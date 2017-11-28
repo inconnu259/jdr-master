@@ -11,7 +11,7 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 """
 
 import os
-from .conf.dev import *
+#from .conf.dev import *
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'utils',
+    'user',
 ]
 
 MIDDLEWARE = [
@@ -61,7 +62,7 @@ ROOT_URLCONF = 'jdr_master.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, "jdr_master", "templates"), []],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -130,8 +131,6 @@ USE_TZ = True
 ### See recipe "Dynamic static URL for Git users"
 from utils.misc import get_git_changeset
 STATIC_URL = "/static/%s/" % get_git_changeset(BASE_DIR)
-
-TEMPLATE_DIRS = (os.path.join(BASE_DIR, 'jdr_master/templates'),)
 
 try:
     exec(open(os.path.join(

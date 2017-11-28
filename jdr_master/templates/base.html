@@ -20,7 +20,6 @@
         <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js" integrity="sha384-vFJXuSJphROIrBnz7yo7oB41mKfc8JzQZiCq4NCceLEaO4IHwicKwpJf9c9IpFgh" crossorigin="anonymous"></script>
         <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js" integrity="sha384-alpBpkh1PFOepccYVYDB4do5UnbKysX5WZXm3XxPqe5iKTfUKjNkCk9SaVuEZflJ" crossorigin="anonymous"></script>
-        <script src="{% url "js_settings" %}"></script>
     {% endblock %}
 
     {% block js %}{% endblock %}
@@ -32,10 +31,7 @@
             <header class="clearfix container">
                 <h1>{% trans "My Website" %}</h1>
                 {% block header_navigation %}
-                    {% inblude "utils/header_navigation.html" %}
-                {% endblock %}
-                {% block language_chooser %}
-                    {% include "utils/language_chooser.html" %}
+                    {# {% include "utils/header_navigation.html" %} #}
                 {% endblock %}
             </header>
             <div id="content" class="clearfix container">
@@ -44,7 +40,7 @@
             </div>
             <footer class="clearfix container">
                 {% block footer_navigation %}
-                    {% include "utils/footer_navigation.html" %}
+                    {# {% include "utils/footer_navigation.html" %} #}
                 {% endblock %}
             </footer>
         </section>
