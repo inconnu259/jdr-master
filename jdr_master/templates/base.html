@@ -4,15 +4,17 @@
 <html lang="{{ LANGUAGE_CODE }}">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>{% block title %}{% endblock %}{% trans "My Website" %}</title>
-    <link rel="icon" href="{{ STATIC_URL }}site/favicon.ico" type="image/png" />
+    <link rel="icon" href="{{ STATIC_URL }}favicon/favicon.ico" type="image/png" />
+
+
 
     {% block meta_tags %}{% endblock %}
 
     {% block base_stylesheet %}
         <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/css/bootstrap.min.css" integrity="sha384-PsH8R72JQ3SOdhVi3uxftmaW6Vc51MKb0q5P2rRUpPvrszuE4W1povHYgTpBfshb" crossorigin="anonymous" />
-        <link href="{{ STATIC_URL }}site/css/style.css" rel="stylesheet" media="screen" type="text/css" />
+        <link href="{{ STATIC_URL }}css/style.css" rel="stylesheet" media="screen" type="text/css" />
     {% endblock %}
     {% block stylesheet %}{% endblock %}
 
