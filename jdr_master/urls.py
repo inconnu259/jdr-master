@@ -21,6 +21,6 @@ from user import forms
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('user.urls')),
-    path('login/', views.LoginView.as_view(template_name='login2.html', authentication_form=forms.LoginForm), name='login'),
+    path('login/', views.LoginView.as_view(template_name='login.html', authentication_form=forms.LoginForm), name='login'),
     path('logout/', views.LogoutView.as_view(next_page='login')),
 ]

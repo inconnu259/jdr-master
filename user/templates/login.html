@@ -1,41 +1,41 @@
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-#borderimg1 {
-    border: 25px solid transparent;
-    padding: 20px;
-    -webkit-border-image: url('{{ STATIC_URL }}img/bord_parchemin.png') 30 round; /* Safari 3.1-5 */
-    -o-border-image: url('{{ STATIC_URL }}img/bord_parchemin.png') 30 round; /* Opera 11-12.1 */
-    border-image: url('{{ STATIC_URL }}img/bord_parchemin.png') 50 round;
-    background: url('{{ STATIC_URL }}img/fond_parchemin.png');
-    background-clip: padding-box;
-}
+{% extends 'base_simple.html' %}
 
-#borderimg2 {
-    border: 30px solid transparent;
-    padding: 25px;
-    -webkit-border-image: url('{{ STATIC_URL }}img/bord_parchemin.png') 30 stretch; /* Safari 3.1-5 */
-    -o-border-image: url('{{ STATIC_URL }}img/bord_parchemin.png') 30 stretch; /* Opera 11-12.1 */
-    border-image: url('{{ STATIC_URL }}img/bord_parchemin.png') 50 stretch;
-    background: url('{{ STATIC_URL }}img/fond_parchemin.png');
-    background-clip: padding-box;
-}
+{% block content %}
+    <div class="middle">
+    {% if form.errors %}
+        <p>J'ai pas d'utilisateurs et de mots de passes qui vont avec ce que tu m'as donné.
+            Petit étourdit, tu voudrais pas recommencer avec les bonnes données ? :)</p>
+    {% endif %}
 
-body {
-background: url('{{ STATIC_URL }}img/esteren_set1_fonddepage2.jpg');
-}
+    {% if next %}
+        {% if user.is_authenticated %}
+            <p>Mouai mouai mouai, regardez ce petit malin !
+            Je crois que tu n'as pas accès à cette partie là.
+            Demande gentiment d'y avoir accès à la bonne personne,
+            et si elle est gentille, tu pourra revenir !</p>
+        {% else %}
+            <p>S'il te plaît, connecte-toi pour voir cette page.</p>
+        {% endif %}
+    {% endif %}
 
-</style>
-</head>
-<body>
+    <h3 class="panel-title">Connection</h3>
+    <form method="post" action="{% url 'login' %}">
+        {% csrf_token %}
+        <div class="container">
+            {{ form.username.label_tag }}
+            {{ form.username }}
+            {{ form.password.label_tag }}
+            {{ form.password }}
+            <button type="submit">Rejoindre le monde d'esteren</button>
+            <input type="hidden" name="next" value="{{ next }}"/>
+        </div>
+    </div>
+{% endblock %}
 
-<p>The border-image property specifies an image to be used as the border around an element:</p>
-<p id="borderimg1">Here, the middle sections of the image are repeated to create the border.</p>
-<p id="borderimg2">Here, the middle sections of the image are stretched to create the border.</p>
-
-<p>Here is the original image:</p><img src="{{ STATIC_URL }}img/esteren_set1_parchemin3.png">
-<p><strong>Note:</strong> Internet Explorer 10, and earlier versions, do not support the border-image property.</p>
-
-</body>
-</html>
+{% block js %}
+    <script>
+        {% if not user.is_authenticated %}
+            $("ul.nav.navbar-nav.navbar-right").css("display", "none");
+        {% endif %}
+    </script>
+{% endblock %}

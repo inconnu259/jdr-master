@@ -22,6 +22,9 @@
     {% block page %}
         <section>
             <header>
+                <div class="logo">
+                    <img src="{{ STATIC_URL }}img/esteren_set1_logo.png" alt="Les ombres d'Esteren" />
+                </div>
                 {% block header_navigation %}
                     {% include "utils/header_navigation.html" %}
                 {% endblock %}
