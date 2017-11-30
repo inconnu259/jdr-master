@@ -1,10 +1,46 @@
 #body456
 {
-  background: url('../img/esteren_set1_fonddepage1.jpg');
+    background: url('../img/esteren_set1_fonddepage1.jpg');
 }
 
 #nav456
 {
-background: url('../img/esteren_set1_parchemin3.png');
-background-size: 100% 100%;
+    background: url('../img/esteren_set1_parchemin3.png');
+    background-size: 100% 100%;
+}
+
+ul {
+    list-style-type: none;
+    margin: 0;
+    border: 25px solid transparent;
+    padding: 0px;
+    overflow: hidden;
+    border-image: url('../img/bord_parchemin.png') 60 round;
+    background: url('../img/fond_parchemin.png');
+    background-clip: padding-box;
+}
+
+li {
+    float: left;
+    border-right:1px solid #bbb;
+}
+
+li:last-child {
+    border-right: none;
+}
+
+li a {
+    display: block;
+    color: #4e372b;
+    text-align: center;
+    padding: 14px 16px;
+    text-decoration: none;
+}
+
+li a:hover:not(.active) {
+    background-color: #1112;
+}
+
+.active {
+    background-color: rgba(151, 110, 81, 0.75);
 }

@@ -5,15 +5,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-    <title>{% block title %}{% endblock %}{% trans "My Website" %}</title>
+    <title>{% block title %}{% endblock %}{% trans "Esteren" %}</title>
     <link rel="icon" href="{{ STATIC_URL }}favicon/favicon.ico" type="image/png" />
-
 
 
     {% block meta_tags %}{% endblock %}
 
     {% block base_stylesheet %}
-        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/css/bootstrap.min.css" integrity="sha384-PsH8R72JQ3SOdhVi3uxftmaW6Vc51MKb0q5P2rRUpPvrszuE4W1povHYgTpBfshb" crossorigin="anonymous" />
         <link href="{{ STATIC_URL }}css/style.css" rel="stylesheet" media="screen" type="text/css" />
     {% endblock %}
     {% block stylesheet %}{% endblock %}
@@ -22,18 +20,17 @@
 </head>
 <body class="{% block bodyclass %}{% endblock %}">
     {% block page %}
-        <section class="wrapper">
-            <header class="clearfix container">
-                <h1>{% trans "My Website" %}</h1>
+        <section>
+            <header>
                 {% block header_navigation %}
                     {% include "utils/header_navigation.html" %}
                 {% endblock %}
             </header>
-            <div id="content" class="clearfix container">
+            <div id="content">
                 {% block content %}
                 {% endblock %}
             </div>
-            <footer class="clearfix container">
+            <footer>
                 {% block footer_navigation %}
                     {# {% include "utils/footer_navigation.html" %} #}
                 {% endblock %}
@@ -44,8 +41,6 @@
 
     {% block base_js %}
         <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.3/umd/popper.min.js" integrity="sha384-vFJXuSJphROIrBnz7yo7oB41mKfc8JzQZiCq4NCceLEaO4IHwicKwpJf9c9IpFgh" crossorigin="anonymous"></script>
-        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-beta.2/js/bootstrap.min.js" integrity="sha384-alpBpkh1PFOepccYVYDB4do5UnbKysX5WZXm3XxPqe5iKTfUKjNkCk9SaVuEZflJ" crossorigin="anonymous"></script>
     {% endblock %}
 
     {% block js %}{% endblock %}
