@@ -6,46 +6,54 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
     <title>{% block title %}{% endblock %}{% trans "Esteren" %}</title>
-    <link rel="icon" href="{{ STATIC_URL }}favicon/favicon.ico" type="image/png" />
+    <link rel="icon" href="{{ STATIC_URL }}favicon/favicon.ico" type="image/png"/>
 
 
     {% block meta_tags %}{% endblock %}
 
     {% block base_stylesheet %}
-        <link href="{{ STATIC_URL }}css/style.css" rel="stylesheet" media="screen" type="text/css" />
+        <!--Import Google Icon Font-->
+      <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+        <!-- Compiled and minified CSS -->
+        <link rel="stylesheet"
+              href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/css/materialize.min.css">
+        <link href="{{ STATIC_URL }}css/style.css" rel="stylesheet" media="screen" type="text/css"/>
     {% endblock %}
     {% block stylesheet %}{% endblock %}
 
     {% block extrahead %}{% endblock %}
 </head>
 <body class="{% block bodyclass %}{% endblock %}">
-    {% block page %}
-        <section>
-            <header>
-                <div class="logo">
-                    <img src="{{ STATIC_URL }}img/esteren_set1_logo.png" alt="Les ombres d'Esteren" />
-                </div>
-                {% block header_navigation %}
-                    {% include "utils/header_navigation.html" %}
-                {% endblock %}
-            </header>
-            <div id="content">
-                {% block content %}
-                {% endblock %}
-            </div>
-            <footer>
-                {% block footer_navigation %}
-                    {# {% include "utils/footer_navigation.html" %} #}
-                {% endblock %}
-            </footer>
-        </section>
-    {% endblock %}
-    {% block extrabody %}{% endblock %}
+{% block page %}
+    <section>
+        <header>
+            {% block header_navigation %}
+                {% include "utils/header_navigation.html" %}
+            {% endblock %}
+        </header>
+        <div id="content">
+            {% block content %}
+            {% endblock %}
+        </div>
+        <footer>
+            {% block footer_navigation %}
+                {# {% include "utils/footer_navigation.html" %} #}
+            {% endblock %}
+        </footer>
+    </section>
+{% endblock %}
+{% block extrabody %}{% endblock %}
 
-    {% block base_js %}
-        <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
-    {% endblock %}
+{% block base_js %}
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <!-- Compiled and minified JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.2/js/materialize.min.js"></script>
 
-    {% block js %}{% endblock %}
+    <script type="text/javascript">
+        $(".dropdown-button").dropdown();
+    </script>
+{% endblock %}
+
+{% block js %}{% endblock %}
 </body>
 </html>

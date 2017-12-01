@@ -1,105 +1,11 @@
-body {
-    background: url('../img/esteren_set1_fonddepage1.jpg');
-    background-clip: padding-box;
+html,
+body,
+.login-box {
+    height: 100%;
 }
 
-section {
-    margin-left: 50px;
-}
-
-div.logo img {
-    position: relative;
-    width: 500px;
-    margin: auto;
-    margin-bottom: -20px;
-    margin-top: -20px;
-    display: block;
-    z-index: 100;
-}
-
-div.logo {
-    position: absolute;
-    left: 50;
-    top: 0;
-    width: 100%;
-    z-index: -1;
-}
-
-ul {
-    list-style-type: none;
-    margin: 0px;
-    border: 25px solid transparent;
-    padding: 0px;
-    overflow: hidden;
-    border-image: url('../img/bord_parchemin.png') 60 round;
-    background: url('../img/fond_parchemin.png');
-    background-clip: padding-box;
-}
-
-li {
-    float: left;
-    border-right:1px solid #bbb;
-}
-
-li:last-child {
-    border-right: none;
-}
-
-li a {
-    display: block;
-    color: #4e372b;
-    text-align: center;
-    padding: 14px 16px;
-    text-decoration: none;
-}
-
-li a:hover:not(.active) {
-    background-color: #1112;
-}
-
-.active {
-    background-color: rgba(151, 110, 81, 0.75);
-}
-
-form {
-    border: 3px solid #f1f1f1;
-}
-
-/* Full-width inputs */
-input[type=text], input[type=password] {
-    width: 100%;
-    padding: 12px 200px;
-    margin: 8px 0;
-    diplay: inline-block;
-    border: 1px solid #ccc;
-    box-sizing: border-box;
-}
-
-/* Set a style for all buttons */
-button {
-    background-color: #4CAF50;
-    color: white;
-    padding: 14px 20px;
-    margin: 8px 0;
-    border: none;
-    cursor: pointer;
-    width: 100%;
-}
-
-/* Add a hover effect for buttons */
-button:hover {
-    opacity: 0.8;
-}
-
-/* Add padding to containers */
-.container {
-    padding: 16px;
-}
-
-.middle {
-    margin: 25%
-}
-
-h3 {
-    text-align: center;
+.brand-logo,
+img {
+    width: 250px;
+    margin-top: -10px;
 }
