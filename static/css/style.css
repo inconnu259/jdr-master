@@ -9,3 +9,24 @@ img {
     width: 250px;
     margin-top: -10px;
 }
+
+.tabs {
+    height: auto;
+}
+
+.tabs .tab a.active {
+    font-size: 14px;
+}
+
+.tabs .tab a {
+    font-size: 12px;
+    padding: 0 5px;
+}
+
+.tabs .tab {
+    text-transform: none;
+}
+
+.body {
+    background-color: #2196f3;
+}

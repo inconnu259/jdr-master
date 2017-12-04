@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+    <div class="section grey lighten-5">
+        <div class="container">
+            <div class="row">
+                < class="col s12">
+                <h3 class="light center-align dark-text">Création du personnage</h3>
+                <div class="card">
+                    <div class="card-content">
+                        <ul class="tabs">
+                            <li class="tab col">
+                                <a href="#nations" class="active waves-effect waves-dark">Peuple</a>
+                            </li>
+                            <li class="tab col">
+                                <a href="#" class="step-title waves-effect waves-dark">Métier</a>
+                            </li>
+                            <li class="tab col">
+                                <a href="#" class="step-title waves-effect waves-dark">Lieu de naissance</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Lieu de résidence géographique</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Classe sociale</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Âge</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Revers</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Voies</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Traits de caractère</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Orientation de la personnalité</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Avantages et Désavantages</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Santé Mentale</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Domaines primaires et secondaires
+                                </a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Amélioration des domaines</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Bonus divers ajoutés aux domaines
+                                </a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Disciplines</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Arts de combat</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Equipements</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Description et histoire</a>
+                            </li>
+                            <li class="tab col">
+                                <a class="step-title waves-effect waves-dark">Finalisation du personnage</a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card">
+                    <div id="nations" class="card-content">
+
+                        {% include 'list.html' %}
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+{% endblock %}
+
+{% block js %}
+    <script>
+        $(document).ready(function () {
+            $('.tabs').tabs();
+        });
+    </script>
+{% endblock %}

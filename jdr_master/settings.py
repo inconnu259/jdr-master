@@ -127,6 +127,8 @@ USE_TZ = True
 
 LOGIN_REDIRECT_URL = '/'
 
+PERSO_SESSION_ID = 'perso'
+
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/dev/howto/static-files/
 
