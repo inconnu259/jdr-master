@@ -63,7 +63,7 @@ ROOT_URLCONF = 'jdr_master.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, "jdr_master", "templates"), []],
+        'DIRS': [os.path.join(BASE_DIR, "jdr_master", "templates"), ''],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [

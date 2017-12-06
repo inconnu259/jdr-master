@@ -14,7 +14,7 @@
                                 <a href="#nations" class="active waves-effect waves-dark">Peuple</a>
                             </li>
                             <li class="tab col">
-                                <a href="#" class="step-title waves-effect waves-dark">Métier</a>
+                                <a href="#professions" class="step-title waves-effect waves-dark">Métier</a>
                             </li>
                             <li class="tab col">
                                 <a href="#" class="step-title waves-effect waves-dark">Lieu de naissance</a>
@@ -78,7 +78,12 @@
 
                     <div id="nations">
 
-                        {% include 'list.html' %}
+                        {% include 'list_nations.html' %}
+
+                    </div>
+                    <div id="professions" class="card-content">
+
+                        {% include 'list_professions.html' %}
 
                     </div>
             </div>

@@ -1,0 +1,8 @@
+<ul>
+    {% for nation in nations %}
+        <a href="{% url 'choose_nation' nation.id %}">
+            <li>{{ nation.name }}</li>
+            <li>{{ nation.description }}</li>
+        </a>
+    {% endfor %}
+</ul>

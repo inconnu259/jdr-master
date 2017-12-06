@@ -16,17 +16,13 @@ class Creator(object):
             creator = self.session[settings.PERSO_SESSION_ID] = {}
         self.creator = creator
 
-    def add_nation(self, nation, update_nation=False):
+    def choose_nation(self, nation):
         """
         Add a nation to the creator or update it
         :return:
         """
         nation_id = str(nation.id)
-        if 'nation' not in self.creator:
-            self.creator['nation'] = nation_id
-
-        if update_nation:
-            self.creator['nation'] = nation_id
+        self.creator['nation'] = nation_id
 
         self.save()
 

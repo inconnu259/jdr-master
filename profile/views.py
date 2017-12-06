@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from .forms import UserForm, ProfileForm
 from django.contrib import messages
@@ -20,10 +20,10 @@ def profile(request):
         if user_form.is_valid() and profile_form.is_valid():
             user_form.save()
             profile_form.save()
-            messages.success(request, _('Votre profile est bien sauvegardé !'))
+            messages.success(request, 'Votre profile est bien sauvegardé !')
             return redirect('settings:profile')
         else:
-            messages.error(request, ("S'il te plait, corrige les erreurs."))
+            messages.error(request, "S'il te plait, corrige les erreurs.")
     else:
         user_form = UserForm(instance=request.user)
         try:
