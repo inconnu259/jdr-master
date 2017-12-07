@@ -33,6 +33,20 @@ class Nation(models.Model):
         ordering = ("name",)
 
 
+class Place(models.Model):
+    name = models.CharField(max_length=100,
+                            verbose_name='place')
+    description = models.TextField(verbose_name='description')
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = 'Lieu de résidence'
+        verbose_name_plural = 'Lieux de résidences'
+        ordering = ("name",)
+
+
 class Discipline(models.Model):
     name = models.CharField(max_length=100,
                             verbose_name='nom')
@@ -65,6 +79,24 @@ class Domain(models.Model):
     class Meta:
         verbose_name = 'Domaine'
         verbose_name_plural = 'Domaines'
+        ordering = ("name",)
+
+
+class Social(models.Model):
+    name = models.CharField(max_length=100,
+                            verbose_name='social')
+    description = models.TextField(verbose_name='description')
+
+    domains = models.ManyToManyField(Domain,
+                          verbose_name='domaines',
+                          related_name='domains')
+
+    def __str__(self):
+        return self.name + ' (' + ','.join([domain.name for domain in self.domains.all()]) + ')'
+
+    class Meta:
+        verbose_name = 'Classe sociale'
+        verbose_name_plural = 'Classes sociales'
         ordering = ("name",)
 
 

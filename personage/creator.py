@@ -26,9 +26,25 @@ class Creator(object):
 
         self.save()
 
+    def choose_place(self, place):
+        """
+        Add a nation to the creator or update it
+        :return:
+        """
+        place_id = str(place.id)
+        self.creator['place'] = place_id
+
+        self.save()
+
     def get_choosen_nation(self):
         if 'nation' in self.creator:
             return int(self.creator['nation'])
+        else:
+            return 0
+
+    def get_choosen_place(self):
+        if 'place' in self.creator:
+            return int(self.creator['place'])
         else:
             return 0
 

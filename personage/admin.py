@@ -1,9 +1,14 @@
 from django.contrib import admin
-from .models import Setback, Profession, Nation, Personage, Domain, Discipline
+from .models import Setback, Profession, Nation, Personage, Domain, Discipline, Place, Social
 
 
 @admin.register(Nation)
 class NationAdmin(admin.ModelAdmin):
+    pass
+
+
+@admin.register(Place)
+class PlaceAdmin(admin.ModelAdmin):
     pass
 
 
@@ -28,4 +33,9 @@ class DisciplineAdmin(admin.ModelAdmin):
 
 @admin.register(Profession)
 class ProfessionAdmin(admin.ModelAdmin):
+    pass
+
+
+@admin.register(Social)
+class SocialAdmin(admin.ModelAdmin):
     pass
