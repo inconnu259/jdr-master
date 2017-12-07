@@ -1,6 +1,19 @@
-<ul>
+<div class="row">
+    {% if creator.get_choosen_professions %}
+        <a class="waves-effect waves-light btn" href="javascript:switch_tab('location');">Suivant</a>
+    {% endif %}
     {% for profession in professions %}
-        <li>{{ profession.name }}</li>
-        <li class="hidden">{{ profession.description }}</li>
+    <div class="col s12 m6 l8">
+        <a href="{% url 'choose_profession' profession.id %}" class="btn waves-effect waves-light {% if profession.id in creator.get_choosen_professions %}grey{% endif %}">{{ profession.name }}</a>
+        <!-- Modal Trigger -->
+        <a class="btn waves-effect waves-light modal-trigger" href="#modal-desc-{{ profession.id }}"><i class="material-icons">search</i></a>
+        <!-- Modal Structure -->
+        <div id="modal-desc-{{ profession.id }}" class="modal">
+            <div class="modal-content">
+                <h4>{{ profession.name }}</h4>
+                <p>{{ profession.description }}</p>
+            </div>
+        </div>
+    </div>
     {% endfor %}
-</ul>
+</div>

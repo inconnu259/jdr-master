@@ -32,5 +32,19 @@ def create_personage(request):
 def creator_choose_nation(request, nation_id):
     creator = Creator(request)
     nation = get_object_or_404(Nation, id=nation_id)
-    creator.choose_nation(nation=nation)
+    if nation.id is creator.get_choosen_nation():
+        creator.remove_nation()
+    else:
+        creator.choose_nation(nation=nation)
+    return redirect('create_personage')
+
+@require_GET
+@login_required(login_url="login/")
+def creator_choose_profession(request, profession_id):
+    creator = Creator(request)
+    profession = get_object_or_404(Profession, id=profession_id)
+    if profession.id is creator.get_choosen_professions():
+        creator.remove_professions()
+    else:
+        creator.choose_profession(profession=profession)
     return redirect('create_personage')
