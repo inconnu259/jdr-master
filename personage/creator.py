@@ -59,6 +59,12 @@ class Creator(object):
         #else:
             #error no social domain
 
+    def choose_trait(self, trait):
+        trait_id = str(trait.id)
+        self.creator['trait'] = trait_id
+
+        self.save()
+
 
     def get_choosen_nation(self):
         if 'nation' in self.creator:
@@ -69,6 +75,12 @@ class Creator(object):
     def get_choosen_place(self):
         if 'place' in self.creator:
             return int(self.creator['place'])
+        else:
+            return 0
+
+    def get_choosen_trait(self):
+        if 'trait' in self.creator:
+            return int(self.creator['trait'])
         else:
             return 0
 

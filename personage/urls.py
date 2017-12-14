@@ -11,5 +11,5 @@ urlpatterns = [
     path('creator_choose_place/<int:place_id>', views.creator_choose_place, name='choose_place'),
     path('creator_choose_social/<int:social_id>', views.creator_choose_social, name='choose_social'),
     path('creator_choose_social_domain/<int:domain_id>', views.creator_choose_social_domain, name='choose_social_domain'),
-    path('creator_choose_trait/<int:trait_id', views.creator_choose_trait, name='choose_trait'),
+    path('creator_choose_trait/<int:trait_id>', views.creator_choose_trait, name='choose_trait'),
 ]

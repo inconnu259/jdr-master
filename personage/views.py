@@ -1,4 +1,5 @@
 from django.shortcuts import render, get_object_or_404, redirect, resolve_url
+from django.db.models.query_utils import Q
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET
 from .models import Nation, Profession, Place, Social, Domain, Traits, Way
@@ -22,14 +23,14 @@ def create_personage(request):
     places = Place.objects.all()
     socials = Social.objects.all()
     domains = Domain.objects.all()
-    Way.objects
+    traits = Traits.objects.filter(Q(way__name='Combativité') & Q(type_trait='QMAJ'))
     context = {
         'nations': nations,
         'professions': professions,
         'places': places,
         'socials': socials,
         'domains': domains,
-        'tratis': trait,
+        'traits': traits,
         'creator': creator,
     }
     return render(request, "create_personage.html", context)
@@ -109,7 +110,14 @@ def creator_choose_social_domain(request, domain_id):
         creator.choose_social_domains(social_domain=domain)
     return redirect('{}#social'.format(resolve_url('create_personage')))
 
+
 @require_GET
 @login_required(login_url="login/")
 def creator_choose_trait(request, trait_id):
+    creator = Creator(request)
+    trait = get_object_or_404(Traits, id=trait_id)
+    if trait.id is creator.get_choosen_trait():
+        creator.remove_trait()
+    else:
+        creator.choose_trait(trait=trait)
     return redirect('{}#traits'.format(resolve_url('create_personage')))
