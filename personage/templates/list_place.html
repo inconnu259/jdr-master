@@ -1,0 +1,16 @@
+<div class="row">
+    {% if creator.get_choosen_place %}
+        <a class="waves-effect waves-light btn" href="javascript:switch_tab('professions');">Suivant</a>
+    {% endif %}
+    {% for place in places %}
+    <div class="col s12 m6 l6">
+        <a href="{% url 'choose_place' place.id %}"
+           class="{% if place.id == creator.get_choosen_place %}grey{% endif %} z-depth-2 hoverable waves-effect waves-dark waves-block same-size">
+            <div class="container">
+                <h3>{{ place.name }}</h3>
+                <p>{{ place.description }}</p>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+</div>

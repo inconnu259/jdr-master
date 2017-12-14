@@ -122,6 +122,41 @@ class Profession(models.Model):
         ordering = ("name",)
 
 
+class Way(models.Model):
+    name = models.CharField(max_length=100,
+                            verbose_name='Voie')
+    description = models.TextField(verbose_name='description')
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = 'Voie'
+        verbose_name_plural = 'Voies'
+        ordering = ("name",)
+
+
+class Traits(models.Model):
+    TRAIT_CHOICE = (
+        ('QMAJ', 'Qualité majeur'),
+        ('QMIN', 'Qualité mineur'),
+        ('FMAJ', 'Défaut majeur'),
+        ('FMIN', 'Défaut mineur'),
+    )
+    name = models.CharField(max_length=100,
+                            verbose_name='trait de caractère')
+    way = models.ForeignKey(Way, blank=True, on_delete=models.CASCADE, related_name='traits')
+    type_trait = models.CharField(max_length=10, choices=TRAIT_CHOICE)
+
+    def __str__(self):
+        return self.name + ' (' + str(self.way) + ', ' + self.get_type_trait_display() + ')'
+
+    class Meta:
+        verbose_name = 'Trait de caractère'
+        verbose_name_plural = 'traits de caractères'
+        ordering = ("name",)
+
+
 class Personage(models.Model):
     SEXE_CHOICES = (
         ('F', 'Femme'),

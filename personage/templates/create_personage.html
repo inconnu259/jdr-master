@@ -20,10 +20,10 @@
                                 <a href="#location" class="step-title waves-effect waves-dark">Lieu de naissance</a>
                             </li>
                             <li class="tab col">
-                                <a class="step-title waves-effect waves-dark">Lieu de résidence géographique</a>
+                                <a href="#place" class="step-title waves-effect waves-dark">Lieu de résidence géographique</a>
                             </li>
                             <li class="tab col">
-                                <a class="step-title waves-effect waves-dark">Classe sociale</a>
+                                <a href="#social" class="step-title waves-effect waves-dark">Classe sociale</a>
                             </li>
                             <li class="tab col">
                                 <a class="step-title waves-effect waves-dark">Âge</a>
@@ -35,7 +35,7 @@
                                 <a class="step-title waves-effect waves-dark">Voies</a>
                             </li>
                             <li class="tab col">
-                                <a class="step-title waves-effect waves-dark">Traits de caractère</a>
+                                <a href="#traits" class="step-title waves-effect waves-dark">Traits de caractère</a>
                             </li>
                             <li class="tab col">
                                 <a class="step-title waves-effect waves-dark">Orientation de la personnalité</a>
@@ -86,7 +86,32 @@
                         {% include 'list_professions.html' %}
 
                     </div>
+
+                    <div id="location" class="card-content">
+
+                        <p>Localisation</p>
+
+                    </div>
+
+                    <div id="place" class="card-content">
+
+                        {% include 'list_place.html' %}
+
+                    </div>
+
+                    <div id="social" class="card-content">
+
+                        {% include 'list_social.html' %}
+
+                    </div>
+
+                    <div id="traits" class="card-content">
+
+                        {% include 'list_traits.html' %}
+
+                    </div>
             </div>
+                {% include 'list_domains.html' %}
         </div>
     </div>
     </div>

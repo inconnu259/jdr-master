@@ -1,0 +1,23 @@
+<div class="row">
+    {% if creator.get_choosen_social %}
+        <a class="waves-effect waves-light btn" href="javascript:switch_tab('professions');">Suivant</a>
+    {% endif %}
+    {% for social in socials %}
+    <div class="col s12 m6 l6">
+        <a href="{% url 'choose_social' social.id %}"
+           class="{% if social.id == creator.get_choosen_social %}grey{% endif %} z-depth-2 hoverable waves-effect waves-dark waves-block same-size">
+            <div class="container">
+                <h3>{{ social.name }}</h3>
+                <p>{{ social.description }}</p>
+                {% if social.id == creator.get_choosen_social %}
+                    {% for domain in social.domains.all %}
+                        <a href="{% url 'choose_social_domain' domain.id %}" class="btn waves-effect waves-light {% if domain.id in creator.get_choosen_social_domains %}grey{% endif %}">{{ domain.name }}</a>
+                        <!-- Modal Trigger -->
+                        <a class="btn waves-effect waves-light modal-trigger" href="#modal-desc-domain-{{ domain.id }}"><i class="material-icons">search</i></a>
+                    {% endfor %}
+                {% endif %}
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+</div>

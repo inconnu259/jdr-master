@@ -1,0 +1,13 @@
+<div class="row">
+    {% for domain in domains %}
+    <div class="col s12 m6 l8">
+        <!-- Modal Structure -->
+        <div id="modal-desc-domain-{{ domain.id }}" class="modal">
+            <div class="modal-content">
+                <h4>{{ domain.name }}</h4>
+                <p>{{ domain.description }}</p>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>

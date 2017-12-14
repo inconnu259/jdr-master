@@ -36,6 +36,30 @@ class Creator(object):
 
         self.save()
 
+    def choose_social(self, social):
+        social_id = str(social.id)
+        if 'social' in self.creator:
+            self.remove_social_domains()
+        self.creator['social'] = social_id
+
+        self.save()
+
+    def choose_social_domains(self, social_domain):
+        if 'social' in self.creator:
+            domain_id = str(social_domain.id)
+            saved_list = self.creator.get('social_domains', [])
+            if domain_id in saved_list:
+                saved_list.remove(domain_id)
+            elif len(saved_list) < 2:
+                saved_list.append(domain_id)
+            else:
+                saved_list[1] = domain_id
+            self.creator['social_domains'] = saved_list
+            self.save()
+        #else:
+            #error no social domain
+
+
     def get_choosen_nation(self):
         if 'nation' in self.creator:
             return int(self.creator['nation'])
@@ -72,6 +96,18 @@ class Creator(object):
         else:
             return 0
 
+    def get_choosen_social(self):
+        if 'social' in self.creator:
+            return int(self.creator['social'])
+        else:
+            return 0
+
+    def get_choosen_social_domains(self):
+        if 'social_domains' in self.creator:
+            return list(map(int, self.creator['social_domains']))
+        else:
+            return 0
+
     def save(self):
         # update the session creator
         self.session[settings.PERSO_SESSION_ID] = self.creator
@@ -90,4 +126,21 @@ class Creator(object):
     def remove_professions(self):
         if 'professions' in self.creator:
             del self.creator['professions']
+            self.save()
+
+    def remove_place(self):
+        if 'place' in self.creator:
+            del self.creator['place']
+            self.save()
+
+    def remove_social(self):
+        if 'social' in self.creator:
+            del self.creator['social']
+            if 'social_domains' in self.creator:
+                del self.creator['social_domains']
+            self.save()
+
+    def remove_social_domains(self):
+        if 'social_domains' in self.creator:
+            del self.creator['social_domains']
             self.save()

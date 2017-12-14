@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Setback, Profession, Nation, Personage, Domain, Discipline, Place, Social
+from .models import Setback, Profession, Nation, Personage, Domain, Discipline, Place, Social, Way, Traits
 
 
 @admin.register(Nation)
@@ -24,6 +24,16 @@ class DisciplineInLine(admin.TabularInline):
 class DomainAdmin(admin.ModelAdmin):
     inlines = [DisciplineInLine, ]
     exclude = ['disciplines', ]
+
+
+@admin.register(Traits)
+class Traits(admin.ModelAdmin):
+    pass
+
+
+@admin.register(Way)
+class WayAdmin(admin.ModelAdmin):
+    how_change_link = True
 
 
 @admin.register(Discipline)
