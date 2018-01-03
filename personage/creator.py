@@ -13,7 +13,7 @@ class Creator(object):
         creator = self.session.get(settings.PERSO_SESSION_ID)
         if not creator:
             # save an empty creator in the session
-            creator = self.session[settings.PERSO_SESSION_ID] = {}
+            creator = self.session[settings.PERSO_SESSION_ID] = {'xp': 100, }
         self.creator = creator
 
     def choose_nation(self, nation):
@@ -65,6 +65,32 @@ class Creator(object):
 
         self.save()
 
+    def upgrade_domain(self, id_domain):
+        # check if it's possible (about xp)
+        # add parameter to update more than one
+        # check if it's always 25, and depend of how many times we upgrade it
+        # update this new section in other choose section(because we can change some parameters)
+        if int(self.creator['xp']) > 25:
+            self.creator['domains'][id_domain] = int(self.creator['domains'][id_domain]) + 1
+            self.creator['xp'] = int(self.creator['xp']) - 25
+            self.save()
+
+    def upgrade_discipline(self, id_discipline):
+        # check if it's possible (about xp and domain and profession)
+        # add parameter to update more than one
+        if int(self.creator['xp']) > 25:
+            self.creator['disciplines'][id_discipline] = int(self.creator['disciplines'][id_discipline]) + 1
+            self.creator['xp'] = int(self.creator['xp']) - 25
+            self.save()
+
+    def downgrade_domain(self, id_domain):
+        # add parameter to downgrade more than one
+        pass
+
+    def downgrade_discipline(self, id_discipline):
+        # check if it's possible
+        # add parameter to downgrade more than one
+        pass
 
     def get_choosen_nation(self):
         if 'nation' in self.creator:
@@ -120,6 +146,9 @@ class Creator(object):
         else:
             return 0
 
+    def get_choosen_domains_xp(self):
+        pass
+
     def save(self):
         # update the session creator
         self.session[settings.PERSO_SESSION_ID] = self.creator
@@ -155,4 +184,9 @@ class Creator(object):
     def remove_social_domains(self):
         if 'social_domains' in self.creator:
             del self.creator['social_domains']
+            self.save()
+
+    def remove_trait(self):
+        if 'trait' in self.creator:
+            del self.creator['trait']
             self.save()

@@ -5,7 +5,7 @@
     {% for trait in traits %}
     <!-- faire deux colonnes : une pour les qualités, une pour les defauts -->
     <div class="col s12 m6 l8">
-        <a href="{% url 'choose_trait' trait.id %}" class="btn waves-effect waves-light {% if trait.id in creator.get_choosen_traits %}grey{% endif %}">{{ trait.name }}</a>
+        <a href="{% url 'choose_trait' trait.id %}" class="btn waves-effect waves-light {% if trait.id == creator.get_choosen_trait %}grey{% endif %}">{{ trait.name }}</a>
     </div>
     {% endfor %}
 </div>
