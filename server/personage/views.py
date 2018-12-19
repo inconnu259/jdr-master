@@ -121,6 +121,3 @@ def creator_choose_trait(request, trait_id):
     else:
         creator.choose_trait(trait=trait)
     return redirect('{}#traits'.format(resolve_url('create_personage')))
-
-@require_GET
-@

@@ -11,22 +11,23 @@ https://docs.djangoproject.com/en/dev/ref/settings/
 """
 
 import os
+import datetime
 #from .conf.dev import *
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+#MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
-STATIC_ROOT = os.path.join(BASE_DIR, "static_files")
+#STATIC_ROOT = os.path.join(BASE_DIR, "static_files")
 
-STATICFILES_DIRS = (
-    os.path.join(BASE_DIR, "static"),
-)
+#STATICFILES_DIRS = (
+#    os.path.join(BASE_DIR, "static"),
+#)
 
-TEMPLATES_DIRS = (
-    os.path.join(BASE_DIR, "jdr_master", "templates"),
-)
+#TEMPLATES_DIRS = (
+#    os.path.join(BASE_DIR, "jdr_master", "templates"),
+#)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/dev/howto/deployment/checklist/
@@ -43,14 +44,40 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'rest_framework.authtoken',
+    'corsheaders',
     'utils',
     'profile',
     'personage',
 ]
 
+REST_FRAMEWORK = {
+    # Use Django's standard `django.contrib.auth` permissions,
+    # or allow read-only access for unauthenticated users.
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly'
+    ],
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
+    ),
+}
+
+JWT_AUTH = {
+    'JWT_VERIFY': True,
+    'JWT_VERIFY_EXPIRATION': True,
+    'JWT_LEEWAY': 0,
+    'JWT_EXPIRATION_DELTA': datetime.timedelta(seconds=86400),
+    'JWT_ALLOW_REFRESH': True,
+    'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=7),
+}
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
