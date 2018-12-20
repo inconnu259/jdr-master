@@ -2,7 +2,8 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from .forms import UserForm, ProfileForm
 from django.contrib import messages
-
+from rest_framework import generics, permissions
+from .serializer import ProfileSerializer
 
 @login_required(login_url="login/")
 def home(request):
@@ -34,3 +35,8 @@ def profile(request):
         'user_form': user_form,
         'profile_form': profile_form
     })
+
+
+class ProfileList(generics.ListAPIView):
+    """ View to list all profile """
+    serializer_class = ProfileSerializer
