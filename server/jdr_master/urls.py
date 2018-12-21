@@ -20,8 +20,8 @@ from rest_framework_jwt.views import obtain_jwt_token
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('profile.urls')),
     path('login/', obtain_jwt_token),
+    path('api/', include('profile.urls')),
     path('logout/', auth_views.LogoutView.as_view(next_page='login')),
     path('', include('personage.urls')),
 ]
