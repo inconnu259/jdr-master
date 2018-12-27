@@ -14,6 +14,7 @@ class UserSerializer(serializers.ModelSerializer):
         # Mostly it is all fields in that model
         fields = ('id', 'first_name', 'last_name', 'username', 'password', 'is_active', 'is_superuser')
 
+
 class ProfileSerializer(serializers.ModelSerializer):
     """ A serializer class for the Profil model """
     class Meta:

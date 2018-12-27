@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.db.models.signals import m2m_changed
+from django.core.exceptions import ValidationError
 
 WAYS_CHOICES = (
     ('Co', 'Combativité'),
@@ -157,6 +159,24 @@ class Traits(models.Model):
         ordering = ("name",)
 
 
+#class DomainLevels(models.Model):
+#    skill = models.ForeignKey(Domain, null=True, on_delete=models.SET_NULL)
+#    level = models.IntegerField()
+#    first_domain = models.BooleanField()
+#    secondary_domain = models.BooleanField()
+
+#    def __str__(self):
+#        return self.skill.name + ' niveau ' + str(self.level)
+
+
+class DisciplineLevels(models.Model):
+    skill = models.ForeignKey(Discipline, null=True, on_delete=models.SET_NULL)
+    level = models.IntegerField()
+
+    def __str__(self):
+        return self.skill.name + ' niveau ' + str(self.level)
+
+
 class Personage(models.Model):
     SEXE_CHOICES = (
         ('F', 'Femme'),
@@ -165,30 +185,90 @@ class Personage(models.Model):
     name = models.CharField(max_length=100, verbose_name='nom')
     genre = models.CharField(max_length=10,
                              choices=SEXE_CHOICES)
+    birthdate = models.IntegerField(default=20)
     nation = models.ForeignKey(Nation, null=True, on_delete=models.SET_NULL,
                                verbose_name='peuple')
     profession = models.ManyToManyField(Profession,
-                                        verbose_name='metier')
-    birthplace = None
-    residence = None  # Rural / Urban
-    birthdate = None  # or age
-    discipline = None
-    domain = None
-    social = None
-    advantages = None
-    disadvantages = None
-    sanity = None
-    primary_domain = None
-    secondary_domain = None
-    story = models.TextField(verbose_name='histoire')
+                                        verbose_name='metier',
+                                        related_name='personnages')
     description = models.TextField(verbose_name='description')
     player = models.ForeignKey(User, on_delete=models.CASCADE,
                                verbose_name='joueur')
+    ways = None
+    advantages = None
+    disadvantages = None
+    sanity = None
+
+    discipline = None
+    domain = None
+    primary_domain = None
+    secondary_domain = None
+    #skill_level = models.ManyToOneRel(SkillLevels,
+    #                                  related_name='personnages')
+
+    weapons = None
+
+    artefact = None
+    tresor = None
+
+    rindath = None
+    ogham = None
+    Flux = None
+
+    birthplace = None
+    residence = None  # Rural / Urban
+    social = None
+    story = models.TextField(verbose_name='histoire')
+    setback = None
+
+    mental_health = None
+
+    personality = None
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         verbose_name = 'Personnage'
         verbose_name_plural = 'Personnages'
         ordering = ("name",)
+
+    def profession_changed(sender, **kwargs):
+        if kwargs['instance'].profession.count() > 2:
+            raise ValidationError("Vous ne pouvez pas avoir plus de 2 métiers")
+
+    # This will not work cause m2m fields are saved after the model is saved
+
+    def check_xp(self):
+        ''' Le choix d'un metier dnne directement un niveau de 5 dans un Domaine de compétence (Domaine Primaire) et
+        de 3 dans un domaine secondaire'''
+        # Check if primary_domain and secondary_domain are in domain.
+        # Check if primary_domain = the same primary domain of profession
+        # Check if secondary_domain is in secondary domain of profession
+        # Check if primary_domain == 5
+        # Check if secondary_domain is 3 min
+        # Check if
+
+
+class SkillLevels(models.Model):
+    domainLevel = models.ForeignKey(Domain, null=True, on_delete=models.SET_NULL)
+    level = models.IntegerField()
+    first_domain = models.BooleanField()
+    secondary_domain = models.BooleanField()
+    personnage = models.ForeignKey(Personage, null=True, on_delete=models.SET_NULL)
+
+    disciplineLevel = models.ManyToManyField(DisciplineLevels)
+
+    def __str__(self):
+        return self.domainLevel.name + ' niveau ' + str(self.level) + ' avec les disciplines : ' + str(self.disciplineLevel)
+
+    # limiter domaine de 1 à 5. (ou de 0 à 5 suivant comment on voit les choses)
+    # test si domaine est à 5 pour pouvoir avoir une discipline
+    # test si discipline est bien dans le domaine
+    # discipline va de 6 à 15
+
+    class Meta:
+        verbose_name = 'Compétence'
 
 
 class Setback(models.Model):
@@ -198,4 +278,5 @@ class Setback(models.Model):
 
     class Meta:
         verbose_name = 'Revers'
+        verbose_name_plural = 'Revers'
         ordering = ("name",)
