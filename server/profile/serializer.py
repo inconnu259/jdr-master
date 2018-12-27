@@ -12,7 +12,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         # Specify the fields that should be made accssible.
         # Mostly it is all fields in that model
-        fields = ('id', 'first_name', 'last_name', 'username', 'password', 'is_active', 'is_superuser')
+        fields = ('id', 'first_name', 'last_name', 'username', 'is_active', 'is_superuser')
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -21,5 +21,5 @@ class ProfileSerializer(serializers.ModelSerializer):
         # Specify the model we are using
         model = Profile
         # Specify the fields that should be made accessible
-        # Mostly it is all fields in taht model
-        fields = ('user',)
+        # Mostly it is all fields in that model
+        fields = ('nickname', 'user', 'personnages')

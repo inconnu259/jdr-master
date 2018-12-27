@@ -23,5 +23,5 @@ urlpatterns = [
     path('login/', obtain_jwt_token),
     path('api/', include('profile.urls')),
     path('logout/', auth_views.LogoutView.as_view(next_page='login')),
-    path('', include('personage.urls')),
+    path('api/', include('personage.urls')),
 ]

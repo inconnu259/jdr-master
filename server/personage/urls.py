@@ -1,6 +1,7 @@
 # personage/urls.py
-from django.urls import path
+from django.urls import path, re_path
 from . import views
+from .views import *
 
 
 urlpatterns = [
@@ -12,4 +13,6 @@ urlpatterns = [
     path('creator_choose_social/<int:social_id>', views.creator_choose_social, name='choose_social'),
     path('creator_choose_social_domain/<int:domain_id>', views.creator_choose_social_domain, name='choose_social_domain'),
     path('creator_choose_trait/<int:trait_id>', views.creator_choose_trait, name='choose_trait'),
+    path('personages/', PersonageList.as_view()),
+    re_path('personages/(?P<pk>\d+)/', PersonageRetrieveUpdate.as_view())
 ]

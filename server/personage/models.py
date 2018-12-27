@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import m2m_changed
 from django.core.exceptions import ValidationError
+from profile.models import Profile
 
 WAYS_CHOICES = (
     ('Co', 'Combativité'),
@@ -192,8 +193,9 @@ class Personage(models.Model):
                                         verbose_name='metier',
                                         related_name='personnages')
     description = models.TextField(verbose_name='description')
-    player = models.ForeignKey(User, on_delete=models.CASCADE,
-                               verbose_name='joueur')
+    player = models.ForeignKey(Profile, on_delete=models.CASCADE,
+                               verbose_name='joueur',
+                               related_name='personnages')
     ways = None
     advantages = None
     disadvantages = None

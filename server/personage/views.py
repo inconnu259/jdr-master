@@ -2,8 +2,10 @@ from django.shortcuts import render, get_object_or_404, redirect, resolve_url
 from django.db.models.query_utils import Q
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET
-from .models import Nation, Profession, Place, Social, Domain, Traits, Way
+from .models import Nation, Profession, Place, Social, Domain, Traits, Way, Personage
 from .creator import Creator
+from rest_framework import generics, permissions
+from .serializer import PersonageSerializer
 
 
 @login_required(login_url="login/")
@@ -121,3 +123,17 @@ def creator_choose_trait(request, trait_id):
     else:
         creator.choose_trait(trait=trait)
     return redirect('{}#traits'.format(resolve_url('create_personage')))
+
+
+class PersonageList(generics.ListAPIView):
+    """ View to list all profile """
+    queryset = Personage.objects.all()
+    serializer_class = PersonageSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+
+class PersonageRetrieveUpdate(generics.RetrieveUpdateAPIView):
+    """ Retrieve and update a profile """
+    queryset = Personage.objects.all()
+    serializer_class = PersonageSerializer
+    permission_classes = (permissions.IsAuthenticated,)
