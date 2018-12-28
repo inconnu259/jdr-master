@@ -36,6 +36,13 @@ class SkillLevelsInLine(admin.TabularInline):
     can_delete = False
 
 
+class WaysLevelsInLine(admin.TabularInline):
+    model = WaysLevels
+    can_delete = False
+    min_num = 5
+    max_num = 5
+
+
 @admin.register(Domain)
 class DomainAdmin(admin.ModelAdmin):
     inlines = [DisciplineInLine, ]
@@ -69,7 +76,7 @@ class SocialAdmin(admin.ModelAdmin):
 
 @admin.register(Personage)
 class PersonnageAdmin(admin.ModelAdmin):
-    inlines = [ProfessionInLine, SkillLevelsInLine]
+    inlines = [WaysLevelsInLine, ProfessionInLine, SkillLevelsInLine]
     exclude = ['profession',]
 
 
@@ -85,4 +92,9 @@ class SetBackAdmin(admin.ModelAdmin):
 
 @admin.register(DisciplineLevels)
 class DisciplineLevelsAdmin(admin.ModelAdmin):
+    pass
+
+
+@admin.register(WaysLevels)
+class WaysLevelsAdmin(admin.ModelAdmin):
     pass
