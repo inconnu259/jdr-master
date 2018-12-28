@@ -180,14 +180,6 @@ class Traits(models.Model):
 #        return self.skill.name + ' niveau ' + str(self.level)
 
 
-class DisciplineLevels(models.Model):
-    skill = models.ForeignKey(Discipline, null=True, on_delete=models.SET_NULL)
-    level = models.PositiveIntegerField(validators=[MinValueValidator(6), MaxValueValidator(15)])
-
-    def __str__(self):
-        return self.skill.name + ' niveau ' + str(self.level)
-
-
 class Setback(models.Model):
     name = models.CharField(max_length=100, verbose_name='nom',
                             unique=True)
@@ -236,11 +228,11 @@ class Personage(models.Model):
                                verbose_name='peuple')
     profession = models.ManyToManyField(Profession,
                                         verbose_name='metier',
-                                        related_name='personnages')
+                                        related_name='personages')
     description = models.TextField(verbose_name='description',
                                    blank=True)
     player = models.ForeignKey(User, on_delete=models.CASCADE,
-                               verbose_name='joueur')
+                               verbose_name='personages')
 
     advantages = models.ForeignKey(Advantage,
                                    verbose_name='avantage',
@@ -326,8 +318,9 @@ class Personage(models.Model):
         # Check if
 
     def clean(self):
-        if self.ways.all() != 5:
-            raise ValidationError("Il doit y avoir 5 voies.")
+        super().clean()
+        if self.ways.count() != 5:
+            raise ValidationError("Il y a {} voies au lieu de 5".format(self.ways.count()))
         total = 0
         max_min = False
         for way in self.ways.all():
@@ -353,11 +346,7 @@ class SkillLevels(models.Model):
         (STANDARD, 'Standard')
     )
     types_domain = models.CharField(max_length=2, choices=TYPES, default=STANDARD)
-    #first_domain = models.BooleanField()
-    #secondary_domain = models.BooleanField()
-    personage = models.ForeignKey(Personage, null=True, on_delete=models.CASCADE)
-
-    disciplineLevel = models.ManyToManyField(DisciplineLevels)
+    personage = models.ForeignKey(Personage, null=True, on_delete=models.CASCADE, related_name='skills')
 
     def __str__(self):
         return self.domainLevel.name + ' niveau ' + str(self.level) + ' avec les disciplines : ' + str(self.disciplineLevel)
@@ -371,11 +360,39 @@ class SkillLevels(models.Model):
         verbose_name = 'Compétence'
 
     def clean(self):
-        if self.types_domain == self.FIRST and self.level != 5:
-            raise(ValidationError("Un domaine primaire est forcément à 5"))
-        if self.types_domain == self.SECOND and self.level < 3:
-            raise (ValidationError("Un domaine secondaire doit être au minimum à 3"))
+        super().clean()
+        if self.domainLevel in self.personage.skills.all():
+            raise("Le personnage a déjà ce domaine")
+        if self.types_domain == self.FIRST:
+            if self.FIRST == self.personage.skills.all():
+                raise(ValidationError("Un domaine primaire existe déjà."))
+            if self.level != 5:
+                raise(ValidationError("Un domaine primaire est forcément à 5"))
+        if self.types_domain == self.SECOND:
+            if self.SECOND == self.personage.skills.all():
+                raise(ValidationError("Un domaine secondaire existe déjà."))
+            if self.level < 3:
+                raise (ValidationError("Un domaine secondaire doit être au minimum à 3"))
         # si domaine primaire ou secondaire, tester si notre personnage n'a pas deja un primaire (ou secondaire)
+
+
+class DisciplineLevels(models.Model):
+    skill = models.ForeignKey(Discipline, null=True, on_delete=models.SET_NULL)
+    level = models.PositiveIntegerField(validators=[MinValueValidator(6), MaxValueValidator(15)])
+    skill_level = models.ForeignKey(SkillLevels,
+                                    null=True,
+                                    on_delete=models.CASCADE,
+                                    related_name='discipline_levels')
+
+    def __str__(self):
+        return self.skill.name + ' niveau ' + str(self.level)
+
+    def clean(self):
+        super().clean()
+        if self.skill_level.domainLevel not in self.skill.domains.all():
+            raise(ValidationError("La discipline ne fait pas partie du domaine"))
+        if self.skill_level.level != 5:
+            raise(ValidationError("Le domaine doit être à 5 pour pouvoir prendre une discipline"))
 
 
 class WaysLevels(models.Model):
