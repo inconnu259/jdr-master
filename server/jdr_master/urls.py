@@ -16,12 +16,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.contrib.auth import views as auth_views
-from rest_framework_jwt.views import obtain_jwt_token
+from rest_framework_jwt.views import obtain_jwt_token, refresh_jwt_token
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('nested_admin/', include('nested_admin.urls')),
-    path('login/', obtain_jwt_token),
+    path('login/', obtain_jwt_token, name='user-login'),
+    path('login/refresh/', refresh_jwt_token, name='user-login-refresh'),
     path('api/', include('profile.urls')),
     path('logout/', auth_views.LogoutView.as_view(next_page='login')),
     path('', include('personage.urls')),

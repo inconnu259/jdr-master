@@ -9,7 +9,7 @@
           <v-toolbar-title>Les Ombres d'Esteren</v-toolbar-title>
           <v-spacer></v-spacer>
           <v-toolbar-items>
-              <v-btn>Deconnexion</v-btn>
+              <v-btn @click="logout">Deconnexion</v-btn>
           </v-toolbar-items>
       </v-toolbar>
       <v-content>
@@ -19,7 +19,13 @@
 </template>
 
 <script>
+import router from './router';
 export default {
-  name: 'App'
+  name: 'App',
+
+  methods: {
+        logout() {
+        }
+    }
 }
 </script>

@@ -6,6 +6,9 @@ from django.contrib import messages
 from .models import Profile
 from rest_framework import generics, permissions
 from .serializer import ProfileSerializer, UserSerializer
+from rest_framework import views
+import uuid
+from rest_framework.response import Response
 
 @login_required(login_url="login/")
 def home(request):
@@ -37,6 +40,16 @@ def profile(request):
         'user_form': user_form,
         'profile_form': profile_form
     })
+
+
+class ProfileLogoutAllView(views.APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        user = request.user
+        user.jwt_secret = uuid.uuid4()
+        user.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UserList(generics.ListAPIView):
