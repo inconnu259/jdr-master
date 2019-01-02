@@ -17,9 +17,18 @@ class UserSerializer(serializers.ModelSerializer):
 
 class ProfileSerializer(serializers.ModelSerializer):
     """ A serializer class for the Profil model """
+    user = UserSerializer(many=True, read_only=True)
+
     class Meta:
         # Specify the model we are using
         model = Profile
         # Specify the fields that should be made accessible
         # Mostly it is all fields in taht model
-        fields = ('user',)
+        fields = ('nickname', 'user')
+
+
+class TokenSerializer(serializers.Serializer):
+    """
+    This serializer serializes the token data
+    """
+    token = serializers.CharField(max_length=255)
