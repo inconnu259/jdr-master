@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import m2m_changed
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from profile.models import Profile
 
@@ -15,8 +16,9 @@ WAYS_CHOICES = (
 
 class Nation(models.Model):
     name = models.CharField(max_length=100,
-                            verbose_name='peuple')
-    description = models.TextField(verbose_name='description')
+                            verbose_name='peuple',
+                            unique=True)
+    description = models.TextField(verbose_name='description', blank=True)
     noun = models.CharField(max_length=100,
                             verbose_name='nom')
     plural = models.CharField(max_length=100,
@@ -38,8 +40,9 @@ class Nation(models.Model):
 
 class Place(models.Model):
     name = models.CharField(max_length=100,
-                            verbose_name='place')
-    description = models.TextField(verbose_name='description')
+                            verbose_name='place',
+                            unique=True)
+    description = models.TextField(verbose_name='description', blank=True)
 
     def __str__(self):
         return self.name
@@ -52,7 +55,8 @@ class Place(models.Model):
 
 class Discipline(models.Model):
     name = models.CharField(max_length=100,
-                            verbose_name='nom')
+                            verbose_name='nom',
+                            unique=True)
     description = models.TextField(blank=True,
                                    verbose_name='description')
 
@@ -65,19 +69,35 @@ class Discipline(models.Model):
         ordering = ("name",)
 
 
+class Way(models.Model):
+    name = models.CharField(max_length=100,
+                            verbose_name='Voie',
+                            unique=True)
+    description = models.TextField(verbose_name='description',
+                                   blank=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = 'Voie'
+        verbose_name_plural = 'Voies'
+        ordering = ("name",)
+
+
 class Domain(models.Model):
     name = models.CharField(max_length=100,
-                            verbose_name='domaine')
-    description = models.TextField(verbose_name='description')
-    way = models.CharField(max_length=2,
-                           verbose_name='voie',
-                           choices=WAYS_CHOICES)
+                            verbose_name='domaine',
+                            unique=True)
+    description = models.TextField(verbose_name='description',
+                                   blank=True)
+    way = models.ForeignKey(Way, on_delete=models.CASCADE, related_name='domain')
     disciplines = models.ManyToManyField(Discipline,
                                          verbose_name='discipline',
                                          related_name='domains')
 
     def __str__(self):
-        return self.name + ' (' + self.get_way_display() + ')'
+        return self.name + ' (' + self.way.name[:2] + ')'
 
     class Meta:
         verbose_name = 'Domaine'
@@ -87,8 +107,10 @@ class Domain(models.Model):
 
 class Social(models.Model):
     name = models.CharField(max_length=100,
-                            verbose_name='social')
-    description = models.TextField(verbose_name='description')
+                            verbose_name='social',
+                            unique=True)
+    description = models.TextField(verbose_name='description',
+                                   blank=True)
 
     domains = models.ManyToManyField(Domain,
                           verbose_name='domaines',
@@ -105,8 +127,10 @@ class Social(models.Model):
 
 class Profession(models.Model):
     name = models.CharField(max_length=100,
-                            verbose_name='metier')
-    description = models.TextField(verbose_name='description')
+                            verbose_name='metier',
+                            unique=True)
+    description = models.TextField(verbose_name='description',
+                                   blank=True)
     primary_domain = models.ForeignKey(Domain,
                                        verbose_name='domaine primaire',
                                        on_delete=models.SET_NULL,
@@ -125,20 +149,6 @@ class Profession(models.Model):
         ordering = ("name",)
 
 
-class Way(models.Model):
-    name = models.CharField(max_length=100,
-                            verbose_name='Voie')
-    description = models.TextField(verbose_name='description')
-
-    def __str__(self):
-        return self.name
-
-    class Meta:
-        verbose_name = 'Voie'
-        verbose_name_plural = 'Voies'
-        ordering = ("name",)
-
-
 class Traits(models.Model):
     TRAIT_CHOICE = (
         ('QMAJ', 'Qualité majeur'),
@@ -147,8 +157,9 @@ class Traits(models.Model):
         ('FMIN', 'Défaut mineur'),
     )
     name = models.CharField(max_length=100,
-                            verbose_name='trait de caractère')
-    way = models.ForeignKey(Way, blank=True, on_delete=models.CASCADE, related_name='traits')
+                            verbose_name='trait de caractère',
+                            unique=True)
+    way = models.ForeignKey(Way, on_delete=models.CASCADE, related_name='traits')
     type_trait = models.CharField(max_length=10, choices=TRAIT_CHOICE)
 
     def __str__(self):
@@ -170,12 +181,38 @@ class Traits(models.Model):
 #        return self.skill.name + ' niveau ' + str(self.level)
 
 
-class DisciplineLevels(models.Model):
-    skill = models.ForeignKey(Discipline, null=True, on_delete=models.SET_NULL)
-    level = models.IntegerField()
+class Setback(models.Model):
+    name = models.CharField(max_length=100, verbose_name='nom',
+                            unique=True)
+    description = models.TextField(verbose_name='description',
+                                   blank=True)
+    feminine = models.CharField(max_length=100, verbose_name='feminin')
+    # rajouter un malus => suivant ce que c'est, sur le truc
 
-    def __str__(self):
-        return self.skill.name + ' niveau ' + str(self.level)
+    class Meta:
+        verbose_name = 'Revers'
+        verbose_name_plural = 'Revers'
+        ordering = ("name",)
+
+
+# Un désavantage, au final, c'est aussi un avantage mais négatif !
+class Advantage(models.Model):
+    name = models.CharField(max_length=100, verbose_name='nom',
+                            unique=True)
+    points = models.IntegerField()
+    descriptions = models.TextField(verbose_name='description',
+                                    blank=True)
+    # bonus : discipline / domaine et nbre de points en plus
+    # le bonus peut être aussi textuel : ex : allié il faut le nom de son allié
+    # le bonus peut être aussi monetaire : aisance financière...
+    # c'est la merde en fait !
+    bonus = None
+    # on peut faire un avantage++ qui est comme une évolution d'un avantage
+    # pour simuler cela, on peut faire un avantage qui requiert d'avoir l'avantage "niveau n-1"
+    # difficulté de cette méthode : n'afficher que le dernier niveau
+    # et savoir s'il faut tenir compte que du bonus du dernier niveau, ou du bonus de tous les autres niveaux
+    # donc le bonus serait vu que comme une addition.
+    requiert = None
 
 
 class Personage(models.Model):
@@ -186,46 +223,77 @@ class Personage(models.Model):
     name = models.CharField(max_length=100, verbose_name='nom')
     genre = models.CharField(max_length=10,
                              choices=SEXE_CHOICES)
-    birthdate = models.IntegerField(default=20)
+    birthdate = models.PositiveIntegerField(validators=[MinValueValidator(0), MaxValueValidator(150)],
+                                            default=20)
     nation = models.ForeignKey(Nation, null=True, on_delete=models.SET_NULL,
                                verbose_name='peuple')
     profession = models.ManyToManyField(Profession,
                                         verbose_name='metier',
-                                        related_name='personnages')
-    description = models.TextField(verbose_name='description')
+                                        related_name='personages')
+    description = models.TextField(verbose_name='description',
+                                   blank=True)
     player = models.ForeignKey(Profile, on_delete=models.CASCADE,
                                verbose_name='joueur',
-                               related_name='personnages')
-    ways = None
-    advantages = None
-    disadvantages = None
-    sanity = None
+                               related_name='personages')
 
-    discipline = None
-    domain = None
-    primary_domain = None
-    secondary_domain = None
-    #skill_level = models.ManyToOneRel(SkillLevels,
-    #                                  related_name='personnages')
+    advantages = models.ForeignKey(Advantage,
+                                   verbose_name='avantage',
+                                   blank=True,
+                                   null=True,
+                                   on_delete=models.SET_NULL)
+    disadvantages = None
+    sanity = models.PositiveIntegerField(validators=[MinValueValidator(0), MaxValueValidator(19)],
+                                         default=19)
+
+    #survie, vigueur : calculé automatiquement à la création du perso => fonction pour la valeur de base
+    # Valeurs stockées = valeurs qui peut être modifié au cours de la partie. A la création c'est utilisé par celle de base
+    # ne peut pas dépasser celle de base.
+    stamina = None
+    survival = None
+
 
     weapons = None
+    armor = None
+    # potentiel de combat, defense, rapidité : calculé automatiquement
+    # score d'attaque calculé automatiquement
+    # attitude : automatique, mouvement aussi, protection aussi
+
+    # ajouter automatiquement weapon et armor à la liste des équipements quand elle est demandée
+    # text ou database equipment qui permet de pouvoir ajouter des élements ? et d'avoir un tracking ?
+    equipment = None
 
     artefact = None
     tresor = None
+    precious = None
 
+    resources = None
+
+    # rindath, exaltation calculé automatiquement => sert à la valeur maximal.
+    # valeur sauvé = valeur actuel
     rindath = None
     ogham = None
-    Flux = None
+    exaltation = None
+    major_miracles = None
+    minor_miracles = None
+    mineral_flux = None
+    vegetal_flux = None
+    organic_flux = None
+    fossil_flux = None
 
     birthplace = None
     residence = None  # Rural / Urban
     social = None
-    story = models.TextField(verbose_name='histoire')
-    setback = None
+    story = models.TextField(verbose_name='histoire',
+                             blank=True)
+    setback = models.ForeignKey(Setback, null=True, on_delete=models.SET_NULL,
+                                verbose_name='Revers')
 
-    mental_health = None
+    mental_health = models.PositiveSmallIntegerField()
+    mental_resistance = models.PositiveSmallIntegerField()
 
-    personality = None
+    personality = models.TextField(blank=True)
+
+    xp = models.PositiveSmallIntegerField(default=0)
 
     def __str__(self):
         return self.name
@@ -251,15 +319,36 @@ class Personage(models.Model):
         # Check if secondary_domain is 3 min
         # Check if
 
+    def clean(self):
+        super().clean()
+        if self.ways.count() != 5:
+            raise ValidationError("Il y a {} voies au lieu de 5".format(self.ways.count()))
+        total = 0
+        max_min = False
+        for way in self.ways.all():
+            total += way.level
+            if way.level == 1 or way.level == 5:
+                max_min = True
+        if 15 != total:
+            raise ValidationError("La somme des voies doit être égal à 15.")
+        if not max_min:
+            raise(ValidationError("Au moins une voie doit être à 5 ou à 1."))
+
+
 
 class SkillLevels(models.Model):
-    domainLevel = models.ForeignKey(Domain, null=True, on_delete=models.SET_NULL)
-    level = models.IntegerField()
-    first_domain = models.BooleanField()
-    secondary_domain = models.BooleanField()
-    personnage = models.ForeignKey(Personage, null=True, on_delete=models.SET_NULL)
-
-    disciplineLevel = models.ManyToManyField(DisciplineLevels)
+    domainLevel = models.ForeignKey(Domain, null=True, on_delete=models.CASCADE)
+    level = models.PositiveIntegerField(validators=[MinValueValidator(0), MaxValueValidator(5)])
+    FIRST = '1'
+    SECOND = '2'
+    STANDARD = 'ST'
+    TYPES = (
+        (FIRST, 'Premier'),
+        (SECOND, 'Second'),
+        (STANDARD, 'Standard')
+    )
+    types_domain = models.CharField(max_length=2, choices=TYPES, default=STANDARD)
+    personage = models.ForeignKey(Personage, null=True, on_delete=models.CASCADE, related_name='skills')
 
     def __str__(self):
         return self.domainLevel.name + ' niveau ' + str(self.level) + ' avec les disciplines : ' + str(self.disciplineLevel)
@@ -272,13 +361,43 @@ class SkillLevels(models.Model):
     class Meta:
         verbose_name = 'Compétence'
 
+    def clean(self):
+        super().clean()
+        if self.domainLevel in self.personage.skills.all():
+            raise("Le personnage a déjà ce domaine")
+        if self.types_domain == self.FIRST:
+            if self.FIRST == self.personage.skills.all():
+                raise(ValidationError("Un domaine primaire existe déjà."))
+            if self.level != 5:
+                raise(ValidationError("Un domaine primaire est forcément à 5"))
+        if self.types_domain == self.SECOND:
+            if self.SECOND == self.personage.skills.all():
+                raise(ValidationError("Un domaine secondaire existe déjà."))
+            if self.level < 3:
+                raise (ValidationError("Un domaine secondaire doit être au minimum à 3"))
+        # si domaine primaire ou secondaire, tester si notre personnage n'a pas deja un primaire (ou secondaire)
 
-class Setback(models.Model):
-    name = models.CharField(max_length=100, verbose_name='nom')
-    description = models.TextField(verbose_name='description')
-    feminine = models.CharField(max_length=100, verbose_name='feminin')
 
-    class Meta:
-        verbose_name = 'Revers'
-        verbose_name_plural = 'Revers'
-        ordering = ("name",)
+class DisciplineLevels(models.Model):
+    skill = models.ForeignKey(Discipline, null=True, on_delete=models.SET_NULL)
+    level = models.PositiveIntegerField(validators=[MinValueValidator(6), MaxValueValidator(15)])
+    skill_level = models.ForeignKey(SkillLevels,
+                                    null=True,
+                                    on_delete=models.CASCADE,
+                                    related_name='discipline_levels')
+
+    def __str__(self):
+        return self.skill.name + ' niveau ' + str(self.level)
+
+    def clean(self):
+        super().clean()
+        if self.skill_level.domainLevel not in self.skill.domains.all():
+            raise(ValidationError("La discipline ne fait pas partie du domaine"))
+        if self.skill_level.level != 5:
+            raise(ValidationError("Le domaine doit être à 5 pour pouvoir prendre une discipline"))
+
+
+class WaysLevels(models.Model):
+    way = models.ForeignKey(Way, blank=True, on_delete=models.CASCADE, related_name='ways_level')
+    level = models.PositiveIntegerField(validators=[MinValueValidator(0), MaxValueValidator(5)])
+    personage = models.ForeignKey(Personage, null=True, on_delete=models.CASCADE, related_name='ways')

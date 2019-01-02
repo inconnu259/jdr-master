@@ -1,4 +1,5 @@
 from django.contrib import admin
+import nested_admin
 from .models import *
 
 
@@ -25,15 +26,30 @@ class DomainInLine(admin.TabularInline):
     can_delete = False
 
 
-class ProfessionInLine(admin.TabularInline):
-    model = Profession.personnages.through
+class ProfessionInLine(nested_admin.NestedStackedInline):
+    model = Profession.personages.through
+    extra = 1
     can_delete = False
     max_num = 2
 
 
-class SkillLevelsInLine(admin.TabularInline):
+class DisciplineLevelsInLine(nested_admin.NestedTabularInline):
+    model = DisciplineLevels
+    can_delete = True
+
+
+class SkillLevelsInLine(nested_admin.NestedTabularInline):
     model = SkillLevels
+    can_delete = True
+    show_change_link = True
+    inlines = (DisciplineLevelsInLine, )
+
+
+class WaysLevelsInLine(nested_admin.NestedTabularInline):
+    model = WaysLevels
     can_delete = False
+    min_num = 5
+    max_num = 5
 
 
 @admin.register(Domain)
@@ -54,7 +70,7 @@ class WayAdmin(admin.ModelAdmin):
 
 @admin.register(Discipline)
 class DisciplineAdmin(admin.ModelAdmin):
-    inlines = [DomainInLine,]
+    inlines = [DomainInLine]
 
 
 @admin.register(Profession)
@@ -68,14 +84,14 @@ class SocialAdmin(admin.ModelAdmin):
 
 
 @admin.register(Personage)
-class PersonnageAdmin(admin.ModelAdmin):
-    inlines = [ProfessionInLine, SkillLevelsInLine]
-    exclude = ['profession',]
+class PersonnageAdmin(nested_admin.NestedModelAdmin):
+    inlines = [WaysLevelsInLine, ProfessionInLine, SkillLevelsInLine]
+    exclude = ['profession']
 
 
 @admin.register(SkillLevels)
 class SkillLelvesAdmin(admin.ModelAdmin):
-    pass
+    inlines = [DisciplineLevelsInLine]
 
 
 @admin.register(Setback)
@@ -85,4 +101,9 @@ class SetBackAdmin(admin.ModelAdmin):
 
 @admin.register(DisciplineLevels)
 class DisciplineLevelsAdmin(admin.ModelAdmin):
+    pass
+
+
+@admin.register(WaysLevels)
+class WaysLevelsAdmin(admin.ModelAdmin):
     pass

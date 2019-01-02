@@ -17,3 +17,7 @@ def get_git_changeset(absolute_path):
         return ""
     changeset = timestamp.strftime("%Y%m%d%H%M%S")
     return changeset
+
+
+def jwt_get_secret_key(user_model):
+    return user_model.profile.jwt_secret

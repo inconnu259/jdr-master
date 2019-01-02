@@ -76,7 +76,7 @@ export default {
           username: [
             v => !!v || "Un identifiant est requis",
             v => (v && v.length > 3) || "Un identifiant doit avoir plus de 3 charactères",
-            v => /^[a-z0-9_]+$/.test(v) || "Un identifiant doit avoir seulement des lettres et des chiffres"
+            v => /^[a-zA-Z0-9_]+$/.test(v) || "Un identifiant doit avoir seulement des lettres et des chiffres"
           ],
           password: [
             v => !!v || "Un mot de passe est requis",
@@ -105,6 +105,25 @@ export default {
                 })
               })
             }
+        },
+
+        logout() {
+          // checking if the input is valid
+          this.loading = true;
+          axios.post('http://localhost:8000/api/logout/all/', this.credentials).then(res => {
+            this.$session.stop();
+            router.push('/');
+          }).catch(e => {
+            this.loading = false;
+            swal({
+              type: 'warning',
+              title: 'Erreur',
+              text: 'Impossible de se déconnecter',
+              showConfirmButton:false,
+              showCloseButton:false,
+              timer:3000
+            })
+          })
         }
     }
 }
