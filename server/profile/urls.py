@@ -10,7 +10,8 @@ urlpatterns = [
     re_path('users/(?P<pk>\d+)/', UserRetrieveUpdate.as_view()),
 
     path('profiles/', ProfileList.as_view(), name="profiles-all"),
-    re_path('profiles/(?P<pk>\d+)/', ProfileRetrieveUpdate.as_view()),
+    re_path('profiles/(?P<pk>\d+)/', ProfileRetrieveUpdate.as_view(), name="profile"),
+    path('current_profile/', UserDetail, name="current-user"),
     path('auth/login/', LoginView.as_view(), name="auth-login"),
     re_path('logout/all/', ProfileLogoutAllView.as_view(), name='user-logout-all')
 ]

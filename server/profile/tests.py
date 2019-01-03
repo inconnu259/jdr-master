@@ -17,7 +17,6 @@ class BaseViewTest(APITestCase):
     def create_profile(nickname="", user=""):
         if nickname != "" and user != "":
             Profile.objects.create(nickname=nickname, user=user)
-            pass
 
     def login_a_user(self, username="", password=""):
         url = reverse(
@@ -48,7 +47,7 @@ class BaseViewTest(APITestCase):
         self.token = response.data['token']
         # set the token in the header
         self.client.credentials(
-            HTTP_AUTHORIZATION='Bearer ' + self.token
+            HTTP_AUTHORIZATION='JWT ' + self.token
         )
         self.client.login(username=username, password=password)
         return self.token
@@ -63,14 +62,17 @@ class BaseViewTest(APITestCase):
             last_name="user",
         )
         # add profile for super user
-        self.profile = Profile.objects.create(
-            nickname="super_testor",
-            user=self.user,
-        )
+        self.create_profile("super_testor", self.user)
         # add test data
-        user1 = User.objects.create(username="user1")
-        user2 = User.objects.create(username="user2")
-        user3 = User.objects.create(username="user3")
+        user1 = User.objects.create_user(
+            username="user1",
+            password='user_test',
+            email="user@mail.com",
+            first_name="user",
+            last_name="test"
+        )
+        user2 = User.objects.create_user(username="user2")
+        user3 = User.objects.create_user(username="user3")
         self.create_profile("the killer", user1)
         self.create_profile("amstramgram", user2)
         self.create_profile("bisounours", user3)
@@ -91,9 +93,15 @@ class AuthLoginUser(BaseViewTest):
         response = self.login_a_user("anonymous", "pass")
         # assert status code is 401 UNAUTHORIZED
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        # test login with no admin count
+        response = self.login_a_user("user1", "user_test")
+        # assert token key exists
+        self.assertIn("token", response.data)
+        # assert status code is 200 OK
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
-class GetAllProfilesTest(BaseViewTest):
+class ApiProfilesTest(BaseViewTest):
     def test_get_all_profiles(self):
         """
         This test ensure that all profiles added in the setUp method
@@ -111,3 +119,54 @@ class GetAllProfilesTest(BaseViewTest):
         serialized = ProfileSerializer(expected, many=True)
         self.assertEqual(response.data, serialized.data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.login_client('user1', 'user_test')
+        response = self.client.get(
+            reverse(
+                "profiles-all",
+                kwargs={"version": "v1"})
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_get_profile_id(self):
+        """
+        This test
+        """
+        self.login_client('test_user', 'testing')
+        #self.client.headers.update({'': ''})
+        response = self.client.get(
+            reverse(
+                "profile",
+                kwargs={"version": "v1",
+                        "pk": "1"})
+        )
+        expected = Profile.objects.get(id=1)
+        serialized = ProfileSerializer(instance=expected)
+        self.assertEqual(response.data, serialized.data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.login_client('user1', 'user_test')
+        response = self.client.get(
+            reverse(
+                "profile",
+                kwargs={"version": "v1",
+                        "pk": "1"})
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_get_current_profile(self):
+        """
+        This test
+        """
+        self.login_client('test_user', 'testing')
+        response = self.client.get(
+            reverse(
+                "current-user",
+                kwargs={"version": "v1"})
+        )
+        expected = Profile.objects.get(nickname="super_testor")
+        serialized = ProfileSerializer(instance=expected)
+        self.assertEqual(response.data, serialized.data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.login_client('user1', 'user_test')

@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'djoser',
     'nested_admin',
     'utils',
     'personage',
@@ -74,7 +75,8 @@ JWT_AUTH = {
     'JWT_EXPIRATION_DELTA': datetime.timedelta(minutes=120),
     'JWT_ALLOW_REFRESH': True,
     'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=7),
-    'JWT_GET_USER_SECRET_KEY': 'utils.misc.jwt_get_secret_key'
+    'JWT_GET_USER_SECRET_KEY': 'utils.misc.jwt_get_secret_key',
+    'JWT_RESPONSE_PAYLOAD_HANDLER': 'profile.utils.jwt_response_handler',
 }
 
 MIDDLEWARE = [

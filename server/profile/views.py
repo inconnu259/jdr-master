@@ -11,6 +11,7 @@ from rest_framework import views
 import uuid
 from rest_framework_jwt.settings import api_settings
 from rest_framework.response import Response
+from rest_framework.decorators import api_view
 
 # Get the JWT settings, add these lines after the import/from lines
 jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
@@ -49,10 +50,23 @@ def profile(request):
     })
 
 
-class CurrentUserView(views.APIView):
-    def get(self, request):
-        serializer = UserSerializer(request.user)
-        return Response(serializer.data)
+class UserDetail(generics.RetrieveUpdateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request, *args, **kwargs):
+        serializer = self.serializer_class(request.user)
+        return Response(serializer.data, status=views.status.HTTP_200_OK)
+
+    def put(self, request, *args, **kwargs):
+        serializer_data = request.data.get('user', {})
+
+        serializer = UserSerializer(
+            request.user, data=serializer_data, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=views.status.HTTP_200_OK)
 
 
 class ProfileLogoutAllView(views.APIView):
@@ -109,7 +123,7 @@ class LoginView(generics.CreateAPIView):
     # class setting
     permission_classes = (permissions.AllowAny, )
 
-    queryset =  User.objects.all()
+    queryset = User.objects.all()
 
     def post(self, request, *args, **kwargs):
         username = request.data.get("username", "")
