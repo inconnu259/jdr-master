@@ -1,7 +1,5 @@
 from django.contrib.auth.models import User
-
 from rest_framework import serializers
-
 from .models import Profile
 
 
@@ -17,9 +15,18 @@ class UserSerializer(serializers.ModelSerializer):
 
 class ProfileSerializer(serializers.ModelSerializer):
     """ A serializer class for the Profil model """
+    user = UserSerializer(read_only=True)
+
     class Meta:
         # Specify the model we are using
         model = Profile
         # Specify the fields that should be made accessible
         # Mostly it is all fields in that model
-        fields = ('nickname', 'user', 'personnages')
+        fields = ('nickname', 'user')
+
+
+class TokenSerializer(serializers.Serializer):
+    """
+    This serializer serializes the token data
+    """
+    token = serializers.CharField(max_length=255)

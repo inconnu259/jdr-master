@@ -1,7 +1,6 @@
 # profile/urls.py
 from django.urls import path, re_path
 from django.contrib.auth import views as auth_views
-from . import views
 from .views import *
 
 
@@ -10,8 +9,9 @@ urlpatterns = [
     path('create-users/', UserCreate.as_view()),
     re_path('users/(?P<pk>\d+)/', UserRetrieveUpdate.as_view()),
 
-    path('profiles/', ProfileList.as_view()),
+    path('profiles/', ProfileList.as_view(), name="profiles-all"),
     re_path('profiles/(?P<pk>\d+)/', ProfileRetrieveUpdate.as_view()),
+    path('auth/login/', LoginView.as_view(), name="auth-login"),
     re_path('logout/all/', ProfileLogoutAllView.as_view(), name='user-logout-all')
 ]
 
