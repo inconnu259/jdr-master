@@ -20,4 +20,5 @@ def get_git_changeset(absolute_path):
 
 
 def jwt_get_secret_key(user_model):
+    print("jwt_get_secret_key : user : {0}, secret: {1}".format(user_model.username, user_model.profile.jwt_secret))
     return user_model.profile.jwt_secret

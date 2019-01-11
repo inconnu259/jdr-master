@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout, user_logged_out, user_logged_in
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from .forms import UserForm, ProfileForm
@@ -50,32 +50,36 @@ def profile(request):
     })
 
 
-class UserDetail(generics.RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
-    permission_classes = (permissions.IsAuthenticated,)
+class ProfileView(generics.RetrieveUpdateAPIView):
+    """
+    Use this endpoint to retrieve/update profile.
+    """
+    print("ProfileView")
+    queryset = User.objects.all()
+    serializer_class = ProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-    def get(self, request, *args, **kwargs):
-        serializer = self.serializer_class(request.user)
-        return Response(serializer.data, status=views.status.HTTP_200_OK)
+    def get_object(self, *args, **kwargs):
+        return self.request.user.profile
 
-    def put(self, request, *args, **kwargs):
-        serializer_data = request.data.get('user', {})
-
-        serializer = UserSerializer(
-            request.user, data=serializer_data, partial=True
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data, status=views.status.HTTP_200_OK)
+    def perform_update(self, serializer):
+        pass
 
 
 class ProfileLogoutAllView(views.APIView):
+    """
+    Use this endpoint to log out all session for a given user.
+    """
+    print("LogoutView")
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
+        print("Change uuid for logout")
         user = request.user
-        user.jwt_secret = uuid.uuid4()
+        user.profile.jwt_secret = uuid.uuid4()
         user.save()
+        logout(request)
+        #user_logged_out.send(sender=request.user.__class__, request=request, user=request.user)
         return Response(status=views.status.HTTP_204_NO_CONTENT)
 
 
@@ -121,6 +125,7 @@ class LoginView(generics.CreateAPIView):
     """
     # This persmission class will overide the global permission
     # class setting
+    print("LoginView")
     permission_classes = (permissions.AllowAny, )
 
     queryset = User.objects.all()
@@ -133,12 +138,12 @@ class LoginView(generics.CreateAPIView):
             # login saves the user's ID in the session,
             # using Django's session framework.
             login(request, user)
-            serializer = TokenSerializer(data={
+            '''serializer = TokenSerializer(data={
                 # using drf jwt utility functions to generate a token
                 "token": jwt_encode_handler(
                     jwt_payload_handler(user)
                 )})
-            serializer.is_valid()
+            serializer.is_valid()'''
+            #user_logged_in.send(sender=request.user.__class__, request=request, user=request.user)
             return Response(serializer.data)
-        return Response(status=views.status.HTTP_401_UNAUTHORIZED
-)
+        return Response(status=views.status.HTTP_401_UNAUTHORIZED)

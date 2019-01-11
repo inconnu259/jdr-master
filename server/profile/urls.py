@@ -1,18 +1,24 @@
 # profile/urls.py
 from django.urls import path, re_path
 from django.contrib.auth import views as auth_views
+from rest_framework_jwt import views as jwt_views
 from .views import *
 
 
 urlpatterns = [
-    path('users/', UserList.as_view()),
-    path('create-users/', UserCreate.as_view()),
-    re_path('users/(?P<pk>\d+)/', UserRetrieveUpdate.as_view()),
+    #path('users/', UserList.as_view()),
+    #path('create-users/', UserCreate.as_view()),
+    #re_path('users/(?P<pk>\d+)/', UserRetrieveUpdate.as_view()),
 
-    path('profiles/', ProfileList.as_view(), name="profiles-all"),
-    re_path('profiles/(?P<pk>\d+)/', ProfileRetrieveUpdate.as_view(), name="profile"),
-    path('current_profile/', UserDetail, name="current-user"),
-    path('auth/login/', LoginView.as_view(), name="auth-login"),
+    #path('profiles/', ProfileList.as_view(), name="profiles-all"),
+    #re_path('profiles/(?P<pk>\d+)/', ProfileRetrieveUpdate.as_view(), name="profile"),
+    #path('current_profile/', UserDetail, name="current-user"),
+    #path('auth/login/', LoginView.as_view(), name="auth-login"),
+    # Views are defined in Djoser, but we're assigning custom paths.
+    re_path('profile/view/', ProfileView.as_view(), name='current-profile'),
+    # Views are defined in Rest Framework JWT, but we're assigning custom paths.
+    re_path('user/login/', jwt_views.ObtainJSONWebToken.as_view(), name='user-login'),
+    re_path('user/login/refresh/', jwt_views.RefreshJSONWebToken.as_view(), name='user-login-refresh'),
     re_path('logout/all/', ProfileLogoutAllView.as_view(), name='user-logout-all')
 ]
 

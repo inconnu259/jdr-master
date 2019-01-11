@@ -1,11 +1,11 @@
 <template>
     <div>
-        Profile Page
+        <h1>Profile Page</h1>
+        <p></p>
     </div>
 </template>
 
 <script>
-import router from "../../router";
 export default {
   name: "Profile",
   mounted() {
@@ -18,6 +18,6 @@ export default {
         router.push("/login");
       }
     }
-  }
+  },
 };
 </script>

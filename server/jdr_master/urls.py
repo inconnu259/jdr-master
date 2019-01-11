@@ -21,11 +21,11 @@ from rest_framework_jwt.views import obtain_jwt_token, refresh_jwt_token
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('nested_admin/', include('nested_admin.urls')),
-    path('login/', obtain_jwt_token, name='create-token'),
-    path('login/refresh/', refresh_jwt_token, name='user-login-refresh'),
+    #path('login/', obtain_jwt_token, name='create-token'),
+    #path('login/refresh/', refresh_jwt_token, name='user-login-refresh'),
     re_path('api/(?P<version>(v1|v2))/', include('profile.urls')),
-    path('logout/', auth_views.LogoutView.as_view(next_page='login')),
-    re_path('api/', include('djoser.urls')),
-    re_path('api/', include('djoser.urls.jwt')),
+    #path('logout/', auth_views.LogoutView.as_view(next_page='login')),
+    #re_path('api/', include('djoser.urls')),
+    #re_path('api/', include('djoser.urls.jwt')),
     #path('api/', include('personage.urls')),
 ]
