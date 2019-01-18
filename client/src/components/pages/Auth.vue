@@ -89,9 +89,11 @@ export default {
           // checking if the input is valid
             if (this.$refs.form.validate()) {
               this.loading = true;
-              axios.post('http://localhost:8000/api/v1/user/login/', this.credentials).then(res => {
-                this.$session.start();
-                this.$session.set('token', res.data.token);
+              this.$store.dispatch('auth/login', this.credentials)
+                .then(() => this.$router.push('/'));
+              /*axios.post('http://localhost:8000/api/v1/user/login/', this.credentials).then(res => {
+                this.$store.commit('updateToken', response.data.token);
+
                 router.push('/');
               }).catch(e => {
                 this.loading = false;
@@ -103,7 +105,7 @@ export default {
                   showCloseButton:false,
                   timer:3000
                 })
-              })
+              })*/
             }
         },
 

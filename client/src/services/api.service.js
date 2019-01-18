@@ -1,21 +1,65 @@
 import Vue from 'vue'
 import axios from 'axios'
-import VueAxios from 'vue-axios'
-import { API_URL } from '@services/config'
+import AuthService from '@/services/AuthService'
+import { API_URL } from '@/services/config'
 
-const ApiService = {
-    init() {
-    Vue.use(VueAxios, axios)
-    Vue.axios.defaults.baseURL = API_URL
-    },
+export class ApiService{
+  constructor() {
+  }
 
-    get (resource, slug='') {
-        return Vue.axios
-            .get(`${resource}\${slug})
+  getProfile() {
+    const url = `$(API_URL}/profile/view/`;
+    return axios.get(url, {headers: { Authorization: `JWT ${AuthService.getAuthToken()}`}}).then(response => response.data);
+  }
+
+  get (resource, slug='') {
+    console.log("Get");
+    return axios
+            .get(`${resource}\${slug}`)
             .catch((error) => {
-                throw new Error(`ApiService ${error}`)
+              throw new Error(`ApiService ${error}`)
             })
-    },
+  }
 }
 
-export default ApiService
+
+
+/*const ApiService = {
+  init () {
+    console.log("ApiService");
+    Vue.use(VueAxios, axios)
+    Vue.axios.defaults.baseURL = API_URL
+    Vue.axios.defaults.headers =  {
+        'Content-Type': 'application/json',
+        'Authorization': 'JWT ' + this.$session.get('token')
+    }
+    Vue.axios.defaults.xsrfCookieName = 'csrfToken'
+    Vue.axios.defaults.xsrfHeaderName = 'X-CSRFToken'
+  },
+
+  get (resource, slug='') {
+    console.log("Get");
+    return Vue.axios
+            .get(`${resource}`)
+            .catch((error) => {
+              throw new Error(`ApiService ${error}`)
+            })
+  },
+
+  requireAuth(to, from, next) {
+    if(!isLoggedIn()){
+        next({
+            path: '/',
+            query: {redirect: to.fullPath}
+        });
+    } else {
+        next();
+    }
+  },
+
+  isLoggedIn() {
+   const idToken = getIdToken();
+   }
+}
+
+export default ApiService*/

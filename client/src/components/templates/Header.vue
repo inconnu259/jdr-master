@@ -1,23 +1,34 @@
 <template>
     <v-toolbar>
       <v-toolbar-items>
-          <v-btn flat>Profile</v-btn>
-          <v-btn>Personnages</v-btn>
+          <v-btn :to="{ name: 'profile' }">Profile</v-btn>
+          <v-btn :to="{ name: 'personage' }">Personnages</v-btn>
       </v-toolbar-items>
       <v-spacer></v-spacer>
       <v-toolbar-title>Les Ombres d'Esteren</v-toolbar-title>
       <v-spacer></v-spacer>
       <v-toolbar-items>
-          <v-btn @click="logout">Deconnexion</v-btn>
+          <v-btn v-show="!isAuthenticated" @click="login()">Connexion</v-btn>
+          <v-btn v-show="isAuthenticated" @click="logout()">Deconnexion</v-btn>
       </v-toolbar-items>
   </v-toolbar>
 </template>
 
 <script>
-    export default {
-        data() {
-            return {
-            }
+import { mapGetters } from 'vuex';
+
+export default {
+
+    methods: {
+        login(){
+            this.$router.push('/login');
+        },
+        logout(){
+            this.$router.push('/logout');
         }
-    }
+    },
+    computed: mapGetters('auth', [
+        'isAuthenticated',
+    ]),
+}
 </script>
