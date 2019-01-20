@@ -35,9 +35,9 @@ const actions = {
     context.commit(FETCH_START)
     console.log("Fetch personages");
     return ApiService
-      .get('profile/view')
+      .getProfileDetails()
       .then(({data}) => {
-        context.commit(SET_PERSONAGES, data.personages.results);
+        context.commit(SET_PERSONAGES, data);
         context.commit(FETCH_END)
       })
       .catch(({response}) => {

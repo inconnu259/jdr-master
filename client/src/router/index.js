@@ -12,7 +12,7 @@ import store from '@/store';
 Vue.use(Router)
 
 const requireAuthenticated = (to, from, next) => {
-  console.log('routing ', from)
+  console.log('routing authenticated ', from, next)
   store.dispatch('auth/initialize')
     .then(() => {
         if(!store.getters['auth/isAuthenticated']) {
@@ -23,12 +23,25 @@ const requireAuthenticated = (to, from, next) => {
     });
 };
 
+const requireUnauthenticated = (to, from, next) => {
+    store.dispatch('auth/initialize')
+        .then(() => {
+            if(store.getters['auth/isAuthenticated']) {
+                next('/home');
+            } else {
+                next();
+            }
+        });
+};
+
 const redirectLogout = (to, from, next) => {
+    console.log('routing logout ', from, next)
     store.dispatch('auth/logout')
     .then(() => next('/login'));
 };
 
 export default new Router({
+  saveScrollPosition: true,
   routes: [
     {
       path: '/profile',
@@ -45,6 +58,7 @@ export default new Router({
       path: '/login',
       name: 'login',
       component: Auth,
+      beforeEnter: requireUnauthenticated,
     },
     {
       path: '/personnages',

@@ -90,43 +90,20 @@ export default {
             if (this.$refs.form.validate()) {
               this.loading = true;
               this.$store.dispatch('auth/login', this.credentials)
-                .then(() => this.$router.push('/'));
-              /*axios.post('http://localhost:8000/api/v1/user/login/', this.credentials).then(res => {
-                this.$store.commit('updateToken', response.data.token);
-
-                router.push('/');
-              }).catch(e => {
-                this.loading = false;
-                swal({
-                  type: 'warning',
-                  title: 'Erreur',
-                  text: 'Mauvais identifiant ou mot de passe',
-                  showConfirmButton:false,
-                  showCloseButton:false,
-                  timer:3000
+                .then(() => this.$router.push('/'))
+                .catch(e => {
+                  this.loading = false;
+                  swal({
+                    type: 'warning',
+                    title: 'Erreur',
+                    text: 'Mauvais identifiant ou mot de passe',
+                    showConfirmButton: false,
+                    showCloseButton: false,
+                    timer: 300
+                  })
                 })
-              })*/
             }
         },
-
-        logout() {
-          // checking if the input is valid
-          this.loading = true;
-          axios.post('http://localhost:8000/api/logout/all/', this.credentials).then(res => {
-            this.$session.stop();
-            router.push('/');
-          }).catch(e => {
-            this.loading = false;
-            swal({
-              type: 'warning',
-              title: 'Erreur',
-              text: 'Impossible de se déconnecter',
-              showConfirmButton:false,
-              showCloseButton:false,
-              timer:3000
-            })
-          })
-        }
     }
 }
 </script>

@@ -9,7 +9,7 @@ import Vuetify from 'vuetify'
 import { sync } from 'vuex-router-sync'
 
 import 'vuetify/dist/vuetify.min.css'
-import VueSession from 'vue-session'
+//import VueSession from 'vue-session'
 
 import store from '@/store'
 
@@ -17,7 +17,7 @@ import store from '@/store'
 sync(store, router)
 
 Vue.use(Vuetify)
-Vue.use(VueSession)
+//Vue.use(VueSession)
 Vue.config.productionTip = false
 
 /* eslint-disable no-new */

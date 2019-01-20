@@ -24,6 +24,7 @@ urlpatterns = [
     #path('login/', obtain_jwt_token, name='create-token'),
     #path('login/refresh/', refresh_jwt_token, name='user-login-refresh'),
     re_path('api/(?P<version>(v1|v2))/', include('profile.urls')),
+    re_path('auth/', include('rest_auth.urls')),
     #path('logout/', auth_views.LogoutView.as_view(next_page='login')),
     #re_path('api/', include('djoser.urls')),
     #re_path('api/', include('djoser.urls.jwt')),

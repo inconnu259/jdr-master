@@ -1,24 +1,31 @@
 <template>
     <div>
         <h1>Profile Page</h1>
-        <p></p>
+        <!--<p>{{ profile.nickname }}</p>-->
     </div>
 </template>
 
 <script>
-import router from '../../router';
+import { mapGetters } from 'vuex';
+import { FETCH_A_PROFILE } from '@/store/actions.type'
 
 export default {
-  name: "Profile",
-  /*mounted() {
-    this.checkLoggedIn();
-  },
-  methods: {
-    checkLoggedIn() {
-      if (!this.$session.has("token")) {
-        router.push("/login");
-      }
-    }
-  },*/
+    name: "Profile",
+
+    mounted () {
+        this.$store.dispatch(FETCH_A_PROFILE)
+        .then(() => {
+            console.log("YOUPI");
+        })
+        .catch((err) => {
+            console.log("ERR : ", err);
+        })
+    },
+    /*computed: {
+      ...mapGetters([
+        'profile',
+        'isLoading'
+      ])
+    }*/
 };
 </script>

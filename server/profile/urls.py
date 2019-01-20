@@ -17,9 +17,9 @@ urlpatterns = [
     # Views are defined in Djoser, but we're assigning custom paths.
     re_path('profile/view/', ProfileView.as_view(), name='current-profile'),
     # Views are defined in Rest Framework JWT, but we're assigning custom paths.
-    re_path('user/login/', jwt_views.ObtainJSONWebToken.as_view(), name='user-login'),
-    re_path('user/login/refresh/', jwt_views.RefreshJSONWebToken.as_view(), name='user-login-refresh'),
-    re_path('logout/all/', ProfileLogoutAllView.as_view(), name='user-logout-all')
+    #re_path('user/login/', jwt_views.ObtainJSONWebToken.as_view(), name='user-login'),
+    #re_path('user/login/refresh/', jwt_views.RefreshJSONWebToken.as_view(), name='user-login-refresh'),
+    #re_path('logout/all/', ProfileLogoutAllView.as_view(), name='user-logout-all')
 ]
 
 '''

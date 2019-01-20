@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'rest_auth',
     'corsheaders',
     'nested_admin',
     'utils',
@@ -60,14 +61,15 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly'
     ],
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
+        #'rest_framework_jwt.authentication.JSONWebTokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.BasicAuthentication',
     ),
     'DEFAULT_VERSIONING_CLASS': 'rest_framework.versioning.URLPathVersioning',
 }
 
-JWT_AUTH = {
+'''JWT_AUTH = {
     'JWT_VERIFY': True,
     'JWT_VERIFY_EXPIRATION': True,
     'JWT_LEEWAY': 0,
@@ -76,7 +78,7 @@ JWT_AUTH = {
     'JWT_REFRESH_EXPIRATION_DELTA': datetime.timedelta(days=7),
     'JWT_GET_USER_SECRET_KEY': 'utils.misc.jwt_get_secret_key',
     #'JWT_RESPONSE_PAYLOAD_HANDLER': 'profile.utils.jwt_response_handler',
-}
+}'''
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -109,6 +111,8 @@ TEMPLATES = [
         },
     },
 ]
+
+REST_SESSION_LOGIN = True
 
 WSGI_APPLICATION = 'jdr_master.wsgi.application'
 

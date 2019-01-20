@@ -1,12 +1,15 @@
-import ApiService from '@/service/api.service'
+import ApiService from '@/services/api.service'
+import session from '@/services/session'
+
 import { FETCH_PROFILES,
          FETCH_A_PROFILE
        } from './actions.type'
 import  { FETCH_START,
           FETCH_END,
-          SET_PROFILE,
+          SET_A_PROFILE,
+          SET_PROFILES,
           SET_ERROR
-        } from '.mutations.type'
+        } from './mutations.type'
 
 const state = {
     profiles: [],
@@ -28,7 +31,7 @@ const getters = {
 }
 
 const actions = {
-    [FETCH_PROFILES] (context, payload) {
+    /*[FETCH_PROFILES] (context, payload) {
         context.commit(FETCH_START)
         return ApiService
             .get('profiles')
@@ -39,14 +42,14 @@ const actions = {
             .catch(({response})) => {
                 context.commit(SET_ERROR, response.data.errors)
             }
-    },
+    },*/
     [FETCH_A_PROFILE] (context, payload) {
         context.commit(FETCH_START)
-        const {profile_id} = payload
+        //const {profile_id} = payload
         return ApiService
-            .get(`profiles/${profile_id}`)
+            .getProfileDetails()
             .then(({data}) => {
-                context.commit(SET_A_PROFILE, data.profiles);
+                context.commit(SET_A_PROFILE, data);
                 context.commit(FETCH_END)
             })
             .catch(({response}) => {
@@ -75,7 +78,7 @@ const mutations = {
     }
 }
 
-export default = {
+export default {
     state,
     getters,
     actions,

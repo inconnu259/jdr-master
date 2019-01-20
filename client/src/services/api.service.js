@@ -1,4 +1,15 @@
-import Vue from 'vue'
+import session from './session';
+
+export default {
+    getProfileDetails() {
+        return session.get('/api/v1/profile/view/');
+    },
+    getAccountDetails() {
+        return session.get('/auth/user/');
+    },
+}
+
+/*import Vue from 'vue'
 import axios from 'axios'
 import AuthService from '@/services/AuthService'
 import { API_URL } from '@/services/config'
@@ -20,7 +31,7 @@ export class ApiService{
               throw new Error(`ApiService ${error}`)
             })
   }
-}
+}*/
 
 
 
