@@ -6,6 +6,11 @@ from .views import *
 
 urlpatterns = [
     re_path('nations_list/', views.NationView.as_view(), name='nations_list'),
+    path('profession_list/', views.ProfessionList.as_view(), name='profession_list'),
+    path('social_list/', views.SocialList.as_view(), name='social_list'),
+    path('domain_list/', views.DomainList.as_view(), name='domain_list'),
+    path('discipline_list/', views.DisciplineList.as_view(), name='discipline_list'),
+    path('way_list/', views.WayList.as_view(), name='way_list'),
     path('create_personage', views.create_personage, name='create_personage'),
     path('creator_choose_nation/<int:nation_id>', views.creator_choose_nation, name='choose_nation'),
     path('creator_choose_profession/<int:profession_id>', views.creator_choose_profession, name='choose_profession'),

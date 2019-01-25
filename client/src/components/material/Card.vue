@@ -49,7 +49,7 @@
 
     <v-card-actions v-if="$slots.actions">
       <slot name="actions" />
-    </v-card-actions>
+    </v-card-actions>-
   </v-card>
 </template>
 
@@ -64,6 +64,10 @@ export default {
     elevation: {
       type: [Number, String],
       default: 10
+    },
+    ripple: {
+      type: Boolean,
+      default: false
     },
     inline: {
       type: Boolean,

@@ -6,28 +6,32 @@
       grid-list-xl>
         <v-layout
           justify-center
-          wrap
-          row>
+          row
+          wrap>
             <v-flex
               xs12
               md6
               py-4
-              v-for="(nation, i) in nations">
+              v-for="(n, i) in nations">
                 <v-hover>
                     <material-card
                       slot-scope="{ hover }"
                       :class="`elevation-${hover ? 18 : 2}`"
-                      class="mx-auto grow"
+                      class="mx-auto"
                       height="100%"
                       color="green"
-                      :title="nation.name"
+                      :title="n.name"
                       hover
+                      v-ripple
+                      shift
+                      :value="true"
+                      :active.sync="e2"
                       @click.native="chooseNation(i)"
                       text="choisir ce peuple ?">
                         <v-card-text
-                          color="green"
-                          class="text-xs-justify">
-                            <p>{{ nation.description }}</p>
+                          class="text-xs-justify"
+                          :ripple="true">
+                            <p>{{ n.description }}</p>
                         </v-card-text>
                     </material-card>
                 </v-hover>

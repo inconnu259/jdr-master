@@ -2,10 +2,10 @@ from django.shortcuts import render, get_object_or_404, redirect, resolve_url
 from django.db.models.query_utils import Q
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_GET
-from .models import Nation, Profession, Place, Social, Domain, Traits, Way, Personage
+from .models import Nation, Profession, Place, Social, Domain, Traits, Way, Personage, Discipline
 from .creator import Creator
 from rest_framework import generics, permissions
-from .serializer import PersonageSerializer, NationSerializer
+from .serializer import PersonageSerializer, NationSerializer, ProfessionSerializer, SocialSerializer, WaySerializer, DomainSerializer, DisciplineSerializer, PlaceSerializer
 
 
 @login_required(login_url="login/")
@@ -156,3 +156,34 @@ class NationView(generics.ListAPIView):
 
     '''def post(self, request, *args, **kwargs):
         pass'''
+
+
+
+class ProfessionList(generics.ListAPIView):
+    queryset = Profession.objects.all()
+    serializer_class = ProfessionSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+
+class SocialList(generics.ListAPIView):
+    queryset = Social.objects.all()
+    serializer_class = SocialSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+
+class DisciplineList(generics.ListAPIView):
+    queryset = Discipline.objects.all()
+    serializer_class = DisciplineSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+
+class DomainList(generics.ListAPIView):
+    queryset = Domain.objects.all()
+    serializer_class = DomainSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+
+class WayList(generics.ListAPIView):
+    queryset = Way.objects.all()
+    serializer_class = WaySerializer
+    permission_classes = (permissions.IsAuthenticated,)
