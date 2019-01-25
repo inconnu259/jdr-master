@@ -5,7 +5,7 @@ from django.views.decorators.http import require_GET
 from .models import Nation, Profession, Place, Social, Domain, Traits, Way, Personage
 from .creator import Creator
 from rest_framework import generics, permissions
-from .serializer import PersonageSerializer
+from .serializer import PersonageSerializer, NationSerializer
 
 
 @login_required(login_url="login/")
@@ -137,3 +137,22 @@ class PersonageRetrieveUpdate(generics.RetrieveUpdateAPIView):
     queryset = Personage.objects.all()
     serializer_class = PersonageSerializer
     permission_classes = (permissions.IsAuthenticated,)
+
+
+class NationView(generics.ListAPIView):
+    """
+    Use this endpoint to retrieve/update profile.
+    """
+    queryset = Nation.objects.all()
+    serializer_class = NationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    '''def get_object(self, *args, **kwargs):
+        #return self.request.user.profile
+        pass
+
+    def perform_update(self, serializer):
+        pass'''
+
+    '''def post(self, request, *args, **kwargs):
+        pass'''

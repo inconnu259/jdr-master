@@ -7,6 +7,9 @@ export default {
     getAccountDetails() {
         return session.get('/auth/user/');
     },
+    getNationsList() {
+        return session.get('/api/v1/nations_list')
+    },
 }
 
 /*import Vue from 'vue'

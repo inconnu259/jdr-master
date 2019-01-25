@@ -28,5 +28,5 @@ urlpatterns = [
     #path('logout/', auth_views.LogoutView.as_view(next_page='login')),
     #re_path('api/', include('djoser.urls')),
     #re_path('api/', include('djoser.urls.jwt')),
-    #path('api/', include('personage.urls')),
+    re_path('api/(?P<version>(v1|v2))/', include('personage.urls')),
 ]

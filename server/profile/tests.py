@@ -1,142 +1,121 @@
 import json
 from django.contrib.auth.models import User
 from django.urls import reverse
-from rest_framework.test import APITestCase, APIClient
+from django.test import TestCase, override_settings
+from rest_framework.test import APIClient
 from rest_framework.views import status
+from .mixins import TestsMixin
 from rest_framework_jwt.settings import api_settings
 from django.contrib.auth import user_logged_out
 from .serializer import ProfileSerializer, UserSerializer
 from .models import Profile
 
-# Get the JWT settings, add these lines after the import/from lines
-jwt_payload_handler = api_settings.JWT_PAYLOAD_HANDLER
-jwt_encode_handler = api_settings.JWT_ENCODE_HANDLER
-
 # tests for profiles
 
 
-class BaseViewTest(APITestCase):
-    client = APIClient(enforce_csrf_checks=True)
-
+class BaseViewTest(TestsMixin, TestCase):
+    SUPER_USER = "super_test"
+    PASSWORD_SUPER_USER = "super_pass"
+    USER = "user_test"
+    PASSWORD_USER = "user_pass"
     @staticmethod
     def create_profile(nickname="", user=""):
         if nickname != "" and user != "":
             Profile.objects.create(nickname=nickname, user=user)
 
-    def login_a_user(self, username="", password=""):
-        url = reverse(
-            "user-login",
-            kwargs={"version": "v1"}
-        )
-        return self.client.post(
-            url,
-            data=json.dumps({
+    def login_client(self, username="", password=""):
+        return self.post(
+            self.login_url,
+            data={
                 "username": username,
                 "password": password,
-            }),
-            content_type="application/json"
+            },
+            status_code=200
         )
 
     def logout(self):
-        # get a token from DRF
-        response = self.client.post(
-            reverse('user-logout-alluser-logout-all',
-                    kwargs={"version": "v1"}),
-            self.client.credentials(
-                HTTP_AUTHORIZATION='JWT ' + self.token
-            )
-        )
-
-    def login_client(self, username="", password=""):
-        # get a token from DRF
-        response = self.client.post(
-            reverse('user-login',
-                    kwargs={"version": "v1"}),
-            data=json.dumps(
-                {
-                    'username': username,
-                    'password': password,
-                }
-            ),
-            content_type='application/json'
-        )
-        try:
-            self.token = response.data['token']
-            # set the token in the header
-            self.client.credentials(
-                HTTP_AUTHORIZATION='JWT ' + self.token
-            )
-        except KeyError:
-            print("No token")
-        self.client.login(username=username, password=password)
-        return self.token
+        self.post(self.logout_url, status=status.HTTP_200_OK)
 
     def setUp(self):
+        self.init()
         # create a admin user
-        self.user = User.objects.create_superuser(
-            username="test_user",
+        self.super_user = User.objects.create_superuser(
+            username=self.SUPER_USER,
             email="test@mail.com",
-            password="testing",
+            password=self.PASSWORD_SUPER_USER,
             first_name="test",
             last_name="user",
         )
         # add profile for super user
-        self.create_profile("super_testor", self.user)
+        self.create_profile("super_testor", self.super_user)
         # add test data
-        user1 = User.objects.create_user(
-            username="user1",
-            password='user_test',
+        self.user1 = User.objects.create_user(
+            username=self.USER,
+            password=self.PASSWORD_USER,
             email="user@mail.com",
             first_name="user",
             last_name="test"
         )
         user2 = User.objects.create_user(username="user2")
         user3 = User.objects.create_user(username="user3")
-        self.create_profile("the killer", user1)
+        self.create_profile("the killer", self.user1)
         self.create_profile("amstramgram", user2)
         self.create_profile("bisounours", user3)
 
 
-class AuthLoginUser(BaseViewTest):
+class AuthUser(BaseViewTest):
     """
     Tests for the auth/login/ endpoint
     """
-    def test_login_user_with_valid_credential(self):
-        # test login with valid credentials
-        response = self.login_a_user("test_user", "testing")
-        # assert token key exists
-        self.assertIn("token", response.data)
-        # assert status code is 200 OK
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    def test_user_login(self):
+        # test login with super user
+        payload = {
+            "username": self.SUPER_USER,
+            "password": self.PASSWORD_SUPER_USER
+        }
+        resp = self.post(self.login_url, data=payload, status_code=200)
+        self.assertEqual('key' in self.response.json.keys(), True)
+        self.token = self.response.json['key']
+
         # test login with invalid credentials
-        response = self.login_a_user("anonymous", "pass")
-        # assert status code is 401 UNAUTHORIZED
-        #self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        # => maintenant les erreurs d'identifications sont bad_request
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        payload = {
+            "username": self.SUPER_USER,
+            "passowrd": "wrong_passowrd"
+        }
+        resp = self.post(self.login_url, data=payload, status_code=400)
+
+        # test with empty user
+        resp = self.post(self.login_url, data={}, status_code=400)
+
         # test login with no admin count
-        response = self.login_a_user("user1", "user_test")
-        # assert token key exists
-        self.assertIn("token", response.data)
-        # assert status code is 200 OK
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payload = {
+            "username": self.USER,
+            "password": self.PASSWORD_USER
+        }
+        response = self.post(self.login_url, data=payload, status_code=200)
+        self.assertEqual('key' in self.response.json.keys(), True)
+        self.token = self.response.json['key']
 
+    @override_settings(ACCOUNT_LOGOUT_ON_GET=True)
+    def test_user_logout_on_get(self):
+        payload = {
+            "username": self.SUPER_USER,
+            "password": self.PASSWORD_SUPER_USER
+        }
+        self.post(self.login_url, data=payload, status_code=200)
+        self.get(self.logout_url, status=status.HTTP_200_OK)
+        self.post(self.login_url, data=payload, status_code=200)
+        self.post(self.logout_url, status=status.HTTP_200_OK)
 
-class ApiUsersTest(BaseViewTest):
-    '''def test_get_all_users(self):
-        self.login_client('test_user', 'testing')
-        response = self.client.get(
-            reverse("user-list")
-        )
-        # fetch the data from db
-        expected = User.objects.all()
-        serialized = UserSerializer(expected, many=True)
-        self.assertEqual(response.data, serialized.data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)'''
-
-    #def test_post_should_logout_logged_in_user(self):
-        #user_logged_out.connect(self.signal_receiver)
-        #request = self.factory.post(user=user)
+    @override_settings(ACCOUT_LOGOUT_ON_GET=False)
+    def test_user_logout_on_post_only(self):
+        payload = {
+            "username": self.SUPER_USER,
+            "password": self.PASSWORD_SUPER_USER
+        }
+        self.post(self.login_url, data=payload, status_code=200)
+        self.get(self.logout_url, status=status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.post(self.logout_url, status=status.HTTP_200_OK)
 
 
 
@@ -197,8 +176,8 @@ class ApiProfilesTest(BaseViewTest):
         """
         This test
         """
-        self.login_client('test_user', 'testing')
-        response = self.client.get(
+        self.login_client(self.SUPER_USER, self.PASSWORD_SUPER_USER)
+        response = self.get(
             reverse(
                 "current-profile",
                 kwargs={"version": "v1"})
@@ -208,7 +187,7 @@ class ApiProfilesTest(BaseViewTest):
         self.assertEqual(response.data, serialized.data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        self.login_client('user1', 'user_test')
+        self.login_client(self.USER, self.PASSWORD_USER)
         response = self.client.get(
             reverse(
                 "current-profile",
@@ -218,39 +197,3 @@ class ApiProfilesTest(BaseViewTest):
         serialized = ProfileSerializer(instance=expected)
         self.assertEqual(response.data, serialized.data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-        # log out before
-
-        """self.login_client("anonymous", "123nopassword")
-        response = self.client.get(
-            reverse(
-                "current-profile",
-                kwargs={"version": "v1"})
-            )
-        print(response.data)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)"""
-
-    def test_logout(self):
-        print("logout")
-        payload = jwt_payload_handler(self.user)
-        token = jwt_encode_handler(payload)
-
-        auth = 'JWT {0}'.format(token)
-        response = self.client.post(
-            reverse("user-logout-all",
-                    kwargs={"version": "v1"})
-            , HTTP_AUTHORIZATION=auth, format='json')
-
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-
-        # logout doesn't work if we try to login with same token
-        '''print("current profile with logout user")
-        response = self.client.get(
-            reverse(
-                "current-profile",
-                kwargs={"version": "v1"})
-            , HTTP_AUTHORIZATION=auth, format='json'
-            )
-        print("assert")
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        print("test_logout end")'''

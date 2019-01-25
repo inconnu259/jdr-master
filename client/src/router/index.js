@@ -1,11 +1,12 @@
 import Vue from 'vue'
 import Router from 'vue-router'
 
-import Home from '@/components/pages/Home'
-import Auth from '@/components/pages/Auth'
-import Profile from '@/components/pages/Profile'
-import Personage from '@/components/pages/Personage'
-import Lost from '@/components/pages/Lost'
+import Home from '@/view/Home'
+import Auth from '@/view/Auth'
+import Profile from '@/view/Profile'
+import Personage from '@/view/Personage'
+import CreatePersonage from '@/view/CreatePersonage'
+import Lost from '@/view/Lost'
 
 import store from '@/store';
 
@@ -64,6 +65,12 @@ export default new Router({
       path: '/personnages',
       name: 'personage',
       component: Personage,
+      beforeEnter: requireAuthenticated,
+    },
+    {
+      path: '/create-personage',
+      name:'create-personage',
+      component: CreatePersonage,
       beforeEnter: requireAuthenticated,
     },
     {

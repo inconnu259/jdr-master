@@ -54,7 +54,6 @@ class ProfileView(generics.RetrieveUpdateAPIView):
     """
     Use this endpoint to retrieve/update profile.
     """
-    print("ProfileView")
     queryset = User.objects.all()
     serializer_class = ProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -70,7 +69,6 @@ class ProfileLogoutAllView(views.APIView):
     """
     Use this endpoint to log out all session for a given user.
     """
-    print("LogoutView")
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
@@ -125,7 +123,6 @@ class LoginView(generics.CreateAPIView):
     """
     # This persmission class will overide the global permission
     # class setting
-    print("LoginView")
     permission_classes = (permissions.AllowAny, )
 
     queryset = User.objects.all()

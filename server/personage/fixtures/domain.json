@@ -1,0 +1,298 @@
+[
+{
+  "model": "personage.domain",
+  "pk": 1,
+  "fields": {
+    "name": "Artisanat",
+    "description": "Le Domaine de l'Artisanat rassemble la connaissance des techniques traditionnelles et le savoir-faire dans les travaux manuels. Il concerne \u00e9galement les diff\u00e9rents arts plastiques.\r\nLa Discipline Outil magientiste permet d'utiliser un artefact, un appareil ou un outil fonctionnant au Flux. \r\nLa Discipline Machinerie magientiste concerne les plus gros des artefacts. Dans tous les cas, pour pouvoir acc\u00e9der \u00e0 ces Disciplines li\u00e9es \u00e0 la magience, l'utilisateur devra \u00e9galement avoir un niveau minimal de 1 dans le Domaine Magience. (Cf. \" Artefacts et disciplines associ\u00e9es \", p.265).",
+    "way": 2,
+    "disciplines": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 2,
+  "fields": {
+    "name": "Combat au contact",
+    "description": "Ce Domaine rassemble toutes les techniques de combat au corps \u00e0 corps.\r\n- Ma\u00eetriser une Discipline permet de manier toutes les armes contenues dans celle-ci. Par exemple, la Discipline Armes contondantes permet de se battre avec un b\u00e2ton, un marteau, un fl\u00e9au, etc.\r\n- \u00c0 partir du niveau 10 dans une Discipline (Expert), le Personnage doit choisir une seule arme avec laquelle il excelle. Il est possible de devenir expert dans plusieurs armes d'une m\u00eame Discipline en utilisant les points d'exp\u00e9rience n\u00e9cessaires.\r\n- Avoir un score de 5 en Combat au contact permet d'acc\u00e9der aux Arts de combat (p. 238).\r\n- Pour acc\u00e9der \u00e0 la Discipline Artefact de combat, il est n\u00e9cessaire d'avoir au moins 1 niveau en\r\nMagience. Cette Discipline permet l'apprentissage d'un artefact pouvant \u00eatre utilis\u00e9 au corps \u00e0 corps.\r\n(Cf. \" Artefacts et disciplines associ\u00e9es \", p.265).",
+    "way": 1,
+    "disciplines": [
+      16,
+      17,
+      15,
+      19,
+      18,
+      21,
+      22,
+      20
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 3,
+  "fields": {
+    "name": "Discr\u00e9tion",
+    "description": "Domaine de la furtivit\u00e9 et du camouflage, permettant d'\u00e9chapper \u00e0 la d\u00e9tection et demeurer dissimul\u00e9. La plupart des Disciplines d\u00e9coulant de ce Domaine sont utilisables seulement par des Personnages sans armure, ou portant une armure l\u00e9g\u00e8re (en cuir l\u00e9ger ou tress\u00e9e).",
+    "way": 3,
+    "disciplines": [
+      23,
+      24,
+      25,
+      26
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 4,
+  "fields": {
+    "name": "Erudition",
+    "description": "L'\u00c9rudition concerne la culture g\u00e9n\u00e9rale.\r\n- Avoir un niveau de 0 en \u00c9rudition signifie qu'un Personnage est compl\u00e8tement analphab\u00e8te. G\u00e9n\u00e9ralement, un niveau de 1 signifie qu'il peut seulement d\u00e9chiffrer avec peine quelques mots jusqu'au niveau de 5 o\u00f9 l'on estime qu'il sait lire et \u00e9crire avec aisance. Selon l'enfance du Personnage, il est possible qu'il soit tr\u00e8s \u00e9rudit, mais n'ait jamais eu acc\u00e8s \u00e0 l'apprentissage de la lecture et de l'\u00e9criture.\r\n- Ce Domaine inclut \u00e9galement tous les savoirs qui ne sont pas abord\u00e9s par les autres Domaines. Acqu\u00e9rir la Discipline Principes magientistes ne permet pas d'utiliser les artefacts, mais donne des connaissances th\u00e9oriques sur cette science.",
+    "way": 4,
+    "disciplines": [
+      27,
+      28,
+      29,
+      31,
+      32,
+      30,
+      33,
+      34,
+      35,
+      36
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 5,
+  "fields": {
+    "name": "Milieu Naturel",
+    "description": "Ce Domaine repr\u00e9sente l'aptitude du Personnage \u00e0 \u00e9voluer en pleine nature ainsi que ses connaissances du milieu rural.\r\nUn Personnage comp\u00e9tent dans ce domaine aura notamment des bases en agriculture, en connaissance animali\u00e8re, en bivouac, etc.",
+    "way": 3,
+    "disciplines": [
+      37,
+      38,
+      39,
+      31,
+      40,
+      41,
+      42,
+      43
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 6,
+  "fields": {
+    "name": "Magience",
+    "description": "Ce Domaine regroupe les connaissances et les savoir-faire li\u00e9s \u00e0 cette science continentale. Il faut normalement suivre l'enseignement des universit\u00e9s magientistes pour avoir acc\u00e8s aux Disciplines de ce Domaine. Certaines Disciplines se traduisent par l'obtention d'un dipl\u00f4me qui permet au Personnage d'exercer. Dans tous les cas, obtenir un niveau dans le Domaine Magience doit se justifier (mentor, \u00e9tude, ressources biblioth\u00e9caires importantes, etc.). Par exemple, les ouvriers travaillant dans les laboratoires magientistes et certains artisans bricoleurs peuvent acqu\u00e9rir des niveaux dans ce Domaine. Plus d'informations sont donn\u00e9es sur ce Domaine et ses Disciplines pages 265-266.",
+    "way": 4,
+    "disciplines": [
+      44,
+      45,
+      49,
+      46,
+      47,
+      48
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 7,
+  "fields": {
+    "name": "Myst\u00e8res D\u00e9morth\u00e8n",
+    "description": "En dehors des demorth\u00e8n, seuls les ionnth\u00e8n (leurs apprentis) ou des alli\u00e9s de longue date peuvent avoir acc\u00e8s \u00e0 ce Domaine. Celui-ci donne notamment acc\u00e8s aux techniques et savoirs permettant d'utiliser la Sigil Rann, l'un des Arts ancestraux demorth\u00e8n (p. 245).",
+    "way": 3,
+    "disciplines": [
+      51,
+      31,
+      53,
+      54,
+      52,
+      50,
+      55,
+      56
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 8,
+  "fields": {
+    "name": "Occultisme",
+    "description": "L'occultisme est une discipline continentale peu connue en Tri-Kazel, tr\u00e8s marginale en Reizh et pratiquement inexistante ailleurs.\r\n- Ce Domaine rassemble tout un corpus de croyances et de th\u00e9ories parfois fantaisistes sur la magie et les cr\u00e9atures fantasmagoriques.\r\nIl concerne \u00e9galement l'\u00e9tude de la sant\u00e9 mentale ainsi que le traitement de ces troubles via l'hypnose.\r\nLe MJ ne devrait autoriser un PJ \u00e0 prendre des niveaux dans ce Domaine que si cela se justifie dans son histoire : apprentissage de la Discipline dans une universit\u00e9, mentor sp\u00e9cialis\u00e9 dans ce domaine, etc.\r\n- Si le PJ n'a aucun niveau en Occultisme, il ne pourra pas l'utiliser en cours de jeu. Pour acc\u00e9der aux Disciplines li\u00e9es \u00e0 la magience dans l'Occultisme, il est n\u00e9cessaire d'avoir \u00e9galement un niveau dans le domaine Magience.",
+    "way": 4,
+    "disciplines": [
+      15,
+      58,
+      59,
+      10,
+      60,
+      57
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 9,
+  "fields": {
+    "name": "Prouesse",
+    "description": "Cette comp\u00e9tence permet de se d\u00e9passer physiquement, d'accomplir des actions physiques exceptionnelles.\r\nOn estime qu'un Personnage ayant un score de 2 en Prouesses conna\u00eet les bases de la natation.",
+    "way": 1,
+    "disciplines": [
+      61,
+      62,
+      63,
+      64,
+      66,
+      65
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 10,
+  "fields": {
+    "name": "Relation",
+    "description": "Ce Domaine regroupe des connaissances et des techniques rh\u00e9toriques. Il concerne \u00e9galement les mani\u00e8res ayant trait \u00e0 la vie en soci\u00e9t\u00e9 et l'\u00e9ducation.",
+    "way": 3,
+    "disciplines": [
+      67,
+      68,
+      69,
+      70,
+      71,
+      73,
+      74,
+      72
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 11,
+  "fields": {
+    "name": "Perception",
+    "description": "Regroupement des comp\u00e9tences li\u00e9es \u00e0 l'observation, au fait de remarquer les d\u00e9tails, d'\u00eatre vigilant.",
+    "way": 4,
+    "disciplines": [
+      77,
+      76,
+      40,
+      78,
+      79,
+      75
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 12,
+  "fields": {
+    "name": "Repr\u00e9sentation",
+    "description": "Pratique et connaissance des arts de la sc\u00e8ne.\r\nCe Domaine contient \u00e9galement tout ce qui a trait aux diff\u00e9rents types de jeux et \u00e0 la f\u00eate. La Repr\u00e9sentation est le Domaine de pr\u00e9dilection des bardes.",
+    "way": 2,
+    "disciplines": [
+      80,
+      81,
+      82,
+      84,
+      83,
+      85,
+      86
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 13,
+  "fields": {
+    "name": "Pri\u00e8re",
+    "description": "Cette comp\u00e9tence rassemble les connaissances et les rites de la religion du Temple.\r\n- Seuls les religieux membres de l'un des six ordres peuvent acc\u00e9der aux Disciplines et eux seuls se voient \u00e9galement initi\u00e9s aux Miracles du Dieu Unique (p. 256).",
+    "way": 5,
+    "disciplines": [
+      51,
+      87,
+      88,
+      89,
+      56
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 14,
+  "fields": {
+    "name": "Science",
+    "description": "Ce Domaine rassemble des connaissances et des proc\u00e9d\u00e9s pointus, qui sont pour la plupart traditionnels.\r\n- La connaissance de la magience est un Domaine particulier et ne fait pas partie de celui-ci.\r\nUn Personnage ayant un bon score en Sciences mais 0 en Magience n'aura donc aucune connaissance des principes magientistes et ne pourra apprendre les Disciplines Artefact de combat, R\u00e9paration d'artefacts, Outil magientiste ou Machinerie magientiste. Voir le paragraphe \" Artefacts et disciplines associ\u00e9es \", p.265.",
+    "way": 4,
+    "disciplines": [
+      90,
+      15,
+      92,
+      93,
+      94,
+      91,
+      7,
+      95,
+      49,
+      10,
+      47,
+      96,
+      97
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 15,
+  "fields": {
+    "name": "Tir et lancer",
+    "description": "Comp\u00e9tence servant au combat \u00e0 distance, mais aussi \u00e0 lancer un grappin par exemple.\r\n- Avoir un niveau de 1 en Magience est requis pour apprendre Artefact de combat.",
+    "way": 1,
+    "disciplines": [
+      98,
+      99,
+      100,
+      15
+    ]
+  }
+},
+{
+  "model": "personage.domain",
+  "pk": 16,
+  "fields": {
+    "name": "Voyage",
+    "description": "Domaine rassemblant les diff\u00e9rentes connaissances et techniques utiles au voyage et \u00e0 la vie en ext\u00e9rieur.\r\nCertaines Disciplines sont r\u00e9serv\u00e9es aux varigaux ou \u00e0 ceux qui ont eu la chance d'apprendre de leurs connaissances.",
+    "way": 3,
+    "disciplines": [
+      101,
+      102,
+      103,
+      106,
+      40,
+      104,
+      105
+    ]
+  }
+}
+]

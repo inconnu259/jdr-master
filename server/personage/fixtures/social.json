@@ -1,0 +1,49 @@
+[
+{
+  "model": "personage.social",
+  "pk": 1,
+  "fields": {
+    "name": "Roture",
+    "description": "La roture forme l'essentiel de la population.\r\nPour les paysans et les ruraux (ainsi que les demorth\u00e8n m\u00eame si ceux-ci n'appartiennent \u00e0 aucune classe sociale), le PJ obtient +1 niveau dans deux Domaines parmi Milieu Naturel, Perception, Prouesses et Voyage.\r\nPour les artisans et les ouvriers, le PJ obtient +1 dans deux Domaines parmi Artisanat, \u00c9rudition, Sciences et Relation.\r\nS'il est bourgeois, le PJ obtient +1 dans deux Domaines parmi Artisanat, \u00c9rudition, Repr\u00e9sentation et Relation.",
+    "domains": [
+      1,
+      4,
+      5,
+      11,
+      9,
+      10,
+      12,
+      14,
+      16
+    ]
+  }
+},
+{
+  "model": "personage.social",
+  "pk": 2,
+  "fields": {
+    "name": "Clerg\u00e9",
+    "description": "Les membres du Temple font partie du clerg\u00e9.\r\nUn PJ de cette classe obtient +1 dans deux Domaines parmi Pri\u00e8re, \u00c9rudition, Relation et Voyage.",
+    "domains": [
+      4,
+      13,
+      10,
+      16
+    ]
+  }
+},
+{
+  "model": "personage.social",
+  "pk": 3,
+  "fields": {
+    "name": "Noblesse",
+    "description": "Les nobles peuvent \u00eatre d'origine citadine ou rurale ; ils obtiennent +1 dans deux Domaines parmi Combat au Contact, \u00c9rudition, Sciences et Relation.",
+    "domains": [
+      2,
+      4,
+      10,
+      14
+    ]
+  }
+}
+]

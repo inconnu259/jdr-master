@@ -335,7 +335,6 @@ class Personage(models.Model):
             raise(ValidationError("Au moins une voie doit être à 5 ou à 1."))
 
 
-
 class SkillLevels(models.Model):
     domainLevel = models.ForeignKey(Domain, null=True, on_delete=models.CASCADE)
     level = models.PositiveIntegerField(validators=[MinValueValidator(0), MaxValueValidator(5)])

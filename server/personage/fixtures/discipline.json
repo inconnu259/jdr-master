@@ -1,0 +1,850 @@
+[
+{
+  "model": "personage.discipline",
+  "pk": 1,
+  "fields": {
+    "name": "Bijouterie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 2,
+  "fields": {
+    "name": "Confection",
+    "description": "couture, tissage, etc."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 3,
+  "fields": {
+    "name": "Cuisine",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 4,
+  "fields": {
+    "name": "Distillation",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 5,
+  "fields": {
+    "name": "Extraction mini\u00e8re",
+    "description": "exploitation de gisements de minerais"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 6,
+  "fields": {
+    "name": "Forge",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 7,
+  "fields": {
+    "name": "Machinerie magientiste",
+    "description": "l'utilisateur devra \u00e9galement avoir un niveau minimal de 1 dans le Domaine Magience.\r\n(Cf. \" Artefacts et disciplines associ\u00e9es \", p.265)."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 8,
+  "fields": {
+    "name": "Maroquinerie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 9,
+  "fields": {
+    "name": "Menuiserie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 10,
+  "fields": {
+    "name": "Outil magientiste",
+    "description": "l'utilisateur devra \u00e9galement avoir un niveau minimal de 1 dans le Domaine Magience.\r\n(Cf. \" Artefacts et disciplines associ\u00e9es \", p.265)."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 11,
+  "fields": {
+    "name": "Peinture",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 12,
+  "fields": {
+    "name": "Poterie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 13,
+  "fields": {
+    "name": "Sculpture",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 14,
+  "fields": {
+    "name": "Serrurerie",
+    "description": "inclut le crochetage de serrures"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 15,
+  "fields": {
+    "name": "Artefact de combat",
+    "description": "Pour acc\u00e9der \u00e0 la Discipline Artefact de combat, il est n\u00e9cessaire d'avoir au moins 1 niveau en Magience. Cette Discipline permet l'apprentissage\r\nd'un artefact pouvant \u00eatre utilis\u00e9 au corps \u00e0 corps.\r\n(Cf. \" Artefacts et disciplines associ\u00e9es \", p.265)."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 16,
+  "fields": {
+    "name": "Armes contondantes",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 17,
+  "fields": {
+    "name": "Armes d'hast",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 18,
+  "fields": {
+    "name": "Combat \u00e0 mains nues",
+    "description": "inclut la lutte et l'utilisation de gantelets."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 19,
+  "fields": {
+    "name": "Combat aveugle",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 20,
+  "fields": {
+    "name": "\u00c9p\u00e9es",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 21,
+  "fields": {
+    "name": "Haches",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 22,
+  "fields": {
+    "name": "Lames courtes",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 23,
+  "fields": {
+    "name": "Camouflage",
+    "description": "dissimuler un abri, un objet sur soi ou dans un contenant, se cacher dans l'ombre"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 24,
+  "fields": {
+    "name": "Furtivit\u00e9",
+    "description": "\u00e9voluer en silence et filature"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 25,
+  "fields": {
+    "name": "Mim\u00e9tisme",
+    "description": "inclut le d\u00e9guisement et l'imitation gestuelle."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 26,
+  "fields": {
+    "name": "Vol \u00e0 la tire",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 27,
+  "fields": {
+    "name": "Astronomie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 28,
+  "fields": {
+    "name": "Doctrine du Temple",
+    "description": "id\u00e9ologie du Temple, les six Ordonnances et les six ordres"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 29,
+  "fields": {
+    "name": "G\u00e9ographie",
+    "description": "connaissance en orientation et savoir lire une carte"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 30,
+  "fields": {
+    "name": "H\u00e9raldique",
+    "description": "connaissance des blasons et des insignes militaires, familiaux, politiques."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 31,
+  "fields": {
+    "name": "Herboristerie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 32,
+  "fields": {
+    "name": "Histoire",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 33,
+  "fields": {
+    "name": "Langues",
+    "description": "dont la langue ancienne p\u00e9ninsulaire"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 34,
+  "fields": {
+    "name": "Politique",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 35,
+  "fields": {
+    "name": "Principes magientistes",
+    "description": "th\u00e9orie de la magience, conceptions et id\u00e9es magientistes."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 36,
+  "fields": {
+    "name": "Traditions demorth\u00e8n",
+    "description": "connaissance des rites et croyances ancestrales demorth\u00e8n."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 37,
+  "fields": {
+    "name": "Agriculture",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 38,
+  "fields": {
+    "name": "Dressage d'animaux",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 39,
+  "fields": {
+    "name": "Faune et flore",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 40,
+  "fields": {
+    "name": "Orientation",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 41,
+  "fields": {
+    "name": "Pistage",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 42,
+  "fields": {
+    "name": "Premiers soins",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 43,
+  "fields": {
+    "name": "Survie",
+    "description": "inclut les techniques de chasse, dont la conception de pi\u00e8ges naturels"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 44,
+  "fields": {
+    "name": "Connaissance des Flux",
+    "description": "savoir o\u00f9 trouver du Flux, les diff\u00e9rents types de Flux et leurs propri\u00e9t\u00e9s"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 45,
+  "fields": {
+    "name": "Extraction de Flux",
+    "description": "p 262"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 46,
+  "fields": {
+    "name": "Raffinage de Flux",
+    "description": "p. 264"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 47,
+  "fields": {
+    "name": "R\u00e9paration d'artefacts",
+    "description": "p. 266"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 48,
+  "fields": {
+    "name": "Utilisation des artefacts",
+    "description": "cette Discipline permet de se servir indiff\u00e9remment de tous les artefacts, armes, outils, etc. ; voir p. 265"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 49,
+  "fields": {
+    "name": "M\u00e9decine",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 50,
+  "fields": {
+    "name": "Savoirs demorth\u00e8n",
+    "description": "connaissance des c\u00e9r\u00e9monies ancestrales, des r\u00e9unions demorth\u00e8n, des mythes fondateurs et des lieux charg\u00e9s de pouvoir"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 51,
+  "fields": {
+    "name": "Concentration",
+    "description": "Pour un demorth\u00e8n :\r\npermet de mettre en \u0153uvre ou maintenir un Art ancestral demorth\u00e8n malgr\u00e9 les perturbations ext\u00e9rieures.\r\n\r\npour le temple :\r\npermet d'invoquer un miracle m\u00eame en \u00e9tant soumis \u00e0 des perturbations"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 52,
+  "fields": {
+    "name": "M\u00e9ditation",
+    "description": "r\u00e9cup\u00e9rer du Rindath et des traumatismes"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 53,
+  "fields": {
+    "name": "Langue ancienne",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 54,
+  "fields": {
+    "name": "M\u00e9decine traditionnelle",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 55,
+  "fields": {
+    "name": "Sigil Rann",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 56,
+  "fields": {
+    "name": "Spiritualit\u00e9",
+    "description": "cette Discipline peut aider quelqu'un souffrant de troubles psychiques (p. 279)"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 57,
+  "fields": {
+    "name": "\u00c9sot\u00e9risme",
+    "description": "connaissance des \u00e9crits \u00e9sot\u00e9riques, des techniques de spiritisme"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 58,
+  "fields": {
+    "name": "Hypnose",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 59,
+  "fields": {
+    "name": "Interpr\u00e9tation des r\u00eaves",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 60,
+  "fields": {
+    "name": "Ph\u00e9nom\u00e8nes Mentaux",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 61,
+  "fields": {
+    "name": "Acrobaties",
+    "description": "inclut le saut et l'\u00e9quilibrisme"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 62,
+  "fields": {
+    "name": "Course",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 63,
+  "fields": {
+    "name": "Endurance",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 64,
+  "fields": {
+    "name": "Escalade",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 65,
+  "fields": {
+    "name": "\u00c9vasion",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 66,
+  "fields": {
+    "name": "Natation",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 67,
+  "fields": {
+    "name": "Baratin",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 68,
+  "fields": {
+    "name": "Charme",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 69,
+  "fields": {
+    "name": "Commandement",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 70,
+  "fields": {
+    "name": "Connaissance d'une faction",
+    "description": "pr\u00e9ciser laquelle"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 71,
+  "fields": {
+    "name": "Diplomatie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 72,
+  "fields": {
+    "name": "\u00c9tiquette",
+    "description": "pr\u00e9ciser le milieu social"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 73,
+  "fields": {
+    "name": "Intimidation",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 74,
+  "fields": {
+    "name": "Persuasion",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 75,
+  "fields": {
+    "name": "\u00c9valuation",
+    "description": "estimer la valeur d'un objet, mais \u00e9galement juger l'\u00e9tat d'un b\u00e2timent, etc."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 76,
+  "fields": {
+    "name": "Observation",
+    "description": "permet de remarquer les choses anormales, de mener des fouilles efficaces."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 77,
+  "fields": {
+    "name": "Lecture sur les l\u00e8vres",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 78,
+  "fields": {
+    "name": "Sens aiguis\u00e9s",
+    "description": "permet notamment de diminuer les malus en cas d'aveuglement"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 79,
+  "fields": {
+    "name": "Vigilance",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 80,
+  "fields": {
+    "name": "Chant",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 81,
+  "fields": {
+    "name": "Com\u00e9die",
+    "description": "inclut le d\u00e9guisement"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 82,
+  "fields": {
+    "name": "Danse",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 83,
+  "fields": {
+    "name": "Jeux",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 84,
+  "fields": {
+    "name": "Instrument de musique",
+    "description": "pr\u00e9ciser lequel"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 85,
+  "fields": {
+    "name": "Jonglage",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 86,
+  "fields": {
+    "name": "Ventriloquie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 87,
+  "fields": {
+    "name": "Connaissance du Temple",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 88,
+  "fields": {
+    "name": "Miracles",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 89,
+  "fields": {
+    "name": "Recueillement",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 90,
+  "fields": {
+    "name": "Architecture",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 91,
+  "fields": {
+    "name": "Ing\u00e9nierie",
+    "description": "\u00e9tude et supervision de constructions lourdes, ponts, mais aussi des machines de si\u00e8ge"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 92,
+  "fields": {
+    "name": "Botanique",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 93,
+  "fields": {
+    "name": "Connaissance des troubles mentaux",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 94,
+  "fields": {
+    "name": "G\u00e9ologie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 95,
+  "fields": {
+    "name": "M\u00e9canique",
+    "description": "r\u00e9paration et cr\u00e9ation de tout ce qui est articul\u00e9, pi\u00e8ges m\u00e9caniques"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 96,
+  "fields": {
+    "name": "Traitement de l'esprit",
+    "description": "cette Discipline peut aider quelqu'un souffrant de troubles psychiques (p. 279)"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 97,
+  "fields": {
+    "name": "Zoologie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 98,
+  "fields": {
+    "name": "Arbal\u00e8tes",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 99,
+  "fields": {
+    "name": "Arcs",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 100,
+  "fields": {
+    "name": "Armes de jet",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 101,
+  "fields": {
+    "name": "Attelage",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 102,
+  "fields": {
+    "name": "Cartographie",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 103,
+  "fields": {
+    "name": "Chemins de traverse",
+    "description": "Discipline r\u00e9serv\u00e9e aux varigaux leur permettant de trouver des raccourcis"
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 104,
+  "fields": {
+    "name": "Signes",
+    "description": "Discipline r\u00e9serv\u00e9e aux varigaux leur permettant de rep\u00e9rer et comprendre les signes laiss\u00e9s dans la nature par leurs pairs : marque annon\u00e7ant un danger, la pr\u00e9sence de feondas, un point d'eau proche, etc."
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 105,
+  "fields": {
+    "name": "\u00c9quitation",
+    "description": ""
+  }
+},
+{
+  "model": "personage.discipline",
+  "pk": 106,
+  "fields": {
+    "name": "Navigation",
+    "description": ""
+  }
+}
+]
