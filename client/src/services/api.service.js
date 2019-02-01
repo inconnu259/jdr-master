@@ -10,6 +10,21 @@ export default {
     getNationsList() {
         return session.get('/api/v1/nations_list')
     },
+    getProfessionsList() {
+        return session.get('/api/v1/professions_list')
+    },
+    getPlacesList() {
+        return session.get('/api/v1/places_list')
+    },
+    getSocialsList() {
+        return session.get('/api/v1/socials_list')
+    },
+    getDomainsList() {
+        return session.get('/api/v1/domains_list')
+    },
+    getDisciplinesList() {
+        return session.get('/api/v1/disciplines_list')
+    },
 }
 
 /*import Vue from 'vue'

@@ -14,8 +14,8 @@
               <v-list>
                   <v-list-tile
                     v-for="item in items"
-                    :key="item"
                     :to="{ name : item.to }"
+                    :key="item.id"
                     @click="">
                       <v-list-tile-title v-text="item.label"></v-list-tile-title>
                   </v-list-tile>
@@ -38,12 +38,15 @@ import { mapGetters } from 'vuex';
 
 export default {
     data: () => ({
-        items: [{"label": "Création",
+        items: [{"id": 0,
+                 "label": "Création",
                  "to": "create-personage"},
-                {"label": "liste",
+                {"id": 1,
+                 "label": "liste",
                  "to" : "personage"},
-                {"label": "augmenter de niveau",
-                 "to": "level-up"}]
+                {"id": 2,
+                 "label": "augmenter de niveau",
+                 "to": "home"}]
     }),
     methods: {
         login(){

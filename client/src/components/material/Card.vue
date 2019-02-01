@@ -49,7 +49,7 @@
 
     <v-card-actions v-if="$slots.actions">
       <slot name="actions" />
-    </v-card-actions>-
+    </v-card-actions>
   </v-card>
 </template>
 

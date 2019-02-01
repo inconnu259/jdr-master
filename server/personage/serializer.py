@@ -12,7 +12,7 @@ class PersonageSerializer(serializers.ModelSerializer):
         model = Personage
         # Specify the fields that should be made accessible
         # Mostly it is all fields in that model
-        fields = ('name', 'genre', 'birthdate', 'nation')
+        fields = ('id', 'name', 'genre', 'birthdate', 'nation')
 
 
 class NationSerializer(serializers.ModelSerializer):
@@ -22,41 +22,41 @@ class NationSerializer(serializers.ModelSerializer):
         model = Nation
         # Specify the fields that should be made accssible.
         # Mostly it is all fields in that model
-        fields = ('name', 'description', 'preposition')
+        fields = ('id', 'name', 'description', 'preposition')
 
 
 class ProfessionSerializer(serializers.ModelSerializer):
     """ A serializer class for the Profession model """
     class Meta:
         model = Profession
-        fields = ('name', 'description', 'primary_domain', 'secondary_domain')
+        fields = ('id', 'name', 'description', 'primary_domain', 'secondary_domain')
 
 
 class SocialSerializer(serializers.ModelSerializer):
     class Meta:
         model = Social
-        fields = ('name', 'description', 'domains')
+        fields = ('id', 'name', 'description', 'domains')
 
 
 class WaySerializer(serializers.ModelSerializer):
     class Meta:
         model = Way
-        fields = ('name', 'description')
+        fields = ('id', 'name', 'description')
 
 
 class DisciplineSerializer(serializers.ModelSerializer):
     class Meta:
         model = Discipline
-        fields = ('name', 'description')
+        fields = ('id', 'name', 'description')
 
 
 class DomainSerializer(serializers.ModelSerializer):
     class Meta:
         model = Domain
-        fields = ('name', 'description', 'disciplines', 'way')
+        fields = ('id', 'name', 'description', 'disciplines', 'way')
 
 
 class PlaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Place
-        fields = ('name', 'description')
+        fields = ('id', 'name', 'description')

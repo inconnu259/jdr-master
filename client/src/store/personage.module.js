@@ -25,9 +25,9 @@ const getters = {
   personages (state) {
     return state.personages;
   },
-  isLoading (state) {
+  /*isLoading (state) {
     return state.loading;
-  }
+  }*/
 }
 
 const actions = {

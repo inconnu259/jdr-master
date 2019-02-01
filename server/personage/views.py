@@ -187,3 +187,8 @@ class WayList(generics.ListAPIView):
     queryset = Way.objects.all()
     serializer_class = WaySerializer
     permission_classes = (permissions.IsAuthenticated,)
+
+class PlaceList(generics.ListAPIView):
+    queryset = Place.objects.all()
+    serializer_class = PlaceSerializer
+    permission_classes = (permissions.IsAuthenticated,)

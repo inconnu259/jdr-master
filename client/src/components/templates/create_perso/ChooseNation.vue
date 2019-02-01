@@ -12,7 +12,8 @@
               xs12
               md6
               py-4
-              v-for="(n, i) in nations">
+              v-for="(n, i) in nations"
+              :key=n.id>
                 <v-hover>
                     <material-card
                       slot-scope="{ hover }"
@@ -20,14 +21,14 @@
                       class="mx-auto"
                       height="100%"
                       color="green"
-                      :title="n.name"
+                      :title="`Peuple ${n.preposition} ${n.name}`"
                       hover
+                      tile
                       v-ripple
                       shift
                       :value="true"
-                      :active.sync="e2"
                       @click.native="chooseNation(i)"
-                      text="choisir ce peuple ?">
+                      :text="nation == i ? 'vous avez choisis ce peuple' : 'choisir ce peuple ?'">
                         <v-card-text
                           class="text-xs-justify"
                           :ripple="true">
@@ -44,7 +45,7 @@
 import ApiService from '@/services/api.service.js'
     export default {
         name: 'chooseNation',
-        data(){
+        data: function(){
             return {
                 nations: {},
                 nation: -1,
@@ -59,7 +60,12 @@ import ApiService from '@/services/api.service.js'
         },
         methods: {
             chooseNation(i) {
-                this.nation = i
+                if (this.nation != i)
+                    this.nation = i
+                else
+                    this.nation = -1
+
+                this.$emit('nation-choosen', this.nation)
             }
         }
     }

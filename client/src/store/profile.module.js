@@ -25,9 +25,9 @@ const getters = {
     profiles(state) {
         return state.profiles
     },
-    isLoading(state) {
+    /*isLoading(state) {
         return state.loading
-    }
+    }*/
 }
 
 const actions = {
