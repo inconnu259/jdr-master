@@ -108,22 +108,67 @@
 
         <v-stepper-step :complete="e1 > 8" step="8" editable>
             Revers
+            <small>Optional</small>
         </v-stepper-step>
+        <v-stepper-content step="8">
+            <chooseRevers
+              v-on:revers-choosen="rever = $event"/>
+            <v-btn
+              color="primary"
+              @click="e1=9"
+              :disabled="revers == -1">
+                Continue
+            </v-btn>
+        </v-stepper-content>
 
         <v-stepper-step :complete="e1 > 9" step="9" editable>
+            Histoire
+        </v-stepper-step>
+        <v-stepper-content step="9">
+            <v-textarea
+              v-model="story"
+              box
+              name="story"
+              label="Histoire"></v-textarea>
+            <v-btn
+              color="primary"
+              @click="e1=10"
+              :disabled="story == -1">
+                Continue
+            </v-btn>
+        </v-stepper-content>
+
+
+        <v-stepper-step :complete="e1 > 10" step="10" editable>
             Traits de caractères
         </v-stepper-step>
 
-        <v-stepper-step :complete="e1 > 10" step="10" editable>
-            Orientation de la personalité
-        </v-stepper-step>
-
         <v-stepper-step :complete="e1 > 11" step="11" editable>
-            Avantages et désavantages
+            Santé Mentale
         </v-stepper-step>
 
         <v-stepper-step :complete="e1 > 12" step="12" editable>
-            Santé Mentale
+            Orientation de la personalité
+        </v-stepper-step>
+
+        <v-stepper-step :complete="e1 > 13" step="13" editable>
+            Avantages et désavantages
+        </v-stepper-step>
+
+        <v-stepper-step :complete="e1 > 14" step="14" editable>
+            Compétences
+        </v-stepper-step>
+
+        <v-stepper-step :complete="e1 > 15" step="15" editable>
+            Descriptions
+        </v-stepper-step>
+
+        <v-stepper-step :complete="e1 > 16" step="16" editable>
+            Equipements
+        </v-stepper-step>
+
+        <v-stepper-step :complete="e1 > 17" step="17" editable>
+            Finalisation -- nom, sexe, faits marquants ou autre.
         </v-stepper-step>
     </v-stepper>
 </template>
@@ -135,6 +180,7 @@ import choosePlace from '@/components/templates/create_perso/ChoosePlace'
 import chooseSocial from '@/components/templates/create_perso/ChooseSocial'
 import chooseAge from '@/components/templates/create_perso/ChooseAge'
 import chooseWay from '@/components/templates/create_perso/ChooseWay'
+import chooseRevers from '@/components/templates/create_perso/ChooseRevers'
 import ApiService from '@/services/api.service.js'
 
     export default {
@@ -145,6 +191,7 @@ import ApiService from '@/services/api.service.js'
             chooseAge,
             chooseSocial,
             chooseWay,
+            chooseRevers,
         },
         data() {
             return {
@@ -156,6 +203,8 @@ import ApiService from '@/services/api.service.js'
                 age: -1,
                 way: -1,
                 domains: [],
+                revers: [],
+                story: "Histoire de ton personnage, tu peux y revenir plus tard si besoin"
             }
         },
         created() {

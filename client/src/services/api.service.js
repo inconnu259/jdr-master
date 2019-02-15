@@ -25,6 +25,9 @@ export default {
     getDisciplinesList() {
         return session.get('/api/v1/disciplines_list')
     },
+    getWaysList() {
+        return session.get('/api/v1/ways_list')
+    },
 }
 
 /*import Vue from 'vue'

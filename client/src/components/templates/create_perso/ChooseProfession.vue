@@ -31,10 +31,9 @@
                             <v-card-text>
                                 <span>{{ p.description }}</span>
                                 <p>Domaine principal :</p>
-                                {{ accessDomain(p.primary_domain) }}
                                 <span>{{ domains[p.primary_domain-1].name }}</span>
                                 <p>Domaines secondaires :</p>
-                                <span>{{ p.secondary_domain }}</span>
+                                <span v-for="domain in p.secondary_domain">{{ domains[domain-1].name }} </span>
 
                             </v-card-text>
                             <v-divider></v-divider>
@@ -91,11 +90,6 @@ export default {
 
             this.$emit('profession-choosen', this.profession)
         },
-        accessDomain(id) {
-            console.log(id);
-            console.log(this.domains[id-1]);
-            console.log(this.domains[id-1].name);
-        }
     }
 }
 </script>

@@ -30,7 +30,7 @@
                                       v-for="domain_id in s.domains"
                                       :key="domain_id">
                                         <v-btn flat>
-                                            {{ domain_id }}
+                                            {{ domains[domain_id-1].name }}
                                         </v-btn>
                                     </v-btn-toggle>
                                 </v-card-actions>
@@ -53,6 +53,12 @@
                 social: -1,
                 toggle_multiple: [0,1,2]
             }
+        },
+        props: {
+            domains: {
+              type: Array,
+              default: []
+            },
         },
         mounted() {
             ApiService
