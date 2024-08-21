@@ -1,0 +1,11 @@
+#syntax=docker/dockerfile:1.4
+FROM nginx:stable-alpine-slim
+
+RUN apk update
+RUN apk add \
+    gettext  \
+    moreutils \
+    dos2unix
+
+COPY ./client/build/client /var/www/client
+COPY ./docker/client/conf.d/default.conf /etc/nginx/conf.d/default.conf

@@ -1,0 +1,8 @@
+#syntax=docker/dockerfile:1.4
+FROM nginx:stable-alpine-slim
+
+RUN apk update
+RUN apk add gettext moreutils
+
+COPY ./api /var/www/api
+COPY ./docker/nginx/conf.d/staging.conf /etc/nginx/conf.d/default.conf

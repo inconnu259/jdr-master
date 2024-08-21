@@ -1,0 +1,13 @@
+/.env
+
+/docker/DB
+
+/docker-compose.override.yml
+
+# PHPStorm / Webstorm / CLion IDE
+/.idea
+
+# Visual studio code
+*.code-workspace
+/.vs/
+/vscode/

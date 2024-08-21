@@ -1,0 +1,45 @@
+#syntax=docker/dockerfile:1.4
+FROM php:8.3.1-fpm-bookworm
+
+RUN apt-get update && \
+    apt-get install -y \
+    curl \
+    git \
+    unzip \
+    vim \
+    dos2unix\
+    libpq-dev \
+    gettext-base \
+    libicu-dev
+RUN docker-php-ext-install -j$(nproc) pdo_mysql
+RUN docker-php-ext-enable pdo_mysql
+RUN docker-php-ext-install -j$(nproc) intl
+RUN echo "alias ll='ls -lhF'" >> ~/.bashrc
+
+# conf
+COPY ./docker/api/php.ini /usr/local/etc/php/php.ini
+
+WORKDIR /var/www/api
+
+# install dependencies
+COPY --chown=www-data:www-data ./api/composer.json ./api/composer.lock ./api/symfony.lock ./
+COPY --from=composer:2.7.1 /usr/bin/composer /usr/bin/composer
+RUN composer install --prefer-dist --no-dev --no-autoloader --no-scripts --no-progress
+RUN composer clear-cache
+
+# copy source code
+COPY --chown=www-data:www-data ./api ./
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV DB_USER=null
+ENV DB_PASSWORD=null
+ENV DB_DATABASE=null
+RUN composer install
+RUN chown -R www-data: vendor
+RUN chown -R www-data: var
+
+# initialization
+COPY ./docker/api/home/* /home/
+RUN chmod +x /home/*.sh
+RUN dos2unix /home/*.sh
+
+CMD /home/init_api.sh && php-fpm

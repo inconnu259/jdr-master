@@ -1,0 +1,20 @@
+FROM node:current-alpine
+
+# System
+RUN apk update
+RUN apk add \
+    gettext  \
+    moreutils \
+    dos2unix
+
+WORKDIR /var/www/client
+
+# Project files
+COPY ./client /var/www/client
+
+# Project dependencies
+COPY ./client/package*.json ./
+RUN --mount=type=secret,id=npmrc,target=/var/www/client/.npmrc npm ci
+
+#CMD tail -f /dev/null
+CMD npm start
