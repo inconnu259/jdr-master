@@ -79,9 +79,6 @@ services:
       MAIL_FROM: ${MAIL_FROM}
       APP_URL: ${APP_URL}
       NB_LASTNAME_CHAR_IN_USERNAME: ${NB_LASTNAME_CHAR_IN_USERNAME}
-      STRIPE_SECRET: ${STRIPE_SECRET}
-      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
-      MAX_INSTALLER_FILE_SIZE_IN_MB: ${MAX_INSTALLER_FILE_SIZE_IN_MB}
     volumes:
       - ./docker/api/jwt:/var/www/api/config/jwt
       - ${UPLOAD_PATH}:/var/www/api/var/upload
@@ -102,8 +99,6 @@ services:
     build:
       context: ./docker
       dockerfile: Dockerfile_client_${CLIENT_IMAGE_TAG}
-    environment:
-      STRIPE_PUBLIC_KEY: ${STRIPE_PUBLIC_KEY}
     restart: always
     logging:
       driver: "json-file"
@@ -122,7 +117,7 @@ services:
       TZ: ${TZ}
       UPLOAD_LIMIT: 8G
       MAX_EXECUTION_TIME: 3600
-      ADMINER_ABSOLUTE_URI: htt://localhost/adminer
+      ADMINER_ABSOLUTE_URI: http://localhost/adminer
     restart: always
     depends_on:
       - database

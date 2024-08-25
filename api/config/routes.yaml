@@ -1,5 +1,6 @@
-controllers:
-    resource:
-        path: ../src/Controller/
-        namespace: App\Controller
-    type: attribute
+api_login_check:
+    path: /api/login
+api_2fa_check:
+    path: /api/2fa
+api_sync_login_check:
+    path: /api/sync/login

@@ -11,8 +11,8 @@ RUN apt-get update && \
     libpq-dev \
     gettext-base \
     libicu-dev
-RUN docker-php-ext-install -j$(nproc) pdo_mysql
-RUN docker-php-ext-enable pdo_mysql
+RUN docker-php-ext-install -j$(nproc) pdo_pgsql
+RUN docker-php-ext-enable pdo_pgsql
 RUN docker-php-ext-install -j$(nproc) intl
 RUN echo "alias ll='ls -lhF'" >> ~/.bashrc
 

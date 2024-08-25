@@ -2,11 +2,15 @@
   "name": "jdr-master",
   "version": "0.0.0",
   "scripts": {
-    "ng": "ng",
-    "start": "ng serve",
+    "start": "ng serve --disable-host-check true --host 0.0.0.0",
     "build": "ng build",
-    "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "build:dev": "npm run build -- -c development",
+    "build:prod": "npm run build -- -c production",
+    "serve": "serve -l 4200 -s build/client",
+    "test": "ng test",
+    "test:ci": "npm run test -- --browsers ChromeHeadlessCI --watch=false --code-coverage",
+    "lint": "ng lint --max-warnings 0",
+    "ng": "ng"
   },
   "private": true,
   "dependencies": {

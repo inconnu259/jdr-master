@@ -1,4 +1,4 @@
-FROM node:current-alpine
+FROM node:22.7.0-alpine
 
 # System
 RUN apk update
@@ -7,14 +7,25 @@ RUN apk add \
     moreutils \
     dos2unix
 
-WORKDIR /var/www/client
+# Installer Angular CLI globalement
+RUN npm install -g @angular/cli
+
+WORKDIR /var/www/clien
 
 # Project files
-COPY ./client /var/www/client
-
-# Project dependencies
 COPY ./client/package*.json ./
-RUN --mount=type=secret,id=npmrc,target=/var/www/client/.npmrc npm ci
+
+# install dependencies
+RUN npm ci
+
+# copy the reste of the application code
+COPY ./client .
+
+# Verify Angular CLI installation
+RUN ng version
+
+RUN node -v
+RUN npm -v
 
 #CMD tail -f /dev/null
 CMD npm start

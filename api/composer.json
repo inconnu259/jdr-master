@@ -7,14 +7,35 @@
         "php": ">=8.2",
         "ext-ctype": "*",
         "ext-iconv": "*",
+        "beberlei/doctrineextensions": "^1.5",
+        "doctrine/dbal": "^4.1",
+        "doctrine/doctrine-bundle": "^2.12",
+        "doctrine/doctrine-migrations-bundle": "^3.3",
+        "doctrine/orm": "^3.2",
+        "lexik/jwt-authentication-bundle": "^3.1",
+        "nelmio/api-doc-bundle": "^4.29",
+        "scienta/doctrine-json-functions": "^6.1",
+        "symfony/asset": "7.1.*",
         "symfony/console": "7.1.*",
         "symfony/dotenv": "7.1.*",
+        "symfony/expression-language": "7.1.*",
         "symfony/flex": "^2",
         "symfony/framework-bundle": "7.1.*",
+        "symfony/http-client": "7.1.*",
+        "symfony/intl": "7.1.*",
+        "symfony/lock": "7.1.*",
+        "symfony/mailer": "7.1.*",
+        "symfony/monolog-bundle": "^3.10",
+        "symfony/rate-limiter": "7.1.*",
         "symfony/runtime": "7.1.*",
-        "symfony/yaml": "7.1.*"
-    },
-    "require-dev": {
+        "symfony/security-bundle": "7.1.*",
+        "symfony/serializer": "7.1.*",
+        "symfony/string": "7.1.*",
+        "symfony/translation": "7.1.*",
+        "symfony/uid": "7.1.*",
+        "symfony/validator": "7.1.*",
+        "symfony/yaml": "7.1.*",
+        "twig/cssinliner-extra": "^3.11"
     },
     "config": {
         "allow-plugins": {
@@ -62,7 +83,13 @@
     "extra": {
         "symfony": {
             "allow-contrib": false,
-            "require": "7.1.*"
+            "require": "7.1.*",
+            "docker": false
         }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.3",
+        "symfony/stopwatch": "7.1.*",
+        "symfony/web-profiler-bundle": "7.1.*"
     }
 }
