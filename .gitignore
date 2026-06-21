@@ -1,13 +1,22 @@
-/.env
+# Dependencies
+node_modules/
+.pnpm-store/
 
-/docker/DB
+# Build outputs
+dist/
+build/
+apps/web/.angular/
+**/*.tsbuildinfo
 
-/docker-compose.override.yml
+# Env & secrets
+.env
+.env.*
+!.env.dev
 
-# PHPStorm / Webstorm / CLion IDE
-/.idea
+# Tests / coverage
+coverage/
 
-# Visual studio code
-*.code-workspace
-/.vs/
-/vscode/
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+.idea/

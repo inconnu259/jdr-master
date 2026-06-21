@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm 11 — approbation explicite des scripts de build (sécurité supply-chain).
+# Tous nécessaires : moteur Prisma, binaires esbuild (Angular), watchers natifs.
+allowBuilds:
+  '@parcel/watcher': true
+  '@prisma/engines': true
+  esbuild: true
+  lmdb: true
+  msgpackr-extract: true
+  prisma: true
+  unrs-resolver: true

@@ -1,139 +1,73 @@
-networks:
-  nct-networks:
-    driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: "${NETWORK_IP}.0/24"
+# Image de dev commune (Node 24 + OpenSSL + pnpm) — construite une fois, partagée.
+x-dev: &dev
+  image: master-jdr-dev:local
+  build:
+    context: .
+    dockerfile: docker/dev.Dockerfile
 
 services:
-
-  nginx:
-    container_name: nginx
-    image: nginx:stable-alpine-slim
-    ports:
-      - ${NGINX_PORT}:80
-    environment:
-      TZ: ${TZ}
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    env_file: [.env]
     volumes:
-      # conf
-      - ./docker/nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf
-      # certificates
-      - ./docker/nginx/ssl:/etc/nginx/ssl
-      # php files
-      - ./api:/var/www/api
-    logging:
-      driver: "json-file"
-      options:
-        max-file: ${LOG_FILES_COUNT}
-        max-size: ${LOG_FILES_SIZE}
-    restart: always
-    depends_on:
-      - api
-      - client
-      - mailer
-      - adminer
-    networks:
-      nct-networks:
-        ipv4_address: "${NETWORK_IP}.2"
-
-  database:
-    container_name: database
-    image: postgres:alpine
-    environment:
-      POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_DATABASE}
-      TZ: ${TZ}
-    volumes:
-      - ./docker/DB/:/var/lib/postgres/
-    logging:
-      driver: "json-file"
-      options:
-        max-file: ${LOG_FILES_COUNT}
-        max-size: ${LOG_FILES_SIZE}
-    restart: always
+      - db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_DATABASE}"]
-      interval: 2s
-      retries: 60
-    networks:
-      nct-networks:
-        ipv4_address: "${NETWORK_IP}.3"
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Installe les dépendances du workspace une seule fois dans les volumes node_modules,
+  # puis se termine. api et web attendent sa réussite.
+  deps:
+    <<: *dev
+    working_dir: /work
+    volumes:
+      - .:/work
+      - node_modules_root:/work/node_modules
+      - node_modules_api:/work/apps/api/node_modules
+      - node_modules_web:/work/apps/web/node_modules
+    command: pnpm install
 
   api:
-    container_name: api
-    build:
-      context: .
-      dockerfile: docker/Dockerfile_api
+    <<: *dev
+    working_dir: /work/apps/api
+    env_file: [.env]
     environment:
-      APP_ENV: dev
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      DB_DATABASE: ${DB_DATABASE}
-      TZ: ${TZ}
-      JWT_PASSPHRASE: ${JWT_PASSPHRASE}
-      DUAL_FACTOR_AUTH_TOKEN_VALIDITY_IN_MINUTES: ${DUAL_FACTOR_AUTH_TOKEN_VALIDITY_IN_MINUTES}
-      DUAL_FACTOR_AUTH_REGENERATE_INTERVAL_IN_SECONDS: ${DUAL_FACTOR_AUTH_REGENERATE_INTERVAL_IN_SECONDS}
-      ACCESS_TOKEN_VALIDITY_IN_HOURS: ${ACCESS_TOKEN_VALIDITY_IN_HOURS}
-      REGISTRATION_TOKEN_VALIDITY_IN_HOURS: ${REGISTRATION_TOKEN_VALIDITY_IN_HOURS}
-      REGISTRATION_TOKEN_REGENERATE_INTERVAL_IN_SECONDS: ${REGISTRATION_TOKEN_REGENERATE_INTERVAL_IN_SECONDS}
-      RESET_PASSWORD_TOKEN_VALIDITY_IN_HOURS: ${RESET_PASSWORD_TOKEN_VALIDITY_IN_HOURS}
-      MAILER_DSN: ${MAILER_DSN}
-      MAIL_FROM: ${MAIL_FROM}
-      APP_URL: ${APP_URL}
-      NB_LASTNAME_CHAR_IN_USERNAME: ${NB_LASTNAME_CHAR_IN_USERNAME}
-    volumes:
-      - ./api:/var/www/api
-    restart: always
-    logging:
-      driver: "json-file"
-      options:
-        max-file: ${LOG_FILES_COUNT}
-        max-size: ${LOG_FILES_SIZE}
+      PORT: '3000'
+      CHOKIDAR_USEPOLLING: 'true'
     depends_on:
-      - database
-    networks:
-      nct-networks:
-        ipv4_address: "${NETWORK_IP}.4"
-
-  client:
-    container_name: client
-    build:
-      context: .
-      dockerfile: docker/Dockerfile_client_${CLIENT_IMAGE_TAG}
+      db:
+        condition: service_healthy
+      deps:
+        condition: service_completed_successfully
     volumes:
-      - ./client:/var/www/client
-    restart: always
-    logging:
-      driver: "json-file"
-      options:
-        max-file: ${LOG_FILES_COUNT}
-        max-size: ${LOG_FILES_SIZE}
-    networks:
-      nct-networks:
-        ipv4_address: "${NETWORK_IP}.5"
+      - .:/work
+      - node_modules_root:/work/node_modules
+      - node_modules_api:/work/apps/api/node_modules
+    ports:
+      - '${API_PORT}:3000'
+    command: sh -c "pnpm prisma generate && pnpm prisma db push --accept-data-loss && pnpm start:dev"
 
-  mailer:
-    container_name: mailer
-    image: mailhog/mailhog
-    restart: always
-    networks:
-      nct-networks:
-        ipv4_address: "${NETWORK_IP}.6"
-
-  adminer:
-    container_name: adminer
-    image: adminer
+  web:
+    <<: *dev
+    working_dir: /work/apps/web
     environment:
-      ADMINER_DEFAULT_SERVER: database
-      TZ: ${TZ}
-      UPLOAD_LIMIT: 8G
-      MAX_EXECUTION_TIME: 3600
-      ADMINER_ABSOLUTE_URI: http://localhost/adminer/
-    restart: always
+      CHOKIDAR_USEPOLLING: 'true'
     depends_on:
-      - database
-    networks:
-      nct-networks:
-        ipv4_address: "${NETWORK_IP}.7"
+      deps:
+        condition: service_completed_successfully
+    volumes:
+      - .:/work
+      - node_modules_root:/work/node_modules
+      - node_modules_web:/work/apps/web/node_modules
+    ports:
+      - '${WEB_PORT}:4200'
+    command: sh -c "pnpm ng serve --host 0.0.0.0 --port 4200 --poll 500"
+
+volumes:
+  db-data:
+  node_modules_root:
+  node_modules_api:
+  node_modules_web:

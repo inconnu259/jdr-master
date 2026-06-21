@@ -1,0 +1,15 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Table triviale du palier 0 — prouve la connexion DB + la synchro de schéma.
+/// Les vrais modèles (User, Partie, Character…) arrivent au palier 1.
+model AppInfo {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+}
