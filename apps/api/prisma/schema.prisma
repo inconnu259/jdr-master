@@ -6,10 +6,17 @@ datasource db {
   provider = "postgresql"
 }
 
-/// Table triviale du palier 0 — prouve la connexion DB + la synchro de schéma.
-/// Les vrais modèles (User, Partie, Character…) arrivent au palier 1.
-model AppInfo {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique
-  createdAt DateTime @default(now())
+enum GlobalRole {
+  USER
+  ADMIN
+}
+
+/// Compte utilisateur. La connexion se fait par `email` ; `pseudo` est public (recherche/affichage).
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  pseudo       String     @unique
+  passwordHash String
+  role         GlobalRole @default(USER)
+  createdAt    DateTime   @default(now())
 }

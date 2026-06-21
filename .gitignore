@@ -20,3 +20,6 @@ coverage/
 .DS_Store
 Thumbs.db
 .idea/
+
+# Specs / planification — privé pour l'instant (hors repo public)
+docs/

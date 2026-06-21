@@ -3,6 +3,15 @@
  * Import type-only côté apps → effacé à la compilation, aucun coût runtime.
  */
 
+/** Utilisateur authentifié (renvoyé par /auth/login, /auth/me). Jamais le hash. */
+export interface AuthUser {
+  id: string;
+  email: string;
+  pseudo: string;
+  role: 'USER' | 'ADMIN';
+  createdAt: string;
+}
+
 /** Réponse de l'endpoint GET /health de l'API. */
 export interface HealthStatus {
   /** État global de l'API. */
