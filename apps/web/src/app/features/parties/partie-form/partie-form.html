@@ -1,0 +1,39 @@
+<mat-card class="form-card">
+  <mat-card-title>{{ editId() ? 'Modifier la partie' : 'Nouvelle partie' }}</mat-card-title>
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <mat-form-field appearance="outline">
+      <mat-label>Nom</mat-label>
+      <input matInput formControlName="name" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Système de jeu</mat-label>
+      <mat-select formControlName="gameSystemId">
+        @for (s of systems; track s.id) {
+          <mat-option [value]="s.id">{{ s.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <label class="lbl">Type</label>
+    <mat-button-toggle-group formControlName="kind" hideSingleSelectionIndicator>
+      <mat-button-toggle value="ONE_SHOT">One-shot</mat-button-toggle>
+      <mat-button-toggle value="CAMPAGNE_LINEAIRE">Campagne</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Description (optionnel)</mat-label>
+      <textarea matInput formControlName="description" rows="3"></textarea>
+    </mat-form-field>
+
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+    <div class="actions">
+      <button mat-button type="button" (click)="cancel()">Annuler</button>
+      <button mat-flat-button type="submit" [disabled]="saving()">
+        {{ editId() ? 'Enregistrer' : 'Créer' }}
+      </button>
+    </div>
+  </form>
+</mat-card>

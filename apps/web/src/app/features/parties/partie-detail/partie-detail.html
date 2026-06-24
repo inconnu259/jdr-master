@@ -1,0 +1,21 @@
+@if (partie(); as p) {
+  <mat-card class="detail">
+    <mat-card-header>
+      <mat-card-title>{{ p.name }}</mat-card-title>
+      <mat-card-subtitle>{{ system(p.gameSystemId) }} · {{ kind(p.kind) }}</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      @if (p.description) {
+        <p>{{ p.description }}</p>
+      } @else {
+        <p class="muted">Aucune description.</p>
+      }
+      <div class="members">👥 Membres — à venir (Palier 1c)</div>
+    </mat-card-content>
+    <mat-card-actions>
+      <a mat-button [routerLink]="['/parties', p.id, 'edit']"><mat-icon>edit</mat-icon> Éditer</a>
+      <button mat-button (click)="confirmDelete(p)"><mat-icon>delete</mat-icon> Supprimer</button>
+      <a mat-button routerLink="/"><mat-icon>arrow_back</mat-icon> Retour</a>
+    </mat-card-actions>
+  </mat-card>
+}

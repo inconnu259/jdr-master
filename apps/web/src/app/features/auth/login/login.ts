@@ -17,39 +17,8 @@ import { AuthService } from '../../../core/auth/auth.service';
     MatInputModule,
     MatButtonModule,
   ],
-  template: `
-    <div class="auth-page">
-      <mat-card class="auth-card">
-        <mat-card-header><mat-card-title>Connexion</mat-card-title></mat-card-header>
-        <mat-card-content>
-          <form [formGroup]="form" (ngSubmit)="submit()">
-            <mat-form-field appearance="outline">
-              <mat-label>Email</mat-label>
-              <input matInput type="email" formControlName="email" autocomplete="email" />
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Mot de passe</mat-label>
-              <input matInput type="password" formControlName="password" autocomplete="current-password" />
-            </mat-form-field>
-            @if (error()) {
-              <p class="error">{{ error() }}</p>
-            }
-            <button mat-flat-button type="submit" [disabled]="loading()">Se connecter</button>
-          </form>
-        </mat-card-content>
-        <mat-card-actions>
-          <a routerLink="/register">Créer un compte</a>
-        </mat-card-actions>
-      </mat-card>
-    </div>
-  `,
-  styles: `
-    .auth-page { display: flex; justify-content: center; padding: 4rem 1rem; }
-    .auth-card { width: 100%; max-width: 24rem; }
-    form { display: flex; flex-direction: column; gap: 0.5rem; }
-    mat-form-field { width: 100%; }
-    .error { color: var(--mat-sys-error, #b00020); margin: 0 0 0.5rem; }
-  `,
+  templateUrl: './login.html',
+  styleUrl: './login.scss',
 })
 export class Login {
   private readonly fb = inject(FormBuilder);

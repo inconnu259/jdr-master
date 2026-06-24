@@ -19,4 +19,35 @@ model User {
   passwordHash String
   role         GlobalRole @default(USER)
   createdAt    DateTime   @default(now())
+
+  mjOfParties  Partie[]   @relation("PartieMJ")
+}
+
+enum PartieKind {
+  ONE_SHOT
+  CAMPAGNE_LINEAIRE
+  CAMPAGNE_EPISODIQUE
+}
+
+/// Une partie (one-shot ou campagne). En 1b elle n'a que son MJ (`mjId`) ; les membres arrivent en 1c.
+model Partie {
+  id           String     @id @default(uuid())
+  name         String
+  kind         PartieKind
+  gameSystemId String
+  description  String?
+  mjId         String
+  mj           User       @relation("PartieMJ", fields: [mjId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+}
+
+/// Sessions HTTP (stockées par connect-pg-simple). Modélisées ici pour que **Prisma** les gère :
+/// sinon la table créée au runtime apparaît comme un « drift » à chaque migration.
+model Session {
+  sid    String   @id @db.VarChar
+  sess   Json     @db.Json
+  expire DateTime @db.Timestamp(6)
+
+  @@index([expire], map: "IDX_session_expire")
+  @@map("session")
 }

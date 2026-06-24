@@ -1,0 +1,23 @@
+@if (mode() === 'mj') {
+  <div class="head">
+    <h1>Mes parties</h1>
+    <a mat-flat-button routerLink="/parties/new"><mat-icon>add</mat-icon> Créer une partie</a>
+  </div>
+  @if (parties().length === 0) {
+    <p class="empty">Tu ne maîtrises encore aucune partie. Crée ta première !</p>
+  } @else {
+    <div class="grid">
+      @for (p of parties(); track p.id) {
+        <mat-card class="tile" [routerLink]="['/parties', p.id]">
+          <mat-card-header>
+            <mat-card-title>{{ p.name }}</mat-card-title>
+            <mat-card-subtitle>{{ system(p.gameSystemId) }} · {{ kind(p.kind) }}</mat-card-subtitle>
+          </mat-card-header>
+        </mat-card>
+      }
+    </div>
+  }
+} @else {
+  <h1>Mes parties</h1>
+  <p class="empty">Tu ne participes à aucune partie. Demande une invitation à un MJ.</p>
+}

@@ -18,7 +18,7 @@ async function bootstrap() {
     session({
       store: new PgSession({
         conString: process.env.DATABASE_URL,
-        createTableIfMissing: true, // crée la table "session" si absente
+        createTableIfMissing: false, // la table "session" est gérée par Prisma (modèle Session)
       }),
       secret: process.env.SESSION_SECRET ?? 'dev-secret',
       resave: false,

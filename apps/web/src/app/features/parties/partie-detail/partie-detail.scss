@@ -1,0 +1,15 @@
+.detail {
+  max-width: 36rem;
+  margin: 1rem auto;
+}
+.muted {
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+.members {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px dashed var(--mat-sys-outline-variant, #ccc);
+  border-radius: 0.5rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+  text-align: center;
+}

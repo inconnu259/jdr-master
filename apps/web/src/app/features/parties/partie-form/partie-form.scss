@@ -1,0 +1,25 @@
+.form-card {
+  max-width: 32rem;
+  margin: 1rem auto;
+}
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+mat-form-field {
+  width: 100%;
+}
+.lbl {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.error {
+  color: var(--mat-sys-error, #b00020);
+}
