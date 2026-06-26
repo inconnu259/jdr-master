@@ -43,9 +43,13 @@ export class AuthService {
     this.initialized.set(true);
   }
 
-  async register(email: string, pseudo: string, password: string): Promise<void> {
+  async register(email: string, pseudo: string, password: string, token: string): Promise<void> {
     await firstValueFrom(
-      this.http.post(`${API}/auth/register`, { email, pseudo, password }, { withCredentials: true }),
+      this.http.post(
+        `${API}/auth/register`,
+        { email, pseudo, password, token },
+        { withCredentials: true },
+      ),
     );
   }
 

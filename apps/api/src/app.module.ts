@@ -8,6 +8,7 @@ import { HealthModule } from './health/health.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { PartiesModule } from './parties/parties.module';
+import { InvitationsModule } from './invitations/invitations.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PartiesModule } from './parties/parties.module';
     UsersModule,
     AuthModule,
     PartiesModule,
+    InvitationsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

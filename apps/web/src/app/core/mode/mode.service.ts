@@ -12,6 +12,8 @@ export class ModeService {
   readonly mode = signal<Mode>(this.readStoredMode());
   /** Les parties que l'utilisateur maîtrise (source unique : pilote le toggle ET le dashboard MJ). */
   readonly mjParties = signal<PartieDto[]>([]);
+  /** Les parties où l'utilisateur est joueur (dashboard Joueur). */
+  readonly playerParties = signal<PartieDto[]>([]);
   /** Le toggle MJ ne s'affiche que si on maîtrise au moins une partie. */
   readonly hasMjParties = computed(() => this.mjParties().length > 0);
 
@@ -28,6 +30,14 @@ export class ModeService {
     }
     // Si on n'est MJ de rien, on ne peut pas rester en mode MJ.
     if (!this.hasMjParties() && this.mode() === 'mj') this.setMode('joueur');
+  }
+
+  async refreshPlayerParties(): Promise<void> {
+    try {
+      this.playerParties.set(await this.parties.list('player'));
+    } catch {
+      this.playerParties.set([]);
+    }
   }
 
   private readStoredMode(): Mode {

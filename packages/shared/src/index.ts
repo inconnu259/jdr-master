@@ -45,3 +45,50 @@ export interface PartieDto {
   mjId: string;
   createdAt: string;
 }
+
+/** Statut d'une invitation in-app. */
+export type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'REVOKED';
+
+/** Résultat de recherche d'utilisateur (GET /users/search) — jamais le hash. */
+export interface UserSearchResultDto {
+  id: string;
+  pseudo: string;
+  email: string;
+}
+
+/** Un joueur d'une partie (GET /parties/:id/members). */
+export interface PartieMemberDto {
+  userId: string;
+  pseudo: string;
+  email: string;
+  joinedAt: string;
+}
+
+/** Invitation reçue, telle qu'affichée au joueur (GET /invitations). */
+export interface InvitationDto {
+  id: string;
+  partie: { id: string; name: string; gameSystemId: string };
+  inviterPseudo: string;
+  status: InvitationStatus;
+  createdAt: string;
+}
+
+/** Lien d'invitation (vue MJ — GET /parties/:id/invite-links). */
+export interface InviteLinkDto {
+  id: string;
+  token: string;
+  maxUses: number | null;
+  usesCount: number;
+  expiresAt: string;
+  revoked: boolean;
+  createdAt: string;
+}
+
+/** Prévisualisation publique d'un lien (GET /invite-links/:token, sans session). */
+export interface InviteLinkPreviewDto {
+  partieName: string;
+  gameSystemId: string;
+  valid: boolean;
+  /** Raison d'invalidité éventuelle (expiré / révoqué / quota atteint). */
+  reason?: string;
+}

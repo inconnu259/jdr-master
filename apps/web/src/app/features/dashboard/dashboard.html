@@ -18,6 +18,39 @@
     </div>
   }
 } @else {
+  @if (received().length > 0) {
+    <h1>Invitations reçues</h1>
+    <div class="grid">
+      @for (inv of received(); track inv.id) {
+        <mat-card class="tile">
+          <mat-card-header>
+            <mat-card-title>{{ inv.partie.name }}</mat-card-title>
+            <mat-card-subtitle>
+              {{ system(inv.partie.gameSystemId) }} · invité par {{ inv.inviterPseudo }}
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-card-actions>
+            <button mat-flat-button (click)="accept(inv)"><mat-icon>check</mat-icon> Accepter</button>
+            <button mat-button (click)="decline(inv)"><mat-icon>close</mat-icon> Refuser</button>
+          </mat-card-actions>
+        </mat-card>
+      }
+    </div>
+  }
+
   <h1>Mes parties</h1>
-  <p class="empty">Tu ne participes à aucune partie. Demande une invitation à un MJ.</p>
+  @if (playerParties().length === 0) {
+    <p class="empty">Tu ne participes à aucune partie. Demande une invitation à un MJ.</p>
+  } @else {
+    <div class="grid">
+      @for (p of playerParties(); track p.id) {
+        <mat-card class="tile" [routerLink]="['/parties', p.id]">
+          <mat-card-header>
+            <mat-card-title>{{ p.name }}</mat-card-title>
+            <mat-card-subtitle>{{ system(p.gameSystemId) }} · {{ kind(p.kind) }}</mat-card-subtitle>
+          </mat-card-header>
+        </mat-card>
+      }
+    </div>
+  }
 }

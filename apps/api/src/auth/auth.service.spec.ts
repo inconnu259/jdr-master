@@ -2,12 +2,17 @@ import { ConflictException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { InviteLinksService } from '../invitations/invite-links.service';
 
 jest.mock('argon2');
 
 describe('AuthService', () => {
   let service: AuthService;
   let users: jest.Mocked<Pick<UsersService, 'findByEmail' | 'create'>>;
+  let tx: { user: { create: jest.Mock } };
+  let prisma: { $transaction: jest.Mock };
+  let inviteLinks: { consumeLink: jest.Mock };
 
   const fakeUser = {
     id: 'u1',
@@ -20,7 +25,15 @@ describe('AuthService', () => {
 
   beforeEach(() => {
     users = { findByEmail: jest.fn(), create: jest.fn() };
-    service = new AuthService(users as unknown as UsersService);
+    tx = { user: { create: jest.fn() } };
+    // $transaction exécute le callback avec notre `tx` mocké.
+    prisma = { $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)) };
+    inviteLinks = { consumeLink: jest.fn().mockResolvedValue({ partieId: 'p1' }) };
+    service = new AuthService(
+      users as unknown as UsersService,
+      prisma as unknown as PrismaService,
+      inviteLinks as unknown as InviteLinksService,
+    );
   });
 
   describe('validateUser', () => {
@@ -45,21 +58,23 @@ describe('AuthService', () => {
   });
 
   describe('register', () => {
-    it("crée et renvoie l'utilisateur sans le hash", async () => {
-      users.create.mockResolvedValue(fakeUser as never);
+    it("crée le compte, consomme le lien et renvoie l'utilisateur sans le hash", async () => {
+      tx.user.create.mockResolvedValue(fakeUser);
       const result = await service.register({
         email: 'a@b.c',
         pseudo: 'alice',
         password: 'password123',
+        token: 'tok',
       });
+      expect(inviteLinks.consumeLink).toHaveBeenCalledWith(tx, 'tok', 'u1');
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ pseudo: 'alice' });
     });
 
     it('lève ConflictException si email/pseudo déjà pris (P2002)', async () => {
-      users.create.mockRejectedValue({ code: 'P2002' });
+      tx.user.create.mockRejectedValue({ code: 'P2002' });
       await expect(
-        service.register({ email: 'a@b.c', pseudo: 'alice', password: 'password123' }),
+        service.register({ email: 'a@b.c', pseudo: 'alice', password: 'password123', token: 'tok' }),
       ).rejects.toBeInstanceOf(ConflictException);
     });
   });

@@ -2,6 +2,11 @@
   <mat-card class="auth-card">
     <mat-card-header><mat-card-title>Créer un compte</mat-card-title></mat-card-header>
     <mat-card-content>
+      @if (!token) {
+        <p class="error">
+          L'inscription se fait uniquement sur invitation. Ouvre un lien d'invitation pour créer ton compte.
+        </p>
+      }
       <form [formGroup]="form" (ngSubmit)="submit()">
         <mat-form-field appearance="outline">
           <mat-label>Email</mat-label>
@@ -18,7 +23,7 @@
         @if (error()) {
           <p class="error">{{ error() }}</p>
         }
-        <button mat-flat-button type="submit" [disabled]="loading()">Créer le compte</button>
+        <button mat-flat-button type="submit" [disabled]="loading() || !token">Créer le compte</button>
       </form>
     </mat-card-content>
     <mat-card-actions>

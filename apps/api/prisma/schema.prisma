@@ -20,7 +20,11 @@ model User {
   role         GlobalRole @default(USER)
   createdAt    DateTime   @default(now())
 
-  mjOfParties  Partie[]   @relation("PartieMJ")
+  mjOfParties        Partie[]     @relation("PartieMJ")
+  memberships        Membership[]
+  invitesSent        Invitation[] @relation("InvitationInviter")
+  invitesRecv        Invitation[] @relation("InvitationInvitee")
+  inviteLinksCreated InviteLink[] @relation("InviteLinkCreator")
 }
 
 enum PartieKind {
@@ -29,7 +33,7 @@ enum PartieKind {
   CAMPAGNE_EPISODIQUE
 }
 
-/// Une partie (one-shot ou campagne). En 1b elle n'a que son MJ (`mjId`) ; les membres arrivent en 1c.
+/// Une partie (one-shot ou campagne). Le MJ = le créateur (`mjId`) ; les joueurs sont des `Membership`.
 model Partie {
   id           String     @id @default(uuid())
   name         String
@@ -39,6 +43,60 @@ model Partie {
   mjId         String
   mj           User       @relation("PartieMJ", fields: [mjId], references: [id], onDelete: Cascade)
   createdAt    DateTime   @default(now())
+
+  memberships  Membership[]
+  invitations  Invitation[]
+  inviteLinks  InviteLink[]
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+}
+
+/// Un JOUEUR dans une partie (le MJ n'est pas un membership, il est `Partie.mjId`).
+model Membership {
+  id       String   @id @default(uuid())
+  userId   String
+  partieId String
+  joinedAt DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partie   Partie   @relation(fields: [partieId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, partieId])
+}
+
+/// Invitation ciblée d'un utilisateur DÉJÀ inscrit (accept/refus in-app).
+model Invitation {
+  id            String           @id @default(uuid())
+  partieId      String
+  partie        Partie           @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  inviterId     String
+  inviter       User             @relation("InvitationInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  inviteeUserId String
+  invitee       User             @relation("InvitationInvitee", fields: [inviteeUserId], references: [id], onDelete: Cascade)
+  status        InvitationStatus @default(PENDING)
+  createdAt     DateTime         @default(now())
+  respondedAt   DateTime?
+
+  @@unique([partieId, inviteeUserId])
+}
+
+/// Lien d'invitation = aussi le SEUL moyen de s'inscrire (inscription sur invitation).
+model InviteLink {
+  id          String   @id @default(uuid())
+  token       String   @unique
+  partieId    String
+  partie      Partie   @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User     @relation("InviteLinkCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  maxUses     Int? // null = illimité · 1 = usage unique · N = X joueurs
+  usesCount   Int      @default(0)
+  expiresAt   DateTime // défaut +7 jours, configurable
+  revoked     Boolean  @default(false)
+  createdAt   DateTime @default(now())
 }
 
 /// Sessions HTTP (stockées par connect-pg-simple). Modélisées ici pour que **Prisma** les gère :

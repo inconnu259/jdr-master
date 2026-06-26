@@ -31,9 +31,10 @@ export class Shell implements OnInit {
   protected readonly mode = this.modeSvc.mode;
   protected readonly hasMjParties = this.modeSvc.hasMjParties;
 
-  // Charge les parties MJ (pilote le toggle + le dashboard MJ) une fois la session établie.
+  // Charge les parties (MJ pilote le toggle + dashboard MJ ; joueur alimente le dashboard Joueur).
   ngOnInit(): void {
     void this.modeSvc.refreshMjParties();
+    void this.modeSvc.refreshPlayerParties();
   }
 
   setMode(m: 'joueur' | 'mj'): void {

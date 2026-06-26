@@ -14,6 +14,17 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
+  /**
+   * Recherche par **email OU pseudo** en correspondance **exacte** (spec §4).
+   * Ne renvoie jamais le hash : juste de quoi inviter (id, pseudo, email).
+   */
+  searchByEmailOrPseudo(q: string) {
+    return this.prisma.user.findMany({
+      where: { OR: [{ email: q }, { pseudo: q }] },
+      select: { id: true, pseudo: true, email: true },
+    });
+  }
+
   async create(data: { email: string; pseudo: string; password: string }) {
     const passwordHash = await argon2.hash(data.password);
     return this.prisma.user.create({

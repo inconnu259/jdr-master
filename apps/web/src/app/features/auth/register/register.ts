@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -24,7 +24,10 @@ export class Register {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
+  /** Inscription sur invitation : le token vient du lien (/join → /register?token=…). */
+  protected readonly token = this.route.snapshot.queryParamMap.get('token') ?? '';
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
 
@@ -35,16 +38,16 @@ export class Register {
   });
 
   async submit(): Promise<void> {
-    if (this.form.invalid) return;
+    if (this.form.invalid || !this.token) return;
     this.loading.set(true);
     this.error.set(null);
     try {
       const { email, pseudo, password } = this.form.getRawValue();
-      await this.auth.register(email, pseudo, password);
+      await this.auth.register(email, pseudo, password, this.token);
       await this.auth.login(email, password);
       void this.router.navigate(['/']);
     } catch {
-      this.error.set('Impossible de créer le compte (email/pseudo déjà pris ?).');
+      this.error.set('Impossible de créer le compte (lien invalide, ou email/pseudo déjà pris ?).');
     } finally {
       this.loading.set(false);
     }

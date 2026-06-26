@@ -23,7 +23,21 @@ export class PartiesController {
 
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.parties.getOwned(id, user.id);
+    return this.parties.getViewable(id, user.id);
+  }
+
+  @Get(':id/members')
+  members(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.parties.listMembers(id, user.id);
+  }
+
+  @Delete(':id/members/:userId')
+  removeMember(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Param('userId') targetUserId: string,
+  ) {
+    return this.parties.removeMember(id, user.id, targetUserId);
   }
 
   @Patch(':id')

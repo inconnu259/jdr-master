@@ -1,11 +1,22 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatListModule } from '@angular/material/list';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
-import type { PartieDto } from '@master-jdr/shared';
+import type {
+  InviteLinkDto,
+  PartieDto,
+  PartieMemberDto,
+  UserSearchResultDto,
+} from '@master-jdr/shared';
+import { AuthService } from '../../../core/auth/auth.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
 import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
@@ -13,34 +24,119 @@ import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 
 @Component({
   selector: 'app-partie-detail',
-  imports: [RouterLink, MatCardModule, MatButtonModule, MatIconModule],
+  imports: [
+    RouterLink,
+    FormsModule,
+    DatePipe,
+    MatCardModule,
+    MatButtonModule,
+    MatIconModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatListModule,
+  ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
 })
 export class PartieDetail implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly auth = inject(AuthService);
   private readonly parties = inject(PartiesService);
   private readonly modeSvc = inject(ModeService);
   private readonly dialog = inject(MatDialog);
 
   protected readonly partie = signal<PartieDto | null>(null);
+  protected readonly members = signal<PartieMemberDto[]>([]);
+  protected readonly links = signal<InviteLinkDto[]>([]);
+  protected readonly search = signal('');
+  protected readonly results = signal<UserSearchResultDto[]>([]);
+  protected readonly notice = signal<string | null>(null);
+
+  /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
+  protected readonly isMj = computed(() => this.partie()?.mjId === this.auth.currentUser()?.id);
+
   protected readonly system = gameSystemName;
   protected readonly kind = partieKindLabel;
 
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
-    if (id) this.partie.set(await this.parties.get(id));
+    if (!id) return;
+    this.partie.set(await this.parties.get(id));
+    await this.loadMembers();
+    if (this.isMj()) await this.loadLinks();
+  }
+
+  async runSearch(): Promise<void> {
+    const q = this.search().trim();
+    this.notice.set(null);
+    if (!q) {
+      this.results.set([]);
+      return;
+    }
+    const found = await this.parties.searchUsers(q);
+    // On masque le MJ et les membres déjà présents.
+    const memberIds = new Set(this.members().map((m) => m.userId));
+    this.results.set(found.filter((u) => u.id !== this.partie()?.mjId && !memberIds.has(u.id)));
+  }
+
+  async invite(user: UserSearchResultDto): Promise<void> {
+    const p = this.partie();
+    if (!p) return;
+    await this.parties.inviteUser(p.id, user.id);
+    this.results.update((list) => list.filter((u) => u.id !== user.id));
+    this.notice.set(`Invitation envoyée à ${user.pseudo}.`);
+  }
+
+  async removeMember(member: PartieMemberDto): Promise<void> {
+    const p = this.partie();
+    if (!p) return;
+    const ref = this.dialog.open(ConfirmDialog, {
+      data: { message: `Retirer ${member.pseudo} de « ${p.name} » ?` },
+    });
+    if (!(await firstValueFrom(ref.afterClosed()))) return;
+    await this.parties.removeMember(p.id, member.userId);
+    await this.loadMembers();
+  }
+
+  async createLink(): Promise<void> {
+    const p = this.partie();
+    if (!p) return;
+    await this.parties.createInviteLink(p.id, {});
+    await this.loadLinks();
+  }
+
+  async revokeLink(link: InviteLinkDto): Promise<void> {
+    await this.parties.revokeInviteLink(link.id);
+    await this.loadLinks();
+  }
+
+  joinUrl(token: string): string {
+    return `${location.origin}/join/${token}`;
+  }
+
+  async copyLink(token: string): Promise<void> {
+    await navigator.clipboard?.writeText(this.joinUrl(token));
+    this.notice.set('Lien copié dans le presse-papiers.');
   }
 
   async confirmDelete(p: PartieDto): Promise<void> {
     const ref = this.dialog.open(ConfirmDialog, {
       data: { message: `Supprimer « ${p.name} » ? Cette action est irréversible.` },
     });
-    const confirmed = await firstValueFrom(ref.afterClosed());
-    if (!confirmed) return;
+    if (!(await firstValueFrom(ref.afterClosed()))) return;
     await this.parties.remove(p.id);
     await this.modeSvc.refreshMjParties();
     void this.router.navigate(['/']);
+  }
+
+  private async loadMembers(): Promise<void> {
+    const p = this.partie();
+    if (p) this.members.set(await this.parties.members(p.id));
+  }
+
+  private async loadLinks(): Promise<void> {
+    const p = this.partie();
+    if (p) this.links.set(await this.parties.inviteLinks(p.id));
   }
 }

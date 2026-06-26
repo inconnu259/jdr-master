@@ -1,7 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { PartieDto, PartieKind } from '@master-jdr/shared';
+import type {
+  InviteLinkDto,
+  PartieDto,
+  PartieKind,
+  PartieMemberDto,
+  UserSearchResultDto,
+} from '@master-jdr/shared';
 
 const API = 'http://localhost:3000';
 
@@ -10,6 +16,11 @@ export interface PartiePayload {
   gameSystemId: string;
   kind: PartieKind;
   description?: string;
+}
+
+export interface InviteLinkPayload {
+  maxUses?: number;
+  expiresAt?: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -40,5 +51,53 @@ export class PartiesService {
 
   remove(id: string): Promise<void> {
     return firstValueFrom(this.http.delete<void>(`${API}/parties/${id}`, { withCredentials: true }));
+  }
+
+  // --- Membres & invitations (1c) ---
+
+  searchUsers(q: string): Promise<UserSearchResultDto[]> {
+    return firstValueFrom(
+      this.http.get<UserSearchResultDto[]>(`${API}/users/search?q=${encodeURIComponent(q)}`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  members(id: string): Promise<PartieMemberDto[]> {
+    return firstValueFrom(
+      this.http.get<PartieMemberDto[]>(`${API}/parties/${id}/members`, { withCredentials: true }),
+    );
+  }
+
+  removeMember(id: string, userId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(`${API}/parties/${id}/members/${userId}`, { withCredentials: true }),
+    );
+  }
+
+  inviteUser(id: string, inviteeUserId: string): Promise<unknown> {
+    return firstValueFrom(
+      this.http.post(`${API}/parties/${id}/invitations`, { inviteeUserId }, { withCredentials: true }),
+    );
+  }
+
+  inviteLinks(id: string): Promise<InviteLinkDto[]> {
+    return firstValueFrom(
+      this.http.get<InviteLinkDto[]>(`${API}/parties/${id}/invite-links`, { withCredentials: true }),
+    );
+  }
+
+  createInviteLink(id: string, payload: InviteLinkPayload): Promise<InviteLinkDto> {
+    return firstValueFrom(
+      this.http.post<InviteLinkDto>(`${API}/parties/${id}/invite-links`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  revokeInviteLink(linkId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(`${API}/invite-links/${linkId}`, { withCredentials: true }),
+    );
   }
 }
