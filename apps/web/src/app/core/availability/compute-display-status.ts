@@ -24,7 +24,6 @@ export function computeDisplayStatus(
 
   if (active.some((d) => d.kind === 'UNAVAILABLE' && matches(d))) return 'UNAVAILABLE';
   if (active.some((d) => d.kind === 'AVAILABLE' && matches(d))) return 'AVAILABLE';
-  if (active.some((d) => isInCoveredPeriod(d, date))) return 'AVAILABLE';
   return 'UNKNOWN';
 }
 
@@ -35,17 +34,14 @@ function slotsMatch(declSlot: DaySlot, query: QuerySlot): boolean {
 
 function matchesDate(d: AvailabilityDeclarationDto, date: Date): boolean {
   if (d.recurKind === 'RECURRING') {
-    return d.dayOfWeek === date.getUTCDay();
-  }
-  if (!d.startDate || !d.endDate) return false;
-  const start = toUTCMidnight(d.startDate);
-  const end = toUTCMidnight(d.endDate);
-  return date >= start && date <= end;
-}
-
-function isInCoveredPeriod(d: AvailabilityDeclarationDto, date: Date): boolean {
-  if (d.recurKind === 'RECURRING') {
-    return date <= new Date(d.expiresAt);
+    if (d.dayOfWeek !== date.getUTCDay()) return false;
+    // Borne inférieure : à partir du jour sélectionné (startDate stocké à la création)
+    if (d.startDate) {
+      if (date < toUTCMidnight(d.startDate)) return false;
+    }
+    // Borne supérieure : jusqu'à expiresAt (inclus, minuit UTC)
+    const expiresMidnight = toUTCMidnight(d.expiresAt);
+    return date <= expiresMidnight;
   }
   if (!d.startDate || !d.endDate) return false;
   const start = toUTCMidnight(d.startDate);

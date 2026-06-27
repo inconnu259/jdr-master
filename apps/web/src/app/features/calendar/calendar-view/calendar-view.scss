@@ -9,3 +9,19 @@
     padding: 24px 32px;
   }
 }
+
+.calendar-error {
+  color: var(--mat-sys-error, #c00);
+  margin: 0 0 12px;
+}
+
+.constraint-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: rgba(0, 0, 0, 0.4);
+
+  @media (min-width: 768px) {
+    background: transparent;
+  }
+}

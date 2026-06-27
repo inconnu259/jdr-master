@@ -1,6 +1,24 @@
 <div class="calendar-page">
+  @if (error()) {
+    <p class="calendar-error" role="alert">{{ error() }}</p>
+  }
   <app-calendar-month-view
     [declarations]="declarations()"
     [loading]="loading()"
+    [pendingDto]="pendingDto()"
+    (slotSelected)="onSlotSelected($event)"
   />
 </div>
+
+@if (panelOpen()) {
+  <div class="constraint-backdrop" (click)="closePanel()" aria-hidden="true"></div>
+  <app-constraint-panel
+    [date]="selectedDate()"
+    [slot]="selectedSlot()"
+    [existingDeclaration]="selectedExisting()"
+    (saved)="onPanelSaved()"
+    (deleted)="onPanelDeleted()"
+    (cancelled)="closePanel()"
+    (formChanged)="onFormChanged($event)"
+  />
+}

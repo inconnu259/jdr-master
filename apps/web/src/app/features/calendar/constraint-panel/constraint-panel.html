@@ -1,0 +1,122 @@
+<div class="panel-header">
+  <div class="panel-title-block">
+    <h3 class="panel-title">{{ panelTitle }}</h3>
+    <span class="panel-slot-label">{{ SLOT_LABELS[form.value.slot || slot()] }}</span>
+  </div>
+  <button mat-icon-button type="button" (click)="cancelled.emit()" aria-label="Fermer le panneau">
+    <mat-icon>close</mat-icon>
+  </button>
+</div>
+
+<form [formGroup]="form" (ngSubmit)="onSave()" class="panel-form">
+  @if (error()) {
+    <p class="panel-error" role="alert">{{ error() }}</p>
+  }
+
+  <!-- Créneau -->
+  <div class="form-field">
+    <label class="field-label">Créneau</label>
+    <mat-button-toggle-group formControlName="slot" aria-label="Créneau" class="slot-toggle">
+      <mat-button-toggle value="MORNING">Matin</mat-button-toggle>
+      <mat-button-toggle value="AFTERNOON">AM</mat-button-toggle>
+      <mat-button-toggle value="EVENING">Soir</mat-button-toggle>
+      <mat-button-toggle value="FULL_DAY">Journée</mat-button-toggle>
+    </mat-button-toggle-group>
+  </div>
+
+  <!-- Disponibilité -->
+  <div class="form-field">
+    <mat-button-toggle-group formControlName="kind" aria-label="Disponibilité" class="kind-toggle">
+      <mat-button-toggle value="UNAVAILABLE">Indisponible</mat-button-toggle>
+      <mat-button-toggle value="AVAILABLE">Disponible</mat-button-toggle>
+    </mat-button-toggle-group>
+  </div>
+
+  <!-- Type de contrainte -->
+  <div class="form-field">
+    <label class="field-label">Type</label>
+    <mat-radio-group formControlName="type" class="type-radio-group">
+      <mat-radio-button value="PONCTUEL">Ce créneau uniquement</mat-radio-button>
+      <mat-radio-button value="RECURRENT">Récurrent (chaque semaine)</mat-radio-button>
+      <mat-radio-button value="PLAGE">Plage de dates</mat-radio-button>
+    </mat-radio-group>
+  </div>
+
+  <!-- Plage de dates -->
+  @if (form.value.type === 'PLAGE') {
+    <div class="form-field">
+      <label class="field-label" for="startDate">Date de début</label>
+      <input id="startDate" type="date" formControlName="startDate" class="date-input"
+        [attr.min]="today" required />
+    </div>
+    <div class="form-field">
+      <label class="field-label" for="endDate">Date de fin</label>
+      <input id="endDate" type="date" formControlName="endDate" class="date-input"
+        [attr.min]="form.value.startDate || today" required />
+    </div>
+  }
+
+  <!-- Expiration — uniquement pour RÉCURRENT -->
+  @if (form.value.type === 'RECURRENT') {
+    <div class="form-field">
+      <label class="field-label" for="expiresAt">Expire le</label>
+      <input id="expiresAt" type="date" formControlName="expiresAt" class="date-input"
+        [attr.min]="today" required />
+    </div>
+  }
+
+  <!-- Actions -->
+  <div class="panel-actions">
+
+    <!-- Supprimer (caché pendant une confirmation) -->
+    @if (existingDeclaration() && !confirmingDelete() && !confirmingReplace()) {
+      <button mat-stroked-button type="button" color="warn" (click)="onDeleteClick()" [disabled]="saving()">
+        <mat-icon>delete</mat-icon>
+        Supprimer
+      </button>
+    }
+
+    <!-- Confirmation suppression (RÉCURRENT) -->
+    @if (confirmingDelete()) {
+      <div class="inline-confirm">
+        <p class="confirm-warn">⚠ Supprimera toutes les occurrences récurrentes.</p>
+        <div class="confirm-actions">
+          <button mat-button type="button" (click)="confirmingDelete.set(false)">Annuler</button>
+          <button mat-flat-button color="warn" type="button" (click)="confirmDelete()" [disabled]="saving()">
+            Confirmer
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- Confirmation remplacement (modifier un RÉCURRENT) -->
+    @if (confirmingReplace()) {
+      <div class="inline-confirm">
+        <p class="confirm-warn">
+          ⚠ Remplacera toutes les occurrences récurrentes.
+          <em class="confirm-note">La modification d'une seule occurrence sera disponible prochainement.</em>
+        </p>
+        <div class="confirm-actions">
+          <button mat-button type="button" (click)="confirmingReplace.set(false)">Annuler</button>
+          <button mat-flat-button color="primary" type="button" (click)="executeReplace()" [disabled]="saving()">
+            Remplacer tout
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- Boutons normaux (cachés pendant les confirmations) -->
+    @if (!confirmingDelete() && !confirmingReplace()) {
+      <div class="actions-right">
+        <button mat-button type="button" (click)="cancelled.emit()" [disabled]="saving()">Annuler</button>
+        <button mat-flat-button color="primary" type="submit" [disabled]="!isFormValid || saving()">
+          @if (saving()) {
+            Enregistrement…
+          } @else {
+            {{ theme.tone()['cta.save_constraint'] }}
+          }
+        </button>
+      </div>
+    }
+  </div>
+</form>

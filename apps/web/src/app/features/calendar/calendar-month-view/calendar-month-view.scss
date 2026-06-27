@@ -1,6 +1,6 @@
 .calendar-month {
   width: 100%;
-  overflow: hidden; // bloque tout débordement du conteneur
+  overflow: hidden;
 }
 
 /* ── Navigation mois ───────────────────────────────────────────────────────── */
@@ -8,11 +8,15 @@
   display: flex;
   align-items: center;
   padding: 0 0 10px;
-  // Pas de gap : les boutons icon gardent leur padding natif
+
+  .today-btn {
+    margin-left: 2px;
+    opacity: 0.7;
+  }
 }
 
 .month-title {
-  flex: 1; // prend l'espace restant entre les deux flèches
+  flex: 1;
   text-align: center;
   font-size: 1rem;
   font-weight: 600;
@@ -45,7 +49,7 @@
 /* ── Grille ────────────────────────────────────────────────────────────────── */
 .calendar-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr)); // minmax(0) empêche tout overflow
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 2px;
 }
 
@@ -54,11 +58,11 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px; // espace minimal entre chiffre et segments
+  gap: 2px;
   padding: 4px 2px;
   border-radius: 6px;
-  min-height: 46px;
-  min-width: 0; // laisse la grille gérer la largeur
+  min-height: 52px;
+  min-width: 0;
   overflow: hidden;
   cursor: pointer;
   transition: background 0.1s;
@@ -67,12 +71,23 @@
     background: var(--mat-sys-surface-container-high);
   }
 
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: -2px;
+  }
+
   &.other-month {
     opacity: 0.3;
   }
+
+  &.past {
+    opacity: 0.3;
+    cursor: default;
+    pointer-events: none;
+  }
 }
 
-/* ── Numéro du jour — toujours carré, toujours circulaire ──────────────────── */
+/* ── Numéro du jour ─────────────────────────────────────────────────────────── */
 .day-number {
   width: 24px;
   height: 24px;
@@ -80,13 +95,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 50%; // cercle constant (pas oval)
+  border-radius: 50%;
   font-size: 0.78rem;
   font-weight: 500;
   color: var(--mat-sys-on-surface);
 }
 
-// Aujourd'hui : remplir le cercle avec la couleur primaire
 .today .day-number {
   background: var(--mat-sys-primary);
   color: var(--mat-sys-on-primary);
@@ -101,20 +115,33 @@
 }
 
 .segment {
+  /* Zone de clic élargie via padding vertical — zone visuelle réduite via height sur ::before */
+  position: relative;
   width: calc(33% - 2px);
-  height: 4px;
-  border-radius: 2px;
+  height: 14px;            /* zone cliquable */
   flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 3px;
 
-  &[data-status='AVAILABLE'] {
+  /* La barre colorée est un pseudo-élément centré */
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 3px 0;           /* 3px de marge top/bottom = barre de 8px visible */
+    border-radius: 2px;
+    background: transparent;
+    transition: background 0.15s, opacity 0.15s;
+  }
+
+  &[data-status='AVAILABLE']::before {
     background: var(--color-available);
   }
 
-  &[data-status='UNAVAILABLE'] {
+  &[data-status='UNAVAILABLE']::before {
     background: var(--color-unavailable);
   }
 
-  &[data-status='UNKNOWN'] {
+  &[data-status='UNKNOWN']::before {
     background: repeating-linear-gradient(
       90deg,
       var(--color-unknown) 0,
@@ -123,6 +150,20 @@
       transparent 4px
     );
   }
+
+  /* Preview : opacité réduite + animation pulse */
+  &.preview::before {
+    animation: segmentPulse 1.2s ease-in-out infinite alternate;
+  }
+
+  &:hover::before {
+    filter: brightness(1.15);
+  }
+}
+
+@keyframes segmentPulse {
+  from { opacity: 0.4; }
+  to   { opacity: 0.85; }
 }
 
 /* ── Loading ───────────────────────────────────────────────────────────────── */
@@ -132,7 +173,7 @@
   padding: 40px 0;
 }
 
-/* ── Desktop : version spacieuse (≥ 768 px) ─────────────────────────────────── */
+/* ── Desktop (≥ 768 px) ──────────────────────────────────────────────────── */
 @media (min-width: 768px) {
   .calendar-grid {
     gap: 4px;
@@ -152,8 +193,11 @@
   }
 
   .segment {
-    height: 6px;
-    border-radius: 3px;
+    height: 18px;
+
+    &::before {
+      inset: 4px 0;   /* barre visible de 10px */
+    }
   }
 
   .month-title {

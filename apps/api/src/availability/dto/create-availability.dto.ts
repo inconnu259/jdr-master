@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, Max, Min, ValidateIf } from 'class-validator';
 import type { AvailKind, DaySlot, RecurKind } from '@master-jdr/shared';
 
 const AVAIL_KINDS: AvailKind[] = ['UNAVAILABLE', 'AVAILABLE'];
@@ -12,7 +12,8 @@ export class CreateAvailabilityDto {
   @IsIn(RECUR_KINDS)
   recurKind!: RecurKind;
 
-  @IsOptional()
+  /** Requis pour RECURRING (jour de la semaine 0=dim … 6=sam), ignoré pour PUNCTUAL. */
+  @ValidateIf((o) => o.recurKind === 'RECURRING')
   @IsInt()
   @Min(0)
   @Max(6)
@@ -21,11 +22,13 @@ export class CreateAvailabilityDto {
   @IsIn(DAY_SLOTS)
   slot!: DaySlot;
 
-  @IsOptional()
+  /** Requis pour PUNCTUAL, ignoré pour RECURRING. */
+  @ValidateIf((o) => o.recurKind === 'PUNCTUAL')
   @IsDateString()
   startDate?: string | null;
 
-  @IsOptional()
+  /** Requis pour PUNCTUAL, ignoré pour RECURRING. */
+  @ValidateIf((o) => o.recurKind === 'PUNCTUAL')
   @IsDateString()
   endDate?: string | null;
 

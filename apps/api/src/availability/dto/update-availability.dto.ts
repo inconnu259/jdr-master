@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsOptional, Max, Min, ValidateIf } from 'class-validator';
 import type { AvailKind, DaySlot, RecurKind } from '@master-jdr/shared';
 
 const AVAIL_KINDS: AvailKind[] = ['UNAVAILABLE', 'AVAILABLE'];
@@ -14,7 +14,8 @@ export class UpdateAvailabilityDto {
   @IsIn(RECUR_KINDS)
   recurKind?: RecurKind;
 
-  @IsOptional()
+  /** Requis si recurKind est passé à RECURRING dans ce PATCH. */
+  @ValidateIf((o) => o.recurKind === 'RECURRING')
   @IsInt()
   @Min(0)
   @Max(6)
@@ -24,11 +25,13 @@ export class UpdateAvailabilityDto {
   @IsIn(DAY_SLOTS)
   slot?: DaySlot;
 
-  @IsOptional()
+  /** Requis si recurKind est passé à PUNCTUAL dans ce PATCH. */
+  @ValidateIf((o) => o.recurKind === 'PUNCTUAL')
   @IsDateString()
   startDate?: string | null;
 
-  @IsOptional()
+  /** Requis si recurKind est passé à PUNCTUAL dans ce PATCH. */
+  @ValidateIf((o) => o.recurKind === 'PUNCTUAL')
   @IsDateString()
   endDate?: string | null;
 

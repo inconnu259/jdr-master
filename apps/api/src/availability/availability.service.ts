@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { DaySlot, SlotStatus } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
@@ -22,6 +22,9 @@ export class AvailabilityService {
   // ─── CRUD ──────────────────────────────────────────────────────────────────
 
   create(userId: string, dto: CreateAvailabilityDto) {
+    if (new Date(dto.expiresAt) <= new Date()) {
+      throw new BadRequestException('expiresAt doit être une date dans le futur');
+    }
     return this.prisma.availabilityDeclaration.create({
       data: {
         userId,
@@ -48,8 +51,9 @@ export class AvailabilityService {
     const decl = await this.prisma.availabilityDeclaration.findUnique({ where: { id } });
     if (!decl) throw new NotFoundException('Déclaration introuvable');
     if (decl.userId !== userId) throw new ForbiddenException();
-    return this.prisma.availabilityDeclaration.update({
-      where: { id },
+    // updateMany avec { id, userId } rend le write atomique (élimine la race TOCTOU)
+    await this.prisma.availabilityDeclaration.updateMany({
+      where: { id, userId },
       data: {
         ...(dto.kind && { kind: dto.kind }),
         ...(dto.recurKind && { recurKind: dto.recurKind }),
@@ -60,6 +64,7 @@ export class AvailabilityService {
         ...(dto.expiresAt && { expiresAt: new Date(dto.expiresAt) }),
       },
     });
+    return this.prisma.availabilityDeclaration.findUnique({ where: { id } });
   }
 
   /** Soft-archive : ramène expiresAt à maintenant (filtrée hors des actives). */
@@ -67,8 +72,9 @@ export class AvailabilityService {
     const decl = await this.prisma.availabilityDeclaration.findUnique({ where: { id } });
     if (!decl) throw new NotFoundException('Déclaration introuvable');
     if (decl.userId !== userId) throw new ForbiddenException();
-    return this.prisma.availabilityDeclaration.update({
-      where: { id },
+    // updateMany avec { id, userId } rend le soft-delete atomique
+    await this.prisma.availabilityDeclaration.updateMany({
+      where: { id, userId },
       data: { expiresAt: new Date() },
     });
   }
@@ -80,6 +86,7 @@ export class AvailabilityService {
    * en une seule requête SQL (pas de N+1).
    */
   async getActiveDeclarations(userIds: string[]): Promise<Map<string, DeclarationLike[]>> {
+    if (userIds.length === 0) return new Map();
     const decls = await this.prisma.availabilityDeclaration.findMany({
       where: { userId: { in: userIds }, expiresAt: { gt: new Date() } },
     });
@@ -122,7 +129,11 @@ export class AvailabilityService {
   private matchesDeclaration(decl: DeclarationLike, date: Date, slot: DaySlot): boolean {
     if (!this.slotMatches(decl.slot, slot)) return false;
     if (decl.recurKind === 'RECURRING') {
-      return decl.dayOfWeek === date.getUTCDay();
+      if (decl.dayOfWeek !== date.getUTCDay()) return false;
+      // Borne inférieure : startDate = jour de la première occurrence déclarée
+      if (decl.startDate && date < decl.startDate) return false;
+      // Borne supérieure : expiresAt (la déclaration ne couvre pas les occurrences après expiration)
+      return date <= decl.expiresAt;
     }
     // PUNCTUAL
     if (!decl.startDate || !decl.endDate) return false;
@@ -146,7 +157,8 @@ export class AvailabilityService {
   private isInCoveredPeriod(active: DeclarationLike[], date: Date, _now: Date): boolean {
     return active.some((d) => {
       if (d.recurKind === 'RECURRING') {
-        // Un RECURRING actif couvre toute la plage jusqu'à sa date d'expiration
+        // Couvre [startDate, expiresAt] — startDate = premier jour déclaré
+        if (d.startDate && date < d.startDate) return false;
         return date <= d.expiresAt;
       }
       if (!d.startDate || !d.endDate) return false;

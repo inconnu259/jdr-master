@@ -7,6 +7,11 @@
     <button mat-icon-button (click)="nextMonth()" aria-label="Mois suivant">
       <mat-icon>chevron_right</mat-icon>
     </button>
+    @if (!isCurrentMonth()) {
+      <button mat-icon-button (click)="goToToday()" aria-label="Revenir au mois actuel" class="today-btn">
+        <mat-icon>today</mat-icon>
+      </button>
+    }
   </div>
 
   <div class="day-names" aria-hidden="true">
@@ -27,27 +32,40 @@
             class="day-cell"
             [class.other-month]="!cell.isCurrentMonth"
             [class.today]="cell.isToday"
-            [attr.aria-label]="cell.date.getDate() + ' ' + (cell.isToday ? '(aujourd\'hui)' : '')"
+            [class.past]="cell.isPast"
+            [attr.aria-label]="cell.date.getDate() + (cell.isToday ? ' (aujourd\'hui)' : '')"
+            [attr.aria-disabled]="cell.isPast ? 'true' : null"
+            [attr.role]="cell.isPast ? 'presentation' : 'button'"
+            [attr.tabindex]="cell.isPast ? null : 0"
+            (click)="onCellClick(cell.date, 'FULL_DAY')"
+            (keyup.enter)="onCellClick(cell.date, 'FULL_DAY')"
+            (keyup.space)="onCellClick(cell.date, 'FULL_DAY')"
           >
             <span class="day-number" aria-hidden="true">{{ cell.date.getDate() }}</span>
-            <div class="segments" aria-hidden="false">
+            <div class="segments">
               <span
                 class="segment"
-                [attr.data-status]="cell.morning"
-                [attr.aria-label]="slotAriaLabel('Matin', cell.morning)"
+                [attr.data-status]="cell.morningPreview !== null ? cell.morningPreview : cell.morning"
+                [class.preview]="cell.morningPreview !== null"
+                [attr.aria-label]="slotAriaLabel('Matin', cell.morningPreview !== null ? cell.morningPreview : cell.morning)"
                 role="img"
+                (click)="$event.stopPropagation(); onCellClick(cell.date, 'MORNING')"
               ></span>
               <span
                 class="segment"
-                [attr.data-status]="cell.afternoon"
-                [attr.aria-label]="slotAriaLabel('Après-midi', cell.afternoon)"
+                [attr.data-status]="cell.afternoonPreview !== null ? cell.afternoonPreview : cell.afternoon"
+                [class.preview]="cell.afternoonPreview !== null"
+                [attr.aria-label]="slotAriaLabel('Après-midi', cell.afternoonPreview !== null ? cell.afternoonPreview : cell.afternoon)"
                 role="img"
+                (click)="$event.stopPropagation(); onCellClick(cell.date, 'AFTERNOON')"
               ></span>
               <span
                 class="segment"
-                [attr.data-status]="cell.evening"
-                [attr.aria-label]="slotAriaLabel('Soirée', cell.evening)"
+                [attr.data-status]="cell.eveningPreview !== null ? cell.eveningPreview : cell.evening"
+                [class.preview]="cell.eveningPreview !== null"
+                [attr.aria-label]="slotAriaLabel('Soirée', cell.eveningPreview !== null ? cell.eveningPreview : cell.evening)"
                 role="img"
+                (click)="$event.stopPropagation(); onCellClick(cell.date, 'EVENING')"
               ></span>
             </div>
           </div>

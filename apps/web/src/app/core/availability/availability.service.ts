@@ -2,8 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type { AvailabilityDeclarationDto, CreateAvailabilityDto } from '@master-jdr/shared';
+import { API_BASE } from '../api-base';
 
-const API = 'http://localhost:3000';
+const API = API_BASE;
 
 @Injectable({ providedIn: 'root' })
 export class AvailabilityService {
