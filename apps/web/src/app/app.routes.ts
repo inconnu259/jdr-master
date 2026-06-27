@@ -7,6 +7,7 @@ import { Dashboard } from './features/dashboard/dashboard';
 import { PartieForm } from './features/parties/partie-form/partie-form';
 import { PartieDetail } from './features/parties/partie-detail/partie-detail';
 import { Join } from './features/join/join';
+import { CalendarView } from './features/calendar/calendar-view/calendar-view';
 
 export const routes: Routes = [
   { path: 'login', component: Login },
@@ -21,6 +22,7 @@ export const routes: Routes = [
       { path: 'parties/new', component: PartieForm },
       { path: 'parties/:id', component: PartieDetail },
       { path: 'parties/:id/edit', component: PartieForm },
+      { path: 'profile/calendar', component: CalendarView },
     ],
   },
   { path: '**', redirectTo: '' },

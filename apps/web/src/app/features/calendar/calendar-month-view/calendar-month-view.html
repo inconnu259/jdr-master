@@ -1,0 +1,58 @@
+<div class="calendar-month">
+  <div class="month-nav">
+    <button mat-icon-button (click)="prevMonth()" aria-label="Mois précédent">
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+    <h2 class="month-title">{{ monthLabel() }}</h2>
+    <button mat-icon-button (click)="nextMonth()" aria-label="Mois suivant">
+      <mat-icon>chevron_right</mat-icon>
+    </button>
+  </div>
+
+  <div class="day-names" aria-hidden="true">
+    @for (name of DAY_NAMES; track name) {
+      <div class="day-name">{{ name }}</div>
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="loading-overlay">
+      <mat-spinner diameter="40" />
+    </div>
+  } @else {
+    <div class="calendar-grid">
+      @for (week of weeks(); track $index) {
+        @for (cell of week; track cell.date.getTime()) {
+          <div
+            class="day-cell"
+            [class.other-month]="!cell.isCurrentMonth"
+            [class.today]="cell.isToday"
+            [attr.aria-label]="cell.date.getDate() + ' ' + (cell.isToday ? '(aujourd\'hui)' : '')"
+          >
+            <span class="day-number" aria-hidden="true">{{ cell.date.getDate() }}</span>
+            <div class="segments" aria-hidden="false">
+              <span
+                class="segment"
+                [attr.data-status]="cell.morning"
+                [attr.aria-label]="slotAriaLabel('Matin', cell.morning)"
+                role="img"
+              ></span>
+              <span
+                class="segment"
+                [attr.data-status]="cell.afternoon"
+                [attr.aria-label]="slotAriaLabel('Après-midi', cell.afternoon)"
+                role="img"
+              ></span>
+              <span
+                class="segment"
+                [attr.data-status]="cell.evening"
+                [attr.aria-label]="slotAriaLabel('Soirée', cell.evening)"
+                role="img"
+              ></span>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  }
+</div>

@@ -17,6 +17,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'nav.mode_joueur':        'Héros',
     'nav.mode_mj':            'Maître',
     'nav.logout':             'Fermer le grimoire',
+    'nav.calendar':           'Mes disponibilités',
     /* — dashboard — */
     'dashboard.title_mj':         'Mes rituels',
     'dashboard.empty_mj':         'Nulle quête en cours. Forgez la première…',
@@ -71,6 +72,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'nav.mode_joueur':        'Voyageur',
     'nav.mode_mj':            'Guide',
     'nav.logout':             'Quitter la forêt',
+    'nav.calendar':           'Mes disponibilités',
     /* — dashboard — */
     'dashboard.title_mj':         'Mes clairières',
     'dashboard.empty_mj':         'Aucune clairière ouverte. Plantez le premier feu…',
@@ -125,6 +127,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'nav.mode_joueur':        'Mécanicien',
     'nav.mode_mj':            'Ingénieur',
     'nav.logout':             'Couper la vapeur',
+    'nav.calendar':           'Mes disponibilités',
     /* — dashboard — */
     'dashboard.title_mj':         'Mes manufactures',
     'dashboard.empty_mj':         'Aucune manufacture active. Lancez la première…',

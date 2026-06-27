@@ -1,36 +1,62 @@
 <mat-toolbar color="primary">
-  <span class="logo" routerLink="/">master-jdr</span>
-  <span class="spacer"></span>
 
+  <!-- Ligne 1 : logo + (toggle sur desktop) + icône compte -->
+  <mat-toolbar-row>
+    <span class="logo" routerLink="/">master-jdr</span>
+    <span class="spacer"></span>
+
+    @if (hasMjParties()) {
+      <mat-button-toggle-group
+        class="mode-toggle-desktop"
+        [value]="mode()"
+        (change)="setMode($event.value)"
+        hideSingleSelectionIndicator
+        aria-label="Mode"
+      >
+        <mat-button-toggle value="joueur">{{ theme.tone()['nav.mode_joueur'] }}</mat-button-toggle>
+        <mat-button-toggle value="mj">{{ theme.tone()['nav.mode_mj'] }}</mat-button-toggle>
+      </mat-button-toggle-group>
+    }
+
+    <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Menu utilisateur">
+      <mat-icon>account_circle</mat-icon>
+    </button>
+    <mat-menu #menu="matMenu">
+      <div class="menu-user">{{ user()?.pseudo }}</div>
+      <a mat-menu-item routerLink="/parties/new">
+        <mat-icon>add</mat-icon>
+        <span>{{ theme.tone()['nav.create_game'] }}</span>
+      </a>
+      <a mat-menu-item routerLink="/profile/calendar">
+        <mat-icon>calendar_month</mat-icon>
+        <span>{{ theme.tone()['nav.calendar'] }}</span>
+      </a>
+      <mat-divider />
+      <app-theme-selector />
+      <mat-divider />
+      <button mat-menu-item (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        <span>{{ theme.tone()['nav.logout'] }}</span>
+      </button>
+    </mat-menu>
+  </mat-toolbar-row>
+
+  <!-- Ligne 2 : toggle mode visible uniquement sur mobile (< 600 px) -->
   @if (hasMjParties()) {
-    <mat-button-toggle-group
-      [value]="mode()"
-      (change)="setMode($event.value)"
-      hideSingleSelectionIndicator
-      aria-label="Mode"
-    >
-      <mat-button-toggle value="joueur">{{ theme.tone()['nav.mode_joueur'] }}</mat-button-toggle>
-      <mat-button-toggle value="mj">{{ theme.tone()['nav.mode_mj'] }}</mat-button-toggle>
-    </mat-button-toggle-group>
+    <mat-toolbar-row class="mode-row-mobile">
+      <mat-button-toggle-group
+        [value]="mode()"
+        (change)="setMode($event.value)"
+        hideSingleSelectionIndicator
+        aria-label="Mode"
+        aria-hidden="true"
+      >
+        <mat-button-toggle value="joueur">{{ theme.tone()['nav.mode_joueur'] }}</mat-button-toggle>
+        <mat-button-toggle value="mj">{{ theme.tone()['nav.mode_mj'] }}</mat-button-toggle>
+      </mat-button-toggle-group>
+    </mat-toolbar-row>
   }
 
-  <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Menu utilisateur">
-    <mat-icon>account_circle</mat-icon>
-  </button>
-  <mat-menu #menu="matMenu">
-    <div class="menu-user">{{ user()?.pseudo }}</div>
-    <a mat-menu-item routerLink="/parties/new">
-      <mat-icon>add</mat-icon>
-      <span>{{ theme.tone()['nav.create_game'] }}</span>
-    </a>
-    <mat-divider />
-    <app-theme-selector />
-    <mat-divider />
-    <button mat-menu-item (click)="logout()">
-      <mat-icon>logout</mat-icon>
-      <span>{{ theme.tone()['nav.logout'] }}</span>
-    </button>
-  </mat-menu>
 </mat-toolbar>
 
 <main class="content">

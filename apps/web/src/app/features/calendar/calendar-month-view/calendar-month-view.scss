@@ -1,0 +1,168 @@
+.calendar-month {
+  width: 100%;
+  overflow: hidden; // bloque tout débordement du conteneur
+}
+
+/* ── Navigation mois ───────────────────────────────────────────────────────── */
+.month-nav {
+  display: flex;
+  align-items: center;
+  padding: 0 0 10px;
+  // Pas de gap : les boutons icon gardent leur padding natif
+}
+
+.month-title {
+  flex: 1; // prend l'espace restant entre les deux flèches
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--mat-sys-on-surface);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── En-têtes jours ────────────────────────────────────────────────────────── */
+.day-names {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  margin-bottom: 2px;
+}
+
+.day-name {
+  text-align: center;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--mat-sys-on-surface-variant);
+  padding: 4px 0;
+  overflow: hidden;
+}
+
+/* ── Grille ────────────────────────────────────────────────────────────────── */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr)); // minmax(0) empêche tout overflow
+  gap: 2px;
+}
+
+/* ── Cellule jour ──────────────────────────────────────────────────────────── */
+.day-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px; // espace minimal entre chiffre et segments
+  padding: 4px 2px;
+  border-radius: 6px;
+  min-height: 46px;
+  min-width: 0; // laisse la grille gérer la largeur
+  overflow: hidden;
+  cursor: pointer;
+  transition: background 0.1s;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-high);
+  }
+
+  &.other-month {
+    opacity: 0.3;
+  }
+}
+
+/* ── Numéro du jour — toujours carré, toujours circulaire ──────────────────── */
+.day-number {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%; // cercle constant (pas oval)
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface);
+}
+
+// Aujourd'hui : remplir le cercle avec la couleur primaire
+.today .day-number {
+  background: var(--mat-sys-primary);
+  color: var(--mat-sys-on-primary);
+}
+
+/* ── 3 segments de statut ──────────────────────────────────────────────────── */
+.segments {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  justify-content: center;
+}
+
+.segment {
+  width: calc(33% - 2px);
+  height: 4px;
+  border-radius: 2px;
+  flex-shrink: 0;
+
+  &[data-status='AVAILABLE'] {
+    background: var(--color-available);
+  }
+
+  &[data-status='UNAVAILABLE'] {
+    background: var(--color-unavailable);
+  }
+
+  &[data-status='UNKNOWN'] {
+    background: repeating-linear-gradient(
+      90deg,
+      var(--color-unknown) 0,
+      var(--color-unknown) 2px,
+      transparent 2px,
+      transparent 4px
+    );
+  }
+}
+
+/* ── Loading ───────────────────────────────────────────────────────────────── */
+.loading-overlay {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+/* ── Desktop : version spacieuse (≥ 768 px) ─────────────────────────────────── */
+@media (min-width: 768px) {
+  .calendar-grid {
+    gap: 4px;
+  }
+
+  .day-cell {
+    min-height: 80px;
+    padding: 8px 4px;
+    gap: 4px;
+    border-radius: 8px;
+  }
+
+  .day-number {
+    width: 30px;
+    height: 30px;
+    font-size: 0.92rem;
+  }
+
+  .segment {
+    height: 6px;
+    border-radius: 3px;
+  }
+
+  .month-title {
+    font-size: 1.2rem;
+  }
+
+  .day-name {
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+    padding: 6px 0;
+  }
+}
