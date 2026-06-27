@@ -2,12 +2,32 @@
   @if (error()) {
     <p class="calendar-error" role="alert">{{ error() }}</p>
   }
-  <app-calendar-month-view
-    [declarations]="declarations()"
-    [loading]="loading()"
-    [pendingDto]="pendingDto()"
-    (slotSelected)="onSlotSelected($event)"
-  />
+  <div class="view-toggle">
+    <mat-button-toggle-group [value]="view()" (change)="onViewChange($event.value)" aria-label="Vue du calendrier">
+      <mat-button-toggle value="month">Vue mois</mat-button-toggle>
+      <mat-button-toggle value="week">Vue semaine</mat-button-toggle>
+    </mat-button-toggle-group>
+  </div>
+
+  @if (view() === 'month') {
+    <app-calendar-month-view
+      [declarations]="declarations()"
+      [loading]="loading()"
+      [pendingDto]="pendingDto()"
+      [initialDate]="sharedDate()"
+      (slotSelected)="onSlotSelected($event)"
+      (displayDateChange)="onMonthDateChange($event)"
+    />
+  } @else {
+    <app-calendar-week-view
+      [declarations]="declarations()"
+      [loading]="loading()"
+      [pendingDto]="pendingDto()"
+      [startDate]="sharedDate()"
+      (slotSelected)="onSlotSelected($event)"
+      (displayDateChange)="onWeekDateChange($event)"
+    />
+  }
 </div>
 
 @if (panelOpen()) {

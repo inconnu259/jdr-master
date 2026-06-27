@@ -7,11 +7,10 @@
     <button mat-icon-button (click)="nextMonth()" aria-label="Mois suivant">
       <mat-icon>chevron_right</mat-icon>
     </button>
-    @if (!isCurrentMonth()) {
-      <button mat-icon-button (click)="goToToday()" aria-label="Revenir au mois actuel" class="today-btn">
-        <mat-icon>today</mat-icon>
-      </button>
-    }
+    <button mat-icon-button (click)="goToToday()" aria-label="Revenir au mois actuel" class="today-btn"
+            [style.visibility]="isCurrentMonth() ? 'hidden' : 'visible'">
+      <mat-icon>today</mat-icon>
+    </button>
   </div>
 
   <div class="day-names" aria-hidden="true">

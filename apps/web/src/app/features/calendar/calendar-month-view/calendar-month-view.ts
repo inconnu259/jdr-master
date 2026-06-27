@@ -112,8 +112,10 @@ export class CalendarMonthView {
   readonly declarations = input<AvailabilityDeclarationDto[]>([]);
   readonly loading = input(false);
   readonly pendingDto = input<CreateAvailabilityDto | null>(null);
+  readonly initialDate = input<Date | null>(null);
 
   readonly slotSelected = output<SlotSelectedEvent>();
+  readonly displayDateChange = output<Date>();
 
   protected readonly displayDate = signal(new Date());
 
@@ -147,18 +149,31 @@ export class CalendarMonthView {
     return d.getTime();
   })();
 
+  constructor() {
+    const init = this.initialDate();
+    if (init) {
+      this.displayDate.set(new Date(init.getFullYear(), init.getMonth(), 1));
+    }
+  }
+
   goToToday(): void {
-    this.displayDate.set(new Date());
+    const today = new Date();
+    this.displayDate.set(today);
+    this.displayDateChange.emit(today);
   }
 
   prevMonth(): void {
     const d = this.displayDate();
-    this.displayDate.set(new Date(d.getFullYear(), d.getMonth() - 1, 1));
+    const next = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    this.displayDate.set(next);
+    this.displayDateChange.emit(next);
   }
 
   nextMonth(): void {
     const d = this.displayDate();
-    this.displayDate.set(new Date(d.getFullYear(), d.getMonth() + 1, 1));
+    const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    this.displayDate.set(next);
+    this.displayDateChange.emit(next);
   }
 
   protected onCellClick(date: Date, slot: DaySlot): void {

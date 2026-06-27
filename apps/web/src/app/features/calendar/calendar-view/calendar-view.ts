@@ -1,13 +1,15 @@
 import { Component, OnInit, inject, input, signal } from '@angular/core';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import type { AvailabilityDeclarationDto, CreateAvailabilityDto, DaySlot } from '@master-jdr/shared';
 import { AvailabilityService } from '../../../core/availability/availability.service';
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
+import { CalendarWeekView } from '../calendar-week-view/calendar-week-view';
 import { ConstraintPanel } from '../constraint-panel/constraint-panel';
 
 @Component({
   selector: 'app-calendar-view',
   standalone: true,
-  imports: [CalendarMonthView, ConstraintPanel],
+  imports: [CalendarMonthView, CalendarWeekView, ConstraintPanel, MatButtonToggleModule],
   templateUrl: './calendar-view.html',
   styleUrl: './calendar-view.scss',
 })
@@ -19,6 +21,9 @@ export class CalendarView implements OnInit {
   protected readonly declarations = signal<AvailabilityDeclarationDto[]>([]);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
+
+  protected readonly view = signal<'month' | 'week'>('month');
+  protected readonly sharedDate = signal<Date>(new Date());
 
   protected readonly panelOpen = signal(false);
   protected readonly selectedDate = signal<Date>(new Date());
@@ -36,6 +41,18 @@ export class CalendarView implements OnInit {
     this.selectedExisting.set(this.findMatchingDeclaration(event.date, event.slot));
     this.pendingDto.set(null);
     this.panelOpen.set(true);
+  }
+
+  protected onViewChange(value: string): void {
+    this.view.set(value as 'month' | 'week');
+  }
+
+  protected onMonthDateChange(d: Date): void {
+    this.sharedDate.set(d);
+  }
+
+  protected onWeekDateChange(d: Date): void {
+    this.sharedDate.set(d);
   }
 
   protected onFormChanged(dto: CreateAvailabilityDto | null): void {

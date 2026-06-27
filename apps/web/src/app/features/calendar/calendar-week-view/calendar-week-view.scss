@@ -1,0 +1,169 @@
+.calendar-week {
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ── Navigation semaine ──────────────────────────────────────────────────────── */
+.week-nav {
+  display: flex;
+  align-items: center;
+  padding: 0 0 10px;
+
+  .today-btn {
+    margin-left: 2px;
+    opacity: 0.7;
+  }
+}
+
+.week-title {
+  flex: 1;
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--mat-sys-on-surface);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Grille semaine ──────────────────────────────────────────────────────────── */
+.week-grid {
+  display: grid;
+  grid-template-columns: auto repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+
+.grid-cell {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ── Cellule coin (vide, haut-gauche) ─────────────────────────────────────── */
+.header-corner {
+  /* intentionnellement vide */
+}
+
+/* ── En-têtes colonnes (jours) ───────────────────────────────────────────── */
+.col-header {
+  text-align: center;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--mat-sys-on-surface-variant);
+  padding: 4px 2px;
+
+  &.today {
+    background: var(--mat-sys-primary);
+    color: var(--mat-sys-on-primary);
+    border-radius: 4px;
+  }
+}
+
+/* ── Labels de lignes (Matin / Après-midi / Soirée) ─────────────────────── */
+.row-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+/* ── Cellule de slot ─────────────────────────────────────────────────────── */
+.slot-cell {
+  min-height: 44px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.1s;
+  display: flex;
+  align-items: flex-start;
+  padding: 4px;
+
+  &:hover {
+    filter: brightness(0.92);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: -2px;
+  }
+
+  &[data-status='AVAILABLE'] {
+    background: color-mix(in srgb, var(--color-available) 25%, transparent);
+  }
+
+  &[data-status='UNAVAILABLE'] {
+    background: color-mix(in srgb, var(--color-unavailable) 25%, transparent);
+  }
+
+  &[data-status='UNKNOWN'],
+  &.unknown {
+    background: transparent;
+    border: 1px dashed var(--color-unknown);
+  }
+
+  &.past {
+    opacity: 0.3;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  &.today-col {
+    outline: 1px solid var(--mat-sys-primary);
+    outline-offset: -1px;
+  }
+
+  &.preview {
+    animation: slotPulse 1.2s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes slotPulse {
+  from { opacity: 0.4; }
+  to   { opacity: 0.9; }
+}
+
+/* ── Label de contrainte ─────────────────────────────────────────────────── */
+.decl-label {
+  font-size: 0.6rem;
+  line-height: 1.2;
+  color: var(--mat-sys-on-surface);
+  opacity: 0.8;
+  word-break: break-word;
+}
+
+/* ── Loading ─────────────────────────────────────────────────────────────── */
+.loading-overlay {
+  display: flex;
+  justify-content: center;
+  padding: 40px 0;
+}
+
+/* ── Desktop (≥ 768 px) ──────────────────────────────────────────────────── */
+@media (min-width: 768px) {
+  .week-grid {
+    gap: 4px;
+  }
+
+  .slot-cell {
+    min-height: 56px;
+  }
+
+  .col-header {
+    font-size: 0.75rem;
+    padding: 6px 4px;
+  }
+
+  .row-label {
+    font-size: 0.65rem;
+    padding: 0 8px;
+  }
+
+  .week-title {
+    font-size: 1.2rem;
+  }
+}

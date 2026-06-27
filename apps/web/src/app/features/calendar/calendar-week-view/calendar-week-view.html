@@ -1,0 +1,53 @@
+<div class="calendar-week">
+  <div class="week-nav">
+    <button mat-icon-button (click)="prevWeek()" aria-label="Semaine précédente">
+      <mat-icon>chevron_left</mat-icon>
+    </button>
+    <h2 class="week-title">{{ weekLabel() }}</h2>
+    <button mat-icon-button (click)="nextWeek()" aria-label="Semaine suivante">
+      <mat-icon>chevron_right</mat-icon>
+    </button>
+    <button mat-icon-button (click)="goToToday()" class="today-btn" aria-label="Revenir à la semaine actuelle"
+            [style.visibility]="isCurrentWeek() ? 'hidden' : 'visible'">
+      <mat-icon>today</mat-icon>
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-overlay"><mat-spinner diameter="40" /></div>
+  } @else {
+    <div class="week-grid" role="grid">
+      <div class="grid-cell header-corner"></div>
+      @for (cell of cells(); track cell.date.getTime()) {
+        <div class="grid-cell col-header" [class.today]="cell.isToday">
+          {{ cell.label }}
+        </div>
+      }
+
+      @for (row of SLOT_ROWS; track row.key) {
+        <div class="grid-cell row-label">{{ row.label }}</div>
+        @for (cell of cells(); track cell.date.getTime()) {
+          <div
+            class="grid-cell slot-cell"
+            [attr.data-status]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status)"
+            [class.past]="cell.isPast"
+            [class.today-col]="cell.isToday"
+            [class.preview]="getSlotData(cell, row.key).preview !== null"
+            [class.unknown]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status) === 'UNKNOWN'"
+            [attr.role]="cell.isPast ? 'presentation' : 'button'"
+            [attr.tabindex]="cell.isPast ? null : 0"
+            [attr.aria-label]="cell.isPast ? null : cellAriaLabel(cell, getSlotData(cell, row.key), row.label)"
+            (click)="onCellClick(cell.date, row.slot)"
+            (keyup.enter)="onCellClick(cell.date, row.slot)"
+            (keydown.space)="$event.preventDefault()"
+            (keyup.space)="onCellClick(cell.date, row.slot)"
+          >
+            @if (getSlotData(cell, row.key).declLabel) {
+              <span class="decl-label">{{ getSlotData(cell, row.key).declLabel }}</span>
+            }
+          </div>
+        }
+      }
+    </div>
+  }
+</div>
