@@ -1,0 +1,18 @@
+<div class="appearance-section">
+  <span class="section-label">Apparence</span>
+  @for (t of themeSvc.themes; track t) {
+    <button
+      class="theme-option"
+      [class.active]="themeSvc.activeTheme() === t"
+      [style.--accent]="accents[t]"
+      (click)="selectTheme(t)"
+      type="button"
+    >
+      <span class="swatch" [style.background]="gradients[t]"></span>
+      <span class="name">{{ themeSvc.themeNames[t] }}</span>
+      @if (themeSvc.activeTheme() === t) {
+        <mat-icon class="check">check</mat-icon>
+      }
+    </button>
+  }
+</div>

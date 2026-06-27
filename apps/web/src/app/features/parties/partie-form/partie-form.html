@@ -1,5 +1,5 @@
 <mat-card class="form-card">
-  <mat-card-title>{{ editId() ? 'Modifier la partie' : 'Nouvelle partie' }}</mat-card-title>
+  <mat-card-title>{{ editId() ? theme.tone()['partie.edit_title'] : theme.tone()['partie.new_title'] }}</mat-card-title>
   <form [formGroup]="form" (ngSubmit)="submit()">
     <mat-form-field appearance="outline">
       <mat-label>Nom</mat-label>
@@ -32,7 +32,7 @@
     <div class="actions">
       <button mat-button type="button" (click)="cancel()">Annuler</button>
       <button mat-flat-button type="submit" [disabled]="saving()">
-        {{ editId() ? 'Enregistrer' : 'Créer' }}
+        {{ editId() ? theme.tone()['partie.save_btn'] : theme.tone()['nav.create_game'] }}
       </button>
     </div>
   </form>

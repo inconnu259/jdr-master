@@ -37,3 +37,174 @@ body {
   height: 100%;
 }
 /* You can add global styles to this file, and also import other style files */
+
+/* ── Tokens de disponibilité calendrier (communs, surchargés par thème) ───── */
+:root {
+  --color-available:   #2ecc71;
+  --color-unavailable: #e74c3c;
+  --color-unknown:     #7f8c8d;
+  --color-mixed:       #f0a030;
+}
+
+/* ── Mixin interne : surcharges Angular Material M3 pour dark JDR ──────────
+   Chaque thème sombre surcharge les tokens --mat-sys-* qui pilotent tous les
+   composants Material (fond, texte, boutons, champs, toolbar, cartes…).     */
+
+/* ── Thème Grimoire Émeraude ─────────────────────────────────────────────── */
+.theme-grimoire-emeraude {
+  color-scheme: dark;
+
+  /* JDR design tokens */
+  --jdr-bg:           #0d0a14;
+  --jdr-surface:      #1a1428;
+  --jdr-accent-1:     #7ec8a4;
+  --jdr-accent-2:     #9b6dff;
+  --jdr-text:         #e8e0f0;
+  --jdr-text-muted:   #9b8fb0;
+  --jdr-gradient-cta: linear-gradient(135deg, #7ec8a4, #9b6dff);
+  --color-available:  #7ec8a4;
+
+  /* Angular Material M3 system tokens — fond & texte */
+  --mat-sys-background:               #09070f;
+  --mat-sys-on-background:            #e8e0f0;
+  --mat-sys-surface:                  #0d0a14;
+  --mat-sys-on-surface:               #e8e0f0;
+  --mat-sys-surface-variant:          #221c35;
+  --mat-sys-on-surface-variant:       #9b8fb0;
+  --mat-sys-surface-container-lowest: #09070f;
+  --mat-sys-surface-container-low:    #0d0a14;
+  --mat-sys-surface-container:        #1a1428;
+  --mat-sys-surface-container-high:   #221c35;
+  --mat-sys-surface-container-highest:#2a2340;
+  --mat-sys-surface-bright:           #2a2340;
+  --mat-sys-surface-dim:              #09070f;
+  --mat-sys-inverse-surface:          #e8e0f0;
+  --mat-sys-inverse-on-surface:       #0d0a14;
+
+  /* Angular Material M3 system tokens — couleurs primaires */
+  --mat-sys-primary:                  #7ec8a4;
+  --mat-sys-on-primary:               #062018;
+  --mat-sys-primary-container:        #1e4835;
+  --mat-sys-on-primary-container:     #a0d8bc;
+  --mat-sys-inverse-primary:          #7ec8a4;
+
+  /* Angular Material M3 system tokens — couleurs secondaires */
+  --mat-sys-secondary:                #9b6dff;
+  --mat-sys-on-secondary:             #1a0a30;
+  --mat-sys-secondary-container:      #3d2070;
+  --mat-sys-on-secondary-container:   #c4a0ff;
+
+  /* Angular Material M3 system tokens — contours & erreur */
+  --mat-sys-outline:                  #5a5070;
+  --mat-sys-outline-variant:          #2a2340;
+  --mat-sys-error:                    #cf6679;
+  --mat-sys-on-error:                 #1a0010;
+  --mat-sys-error-container:          #4a0020;
+  --mat-sys-on-error-container:       #ffb3c0;
+
+  /* Toolbar */
+  --mat-toolbar-container-background-color: #150f20;
+  --mat-toolbar-container-text-color: #e8e0f0;
+}
+
+/* ── Thème Forêt Ancienne ────────────────────────────────────────────────── */
+.theme-foret-ancienne {
+  color-scheme: dark;
+
+  --jdr-bg:           #080f0a;
+  --jdr-surface:      #0f1f12;
+  --jdr-accent-1:     #2ecc71;
+  --jdr-accent-2:     #f0c040;
+  --jdr-text:         #d4f0dc;
+  --jdr-text-muted:   #7aa885;
+  --jdr-gradient-cta: linear-gradient(135deg, #2ecc71, #f0c040);
+  --color-available:  #2ecc71;
+
+  --mat-sys-background:               #040905;
+  --mat-sys-on-background:            #d4f0dc;
+  --mat-sys-surface:                  #080f0a;
+  --mat-sys-on-surface:               #d4f0dc;
+  --mat-sys-surface-variant:          #1a3020;
+  --mat-sys-on-surface-variant:       #7aa885;
+  --mat-sys-surface-container-lowest: #040905;
+  --mat-sys-surface-container-low:    #080f0a;
+  --mat-sys-surface-container:        #0f1f12;
+  --mat-sys-surface-container-high:   #1a3020;
+  --mat-sys-surface-container-highest:#213a28;
+  --mat-sys-surface-bright:           #213a28;
+  --mat-sys-surface-dim:              #040905;
+  --mat-sys-inverse-surface:          #d4f0dc;
+  --mat-sys-inverse-on-surface:       #080f0a;
+
+  --mat-sys-primary:                  #2ecc71;
+  --mat-sys-on-primary:               #062518;
+  --mat-sys-primary-container:        #0f4025;
+  --mat-sys-on-primary-container:     #5de89a;
+  --mat-sys-inverse-primary:          #2ecc71;
+
+  --mat-sys-secondary:                #f0c040;
+  --mat-sys-on-secondary:             #281800;
+  --mat-sys-secondary-container:      #4a3800;
+  --mat-sys-on-secondary-container:   #ffd86a;
+
+  --mat-sys-outline:                  #3a5040;
+  --mat-sys-outline-variant:          #1a2e1f;
+  --mat-sys-error:                    #cf6679;
+  --mat-sys-on-error:                 #1a0010;
+  --mat-sys-error-container:          #4a0020;
+  --mat-sys-on-error-container:       #ffb3c0;
+
+  --mat-toolbar-container-background-color: #0a1a0d;
+  --mat-toolbar-container-text-color: #d4f0dc;
+}
+
+/* ── Thème Médiéval Steampunk ────────────────────────────────────────────── */
+.theme-medieval-steampunk {
+  color-scheme: dark;
+
+  --jdr-bg:           #1a1008;
+  --jdr-surface:      #2a1e10;
+  --jdr-accent-1:     #cd7f32;
+  --jdr-accent-2:     #4a7c59;
+  --jdr-text:         #f0e6d0;
+  --jdr-text-muted:   #9a8060;
+  --jdr-gradient-cta: linear-gradient(135deg, #cd7f32, #4a7c59);
+  --color-available:  #4a7c59;
+
+  --mat-sys-background:               #120b04;
+  --mat-sys-on-background:            #f0e6d0;
+  --mat-sys-surface:                  #1a1008;
+  --mat-sys-on-surface:               #f0e6d0;
+  --mat-sys-surface-variant:          #3a2a18;
+  --mat-sys-on-surface-variant:       #9a8060;
+  --mat-sys-surface-container-lowest: #120b04;
+  --mat-sys-surface-container-low:    #1a1008;
+  --mat-sys-surface-container:        #2a1e10;
+  --mat-sys-surface-container-high:   #3a2a18;
+  --mat-sys-surface-container-highest:#4a3820;
+  --mat-sys-surface-bright:           #4a3820;
+  --mat-sys-surface-dim:              #120b04;
+  --mat-sys-inverse-surface:          #f0e6d0;
+  --mat-sys-inverse-on-surface:       #1a1008;
+
+  --mat-sys-primary:                  #cd7f32;
+  --mat-sys-on-primary:               #1a0800;
+  --mat-sys-primary-container:        #4a2c0a;
+  --mat-sys-on-primary-container:     #e8a060;
+  --mat-sys-inverse-primary:          #cd7f32;
+
+  --mat-sys-secondary:                #4a7c59;
+  --mat-sys-on-secondary:             #020e08;
+  --mat-sys-secondary-container:      #1a3025;
+  --mat-sys-on-secondary-container:   #6a9a78;
+
+  --mat-sys-outline:                  #7a5030;
+  --mat-sys-outline-variant:          #3a2810;
+  --mat-sys-error:                    #cf6679;
+  --mat-sys-on-error:                 #1a0010;
+  --mat-sys-error-container:          #4a0020;
+  --mat-sys-on-error-container:       #ffb3c0;
+
+  --mat-toolbar-container-background-color: #221408;
+  --mat-toolbar-container-text-color: #f0e6d0;
+}

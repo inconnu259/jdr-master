@@ -20,11 +20,13 @@ model User {
   role         GlobalRole @default(USER)
   createdAt    DateTime   @default(now())
 
-  mjOfParties        Partie[]     @relation("PartieMJ")
-  memberships        Membership[]
-  invitesSent        Invitation[] @relation("InvitationInviter")
-  invitesRecv        Invitation[] @relation("InvitationInvitee")
-  inviteLinksCreated InviteLink[] @relation("InviteLinkCreator")
+  mjOfParties            Partie[]                  @relation("PartieMJ")
+  memberships            Membership[]
+  invitesSent            Invitation[]              @relation("InvitationInviter")
+  invitesRecv            Invitation[]              @relation("InvitationInvitee")
+  inviteLinksCreated     InviteLink[]              @relation("InviteLinkCreator")
+  availabilityDeclarations AvailabilityDeclaration[]
+  pollVotes              PollVote[]
 }
 
 enum PartieKind {
@@ -47,6 +49,7 @@ model Partie {
   memberships  Membership[]
   invitations  Invitation[]
   inviteLinks  InviteLink[]
+  polls        SessionPoll[]
 }
 
 enum InvitationStatus {
@@ -97,6 +100,97 @@ model InviteLink {
   expiresAt   DateTime // défaut +7 jours, configurable
   revoked     Boolean  @default(false)
   createdAt   DateTime @default(now())
+}
+
+// ─── Palier 2 : Calendrier de disponibilités ──────────────────────────────────
+
+enum DaySlot {
+  MORNING
+  AFTERNOON
+  EVENING
+  FULL_DAY
+}
+
+enum RecurKind {
+  RECURRING
+  PUNCTUAL
+}
+
+enum AvailKind {
+  UNAVAILABLE
+  AVAILABLE
+}
+
+enum PollStatus {
+  OPEN
+  CLOSED
+}
+
+enum VoteAnswer {
+  YES
+  NO
+  MAYBE
+}
+
+/// Déclaration de disponibilité ou d'indisponibilité d'un utilisateur.
+/// Portée globale (pas par partie). Expiration obligatoire.
+/// Soft-delete = expiresAt mis à now() (archivage par expiration).
+model AvailabilityDeclaration {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      AvailKind
+  recurKind RecurKind
+  dayOfWeek Int?      // 0=dim … 6=sam, obligatoire si RECURRING
+  slot      DaySlot   @default(FULL_DAY)
+  startDate DateTime? // obligatoire si PUNCTUAL
+  endDate   DateTime? // obligatoire si PUNCTUAL
+  expiresAt DateTime  // archivé quand expiresAt <= now()
+  createdAt DateTime  @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+/// Vote de date lancé par le MJ pour déterminer la prochaine séance.
+model SessionPoll {
+  id          String     @id @default(uuid())
+  partieId    String
+  partie      Partie     @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  createdById String
+  scenarioRef String?
+  status      PollStatus @default(OPEN)
+  expiresAt   DateTime?
+  chosenDate  DateTime?
+  chosenSlot  DaySlot?
+  createdAt   DateTime   @default(now())
+  options     PollOption[]
+  votes       PollVote[]
+
+  @@index([partieId, status])
+}
+
+/// Option (créneau candidat) d'un vote de date.
+model PollOption {
+  id     String      @id @default(uuid())
+  pollId String
+  poll   SessionPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  date   DateTime
+  slot   DaySlot
+  votes  PollVote[]
+}
+
+/// Vote d'un membre sur une option.
+model PollVote {
+  id       String      @id @default(uuid())
+  pollId   String
+  poll     SessionPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId String
+  option   PollOption  @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  answer   VoteAnswer
+
+  @@unique([optionId, userId])
 }
 
 /// Sessions HTTP (stockées par connect-pg-simple). Modélisées ici pour que **Prisma** les gère :

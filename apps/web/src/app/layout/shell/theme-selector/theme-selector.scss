@@ -1,0 +1,60 @@
+.appearance-section {
+  padding: 6px 12px 8px;
+  min-width: 210px;
+}
+
+.section-label {
+  display: block;
+  padding: 0 4px;
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--mat-sys-on-surface);
+  font-family: inherit;
+  transition: background 0.12s ease;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-high);
+  }
+
+  &.active {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+  }
+}
+
+.swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.name {
+  flex: 1;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.check {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+}

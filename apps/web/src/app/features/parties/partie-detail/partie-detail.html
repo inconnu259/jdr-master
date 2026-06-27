@@ -8,13 +8,13 @@
       @if (p.description) {
         <p>{{ p.description }}</p>
       } @else {
-        <p class="muted">Aucune description.</p>
+        <p class="muted">{{ theme.tone()['partie.no_description'] }}</p>
       }
 
       <section class="members">
-        <h3>👥 Membres ({{ members().length }})</h3>
+        <h3>{{ theme.tone()['partie.members_title'] }} ({{ members().length }})</h3>
         @if (members().length === 0) {
-          <p class="muted">Aucun joueur pour l'instant.</p>
+          <p class="muted">{{ theme.tone()['partie.no_members'] }}</p>
         } @else {
           <mat-list>
             @for (m of members(); track m.userId) {
@@ -33,24 +33,30 @@
 
       @if (isMj()) {
         <section class="invite">
-          <h3>Inviter un joueur</h3>
+          <h3>{{ theme.tone()['partie.invite_title'] }}</h3>
           <div class="search-row">
             <mat-form-field appearance="outline">
-              <mat-label>Email ou pseudo (exact)</mat-label>
+              <mat-label>{{ theme.tone()['partie.search_label'] }}</mat-label>
               <input matInput [ngModel]="search()" (ngModelChange)="search.set($event)"
                      (keyup.enter)="runSearch()" />
             </mat-form-field>
-            <button mat-flat-button (click)="runSearch()"><mat-icon>search</mat-icon> Rechercher</button>
+            <button mat-flat-button (click)="runSearch()">
+              <mat-icon>search</mat-icon> {{ theme.tone()['partie.search_btn'] }}
+            </button>
           </div>
           @for (u of results(); track u.id) {
             <div class="result-row">
               <span>{{ u.pseudo }} <span class="muted">({{ u.email }})</span></span>
-              <button mat-button (click)="invite(u)"><mat-icon>person_add</mat-icon> Inviter</button>
+              <button mat-button (click)="invite(u)">
+                <mat-icon>person_add</mat-icon> {{ theme.tone()['partie.invite_btn'] }}
+              </button>
             </div>
           }
 
-          <h3>Liens d'invitation</h3>
-          <button mat-stroked-button (click)="createLink()"><mat-icon>link</mat-icon> Générer un lien</button>
+          <h3>{{ theme.tone()['partie.links_title'] }}</h3>
+          <button mat-stroked-button (click)="createLink()">
+            <mat-icon>link</mat-icon> {{ theme.tone()['partie.generate_link'] }}
+          </button>
           @for (l of links(); track l.id) {
             <div class="link-row" [class.revoked]="l.revoked">
               <code>{{ joinUrl(l.token) }}</code>
@@ -77,10 +83,16 @@
     </mat-card-content>
     <mat-card-actions>
       @if (isMj()) {
-        <a mat-button [routerLink]="['/parties', p.id, 'edit']"><mat-icon>edit</mat-icon> Éditer</a>
-        <button mat-button (click)="confirmDelete(p)"><mat-icon>delete</mat-icon> Supprimer</button>
+        <a mat-button [routerLink]="['/parties', p.id, 'edit']">
+          <mat-icon>edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
+        </a>
+        <button mat-button (click)="confirmDelete(p)">
+          <mat-icon>delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
+        </button>
       }
-      <a mat-button routerLink="/"><mat-icon>arrow_back</mat-icon> Retour</a>
+      <a mat-button routerLink="/">
+        <mat-icon>arrow_back</mat-icon> {{ theme.tone()['partie.back_btn'] }}
+      </a>
     </mat-card-actions>
   </mat-card>
 }

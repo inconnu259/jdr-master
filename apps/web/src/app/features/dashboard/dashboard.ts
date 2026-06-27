@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import type { InvitationDto } from '@master-jdr/shared';
 import { ModeService } from '../../core/mode/mode.service';
 import { InvitationsService } from '../../core/invitations/invitations.service';
+import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { gameSystemName, partieKindLabel } from '../../core/parties/parties.util';
 
 @Component({
@@ -17,6 +18,7 @@ import { gameSystemName, partieKindLabel } from '../../core/parties/parties.util
 export class Dashboard implements OnInit {
   private readonly modeSvc = inject(ModeService);
   private readonly invitations = inject(InvitationsService);
+  protected readonly theme = inject(ThemeToneService);
 
   protected readonly mode = this.modeSvc.mode;
   protected readonly parties = this.modeSvc.mjParties;

@@ -2,7 +2,6 @@
   <span class="logo" routerLink="/">master-jdr</span>
   <span class="spacer"></span>
 
-  <!-- Le toggle MJ n'apparaît que si l'utilisateur maîtrise au moins une partie. -->
   @if (hasMjParties()) {
     <mat-button-toggle-group
       [value]="mode()"
@@ -10,8 +9,8 @@
       hideSingleSelectionIndicator
       aria-label="Mode"
     >
-      <mat-button-toggle value="joueur">Joueur</mat-button-toggle>
-      <mat-button-toggle value="mj">MJ</mat-button-toggle>
+      <mat-button-toggle value="joueur">{{ theme.tone()['nav.mode_joueur'] }}</mat-button-toggle>
+      <mat-button-toggle value="mj">{{ theme.tone()['nav.mode_mj'] }}</mat-button-toggle>
     </mat-button-toggle-group>
   }
 
@@ -22,11 +21,14 @@
     <div class="menu-user">{{ user()?.pseudo }}</div>
     <a mat-menu-item routerLink="/parties/new">
       <mat-icon>add</mat-icon>
-      <span>Créer une partie</span>
+      <span>{{ theme.tone()['nav.create_game'] }}</span>
     </a>
+    <mat-divider />
+    <app-theme-selector />
+    <mat-divider />
     <button mat-menu-item (click)="logout()">
       <mat-icon>logout</mat-icon>
-      <span>Déconnexion</span>
+      <span>{{ theme.tone()['nav.logout'] }}</span>
     </button>
   </mat-menu>
 </mat-toolbar>

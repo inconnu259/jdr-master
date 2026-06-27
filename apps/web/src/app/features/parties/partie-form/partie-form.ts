@@ -10,6 +10,7 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { GAME_SYSTEMS } from '@master-jdr/shared';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 type FormKind = 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE';
 
@@ -34,6 +35,7 @@ export class PartieForm implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
+  protected readonly theme = inject(ThemeToneService);
   protected readonly systems = GAME_SYSTEMS;
   protected readonly editId = signal<string | null>(null);
   protected readonly saving = signal(false);

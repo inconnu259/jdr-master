@@ -92,3 +92,93 @@ export interface InviteLinkPreviewDto {
   /** Raison d'invalidité éventuelle (expiré / révoqué / quota atteint). */
   reason?: string;
 }
+
+// ─── Palier 2 : Calendrier de disponibilités ──────────────────────────────────
+
+/** Granularité d'un créneau de disponibilité. */
+export type DaySlot = 'MORNING' | 'AFTERNOON' | 'EVENING' | 'FULL_DAY';
+
+/** Type d'une déclaration de disponibilité. */
+export type AvailKind = 'UNAVAILABLE' | 'AVAILABLE';
+
+/** Récurrence d'une déclaration. */
+export type RecurKind = 'RECURRING' | 'PUNCTUAL';
+
+/** Statut calculé d'un créneau pour un utilisateur donné. */
+export type SlotStatus = 'AVAILABLE' | 'UNAVAILABLE' | 'UNKNOWN';
+
+/** Statut d'un vote de date. */
+export type PollStatus = 'OPEN' | 'CLOSED';
+
+/** Réponse à une option de vote. */
+export type VoteAnswer = 'YES' | 'NO' | 'MAYBE';
+
+/** Déclaration de disponibilité telle que renvoyée par l'API. */
+export interface AvailabilityDeclarationDto {
+  id: string;
+  userId: string;
+  kind: AvailKind;
+  recurKind: RecurKind;
+  dayOfWeek: number | null;
+  slot: DaySlot;
+  startDate: string | null;
+  endDate: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+/** Payload de création d'une déclaration de disponibilité. */
+export interface CreateAvailabilityDto {
+  kind: AvailKind;
+  recurKind: RecurKind;
+  dayOfWeek?: number | null;
+  slot: DaySlot;
+  startDate?: string | null;
+  endDate?: string | null;
+  expiresAt: string;
+}
+
+/** Payload partiel pour la mise à jour d'une déclaration. */
+export interface UpdateAvailabilityDto {
+  kind?: AvailKind;
+  recurKind?: RecurKind;
+  dayOfWeek?: number | null;
+  slot?: DaySlot;
+  startDate?: string | null;
+  endDate?: string | null;
+  expiresAt?: string;
+}
+
+/** Créneau calculé disponible pour une partie (retourné par GET /parties/:id/available-slots). */
+export interface AvailableSlotDto {
+  date: string;
+  slot: DaySlot;
+  members: { userId: string; pseudo: string; status: SlotStatus }[];
+}
+
+/** Vote de date (SessionPoll). */
+export interface SessionPollDto {
+  id: string;
+  partieId: string;
+  status: PollStatus;
+  scenarioRef: string | null;
+  expiresAt: string | null;
+  chosenDate: string | null;
+  chosenSlot: DaySlot | null;
+  options: PollOptionDto[];
+}
+
+/** Option d'un vote de date. */
+export interface PollOptionDto {
+  id: string;
+  date: string;
+  slot: DaySlot;
+  votes: PollVoteDto[];
+}
+
+/** Vote d'un membre sur une option. */
+export interface PollVoteDto {
+  userId: string;
+  pseudo: string;
+  answer: VoteAnswer;
+}

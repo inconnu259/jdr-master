@@ -1,0 +1,35 @@
+<div class="join-page">
+  <mat-card class="join-card">
+    @if (notFound()) {
+      <mat-card-header><mat-card-title>Lien introuvable</mat-card-title></mat-card-header>
+      <mat-card-content><p>Ce lien d'invitation n'existe pas.</p></mat-card-content>
+    } @else if (preview(); as pv) {
+      <mat-card-header>
+        <mat-card-title>Rejoindre « {{ pv.partieName }} »</mat-card-title>
+        <mat-card-subtitle>{{ system(pv.gameSystemId) }}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        @if (!pv.valid) {
+          <p class="error">{{ pv.reason ?? 'Lien invalide.' }}</p>
+        } @else if (loggedIn()) {
+          <p>Tu es connecté en tant que <strong>{{ loggedIn()?.pseudo }}</strong>.</p>
+          @if (error()) {
+            <p class="error">{{ error() }}</p>
+          }
+        } @else {
+          <p>Connecte-toi ou crée un compte pour rejoindre cette partie.</p>
+        }
+      </mat-card-content>
+      <mat-card-actions>
+        @if (pv.valid && loggedIn()) {
+          <button mat-flat-button (click)="join()">Rejoindre</button>
+        } @else if (pv.valid) {
+          <a mat-flat-button [routerLink]="['/register']" [queryParams]="{ token }">Créer un compte</a>
+          <a mat-button [routerLink]="['/login']">J'ai déjà un compte</a>
+        }
+      </mat-card-actions>
+    } @else {
+      <mat-card-content><p>Chargement…</p></mat-card-content>
+    }
+  </mat-card>
+</div>

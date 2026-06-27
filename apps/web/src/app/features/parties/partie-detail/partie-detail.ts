@@ -19,6 +19,7 @@ import type {
 import { AuthService } from '../../../core/auth/auth.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 
@@ -45,6 +46,7 @@ export class PartieDetail implements OnInit {
   private readonly parties = inject(PartiesService);
   private readonly modeSvc = inject(ModeService);
   private readonly dialog = inject(MatDialog);
+  protected readonly theme = inject(ThemeToneService);
 
   protected readonly partie = signal<PartieDto | null>(null);
   protected readonly members = signal<PartieMemberDto[]>([]);
@@ -85,7 +87,7 @@ export class PartieDetail implements OnInit {
     if (!p) return;
     await this.parties.inviteUser(p.id, user.id);
     this.results.update((list) => list.filter((u) => u.id !== user.id));
-    this.notice.set(`Invitation envoyée à ${user.pseudo}.`);
+    this.notice.set(this.theme.tone()['partie.notice_invited'].replace('{name}', user.pseudo));
   }
 
   async removeMember(member: PartieMemberDto): Promise<void> {
@@ -117,7 +119,7 @@ export class PartieDetail implements OnInit {
 
   async copyLink(token: string): Promise<void> {
     await navigator.clipboard?.writeText(this.joinUrl(token));
-    this.notice.set('Lien copié dans le presse-papiers.');
+    this.notice.set(this.theme.tone()['partie.notice_copy']);
   }
 
   async confirmDelete(p: PartieDto): Promise<void> {

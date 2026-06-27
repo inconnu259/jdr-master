@@ -5,8 +5,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatDivider } from '@angular/material/divider';
 import { AuthService } from '../../core/auth/auth.service';
 import { ModeService } from '../../core/mode/mode.service';
+import { ThemeToneService } from '../../core/theme/theme-tone.service';
+import { ThemeSelector } from './theme-selector/theme-selector';
 
 @Component({
   selector: 'app-shell',
@@ -18,6 +21,8 @@ import { ModeService } from '../../core/mode/mode.service';
     MatIconModule,
     MatMenuModule,
     MatButtonToggleModule,
+    ThemeSelector,
+    MatDivider,
   ],
   templateUrl: './shell.html',
   styleUrl: './shell.scss',
@@ -26,6 +31,8 @@ export class Shell implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly modeSvc = inject(ModeService);
   private readonly router = inject(Router);
+  // Injecter pour déclencher l'initialisation du thème (apply CSS class + localStorage) dès le Shell.
+  protected readonly theme = inject(ThemeToneService);
 
   protected readonly user = this.auth.currentUser;
   protected readonly mode = this.modeSvc.mode;

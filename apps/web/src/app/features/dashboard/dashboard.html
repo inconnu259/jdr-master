@@ -1,10 +1,10 @@
 @if (mode() === 'mj') {
   <div class="head">
-    <h1>Mes parties</h1>
-    <a mat-flat-button routerLink="/parties/new"><mat-icon>add</mat-icon> Créer une partie</a>
+    <h1>{{ theme.tone()['dashboard.title_mj'] }}</h1>
+    <a mat-flat-button routerLink="/parties/new"><mat-icon>add</mat-icon> {{ theme.tone()['nav.create_game'] }}</a>
   </div>
   @if (parties().length === 0) {
-    <p class="empty">Tu ne maîtrises encore aucune partie. Crée ta première !</p>
+    <p class="empty">{{ theme.tone()['dashboard.empty_mj'] }}</p>
   } @else {
     <div class="grid">
       @for (p of parties(); track p.id) {
@@ -19,7 +19,7 @@
   }
 } @else {
   @if (received().length > 0) {
-    <h1>Invitations reçues</h1>
+    <h1>{{ theme.tone()['dashboard.title_invitations'] }}</h1>
     <div class="grid">
       @for (inv of received(); track inv.id) {
         <mat-card class="tile">
@@ -38,9 +38,9 @@
     </div>
   }
 
-  <h1>Mes parties</h1>
+  <h1>{{ theme.tone()['dashboard.title_player'] }}</h1>
   @if (playerParties().length === 0) {
-    <p class="empty">Tu ne participes à aucune partie. Demande une invitation à un MJ.</p>
+    <p class="empty">{{ theme.tone()['dashboard.empty_player'] }}</p>
   } @else {
     <div class="grid">
       @for (p of playerParties(); track p.id) {
