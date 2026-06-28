@@ -36,7 +36,11 @@ async function bootstrap() {
 
   // Valide et nettoie les entrées (rejette les champs non déclarés dans les DTO).
   app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
   );
 
   // Le front (autre origine en dev) doit pouvoir envoyer le cookie → credentials: true.

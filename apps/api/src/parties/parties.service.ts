@@ -1,11 +1,20 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
+import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePartieDto } from './dto/create-partie.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
 @Injectable()
 export class PartiesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly availability: AvailabilityService,
+  ) {}
 
   create(mjId: string, dto: CreatePartieDto) {
     return this.prisma.partie.create({
@@ -76,7 +85,9 @@ export class PartiesService {
   /** Le MJ retire un joueur de SA partie. */
   async removeMember(partieId: string, userId: string, targetUserId: string) {
     await this.getOwned(partieId, userId);
-    await this.prisma.membership.deleteMany({ where: { partieId, userId: targetUserId } });
+    await this.prisma.membership.deleteMany({
+      where: { partieId, userId: targetUserId },
+    });
     return { ok: true };
   }
 
@@ -89,5 +100,73 @@ export class PartiesService {
     await this.getOwned(id, userId);
     await this.prisma.partie.delete({ where: { id } });
     return { ok: true };
+  }
+
+  async getAvailableSlots(
+    partieId: string,
+    userId: string,
+    weeks: number,
+  ): Promise<AvailableSlotDto[] | AggregatedSlotDto[]> {
+    const partie = await this.prisma.partie.findUnique({
+      where: { id: partieId },
+    });
+    if (!partie) throw new NotFoundException('Partie introuvable');
+
+    const memberships = await this.prisma.membership.findMany({
+      where: { partieId },
+      include: { user: { select: { id: true, pseudo: true } } },
+    });
+
+    const isMj = partie.mjId === userId;
+    const isMember = memberships.some((m) => m.userId === userId);
+    if (!isMj && !isMember) throw new ForbiddenException();
+
+    const memberIds = memberships.map((m) => m.userId);
+    const declarationsMap =
+      await this.availability.getActiveDeclarations(memberIds);
+
+    const SLOTS = ['MORNING', 'AFTERNOON', 'EVENING'] as const;
+    const now = new Date();
+    const todayUtcMidnight = Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+    );
+    const results: AvailableSlotDto[] = [];
+
+    outer: for (let d = 0; d < weeks * 7; d++) {
+      const dateUtc = new Date(todayUtcMidnight + d * 86_400_000);
+      for (const slot of SLOTS) {
+        const memberStatuses = memberships.map((m) => ({
+          userId: m.user.id,
+          pseudo: m.user.pseudo,
+          status: this.availability.computeSlotStatus(
+            declarationsMap.get(m.userId) ?? [],
+            dateUtc,
+            slot,
+          ),
+        }));
+
+        if (memberStatuses.some((m) => m.status === 'UNAVAILABLE')) continue;
+
+        results.push({
+          date: dateUtc.toISOString().substring(0, 10),
+          slot,
+          members: memberStatuses,
+        });
+        if (results.length >= 5) break outer;
+      }
+    }
+
+    if (isMj) return results;
+
+    return results.map(({ date, slot, members }) => ({
+      date,
+      slot,
+      available: members.filter((m) => m.status === 'AVAILABLE').length,
+      unavailable: members.filter((m) => m.status === 'UNAVAILABLE').length,
+      unknown: members.filter((m) => m.status === 'UNKNOWN').length,
+      total: members.length,
+    }));
   }
 }

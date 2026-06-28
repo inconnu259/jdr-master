@@ -42,7 +42,9 @@ export class AuthService {
       const err = e as { code?: string };
       if (err?.code === 'P2002') {
         // Le driver adapter Prisma 7 ne fiabilise pas `meta.target` → message générique.
-        throw new ConflictException('Cet e-mail ou ce pseudo est déjà utilisé.');
+        throw new ConflictException(
+          'Cet e-mail ou ce pseudo est déjà utilisé.',
+        );
       }
       throw e;
     }

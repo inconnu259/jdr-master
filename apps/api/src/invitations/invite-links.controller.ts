@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -11,7 +19,11 @@ export class InviteLinksController {
 
   @UseGuards(AuthenticatedGuard)
   @Post('parties/:id/invite-links')
-  create(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateInviteLinkDto) {
+  create(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: CreateInviteLinkDto,
+  ) {
     return this.links.create(id, user.id, dto);
   }
 

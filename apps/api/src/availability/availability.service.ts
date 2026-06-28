@@ -1,5 +1,16 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { AvailKind, ConflictInfo, DaySlot, SlotStatus } from '@master-jdr/shared';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import type {
+  AvailKind,
+  ConflictInfo,
+  DaySlot,
+  SlotStatus,
+} from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
@@ -31,15 +42,26 @@ export class AvailabilityService {
 
   // ─── CRUD ──────────────────────────────────────────────────────────────────
 
-  async create(userId: string, dto: CreateAvailabilityDto): Promise<{ created: object[] }> {
+  async create(
+    userId: string,
+    dto: CreateAvailabilityDto,
+  ): Promise<{ created: object[] }> {
     if (new Date(dto.expiresAt) <= new Date()) {
-      throw new BadRequestException('expiresAt doit être une date dans le futur');
+      throw new BadRequestException(
+        'expiresAt doit être une date dans le futur',
+      );
     }
 
-    const conflicts = await this.findConflictsForCreate(userId, dto, dto.replacingId);
+    const conflicts = await this.findConflictsForCreate(
+      userId,
+      dto,
+      dto.replacingId,
+    );
 
     if (conflicts.length > 0 && !dto.conflictResolution) {
-      throw new ConflictException({ conflicts: conflicts.map((c) => this.toConflictInfo(c)) });
+      throw new ConflictException({
+        conflicts: conflicts.map((c) => this.toConflictInfo(c)),
+      });
     }
 
     if (dto.conflictResolution === 'overwrite' && conflicts.length > 0) {
@@ -65,7 +87,9 @@ export class AvailabilityService {
         recurKind: dto.recurKind,
         dayOfWeek: dto.dayOfWeek ?? null,
         slot: dto.slot,
-        startDate: dto.startDate ? new Date(dto.startDate + 'T00:00:00Z') : null,
+        startDate: dto.startDate
+          ? new Date(dto.startDate + 'T00:00:00Z')
+          : null,
         endDate: dto.endDate ? new Date(dto.endDate + 'T00:00:00Z') : null,
         expiresAt: new Date(dto.expiresAt),
       },
@@ -101,7 +125,9 @@ export class AvailabilityService {
   private async createWithHoles(
     userId: string,
     dto: CreateAvailabilityDto,
-    conflicts: Awaited<ReturnType<typeof this.prisma.availabilityDeclaration.findMany>>,
+    conflicts: Awaited<
+      ReturnType<typeof this.prisma.availabilityDeclaration.findMany>
+    >,
   ): Promise<object[]> {
     const MS_1D = 24 * 60 * 60 * 1000;
     const MS_7D = 7 * MS_1D;
@@ -109,15 +135,20 @@ export class AvailabilityService {
     if (dto.recurKind === 'RECURRING') {
       // Construit les plages exclues : [start, end] pour chaque conflit.
       // Pour RECURRING sans endDate : expiresAt borne la série (pas startDate → évite intervalle zéro-largeur).
-      const excluded: Array<{ start: Date; end: Date }> = conflicts.map((c) => ({
-        start: c.startDate ?? new Date(0),
-        end: c.endDate ?? c.expiresAt,
-      }));
+      const excluded: Array<{ start: Date; end: Date }> = conflicts.map(
+        (c) => ({
+          start: c.startDate ?? new Date(0),
+          end: c.endDate ?? c.expiresAt,
+        }),
+      );
       excluded.sort((a, b) => a.start.getTime() - b.start.getTime());
 
-      const dtoStart = dto.startDate ? new Date(dto.startDate + 'T00:00:00Z') : null;
+      const dtoStart = dto.startDate
+        ? new Date(dto.startDate + 'T00:00:00Z')
+        : null;
       const dtoExpires = new Date(dto.expiresAt);
-      const pieces: Array<{ startDate: Date | null; endDate: Date | null }> = [];
+      const pieces: Array<{ startDate: Date | null; endDate: Date | null }> =
+        [];
       let currentStart = dtoStart;
 
       for (const { start: excStart, end: excEnd } of excluded) {
@@ -164,26 +195,39 @@ export class AvailabilityService {
         const cEnd = c.endDate ?? cStart;
         let d = new Date(Math.max(cStart.getTime(), dtoStart.getTime()));
         const endD = new Date(Math.min(cEnd.getTime(), dtoEnd.getTime()));
-        while (d <= endD) { holeDates.push(new Date(d)); d = new Date(d.getTime() + MS_1D); }
+        while (d <= endD) {
+          holeDates.push(new Date(d));
+          d = new Date(d.getTime() + MS_1D);
+        }
       } else if (c.recurKind === 'RECURRING' && c.dayOfWeek !== null) {
         const cEffEnd = c.endDate ?? c.expiresAt;
-        const overlapStart = new Date(Math.max(dtoStart.getTime(), (c.startDate ?? dtoStart).getTime()));
-        const overlapEnd = new Date(Math.min(dtoEnd.getTime(), cEffEnd.getTime()));
+        const overlapStart = new Date(
+          Math.max(dtoStart.getTime(), (c.startDate ?? dtoStart).getTime()),
+        );
+        const overlapEnd = new Date(
+          Math.min(dtoEnd.getTime(), cEffEnd.getTime()),
+        );
         if (overlapStart > overlapEnd) continue;
         const daysUntil = (c.dayOfWeek - overlapStart.getUTCDay() + 7) % 7;
         let occ = new Date(overlapStart.getTime() + daysUntil * MS_1D);
-        while (occ <= overlapEnd) { holeDates.push(new Date(occ)); occ = new Date(occ.getTime() + MS_7D); }
+        while (occ <= overlapEnd) {
+          holeDates.push(new Date(occ));
+          occ = new Date(occ.getTime() + MS_7D);
+        }
       }
     }
 
     holeDates.sort((a, b) => a.getTime() - b.getTime());
-    const unique = holeDates.filter((d, i) => i === 0 || d.getTime() !== holeDates[i - 1].getTime());
+    const unique = holeDates.filter(
+      (d, i) => i === 0 || d.getTime() !== holeDates[i - 1].getTime(),
+    );
     const pieces2: Array<{ startDate: Date; endDate: Date }> = [];
     let cur = dtoStart;
 
     for (const hole of unique) {
       const pieceEnd = new Date(hole.getTime() - MS_1D);
-      if (cur <= pieceEnd) pieces2.push({ startDate: new Date(cur), endDate: pieceEnd });
+      if (cur <= pieceEnd)
+        pieces2.push({ startDate: new Date(cur), endDate: pieceEnd });
       cur = new Date(hole.getTime() + MS_1D);
     }
     if (cur <= dtoEnd) pieces2.push({ startDate: cur, endDate: dtoEnd });
@@ -210,7 +254,15 @@ export class AvailabilityService {
     });
   }
 
-  private toConflictInfo(d: { id: string; kind: string; slot: string; recurKind: string; startDate: Date | null; endDate: Date | null; dayOfWeek: number | null }): ConflictInfo {
+  private toConflictInfo(d: {
+    id: string;
+    kind: string;
+    slot: string;
+    recurKind: string;
+    startDate: Date | null;
+    endDate: Date | null;
+    dayOfWeek: number | null;
+  }): ConflictInfo {
     return {
       id: d.id,
       kind: d.kind as AvailKind,
@@ -232,7 +284,13 @@ export class AvailabilityService {
   }
 
   private dateRangesConflict(
-    existing: { recurKind: string; dayOfWeek: number | null; startDate: Date | null; endDate: Date | null; expiresAt: Date },
+    existing: {
+      recurKind: string;
+      dayOfWeek: number | null;
+      startDate: Date | null;
+      endDate: Date | null;
+      expiresAt: Date;
+    },
     dto: CreateAvailabilityDto,
   ): boolean {
     const MS_1D = 24 * 60 * 60 * 1000;
@@ -242,7 +300,9 @@ export class AvailabilityService {
     if (dtoIsRecurring && existingIsRecurring) {
       if (existing.dayOfWeek !== (dto.dayOfWeek ?? null)) return false;
       const existingEffEnd = existing.endDate ?? existing.expiresAt;
-      const dtoStart = dto.startDate ? new Date(dto.startDate + 'T00:00:00Z') : new Date(0);
+      const dtoStart = dto.startDate
+        ? new Date(dto.startDate + 'T00:00:00Z')
+        : new Date(0);
       const dtoEnd = new Date(dto.expiresAt);
       const existingStart = existing.startDate ?? new Date(0);
       return existingStart <= dtoEnd && existingEffEnd >= dtoStart;
@@ -251,8 +311,11 @@ export class AvailabilityService {
     if (dtoIsRecurring && !existingIsRecurring) {
       // Nouveau RECURRING vs PUNCTUAL existant
       const existingStart = existing.startDate ?? existing.expiresAt;
-      const existingEnd = existing.endDate ?? existing.startDate ?? existing.expiresAt;
-      const dtoStart = dto.startDate ? new Date(dto.startDate + 'T00:00:00Z') : new Date(0);
+      const existingEnd =
+        existing.endDate ?? existing.startDate ?? existing.expiresAt;
+      const dtoStart = dto.startDate
+        ? new Date(dto.startDate + 'T00:00:00Z')
+        : new Date(0);
       const dtoEnd = new Date(dto.expiresAt);
       const overlapStart = existingStart > dtoStart ? existingStart : dtoStart;
       const overlapEnd = existingEnd < dtoEnd ? existingEnd : dtoEnd;
@@ -270,11 +333,21 @@ export class AvailabilityService {
       const overlapStart = existingStart > dtoStart ? existingStart : dtoStart;
       const overlapEnd = existingEffEnd < dtoEnd ? existingEffEnd : dtoEnd;
       if (overlapStart > overlapEnd) return false;
-      return this.hasWeekdayInRange(overlapStart, overlapEnd, existing.dayOfWeek!);
+      return this.hasWeekdayInRange(
+        overlapStart,
+        overlapEnd,
+        existing.dayOfWeek!,
+      );
     }
 
     // PUNCTUAL vs PUNCTUAL
-    if (!existing.startDate || !existing.endDate || !dto.startDate || !dto.endDate) return false;
+    if (
+      !existing.startDate ||
+      !existing.endDate ||
+      !dto.startDate ||
+      !dto.endDate
+    )
+      return false;
     const s2 = new Date(dto.startDate + 'T00:00:00Z');
     const e2 = new Date(dto.endDate + 'T00:00:00Z');
     return existing.startDate <= e2 && existing.endDate >= s2;
@@ -289,7 +362,9 @@ export class AvailabilityService {
   }
 
   async update(id: string, userId: string, dto: UpdateAvailabilityDto) {
-    const decl = await this.prisma.availabilityDeclaration.findUnique({ where: { id } });
+    const decl = await this.prisma.availabilityDeclaration.findUnique({
+      where: { id },
+    });
     if (!decl) throw new NotFoundException('Déclaration introuvable');
     if (decl.userId !== userId) throw new ForbiddenException();
     // updateMany avec { id, userId } rend le write atomique (élimine la race TOCTOU)
@@ -300,8 +375,12 @@ export class AvailabilityService {
         ...(dto.recurKind && { recurKind: dto.recurKind }),
         ...(dto.dayOfWeek !== undefined && { dayOfWeek: dto.dayOfWeek }),
         ...(dto.slot && { slot: dto.slot }),
-        ...(dto.startDate !== undefined && { startDate: dto.startDate ? new Date(dto.startDate) : null }),
-        ...(dto.endDate !== undefined && { endDate: dto.endDate ? new Date(dto.endDate) : null }),
+        ...(dto.startDate !== undefined && {
+          startDate: dto.startDate ? new Date(dto.startDate) : null,
+        }),
+        ...(dto.endDate !== undefined && {
+          endDate: dto.endDate ? new Date(dto.endDate) : null,
+        }),
         ...(dto.expiresAt && { expiresAt: new Date(dto.expiresAt) }),
       },
     });
@@ -310,7 +389,9 @@ export class AvailabilityService {
 
   /** Soft-archive : ramène expiresAt à maintenant (filtrée hors des actives). */
   async softDelete(id: string, userId: string) {
-    const decl = await this.prisma.availabilityDeclaration.findUnique({ where: { id } });
+    const decl = await this.prisma.availabilityDeclaration.findUnique({
+      where: { id },
+    });
     if (!decl) throw new NotFoundException('Déclaration introuvable');
     if (decl.userId !== userId) throw new ForbiddenException();
     // updateMany avec { id, userId } rend le soft-delete atomique
@@ -326,7 +407,9 @@ export class AvailabilityService {
    * Charge toutes les déclarations actives pour un ensemble d'utilisateurs
    * en une seule requête SQL (pas de N+1).
    */
-  async getActiveDeclarations(userIds: string[]): Promise<Map<string, DeclarationLike[]>> {
+  async getActiveDeclarations(
+    userIds: string[],
+  ): Promise<Map<string, DeclarationLike[]>> {
     if (userIds.length === 0) return new Map();
     const decls = await this.prisma.availabilityDeclaration.findMany({
       where: { userId: { in: userIds }, expiresAt: { gt: new Date() } },
@@ -353,10 +436,19 @@ export class AvailabilityService {
   ): SlotStatus {
     const active = declarations.filter((d) => d.expiresAt > now);
 
-    if (active.some((d) => d.kind === 'UNAVAILABLE' && this.matchesDeclaration(d, date, slot))) {
+    if (
+      active.some(
+        (d) =>
+          d.kind === 'UNAVAILABLE' && this.matchesDeclaration(d, date, slot),
+      )
+    ) {
       return 'UNAVAILABLE';
     }
-    if (active.some((d) => d.kind === 'AVAILABLE' && this.matchesDeclaration(d, date, slot))) {
+    if (
+      active.some(
+        (d) => d.kind === 'AVAILABLE' && this.matchesDeclaration(d, date, slot),
+      )
+    ) {
       return 'AVAILABLE';
     }
     if (this.isInCoveredPeriod(active, date, now)) {
@@ -385,48 +477,59 @@ export class AvailabilityService {
     action: 'modify' | 'delete',
     dto?: SplitOccurrenceModifyDto,
   ): Promise<SplitResult> {
-    const decl = await this.prisma.availabilityDeclaration.findUnique({ where: { id } });
+    const decl = await this.prisma.availabilityDeclaration.findUnique({
+      where: { id },
+    });
     if (!decl) throw new NotFoundException('Déclaration introuvable');
     if (decl.userId !== userId) throw new ForbiddenException();
     if (decl.recurKind !== 'RECURRING') {
-      throw new BadRequestException('La déclaration n\'est pas récurrente');
+      throw new BadRequestException("La déclaration n'est pas récurrente");
     }
     if (action === 'modify' && !dto) {
-      throw new BadRequestException('dto est requis pour l\'action modify');
+      throw new BadRequestException("dto est requis pour l'action modify");
     }
 
     const utcD = new Date(occurrence + 'T00:00:00Z');
-    if (isNaN(utcD.getTime())) throw new BadRequestException('Date d\'occurrence invalide');
+    if (isNaN(utcD.getTime()))
+      throw new BadRequestException("Date d'occurrence invalide");
     if (utcD.getUTCDay() !== decl.dayOfWeek) {
       throw new BadRequestException(
-        'La date d\'occurrence ne correspond pas au jour de la semaine de la déclaration',
+        "La date d'occurrence ne correspond pas au jour de la semaine de la déclaration",
       );
     }
     if (decl.startDate && utcD < decl.startDate) {
-      throw new BadRequestException('La date d\'occurrence est antérieure au début de la déclaration');
+      throw new BadRequestException(
+        "La date d'occurrence est antérieure au début de la déclaration",
+      );
     }
     // Borne effective : endDate (si positionné par un SPLIT précédent) ou expiresAt
     const effectiveEnd = decl.endDate ?? decl.expiresAt;
     if (utcD > effectiveEnd) {
-      throw new BadRequestException('La date d\'occurrence est postérieure à la fin de la déclaration');
+      throw new BadRequestException(
+        "La date d'occurrence est postérieure à la fin de la déclaration",
+      );
     }
 
     const MS_7D = 7 * 24 * 60 * 60 * 1000;
     const dMinus7 = new Date(utcD.getTime() - MS_7D);
-    const dPlus7  = new Date(utcD.getTime() + MS_7D);
+    const dPlus7 = new Date(utcD.getTime() + MS_7D);
 
-    const isLeftEdge  = !decl.startDate || decl.startDate.getTime() === utcD.getTime();
+    const isLeftEdge =
+      !decl.startDate || decl.startDate.getTime() === utcD.getTime();
     const isRightEdge = dPlus7 > effectiveEnd;
 
     // Rmod : PUNCTUAL, toujours sur [D, D], expire en fin de journée D
     const rmodExpiresAt = new Date(utcD.getTime() + 86_399_999); // 23:59:59.999 UTC
     const rmodData = {
       userId,
-      kind: action === 'delete'
-        ? (decl.kind === 'UNAVAILABLE' ? 'AVAILABLE' : 'UNAVAILABLE') as AvailKind
-        : dto!.kind,
+      kind:
+        action === 'delete'
+          ? decl.kind === 'UNAVAILABLE'
+            ? 'AVAILABLE'
+            : 'UNAVAILABLE'
+          : dto!.kind,
       recurKind: 'PUNCTUAL' as const,
-      dayOfWeek: null as null,
+      dayOfWeek: null,
       slot: action === 'delete' ? decl.slot : dto!.slot,
       startDate: utcD,
       endDate: utcD,
@@ -434,36 +537,45 @@ export class AvailabilityService {
     };
 
     // R1 : partie avant D (absent si left-edge)
-    const r1Data = !isLeftEdge ? {
-      userId,
-      kind: decl.kind,
-      recurKind: 'RECURRING' as const,
-      dayOfWeek: decl.dayOfWeek,
-      slot: decl.slot,
-      startDate: decl.startDate,
-      endDate: dMinus7,
-      expiresAt: decl.expiresAt,
-    } : null;
+    const r1Data = !isLeftEdge
+      ? {
+          userId,
+          kind: decl.kind,
+          recurKind: 'RECURRING' as const,
+          dayOfWeek: decl.dayOfWeek,
+          slot: decl.slot,
+          startDate: decl.startDate,
+          endDate: dMinus7,
+          expiresAt: decl.expiresAt,
+        }
+      : null;
 
     // R2 : partie après D (absent si right-edge)
-    const r2Data = !isRightEdge ? {
-      userId,
-      kind: decl.kind,
-      recurKind: 'RECURRING' as const,
-      dayOfWeek: decl.dayOfWeek,
-      slot: decl.slot,
-      startDate: dPlus7,
-      endDate: decl.endDate, // hérite la borne de fin de l'original (null ou valeur d'un SPLIT antérieur)
-      expiresAt: decl.expiresAt,
-    } : null;
+    const r2Data = !isRightEdge
+      ? {
+          userId,
+          kind: decl.kind,
+          recurKind: 'RECURRING' as const,
+          dayOfWeek: decl.dayOfWeek,
+          slot: decl.slot,
+          startDate: dPlus7,
+          endDate: decl.endDate, // hérite la borne de fin de l'original (null ou valeur d'un SPLIT antérieur)
+          expiresAt: decl.expiresAt,
+        }
+      : null;
 
     const created = await this.prisma.$transaction(async (tx) => {
       const results: object[] = [];
-      if (r1Data) results.push(await tx.availabilityDeclaration.create({ data: r1Data }));
+      if (r1Data)
+        results.push(await tx.availabilityDeclaration.create({ data: r1Data }));
       results.push(await tx.availabilityDeclaration.create({ data: rmodData }));
-      if (r2Data) results.push(await tx.availabilityDeclaration.create({ data: r2Data }));
+      if (r2Data)
+        results.push(await tx.availabilityDeclaration.create({ data: r2Data }));
       // Soft-delete l'original (updateMany pour atomicité TOCTOU, même pattern que softDelete)
-      await tx.availabilityDeclaration.update({ where: { id }, data: { expiresAt: new Date() } });
+      await tx.availabilityDeclaration.update({
+        where: { id },
+        data: { expiresAt: new Date() },
+      });
       return results;
     });
 
@@ -472,7 +584,11 @@ export class AvailabilityService {
 
   // ─── Helpers privés ────────────────────────────────────────────────────────
 
-  private matchesDeclaration(decl: DeclarationLike, date: Date, slot: DaySlot): boolean {
+  private matchesDeclaration(
+    decl: DeclarationLike,
+    date: Date,
+    slot: DaySlot,
+  ): boolean {
     if (!this.slotMatches(decl.slot, slot)) return false;
     if (decl.recurKind === 'RECURRING') {
       if (decl.dayOfWeek !== date.getUTCDay()) return false;
@@ -502,7 +618,11 @@ export class AvailabilityService {
    * À l'intérieur → inférence AVAILABLE (FR3).
    * En dehors → UNKNOWN (FR4).
    */
-  private isInCoveredPeriod(active: DeclarationLike[], date: Date, _now: Date): boolean {
+  private isInCoveredPeriod(
+    active: DeclarationLike[],
+    date: Date,
+    _now: Date,
+  ): boolean {
     return active.some((d) => {
       if (d.recurKind === 'RECURRING') {
         // Couvre [startDate, min(endDate, expiresAt)] — startDate = premier jour déclaré

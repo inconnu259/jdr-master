@@ -176,6 +176,16 @@ export interface AvailableSlotDto {
   members: { userId: string; pseudo: string; status: SlotStatus }[];
 }
 
+/** Vue agrégée d'un créneau disponible pour un joueur non-MJ (sans identité des membres). */
+export interface AggregatedSlotDto {
+  date: string;
+  slot: DaySlot;
+  available: number;
+  unavailable: number;
+  unknown: number;
+  total: number;
+}
+
 /** Vote de date (SessionPoll). */
 export interface SessionPollDto {
   id: string;

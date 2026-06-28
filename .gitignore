@@ -23,3 +23,8 @@ Thumbs.db
 
 # Specs / planification — privé pour l'instant (hors repo public)
 docs/
+
+_bmad/
+_bmad-output/
+.claude/
+CLAUDE.md

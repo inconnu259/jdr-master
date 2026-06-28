@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -11,7 +19,11 @@ export class InvitationsController {
   constructor(private readonly invitations: InvitationsService) {}
 
   @Post('parties/:id/invitations')
-  invite(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: CreateInvitationDto) {
+  invite(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: CreateInvitationDto,
+  ) {
     return this.invitations.invite(id, user.id, dto.inviteeUserId);
   }
 

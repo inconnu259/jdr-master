@@ -27,8 +27,12 @@ describe('AuthService', () => {
     users = { findByEmail: jest.fn(), create: jest.fn() };
     tx = { user: { create: jest.fn() } };
     // $transaction exécute le callback avec notre `tx` mocké.
-    prisma = { $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)) };
-    inviteLinks = { consumeLink: jest.fn().mockResolvedValue({ partieId: 'p1' }) };
+    prisma = {
+      $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
+    };
+    inviteLinks = {
+      consumeLink: jest.fn().mockResolvedValue({ partieId: 'p1' }),
+    };
     service = new AuthService(
       users as unknown as UsersService,
       prisma as unknown as PrismaService,
@@ -43,16 +47,20 @@ describe('AuthService', () => {
     });
 
     it('renvoie null si mauvais mot de passe', async () => {
-      users.findByEmail.mockResolvedValue(fakeUser as never);
+      users.findByEmail.mockResolvedValue(fakeUser);
       (argon2.verify as jest.Mock).mockResolvedValue(false);
       expect(await service.validateUser('a@b.c', 'wrong')).toBeNull();
     });
 
     it("renvoie l'utilisateur sans le hash si mot de passe correct", async () => {
-      users.findByEmail.mockResolvedValue(fakeUser as never);
+      users.findByEmail.mockResolvedValue(fakeUser);
       (argon2.verify as jest.Mock).mockResolvedValue(true);
       const result = await service.validateUser('a@b.c', 'good');
-      expect(result).toMatchObject({ id: 'u1', email: 'a@b.c', pseudo: 'alice' });
+      expect(result).toMatchObject({
+        id: 'u1',
+        email: 'a@b.c',
+        pseudo: 'alice',
+      });
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
     });
   });
@@ -74,7 +82,12 @@ describe('AuthService', () => {
     it('lève ConflictException si email/pseudo déjà pris (P2002)', async () => {
       tx.user.create.mockRejectedValue({ code: 'P2002' });
       await expect(
-        service.register({ email: 'a@b.c', pseudo: 'alice', password: 'password123', token: 'tok' }),
+        service.register({
+          email: 'a@b.c',
+          pseudo: 'alice',
+          password: 'password123',
+          token: 'tok',
+        }),
       ).rejects.toBeInstanceOf(ConflictException);
     });
   });

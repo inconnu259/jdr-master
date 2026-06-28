@@ -24,28 +24,46 @@ export class InviteLinksService {
   /** Le MJ génère un lien d'invitation pour SA partie. */
   async create(partieId: string, mjId: string, dto: CreateInviteLinkDto) {
     await this.parties.getOwned(partieId, mjId);
-    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : new Date(Date.now() + DEFAULT_TTL_MS);
+    const expiresAt = dto.expiresAt
+      ? new Date(dto.expiresAt)
+      : new Date(Date.now() + DEFAULT_TTL_MS);
     if (expiresAt.getTime() <= Date.now()) {
-      throw new BadRequestException("La date d'expiration doit être dans le futur.");
+      throw new BadRequestException(
+        "La date d'expiration doit être dans le futur.",
+      );
     }
     const token = randomBytes(32).toString('base64url');
     return this.prisma.inviteLink.create({
-      data: { token, partieId, createdById: mjId, maxUses: dto.maxUses ?? null, expiresAt },
+      data: {
+        token,
+        partieId,
+        createdById: mjId,
+        maxUses: dto.maxUses ?? null,
+        expiresAt,
+      },
     });
   }
 
   /** Liens d'une partie (vue MJ). */
   async listForPartie(partieId: string, mjId: string) {
     await this.parties.getOwned(partieId, mjId);
-    return this.prisma.inviteLink.findMany({ where: { partieId }, orderBy: { createdAt: 'desc' } });
+    return this.prisma.inviteLink.findMany({
+      where: { partieId },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   /** Le MJ révoque un lien. */
   async revoke(linkId: string, userId: string) {
-    const link = await this.prisma.inviteLink.findUnique({ where: { id: linkId } });
+    const link = await this.prisma.inviteLink.findUnique({
+      where: { id: linkId },
+    });
     if (!link) throw new NotFoundException('Lien introuvable');
     await this.parties.getOwned(link.partieId, userId); // MJ uniquement
-    await this.prisma.inviteLink.update({ where: { id: linkId }, data: { revoked: true } });
+    await this.prisma.inviteLink.update({
+      where: { id: linkId },
+      data: { revoked: true },
+    });
     return { ok: true };
   }
 
@@ -57,12 +75,19 @@ export class InviteLinksService {
     });
     if (!link) throw new NotFoundException('Lien introuvable');
     const { valid, reason } = this.linkStatus(link);
-    return { partieName: link.partie.name, gameSystemId: link.partie.gameSystemId, valid, reason };
+    return {
+      partieName: link.partie.name,
+      gameSystemId: link.partie.gameSystemId,
+      valid,
+      reason,
+    };
   }
 
   /** Un utilisateur connecté rejoint une partie via un lien. */
   async join(token: string, userId: string) {
-    const link = await this.prisma.$transaction((tx) => this.consumeLink(tx, token, userId));
+    const link = await this.prisma.$transaction((tx) =>
+      this.consumeLink(tx, token, userId),
+    );
     return { ok: true, partieId: link.partieId };
   }
 
@@ -71,7 +96,11 @@ export class InviteLinksService {
    * Réutilisé par `join` (utilisateur existant) **et** par l'inscription (`AuthService.register`).
    * L'incrément conditionnel (`updateMany` + quota dans le `WHERE`) protège contre la course sur `maxUses`.
    */
-  async consumeLink(tx: Prisma.TransactionClient, token: string, userId: string): Promise<InviteLink> {
+  async consumeLink(
+    tx: Prisma.TransactionClient,
+    token: string,
+    userId: string,
+  ): Promise<InviteLink> {
     const link = await tx.inviteLink.findUnique({
       where: { token },
       include: { partie: { select: { mjId: true } } },
@@ -85,7 +114,8 @@ export class InviteLinksService {
     const existing = await tx.membership.findUnique({
       where: { userId_partieId: { userId, partieId: link.partieId } },
     });
-    if (existing) throw new ConflictException('Vous êtes déjà membre de cette partie.');
+    if (existing)
+      throw new ConflictException('Vous êtes déjà membre de cette partie.');
 
     const claim = await tx.inviteLink.updateMany({
       where: {
@@ -96,19 +126,23 @@ export class InviteLinksService {
       },
       data: { usesCount: { increment: 1 } },
     });
-    if (claim.count === 0) throw new ForbiddenException('Lien invalide ou quota atteint.');
+    if (claim.count === 0)
+      throw new ForbiddenException('Lien invalide ou quota atteint.');
 
     await tx.membership.create({ data: { userId, partieId: link.partieId } });
     return link;
   }
 
   /** État de validité d'un lien (révoqué / expiré / quota). */
-  private linkStatus(link: Pick<InviteLink, 'revoked' | 'expiresAt' | 'maxUses' | 'usesCount'>): {
+  private linkStatus(
+    link: Pick<InviteLink, 'revoked' | 'expiresAt' | 'maxUses' | 'usesCount'>,
+  ): {
     valid: boolean;
     reason?: string;
   } {
     if (link.revoked) return { valid: false, reason: 'Lien révoqué.' };
-    if (link.expiresAt.getTime() <= Date.now()) return { valid: false, reason: 'Lien expiré.' };
+    if (link.expiresAt.getTime() <= Date.now())
+      return { valid: false, reason: 'Lien expiré.' };
     if (link.maxUses != null && link.usesCount >= link.maxUses) {
       return { valid: false, reason: "Nombre maximum d'utilisations atteint." };
     }

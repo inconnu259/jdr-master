@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -28,7 +37,13 @@ export class AvailabilityController {
     @Param('id') id: string,
     @Body() dto: SplitOccurrenceDto,
   ) {
-    return this.availability.splitOccurrence(id, user.id, dto.occurrence, dto.action, dto.dto);
+    return this.availability.splitOccurrence(
+      id,
+      user.id,
+      dto.occurrence,
+      dto.action,
+      dto.dto,
+    );
   }
 
   @Patch(':id')

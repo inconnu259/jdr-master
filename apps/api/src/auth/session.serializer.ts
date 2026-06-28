@@ -10,11 +10,17 @@ export class SessionSerializer extends PassportSerializer {
     super();
   }
 
-  serializeUser(user: { id: string }, done: (err: Error | null, id?: string) => void) {
+  serializeUser(
+    user: { id: string },
+    done: (err: Error | null, id?: string) => void,
+  ) {
     done(null, user.id);
   }
 
-  async deserializeUser(id: string, done: (err: Error | null, user?: unknown) => void) {
+  async deserializeUser(
+    id: string,
+    done: (err: Error | null, user?: unknown) => void,
+  ) {
     const user = await this.users.findById(id);
     if (!user) {
       done(null, null);

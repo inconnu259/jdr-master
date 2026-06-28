@@ -1,4 +1,9 @@
-import { IsDateString, IsIn, IsOptional, ValidateNested } from 'class-validator';
+import {
+  IsDateString,
+  IsIn,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import type { AvailKind, DaySlot } from '@master-jdr/shared';
 
