@@ -40,7 +40,7 @@ function toFakeDecl(dto: CreateAvailabilityDto): AvailabilityDeclarationDto {
   };
 }
 
-function buildMonth(
+export function buildMonth(
   display: Date,
   decls: AvailabilityDeclarationDto[],
   pendingDecl: AvailabilityDeclarationDto | null,
@@ -142,13 +142,6 @@ export class CalendarMonthView {
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
   });
 
-  // Minuit aujourd'hui (local) — utilisé pour bloquer les clics sur les dates passées.
-  private readonly todayMidnight = (() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  })();
-
   constructor() {
     const init = this.initialDate();
     if (init) {
@@ -177,9 +170,14 @@ export class CalendarMonthView {
   }
 
   protected onCellClick(date: Date, slot: DaySlot): void {
+    // Bloquer les clics sur les cellules hors-mois courant.
+    const displayDate = this.displayDate();
+    if (date.getMonth() !== displayDate.getMonth() || date.getFullYear() !== displayDate.getFullYear()) return;
     const midnight = new Date(date);
     midnight.setHours(0, 0, 0, 0);
-    if (midnight.getTime() < this.todayMidnight) return; // date passée — ignorée
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (midnight.getTime() < today.getTime()) return; // date passée — ignorée
     this.slotSelected.emit({ date, slot });
   }
 

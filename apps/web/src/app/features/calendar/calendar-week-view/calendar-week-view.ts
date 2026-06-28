@@ -23,12 +23,9 @@ export interface WeekCell {
 }
 
 export function getWeekStart(date: Date): Date {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const dow = d.getDay();
+  const dow = date.getUTCDay();
   const diff = dow === 0 ? -6 : 1 - dow;
-  d.setDate(d.getDate() + diff);
-  return d;
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + diff));
 }
 
 function toUTCMidnight(isoDate: string): Date {
@@ -58,6 +55,10 @@ function findWeekDecl(
         if (d.startDate) {
           const start = toUTCMidnight(d.startDate);
           if (utcDate < start) return false;
+        }
+        if (d.endDate) {
+          const end = toUTCMidnight(d.endDate);
+          if (utcDate > end) return false;
         }
         return utcDate <= toUTCMidnight(d.expiresAt);
       }
@@ -89,20 +90,17 @@ export function buildWeek(
   decls: AvailabilityDeclarationDto[],
   pendingDecl: AvailabilityDeclarationDto | null,
 ): WeekCell[] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayTime = today.getTime();
   const now = new Date();
+  // Minuit UTC d'aujourd'hui — cohérent avec l'alignement UTC des semaines.
+  const todayUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const declsWithPending = pendingDecl ? [...decls, pendingDecl] : decls;
 
   return Array.from({ length: 7 }, (_, i) => {
-    const cellLocal = new Date(weekStart);
-    cellLocal.setDate(weekStart.getDate() + i);
-    const cellMidnight = new Date(cellLocal);
-    cellMidnight.setHours(0, 0, 0, 0);
     const utcCell = new Date(
-      Date.UTC(cellLocal.getFullYear(), cellLocal.getMonth(), cellLocal.getDate()),
+      Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + i),
     );
+    // Pour l'affichage (label, date émise) : date locale représentant le même jour calendaire.
+    const cellLocal = new Date(utcCell.getUTCFullYear(), utcCell.getUTCMonth(), utcCell.getUTCDate());
 
     const computeSlot = (slot: 'MORNING' | 'AFTERNOON' | 'EVENING'): SlotData => {
       const status = computeDisplayStatus(utcCell, slot, decls);
@@ -124,8 +122,8 @@ export function buildWeek(
       label: new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric' }).format(
         cellLocal,
       ),
-      isToday: cellMidnight.getTime() === todayTime,
-      isPast: cellMidnight.getTime() < todayTime,
+      isToday: utcCell.getTime() === todayUtcMidnight,
+      isPast: utcCell.getTime() < todayUtcMidnight,
       morning: computeSlot('MORNING'),
       afternoon: computeSlot('AFTERNOON'),
       evening: computeSlot('EVENING'),
@@ -161,9 +159,10 @@ export class CalendarWeekView {
   );
 
   protected readonly weekLabel = computed(() => {
-    const start = this.displayWeekStart();
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
+    const ws = this.displayWeekStart();
+    // Dates locales construites depuis les composantes UTC pour l'affichage.
+    const start = new Date(ws.getUTCFullYear(), ws.getUTCMonth(), ws.getUTCDate());
+    const end = new Date(ws.getUTCFullYear(), ws.getUTCMonth(), ws.getUTCDate() + 6);
     const fmt = (d: Date) =>
       new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' }).format(d);
     const fmtYear = (d: Date) =>
@@ -180,12 +179,6 @@ export class CalendarWeekView {
     const curr = getWeekStart(new Date());
     return ws.getTime() === curr.getTime();
   });
-
-  private readonly todayMidnight = (() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  })();
 
   protected readonly SLOT_ROWS: {
     key: 'morning' | 'afternoon' | 'evening';
@@ -206,16 +199,14 @@ export class CalendarWeekView {
 
   prevWeek(): void {
     const ws = this.displayWeekStart();
-    const next = new Date(ws);
-    next.setDate(ws.getDate() - 7);
+    const next = new Date(Date.UTC(ws.getUTCFullYear(), ws.getUTCMonth(), ws.getUTCDate() - 7));
     this.displayWeekStart.set(next);
     this.displayDateChange.emit(next);
   }
 
   nextWeek(): void {
     const ws = this.displayWeekStart();
-    const next = new Date(ws);
-    next.setDate(ws.getDate() + 7);
+    const next = new Date(Date.UTC(ws.getUTCFullYear(), ws.getUTCMonth(), ws.getUTCDate() + 7));
     this.displayWeekStart.set(next);
     this.displayDateChange.emit(next);
   }
@@ -227,9 +218,11 @@ export class CalendarWeekView {
   }
 
   protected onCellClick(date: Date, slot: DaySlot): void {
-    const midnight = new Date(date);
-    midnight.setHours(0, 0, 0, 0);
-    if (midnight.getTime() < this.todayMidnight) return;
+    const now = new Date();
+    // cellLocal est construit depuis les composantes UTC → getFullYear/Month/Date() == composantes UTC.
+    const cellUtcMidnight = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+    const todayUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    if (cellUtcMidnight < todayUtcMidnight) return;
     this.slotSelected.emit({ date, slot });
   }
 
