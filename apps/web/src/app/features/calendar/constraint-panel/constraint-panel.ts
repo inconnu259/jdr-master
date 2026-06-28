@@ -7,7 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import type { AvailabilityDeclarationDto, CreateAvailabilityDto, DaySlot } from '@master-jdr/shared';
-import { AvailabilityService } from '../../../core/availability/availability.service';
+import { AvailabilityService, ConflictError, type ConflictInfo } from '../../../core/availability/availability.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import {
   addMonths,
@@ -55,8 +55,12 @@ export class ConstraintPanel implements OnInit {
 
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly confirmingDelete = signal(false);
-  protected readonly confirmingReplace = signal(false);
+  /** null = aucun dialog ; 'modify' = dialog modification récurrente ; 'delete' = dialog suppression récurrente */
+  protected readonly splitDialogAction = signal<'modify' | 'delete' | null>(null);
+  /** Conflits détectés lors de la création — déclenche le dialog de résolution. */
+  protected readonly conflictData = signal<ConflictInfo[] | null>(null);
+  /** DTO en attente de résolution de conflit. */
+  private pendingConflictDto: CreateAvailabilityDto | null = null;
   protected readonly today = toISODate(new Date());
 
   protected readonly form = this.fb.nonNullable.group({
@@ -72,16 +76,15 @@ export class ConstraintPanel implements OnInit {
 
   constructor() {
     // Re-initialise le formulaire à chaque changement de cellule (date / slot / déclaration existante).
-    // Couvre aussi le cas où l'utilisateur clique une nouvelle cellule pendant que le panneau est ouvert :
-    // CalendarView garde panelOpen=true (pas de ngOnInit), mais cet effet se relance.
     effect(() => {
       const existing = this.existingDeclaration();
       const slot = this.slot();
       this.date(); // suivi — utilisé indirectement dans prefill et tryBuildPreviewDto
 
       untracked(() => {
-        this.confirmingReplace.set(false);
-        this.confirmingDelete.set(false);
+        this.splitDialogAction.set(null);
+        this.conflictData.set(null);
+        this.pendingConflictDto = null;
         this.error.set(null);
         if (existing) {
           this.prefill(existing);
@@ -99,7 +102,9 @@ export class ConstraintPanel implements OnInit {
 
   ngOnInit(): void {
     this.form.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
-      this.confirmingReplace.set(false);
+      this.splitDialogAction.set(null);
+      this.conflictData.set(null);
+      this.pendingConflictDto = null;
       this.formChanged.emit(this.tryBuildPreviewDto());
     });
     // Émet le preview initial au cas où l'effet a tourné avant que l'abonnement soit actif.
@@ -120,7 +125,7 @@ export class ConstraintPanel implements OnInit {
     if (v.type === 'RECURRENT' && !v.expiresAt) return false;
     if (v.type === 'PLAGE') {
       if (!v.startDate || !v.endDate) return false;
-      if (v.endDate < v.startDate) return false; // comparaison lexicographique YYYY-MM-DD = chronologique
+      if (v.endDate < v.startDate) return false;
     }
     return true;
   }
@@ -131,19 +136,21 @@ export class ConstraintPanel implements OnInit {
       type = 'RECURRENT';
     } else if (d.startDate && d.endDate) {
       const cellDateStr = toISODate(this.date());
-      // PONCTUEL = PUNCTUAL où startDate = endDate = date de la cellule sélectionnée
-      // PLAGE = tout autre PUNCTUAL (dates différentes ou plage d'un jour sur une autre date)
       if (d.startDate !== d.endDate || d.startDate !== cellDateStr) {
         type = 'PLAGE';
       }
     }
+    // En mode PLAGE : utiliser les bornes de la déclaration existante.
+    // Sinon (PONCTUEL / RECURRENT) : pré-remplir startDate avec la date cliquée
+    // pour que le passage à PLAGE propose une valeur sensée par défaut.
+    const isExistingRange = type === 'PLAGE';
     this.form.patchValue({
       slot: d.slot,
       kind: d.kind as 'UNAVAILABLE' | 'AVAILABLE',
       type,
       expiresAt: d.expiresAt.substring(0, 10),
-      startDate: d.startDate ?? '',
-      endDate: d.endDate ?? '',
+      startDate: isExistingRange ? (d.startDate ?? '') : toISODate(this.date()),
+      endDate: isExistingRange ? (d.endDate ?? '') : '',
     });
   }
 
@@ -158,33 +165,103 @@ export class ConstraintPanel implements OnInit {
     }
   }
 
+  // ── Sauvegarde ──────────────────────────────────────────────────────────────
+
   protected async onSave(): Promise<void> {
     if (!this.isFormValid || this.saving()) return;
     const existing = this.existingDeclaration();
     if (existing?.recurKind === 'RECURRING') {
-      this.confirmingReplace.set(true);
+      this.splitDialogAction.set('modify');
       return;
     }
     await this.doActualSave();
   }
 
-  protected async executeReplace(): Promise<void> {
-    if (this.saving()) return; // garde contre le double-clic
-    this.confirmingReplace.set(false);
+  /** "Toutes les occurrences" depuis le dialog modify. */
+  protected async onSplitAll(): Promise<void> {
+    if (this.saving()) return;
+    this.splitDialogAction.set(null);
     await this.doActualSave();
+  }
+
+  /** "Ce jour uniquement" depuis le dialog modify. */
+  protected async onSplitThisDay(): Promise<void> {
+    if (this.saving()) return;
+    this.splitDialogAction.set(null);
+    this.saving.set(true);
+    this.error.set(null);
+    try {
+      const existing = this.existingDeclaration()!;
+      const occurrence = toISODate(this.date());
+      const v = this.form.getRawValue() as ConstraintFormValue;
+      const result = await this.availabilitySvc.splitOccurrence(existing.id, {
+        occurrence,
+        action: 'modify',
+        dto: { kind: v.kind as 'UNAVAILABLE' | 'AVAILABLE', slot: v.slot },
+      });
+      this.snack.open(this.theme.tone()['success.constraint_saved'], undefined, { duration: 3000 });
+      this.saved.emit(result.created[0] ?? existing);
+    } catch {
+      this.error.set("Impossible de modifier l'occurrence.");
+    } finally {
+      this.saving.set(false);
+    }
   }
 
   private async doActualSave(): Promise<void> {
     this.saving.set(true);
     this.error.set(null);
+    const existing = this.existingDeclaration();
+    let dto: CreateAvailabilityDto | null = null;
     try {
-      const dto = buildConstraintDto(this.form.getRawValue() as ConstraintFormValue, this.date());
+      const raw = buildConstraintDto(this.form.getRawValue() as ConstraintFormValue, this.date());
+      dto = existing ? { ...raw, replacingId: existing.id } : raw;
       // Créer avant de supprimer : si la création échoue, l'ancienne déclaration est préservée.
       const result = await this.availabilitySvc.createDeclaration(dto);
-      const existing = this.existingDeclaration();
       if (existing) await this.availabilitySvc.deleteDeclaration(existing.id);
       this.snack.open(this.theme.tone()['success.constraint_saved'], undefined, { duration: 3000 });
-      this.saved.emit(result);
+      this.saved.emit(result.created[0] ?? existing!);
+    } catch (err) {
+      if (err instanceof ConflictError && dto) {
+        this.conflictData.set(err.conflicts);
+        this.pendingConflictDto = dto;
+        return;
+      }
+      this.error.set("Impossible d'enregistrer la contrainte.");
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  /** L'utilisateur choisit d'écraser les déclarations conflictuelles. */
+  protected async onConflictOverwrite(): Promise<void> {
+    await this.resolveConflict('overwrite');
+  }
+
+  /** L'utilisateur choisit de garder l'existant en créant autour. */
+  protected async onConflictKeep(): Promise<void> {
+    await this.resolveConflict('keep');
+  }
+
+  /** L'utilisateur annule la création. */
+  protected onConflictCancel(): void {
+    this.conflictData.set(null);
+    this.pendingConflictDto = null;
+  }
+
+  private async resolveConflict(resolution: 'overwrite' | 'keep'): Promise<void> {
+    const dto = this.pendingConflictDto;
+    if (!dto || this.saving()) return;
+    this.conflictData.set(null);
+    this.pendingConflictDto = null;
+    this.saving.set(true);
+    this.error.set(null);
+    const existing = this.existingDeclaration();
+    try {
+      const result = await this.availabilitySvc.createDeclaration({ ...dto, conflictResolution: resolution });
+      if (existing) await this.availabilitySvc.deleteDeclaration(existing.id);
+      this.snack.open(this.theme.tone()['success.constraint_saved'], undefined, { duration: 3000 });
+      this.saved.emit(result.created[0] ?? existing!);
     } catch {
       this.error.set("Impossible d'enregistrer la contrainte.");
     } finally {
@@ -192,19 +269,75 @@ export class ConstraintPanel implements OnInit {
     }
   }
 
+  // ── Suppression ─────────────────────────────────────────────────────────────
+
   protected onDeleteClick(): void {
-    if (this.saving()) return; // garde contre le double-clic
+    if (this.saving()) return;
     const existing = this.existingDeclaration();
     if (!existing) return;
     if (existing.recurKind === 'RECURRING') {
-      this.confirmingDelete.set(true);
+      this.splitDialogAction.set('delete');
     } else {
       void this.doDelete(existing);
     }
   }
 
-  protected async confirmDelete(): Promise<void> {
-    if (this.saving()) return; // garde contre le double-clic
+  /** "Ce jour uniquement" depuis le dialog delete. */
+  protected async onDeleteThisDay(): Promise<void> {
+    if (this.saving()) return;
+    this.splitDialogAction.set(null);
+    this.saving.set(true);
+    this.error.set(null);
+    try {
+      const existing = this.existingDeclaration()!;
+      const occurrence = toISODate(this.date());
+      await this.availabilitySvc.splitOccurrence(existing.id, { occurrence, action: 'delete' });
+      this.deleted.emit();
+    } catch {
+      this.error.set("Impossible de supprimer l'occurrence.");
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  /**
+   * "De ce jour jusqu'à la fin" depuis le dialog delete.
+   * Si l'occurrence est le premier jour de la série → soft-delete complet.
+   * Sinon → tronque la série en posant endDate = D - 7 jours.
+   */
+  protected async onDeleteTail(): Promise<void> {
+    if (this.saving()) return;
+    this.splitDialogAction.set(null);
+    const existing = this.existingDeclaration();
+    if (!existing) return;
+    const d = this.date();
+    const occurrenceStr = toISODate(d);
+
+    if (existing.startDate === occurrenceStr) {
+      // Premier jour : supprime toute la série
+      await this.doDelete(existing);
+      return;
+    }
+
+    // Sinon : tronque — endDate = D - 7 (UTC pour rester cohérent avec le reste du codebase)
+    const dMinus7 = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - 7));
+    const dMinus7Str = toISODate(dMinus7);
+    this.saving.set(true);
+    this.error.set(null);
+    try {
+      await this.availabilitySvc.updateDeclaration(existing.id, { endDate: dMinus7Str });
+      this.deleted.emit();
+    } catch {
+      this.error.set('Impossible de modifier la contrainte.');
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  /** "Toute la série" depuis le dialog delete. */
+  protected async onDeleteAll(): Promise<void> {
+    if (this.saving()) return;
+    this.splitDialogAction.set(null);
     const existing = this.existingDeclaration();
     if (existing) await this.doDelete(existing);
   }
@@ -219,7 +352,6 @@ export class ConstraintPanel implements OnInit {
       this.error.set('Impossible de supprimer la contrainte.');
     } finally {
       this.saving.set(false);
-      this.confirmingDelete.set(false);
     }
   }
 

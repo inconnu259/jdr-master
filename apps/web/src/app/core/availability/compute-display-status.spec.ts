@@ -11,6 +11,7 @@ const FAR = new Date('2027-01-01T00:00:00Z');
 function decl(overrides: Partial<AvailabilityDeclarationDto> = {}): AvailabilityDeclarationDto {
   return {
     id: 'test-id',
+    userId: 'user-1',
     kind: 'UNAVAILABLE',
     recurKind: 'RECURRING',
     dayOfWeek: 3,
@@ -18,6 +19,7 @@ function decl(overrides: Partial<AvailabilityDeclarationDto> = {}): Availability
     startDate: null,
     endDate: null,
     expiresAt: FAR.toISOString(),
+    createdAt: NOW.toISOString(),
     ...overrides,
   };
 }
@@ -88,5 +90,42 @@ describe('computeDisplayStatus', () => {
     expect(computeDisplayStatus(WED, 'MORNING', [fullDay], NOW)).toBe('UNAVAILABLE');
     expect(computeDisplayStatus(WED, 'AFTERNOON', [fullDay], NOW)).toBe('UNAVAILABLE');
     expect(computeDisplayStatus(WED, 'EVENING', [fullDay], NOW)).toBe('UNAVAILABLE');
+  });
+
+  // ── Tests modèle SPLIT : endDate tronque la série ────────────────────────
+
+  it('RECURRING with endDate — after endDate → UNKNOWN (modèle SPLIT R1)', () => {
+    // R1 après un split : couvre [Jul 1, Jul 8] — le mercredi Jul 8 (WED2) est la borne
+    const r1 = decl({ startDate: '2026-07-01', endDate: '2026-07-08' });
+    // WED = Jul 1 → dans la plage → UNAVAILABLE
+    expect(computeDisplayStatus(WED, 'EVENING', [r1], NOW)).toBe('UNAVAILABLE');
+    // NEXT_WED = Jul 8 → borne incluse → UNAVAILABLE
+    expect(computeDisplayStatus(NEXT_WED, 'EVENING', [r1], NOW)).toBe('UNAVAILABLE');
+    // AUG_WED = Aug 5 → après endDate → UNKNOWN (R1 ne doit plus couvrir ce jour)
+    expect(computeDisplayStatus(AUG_WED, 'EVENING', [r1], NOW)).toBe('UNKNOWN');
+  });
+
+  it('SPLIT: Rmod AVAILABLE sur le jour J masque R1 UNAVAILABLE (endDate=J-7)', () => {
+    // Simule un split sur NEXT_WED (Jul 8) : R1 endDate=WED(Jul 1), Rmod AVAILABLE sur Jul 8
+    const r1 = decl({ startDate: '2026-07-01', endDate: '2026-07-01', kind: 'UNAVAILABLE' });
+    const rmod = decl({
+      recurKind: 'PUNCTUAL',
+      dayOfWeek: null,
+      startDate: '2026-07-08',
+      endDate: '2026-07-08',
+      expiresAt: '2026-07-08T23:59:59Z',
+      kind: 'AVAILABLE',
+    });
+    // NEXT_WED = Jul 8 : R1 s'arrête Jul 1, Rmod couvre Jul 8 → AVAILABLE doit gagner
+    expect(computeDisplayStatus(NEXT_WED, 'EVENING', [r1, rmod], NOW)).toBe('AVAILABLE');
+    // WED = Jul 1 : couvert par R1 seulement → UNAVAILABLE
+    expect(computeDisplayStatus(WED, 'EVENING', [r1, rmod], NOW)).toBe('UNAVAILABLE');
+  });
+
+  it('SPLIT: R2 UNAVAILABLE ne couvre pas les jours avant startDate', () => {
+    // R2 après un split : couvre [Jul 8, …] — WED (Jul 1) est avant → UNKNOWN
+    const r2 = decl({ startDate: '2026-07-08' });
+    expect(computeDisplayStatus(WED, 'EVENING', [r2], NOW)).toBe('UNKNOWN');
+    expect(computeDisplayStatus(NEXT_WED, 'EVENING', [r2], NOW)).toBe('UNAVAILABLE');
   });
 });

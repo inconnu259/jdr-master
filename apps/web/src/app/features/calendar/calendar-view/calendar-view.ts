@@ -98,7 +98,18 @@ export class CalendarView implements OnInit {
             ? d.slot === 'FULL_DAY'
             : d.slot === 'FULL_DAY' || d.slot === slot;
         if (!slotMatch) return false;
-        if (d.recurKind === 'RECURRING') return d.dayOfWeek === utcDate.getUTCDay();
+        if (d.recurKind === 'RECURRING') {
+          if (d.dayOfWeek !== utcDate.getUTCDay()) return false;
+          if (d.startDate) {
+            const start = new Date(d.startDate.substring(0, 10) + 'T00:00:00Z');
+            if (utcDate < start) return false;
+          }
+          if (d.endDate) {
+            const end = new Date(d.endDate.substring(0, 10) + 'T00:00:00Z');
+            if (utcDate > end) return false;
+          }
+          return true;
+        }
         // Normalise en UTC minuit pour éviter les décalages de fuseau horaire dans la string ISO
         const start = new Date(d.startDate!.substring(0, 10) + 'T00:00:00Z');
         const end = new Date(d.endDate!.substring(0, 10) + 'T00:00:00Z');

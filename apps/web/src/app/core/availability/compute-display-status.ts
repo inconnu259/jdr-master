@@ -39,6 +39,10 @@ function matchesDate(d: AvailabilityDeclarationDto, date: Date): boolean {
     if (d.startDate) {
       if (date < toUTCMidnight(d.startDate)) return false;
     }
+    // Borne de série (posée par le modèle SPLIT) : endDate tronque la récurrence avant expiresAt
+    if (d.endDate) {
+      if (date > toUTCMidnight(d.endDate)) return false;
+    }
     // Borne supérieure : jusqu'à expiresAt (inclus, minuit UTC)
     const expiresMidnight = toUTCMidnight(d.expiresAt);
     return date <= expiresMidnight;

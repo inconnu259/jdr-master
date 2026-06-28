@@ -4,6 +4,7 @@ import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { AvailabilityService } from './availability.service';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
+import { SplitOccurrenceDto } from './dto/split-occurrence.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
 
 @UseGuards(AuthenticatedGuard)
@@ -19,6 +20,15 @@ export class AvailabilityController {
   @Get()
   findActive(@CurrentUser() user: AuthUser) {
     return this.availability.findActive(user.id);
+  }
+
+  @Post(':id/split')
+  splitOccurrence(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SplitOccurrenceDto,
+  ) {
+    return this.availability.splitOccurrence(id, user.id, dto.occurrence, dto.action, dto.dto);
   }
 
   @Patch(':id')

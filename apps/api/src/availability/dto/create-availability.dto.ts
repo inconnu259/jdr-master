@@ -1,4 +1,4 @@
-import { IsDateString, IsIn, IsInt, Max, Min, ValidateIf } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min, ValidateIf } from 'class-validator';
 import type { AvailKind, DaySlot, RecurKind } from '@master-jdr/shared';
 
 const AVAIL_KINDS: AvailKind[] = ['UNAVAILABLE', 'AVAILABLE'];
@@ -34,4 +34,14 @@ export class CreateAvailabilityDto {
 
   @IsDateString()
   expiresAt!: string;
+
+  /** ID de la déclaration en cours de remplacement — exclue du check de conflits. */
+  @IsOptional()
+  @IsString()
+  replacingId?: string;
+
+  /** Résolution choisie par l'utilisateur après détection d'un conflit. */
+  @IsOptional()
+  @IsIn(['overwrite', 'keep'])
+  conflictResolution?: 'overwrite' | 'keep';
 }

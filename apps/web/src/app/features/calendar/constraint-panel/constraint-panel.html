@@ -68,45 +68,73 @@
   <!-- Actions -->
   <div class="panel-actions">
 
-    <!-- Supprimer (caché pendant une confirmation) -->
-    @if (existingDeclaration() && !confirmingDelete() && !confirmingReplace()) {
+    <!-- Supprimer (visible uniquement en dehors des dialogs) -->
+    @if (existingDeclaration() && splitDialogAction() === null && conflictData() === null) {
       <button mat-stroked-button type="button" color="warn" (click)="onDeleteClick()" [disabled]="saving()">
         <mat-icon>delete</mat-icon>
         Supprimer
       </button>
     }
 
-    <!-- Confirmation suppression (RÉCURRENT) -->
-    @if (confirmingDelete()) {
+    <!-- Dialog MODIFICATION d'une contrainte récurrente -->
+    @if (splitDialogAction() === 'modify') {
       <div class="inline-confirm">
-        <p class="confirm-warn">⚠ Supprimera toutes les occurrences récurrentes.</p>
+        <p class="confirm-warn">⚠ Cette contrainte est récurrente. Que souhaitez-vous modifier ?</p>
         <div class="confirm-actions">
-          <button mat-button type="button" (click)="confirmingDelete.set(false)">Annuler</button>
-          <button mat-flat-button color="warn" type="button" (click)="confirmDelete()" [disabled]="saving()">
-            Confirmer
+          <button mat-button type="button" (click)="splitDialogAction.set(null)" [disabled]="saving()">
+            Annuler
+          </button>
+          <button mat-stroked-button type="button" (click)="onSplitThisDay()" [disabled]="saving()">
+            Ce jour uniquement
+          </button>
+          <button mat-flat-button color="primary" type="button" (click)="onSplitAll()" [disabled]="saving()">
+            Toutes les occurrences
           </button>
         </div>
       </div>
     }
 
-    <!-- Confirmation remplacement (modifier un RÉCURRENT) -->
-    @if (confirmingReplace()) {
+    <!-- Dialog SUPPRESSION d'une contrainte récurrente -->
+    @if (splitDialogAction() === 'delete') {
       <div class="inline-confirm">
-        <p class="confirm-warn">
-          ⚠ Remplacera toutes les occurrences récurrentes.
-          <em class="confirm-note">La modification d'une seule occurrence sera disponible prochainement.</em>
-        </p>
+        <p class="confirm-warn">⚠ Cette contrainte est récurrente. Que souhaitez-vous supprimer ?</p>
         <div class="confirm-actions">
-          <button mat-button type="button" (click)="confirmingReplace.set(false)">Annuler</button>
-          <button mat-flat-button color="primary" type="button" (click)="executeReplace()" [disabled]="saving()">
-            Remplacer tout
+          <button mat-button type="button" (click)="splitDialogAction.set(null)" [disabled]="saving()">
+            Annuler
+          </button>
+          <button mat-stroked-button type="button" color="warn" (click)="onDeleteThisDay()" [disabled]="saving()">
+            Ce jour uniquement
+          </button>
+          <button mat-stroked-button type="button" color="warn" (click)="onDeleteTail()" [disabled]="saving()">
+            De ce jour jusqu'à la fin
+          </button>
+          <button mat-flat-button color="warn" type="button" (click)="onDeleteAll()" [disabled]="saving()">
+            Toute la série
           </button>
         </div>
       </div>
     }
 
-    <!-- Boutons normaux (cachés pendant les confirmations) -->
-    @if (!confirmingDelete() && !confirmingReplace()) {
+    <!-- Dialog CONFLIT lors de la création -->
+    @if (conflictData() !== null) {
+      <div class="inline-confirm">
+        <p class="confirm-warn">⚠ Des disponibilités contradictoires existent déjà pour cette période.</p>
+        <div class="confirm-actions">
+          <button mat-button type="button" (click)="onConflictCancel()" [disabled]="saving()">
+            Annuler
+          </button>
+          <button mat-stroked-button type="button" (click)="onConflictKeep()" [disabled]="saving()">
+            Garder l'existant
+          </button>
+          <button mat-flat-button color="warn" type="button" (click)="onConflictOverwrite()" [disabled]="saving()">
+            Écraser
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- Boutons normaux (cachés pendant les dialogs) -->
+    @if (splitDialogAction() === null && conflictData() === null) {
       <div class="actions-right">
         <button mat-button type="button" (click)="cancelled.emit()" [disabled]="saving()">Annuler</button>
         <button mat-flat-button color="primary" type="submit" [disabled]="!isFormValid || saving()">

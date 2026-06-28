@@ -34,7 +34,7 @@ describe('buildConstraintDto', () => {
     expect(dto.dayOfWeek).toBe(3);
     expect(dto.slot).toBe('EVENING');
     expect(dto.expiresAt).toBe('2027-01-01T23:59:59.000Z');
-    expect(dto.startDate).toBeUndefined();
+    expect(dto.startDate).toBe('2026-07-01'); // première occurrence = jour sélectionné
     expect(dto.endDate).toBeUndefined();
   });
 

@@ -30,8 +30,11 @@ export class UpdateAvailabilityDto {
   @IsDateString()
   startDate?: string | null;
 
-  /** Requis si recurKind est passé à PUNCTUAL dans ce PATCH. */
-  @ValidateIf((o) => o.recurKind === 'PUNCTUAL')
+  /**
+   * Pour PUNCTUAL : borne de fin explicite.
+   * Pour RECURRING : borne de fin de série (utilisé par le modèle SPLIT pour tronquer la série).
+   */
+  @IsOptional()
   @IsDateString()
   endDate?: string | null;
 

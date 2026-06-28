@@ -136,6 +136,26 @@ export interface CreateAvailabilityDto {
   startDate?: string | null;
   endDate?: string | null;
   expiresAt: string;
+  /** ID de la déclaration en cours de remplacement (exclue du check de conflits). */
+  replacingId?: string;
+  /** Résolution choisie après détection de conflit. */
+  conflictResolution?: 'overwrite' | 'keep';
+}
+
+/** Info sur une déclaration conflictuelle détectée à la création. */
+export interface ConflictInfo {
+  id: string;
+  kind: AvailKind;
+  slot: DaySlot;
+  recurKind: RecurKind;
+  startDate: string | null;
+  endDate: string | null;
+  dayOfWeek: number | null;
+}
+
+/** Résultat d'un POST /availability (avec ou sans résolution de conflit). */
+export interface CreateAvailabilityResult {
+  created: AvailabilityDeclarationDto[];
 }
 
 /** Payload partiel pour la mise à jour d'une déclaration. */
