@@ -2,7 +2,7 @@ import { Component, computed, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import type { AvailabilityDeclarationDto, CreateAvailabilityDto, DaySlot, SlotStatus } from '@master-jdr/shared';
+import type { AggregatedSlotDto, AvailabilityDeclarationDto, CreateAvailabilityDto, DaySlot, SlotStatus } from '@master-jdr/shared';
 import { computeDisplayStatus } from '../../../core/availability/compute-display-status';
 
 export interface SlotSelectedEvent {
@@ -101,6 +101,15 @@ export function buildMonth(
   return weeks;
 }
 
+type GuildStatus = 'ALL_AVAILABLE' | 'MIXED' | 'UNKNOWN' | 'BLOCKED';
+
+function entryGuildStatus(e: AggregatedSlotDto): GuildStatus {
+  if (e.unavailable > 0) return 'BLOCKED';
+  if (e.available === e.total && e.total > 0) return 'ALL_AVAILABLE';
+  if (e.available > 0) return 'MIXED';
+  return 'UNKNOWN';
+}
+
 @Component({
   selector: 'app-calendar-month-view',
   standalone: true,
@@ -113,6 +122,7 @@ export class CalendarMonthView {
   readonly loading = input(false);
   readonly pendingDto = input<CreateAvailabilityDto | null>(null);
   readonly initialDate = input<Date | null>(null);
+  readonly heatmap = input<AggregatedSlotDto[]>([]);
 
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();
@@ -133,6 +143,19 @@ export class CalendarMonthView {
   protected readonly weeks = computed(() =>
     buildMonth(this.displayDate(), this.declarations(), this.pendingDecl()),
   );
+
+  protected readonly heatmapByDate = computed((): Map<string, GuildStatus> => {
+    const map = new Map<string, GuildStatus>();
+    const rank: Record<GuildStatus, number> = { ALL_AVAILABLE: 0, MIXED: 1, UNKNOWN: 2, BLOCKED: 3 };
+    for (const entry of this.heatmap()) {
+      const status = entryGuildStatus(entry);
+      const current = map.get(entry.date);
+      if (current === undefined || rank[status] < rank[current]) {
+        map.set(entry.date, status);
+      }
+    }
+    return map;
+  });
 
   protected readonly DAY_NAMES = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
@@ -179,6 +202,10 @@ export class CalendarMonthView {
     today.setHours(0, 0, 0, 0);
     if (midnight.getTime() < today.getTime()) return; // date passée — ignorée
     this.slotSelected.emit({ date, slot });
+  }
+
+  protected dateKey(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
   protected slotAriaLabel(slotName: string, status: SlotStatus): string {

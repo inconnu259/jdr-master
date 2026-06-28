@@ -106,6 +106,19 @@
   color: var(--mat-sys-on-primary);
 }
 
+/* ── Point guilde (heatmap) ────────────────────────────────────────────────── */
+.guild-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &[data-guild-status='ALL_AVAILABLE'] { background: var(--color-available); }
+  &[data-guild-status='MIXED']         { background: var(--mat-sys-tertiary, #7d5260); opacity: 0.8; }
+  &[data-guild-status='UNKNOWN']       { background: var(--color-unknown); opacity: 0.6; }
+  &[data-guild-status='BLOCKED']       { background: var(--color-unavailable); opacity: 0.4; }
+}
+
 /* ── 3 segments de statut ──────────────────────────────────────────────────── */
 .segments {
   display: flex;

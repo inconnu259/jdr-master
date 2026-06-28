@@ -1,0 +1,29 @@
+<article class="creneau-card">
+  <header class="creneau-card__header">
+    <span class="creneau-card__date">{{ formatDate(slot().date) }}</span>
+    <span class="creneau-card__slot">{{ slotLabel(slot().slot) }}</span>
+    @if (allAvailable()) {
+      <span class="creneau-card__tag creneau-card__tag--full">Guilde complète</span>
+    }
+  </header>
+
+  <ul class="creneau-card__members" aria-label="Membres">
+    @for (member of slot().members; track member.userId) {
+      <li class="creneau-card__member">
+        <span class="creneau-card__icon" aria-hidden="true">⚔</span>
+        <span class="creneau-card__pseudo">{{ member.pseudo }}</span>
+        <span class="creneau-card__status" [attr.aria-label]="member.status">
+          {{ statusIcon(member.status) }}
+        </span>
+      </li>
+    }
+  </ul>
+
+  @if (unknownMembers().length > 0) {
+    <ul class="creneau-card__alerts" aria-label="Alertes disponibilité">
+      @for (member of unknownMembers(); track member.userId) {
+        <li class="creneau-card__alert">{{ missingAlert(member.pseudo) }}</li>
+      }
+    </ul>
+  }
+</article>

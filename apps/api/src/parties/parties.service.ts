@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -102,6 +103,32 @@ export class PartiesService {
     return { ok: true };
   }
 
+  /** Retourne MJ + membres (dédoublonnés) avec leur pseudo. */
+  private async resolveParticipants(partieId: string, mjId: string) {
+    const [mjUser, memberships] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: mjId }, select: { id: true, pseudo: true } }),
+      this.prisma.membership.findMany({
+        where: { partieId },
+        include: { user: { select: { id: true, pseudo: true } } },
+      }),
+    ]);
+
+    const seen = new Set<string>();
+    const participants: { userId: string; pseudo: string }[] = [];
+
+    if (mjUser) {
+      seen.add(mjUser.id);
+      participants.push({ userId: mjUser.id, pseudo: mjUser.pseudo });
+    }
+    for (const m of memberships) {
+      if (!seen.has(m.user.id)) {
+        seen.add(m.user.id);
+        participants.push({ userId: m.user.id, pseudo: m.user.pseudo });
+      }
+    }
+    return { participants, memberships };
+  }
+
   async getAvailableSlots(
     partieId: string,
     userId: string,
@@ -112,18 +139,15 @@ export class PartiesService {
     });
     if (!partie) throw new NotFoundException('Partie introuvable');
 
-    const memberships = await this.prisma.membership.findMany({
-      where: { partieId },
-      include: { user: { select: { id: true, pseudo: true } } },
-    });
+    const { participants, memberships } = await this.resolveParticipants(partieId, partie.mjId);
 
     const isMj = partie.mjId === userId;
     const isMember = memberships.some((m) => m.userId === userId);
     if (!isMj && !isMember) throw new ForbiddenException();
 
-    const memberIds = memberships.map((m) => m.userId);
+    const participantIds = participants.map((p) => p.userId);
     const declarationsMap =
-      await this.availability.getActiveDeclarations(memberIds);
+      await this.availability.getActiveDeclarations(participantIds);
 
     const SLOTS = ['MORNING', 'AFTERNOON', 'EVENING'] as const;
     const now = new Date();
@@ -132,35 +156,55 @@ export class PartiesService {
       now.getUTCMonth(),
       now.getUTCDate(),
     );
-    const results: AvailableSlotDto[] = [];
+    const all: AvailableSlotDto[] = [];
 
-    outer: for (let d = 0; d < weeks * 7; d++) {
+    for (let d = 0; d < weeks * 7; d++) {
       const dateUtc = new Date(todayUtcMidnight + d * 86_400_000);
       for (const slot of SLOTS) {
-        const memberStatuses = memberships.map((m) => ({
-          userId: m.user.id,
-          pseudo: m.user.pseudo,
+        const members = participants.map((p) => ({
+          userId: p.userId,
+          pseudo: p.pseudo,
           status: this.availability.computeSlotStatus(
-            declarationsMap.get(m.userId) ?? [],
+            declarationsMap.get(p.userId) ?? [],
             dateUtc,
             slot,
           ),
         }));
-
-        if (memberStatuses.some((m) => m.status === 'UNAVAILABLE')) continue;
-
-        results.push({
-          date: dateUtc.toISOString().substring(0, 10),
-          slot,
-          members: memberStatuses,
-        });
-        if (results.length >= 5) break outer;
+        all.push({ date: dateUtc.toISOString().substring(0, 10), slot, members });
       }
     }
 
-    if (isMj) return results;
+    // Priorité : 0=tous dispos, 1=mixte sans refus, 2=tous inconnus, 3=au moins un refus
+    const priority = (s: AvailableSlotDto): number => {
+      const hasUnavail = s.members.some((m) => m.status === 'UNAVAILABLE');
+      const availCount = s.members.filter((m) => m.status === 'AVAILABLE').length;
+      if (hasUnavail) return 3;
+      if (availCount === s.members.length) return 0;
+      if (availCount > 0) return 1;
+      return 2;
+    };
 
-    return results.map(({ date, slot, members }) => ({
+    const slotIdx = (s: AvailableSlotDto) =>
+      SLOTS.indexOf(s.slot as (typeof SLOTS)[number]);
+
+    const sorted = [...all].sort((a, b) => {
+      const pa = priority(a);
+      const pb = priority(b);
+      if (pa !== pb) return pa - pb;
+      if (pa === 1) {
+        const ca = a.members.filter((m) => m.status === 'AVAILABLE').length;
+        const cb = b.members.filter((m) => m.status === 'AVAILABLE').length;
+        if (ca !== cb) return cb - ca;
+      }
+      const dateCmp = a.date.localeCompare(b.date);
+      return dateCmp !== 0 ? dateCmp : slotIdx(a) - slotIdx(b);
+    });
+
+    const limited = sorted.slice(0, 20);
+
+    if (isMj) return limited;
+
+    return limited.map(({ date, slot, members }) => ({
       date,
       slot,
       available: members.filter((m) => m.status === 'AVAILABLE').length,
@@ -168,5 +212,58 @@ export class PartiesService {
       unknown: members.filter((m) => m.status === 'UNKNOWN').length,
       total: members.length,
     }));
+  }
+
+  async getHeatmap(
+    partieId: string,
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<AggregatedSlotDto[]> {
+    const partie = await this.prisma.partie.findUnique({
+      where: { id: partieId },
+    });
+    if (!partie) throw new NotFoundException('Partie introuvable');
+
+    const { participants, memberships } = await this.resolveParticipants(partieId, partie.mjId);
+
+    const isMj = partie.mjId === userId;
+    const isMember = memberships.some((m) => m.userId === userId);
+    if (!isMj && !isMember) throw new ForbiddenException();
+
+    const participantIds = participants.map((p) => p.userId);
+    const declarationsMap =
+      await this.availability.getActiveDeclarations(participantIds);
+
+    const SLOTS = ['MORNING', 'AFTERNOON', 'EVENING'] as const;
+    const fromMs = new Date(from + 'T00:00:00Z').getTime();
+    const toMs = new Date(to + 'T00:00:00Z').getTime();
+    if (fromMs > toMs) throw new BadRequestException('from must be before or equal to to');
+    if (toMs - fromMs > 45 * 86_400_000) throw new BadRequestException('Date range must not exceed 45 days');
+    const results: AggregatedSlotDto[] = [];
+
+    for (let ms = fromMs; ms <= toMs; ms += 86_400_000) {
+      const dateUtc = new Date(ms);
+      const dateStr = dateUtc.toISOString().substring(0, 10);
+      for (const slot of SLOTS) {
+        const statuses = participants.map((p) =>
+          this.availability.computeSlotStatus(
+            declarationsMap.get(p.userId) ?? [],
+            dateUtc,
+            slot,
+          ),
+        );
+        results.push({
+          date: dateStr,
+          slot,
+          available: statuses.filter((s) => s === 'AVAILABLE').length,
+          unavailable: statuses.filter((s) => s === 'UNAVAILABLE').length,
+          unknown: statuses.filter((s) => s === 'UNKNOWN').length,
+          total: participants.length,
+        });
+      }
+    }
+
+    return results;
   }
 }

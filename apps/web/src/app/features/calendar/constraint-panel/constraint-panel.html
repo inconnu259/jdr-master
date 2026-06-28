@@ -46,12 +46,12 @@
   @if (form.value.type === 'PLAGE') {
     <div class="form-field">
       <label class="field-label" for="startDate">Date de début</label>
-      <input id="startDate" type="date" formControlName="startDate" class="date-input"
+      <input id="startDate" type="date" lang="fr" formControlName="startDate" class="date-input"
         [attr.min]="today" required />
     </div>
     <div class="form-field">
       <label class="field-label" for="endDate">Date de fin</label>
-      <input id="endDate" type="date" formControlName="endDate" class="date-input"
+      <input id="endDate" type="date" lang="fr" formControlName="endDate" class="date-input"
         [attr.min]="form.value.startDate || today" required />
     </div>
   }
@@ -60,7 +60,7 @@
   @if (form.value.type === 'RECURRENT') {
     <div class="form-field">
       <label class="field-label" for="expiresAt">Expire le</label>
-      <input id="expiresAt" type="date" formControlName="expiresAt" class="date-input"
+      <input id="expiresAt" type="date" lang="fr" formControlName="expiresAt" class="date-input"
         [attr.min]="today" required />
     </div>
   }

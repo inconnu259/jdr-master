@@ -1,0 +1,53 @@
+.agg-card {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  &.all-available {
+    border-left: 3px solid var(--color-available);
+  }
+
+  &.mixed {
+    border-left: 3px solid var(--mat-sys-tertiary, #7d5260);
+  }
+
+  &.has-refusal {
+    border-left: 3px solid var(--color-unavailable);
+    opacity: 0.7;
+  }
+}
+
+.agg-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.agg-card__date {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface);
+  text-transform: capitalize;
+}
+
+.agg-card__slot {
+  font-size: 0.75rem;
+  color: var(--mat-sys-on-surface-variant);
+  white-space: nowrap;
+}
+
+.agg-card__counts {
+  display: flex;
+  gap: 10px;
+  font-size: 0.8rem;
+  align-items: center;
+}
+
+.agg-card__total {
+  color: var(--mat-sys-on-surface-variant);
+  margin-left: auto;
+}

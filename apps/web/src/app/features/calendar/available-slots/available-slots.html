@@ -1,0 +1,33 @@
+<section class="available-slots">
+  <h2 class="available-slots__title">{{ theme.tone()['section.slots'] }}</h2>
+
+  @if (loading()) {
+    <div class="available-slots__loading" aria-busy="true" aria-label="Chargement en cours">
+      <span class="available-slots__skeleton" aria-hidden="true"></span>
+      <span class="available-slots__skeleton" aria-hidden="true"></span>
+      <span class="available-slots__skeleton" aria-hidden="true"></span>
+    </div>
+  }
+
+  @if (error()) {
+    <p class="available-slots__error" role="alert">{{ error() }}</p>
+  }
+
+  @if (!loading() && !error() && sortedSlots().length === 0) {
+    <p class="available-slots__empty">{{ theme.tone()['empty.no_slots'] }}</p>
+  }
+
+  @if (!loading() && !error() && sortedSlots().length > 0) {
+    <ul class="available-slots__list" aria-label="Créneaux disponibles">
+      @for (s of sortedSlots(); track s.date + s.slot) {
+        <li>
+          @if (isMjSlot(s)) {
+            <app-creneau-card [slot]="$any(s)" />
+          } @else {
+            <app-aggregated-creneau-card [slot]="$any(s)" />
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

@@ -42,6 +42,9 @@
             (keyup.space)="onCellClick(cell.date, 'FULL_DAY')"
           >
             <span class="day-number" aria-hidden="true">{{ cell.date.getDate() }}</span>
+            @if (heatmapByDate().get(dateKey(cell.date)); as gs) {
+              <span class="guild-dot" [attr.data-guild-status]="gs" aria-hidden="true"></span>
+            }
             <div class="segments">
               <span
                 class="segment"

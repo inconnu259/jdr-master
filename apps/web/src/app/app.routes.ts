@@ -22,6 +22,7 @@ export const routes: Routes = [
       { path: 'parties/new', component: PartieForm },
       { path: 'parties/:id', component: PartieDetail },
       { path: 'parties/:id/edit', component: PartieForm },
+      { path: 'parties/:id/calendar', component: CalendarView },
       { path: 'profile/calendar', component: CalendarView },
     ],
   },

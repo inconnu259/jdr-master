@@ -1,6 +1,6 @@
 ---
 baseline_commit: 144b52d653438330b7f17eeba5e1ced08f8e7674
-status: review
+status: done
 ---
 
 # Story 1.3 : Calendrier personnel — vue mois
@@ -54,6 +54,18 @@ So that I can visualize at a glance when I'm available or not.
 - [x] Task 2: Créer `computeDisplayStatus` + 7 tests unitaires (7/7 ✅)
 - [x] Task 3: Créer `CalendarMonthView` component (grille mois, segments colorés, navigation prev/next)
 - [x] Task 4: Créer `CalendarView` wrapper (mode=personal) + route `/profile/calendar` + lien dans Shell
+
+### Review Findings (2026-06-27)
+
+- [x] [Review][Decision→Patch] Positive inference supprimée — option 3 choisie : supprimer `isInCoveredPeriod` entièrement, seules les déclarations explicites comptent, UNKNOWN sinon. Mise à jour de `computeDisplayStatus` et du test "covered period".
+- [x] [Review][Patch] CalendarView.ngOnInit sans catch — échec API silencieux, le calendrier reste vide sans feedback utilisateur [`calendar-view.ts:21`] ✅ fixed
+- [x] [Review][Patch] `aria-hidden="true"` sur le toggle mode mobile visible — le groupe de toggles de la ligne 2 est caché aux AT alors qu'il est le seul contrôle visible sur mobile (<600px) [`shell.html:52`] ✅ fixed
+- [x] [Review][Patch] `setMonth()` overflow en navigation — déjà résolu dans le code commité (day=1 dans le constructeur Date) [`calendar-month-view.ts`] ✅ pre-resolved
+- [x] [Review][Defer] Signal input `mode` déclaré mais jamais consommé — stub pour Story 2.x, pas de bug actuel [`calendar-view.ts:14`] — deferred, Story 2.x
+- [x] [Review][Defer] Risque timezone PUNCTUAL — `new Date(d.startDate!)` peut décaler d'un jour si le backend émet un offset non-UTC (Prisma émet UTC aujourd'hui) [`compute-display-status.ts:14`] — deferred, pre-existing latent
+- [x] [Review][Defer] Pas de `takeUntilDestroyed` — requête HTTP en vol survit à la destruction du composant [`calendar-view.ts:21`] — deferred, pattern Angular acceptable
+- [x] [Review][Defer] 42 cellules fixes incluent des jours hors-mois navigables par virtual cursor AT [`calendar-month-view.ts`] — deferred, pre-existing
+- [x] [Review][Defer] `isToday` peut rater lors du passage à l'heure d'été (setHours(0,0,0,0) sur minuit inexistant) [`calendar-month-view.ts:25`] — deferred, 1 jour/an
 
 ## Dev Notes
 

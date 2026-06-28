@@ -1,6 +1,6 @@
 ---
 baseline_commit: 2517ac45b61a3633fb4bc7434174ff5c3b19f59a
-status: review
+status: done
 ---
 
 # Story 1.2 : Sélecteur de thème & ThemeToneService
@@ -12,6 +12,11 @@ status: review
 - [x] Task 3: Ajouter les 3 classes CSS de thème dans styles.scss
 - [x] Task 4: Créer ThemeSelector component (embarqué dans le menu Shell)
 - [x] Task 5: Initialiser ThemeToneService dans App au démarrage
+
+### Review Findings (2026-06-27)
+
+- [x] [Review][Patch] Clé `'nav.logout'` dupliquée dans `medieval-steampunk` — déjà résolu dans le code commité (une seule entrée `'Couper la vapeur'`) [`tones.ts`] ✅ pre-resolved
+- [x] [Review][Defer] `localStorage` appelé à l'instanciation — incompatible SSR si Angular Universal est activé plus tard [`theme-tone.service.ts:8`] — deferred, pas de SSR aujourd'hui
 
 ## Dev Agent Record
 

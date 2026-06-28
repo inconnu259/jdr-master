@@ -31,3 +31,48 @@
     background: transparent;
   }
 }
+
+/* ── Mode MJ : split layout ── */
+
+.calendar-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.mj-results-panel {
+  flex: 0 0 40%;
+  min-width: 280px;
+}
+
+.see-slots-btn {
+  display: none;
+  margin-top: 16px;
+}
+
+@media (max-width: 767px) {
+  .see-slots-btn {
+    display: block;
+    width: 100%;
+  }
+
+  .mj-results-panel {
+    margin-top: 24px;
+  }
+}
+
+@media (min-width: 768px) {
+  .calendar-page--mj {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+    padding: 24px 32px;
+  }
+
+  .calendar-page--mj .mj-results-panel {
+    position: sticky;
+    top: 16px;
+    align-self: flex-start;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+  }
+}

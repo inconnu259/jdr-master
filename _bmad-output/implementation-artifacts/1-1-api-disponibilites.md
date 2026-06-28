@@ -35,6 +35,21 @@ All 6 tasks completed. computeSlotStatus implemented as pure function (no DB acc
 on pre-loaded declarations. Unit tests cover 7 cases from Story AC. Migration calendar_p2 run
 via Docker. AvailabilityModule registered in AppModule.
 
+## Code Review (2026-06-27)
+
+### Patches appliqués
+- **1.1-A** (High) — DTO cross-field validation : `@ValidateIf(recurKind=RECURRING)` sur `dayOfWeek`, `@ValidateIf(recurKind=PUNCTUAL)` sur `startDate`/`endDate` dans `CreateAvailabilityDto` et `UpdateAvailabilityDto`
+- **1.1-B** (Medium) — `expiresAt` dans le passé rejeté : `BadRequestException` dans `create()` si `new Date(dto.expiresAt) <= new Date()`
+- **1.1-C** (Medium) — TOCTOU ownership : `update()` et `softDelete()` utilisent `updateMany({ where: { id, userId } })` pour atomicité ; `update()` refetch le record après le write
+- **1.1-D** (Medium) — URL API centralisée : `const API = API_BASE` importé de `apps/web/src/app/core/api-base.ts`
+
+### Deferred
+- **1.1-E** — Divergence positive inference frontend/backend : délibérée (Story 1.4 a supprimé `isInCoveredPeriod` côté frontend). À réévaluer à Epic 2 selon le comportement attendu des sondages.
+- **1.1-F** — Race soft-delete (expiresAt=now vs gt:now) : sub-milliseconde, PostgreSQL, négligeable
+- **1.1-G** — `SessionPoll.createdById` sans FK : hors scope (Epic 3)
+- **1.1-H** — `getActiveDeclarations([])` short-circuit : PostgreSQL gère `IN ()` correctement, guard ajouté défensivement
+- **1.1-I/J** — Date timezone edge cases : cohérent avec `toUTCMidnight()` frontend
+
 ## File List
 
 - packages/shared/src/index.ts (modifié)

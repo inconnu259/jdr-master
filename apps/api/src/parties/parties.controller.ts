@@ -15,6 +15,7 @@ import { CurrentUser } from '../common/current-user.decorator';
 import { PartiesService } from './parties.service';
 import { CreatePartieDto } from './dto/create-partie.dto';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
+import { GetHeatmapDto } from './dto/get-heatmap.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
 @UseGuards(AuthenticatedGuard) // toutes les routes /parties exigent une session
@@ -52,6 +53,15 @@ export class PartiesController {
     @Query() q: GetAvailableSlotsDto,
   ) {
     return this.parties.getAvailableSlots(id, user.id, q.weeks ?? 8);
+  }
+
+  @Get(':id/heatmap')
+  getHeatmap(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Query() q: GetHeatmapDto,
+  ) {
+    return this.parties.getHeatmap(id, user.id, q.from, q.to);
   }
 
   @Delete(':id/members/:userId')
