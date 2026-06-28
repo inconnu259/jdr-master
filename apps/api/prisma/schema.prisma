@@ -46,6 +46,9 @@ model Partie {
   mj           User       @relation("PartieMJ", fields: [mjId], references: [id], onDelete: Cascade)
   createdAt    DateTime   @default(now())
 
+  nextSessionDate DateTime? // Date confirmée de la prochaine séance (mise à jour par Epic 3)
+  nextSessionSlot DaySlot?  // Créneau confirmé
+
   memberships  Membership[]
   invitations  Invitation[]
   inviteLinks  InviteLink[]

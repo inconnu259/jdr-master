@@ -5,6 +5,34 @@
 .muted {
   color: var(--mat-sys-on-surface-variant, #666);
 }
+.scheduling-widget {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 0.5rem;
+
+  h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--mat-sys-on-surface-variant, #666);
+  }
+
+  .next-session-date {
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+  }
+
+  .muted {
+    margin: 0 0 0.75rem;
+  }
+
+  a[mat-flat-button] {
+    margin-top: 0.25rem;
+  }
+}
+
 .members {
   margin-top: 1rem;
   padding: 1rem;

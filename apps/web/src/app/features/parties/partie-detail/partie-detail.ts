@@ -11,11 +11,19 @@ import { MatListModule } from '@angular/material/list';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
 import type {
+  DaySlot,
   InviteLinkDto,
   PartieDto,
   PartieMemberDto,
   UserSearchResultDto,
 } from '@master-jdr/shared';
+
+const SLOT_LABELS: Record<DaySlot, string> = {
+  MORNING:   'Matin',
+  AFTERNOON: 'Après-midi',
+  EVENING:   'Soirée',
+  FULL_DAY:  'Journée',
+};
 import { AuthService } from '../../../core/auth/auth.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
@@ -57,6 +65,25 @@ export class PartieDetail implements OnInit {
 
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
   protected readonly isMj = computed(() => this.partie()?.mjId === this.auth.currentUser()?.id);
+
+  /** Libellé formaté de la prochaine séance, ou null si aucune date confirmée. */
+  protected readonly nextSessionLabel = computed(() => {
+    const p = this.partie();
+    if (!p?.nextSessionDate) return null;
+    try {
+      const d = new Date(p.nextSessionDate);
+      const date = new Intl.DateTimeFormat('fr-FR', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        timeZone: 'UTC',
+      }).format(d);
+      const slot = p.nextSessionSlot ? ` — ${SLOT_LABELS[p.nextSessionSlot]}` : '';
+      return `${date}${slot}`;
+    } catch {
+      return null;
+    }
+  });
 
   protected readonly system = gameSystemName;
   protected readonly kind = partieKindLabel;

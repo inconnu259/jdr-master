@@ -11,6 +11,24 @@
         <p class="muted">{{ theme.tone()['partie.no_description'] }}</p>
       }
 
+      <section class="scheduling-widget">
+        <h3>{{ theme.tone()['partie.scheduling_title'] }}</h3>
+        @if (nextSessionLabel()) {
+          <p class="next-session-date">{{ nextSessionLabel() }}</p>
+        } @else {
+          <p class="muted">{{ theme.tone()['partie.no_session'] }}</p>
+        }
+        @if (isMj()) {
+          <a mat-flat-button color="primary" [routerLink]="['/parties', p.id, 'calendar']">
+            {{ theme.tone()['cta.find_date'] }}
+          </a>
+        } @else {
+          <a mat-stroked-button [routerLink]="['/parties', p.id, 'calendar']">
+            {{ theme.tone()['cta.guild_calendar'] }}
+          </a>
+        }
+      </section>
+
       <section class="members">
         <h3>{{ theme.tone()['partie.members_title'] }} ({{ members().length }})</h3>
         @if (members().length === 0) {

@@ -29,6 +29,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.edit_title':   'Retranscrire le parchemin',
     'partie.save_btn':     'Inscrire',
     /* — partie-detail — */
+    'partie.scheduling_title': 'Prochaine séance',
+    'partie.no_session':       'Aucune séance convoquée. Consultez l\'oracle des créneaux.',
     'partie.members_title':   '⚔ Compagnons',
     'partie.no_members':      'Nulle âme pour l\'instant.',
     'partie.no_description':  'Ce grimoire est muet.',
@@ -45,6 +47,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.back_btn':        'Retour au grimoire',
     /* — calendrier & vote — */
     'cta.find_date':            'Consulter l\'oracle des créneaux',
+    'cta.guild_calendar':       'Voir le grimoire des disponibilités',
     'cta.launch_vote':          'Ouvrir le parchemin du vote',
     'cta.save_constraint':      'Inscrire dans le grimoire',
     'cta.send_reminder':        'Envoyer une missive',
@@ -84,6 +87,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.edit_title':   'Rebattre le sentier',
     'partie.save_btn':     'Planter',
     /* — partie-detail — */
+    'partie.scheduling_title': 'Prochaine clairière',
+    'partie.no_session':       'Aucune clairière réservée. L\'écureuil cherche encore.',
     'partie.members_title':   '🌿 Habitants',
     'partie.no_members':      'Aucun habitant de la clairière.',
     'partie.no_description':  'La forêt garde ses secrets.',
@@ -100,6 +105,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.back_btn':        'Rentrer dans la forêt',
     /* — calendrier & vote — */
     'cta.find_date':            'Envoyer l\'écureuil messager',
+    'cta.guild_calendar':       'Voir la forêt des disponibilités',
     'cta.launch_vote':          'Planter le bâton du vote',
     'cta.save_constraint':      'Marquer le territoire',
     'cta.send_reminder':        'Faire chanter les oiseaux',
@@ -139,6 +145,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.edit_title':   'Recalibrer la mission',
     'partie.save_btn':     'Valider',
     /* — partie-detail — */
+    'partie.scheduling_title': 'Prochaine mission',
+    'partie.no_session':       'Aucune mission planifiée. Interrogez l\'automate.',
     'partie.members_title':   '⚙ Équipage',
     'partie.no_members':      'Aucun mécanicien à bord.',
     'partie.no_description':  'Dossier technique vierge.',
@@ -155,6 +163,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.back_btn':        'Retour à l\'atelier',
     /* — calendrier & vote — */
     'cta.find_date':            'Interroger l\'automate des créneaux',
+    'cta.guild_calendar':       'Consulter le registre de la mission',
     'cta.launch_vote':          'Actionner le registre de vote',
     'cta.save_constraint':      'Enregistrer dans le registre de vapeur',
     'cta.send_reminder':        'Envoyer un message pneumatique',

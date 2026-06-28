@@ -18,6 +18,8 @@ describe('PartiesService (front)', () => {
     description: null,
     mjId: 'mj1',
     createdAt: '2026-01-01T00:00:00.000Z',
+    nextSessionDate: null,
+    nextSessionSlot: null,
   };
 
   beforeEach(() => {

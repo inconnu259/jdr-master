@@ -44,6 +44,8 @@ export interface PartieDto {
   description: string | null;
   mjId: string;
   createdAt: string;
+  nextSessionDate: string | null;
+  nextSessionSlot: DaySlot | null;
 }
 
 /** Statut d'une invitation in-app. */
