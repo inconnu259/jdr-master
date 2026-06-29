@@ -1,7 +1,7 @@
 import { Component, ElementRef, OnInit, ViewChild, computed, inject, input, signal } from '@angular/core';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatButtonModule } from '@angular/material/button';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import type { AggregatedSlotDto, AvailabilityDeclarationDto, AvailableSlotDto, CreateAvailabilityDto, DaySlot } from '@master-jdr/shared';
 import { AvailabilityService } from '../../../core/availability/availability.service';
 import { PollService } from '../../../core/poll/poll.service';
@@ -25,6 +25,7 @@ export class CalendarView implements OnInit {
   private readonly availabilitySvc = inject(AvailabilityService);
   private readonly pollSvc         = inject(PollService);
   private readonly route           = inject(ActivatedRoute);
+  private readonly router          = inject(Router);
 
   protected readonly declarations  = signal<AvailabilityDeclarationDto[]>([]);
   protected readonly loading       = signal(true);
@@ -47,11 +48,40 @@ export class CalendarView implements OnInit {
 
   protected readonly isMjMode = computed(() => this.partieId() !== null);
 
+  private static todayIso(): string {
+    return new Date().toISOString().substring(0, 10);
+  }
+  private static eightWeeksLaterIso(): string {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + 56);
+    return d.toISOString().substring(0, 10);
+  }
+
+  protected readonly fromDateStr = signal(CalendarView.todayIso());
+  protected readonly toDateStr   = signal(CalendarView.eightWeeksLaterIso());
+
+  private static readonly ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
   async ngOnInit(): Promise<void> {
-    const id = this.route.snapshot.paramMap.get('id');
+    const id        = this.route.snapshot.paramMap.get('id');
+    const fromParam = this.route.snapshot.queryParamMap.get('from');
+    const toParam   = this.route.snapshot.queryParamMap.get('to');
+    if (fromParam && CalendarView.ISO_DATE_RE.test(fromParam)) this.fromDateStr.set(fromParam);
+    if (toParam   && CalendarView.ISO_DATE_RE.test(toParam))   this.toDateStr.set(toParam);
+
     if (id) {
       this.partieId.set(id);
-      await Promise.all([this.loadDeclarations(), this.loadAvailableSlots(id), this.loadHeatmap(id)]);
+      await Promise.all([
+        this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { from: this.fromDateStr(), to: this.toDateStr() },
+          queryParamsHandling: 'merge',
+          replaceUrl: true,
+        }),
+        this.loadDeclarations(),
+        this.loadAvailableSlots(id, this.fromDateStr(), this.toDateStr()),
+        this.loadHeatmap(id),
+      ]);
     } else {
       await this.loadDeclarations();
     }
@@ -104,6 +134,32 @@ export class CalendarView implements OnInit {
     this.slotsPanel?.nativeElement.scrollIntoView({ behavior: 'smooth' });
   }
 
+  protected onFromChange(event: Event): void {
+    this.fromDateStr.set((event.target as HTMLInputElement).value);
+  }
+
+  protected onToChange(event: Event): void {
+    this.toDateStr.set((event.target as HTMLInputElement).value);
+  }
+
+  protected async onSearch(): Promise<void> {
+    const id = this.partieId();
+    if (!id) return;
+    const from = this.fromDateStr();
+    const to   = this.toDateStr();
+    if (from > to) {
+      this.slotsError.set('La date de début doit être avant ou égale à la date de fin.');
+      return;
+    }
+    this.slotsError.set(null);
+    await this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { from, to },
+      queryParamsHandling: 'merge',
+    });
+    await this.loadAvailableSlots(id, from, to);
+  }
+
   private async loadDeclarations(): Promise<void> {
     try {
       this.declarations.set(await this.availabilitySvc.getMyDeclarations());
@@ -130,10 +186,10 @@ export class CalendarView implements OnInit {
     }
   }
 
-  private async loadAvailableSlots(id: string): Promise<void> {
+  private async loadAvailableSlots(id: string, from?: string, to?: string): Promise<void> {
     this.slotsLoading.set(true);
     try {
-      this.availableSlots.set(await this.pollSvc.getAvailableSlots(id));
+      this.availableSlots.set(await this.pollSvc.getAvailableSlots(id, undefined, from, to));
     } catch {
       this.slotsError.set('Impossible de charger les créneaux.');
     } finally {

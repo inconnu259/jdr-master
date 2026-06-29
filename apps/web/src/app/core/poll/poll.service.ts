@@ -8,10 +8,15 @@ import { API_BASE } from '../api-base';
 export class PollService {
   private readonly http = inject(HttpClient);
 
-  getAvailableSlots(partieId: string, weeks?: number): Promise<(AvailableSlotDto | AggregatedSlotDto)[]> {
-    const url = weeks !== undefined
-      ? `${API_BASE}/parties/${partieId}/available-slots?weeks=${weeks}`
-      : `${API_BASE}/parties/${partieId}/available-slots`;
+  getAvailableSlots(partieId: string, weeks?: number, from?: string, to?: string): Promise<(AvailableSlotDto | AggregatedSlotDto)[]> {
+    let url: string;
+    if (from && to) {
+      url = `${API_BASE}/parties/${partieId}/available-slots?from=${from}&to=${to}`;
+    } else if (weeks !== undefined) {
+      url = `${API_BASE}/parties/${partieId}/available-slots?weeks=${weeks}`;
+    } else {
+      url = `${API_BASE}/parties/${partieId}/available-slots`;
+    }
     return firstValueFrom(this.http.get<(AvailableSlotDto | AggregatedSlotDto)[]>(url, { withCredentials: true }));
   }
 

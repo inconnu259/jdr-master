@@ -32,6 +32,36 @@
   }
 }
 
+/* ── Date range form ── */
+
+.date-range-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 0;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--mat-sys-outline-variant, #ccc);
+}
+
+.date-range-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+.date-input {
+  padding: 6px 8px;
+  border: 1px solid var(--mat-sys-outline, #999);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
 /* ── Mode MJ : split layout ── */
 
 .calendar-main {

@@ -33,4 +33,13 @@ describe('PollService', () => {
     req.flush([]);
     await promise;
   });
+
+  it('getAvailableSlots avec from/to appelle la bonne URL', async () => {
+    const promise = service.getAvailableSlots('p1', undefined, '2026-08-01', '2026-08-31');
+    const req = http.expectOne('http://localhost:3000/parties/p1/available-slots?from=2026-08-01&to=2026-08-31');
+    expect(req.request.method).toBe('GET');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush([]);
+    await promise;
+  });
 });

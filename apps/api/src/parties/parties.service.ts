@@ -133,6 +133,8 @@ export class PartiesService {
     partieId: string,
     userId: string,
     weeks: number,
+    from?: string,
+    to?: string,
   ): Promise<AvailableSlotDto[] | AggregatedSlotDto[]> {
     const partie = await this.prisma.partie.findUnique({
       where: { id: partieId },
@@ -149,28 +151,54 @@ export class PartiesService {
     const declarationsMap =
       await this.availability.getActiveDeclarations(participantIds);
 
+    if (!!from !== !!to) {
+      throw new BadRequestException('from and to must both be provided together');
+    }
+
     const SLOTS = ['MORNING', 'AFTERNOON', 'EVENING'] as const;
-    const now = new Date();
-    const todayUtcMidnight = Date.UTC(
-      now.getUTCFullYear(),
-      now.getUTCMonth(),
-      now.getUTCDate(),
-    );
     const all: AvailableSlotDto[] = [];
 
-    for (let d = 0; d < weeks * 7; d++) {
-      const dateUtc = new Date(todayUtcMidnight + d * 86_400_000);
-      for (const slot of SLOTS) {
-        const members = participants.map((p) => ({
-          userId: p.userId,
-          pseudo: p.pseudo,
-          status: this.availability.computeSlotStatus(
-            declarationsMap.get(p.userId) ?? [],
-            dateUtc,
-            slot,
-          ),
-        }));
-        all.push({ date: dateUtc.toISOString().substring(0, 10), slot, members });
+    if (from && to) {
+      const fromMs = new Date(from + 'T00:00:00Z').getTime();
+      const toMs   = new Date(to   + 'T00:00:00Z').getTime();
+      if (fromMs > toMs) throw new BadRequestException('from must be before or equal to to');
+      if (toMs - fromMs > 366 * 86_400_000) throw new BadRequestException('Date range cannot exceed 366 days');
+      for (let ms = fromMs; ms <= toMs; ms += 86_400_000) {
+        const dateUtc = new Date(ms);
+        for (const slot of SLOTS) {
+          const members = participants.map((p) => ({
+            userId: p.userId,
+            pseudo: p.pseudo,
+            status: this.availability.computeSlotStatus(
+              declarationsMap.get(p.userId) ?? [],
+              dateUtc,
+              slot,
+            ),
+          }));
+          all.push({ date: dateUtc.toISOString().substring(0, 10), slot, members });
+        }
+      }
+    } else {
+      const now = new Date();
+      const todayUtcMidnight = Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+      );
+      for (let d = 0; d < weeks * 7; d++) {
+        const dateUtc = new Date(todayUtcMidnight + d * 86_400_000);
+        for (const slot of SLOTS) {
+          const members = participants.map((p) => ({
+            userId: p.userId,
+            pseudo: p.pseudo,
+            status: this.availability.computeSlotStatus(
+              declarationsMap.get(p.userId) ?? [],
+              dateUtc,
+              slot,
+            ),
+          }));
+          all.push({ date: dateUtc.toISOString().substring(0, 10), slot, members });
+        }
       }
     }
 

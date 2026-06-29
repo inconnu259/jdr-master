@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsDateString, IsInt, IsOptional, Matches, Max, Min } from 'class-validator';
 
 export class GetAvailableSlotsDto {
   @IsOptional()
@@ -8,4 +8,14 @@ export class GetAvailableSlotsDto {
   @Min(1)
   @Max(52)
   weeks?: number;
+
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'from must be YYYY-MM-DD' })
+  from?: string;
+
+  @IsOptional()
+  @IsDateString({ strict: true })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'to must be YYYY-MM-DD' })
+  to?: string;
 }

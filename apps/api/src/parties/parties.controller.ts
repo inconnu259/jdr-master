@@ -52,7 +52,7 @@ export class PartiesController {
     @Param('id') id: string,
     @Query() q: GetAvailableSlotsDto,
   ) {
-    return this.parties.getAvailableSlots(id, user.id, q.weeks ?? 8);
+    return this.parties.getAvailableSlots(id, user.id, q.weeks ?? 8, q.from, q.to);
   }
 
   @Get(':id/heatmap')

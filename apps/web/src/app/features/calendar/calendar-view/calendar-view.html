@@ -40,6 +40,27 @@
 
   @if (isMjMode()) {
     <div class="mj-results-panel" #slotsPanel>
+      <div class="date-range-form">
+        <label class="date-range-label">
+          Du
+          <input
+            type="date"
+            class="date-input"
+            [value]="fromDateStr()"
+            (change)="onFromChange($event)"
+          />
+        </label>
+        <label class="date-range-label">
+          Au
+          <input
+            type="date"
+            class="date-input"
+            [value]="toDateStr()"
+            (change)="onToChange($event)"
+          />
+        </label>
+        <button mat-stroked-button (click)="onSearch()">Rechercher</button>
+      </div>
       <app-available-slots
         [slots]="availableSlots()"
         [loading]="slotsLoading()"

@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -18,6 +18,9 @@ describe('PartiesService', () => {
       findUnique: jest.Mock;
       findMany: jest.Mock;
       deleteMany: jest.Mock;
+    };
+    user: {
+      findUnique: jest.Mock;
     };
   };
   let avail: {
@@ -48,6 +51,9 @@ describe('PartiesService', () => {
         findUnique: jest.fn(),
         findMany: jest.fn(),
         deleteMany: jest.fn(),
+      },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(null),
       },
     };
     avail = {
@@ -229,7 +235,7 @@ describe('PartiesService', () => {
       expect(avail.getActiveDeclarations).toHaveBeenCalledWith(['u1']);
     });
 
-    it('renvoie au plus 5 créneaux triés par date croissante', async () => {
+    it('renvoie au plus 20 créneaux triés par date croissante', async () => {
       avail.computeSlotStatus.mockReturnValue('UNKNOWN');
 
       const results = (await service.getAvailableSlots(
@@ -237,7 +243,7 @@ describe('PartiesService', () => {
         'mj1',
         8,
       )) as AvailableSlotDto[];
-      expect(results.length).toBeLessThanOrEqual(5);
+      expect(results.length).toBeLessThanOrEqual(20);
       for (let i = 1; i < results.length; i++) {
         expect(results[i].date >= results[i - 1].date).toBe(true);
       }
@@ -290,6 +296,69 @@ describe('PartiesService', () => {
       await expect(
         service.getAvailableSlots('p1', 'stranger', 1),
       ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    describe('filtrage from/to', () => {
+      beforeEach(() => {
+        prisma.partie.findUnique.mockResolvedValue(partie);
+        prisma.membership.findMany.mockResolvedValue(members);
+        avail.getActiveDeclarations.mockResolvedValue(
+          new Map([['u1', []], ['u2', []]]),
+        );
+        avail.computeSlotStatus.mockReturnValue('AVAILABLE');
+      });
+
+      it('restreint les résultats à la plage from/to', async () => {
+        const from = '2026-08-01';
+        const to   = '2026-08-03';
+        const results = (await service.getAvailableSlots('p1', 'mj1', 8, from, to)) as AvailableSlotDto[];
+        expect(results.length).toBeGreaterThan(0);
+        expect(results.every(r => r.date >= from && r.date <= to)).toBe(true);
+      });
+
+      it('ne retourne aucun créneau hors de la plage from/to', async () => {
+        const from = '2026-08-01';
+        const to   = '2026-08-01';
+        const results = (await service.getAvailableSlots('p1', 'mj1', 8, from, to)) as AvailableSlotDto[];
+        expect(results.every(r => r.date === '2026-08-01')).toBe(true);
+        expect(results.some(r => r.date !== '2026-08-01')).toBe(false);
+      });
+
+      it('lève BadRequestException si from > to', async () => {
+        await expect(
+          service.getAvailableSlots('p1', 'mj1', 8, '2026-08-31', '2026-08-01'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it('sans from/to, appel avec weeks fonctionne (rétrocompat)', async () => {
+        const results = (await service.getAvailableSlots('p1', 'mj1', 1)) as AvailableSlotDto[];
+        expect(avail.getActiveDeclarations).toHaveBeenCalledTimes(1);
+        expect(results.length).toBeGreaterThanOrEqual(0);
+      });
+
+      it('accepte from === to (plage d\'un seul jour)', async () => {
+        const results = (await service.getAvailableSlots('p1', 'mj1', 8, '2026-08-15', '2026-08-15')) as AvailableSlotDto[];
+        expect(results.every(r => r.date === '2026-08-15')).toBe(true);
+        expect(results.length).toBe(3);
+      });
+
+      it('lève BadRequestException si seulement from est fourni', async () => {
+        await expect(
+          service.getAvailableSlots('p1', 'mj1', 8, '2026-08-01', undefined),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it('lève BadRequestException si seulement to est fourni', async () => {
+        await expect(
+          service.getAvailableSlots('p1', 'mj1', 8, undefined, '2026-08-31'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
+
+      it('lève BadRequestException si la plage dépasse 366 jours', async () => {
+        await expect(
+          service.getAvailableSlots('p1', 'mj1', 8, '2024-01-01', '2025-12-31'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      });
     });
   });
 });
