@@ -46,7 +46,7 @@ export class CalendarView implements OnInit {
   protected readonly slotsError     = signal<string | null>(null);
   protected readonly heatmap        = signal<AggregatedSlotDto[]>([]);
 
-  protected readonly isMjMode = computed(() => this.partieId() !== null);
+  protected readonly isMjMode = computed(() => this.mode() === 'mj');
 
   private static todayIso(): string {
     return new Date().toISOString().substring(0, 10);
