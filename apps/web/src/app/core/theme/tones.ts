@@ -65,6 +65,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'empty.no_poll':            'Aucun vote en cours dans ce grimoire.',
     'success.poll_created':     'Vote ouvert. Les membres ont été avertis.',
     'success.date_chosen':      'La date est gravée dans le grimoire.',
+    'poll.status_title':        'Vote en cours',
+    'poll.vote_pending':        'Vote de date en cours — parchemin en attente',
+    'success.vote_cast':        'Réponse inscrite dans le grimoire.',
+    'cta.confirm_votes':        'Sceller mes réponses',
+    'poll.vote_closed':         'Ce vote est clos. L\'oracle a tranché.',
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -123,6 +128,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'empty.no_poll':            'Aucun vote en cours dans la forêt.',
     'success.poll_created':     'L\'écureuil a transmis l\'appel du vote.',
     'success.date_chosen':      'La clairière de la séance est choisie.',
+    'poll.status_title':        'Vote en cours dans la forêt',
+    'poll.vote_pending':        'L\'écureuil attend ta réponse au vote',
+    'success.vote_cast':        'L\'écureuil a transmis ta réponse.',
+    'cta.confirm_votes':        'Transmettre mes réponses',
+    'poll.vote_closed':         'Le vote de la forêt est terminé.',
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -181,5 +191,10 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'empty.no_poll':            'Aucun registre de vote actif.',
     'success.poll_created':     'Registre de vote activé. Message pneumatique envoyé.',
     'success.date_chosen':      'L\'engrenage est verrouillé. Séance confirmée.',
+    'poll.status_title':        'Registre de vote actif',
+    'poll.vote_pending':        'Registre de vote — réponse requise',
+    'success.vote_cast':        'Réponse enregistrée dans le registre.',
+    'cta.confirm_votes':        'Valider dans le registre',
+    'poll.vote_closed':         'Registre de vote verrouillé.',
   },
 };

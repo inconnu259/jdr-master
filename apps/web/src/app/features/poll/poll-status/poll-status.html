@@ -1,0 +1,14 @@
+<div class="poll-status">
+  <h3 class="poll-status__title">{{ theme.tone()['poll.status_title'] }}</h3>
+  @if (poll().scenarioRef) {
+    <p class="poll-status__scenario">{{ poll().scenarioRef }}</p>
+  }
+  <ul class="poll-status__options">
+    @for (opt of poll().options; track opt.id) {
+      <li class="poll-status__option">
+        {{ formatDate(opt.date) }} — {{ SLOT_LABELS[opt.slot] }}
+        <span class="poll-status__votes">{{ opt.votes.length }} vote(s)</span>
+      </li>
+    }
+  </ul>
+</div>

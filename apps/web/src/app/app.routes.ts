@@ -23,6 +23,7 @@ export const routes: Routes = [
       { path: 'parties/:id', component: PartieDetail },
       { path: 'parties/:id/edit', component: PartieForm },
       { path: 'parties/:id/calendar', component: CalendarView, data: { mode: 'mj' } },
+      { path: 'parties/:id/guild-calendar', component: CalendarView, data: { mode: 'personal' } },
       { path: 'profile/calendar', component: CalendarView, data: { mode: 'personal' } },
     ],
   },

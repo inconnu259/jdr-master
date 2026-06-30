@@ -2,18 +2,21 @@ import { Component, ElementRef, OnInit, ViewChild, computed, inject, input, sign
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { ActivatedRoute, Router } from '@angular/router';
-import type { AggregatedSlotDto, AvailabilityDeclarationDto, AvailableSlotDto, CreateAvailabilityDto, DaySlot } from '@master-jdr/shared';
+import type { AggregatedSlotDto, AvailabilityDeclarationDto, AvailableSlotDto, CreateAvailabilityDto, DaySlot, SessionPollDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../../../core/availability/availability.service';
 import { PollService } from '../../../core/poll/poll.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
 import { CalendarWeekView } from '../calendar-week-view/calendar-week-view';
 import { ConstraintPanel } from '../constraint-panel/constraint-panel';
 import { AvailableSlotsPanel } from '../available-slots/available-slots';
+import { PollCreationComponent } from '../../poll/poll-creation/poll-creation';
+import { PollStatusPanel } from '../../poll/poll-status/poll-status';
 
 @Component({
   selector: 'app-calendar-view',
   standalone: true,
-  imports: [CalendarMonthView, CalendarWeekView, ConstraintPanel, MatButtonToggleModule, MatButtonModule, AvailableSlotsPanel],
+  imports: [CalendarMonthView, CalendarWeekView, ConstraintPanel, MatButtonToggleModule, MatButtonModule, AvailableSlotsPanel, PollCreationComponent, PollStatusPanel],
   templateUrl: './calendar-view.html',
   styleUrl: './calendar-view.scss',
 })
@@ -26,6 +29,7 @@ export class CalendarView implements OnInit {
   private readonly pollSvc         = inject(PollService);
   private readonly route           = inject(ActivatedRoute);
   private readonly router          = inject(Router);
+  protected readonly theme         = inject(ThemeToneService);
 
   protected readonly declarations  = signal<AvailabilityDeclarationDto[]>([]);
   protected readonly loading       = signal(true);
@@ -47,6 +51,13 @@ export class CalendarView implements OnInit {
   protected readonly heatmap        = signal<AggregatedSlotDto[]>([]);
 
   protected readonly isMjMode = computed(() => this.mode() === 'mj');
+
+  protected readonly activePoll    = signal<SessionPollDto | null>(null);
+  protected readonly pollPanelOpen = signal(false);
+
+  protected readonly mjSlots = computed(() =>
+    this.availableSlots().filter((s): s is AvailableSlotDto => 'members' in s),
+  );
 
   private static todayIso(): string {
     return new Date().toISOString().substring(0, 10);
@@ -82,6 +93,9 @@ export class CalendarView implements OnInit {
         this.loadAvailableSlots(id, this.fromDateStr(), this.toDateStr()),
         this.loadHeatmap(id),
       ]);
+      if (this.isMjMode()) {
+        this.activePoll.set(await this.pollSvc.getCurrentPoll(id).catch(() => null));
+      }
     } else {
       await this.loadDeclarations();
     }
@@ -116,6 +130,26 @@ export class CalendarView implements OnInit {
   protected closePanel(): void {
     this.panelOpen.set(false);
     this.pendingDto.set(null);
+  }
+
+  protected openPollPanel(): void  { this.pollPanelOpen.set(true); }
+  protected closePollPanel(): void { this.pollPanelOpen.set(false); }
+
+  protected onPollCreated(poll: SessionPollDto): void {
+    this.activePoll.set(poll);
+    this.pollPanelOpen.set(false);
+  }
+
+  protected async onClosePoll(): Promise<void> {
+    const poll = this.activePoll();
+    const id   = this.partieId();
+    if (!poll || !id) return;
+    try {
+      await this.pollSvc.closePoll(id, poll.id);
+      this.activePoll.set(null);
+    } catch {
+      this.error.set('Impossible de clôturer le vote. Réessayez.');
+    }
   }
 
   protected async onPanelSaved(): Promise<void> {

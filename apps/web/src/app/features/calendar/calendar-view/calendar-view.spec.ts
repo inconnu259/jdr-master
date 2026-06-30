@@ -29,6 +29,7 @@ function makePollService() {
   return {
     getAvailableSlots: vi.fn().mockResolvedValue([]),
     getHeatmap:        vi.fn().mockResolvedValue([]),
+    getCurrentPoll:    vi.fn().mockResolvedValue(null),
   };
 }
 

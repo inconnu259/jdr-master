@@ -1,0 +1,47 @@
+.poll-status {
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  margin-top: 1rem;
+
+  &__title {
+    margin: 0 0 0.5rem;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.7;
+  }
+
+  &__scenario {
+    font-size: 0.875rem;
+    opacity: 0.8;
+    margin: 0 0 0.5rem;
+    font-style: italic;
+  }
+
+  &__options {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  &__option {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.875rem;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--color-border);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  &__votes {
+    opacity: 0.6;
+    font-size: 0.8rem;
+  }
+}

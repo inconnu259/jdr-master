@@ -22,7 +22,7 @@ class PollOptionInput {
 export class CreatePollDto {
   @IsArray()
   @ArrayMinSize(2)
-  @ArrayMaxSize(4)
+  @ArrayMaxSize(40)
   @ValidateNested({ each: true })
   @Type(() => PollOptionInput)
   options!: PollOptionInput[];

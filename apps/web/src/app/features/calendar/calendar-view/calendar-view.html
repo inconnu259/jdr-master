@@ -36,10 +36,59 @@
         Voir les créneaux calculés
       </button>
     }
+    @if (!isMjMode() && partieId()) {
+      <button class="see-slots-btn" mat-stroked-button (click)="scrollToSlots()">
+        Voir les créneaux de la guilde
+      </button>
+    }
   </div>
 
   @if (isMjMode()) {
     <div class="mj-results-panel" #slotsPanel>
+      <div class="poll-section">
+        @if (!activePoll()) {
+          <button mat-flat-button color="primary" (click)="openPollPanel()">
+            {{ theme.tone()['cta.launch_vote'] }}
+          </button>
+        } @else {
+          <app-poll-status [poll]="activePoll()!" />
+          <button mat-stroked-button color="warn" (click)="onClosePoll()">
+            Clôturer le vote
+          </button>
+        }
+      </div>
+
+      <div class="date-range-form">
+        <label class="date-range-label">
+          Du
+          <input
+            type="date"
+            class="date-input"
+            [value]="fromDateStr()"
+            (change)="onFromChange($event)"
+          />
+        </label>
+        <label class="date-range-label">
+          Au
+          <input
+            type="date"
+            class="date-input"
+            [value]="toDateStr()"
+            (change)="onToChange($event)"
+          />
+        </label>
+        <button mat-stroked-button (click)="onSearch()">Rechercher</button>
+      </div>
+      <app-available-slots
+        [slots]="availableSlots()"
+        [loading]="slotsLoading()"
+        [error]="slotsError()"
+      />
+    </div>
+  }
+
+  @if (!isMjMode() && partieId()) {
+    <div class="guild-slots-panel" #slotsPanel>
       <div class="date-range-form">
         <label class="date-range-label">
           Du
@@ -69,6 +118,15 @@
     </div>
   }
 </div>
+
+@if (pollPanelOpen()) {
+  <app-poll-creation
+    [partieId]="partieId()!"
+    [preselectedSlots]="mjSlots()"
+    (created)="onPollCreated($event)"
+    (cancelled)="closePollPanel()"
+  />
+}
 
 @if (panelOpen()) {
   <div class="constraint-backdrop" (click)="closePanel()" aria-hidden="true"></div>

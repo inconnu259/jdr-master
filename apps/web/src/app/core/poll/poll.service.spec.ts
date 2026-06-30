@@ -42,4 +42,24 @@ describe('PollService', () => {
     req.flush([]);
     await promise;
   });
+
+  it('createPoll appelle POST /parties/p1/poll avec le DTO', async () => {
+    const dto = {
+      options: [
+        { date: '2026-08-01', slot: 'MORNING' as const },
+        { date: '2026-08-08', slot: 'AFTERNOON' as const },
+      ],
+    };
+    const fakePoll = {
+      id: 'poll1', partieId: 'p1', status: 'OPEN' as const, scenarioRef: null,
+      expiresAt: null, chosenDate: null, chosenSlot: null, options: [],
+    };
+    const promise = service.createPoll('p1', dto);
+    const req = http.expectOne('http://localhost:3000/parties/p1/poll');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(dto);
+    req.flush(fakePoll);
+    const result = await promise;
+    expect(result.id).toBe('poll1');
+  });
 });
