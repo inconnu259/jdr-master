@@ -214,3 +214,15 @@ export interface PollVoteDto {
   pseudo: string;
   answer: VoteAnswer;
 }
+
+/** Payload de création d'un vote de date (POST /parties/:id/poll). */
+export interface CreatePollDto {
+  options: { date: string; slot: DaySlot }[];
+  scenarioRef?: string | null;
+}
+
+/** Payload pour voter sur une option (POST /parties/:id/poll/:pollId/vote). */
+export interface CastVoteDto {
+  optionId: string;
+  answer: VoteAnswer;
+}

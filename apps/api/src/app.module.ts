@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { PartiesModule } from './parties/parties.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { AvailabilityModule } from './availability/availability.module';
+import { PollModule } from './poll/poll.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AvailabilityModule } from './availability/availability.module';
     PartiesModule,
     InvitationsModule,
     AvailabilityModule,
+    PollModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
