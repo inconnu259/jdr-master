@@ -640,12 +640,12 @@ describe('AvailabilityService.computeSlotStatus', () => {
     );
   });
 
-  it('date dans la période couverte, pas de déclaration sur le slot → AVAILABLE (inférence)', () => {
+  it('date dans la période couverte, slot non couvert → UNKNOWN', () => {
     const decls = [
       makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'EVENING' }),
     ];
     expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe(
-      'AVAILABLE',
+      'UNKNOWN',
     );
   });
 
@@ -695,7 +695,16 @@ describe('AvailabilityService.computeSlotStatus', () => {
     );
   });
 
-  it('déclaration MORNING UNAVAILABLE ne couvre pas AFTERNOON', () => {
+  it('déclaration MORNING AVAILABLE ne doit pas rendre AFTERNOON AVAILABLE (régression bug FULL_DAY→MORNING)', () => {
+    const decls = [
+      makeDecl({ kind: 'AVAILABLE', recurKind: 'PUNCTUAL', dayOfWeek: null, slot: 'MORNING', startDate: WED, endDate: WED }),
+    ];
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('AVAILABLE');
+    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe('UNKNOWN');
+    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe('UNKNOWN');
+  });
+
+  it('déclaration MORNING UNAVAILABLE ne couvre pas AFTERNOON → UNKNOWN', () => {
     const decls = [
       makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'MORNING' }),
     ];
@@ -703,7 +712,52 @@ describe('AvailabilityService.computeSlotStatus', () => {
       'UNAVAILABLE',
     );
     expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe(
-      'AVAILABLE',
+      'UNKNOWN',
     );
+  });
+
+  it('déclaration FULL_DAY AVAILABLE couvre tous les slots', () => {
+    const decls = [
+      makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'FULL_DAY' }),
+    ];
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('AVAILABLE');
+    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe('AVAILABLE');
+    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe('AVAILABLE');
+  });
+
+  it('RECURRING MORNING : inférence cross-day sur même slot → AVAILABLE', () => {
+    // Jeudi n'est pas le jour de la semaine de la déclaration (mercredi=3)
+    // mais le jeudi est dans la période couverte ET le slot correspond → AVAILABLE via isInCoveredPeriod
+    const decls = [
+      makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'MORNING' }),
+    ];
+    expect(service.computeSlotStatus(decls, THU, 'MORNING', NOW)).toBe('AVAILABLE');
+  });
+
+  it('RECURRING MORNING : inférence cross-day bloquée sur slot différent → UNKNOWN', () => {
+    // Même période couverte, mais AFTERNOON ne correspond pas au slot MORNING → pas d'inférence
+    const decls = [
+      makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'MORNING' }),
+    ];
+    expect(service.computeSlotStatus(decls, THU, 'AFTERNOON', NOW)).toBe('UNKNOWN');
+    expect(service.computeSlotStatus(decls, THU, 'EVENING', NOW)).toBe('UNKNOWN');
+  });
+
+  it('PUNCTUAL sur plage de dates : slot couvert dans la plage → AVAILABLE, hors plage → UNKNOWN', () => {
+    const inRange  = new Date('2026-07-07T00:00:00Z'); // dans la plage
+    const outRange = new Date('2026-07-11T00:00:00Z'); // hors plage
+    const decls = [
+      makeDecl({
+        kind: 'AVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'MORNING',
+        startDate: new Date('2026-07-05T00:00:00Z'),
+        endDate: new Date('2026-07-10T00:00:00Z'),
+      }),
+    ];
+    expect(service.computeSlotStatus(decls, inRange,  'MORNING',   NOW)).toBe('AVAILABLE');
+    expect(service.computeSlotStatus(decls, inRange,  'AFTERNOON', NOW)).toBe('UNKNOWN');
+    expect(service.computeSlotStatus(decls, outRange, 'MORNING',   NOW)).toBe('UNKNOWN');
   });
 });

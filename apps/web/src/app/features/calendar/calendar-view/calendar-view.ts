@@ -122,12 +122,23 @@ export class CalendarView implements OnInit {
     this.panelOpen.set(false);
     this.pendingDto.set(null);
     await this.loadDeclarations();
+    await this.refreshMjPanels();
   }
 
   protected async onPanelDeleted(): Promise<void> {
     this.panelOpen.set(false);
     this.pendingDto.set(null);
     await this.loadDeclarations();
+    await this.refreshMjPanels();
+  }
+
+  private async refreshMjPanels(): Promise<void> {
+    const id = this.partieId();
+    if (!id) return;
+    await Promise.all([
+      this.loadAvailableSlots(id, this.fromDateStr(), this.toDateStr()),
+      this.loadHeatmap(id),
+    ]);
   }
 
   protected scrollToSlots(): void {
@@ -154,7 +165,7 @@ export class CalendarView implements OnInit {
     this.slotsError.set(null);
     await this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { from, to },
+      queryParams: { from, to, weeks: null },
       queryParamsHandling: 'merge',
     });
     await this.loadAvailableSlots(id, from, to);
@@ -172,13 +183,20 @@ export class CalendarView implements OnInit {
 
   private async loadHeatmap(id: string, centerDate: Date = new Date()): Promise<void> {
     // Calcule exactement la grille du mois affiché (même logique que buildMonth : 6×7 = 42 jours)
-    const firstOfMonth = new Date(centerDate.getFullYear(), centerDate.getMonth(), 1);
-    const dow = firstOfMonth.getDay();
+    // centerDate est un Date UTC-midnight (émis par displayDateChange) → utiliser getUTC*
+    const year  = centerDate.getUTCFullYear();
+    const month = centerDate.getUTCMonth();
+    const firstOfMonth = new Date(Date.UTC(year, month, 1));
+    const dow = firstOfMonth.getUTCDay();
     const startOffset = dow === 0 ? 6 : dow - 1;
-    const gridStart = new Date(firstOfMonth.getFullYear(), firstOfMonth.getMonth(), 1 - startOffset);
-    const gridEnd   = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 41);
+    const gridStart = new Date(Date.UTC(year, month, 1 - startOffset));
+    const gridEnd   = new Date(Date.UTC(
+      gridStart.getUTCFullYear(),
+      gridStart.getUTCMonth(),
+      gridStart.getUTCDate() + 41,
+    ));
     const toIso = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
     try {
       this.heatmap.set(await this.pollSvc.getHeatmap(id, toIso(gridStart), toIso(gridEnd)));
     } catch {

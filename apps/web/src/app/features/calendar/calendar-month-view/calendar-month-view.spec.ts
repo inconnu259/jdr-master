@@ -1,6 +1,8 @@
 import '@angular/compiler';
-import { describe, expect, it } from 'vitest';
-import { buildMonth } from './calendar-month-view';
+import { TestBed } from '@angular/core/testing';
+import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
+import { describe, expect, it, vi } from 'vitest';
+import { CalendarMonthView, buildMonth } from './calendar-month-view';
 
 describe('buildMonth', () => {
   it('returns 6 weeks of 7 days', () => {
@@ -56,5 +58,55 @@ describe('buildMonth', () => {
     const weeks = buildMonth(display, [], null);
     const currentMonthCells = weeks.flat().filter((c) => c.isCurrentMonth);
     expect(currentMonthCells).toHaveLength(30); // juin a 30 jours
+  });
+});
+
+describe('CalendarMonthView — navigation UTC-midnight (Q8)', () => {
+  function isUtcMidnight(d: Date): boolean {
+    return d.getTime() % 86_400_000 === 0;
+  }
+
+  async function createMonthView() {
+    await TestBed.configureTestingModule({
+      imports: [CalendarMonthView],
+      providers: [provideAnimationsAsync()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CalendarMonthView);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('goToToday() émet un Date UTC-midnight', async () => {
+    const fixture = await createMonthView();
+    const emitted: Date[] = [];
+    fixture.componentInstance.displayDateChange.subscribe((d) => emitted.push(d));
+    fixture.componentInstance.goToToday();
+    expect(emitted).toHaveLength(1);
+    expect(isUtcMidnight(emitted[0])).toBe(true);
+    const today = new Date();
+    expect(emitted[0].getUTCDate()).toBe(today.getUTCDate());
+    expect(emitted[0].getUTCMonth()).toBe(today.getUTCMonth());
+  });
+
+  it('nextMonth() émet un Date UTC-midnight au 1er du mois suivant', async () => {
+    const fixture = await createMonthView();
+    const emitted: Date[] = [];
+    fixture.componentInstance.displayDateChange.subscribe((d) => emitted.push(d));
+    fixture.componentInstance.nextMonth();
+    expect(emitted).toHaveLength(1);
+    expect(isUtcMidnight(emitted[0])).toBe(true);
+    expect(emitted[0].getUTCDate()).toBe(1);
+  });
+
+  it('prevMonth() émet un Date UTC-midnight au 1er du mois précédent', async () => {
+    const fixture = await createMonthView();
+    const emitted: Date[] = [];
+    fixture.componentInstance.displayDateChange.subscribe((d) => emitted.push(d));
+    fixture.componentInstance.prevMonth();
+    expect(emitted).toHaveLength(1);
+    expect(isUtcMidnight(emitted[0])).toBe(true);
+    expect(emitted[0].getUTCDate()).toBe(1);
   });
 });

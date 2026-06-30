@@ -202,6 +202,13 @@ export class PartiesService {
       }
     }
 
+    // Q1: hard-exclude tout créneau où le MJ est UNAVAILABLE (prérequis organisateur)
+    const mjId = partie.mjId;
+    const filtered = all.filter((s) => {
+      const mj = s.members.find((m) => m.userId === mjId);
+      return mj?.status !== 'UNAVAILABLE';
+    });
+
     // Priorité : 0=tous dispos, 1=mixte sans refus, 2=tous inconnus, 3=au moins un refus
     const priority = (s: AvailableSlotDto): number => {
       const hasUnavail = s.members.some((m) => m.status === 'UNAVAILABLE');
@@ -215,7 +222,7 @@ export class PartiesService {
     const slotIdx = (s: AvailableSlotDto) =>
       SLOTS.indexOf(s.slot as (typeof SLOTS)[number]);
 
-    const sorted = [...all].sort((a, b) => {
+    const sorted = [...filtered].sort((a, b) => {
       const pa = priority(a);
       const pb = priority(b);
       if (pa !== pb) return pa - pb;

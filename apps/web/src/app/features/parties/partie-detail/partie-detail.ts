@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -66,6 +66,12 @@ export class PartieDetail implements OnInit {
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
   protected readonly isMj = computed(() => this.partie()?.mjId === this.auth.currentUser()?.id);
 
+  constructor() {
+    effect(() => {
+      if (this.isMj()) void this.loadLinks();
+    });
+  }
+
   /** Libellé formaté de la prochaine séance, ou null si aucune date confirmée. */
   protected readonly nextSessionLabel = computed(() => {
     const p = this.partie();
@@ -77,7 +83,7 @@ export class PartieDetail implements OnInit {
         day: 'numeric',
         month: 'long',
         timeZone: 'UTC',
-      }).format(d);
+      }).format(d).toLocaleLowerCase('fr-FR');
       const slot = p.nextSessionSlot ? ` — ${SLOT_LABELS[p.nextSessionSlot]}` : '';
       return `${date}${slot}`;
     } catch {
@@ -93,7 +99,7 @@ export class PartieDetail implements OnInit {
     if (!id) return;
     this.partie.set(await this.parties.get(id));
     await this.loadMembers();
-    if (this.isMj()) await this.loadLinks();
+    // loadLinks() déclenché réactivement par effect() dans le constructeur
   }
 
   async runSearch(): Promise<void> {

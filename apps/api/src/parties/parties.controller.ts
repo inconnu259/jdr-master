@@ -18,6 +18,8 @@ import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
 import { GetHeatmapDto } from './dto/get-heatmap.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
+const DEFAULT_WEEKS = 8;
+
 @UseGuards(AuthenticatedGuard) // toutes les routes /parties exigent une session
 @Controller('parties')
 export class PartiesController {
@@ -52,7 +54,7 @@ export class PartiesController {
     @Param('id') id: string,
     @Query() q: GetAvailableSlotsDto,
   ) {
-    return this.parties.getAvailableSlots(id, user.id, q.weeks ?? 8, q.from, q.to);
+    return this.parties.getAvailableSlots(id, user.id, q.weeks ?? DEFAULT_WEEKS, q.from, q.to);
   }
 
   @Get(':id/heatmap')

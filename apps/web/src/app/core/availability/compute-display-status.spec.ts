@@ -85,11 +85,40 @@ describe('computeDisplayStatus', () => {
     expect(computeDisplayStatus(NEXT_WED, 'EVENING', [d], NOW)).toBe('UNAVAILABLE');
   });
 
-  it('FULL_DAY declaration matches any specific slot', () => {
+  it('FULL_DAY UNAVAILABLE matches any specific slot', () => {
     const fullDay = decl({ slot: 'FULL_DAY', kind: 'UNAVAILABLE' });
     expect(computeDisplayStatus(WED, 'MORNING', [fullDay], NOW)).toBe('UNAVAILABLE');
     expect(computeDisplayStatus(WED, 'AFTERNOON', [fullDay], NOW)).toBe('UNAVAILABLE');
     expect(computeDisplayStatus(WED, 'EVENING', [fullDay], NOW)).toBe('UNAVAILABLE');
+  });
+
+  it('FULL_DAY AVAILABLE covers all specific slots', () => {
+    const fullDay = decl({ slot: 'FULL_DAY', kind: 'AVAILABLE' });
+    expect(computeDisplayStatus(WED, 'MORNING', [fullDay], NOW)).toBe('AVAILABLE');
+    expect(computeDisplayStatus(WED, 'AFTERNOON', [fullDay], NOW)).toBe('AVAILABLE');
+    expect(computeDisplayStatus(WED, 'EVENING', [fullDay], NOW)).toBe('AVAILABLE');
+  });
+
+  it('PUNCTUAL MORNING AVAILABLE : AFTERNOON et EVENING restent UNKNOWN (pas de cross-slot)', () => {
+    const morning = decl({
+      kind: 'AVAILABLE',
+      recurKind: 'PUNCTUAL',
+      dayOfWeek: null,
+      slot: 'MORNING',
+      startDate: '2026-07-01',
+      endDate: '2026-07-01',
+      expiresAt: '2026-07-01T23:59:59Z',
+    });
+    expect(computeDisplayStatus(WED, 'MORNING',   [morning], NOW)).toBe('AVAILABLE');
+    expect(computeDisplayStatus(WED, 'AFTERNOON', [morning], NOW)).toBe('UNKNOWN');
+    expect(computeDisplayStatus(WED, 'EVENING',   [morning], NOW)).toBe('UNKNOWN');
+  });
+
+  it('déclaration MORNING : ne couvre pas AFTERNOON sur le même jour RECURRING', () => {
+    const morningDecl = decl({ slot: 'MORNING', kind: 'UNAVAILABLE' });
+    expect(computeDisplayStatus(WED, 'MORNING',   [morningDecl], NOW)).toBe('UNAVAILABLE');
+    expect(computeDisplayStatus(WED, 'AFTERNOON', [morningDecl], NOW)).toBe('UNKNOWN');
+    expect(computeDisplayStatus(WED, 'EVENING',   [morningDecl], NOW)).toBe('UNKNOWN');
   });
 
   // ── Tests modèle SPLIT : endDate tronque la série ────────────────────────

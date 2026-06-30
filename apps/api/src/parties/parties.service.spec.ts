@@ -1,8 +1,11 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from './parties.service';
+import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
 
 describe('PartiesService', () => {
   let service: PartiesService;
@@ -191,8 +194,10 @@ describe('PartiesService', () => {
       expect(avail.getActiveDeclarations).toHaveBeenCalledWith(['u1', 'u2']);
     });
 
-    it('exclut un créneau si un membre est UNAVAILABLE', async () => {
+    it('les créneaux avec membres non-MJ UNAVAILABLE sont classés en priorité 3 (fins de liste)', async () => {
       // Premier appel (u1 sur le 1er slot) = UNAVAILABLE ; tous les suivants = UNKNOWN
+      // Avec 1 semaine = 21 créneaux, le créneau UNAVAILABLE (priorité 3) arrive en 21ème
+      // position → exclu par slice(0, 20). Non hard-exclu : seulement de-priorisé.
       avail.computeSlotStatus
         .mockReturnValueOnce('UNAVAILABLE')
         .mockReturnValue('UNKNOWN');
@@ -202,7 +207,8 @@ describe('PartiesService', () => {
         'mj1',
         1,
       )) as AvailableSlotDto[];
-      // Aucun créneau retourné ne doit contenir un membre UNAVAILABLE
+      expect(results.length).toBeLessThanOrEqual(20);
+      // Le créneau UNAVAILABLE ne figure pas dans les 20 premiers (relégué en priorité 3)
       expect(
         results.every((r) =>
           r.members.every((m) => m.status !== 'UNAVAILABLE'),
@@ -235,18 +241,70 @@ describe('PartiesService', () => {
       expect(avail.getActiveDeclarations).toHaveBeenCalledWith(['u1']);
     });
 
-    it('renvoie au plus 20 créneaux triés par date croissante', async () => {
+    it('renvoie au plus 20 créneaux (limite de résultats)', async () => {
       avail.computeSlotStatus.mockReturnValue('UNKNOWN');
-
-      const results = (await service.getAvailableSlots(
-        'p1',
-        'mj1',
-        8,
-      )) as AvailableSlotDto[];
+      const results = await service.getAvailableSlots('p1', 'mj1', 8);
       expect(results.length).toBeLessThanOrEqual(20);
+    });
+
+    it('trie par priorité : AVAILABLE avant UNKNOWN, UNAVAILABLE en dernier', async () => {
+      // Alterne AVAILABLE / UNAVAILABLE par participant pour créer des priorités mixtes
+      // (MJ absent du mock → seuls u1/u2 sont participants)
+      let callCount = 0;
+      avail.computeSlotStatus.mockImplementation(() => {
+        callCount++;
+        // Tous les slots homogènes sauf les 2 premiers : u1=AVAILABLE, u2=UNAVAILABLE
+        if (callCount === 1) return 'AVAILABLE';
+        if (callCount === 2) return 'UNAVAILABLE';
+        return 'AVAILABLE';
+      });
+      const results = (await service.getAvailableSlots('p1', 'mj1', 1)) as AvailableSlotDto[];
+      expect(results.length).toBeGreaterThan(0);
+      // Les 20 premiers résultats ne doivent PAS commencer par le créneau mixte (priorité 1)
+      // avant un créneau all-AVAILABLE (priorité 0) — vérifier que le tri est respecté
       for (let i = 1; i < results.length; i++) {
-        expect(results[i].date >= results[i - 1].date).toBe(true);
+        const pa = results[i - 1].members.some((m) => m.status === 'UNAVAILABLE') ? 3
+          : results[i - 1].members.every((m) => m.status === 'AVAILABLE') ? 0
+          : results[i - 1].members.some((m) => m.status === 'AVAILABLE') ? 1 : 2;
+        const pb = results[i].members.some((m) => m.status === 'UNAVAILABLE') ? 3
+          : results[i].members.every((m) => m.status === 'AVAILABLE') ? 0
+          : results[i].members.some((m) => m.status === 'AVAILABLE') ? 1 : 2;
+        expect(pa).toBeLessThanOrEqual(pb);
       }
+    });
+
+    describe('Q1 : exclusion hard MJ UNAVAILABLE', () => {
+      const mjUser = { id: 'mj1', pseudo: 'MJ' };
+      const memberU1 = { userId: 'u1', user: { id: 'u1', pseudo: 'Alice' } };
+
+      beforeEach(() => {
+        prisma.partie.findUnique.mockResolvedValue(partie);
+        prisma.user.findUnique.mockResolvedValue(mjUser);
+        prisma.membership.findMany.mockResolvedValue([memberU1]);
+        avail.getActiveDeclarations.mockResolvedValue(
+          new Map([['mj1', []], ['u1', []]]),
+        );
+      });
+
+      it('hard-exclut tout créneau où le MJ est UNAVAILABLE', async () => {
+        avail.computeSlotStatus.mockReturnValue('UNAVAILABLE');
+        const results = await service.getAvailableSlots('p1', 'mj1', 1);
+        expect(results).toHaveLength(0);
+      });
+
+      it('conserve un créneau où le MJ est AVAILABLE et un joueur est UNAVAILABLE (Q2B)', async () => {
+        // mj1 → AVAILABLE, u1 → UNAVAILABLE sur le premier créneau
+        let callIdx = 0;
+        avail.computeSlotStatus.mockImplementation(() => {
+          // Participants = [mj1, u1] — alterne par participant
+          const isEven = callIdx++ % 2 === 0;
+          return isEven ? 'AVAILABLE' : 'UNAVAILABLE'; // mj=AVAILABLE, u1=UNAVAILABLE
+        });
+        const results = (await service.getAvailableSlots('p1', 'u1', 1)) as AggregatedSlotDto[];
+        expect(results.length).toBeGreaterThan(0);
+        // Au moins un créneau doit avoir unavailable > 0 (Q2B)
+        expect(results.some((r) => r.unavailable > 0)).toBe(true);
+      });
     });
 
     it('renvoie AvailableSlotDto[] (avec members) pour le MJ', async () => {
@@ -360,5 +418,25 @@ describe('PartiesService', () => {
         ).rejects.toBeInstanceOf(BadRequestException);
       });
     });
+  });
+});
+
+describe('GetAvailableSlotsDto', () => {
+  it('accepte weeks=16 (valeur max)', async () => {
+    const dto = plainToInstance(GetAvailableSlotsDto, { weeks: '16' });
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejette weeks=17 (dépasse le max)', async () => {
+    const dto = plainToInstance(GetAvailableSlotsDto, { weeks: '17' });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'weeks')).toBe(true);
+  });
+
+  it('accepte weeks absent (optionnel)', async () => {
+    const dto = plainToInstance(GetAvailableSlotsDto, {});
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(0);
   });
 });

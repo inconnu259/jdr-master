@@ -174,22 +174,25 @@ export class CalendarMonthView {
 
   goToToday(): void {
     const today = new Date();
-    this.displayDate.set(today);
-    this.displayDateChange.emit(today);
+    this.displayDate.set(today); // local-midnight pour buildMonth
+    const utc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    this.displayDateChange.emit(utc);
   }
 
   prevMonth(): void {
     const d = this.displayDate();
-    const next = new Date(d.getFullYear(), d.getMonth() - 1, 1);
+    const next = new Date(d.getFullYear(), d.getMonth() - 1, 1); // local pour buildMonth
     this.displayDate.set(next);
-    this.displayDateChange.emit(next);
+    const utc = new Date(Date.UTC(next.getFullYear(), next.getMonth(), 1));
+    this.displayDateChange.emit(utc);
   }
 
   nextMonth(): void {
     const d = this.displayDate();
-    const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    const next = new Date(d.getFullYear(), d.getMonth() + 1, 1); // local pour buildMonth
     this.displayDate.set(next);
-    this.displayDateChange.emit(next);
+    const utc = new Date(Date.UTC(next.getFullYear(), next.getMonth(), 1));
+    this.displayDateChange.emit(utc);
   }
 
   protected onCellClick(date: Date, slot: DaySlot): void {

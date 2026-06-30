@@ -451,7 +451,7 @@ export class AvailabilityService {
     ) {
       return 'AVAILABLE';
     }
-    if (this.isInCoveredPeriod(active, date, now)) {
+    if (this.isInCoveredPeriod(active, date, slot, now)) {
       return 'AVAILABLE';
     }
     return 'UNKNOWN';
@@ -621,9 +621,11 @@ export class AvailabilityService {
   private isInCoveredPeriod(
     active: DeclarationLike[],
     date: Date,
+    slot: DaySlot,
     _now: Date,
   ): boolean {
     return active.some((d) => {
+      if (!this.slotMatches(d.slot, slot)) return false;
       if (d.recurKind === 'RECURRING') {
         // Couvre [startDate, min(endDate, expiresAt)] — startDate = premier jour déclaré
         if (d.startDate && date < d.startDate) return false;

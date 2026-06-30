@@ -6,7 +6,7 @@ export class GetAvailableSlotsDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(52)
+  @Max(16)
   weeks?: number;
 
   @IsOptional()
