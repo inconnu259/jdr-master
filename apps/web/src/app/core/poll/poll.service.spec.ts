@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
+import type { CastVoteDto, ChooseDateDto } from '@master-jdr/shared';
 import { PollService } from './poll.service';
 
 describe('PollService', () => {
@@ -40,6 +41,26 @@ describe('PollService', () => {
     expect(req.request.method).toBe('GET');
     expect(req.request.withCredentials).toBe(true);
     req.flush([]);
+    await promise;
+  });
+
+  it('castVote appelle POST /parties/p1/poll/poll1/vote avec le DTO', async () => {
+    const dto: CastVoteDto = { optionId: 'opt1', answer: 'YES' };
+    const promise = service.castVote('p1', 'poll1', dto);
+    const req = http.expectOne('http://localhost:3000/parties/p1/poll/poll1/vote');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(dto);
+    req.flush(null);
+    await promise;
+  });
+
+  it('chooseDate appelle PATCH /parties/p1/poll/poll1/choose avec le DTO', async () => {
+    const dto: ChooseDateDto = { optionId: 'opt1' };
+    const promise = service.chooseDate('p1', 'poll1', dto);
+    const req = http.expectOne('http://localhost:3000/parties/p1/poll/poll1/choose');
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual(dto);
+    req.flush(null);
     await promise;
   });
 

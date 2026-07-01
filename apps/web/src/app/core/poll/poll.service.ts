@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { AggregatedSlotDto, AvailableSlotDto, CreatePollDto, SessionPollDto } from '@master-jdr/shared';
+import type { AggregatedSlotDto, AvailableSlotDto, CastVoteDto, ChooseDateDto, CreatePollDto, SessionPollDto } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
 @Injectable({ providedIn: 'root' })
@@ -52,6 +52,26 @@ export class PollService {
     return firstValueFrom(
       this.http.delete<void>(
         `${API_BASE}/parties/${partieId}/poll/${pollId}`,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  castVote(partieId: string, pollId: string, dto: CastVoteDto): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>(
+        `${API_BASE}/parties/${partieId}/poll/${pollId}/vote`,
+        dto,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  chooseDate(partieId: string, pollId: string, dto: ChooseDateDto): Promise<void> {
+    return firstValueFrom(
+      this.http.patch<void>(
+        `${API_BASE}/parties/${partieId}/poll/${pollId}/choose`,
+        dto,
         { withCredentials: true },
       ),
     );

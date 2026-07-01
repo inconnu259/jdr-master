@@ -5,9 +5,26 @@
   }
   <ul class="poll-status__options">
     @for (opt of poll().options; track opt.id) {
-      <li class="poll-status__option">
-        {{ formatDate(opt.date) }} — {{ SLOT_LABELS[opt.slot] }}
-        <span class="poll-status__votes">{{ opt.votes.length }} vote(s)</span>
+      <li class="poll-status__option" [class.poll-status__option--all-yes]="isAllYes(opt)">
+        <div class="poll-status__option-header">
+          <span class="poll-status__date">{{ formatDate(opt.date) }} — {{ SLOT_LABELS[opt.slot] }}</span>
+          <span class="poll-status__breakdown">
+            ✅ {{ countByAnswer(opt, 'YES') }} · ❌ {{ countByAnswer(opt, 'NO') }} · ❔ {{ countByAnswer(opt, 'MAYBE') }}
+          </span>
+        </div>
+        @if (opt.votes.length > 0) {
+          <ul class="poll-status__voters" aria-label="Votants">
+            @for (vote of opt.votes; track vote.userId) {
+              <li class="poll-status__voter">
+                <span aria-hidden="true">⚔</span> {{ vote.pseudo }}
+                <span class="poll-status__answer">{{ ANSWER_ICONS[vote.answer] }} {{ ANSWER_LABELS[vote.answer] }}</span>
+              </li>
+            }
+          </ul>
+        }
+        <button mat-stroked-button color="primary" [disabled]="busy() || dialogPending()" (click)="onChooseClick(opt)">
+          {{ theme.tone()['cta.choose_date'] }}
+        </button>
       </li>
     }
   </ul>

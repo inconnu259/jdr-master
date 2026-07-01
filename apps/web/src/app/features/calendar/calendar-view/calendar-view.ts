@@ -1,6 +1,7 @@
 import { Component, ElementRef, OnInit, ViewChild, computed, inject, input, signal } from '@angular/core';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatButtonModule } from '@angular/material/button';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router } from '@angular/router';
 import type { AggregatedSlotDto, AvailabilityDeclarationDto, AvailableSlotDto, CreateAvailabilityDto, DaySlot, SessionPollDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../../../core/availability/availability.service';
@@ -12,11 +13,12 @@ import { ConstraintPanel } from '../constraint-panel/constraint-panel';
 import { AvailableSlotsPanel } from '../available-slots/available-slots';
 import { PollCreationComponent } from '../../poll/poll-creation/poll-creation';
 import { PollStatusPanel } from '../../poll/poll-status/poll-status';
+import { PollResponseComponent } from '../../poll/poll-response/poll-response';
 
 @Component({
   selector: 'app-calendar-view',
   standalone: true,
-  imports: [CalendarMonthView, CalendarWeekView, ConstraintPanel, MatButtonToggleModule, MatButtonModule, AvailableSlotsPanel, PollCreationComponent, PollStatusPanel],
+  imports: [CalendarMonthView, CalendarWeekView, ConstraintPanel, MatButtonToggleModule, MatButtonModule, AvailableSlotsPanel, PollCreationComponent, PollStatusPanel, PollResponseComponent],
   templateUrl: './calendar-view.html',
   styleUrl: './calendar-view.scss',
 })
@@ -29,6 +31,7 @@ export class CalendarView implements OnInit {
   private readonly pollSvc         = inject(PollService);
   private readonly route           = inject(ActivatedRoute);
   private readonly router          = inject(Router);
+  private readonly snack           = inject(MatSnackBar);
   protected readonly theme         = inject(ThemeToneService);
 
   protected readonly declarations  = signal<AvailabilityDeclarationDto[]>([]);
@@ -54,6 +57,8 @@ export class CalendarView implements OnInit {
 
   protected readonly activePoll    = signal<SessionPollDto | null>(null);
   protected readonly pollPanelOpen = signal(false);
+  /** true pendant qu'une requête choose/close est en cours — évite une double action concurrente (double-clic, choix + annulation simultanés). */
+  protected readonly pollActionPending = signal(false);
 
   protected readonly mjSlots = computed(() =>
     this.availableSlots().filter((s): s is AvailableSlotDto => 'members' in s),
@@ -93,9 +98,7 @@ export class CalendarView implements OnInit {
         this.loadAvailableSlots(id, this.fromDateStr(), this.toDateStr()),
         this.loadHeatmap(id),
       ]);
-      if (this.isMjMode()) {
-        this.activePoll.set(await this.pollSvc.getCurrentPoll(id).catch(() => null));
-      }
+      this.activePoll.set(await this.pollSvc.getCurrentPoll(id).catch(() => null));
     } else {
       await this.loadDeclarations();
     }
@@ -140,15 +143,40 @@ export class CalendarView implements OnInit {
     this.pollPanelOpen.set(false);
   }
 
+  protected onPollResponded(poll: SessionPollDto): void {
+    this.activePoll.set(poll);
+  }
+
   protected async onClosePoll(): Promise<void> {
     const poll = this.activePoll();
     const id   = this.partieId();
-    if (!poll || !id) return;
+    if (!poll || !id || this.pollActionPending()) return;
+    this.pollActionPending.set(true);
+    this.error.set(null);
     try {
       await this.pollSvc.closePoll(id, poll.id);
       this.activePoll.set(null);
     } catch {
       this.error.set('Impossible de clôturer le vote. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
+  protected async onChooseDate(optionId: string): Promise<void> {
+    const poll = this.activePoll();
+    const id   = this.partieId();
+    if (!poll || !id || this.pollActionPending()) return;
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      await this.pollSvc.chooseDate(id, poll.id, { optionId });
+      this.snack.open(this.theme.tone()['success.date_chosen'], undefined, { duration: 3000 });
+      this.activePoll.set(null);
+    } catch {
+      this.error.set('Impossible de choisir cette date. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
     }
   }
 

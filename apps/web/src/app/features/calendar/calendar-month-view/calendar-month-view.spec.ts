@@ -31,14 +31,16 @@ describe('buildMonth', () => {
   });
 
   // AC3 : isToday ne doit PAS dépendre d'un snapshot statique — chaque appel de buildMonth
-  // recalcule le jour courant. Ce test vérifie que le mois précédent ne contient aucun isToday.
+  // recalcule le jour courant. Ce test vérifie que le mois précédent ne contient aucun isToday
+  // parmi ses propres jours (les cellules de débordement d'un autre mois peuvent légitimement
+  // inclure aujourd'hui et ne sont donc pas concernées par cette assertion).
   it('does not mark any cell as isToday in a past month', () => {
     const lastMonth = new Date();
     lastMonth.setMonth(lastMonth.getMonth() - 1);
     const display = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
     const weeks = buildMonth(display, [], null);
-    const allCells = weeks.flat();
-    expect(allCells.every((c) => !c.isToday)).toBe(true);
+    const currentMonthCells = weeks.flat().filter((c) => c.isCurrentMonth);
+    expect(currentMonthCells.every((c) => !c.isToday)).toBe(true);
   });
 
   it('marks cells of previous and next months as isCurrentMonth = false', () => {

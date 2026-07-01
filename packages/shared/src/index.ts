@@ -226,3 +226,8 @@ export interface CastVoteDto {
   optionId: string;
   answer: VoteAnswer;
 }
+
+/** Payload pour choisir la date finale d'un vote (PATCH /parties/:id/poll/:pollId/choose). */
+export interface ChooseDateDto {
+  optionId: string;
+}

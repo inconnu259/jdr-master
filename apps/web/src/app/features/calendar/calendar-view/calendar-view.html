@@ -51,9 +51,9 @@
             {{ theme.tone()['cta.launch_vote'] }}
           </button>
         } @else {
-          <app-poll-status [poll]="activePoll()!" />
-          <button mat-stroked-button color="warn" (click)="onClosePoll()">
-            Clôturer le vote
+          <app-poll-status [poll]="activePoll()!" [busy]="pollActionPending()" (chosen)="onChooseDate($event)" />
+          <button mat-stroked-button color="warn" [disabled]="pollActionPending()" (click)="onClosePoll()">
+            {{ theme.tone()['cta.cancel_poll'] }}
           </button>
         }
       </div>
@@ -89,6 +89,13 @@
 
   @if (!isMjMode() && partieId()) {
     <div class="guild-slots-panel" #slotsPanel>
+      @if (activePoll()) {
+        <app-poll-response
+          [partieId]="partieId()!"
+          [poll]="activePoll()!"
+          (responded)="onPollResponded($event)"
+        />
+      }
       <div class="date-range-form">
         <label class="date-range-label">
           Du

@@ -49,6 +49,17 @@
             <mat-card-title>{{ p.name }}</mat-card-title>
             <mat-card-subtitle>{{ system(p.gameSystemId) }} · {{ kind(p.kind) }}</mat-card-subtitle>
           </mat-card-header>
+          @if (openPolls().has(p.id)) {
+            <mat-card-content class="poll-badge">
+              <a
+                mat-stroked-button
+                [routerLink]="['/parties', p.id, 'guild-calendar']"
+                (click)="$event.stopPropagation()"
+              >
+                {{ theme.tone()['poll.vote_pending'] }}
+              </a>
+            </mat-card-content>
+          }
         </mat-card>
       }
     </div>

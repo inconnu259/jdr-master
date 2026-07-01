@@ -30,14 +30,50 @@
 
   &__option {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: 0.35rem;
     font-size: 0.875rem;
-    padding: 0.25rem 0;
+    padding: 0.5rem 0;
     border-bottom: 1px solid var(--color-border);
 
     &:last-child {
       border-bottom: none;
     }
+
+    &--all-yes {
+      background-color: var(--mat-sys-primary-container, #d0e8ff);
+      border-radius: 4px;
+      padding-left: 0.5rem;
+      padding-right: 0.5rem;
+    }
+  }
+
+  &__option-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  &__breakdown {
+    opacity: 0.8;
+    font-size: 0.8rem;
+  }
+
+  &__voters {
+    list-style: none;
+    margin: 0.25rem 0;
+    padding: 0;
+    font-size: 0.8rem;
+  }
+
+  &__voter {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.1rem 0;
+  }
+
+  &__answer {
+    opacity: 0.8;
   }
 
   &__votes {

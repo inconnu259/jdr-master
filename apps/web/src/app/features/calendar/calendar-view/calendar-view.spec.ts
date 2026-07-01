@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { vi } from 'vitest';
 import { CalendarView } from './calendar-view';
 import { ActivatedRoute } from '@angular/router';
@@ -30,7 +31,13 @@ function makePollService() {
     getAvailableSlots: vi.fn().mockResolvedValue([]),
     getHeatmap:        vi.fn().mockResolvedValue([]),
     getCurrentPoll:    vi.fn().mockResolvedValue(null),
+    chooseDate:        vi.fn().mockResolvedValue(undefined),
+    closePoll:         vi.fn().mockResolvedValue(undefined),
   };
+}
+
+function makeSnackBar() {
+  return { open: vi.fn() };
 }
 
 async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
@@ -38,6 +45,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
 
   const availabilitySvc = makeAvailabilityService();
   const pollSvc = makePollService();
+  const snack = makeSnackBar();
 
   await TestBed.configureTestingModule({
     imports: [CalendarView],
@@ -47,6 +55,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
       { provide: ActivatedRoute,      useValue: makeActivatedRoute(opts.partieId) },
       { provide: AvailabilityService, useValue: availabilitySvc },
       { provide: PollService,         useValue: pollSvc },
+      { provide: MatSnackBar,         useValue: snack },
     ],
   }).compileComponents();
 
@@ -55,7 +64,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges(); // D5: second cycle pour les bindings asynchrones
-  return { fixture, pollSvc, availabilitySvc };
+  return { fixture, pollSvc, availabilitySvc, snack };
 }
 
 describe('CalendarView — signal mode', () => {
@@ -128,5 +137,71 @@ describe('CalendarView — rafraîchissement après sauvegarde/suppression (Bug 
     await (fixture.componentInstance as any).onPanelDeleted();
 
     expect(pollSvc.getAvailableSlots).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Choix de la date finale (Story 3.4) ──────────────────────────────────
+
+describe('CalendarView — onChooseDate()', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function setActivePoll(comp: any) {
+    comp.activePoll.set({
+      id: 'poll1', partieId: 'partie-1', status: 'OPEN', scenarioRef: null,
+      expiresAt: null, chosenDate: null, chosenSlot: null, options: [],
+    });
+  }
+
+  it('onChooseDate() appelle pollSvc.chooseDate, vide activePoll et affiche un toast', async () => {
+    const { fixture, pollSvc, snack } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const comp = fixture.componentInstance as any;
+    setActivePoll(comp);
+
+    await comp.onChooseDate('opt1');
+
+    expect(pollSvc.chooseDate).toHaveBeenCalledWith('partie-1', 'poll1', { optionId: 'opt1' });
+    expect(comp.activePoll()).toBeNull();
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.mock.calls[0][2]).toEqual({ duration: 3000 });
+  });
+
+  it('onChooseDate() en échec → activePoll conservé, error affichée, pas de toast', async () => {
+    const { fixture, pollSvc, snack } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    pollSvc.chooseDate.mockRejectedValueOnce(new Error('network'));
+    const comp = fixture.componentInstance as any;
+    setActivePoll(comp);
+
+    await comp.onChooseDate('opt1');
+
+    expect(comp.activePoll()).not.toBeNull();
+    expect(comp.error()).toBe('Impossible de choisir cette date. Réessayez.');
+    expect(snack.open).not.toHaveBeenCalled();
+  });
+
+  it('deux appels concurrents à onChooseDate() → un seul appel réel à pollSvc.chooseDate (garde pollActionPending)', async () => {
+    const { fixture, pollSvc } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const comp = fixture.componentInstance as any;
+    setActivePoll(comp);
+
+    const p1 = comp.onChooseDate('opt1');
+    const p2 = comp.onChooseDate('opt1');
+    await Promise.all([p1, p2]);
+
+    expect(pollSvc.chooseDate).toHaveBeenCalledTimes(1);
+  });
+
+  it('onClosePoll() bloqué pendant qu\'un onChooseDate() est en cours', async () => {
+    const { fixture, pollSvc } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const comp = fixture.componentInstance as any;
+    setActivePoll(comp);
+    let resolveChoose!: () => void;
+    pollSvc.chooseDate.mockReturnValueOnce(new Promise<void>((resolve) => { resolveChoose = resolve; }));
+
+    const choosePromise = comp.onChooseDate('opt1');
+    await comp.onClosePoll();
+    expect(pollSvc.closePoll).not.toHaveBeenCalled();
+
+    resolveChoose();
+    await choosePromise;
   });
 });
