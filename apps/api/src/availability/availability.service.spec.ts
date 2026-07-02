@@ -697,11 +697,24 @@ describe('AvailabilityService.computeSlotStatus', () => {
 
   it('déclaration MORNING AVAILABLE ne doit pas rendre AFTERNOON AVAILABLE (régression bug FULL_DAY→MORNING)', () => {
     const decls = [
-      makeDecl({ kind: 'AVAILABLE', recurKind: 'PUNCTUAL', dayOfWeek: null, slot: 'MORNING', startDate: WED, endDate: WED }),
+      makeDecl({
+        kind: 'AVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'MORNING',
+        startDate: WED,
+        endDate: WED,
+      }),
     ];
-    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('AVAILABLE');
-    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe('UNKNOWN');
-    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe('UNKNOWN');
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe(
+      'AVAILABLE',
+    );
+    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe(
+      'UNKNOWN',
+    );
+    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe(
+      'UNKNOWN',
+    );
   });
 
   it('déclaration MORNING UNAVAILABLE ne couvre pas AFTERNOON → UNKNOWN', () => {
@@ -720,9 +733,15 @@ describe('AvailabilityService.computeSlotStatus', () => {
     const decls = [
       makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'FULL_DAY' }),
     ];
-    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('AVAILABLE');
-    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe('AVAILABLE');
-    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe('AVAILABLE');
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe(
+      'AVAILABLE',
+    );
+    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe(
+      'AVAILABLE',
+    );
+    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe(
+      'AVAILABLE',
+    );
   });
 
   it('RECURRING MORNING : inférence cross-day sur même slot → AVAILABLE', () => {
@@ -731,7 +750,9 @@ describe('AvailabilityService.computeSlotStatus', () => {
     const decls = [
       makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'MORNING' }),
     ];
-    expect(service.computeSlotStatus(decls, THU, 'MORNING', NOW)).toBe('AVAILABLE');
+    expect(service.computeSlotStatus(decls, THU, 'MORNING', NOW)).toBe(
+      'AVAILABLE',
+    );
   });
 
   it('RECURRING MORNING : inférence cross-day bloquée sur slot différent → UNKNOWN', () => {
@@ -739,12 +760,16 @@ describe('AvailabilityService.computeSlotStatus', () => {
     const decls = [
       makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'MORNING' }),
     ];
-    expect(service.computeSlotStatus(decls, THU, 'AFTERNOON', NOW)).toBe('UNKNOWN');
-    expect(service.computeSlotStatus(decls, THU, 'EVENING', NOW)).toBe('UNKNOWN');
+    expect(service.computeSlotStatus(decls, THU, 'AFTERNOON', NOW)).toBe(
+      'UNKNOWN',
+    );
+    expect(service.computeSlotStatus(decls, THU, 'EVENING', NOW)).toBe(
+      'UNKNOWN',
+    );
   });
 
   it('PUNCTUAL sur plage de dates : slot couvert dans la plage → AVAILABLE, hors plage → UNKNOWN', () => {
-    const inRange  = new Date('2026-07-07T00:00:00Z'); // dans la plage
+    const inRange = new Date('2026-07-07T00:00:00Z'); // dans la plage
     const outRange = new Date('2026-07-11T00:00:00Z'); // hors plage
     const decls = [
       makeDecl({
@@ -756,8 +781,14 @@ describe('AvailabilityService.computeSlotStatus', () => {
         endDate: new Date('2026-07-10T00:00:00Z'),
       }),
     ];
-    expect(service.computeSlotStatus(decls, inRange,  'MORNING',   NOW)).toBe('AVAILABLE');
-    expect(service.computeSlotStatus(decls, inRange,  'AFTERNOON', NOW)).toBe('UNKNOWN');
-    expect(service.computeSlotStatus(decls, outRange, 'MORNING',   NOW)).toBe('UNKNOWN');
+    expect(service.computeSlotStatus(decls, inRange, 'MORNING', NOW)).toBe(
+      'AVAILABLE',
+    );
+    expect(service.computeSlotStatus(decls, inRange, 'AFTERNOON', NOW)).toBe(
+      'UNKNOWN',
+    );
+    expect(service.computeSlotStatus(decls, outRange, 'MORNING', NOW)).toBe(
+      'UNKNOWN',
+    );
   });
 });

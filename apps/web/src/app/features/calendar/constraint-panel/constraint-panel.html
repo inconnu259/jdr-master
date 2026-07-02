@@ -15,7 +15,7 @@
 
   <!-- Créneau -->
   <div class="form-field">
-    <label class="field-label">Créneau</label>
+    <span class="field-label">Créneau</span>
     <mat-button-toggle-group formControlName="slot" aria-label="Créneau" class="slot-toggle">
       <mat-button-toggle value="MORNING">Matin</mat-button-toggle>
       <mat-button-toggle value="AFTERNOON">AM</mat-button-toggle>
@@ -34,8 +34,8 @@
 
   <!-- Type de contrainte -->
   <div class="form-field">
-    <label class="field-label">Type</label>
-    <mat-radio-group formControlName="type" class="type-radio-group">
+    <span class="field-label">Type</span>
+    <mat-radio-group formControlName="type" aria-label="Type" class="type-radio-group">
       <mat-radio-button value="PONCTUEL">Ce créneau uniquement</mat-radio-button>
       <mat-radio-button value="RECURRENT">Récurrent (chaque semaine)</mat-radio-button>
       <mat-radio-button value="PLAGE">Plage de dates</mat-radio-button>

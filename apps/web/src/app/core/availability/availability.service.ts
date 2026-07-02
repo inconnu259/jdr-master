@@ -2,7 +2,15 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { catchError, throwError } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
-import type { AvailabilityDeclarationDto, AvailKind, ConflictInfo, CreateAvailabilityDto, CreateAvailabilityResult, DaySlot, UpdateAvailabilityDto } from '@master-jdr/shared';
+import type {
+  AvailabilityDeclarationDto,
+  AvailKind,
+  ConflictInfo,
+  CreateAvailabilityDto,
+  CreateAvailabilityResult,
+  DaySlot,
+  UpdateAvailabilityDto,
+} from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
 export { ConflictInfo };
@@ -52,9 +60,14 @@ export class AvailabilityService {
     );
   }
 
-  updateDeclaration(id: string, dto: Partial<UpdateAvailabilityDto>): Promise<AvailabilityDeclarationDto> {
+  updateDeclaration(
+    id: string,
+    dto: Partial<UpdateAvailabilityDto>,
+  ): Promise<AvailabilityDeclarationDto> {
     return firstValueFrom(
-      this.http.patch<AvailabilityDeclarationDto>(`${API}/availability/${id}`, dto, { withCredentials: true }),
+      this.http.patch<AvailabilityDeclarationDto>(`${API}/availability/${id}`, dto, {
+        withCredentials: true,
+      }),
     );
   }
 
@@ -66,7 +79,9 @@ export class AvailabilityService {
 
   splitOccurrence(id: string, body: SplitOccurrenceBody): Promise<SplitOccurrenceResult> {
     return firstValueFrom(
-      this.http.post<SplitOccurrenceResult>(`${API}/availability/${id}/split`, body, { withCredentials: true }),
+      this.http.post<SplitOccurrenceResult>(`${API}/availability/${id}/split`, body, {
+        withCredentials: true,
+      }),
     );
   }
 }

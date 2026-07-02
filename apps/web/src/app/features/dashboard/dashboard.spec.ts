@@ -13,15 +13,28 @@ import { TONE_MAP } from '../../core/theme/tones';
 
 function makeParty(id: string): PartieDto {
   return {
-    id, name: `Party ${id}`, kind: 'ONE_SHOT', gameSystemId: 'draconis',
-    description: null, mjId: 'mj-1', createdAt: '', nextSessionDate: null, nextSessionSlot: null,
+    id,
+    name: `Party ${id}`,
+    kind: 'ONE_SHOT',
+    gameSystemId: 'draconis',
+    description: null,
+    mjId: 'mj-1',
+    createdAt: '',
+    nextSessionDate: null,
+    nextSessionSlot: null,
   };
 }
 
 function makePoll(partieId: string): SessionPollDto {
   return {
-    id: `poll-${partieId}`, partieId, status: 'OPEN', scenarioRef: null,
-    expiresAt: null, chosenDate: null, chosenSlot: null, options: [],
+    id: `poll-${partieId}`,
+    partieId,
+    status: 'OPEN',
+    scenarioRef: null,
+    expiresAt: null,
+    chosenDate: null,
+    chosenSlot: null,
+    options: [],
   };
 }
 
@@ -32,7 +45,8 @@ async function createFixture(openPolls: Map<string, SessionPollDto>) {
       provideRouter([]),
       provideAnimationsAsync(),
       {
-        provide: ModeService, useValue: {
+        provide: ModeService,
+        useValue: {
           mode: signal('joueur'),
           mjParties: signal([]),
           playerParties: signal([makeParty('p1'), makeParty('p2')]),
@@ -53,13 +67,13 @@ async function createFixture(openPolls: Map<string, SessionPollDto>) {
 describe('Dashboard — badge de vote en attente', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('affiche le badge sur la carte d\'une partie présente dans OpenPollsService.openPolls', async () => {
+  it("affiche le badge sur la carte d'une partie présente dans OpenPollsService.openPolls", async () => {
     const fixture = await createFixture(new Map([['p1', makePoll('p1')]]));
     const badges = fixture.nativeElement.querySelectorAll('.poll-badge');
     expect(badges.length).toBe(1);
   });
 
-  it('n\'affiche aucun badge si openPolls est vide', async () => {
+  it("n'affiche aucun badge si openPolls est vide", async () => {
     const fixture = await createFixture(new Map());
     const badges = fixture.nativeElement.querySelectorAll('.poll-badge');
     expect(badges.length).toBe(0);

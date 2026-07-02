@@ -2,7 +2,12 @@ import { Component, computed, effect, input, output, signal, untracked } from '@
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import type { AvailabilityDeclarationDto, CreateAvailabilityDto, DaySlot, SlotStatus } from '@master-jdr/shared';
+import type {
+  AvailabilityDeclarationDto,
+  CreateAvailabilityDto,
+  DaySlot,
+  SlotStatus,
+} from '@master-jdr/shared';
 import { computeDisplayStatus } from '../../../core/availability/compute-display-status';
 import { SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
 
@@ -100,7 +105,11 @@ export function buildWeek(
       Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + i),
     );
     // Pour l'affichage (label, date émise) : date locale représentant le même jour calendaire.
-    const cellLocal = new Date(utcCell.getUTCFullYear(), utcCell.getUTCMonth(), utcCell.getUTCDate());
+    const cellLocal = new Date(
+      utcCell.getUTCFullYear(),
+      utcCell.getUTCMonth(),
+      utcCell.getUTCDate(),
+    );
 
     const computeSlot = (slot: 'MORNING' | 'AFTERNOON' | 'EVENING'): SlotData => {
       const status = computeDisplayStatus(utcCell, slot, decls);

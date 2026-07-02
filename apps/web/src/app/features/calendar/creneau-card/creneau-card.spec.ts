@@ -9,7 +9,7 @@ function makeSlot(overrides: Partial<AvailableSlotDto> = {}): AvailableSlotDto {
     slot: 'MORNING',
     members: [
       { userId: 'u1', pseudo: 'Alice', status: 'AVAILABLE' },
-      { userId: 'u2', pseudo: 'Bob',   status: 'AVAILABLE' },
+      { userId: 'u2', pseudo: 'Bob', status: 'AVAILABLE' },
     ],
     ...overrides,
   };
@@ -37,22 +37,26 @@ describe('CreneauCard', () => {
   });
 
   it('affiche le tag "Guilde complète" quand tous les membres sont AVAILABLE', () => {
-    create(makeSlot({
-      members: [
-        { userId: 'u1', pseudo: 'Alice', status: 'AVAILABLE' },
-        { userId: 'u2', pseudo: 'Bob',   status: 'AVAILABLE' },
-      ],
-    }));
+    create(
+      makeSlot({
+        members: [
+          { userId: 'u1', pseudo: 'Alice', status: 'AVAILABLE' },
+          { userId: 'u2', pseudo: 'Bob', status: 'AVAILABLE' },
+        ],
+      }),
+    );
     expect(el.textContent).toContain('Guilde complète');
   });
 
-  it('affiche l\'alerte avec pseudo interpolé pour chaque membre UNKNOWN', () => {
-    create(makeSlot({
-      members: [
-        { userId: 'u1', pseudo: 'Alice', status: 'AVAILABLE' },
-        { userId: 'u2', pseudo: 'Bob',   status: 'UNKNOWN' },
-      ],
-    }));
+  it("affiche l'alerte avec pseudo interpolé pour chaque membre UNKNOWN", () => {
+    create(
+      makeSlot({
+        members: [
+          { userId: 'u1', pseudo: 'Alice', status: 'AVAILABLE' },
+          { userId: 'u2', pseudo: 'Bob', status: 'UNKNOWN' },
+        ],
+      }),
+    );
     expect(el.textContent).not.toContain('Guilde complète');
     const alertList = el.querySelector('.creneau-card__alerts');
     expect(alertList).toBeTruthy();

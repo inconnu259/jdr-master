@@ -3,14 +3,14 @@ import type { AvailableSlotDto, DaySlot, SlotStatus } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 const SLOT_LABELS: Record<string, string> = {
-  MORNING:   'Matin',
+  MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING:   'Soirée',
+  EVENING: 'Soirée',
 };
 
 const STATUS_ICONS: Record<SlotStatus, string> = {
-  AVAILABLE:   '✅',
-  UNKNOWN:     '⚠️',
+  AVAILABLE: '✅',
+  UNKNOWN: '⚠️',
   UNAVAILABLE: '❌',
 };
 
@@ -44,8 +44,8 @@ export class CreneauCard {
     const d = new Date(iso + 'T00:00:00Z');
     return new Intl.DateTimeFormat('fr-FR', {
       weekday: 'long',
-      day:     'numeric',
-      month:   'long',
+      day: 'numeric',
+      month: 'long',
       timeZone: 'UTC',
     }).format(d);
   }

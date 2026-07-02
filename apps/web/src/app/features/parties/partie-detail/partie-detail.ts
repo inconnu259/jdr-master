@@ -20,10 +20,10 @@ import type {
 } from '@master-jdr/shared';
 
 const SLOT_LABELS: Record<DaySlot, string> = {
-  MORNING:   'Matin',
+  MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING:   'Soirée',
-  FULL_DAY:  'Journée',
+  EVENING: 'Soirée',
+  FULL_DAY: 'Journée',
 };
 import { AuthService } from '../../../core/auth/auth.service';
 import { PartiesService } from '../../../core/parties/parties.service';
@@ -88,7 +88,9 @@ export class PartieDetail implements OnInit {
         day: 'numeric',
         month: 'long',
         timeZone: 'UTC',
-      }).format(d).toLocaleLowerCase('fr-FR');
+      })
+        .format(d)
+        .toLocaleLowerCase('fr-FR');
       const slot = p.nextSessionSlot ? ` — ${SLOT_LABELS[p.nextSessionSlot]}` : '';
       return `${date}${slot}`;
     } catch {
@@ -105,8 +107,9 @@ export class PartieDetail implements OnInit {
   });
 
   protected pollStatusLabel(): string {
-    return this.theme.tone()['poll.status_summary']
-      .replace('{responded}', String(this.respondedCount()))
+    return this.theme
+      .tone()
+      ['poll.status_summary'].replace('{responded}', String(this.respondedCount()))
       .replace('{total}', String(this.members().length));
   }
 

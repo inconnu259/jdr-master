@@ -54,7 +54,13 @@ export class PartiesController {
     @Param('id') id: string,
     @Query() q: GetAvailableSlotsDto,
   ) {
-    return this.parties.getAvailableSlots(id, user.id, q.weeks ?? DEFAULT_WEEKS, q.from, q.to);
+    return this.parties.getAvailableSlots(
+      id,
+      user.id,
+      q.weeks ?? DEFAULT_WEEKS,
+      q.from,
+      q.to,
+    );
   }
 
   @Get(':id/heatmap')

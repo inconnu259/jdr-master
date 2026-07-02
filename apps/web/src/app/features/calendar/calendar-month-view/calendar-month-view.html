@@ -19,6 +19,11 @@
     }
   </div>
 
+  <p id="month-cell-instructions" class="visually-hidden">
+    Entrée ou Espace : sélectionner la journée complète. Touches 1, 2, 3 : sélectionner respectivement
+    le matin, l'après-midi ou le soir.
+  </p>
+
   @if (loading()) {
     <div class="loading-overlay">
       <mat-spinner diameter="40" />
@@ -37,15 +42,26 @@
             [attr.aria-disabled]="cell.isCurrentMonth && cell.isPast ? 'true' : null"
             [attr.role]="!cell.isCurrentMonth ? 'presentation' : (cell.isPast ? 'presentation' : 'button')"
             [attr.tabindex]="!cell.isCurrentMonth ? null : (cell.isPast ? null : 0)"
+            [attr.aria-describedby]="cell.isCurrentMonth && !cell.isPast ? 'month-cell-instructions' : null"
             (click)="onCellClick(cell.date, 'FULL_DAY')"
             (keyup.enter)="onCellClick(cell.date, 'FULL_DAY')"
             (keyup.space)="onCellClick(cell.date, 'FULL_DAY')"
+            (keyup.1)="onCellClick(cell.date, 'MORNING')"
+            (keyup.2)="onCellClick(cell.date, 'AFTERNOON')"
+            (keyup.3)="onCellClick(cell.date, 'EVENING')"
           >
             <span class="day-number" aria-hidden="true">{{ cell.date.getDate() }}</span>
             @if (heatmapByDate().get(dateKey(cell.date)); as gs) {
               <span class="guild-dot" [attr.data-guild-status]="gs" aria-hidden="true"></span>
             }
+            <!--
+              Ces 3 segments sont cliquables à la souris pour une sélection granulaire (matin/après-midi/soir).
+              Équivalent clavier : touches 1/2/3 sur la cellule parente (déjà focusable, cf. keyup.1/2/3 et
+              aria-describedby ci-dessus) plutôt qu'un tabindex par segment, qui créerait 3 arrêts de
+              tabulation par cellule (126 sur la grille 6×7) et dégraderait la navigation clavier.
+            -->
             <div class="segments">
+              <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (touche 1) -->
               <span
                 class="segment"
                 [attr.data-status]="cell.morningPreview !== null ? cell.morningPreview : cell.morning"
@@ -54,6 +70,7 @@
                 role="img"
                 (click)="$event.stopPropagation(); onCellClick(cell.date, 'MORNING')"
               ></span>
+              <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (touche 2) -->
               <span
                 class="segment"
                 [attr.data-status]="cell.afternoonPreview !== null ? cell.afternoonPreview : cell.afternoon"
@@ -62,6 +79,7 @@
                 role="img"
                 (click)="$event.stopPropagation(); onCellClick(cell.date, 'AFTERNOON')"
               ></span>
+              <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (touche 3) -->
               <span
                 class="segment"
                 [attr.data-status]="cell.eveningPreview !== null ? cell.eveningPreview : cell.evening"

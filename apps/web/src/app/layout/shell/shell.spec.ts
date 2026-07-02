@@ -17,13 +17,21 @@ async function createFixture(openPollsCount: number) {
       provideRouter([]),
       provideAnimationsAsync(),
       {
-        provide: AuthService, useValue: {
-          currentUser: signal({ id: 'u1', pseudo: 'Test', email: 'test@test.com', role: 'USER', createdAt: '' }),
+        provide: AuthService,
+        useValue: {
+          currentUser: signal({
+            id: 'u1',
+            pseudo: 'Test',
+            email: 'test@test.com',
+            role: 'USER',
+            createdAt: '',
+          }),
           logout: vi.fn(),
         },
       },
       {
-        provide: ModeService, useValue: {
+        provide: ModeService,
+        useValue: {
           mode: signal('joueur'),
           hasMjParties: signal(false),
           setMode: vi.fn(),

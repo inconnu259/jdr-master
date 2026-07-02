@@ -13,14 +13,14 @@ export class ThemeSelector {
   protected readonly themeSvc = inject(ThemeToneService);
 
   protected readonly gradients: Record<Theme, string> = {
-    'grimoire-emeraude':  'linear-gradient(135deg, #1a0a30 20%, #9b6dff)',
-    'foret-ancienne':     'linear-gradient(135deg, #080f0a 25%, #2ecc71)',
+    'grimoire-emeraude': 'linear-gradient(135deg, #1a0a30 20%, #9b6dff)',
+    'foret-ancienne': 'linear-gradient(135deg, #080f0a 25%, #2ecc71)',
     'medieval-steampunk': 'linear-gradient(135deg, #1a1008 25%, #cd7f32)',
   };
 
   protected readonly accents: Record<Theme, string> = {
-    'grimoire-emeraude':  '#9b6dff',
-    'foret-ancienne':     '#2ecc71',
+    'grimoire-emeraude': '#9b6dff',
+    'foret-ancienne': '#2ecc71',
     'medieval-steampunk': '#cd7f32',
   };
 

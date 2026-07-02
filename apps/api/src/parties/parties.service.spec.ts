@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
@@ -258,17 +262,31 @@ describe('PartiesService', () => {
         if (callCount === 2) return 'UNAVAILABLE';
         return 'AVAILABLE';
       });
-      const results = (await service.getAvailableSlots('p1', 'mj1', 1)) as AvailableSlotDto[];
+      const results = (await service.getAvailableSlots(
+        'p1',
+        'mj1',
+        1,
+      )) as AvailableSlotDto[];
       expect(results.length).toBeGreaterThan(0);
       // Les 20 premiers résultats ne doivent PAS commencer par le créneau mixte (priorité 1)
       // avant un créneau all-AVAILABLE (priorité 0) — vérifier que le tri est respecté
       for (let i = 1; i < results.length; i++) {
-        const pa = results[i - 1].members.some((m) => m.status === 'UNAVAILABLE') ? 3
-          : results[i - 1].members.every((m) => m.status === 'AVAILABLE') ? 0
-          : results[i - 1].members.some((m) => m.status === 'AVAILABLE') ? 1 : 2;
-        const pb = results[i].members.some((m) => m.status === 'UNAVAILABLE') ? 3
-          : results[i].members.every((m) => m.status === 'AVAILABLE') ? 0
-          : results[i].members.some((m) => m.status === 'AVAILABLE') ? 1 : 2;
+        const pa = results[i - 1].members.some(
+          (m) => m.status === 'UNAVAILABLE',
+        )
+          ? 3
+          : results[i - 1].members.every((m) => m.status === 'AVAILABLE')
+            ? 0
+            : results[i - 1].members.some((m) => m.status === 'AVAILABLE')
+              ? 1
+              : 2;
+        const pb = results[i].members.some((m) => m.status === 'UNAVAILABLE')
+          ? 3
+          : results[i].members.every((m) => m.status === 'AVAILABLE')
+            ? 0
+            : results[i].members.some((m) => m.status === 'AVAILABLE')
+              ? 1
+              : 2;
         expect(pa).toBeLessThanOrEqual(pb);
       }
     });
@@ -282,7 +300,10 @@ describe('PartiesService', () => {
         prisma.user.findUnique.mockResolvedValue(mjUser);
         prisma.membership.findMany.mockResolvedValue([memberU1]);
         avail.getActiveDeclarations.mockResolvedValue(
-          new Map([['mj1', []], ['u1', []]]),
+          new Map([
+            ['mj1', []],
+            ['u1', []],
+          ]),
         );
       });
 
@@ -300,7 +321,11 @@ describe('PartiesService', () => {
           const isEven = callIdx++ % 2 === 0;
           return isEven ? 'AVAILABLE' : 'UNAVAILABLE'; // mj=AVAILABLE, u1=UNAVAILABLE
         });
-        const results = (await service.getAvailableSlots('p1', 'u1', 1)) as AggregatedSlotDto[];
+        const results = (await service.getAvailableSlots(
+          'p1',
+          'u1',
+          1,
+        )) as AggregatedSlotDto[];
         expect(results.length).toBeGreaterThan(0);
         // Au moins un créneau doit avoir unavailable > 0 (Q2B)
         expect(results.some((r) => r.unavailable > 0)).toBe(true);
@@ -361,25 +386,40 @@ describe('PartiesService', () => {
         prisma.partie.findUnique.mockResolvedValue(partie);
         prisma.membership.findMany.mockResolvedValue(members);
         avail.getActiveDeclarations.mockResolvedValue(
-          new Map([['u1', []], ['u2', []]]),
+          new Map([
+            ['u1', []],
+            ['u2', []],
+          ]),
         );
         avail.computeSlotStatus.mockReturnValue('AVAILABLE');
       });
 
       it('restreint les résultats à la plage from/to', async () => {
         const from = '2026-08-01';
-        const to   = '2026-08-03';
-        const results = (await service.getAvailableSlots('p1', 'mj1', 8, from, to)) as AvailableSlotDto[];
+        const to = '2026-08-03';
+        const results = (await service.getAvailableSlots(
+          'p1',
+          'mj1',
+          8,
+          from,
+          to,
+        )) as AvailableSlotDto[];
         expect(results.length).toBeGreaterThan(0);
-        expect(results.every(r => r.date >= from && r.date <= to)).toBe(true);
+        expect(results.every((r) => r.date >= from && r.date <= to)).toBe(true);
       });
 
       it('ne retourne aucun créneau hors de la plage from/to', async () => {
         const from = '2026-08-01';
-        const to   = '2026-08-01';
-        const results = (await service.getAvailableSlots('p1', 'mj1', 8, from, to)) as AvailableSlotDto[];
-        expect(results.every(r => r.date === '2026-08-01')).toBe(true);
-        expect(results.some(r => r.date !== '2026-08-01')).toBe(false);
+        const to = '2026-08-01';
+        const results = (await service.getAvailableSlots(
+          'p1',
+          'mj1',
+          8,
+          from,
+          to,
+        )) as AvailableSlotDto[];
+        expect(results.every((r) => r.date === '2026-08-01')).toBe(true);
+        expect(results.some((r) => r.date !== '2026-08-01')).toBe(false);
       });
 
       it('lève BadRequestException si from > to', async () => {
@@ -389,14 +429,24 @@ describe('PartiesService', () => {
       });
 
       it('sans from/to, appel avec weeks fonctionne (rétrocompat)', async () => {
-        const results = (await service.getAvailableSlots('p1', 'mj1', 1)) as AvailableSlotDto[];
+        const results = (await service.getAvailableSlots(
+          'p1',
+          'mj1',
+          1,
+        )) as AvailableSlotDto[];
         expect(avail.getActiveDeclarations).toHaveBeenCalledTimes(1);
         expect(results.length).toBeGreaterThanOrEqual(0);
       });
 
-      it('accepte from === to (plage d\'un seul jour)', async () => {
-        const results = (await service.getAvailableSlots('p1', 'mj1', 8, '2026-08-15', '2026-08-15')) as AvailableSlotDto[];
-        expect(results.every(r => r.date === '2026-08-15')).toBe(true);
+      it("accepte from === to (plage d'un seul jour)", async () => {
+        const results = (await service.getAvailableSlots(
+          'p1',
+          'mj1',
+          8,
+          '2026-08-15',
+          '2026-08-15',
+        )) as AvailableSlotDto[];
+        expect(results.every((r) => r.date === '2026-08-15')).toBe(true);
         expect(results.length).toBe(3);
       });
 

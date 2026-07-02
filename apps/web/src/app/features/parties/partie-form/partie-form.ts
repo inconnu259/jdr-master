@@ -74,7 +74,9 @@ export class PartieForm implements OnInit {
     };
     try {
       const id = this.editId();
-      const partie = id ? await this.parties.update(id, payload) : await this.parties.create(payload);
+      const partie = id
+        ? await this.parties.update(id, payload)
+        : await this.parties.create(payload);
       await this.modeSvc.refreshMjParties();
       this.modeSvc.setMode('mj');
       void this.router.navigate(['/parties', partie.id]);

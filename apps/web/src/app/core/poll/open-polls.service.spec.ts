@@ -4,20 +4,40 @@ import { signal } from '@angular/core';
 import { vi } from 'vitest';
 import type { PartieDto, SessionPollDto } from '@master-jdr/shared';
 import { OpenPollsService } from './open-polls.service';
+import { AuthService } from '../auth/auth.service';
 import { ModeService } from '../mode/mode.service';
 import { PollService } from './poll.service';
 
 function makeParty(id: string): PartieDto {
   return {
-    id, name: `Party ${id}`, kind: 'ONE_SHOT', gameSystemId: 'draconis',
-    description: null, mjId: 'mj-1', createdAt: '', nextSessionDate: null, nextSessionSlot: null,
+    id,
+    name: `Party ${id}`,
+    kind: 'ONE_SHOT',
+    gameSystemId: 'draconis',
+    description: null,
+    mjId: 'mj-1',
+    createdAt: '',
+    nextSessionDate: null,
+    nextSessionSlot: null,
   };
 }
 
-function makePoll(partieId: string): SessionPollDto {
+/** Par défaut, une option non répondue par 'u1' — pour que le poll compte comme "en attente" dans les tests existants. */
+function makePoll(
+  partieId: string,
+  options: SessionPollDto['options'] = [
+    { id: `opt-${partieId}`, date: '2026-08-01T00:00:00.000Z', slot: 'MORNING', votes: [] },
+  ],
+): SessionPollDto {
   return {
-    id: `poll-${partieId}`, partieId, status: 'OPEN', scenarioRef: null,
-    expiresAt: null, chosenDate: null, chosenSlot: null, options: [],
+    id: `poll-${partieId}`,
+    partieId,
+    status: 'OPEN',
+    scenarioRef: null,
+    expiresAt: null,
+    chosenDate: null,
+    chosenSlot: null,
+    options,
   };
 }
 
@@ -29,13 +49,21 @@ class TestHost {
   readonly svc = inject(OpenPollsService);
 }
 
-async function createHarness(playerParties: PartieDto[], getCurrentPoll: ReturnType<typeof vi.fn>) {
+async function createHarness(
+  playerParties: PartieDto[],
+  getCurrentPoll: ReturnType<typeof vi.fn>,
+  currentUserId: string | undefined = 'u1',
+) {
   const playerPartiesSignal = signal(playerParties);
   await TestBed.configureTestingModule({
     imports: [TestHost],
     providers: [
       { provide: ModeService, useValue: { playerParties: playerPartiesSignal } },
       { provide: PollService, useValue: { getCurrentPoll } },
+      {
+        provide: AuthService,
+        useValue: { currentUser: () => (currentUserId ? { id: currentUserId } : null) },
+      },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(TestHost);
@@ -60,7 +88,7 @@ describe('OpenPollsService', () => {
     expect(svc.openPolls().has('p2')).toBe(false);
   });
 
-  it('count() à 0 si aucune partie n\'a de poll OPEN', async () => {
+  it("count() à 0 si aucune partie n'a de poll OPEN", async () => {
     const getCurrentPoll = vi.fn().mockResolvedValue(null);
     const { svc } = await createHarness([makeParty('p1')], getCurrentPoll);
 
@@ -70,7 +98,10 @@ describe('OpenPollsService', () => {
 
   it('openPolls se vide quand playerParties() passe de non-vide à vide (dernière partie quittée)', async () => {
     const getCurrentPoll = vi.fn().mockResolvedValue(makePoll('p1'));
-    const { svc, playerPartiesSignal, fixture } = await createHarness([makeParty('p1')], getCurrentPoll);
+    const { svc, playerPartiesSignal, fixture } = await createHarness(
+      [makeParty('p1')],
+      getCurrentPoll,
+    );
 
     expect(svc.count()).toBe(1);
 
@@ -82,5 +113,25 @@ describe('OpenPollsService', () => {
 
     expect(svc.count()).toBe(0);
     expect(svc.openPolls().size).toBe(0);
+  });
+
+  it("count() exclut une partie dont le poll OPEN a déjà été entièrement répondu par l'utilisateur courant", async () => {
+    const answeredPoll = makePoll('p1', [
+      {
+        id: 'opt-p1',
+        date: '2026-08-01T00:00:00.000Z',
+        slot: 'MORNING',
+        votes: [{ userId: 'u1', pseudo: 'Moi', answer: 'YES' }],
+      },
+    ]);
+    const unansweredPoll = makePoll('p2'); // option par défaut sans vote
+    const getCurrentPoll = vi.fn((id: string) =>
+      id === 'p1' ? Promise.resolve(answeredPoll) : Promise.resolve(unansweredPoll),
+    );
+    const { svc } = await createHarness([makeParty('p1'), makeParty('p2')], getCurrentPoll);
+
+    expect(svc.count()).toBe(1);
+    expect(svc.openPolls().has('p1')).toBe(false);
+    expect(svc.openPolls().has('p2')).toBe(true);
   });
 });

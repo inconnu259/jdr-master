@@ -2,7 +2,13 @@ import { Component, computed, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import type { AggregatedSlotDto, AvailabilityDeclarationDto, CreateAvailabilityDto, DaySlot, SlotStatus } from '@master-jdr/shared';
+import type {
+  AggregatedSlotDto,
+  AvailabilityDeclarationDto,
+  CreateAvailabilityDto,
+  DaySlot,
+  SlotStatus,
+} from '@master-jdr/shared';
 import { computeDisplayStatus } from '../../../core/availability/compute-display-status';
 
 export interface SlotSelectedEvent {
@@ -130,9 +136,7 @@ export class CalendarMonthView {
   protected readonly displayDate = signal(new Date());
 
   protected readonly monthLabel = computed(() =>
-    new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(
-      this.displayDate(),
-    ),
+    new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(this.displayDate()),
   );
 
   private readonly pendingDecl = computed<AvailabilityDeclarationDto | null>(() => {
@@ -146,7 +150,12 @@ export class CalendarMonthView {
 
   protected readonly heatmapByDate = computed((): Map<string, GuildStatus> => {
     const map = new Map<string, GuildStatus>();
-    const rank: Record<GuildStatus, number> = { ALL_AVAILABLE: 0, MIXED: 1, UNKNOWN: 2, BLOCKED: 3 };
+    const rank: Record<GuildStatus, number> = {
+      ALL_AVAILABLE: 0,
+      MIXED: 1,
+      UNKNOWN: 2,
+      BLOCKED: 3,
+    };
     for (const entry of this.heatmap()) {
       const status = entryGuildStatus(entry);
       const current = map.get(entry.date);
@@ -198,7 +207,11 @@ export class CalendarMonthView {
   protected onCellClick(date: Date, slot: DaySlot): void {
     // Bloquer les clics sur les cellules hors-mois courant.
     const displayDate = this.displayDate();
-    if (date.getMonth() !== displayDate.getMonth() || date.getFullYear() !== displayDate.getFullYear()) return;
+    if (
+      date.getMonth() !== displayDate.getMonth() ||
+      date.getFullYear() !== displayDate.getFullYear()
+    )
+      return;
     const midnight = new Date(date);
     midnight.setHours(0, 0, 0, 0);
     const today = new Date();

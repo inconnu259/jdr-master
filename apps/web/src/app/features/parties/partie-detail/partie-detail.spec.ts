@@ -38,7 +38,13 @@ function makeToneService() {
 
 function makeAuthService(userId: string) {
   return {
-    currentUser: signal({ id: userId, pseudo: 'Test', email: 'test@test.com', role: 'USER', createdAt: '' }),
+    currentUser: signal({
+      id: userId,
+      pseudo: 'Test',
+      email: 'test@test.com',
+      role: 'USER',
+      createdAt: '',
+    }),
   };
 }
 
@@ -75,7 +81,10 @@ async function createFixture(
       { provide: AuthService, useValue: makeAuthService(currentUserId) },
       { provide: PartiesService, useValue: makePartiesService(partie, options.members ?? []) },
       { provide: ModeService, useValue: { refreshMjParties: vi.fn() } },
-      { provide: PollService, useValue: { getCurrentPoll: vi.fn().mockResolvedValue(options.poll ?? null) } },
+      {
+        provide: PollService,
+        useValue: { getCurrentPoll: vi.fn().mockResolvedValue(options.poll ?? null) },
+      },
       { provide: ThemeToneService, useValue: makeToneService() },
       { provide: MatDialog, useValue: { open: vi.fn() } },
     ],
@@ -98,7 +107,7 @@ async function createFixture(
 describe('PartieDetail — widget de planification', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('affiche l\'état vide quand nextSessionDate est null', async () => {
+  it("affiche l'état vide quand nextSessionDate est null", async () => {
     const { el } = await createFixture(
       makePartie({ nextSessionDate: null, nextSessionSlot: null }),
       MJ_ID,
@@ -156,27 +165,32 @@ describe('PartieDetail — statut du vote', () => {
 
   function makePoll(votesOnOpt: string[]): SessionPollDto {
     return {
-      id: 'poll1', partieId: 'party-1', status: 'OPEN', scenarioRef: null,
-      expiresAt: null, chosenDate: null, chosenSlot: null,
+      id: 'poll1',
+      partieId: 'party-1',
+      status: 'OPEN',
+      scenarioRef: null,
+      expiresAt: null,
+      chosenDate: null,
+      chosenSlot: null,
       options: [
-        { id: 'opt1', date: '2026-08-01T00:00:00.000Z', slot: 'MORNING',
-          votes: votesOnOpt.map(userId => ({ userId, pseudo: userId, answer: 'YES' as const })) },
+        {
+          id: 'opt1',
+          date: '2026-08-01T00:00:00.000Z',
+          slot: 'MORNING',
+          votes: votesOnOpt.map((userId) => ({ userId, pseudo: userId, answer: 'YES' as const })),
+        },
       ],
     };
   }
 
   it('affiche la ligne de statut X/Y quand un poll OPEN existe', async () => {
-    const { el } = await createFixture(
-      makePartie(),
-      MJ_ID,
-      { members, poll: makePoll(['u1']) },
-    );
+    const { el } = await createFixture(makePartie(), MJ_ID, { members, poll: makePoll(['u1']) });
     const line = el.querySelector('.poll-status-line');
     expect(line).toBeTruthy();
     expect(line!.textContent).toContain('1/2');
   });
 
-  it('n\'affiche pas la ligne de statut si aucun poll OPEN n\'existe', async () => {
+  it("n'affiche pas la ligne de statut si aucun poll OPEN n'existe", async () => {
     const { el } = await createFixture(makePartie(), MJ_ID, { members, poll: null });
     expect(el.querySelector('.poll-status-line')).toBeFalsy();
   });

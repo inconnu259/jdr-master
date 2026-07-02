@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -22,7 +32,10 @@ export class PollController {
   }
 
   @Get()
-  findOpen(@Param('id', ParseUUIDPipe) partieId: string, @CurrentUser() user: AuthUser) {
+  findOpen(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
     return this.poll.findOpen(partieId, user.id);
   }
 

@@ -111,7 +111,7 @@ describe('buildWeek - findWeekDecl avec endDate (AC1)', () => {
     expect(monday.morning.declLabel).toBeNull();
   });
 
-  it('renvoie le declLabel pour une déclaration RECURRING dont endDate est exactement aujourd\'hui', () => {
+  it("renvoie le declLabel pour une déclaration RECURRING dont endDate est exactement aujourd'hui", () => {
     const decl: AvailabilityDeclarationDto = {
       ...BASE_DECL,
       kind: 'UNAVAILABLE',

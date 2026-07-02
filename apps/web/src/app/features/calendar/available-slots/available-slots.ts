@@ -22,9 +22,7 @@ function slotPriority(s: AnySlotDto): number {
 }
 
 function availableCount(s: AnySlotDto): number {
-  return 'members' in s
-    ? s.members.filter((m) => m.status === 'AVAILABLE').length
-    : s.available;
+  return 'members' in s ? s.members.filter((m) => m.status === 'AVAILABLE').length : s.available;
 }
 
 @Component({
@@ -35,9 +33,9 @@ function availableCount(s: AnySlotDto): number {
   styleUrl: './available-slots.scss',
 })
 export class AvailableSlotsPanel {
-  readonly slots   = input.required<AnySlotDto[]>();
+  readonly slots = input.required<AnySlotDto[]>();
   readonly loading = input<boolean>(false);
-  readonly error   = input<string | null>(null);
+  readonly error = input<string | null>(null);
 
   protected readonly theme = inject(ThemeToneService);
 

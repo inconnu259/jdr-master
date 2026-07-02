@@ -3,8 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import type { PartieDto } from '@master-jdr/shared';
 import { PartiesService } from './parties.service';
-
-const API = 'http://localhost:3000';
+import { API_BASE as API } from '../api-base';
 
 describe('PartiesService (front)', () => {
   let service: PartiesService;

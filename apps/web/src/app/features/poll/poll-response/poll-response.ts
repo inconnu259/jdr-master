@@ -1,4 +1,13 @@
-import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import type { CastVoteDto, DaySlot, SessionPollDto, VoteAnswer } from '@master-jdr/shared';
@@ -7,7 +16,10 @@ import { PollService } from '../../../core/poll/poll.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 const SLOT_LABELS: Record<DaySlot, string> = {
-  MORNING: 'Matin', AFTERNOON: 'Après-midi', EVENING: 'Soirée', FULL_DAY: 'Journée',
+  MORNING: 'Matin',
+  AFTERNOON: 'Après-midi',
+  EVENING: 'Soirée',
+  FULL_DAY: 'Journée',
 };
 
 @Component({
@@ -19,24 +31,24 @@ const SLOT_LABELS: Record<DaySlot, string> = {
 })
 export class PollResponseComponent {
   readonly partieId = input.required<string>();
-  readonly poll     = input.required<SessionPollDto>();
+  readonly poll = input.required<SessionPollDto>();
 
   readonly responded = output<SessionPollDto>();
 
   private readonly pollSvc = inject(PollService);
   private readonly authSvc = inject(AuthService);
   protected readonly theme = inject(ThemeToneService);
-  private readonly snack   = inject(MatSnackBar);
+  private readonly snack = inject(MatSnackBar);
 
-  protected readonly pendingAnswers  = signal<Map<string, VoteAnswer>>(new Map());
+  protected readonly pendingAnswers = signal<Map<string, VoteAnswer>>(new Map());
   protected readonly failedOptionIds = signal<Set<string>>(new Set());
-  protected readonly saving          = signal(false);
-  protected readonly error           = signal<string | null>(null);
+  protected readonly saving = signal(false);
+  protected readonly error = signal<string | null>(null);
 
   readonly SLOT_LABELS = SLOT_LABELS;
   readonly VOTE_OPTIONS: VoteAnswer[] = ['YES', 'NO', 'MAYBE'];
 
-  protected readonly isClosed    = computed(() => this.poll().status === 'CLOSED');
+  protected readonly isClosed = computed(() => this.poll().status === 'CLOSED');
   protected readonly hasSelection = computed(() => this.pendingAnswers().size > 0);
 
   constructor() {
@@ -52,7 +64,7 @@ export class PollResponseComponent {
       const poll = untracked(() => this.poll());
       const map = new Map<string, VoteAnswer>();
       for (const opt of poll.options) {
-        const myVote = opt.votes.find(v => v.userId === userId);
+        const myVote = opt.votes.find((v) => v.userId === userId);
         if (myVote) map.set(opt.id, myVote.answer);
       }
       this.pendingAnswers.set(map);
@@ -73,7 +85,10 @@ export class PollResponseComponent {
   protected formatDate(iso: string): string {
     const d = new Date(iso);
     return new Intl.DateTimeFormat('fr-FR', {
-      weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
     }).format(d);
   }
 
@@ -86,7 +101,10 @@ export class PollResponseComponent {
     const entries = [...this.pendingAnswers()];
     const results = await Promise.allSettled(
       entries.map(([optionId, answer]) =>
-        this.pollSvc.castVote(this.partieId(), this.poll().id, { optionId, answer } satisfies CastVoteDto),
+        this.pollSvc.castVote(this.partieId(), this.poll().id, {
+          optionId,
+          answer,
+        } satisfies CastVoteDto),
       ),
     );
 
@@ -108,7 +126,9 @@ export class PollResponseComponent {
       this.snack.open(this.theme.tone()['success.vote_cast'], undefined, { duration: 3000 });
     } else {
       const successCount = entries.length - failed.size;
-      this.error.set(`${successCount}/${entries.length} réponse(s) enregistrée(s). Réessayez pour les autres.`);
+      this.error.set(
+        `${successCount}/${entries.length} réponse(s) enregistrée(s). Réessayez pour les autres.`,
+      );
     }
     this.saving.set(false);
   }

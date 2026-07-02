@@ -106,7 +106,10 @@ export class PartiesService {
   /** Retourne MJ + membres (dédoublonnés) avec leur pseudo. */
   private async resolveParticipants(partieId: string, mjId: string) {
     const [mjUser, memberships] = await Promise.all([
-      this.prisma.user.findUnique({ where: { id: mjId }, select: { id: true, pseudo: true } }),
+      this.prisma.user.findUnique({
+        where: { id: mjId },
+        select: { id: true, pseudo: true },
+      }),
       this.prisma.membership.findMany({
         where: { partieId },
         include: { user: { select: { id: true, pseudo: true } } },
@@ -141,7 +144,10 @@ export class PartiesService {
     });
     if (!partie) throw new NotFoundException('Partie introuvable');
 
-    const { participants, memberships } = await this.resolveParticipants(partieId, partie.mjId);
+    const { participants, memberships } = await this.resolveParticipants(
+      partieId,
+      partie.mjId,
+    );
 
     const isMj = partie.mjId === userId;
     const isMember = memberships.some((m) => m.userId === userId);
@@ -152,7 +158,9 @@ export class PartiesService {
       await this.availability.getActiveDeclarations(participantIds);
 
     if (!!from !== !!to) {
-      throw new BadRequestException('from and to must both be provided together');
+      throw new BadRequestException(
+        'from and to must both be provided together',
+      );
     }
 
     const SLOTS = ['MORNING', 'AFTERNOON', 'EVENING'] as const;
@@ -160,9 +168,11 @@ export class PartiesService {
 
     if (from && to) {
       const fromMs = new Date(from + 'T00:00:00Z').getTime();
-      const toMs   = new Date(to   + 'T00:00:00Z').getTime();
-      if (fromMs > toMs) throw new BadRequestException('from must be before or equal to to');
-      if (toMs - fromMs > 366 * 86_400_000) throw new BadRequestException('Date range cannot exceed 366 days');
+      const toMs = new Date(to + 'T00:00:00Z').getTime();
+      if (fromMs > toMs)
+        throw new BadRequestException('from must be before or equal to to');
+      if (toMs - fromMs > 366 * 86_400_000)
+        throw new BadRequestException('Date range cannot exceed 366 days');
       for (let ms = fromMs; ms <= toMs; ms += 86_400_000) {
         const dateUtc = new Date(ms);
         for (const slot of SLOTS) {
@@ -175,7 +185,11 @@ export class PartiesService {
               slot,
             ),
           }));
-          all.push({ date: dateUtc.toISOString().substring(0, 10), slot, members });
+          all.push({
+            date: dateUtc.toISOString().substring(0, 10),
+            slot,
+            members,
+          });
         }
       }
     } else {
@@ -197,7 +211,11 @@ export class PartiesService {
               slot,
             ),
           }));
-          all.push({ date: dateUtc.toISOString().substring(0, 10), slot, members });
+          all.push({
+            date: dateUtc.toISOString().substring(0, 10),
+            slot,
+            members,
+          });
         }
       }
     }
@@ -212,7 +230,9 @@ export class PartiesService {
     // Priorité : 0=tous dispos, 1=mixte sans refus, 2=tous inconnus, 3=au moins un refus
     const priority = (s: AvailableSlotDto): number => {
       const hasUnavail = s.members.some((m) => m.status === 'UNAVAILABLE');
-      const availCount = s.members.filter((m) => m.status === 'AVAILABLE').length;
+      const availCount = s.members.filter(
+        (m) => m.status === 'AVAILABLE',
+      ).length;
       if (hasUnavail) return 3;
       if (availCount === s.members.length) return 0;
       if (availCount > 0) return 1;
@@ -260,7 +280,10 @@ export class PartiesService {
     });
     if (!partie) throw new NotFoundException('Partie introuvable');
 
-    const { participants, memberships } = await this.resolveParticipants(partieId, partie.mjId);
+    const { participants, memberships } = await this.resolveParticipants(
+      partieId,
+      partie.mjId,
+    );
 
     const isMj = partie.mjId === userId;
     const isMember = memberships.some((m) => m.userId === userId);
@@ -273,8 +296,10 @@ export class PartiesService {
     const SLOTS = ['MORNING', 'AFTERNOON', 'EVENING'] as const;
     const fromMs = new Date(from + 'T00:00:00Z').getTime();
     const toMs = new Date(to + 'T00:00:00Z').getTime();
-    if (fromMs > toMs) throw new BadRequestException('from must be before or equal to to');
-    if (toMs - fromMs > 45 * 86_400_000) throw new BadRequestException('Date range must not exceed 45 days');
+    if (fromMs > toMs)
+      throw new BadRequestException('from must be before or equal to to');
+    if (toMs - fromMs > 45 * 86_400_000)
+      throw new BadRequestException('Date range must not exceed 45 days');
     const results: AggregatedSlotDto[] = [];
 
     for (let ms = fromMs; ms <= toMs; ms += 86_400_000) {

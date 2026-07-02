@@ -1,11 +1,15 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PollService } from './poll.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 
 function makePrisma() {
-  return {
+  const prisma: any = {
     sessionPoll: {
       findFirst: jest.fn(),
       updateMany: jest.fn(),
@@ -23,6 +27,9 @@ function makePrisma() {
       update: jest.fn(),
     },
   };
+  // $transaction exécute le callback avec le même mock en guise de `tx`
+  prisma.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(prisma));
+  return prisma;
 }
 
 function makePartiesService() {
@@ -69,7 +76,7 @@ describe('PollService', () => {
     service = module.get(PollService);
   });
 
-  it("create() sans poll OPEN → crée sans appeler updateMany", async () => {
+  it('create() sans poll OPEN → crée sans appeler updateMany', async () => {
     prisma.sessionPoll.findFirst.mockResolvedValue(null);
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
     await service.create('p1', 'mj1', {
@@ -86,22 +93,58 @@ describe('PollService', () => {
     await service.create('p1', 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
-    const updateCall = prisma.sessionPoll.updateMany.mock.invocationCallOrder[0];
+    const updateCall =
+      prisma.sessionPoll.updateMany.mock.invocationCallOrder[0];
     const createCall = prisma.sessionPoll.create.mock.invocationCallOrder[0];
     expect(updateCall).toBeLessThan(createCall);
   });
 
+  it('create() → exécute findFirst/updateMany/create dans une transaction Prisma', async () => {
+    prisma.sessionPoll.findFirst.mockResolvedValue(null);
+    prisma.sessionPoll.create.mockResolvedValue(makePoll());
+    await service.create('p1', 'mj1', {
+      options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('create() avec deux options (date,slot) identiques → BadRequestException', async () => {
+    await expect(
+      service.create('p1', 'mj1', {
+        options: [opt('2026-08-01', 'MORNING'), opt('2026-08-01', 'MORNING')],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('castVote() deux fois sur la même option → upsert (pas de doublon)', async () => {
     parties.getViewable.mockResolvedValue({ id: 'p1' });
-    prisma.sessionPoll.findUnique.mockResolvedValue({ id: 'poll1', partieId: 'p1', status: 'OPEN' });
-    prisma.pollOption.findUnique.mockResolvedValue({ id: 'opt1', pollId: 'poll1' });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
+    prisma.pollOption.findUnique.mockResolvedValue({
+      id: 'opt1',
+      pollId: 'poll1',
+    });
     prisma.pollVote.upsert.mockResolvedValue({});
-    await service.castVote('p1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' });
-    await service.castVote('p1', 'poll1', 'u1', { optionId: 'opt1', answer: 'NO' });
+    await service.castVote('p1', 'poll1', 'u1', {
+      optionId: 'opt1',
+      answer: 'YES',
+    });
+    await service.castVote('p1', 'poll1', 'u1', {
+      optionId: 'opt1',
+      answer: 'NO',
+    });
     expect(prisma.pollVote.upsert).toHaveBeenCalledTimes(2);
     const calls = prisma.pollVote.upsert.mock.calls;
-    expect(calls[0][0].where).toEqual({ optionId_userId: { optionId: 'opt1', userId: 'u1' } });
-    expect(calls[1][0].where).toEqual({ optionId_userId: { optionId: 'opt1', userId: 'u1' } });
+    expect(calls[0][0].where).toEqual({
+      optionId_userId: { optionId: 'opt1', userId: 'u1' },
+    });
+    expect(calls[1][0].where).toEqual({
+      optionId_userId: { optionId: 'opt1', userId: 'u1' },
+    });
   });
 
   it('choose() par non-MJ → ForbiddenException', async () => {
@@ -114,7 +157,11 @@ describe('PollService', () => {
   it('choose() → positionne chosenDate/chosenSlot, ferme le poll, met à jour Partie', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
     parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
-    prisma.sessionPoll.findUnique.mockResolvedValue({ id: 'poll1', partieId: 'p1', status: 'OPEN' });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
     prisma.pollOption.findUnique.mockResolvedValue({
       id: 'opt1',
       pollId: 'poll1',
@@ -132,5 +179,33 @@ describe('PollService', () => {
       where: { id: 'p1' },
       data: { nextSessionDate: d, nextSessionSlot: 'MORNING' },
     });
+  });
+
+  it('close() sur un poll OPEN → le ferme', async () => {
+    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
+    prisma.sessionPoll.update.mockResolvedValue({});
+    await service.close('p1', 'poll1', 'mj1');
+    expect(prisma.sessionPoll.update).toHaveBeenCalledWith({
+      where: { id: 'poll1' },
+      data: { status: 'CLOSED' },
+    });
+  });
+
+  it('close() sur un poll déjà CLOSED → BadRequestException', async () => {
+    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'CLOSED',
+    });
+    await expect(service.close('p1', 'poll1', 'mj1')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
   });
 });

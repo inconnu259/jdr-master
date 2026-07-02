@@ -3,9 +3,9 @@ import { computeDisplayStatus } from './compute-display-status';
 import type { AvailabilityDeclarationDto } from '@master-jdr/shared';
 
 const NOW = new Date('2026-06-30T12:00:00Z');
-const WED = new Date('2026-07-01T00:00:00Z');      // getUTCDay() === 3 (Wednesday)
+const WED = new Date('2026-07-01T00:00:00Z'); // getUTCDay() === 3 (Wednesday)
 const NEXT_WED = new Date('2026-07-08T00:00:00Z'); // mercredi suivant
-const AUG_WED = new Date('2026-08-05T00:00:00Z');  // mercredi en août
+const AUG_WED = new Date('2026-08-05T00:00:00Z'); // mercredi en août
 const FAR = new Date('2027-01-01T00:00:00Z');
 
 function decl(overrides: Partial<AvailabilityDeclarationDto> = {}): AvailabilityDeclarationDto {
@@ -30,9 +30,9 @@ describe('computeDisplayStatus', () => {
   });
 
   it('AVAILABLE explicit matching → AVAILABLE', () => {
-    expect(
-      computeDisplayStatus(WED, 'EVENING', [decl({ kind: 'AVAILABLE' })], NOW),
-    ).toBe('AVAILABLE');
+    expect(computeDisplayStatus(WED, 'EVENING', [decl({ kind: 'AVAILABLE' })], NOW)).toBe(
+      'AVAILABLE',
+    );
   });
 
   it('UNAVAILABLE beats AVAILABLE on same slot', () => {
@@ -109,16 +109,16 @@ describe('computeDisplayStatus', () => {
       endDate: '2026-07-01',
       expiresAt: '2026-07-01T23:59:59Z',
     });
-    expect(computeDisplayStatus(WED, 'MORNING',   [morning], NOW)).toBe('AVAILABLE');
+    expect(computeDisplayStatus(WED, 'MORNING', [morning], NOW)).toBe('AVAILABLE');
     expect(computeDisplayStatus(WED, 'AFTERNOON', [morning], NOW)).toBe('UNKNOWN');
-    expect(computeDisplayStatus(WED, 'EVENING',   [morning], NOW)).toBe('UNKNOWN');
+    expect(computeDisplayStatus(WED, 'EVENING', [morning], NOW)).toBe('UNKNOWN');
   });
 
   it('déclaration MORNING : ne couvre pas AFTERNOON sur le même jour RECURRING', () => {
     const morningDecl = decl({ slot: 'MORNING', kind: 'UNAVAILABLE' });
-    expect(computeDisplayStatus(WED, 'MORNING',   [morningDecl], NOW)).toBe('UNAVAILABLE');
+    expect(computeDisplayStatus(WED, 'MORNING', [morningDecl], NOW)).toBe('UNAVAILABLE');
     expect(computeDisplayStatus(WED, 'AFTERNOON', [morningDecl], NOW)).toBe('UNKNOWN');
-    expect(computeDisplayStatus(WED, 'EVENING',   [morningDecl], NOW)).toBe('UNKNOWN');
+    expect(computeDisplayStatus(WED, 'EVENING', [morningDecl], NOW)).toBe('UNKNOWN');
   });
 
   // ── Tests modèle SPLIT : endDate tronque la série ────────────────────────

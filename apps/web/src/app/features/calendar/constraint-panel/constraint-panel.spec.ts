@@ -29,7 +29,10 @@ describe('buildConstraintDto', () => {
   });
 
   it('RECURRENT: recurKind=RECURRING, dayOfWeek inferred (mercredi=3), expiresAt from form', () => {
-    const dto = buildConstraintDto(makeForm({ type: 'RECURRENT', expiresAt: '2027-01-01', slot: 'EVENING' }), WED);
+    const dto = buildConstraintDto(
+      makeForm({ type: 'RECURRENT', expiresAt: '2027-01-01', slot: 'EVENING' }),
+      WED,
+    );
     expect(dto.recurKind).toBe('RECURRING');
     expect(dto.dayOfWeek).toBe(3);
     expect(dto.slot).toBe('EVENING');
@@ -40,7 +43,12 @@ describe('buildConstraintDto', () => {
 
   it('PLAGE: startDate/endDate from form, expiresAt auto from endDate', () => {
     const dto = buildConstraintDto(
-      makeForm({ type: 'PLAGE', startDate: '2026-07-10', endDate: '2026-07-20', slot: 'AFTERNOON' }),
+      makeForm({
+        type: 'PLAGE',
+        startDate: '2026-07-10',
+        endDate: '2026-07-20',
+        slot: 'AFTERNOON',
+      }),
       WED,
     );
     expect(dto.recurKind).toBe('PUNCTUAL');

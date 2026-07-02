@@ -4,9 +4,9 @@ export interface ConstraintFormValue {
   slot: DaySlot;
   kind: 'UNAVAILABLE' | 'AVAILABLE';
   type: 'PONCTUEL' | 'RECURRENT' | 'PLAGE';
-  expiresAt: string;  // only for RECURRENT; auto-computed otherwise
-  startDate: string;  // for PLAGE
-  endDate: string;    // for PLAGE
+  expiresAt: string; // only for RECURRENT; auto-computed otherwise
+  startDate: string; // for PLAGE
+  endDate: string; // for PLAGE
 }
 
 export function toISODate(date: Date): string {
@@ -37,7 +37,14 @@ export function buildConstraintDto(
     const utcDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
     const startDate = toISODate(date); // première occurrence = jour sélectionné
     const expiresAt = new Date(formValue.expiresAt + 'T23:59:59Z').toISOString();
-    return { kind, slot, recurKind: 'RECURRING', dayOfWeek: utcDate.getUTCDay(), startDate, expiresAt };
+    return {
+      kind,
+      slot,
+      recurKind: 'RECURRING',
+      dayOfWeek: utcDate.getUTCDay(),
+      startDate,
+      expiresAt,
+    };
   }
 
   if (formValue.type === 'PONCTUEL') {
@@ -48,5 +55,12 @@ export function buildConstraintDto(
 
   // PLAGE: expiresAt auto = fin du endDate
   const expiresAt = new Date(formValue.endDate + 'T23:59:59Z').toISOString();
-  return { kind, slot, recurKind: 'PUNCTUAL', startDate: formValue.startDate, endDate: formValue.endDate, expiresAt };
+  return {
+    kind,
+    slot,
+    recurKind: 'PUNCTUAL',
+    startDate: formValue.startDate,
+    endDate: formValue.endDate,
+    expiresAt,
+  };
 }

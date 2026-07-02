@@ -1,7 +1,7 @@
 import '@angular/compiler';
 import { TestBed } from '@angular/core/testing';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CalendarMonthView, buildMonth } from './calendar-month-view';
 
 describe('buildMonth', () => {
@@ -52,7 +52,7 @@ describe('buildMonth', () => {
     // Les 2 premières cellules sont en juin
     expect(firstWeek[0].isCurrentMonth).toBe(false); // lun 29 juin
     expect(firstWeek[1].isCurrentMonth).toBe(false); // mar 30 juin
-    expect(firstWeek[2].isCurrentMonth).toBe(true);  // mer 1er juillet
+    expect(firstWeek[2].isCurrentMonth).toBe(true); // mer 1er juillet
   });
 
   it('marks all current-month cells as isCurrentMonth = true', () => {
@@ -110,5 +110,68 @@ describe('CalendarMonthView — navigation UTC-midnight (Q8)', () => {
     expect(emitted).toHaveLength(1);
     expect(isUtcMidnight(emitted[0])).toBe(true);
     expect(emitted[0].getUTCDate()).toBe(1);
+  });
+});
+
+describe('CalendarMonthView — accessibilité clavier des segments (touches 1/2/3)', () => {
+  async function createMonthView() {
+    await TestBed.configureTestingModule({
+      imports: [CalendarMonthView],
+      providers: [provideAnimationsAsync()],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CalendarMonthView);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it("touche '1' sur la cellule du jour → sélectionne le créneau MORNING (équivalent clavier du segment matin)", async () => {
+    const fixture = await createMonthView();
+    const emitted: { date: Date; slot: string }[] = [];
+    fixture.componentInstance.slotSelected.subscribe((e) => emitted.push(e));
+
+    const cell = fixture.nativeElement.querySelector('.day-cell.today') as HTMLElement;
+    expect(cell).toBeTruthy();
+    cell.dispatchEvent(new KeyboardEvent('keyup', { key: '1' }));
+    fixture.detectChanges();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].slot).toBe('MORNING');
+  });
+
+  it("touche '2' sur la cellule du jour → sélectionne le créneau AFTERNOON", async () => {
+    const fixture = await createMonthView();
+    const emitted: { date: Date; slot: string }[] = [];
+    fixture.componentInstance.slotSelected.subscribe((e) => emitted.push(e));
+
+    const cell = fixture.nativeElement.querySelector('.day-cell.today') as HTMLElement;
+    cell.dispatchEvent(new KeyboardEvent('keyup', { key: '2' }));
+    fixture.detectChanges();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].slot).toBe('AFTERNOON');
+  });
+
+  it("touche '3' sur la cellule du jour → sélectionne le créneau EVENING", async () => {
+    const fixture = await createMonthView();
+    const emitted: { date: Date; slot: string }[] = [];
+    fixture.componentInstance.slotSelected.subscribe((e) => emitted.push(e));
+
+    const cell = fixture.nativeElement.querySelector('.day-cell.today') as HTMLElement;
+    cell.dispatchEvent(new KeyboardEvent('keyup', { key: '3' }));
+    fixture.detectChanges();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].slot).toBe('EVENING');
+  });
+
+  it('la cellule interactive référence les instructions clavier via aria-describedby', async () => {
+    const fixture = await createMonthView();
+    const cell = fixture.nativeElement.querySelector('.day-cell.today') as HTMLElement;
+    expect(cell.getAttribute('aria-describedby')).toBe('month-cell-instructions');
+    const instructions = fixture.nativeElement.querySelector('#month-cell-instructions');
+    expect(instructions).toBeTruthy();
+    expect(instructions.textContent).toContain('1');
   });
 });

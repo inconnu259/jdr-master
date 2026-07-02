@@ -3,8 +3,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthService } from './auth.service';
-
-const API = 'http://localhost:3000';
+import { API_BASE as API } from '../api-base';
 
 describe('AuthService (front)', () => {
   let service: AuthService;

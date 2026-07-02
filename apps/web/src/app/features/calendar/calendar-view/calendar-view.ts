@@ -1,9 +1,26 @@
-import { Component, ElementRef, OnInit, ViewChild, computed, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  OnInit,
+  ViewChild,
+  computed,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router } from '@angular/router';
-import type { AggregatedSlotDto, AvailabilityDeclarationDto, AvailableSlotDto, CreateAvailabilityDto, DaySlot, PartieMemberDto, SessionPollDto } from '@master-jdr/shared';
+import type {
+  AggregatedSlotDto,
+  AvailabilityDeclarationDto,
+  AvailableSlotDto,
+  CreateAvailabilityDto,
+  DaySlot,
+  PartieMemberDto,
+  SessionPollDto,
+} from '@master-jdr/shared';
 import { AvailabilityService } from '../../../core/availability/availability.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
@@ -19,7 +36,17 @@ import { PollResponseComponent } from '../../poll/poll-response/poll-response';
 @Component({
   selector: 'app-calendar-view',
   standalone: true,
-  imports: [CalendarMonthView, CalendarWeekView, ConstraintPanel, MatButtonToggleModule, MatButtonModule, AvailableSlotsPanel, PollCreationComponent, PollStatusPanel, PollResponseComponent],
+  imports: [
+    CalendarMonthView,
+    CalendarWeekView,
+    ConstraintPanel,
+    MatButtonToggleModule,
+    MatButtonModule,
+    AvailableSlotsPanel,
+    PollCreationComponent,
+    PollStatusPanel,
+    PollResponseComponent,
+  ],
   templateUrl: './calendar-view.html',
   styleUrl: './calendar-view.scss',
 })
@@ -29,37 +56,37 @@ export class CalendarView implements OnInit {
   @ViewChild('slotsPanel') private readonly slotsPanel?: ElementRef<HTMLElement>;
 
   private readonly availabilitySvc = inject(AvailabilityService);
-  private readonly partiesSvc      = inject(PartiesService);
-  private readonly pollSvc         = inject(PollService);
-  private readonly route           = inject(ActivatedRoute);
-  private readonly router          = inject(Router);
-  private readonly snack           = inject(MatSnackBar);
-  protected readonly theme         = inject(ThemeToneService);
+  private readonly partiesSvc = inject(PartiesService);
+  private readonly pollSvc = inject(PollService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly snack = inject(MatSnackBar);
+  protected readonly theme = inject(ThemeToneService);
 
-  protected readonly declarations  = signal<AvailabilityDeclarationDto[]>([]);
-  protected readonly loading       = signal(true);
-  protected readonly error         = signal<string | null>(null);
+  protected readonly declarations = signal<AvailabilityDeclarationDto[]>([]);
+  protected readonly loading = signal(true);
+  protected readonly error = signal<string | null>(null);
 
-  protected readonly view          = signal<'month' | 'week'>('month');
-  protected readonly sharedDate    = signal<Date>(new Date());
+  protected readonly view = signal<'month' | 'week'>('month');
+  protected readonly sharedDate = signal<Date>(new Date());
 
-  protected readonly panelOpen     = signal(false);
-  protected readonly selectedDate  = signal<Date>(new Date());
-  protected readonly selectedSlot  = signal<DaySlot>('FULL_DAY');
+  protected readonly panelOpen = signal(false);
+  protected readonly selectedDate = signal<Date>(new Date());
+  protected readonly selectedSlot = signal<DaySlot>('FULL_DAY');
   protected readonly selectedExisting = signal<AvailabilityDeclarationDto | null>(null);
-  protected readonly pendingDto    = signal<CreateAvailabilityDto | null>(null);
+  protected readonly pendingDto = signal<CreateAvailabilityDto | null>(null);
 
-  protected readonly partieId       = signal<string | null>(null);
+  protected readonly partieId = signal<string | null>(null);
   protected readonly availableSlots = signal<(AvailableSlotDto | AggregatedSlotDto)[]>([]);
-  protected readonly slotsLoading   = signal(false);
-  protected readonly slotsError     = signal<string | null>(null);
-  protected readonly heatmap        = signal<AggregatedSlotDto[]>([]);
+  protected readonly slotsLoading = signal(false);
+  protected readonly slotsError = signal<string | null>(null);
+  protected readonly heatmap = signal<AggregatedSlotDto[]>([]);
 
   protected readonly isMjMode = computed(() => this.mode() === 'mj');
 
-  protected readonly activePoll    = signal<SessionPollDto | null>(null);
+  protected readonly activePoll = signal<SessionPollDto | null>(null);
   protected readonly pollPanelOpen = signal(false);
-  protected readonly members       = signal<PartieMemberDto[]>([]);
+  protected readonly members = signal<PartieMemberDto[]>([]);
   /** true pendant qu'une requête choose/close est en cours — évite une double action concurrente (double-clic, choix + annulation simultanés). */
   protected readonly pollActionPending = signal(false);
 
@@ -77,16 +104,16 @@ export class CalendarView implements OnInit {
   }
 
   protected readonly fromDateStr = signal(CalendarView.todayIso());
-  protected readonly toDateStr   = signal(CalendarView.eightWeeksLaterIso());
+  protected readonly toDateStr = signal(CalendarView.eightWeeksLaterIso());
 
   private static readonly ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
   async ngOnInit(): Promise<void> {
-    const id        = this.route.snapshot.paramMap.get('id');
+    const id = this.route.snapshot.paramMap.get('id');
     const fromParam = this.route.snapshot.queryParamMap.get('from');
-    const toParam   = this.route.snapshot.queryParamMap.get('to');
+    const toParam = this.route.snapshot.queryParamMap.get('to');
     if (fromParam && CalendarView.ISO_DATE_RE.test(fromParam)) this.fromDateStr.set(fromParam);
-    if (toParam   && CalendarView.ISO_DATE_RE.test(toParam))   this.toDateStr.set(toParam);
+    if (toParam && CalendarView.ISO_DATE_RE.test(toParam)) this.toDateStr.set(toParam);
 
     if (id) {
       this.partieId.set(id);
@@ -141,8 +168,12 @@ export class CalendarView implements OnInit {
     this.pendingDto.set(null);
   }
 
-  protected openPollPanel(): void  { this.pollPanelOpen.set(true); }
-  protected closePollPanel(): void { this.pollPanelOpen.set(false); }
+  protected openPollPanel(): void {
+    this.pollPanelOpen.set(true);
+  }
+  protected closePollPanel(): void {
+    this.pollPanelOpen.set(false);
+  }
 
   protected onPollCreated(poll: SessionPollDto): void {
     this.activePoll.set(poll);
@@ -155,7 +186,7 @@ export class CalendarView implements OnInit {
 
   protected async onClosePoll(): Promise<void> {
     const poll = this.activePoll();
-    const id   = this.partieId();
+    const id = this.partieId();
     if (!poll || !id || this.pollActionPending()) return;
     this.pollActionPending.set(true);
     this.error.set(null);
@@ -171,7 +202,7 @@ export class CalendarView implements OnInit {
 
   protected async onChooseDate(optionId: string): Promise<void> {
     const poll = this.activePoll();
-    const id   = this.partieId();
+    const id = this.partieId();
     if (!poll || !id || this.pollActionPending()) return;
     this.pollActionPending.set(true);
     this.error.set(null);
@@ -225,7 +256,7 @@ export class CalendarView implements OnInit {
     const id = this.partieId();
     if (!id) return;
     const from = this.fromDateStr();
-    const to   = this.toDateStr();
+    const to = this.toDateStr();
     if (from > to) {
       this.slotsError.set('La date de début doit être avant ou égale à la date de fin.');
       return;
@@ -252,17 +283,15 @@ export class CalendarView implements OnInit {
   private async loadHeatmap(id: string, centerDate: Date = new Date()): Promise<void> {
     // Calcule exactement la grille du mois affiché (même logique que buildMonth : 6×7 = 42 jours)
     // centerDate est un Date UTC-midnight (émis par displayDateChange) → utiliser getUTC*
-    const year  = centerDate.getUTCFullYear();
+    const year = centerDate.getUTCFullYear();
     const month = centerDate.getUTCMonth();
     const firstOfMonth = new Date(Date.UTC(year, month, 1));
     const dow = firstOfMonth.getUTCDay();
     const startOffset = dow === 0 ? 6 : dow - 1;
     const gridStart = new Date(Date.UTC(year, month, 1 - startOffset));
-    const gridEnd   = new Date(Date.UTC(
-      gridStart.getUTCFullYear(),
-      gridStart.getUTCMonth(),
-      gridStart.getUTCDate() + 41,
-    ));
+    const gridEnd = new Date(
+      Date.UTC(gridStart.getUTCFullYear(), gridStart.getUTCMonth(), gridStart.getUTCDate() + 41),
+    );
     const toIso = (d: Date) =>
       `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
     try {
@@ -291,9 +320,7 @@ export class CalendarView implements OnInit {
       this.declarations().find((d) => {
         if (new Date(d.expiresAt) <= now) return false;
         const slotMatch =
-          slot === 'FULL_DAY'
-            ? d.slot === 'FULL_DAY'
-            : d.slot === 'FULL_DAY' || d.slot === slot;
+          slot === 'FULL_DAY' ? d.slot === 'FULL_DAY' : d.slot === 'FULL_DAY' || d.slot === slot;
         if (!slotMatch) return false;
         if (d.recurKind === 'RECURRING') {
           if (d.dayOfWeek !== utcDate.getUTCDay()) return false;

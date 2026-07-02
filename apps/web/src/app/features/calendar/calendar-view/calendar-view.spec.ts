@@ -17,7 +17,7 @@ interface CreateOptions {
 function makeActivatedRoute(partieId?: string) {
   return {
     snapshot: {
-      paramMap:      { get: (key: string) => key === 'id' ? (partieId ?? null) : null },
+      paramMap: { get: (key: string) => (key === 'id' ? (partieId ?? null) : null) },
       queryParamMap: { get: () => null },
     },
   };
@@ -30,10 +30,10 @@ function makeAvailabilityService() {
 function makePollService() {
   return {
     getAvailableSlots: vi.fn().mockResolvedValue([]),
-    getHeatmap:        vi.fn().mockResolvedValue([]),
-    getCurrentPoll:    vi.fn().mockResolvedValue(null),
-    chooseDate:        vi.fn().mockResolvedValue(undefined),
-    closePoll:         vi.fn().mockResolvedValue(undefined),
+    getHeatmap: vi.fn().mockResolvedValue([]),
+    getCurrentPoll: vi.fn().mockResolvedValue(null),
+    chooseDate: vi.fn().mockResolvedValue(undefined),
+    closePoll: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -58,11 +58,11 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
     providers: [
       provideRouter([]),
       provideAnimationsAsync(),
-      { provide: ActivatedRoute,      useValue: makeActivatedRoute(opts.partieId) },
+      { provide: ActivatedRoute, useValue: makeActivatedRoute(opts.partieId) },
       { provide: AvailabilityService, useValue: availabilitySvc },
-      { provide: PartiesService,      useValue: partiesSvc },
-      { provide: PollService,         useValue: pollSvc },
-      { provide: MatSnackBar,         useValue: snack },
+      { provide: PartiesService, useValue: partiesSvc },
+      { provide: PollService, useValue: pollSvc },
+      { provide: MatSnackBar, useValue: snack },
     ],
   }).compileComponents();
 
@@ -109,7 +109,7 @@ describe('CalendarView — rafraîchissement après sauvegarde/suppression (Bug 
     const { fixture, pollSvc } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
 
     // ngOnInit a déjà appelé les deux loaders une fois
-    const slotsBefore   = pollSvc.getAvailableSlots.mock.calls.length;
+    const slotsBefore = pollSvc.getAvailableSlots.mock.calls.length;
     const heatmapBefore = pollSvc.getHeatmap.mock.calls.length;
 
     await (fixture.componentInstance as any).onPanelSaved();
@@ -121,7 +121,7 @@ describe('CalendarView — rafraîchissement après sauvegarde/suppression (Bug 
   it('onPanelDeleted() recharge créneaux et heatmap quand une partieId est active', async () => {
     const { fixture, pollSvc } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
 
-    const slotsBefore   = pollSvc.getAvailableSlots.mock.calls.length;
+    const slotsBefore = pollSvc.getAvailableSlots.mock.calls.length;
     const heatmapBefore = pollSvc.getHeatmap.mock.calls.length;
 
     await (fixture.componentInstance as any).onPanelDeleted();
@@ -154,13 +154,22 @@ describe('CalendarView — onChooseDate()', () => {
 
   function setActivePoll(comp: any) {
     comp.activePoll.set({
-      id: 'poll1', partieId: 'partie-1', status: 'OPEN', scenarioRef: null,
-      expiresAt: null, chosenDate: null, chosenSlot: null, options: [],
+      id: 'poll1',
+      partieId: 'partie-1',
+      status: 'OPEN',
+      scenarioRef: null,
+      expiresAt: null,
+      chosenDate: null,
+      chosenSlot: null,
+      options: [],
     });
   }
 
   it('onChooseDate() appelle pollSvc.chooseDate, vide activePoll et affiche un toast', async () => {
-    const { fixture, pollSvc, snack } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const { fixture, pollSvc, snack } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+    });
     const comp = fixture.componentInstance as any;
     setActivePoll(comp);
 
@@ -173,7 +182,10 @@ describe('CalendarView — onChooseDate()', () => {
   });
 
   it('onChooseDate() en échec → activePoll conservé, error affichée, pas de toast', async () => {
-    const { fixture, pollSvc, snack } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const { fixture, pollSvc, snack } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+    });
     pollSvc.chooseDate.mockRejectedValueOnce(new Error('network'));
     const comp = fixture.componentInstance as any;
     setActivePoll(comp);
@@ -197,12 +209,16 @@ describe('CalendarView — onChooseDate()', () => {
     expect(pollSvc.chooseDate).toHaveBeenCalledTimes(1);
   });
 
-  it('onClosePoll() bloqué pendant qu\'un onChooseDate() est en cours', async () => {
+  it("onClosePoll() bloqué pendant qu'un onChooseDate() est en cours", async () => {
     const { fixture, pollSvc } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
     const comp = fixture.componentInstance as any;
     setActivePoll(comp);
     let resolveChoose!: () => void;
-    pollSvc.chooseDate.mockReturnValueOnce(new Promise<void>((resolve) => { resolveChoose = resolve; }));
+    pollSvc.chooseDate.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveChoose = resolve;
+      }),
+    );
 
     const choosePromise = comp.onChooseDate('opt1');
     await comp.onClosePoll();

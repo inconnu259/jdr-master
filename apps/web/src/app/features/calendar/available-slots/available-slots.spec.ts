@@ -13,11 +13,15 @@ describe('AvailableSlotsPanel', () => {
   let fixture: ComponentFixture<AvailableSlotsPanel>;
   let el: HTMLElement;
 
-  function create(opts: { slots?: AvailableSlotDto[]; loading?: boolean; error?: string | null }): void {
+  function create(opts: {
+    slots?: AvailableSlotDto[];
+    loading?: boolean;
+    error?: string | null;
+  }): void {
     fixture = TestBed.createComponent(AvailableSlotsPanel);
-    fixture.componentRef.setInput('slots',   opts.slots   ?? []);
+    fixture.componentRef.setInput('slots', opts.slots ?? []);
     fixture.componentRef.setInput('loading', opts.loading ?? false);
-    fixture.componentRef.setInput('error',   opts.error   ?? null);
+    fixture.componentRef.setInput('error', opts.error ?? null);
     fixture.detectChanges();
     el = fixture.nativeElement;
   }

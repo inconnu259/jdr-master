@@ -1,6 +1,11 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { ActivatedRouteSnapshot, provideRouter, RouterStateSnapshot, UrlTree } from '@angular/router';
+import {
+  ActivatedRouteSnapshot,
+  provideRouter,
+  RouterStateSnapshot,
+  UrlTree,
+} from '@angular/router';
 import type { AuthUser } from '@master-jdr/shared';
 import { authGuard } from './auth.guard';
 import { AuthService } from './auth.service';
@@ -20,7 +25,11 @@ function run() {
 }
 
 describe('authGuard', () => {
-  let auth: { initialized: ReturnType<typeof signal>; currentUser: ReturnType<typeof signal>; loadSession: () => Promise<void> };
+  let auth: {
+    initialized: ReturnType<typeof signal>;
+    currentUser: ReturnType<typeof signal>;
+    loadSession: () => Promise<void>;
+  };
 
   beforeEach(() => {
     auth = {

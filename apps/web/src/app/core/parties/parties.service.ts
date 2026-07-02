@@ -34,7 +34,9 @@ export class PartiesService {
   }
 
   get(id: string): Promise<PartieDto> {
-    return firstValueFrom(this.http.get<PartieDto>(`${API}/parties/${id}`, { withCredentials: true }));
+    return firstValueFrom(
+      this.http.get<PartieDto>(`${API}/parties/${id}`, { withCredentials: true }),
+    );
   }
 
   create(payload: PartiePayload): Promise<PartieDto> {
@@ -50,7 +52,9 @@ export class PartiesService {
   }
 
   remove(id: string): Promise<void> {
-    return firstValueFrom(this.http.delete<void>(`${API}/parties/${id}`, { withCredentials: true }));
+    return firstValueFrom(
+      this.http.delete<void>(`${API}/parties/${id}`, { withCredentials: true }),
+    );
   }
 
   // --- Membres & invitations (1c) ---
@@ -77,13 +81,19 @@ export class PartiesService {
 
   inviteUser(id: string, inviteeUserId: string): Promise<unknown> {
     return firstValueFrom(
-      this.http.post(`${API}/parties/${id}/invitations`, { inviteeUserId }, { withCredentials: true }),
+      this.http.post(
+        `${API}/parties/${id}/invitations`,
+        { inviteeUserId },
+        { withCredentials: true },
+      ),
     );
   }
 
   inviteLinks(id: string): Promise<InviteLinkDto[]> {
     return firstValueFrom(
-      this.http.get<InviteLinkDto[]>(`${API}/parties/${id}/invite-links`, { withCredentials: true }),
+      this.http.get<InviteLinkDto[]>(`${API}/parties/${id}/invite-links`, {
+        withCredentials: true,
+      }),
     );
   }
 

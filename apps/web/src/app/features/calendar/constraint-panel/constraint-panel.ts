@@ -1,4 +1,14 @@
-import { Component, DestroyRef, OnInit, effect, inject, input, output, signal, untracked } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -6,8 +16,16 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import type { AvailabilityDeclarationDto, CreateAvailabilityDto, DaySlot } from '@master-jdr/shared';
-import { AvailabilityService, ConflictError, type ConflictInfo } from '../../../core/availability/availability.service';
+import type {
+  AvailabilityDeclarationDto,
+  CreateAvailabilityDto,
+  DaySlot,
+} from '@master-jdr/shared';
+import {
+  AvailabilityService,
+  ConflictError,
+  type ConflictInfo,
+} from '../../../core/availability/availability.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import {
   addMonths,
@@ -33,7 +51,13 @@ const RECUR_LABEL: Record<string, string> = {
 @Component({
   selector: 'app-constraint-panel',
   standalone: true,
-  imports: [ReactiveFormsModule, MatButtonModule, MatButtonToggleModule, MatIconModule, MatRadioModule],
+  imports: [
+    ReactiveFormsModule,
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatIconModule,
+    MatRadioModule,
+  ],
   templateUrl: './constraint-panel.html',
   styleUrl: './constraint-panel.scss',
 })
@@ -258,7 +282,10 @@ export class ConstraintPanel implements OnInit {
     this.error.set(null);
     const existing = this.existingDeclaration();
     try {
-      const result = await this.availabilitySvc.createDeclaration({ ...dto, conflictResolution: resolution });
+      const result = await this.availabilitySvc.createDeclaration({
+        ...dto,
+        conflictResolution: resolution,
+      });
       if (existing) await this.availabilitySvc.deleteDeclaration(existing.id);
       this.snack.open(this.theme.tone()['success.constraint_saved'], undefined, { duration: 3000 });
       this.saved.emit(result.created[0] ?? existing!);
