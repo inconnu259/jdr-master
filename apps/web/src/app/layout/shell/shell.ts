@@ -5,9 +5,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatBadgeModule } from '@angular/material/badge';
 import { MatDivider } from '@angular/material/divider';
 import { AuthService } from '../../core/auth/auth.service';
 import { ModeService } from '../../core/mode/mode.service';
+import { OpenPollsService } from '../../core/poll/open-polls.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { ThemeSelector } from './theme-selector/theme-selector';
 
@@ -21,6 +23,7 @@ import { ThemeSelector } from './theme-selector/theme-selector';
     MatIconModule,
     MatMenuModule,
     MatButtonToggleModule,
+    MatBadgeModule,
     ThemeSelector,
     MatDivider,
   ],
@@ -30,6 +33,7 @@ import { ThemeSelector } from './theme-selector/theme-selector';
 export class Shell implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly modeSvc = inject(ModeService);
+  private readonly openPollsSvc = inject(OpenPollsService);
   private readonly router = inject(Router);
   // Injecter pour déclencher l'initialisation du thème (apply CSS class + localStorage) dès le Shell.
   protected readonly theme = inject(ThemeToneService);
@@ -37,6 +41,7 @@ export class Shell implements OnInit {
   protected readonly user = this.auth.currentUser;
   protected readonly mode = this.modeSvc.mode;
   protected readonly hasMjParties = this.modeSvc.hasMjParties;
+  protected readonly openPollsCount = this.openPollsSvc.count;
 
   // Charge les parties (MJ pilote le toggle + dashboard MJ ; joueur alimente le dashboard Joueur).
   ngOnInit(): void {

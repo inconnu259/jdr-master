@@ -1,8 +1,9 @@
-import { Component, inject, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { firstValueFrom } from 'rxjs';
-import type { DaySlot, PollOptionDto, SessionPollDto, VoteAnswer } from '@master-jdr/shared';
+import type { DaySlot, PartieMemberDto, PollOptionDto, SessionPollDto, VoteAnswer } from '@master-jdr/shared';
+import { getMissingVoters, getMissingVotersForOption } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ConfirmDialog } from '../../parties/confirm-dialog/confirm-dialog';
 
@@ -29,6 +30,7 @@ export class PollStatusPanel {
   readonly poll = input.required<SessionPollDto>();
   /** true pendant qu'une action (choix/annulation) est en cours côté parent — désactive le bouton pour éviter une double requête. */
   readonly busy = input(false);
+  readonly members = input<PartieMemberDto[]>([]);
 
   readonly chosen = output<string>();
 
@@ -55,6 +57,20 @@ export class PollStatusPanel {
 
   protected isAllYes(opt: PollOptionDto): boolean {
     return opt.votes.length > 0 && opt.votes.every(v => v.answer === 'YES');
+  }
+
+  /** true seulement si TOUS les membres ont voté sur TOUTES les options — condition du bandeau positif global. */
+  protected readonly allResponded = computed(() =>
+    this.members().length > 0 && getMissingVoters(this.poll(), this.members()).length === 0,
+  );
+
+  /** Granularité par date : qui n'a pas encore voté sur CETTE option précise (indépendant des autres options). */
+  protected missingVotersForOption(opt: PollOptionDto): PartieMemberDto[] {
+    return getMissingVotersForOption(opt, this.members());
+  }
+
+  protected missingAlert(pseudo: string): string {
+    return this.theme.tone()['alert.missing_player'].replace('{name}', pseudo);
   }
 
   protected async onChooseClick(opt: PollOptionDto): Promise<void> {

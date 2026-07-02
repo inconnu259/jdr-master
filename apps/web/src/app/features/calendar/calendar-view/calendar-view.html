@@ -51,7 +51,7 @@
             {{ theme.tone()['cta.launch_vote'] }}
           </button>
         } @else {
-          <app-poll-status [poll]="activePoll()!" [busy]="pollActionPending()" (chosen)="onChooseDate($event)" />
+          <app-poll-status [poll]="activePoll()!" [members]="members()" [busy]="pollActionPending()" (chosen)="onChooseDate($event)" />
           <button mat-stroked-button color="warn" [disabled]="pollActionPending()" (click)="onClosePoll()">
             {{ theme.tone()['cta.cancel_poll'] }}
           </button>

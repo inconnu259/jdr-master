@@ -3,9 +3,13 @@ import { provideAnimationsAsync } from '@angular/platform-browser/animations/asy
 import { MatDialog } from '@angular/material/dialog';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
-import type { SessionPollDto } from '@master-jdr/shared';
+import type { PartieMemberDto, SessionPollDto } from '@master-jdr/shared';
 import { PollStatusPanel } from './poll-status';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+
+const alice: PartieMemberDto = { userId: 'u1', pseudo: 'Alice', email: 'alice@test.com', joinedAt: '' };
+const bob: PartieMemberDto = { userId: 'u2', pseudo: 'Bob', email: 'bob@test.com', joinedAt: '' };
+const carol: PartieMemberDto = { userId: 'u3', pseudo: 'Carol', email: 'carol@test.com', joinedAt: '' };
 
 const fakePoll: SessionPollDto = {
   id: 'poll1', partieId: 'p1', status: 'OPEN', scenarioRef: null,
@@ -25,7 +29,14 @@ const fakePoll: SessionPollDto = {
 };
 
 function makeThemeService() {
-  return { tone: () => ({ 'poll.status_title': 'Vote en cours', 'cta.choose_date': 'Sceller ce créneau' }) };
+  return {
+    tone: () => ({
+      'poll.status_title': 'Vote en cours',
+      'cta.choose_date': 'Sceller ce créneau',
+      'alert.all_responded': 'Tous ont répondu.',
+      'alert.missing_player': '{name} n\'a pas encore répondu.',
+    }),
+  };
 }
 
 function makeDialog(confirmed: boolean) {
@@ -113,5 +124,57 @@ describe('PollStatusPanel', () => {
     const comp = fixture.componentInstance as any;
     await comp.onChooseClick(fakePoll.options[0]);
     expect(dialog.open).not.toHaveBeenCalled();
+  });
+
+  it('members non fourni (défaut []) → pas de bannière "tous ont répondu", aucun manquant affiché', async () => {
+    const { fixture } = await createComponent();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const comp = fixture.componentInstance as any;
+    expect(comp.members()).toEqual([]);
+    expect(comp.allResponded()).toBe(false);
+    expect(comp.missingVotersForOption(fakePoll.options[0])).toEqual([]);
+    const text = fixture.nativeElement.textContent;
+    expect(text).not.toContain('Tous ont répondu.');
+  });
+
+  it('bannière "tous ont répondu" quand tous les membres ont voté sur toutes les options', async () => {
+    const { fixture } = await createComponent();
+    fixture.componentRef.setInput('members', [alice, bob]);
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Tous ont répondu.');
+  });
+
+  it('Carol (n\'a voté nulle part) apparaît comme manquante sur CHAQUE option, pas de bannière globale', async () => {
+    const { fixture } = await createComponent();
+    fixture.componentRef.setInput('members', [alice, bob, carol]);
+    fixture.detectChanges();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const comp = fixture.componentInstance as any;
+    expect(comp.missingVotersForOption(fakePoll.options[0]).map((m: PartieMemberDto) => m.pseudo)).toEqual(['Carol']);
+    expect(comp.missingVotersForOption(fakePoll.options[1]).map((m: PartieMemberDto) => m.pseudo)).toEqual(['Carol']);
+    const text = fixture.nativeElement.textContent;
+    expect(text).not.toContain('Tous ont répondu.');
+  });
+
+  it('vote partiel : un membre ayant voté sur une option mais pas l\'autre n\'apparaît manquant QUE sur celle où il n\'a pas voté', async () => {
+    // Dans fakePoll, Bob a voté sur opt1 et opt2 — on ajoute Dana qui ne vote QUE sur opt1.
+    const dana: PartieMemberDto = { userId: 'u4', pseudo: 'Dana', email: 'dana@test.com', joinedAt: '' };
+    const pollWithPartialVote: SessionPollDto = {
+      ...fakePoll,
+      options: [
+        { ...fakePoll.options[0], votes: [...fakePoll.options[0].votes, { userId: 'u4', pseudo: 'Dana', answer: 'YES' }] },
+        fakePoll.options[1],
+      ],
+    };
+    const { fixture } = await createComponent(pollWithPartialVote);
+    fixture.componentRef.setInput('members', [alice, bob, dana]);
+    fixture.detectChanges();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const comp = fixture.componentInstance as any;
+    // Dana a voté sur opt1 → absente des manquants de opt1
+    expect(comp.missingVotersForOption(pollWithPartialVote.options[0]).map((m: PartieMemberDto) => m.pseudo)).toEqual([]);
+    // Dana n'a pas voté sur opt2 → présente dans les manquants de opt2 (et seulement elle, Alice/Bob ont voté)
+    expect(comp.missingVotersForOption(pollWithPartialVote.options[1]).map((m: PartieMemberDto) => m.pseudo)).toEqual(['Dana']);
   });
 });

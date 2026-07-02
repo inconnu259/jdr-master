@@ -3,8 +3,9 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router } from '@angular/router';
-import type { AggregatedSlotDto, AvailabilityDeclarationDto, AvailableSlotDto, CreateAvailabilityDto, DaySlot, SessionPollDto } from '@master-jdr/shared';
+import type { AggregatedSlotDto, AvailabilityDeclarationDto, AvailableSlotDto, CreateAvailabilityDto, DaySlot, PartieMemberDto, SessionPollDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../../../core/availability/availability.service';
+import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
@@ -28,6 +29,7 @@ export class CalendarView implements OnInit {
   @ViewChild('slotsPanel') private readonly slotsPanel?: ElementRef<HTMLElement>;
 
   private readonly availabilitySvc = inject(AvailabilityService);
+  private readonly partiesSvc      = inject(PartiesService);
   private readonly pollSvc         = inject(PollService);
   private readonly route           = inject(ActivatedRoute);
   private readonly router          = inject(Router);
@@ -57,6 +59,7 @@ export class CalendarView implements OnInit {
 
   protected readonly activePoll    = signal<SessionPollDto | null>(null);
   protected readonly pollPanelOpen = signal(false);
+  protected readonly members       = signal<PartieMemberDto[]>([]);
   /** true pendant qu'une requête choose/close est en cours — évite une double action concurrente (double-clic, choix + annulation simultanés). */
   protected readonly pollActionPending = signal(false);
 
@@ -99,6 +102,9 @@ export class CalendarView implements OnInit {
         this.loadHeatmap(id),
       ]);
       this.activePoll.set(await this.pollSvc.getCurrentPoll(id).catch(() => null));
+      if (this.isMjMode()) {
+        this.members.set(await this.partiesSvc.members(id).catch(() => []));
+      }
     } else {
       await this.loadDeclarations();
     }

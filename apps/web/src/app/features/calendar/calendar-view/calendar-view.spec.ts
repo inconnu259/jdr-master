@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import { CalendarView } from './calendar-view';
 import { ActivatedRoute } from '@angular/router';
 import { AvailabilityService } from '../../../core/availability/availability.service';
+import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 
 interface CreateOptions {
@@ -40,12 +41,17 @@ function makeSnackBar() {
   return { open: vi.fn() };
 }
 
+function makePartiesService() {
+  return { members: vi.fn().mockResolvedValue([]) };
+}
+
 async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   const opts: CreateOptions = typeof options === 'string' ? { mode: options } : (options ?? {});
 
   const availabilitySvc = makeAvailabilityService();
   const pollSvc = makePollService();
   const snack = makeSnackBar();
+  const partiesSvc = makePartiesService();
 
   await TestBed.configureTestingModule({
     imports: [CalendarView],
@@ -54,6 +60,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
       provideAnimationsAsync(),
       { provide: ActivatedRoute,      useValue: makeActivatedRoute(opts.partieId) },
       { provide: AvailabilityService, useValue: availabilitySvc },
+      { provide: PartiesService,      useValue: partiesSvc },
       { provide: PollService,         useValue: pollSvc },
       { provide: MatSnackBar,         useValue: snack },
     ],
@@ -64,7 +71,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges(); // D5: second cycle pour les bindings asynchrones
-  return { fixture, pollSvc, availabilitySvc, snack };
+  return { fixture, pollSvc, availabilitySvc, snack, partiesSvc };
 }
 
 describe('CalendarView — signal mode', () => {

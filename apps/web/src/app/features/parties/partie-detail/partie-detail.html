@@ -18,13 +18,16 @@
         } @else {
           <p class="muted">{{ theme.tone()['partie.no_session'] }}</p>
         }
+        @if (activePoll(); as poll) {
+          <p class="poll-status-line">{{ pollStatusLabel() }}</p>
+        }
         @if (isMj()) {
           <a mat-flat-button color="primary" [routerLink]="['/parties', p.id, 'calendar']">
             {{ theme.tone()['cta.find_date'] }}
           </a>
         } @else {
           <a mat-stroked-button [routerLink]="['/parties', p.id, 'guild-calendar']">
-            {{ theme.tone()['cta.guild_calendar'] }}
+            {{ activePoll() ? theme.tone()['poll.vote_pending'] : theme.tone()['cta.guild_calendar'] }}
           </a>
         }
       </section>

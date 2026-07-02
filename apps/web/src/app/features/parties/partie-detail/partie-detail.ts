@@ -15,6 +15,7 @@ import type {
   InviteLinkDto,
   PartieDto,
   PartieMemberDto,
+  SessionPollDto,
   UserSearchResultDto,
 } from '@master-jdr/shared';
 
@@ -27,6 +28,8 @@ const SLOT_LABELS: Record<DaySlot, string> = {
 import { AuthService } from '../../../core/auth/auth.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
+import { PollService } from '../../../core/poll/poll.service';
+import { getRespondedCount } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
@@ -53,11 +56,13 @@ export class PartieDetail implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly parties = inject(PartiesService);
   private readonly modeSvc = inject(ModeService);
+  private readonly pollSvc = inject(PollService);
   private readonly dialog = inject(MatDialog);
   protected readonly theme = inject(ThemeToneService);
 
   protected readonly partie = signal<PartieDto | null>(null);
   protected readonly members = signal<PartieMemberDto[]>([]);
+  protected readonly activePoll = signal<SessionPollDto | null>(null);
   protected readonly links = signal<InviteLinkDto[]>([]);
   protected readonly search = signal('');
   protected readonly results = signal<UserSearchResultDto[]>([]);
@@ -94,11 +99,23 @@ export class PartieDetail implements OnInit {
   protected readonly system = gameSystemName;
   protected readonly kind = partieKindLabel;
 
+  protected readonly respondedCount = computed(() => {
+    const poll = this.activePoll();
+    return poll ? getRespondedCount(poll, this.members()) : 0;
+  });
+
+  protected pollStatusLabel(): string {
+    return this.theme.tone()['poll.status_summary']
+      .replace('{responded}', String(this.respondedCount()))
+      .replace('{total}', String(this.members().length));
+  }
+
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) return;
     this.partie.set(await this.parties.get(id));
     await this.loadMembers();
+    this.activePoll.set(await this.pollSvc.getCurrentPoll(id).catch(() => null));
     // loadLinks() déclenché réactivement par effect() dans le constructeur
   }
 

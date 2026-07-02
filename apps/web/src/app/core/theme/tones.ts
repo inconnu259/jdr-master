@@ -70,6 +70,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'success.vote_cast':        'Réponse inscrite dans le grimoire.',
     'cta.confirm_votes':        'Sceller mes réponses',
     'poll.vote_closed':         'Ce vote est clos. L\'oracle a tranché.',
+    'alert.all_responded':      'Tous les compagnons ont répondu au vote.',
+    'poll.status_summary':      'Vote ouvert — {responded}/{total} compagnons ont répondu',
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -133,6 +135,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'success.vote_cast':        'L\'écureuil a transmis ta réponse.',
     'cta.confirm_votes':        'Transmettre mes réponses',
     'poll.vote_closed':         'Le vote de la forêt est terminé.',
+    'alert.all_responded':      'Tous les habitants ont répondu à l\'appel.',
+    'poll.status_summary':      'Vote ouvert — {responded}/{total} habitants ont répondu',
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -196,5 +200,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'success.vote_cast':        'Réponse enregistrée dans le registre.',
     'cta.confirm_votes':        'Valider dans le registre',
     'poll.vote_closed':         'Registre de vote verrouillé.',
+    'alert.all_responded':      'Tout l\'équipage a répondu au registre.',
+    'poll.status_summary':      'Registre ouvert — {responded}/{total} membres ont répondu',
   },
 };

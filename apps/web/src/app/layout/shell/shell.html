@@ -18,7 +18,15 @@
       </mat-button-toggle-group>
     }
 
-    <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="Menu utilisateur">
+    <button
+      mat-icon-button
+      [matBadge]="openPollsCount()"
+      [matBadgeHidden]="openPollsCount() === 0"
+      matBadgeColor="warn"
+      matBadgeSize="small"
+      [matMenuTriggerFor]="menu"
+      aria-label="Menu utilisateur"
+    >
       <mat-icon>account_circle</mat-icon>
     </button>
     <mat-menu #menu="matMenu">

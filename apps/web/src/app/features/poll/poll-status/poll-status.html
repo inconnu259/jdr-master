@@ -3,6 +3,9 @@
   @if (poll().scenarioRef) {
     <p class="poll-status__scenario">{{ poll().scenarioRef }}</p>
   }
+  @if (allResponded()) {
+    <p class="poll-status__all-responded">{{ theme.tone()['alert.all_responded'] }}</p>
+  }
   <ul class="poll-status__options">
     @for (opt of poll().options; track opt.id) {
       <li class="poll-status__option" [class.poll-status__option--all-yes]="isAllYes(opt)">
@@ -19,6 +22,13 @@
                 <span aria-hidden="true">⚔</span> {{ vote.pseudo }}
                 <span class="poll-status__answer">{{ ANSWER_ICONS[vote.answer] }} {{ ANSWER_LABELS[vote.answer] }}</span>
               </li>
+            }
+          </ul>
+        }
+        @if (missingVotersForOption(opt).length > 0) {
+          <ul class="poll-status__missing" aria-label="N'ont pas encore répondu pour cette date">
+            @for (m of missingVotersForOption(opt); track m.userId) {
+              <li>{{ missingAlert(m.pseudo) }}</li>
             }
           </ul>
         }
