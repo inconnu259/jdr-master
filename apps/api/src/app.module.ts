@@ -11,6 +11,8 @@ import { PartiesModule } from './parties/parties.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { PollModule } from './poll/poll.module';
+import { GameSystemModule } from './game-systems/game-system.module';
+import { CharacterModule } from './characters/character.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { PollModule } from './poll/poll.module';
     InvitationsModule,
     AvailabilityModule,
     PollModule,
+    GameSystemModule,
+    CharacterModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

@@ -21,6 +21,7 @@
     "@angular/material": "^22.0.2",
     "@angular/platform-browser": "^22.0.0",
     "@angular/router": "^22.0.0",
+    "@master-jdr/game-rules": "workspace:*",
     "@master-jdr/shared": "workspace:*",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"

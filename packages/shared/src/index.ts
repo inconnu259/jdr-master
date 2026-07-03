@@ -231,3 +231,50 @@ export interface CastVoteDto {
 export interface ChooseDateDto {
   optionId: string;
 }
+
+// ─── Palier P3 : Moteur plugin & Personnages ─────────────────────────────────
+
+/** Système de jeu enregistré dans le registre. */
+export interface GameSystemDto {
+  id: string;
+  name: string;
+  version: string;
+}
+
+/** Données génériques d'une fiche (structure validée applicativement par validate()). */
+export type SheetData = Record<string, unknown>;
+
+/** Stats dérivées d'un personnage. */
+export interface DerivedStats {
+  PV: number;
+  PE: number;
+  Condition: number;
+  Initiative: number;
+  Encombrement: number;
+}
+
+/** Fiche de personnage telle que renvoyée par l'API. */
+export interface CharacterDto {
+  id: string;
+  userId: string;
+  partieId: string;
+  gameSystemId: string;
+  sheetData: SheetData;
+  derived: DerivedStats;
+  portraitUrl: string | null;
+  portraitCropData: unknown | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Payload de création d'un personnage. */
+export interface CreateCharacterDto {
+  gameSystemId: string;
+  sheetData: SheetData;
+}
+
+/** Réponse de GET /game-systems/:id/schema. */
+export interface GameSystemSchemaDto {
+  sheetSchema: unknown;
+  creationSteps: unknown[];
+}

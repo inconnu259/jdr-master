@@ -27,6 +27,7 @@ model User {
   inviteLinksCreated     InviteLink[]              @relation("InviteLinkCreator")
   availabilityDeclarations AvailabilityDeclaration[]
   pollVotes              PollVote[]
+  characters             Character[]
 }
 
 enum PartieKind {
@@ -53,6 +54,7 @@ model Partie {
   invitations  Invitation[]
   inviteLinks  InviteLink[]
   polls        SessionPoll[]
+  characters   Character[]
 }
 
 enum InvitationStatus {
@@ -194,6 +196,70 @@ model PollVote {
   answer   VoteAnswer
 
   @@unique([optionId, userId])
+}
+
+// ─── Palier P3 : Moteur plugin & Ryuutama ──────────────────────────────────────
+
+enum ContentScope {
+  BASE
+  MJ
+  PARTIE
+}
+
+/// Système de jeu enregistré dans le registre (id = slug stable, ex: "ryuutama").
+model GameSystem {
+  id      String @id
+  name    String
+  version String
+
+  contentTypes ContentType[]
+  characters   Character[]
+}
+
+/// Type de contenu d'un système de jeu (ex: classe, type, catégorie d'arme).
+model ContentType {
+  id           String     @id @default(uuid())
+  gameSystemId String
+  gameSystem   GameSystem @relation(fields: [gameSystemId], references: [id], onDelete: Cascade)
+  key          String
+  label        String
+
+  entries ContentEntry[]
+
+  @@unique([gameSystemId, key])
+}
+
+/// Entrée de contenu (donnée data-driven) pour un ContentType donné.
+model ContentEntry {
+  id            String       @id @default(uuid())
+  contentTypeId String
+  contentType   ContentType  @relation(fields: [contentTypeId], references: [id], onDelete: Cascade)
+  scope         ContentScope @default(BASE)
+  key           String
+  data          Json
+
+  @@unique([contentTypeId, key])
+}
+
+/// Personnage d'un joueur (ou du MJ) pour une partie et un système de jeu donnés.
+model Character {
+  id               String     @id @default(uuid())
+  userId           String
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partieId         String
+  partie           Partie     @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  gameSystemId     String
+  gameSystem       GameSystem @relation(fields: [gameSystemId], references: [id])
+  sheetData        Json
+  derived          Json
+  portraitUrl      String?
+  portraitCropData Json?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  @@unique([userId, partieId, gameSystemId])
+  @@index([partieId])
+  @@index([userId])
 }
 
 /// Sessions HTTP (stockées par connect-pg-simple). Modélisées ici pour que **Prisma** les gère :
