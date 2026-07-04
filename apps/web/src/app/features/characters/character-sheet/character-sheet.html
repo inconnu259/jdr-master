@@ -10,7 +10,29 @@
           {{ classData()?.label }} · {{ typeData()?.label }} · Niveau 1 · Ryuutama
         </p>
       </div>
+      <div class="sheet__export-actions">
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="exporting() !== null"
+          (click)="exportPdf('editable')"
+        >
+          {{ theme.tone()['character.export_editable_cta'] }}
+        </button>
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="exporting() !== null"
+          (click)="exportPdf('2pages')"
+        >
+          {{ theme.tone()['character.export_2pages_cta'] }}
+        </button>
+      </div>
     </header>
+
+    @if (exportError(); as error) {
+      <p class="sheet__export-error">{{ error }}</p>
+    }
 
     <div class="sheet__body">
       <div class="sheet__column">

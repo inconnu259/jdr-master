@@ -1,10 +1,12 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
 import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
 import { characterName, findContentEntry } from '../../../core/characters/character.util';
 import { CharacterAvatar } from '../character-avatar/character-avatar';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 const RYUUTAMA_ID = 'ryuutama';
 
@@ -41,17 +43,20 @@ interface NarrativeFields {
 @Component({
   selector: 'app-character-sheet',
   standalone: true,
-  imports: [CharacterAvatar],
+  imports: [CharacterAvatar, MatButtonModule],
   templateUrl: './character-sheet.html',
   styleUrl: './character-sheet.scss',
 })
 export class CharacterSheet implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly characterSvc = inject(CharacterService);
+  protected readonly theme = inject(ThemeToneService);
 
   protected readonly character = signal<CharacterDto | null>(null);
   protected readonly content = signal<GameSystemContentDto | null>(null);
   protected readonly loadError = signal<string | null>(null);
+  protected readonly exportError = signal<string | null>(null);
+  protected readonly exporting = signal<'editable' | '2pages' | null>(null);
 
   protected readonly sheetData = computed(
     () => (this.character()?.sheetData ?? {}) as Record<string, unknown>,
@@ -153,6 +158,29 @@ export class CharacterSheet implements OnInit {
     } catch {
       // Contenu non critique pour l'affichage : la fiche reste consultable, seuls les
       // labels/talents/avantages résolus resteront vides.
+    }
+  }
+
+  protected async exportPdf(format: 'editable' | '2pages'): Promise<void> {
+    const c = this.character();
+    if (!c) return;
+    this.exportError.set(null);
+    this.exporting.set(format);
+    try {
+      const blob = await this.characterSvc.exportPdf(c.id, format);
+      const url = URL.createObjectURL(blob);
+      const safeName = (this.name() || 'personnage').replace(/[^a-z0-9-_]+/gi, '_');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `fiche-${safeName}-${format}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      this.exportError.set(this.theme.tone()['character.export_error']);
+    } finally {
+      this.exporting.set(null);
     }
   }
 }

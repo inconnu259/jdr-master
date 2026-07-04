@@ -54,6 +54,7 @@ function defaultSvc() {
   return {
     get: vi.fn().mockResolvedValue(CHARACTER),
     getGameSystemContent: vi.fn().mockResolvedValue(CONTENT),
+    exportPdf: vi.fn().mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
   };
 }
 
@@ -83,7 +84,18 @@ async function createComponent(
 }
 
 describe('CharacterSheet', () => {
-  afterEach(() => TestBed.resetTestingModule());
+  beforeEach(() => {
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:mock-url'),
+      revokeObjectURL: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    vi.unstubAllGlobals();
+  });
 
   it('charge le personnage et le contenu, affiche les sections avec labels résolus (pas les clés brutes)', async () => {
     const { fixture, characterSvc } = await createComponent();
@@ -162,5 +174,56 @@ describe('CharacterSheet', () => {
     const { fixture } = await createComponent(characterSvc);
 
     expect(fixture.nativeElement.textContent).toContain('Forgeron');
+  });
+
+  it('clic sur "Exporter en PDF (éditable)" → appelle exportPdf(id, "editable") et déclenche un téléchargement', async () => {
+    const { fixture, characterSvc } = await createComponent();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
+
+    const buttons = fixture.nativeElement.querySelectorAll(
+      '.sheet__export-actions button',
+    ) as NodeListOf<HTMLButtonElement>;
+    buttons[0].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(characterSvc.exportPdf).toHaveBeenCalledWith('char1', 'editable');
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it('clic sur "Exporter en PDF (2 pages)" → appelle exportPdf(id, "2pages")', async () => {
+    const { fixture, characterSvc } = await createComponent();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
+
+    const buttons = fixture.nativeElement.querySelectorAll(
+      '.sheet__export-actions button',
+    ) as NodeListOf<HTMLButtonElement>;
+    buttons[1].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(characterSvc.exportPdf).toHaveBeenCalledWith('char1', '2pages');
+  });
+
+  it("échec de l'export → message d'erreur affiché, pas de plantage", async () => {
+    const characterSvc = makeCharacterService({
+      exportPdf: vi.fn().mockRejectedValue(new Error('network down')),
+    });
+    const { fixture } = await createComponent(characterSvc);
+
+    const buttons = fixture.nativeElement.querySelectorAll(
+      '.sheet__export-actions button',
+    ) as NodeListOf<HTMLButtonElement>;
+    buttons[0].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.exportError()).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain(comp.exportError());
   });
 });

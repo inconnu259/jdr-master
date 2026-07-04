@@ -17,7 +17,21 @@
   &__header {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 1rem;
+  }
+
+  &__export-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  &__export-error {
+    color: var(--mat-sys-error, #c00);
+    font-size: 0.85rem;
+    margin: 0;
   }
 
   &__name {

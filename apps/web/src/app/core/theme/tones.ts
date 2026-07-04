@@ -81,6 +81,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
       "La magie s'apprendra plus tard, jeune sorcier — pour l'instant, seuls les dons passifs s'activent.",
     'character.portrait_missing': 'Aucun portrait — le conteur imagine un visage',
     'character.portrait_edit_cta': 'Modifier le portrait',
+    'character.export_editable_cta': 'Exporter en PDF (éditable)',
+    'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
+    'character.export_error': "Le parchemin n'a pas pu être copié. Réessayez.",
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -156,6 +159,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
       'Les sortilèges des saisons dorment encore — reviens quand le cercle sera prêt.',
     'character.portrait_missing': 'Aucun visage gravé — la forêt garde son mystère',
     'character.portrait_edit_cta': 'Modifier le portrait',
+    'character.export_editable_cta': 'Exporter en PDF (éditable)',
+    'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
+    'character.export_error': "L'écureuil s'est perdu en chemin. Réessayez.",
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -230,5 +236,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
       "Le grimoire à vapeur n'est pas encore calibré pour les formules — les avantages de base restent actifs.",
     'character.portrait_missing': 'Aucun portrait gravé sur la plaque',
     'character.portrait_edit_cta': 'Recalibrer le portrait',
+    'character.export_editable_cta': 'Exporter en PDF (éditable)',
+    'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
+    'character.export_error': "Échec de l'impression pneumatique. Réessayez.",
   },
 };

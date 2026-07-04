@@ -57,4 +57,14 @@ export class CharacterService {
       this.http.get<CharacterDto>(`${API_BASE}/characters/${id}`, { withCredentials: true }),
     );
   }
+
+  exportPdf(id: string, format: 'editable' | '2pages'): Promise<Blob> {
+    return firstValueFrom(
+      this.http.get(`${API_BASE}/characters/${id}/export.pdf`, {
+        params: { format },
+        responseType: 'blob',
+        withCredentials: true,
+      }),
+    );
+  }
 }

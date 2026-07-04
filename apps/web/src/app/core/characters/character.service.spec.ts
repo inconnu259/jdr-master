@@ -85,4 +85,26 @@ describe('CharacterService (front)', () => {
     req.flush(character);
     expect(await p).toEqual(character);
   });
+
+  it('exportPdf(id, format) → GET /characters/:id/export.pdf?format=... en blob', async () => {
+    const p = service.exportPdf('c1', 'editable');
+    const req = http.expectOne(
+      (r) => r.url === `${API}/characters/c1/export.pdf` && r.params.get('format') === 'editable',
+    );
+    expect(req.request.method).toBe('GET');
+    expect(req.request.responseType).toBe('blob');
+    expect(req.request.withCredentials).toBe(true);
+    const blob = new Blob(['%PDF-1.6'], { type: 'application/pdf' });
+    req.flush(blob);
+    expect(await p).toEqual(blob);
+  });
+
+  it('exportPdf(id, "2pages") → passe le format en query param', async () => {
+    const p = service.exportPdf('c1', '2pages');
+    const req = http.expectOne(
+      (r) => r.url === `${API}/characters/c1/export.pdf` && r.params.get('format') === '2pages',
+    );
+    req.flush(new Blob());
+    await p;
+  });
 });
