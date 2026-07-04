@@ -16,7 +16,7 @@ const TYPES: ContentEntryDto[] = [
 describe('TypeStep', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('sélection d\'un type → émet typeIdChange et affiche les avantages', async () => {
+  it("sélection d'un type → émet typeIdChange et affiche les avantages", async () => {
     TestBed.configureTestingModule({ imports: [TypeStep] });
     const fixture = TestBed.createComponent(TypeStep);
     fixture.componentRef.setInput('types', TYPES);

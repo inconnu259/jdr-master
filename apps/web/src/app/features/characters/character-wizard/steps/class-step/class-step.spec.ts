@@ -29,7 +29,7 @@ const CLASSES: ContentEntryDto[] = [
 describe('ClassStep', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('sélection d\'une classe → émet classIdChange et affiche les talents immédiatement', async () => {
+  it("sélection d'une classe → émet classIdChange et affiche les talents immédiatement", async () => {
     TestBed.configureTestingModule({ imports: [ClassStep] });
     const fixture = TestBed.createComponent(ClassStep);
     fixture.componentRef.setInput('classes', CLASSES);

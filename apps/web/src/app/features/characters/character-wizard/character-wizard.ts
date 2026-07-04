@@ -93,12 +93,16 @@ export class CharacterWizard implements OnInit {
   protected readonly submitting = signal(false);
   protected readonly stepErrors = signal<Record<string, string[]>>({});
 
-  protected readonly currentStepKey = computed(() => this.steps()[this.currentStepIndex()]?.key ?? '');
+  protected readonly currentStepKey = computed(
+    () => this.steps()[this.currentStepIndex()]?.key ?? '',
+  );
   protected readonly currentStepLabel = computed(
     () => this.steps()[this.currentStepIndex()]?.label ?? '',
   );
   protected readonly isFirstStep = computed(() => this.currentStepIndex() === 0);
-  protected readonly isLastStep = computed(() => this.currentStepIndex() === this.steps().length - 1);
+  protected readonly isLastStep = computed(
+    () => this.currentStepIndex() === this.steps().length - 1,
+  );
 
   protected readonly derived = computed<DerivedStats | null>(() => {
     const attrs = this.sheetData().attributes;
@@ -182,14 +186,11 @@ export class CharacterWizard implements OnInit {
     this.submitting.set(true);
     this.stepErrors.set({});
     try {
-      await this.characterSvc.create(this.partieId, {
+      const created = await this.characterSvc.create(this.partieId, {
         gameSystemId: RYUUTAMA_ID,
         sheetData: this.sheetData(),
       });
-      // Story 4.3 (fiche de personnage) n'existe pas encore : on redirige vers l'onglet
-      // Personnages de la partie plutôt que vers une fiche dédiée. À remplacer par la
-      // route de la fiche une fois la Story 4.3 livrée.
-      this.router.navigate(['/parties', this.partieId]);
+      this.router.navigate(['/parties', this.partieId, 'characters', created.id]);
     } catch (err) {
       this.handleSubmitError(err);
     } finally {

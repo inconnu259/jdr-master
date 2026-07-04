@@ -1,0 +1,15 @@
+<button type="button" class="character-summary-card" (click)="onClick()">
+  <app-character-avatar [name]="name()" [size]="44" />
+  <div class="character-summary-card__info">
+    <span class="character-summary-card__name">{{ name() }}</span>
+    @if (className()) {
+      <span class="character-summary-card__class">{{ className() }}</span>
+    }
+  </div>
+  <div class="character-summary-card__badges">
+    <span class="stat-pill">PV {{ character().derived.PV }}</span>
+    <span class="stat-pill">PE {{ character().derived.PE }}</span>
+    <span class="stat-pill">Initiative {{ character().derived.Initiative }}</span>
+    <span class="stat-pill">Encombrement max {{ character().derived.Encombrement }}</span>
+  </div>
+</button>

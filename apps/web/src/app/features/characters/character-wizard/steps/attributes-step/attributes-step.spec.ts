@@ -95,8 +95,8 @@ describe('AttributesStep', () => {
     expect(espSelected).not.toBe(-1);
     expect(intSelected).not.toBe(-1);
     expect(espSelected).not.toBe(intSelected);
-    expect(
-      (rows[3].querySelectorAll('.value-chip')[1] as HTMLButtonElement).classList,
-    ).toContain('value-chip--selected');
+    expect((rows[3].querySelectorAll('.value-chip')[1] as HTMLButtonElement).classList).toContain(
+      'value-chip--selected',
+    );
   });
 });

@@ -31,6 +31,13 @@ export const routes: Routes = [
             (m) => m.CharacterWizard,
           ),
       },
+      {
+        path: 'parties/:id/characters/:characterId',
+        loadComponent: () =>
+          import('./features/characters/character-sheet/character-sheet').then(
+            (m) => m.CharacterSheet,
+          ),
+      },
       { path: 'profile/calendar', component: CalendarView, data: { mode: 'personal' } },
     ],
   },

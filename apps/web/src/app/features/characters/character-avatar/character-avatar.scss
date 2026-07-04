@@ -1,0 +1,11 @@
+.character-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--mat-sys-surface-container-high, #f0ebe3);
+  color: var(--mat-sys-on-surface, #1a1428);
+  font-weight: 600;
+  flex-shrink: 0;
+  user-select: none;
+}

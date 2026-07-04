@@ -76,4 +76,13 @@ describe('CharacterService (front)', () => {
     req.flush([character]);
     expect(await p).toEqual([character]);
   });
+
+  it('get(id) → GET /characters/:id avec withCredentials', async () => {
+    const p = service.get('c1');
+    const req = http.expectOne(`${API}/characters/c1`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
 });

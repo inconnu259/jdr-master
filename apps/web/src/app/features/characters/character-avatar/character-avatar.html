@@ -1,0 +1,8 @@
+<div
+  class="character-avatar"
+  [style.width.px]="size()"
+  [style.height.px]="size()"
+  [style.fontSize.px]="size() === 64 ? 24 : 16"
+  [attr.aria-label]="ariaLabel()"
+  role="img"
+>{{ initials() }}</div>

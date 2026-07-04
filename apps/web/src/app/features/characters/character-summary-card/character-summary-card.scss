@@ -1,0 +1,50 @@
+.character-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container, #fff);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  width: 100%;
+
+  &:hover {
+    border-color: var(--mat-sys-primary, #9b6dff);
+  }
+
+  &__info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__name {
+    font-weight: 600;
+  }
+
+  &__class {
+    font-size: 0.85rem;
+    color: var(--mat-sys-on-surface-variant, #555);
+  }
+
+  &__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    justify-content: flex-end;
+  }
+}
+
+.stat-pill {
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--mat-sys-secondary-container, #e0dbef);
+  color: var(--mat-sys-on-secondary-container, #2a1a4a);
+  white-space: nowrap;
+}

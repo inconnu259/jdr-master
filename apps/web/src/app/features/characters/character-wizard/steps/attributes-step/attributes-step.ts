@@ -55,9 +55,7 @@ export class AttributesStep {
         for (const attr of ATTR_KEYS) {
           const attrValue = incoming[attr];
           if (attrValue === undefined) continue;
-          const idx = values.findIndex(
-            (v, i) => v === attrValue && !usedIndices.has(i),
-          );
+          const idx = values.findIndex((v, i) => v === attrValue && !usedIndices.has(i));
           if (idx >= 0) {
             reconstructed[attr] = idx;
             usedIndices.add(idx);
@@ -69,9 +67,7 @@ export class AttributesStep {
   }
 
   protected isChipUsedElsewhere(attr: AttrKey, chipIndex: number): boolean {
-    return Object.entries(this.assignment()).some(
-      ([a, idx]) => a !== attr && idx === chipIndex,
-    );
+    return Object.entries(this.assignment()).some(([a, idx]) => a !== attr && idx === chipIndex);
   }
 
   protected isChipSelected(attr: AttrKey, chipIndex: number): boolean {

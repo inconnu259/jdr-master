@@ -51,4 +51,10 @@ export class CharacterService {
       }),
     );
   }
+
+  get(id: string): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.get<CharacterDto>(`${API_BASE}/characters/${id}`, { withCredentials: true }),
+    );
+  }
 }

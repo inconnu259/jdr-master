@@ -107,23 +107,22 @@
 
         <mat-tab [label]="theme.tone()['character.tab_label']">
             <section class="characters-tab">
-              @if (myCharacters().length === 0) {
+              @if (characters().length === 0) {
                 <p class="muted">Aucun personnage créé sur cette partie pour l'instant.</p>
+              }
+              <div class="characters-tab__grid">
+                @for (character of characters(); track character.id) {
+                  <app-character-summary-card
+                    [character]="character"
+                    [className]="classLabel(character)"
+                    (selected)="openCharacterSheet(p.id, character.id)"
+                  />
+                }
+              </div>
+              @if (myCharacters().length === 0) {
                 <a mat-flat-button color="primary" [routerLink]="['/parties', p.id, 'characters', 'new']">
                   {{ theme.tone()['character.create_cta'] }}
                 </a>
-              } @else {
-                @for (character of myCharacters(); track character.id) {
-                  <!-- La fiche en lecture seule (Story 4.3) n'existe pas encore : le bouton est
-                       affiché mais désactivé, en attendant la route de la fiche. -->
-                  <button
-                    mat-stroked-button
-                    disabled
-                    title="La fiche de personnage sera disponible prochainement"
-                  >
-                    {{ characterName(character) }}
-                  </button>
-                }
               }
             </section>
         </mat-tab>

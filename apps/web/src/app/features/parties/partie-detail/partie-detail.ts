@@ -14,6 +14,7 @@ import { firstValueFrom } from 'rxjs';
 import type {
   CharacterDto,
   DaySlot,
+  GameSystemContentDto,
   InviteLinkDto,
   PartieDto,
   PartieMemberDto,
@@ -29,6 +30,7 @@ const SLOT_LABELS: Record<DaySlot, string> = {
 };
 import { AuthService } from '../../../core/auth/auth.service';
 import { CharacterService } from '../../../core/characters/character.service';
+import { characterName, findContentEntry } from '../../../core/characters/character.util';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
 import { PollService } from '../../../core/poll/poll.service';
@@ -36,6 +38,9 @@ import { getRespondedCount } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
+import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
+
+const RYUUTAMA_ID = 'ryuutama';
 
 @Component({
   selector: 'app-partie-detail',
@@ -50,6 +55,7 @@ import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
     MatInputModule,
     MatListModule,
     MatTabsModule,
+    CharacterSummaryCard,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -70,6 +76,7 @@ export class PartieDetail implements OnInit {
   protected readonly activePoll = signal<SessionPollDto | null>(null);
   protected readonly links = signal<InviteLinkDto[]>([]);
   protected readonly characters = signal<CharacterDto[]>([]);
+  protected readonly gameSystemContent = signal<GameSystemContentDto | null>(null);
   protected readonly search = signal('');
   protected readonly results = signal<UserSearchResultDto[]>([]);
   protected readonly notice = signal<string | null>(null);
@@ -83,10 +90,13 @@ export class PartieDetail implements OnInit {
     return this.characters().filter((c) => c.userId === userId);
   });
 
-  /** Nom narratif du personnage, ou libellé de repli si le joueur ne l'a pas renseigné. */
-  protected characterName(character: CharacterDto): string {
-    const narrative = character.sheetData?.['narrative'] as { name?: string } | undefined;
-    return narrative?.name?.trim() || 'Personnage sans nom';
+  protected readonly characterName = characterName;
+
+  /** Label de classe résolu depuis le contenu seedé (jamais codé en dur). */
+  protected classLabel(character: CharacterDto): string {
+    const classId = (character.sheetData as { classId?: string })?.classId;
+    const entry = findContentEntry<{ label?: string }>(this.gameSystemContent(), 'class', classId);
+    return entry?.label ?? '';
   }
 
   constructor() {
@@ -138,7 +148,14 @@ export class PartieDetail implements OnInit {
     await this.loadMembers();
     this.activePoll.set(await this.pollSvc.getCurrentPoll(id).catch(() => null));
     this.characters.set(await this.characterSvc.listByPartie(id).catch(() => []));
+    this.gameSystemContent.set(
+      await this.characterSvc.getGameSystemContent(RYUUTAMA_ID).catch(() => null),
+    );
     // loadLinks() déclenché réactivement par effect() dans le constructeur
+  }
+
+  protected openCharacterSheet(partieId: string, characterId: string): void {
+    this.router.navigate(['/parties', partieId, 'characters', characterId]);
   }
 
   async runSearch(): Promise<void> {

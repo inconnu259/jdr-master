@@ -3,6 +3,7 @@ import { PartieDetail } from './partie-detail';
 import { ActivatedRoute } from '@angular/router';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { signal } from '@angular/core';
 import { vi } from 'vitest';
 import type { CharacterDto, PartieDto, PartieMemberDto, SessionPollDto } from '@master-jdr/shared';
@@ -67,6 +68,7 @@ interface CreateFixtureOptions {
   members?: PartieMemberDto[];
   poll?: SessionPollDto | null;
   characters?: CharacterDto[];
+  noopAnimations?: boolean;
 }
 
 async function createFixture(
@@ -78,7 +80,9 @@ async function createFixture(
     imports: [PartieDetail],
     providers: [
       provideRouter([]),
-      provideAnimationsAsync(),
+      // MatTabGroup anime le changement d'onglet via le Web Animations API, non fiable en jsdom —
+      // les tests qui doivent naviguer entre onglets utilisent le mode noop pour un rendu synchrone.
+      options.noopAnimations ? provideNoopAnimations() : provideAnimationsAsync(),
       { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => partie.id } } } },
       { provide: AuthService, useValue: makeAuthService(currentUserId) },
       { provide: PartiesService, useValue: makePartiesService(partie, options.members ?? []) },
@@ -89,7 +93,12 @@ async function createFixture(
       },
       {
         provide: CharacterService,
-        useValue: { listByPartie: vi.fn().mockResolvedValue(options.characters ?? []) },
+        useValue: {
+          listByPartie: vi.fn().mockResolvedValue(options.characters ?? []),
+          getGameSystemContent: vi.fn().mockResolvedValue({
+            class: [{ key: 'menestrel', data: { label: 'Ménestrel' } }],
+          }),
+        },
       },
       { provide: ThemeToneService, useValue: makeToneService() },
       { provide: MatDialog, useValue: { open: vi.fn() } },
@@ -223,8 +232,9 @@ describe('PartieDetail — onglet Personnages', () => {
     };
     expect(characterSvc.listByPartie).toHaveBeenCalledWith('party-1');
     expect(el.textContent).toContain('Personnages');
-    expect((fixture.componentInstance as unknown as { characters: () => unknown[] }).characters())
-      .toEqual([]);
+    expect(
+      (fixture.componentInstance as unknown as { characters: () => unknown[] }).characters(),
+    ).toEqual([]);
   });
 
   it('expose les personnages chargés sur le signal characters()', async () => {
@@ -242,8 +252,9 @@ describe('PartieDetail — onglet Personnages', () => {
     };
     const { fixture } = await createFixture(makePartie(), MJ_ID, { characters: [character] });
 
-    expect((fixture.componentInstance as unknown as { characters: () => unknown[] }).characters())
-      .toEqual([character]);
+    expect(
+      (fixture.componentInstance as unknown as { characters: () => unknown[] }).characters(),
+    ).toEqual([character]);
   });
 
   it("un personnage créé par un AUTRE joueur n'empêche pas l'utilisateur courant de créer le sien", async () => {
@@ -268,4 +279,74 @@ describe('PartieDetail — onglet Personnages', () => {
     const comp = fixture.componentInstance as unknown as { myCharacters: () => unknown[] };
     expect(comp.myCharacters()).toEqual([]);
   });
+
+  it('classLabel() résout le label de classe depuis le contenu chargé (pas la clé brute)', async () => {
+    const character: CharacterDto = {
+      id: 'c1',
+      userId: PLAYER_ID,
+      partieId: 'party-1',
+      gameSystemId: 'ryuutama',
+      sheetData: { classId: 'menestrel', narrative: { name: 'Fenn' } },
+      derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
+      portraitUrl: null,
+      portraitCropData: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const { fixture } = await createFixture(makePartie(), MJ_ID, { characters: [character] });
+
+    const comp = fixture.componentInstance as unknown as {
+      classLabel: (c: CharacterDto) => string;
+    };
+    expect(comp.classLabel(character)).toBe('Ménestrel');
+  });
+
+  it('openCharacterSheet() navigue vers /parties/:id/characters/:characterId', async () => {
+    const { fixture } = await createFixture(makePartie(), MJ_ID, { characters: [] });
+
+    const router = TestBed.inject((await import('@angular/router')).Router);
+    const navigateSpy = vi.spyOn(router, 'navigate');
+
+    const comp = fixture.componentInstance as unknown as {
+      openCharacterSheet: (partieId: string, characterId: string) => void;
+    };
+    comp.openCharacterSheet('party-1', 'c1');
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/parties', 'party-1', 'characters', 'c1']);
+  });
+
+  it(
+    'affiche une app-character-summary-card par personnage visible ET la carte CTA quand ' +
+      "myCharacters() est vide, même si d'autres personnages existent déjà (cas MJ)",
+    async () => {
+      const otherPlayerCharacter: CharacterDto = {
+        id: 'c1',
+        userId: 'some-other-player',
+        partieId: 'party-1',
+        gameSystemId: 'ryuutama',
+        sheetData: { narrative: { name: 'Fenn' } },
+        derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
+        portraitUrl: null,
+        portraitCropData: null,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      // MJ n'a pas de personnage à lui (myCharacters() vide) mais un joueur en a déjà créé un.
+      const { fixture, el } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID, {
+        characters: [otherPlayerCharacter],
+        noopAnimations: true,
+      });
+
+      // Le contenu de l'onglet "Personnages" est chargé paresseusement par MatTabGroup — il faut
+      // cliquer sur son libellé pour que son template soit instancié dans le DOM.
+      const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+      tabLabels[1].click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(el.querySelectorAll('app-character-summary-card').length).toBe(1);
+      expect(el.querySelector('.characters-tab')?.textContent).toContain('Créer un voyageur');
+    },
+  );
 });

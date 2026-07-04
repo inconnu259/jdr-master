@@ -35,7 +35,12 @@ const CONTENT: GameSystemContentDto = {
       },
     },
   ],
-  type: [{ key: 'attaque', data: { label: 'Attaque', advantages: [{ name: 'Endurance', effect: '+4 PV' }] } }],
+  type: [
+    {
+      key: 'attaque',
+      data: { label: 'Attaque', advantages: [{ name: 'Endurance', effect: '+4 PV' }] },
+    },
+  ],
   attributePattern: [{ key: 'polyvalent', data: { label: 'Polyvalent', values: [8, 4, 6, 6] } }],
   weaponCategory: [
     { key: 'arc', data: { label: 'Arc', touchFormula: 'AGI+INT-2', damageFormula: 'AGI' } },
@@ -90,7 +95,7 @@ describe('CharacterWizard', () => {
     expect(comp.canGoNext()).toBe(false);
   });
 
-  it("dérive ses 7 étapes depuis creationSteps() du schéma, sans coder les clés en dur (AC1) — exclut Portrait", async () => {
+  it('dérive ses 7 étapes depuis creationSteps() du schéma, sans coder les clés en dur (AC1) — exclut Portrait', async () => {
     const { fixture } = await createComponent();
     const comp = fixture.componentInstance as any;
     expect(comp.steps().map((s: { key: string }) => s.key)).toEqual([
@@ -196,7 +201,7 @@ describe('CharacterWizard', () => {
     expect(comp.currentStepIndex()).toBe(1);
   });
 
-  it('soumission réussie → POST puis redirection vers /parties/:id', async () => {
+  it('soumission réussie → POST puis redirection vers la fiche du personnage créé', async () => {
     const { fixture, characterSvc, router } = await createComponent('p1');
     const comp = fixture.componentInstance as any;
     characterSvc.create.mockResolvedValue({ id: 'char1' });
@@ -207,7 +212,7 @@ describe('CharacterWizard', () => {
       'p1',
       expect.objectContaining({ gameSystemId: 'ryuutama' }),
     );
-    expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1']);
+    expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'characters', 'char1']);
   });
 
   it('soumission 400 sur "attributes" → retour à l\'étape fautive avec les erreurs contextualisées', async () => {
@@ -238,7 +243,7 @@ describe('CharacterWizard', () => {
         status: 400,
         error: {
           message: [
-            { field: 'specialtyTypeId', message: "Spécialité obligatoire pour la classe Artisan" },
+            { field: 'specialtyTypeId', message: 'Spécialité obligatoire pour la classe Artisan' },
           ],
         },
       }),
@@ -248,7 +253,7 @@ describe('CharacterWizard', () => {
 
     expect(comp.currentStepIndex()).toBe(0); // classId → step index 0
     // Le message doit être accessible sous la clé de l'étape ('classId'), pas 'specialtyTypeId'.
-    expect(comp.stepErrors()['classId']).toEqual(["Spécialité obligatoire pour la classe Artisan"]);
+    expect(comp.stepErrors()['classId']).toEqual(['Spécialité obligatoire pour la classe Artisan']);
   });
 
   it('soumission 400 générique (tableau de strings, pas de {field,message}) → notification sans plantage', async () => {

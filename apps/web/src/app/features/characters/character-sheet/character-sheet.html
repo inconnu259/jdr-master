@@ -1,0 +1,157 @@
+@if (loadError(); as error) {
+  <p class="sheet__load-error">{{ error }}</p>
+} @else if (character(); as c) {
+  <article class="sheet">
+    <header class="sheet__header">
+      <app-character-avatar [name]="name()" [size]="64" />
+      <div class="sheet__header-info">
+        <h1 class="sheet__name">{{ name() }}</h1>
+        <p class="sheet__meta">
+          {{ classData()?.label }} · {{ typeData()?.label }} · Niveau 1 · Ryuutama
+        </p>
+      </div>
+    </header>
+
+    <div class="sheet__body">
+      <div class="sheet__column">
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">Vocation — {{ classData()?.label }}</h2>
+          @if (specialtyTypeId()) {
+            <p class="sheet__detail">Spécialité : {{ specialtyTypeId() }}</p>
+          }
+          <ul class="sheet__talent-list">
+            @for (talent of classData()?.talents ?? []; track talent.name) {
+              <li>
+                <strong>{{ talent.name }}</strong>
+                <span class="sheet__detail">{{ talent.effect }}</span>
+              </li>
+            }
+          </ul>
+        </section>
+
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">Voie — {{ typeData()?.label }}</h2>
+          <ul class="sheet__talent-list">
+            @for (advantage of typeData()?.advantages ?? []; track advantage.name) {
+              <li>
+                <strong>{{ advantage.name }}</strong>
+                <span class="sheet__detail">{{ advantage.effect }}</span>
+              </li>
+            }
+          </ul>
+        </section>
+
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">
+            Attributs{{ attributePatternLabel() ? ' — patron ' + attributePatternLabel() : '' }}
+          </h2>
+          @if (attributes(); as attrs) {
+            <div class="sheet__attr-grid">
+              <div class="sheet__attr-box">
+                <span class="sheet__attr-key">VIG</span>
+                <span class="sheet__attr-val">{{ attrs.VIG }}</span>
+              </div>
+              <div class="sheet__attr-box">
+                <span class="sheet__attr-key">AGI</span>
+                <span class="sheet__attr-val">{{ attrs.AGI }}</span>
+              </div>
+              <div class="sheet__attr-box">
+                <span class="sheet__attr-key">INT</span>
+                <span class="sheet__attr-val">{{ attrs.INT }}</span>
+              </div>
+              <div class="sheet__attr-box">
+                <span class="sheet__attr-key">ESP</span>
+                <span class="sheet__attr-val">{{ attrs.ESP }}</span>
+              </div>
+            </div>
+          }
+        </section>
+      </div>
+
+      <div class="sheet__column">
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">Statistiques dérivées</h2>
+          <div class="sheet__pill-grid">
+            <span class="stat-pill">PV {{ c.derived.PV }}</span>
+            <span class="stat-pill">PE {{ c.derived.PE }}</span>
+            <span class="stat-pill">Condition {{ c.derived.Condition }}</span>
+            <span class="stat-pill">Initiative {{ c.derived.Initiative }}</span>
+            <span class="stat-pill">Encombrement max {{ c.derived.Encombrement }}</span>
+          </div>
+        </section>
+
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">Arme de prédilection</h2>
+          @if (weaponData(); as weapon) {
+            <div class="sheet__weapon-row">
+              <span class="sheet__weapon-name">{{ weapon.label }}</span>
+              <div class="sheet__pill-grid">
+                <span class="stat-pill">Toucher {{ weapon.touchFormula }}</span>
+                <span class="stat-pill">Dégâts {{ weapon.damageFormula }}</span>
+              </div>
+            </div>
+          }
+        </section>
+
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">Équipement</h2>
+          @if (equipment(); as eq) {
+            <ul class="sheet__equipment-list">
+              @for (item of eq.individual ?? []; track item) {
+                <li>{{ item }}</li>
+              }
+              @for (item of eq.group ?? []; track item) {
+                <li>{{ item }}</li>
+              }
+            </ul>
+          }
+          @if (fetiqueObject()) {
+            <p class="sheet__fetish-box">Objet fétiche : {{ fetiqueObject() }}</p>
+          }
+        </section>
+
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">Notes narratives</h2>
+          @if (narrative().sex) {
+            <div class="sheet__narrative-field">
+              <span class="sheet__narrative-label">Sexe</span>
+              <span class="sheet__narrative-value">{{ narrative().sex }}</span>
+            </div>
+          }
+          @if (narrative().age) {
+            <div class="sheet__narrative-field">
+              <span class="sheet__narrative-label">Âge</span>
+              <span class="sheet__narrative-value">{{ narrative().age }}</span>
+            </div>
+          }
+          @if (narrative().physicalTraits) {
+            <div class="sheet__narrative-field">
+              <span class="sheet__narrative-label">Traits physiques</span>
+              <span class="sheet__narrative-value">{{ narrative().physicalTraits }}</span>
+            </div>
+          }
+          @if (narrative().homeTown) {
+            <div class="sheet__narrative-field">
+              <span class="sheet__narrative-label">Village natal</span>
+              <span class="sheet__narrative-value">{{ narrative().homeTown }}</span>
+            </div>
+          }
+          @if (narrative().motivation) {
+            <div class="sheet__narrative-field">
+              <span class="sheet__narrative-label">Motivation</span>
+              <span class="sheet__narrative-value">{{ narrative().motivation }}</span>
+            </div>
+          }
+          @if (narrative().personality) {
+            <div class="sheet__narrative-field">
+              <span class="sheet__narrative-label">Personnalité</span>
+              <span class="sheet__narrative-value">{{ narrative().personality }}</span>
+            </div>
+          }
+        </section>
+      </div>
+    </div>
+  </article>
+} @else {
+  <p class="sheet__loading">Chargement…</p>
+}
