@@ -1,0 +1,63 @@
+<div class="narrative-step">
+  <div class="narrative-step__field">
+    <label for="name">Nom</label>
+    <input id="name" type="text" [ngModel]="narrative()?.name" (ngModelChange)="update('name', $event)" />
+  </div>
+  <div class="narrative-step__field">
+    <label for="sex">Sexe</label>
+    <select id="sex" [ngModel]="narrative()?.sex" (ngModelChange)="update('sex', $event)">
+      <option value="">— Non précisé —</option>
+      @for (option of SEX_OPTIONS; track option) {
+        <option [value]="option">{{ option }}</option>
+      }
+    </select>
+  </div>
+  <div class="narrative-step__field">
+    <label for="age">Âge</label>
+    <input
+      id="age"
+      type="number"
+      min="0"
+      step="1"
+      inputmode="numeric"
+      [ngModel]="narrative()?.age"
+      (ngModelChange)="update('age', $event)"
+    />
+  </div>
+  <div class="narrative-step__field">
+    <label for="physicalTraits">Particularités physiques</label>
+    <input
+      id="physicalTraits"
+      type="text"
+      [ngModel]="narrative()?.physicalTraits"
+      (ngModelChange)="update('physicalTraits', $event)"
+    />
+  </div>
+  <div class="narrative-step__field">
+    <label for="homeTown">Village natal</label>
+    <input
+      id="homeTown"
+      type="text"
+      [ngModel]="narrative()?.homeTown"
+      (ngModelChange)="update('homeTown', $event)"
+    />
+  </div>
+  <div class="narrative-step__field">
+    <label for="motivation">Motivation</label>
+    <input
+      id="motivation"
+      type="text"
+      [ngModel]="narrative()?.motivation"
+      (ngModelChange)="update('motivation', $event)"
+    />
+  </div>
+  <div class="narrative-step__field">
+    <label for="personality">Personnalité</label>
+    <input
+      id="personality"
+      type="text"
+      [ngModel]="narrative()?.personality"
+      (ngModelChange)="update('personality', $event)"
+    />
+  </div>
+</div>

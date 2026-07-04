@@ -9,8 +9,10 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatDialog } from '@angular/material/dialog';
+import { MatTabsModule } from '@angular/material/tabs';
 import { firstValueFrom } from 'rxjs';
 import type {
+  CharacterDto,
   DaySlot,
   InviteLinkDto,
   PartieDto,
@@ -26,6 +28,7 @@ const SLOT_LABELS: Record<DaySlot, string> = {
   FULL_DAY: 'Journée',
 };
 import { AuthService } from '../../../core/auth/auth.service';
+import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
 import { PollService } from '../../../core/poll/poll.service';
@@ -46,6 +49,7 @@ import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
     MatFormFieldModule,
     MatInputModule,
     MatListModule,
+    MatTabsModule,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -57,6 +61,7 @@ export class PartieDetail implements OnInit {
   private readonly parties = inject(PartiesService);
   private readonly modeSvc = inject(ModeService);
   private readonly pollSvc = inject(PollService);
+  private readonly characterSvc = inject(CharacterService);
   private readonly dialog = inject(MatDialog);
   protected readonly theme = inject(ThemeToneService);
 
@@ -64,12 +69,25 @@ export class PartieDetail implements OnInit {
   protected readonly members = signal<PartieMemberDto[]>([]);
   protected readonly activePoll = signal<SessionPollDto | null>(null);
   protected readonly links = signal<InviteLinkDto[]>([]);
+  protected readonly characters = signal<CharacterDto[]>([]);
   protected readonly search = signal('');
   protected readonly results = signal<UserSearchResultDto[]>([]);
   protected readonly notice = signal<string | null>(null);
 
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
   protected readonly isMj = computed(() => this.partie()?.mjId === this.auth.currentUser()?.id);
+
+  /** Personnages de l'utilisateur courant sur cette partie (pas ceux des autres joueurs). */
+  protected readonly myCharacters = computed(() => {
+    const userId = this.auth.currentUser()?.id;
+    return this.characters().filter((c) => c.userId === userId);
+  });
+
+  /** Nom narratif du personnage, ou libellé de repli si le joueur ne l'a pas renseigné. */
+  protected characterName(character: CharacterDto): string {
+    const narrative = character.sheetData?.['narrative'] as { name?: string } | undefined;
+    return narrative?.name?.trim() || 'Personnage sans nom';
+  }
 
   constructor() {
     effect(() => {
@@ -119,6 +137,7 @@ export class PartieDetail implements OnInit {
     this.partie.set(await this.parties.get(id));
     await this.loadMembers();
     this.activePoll.set(await this.pollSvc.getCurrentPoll(id).catch(() => null));
+    this.characters.set(await this.characterSvc.listByPartie(id).catch(() => []));
     // loadLinks() déclenché réactivement par effect() dans le constructeur
   }
 

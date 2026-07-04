@@ -1,0 +1,10 @@
+<div class="fetish-step">
+  <label for="fetiqueObject">Objet fétiche (optionnel)</label>
+  <input
+    id="fetiqueObject"
+    type="text"
+    placeholder="Une plume de corbeau porte-bonheur..."
+    [ngModel]="fetiqueObject()"
+    (ngModelChange)="fetiqueObjectChange.emit($event)"
+  />
+</div>

@@ -1,0 +1,17 @@
+<div class="weapon-step">
+  <div class="weapon-step__grid">
+    @for (opt of options(); track opt.key) {
+      <app-choice-card
+        [option]="opt"
+        [selected]="weaponCategoryId() === opt.key"
+        (selectedOption)="onSelect($event)"
+      />
+    }
+  </div>
+
+  @if (selectedWeaponData(); as data) {
+    <p class="weapon-step__detail">
+      Toucher : <strong>{{ data.touchFormula }}</strong> · Dégâts : <strong>{{ data.damageFormula }}</strong>
+    </p>
+  }
+</div>

@@ -16,4 +16,9 @@ export class GameSystemController {
   getSchema(@Param('id') id: string) {
     return this.gameSystems.getSchema(id);
   }
+
+  @Get(':id/content')
+  getContent(@Param('id') id: string) {
+    return this.gameSystems.getContent(id);
+  }
 }

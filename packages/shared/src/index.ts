@@ -278,3 +278,12 @@ export interface GameSystemSchemaDto {
   sheetSchema: unknown;
   creationSteps: unknown[];
 }
+
+/** Entrée de contenu générique d'un système de jeu (ex: une classe, un type, une arme). */
+export interface ContentEntryDto {
+  key: string;
+  data: unknown;
+}
+
+/** Réponse de GET /game-systems/:id/content — groupé par clé de ContentType. */
+export type GameSystemContentDto = Record<string, ContentEntryDto[]>;

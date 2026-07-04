@@ -5,8 +5,9 @@ import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { signal } from '@angular/core';
 import { vi } from 'vitest';
-import type { PartieDto, PartieMemberDto, SessionPollDto } from '@master-jdr/shared';
+import type { CharacterDto, PartieDto, PartieMemberDto, SessionPollDto } from '@master-jdr/shared';
 import { AuthService } from '../../../core/auth/auth.service';
+import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
 import { PollService } from '../../../core/poll/poll.service';
@@ -65,6 +66,7 @@ function makePartiesService(partie: PartieDto, members: PartieMemberDto[] = []) 
 interface CreateFixtureOptions {
   members?: PartieMemberDto[];
   poll?: SessionPollDto | null;
+  characters?: CharacterDto[];
 }
 
 async function createFixture(
@@ -84,6 +86,10 @@ async function createFixture(
       {
         provide: PollService,
         useValue: { getCurrentPoll: vi.fn().mockResolvedValue(options.poll ?? null) },
+      },
+      {
+        provide: CharacterService,
+        useValue: { listByPartie: vi.fn().mockResolvedValue(options.characters ?? []) },
       },
       { provide: ThemeToneService, useValue: makeToneService() },
       { provide: MatDialog, useValue: { open: vi.fn() } },
@@ -201,5 +207,65 @@ describe('PartieDetail — statut du vote', () => {
     const link = el.querySelector('.scheduling-widget a[mat-stroked-button]');
     expect(link).toBeTruthy();
     expect(link!.textContent).toContain('Vote de date en cours');
+  });
+});
+
+// ─── Onglet Personnages (Story 4.2) ───────────────────────────────────────
+
+describe('PartieDetail — onglet Personnages', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it("charge les personnages de la partie via CharacterService.listByPartie et affiche le libellé de l'onglet", async () => {
+    const { fixture, el } = await createFixture(makePartie(), MJ_ID, { characters: [] });
+
+    const characterSvc = TestBed.inject(CharacterService) as unknown as {
+      listByPartie: ReturnType<typeof vi.fn>;
+    };
+    expect(characterSvc.listByPartie).toHaveBeenCalledWith('party-1');
+    expect(el.textContent).toContain('Personnages');
+    expect((fixture.componentInstance as unknown as { characters: () => unknown[] }).characters())
+      .toEqual([]);
+  });
+
+  it('expose les personnages chargés sur le signal characters()', async () => {
+    const character: CharacterDto = {
+      id: 'c1',
+      userId: PLAYER_ID,
+      partieId: 'party-1',
+      gameSystemId: 'ryuutama',
+      sheetData: {},
+      derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
+      portraitUrl: null,
+      portraitCropData: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const { fixture } = await createFixture(makePartie(), MJ_ID, { characters: [character] });
+
+    expect((fixture.componentInstance as unknown as { characters: () => unknown[] }).characters())
+      .toEqual([character]);
+  });
+
+  it("un personnage créé par un AUTRE joueur n'empêche pas l'utilisateur courant de créer le sien", async () => {
+    const otherPlayerCharacter: CharacterDto = {
+      id: 'c1',
+      userId: 'some-other-player',
+      partieId: 'party-1',
+      gameSystemId: 'ryuutama',
+      sheetData: {},
+      derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
+      portraitUrl: null,
+      portraitCropData: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const { fixture } = await createFixture(makePartie(), PLAYER_ID, {
+      characters: [otherPlayerCharacter],
+    });
+
+    // Le joueur courant (PLAYER_ID) n'a pas de personnage à lui, même si un autre joueur a déjà
+    // créé le sien sur cette partie — myCharacters() doit rester vide pour PLAYER_ID.
+    const comp = fixture.componentInstance as unknown as { myCharacters: () => unknown[] };
+    expect(comp.myCharacters()).toEqual([]);
   });
 });

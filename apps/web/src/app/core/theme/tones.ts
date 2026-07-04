@@ -72,6 +72,15 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.vote_closed': "Ce vote est clos. L'oracle a tranché.",
     'alert.all_responded': 'Tous les compagnons ont répondu au vote.',
     'poll.status_summary': 'Vote ouvert — {responded}/{total} compagnons ont répondu',
+    /* — personnages (Palier P3) — */
+    'character.create_cta': 'Créer un voyageur',
+    'character.tab_label': 'Personnages',
+    'character.step_class': 'Choisir sa vocation',
+    'character.step_type': 'Choisir sa voie',
+    'character.magic_deferred_notice':
+      "La magie s'apprendra plus tard, jeune sorcier — pour l'instant, seuls les dons passifs s'activent.",
+    'character.portrait_missing': 'Aucun portrait — le conteur imagine un visage',
+    'character.portrait_edit_cta': 'Modifier le portrait',
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -138,6 +147,15 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.vote_closed': 'Le vote de la forêt est terminé.',
     'alert.all_responded': "Tous les habitants ont répondu à l'appel.",
     'poll.status_summary': 'Vote ouvert — {responded}/{total} habitants ont répondu',
+    /* — personnages (Palier P3) — */
+    'character.create_cta': 'Éveiller un compagnon de route',
+    'character.tab_label': 'Personnages',
+    'character.step_class': 'Choisir son rôle dans le cercle',
+    'character.step_type': 'Choisir son chemin',
+    'character.magic_deferred_notice':
+      'Les sortilèges des saisons dorment encore — reviens quand le cercle sera prêt.',
+    'character.portrait_missing': 'Aucun visage gravé — la forêt garde son mystère',
+    'character.portrait_edit_cta': 'Modifier le portrait',
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -203,5 +221,14 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.vote_closed': 'Registre de vote verrouillé.',
     'alert.all_responded': "Tout l'équipage a répondu au registre.",
     'poll.status_summary': 'Registre ouvert — {responded}/{total} membres ont répondu',
+    /* — personnages (Palier P3) — */
+    'character.create_cta': 'Assembler un automate-voyageur',
+    'character.tab_label': 'Personnages',
+    'character.step_class': 'Choisir sa fonction',
+    'character.step_type': 'Choisir son mécanisme',
+    'character.magic_deferred_notice':
+      "Le grimoire à vapeur n'est pas encore calibré pour les formules — les avantages de base restent actifs.",
+    'character.portrait_missing': 'Aucun portrait gravé sur la plaque',
+    'character.portrait_edit_cta': 'Recalibrer le portrait',
   },
 };

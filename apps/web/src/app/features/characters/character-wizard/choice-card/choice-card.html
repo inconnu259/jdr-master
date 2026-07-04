@@ -1,0 +1,10 @@
+<button
+  type="button"
+  class="choice-card"
+  [class.choice-card--selected]="selected()"
+  [attr.aria-pressed]="selected()"
+  [attr.aria-label]="option().detail ? option().label + ' : ' + option().detail : option().label"
+  (click)="onClick()"
+>
+  <span class="choice-card__label">{{ option().label }}</span>
+</button>

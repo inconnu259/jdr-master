@@ -1,0 +1,22 @@
+.narrative-step {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+
+  @media (max-width: 599px) {
+    grid-template-columns: 1fr;
+  }
+
+  &__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+
+    input {
+      min-height: 44px;
+      padding: 0 0.75rem;
+      border: 1px solid var(--mat-sys-outline-variant, #ccc);
+      border-radius: 6px;
+    }
+  }
+}

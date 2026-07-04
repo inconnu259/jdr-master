@@ -7,7 +7,11 @@ import {
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Prisma } from '@prisma/client';
-import type { GameSystemDto, GameSystemSchemaDto } from '@master-jdr/shared';
+import type {
+  GameSystemDto,
+  GameSystemSchemaDto,
+  GameSystemContentDto,
+} from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RYUUTAMA_ID } from './supported-game-systems';
 
@@ -101,6 +105,21 @@ export class GameSystemService implements OnApplicationBootstrap {
     return this.prisma.gameSystem.findMany({
       select: { id: true, name: true, version: true },
     });
+  }
+
+  async getContent(id: string): Promise<GameSystemContentDto> {
+    if (id !== RYUUTAMA_ID) {
+      throw new NotFoundException('Système de jeu introuvable');
+    }
+    const contentTypes = await this.prisma.contentType.findMany({
+      where: { gameSystemId: id },
+      include: { entries: { where: { scope: 'BASE' } } },
+    });
+    const result: GameSystemContentDto = {};
+    for (const ct of contentTypes) {
+      result[ct.key] = ct.entries.map((e) => ({ key: e.key, data: e.data }));
+    }
+    return result;
   }
 
   getSchema(id: string): GameSystemSchemaDto {

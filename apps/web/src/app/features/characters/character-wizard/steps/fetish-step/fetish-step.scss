@@ -1,0 +1,12 @@
+.fetish-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+
+  input {
+    min-height: 44px;
+    padding: 0 0.75rem;
+    border: 1px solid var(--mat-sys-outline-variant, #ccc);
+    border-radius: 6px;
+  }
+}

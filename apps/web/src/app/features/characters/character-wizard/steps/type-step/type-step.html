@@ -1,0 +1,28 @@
+<div class="type-step">
+  <h2 class="type-step__heading">{{ theme.tone()['character.step_type'] }}</h2>
+
+  <div class="type-step__grid">
+    @for (opt of options(); track opt.key) {
+      <app-choice-card
+        [option]="opt"
+        [selected]="typeId() === opt.key"
+        (selectedOption)="onSelect($event)"
+      />
+    }
+  </div>
+
+  @if (selectedTypeData(); as data) {
+    <div class="type-step__advantages">
+      <h3>Avantages de {{ data.label }}</h3>
+      <ul>
+        @for (adv of data.advantages; track adv.name) {
+          <li><strong>{{ adv.name }}</strong> — {{ adv.effect }}</li>
+        }
+      </ul>
+    </div>
+  }
+
+  @if (isMagie()) {
+    <p class="type-step__magic-notice">{{ theme.tone()['character.magic_deferred_notice'] }}</p>
+  }
+</div>

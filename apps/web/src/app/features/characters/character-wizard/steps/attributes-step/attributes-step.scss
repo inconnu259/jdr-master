@@ -1,0 +1,53 @@
+.attributes-step {
+  &__banner {
+    padding: 0.5rem 0.75rem;
+    background: var(--mat-sys-surface-container-high, #f0ebe3);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+
+    @media (max-width: 599px) {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+.attr-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+
+  &__label {
+    font-weight: 600;
+  }
+
+  &__chips {
+    display: flex;
+    gap: 0.375rem;
+  }
+}
+
+.value-chip {
+  flex: 1;
+  min-height: 44px;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 6px;
+  background: var(--mat-sys-surface-container, #fff);
+  cursor: pointer;
+  font-weight: 600;
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  &--selected {
+    border-color: var(--mat-sys-primary, #9b6dff);
+    background: var(--mat-sys-primary-container, #ece3ff);
+  }
+}

@@ -24,6 +24,13 @@ export const routes: Routes = [
       { path: 'parties/:id/edit', component: PartieForm },
       { path: 'parties/:id/calendar', component: CalendarView, data: { mode: 'mj' } },
       { path: 'parties/:id/guild-calendar', component: CalendarView, data: { mode: 'personal' } },
+      {
+        path: 'parties/:id/characters/new',
+        loadComponent: () =>
+          import('./features/characters/character-wizard/character-wizard').then(
+            (m) => m.CharacterWizard,
+          ),
+      },
       { path: 'profile/calendar', component: CalendarView, data: { mode: 'personal' } },
     ],
   },

@@ -1,0 +1,23 @@
+<div class="equipment-step">
+  <p class="equipment-step__notice">
+    Équipement attribué automatiquement (mode pique-nique) — aucune action requise.
+  </p>
+
+  <div class="equipment-step__group">
+    <h3>Nécessaire de voyage</h3>
+    <ul>
+      @for (item of individual(); track item) {
+        <li>{{ item }}</li>
+      }
+    </ul>
+  </div>
+
+  <div class="equipment-step__group">
+    <h3>Nécessaire d'intendance (groupe)</h3>
+    <ul>
+      @for (item of group(); track item) {
+        <li>{{ item }}</li>
+      }
+    </ul>
+  </div>
+</div>

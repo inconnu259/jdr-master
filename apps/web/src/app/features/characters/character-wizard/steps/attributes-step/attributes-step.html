@@ -1,0 +1,26 @@
+<div class="attributes-step">
+  <p class="attributes-step__banner">
+    Patron choisi : <strong>{{ patternData().label }}</strong> — valeurs à distribuer :
+    {{ values().join(', ') }}
+  </p>
+
+  <div class="attributes-step__grid">
+    @for (attr of ATTR_KEYS; track attr) {
+      <div class="attr-slot">
+        <span class="attr-slot__label">{{ ATTR_LABELS[attr] }} ({{ attr }})</span>
+        <div class="attr-slot__chips">
+          @for (value of values(); track $index) {
+            <button
+              type="button"
+              class="value-chip"
+              [class.value-chip--selected]="isChipSelected(attr, $index)"
+              [disabled]="isChipUsedElsewhere(attr, $index)"
+              [attr.aria-pressed]="isChipSelected(attr, $index)"
+              (click)="selectChip(attr, $index)"
+            >{{ value }}</button>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>

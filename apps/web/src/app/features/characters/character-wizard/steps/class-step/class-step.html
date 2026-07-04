@@ -1,0 +1,36 @@
+<div class="class-step">
+  <h2 class="class-step__heading">{{ theme.tone()['character.step_class'] }}</h2>
+
+  <div class="class-step__grid">
+    @for (opt of options(); track opt.key) {
+      <app-choice-card
+        [option]="opt"
+        [selected]="classId() === opt.key"
+        (selectedOption)="onSelect($event)"
+      />
+    }
+  </div>
+
+  @if (selectedClassData(); as data) {
+    <div class="class-step__talents">
+      <h3 class="class-step__talents-title">Talents de {{ data.label }}</h3>
+      <ul>
+        @for (talent of data.talents; track talent.name) {
+          <li><strong>{{ talent.name }}</strong> — {{ talent.effect }}</li>
+        }
+      </ul>
+    </div>
+
+    @if (data.requiresSpecialty) {
+      <div class="class-step__specialty">
+        <label for="specialtyTypeId">{{ data.specialtyLabel ?? "Type d'objet de spécialité" }}</label>
+        <input
+          id="specialtyTypeId"
+          type="text"
+          [ngModel]="specialtyTypeId()"
+          (ngModelChange)="onSpecialtyInput($event)"
+        />
+      </div>
+    }
+  }
+</div>

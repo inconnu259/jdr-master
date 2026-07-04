@@ -13,8 +13,11 @@
     "importHelpers": true,
     "target": "ES2022",
     "module": "preserve",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
     "paths": {
-      "@master-jdr/shared": ["../../packages/shared/src/index.ts"]
+      "@master-jdr/shared": ["../../packages/shared/src/index.ts"],
+      "@master-jdr/game-rules": ["../../packages/game-rules/src/index.ts"]
     }
   },
   "angularCompilerOptions": {
