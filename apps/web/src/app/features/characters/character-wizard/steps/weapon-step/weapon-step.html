@@ -1,5 +1,5 @@
 <div class="weapon-step">
-  <div class="weapon-step__grid">
+  <div class="weapon-step__grid" role="radiogroup" aria-label="Choisir son arme" appRadioGroupNav>
     @for (opt of options(); track opt.key) {
       <app-choice-card
         [option]="opt"

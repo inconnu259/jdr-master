@@ -72,6 +72,72 @@ describe('AttributesStep', () => {
     expect(agiChip0.classList.contains('value-chip--selected')).toBe(true);
   });
 
+  it('recliquer sur le chip déjà sélectionné le désélectionne (toggle) et libère la valeur pour les autres attributs', async () => {
+    const fixture = setup();
+    const emitted: unknown[] = [];
+    fixture.componentInstance.attributesChange.subscribe((v) => emitted.push(v));
+    const rows: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('.attr-slot');
+
+    // AGI ← chip index 0 (valeur 8) : les autres lignes se grisent sur cet index.
+    const agiChip0 = rows[0].querySelectorAll('.value-chip')[0] as HTMLButtonElement;
+    agiChip0.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(agiChip0.classList.contains('value-chip--selected')).toBe(true);
+    expect((rows[1].querySelectorAll('.value-chip')[0] as HTMLButtonElement).disabled).toBe(true);
+
+    // Reclic sur AGI ← chip index 0 : désélection, redevient libre partout, next redevient invalide.
+    agiChip0.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(agiChip0.classList.contains('value-chip--selected')).toBe(false);
+    expect((rows[1].querySelectorAll('.value-chip')[0] as HTMLButtonElement).disabled).toBe(false);
+    expect(emitted.at(-1)).toBeNull();
+  });
+
+  it('désélectionner un chip alors que les 4 attributs sont assignés ne désélectionne QUE cet attribut, pas les 3 autres (même une fois le echo `attributes=undefined` du parent reçu en entrée)', async () => {
+    const fixture = setup();
+    const rows: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('.attr-slot');
+
+    // Assigne les 4 attributs.
+    (rows[0].querySelectorAll('.value-chip')[0] as HTMLButtonElement).click(); // AGI ← 8
+    (rows[1].querySelectorAll('.value-chip')[2] as HTMLButtonElement).click(); // ESP ← 6
+    (rows[2].querySelectorAll('.value-chip')[3] as HTMLButtonElement).click(); // INT ← 6
+    (rows[3].querySelectorAll('.value-chip')[1] as HTMLButtonElement).click(); // VIG ← 4
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // Désélectionne AGI seul.
+    (rows[0].querySelectorAll('.value-chip')[0] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // Le parent réel réagit à l'émission `null` en repassant `attributes` à `undefined` en entrée
+    // (cf. character-wizard.ts `sheetData.update(... attributes: attrs ?? undefined)`) — simulé ici.
+    fixture.componentRef.setInput('attributes', undefined);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(
+      (rows[0].querySelectorAll('.value-chip')[0] as HTMLButtonElement).classList,
+    ).not.toContain('value-chip--selected');
+    // ESP, INT et VIG doivent RESTER sélectionnés — seul AGI a été désélectionné.
+    expect(
+      [...rows[1].querySelectorAll('.value-chip')].some((c) =>
+        c.classList.contains('value-chip--selected'),
+      ),
+    ).toBe(true);
+    expect(
+      [...rows[2].querySelectorAll('.value-chip')].some((c) =>
+        c.classList.contains('value-chip--selected'),
+      ),
+    ).toBe(true);
+    expect((rows[3].querySelectorAll('.value-chip')[1] as HTMLButtonElement).classList).toContain(
+      'value-chip--selected',
+    );
+  });
+
   it('restaure la sélection visuelle des chips quand `attributes` est déjà renseigné (ex. retour en arrière)', async () => {
     TestBed.configureTestingModule({ imports: [AttributesStep] });
     const fixture = TestBed.createComponent(AttributesStep);

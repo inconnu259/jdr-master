@@ -1,7 +1,12 @@
 <div class="type-step">
   <h2 class="type-step__heading">{{ theme.tone()['character.step_type'] }}</h2>
 
-  <div class="type-step__grid">
+  <div
+    class="type-step__grid"
+    role="radiogroup"
+    [attr.aria-label]="theme.tone()['character.step_type']"
+    appRadioGroupNav
+  >
     @for (opt of options(); track opt.key) {
       <app-choice-card
         [option]="opt"

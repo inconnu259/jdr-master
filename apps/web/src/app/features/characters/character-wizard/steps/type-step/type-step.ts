@@ -2,6 +2,7 @@ import { Component, computed, inject, input, output } from '@angular/core';
 import type { ContentEntryDto } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../../../core/theme/theme-tone.service';
 import { ChoiceCard, type ChoiceCardOption } from '../../choice-card/choice-card';
+import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.directive';
 
 interface TypeAdvantage {
   name: string;
@@ -16,7 +17,7 @@ interface TypeData {
 @Component({
   selector: 'app-type-step',
   standalone: true,
-  imports: [ChoiceCard],
+  imports: [ChoiceCard, RadioGroupNavDirective],
   templateUrl: './type-step.html',
   styleUrl: './type-step.scss',
 })

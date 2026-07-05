@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import type { ContentEntryDto } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../../../core/theme/theme-tone.service';
 import { ChoiceCard, type ChoiceCardOption } from '../../choice-card/choice-card';
+import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.directive';
 
 interface ClassTalent {
   name: string;
@@ -19,7 +20,7 @@ interface ClassData {
 @Component({
   selector: 'app-class-step',
   standalone: true,
-  imports: [FormsModule, ChoiceCard],
+  imports: [FormsModule, ChoiceCard, RadioGroupNavDirective],
   templateUrl: './class-step.html',
   styleUrl: './class-step.scss',
 })

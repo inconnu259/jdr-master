@@ -2,7 +2,8 @@
   type="button"
   class="choice-card"
   [class.choice-card--selected]="selected()"
-  [attr.aria-pressed]="selected()"
+  role="radio"
+  [attr.aria-checked]="selected()"
   [attr.aria-label]="option().detail ? option().label + ' : ' + option().detail : option().label"
   (click)="onClick()"
 >

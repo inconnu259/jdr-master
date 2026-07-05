@@ -46,6 +46,18 @@ describe('ChoiceCard', () => {
 
     const button: HTMLButtonElement = fixture.nativeElement.querySelector('button');
     expect(button.classList.contains('choice-card--selected')).toBe(true);
-    expect(button.getAttribute('aria-pressed')).toBe('true');
+    expect(button.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('expose la sémantique role="radio" (groupe à choix unique, cf. RadioGroupNavDirective)', async () => {
+    TestBed.configureTestingModule({ imports: [ChoiceCard] });
+    const fixture = TestBed.createComponent(ChoiceCard);
+    fixture.componentRef.setInput('option', { key: 'chasseur', label: 'Chasseur' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('button');
+    expect(button.getAttribute('role')).toBe('radio');
+    expect(button.getAttribute('aria-checked')).toBe('false');
   });
 });

@@ -1,6 +1,7 @@
 import { Component, computed, input, output } from '@angular/core';
 import type { ContentEntryDto } from '@master-jdr/shared';
 import { ChoiceCard, type ChoiceCardOption } from '../../choice-card/choice-card';
+import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.directive';
 
 interface WeaponData {
   label: string;
@@ -11,7 +12,7 @@ interface WeaponData {
 @Component({
   selector: 'app-weapon-step',
   standalone: true,
-  imports: [ChoiceCard],
+  imports: [ChoiceCard, RadioGroupNavDirective],
   templateUrl: './weapon-step.html',
   styleUrl: './weapon-step.scss',
 })
