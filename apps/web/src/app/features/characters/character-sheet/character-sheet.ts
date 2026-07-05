@@ -86,6 +86,17 @@ export class CharacterSheet implements OnInit {
     () => !!this.character() && this.character()?.userId === this.auth.currentUser()?.id,
   );
 
+  /**
+   * Le viewer est le MJ si l'accès en lecture a réussi (owner OU MJ, cf. Story 4.1) et qu'il n'est
+   * pas le propriétaire — raccourci logique valide qui évite un appel réseau supplémentaire pour
+   * connaître le `mjId` de la partie côté front. Affiche le pseudo du propriétaire (Story 4.6, AC2).
+   * Exige un `currentUser()` non nul pour éviter d'afficher ce badge à un viewer déconnecté
+   * (session invalidée alors que `character()` est déjà chargé).
+   */
+  protected readonly viewerIsMj = computed(
+    () => !!this.character() && !!this.auth.currentUser() && !this.isOwner(),
+  );
+
   protected readonly classData = computed<ClassData | null>(() =>
     findContentEntry<ClassData>(
       this.content(),

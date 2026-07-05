@@ -249,6 +249,8 @@ describe('PartieDetail — onglet Personnages', () => {
       portraitCropData: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      ownerPseudo: 'alice',
+      ownerIsMj: false,
     };
     const { fixture } = await createFixture(makePartie(), MJ_ID, { characters: [character] });
 
@@ -269,6 +271,8 @@ describe('PartieDetail — onglet Personnages', () => {
       portraitCropData: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      ownerPseudo: 'bob',
+      ownerIsMj: false,
     };
     const { fixture } = await createFixture(makePartie(), PLAYER_ID, {
       characters: [otherPlayerCharacter],
@@ -292,6 +296,8 @@ describe('PartieDetail — onglet Personnages', () => {
       portraitCropData: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      ownerPseudo: 'alice',
+      ownerIsMj: false,
     };
     const { fixture } = await createFixture(makePartie(), MJ_ID, { characters: [character] });
 
@@ -330,6 +336,8 @@ describe('PartieDetail — onglet Personnages', () => {
         portraitCropData: null,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
+        ownerPseudo: 'bob',
+        ownerIsMj: false,
       };
       // MJ n'a pas de personnage à lui (myCharacters() vide) mais un joueur en a déjà créé un.
       const { fixture, el } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID, {
@@ -347,6 +355,39 @@ describe('PartieDetail — onglet Personnages', () => {
 
       expect(el.querySelectorAll('app-character-summary-card').length).toBe(1);
       expect(el.querySelector('.characters-tab')?.textContent).toContain('Créer un voyageur');
+      // Le MJ consulte la liste : le pseudo du joueur propriétaire doit être visible (AC1).
+      expect(el.querySelector('.character-summary-card__owner-badge')?.textContent?.trim()).toBe(
+        'bob',
+      );
     },
   );
+
+  it("un joueur (non-MJ) consultant l'onglet Personnages → aucun badge/pseudo affiché (AC3)", async () => {
+    const ownCharacter: CharacterDto = {
+      id: 'c1',
+      userId: PLAYER_ID,
+      partieId: 'party-1',
+      gameSystemId: 'ryuutama',
+      sheetData: { narrative: { name: 'Fenn' } },
+      derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
+      portraitUrl: null,
+      portraitCropData: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      ownerPseudo: 'alice',
+      ownerIsMj: false,
+    };
+    const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
+      characters: [ownCharacter],
+      noopAnimations: true,
+    });
+
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    tabLabels[1].click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('.character-summary-card__owner-badge')).toBeNull();
+  });
 });

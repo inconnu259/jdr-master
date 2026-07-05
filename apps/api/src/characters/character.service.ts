@@ -6,8 +6,8 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { CharacterDto } from '@master-jdr/shared';
@@ -18,20 +18,21 @@ import {
 } from '@master-jdr/game-rules';
 import { PartiesService } from '../parties/parties.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { UsersService } from '../users/users.service';
 import { SUPPORTED_GAME_SYSTEMS } from '../game-systems/supported-game-systems';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import type { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 import {
   detectImageMime,
   extensionForImageMime,
-  isValidPortraitFilename,
-  mimeForExtension,
   type DetectedImageMime,
 } from './image-mime.util';
-
-const UPLOADS_ROOT = join(process.cwd(), 'uploads');
-const PORTRAITS_DIR = join(UPLOADS_ROOT, 'portraits');
-const PORTRAITS_URL_PREFIX = '/uploads/portraits/';
+import {
+  PORTRAITS_DIR,
+  PORTRAITS_URL_PREFIX,
+  extractPortraitFilename,
+  readPortraitFile,
+} from './portrait-storage.util';
 
 @Injectable()
 export class CharacterService {
@@ -40,6 +41,7 @@ export class CharacterService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
+    private readonly users: UsersService,
   ) {}
 
   async create(
@@ -47,7 +49,7 @@ export class CharacterService {
     userId: string,
     dto: CreateCharacterDto,
   ): Promise<CharacterDto> {
-    await this.parties.getViewable(partieId, userId);
+    const partie = await this.parties.getViewable(partieId, userId);
 
     if (!SUPPORTED_GAME_SYSTEMS.includes(dto.gameSystemId)) {
       throw new BadRequestException(
@@ -72,7 +74,8 @@ export class CharacterService {
           derived: derived as any,
         },
       });
-      return toDto(character);
+      const owner = await this.users.findById(userId);
+      return toDto(character, owner?.pseudo ?? '', partie.mjId === userId);
     } catch (e: any) {
       if (e?.code === 'P2002') {
         throw new ConflictException(
@@ -88,10 +91,22 @@ export class CharacterService {
       where: { id },
     });
     if (!character) throw new NotFoundException('Personnage introuvable');
-    if (character.userId === userId) return toDto(character);
 
-    await this.parties.getOwned(character.partieId, userId);
-    return toDto(character);
+    // Le MJ a déjà été résolu par getOwned() pour un viewer non-propriétaire — pas besoin
+    // de re-requêter la partie via resolveOwnerInfo() dans ce cas.
+    let mjId: string | undefined;
+    if (character.userId !== userId) {
+      mjId = (await this.parties.getOwned(character.partieId, userId)).mjId;
+    } else {
+      mjId = (
+        await this.prisma.partie.findUnique({
+          where: { id: character.partieId },
+          select: { mjId: true },
+        })
+      )?.mjId;
+    }
+    const owner = await this.users.findById(character.userId);
+    return toDto(character, owner?.pseudo ?? '', mjId === character.userId);
   }
 
   async findByPartie(
@@ -105,7 +120,19 @@ export class CharacterService {
         : await this.prisma.character.findMany({
             where: { partieId, userId },
           });
-    return characters.map(toDto);
+    if (characters.length === 0) return [];
+
+    // Résolution en lot (pas de N+1) — même pattern que PartiesService.resolveParticipants.
+    const ownerIds = [...new Set(characters.map((c) => c.userId))];
+    const owners = await this.prisma.user.findMany({
+      where: { id: { in: ownerIds } },
+      select: { id: true, pseudo: true },
+    });
+    const pseudoById = new Map(owners.map((o) => [o.id, o.pseudo]));
+
+    return characters.map((c) =>
+      toDto(c, pseudoById.get(c.userId) ?? '', c.userId === partie.mjId),
+    );
   }
 
   /**
@@ -164,7 +191,8 @@ export class CharacterService {
     const updated = await this.prisma.character.findUniqueOrThrow({
       where: { id },
     });
-    return toDto(updated);
+    const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    return toDto(updated, owner.pseudo, owner.isMj);
   }
 
   async removePortrait(id: string, userId: string): Promise<CharacterDto> {
@@ -187,7 +215,8 @@ export class CharacterService {
     const updated = await this.prisma.character.findUniqueOrThrow({
       where: { id },
     });
-    return toDto(updated);
+    const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    return toDto(updated, owner.pseudo, owner.isMj);
   }
 
   /**
@@ -205,19 +234,25 @@ export class CharacterService {
       await this.parties.getOwned(character.partieId, userId);
     }
 
-    const filename = this.extractPortraitFilename(character.portraitUrl);
-    if (!filename)
+    const portrait = await readPortraitFile(character.portraitUrl);
+    if (!portrait)
       throw new NotFoundException("Ce personnage n'a pas de portrait");
+    return portrait;
+  }
 
-    const mime = mimeForExtension(extname(filename));
-    if (!mime) throw new NotFoundException("Ce personnage n'a pas de portrait");
-
-    try {
-      const buffer = await readFile(join(PORTRAITS_DIR, filename));
-      return { buffer, mime };
-    } catch {
-      throw new NotFoundException('Portrait introuvable');
-    }
+  /** Pseudo du propriétaire + s'il est le MJ de la partie — résolu en une seule paire de requêtes ciblées (`select` minimal, jamais le hash). */
+  private async resolveOwnerInfo(
+    ownerId: string,
+    partieId: string,
+  ): Promise<{ pseudo: string; isMj: boolean }> {
+    const [owner, partie] = await Promise.all([
+      this.users.findById(ownerId),
+      this.prisma.partie.findUnique({
+        where: { id: partieId },
+        select: { mjId: true },
+      }),
+    ]);
+    return { pseudo: owner?.pseudo ?? '', isMj: partie?.mjId === ownerId };
   }
 
   private async getOwnCharacterOrThrow(id: string, userId: string) {
@@ -233,20 +268,8 @@ export class CharacterService {
     return character;
   }
 
-  /**
-   * Un nom de fichier de portrait légitime est toujours `<uuid>.<ext connue>` (cf.
-   * `image-mime.util.ts`) — un `portraitUrl` corrompu (édité manuellement, migration ratée)
-   * ne doit jamais atteindre `unlink`/`readFile` avec un chemin non validé.
-   */
-  private extractPortraitFilename(portraitUrl: string | null): string | null {
-    if (!portraitUrl || !portraitUrl.startsWith(PORTRAITS_URL_PREFIX))
-      return null;
-    const filename = portraitUrl.slice(PORTRAITS_URL_PREFIX.length);
-    return isValidPortraitFilename(filename) ? filename : null;
-  }
-
   private async deletePortraitFile(portraitUrl: string): Promise<void> {
-    const filename = this.extractPortraitFilename(portraitUrl);
+    const filename = extractPortraitFilename(portraitUrl);
     if (!filename) {
       this.logger.warn(
         `portraitUrl inattendu, suppression ignorée : ${portraitUrl}`,
@@ -268,7 +291,11 @@ export class CharacterService {
   }
 }
 
-function toDto(character: any): CharacterDto {
+function toDto(
+  character: any,
+  ownerPseudo: string,
+  ownerIsMj: boolean,
+): CharacterDto {
   return {
     id: character.id,
     userId: character.userId,
@@ -280,5 +307,7 @@ function toDto(character: any): CharacterDto {
     portraitCropData: character.portraitCropData ?? null,
     createdAt: character.createdAt.toISOString(),
     updatedAt: character.updatedAt.toISOString(),
+    ownerPseudo,
+    ownerIsMj,
   };
 }

@@ -15,6 +15,13 @@
         <p class="sheet__meta">
           {{ classData()?.label }} · {{ typeData()?.label }} · Niveau 1 · Ryuutama
         </p>
+        @if (viewerIsMj()) {
+          @if (c.ownerIsMj) {
+            <p class="sheet__owner-badge">{{ theme.tone()['character.owner_badge_mj'] }}</p>
+          } @else {
+            <p class="sheet__owner-badge">{{ c.ownerPseudo }}</p>
+          }
+        }
         @if (isOwner()) {
           <button mat-button type="button" class="sheet__portrait-edit-cta" (click)="editPortrait()">
             {{ theme.tone()['character.portrait_edit_cta'] }}

@@ -48,6 +48,8 @@ const CHARACTER: CharacterDto = {
   portraitCropData: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  ownerPseudo: 'alice',
+  ownerIsMj: false,
 };
 
 function makeCharacterService(overrides: Partial<ReturnType<typeof defaultSvc>> = {}) {
@@ -240,6 +242,30 @@ describe('CharacterSheet', () => {
     const comp = fixture.componentInstance as any;
     expect(comp.exportError()).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain(comp.exportError());
+  });
+
+  it('propriétaire consultant sa propre fiche → aucun badge/pseudo affiché', async () => {
+    const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'u1');
+    expect(fixture.nativeElement.querySelector('.sheet__owner-badge')).toBeNull();
+  });
+
+  it('MJ (non-propriétaire) consultant la fiche d’un joueur → pseudo du propriétaire affiché (AC2)', async () => {
+    const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'mj-stranger');
+    const badge = fixture.nativeElement.querySelector('.sheet__owner-badge');
+    expect(badge?.textContent?.trim()).toBe('alice');
+  });
+
+  it('MJ consultant la fiche de son propre personnage → aucun badge affiché (isOwner prime sur viewerIsMj)', async () => {
+    const mjOwnCharacter: CharacterDto = {
+      ...CHARACTER,
+      userId: 'mj1',
+      ownerIsMj: true,
+      ownerPseudo: 'le-mj',
+    };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(mjOwnCharacter) });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj1');
+    // Le MJ est propriétaire de son propre personnage → isOwner()=true → viewerIsMj()=false → aucun badge.
+    expect(fixture.nativeElement.querySelector('.sheet__owner-badge')).toBeNull();
   });
 
   it('sans portrait → aucun PortraitPanel affiché', async () => {

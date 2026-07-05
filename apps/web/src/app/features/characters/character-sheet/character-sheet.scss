@@ -41,6 +41,13 @@
     color: var(--mat-sys-secondary, #6750a4);
   }
 
+  &__owner-badge {
+    margin: 0;
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--mat-sys-on-surface-variant, #555);
+  }
+
   &__name {
     font-size: 1.25rem;
     font-weight: 600;

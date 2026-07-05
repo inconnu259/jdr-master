@@ -31,6 +31,12 @@
     color: var(--mat-sys-on-surface-variant, #555);
   }
 
+  &__owner-badge {
+    font-size: 0.75rem;
+    color: var(--mat-sys-on-surface-variant, #555);
+    font-style: italic;
+  }
+
   &__badges {
     display: flex;
     flex-wrap: wrap;

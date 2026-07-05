@@ -265,6 +265,10 @@ export interface CharacterDto {
   portraitCropData: unknown | null;
   createdAt: string;
   updatedAt: string;
+  /** Pseudo du propriétaire (joueur ou MJ) — résolu côté serveur, jamais stocké. */
+  ownerPseudo: string;
+  /** Le propriétaire de ce personnage est le MJ de la partie (distinct d'un personnage de joueur). */
+  ownerIsMj: boolean;
 }
 
 /** Payload de création d'un personnage. */

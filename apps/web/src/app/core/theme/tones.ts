@@ -84,6 +84,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_editable_cta': 'Exporter en PDF (éditable)',
     'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
     'character.export_error': "Le parchemin n'a pas pu être copié. Réessayez.",
+    'character.owner_badge_mj': 'Maître',
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -162,6 +163,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_editable_cta': 'Exporter en PDF (éditable)',
     'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
     'character.export_error': "L'écureuil s'est perdu en chemin. Réessayez.",
+    'character.owner_badge_mj': 'Guide',
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -239,5 +241,6 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_editable_cta': 'Exporter en PDF (éditable)',
     'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
     'character.export_error': "Échec de l'impression pneumatique. Réessayez.",
+    'character.owner_badge_mj': 'Ingénieur',
   },
 };

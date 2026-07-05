@@ -30,6 +30,7 @@ import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises';
 import { CharacterService } from './character.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { UsersService } from '../users/users.service';
 
 /** Nom de fichier légitime généré côté serveur (`randomUUID()` + extension) — cf. `image-mime.util.ts`. */
 const OLD_PORTRAIT_UUID = '11111111-1111-1111-1111-111111111111';
@@ -54,6 +55,12 @@ function makePrisma() {
       findMany: jest.fn(),
       updateMany: jest.fn(),
     },
+    partie: {
+      findUnique: jest.fn(),
+    },
+    user: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
 }
 
@@ -61,6 +68,12 @@ function makePartiesService() {
   return {
     getOwned: jest.fn(),
     getViewable: jest.fn(),
+  };
+}
+
+function makeUsersService() {
+  return {
+    findById: jest.fn(),
   };
 }
 
@@ -99,16 +112,25 @@ describe('CharacterService', () => {
   let service: CharacterService;
   let prisma: ReturnType<typeof makePrisma>;
   let parties: ReturnType<typeof makePartiesService>;
+  let users: ReturnType<typeof makeUsersService>;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     prisma = makePrisma();
     parties = makePartiesService();
+    users = makeUsersService();
+    // Défauts neutres : la plupart des tests ne portent pas sur ownerPseudo/ownerIsMj.
+    users.findById.mockResolvedValue({
+      id: 'default',
+      pseudo: 'default-pseudo',
+    });
+    prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj-default' });
     const module = await Test.createTestingModule({
       providers: [
         CharacterService,
         { provide: PrismaService, useValue: prisma },
         { provide: PartiesService, useValue: parties },
+        { provide: UsersService, useValue: users },
       ],
     }).compile();
     service = module.get(CharacterService);
@@ -218,6 +240,30 @@ describe('CharacterService', () => {
     );
   });
 
+  it('findOne() résout ownerPseudo et ownerIsMj (propriétaire = joueur)', async () => {
+    prisma.character.findUnique.mockResolvedValue(makeCharacter());
+    users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice' });
+    prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
+
+    const result = await service.findOne('char1', 'u1');
+
+    expect(result.ownerPseudo).toBe('alice');
+    expect(result.ownerIsMj).toBe(false);
+  });
+
+  it('findOne() résout ownerIsMj=true quand le propriétaire est le MJ de la partie', async () => {
+    prisma.character.findUnique.mockResolvedValue(
+      makeCharacter({ userId: 'mj1' }),
+    );
+    users.findById.mockResolvedValue({ id: 'mj1', pseudo: 'le-mj' });
+    prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
+
+    const result = await service.findOne('char1', 'mj1');
+
+    expect(result.ownerPseudo).toBe('le-mj');
+    expect(result.ownerIsMj).toBe(true);
+  });
+
   it('create() utilise validate et computeDerived de @master-jdr/game-rules', async () => {
     parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
@@ -231,6 +277,92 @@ describe('CharacterService', () => {
 
     expect(validate).toHaveBeenCalledWith(validSheet(), 'strict');
     expect(computeDerived).toHaveBeenCalledWith(validSheet());
+  });
+
+  it('create() résout ownerPseudo/ownerIsMj du créateur sans requête partie supplémentaire (réutilise getViewable)', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'u1' });
+    (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+    (computeDerived as jest.Mock).mockReturnValue({});
+    prisma.character.create.mockResolvedValue(makeCharacter({ userId: 'u1' }));
+    users.findById.mockResolvedValue({ id: 'u1', pseudo: 'bob' });
+
+    const result = await service.create('p1', 'u1', {
+      gameSystemId: 'ryuutama',
+      sheetData: validSheet(),
+    });
+
+    expect(result.ownerPseudo).toBe('bob');
+    expect(result.ownerIsMj).toBe(true);
+    expect(prisma.partie.findUnique).not.toHaveBeenCalled();
+  });
+
+  describe('findByPartie()', () => {
+    it('MJ → reçoit tous les personnages, avec le bon pseudo par personnage (une seule requête user.findMany)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1' }),
+        makeCharacter({ id: 'c2', userId: 'u2' }),
+        makeCharacter({ id: 'c3', userId: 'mj1' }),
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        { id: 'u1', pseudo: 'alice' },
+        { id: 'u2', pseudo: 'bob' },
+        { id: 'mj1', pseudo: 'le-mj' },
+      ]);
+
+      const result = await service.findByPartie('p1', 'mj1');
+
+      expect(prisma.character.findMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+      });
+      expect(prisma.user.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ['u1', 'u2', 'mj1'] } },
+        select: { id: true, pseudo: true },
+      });
+      expect(result.map((c) => c.ownerPseudo)).toEqual([
+        'alice',
+        'bob',
+        'le-mj',
+      ]);
+      expect(result.map((c) => c.ownerIsMj)).toEqual([false, false, true]);
+    });
+
+    it('joueur → ne reçoit que ses propres personnages', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1' }),
+      ]);
+      prisma.user.findMany.mockResolvedValue([{ id: 'u1', pseudo: 'alice' }]);
+
+      await service.findByPartie('p1', 'u1');
+
+      expect(prisma.character.findMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1', userId: 'u1' },
+      });
+    });
+
+    it('aucun personnage → ne fait aucun appel user.findMany', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.findMany.mockResolvedValue([]);
+
+      const result = await service.findByPartie('p1', 'mj1');
+
+      expect(result).toEqual([]);
+      expect(prisma.user.findMany).not.toHaveBeenCalled();
+    });
+
+    it('userId sans pseudo résolu (défensif) → ownerPseudo vide plutôt que de planter', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'orphan' }),
+      ]);
+      prisma.user.findMany.mockResolvedValue([]);
+
+      const result = await service.findByPartie('p1', 'mj1');
+
+      expect(result[0].ownerPseudo).toBe('');
+    });
   });
 
   describe('updatePortrait()', () => {
@@ -339,6 +471,24 @@ describe('CharacterService', () => {
         expect.stringContaining('fixed-uuid.jpg'),
       );
     });
+
+    it('résout ownerPseudo/ownerIsMj sur le résultat retourné', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+      users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice' });
+      prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
+
+      const result = await service.updatePortrait(
+        'char1',
+        'u1',
+        makeMulterFile(),
+        null,
+      );
+
+      expect(result.ownerPseudo).toBe('alice');
+      expect(result.ownerIsMj).toBe(false);
+    });
   });
 
   describe('removePortrait()', () => {
@@ -377,6 +527,22 @@ describe('CharacterService', () => {
       await expect(service.removePortrait('char1', 'u1')).rejects.toThrow(
         ConflictException,
       );
+    });
+
+    it('résout ownerPseudo/ownerIsMj sur le résultat retourné', async () => {
+      const character = makeCharacter({
+        portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+      users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice' });
+      prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
+
+      const result = await service.removePortrait('char1', 'u1');
+
+      expect(result.ownerPseudo).toBe('alice');
+      expect(result.ownerIsMj).toBe(false);
     });
   });
 

@@ -115,6 +115,7 @@
                   <app-character-summary-card
                     [character]="character"
                     [className]="classLabel(character)"
+                    [showOwnerInfo]="isMj()"
                     (selected)="openCharacterSheet(p.id, character.id)"
                   />
                 }

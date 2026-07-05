@@ -11,6 +11,13 @@
     @if (className()) {
       <span class="character-summary-card__class">{{ className() }}</span>
     }
+    @if (showOwnerInfo()) {
+      @if (character().ownerIsMj) {
+        <span class="character-summary-card__owner-badge">{{ theme.tone()['character.owner_badge_mj'] }}</span>
+      } @else {
+        <span class="character-summary-card__owner-badge">{{ character().ownerPseudo }}</span>
+      }
+    }
   </div>
   <div class="character-summary-card__badges">
     <span class="stat-pill">PV {{ character().derived.PV }}</span>

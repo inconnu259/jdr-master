@@ -14,6 +14,8 @@ const CHARACTER: CharacterDto = {
   portraitCropData: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
+  ownerPseudo: 'alice',
+  ownerIsMj: false,
 };
 
 describe('CharacterSummaryCard', () => {
@@ -65,5 +67,42 @@ describe('CharacterSummaryCard', () => {
     const img: HTMLImageElement = fixture.nativeElement.querySelector('.character-avatar__img');
     expect(img.src).toBe(`${API_BASE}/characters/${withPortrait.id}/portrait`);
     expect(img.style.transform).toBe('translate(2%, -3%) scale(1.4)');
+  });
+
+  it('showOwnerInfo=false (viewer joueur) → aucun badge/pseudo affiché, même si ownerPseudo est renseigné', async () => {
+    TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
+    const fixture = TestBed.createComponent(CharacterSummaryCard);
+    fixture.componentRef.setInput('character', CHARACTER);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('.character-summary-card__owner-badge')).toBeNull();
+  });
+
+  it('showOwnerInfo=true + personnage de joueur → affiche le pseudo du propriétaire', async () => {
+    TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
+    const fixture = TestBed.createComponent(CharacterSummaryCard);
+    fixture.componentRef.setInput('character', CHARACTER);
+    fixture.componentRef.setInput('showOwnerInfo', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const badge = fixture.nativeElement.querySelector('.character-summary-card__owner-badge');
+    expect(badge?.textContent?.trim()).toBe('alice');
+  });
+
+  it('showOwnerInfo=true + personnage du MJ → affiche le badge MJ thématisé, pas le pseudo', async () => {
+    const mjCharacter: CharacterDto = { ...CHARACTER, ownerIsMj: true, ownerPseudo: 'le-mj' };
+    TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
+    const fixture = TestBed.createComponent(CharacterSummaryCard);
+    fixture.componentRef.setInput('character', mjCharacter);
+    fixture.componentRef.setInput('showOwnerInfo', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const badge = fixture.nativeElement.querySelector('.character-summary-card__owner-badge');
+    // Valeur exacte dépend du thème actif (tones.ts, clé `character.owner_badge_mj`) :
+    // 'Maître' (ryuutama), 'Guide' (default), 'Ingénieur' (steampunk).
+    expect(['Maître', 'Guide', 'Ingénieur']).toContain(badge?.textContent?.trim());
   });
 });

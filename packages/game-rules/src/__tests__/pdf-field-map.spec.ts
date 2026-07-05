@@ -43,6 +43,7 @@ const content = {
   weaponLabel: 'Arc',
   weaponTouchFormula: 'AGI+INT-2',
   weaponDamageFormula: 'AGI',
+  ownerPseudo: 'alice',
 };
 
 describe('mapToPdfFields', () => {
@@ -175,5 +176,16 @@ describe('mapToPdfFields', () => {
     expect(
       fields.find((f) => f.field === 'Village natal et raisons du départ')?.value,
     ).toBe('Norn');
+  });
+
+  it('mappe le pseudo du propriétaire sur le champ "Joueur" (Story 4.6)', () => {
+    const data = baseData();
+    const fields = mapToPdfFields(data, computeDerived(data), {
+      ...content,
+      ownerPseudo: 'bob',
+    });
+    const joueurField = fields.find((f) => f.field === 'Joueur');
+    expect(joueurField?.value).toBe('bob');
+    expect(joueurField?.kind).toBe('text');
   });
 });

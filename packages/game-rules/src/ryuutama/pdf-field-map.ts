@@ -21,6 +21,8 @@ export interface RyuutamaPdfContent {
   weaponLabel: string;
   weaponTouchFormula: string;
   weaponDamageFormula: string;
+  /** Pseudo du propriétaire du personnage (joueur ou MJ) — remplit le champ "Joueur" (Story 4.6). */
+  ownerPseudo: string;
 }
 
 /** Valeur d'un champ AcroForm : texte pour les champs texte, option exacte pour les dropdowns. */
@@ -36,7 +38,7 @@ export interface PdfFieldValue {
  * via pdf-lib, pas devinés).
  *
  * Champs du template volontairement non couverts (aucune donnée correspondante dans
- * `RyuutamaSheetData`/`DerivedStats` ce palier, ou hors scope) : Joueur, PX, créé le,
+ * `RyuutamaSheetData`/`DerivedStats` ce palier, ou hors scope) : PX, créé le,
  * Homme dragon, Classe 2 (+ Talent 4-6/Effet 4-6, second classe non supportée),
  * Paysage climat (+ les 22 champs de résistance par terrain), Maladresses, les 6
  * statuts (Blessé/Las/Empoisonné/Surexcité/Malade/Choc), Arme 2/3 (+ A2/A3 *),
@@ -64,6 +66,7 @@ export function mapToPdfFields(
 
   return [
     { field: 'Nom', value: narrative.name ?? '', kind: 'text' },
+    { field: 'Joueur', value: content.ownerPseudo, kind: 'text' },
     { field: 'Sexe', value: narrative.sex ?? '', kind: 'text' },
     { field: 'Âge', value: narrative.age ?? '', kind: 'text' },
     { field: 'Niveau', value: '1', kind: 'text' },
