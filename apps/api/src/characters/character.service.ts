@@ -220,6 +220,39 @@ export class CharacterService {
   }
 
   /**
+   * Recadrage dédié pour l'export PDF (Story 4.7, AC2) : enregistré séparément de
+   * `portraitCropData` (avatar web), sans toucher au fichier image existant — pas d'upload ici.
+   */
+  async updatePdfPortraitCrop(
+    id: string,
+    userId: string,
+    cropData: PortraitCropDataDto,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(id, userId);
+    if (!character.portraitUrl) {
+      throw new BadRequestException(
+        "Ce personnage n'a pas de portrait à recadrer",
+      );
+    }
+
+    const result = await this.prisma.character.updateMany({
+      where: { id, updatedAt: character.updatedAt },
+      data: { pdfPortraitCropData: cropData as any },
+    });
+    if (result.count === 0) {
+      throw new ConflictException(
+        'Le personnage a été modifié entretemps, réessayez.',
+      );
+    }
+
+    const updated = await this.prisma.character.findUniqueOrThrow({
+      where: { id },
+    });
+    const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    return toDto(updated, owner.pseudo, owner.isMj);
+  }
+
+  /**
    * Lecture du fichier portrait : mêmes règles d'accès que `findOne` (propriétaire OU MJ),
    * contrairement aux mutations (propriétaire seul, cf. `getOwnCharacterOrThrow`) — consulter
    * un portrait n'est pas une action d'édition.
@@ -305,6 +338,7 @@ function toDto(
     derived: character.derived,
     portraitUrl: character.portraitUrl ?? null,
     portraitCropData: character.portraitCropData ?? null,
+    pdfPortraitCropData: character.pdfPortraitCropData ?? null,
     createdAt: character.createdAt.toISOString(),
     updatedAt: character.updatedAt.toISOString(),
     ownerPseudo,

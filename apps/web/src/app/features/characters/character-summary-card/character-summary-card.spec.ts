@@ -12,6 +12,7 @@ const CHARACTER: CharacterDto = {
   derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
   portraitUrl: null,
   portraitCropData: null,
+  pdfPortraitCropData: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   ownerPseudo: 'alice',

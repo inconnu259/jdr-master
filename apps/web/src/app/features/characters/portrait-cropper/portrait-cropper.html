@@ -11,6 +11,8 @@
   @if (previewUrl(); as url) {
     <div
       class="portrait-cropper__preview"
+      [class.portrait-cropper__preview--rect]="effectiveShape() === 'rect'"
+      [style.aspect-ratio]="effectiveShape() === 'rect' ? aspectRatio : null"
       tabindex="0"
       role="application"
       aria-label="Zone de recadrage du portrait. Flèches pour déplacer, plus/moins pour zoomer."

@@ -18,7 +18,11 @@ jest.mock('@master-jdr/game-rules', () => ({
 
 import { readFile } from 'node:fs/promises';
 import { mapToPdfFields } from '@master-jdr/game-rules';
-import { RyuutamaPdfService, fitCentered } from './ryuutama-pdf.service';
+import {
+  RyuutamaPdfService,
+  fitCentered,
+  computePdfCropDraw,
+} from './ryuutama-pdf.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 
 const mockSetText = jest.fn();
@@ -29,7 +33,8 @@ const mockDrawImage = jest.fn<
   void,
   [unknown, { x: number; y: number; width: number; height: number }]
 >();
-const mockPage = { drawImage: mockDrawImage };
+const mockPushOperators = jest.fn();
+const mockPage = { drawImage: mockDrawImage, pushOperators: mockPushOperators };
 const mockEmbeddedImage = { width: 100, height: 100 };
 const mockEmbedJpg = jest.fn().mockResolvedValue(mockEmbeddedImage);
 const mockEmbedPng = jest.fn().mockResolvedValue(mockEmbeddedImage);
@@ -48,6 +53,11 @@ const mockDoc = {
 
 jest.mock('pdf-lib', () => ({
   PDFDocument: { load: jest.fn(() => Promise.resolve(mockDoc)) },
+  pushGraphicsState: jest.fn(() => 'pushGraphicsState'),
+  popGraphicsState: jest.fn(() => 'popGraphicsState'),
+  rectangle: jest.fn(() => 'rectangle'),
+  clip: jest.fn(() => 'clip'),
+  endPath: jest.fn(() => 'endPath'),
 }));
 
 function makeContentService() {
@@ -98,6 +108,7 @@ function makeCharacter(overrides: Record<string, unknown> = {}) {
     },
     portraitUrl: null,
     portraitCropData: null,
+    pdfPortraitCropData: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ownerPseudo: 'alice',
@@ -279,6 +290,115 @@ describe('RyuutamaPdfService', () => {
     });
   });
 
+  describe('recadrage dédié du portrait (Story 4.7)', () => {
+    const PORTRAIT_UUID = '22222222-2222-2222-2222-222222222222';
+
+    beforeEach(() => {
+      (readFile as jest.Mock).mockImplementation((path: string) => {
+        if (String(path).includes('portraits')) {
+          return Promise.resolve(Buffer.from('jpeg-bytes'));
+        }
+        return Promise.resolve(Buffer.from('fake-pdf-bytes'));
+      });
+    });
+
+    it('pdfPortraitCropData renseigné => clip path appliqué puis drawImage (AC3)', async () => {
+      const character = makeCharacter({
+        portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.jpg`,
+        pdfPortraitCropData: { scale: 1.5, offsetX: 10, offsetY: -10 },
+      });
+
+      await service.fillCharacterPdf(character, 'editable');
+
+      expect(mockPushOperators).toHaveBeenCalledWith(
+        'pushGraphicsState',
+        'rectangle',
+        'clip',
+        'endPath',
+      );
+      expect(mockPushOperators).toHaveBeenCalledWith('popGraphicsState');
+      expect(mockDrawImage).toHaveBeenCalledWith(
+        mockEmbeddedImage,
+        expect.objectContaining({
+          x: expect.any(Number),
+          y: expect.any(Number),
+          width: expect.any(Number),
+          height: expect.any(Number),
+        }),
+      );
+    });
+
+    it('drawImage qui lève pendant le clip path => popGraphicsState toujours appelé (état graphique jamais laissé déséquilibré)', async () => {
+      mockDrawImage.mockImplementationOnce(() => {
+        throw new Error('drawImage failed unexpectedly');
+      });
+      const character = makeCharacter({
+        portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.jpg`,
+        pdfPortraitCropData: { scale: 1.5, offsetX: 10, offsetY: -10 },
+      });
+
+      await expect(
+        service.fillCharacterPdf(character, 'editable'),
+      ).rejects.toThrow('drawImage failed unexpectedly');
+
+      expect(mockPushOperators).toHaveBeenCalledWith('popGraphicsState');
+    });
+
+    it('pdfPortraitCropData absent (null) => comportement 4.6 inchangé, pas de clip path (AC4)', async () => {
+      const character = makeCharacter({
+        portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.jpg`,
+        pdfPortraitCropData: null,
+      });
+
+      await service.fillCharacterPdf(character, 'editable');
+
+      expect(mockPushOperators).not.toHaveBeenCalled();
+      expect(mockDrawImage).toHaveBeenCalled();
+    });
+
+    it('pdfPortraitCropData malformé (forme inattendue) => dégradation gracieuse vers fitCentered, pas de crash', async () => {
+      const character = makeCharacter({
+        portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.jpg`,
+        pdfPortraitCropData: { foo: 'bar' },
+      });
+
+      await expect(
+        service.fillCharacterPdf(character as any, 'editable'),
+      ).resolves.toBeInstanceOf(Buffer);
+      expect(mockPushOperators).not.toHaveBeenCalled();
+      expect(mockDrawImage).toHaveBeenCalled();
+    });
+
+    it.each([
+      ['scale NaN', { scale: NaN, offsetX: 0, offsetY: 0 }],
+      ['scale Infinity', { scale: Infinity, offsetX: 0, offsetY: 0 }],
+      ['scale négatif', { scale: -1, offsetX: 0, offsetY: 0 }],
+      ['scale hors bornes DTO (>3)', { scale: 10, offsetX: 0, offsetY: 0 }],
+      [
+        'offsetX hors bornes DTO (>100)',
+        { scale: 1, offsetX: 500, offsetY: 0 },
+      ],
+      [
+        'offsetY hors bornes DTO (<-100)',
+        { scale: 1, offsetX: 0, offsetY: -500 },
+      ],
+    ])(
+      'pdfPortraitCropData avec %s (donnée legacy/corrompue) => dégradation gracieuse vers fitCentered, pas de géométrie invalide',
+      async (_label, cropData) => {
+        const character = makeCharacter({
+          portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.jpg`,
+          pdfPortraitCropData: cropData,
+        });
+
+        await expect(
+          service.fillCharacterPdf(character, 'editable'),
+        ).resolves.toBeInstanceOf(Buffer);
+        expect(mockPushOperators).not.toHaveBeenCalled();
+        expect(mockDrawImage).toHaveBeenCalled();
+      },
+    );
+  });
+
   it('template PDF absent => erreur explicite pointant vers le README', async () => {
     (readFile as jest.Mock).mockRejectedValue(new Error('ENOENT'));
     const gs = makeContentService();
@@ -299,7 +419,12 @@ describe('fitCentered', () => {
   it('image carrée dans un cadre plus large que haut => limitée par la hauteur, centrée horizontalement', () => {
     const result = fitCentered(100, 100, 10, 20, 90, 50);
     // scale = min(90/100, 50/100) = 0.5 => 50x50, centré dans 90x50
-    expect(result).toEqual({ x: 10 + (90 - 50) / 2, y: 20, width: 50, height: 50 });
+    expect(result).toEqual({
+      x: 10 + (90 - 50) / 2,
+      y: 20,
+      width: 50,
+      height: 50,
+    });
   });
 
   it('image large (paysage) dans un cadre portrait => limitée par la largeur, centrée verticalement', () => {
@@ -311,7 +436,7 @@ describe('fitCentered', () => {
     expect(result.y).toBeCloseTo((110 - 45) / 2);
   });
 
-  it("image haute (portrait) dans un cadre carré => limitée par la hauteur, centrée horizontalement", () => {
+  it('image haute (portrait) dans un cadre carré => limitée par la hauteur, centrée horizontalement', () => {
     const result = fitCentered(100, 200, 0, 0, 110, 110);
     // scale = min(110/100, 110/200) = 0.55 => 55x110
     expect(result.width).toBeCloseTo(55);
@@ -335,5 +460,84 @@ describe('fitCentered', () => {
       expect(result.x).toBeGreaterThanOrEqual(5 - 1e-9);
       expect(result.y).toBeGreaterThanOrEqual(5 - 1e-9);
     }
+  });
+});
+
+describe('computePdfCropDraw', () => {
+  it('zoom neutre (scale=1, offset=0) => image ENTIÈRE visible (équivalent object-fit: contain), jamais rognée', () => {
+    const result = computePdfCropDraw(100, 100, 10, 20, 90, 50, {
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+    });
+    // containScale = min(90/100, 50/100) = 0.5 => 50x50 (l'image entière tient dans le cadre)
+    expect(result.width).toBeCloseTo(50);
+    expect(result.height).toBeCloseTo(50);
+    expect(result.x).toBeCloseTo(10 + (90 - 50) / 2);
+    expect(result.y).toBeCloseTo(20 + (50 - 50) / 2);
+  });
+
+  it("à scale=1 (contain), l'offset est sans effet (marge nulle dans les deux axes) — l'image entière étant déjà visible, rien à révéler en la déplaçant", () => {
+    const result = computePdfCropDraw(100, 100, 0, 0, 100, 50, {
+      scale: 1,
+      offsetX: 100,
+      offsetY: 100,
+    });
+    // containScale = min(1, 0.5) = 0.5 => 50x50 ; marge nulle (0) dans les deux axes.
+    expect(result.x).toBeCloseTo(0 + (100 - 50) / 2);
+    expect(result.y).toBeCloseTo(0 + (50 - 50) / 2);
+  });
+
+  it("un offsetX/offsetY modéré (non clampé) se résout en pourcentage du CADRE, pas de l'image mise à l'échelle — sinon le même offset produirait un déplacement différent selon le zoom, décorrélant le rendu PDF de l'aperçu web `PortraitCropper` (CSS `transform: translate(%) scale()`, le pourcentage se résout contre la boîte de layout de l'élément, non affectée par `scale()` dans le même transform)", () => {
+    // Cadre 100x50, image carrée 100x100 : containScale = min(1, 0.5) = 0.5 (contrainte Y).
+    // À scale=1, la marge est nulle (cf. test précédent) — comparaison à des zooms >1 à la place.
+    const atZoom2 = computePdfCropDraw(100, 100, 0, 0, 100, 50, {
+      scale: 2,
+      offsetX: 0,
+      offsetY: 10,
+    });
+    const atZoom3 = computePdfCropDraw(100, 100, 0, 0, 100, 50, {
+      scale: 3,
+      offsetX: 0,
+      offsetY: 10,
+    });
+    // Le déplacement en pixels induit par offsetY=10% doit être IDENTIQUE aux deux zooms
+    // (10% × frameHeight=50 = 5px), et non proportionnel à la hauteur dessinée (qui varie).
+    const baseYAtZoom2 = 0 + (50 - 100 * 0.5 * 2) / 2; // -25
+    const baseYAtZoom3 = 0 + (50 - 100 * 0.5 * 3) / 2; // -50
+    expect(atZoom2.y).toBeCloseTo(baseYAtZoom2 - 5);
+    expect(atZoom3.y).toBeCloseTo(baseYAtZoom3 - 5);
+  });
+
+  it('zoom maximal (scale=3) avec offset aux bornes (±100) => déplacement borné par la marge disponible, image couvre toujours le cadre', () => {
+    const result = computePdfCropDraw(100, 100, 0, 0, 90, 50, {
+      scale: 3,
+      offsetX: 100,
+      offsetY: 100,
+    });
+    // containScale = 0.5, totalScale = 1.5 => 150x150 ; marge = (150-90)/2=30 (x), (150-50)/2=50 (y)
+    expect(result.width).toBeCloseTo(150);
+    expect(result.height).toBeCloseTo(150);
+    // Le cadre reste toujours entièrement couvert : x+width >= frameX+frameWidth, x <= frameX, etc.
+    expect(result.x).toBeLessThanOrEqual(0);
+    expect(result.x + result.width).toBeGreaterThanOrEqual(90);
+    expect(result.y).toBeLessThanOrEqual(0);
+    expect(result.y + result.height).toBeGreaterThanOrEqual(50);
+  });
+
+  it("offset qui pousserait la région hors de l'image source (scale=1, cadre de même ratio que l'image) => clampé à 0 (aucune marge disponible dans aucun axe), jamais d'erreur", () => {
+    // Cadre carré à la même proportion que l'image (60x60 vs 100x100) : containScale=0.6=coverScale
+    // ici (ratios identiques) => l'image à l'échelle (60x60) correspond exactement au cadre.
+    const result = computePdfCropDraw(100, 100, 0, 0, 60, 60, {
+      scale: 1,
+      offsetX: 100,
+      offsetY: -100,
+    });
+    expect(Number.isFinite(result.x)).toBe(true);
+    expect(Number.isFinite(result.y)).toBe(true);
+    expect(result.width).toBeCloseTo(60);
+    expect(result.height).toBeCloseTo(60);
+    expect(result.x).toBeCloseTo(0);
+    expect(result.y).toBeCloseTo(0);
   });
 });

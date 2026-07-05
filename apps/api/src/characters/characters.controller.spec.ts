@@ -25,6 +25,7 @@ function makeCharacterService() {
     findOne: jest.fn(),
     updatePortrait: jest.fn(),
     removePortrait: jest.fn(),
+    updatePdfPortraitCrop: jest.fn(),
     getPortraitFile: jest.fn(),
   };
 }
@@ -215,6 +216,24 @@ describe('CharactersController', () => {
     expect(characters.removePortrait).toHaveBeenCalledWith('char1', 'u1');
   });
 
+  it('updatePdfPortraitCrop() délègue à CharacterService', async () => {
+    const cropData = { scale: 1.5, offsetX: 10, offsetY: -10 };
+    characters.updatePdfPortraitCrop.mockResolvedValue({
+      id: 'char1',
+      pdfPortraitCropData: cropData,
+    });
+
+    await controller.updatePdfPortraitCrop('char1', cropData, {
+      id: 'u1',
+    } as any);
+
+    expect(characters.updatePdfPortraitCrop).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      cropData,
+    );
+  });
+
   it('getPortrait() délègue à CharacterService et retourne un StreamableFile', async () => {
     characters.getPortraitFile.mockResolvedValue({
       buffer: Buffer.from('image-bytes'),
@@ -318,6 +337,37 @@ describe('CharactersController', () => {
         .expect(200);
 
       expect(characters.updatePortrait).toHaveBeenCalled();
+    });
+
+    it('PATCH pdf-portrait-crop avec scale hors bornes (>3) → 400 via le pipeline HTTP réel', async () => {
+      await request(app.getHttpServer())
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/pdf-portrait-crop',
+        )
+        .send({ scale: 5, offsetX: 0, offsetY: 0 })
+        .expect(400);
+
+      expect(characters.updatePdfPortraitCrop).not.toHaveBeenCalled();
+    });
+
+    it('PATCH pdf-portrait-crop avec des valeurs valides → CharacterService.updatePdfPortraitCrop est appelé', async () => {
+      characters.updatePdfPortraitCrop.mockResolvedValue({
+        id: '11111111-1111-1111-1111-111111111111',
+        pdfPortraitCropData: { scale: 1.5, offsetX: 10, offsetY: -10 },
+      });
+
+      await request(app.getHttpServer())
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/pdf-portrait-crop',
+        )
+        .send({ scale: 1.5, offsetX: 10, offsetY: -10 })
+        .expect(200);
+
+      expect(characters.updatePdfPortraitCrop).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
+        { scale: 1.5, offsetX: 10, offsetY: -10 },
+      );
     });
   });
 });

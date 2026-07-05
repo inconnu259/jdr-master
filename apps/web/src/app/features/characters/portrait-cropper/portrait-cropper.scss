@@ -11,23 +11,48 @@
   &__preview {
     width: 220px;
     height: 220px;
+    // Sans ça, un `MatDialog` à hauteur contrainte (chrome + autres éléments du formulaire)
+    // peut comprimer ce flex-item le long de l'axe principal (colonne).
+    flex-shrink: 0;
     border-radius: 50%;
     overflow: hidden;
     border: 1px solid var(--mat-sys-outline-variant, #ccc);
     cursor: grab;
     touch-action: none;
     align-self: center;
+    // Damier visible dans les zones hors de l'image (ratio cadre ≠ ratio image à scale=1, cf.
+    // `object-fit: contain` ci-dessous) ou derrière un portrait PNG transparent.
+    background-image:
+      linear-gradient(45deg, #8883 25%, transparent 25%),
+      linear-gradient(-45deg, #8883 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #8883 75%),
+      linear-gradient(-45deg, transparent 75%, #8883 75%);
+    background-size: 16px 16px;
+    background-position:
+      0 0,
+      0 8px,
+      8px -8px,
+      -8px 0;
 
     &:focus-visible {
       outline: 2px solid var(--mat-sys-primary, #6750a4);
       outline-offset: 2px;
+    }
+
+    &--rect {
+      width: 220px;
+      height: auto;
+      border-radius: 4px;
     }
   }
 
   &__preview-img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    // `contain` (pas `cover`) : à scale=1 (zoom neutre), l'image entière reste toujours visible,
+    // quel que soit son ratio par rapport au cadre — jamais de zone rognée par défaut. Zoomer
+    // (scale 1-3) permet ensuite de resserrer le cadrage si voulu.
+    object-fit: contain;
     // Empêche le drag-and-drop natif de l'image (Safari/Firefox l'initient parfois même avec
     // draggable="false" + preventDefault sur dragstart) qui sinon coupe le pan personnalisé
     // (pointer events) en plein milieu d'un mouvement un peu long.

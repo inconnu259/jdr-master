@@ -14,6 +14,10 @@
   &__img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    // `contain` (pas `cover`) : doit interpréter `portraitCropData`/`pdfPortraitCropData` de la
+    // même façon que l'outil `PortraitCropper` qui les a produits (scale=1 = image entière
+    // visible, cf. Story 4.7) — sinon l'aperçu pendant l'édition ne correspondrait pas au rendu
+    // final de l'avatar.
+    object-fit: contain;
   }
 }

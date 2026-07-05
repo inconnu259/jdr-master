@@ -91,6 +91,18 @@ export class CharacterService {
     );
   }
 
+  /** Enregistre le recadrage dédié à l'export PDF — pas de fichier, l'image source existe déjà. */
+  patchPdfPortraitCrop(
+    id: string,
+    cropData: { scale: number; offsetX: number; offsetY: number },
+  ): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.patch<CharacterDto>(`${API_BASE}/characters/${id}/pdf-portrait-crop`, cropData, {
+        withCredentials: true,
+      }),
+    );
+  }
+
   /** Récupère les octets du portrait existant (utilisé par `PortraitCropper` pour permettre un réajustement du recadrage sans re-sélection de fichier, AC4). */
   getPortraitBlob(id: string): Promise<Blob> {
     return firstValueFrom(

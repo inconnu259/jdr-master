@@ -246,4 +246,43 @@ export class CharacterSheet implements OnInit {
       this.portraitError.set("Le portrait n'a pas pu être enregistré. Réessayez.");
     }
   }
+
+  /**
+   * Recadrage dédié à l'export PDF (Story 4.7) : propriétaire seul, uniquement si un portrait
+   * existe déjà (rien à recadrer sinon) — même garde que `editPortrait()`.
+   */
+  protected editPdfPortraitCrop(): void {
+    if (this.portraitDialogOpen || !this.isOwner()) return;
+    const c = this.character();
+    if (!c || !c.portraitUrl) return;
+    this.portraitError.set(null);
+    this.portraitDialogOpen = true;
+    const ref = this.dialog.open<PortraitCropper, PortraitCropperData, PortraitCropResult | null>(
+      PortraitCropper,
+      {
+        data: {
+          characterId: c.id,
+          shape: 'rect',
+          initialCropData: c.pdfPortraitCropData as PortraitCropResult['cropData'] | null,
+        },
+      },
+    );
+    ref.afterClosed().subscribe((result) => {
+      this.portraitDialogOpen = false;
+      if (!result) return;
+      void this.savePdfPortraitCrop(c.id, result);
+    });
+  }
+
+  private async savePdfPortraitCrop(
+    characterId: string,
+    result: PortraitCropResult,
+  ): Promise<void> {
+    try {
+      const updated = await this.characterSvc.patchPdfPortraitCrop(characterId, result.cropData);
+      this.character.set(updated);
+    } catch {
+      this.portraitError.set('Le cadrage PDF n’a pas pu être enregistré. Réessayez.');
+    }
+  }
 }

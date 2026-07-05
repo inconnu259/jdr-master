@@ -1,7 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { PDFDocument, type PDFImage } from 'pdf-lib';
+import {
+  PDFDocument,
+  clip,
+  endPath,
+  popGraphicsState,
+  pushGraphicsState,
+  rectangle,
+  type PDFImage,
+} from 'pdf-lib';
 import type { CharacterDto } from '@master-jdr/shared';
 import {
   mapToPdfFields,
@@ -10,6 +18,12 @@ import {
 } from '@master-jdr/game-rules';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
+import {
+  MAX_PORTRAIT_OFFSET,
+  MAX_PORTRAIT_SCALE,
+  MIN_PORTRAIT_OFFSET,
+  MIN_PORTRAIT_SCALE,
+} from './dto/portrait-crop-data.dto';
 import { readPortraitFile } from './portrait-storage.util';
 
 const PDF_TEMPLATE_PATH = join(
@@ -25,6 +39,13 @@ const PDF_TEMPLATE_PATH = join(
  * incrustation de vérification superposée sur le rendu réel) — bord intérieur du cadre.
  * Remplace l'estimation initiale (90×110, jamais vérifiée) très en-deçà de la vraie zone et
  * mal positionnée, cf. captures utilisateur lors de la revue de la Story 4.6.
+ * Dupliquées intentionnellement dans `RYUUTAMA_PDF_PORTRAIT_WIDTH/HEIGHT` (`@master-jdr/shared`,
+ * consommées par `PortraitCropper` côté web) plutôt que partagées : `@master-jdr/shared` est une
+ * frontière **types uniquement, effacée au runtime** (CLAUDE.md/project-context.md) — Jest ne
+ * transforme pas ce module en tant que dépendance de workspace (`node_modules`, hors `rootDir`
+ * de l'API), donc un import de valeur runtime depuis ce package casse la suite `api` (confirmé :
+ * `SyntaxError: Unexpected token 'export'`). Si ces valeurs changent, mettre à jour les deux
+ * emplacements (et considérer construire `@master-jdr/shared` en JS si ce besoin se répète).
  */
 const PORTRAIT_X = 344.87;
 const PORTRAIT_Y = 646.92;
@@ -32,6 +53,12 @@ const PORTRAIT_WIDTH = 188.18;
 const PORTRAIT_HEIGHT = 136.48;
 
 export type PdfExportFormat = 'editable' | '2pages';
+
+export interface PdfPortraitCropData {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}
 
 /**
  * Calcule position/taille pour dessiner une image centrée dans un cadre, en conservant son
@@ -52,6 +79,94 @@ export function fitCentered(
   const x = frameX + (frameWidth - width) / 2;
   const y = frameY + (frameHeight - height) / 2;
   return { x, y, width, height };
+}
+
+/**
+ * Calcule position/taille pour dessiner une image (surdimensionnée puis clippée au cadre, cf.
+ * `embedPortrait`) selon un recadrage utilisateur `{ scale, offsetX, offsetY }` (Story 4.7,
+ * même forme que `PortraitCropDataDto` / le widget `PortraitCropper` web).
+ *
+ * Reproduit visuellement `object-fit: contain` (base, `scale=1` montre l'image entière, jamais
+ * rognée — contrairement à `cover` qui masquerait toujours une partie de l'image si son ratio ne
+ * correspond pas à celui du cadre) + `transform: translate(offsetX%, offsetY%) scale(scale)`
+ * (CSS, `PortraitCropper`) pour zoomer/déplacer au-delà de cette vue de base (fonction pure,
+ * testable indépendamment de `pdf-lib`).
+ */
+export function computePdfCropDraw(
+  imageWidth: number,
+  imageHeight: number,
+  frameX: number,
+  frameY: number,
+  frameWidth: number,
+  frameHeight: number,
+  cropData: PdfPortraitCropData,
+): { x: number; y: number; width: number; height: number } {
+  const containScale = Math.min(
+    frameWidth / imageWidth,
+    frameHeight / imageHeight,
+  );
+  const totalScale = containScale * cropData.scale;
+  const width = imageWidth * totalScale;
+  const height = imageHeight * totalScale;
+  const baseX = frameX + (frameWidth - width) / 2;
+  const baseY = frameY + (frameHeight - height) / 2;
+
+  // Marge disponible avant que le cadre ne dépasse des bords de l'image mise à l'échelle — borne
+  // l'offset pour ne jamais révéler de zone hors de l'image source. À scale=1 (contain), l'image
+  // ne dépasse le cadre dans aucun axe : la marge est nulle, l'offset est entièrement ignoré
+  // (aucun intérêt à déplacer une image déjà entièrement visible).
+  const maxOffsetXPixels = Math.max(0, (width - frameWidth) / 2);
+  const maxOffsetYPixels = Math.max(0, (height - frameHeight) / 2);
+  // Un pourcentage CSS dans `translate()` se résout contre la boîte de layout de l'élément
+  // (ici : le cadre/conteneur, taille fixe), PAS contre sa taille une fois `scale()` appliqué
+  // dans le même `transform` — sinon un même `offsetX` produirait un déplacement différent
+  // selon le zoom, ce qui décorrèle visuellement l'export PDF de l'aperçu web.
+  const offsetXPixels = Math.min(
+    maxOffsetXPixels,
+    Math.max(-maxOffsetXPixels, (cropData.offsetX / 100) * frameWidth),
+  );
+  const offsetYPixels = Math.min(
+    maxOffsetYPixels,
+    Math.max(-maxOffsetYPixels, (cropData.offsetY / 100) * frameHeight),
+  );
+
+  // CSS translate Y positif = vers le bas de l'écran ; l'axe Y de pdf-lib augmente vers le haut
+  // de la page — un déplacement "vers le bas" côté web se traduit par une position Y décroissante.
+  return { x: baseX + offsetXPixels, y: baseY - offsetYPixels, width, height };
+}
+
+/** Un nombre fini dans `[min, max]` — rejette `NaN`/`Infinity` en plus des valeurs hors bornes. */
+function isFiniteInRange(
+  value: unknown,
+  min: number,
+  max: number,
+): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= min &&
+    value <= max
+  );
+}
+
+/**
+ * Valide `scale`/`offsetX`/`offsetY` avec les mêmes bornes que `PortraitCropDataDto` (déjà
+ * appliquées à l'écriture, cf. `updatePdfPortraitCrop`) — une donnée legacy/corrompue en base
+ * (ou un accès direct à la colonne hors du chemin API validé) ne doit jamais atteindre
+ * `computePdfCropDraw` avec un `NaN`/`Infinity`/hors bornes qui produirait une géométrie
+ * dégénérée ; dégradation gracieuse vers `fitCentered` dans ce cas (cf. `embedPortrait`).
+ */
+function parsePdfPortraitCropData(value: unknown): PdfPortraitCropData | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { scale, offsetX, offsetY } = value as PdfPortraitCropData;
+  if (
+    !isFiniteInRange(scale, MIN_PORTRAIT_SCALE, MAX_PORTRAIT_SCALE) ||
+    !isFiniteInRange(offsetX, MIN_PORTRAIT_OFFSET, MAX_PORTRAIT_OFFSET) ||
+    !isFiniteInRange(offsetY, MIN_PORTRAIT_OFFSET, MAX_PORTRAIT_OFFSET)
+  ) {
+    return null;
+  }
+  return { scale, offsetX, offsetY };
 }
 
 interface ClassContentData {
@@ -107,7 +222,11 @@ export class RyuutamaPdfService {
         );
       }
     }
-    await this.embedPortrait(doc, character.portraitUrl);
+    await this.embedPortrait(
+      doc,
+      character.portraitUrl,
+      character.pdfPortraitCropData,
+    );
 
     if (format === '2pages') {
       form.flatten();
@@ -123,10 +242,17 @@ export class RyuutamaPdfService {
    * web. `pdf-lib` 1.x ne sait embarquer que JPEG/PNG (`embedJpg`/`embedPng`) — pas de méthode
    * WEBP native : un portrait WEBP reste visible sur le web mais n'apparaît pas dans le PDF
    * pour ce palier (limitation documentée, pas un bug).
+   *
+   * Si `pdfPortraitCropData` est renseigné (Story 4.7), applique ce recadrage utilisateur au lieu
+   * du centrage automatique `fitCentered` (Story 4.6, AC4 — comportement inchangé sans recadrage
+   * dédié). `pdf-lib` ne sait pas dessiner une sous-région d'une image embarquée : l'image
+   * surdimensionnée est dessinée puis clippée au cadre via un clip path bas niveau
+   * (`pushGraphicsState`/`rectangle`/`clip`/`endPath`/`popGraphicsState`).
    */
   private async embedPortrait(
     doc: PDFDocument,
     portraitUrl: string | null,
+    pdfPortraitCropData: unknown,
   ): Promise<void> {
     const portrait = await readPortraitFile(portraitUrl);
     if (!portrait) return;
@@ -157,6 +283,33 @@ export class RyuutamaPdfService {
     }
 
     const page = doc.getPages()[0];
+    const cropData = parsePdfPortraitCropData(pdfPortraitCropData);
+    if (cropData) {
+      const { x, y, width, height } = computePdfCropDraw(
+        image.width,
+        image.height,
+        PORTRAIT_X,
+        PORTRAIT_Y,
+        PORTRAIT_WIDTH,
+        PORTRAIT_HEIGHT,
+        cropData,
+      );
+      page.pushOperators(
+        pushGraphicsState(),
+        rectangle(PORTRAIT_X, PORTRAIT_Y, PORTRAIT_WIDTH, PORTRAIT_HEIGHT),
+        clip(),
+        endPath(),
+      );
+      try {
+        page.drawImage(image, { x, y, width, height });
+      } finally {
+        // Toujours dépiler l'état graphique, même si `drawImage` lève — sinon la pile
+        // push/pop de la page resterait déséquilibrée pour tout ce qui serait dessiné après.
+        page.pushOperators(popGraphicsState());
+      }
+      return;
+    }
+
     const { x, y, width, height } = fitCentered(
       image.width,
       image.height,

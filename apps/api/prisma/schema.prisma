@@ -20,14 +20,14 @@ model User {
   role         GlobalRole @default(USER)
   createdAt    DateTime   @default(now())
 
-  mjOfParties            Partie[]                  @relation("PartieMJ")
-  memberships            Membership[]
-  invitesSent            Invitation[]              @relation("InvitationInviter")
-  invitesRecv            Invitation[]              @relation("InvitationInvitee")
-  inviteLinksCreated     InviteLink[]              @relation("InviteLinkCreator")
+  mjOfParties              Partie[]                  @relation("PartieMJ")
+  memberships              Membership[]
+  invitesSent              Invitation[]              @relation("InvitationInviter")
+  invitesRecv              Invitation[]              @relation("InvitationInvitee")
+  inviteLinksCreated       InviteLink[]              @relation("InviteLinkCreator")
   availabilityDeclarations AvailabilityDeclaration[]
-  pollVotes              PollVote[]
-  characters             Character[]
+  pollVotes                PollVote[]
+  characters               Character[]
 }
 
 enum PartieKind {
@@ -48,13 +48,13 @@ model Partie {
   createdAt    DateTime   @default(now())
 
   nextSessionDate DateTime? // Date confirmée de la prochaine séance (mise à jour par Epic 3)
-  nextSessionSlot DaySlot?  // Créneau confirmé
+  nextSessionSlot DaySlot? // Créneau confirmé
 
-  memberships  Membership[]
-  invitations  Invitation[]
-  inviteLinks  InviteLink[]
-  polls        SessionPoll[]
-  characters   Character[]
+  memberships Membership[]
+  invitations Invitation[]
+  inviteLinks InviteLink[]
+  polls       SessionPoll[]
+  characters  Character[]
 }
 
 enum InvitationStatus {
@@ -146,11 +146,11 @@ model AvailabilityDeclaration {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   kind      AvailKind
   recurKind RecurKind
-  dayOfWeek Int?      // 0=dim … 6=sam, obligatoire si RECURRING
+  dayOfWeek Int? // 0=dim … 6=sam, obligatoire si RECURRING
   slot      DaySlot   @default(FULL_DAY)
   startDate DateTime? // obligatoire si PUNCTUAL
   endDate   DateTime? // obligatoire si PUNCTUAL
-  expiresAt DateTime  // archivé quand expiresAt <= now()
+  expiresAt DateTime // archivé quand expiresAt <= now()
   createdAt DateTime  @default(now())
 
   @@index([userId, expiresAt])
@@ -158,16 +158,16 @@ model AvailabilityDeclaration {
 
 /// Vote de date lancé par le MJ pour déterminer la prochaine séance.
 model SessionPoll {
-  id          String     @id @default(uuid())
+  id          String       @id @default(uuid())
   partieId    String
-  partie      Partie     @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  partie      Partie       @relation(fields: [partieId], references: [id], onDelete: Cascade)
   createdById String
   scenarioRef String?
-  status      PollStatus @default(OPEN)
+  status      PollStatus   @default(OPEN)
   expiresAt   DateTime?
   chosenDate  DateTime?
   chosenSlot  DaySlot?
-  createdAt   DateTime   @default(now())
+  createdAt   DateTime     @default(now())
   options     PollOption[]
   votes       PollVote[]
 
@@ -243,19 +243,20 @@ model ContentEntry {
 
 /// Personnage d'un joueur (ou du MJ) pour une partie et un système de jeu donnés.
 model Character {
-  id               String     @id @default(uuid())
-  userId           String
-  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partieId         String
-  partie           Partie     @relation(fields: [partieId], references: [id], onDelete: Cascade)
-  gameSystemId     String
-  gameSystem       GameSystem @relation(fields: [gameSystemId], references: [id])
-  sheetData        Json
-  derived          Json
-  portraitUrl      String?
-  portraitCropData Json?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  id                  String     @id @default(uuid())
+  userId              String
+  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partieId            String
+  partie              Partie     @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  gameSystemId        String
+  gameSystem          GameSystem @relation(fields: [gameSystemId], references: [id])
+  sheetData           Json
+  derived             Json
+  portraitUrl         String?
+  portraitCropData    Json?
+  pdfPortraitCropData Json?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
 
   @@unique([userId, partieId, gameSystemId])
   @@index([partieId])

@@ -9,6 +9,7 @@ import {
   Param,
   ParseFilePipe,
   ParseUUIDPipe,
+  Patch,
   Put,
   Query,
   StreamableFile,
@@ -132,5 +133,14 @@ export class CharactersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.characters.removePortrait(id, user.id);
+  }
+
+  @Patch(':id/pdf-portrait-crop')
+  updatePdfPortraitCrop(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() cropData: PortraitCropDataDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.updatePdfPortraitCrop(id, user.id, cropData);
   }
 }

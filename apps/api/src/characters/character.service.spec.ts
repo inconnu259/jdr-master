@@ -546,6 +546,85 @@ describe('CharacterService', () => {
     });
   });
 
+  describe('updatePdfPortraitCrop()', () => {
+    const CROP_DATA = { scale: 1.5, offsetX: 10, offsetY: -20 };
+
+    it('propriétaire avec portrait existant → enregistre pdfPortraitCropData', async () => {
+      const character = makeCharacter({
+        portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(
+        makeCharacter({ pdfPortraitCropData: CROP_DATA }),
+      );
+
+      const result = await service.updatePdfPortraitCrop(
+        'char1',
+        'u1',
+        CROP_DATA,
+      );
+
+      expect(prisma.character.updateMany).toHaveBeenCalledWith({
+        where: { id: 'char1', updatedAt: character.updatedAt },
+        data: { pdfPortraitCropData: CROP_DATA },
+      });
+      expect(result.pdfPortraitCropData).toEqual(CROP_DATA);
+    });
+
+    it('non-propriétaire → ForbiddenException', async () => {
+      prisma.character.findUnique.mockResolvedValue(
+        makeCharacter({ userId: 'owner' }),
+      );
+      await expect(
+        service.updatePdfPortraitCrop('char1', 'stranger', CROP_DATA),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('personnage sans portrait → BadRequestException', async () => {
+      prisma.character.findUnique.mockResolvedValue(
+        makeCharacter({ portraitUrl: null }),
+      );
+      await expect(
+        service.updatePdfPortraitCrop('char1', 'u1', CROP_DATA),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('conflit de concurrence (updatedAt modifié entretemps) → ConflictException', async () => {
+      prisma.character.findUnique.mockResolvedValue(
+        makeCharacter({
+          portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
+        }),
+      );
+      prisma.character.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.updatePdfPortraitCrop('char1', 'u1', CROP_DATA),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('résout ownerPseudo/ownerIsMj sur le résultat retourné', async () => {
+      const character = makeCharacter({
+        portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+      users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice' });
+      prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
+
+      const result = await service.updatePdfPortraitCrop(
+        'char1',
+        'u1',
+        CROP_DATA,
+      );
+
+      expect(result.ownerPseudo).toBe('alice');
+      expect(result.ownerIsMj).toBe(false);
+    });
+  });
+
   describe('getPortraitFile()', () => {
     it('propriétaire → retourne le buffer et le mime déduit de l’extension', async () => {
       prisma.character.findUnique.mockResolvedValue(

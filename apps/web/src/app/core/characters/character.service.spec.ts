@@ -18,6 +18,7 @@ describe('CharacterService (front)', () => {
     derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
     portraitUrl: null,
     portraitCropData: null,
+    pdfPortraitCropData: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ownerPseudo: 'alice',
@@ -141,5 +142,16 @@ describe('CharacterService (front)', () => {
     expect(req.request.withCredentials).toBe(true);
     req.flush({ ...character, portraitUrl: null });
     expect((await p).portraitUrl).toBeNull();
+  });
+
+  it('patchPdfPortraitCrop(id, cropData) → PATCH /characters/:id/pdf-portrait-crop en JSON, sans fichier', async () => {
+    const cropData = { scale: 1.4, offsetX: 2, offsetY: -3 };
+    const p = service.patchPdfPortraitCrop('c1', cropData);
+    const req = http.expectOne(`${API}/characters/c1/pdf-portrait-crop`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual(cropData);
+    req.flush({ ...character, pdfPortraitCropData: cropData });
+    expect((await p).pdfPortraitCropData).toEqual(cropData);
   });
 });

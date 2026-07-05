@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { RYUUTAMA_PDF_PORTRAIT_ASPECT_RATIO } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
 
 export interface PortraitCropData {
@@ -26,6 +27,14 @@ export interface PortraitCropResult {
 /** Passé via `MatDialog.open(PortraitCropper, { data })` pour permettre l'ajustement du recadrage d'un portrait déjà existant (AC4), sans que l'utilisateur ait à re-choisir un fichier depuis son appareil. */
 export interface PortraitCropperData {
   characterId: string;
+  /** Recadrage déjà enregistré à reprendre (Story 4.7, mode `rect`) plutôt que de repartir de zéro. */
+  initialCropData?: PortraitCropData | null;
+  /**
+   * Surcharge `shape` quand le composant est ouvert via `MatDialog` (les `input()` ne sont pas
+   * bindables sur un composant instancié par `MatDialog.open()` — seul `MAT_DIALOG_DATA` l'est).
+   * Ignoré en usage direct dans un template (assistant de création), où `[shape]` suffit.
+   */
+  shape?: 'circle' | 'rect';
 }
 
 const MIN_SCALE = 1;
@@ -39,6 +48,10 @@ const MAX_OFFSET = 100;
 
 function clampOffset(value: number): number {
   return Math.min(MAX_OFFSET, Math.max(MIN_OFFSET, value));
+}
+
+function clampScale(value: number): number {
+  return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
 }
 
 @Component({
@@ -60,6 +73,17 @@ export class PortraitCropper implements OnInit, OnDestroy {
 
   /** Affiche "Passer cette étape" (contexte assistant) plutôt que "Annuler" (contexte fiche/dialogue). */
   readonly showSkip = input(false);
+
+  /**
+   * `circle` = avatar web (défaut, comportement inchangé) ; `rect` = cadre de l'export PDF
+   * (Story 4.7), au ratio réel du template (`RYUUTAMA_PDF_PORTRAIT_ASPECT_RATIO`).
+   */
+  readonly shape = input<'circle' | 'rect'>('circle');
+
+  /** `dialogData.shape` prime sur l'`input()` (cf. `PortraitCropperData.shape`). */
+  protected readonly effectiveShape = computed(() => this.dialogData?.shape ?? this.shape());
+
+  protected readonly aspectRatio = RYUUTAMA_PDF_PORTRAIT_ASPECT_RATIO;
 
   readonly skip = output<void>();
   readonly saved = output<PortraitCropResult>();
@@ -86,6 +110,18 @@ export class PortraitCropper implements OnInit, OnDestroy {
       const blob = await this.characterSvc.getPortraitBlob(characterId);
       this.file.set(new File([blob], 'portrait-existant', { type: blob.type }));
       this.previewUrl.set(URL.createObjectURL(blob));
+      const initial = this.dialogData?.initialCropData;
+      // Clampé aux bornes valides plutôt qu'appliqué tel quel : une donnée legacy/corrompue
+      // (NaN, hors bornes) ne doit jamais casser le slider ni produire un recadrage invalide.
+      if (initial && Number.isFinite(initial.scale)) {
+        this.scale.set(clampScale(initial.scale));
+      }
+      if (initial && Number.isFinite(initial.offsetX)) {
+        this.offsetX.set(clampOffset(initial.offsetX));
+      }
+      if (initial && Number.isFinite(initial.offsetY)) {
+        this.offsetY.set(clampOffset(initial.offsetY));
+      }
     } catch {
       // Pas de portrait existant (personnage sans portrait) ou erreur réseau : l'utilisateur
       // repart simplement d'une sélection de fichier classique, aucun message d'erreur nécessaire.

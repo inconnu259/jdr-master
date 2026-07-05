@@ -294,4 +294,75 @@ describe('PortraitCropper', () => {
     cancelBtn.click();
     expect(close).toHaveBeenCalledWith(null);
   });
+
+  it('shape par défaut (circle) → pas de classe --rect (comportement avatar web inchangé)', () => {
+    const fixture = setup();
+    selectFile(fixture, makeFile());
+    const preview: HTMLElement = fixture.nativeElement.querySelector('.portrait-cropper__preview');
+    expect(preview.classList.contains('portrait-cropper__preview--rect')).toBe(false);
+  });
+
+  it("shape='rect' → classe --rect appliquée (masque du cadre PDF, Story 4.7)", () => {
+    const fixture = setup();
+    fixture.componentRef.setInput('shape', 'rect');
+    fixture.detectChanges();
+    selectFile(fixture, makeFile());
+    const preview: HTMLElement = fixture.nativeElement.querySelector('.portrait-cropper__preview');
+    expect(preview.classList.contains('portrait-cropper__preview--rect')).toBe(true);
+  });
+
+  it('initialCropData (dialogData) → précharge scale/offsetX/offsetY au lieu de repartir de zéro', async () => {
+    const blob = new Blob(['existing-bytes'], { type: 'image/jpeg' });
+    const characterSvc = makeCharacterService({
+      getPortraitBlob: vi.fn().mockResolvedValue(blob),
+    });
+    const fixture = setup(false, null, characterSvc, {
+      characterId: 'char1',
+      initialCropData: { scale: 2, offsetX: 15, offsetY: -30 },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.scale()).toBe(2);
+    expect(comp.offsetX()).toBe(15);
+    expect(comp.offsetY()).toBe(-30);
+  });
+
+  it("initialCropData hors bornes (donnée legacy/corrompue) → clampé aux bornes valides plutôt qu'appliqué tel quel", async () => {
+    const blob = new Blob(['existing-bytes'], { type: 'image/jpeg' });
+    const characterSvc = makeCharacterService({
+      getPortraitBlob: vi.fn().mockResolvedValue(blob),
+    });
+    const fixture = setup(false, null, characterSvc, {
+      characterId: 'char1',
+      initialCropData: { scale: 50, offsetX: 500, offsetY: -500 },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.scale()).toBe(3);
+    expect(comp.offsetX()).toBe(100);
+    expect(comp.offsetY()).toBe(-100);
+  });
+
+  it('initialCropData avec scale NaN → ignoré, scale reste à sa valeur par défaut (1)', async () => {
+    const blob = new Blob(['existing-bytes'], { type: 'image/jpeg' });
+    const characterSvc = makeCharacterService({
+      getPortraitBlob: vi.fn().mockResolvedValue(blob),
+    });
+    const fixture = setup(false, null, characterSvc, {
+      characterId: 'char1',
+      initialCropData: { scale: NaN, offsetX: 0, offsetY: 0 },
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.scale()).toBe(1);
+  });
 });

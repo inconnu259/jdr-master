@@ -46,6 +46,7 @@ const CHARACTER: CharacterDto = {
   derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
   portraitUrl: null,
   portraitCropData: null,
+  pdfPortraitCropData: null,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
   ownerPseudo: 'alice',
@@ -62,6 +63,7 @@ function defaultSvc() {
     getGameSystemContent: vi.fn().mockResolvedValue(CONTENT),
     exportPdf: vi.fn().mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
     updatePortrait: vi.fn(),
+    patchPdfPortraitCrop: vi.fn(),
   };
 }
 
@@ -393,5 +395,75 @@ describe('CharacterSheet', () => {
     const comp = fixture.componentInstance as any;
     expect(comp.portraitError()).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain(comp.portraitError());
+  });
+
+  it('CTA "Ajuster le cadrage PDF" absent si le personnage n\'a pas de portrait', async () => {
+    const { fixture } = await createComponent();
+    expect(fixture.nativeElement.querySelector('.sheet__pdf-crop-edit-cta')).toBeNull();
+  });
+
+  it('propriétaire + portrait existant → clic sur "Ajuster le cadrage PDF" ouvre le dialogue en mode rect', async () => {
+    const withPortrait = { ...CHARACTER, portraitUrl: '/uploads/portraits/x.jpg' };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(withPortrait) });
+    const { fixture, dialog } = await createComponent(characterSvc);
+
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__pdf-crop-edit-cta');
+    btn.click();
+
+    expect(dialog.open).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        data: expect.objectContaining({ characterId: 'char1', shape: 'rect' }),
+      }),
+    );
+  });
+
+  it('MJ (non-propriétaire) → CTA "Ajuster le cadrage PDF" absent (lecture seule, FR39)', async () => {
+    const withPortrait = { ...CHARACTER, portraitUrl: '/uploads/portraits/x.jpg' };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(withPortrait) });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+    expect(fixture.nativeElement.querySelector('.sheet__pdf-crop-edit-cta')).toBeNull();
+  });
+
+  it('dialogue résolu → appelle patchPdfPortraitCrop puis rafraîchit le personnage affiché', async () => {
+    const withPortrait = { ...CHARACTER, portraitUrl: '/uploads/portraits/x.jpg' };
+    const cropData = { scale: 1.3, offsetX: 5, offsetY: -5 };
+    const updated = { ...withPortrait, pdfPortraitCropData: cropData };
+    const characterSvc = makeCharacterService({
+      get: vi.fn().mockResolvedValue(withPortrait),
+      patchPdfPortraitCrop: vi.fn().mockResolvedValue(updated),
+    });
+    const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+    const { fixture } = await createComponent(characterSvc, 'char1', { file, cropData });
+
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__pdf-crop-edit-cta');
+    btn.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(characterSvc.patchPdfPortraitCrop).toHaveBeenCalledWith('char1', cropData);
+    const comp = fixture.componentInstance as any;
+    expect(comp.character().pdfPortraitCropData).toEqual(cropData);
+  });
+
+  it("échec de patchPdfPortraitCrop → message d'erreur affiché, pas de plantage", async () => {
+    const withPortrait = { ...CHARACTER, portraitUrl: '/uploads/portraits/x.jpg' };
+    const cropData = { scale: 1, offsetX: 0, offsetY: 0 };
+    const characterSvc = makeCharacterService({
+      get: vi.fn().mockResolvedValue(withPortrait),
+      patchPdfPortraitCrop: vi.fn().mockRejectedValue(new Error('network down')),
+    });
+    const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+    const { fixture } = await createComponent(characterSvc, 'char1', { file, cropData });
+
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__pdf-crop-edit-cta');
+    btn.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.portraitError()).toBeTruthy();
   });
 });
