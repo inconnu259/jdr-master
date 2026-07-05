@@ -1,5 +1,11 @@
 <button type="button" class="character-summary-card" (click)="onClick()">
-  <app-character-avatar [name]="name()" [size]="44" />
+  <app-character-avatar
+    [name]="name()"
+    [size]="44"
+    [characterId]="character().id"
+    [portraitUrl]="character().portraitUrl"
+    [cropData]="$any(character().portraitCropData)"
+  />
   <div class="character-summary-card__info">
     <span class="character-summary-card__name">{{ name() }}</span>
     @if (className()) {

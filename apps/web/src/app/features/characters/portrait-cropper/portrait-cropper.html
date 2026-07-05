@@ -1,0 +1,55 @@
+<div class="portrait-cropper">
+  <label class="portrait-cropper__file-label">
+    Choisir une image
+    <input
+      type="file"
+      accept="image/jpeg,image/png,image/webp"
+      (change)="onFileSelected($event)"
+    />
+  </label>
+
+  @if (previewUrl(); as url) {
+    <div
+      class="portrait-cropper__preview"
+      tabindex="0"
+      role="application"
+      aria-label="Zone de recadrage du portrait. Flèches pour déplacer, plus/moins pour zoomer."
+      (keydown)="onKeydown($event)"
+      (pointerdown)="onPointerDown($event)"
+      (pointermove)="onPointerMove($event)"
+      (pointerup)="onPointerUp($event)"
+    >
+      <img
+        class="portrait-cropper__preview-img"
+        [src]="url"
+        [style.transform]="transform()"
+        alt=""
+        draggable="false"
+        (dragstart)="$event.preventDefault()"
+      />
+    </div>
+
+    <label class="portrait-cropper__zoom">
+      Zoom
+      <input
+        type="range"
+        min="1"
+        max="3"
+        step="0.05"
+        [value]="scale()"
+        (input)="onZoomChange($any($event.target).valueAsNumber)"
+      />
+    </label>
+  }
+
+  <div class="portrait-cropper__actions">
+    @if (showSkip()) {
+      <button mat-button type="button" (click)="skipStep()">Passer cette étape</button>
+    } @else {
+      <button mat-button type="button" (click)="cancel()">Annuler</button>
+    }
+    <button mat-flat-button color="primary" type="button" [disabled]="!file()" (click)="save()">
+      Enregistrer
+    </button>
+  </div>
+</div>

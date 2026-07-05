@@ -32,6 +32,7 @@ describe('AuthService (front)', () => {
     const req = http.expectOne(`${API}/auth/login`);
     expect(req.request.method).toBe('POST');
     expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ identifier: 'a@b.c', password: 'pw' });
     req.flush(user);
     await p;
     expect(service.currentUser()).toEqual(user);

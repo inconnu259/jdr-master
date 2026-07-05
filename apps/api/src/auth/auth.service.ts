@@ -13,12 +13,23 @@ export class AuthService {
     private readonly inviteLinks: InviteLinksService,
   ) {}
 
-  /** Vérifie les identifiants ; renvoie l'utilisateur (sans le hash) ou null. */
-  async validateUser(email: string, password: string) {
-    const user = await this.users.findByEmail(email);
+  /** Vérifie les identifiants (email OU pseudo) ; renvoie l'utilisateur (sans le hash) ou null. */
+  async validateUser(identifier: string, password: string) {
+    const user = await this.users.findByEmailOrPseudo(identifier);
     if (!user) return null;
-    const ok = await argon2.verify(user.passwordHash, password);
+
+    let ok: boolean;
+    try {
+      ok = await argon2.verify(user.passwordHash, password);
+    } catch {
+      // `passwordHash` n'est pas un hash argon2 valide (ex. compte inséré manuellement en base
+      // avec un mot de passe en clair) : traiter comme des identifiants invalides plutôt que de
+      // laisser l'exception remonter en 500 (qui serait masquée en "identifiants invalides"
+      // générique côté front de toute façon, mais sans le bon code HTTP).
+      return null;
+    }
     if (!ok) return null;
+
     const { passwordHash, ...safe } = user;
     return safe;
   }

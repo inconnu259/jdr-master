@@ -9,7 +9,7 @@ jest.mock('argon2');
 
 describe('AuthService', () => {
   let service: AuthService;
-  let users: jest.Mocked<Pick<UsersService, 'findByEmail' | 'create'>>;
+  let users: jest.Mocked<Pick<UsersService, 'findByEmailOrPseudo' | 'create'>>;
   let tx: { user: { create: jest.Mock } };
   let prisma: { $transaction: jest.Mock };
   let inviteLinks: { consumeLink: jest.Mock };
@@ -24,7 +24,7 @@ describe('AuthService', () => {
   };
 
   beforeEach(() => {
-    users = { findByEmail: jest.fn(), create: jest.fn() };
+    users = { findByEmailOrPseudo: jest.fn(), create: jest.fn() };
     tx = { user: { create: jest.fn() } };
     // $transaction exécute le callback avec notre `tx` mocké.
     prisma = {
@@ -41,19 +41,19 @@ describe('AuthService', () => {
   });
 
   describe('validateUser', () => {
-    it('renvoie null si email inconnu', async () => {
-      users.findByEmail.mockResolvedValue(null);
+    it('renvoie null si identifiant (email ou pseudo) inconnu', async () => {
+      users.findByEmailOrPseudo.mockResolvedValue(null);
       expect(await service.validateUser('x@y.z', 'pw')).toBeNull();
     });
 
     it('renvoie null si mauvais mot de passe', async () => {
-      users.findByEmail.mockResolvedValue(fakeUser);
+      users.findByEmailOrPseudo.mockResolvedValue(fakeUser);
       (argon2.verify as jest.Mock).mockResolvedValue(false);
       expect(await service.validateUser('a@b.c', 'wrong')).toBeNull();
     });
 
-    it("renvoie l'utilisateur sans le hash si mot de passe correct", async () => {
-      users.findByEmail.mockResolvedValue(fakeUser);
+    it("renvoie l'utilisateur sans le hash si mot de passe correct, via l'email", async () => {
+      users.findByEmailOrPseudo.mockResolvedValue(fakeUser);
       (argon2.verify as jest.Mock).mockResolvedValue(true);
       const result = await service.validateUser('a@b.c', 'good');
       expect(result).toMatchObject({
@@ -62,6 +62,24 @@ describe('AuthService', () => {
         pseudo: 'alice',
       });
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
+    });
+
+    it("renvoie l'utilisateur sans le hash si mot de passe correct, via le pseudo", async () => {
+      users.findByEmailOrPseudo.mockResolvedValue(fakeUser);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      const result = await service.validateUser('alice', 'good');
+      expect(users.findByEmailOrPseudo).toHaveBeenCalledWith('alice');
+      expect(result).toMatchObject({ id: 'u1', pseudo: 'alice' });
+    });
+
+    it('hash stocké invalide/corrompu (argon2.verify lève) → renvoie null plutôt que de laisser planter la requête', async () => {
+      users.findByEmailOrPseudo.mockResolvedValue(fakeUser);
+      (argon2.verify as jest.Mock).mockRejectedValue(
+        new Error('pwhash must be a argon2 hash'),
+      );
+      await expect(
+        service.validateUser('a@b.c', 'anything'),
+      ).resolves.toBeNull();
     });
   });
 

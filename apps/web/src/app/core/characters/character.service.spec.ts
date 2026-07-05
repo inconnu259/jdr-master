@@ -107,4 +107,37 @@ describe('CharacterService (front)', () => {
     req.flush(new Blob());
     await p;
   });
+
+  it('updatePortrait(id, file, cropData) → PUT /characters/:id/portrait en FormData avec file + cropData JSON', async () => {
+    const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+    const p = service.updatePortrait('c1', file, { scale: 1.2, offsetX: 1, offsetY: -1 });
+    const req = http.expectOne(`${API}/characters/c1/portrait`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toBeInstanceOf(FormData);
+    const body = req.request.body as FormData;
+    expect(body.get('file')).toBe(file);
+    expect(body.get('cropData')).toBe(JSON.stringify({ scale: 1.2, offsetX: 1, offsetY: -1 }));
+    req.flush({ ...character, portraitUrl: '/uploads/portraits/x.jpg' });
+    expect((await p).portraitUrl).toBe('/uploads/portraits/x.jpg');
+  });
+
+  it('updatePortrait(id, file, null) → FormData sans champ cropData', async () => {
+    const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+    const p = service.updatePortrait('c1', file, null);
+    const req = http.expectOne(`${API}/characters/c1/portrait`);
+    const body = req.request.body as FormData;
+    expect(body.has('cropData')).toBe(false);
+    req.flush(character);
+    await p;
+  });
+
+  it('removePortrait(id) → DELETE /characters/:id/portrait', async () => {
+    const p = service.removePortrait('c1');
+    const req = http.expectOne(`${API}/characters/c1/portrait`);
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush({ ...character, portraitUrl: null });
+    expect((await p).portraitUrl).toBeNull();
+  });
 });

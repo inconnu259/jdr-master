@@ -29,7 +29,7 @@ export class Login {
   protected readonly error = signal<string | null>(null);
 
   protected readonly form = this.fb.nonNullable.group({
-    email: ['', [Validators.required, Validators.email]],
+    identifier: ['', [Validators.required]],
     password: ['', [Validators.required]],
   });
 
@@ -38,8 +38,8 @@ export class Login {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const { email, password } = this.form.getRawValue();
-      await this.auth.login(email, password);
+      const { identifier, password } = this.form.getRawValue();
+      await this.auth.login(identifier, password);
       void this.router.navigate(['/']);
     } catch {
       this.error.set('Identifiants invalides.');

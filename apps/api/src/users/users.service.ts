@@ -10,6 +10,13 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
+  /** Connexion par **email OU pseudo** (au choix de l'utilisateur, cf. Story login). */
+  findByEmailOrPseudo(identifier: string) {
+    return this.prisma.user.findFirst({
+      where: { OR: [{ email: identifier }, { pseudo: identifier }] },
+    });
+  }
+
   findById(id: string) {
     return this.prisma.user.findUnique({ where: { id } });
   }

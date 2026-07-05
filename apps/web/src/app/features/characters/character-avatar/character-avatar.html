@@ -5,4 +5,10 @@
   [style.fontSize.px]="size() === 64 ? 24 : 16"
   [attr.aria-label]="ariaLabel()"
   role="img"
->{{ initials() }}</div>
+>
+  @if (absolutePortraitUrl(); as url) {
+    <img class="character-avatar__img" [src]="url" [style.transform]="transform()" alt="" />
+  } @else {
+    {{ initials() }}
+  }
+</div>

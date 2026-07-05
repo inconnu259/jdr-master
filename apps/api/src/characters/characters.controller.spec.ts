@@ -23,6 +23,9 @@ import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 function makeCharacterService() {
   return {
     findOne: jest.fn(),
+    updatePortrait: jest.fn(),
+    removePortrait: jest.fn(),
+    getPortraitFile: jest.fn(),
   };
 }
 
@@ -120,6 +123,110 @@ describe('CharactersController', () => {
     expect(ryuutamaPdf.fillCharacterPdf).not.toHaveBeenCalled();
   });
 
+  it('updatePortrait() parse cropData JSON et délègue à CharacterService', async () => {
+    const file = { buffer: Buffer.from('x') } as Express.Multer.File;
+    characters.updatePortrait.mockResolvedValue({
+      id: 'char1',
+      portraitUrl: '/uploads/portraits/x.jpg',
+    });
+
+    await controller.updatePortrait(
+      'char1',
+      file,
+      JSON.stringify({ scale: 1.2, offsetX: 0, offsetY: 0 }),
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.updatePortrait).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      file,
+      {
+        scale: 1.2,
+        offsetX: 0,
+        offsetY: 0,
+      },
+    );
+  });
+
+  it('updatePortrait() cropData JSON invalide → BadRequestException', async () => {
+    const file = { buffer: Buffer.from('x') } as Express.Multer.File;
+
+    await expect(
+      controller.updatePortrait('char1', file, '{not-json', {
+        id: 'u1',
+      } as any),
+    ).rejects.toThrow(BadRequestException);
+    expect(characters.updatePortrait).not.toHaveBeenCalled();
+  });
+
+  it('updatePortrait() sans cropData → passe null au service', async () => {
+    const file = { buffer: Buffer.from('x') } as Express.Multer.File;
+    characters.updatePortrait.mockResolvedValue({ id: 'char1' });
+
+    await controller.updatePortrait('char1', file, undefined, {
+      id: 'u1',
+    } as any);
+
+    expect(characters.updatePortrait).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      file,
+      null,
+    );
+  });
+
+  it('updatePortrait() cropData hors bornes (scale > 3) → BadRequestException', async () => {
+    const file = { buffer: Buffer.from('x') } as Express.Multer.File;
+
+    await expect(
+      controller.updatePortrait(
+        'char1',
+        file,
+        JSON.stringify({ scale: 10, offsetX: 0, offsetY: 0 }),
+        { id: 'u1' } as any,
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(characters.updatePortrait).not.toHaveBeenCalled();
+  });
+
+  it('updatePortrait() cropData de forme incorrecte (champ non numérique) → BadRequestException', async () => {
+    const file = { buffer: Buffer.from('x') } as Express.Multer.File;
+
+    await expect(
+      controller.updatePortrait(
+        'char1',
+        file,
+        JSON.stringify({ scale: 'beaucoup', offsetX: 0, offsetY: 0 }),
+        { id: 'u1' } as any,
+      ),
+    ).rejects.toThrow(BadRequestException);
+    expect(characters.updatePortrait).not.toHaveBeenCalled();
+  });
+
+  it('removePortrait() délègue à CharacterService', async () => {
+    characters.removePortrait.mockResolvedValue({
+      id: 'char1',
+      portraitUrl: null,
+    });
+
+    await controller.removePortrait('char1', { id: 'u1' } as any);
+
+    expect(characters.removePortrait).toHaveBeenCalledWith('char1', 'u1');
+  });
+
+  it('getPortrait() délègue à CharacterService et retourne un StreamableFile', async () => {
+    characters.getPortraitFile.mockResolvedValue({
+      buffer: Buffer.from('image-bytes'),
+      mime: 'image/jpeg',
+    });
+
+    const result = await controller.getPortrait('char1', { id: 'u1' } as any);
+
+    expect(characters.getPortraitFile).toHaveBeenCalledWith('char1', 'u1');
+    expect(result).toBeInstanceOf(StreamableFile);
+  });
+
   describe('validation HTTP réelle (ValidationPipe global)', () => {
     let app: INestApplication;
 
@@ -185,6 +292,32 @@ describe('CharactersController', () => {
         .get('/characters/11111111-1111-1111-1111-111111111111/export.pdf')
         .query({ format: 'editable' })
         .expect(200);
+    });
+
+    it('portrait trop volumineux (>5 Mo) → 413 via le pipeline HTTP réel (multer + ParseFilePipe)', async () => {
+      const oversized = Buffer.alloc(5 * 1024 * 1024 + 1, 0xff);
+
+      await request(app.getHttpServer())
+        .put('/characters/11111111-1111-1111-1111-111111111111/portrait')
+        .attach('file', oversized, 'portrait.jpg')
+        .expect(413);
+
+      expect(characters.updatePortrait).not.toHaveBeenCalled();
+    });
+
+    it('portrait de taille valide → CharacterService.updatePortrait est appelé', async () => {
+      characters.updatePortrait.mockResolvedValue({
+        id: '11111111-1111-1111-1111-111111111111',
+        portraitUrl: '/uploads/portraits/x.jpg',
+      });
+      const small = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+
+      await request(app.getHttpServer())
+        .put('/characters/11111111-1111-1111-1111-111111111111/portrait')
+        .attach('file', small, 'portrait.jpg')
+        .expect(200);
+
+      expect(characters.updatePortrait).toHaveBeenCalled();
     });
   });
 });

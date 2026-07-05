@@ -91,6 +91,13 @@
               (narrativeChange)="updateSheetData({ narrative: $event })"
             />
           }
+          @case ('portrait') {
+            <app-portrait-cropper
+              [showSkip]="true"
+              (skip)="onPortraitSkip()"
+              (saved)="onPortraitSaved($event)"
+            />
+          }
         }
 
         <div class="wizard__nav-bottom">

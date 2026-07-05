@@ -1,0 +1,6 @@
+@if (absoluteUrl(); as url) {
+  <section class="portrait-panel">
+    <img class="portrait-panel__img" [src]="url" [alt]="'Portrait complet de ' + name()" />
+    <p class="portrait-panel__caption">Portrait complet</p>
+  </section>
+}

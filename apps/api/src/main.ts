@@ -9,8 +9,13 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // En-têtes de sécurité.
-  app.use(helmet());
+  // Les portraits sont servis via GET /characters/:id/portrait (AuthenticatedGuard),
+  // jamais en fichiers statiques publics — cf. Character.updatePortrait/getPortraitFile.
+
+  // En-têtes de sécurité. `crossOriginResourcePolicy` par défaut ('same-origin') bloquerait
+  // le chargement cross-origin des <img src="…/portrait"> (le front est sur un port différent,
+  // cf. WEB_ORIGIN) — l'accès reste contrôlé par CORS + AuthenticatedGuard, pas par ce header.
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
   // Session stockée en base (Postgres) → révocable. Le cookie ne contient qu'un id de session.
   const PgSession = connectPgSimple(session);

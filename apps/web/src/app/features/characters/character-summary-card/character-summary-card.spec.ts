@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type { CharacterDto } from '@master-jdr/shared';
 import { CharacterSummaryCard } from './character-summary-card';
+import { API_BASE } from '../../../core/api-base';
 
 const CHARACTER: CharacterDto = {
   id: 'c1',
@@ -47,5 +48,22 @@ describe('CharacterSummaryCard', () => {
     (fixture.nativeElement.querySelector('button') as HTMLButtonElement).click();
 
     expect(emitted).toBe(true);
+  });
+
+  it('transmet portraitUrl/portraitCropData/id du personnage à CharacterAvatar', async () => {
+    const withPortrait: CharacterDto = {
+      ...CHARACTER,
+      portraitUrl: '/uploads/portraits/x.jpg',
+      portraitCropData: { scale: 1.4, offsetX: 2, offsetY: -3 },
+    };
+    TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
+    const fixture = TestBed.createComponent(CharacterSummaryCard);
+    fixture.componentRef.setInput('character', withPortrait);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const img: HTMLImageElement = fixture.nativeElement.querySelector('.character-avatar__img');
+    expect(img.src).toBe(`${API_BASE}/characters/${withPortrait.id}/portrait`);
+    expect(img.style.transform).toBe('translate(2%, -3%) scale(1.4)');
   });
 });

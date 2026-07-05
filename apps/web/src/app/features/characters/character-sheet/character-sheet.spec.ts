@@ -1,10 +1,14 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
+import { of, Subject } from 'rxjs';
 import { vi } from 'vitest';
-import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
+import type { AuthUser, CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterSheet } from './character-sheet';
 import { CharacterService } from '../../../core/characters/character.service';
+import { AuthService } from '../../../core/auth/auth.service';
 
 const CONTENT: GameSystemContentDto = {
   class: [
@@ -55,17 +59,28 @@ function defaultSvc() {
     get: vi.fn().mockResolvedValue(CHARACTER),
     getGameSystemContent: vi.fn().mockResolvedValue(CONTENT),
     exportPdf: vi.fn().mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
+    updatePortrait: vi.fn(),
   };
 }
 
 async function createComponent(
   characterSvc = makeCharacterService(),
   characterId: string | null = 'char1',
+  dialogResult: unknown = null,
+  currentUserId: string | null = 'u1',
 ) {
+  const dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(dialogResult) }) };
+  const auth = {
+    currentUser: signal<AuthUser | null>(
+      currentUserId ? ({ id: currentUserId } as AuthUser) : null,
+    ),
+  };
   await TestBed.configureTestingModule({
     imports: [CharacterSheet],
     providers: [
       { provide: CharacterService, useValue: characterSvc },
+      { provide: MatDialog, useValue: dialog },
+      { provide: AuthService, useValue: auth },
       { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => characterId } } } },
     ],
   }).compileComponents();
@@ -80,7 +95,7 @@ async function createComponent(
   }
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, characterSvc };
+  return { fixture, characterSvc, dialog, auth };
 }
 
 describe('CharacterSheet', () => {
@@ -225,5 +240,132 @@ describe('CharacterSheet', () => {
     const comp = fixture.componentInstance as any;
     expect(comp.exportError()).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain(comp.exportError());
+  });
+
+  it('sans portrait → aucun PortraitPanel affiché', async () => {
+    const { fixture } = await createComponent();
+    expect(fixture.nativeElement.querySelector('.portrait-panel')).toBeNull();
+  });
+
+  it('avec portrait → PortraitPanel affiché', async () => {
+    const withPortrait: CharacterDto = {
+      ...CHARACTER,
+      portraitUrl: '/uploads/portraits/x.jpg',
+      portraitCropData: { scale: 1, offsetX: 0, offsetY: 0 },
+    };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(withPortrait) });
+    const { fixture } = await createComponent(characterSvc);
+    expect(fixture.nativeElement.querySelector('.portrait-panel')).not.toBeNull();
+  });
+
+  it('clic sur "Modifier le portrait" → ouvre le dialogue PortraitCropper', async () => {
+    const { fixture, dialog } = await createComponent();
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__portrait-edit-cta');
+    btn.click();
+    expect(dialog.open).toHaveBeenCalled();
+  });
+
+  it('MJ consultant la fiche d\'un personnage qui n\'est pas le sien → CTA "Modifier le portrait" absent (lecture seule, FR39)', async () => {
+    const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'mj-stranger');
+    expect(fixture.nativeElement.querySelector('.sheet__portrait-edit-cta')).toBeNull();
+  });
+
+  it("editPortrait() ne fait rien si appelé alors qu'on n'est pas le propriétaire (défense en profondeur)", async () => {
+    const { fixture, dialog } = await createComponent(
+      makeCharacterService(),
+      'char1',
+      null,
+      'mj-stranger',
+    );
+    const comp = fixture.componentInstance as any;
+    comp.editPortrait();
+    expect(dialog.open).not.toHaveBeenCalled();
+  });
+
+  it('double-clic rapide sur "Modifier le portrait" (dialogue encore ouvert) → un seul dialogue ouvert', async () => {
+    const afterClosedSubject = new Subject<unknown>();
+    const dialog = {
+      open: vi.fn().mockReturnValue({ afterClosed: () => afterClosedSubject.asObservable() }),
+    };
+    await TestBed.configureTestingModule({
+      imports: [CharacterSheet],
+      providers: [
+        { provide: CharacterService, useValue: makeCharacterService() },
+        { provide: MatDialog, useValue: dialog },
+        {
+          provide: AuthService,
+          useValue: { currentUser: signal<AuthUser | null>({ id: 'u1' } as AuthUser) },
+        },
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'char1' } } } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CharacterSheet);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__portrait-edit-cta');
+    btn.click();
+    btn.click();
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+  });
+
+  it('dialogue résolu avec un résultat → appelle updatePortrait puis rafraîchit le personnage affiché', async () => {
+    const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+    const cropData = { scale: 1.2, offsetX: 0, offsetY: 0 };
+    const updated = {
+      ...CHARACTER,
+      portraitUrl: '/uploads/portraits/new.jpg',
+      portraitCropData: cropData,
+    };
+    const characterSvc = makeCharacterService({
+      updatePortrait: vi.fn().mockResolvedValue(updated),
+    });
+    const { fixture } = await createComponent(characterSvc, 'char1', { file, cropData });
+
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__portrait-edit-cta');
+    btn.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(characterSvc.updatePortrait).toHaveBeenCalledWith('char1', file, cropData);
+    const comp = fixture.componentInstance as any;
+    expect(comp.character().portraitUrl).toBe('/uploads/portraits/new.jpg');
+  });
+
+  it('dialogue annulé (résultat null) → aucun appel à updatePortrait', async () => {
+    const characterSvc = makeCharacterService();
+    const { fixture } = await createComponent(characterSvc, 'char1', null);
+
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__portrait-edit-cta');
+    btn.click();
+    await Promise.resolve();
+
+    expect(characterSvc.updatePortrait).not.toHaveBeenCalled();
+  });
+
+  it("échec de la mise à jour du portrait → message d'erreur affiché, pas de plantage", async () => {
+    const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+    const cropData = { scale: 1, offsetX: 0, offsetY: 0 };
+    const characterSvc = makeCharacterService({
+      updatePortrait: vi.fn().mockRejectedValue(new Error('network down')),
+    });
+    const { fixture } = await createComponent(characterSvc, 'char1', { file, cropData });
+
+    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__portrait-edit-cta');
+    btn.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.portraitError()).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain(comp.portraitError());
   });
 });

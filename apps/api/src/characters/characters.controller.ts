@@ -1,20 +1,37 @@
 import {
   BadRequestException,
+  Body,
   Controller,
+  Delete,
   Get,
+  HttpStatus,
+  MaxFileSizeValidator,
   Param,
+  ParseFilePipe,
   ParseUUIDPipe,
+  Put,
   Query,
   StreamableFile,
+  UploadedFile,
+  UseFilters,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import { memoryStorage } from 'multer';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
+import { MulterExceptionFilter } from '../common/filters/multer-exception.filter';
 import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
 import { CharacterService } from './character.service';
 import { RyuutamaPdfService } from './ryuutama-pdf.service';
 import { ExportCharacterPdfDto } from './dto/export-character-pdf.dto';
+import { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
+
+const MAX_PORTRAIT_SIZE = 5 * 1024 * 1024;
 
 @UseGuards(AuthenticatedGuard)
 @Controller('characters')
@@ -52,5 +69,68 @@ export class CharactersController {
       type: 'application/pdf',
       disposition: `attachment; filename="fiche-${id}-${query.format}.pdf"`,
     });
+  }
+
+  @Get(':id/portrait')
+  async getPortrait(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<StreamableFile> {
+    const { buffer, mime } = await this.characters.getPortraitFile(id, user.id);
+    return new StreamableFile(buffer, { type: mime });
+  }
+
+  @Put(':id/portrait')
+  @UseFilters(MulterExceptionFilter)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      // Rejette la requête pendant le streaming, avant de bufferiser un fichier surdimensionné
+      // en mémoire (le `ParseFilePipe` ci-dessous ne s'exécute qu'APRÈS que Multer a fini de lire
+      // le body) — cf. `MulterExceptionFilter` pour le remappage de l'erreur Multer en 413.
+      limits: { fileSize: MAX_PORTRAIT_SIZE },
+    }),
+  )
+  async updatePortrait(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [new MaxFileSizeValidator({ maxSize: MAX_PORTRAIT_SIZE })],
+        errorHttpStatusCode: HttpStatus.PAYLOAD_TOO_LARGE,
+      }),
+    )
+    file: Express.Multer.File,
+    @Body('cropData') cropDataRaw: string | undefined,
+    @CurrentUser() user: AuthUser,
+  ) {
+    let cropData: PortraitCropDataDto | null = null;
+    if (cropDataRaw) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(cropDataRaw);
+      } catch {
+        throw new BadRequestException('cropData doit être un JSON valide');
+      }
+      const dto = plainToInstance(PortraitCropDataDto, parsed);
+      const errors = await validate(dto, {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      });
+      if (errors.length > 0) {
+        throw new BadRequestException(
+          'cropData invalide : scale/offsetX/offsetY doivent être des nombres dans les bornes attendues',
+        );
+      }
+      cropData = dto;
+    }
+    return this.characters.updatePortrait(id, user.id, file, cropData);
+  }
+
+  @Delete(':id/portrait')
+  removePortrait(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.removePortrait(id, user.id);
   }
 }

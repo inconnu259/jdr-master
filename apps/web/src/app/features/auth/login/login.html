@@ -4,8 +4,8 @@
     <mat-card-content>
       <form [formGroup]="form" (ngSubmit)="submit()">
         <mat-form-field appearance="outline">
-          <mat-label>Email</mat-label>
-          <input matInput type="email" formControlName="email" autocomplete="email" />
+          <mat-label>Email ou pseudo</mat-label>
+          <input matInput type="text" formControlName="identifier" autocomplete="username" />
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>Mot de passe</mat-label>

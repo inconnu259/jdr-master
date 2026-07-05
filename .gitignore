@@ -32,3 +32,6 @@ CLAUDE.md
 # Contenu de jeu sous droits d'auteur (voir README du dossier) — Palier P3
 apps/api/game-systems/ryuutama/data/
 apps/api/game-systems/ryuutama/assets/
+
+# Contenu utilisateur uploadé (portraits, etc.) — runtime uniquement, jamais committé
+apps/api/uploads/

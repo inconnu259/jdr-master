@@ -2,11 +2,19 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
 import { characterName, findContentEntry } from '../../../core/characters/character.util';
 import { CharacterAvatar } from '../character-avatar/character-avatar';
+import { PortraitPanel } from '../portrait-panel/portrait-panel';
+import {
+  PortraitCropper,
+  type PortraitCropperData,
+  type PortraitCropResult,
+} from '../portrait-cropper/portrait-cropper';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { AuthService } from '../../../core/auth/auth.service';
 
 const RYUUTAMA_ID = 'ryuutama';
 
@@ -43,13 +51,15 @@ interface NarrativeFields {
 @Component({
   selector: 'app-character-sheet',
   standalone: true,
-  imports: [CharacterAvatar, MatButtonModule],
+  imports: [CharacterAvatar, MatButtonModule, PortraitPanel],
   templateUrl: './character-sheet.html',
   styleUrl: './character-sheet.scss',
 })
 export class CharacterSheet implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly characterSvc = inject(CharacterService);
+  private readonly dialog = inject(MatDialog);
+  private readonly auth = inject(AuthService);
   protected readonly theme = inject(ThemeToneService);
 
   protected readonly character = signal<CharacterDto | null>(null);
@@ -57,6 +67,7 @@ export class CharacterSheet implements OnInit {
   protected readonly loadError = signal<string | null>(null);
   protected readonly exportError = signal<string | null>(null);
   protected readonly exporting = signal<'editable' | '2pages' | null>(null);
+  protected readonly portraitError = signal<string | null>(null);
 
   protected readonly sheetData = computed(
     () => (this.character()?.sheetData ?? {}) as Record<string, unknown>,
@@ -65,6 +76,15 @@ export class CharacterSheet implements OnInit {
     const c = this.character();
     return c ? characterName(c) : '';
   });
+
+  /**
+   * Le MJ peut consulter la fiche d'un personnage de ses joueurs (lecture seule), mais jamais
+   * modifier son portrait — seul le propriétaire le peut (FR39, cf. Dev Notes Story 4.5). Le CTA
+   * "Modifier le portrait" ne doit donc s'afficher que pour le propriétaire.
+   */
+  protected readonly isOwner = computed(
+    () => !!this.character() && this.character()?.userId === this.auth.currentUser()?.id,
+  );
 
   protected readonly classData = computed<ClassData | null>(() =>
     findContentEntry<ClassData>(
@@ -181,6 +201,38 @@ export class CharacterSheet implements OnInit {
       this.exportError.set(this.theme.tone()['character.export_error']);
     } finally {
       this.exporting.set(null);
+    }
+  }
+
+  private portraitDialogOpen = false;
+
+  protected editPortrait(): void {
+    if (this.portraitDialogOpen || !this.isOwner()) return;
+    const c = this.character();
+    if (!c) return;
+    this.portraitError.set(null);
+    this.portraitDialogOpen = true;
+    const ref = this.dialog.open<PortraitCropper, PortraitCropperData, PortraitCropResult | null>(
+      PortraitCropper,
+      { data: { characterId: c.id } },
+    );
+    ref.afterClosed().subscribe((result) => {
+      this.portraitDialogOpen = false;
+      if (!result) return;
+      void this.savePortrait(c.id, result);
+    });
+  }
+
+  private async savePortrait(characterId: string, result: PortraitCropResult): Promise<void> {
+    try {
+      const updated = await this.characterSvc.updatePortrait(
+        characterId,
+        result.file,
+        result.cropData,
+      );
+      this.character.set(updated);
+    } catch {
+      this.portraitError.set("Le portrait n'a pas pu être enregistré. Réessayez.");
     }
   }
 }

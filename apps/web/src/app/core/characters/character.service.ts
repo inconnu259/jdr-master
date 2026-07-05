@@ -67,4 +67,37 @@ export class CharacterService {
       }),
     );
   }
+
+  updatePortrait(
+    id: string,
+    file: File,
+    cropData: { scale: number; offsetX: number; offsetY: number } | null,
+  ): Promise<CharacterDto> {
+    const form = new FormData();
+    form.append('file', file);
+    if (cropData) form.append('cropData', JSON.stringify(cropData));
+    return firstValueFrom(
+      this.http.put<CharacterDto>(`${API_BASE}/characters/${id}/portrait`, form, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  removePortrait(id: string): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.delete<CharacterDto>(`${API_BASE}/characters/${id}/portrait`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  /** Récupère les octets du portrait existant (utilisé par `PortraitCropper` pour permettre un réajustement du recadrage sans re-sélection de fichier, AC4). */
+  getPortraitBlob(id: string): Promise<Blob> {
+    return firstValueFrom(
+      this.http.get(`${API_BASE}/characters/${id}/portrait`, {
+        responseType: 'blob',
+        withCredentials: true,
+      }),
+    );
+  }
 }

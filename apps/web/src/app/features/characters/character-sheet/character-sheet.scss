@@ -34,6 +34,13 @@
     margin: 0;
   }
 
+  &__portrait-edit-cta {
+    padding: 0;
+    min-width: 0;
+    font-size: 0.8rem;
+    color: var(--mat-sys-secondary, #6750a4);
+  }
+
   &__name {
     font-size: 1.25rem;
     font-weight: 600;

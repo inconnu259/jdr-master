@@ -35,9 +35,14 @@ export class AuthService {
     }
   }
 
-  async login(email: string, password: string): Promise<void> {
+  /** `identifier` accepte indifféremment l'email ou le pseudo (cf. LocalStrategy côté API). */
+  async login(identifier: string, password: string): Promise<void> {
     const user = await firstValueFrom(
-      this.http.post<AuthUser>(`${API}/auth/login`, { email, password }, { withCredentials: true }),
+      this.http.post<AuthUser>(
+        `${API}/auth/login`,
+        { identifier, password },
+        { withCredentials: true },
+      ),
     );
     this.currentUser.set(user);
     this.initialized.set(true);

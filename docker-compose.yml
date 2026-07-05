@@ -48,7 +48,7 @@ services:
       - node_modules_api:/work/apps/api/node_modules
     ports:
       - '${API_PORT}:3000'
-    command: sh -c "pnpm prisma generate && pnpm prisma migrate deploy && pnpm start:dev"
+    command: sh -c "pnpm prisma generate && pnpm prisma migrate deploy && pnpm run seed && pnpm start:dev"
 
   web:
     <<: *dev

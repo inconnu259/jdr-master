@@ -52,6 +52,7 @@ function makeCharacterService() {
     getGameSystemSchema: vi.fn().mockResolvedValue(SCHEMA),
     getGameSystemContent: vi.fn().mockResolvedValue(CONTENT),
     create: vi.fn(),
+    updatePortrait: vi.fn(),
   };
 }
 
@@ -95,7 +96,7 @@ describe('CharacterWizard', () => {
     expect(comp.canGoNext()).toBe(false);
   });
 
-  it('dérive ses 7 étapes depuis creationSteps() du schéma, sans coder les clés en dur (AC1) — exclut Portrait', async () => {
+  it('dérive ses 8 étapes depuis creationSteps() du schéma, sans coder les clés en dur (AC1) — inclut Portrait (Story 4.5)', async () => {
     const { fixture } = await createComponent();
     const comp = fixture.componentInstance as any;
     expect(comp.steps().map((s: { key: string }) => s.key)).toEqual([
@@ -106,6 +107,7 @@ describe('CharacterWizard', () => {
       'fetiqueObject',
       'equipment',
       'narrative',
+      'portrait',
     ]);
   });
 
@@ -299,6 +301,57 @@ describe('CharacterWizard', () => {
 
     await expect(comp.onSubmit()).resolves.not.toThrow();
     expect(snack.open).toHaveBeenCalled();
+  });
+
+  it('onPortraitSkip() finalise directement (Passer cette étape = créer sans portrait, AC1)', async () => {
+    const { fixture, characterSvc, router } = await createComponent('p1');
+    const comp = fixture.componentInstance as any;
+    characterSvc.create.mockResolvedValue({ id: 'char1' });
+
+    await comp.onPortraitSkip();
+
+    expect(characterSvc.create).toHaveBeenCalled();
+    expect(characterSvc.updatePortrait).not.toHaveBeenCalled();
+    expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'characters', 'char1']);
+  });
+
+  it('onPortraitSaved() puis onSubmit() → uploade le portrait après la création réussie (AC2)', async () => {
+    const { fixture, characterSvc, router } = await createComponent('p1');
+    const comp = fixture.componentInstance as any;
+    characterSvc.create.mockResolvedValue({ id: 'char1' });
+    characterSvc.updatePortrait.mockResolvedValue({ id: 'char1', portraitUrl: '/x.jpg' });
+    const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+    const cropData = { scale: 1.2, offsetX: 0, offsetY: 0 };
+
+    comp.onPortraitSaved({ file, cropData });
+    await comp.onSubmit();
+
+    expect(characterSvc.updatePortrait).toHaveBeenCalledWith('char1', file, cropData);
+    expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'characters', 'char1']);
+  });
+
+  it("échec de l'upload du portrait après création réussie → n'empêche pas la redirection, avertit via snackbar", async () => {
+    const { fixture, characterSvc, router, snack } = await createComponent('p1');
+    const comp = fixture.componentInstance as any;
+    characterSvc.create.mockResolvedValue({ id: 'char1' });
+    characterSvc.updatePortrait.mockRejectedValue(new Error('network down'));
+    const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
+
+    comp.onPortraitSaved({ file, cropData: { scale: 1, offsetX: 0, offsetY: 0 } });
+    await comp.onSubmit();
+
+    expect(snack.open).toHaveBeenCalled();
+    expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'characters', 'char1']);
+  });
+
+  it("sans fichier sélectionné (pendingPortraitFile null) → onSubmit() ne tente pas d'upload", async () => {
+    const { fixture, characterSvc } = await createComponent('p1');
+    const comp = fixture.componentInstance as any;
+    characterSvc.create.mockResolvedValue({ id: 'char1' });
+
+    await comp.onSubmit();
+
+    expect(characterSvc.updatePortrait).not.toHaveBeenCalled();
   });
 
   it('les boutons de navigation sont désactivés pendant submitting()', async () => {

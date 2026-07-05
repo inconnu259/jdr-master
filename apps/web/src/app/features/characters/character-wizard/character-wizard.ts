@@ -14,15 +14,17 @@ import { WeaponStep } from './steps/weapon-step/weapon-step';
 import { FetishStep } from './steps/fetish-step/fetish-step';
 import { EquipmentStep, FIXED_EQUIPMENT } from './steps/equipment-step/equipment-step';
 import { NarrativeStep } from './steps/narrative-step/narrative-step';
+import {
+  PortraitCropper,
+  type PortraitCropData,
+  type PortraitCropResult,
+} from '../portrait-cropper/portrait-cropper';
 
 type AttrKey = 'AGI' | 'ESP' | 'INT' | 'VIG';
 
 const RYUUTAMA_ID = 'ryuutama';
 
-/**
- * Étapes couvertes par CETTE story (1 à 7 — la Portrait optionnelle, ajoutée par la Story 4.5,
- * est exclue même si `creationSteps()` du plugin la liste en 8e position).
- */
+/** Les 8 étapes du plugin Ryuutama, portrait inclus (Story 4.5). */
 const SUPPORTED_STEP_KEYS = new Set([
   'classId',
   'typeId',
@@ -31,6 +33,7 @@ const SUPPORTED_STEP_KEYS = new Set([
   'fetiqueObject',
   'equipment',
   'narrative',
+  'portrait',
 ]);
 
 interface CreationStep {
@@ -64,6 +67,7 @@ interface ServerValidationError {
     FetishStep,
     EquipmentStep,
     NarrativeStep,
+    PortraitCropper,
   ],
   templateUrl: './character-wizard.html',
   styleUrl: './character-wizard.scss',
@@ -92,6 +96,10 @@ export class CharacterWizard implements OnInit {
   });
   protected readonly submitting = signal(false);
   protected readonly stepErrors = signal<Record<string, string[]>>({});
+
+  /** Portrait : hors `sheetData` (vit sur `Character.portraitUrl`/`portraitCropData`, uploadé après création). */
+  protected readonly pendingPortraitFile = signal<File | null>(null);
+  protected readonly pendingCropData = signal<PortraitCropData | null>(null);
 
   protected readonly currentStepKey = computed(
     () => this.steps()[this.currentStepIndex()]?.key ?? '',
@@ -166,6 +174,18 @@ export class CharacterWizard implements OnInit {
     this.currentStepIndex.update((i) => i - 1);
   }
 
+  protected onPortraitSaved(result: PortraitCropResult): void {
+    this.pendingPortraitFile.set(result.file);
+    this.pendingCropData.set(result.cropData);
+  }
+
+  /** L'étape Portrait est la dernière — "Passer cette étape" finalise directement (AC1), il n'y a pas d'étape suivante. */
+  protected onPortraitSkip(): void {
+    this.pendingPortraitFile.set(null);
+    this.pendingCropData.set(null);
+    void this.onSubmit();
+  }
+
   protected updateSheetData(patch: Partial<RyuutamaSheetData>): void {
     this.sheetData.update((d) => {
       const next = { ...d, ...patch };
@@ -190,6 +210,22 @@ export class CharacterWizard implements OnInit {
         gameSystemId: RYUUTAMA_ID,
         sheetData: this.sheetData(),
       });
+
+      const portraitFile = this.pendingPortraitFile();
+      if (portraitFile) {
+        try {
+          await this.characterSvc.updatePortrait(created.id, portraitFile, this.pendingCropData());
+        } catch {
+          // Le personnage existe déjà : un échec d'upload ne doit pas se présenter comme un
+          // échec de création (cf. Dev Notes Story 4.5) — avertissement non bloquant.
+          this.snack.open(
+            "Personnage créé, mais le portrait n'a pas pu être enregistré. Réessayez depuis la fiche.",
+            undefined,
+            { duration: 5000 },
+          );
+        }
+      }
+
       this.router.navigate(['/parties', this.partieId, 'characters', created.id]);
     } catch (err) {
       this.handleSubmitError(err);

@@ -1,0 +1,22 @@
+.portrait-panel {
+  background: var(--mat-sys-surface-container-high, #f0ebe3);
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+
+  &__img {
+    width: 100%;
+    max-width: 280px;
+    border-radius: 8px;
+    object-fit: contain;
+  }
+
+  &__caption {
+    font-size: 0.8rem;
+    color: var(--mat-sys-on-surface-variant, #555);
+    margin: 0;
+  }
+}

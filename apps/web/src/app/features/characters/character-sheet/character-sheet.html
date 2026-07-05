@@ -3,12 +3,23 @@
 } @else if (character(); as c) {
   <article class="sheet">
     <header class="sheet__header">
-      <app-character-avatar [name]="name()" [size]="64" />
+      <app-character-avatar
+        [name]="name()"
+        [size]="64"
+        [characterId]="c.id"
+        [portraitUrl]="c.portraitUrl"
+        [cropData]="$any(c.portraitCropData)"
+      />
       <div class="sheet__header-info">
         <h1 class="sheet__name">{{ name() }}</h1>
         <p class="sheet__meta">
           {{ classData()?.label }} · {{ typeData()?.label }} · Niveau 1 · Ryuutama
         </p>
+        @if (isOwner()) {
+          <button mat-button type="button" class="sheet__portrait-edit-cta" (click)="editPortrait()">
+            {{ theme.tone()['character.portrait_edit_cta'] }}
+          </button>
+        }
       </div>
       <div class="sheet__export-actions">
         <button
@@ -32,6 +43,13 @@
 
     @if (exportError(); as error) {
       <p class="sheet__export-error">{{ error }}</p>
+    }
+    @if (portraitError(); as error) {
+      <p class="sheet__export-error">{{ error }}</p>
+    }
+
+    @if (c.portraitUrl) {
+      <app-portrait-panel [characterId]="c.id" [portraitUrl]="c.portraitUrl" [name]="name()" />
     }
 
     <div class="sheet__body">
