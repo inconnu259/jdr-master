@@ -76,6 +76,20 @@
                   </div>
                 }
 
+                <div class="search-row">
+                  <mat-form-field appearance="outline">
+                    <mat-label>{{ theme.tone()['partie.invite_by_email_label'] }}</mat-label>
+                    <input matInput type="email" [ngModel]="inviteEmail()" (ngModelChange)="inviteEmail.set($event)"
+                           [disabled]="invitingByEmail()" (keyup.enter)="inviteByEmail()" />
+                  </mat-form-field>
+                  <button mat-flat-button [disabled]="invitingByEmail()" (click)="inviteByEmail()">
+                    <mat-icon>mail</mat-icon> {{ theme.tone()['partie.invite_by_email_btn'] }}
+                  </button>
+                </div>
+                @if (inviteEmailError()) {
+                  <p class="notice error">{{ inviteEmailError() }}</p>
+                }
+
                 <h3>{{ theme.tone()['partie.links_title'] }}</h3>
                 <button mat-stroked-button (click)="createLink()">
                   <mat-icon>link</mat-icon> {{ theme.tone()['partie.generate_link'] }}

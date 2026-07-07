@@ -8,12 +8,16 @@ import {
 import type { InvitationDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { InviteLinksService } from './invite-links.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class InvitationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
+    private readonly inviteLinks: InviteLinksService,
+    private readonly email: EmailService,
   ) {}
 
   /** Le MJ invite un utilisateur déjà inscrit. Idempotent : ré-invite ranime une invitation close. */
@@ -114,6 +118,42 @@ export class InvitationsService {
       data: { status: 'REVOKED', respondedAt: new Date() },
     });
     return { ok: true };
+  }
+
+  /**
+   * Le MJ invite par e-mail (FR-3) : réutilise `invite()` si l'adresse correspond à un
+   * utilisateur déjà inscrit, sinon génère/réutilise un `InviteLink` à usage unique.
+   * Ne relance jamais sur un échec d'envoi — `EmailService.sendMail` ne relance pas non plus.
+   */
+  async inviteByEmail(
+    partieId: string,
+    inviterId: string,
+    rawEmail: string,
+  ): Promise<{ ok: boolean }> {
+    // Normalisée une seule fois ici : couvre la recherche User, le dédoublonnage InviteLink et
+    // l'envoi, sans dépendre de la casse saisie par le MJ (foo@bar.com === Foo@Bar.com).
+    const email = rawEmail.trim().toLowerCase();
+    const partie = await this.parties.getOwned(partieId, inviterId);
+    const origin = process.env.WEB_ORIGIN ?? 'http://localhost:4200';
+    const user = await this.prisma.user.findUnique({ where: { email } });
+
+    let link: string;
+    if (user) {
+      await this.invite(partieId, inviterId, user.id);
+      link = `${origin}/`;
+    } else {
+      const inviteLink = await this.inviteLinks.findOrCreateForEmail(
+        partieId,
+        inviterId,
+        email,
+      );
+      link = `${origin}/join/${inviteLink.token}`;
+    }
+
+    return this.email.sendMail('invitation', email, {
+      partieName: partie.name,
+      link,
+    });
   }
 
   /** Garde-fou commun à accept/decline : invitation existante, PENDING, adressée à l'utilisateur. */

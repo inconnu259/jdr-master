@@ -89,6 +89,16 @@ export class PartiesService {
     );
   }
 
+  inviteByEmail(id: string, email: string): Promise<{ ok: boolean }> {
+    return firstValueFrom(
+      this.http.post<{ ok: boolean }>(
+        `${API}/parties/${id}/invitations/by-email`,
+        { email },
+        { withCredentials: true },
+      ),
+    );
+  }
+
   inviteLinks(id: string): Promise<InviteLinkDto[]> {
     return firstValueFrom(
       this.http.get<InviteLinkDto[]>(`${API}/parties/${id}/invite-links`, {

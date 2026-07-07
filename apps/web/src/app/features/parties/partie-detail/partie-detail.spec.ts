@@ -57,6 +57,7 @@ function makePartiesService(partie: PartieDto, members: PartieMemberDto[] = []) 
     inviteLinks: vi.fn().mockResolvedValue([]),
     searchUsers: vi.fn().mockResolvedValue([]),
     inviteUser: vi.fn(),
+    inviteByEmail: vi.fn(),
     removeMember: vi.fn(),
     createInviteLink: vi.fn(),
     revokeInviteLink: vi.fn(),
@@ -394,5 +395,79 @@ describe('PartieDetail — onglet Personnages', () => {
     fixture.detectChanges();
 
     expect(el.querySelector('.character-summary-card__owner-badge')).toBeNull();
+  });
+});
+
+describe('PartieDetail — invitation par e-mail', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('succès : affiche la confirmation et vide le champ', async () => {
+    const { fixture } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      inviteByEmail: ReturnType<typeof vi.fn>;
+    };
+    parties.inviteByEmail.mockResolvedValue({ ok: true });
+
+    const component = fixture.componentInstance as unknown as {
+      inviteEmail: { set: (v: string) => void; (): string };
+      inviteEmailError: () => string | null;
+      notice: () => string | null;
+      inviteByEmail: () => Promise<void>;
+    };
+    component.inviteEmail.set('ami@example.com');
+    await component.inviteByEmail();
+    fixture.detectChanges();
+
+    expect(parties.inviteByEmail).toHaveBeenCalledWith('party-1', 'ami@example.com');
+    expect(component.notice()).toContain('ami@example.com');
+    expect(component.inviteEmail()).toBe('');
+    expect(component.inviteEmailError()).toBeNull();
+  });
+
+  it('échec ({ ok: false }) : affiche un message d’erreur explicite, ne vide pas le champ', async () => {
+    const { fixture } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      inviteByEmail: ReturnType<typeof vi.fn>;
+    };
+    parties.inviteByEmail.mockResolvedValue({ ok: false });
+
+    const component = fixture.componentInstance as unknown as {
+      inviteEmail: { set: (v: string) => void; (): string };
+      inviteEmailError: () => string | null;
+      inviteByEmail: () => Promise<void>;
+    };
+    component.inviteEmail.set('ami@example.com');
+    await component.inviteByEmail();
+    fixture.detectChanges();
+
+    expect(component.inviteEmailError()).toBeTruthy();
+    expect(component.inviteEmail()).toBe('ami@example.com');
+  });
+
+  it('ignore un second appel concurrent tant que le premier est en cours (anti double-soumission)', async () => {
+    const { fixture } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      inviteByEmail: ReturnType<typeof vi.fn>;
+    };
+    let resolveFirst!: (v: { ok: boolean }) => void;
+    parties.inviteByEmail.mockReturnValue(
+      new Promise((resolve) => {
+        resolveFirst = resolve;
+      }),
+    );
+
+    const component = fixture.componentInstance as unknown as {
+      inviteEmail: { set: (v: string) => void; (): string };
+      inviteByEmail: () => Promise<void>;
+    };
+    component.inviteEmail.set('ami@example.com');
+    const firstCall = component.inviteByEmail();
+    const secondCall = component.inviteByEmail(); // déclenché pendant que le premier est en vol
+
+    resolveFirst({ ok: true });
+    await firstCall;
+    await secondCall;
+
+    expect(parties.inviteByEmail).toHaveBeenCalledTimes(1);
   });
 });

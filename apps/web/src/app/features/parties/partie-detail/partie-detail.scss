@@ -13,6 +13,9 @@
 .muted {
   color: var(--mat-sys-on-surface-variant, #666);
 }
+.notice.error {
+  color: var(--mat-sys-error, #b3261e);
+}
 .scheduling-widget {
   margin-top: 1rem;
   padding: 1rem;

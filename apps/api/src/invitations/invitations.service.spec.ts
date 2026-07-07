@@ -7,6 +7,8 @@ import {
 import { InvitationsService } from './invitations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { InviteLinksService } from './invite-links.service';
+import { EmailService } from '../email/email.service';
 
 describe('InvitationsService', () => {
   let service: InvitationsService;
@@ -22,6 +24,8 @@ describe('InvitationsService', () => {
     $transaction: jest.Mock;
   };
   let parties: { getOwned: jest.Mock };
+  let inviteLinks: { findOrCreateForEmail: jest.Mock };
+  let email: { sendMail: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -36,11 +40,21 @@ describe('InvitationsService', () => {
       $transaction: jest.fn().mockResolvedValue([]),
     };
     parties = {
-      getOwned: jest.fn().mockResolvedValue({ id: 'p1', mjId: 'mj1' }),
+      getOwned: jest.fn().mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        name: 'La Forêt Ancienne',
+      }),
     };
+    inviteLinks = {
+      findOrCreateForEmail: jest.fn().mockResolvedValue({ token: 'tok123' }),
+    };
+    email = { sendMail: jest.fn().mockResolvedValue({ ok: true }) };
     service = new InvitationsService(
       prisma as unknown as PrismaService,
       parties as unknown as PartiesService,
+      inviteLinks as unknown as InviteLinksService,
+      email as unknown as EmailService,
     );
   });
 
@@ -129,6 +143,87 @@ describe('InvitationsService', () => {
     });
     await expect(service.revoke('inv1', 'intrus')).rejects.toBeInstanceOf(
       ForbiddenException,
+    );
+  });
+
+  // --- inviteByEmail (Story 5.2) ---
+
+  it('inviteByEmail : adresse déjà inscrite → réutilise invite() existant, envoie un e-mail vers le tableau de bord', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'u1' });
+    prisma.membership.findUnique.mockResolvedValue(null);
+    prisma.invitation.upsert.mockResolvedValue({ id: 'inv1' });
+
+    const result = await service.inviteByEmail('p1', 'mj1', 'ami@example.com');
+
+    expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+    expect(prisma.invitation.upsert).toHaveBeenCalled(); // délègue à invite()
+    expect(inviteLinks.findOrCreateForEmail).not.toHaveBeenCalled();
+    expect(email.sendMail).toHaveBeenCalledWith(
+      'invitation',
+      'ami@example.com',
+      expect.objectContaining({
+        partieName: 'La Forêt Ancienne',
+        link: expect.stringContaining('/'),
+      }),
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('inviteByEmail : adresse inconnue → génère/réutilise un InviteLink, envoie un e-mail avec le lien de jonction', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    const result = await service.inviteByEmail(
+      'p1',
+      'mj1',
+      'inconnu@example.com',
+    );
+
+    expect(inviteLinks.findOrCreateForEmail).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+      'inconnu@example.com',
+    );
+    expect(email.sendMail).toHaveBeenCalledWith(
+      'invitation',
+      'inconnu@example.com',
+      expect.objectContaining({
+        partieName: 'La Forêt Ancienne',
+        link: expect.stringContaining('/join/tok123'),
+      }),
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('inviteByEmail : propage { ok: false } si l’envoi échoue, sans lever d’exception', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    email.sendMail.mockResolvedValue({ ok: false });
+
+    const result = await service.inviteByEmail(
+      'p1',
+      'mj1',
+      'inconnu@example.com',
+    );
+
+    expect(result).toEqual({ ok: false });
+  });
+
+  it('inviteByEmail : normalise la casse/espaces avant recherche, dédoublonnage et envoi', async () => {
+    prisma.user.findUnique.mockResolvedValue(null);
+
+    await service.inviteByEmail('p1', 'mj1', '  Ami@Example.COM  ');
+
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { email: 'ami@example.com' },
+    });
+    expect(inviteLinks.findOrCreateForEmail).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+      'ami@example.com',
+    );
+    expect(email.sendMail).toHaveBeenCalledWith(
+      'invitation',
+      'ami@example.com',
+      expect.anything(),
     );
   });
 });

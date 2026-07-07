@@ -133,6 +133,40 @@ export class InviteLinksService {
     return link;
   }
 
+  /**
+   * Retrouve un lien valide déjà émis pour cette adresse sur cette partie, ou en crée un
+   * nouveau (usage unique). Dédoublonnage pour l'invitation par e-mail (Story 5.2, FR-3) —
+   * ne vérifie pas le rôle MJ ici, délégué à l'appelant (`InvitationsService.inviteByEmail`).
+   */
+  async findOrCreateForEmail(
+    partieId: string,
+    mjId: string,
+    email: string,
+  ): Promise<InviteLink> {
+    const existing = await this.prisma.inviteLink.findFirst({
+      where: {
+        partieId,
+        targetEmail: email,
+        revoked: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) return existing;
+
+    const token = randomBytes(32).toString('base64url');
+    return this.prisma.inviteLink.create({
+      data: {
+        token,
+        partieId,
+        createdById: mjId,
+        maxUses: 1,
+        targetEmail: email,
+        expiresAt: new Date(Date.now() + DEFAULT_TTL_MS),
+      },
+    });
+  }
+
   /** État de validité d'un lien (révoqué / expiré / quota). */
   private linkStatus(
     link: Pick<InviteLink, 'revoked' | 'expiresAt' | 'maxUses' | 'usesCount'>,

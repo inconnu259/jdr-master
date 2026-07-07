@@ -13,11 +13,23 @@ const past = () => new Date(Date.now() - 60_000);
 
 describe('InviteLinksService', () => {
   let service: InviteLinksService;
-  let prisma: { inviteLink: { create: jest.Mock; findUnique: jest.Mock } };
+  let prisma: {
+    inviteLink: {
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      findFirst: jest.Mock;
+    };
+  };
   let parties: { getOwned: jest.Mock };
 
   beforeEach(() => {
-    prisma = { inviteLink: { create: jest.fn(), findUnique: jest.fn() } };
+    prisma = {
+      inviteLink: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+      },
+    };
     parties = {
       getOwned: jest.fn().mockResolvedValue({ id: 'p1', mjId: 'mj1' }),
     };
@@ -193,5 +205,47 @@ describe('InviteLinksService', () => {
       data: { userId: 'u', partieId: 'p1' },
     });
     expect(res).toBe(link);
+  });
+
+  // --- findOrCreateForEmail (Story 5.2) ---
+
+  it('findOrCreateForEmail : crée un nouveau lien usage unique si aucun n’existe', async () => {
+    prisma.inviteLink.findFirst.mockResolvedValue(null);
+    prisma.inviteLink.create.mockImplementation(({ data }) =>
+      Promise.resolve(data),
+    );
+    const link = (await service.findOrCreateForEmail(
+      'p1',
+      'mj1',
+      'ami@example.com',
+    )) as { token: string; maxUses: number; targetEmail: string };
+    expect(prisma.inviteLink.findFirst).toHaveBeenCalledWith({
+      where: {
+        partieId: 'p1',
+        targetEmail: 'ami@example.com',
+        revoked: false,
+        expiresAt: { gt: expect.any(Date) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(link.maxUses).toBe(1);
+    expect(link.targetEmail).toBe('ami@example.com');
+    expect(link.token).toHaveLength(43);
+  });
+
+  it('findOrCreateForEmail : réutilise un lien existant valide plutôt que d’en créer un nouveau', async () => {
+    const existing = {
+      id: 'l1',
+      token: 'tok-existant',
+      targetEmail: 'ami@example.com',
+    };
+    prisma.inviteLink.findFirst.mockResolvedValue(existing);
+    const link = await service.findOrCreateForEmail(
+      'p1',
+      'mj1',
+      'ami@example.com',
+    );
+    expect(link).toBe(existing);
+    expect(prisma.inviteLink.create).not.toHaveBeenCalled();
   });
 });

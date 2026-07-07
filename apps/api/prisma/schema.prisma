@@ -105,6 +105,7 @@ model InviteLink {
   expiresAt   DateTime // défaut +7 jours, configurable
   revoked     Boolean  @default(false)
   createdAt   DateTime @default(now())
+  targetEmail String? // renseigné uniquement pour un lien généré via l'invitation par e-mail (Story 5.2) ; null = lien ouvert partageable
 }
 
 // ─── Palier 2 : Calendrier de disponibilités ──────────────────────────────────

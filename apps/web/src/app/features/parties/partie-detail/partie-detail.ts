@@ -80,6 +80,9 @@ export class PartieDetail implements OnInit {
   protected readonly search = signal('');
   protected readonly results = signal<UserSearchResultDto[]>([]);
   protected readonly notice = signal<string | null>(null);
+  protected readonly inviteEmail = signal('');
+  protected readonly invitingByEmail = signal(false);
+  protected readonly inviteEmailError = signal<string | null>(null);
 
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
   protected readonly isMj = computed(() => this.partie()?.mjId === this.auth.currentUser()?.id);
@@ -177,6 +180,28 @@ export class PartieDetail implements OnInit {
     await this.parties.inviteUser(p.id, user.id);
     this.results.update((list) => list.filter((u) => u.id !== user.id));
     this.notice.set(this.theme.tone()['partie.notice_invited'].replace('{name}', user.pseudo));
+  }
+
+  async inviteByEmail(): Promise<void> {
+    if (this.invitingByEmail()) return; // évite les doubles soumissions (Entrée répétée, double-clic)
+    const p = this.partie();
+    const email = this.inviteEmail().trim();
+    if (!p || !email) return;
+    this.invitingByEmail.set(true);
+    this.inviteEmailError.set(null);
+    try {
+      const result = await this.parties.inviteByEmail(p.id, email);
+      if (result.ok) {
+        this.notice.set(this.theme.tone()['partie.notice_invited_email'].replace('{email}', email));
+        this.inviteEmail.set('');
+      } else {
+        this.inviteEmailError.set(this.theme.tone()['partie.notice_invite_email_error']);
+      }
+    } catch {
+      this.inviteEmailError.set(this.theme.tone()['partie.notice_invite_email_error']);
+    } finally {
+      this.invitingByEmail.set(false);
+    }
   }
 
   async removeMember(member: PartieMemberDto): Promise<void> {
