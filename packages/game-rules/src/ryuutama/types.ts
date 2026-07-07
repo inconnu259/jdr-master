@@ -34,3 +34,16 @@ export interface ValidationResult {
   valid: boolean;
   errors: ValidationError[];
 }
+
+/**
+ * Catalogue de contenu Ryuutama valide, dérivé du contenu seedé en base
+ * (`GameSystemService.getContent`) — évite que `validate()` code en dur ses propres listes
+ * déconnectées du contenu réellement seedé.
+ */
+export interface RyuutamaCatalog {
+  validClasses: string[];
+  validTypes: string[];
+  validWeapons: string[];
+  /** Chaque pattern est un tableau de 4 valeurs déjà trié (ex. [4, 6, 6, 8] pour "Polyvalent"). */
+  attributePatterns: number[][];
+}

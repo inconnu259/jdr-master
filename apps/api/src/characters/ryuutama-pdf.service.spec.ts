@@ -222,6 +222,41 @@ describe('RyuutamaPdfService', () => {
       expect(call.height).toBeLessThanOrEqual(136.48);
     });
 
+    it('portrait embarqué avec des dimensions 0×0 => zone laissée vide, pas de crash (division par zéro évitée)', async () => {
+      (readFile as jest.Mock).mockImplementation((path: string) => {
+        if (String(path).includes('portraits')) {
+          return Promise.resolve(Buffer.from('jpeg-bytes'));
+        }
+        return Promise.resolve(Buffer.from('fake-pdf-bytes'));
+      });
+      mockEmbedJpg.mockResolvedValueOnce({ width: 0, height: 0 });
+      const character = makeCharacter({
+        portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.jpg`,
+      });
+
+      await expect(
+        service.fillCharacterPdf(character, 'editable'),
+      ).resolves.not.toThrow();
+      expect(mockDrawImage).not.toHaveBeenCalled();
+    });
+
+    it('template sans page => erreur explicite plutôt qu’un crash silencieux sur getPages()[0]', async () => {
+      (readFile as jest.Mock).mockImplementation((path: string) => {
+        if (String(path).includes('portraits')) {
+          return Promise.resolve(Buffer.from('jpeg-bytes'));
+        }
+        return Promise.resolve(Buffer.from('fake-pdf-bytes'));
+      });
+      mockDoc.getPages.mockReturnValueOnce([]);
+      const character = makeCharacter({
+        portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.jpg`,
+      });
+
+      await expect(
+        service.fillCharacterPdf(character, 'editable'),
+      ).rejects.toThrow('sans page');
+    });
+
     it('portrait PNG => embedPng puis drawImage', async () => {
       (readFile as jest.Mock).mockImplementation((path: string) => {
         if (String(path).includes('portraits')) {

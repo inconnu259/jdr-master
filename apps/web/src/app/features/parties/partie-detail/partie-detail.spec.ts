@@ -9,6 +9,7 @@ import { vi } from 'vitest';
 import type { CharacterDto, PartieDto, PartieMemberDto, SessionPollDto } from '@master-jdr/shared';
 import { AuthService } from '../../../core/auth/auth.service';
 import { CharacterService } from '../../../core/characters/character.service';
+import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
 import { PollService } from '../../../core/poll/poll.service';
@@ -239,21 +240,10 @@ describe('PartieDetail — onglet Personnages', () => {
   });
 
   it('expose les personnages chargés sur le signal characters()', async () => {
-    const character: CharacterDto = {
-      id: 'c1',
+    const character: CharacterDto = makeCharacterDto({
       userId: PLAYER_ID,
       partieId: 'party-1',
-      gameSystemId: 'ryuutama',
-      sheetData: {},
-      derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
-      portraitUrl: null,
-      portraitCropData: null,
-      pdfPortraitCropData: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-      ownerPseudo: 'alice',
-      ownerIsMj: false,
-    };
+    });
     const { fixture } = await createFixture(makePartie(), MJ_ID, { characters: [character] });
 
     expect(
@@ -262,21 +252,11 @@ describe('PartieDetail — onglet Personnages', () => {
   });
 
   it("un personnage créé par un AUTRE joueur n'empêche pas l'utilisateur courant de créer le sien", async () => {
-    const otherPlayerCharacter: CharacterDto = {
-      id: 'c1',
+    const otherPlayerCharacter: CharacterDto = makeCharacterDto({
       userId: 'some-other-player',
       partieId: 'party-1',
-      gameSystemId: 'ryuutama',
-      sheetData: {},
-      derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
-      portraitUrl: null,
-      portraitCropData: null,
-      pdfPortraitCropData: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
       ownerPseudo: 'bob',
-      ownerIsMj: false,
-    };
+    });
     const { fixture } = await createFixture(makePartie(), PLAYER_ID, {
       characters: [otherPlayerCharacter],
     });
@@ -288,21 +268,11 @@ describe('PartieDetail — onglet Personnages', () => {
   });
 
   it('classLabel() résout le label de classe depuis le contenu chargé (pas la clé brute)', async () => {
-    const character: CharacterDto = {
-      id: 'c1',
+    const character: CharacterDto = makeCharacterDto({
       userId: PLAYER_ID,
       partieId: 'party-1',
-      gameSystemId: 'ryuutama',
       sheetData: { classId: 'menestrel', narrative: { name: 'Fenn' } },
-      derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
-      portraitUrl: null,
-      portraitCropData: null,
-      pdfPortraitCropData: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-      ownerPseudo: 'alice',
-      ownerIsMj: false,
-    };
+    });
     const { fixture } = await createFixture(makePartie(), MJ_ID, { characters: [character] });
 
     const comp = fixture.componentInstance as unknown as {
@@ -329,21 +299,12 @@ describe('PartieDetail — onglet Personnages', () => {
     'affiche une app-character-summary-card par personnage visible ET la carte CTA quand ' +
       "myCharacters() est vide, même si d'autres personnages existent déjà (cas MJ)",
     async () => {
-      const otherPlayerCharacter: CharacterDto = {
-        id: 'c1',
+      const otherPlayerCharacter: CharacterDto = makeCharacterDto({
         userId: 'some-other-player',
         partieId: 'party-1',
-        gameSystemId: 'ryuutama',
         sheetData: { narrative: { name: 'Fenn' } },
-        derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
-        portraitUrl: null,
-        portraitCropData: null,
-        pdfPortraitCropData: null,
-        createdAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: '2026-01-01T00:00:00.000Z',
         ownerPseudo: 'bob',
-        ownerIsMj: false,
-      };
+      });
       // MJ n'a pas de personnage à lui (myCharacters() vide) mais un joueur en a déjà créé un.
       const { fixture, el } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID, {
         characters: [otherPlayerCharacter],
@@ -368,21 +329,11 @@ describe('PartieDetail — onglet Personnages', () => {
   );
 
   it("un joueur (non-MJ) consultant l'onglet Personnages → aucun badge/pseudo affiché (AC3)", async () => {
-    const ownCharacter: CharacterDto = {
-      id: 'c1',
+    const ownCharacter: CharacterDto = makeCharacterDto({
       userId: PLAYER_ID,
       partieId: 'party-1',
-      gameSystemId: 'ryuutama',
       sheetData: { narrative: { name: 'Fenn' } },
-      derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
-      portraitUrl: null,
-      portraitCropData: null,
-      pdfPortraitCropData: null,
-      createdAt: '2026-01-01T00:00:00.000Z',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-      ownerPseudo: 'alice',
-      ownerIsMj: false,
-    };
+    });
     const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
       characters: [ownCharacter],
       noopAnimations: true,

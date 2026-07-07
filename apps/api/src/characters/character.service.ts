@@ -14,11 +14,13 @@ import type { CharacterDto } from '@master-jdr/shared';
 import {
   computeDerived,
   validate,
+  type RyuutamaCatalog,
   type RyuutamaSheetData,
 } from '@master-jdr/game-rules';
 import { PartiesService } from '../parties/parties.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
+import { GameSystemService } from '../game-systems/game-system.service';
 import { SUPPORTED_GAME_SYSTEMS } from '../game-systems/supported-game-systems';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import type { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
@@ -42,6 +44,7 @@ export class CharacterService {
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
     private readonly users: UsersService,
+    private readonly gameSystems: GameSystemService,
   ) {}
 
   async create(
@@ -57,8 +60,9 @@ export class CharacterService {
       );
     }
 
+    const catalog = await this.buildRyuutamaCatalog(dto.gameSystemId);
     const sheetData = dto.sheetData as unknown as RyuutamaSheetData;
-    const result = validate(sheetData, 'strict');
+    const result = validate(sheetData, 'strict', catalog);
     if (!result.valid) {
       throw new BadRequestException(result.errors);
     }
@@ -84,6 +88,36 @@ export class CharacterService {
       }
       throw e;
     }
+  }
+
+  /**
+   * Dérive le catalogue de validation Ryuutama du contenu réellement seedé en base
+   * (`GameSystemService.getContent`), pour que `validate()` ne code plus en dur ses propres
+   * listes déconnectées du contenu seed.
+   */
+  private async buildRyuutamaCatalog(
+    gameSystemId: string,
+  ): Promise<RyuutamaCatalog> {
+    const content = await this.gameSystems.getContent(gameSystemId);
+    const keysOf = (typeKey: string) =>
+      (content[typeKey] ?? []).map((entry) => entry.key);
+    // `entry.data` vient de `ContentEntry.data` (Json, aucune contrainte de forme en base) — la
+    // garde vérifie que `values` est un tableau ET que chaque élément est bien un nombre, pas
+    // seulement `Array.isArray()` (qui laisserait passer ex. ["8","4","6","6"] et produirait un
+    // tri silencieusement faux via NaN dans `.sort((a, b) => a - b)`).
+    const isNumberArray = (values: unknown): values is number[] =>
+      Array.isArray(values) && values.every((v) => typeof v === 'number');
+    const attributePatterns = (content['attributePattern'] ?? [])
+      .map((entry) => (entry.data as { values?: unknown }).values)
+      .filter(isNumberArray)
+      .map((values) => [...values].sort((a, b) => a - b));
+
+    return {
+      validClasses: keysOf('class'),
+      validTypes: keysOf('type'),
+      validWeapons: keysOf('weaponCategory'),
+      attributePatterns,
+    };
   }
 
   async findOne(id: string, userId: string): Promise<CharacterDto> {

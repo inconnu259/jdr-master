@@ -135,7 +135,12 @@
                 }
               </div>
               @if (myCharacters().length === 0) {
-                <a mat-flat-button color="primary" [routerLink]="['/parties', p.id, 'characters', 'new']">
+                <a
+                  mat-flat-button
+                  color="primary"
+                  [routerLink]="['/parties', p.id, 'characters', 'new']"
+                  [queryParams]="{ gameSystemId: p.gameSystemId }"
+                >
                   {{ theme.tone()['character.create_cta'] }}
                 </a>
               }

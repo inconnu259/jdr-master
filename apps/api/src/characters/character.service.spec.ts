@@ -31,6 +31,7 @@ import { CharacterService } from './character.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { UsersService } from '../users/users.service';
+import { GameSystemService } from '../game-systems/game-system.service';
 
 /** Nom de fichier légitime généré côté serveur (`randomUUID()` + extension) — cf. `image-mime.util.ts`. */
 const OLD_PORTRAIT_UUID = '11111111-1111-1111-1111-111111111111';
@@ -77,6 +78,17 @@ function makeUsersService() {
   };
 }
 
+function makeGameSystemService() {
+  return {
+    getContent: jest.fn().mockResolvedValue({
+      class: [{ key: 'chasseur', data: {} }],
+      type: [{ key: 'attaque', data: {} }],
+      weaponCategory: [{ key: 'arc', data: {} }],
+      attributePattern: [{ key: 'polyvalent', data: { values: [8, 4, 6, 6] } }],
+    }),
+  };
+}
+
 function validSheet() {
   return {
     classId: 'chasseur',
@@ -113,12 +125,14 @@ describe('CharacterService', () => {
   let prisma: ReturnType<typeof makePrisma>;
   let parties: ReturnType<typeof makePartiesService>;
   let users: ReturnType<typeof makeUsersService>;
+  let gameSystems: ReturnType<typeof makeGameSystemService>;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     prisma = makePrisma();
     parties = makePartiesService();
     users = makeUsersService();
+    gameSystems = makeGameSystemService();
     // Défauts neutres : la plupart des tests ne portent pas sur ownerPseudo/ownerIsMj.
     users.findById.mockResolvedValue({
       id: 'default',
@@ -131,6 +145,7 @@ describe('CharacterService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: PartiesService, useValue: parties },
         { provide: UsersService, useValue: users },
+        { provide: GameSystemService, useValue: gameSystems },
       ],
     }).compile();
     service = module.get(CharacterService);
@@ -275,8 +290,58 @@ describe('CharacterService', () => {
       sheetData: validSheet(),
     });
 
-    expect(validate).toHaveBeenCalledWith(validSheet(), 'strict');
+    expect(validate).toHaveBeenCalledWith(
+      validSheet(),
+      'strict',
+      expect.objectContaining({
+        validClasses: ['chasseur'],
+        validTypes: ['attaque'],
+        validWeapons: ['arc'],
+        attributePatterns: [[4, 6, 6, 8]],
+      }),
+    );
     expect(computeDerived).toHaveBeenCalledWith(validSheet());
+  });
+
+  it('create() dérive le catalog de validate() du contenu réellement seedé (GameSystemService.getContent)', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+    (computeDerived as jest.Mock).mockReturnValue({});
+    prisma.character.create.mockResolvedValue(makeCharacter());
+
+    await service.create('p1', 'u1', {
+      gameSystemId: 'ryuutama',
+      sheetData: validSheet(),
+    });
+
+    expect(gameSystems.getContent).toHaveBeenCalledWith('ryuutama');
+  });
+
+  it('create() ignore un attributePattern malformé (values non-numériques) plutôt que de produire un pattern trié n’importe comment', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    gameSystems.getContent.mockResolvedValue({
+      class: [{ key: 'chasseur', data: {} }],
+      type: [{ key: 'attaque', data: {} }],
+      weaponCategory: [{ key: 'arc', data: {} }],
+      attributePattern: [
+        { key: 'polyvalent', data: { values: [8, 4, 6, 6] } },
+        { key: 'corrompu', data: { values: ['8', '4', '6', '6'] } },
+      ],
+    });
+    (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+    (computeDerived as jest.Mock).mockReturnValue({});
+    prisma.character.create.mockResolvedValue(makeCharacter());
+
+    await service.create('p1', 'u1', {
+      gameSystemId: 'ryuutama',
+      sheetData: validSheet(),
+    });
+
+    expect(validate).toHaveBeenCalledWith(
+      validSheet(),
+      'strict',
+      expect.objectContaining({ attributePatterns: [[4, 6, 6, 8]] }),
+    );
   });
 
   it('create() résout ownerPseudo/ownerIsMj du créateur sans requête partie supplémentaire (réutilise getViewable)', async () => {

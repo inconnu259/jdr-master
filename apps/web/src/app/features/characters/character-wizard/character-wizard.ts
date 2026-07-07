@@ -6,6 +6,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { computeDerived, type DerivedStats, type RyuutamaSheetData } from '@master-jdr/game-rules';
 import type { ContentEntryDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
+import { PartiesService } from '../../../core/parties/parties.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ClassStep } from './steps/class-step/class-step';
 import { TypeStep } from './steps/type-step/type-step';
@@ -21,8 +22,6 @@ import {
 } from '../portrait-cropper/portrait-cropper';
 
 type AttrKey = 'AGI' | 'ESP' | 'INT' | 'VIG';
-
-const RYUUTAMA_ID = 'ryuutama';
 
 /** Les 8 étapes du plugin Ryuutama, portrait inclus (Story 4.5). */
 const SUPPORTED_STEP_KEYS = new Set([
@@ -74,6 +73,7 @@ interface ServerValidationError {
 })
 export class CharacterWizard implements OnInit {
   private readonly characterSvc = inject(CharacterService);
+  private readonly partiesSvc = inject(PartiesService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly snack = inject(MatSnackBar);
@@ -81,6 +81,8 @@ export class CharacterWizard implements OnInit {
 
   /** Résolu depuis le paramètre de route `:id` dans `ngOnInit()`. */
   protected partieId = '';
+  /** Système de jeu de la partie, résolu dans `ngOnInit()` (jamais codé en dur — cf. Partie.gameSystemId). */
+  private gameSystemId = '';
 
   /**
    * Piloté par `GameSystemSchemaDto.creationSteps` (AC1) — jamais codé en dur, pour que le
@@ -150,9 +152,14 @@ export class CharacterWizard implements OnInit {
     if (!id) return;
     this.partieId = id;
     try {
+      // `partie-detail.ts` passe déjà `gameSystemId` en query param (il l'a chargé juste avant) —
+      // évite un aller-retour réseau redondant. Repli sur un fetch de la partie uniquement pour
+      // une navigation directe (lien partagé, rechargement de page) où le paramètre est absent.
+      const gameSystemIdParam = this.route.snapshot.queryParamMap.get('gameSystemId');
+      this.gameSystemId = gameSystemIdParam ?? (await this.partiesSvc.get(id)).gameSystemId;
       const [schema, content] = await Promise.all([
-        this.characterSvc.getGameSystemSchema(RYUUTAMA_ID),
-        this.characterSvc.getGameSystemContent(RYUUTAMA_ID),
+        this.characterSvc.getGameSystemSchema(this.gameSystemId),
+        this.characterSvc.getGameSystemContent(this.gameSystemId),
       ]);
       const allSteps = (schema.creationSteps as CreationStep[]) ?? [];
       this.steps.set(allSteps.filter((s) => SUPPORTED_STEP_KEYS.has(s.key)));
@@ -207,7 +214,7 @@ export class CharacterWizard implements OnInit {
     this.stepErrors.set({});
     try {
       const created = await this.characterSvc.create(this.partieId, {
-        gameSystemId: RYUUTAMA_ID,
+        gameSystemId: this.gameSystemId,
         sheetData: this.sheetData(),
       });
 

@@ -1,24 +1,6 @@
-import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
+import type { GameSystemContentDto } from '@master-jdr/shared';
 import { characterName, findContentEntry } from './character.util';
-
-function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
-  return {
-    id: 'c1',
-    userId: 'u1',
-    partieId: 'p1',
-    gameSystemId: 'ryuutama',
-    sheetData: {},
-    derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
-    portraitUrl: null,
-    portraitCropData: null,
-    pdfPortraitCropData: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    ownerPseudo: 'alice',
-    ownerIsMj: false,
-    ...overrides,
-  };
-}
+import { makeCharacterDto as makeCharacter } from './character-dto.fixture';
 
 describe('characterName', () => {
   it('retourne le nom narratif si renseigné', () => {

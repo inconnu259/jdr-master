@@ -42,6 +42,15 @@ const CONTENT_TYPES: ContentTypeSeed[] = [
 export class GameSystemService implements OnApplicationBootstrap {
   private readonly logger = new Logger(GameSystemService.name);
 
+  /**
+   * Le contenu (`ContentType`/`ContentEntry`) n'est écrit qu'une fois, au bootstrap
+   * (`seedRyuutama()`, appelé depuis `onApplicationBootstrap`) — aucun endpoint ne le modifie à
+   * l'exécution. Le mettre en cache évite une requête DB (avec jointure) à chaque appel de
+   * `getContent()`, notamment sur le chemin chaud de création de personnage
+   * (`CharacterService.create()` → `buildRyuutamaCatalog()`).
+   */
+  private readonly contentCache = new Map<string, GameSystemContentDto>();
+
   constructor(private readonly prisma: PrismaService) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -55,11 +64,22 @@ export class GameSystemService implements OnApplicationBootstrap {
       let raw: string;
       try {
         raw = await readFile(filePath, 'utf-8');
-        entriesByType[contentType.key] = JSON.parse(raw);
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+          throw new Error(`${contentType.file} doit contenir un tableau`);
+        }
+        for (const entry of parsed as Record<string, unknown>[]) {
+          if (typeof entry?.key !== 'string' || entry.key.length === 0) {
+            throw new Error(
+              `${contentType.file} : chaque entrée doit avoir une "key" (string non vide)`,
+            );
+          }
+        }
+        entriesByType[contentType.key] = parsed as Record<string, unknown>[];
       } catch (e) {
         this.logger.error(`Échec du chargement de ${contentType.file}`, e);
         throw new Error(
-          'Seed Ryuutama introuvable. Consultez apps/api/game-systems/ryuutama/README.md',
+          'Seed Ryuutama introuvable ou mal formé. Consultez apps/api/game-systems/ryuutama/README.md',
         );
       }
     }
@@ -111,6 +131,9 @@ export class GameSystemService implements OnApplicationBootstrap {
     if (id !== RYUUTAMA_ID) {
       throw new NotFoundException('Système de jeu introuvable');
     }
+    const cached = this.contentCache.get(id);
+    if (cached) return cached;
+
     const contentTypes = await this.prisma.contentType.findMany({
       where: { gameSystemId: id },
       include: { entries: { where: { scope: 'BASE' } } },
@@ -119,12 +142,28 @@ export class GameSystemService implements OnApplicationBootstrap {
     for (const ct of contentTypes) {
       result[ct.key] = ct.entries.map((e) => ({ key: e.key, data: e.data }));
     }
+    this.contentCache.set(id, result);
     return result;
   }
 
-  getSchema(id: string): GameSystemSchemaDto {
-    if (id !== RYUUTAMA_ID) {
+  async getSchema(id: string): Promise<GameSystemSchemaDto> {
+    // Vérifie d'abord l'existence en base (comme findAll()) — distinct du cas "existe en base
+    // mais aucun schéma codé pour ce système" ci-dessous, pour ne pas confondre les deux causes.
+    const gameSystem = await this.prisma.gameSystem.findUnique({
+      where: { id },
+    });
+    if (!gameSystem) {
       throw new NotFoundException('Système de jeu introuvable');
+    }
+    // Seul Ryuutama a un schéma codé en dur aujourd'hui — pas encore de registre de plugin par
+    // système (prévu Palier 6/7 avec Conte de Minuit/Draconis, cf. deferred-work.md). Un système
+    // présent en base sans schéma implémenté reste un 404, mais pour une raison différente de
+    // "introuvable" — ce n'est PAS une divergence avec findAll() (qui, lui, liste tout ce qui est
+    // en base) : c'est une limitation connue et assumée tant que ce registre n'existe pas.
+    if (id !== RYUUTAMA_ID) {
+      throw new NotFoundException(
+        'Aucun schéma implémenté pour ce système de jeu',
+      );
     }
     return {
       sheetSchema: {

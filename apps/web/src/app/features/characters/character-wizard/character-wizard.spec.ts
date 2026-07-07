@@ -7,6 +7,7 @@ import { vi } from 'vitest';
 import type { GameSystemContentDto, GameSystemSchemaDto } from '@master-jdr/shared';
 import { CharacterWizard } from './character-wizard';
 import { CharacterService } from '../../../core/characters/character.service';
+import { PartiesService } from '../../../core/parties/parties.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 const SCHEMA: GameSystemSchemaDto = {
@@ -60,8 +61,15 @@ function makeThemeService() {
   return { tone: () => ({ 'character.create_cta': 'Créer un voyageur' }) };
 }
 
-async function createComponent(partieId = 'p1') {
+function makePartiesService(partieId: string) {
+  return {
+    get: vi.fn().mockResolvedValue({ id: partieId, gameSystemId: 'ryuutama' }),
+  };
+}
+
+async function createComponent(partieId = 'p1', gameSystemIdParam: string | null = null) {
   const characterSvc = makeCharacterService();
+  const partiesSvc = makePartiesService(partieId);
   const router = { navigate: vi.fn() };
   const snack = { open: vi.fn() };
 
@@ -70,18 +78,34 @@ async function createComponent(partieId = 'p1') {
     providers: [
       provideAnimationsAsync(),
       { provide: CharacterService, useValue: characterSvc },
+      { provide: PartiesService, useValue: partiesSvc },
       { provide: ThemeToneService, useValue: makeThemeService() },
       { provide: MatSnackBar, useValue: snack },
       { provide: Router, useValue: router },
-      { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => partieId } } } },
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          snapshot: {
+            paramMap: { get: () => partieId },
+            queryParamMap: { get: () => gameSystemIdParam },
+          },
+        },
+      },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(CharacterWizard);
   fixture.detectChanges();
+  // ngOnInit enchaîne maintenant un await (partiesSvc.get()) avant le Promise.all() —
+  // whenStable() ne garantit pas toujours le drainage complet de la chaîne de microtasks en
+  // environnement zoneless (même pattern que le test "erreur au chargement" plus bas).
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, characterSvc, router, snack };
+  return { fixture, characterSvc, partiesSvc, router, snack };
 }
 
 describe('CharacterWizard', () => {
@@ -94,6 +118,17 @@ describe('CharacterWizard', () => {
     const comp = fixture.componentInstance as any;
     expect(comp.currentStepKey()).toBe('classId');
     expect(comp.canGoNext()).toBe(false);
+  });
+
+  it('gameSystemId fourni en query param (navigation depuis partie-detail) → ne re-fetch pas la partie', async () => {
+    const { characterSvc, partiesSvc } = await createComponent('p1', 'ryuutama');
+    expect(partiesSvc.get).not.toHaveBeenCalled();
+    expect(characterSvc.getGameSystemSchema).toHaveBeenCalledWith('ryuutama');
+  });
+
+  it('gameSystemId absent du query param (navigation directe/rechargement) → repli sur partiesSvc.get()', async () => {
+    const { partiesSvc } = await createComponent('p1', null);
+    expect(partiesSvc.get).toHaveBeenCalledWith('p1');
   });
 
   it('dérive ses 8 étapes depuis creationSteps() du schéma, sans coder les clés en dur (AC1) — inclut Portrait (Story 4.5)', async () => {
@@ -122,10 +157,16 @@ describe('CharacterWizard', () => {
       providers: [
         provideAnimationsAsync(),
         { provide: CharacterService, useValue: characterSvc },
+        { provide: PartiesService, useValue: makePartiesService('p1') },
         { provide: ThemeToneService, useValue: makeThemeService() },
         { provide: MatSnackBar, useValue: { open: vi.fn() } },
         { provide: Router, useValue: { navigate: vi.fn() } },
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'p1' } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: { paramMap: { get: () => 'p1' }, queryParamMap: { get: () => null } },
+          },
+        },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(CharacterWizard);

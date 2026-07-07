@@ -1,29 +1,16 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
-import type { CharacterDto, GameSystemDto } from '@master-jdr/shared';
+import type { GameSystemDto } from '@master-jdr/shared';
 import { CharacterService } from './character.service';
 import { API_BASE as API } from '../api-base';
+import { makeCharacterDto } from './character-dto.fixture';
 
 describe('CharacterService (front)', () => {
   let service: CharacterService;
   let http: HttpTestingController;
 
-  const character: CharacterDto = {
-    id: 'c1',
-    userId: 'u1',
-    partieId: 'p1',
-    gameSystemId: 'ryuutama',
-    sheetData: {},
-    derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
-    portraitUrl: null,
-    portraitCropData: null,
-    pdfPortraitCropData: null,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
-    ownerPseudo: 'alice',
-    ownerIsMj: false,
-  };
+  const character = makeCharacterDto({ id: 'c1' });
 
   beforeEach(() => {
     TestBed.configureTestingModule({

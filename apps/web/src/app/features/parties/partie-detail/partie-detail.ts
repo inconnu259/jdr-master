@@ -40,8 +40,6 @@ import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.u
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 
-const RYUUTAMA_ID = 'ryuutama';
-
 @Component({
   selector: 'app-partie-detail',
   imports: [
@@ -152,7 +150,7 @@ export class PartieDetail implements OnInit {
     this.activePoll.set(await this.pollSvc.getCurrentPoll(id).catch(() => null));
     this.characters.set(await this.characterSvc.listByPartie(id).catch(() => []));
     this.gameSystemContent.set(
-      await this.characterSvc.getGameSystemContent(RYUUTAMA_ID).catch(() => null),
+      await this.characterSvc.getGameSystemContent(this.partie()!.gameSystemId).catch(() => null),
     );
     // loadLinks() déclenché réactivement par effect() dans le constructeur
   }

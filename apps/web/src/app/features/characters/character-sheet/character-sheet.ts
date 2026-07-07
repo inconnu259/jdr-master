@@ -16,8 +16,6 @@ import {
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { AuthService } from '../../../core/auth/auth.service';
 
-const RYUUTAMA_ID = 'ryuutama';
-
 interface ClassData {
   label: string;
   talents: { name: string; effect: string }[];
@@ -185,7 +183,8 @@ export class CharacterSheet implements OnInit {
       return;
     }
     try {
-      this.content.set(await this.characterSvc.getGameSystemContent(RYUUTAMA_ID));
+      const gameSystemId = this.character()!.gameSystemId;
+      this.content.set(await this.characterSvc.getGameSystemContent(gameSystemId));
     } catch {
       // Contenu non critique pour l'affichage : la fiche reste consultable, seuls les
       // labels/talents/avantages résolus resteront vides.

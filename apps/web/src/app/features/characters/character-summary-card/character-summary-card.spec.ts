@@ -2,22 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import type { CharacterDto } from '@master-jdr/shared';
 import { CharacterSummaryCard } from './character-summary-card';
 import { API_BASE } from '../../../core/api-base';
+import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 
-const CHARACTER: CharacterDto = {
+const CHARACTER: CharacterDto = makeCharacterDto({
   id: 'c1',
-  userId: 'u1',
-  partieId: 'p1',
-  gameSystemId: 'ryuutama',
   sheetData: { narrative: { name: 'Fenn' } },
-  derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
-  portraitUrl: null,
-  portraitCropData: null,
-  pdfPortraitCropData: null,
-  createdAt: '2026-01-01T00:00:00.000Z',
-  updatedAt: '2026-01-01T00:00:00.000Z',
-  ownerPseudo: 'alice',
-  ownerIsMj: false,
-};
+});
 
 describe('CharacterSummaryCard', () => {
   afterEach(() => TestBed.resetTestingModule());

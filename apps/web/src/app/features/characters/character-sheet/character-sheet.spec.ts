@@ -9,6 +9,7 @@ import type { AuthUser, CharacterDto, GameSystemContentDto } from '@master-jdr/s
 import { CharacterSheet } from './character-sheet';
 import { CharacterService } from '../../../core/characters/character.service';
 import { AuthService } from '../../../core/auth/auth.service';
+import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 
 const CONTENT: GameSystemContentDto = {
   class: [
@@ -29,11 +30,7 @@ const CONTENT: GameSystemContentDto = {
   ],
 };
 
-const CHARACTER: CharacterDto = {
-  id: 'char1',
-  userId: 'u1',
-  partieId: 'p1',
-  gameSystemId: 'ryuutama',
+const CHARACTER: CharacterDto = makeCharacterDto({
   sheetData: {
     classId: 'menestrel',
     typeId: 'technique',
@@ -43,15 +40,7 @@ const CHARACTER: CharacterDto = {
     fetiqueObject: 'une plume de corbeau',
     narrative: { name: 'Fenn', homeTown: 'Aubval', motivation: 'Voir la mer' },
   },
-  derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
-  portraitUrl: null,
-  portraitCropData: null,
-  pdfPortraitCropData: null,
-  createdAt: '2026-01-01T00:00:00.000Z',
-  updatedAt: '2026-01-01T00:00:00.000Z',
-  ownerPseudo: 'alice',
-  ownerIsMj: false,
-};
+});
 
 function makeCharacterService(overrides: Partial<ReturnType<typeof defaultSvc>> = {}) {
   return { ...defaultSvc(), ...overrides };
@@ -130,6 +119,34 @@ describe('CharacterSheet', () => {
     expect(text).toContain('PV 16');
     expect(text).not.toContain('menestrel');
     expect(text).not.toContain('technique');
+  });
+
+  it('composant détruit avant la résolution de get() → pas d’erreur (résolution tardive sans garde)', async () => {
+    // Angular ne lève aucune erreur/avertissement quand un signal est mis à jour sur un composant
+    // déjà détruit (ce n'est ni un ChangeDetectorRef ni un effect() actif) — pas de garde
+    // `destroyed` nécessaire ici, juste la garantie que la résolution tardive ne plante pas.
+    let resolveGet!: (c: CharacterDto) => void;
+    const characterSvc = makeCharacterService({
+      get: vi.fn(() => new Promise<CharacterDto>((resolve) => (resolveGet = resolve))),
+    });
+    const dialog = { open: vi.fn() };
+    const auth = { currentUser: signal<AuthUser | null>({ id: 'u1' } as AuthUser) };
+    await TestBed.configureTestingModule({
+      imports: [CharacterSheet],
+      providers: [
+        { provide: CharacterService, useValue: characterSvc },
+        { provide: MatDialog, useValue: dialog },
+        { provide: AuthService, useValue: auth },
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'char1' } } } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CharacterSheet);
+    fixture.detectChanges();
+
+    fixture.destroy();
+    expect(() => resolveGet(CHARACTER)).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
   });
 
   it('affiche les notes narratives renseignées uniquement', async () => {

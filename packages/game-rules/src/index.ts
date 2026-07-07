@@ -6,6 +6,7 @@ export type {
   DerivedStats,
   ValidationResult,
   ValidationError,
+  RyuutamaCatalog,
 } from './ryuutama/types.ts';
 export type {
   RyuutamaPdfContent,

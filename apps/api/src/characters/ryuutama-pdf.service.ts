@@ -282,7 +282,24 @@ export class RyuutamaPdfService {
       return;
     }
 
-    const page = doc.getPages()[0];
+    if (image.width <= 0 || image.height <= 0) {
+      // Image embarquée de dimensions dégénérées (0×0) — extrêmement improbable après un passage
+      // réussi par embedJpg/embedPng, mais fitCentered/computePdfCropDraw diviseraient par zéro
+      // (NaN/Infinity) sans cette garde. Dégradation gracieuse : zone laissée vide, comme un
+      // portrait manquant (AC6).
+      this.logger.warn(
+        `Portrait embarqué avec des dimensions invalides (${image.width}×${image.height}) — zone laissée vide.`,
+      );
+      return;
+    }
+
+    const pages = doc.getPages();
+    const page = pages[0];
+    if (!page) {
+      throw new Error(
+        'Template PDF Ryuutama sans page — fichier corrompu ou mal chargé.',
+      );
+    }
     const cropData = parsePdfPortraitCropData(pdfPortraitCropData);
     if (cropData) {
       const { x, y, width, height } = computePdfCropDraw(

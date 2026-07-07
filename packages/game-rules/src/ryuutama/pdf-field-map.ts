@@ -13,6 +13,18 @@ const WEAPON_PDF_OPTION: Record<string, string> = {
   lance: 'Lances',
 };
 
+/** Avertit (plutôt que d'échouer silencieusement) sur une catégorie d'arme hors des 5 connues du template PDF. */
+function weaponPdfOption(weaponCategoryId: string): string {
+  const option = WEAPON_PDF_OPTION[weaponCategoryId];
+  if (option === undefined) {
+    console.warn(
+      `[game-rules] Catégorie d'arme "${weaponCategoryId}" sans option PDF connue — champ "Arme Fav" laissé vide.`,
+    );
+    return '';
+  }
+  return option;
+}
+
 /** Contenu résolu (labels/talents Ryuutama) à fournir par l'appelant — jamais chargé en interne, cf. principe des fonctions pures de ce package. */
 export interface RyuutamaPdfContent {
   classLabel: string;
@@ -126,7 +138,7 @@ export function mapToPdfFields(
     { field: 'Classe 1', value: content.classLabel, kind: 'dropdown' },
     {
       field: 'Arme Fav',
-      value: WEAPON_PDF_OPTION[data.weaponCategoryId] ?? '',
+      value: weaponPdfOption(data.weaponCategoryId),
       kind: 'dropdown',
     },
     {
