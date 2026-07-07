@@ -3,6 +3,8 @@ import { authGuard } from './core/auth/auth.guard';
 import { Shell } from './layout/shell/shell';
 import { Login } from './features/auth/login/login';
 import { Register } from './features/auth/register/register';
+import { ForgotPassword } from './features/auth/forgot-password/forgot-password';
+import { ResetPassword } from './features/auth/reset-password/reset-password';
 import { Dashboard } from './features/dashboard/dashboard';
 import { PartieForm } from './features/parties/partie-form/partie-form';
 import { PartieDetail } from './features/parties/partie-detail/partie-detail';
@@ -12,6 +14,8 @@ import { CalendarView } from './features/calendar/calendar-view/calendar-view';
 export const routes: Routes = [
   { path: 'login', component: Login },
   { path: 'register', component: Register },
+  { path: 'forgot-password', component: ForgotPassword },
+  { path: 'reset-password/:token', component: ResetPassword },
   { path: 'join/:token', component: Join }, // hors zone authentifiée : un nouveau venu doit y accéder
   {
     path: '',

@@ -56,4 +56,24 @@ describe('AuthService (front)', () => {
     expect(service.currentUser()).toEqual(user);
     expect(service.initialized()).toBe(true);
   });
+
+  it('requestPasswordReset envoie la demande avec le cookie (withCredentials)', async () => {
+    const p = service.requestPasswordReset('a@b.c');
+    const req = http.expectOne(`${API}/auth/forgot-password`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ email: 'a@b.c' });
+    req.flush({ ok: true });
+    await p;
+  });
+
+  it('resetPassword envoie le token et le nouveau mot de passe avec le cookie (withCredentials)', async () => {
+    const p = service.resetPassword('tok', 'newpassword123');
+    const req = http.expectOne(`${API}/auth/reset-password`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ token: 'tok', newPassword: 'newpassword123' });
+    req.flush({});
+    await p;
+  });
 });

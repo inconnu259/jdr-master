@@ -62,4 +62,20 @@ export class AuthService {
     await firstValueFrom(this.http.post(`${API}/auth/logout`, {}, { withCredentials: true }));
     this.currentUser.set(null);
   }
+
+  async requestPasswordReset(email: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post(`${API}/auth/forgot-password`, { email }, { withCredentials: true }),
+    );
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post(
+        `${API}/auth/reset-password`,
+        { token, newPassword },
+        { withCredentials: true },
+      ),
+    );
+  }
 }

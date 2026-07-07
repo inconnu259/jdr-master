@@ -28,6 +28,7 @@ model User {
   availabilityDeclarations AvailabilityDeclaration[]
   pollVotes                PollVote[]
   characters               Character[]
+  passwordResetTokens      PasswordResetToken[]
 }
 
 enum PartieKind {
@@ -107,6 +108,19 @@ model InviteLink {
   revoked     Boolean  @default(false)
   createdAt   DateTime @default(now())
   targetEmail String? // renseigné uniquement pour un lien généré via l'invitation par e-mail (Story 5.2) ; null = lien ouvert partageable
+}
+
+/// Jeton de réinitialisation de mot de passe (self-service, Story 5.4). Usage unique, expire à +24h.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // ─── Palier 2 : Calendrier de disponibilités ──────────────────────────────────

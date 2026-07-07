@@ -1,18 +1,28 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteLinksService } from '../invitations/invite-links.service';
+import { EmailService } from '../email/email.service';
 
 jest.mock('argon2');
 
 describe('AuthService', () => {
   let service: AuthService;
-  let users: jest.Mocked<Pick<UsersService, 'findByEmailOrPseudo' | 'create'>>;
-  let tx: { user: { create: jest.Mock } };
-  let prisma: { $transaction: jest.Mock };
+  let users: jest.Mocked<
+    Pick<UsersService, 'findByEmailOrPseudo' | 'findByEmail' | 'create'>
+  >;
+  let tx: {
+    user: { create: jest.Mock; update: jest.Mock };
+    passwordResetToken: { updateMany: jest.Mock; findUniqueOrThrow: jest.Mock };
+  };
+  let prisma: {
+    $transaction: jest.Mock;
+    passwordResetToken: { create: jest.Mock };
+  };
   let inviteLinks: { consumeLink: jest.Mock };
+  let email: { sendMail: jest.Mock };
 
   const fakeUser = {
     id: 'u1',
@@ -24,19 +34,32 @@ describe('AuthService', () => {
   };
 
   beforeEach(() => {
-    users = { findByEmailOrPseudo: jest.fn(), create: jest.fn() };
-    tx = { user: { create: jest.fn() } };
+    users = {
+      findByEmailOrPseudo: jest.fn(),
+      findByEmail: jest.fn(),
+      create: jest.fn(),
+    };
+    tx = {
+      user: { create: jest.fn(), update: jest.fn() },
+      passwordResetToken: {
+        updateMany: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
+      },
+    };
     // $transaction exécute le callback avec notre `tx` mocké.
     prisma = {
       $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
+      passwordResetToken: { create: jest.fn() },
     };
     inviteLinks = {
       consumeLink: jest.fn().mockResolvedValue({ partieId: 'p1' }),
     };
+    email = { sendMail: jest.fn().mockResolvedValue({ ok: true }) };
     service = new AuthService(
       users as unknown as UsersService,
       prisma as unknown as PrismaService,
       inviteLinks as unknown as InviteLinksService,
+      email as unknown as EmailService,
     );
   });
 
@@ -107,6 +130,73 @@ describe('AuthService', () => {
           token: 'tok',
         }),
       ).rejects.toBeInstanceOf(ConflictException);
+    });
+  });
+
+  describe('requestPasswordReset', () => {
+    it('e-mail correspondant à un compte → crée un PasswordResetToken (+24h) et envoie l’e-mail', async () => {
+      users.findByEmail.mockResolvedValue(fakeUser);
+      const before = Date.now();
+      const result = await service.requestPasswordReset('a@b.c');
+      expect(prisma.passwordResetToken.create).toHaveBeenCalledTimes(1);
+      const createArgs = prisma.passwordResetToken.create.mock.calls[0][0];
+      expect(createArgs.data.userId).toBe('u1');
+      expect(createArgs.data.expiresAt.getTime()).toBeGreaterThan(
+        before + 23 * 60 * 60 * 1000,
+      );
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'password-reset',
+        'a@b.c',
+        expect.objectContaining({
+          link: expect.stringContaining('/reset-password/'),
+        }),
+      );
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('e-mail sans compte correspondant → aucun token créé, aucun e-mail envoyé, renvoie quand même { ok: true } (AC1)', async () => {
+      users.findByEmail.mockResolvedValue(null);
+      const result = await service.requestPasswordReset('inconnu@x.y');
+      expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(result).toEqual({ ok: true });
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('token valide et non expiré → réclame le token atomiquement puis met à jour le mot de passe, dans une transaction', async () => {
+      tx.passwordResetToken.updateMany.mockResolvedValue({ count: 1 });
+      tx.passwordResetToken.findUniqueOrThrow.mockResolvedValue({
+        id: 'r1',
+        userId: 'u1',
+        token: 'tok',
+      });
+      (argon2.hash as jest.Mock).mockResolvedValue('NEW_HASH');
+      await service.resetPassword('tok', 'newpassword123');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(tx.passwordResetToken.updateMany).toHaveBeenCalledWith({
+        where: {
+          token: 'tok',
+          usedAt: null,
+          expiresAt: { gt: expect.any(Date) },
+        },
+        data: { usedAt: expect.any(Date) },
+      });
+      expect(tx.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: { passwordHash: 'NEW_HASH' },
+      });
+    });
+
+    it('token inconnu, expiré ou déjà utilisé → la réclamation atomique échoue (count: 0) → NotFoundException, mot de passe non modifié', async () => {
+      // La garde `WHERE usedAt: null, expiresAt: { gt: now }` de `updateMany` couvre les 3 cas
+      // (token inexistant, expiré, déjà utilisé) et protège aussi contre la course entre deux
+      // requêtes concurrentes sur le même token (une seule verrait count: 1 côté Postgres).
+      tx.passwordResetToken.updateMany.mockResolvedValue({ count: 0 });
+      await expect(
+        service.resetPassword('tok', 'newpassword123'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(tx.user.update).not.toHaveBeenCalled();
     });
   });
 });

@@ -310,3 +310,16 @@ export interface ContentEntryDto {
 
 /** Réponse de GET /game-systems/:id/content — groupé par clé de ContentType. */
 export type GameSystemContentDto = Record<string, ContentEntryDto[]>;
+
+// ─── Palier 4 : Infra e-mail & notifications ─────────────────────────────────
+
+/** Payload de POST /auth/forgot-password. */
+export interface RequestPasswordResetDto {
+  email: string;
+}
+
+/** Payload de POST /auth/reset-password. */
+export interface ResetPasswordDto {
+  token: string;
+  newPassword: string;
+}

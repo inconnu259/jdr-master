@@ -3,6 +3,8 @@ import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { AuthenticatedGuard } from './guards/authenticated.guard';
 
@@ -36,5 +38,18 @@ export class AuthController {
     );
     await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
     return { ok: true };
+  }
+
+  // Routes publiques (utilisateur non connecté) — pas de guard, comme `register`.
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Post('forgot-password')
+  forgotPassword(@Body() dto: RequestPasswordResetDto) {
+    return this.auth.requestPasswordReset(dto.email);
+  }
+
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Post('reset-password')
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.auth.resetPassword(dto.token, dto.newPassword);
   }
 }
