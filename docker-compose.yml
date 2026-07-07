@@ -6,6 +6,15 @@ x-dev: &dev
     dockerfile: docker/dev.Dockerfile
 
 services:
+  # Relais SMTP factice pour dev/test (FR-1) : capture les e-mails sans les envoyer réellement,
+  # consultables via son API HTTP. Remplaçant maintenu de MailHog (mêmes ports, API compatible).
+  mailpit:
+    image: axllent/mailpit
+    restart: unless-stopped
+    ports:
+      - '8025:8025' # UI web + API HTTP
+      - '1025:1025' # SMTP
+
   db:
     image: postgres:17-alpine
     restart: unless-stopped

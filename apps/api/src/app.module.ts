@@ -13,6 +13,7 @@ import { AvailabilityModule } from './availability/availability.module';
 import { PollModule } from './poll/poll.module';
 import { GameSystemModule } from './game-systems/game-system.module';
 import { CharacterModule } from './characters/character.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { CharacterModule } from './characters/character.module';
     PollModule,
     GameSystemModule,
     CharacterModule,
+    EmailModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
