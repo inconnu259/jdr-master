@@ -118,7 +118,7 @@ export class PollService {
     userId: string,
     dto: ChooseDateDto,
   ): Promise<void> {
-    await this.parties.getOwned(partieId, userId);
+    const partie = await this.parties.getOwned(partieId, userId);
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -139,9 +139,18 @@ export class PollService {
         chosenSlot: option.slot,
       },
     });
+    // Ne remettre reminderSentAt à null que si la date/le créneau change réellement — une
+    // re-confirmation du créneau déjà actif ne doit pas annuler un rappel déjà envoyé.
+    const dateUnchanged =
+      partie.nextSessionDate?.getTime() === option.date.getTime() &&
+      partie.nextSessionSlot === option.slot;
     await this.prisma.partie.update({
       where: { id: partieId },
-      data: { nextSessionDate: option.date, nextSessionSlot: option.slot },
+      data: {
+        nextSessionDate: option.date,
+        nextSessionSlot: option.slot,
+        ...(dateUnchanged ? {} : { reminderSentAt: null }),
+      },
     });
   }
 

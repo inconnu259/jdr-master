@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
@@ -14,10 +15,12 @@ import { PollModule } from './poll/poll.module';
 import { GameSystemModule } from './game-systems/game-system.module';
 import { CharacterModule } from './characters/character.module';
 import { EmailModule } from './email/email.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 20 }]), // garde-fou global : 20 req/min
+    ScheduleModule.forRoot(),
     PrismaModule,
     HealthModule,
     UsersModule,
@@ -29,6 +32,7 @@ import { EmailModule } from './email/email.module';
     GameSystemModule,
     CharacterModule,
     EmailModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

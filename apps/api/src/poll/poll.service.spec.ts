@@ -177,6 +177,38 @@ describe('PollService', () => {
     });
     expect(prisma.partie.update).toHaveBeenCalledWith({
       where: { id: 'p1' },
+      data: {
+        nextSessionDate: d,
+        nextSessionSlot: 'MORNING',
+        reminderSentAt: null,
+      },
+    });
+  });
+
+  it('choose() sur le même créneau déjà actif → ne remet PAS reminderSentAt à null', async () => {
+    const d = new Date('2026-08-01T00:00:00.000Z');
+    parties.getOwned.mockResolvedValue({
+      id: 'p1',
+      mjId: 'mj1',
+      nextSessionDate: d,
+      nextSessionSlot: 'MORNING',
+    });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
+    prisma.pollOption.findUnique.mockResolvedValue({
+      id: 'opt1',
+      pollId: 'poll1',
+      date: d,
+      slot: 'MORNING',
+    });
+    prisma.sessionPoll.update.mockResolvedValue({});
+    prisma.partie.update.mockResolvedValue({});
+    await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
+    expect(prisma.partie.update).toHaveBeenCalledWith({
+      where: { id: 'p1' },
       data: { nextSessionDate: d, nextSessionSlot: 'MORNING' },
     });
   });

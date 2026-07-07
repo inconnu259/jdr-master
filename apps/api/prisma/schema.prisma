@@ -49,6 +49,7 @@ model Partie {
 
   nextSessionDate DateTime? // Date confirmée de la prochaine séance (mise à jour par Epic 3)
   nextSessionSlot DaySlot? // Créneau confirmé
+  reminderSentAt  DateTime? // null = rappel pas encore envoyé pour le créneau courant (Epic 5)
 
   memberships Membership[]
   invitations Invitation[]
