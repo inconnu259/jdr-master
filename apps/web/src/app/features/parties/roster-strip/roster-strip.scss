@@ -1,0 +1,64 @@
+.roster-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--mat-sys-outline-variant, #ccc);
+}
+
+.roster-strip__item,
+.roster-strip__invite-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 20px;
+  background: transparent;
+  cursor: default;
+}
+
+.roster-strip__item--clickable {
+  cursor: pointer;
+}
+
+.roster-strip__avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  border-radius: 50%;
+}
+
+.roster-strip__avatar-wrap--mj {
+  box-shadow: 0 0 0 2px var(--mat-sys-primary, #6750a4);
+}
+
+.roster-strip__mj-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: var(--mat-sys-surface, #fff);
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: var(--mat-sys-primary, #6750a4);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 2px;
+  line-height: 1.3;
+}
+
+.roster-strip__name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.roster-strip__invite-slot {
+  cursor: pointer;
+  color: var(--mat-sys-on-surface-variant, #666);
+  justify-content: center;
+  border-style: dashed;
+}

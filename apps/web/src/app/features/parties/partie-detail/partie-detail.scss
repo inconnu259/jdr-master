@@ -1,7 +1,22 @@
 .detail {
   max-width: 36rem;
   margin: 1rem auto;
+
+  @media (min-width: 1024px) {
+    max-width: 72rem;
+  }
 }
+
+.detail-body {
+  display: flex;
+  align-items: flex-start;
+
+  mat-card-content {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 .characters-tab {
   &__grid {
     display: flex;
@@ -10,6 +25,14 @@
     margin-bottom: 1rem;
   }
 }
+
+.my-sheet-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
 .muted {
   color: var(--mat-sys-on-surface-variant, #666);
 }
@@ -44,11 +67,6 @@
   }
 }
 
-.members {
+.troupe-toggle {
   margin-top: 1rem;
-  padding: 1rem;
-  border: 1px dashed var(--mat-sys-outline-variant, #ccc);
-  border-radius: 0.5rem;
-  color: var(--mat-sys-on-surface-variant, #666);
-  text-align: center;
 }

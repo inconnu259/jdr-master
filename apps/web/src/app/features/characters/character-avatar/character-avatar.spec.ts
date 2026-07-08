@@ -7,7 +7,7 @@ describe('CharacterAvatar', () => {
 
   function setup(
     name: string,
-    size?: 44 | 64,
+    size?: 26 | 38 | 44 | 64,
     portraitUrl?: string | null,
     cropData?: { scale: number; offsetX: number; offsetY: number } | null,
     characterId = 'char1',
@@ -57,6 +57,42 @@ describe('CharacterAvatar', () => {
     const fixture = setup('Fenn', 64);
     const el: HTMLElement = fixture.nativeElement.querySelector('.character-avatar');
     expect(el.style.width).toBe('64px');
+  });
+
+  it('taille 38px (RosterRail) si demandé', () => {
+    const fixture = setup('Fenn', 38);
+    const el: HTMLElement = fixture.nativeElement.querySelector('.character-avatar');
+    expect(el.style.width).toBe('38px');
+  });
+
+  it('taille 26px (RosterStrip) si demandé', () => {
+    const fixture = setup('Fenn', 26);
+    const el: HTMLElement = fixture.nativeElement.querySelector('.character-avatar');
+    expect(el.style.width).toBe('26px');
+  });
+
+  it('fontSize 10px pour la taille 26px', () => {
+    const fixture = setup('Fenn', 26);
+    const el: HTMLElement = fixture.nativeElement.querySelector('.character-avatar');
+    expect(el.style.fontSize).toBe('10px');
+  });
+
+  it('fontSize 14px pour la taille 38px', () => {
+    const fixture = setup('Fenn', 38);
+    const el: HTMLElement = fixture.nativeElement.querySelector('.character-avatar');
+    expect(el.style.fontSize).toBe('14px');
+  });
+
+  it('fontSize 16px pour la taille 44px (défaut)', () => {
+    const fixture = setup('Fenn', 44);
+    const el: HTMLElement = fixture.nativeElement.querySelector('.character-avatar');
+    expect(el.style.fontSize).toBe('16px');
+  });
+
+  it('fontSize 24px pour la taille 64px', () => {
+    const fixture = setup('Fenn', 64);
+    const el: HTMLElement = fixture.nativeElement.querySelector('.character-avatar');
+    expect(el.style.fontSize).toBe('24px');
   });
 
   it("sans portraitUrl → affiche les initiales, pas d'image", () => {

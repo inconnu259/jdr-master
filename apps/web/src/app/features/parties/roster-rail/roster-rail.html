@@ -1,0 +1,61 @@
+<div class="roster-rail" [class.roster-rail--expanded]="expanded()">
+  <button
+    type="button"
+    class="roster-rail__toggle"
+    (click)="toggle()"
+    [attr.aria-label]="expanded() ? theme.tone()['roster.collapse_label'] : theme.tone()['roster.expand_label']"
+    [attr.aria-expanded]="expanded()"
+  >
+    <span aria-hidden="true">{{ expanded() ? '‹' : '›' }}</span>
+  </button>
+
+  @for (row of rows(); track row.member.userId) {
+    <div
+      class="roster-rail__item"
+      [class.roster-rail__item--mj]="row.isMj"
+      [class.roster-rail__item--clickable]="row.character"
+      [attr.data-user-id]="row.member.userId"
+      [attr.aria-label]="row.ariaLabel"
+      role="button"
+      [attr.tabindex]="row.character ? 0 : -1"
+      (click)="selectRow(row)"
+      (keydown.enter)="selectRow(row)"
+      (keydown.space)="$event.preventDefault(); selectRow(row)"
+    >
+      <span class="roster-rail__avatar-wrap" [class.roster-rail__avatar-wrap--mj]="row.isMj">
+        <app-character-avatar
+          [name]="row.displayName"
+          [size]="38"
+          [characterId]="row.character?.id ?? ''"
+          [portraitUrl]="row.character?.portraitUrl ?? null"
+          [cropData]="$any(row.character?.portraitCropData) ?? null"
+        />
+        @if (row.isMj) {
+          <span class="roster-rail__mj-badge">{{ theme.tone()['roster.mj_badge'] }}</span>
+        }
+      </span>
+      @if (expanded()) {
+        <span class="roster-rail__label">
+          <span class="roster-rail__name">{{ row.displayName }}</span>
+          @if (row.classLabel) {
+            <span class="roster-rail__class">{{ row.classLabel }}</span>
+          }
+        </span>
+      }
+    </div>
+  }
+
+  @if (hasFreeSlot()) {
+    <button
+      type="button"
+      class="roster-rail__invite-slot"
+      [attr.aria-label]="theme.tone()['roster.invite_slot']"
+      (click)="openInvitations.emit()"
+    >
+      <span aria-hidden="true">+</span>
+      @if (expanded()) {
+        <span class="roster-rail__label">{{ theme.tone()['roster.invite_slot'] }}</span>
+      }
+    </button>
+  }
+</div>

@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -10,7 +10,10 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
+import { map } from 'rxjs/operators';
 import type {
   CharacterDto,
   DaySlot,
@@ -39,6 +42,11 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
+import { RosterRail } from '../roster-rail/roster-rail';
+import { RosterStrip } from '../roster-strip/roster-strip';
+
+/** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
+const MJ_INVITATIONS_TAB_INDEX = 1;
 
 @Component({
   selector: 'app-partie-detail',
@@ -54,6 +62,8 @@ import { CharacterSummaryCard } from '../../characters/character-summary-card/ch
     MatListModule,
     MatTabsModule,
     CharacterSummaryCard,
+    RosterRail,
+    RosterStrip,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -67,7 +77,14 @@ export class PartieDetail implements OnInit {
   private readonly pollSvc = inject(PollService);
   private readonly characterSvc = inject(CharacterService);
   private readonly dialog = inject(MatDialog);
+  private readonly breakpointObserver = inject(BreakpointObserver);
   protected readonly theme = inject(ThemeToneService);
+
+  private static readonly DESKTOP_QUERY = '(min-width: 1024px)';
+
+  /** Aucun champ de capacité/nombre de places max sur `PartieDto` — le slot "+ Inviter" du roster
+   *  reste donc toujours visible pour le MJ (seul rôle habilité à inviter), sans notion de capacité. */
+  protected readonly hasFreeSlot = true;
 
   protected readonly partie = signal<PartieDto | null>(null);
   protected readonly members = signal<PartieMemberDto[]>([]);
@@ -81,6 +98,7 @@ export class PartieDetail implements OnInit {
   protected readonly inviteEmail = signal('');
   protected readonly invitingByEmail = signal(false);
   protected readonly inviteEmailError = signal<string | null>(null);
+  protected readonly showTroupe = signal(false);
 
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
   protected readonly isMj = computed(() => this.partie()?.mjId === this.auth.currentUser()?.id);
@@ -93,6 +111,48 @@ export class PartieDetail implements OnInit {
 
   protected readonly characterName = characterName;
 
+  /** `isMatched` est synchrone — évite un flash d'un rendu desktop sur un premier chargement mobile. */
+  protected readonly isDesktop = toSignal(
+    this.breakpointObserver.observe(PartieDetail.DESKTOP_QUERY).pipe(map((r) => r.matches)),
+    { initialValue: this.breakpointObserver.isMatched(PartieDetail.DESKTOP_QUERY) },
+  );
+
+  /** Liens d'invitation actifs uniquement — un lien révoqué ne doit plus jamais s'afficher (cf. AC6). */
+  protected readonly activeLinks = computed(() => this.links().filter((l) => !l.revoked));
+
+  /** Membres autres que le MJ — utilisé pour l'action « Retirer » dans l'onglet Invitations. */
+  protected readonly otherMembers = computed(() => {
+    const mjId = this.partie()?.mjId;
+    return this.members().filter((m) => m.userId !== mjId);
+  });
+
+  /** Onglet "Ma fiche" (joueur mobile) sélectionné par défaut ; sinon "Détails" (index 0). */
+  protected readonly defaultTabIndex = computed(() => (!this.isMj() && !this.isDesktop() ? 1 : 0));
+
+  private readonly manualTabIndex = signal<number | null>(null);
+
+  protected readonly selectedTabIndex = computed(
+    () => this.manualTabIndex() ?? this.defaultTabIndex(),
+  );
+
+  /** Combinaison qui détermine l'ensemble des onglets rendus — un changement invalide toute sélection manuelle
+   *  antérieure (ex. joueur mobile sur "Ma fiche" qui redimensionne vers desktop, où cet onglet n'existe pas). */
+  private readonly tabSetKey = computed(() => `${this.isMj()}-${this.isDesktop()}`);
+
+  protected onTabIndexChange(index: number): void {
+    this.manualTabIndex.set(index);
+  }
+
+  /** Ouvre l'onglet Invitations depuis le slot "+ Inviter" du roster (MJ uniquement — seul rôle où cet onglet existe). */
+  protected openInvitationsTab(): void {
+    if (this.isMj()) this.manualTabIndex.set(MJ_INVITATIONS_TAB_INDEX);
+  }
+
+  protected onSelectRosterCharacter(event: { characterId: string }): void {
+    const p = this.partie();
+    if (p) this.openCharacterSheet(p.id, event.characterId);
+  }
+
   /** Label de classe résolu depuis le contenu seedé (jamais codé en dur). */
   protected classLabel(character: CharacterDto): string {
     const classId = (character.sheetData as { classId?: string })?.classId;
@@ -100,9 +160,18 @@ export class PartieDetail implements OnInit {
     return entry?.label ?? '';
   }
 
+  /** Champ fonction stable (pas une méthode liée) pour l'input `classLabelFor` de RosterRail/RosterStrip. */
+  protected readonly classLabelFor = (character: CharacterDto): string =>
+    this.classLabel(character);
+
   constructor() {
     effect(() => {
       if (this.isMj()) void this.loadLinks();
+    });
+
+    effect(() => {
+      this.tabSetKey();
+      untracked(() => this.manualTabIndex.set(null));
     });
   }
 
@@ -145,6 +214,7 @@ export class PartieDetail implements OnInit {
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) return;
+    this.showTroupe.set(false);
     this.partie.set(await this.parties.get(id));
     await this.loadMembers();
     this.activePoll.set(await this.pollSvc.getCurrentPoll(id).catch(() => null));

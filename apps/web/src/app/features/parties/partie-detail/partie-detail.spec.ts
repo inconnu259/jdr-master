@@ -5,8 +5,16 @@ import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { signal } from '@angular/core';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { BehaviorSubject, of } from 'rxjs';
 import { vi } from 'vitest';
-import type { CharacterDto, PartieDto, PartieMemberDto, SessionPollDto } from '@master-jdr/shared';
+import type {
+  CharacterDto,
+  InviteLinkDto,
+  PartieDto,
+  PartieMemberDto,
+  SessionPollDto,
+} from '@master-jdr/shared';
 import { AuthService } from '../../../core/auth/auth.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
@@ -16,6 +24,16 @@ import { PollService } from '../../../core/poll/poll.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { MatDialog } from '@angular/material/dialog';
 import { TONE_MAP } from '../../../core/theme/tones';
+
+/** jsdom n'implémente pas de vraie détection de largeur — desktop=true par défaut pour préserver
+ *  le comportement historique des tests existants (onglet "Détails" actif par défaut) ; les tests
+ *  ciblant spécifiquement le comportement mobile passent `desktop: false`. */
+function makeBreakpointObserver(desktop: boolean) {
+  return {
+    observe: () => of({ matches: desktop, breakpoints: {} }),
+    isMatched: () => desktop,
+  };
+}
 
 const MJ_ID = 'mj-1';
 const PLAYER_ID = 'player-1';
@@ -51,11 +69,15 @@ function makeAuthService(userId: string) {
   };
 }
 
-function makePartiesService(partie: PartieDto, members: PartieMemberDto[] = []) {
+function makePartiesService(
+  partie: PartieDto,
+  members: PartieMemberDto[] = [],
+  links: InviteLinkDto[] = [],
+) {
   return {
     get: vi.fn().mockResolvedValue(partie),
     members: vi.fn().mockResolvedValue(members),
-    inviteLinks: vi.fn().mockResolvedValue([]),
+    inviteLinks: vi.fn().mockResolvedValue(links),
     searchUsers: vi.fn().mockResolvedValue([]),
     inviteUser: vi.fn(),
     inviteByEmail: vi.fn(),
@@ -70,7 +92,9 @@ interface CreateFixtureOptions {
   members?: PartieMemberDto[];
   poll?: SessionPollDto | null;
   characters?: CharacterDto[];
+  links?: InviteLinkDto[];
   noopAnimations?: boolean;
+  desktop?: boolean;
 }
 
 async function createFixture(
@@ -87,7 +111,11 @@ async function createFixture(
       options.noopAnimations ? provideNoopAnimations() : provideAnimationsAsync(),
       { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => partie.id } } } },
       { provide: AuthService, useValue: makeAuthService(currentUserId) },
-      { provide: PartiesService, useValue: makePartiesService(partie, options.members ?? []) },
+      {
+        provide: PartiesService,
+        useValue: makePartiesService(partie, options.members ?? [], options.links ?? []),
+      },
+      { provide: BreakpointObserver, useValue: makeBreakpointObserver(options.desktop ?? true) },
       { provide: ModeService, useValue: { refreshMjParties: vi.fn() } },
       {
         provide: PollService,
@@ -221,19 +249,18 @@ describe('PartieDetail — statut du vote', () => {
   });
 });
 
-// ─── Onglet Personnages (Story 4.2) ───────────────────────────────────────
+// ─── Chargement des personnages (Story 4.2, consommé par le roster + l'onglet "Ma fiche" depuis 6.1) ───
 
-describe('PartieDetail — onglet Personnages', () => {
+describe('PartieDetail — chargement des personnages', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it("charge les personnages de la partie via CharacterService.listByPartie et affiche le libellé de l'onglet", async () => {
-    const { fixture, el } = await createFixture(makePartie(), MJ_ID, { characters: [] });
+  it('charge les personnages de la partie via CharacterService.listByPartie', async () => {
+    const { fixture } = await createFixture(makePartie(), MJ_ID, { characters: [] });
 
     const characterSvc = TestBed.inject(CharacterService) as unknown as {
       listByPartie: ReturnType<typeof vi.fn>;
     };
     expect(characterSvc.listByPartie).toHaveBeenCalledWith('party-1');
-    expect(el.textContent).toContain('Personnages');
     expect(
       (fixture.componentInstance as unknown as { characters: () => unknown[] }).characters(),
     ).toEqual([]);
@@ -294,58 +321,198 @@ describe('PartieDetail — onglet Personnages', () => {
 
     expect(navigateSpy).toHaveBeenCalledWith(['/parties', 'party-1', 'characters', 'c1']);
   });
+});
 
-  it(
-    'affiche une app-character-summary-card par personnage visible ET la carte CTA quand ' +
-      "myCharacters() est vide, même si d'autres personnages existent déjà (cas MJ)",
-    async () => {
-      const otherPlayerCharacter: CharacterDto = makeCharacterDto({
-        userId: 'some-other-player',
-        partieId: 'party-1',
-        sheetData: { narrative: { name: 'Fenn' } },
-        ownerPseudo: 'bob',
-      });
-      // MJ n'a pas de personnage à lui (myCharacters() vide) mais un joueur en a déjà créé un.
-      const { fixture, el } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID, {
-        characters: [otherPlayerCharacter],
-        noopAnimations: true,
-      });
+// ─── Nouvelle disposition de la page Partie (Story 6.1) ───────────────────
 
-      // Le contenu de l'onglet "Personnages" est chargé paresseusement par MatTabGroup — il faut
-      // cliquer sur son libellé pour que son template soit instancié dans le DOM.
-      const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
-      tabLabels[1].click();
-      fixture.detectChanges();
-      await fixture.whenStable();
-      fixture.detectChanges();
+describe('PartieDetail — roster (Story 6.1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
 
-      expect(el.querySelectorAll('app-character-summary-card').length).toBe(1);
-      expect(el.querySelector('.characters-tab')?.textContent).toContain('Créer un voyageur');
-      // Le MJ consulte la liste : le pseudo du joueur propriétaire doit être visible (AC1).
-      expect(el.querySelector('.character-summary-card__owner-badge')?.textContent?.trim()).toBe(
-        'bob',
-      );
-    },
-  );
+  const members: PartieMemberDto[] = [
+    { userId: MJ_ID, pseudo: 'Sylas', email: 'sylas@test.com', joinedAt: '' },
+    { userId: PLAYER_ID, pseudo: 'Alice', email: 'alice@test.com', joinedAt: '' },
+  ];
 
-  it("un joueur (non-MJ) consultant l'onglet Personnages → aucun badge/pseudo affiché (AC3)", async () => {
-    const ownCharacter: CharacterDto = makeCharacterDto({
-      userId: PLAYER_ID,
-      partieId: 'party-1',
-      sheetData: { narrative: { name: 'Fenn' } },
-    });
-    const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
-      characters: [ownCharacter],
+  it('desktop → affiche app-roster-rail, pas app-roster-strip', async () => {
+    const { el } = await createFixture(makePartie(), MJ_ID, { members, desktop: true });
+    expect(el.querySelector('app-roster-rail')).not.toBeNull();
+    expect(el.querySelector('app-roster-strip')).toBeNull();
+  });
+
+  it('mobile + MJ → affiche app-roster-strip, pas app-roster-rail', async () => {
+    const { el } = await createFixture(makePartie(), MJ_ID, { members, desktop: false });
+    expect(el.querySelector('app-roster-strip')).not.toBeNull();
+    expect(el.querySelector('app-roster-rail')).toBeNull();
+  });
+
+  it("mobile + joueur → aucun roster (ni rail ni strip), l'onglet Ma fiche est sélectionné par défaut", async () => {
+    const { el } = await createFixture(makePartie(), PLAYER_ID, {
+      members,
+      desktop: false,
       noopAnimations: true,
     });
+    expect(el.querySelector('app-roster-rail')).toBeNull();
+    expect(el.querySelector('app-roster-strip')).toBeNull();
 
-    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
-    tabLabels[1].click();
+    const activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
+    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
+  });
+
+  it('desktop + joueur → aucun onglet "Ma fiche" (accès via le roster à la place)', async () => {
+    const { el } = await createFixture(makePartie(), PLAYER_ID, { members, desktop: true });
+    const tabLabels = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
+      t.textContent?.trim(),
+    );
+    expect(tabLabels).not.toContain('Ma fiche');
+  });
+
+  it("réinitialise la sélection manuelle d'onglet quand le redimensionnement fait disparaître l'onglet sélectionné", async () => {
+    const breakpoint$ = new BehaviorSubject({ matches: false, breakpoints: {} });
+    const dynamicBreakpointObserver = {
+      observe: () => breakpoint$.asObservable(),
+      isMatched: () => breakpoint$.value.matches,
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [PartieDetail],
+      providers: [
+        provideRouter([]),
+        provideNoopAnimations(),
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'party-1' } } } },
+        { provide: AuthService, useValue: makeAuthService(PLAYER_ID) },
+        { provide: PartiesService, useValue: makePartiesService(makePartie(), members, []) },
+        { provide: BreakpointObserver, useValue: dynamicBreakpointObserver },
+        { provide: ModeService, useValue: { refreshMjParties: vi.fn() } },
+        { provide: PollService, useValue: { getCurrentPoll: vi.fn().mockResolvedValue(null) } },
+        {
+          provide: CharacterService,
+          useValue: {
+            listByPartie: vi.fn().mockResolvedValue([]),
+            getGameSystemContent: vi.fn().mockResolvedValue(null),
+          },
+        },
+        { provide: ThemeToneService, useValue: makeToneService() },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(PartieDetail);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // Joueur mobile : sélection manuelle explicite de l'onglet "Ma fiche" (index 1).
+    const comp = fixture.componentInstance as unknown as {
+      onTabIndexChange: (i: number) => void;
+      selectedTabIndex: () => number;
+    };
+    comp.onTabIndexChange(1);
+    expect(comp.selectedTabIndex()).toBe(1);
+
+    // Redimensionnement vers desktop : l'onglet "Ma fiche" (index 1) disparaît (un seul onglet "Détails").
+    // Sans réinitialisation, selectedTabIndex resterait bloqué à 1, un index désormais hors bornes.
+    breakpoint$.next({ matches: true, breakpoints: {} });
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(el.querySelector('.character-summary-card__owner-badge')).toBeNull();
+    expect(comp.selectedTabIndex()).toBe(0); // la sélection manuelle obsolète a été oubliée
+  });
+});
+
+// ─── Onglet Invitations & liens révoqués (Story 6.1) ──────────────────────
+
+describe('PartieDetail — invitations', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const links: InviteLinkDto[] = [
+    {
+      id: 'l1',
+      token: 'active-token',
+      maxUses: 1,
+      usesCount: 0,
+      expiresAt: '2099-01-01',
+      revoked: false,
+      createdAt: '',
+    },
+    {
+      id: 'l2',
+      token: 'revoked-token',
+      maxUses: 1,
+      usesCount: 0,
+      expiresAt: '2099-01-01',
+      revoked: true,
+      createdAt: '',
+    },
+  ];
+
+  it("un lien révoqué ne s'affiche plus dans l'onglet Invitations (AC6)", async () => {
+    const { fixture, el } = await createFixture(makePartie(), MJ_ID, {
+      links,
+      noopAnimations: true,
+    });
+
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    const invitationsTab = Array.from(tabLabels).find((t) =>
+      t.textContent?.includes('Invitations'),
+    );
+    invitationsTab?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text = el.textContent ?? '';
+    expect(text).toContain('active-token');
+    expect(text).not.toContain('revoked-token');
+  });
+
+  it("un joueur (non-MJ) n'a pas d'onglet Invitations", async () => {
+    const { el } = await createFixture(makePartie(), PLAYER_ID, { links });
+    const tabLabels = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
+      t.textContent?.trim(),
+    );
+    expect(tabLabels).not.toContain('Invitations');
+  });
+
+  it('le MJ peut retirer un membre depuis la liste "Membres actuels" de l\'onglet Invitations', async () => {
+    const members: PartieMemberDto[] = [
+      { userId: MJ_ID, pseudo: 'Sylas', email: 'sylas@test.com', joinedAt: '' },
+      { userId: PLAYER_ID, pseudo: 'Alice', email: 'alice@test.com', joinedAt: '' },
+    ];
+    const { fixture, el } = await createFixture(makePartie(), MJ_ID, {
+      members,
+      noopAnimations: true,
+    });
+
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    const invitationsTab = Array.from(tabLabels).find((t) =>
+      t.textContent?.includes('Invitations'),
+    );
+    invitationsTab?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.textContent).toContain('Alice');
+
+    const removeButtons = Array.from(el.querySelectorAll('button')).filter((b) =>
+      b.textContent?.includes('Retirer'),
+    );
+    expect(removeButtons.length).toBe(1); // seule Alice est retirable, le MJ (Sylas) est exclu de la liste
+    removeButtons[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await fixture.whenStable();
+
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      removeMember: ReturnType<typeof vi.fn>;
+    };
+    expect(parties.removeMember).toHaveBeenCalledWith('party-1', PLAYER_ID);
   });
 });
 

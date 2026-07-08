@@ -33,6 +33,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.no_session': "Aucune séance convoquée. Consultez l'oracle des créneaux.",
     'partie.members_title': '⚔ Compagnons',
     'partie.no_members': "Nulle âme pour l'instant.",
+    'partie.remove_member_btn': 'Retirer',
     'partie.no_description': 'Ce grimoire est muet.',
     'partie.invite_title': 'Convoquer un compagnon',
     'partie.search_label': 'Nom ou signe distinctif',
@@ -49,6 +50,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.edit_btn': 'Retranscrire',
     'partie.delete_btn': 'Brûler le parchemin',
     'partie.back_btn': 'Retour au grimoire',
+    'partie.invitations_tab_label': 'Invitations',
+    'partie.show_troupe': 'Voir la troupe',
+    'partie.hide_troupe': 'Masquer la troupe',
     /* — calendrier & vote — */
     'cta.find_date': "Consulter l'oracle des créneaux",
     'cta.guild_calendar': 'Voir le grimoire des disponibilités',
@@ -90,6 +94,12 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
     'character.export_error': "Le parchemin n'a pas pu être copié. Réessayez.",
     'character.owner_badge_mj': 'Maître',
+    'character.my_sheet_tab_label': 'Ma fiche',
+    /* — roster (Story 6.1) — */
+    'roster.mj_badge': 'MJ',
+    'roster.invite_slot': 'Convier un compagnon',
+    'roster.collapse_label': 'Replier la troupe',
+    'roster.expand_label': 'Déplier la troupe',
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -116,6 +126,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.no_session': "Aucune clairière réservée. L'écureuil cherche encore.",
     'partie.members_title': '🌿 Habitants',
     'partie.no_members': 'Aucun habitant de la clairière.',
+    'partie.remove_member_btn': 'Renvoyer',
     'partie.no_description': 'La forêt garde ses secrets.',
     'partie.invite_title': 'Appeler depuis la forêt',
     'partie.search_label': 'Nom ou espèce connue',
@@ -132,6 +143,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.edit_btn': 'Rebattre',
     'partie.delete_btn': 'Effacer le sentier',
     'partie.back_btn': 'Rentrer dans la forêt',
+    'partie.invitations_tab_label': 'Invitations',
+    'partie.show_troupe': 'Voir le cercle',
+    'partie.hide_troupe': 'Masquer le cercle',
     /* — calendrier & vote — */
     'cta.find_date': "Envoyer l'écureuil messager",
     'cta.guild_calendar': 'Voir la forêt des disponibilités',
@@ -173,6 +187,12 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
     'character.export_error': "L'écureuil s'est perdu en chemin. Réessayez.",
     'character.owner_badge_mj': 'Guide',
+    'character.my_sheet_tab_label': 'Ma fiche',
+    /* — roster (Story 6.1) — */
+    'roster.mj_badge': 'MJ',
+    'roster.invite_slot': 'Accueillir un compagnon de route',
+    'roster.collapse_label': 'Replier le cercle',
+    'roster.expand_label': 'Déplier le cercle',
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -199,6 +219,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.no_session': "Aucune mission planifiée. Interrogez l'automate.",
     'partie.members_title': '⚙ Équipage',
     'partie.no_members': 'Aucun mécanicien à bord.',
+    'partie.remove_member_btn': 'Débarquer',
     'partie.no_description': 'Dossier technique vierge.',
     'partie.invite_title': 'Recruter un mécanicien',
     'partie.search_label': 'Matricule ou appellation',
@@ -215,6 +236,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.edit_btn': 'Recalibrer',
     'partie.delete_btn': 'Démanteler',
     'partie.back_btn': "Retour à l'atelier",
+    'partie.invitations_tab_label': 'Invitations',
+    'partie.show_troupe': "Voir l'équipage",
+    'partie.hide_troupe': "Masquer l'équipage",
     /* — calendrier & vote — */
     'cta.find_date': "Interroger l'automate des créneaux",
     'cta.guild_calendar': 'Consulter le registre de la mission',
@@ -256,5 +280,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
     'character.export_error': "Échec de l'impression pneumatique. Réessayez.",
     'character.owner_badge_mj': 'Ingénieur',
+    'character.my_sheet_tab_label': 'Ma fiche',
+    /* — roster (Story 6.1) — */
+    'roster.mj_badge': 'MJ',
+    'roster.invite_slot': 'Recruter un mécanicien',
+    'roster.collapse_label': "Replier l'équipage",
+    'roster.expand_label': "Déplier l'équipage",
   },
 };

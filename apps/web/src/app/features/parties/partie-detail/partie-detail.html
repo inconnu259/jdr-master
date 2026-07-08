@@ -4,8 +4,34 @@
       <mat-card-title>{{ p.name }}</mat-card-title>
       <mat-card-subtitle>{{ system(p.gameSystemId) }} · {{ kind(p.kind) }}</mat-card-subtitle>
     </mat-card-header>
+
+    @if (!isDesktop() && isMj()) {
+      <app-roster-strip
+        [members]="members()"
+        [characters]="characters()"
+        [mjId]="p.mjId"
+        [hasFreeSlot]="hasFreeSlot"
+        [classLabelFor]="classLabelFor"
+        (selectCharacter)="onSelectRosterCharacter($event)"
+        (openInvitations)="openInvitationsTab()"
+      />
+    }
+
+    <div class="detail-body">
+      @if (isDesktop()) {
+        <app-roster-rail
+          [members]="members()"
+          [characters]="characters()"
+          [mjId]="p.mjId"
+          [hasFreeSlot]="isMj() && hasFreeSlot"
+          [classLabelFor]="classLabelFor"
+          (selectCharacter)="onSelectRosterCharacter($event)"
+          (openInvitations)="openInvitationsTab()"
+        />
+      }
+
     <mat-card-content>
-      <mat-tab-group>
+      <mat-tab-group [selectedIndex]="selectedTabIndex()" (selectedIndexChange)="onTabIndexChange($event)">
         <mat-tab label="Détails">
             @if (p.description) {
               <p>{{ p.description }}</p>
@@ -34,82 +60,17 @@
               }
             </section>
 
-            <section class="members">
-              <h3>{{ theme.tone()['partie.members_title'] }} ({{ members().length }})</h3>
-              @if (members().length === 0) {
-                <p class="muted">{{ theme.tone()['partie.no_members'] }}</p>
-              } @else {
-                <mat-list>
-                  @for (m of members(); track m.userId) {
-                    <mat-list-item>
-                      {{ m.pseudo }}
-                      @if (isMj()) {
-                        <button mat-icon-button (click)="removeMember(m)" aria-label="Retirer">
-                          <mat-icon>person_remove</mat-icon>
-                        </button>
-                      }
-                    </mat-list-item>
-                  }
-                </mat-list>
-              }
-            </section>
-
-            @if (isMj()) {
-              <section class="invite">
-                <h3>{{ theme.tone()['partie.invite_title'] }}</h3>
-                <div class="search-row">
-                  <mat-form-field appearance="outline">
-                    <mat-label>{{ theme.tone()['partie.search_label'] }}</mat-label>
-                    <input matInput [ngModel]="search()" (ngModelChange)="search.set($event)"
-                           (keyup.enter)="runSearch()" />
-                  </mat-form-field>
-                  <button mat-flat-button (click)="runSearch()">
-                    <mat-icon>search</mat-icon> {{ theme.tone()['partie.search_btn'] }}
-                  </button>
-                </div>
-                @for (u of results(); track u.id) {
-                  <div class="result-row">
-                    <span>{{ u.pseudo }} <span class="muted">({{ u.email }})</span></span>
-                    <button mat-button (click)="invite(u)">
-                      <mat-icon>person_add</mat-icon> {{ theme.tone()['partie.invite_btn'] }}
-                    </button>
-                  </div>
-                }
-
-                <div class="search-row">
-                  <mat-form-field appearance="outline">
-                    <mat-label>{{ theme.tone()['partie.invite_by_email_label'] }}</mat-label>
-                    <input matInput type="email" [ngModel]="inviteEmail()" (ngModelChange)="inviteEmail.set($event)"
-                           [disabled]="invitingByEmail()" (keyup.enter)="inviteByEmail()" />
-                  </mat-form-field>
-                  <button mat-flat-button [disabled]="invitingByEmail()" (click)="inviteByEmail()">
-                    <mat-icon>mail</mat-icon> {{ theme.tone()['partie.invite_by_email_btn'] }}
-                  </button>
-                </div>
-                @if (inviteEmailError()) {
-                  <p class="notice error">{{ inviteEmailError() }}</p>
-                }
-
-                <h3>{{ theme.tone()['partie.links_title'] }}</h3>
-                <button mat-stroked-button (click)="createLink()">
-                  <mat-icon>link</mat-icon> {{ theme.tone()['partie.generate_link'] }}
+            @if (!isDesktop() && !isMj()) {
+              <section class="troupe-toggle">
+                <button type="button" mat-button (click)="showTroupe.set(!showTroupe())">
+                  {{ showTroupe() ? theme.tone()['partie.hide_troupe'] : theme.tone()['partie.show_troupe'] }}
                 </button>
-                @for (l of links(); track l.id) {
-                  <div class="link-row" [class.revoked]="l.revoked">
-                    <code>{{ joinUrl(l.token) }}</code>
-                    <span class="muted">
-                      {{ l.usesCount }}<span>{{ l.maxUses ? '/' + l.maxUses : '' }}</span> · exp.
-                      {{ l.expiresAt | date: 'short' }}{{ l.revoked ? ' · révoqué' : '' }}
-                    </span>
-                    <button mat-icon-button (click)="copyLink(l.token)" aria-label="Copier">
-                      <mat-icon>content_copy</mat-icon>
-                    </button>
-                    @if (!l.revoked) {
-                      <button mat-icon-button (click)="revokeLink(l)" aria-label="Révoquer">
-                        <mat-icon>link_off</mat-icon>
-                      </button>
+                @if (showTroupe()) {
+                  <mat-list>
+                    @for (m of members(); track m.userId) {
+                      <mat-list-item>{{ m.pseudo }}</mat-list-item>
                     }
-                  </div>
+                  </mat-list>
                 }
               </section>
             }
@@ -119,22 +80,11 @@
             }
         </mat-tab>
 
-        <mat-tab [label]="theme.tone()['character.tab_label']">
-            <section class="characters-tab">
-              @if (characters().length === 0) {
-                <p class="muted">Aucun personnage créé sur cette partie pour l'instant.</p>
-              }
-              <div class="characters-tab__grid">
-                @for (character of characters(); track character.id) {
-                  <app-character-summary-card
-                    [character]="character"
-                    [className]="classLabel(character)"
-                    [showOwnerInfo]="isMj()"
-                    (selected)="openCharacterSheet(p.id, character.id)"
-                  />
-                }
-              </div>
+        @if (!isMj() && !isDesktop()) {
+          <mat-tab [label]="theme.tone()['character.my_sheet_tab_label']">
+            <section class="my-sheet-tab">
               @if (myCharacters().length === 0) {
+                <p class="muted">Aucun personnage créé sur cette partie pour l'instant.</p>
                 <a
                   mat-flat-button
                   color="primary"
@@ -143,11 +93,95 @@
                 >
                   {{ theme.tone()['character.create_cta'] }}
                 </a>
+              } @else {
+                @for (character of myCharacters(); track character.id) {
+                  <app-character-summary-card
+                    [character]="character"
+                    [className]="classLabel(character)"
+                    (selected)="openCharacterSheet(p.id, character.id)"
+                  />
+                }
               }
             </section>
-        </mat-tab>
+          </mat-tab>
+        }
+
+        @if (isMj()) {
+          <mat-tab [label]="theme.tone()['partie.invitations_tab_label']">
+            <section class="invite">
+              <h3>{{ theme.tone()['partie.members_title'] }}</h3>
+              @if (otherMembers().length === 0) {
+                <p class="muted">{{ theme.tone()['partie.no_members'] }}</p>
+              } @else {
+                @for (m of otherMembers(); track m.userId) {
+                  <div class="result-row">
+                    <span>{{ m.pseudo }}</span>
+                    <button mat-button (click)="removeMember(m)">
+                      <mat-icon>person_remove</mat-icon> {{ theme.tone()['partie.remove_member_btn'] }}
+                    </button>
+                  </div>
+                }
+              }
+
+              <h3>{{ theme.tone()['partie.invite_title'] }}</h3>
+              <div class="search-row">
+                <mat-form-field appearance="outline">
+                  <mat-label>{{ theme.tone()['partie.search_label'] }}</mat-label>
+                  <input matInput [ngModel]="search()" (ngModelChange)="search.set($event)"
+                         (keyup.enter)="runSearch()" />
+                </mat-form-field>
+                <button mat-flat-button (click)="runSearch()">
+                  <mat-icon>search</mat-icon> {{ theme.tone()['partie.search_btn'] }}
+                </button>
+              </div>
+              @for (u of results(); track u.id) {
+                <div class="result-row">
+                  <span>{{ u.pseudo }} <span class="muted">({{ u.email }})</span></span>
+                  <button mat-button (click)="invite(u)">
+                    <mat-icon>person_add</mat-icon> {{ theme.tone()['partie.invite_btn'] }}
+                  </button>
+                </div>
+              }
+
+              <div class="search-row">
+                <mat-form-field appearance="outline">
+                  <mat-label>{{ theme.tone()['partie.invite_by_email_label'] }}</mat-label>
+                  <input matInput type="email" [ngModel]="inviteEmail()" (ngModelChange)="inviteEmail.set($event)"
+                         [disabled]="invitingByEmail()" (keyup.enter)="inviteByEmail()" />
+                </mat-form-field>
+                <button mat-flat-button [disabled]="invitingByEmail()" (click)="inviteByEmail()">
+                  <mat-icon>mail</mat-icon> {{ theme.tone()['partie.invite_by_email_btn'] }}
+                </button>
+              </div>
+              @if (inviteEmailError()) {
+                <p class="notice error">{{ inviteEmailError() }}</p>
+              }
+
+              <h3>{{ theme.tone()['partie.links_title'] }}</h3>
+              <button mat-stroked-button (click)="createLink()">
+                <mat-icon>link</mat-icon> {{ theme.tone()['partie.generate_link'] }}
+              </button>
+              @for (l of activeLinks(); track l.id) {
+                <div class="link-row">
+                  <code>{{ joinUrl(l.token) }}</code>
+                  <span class="muted">
+                    {{ l.usesCount }}<span>{{ l.maxUses ? '/' + l.maxUses : '' }}</span> · exp.
+                    {{ l.expiresAt | date: 'short' }}
+                  </span>
+                  <button mat-icon-button (click)="copyLink(l.token)" aria-label="Copier">
+                    <mat-icon>content_copy</mat-icon>
+                  </button>
+                  <button mat-icon-button (click)="revokeLink(l)" aria-label="Révoquer">
+                    <mat-icon>link_off</mat-icon>
+                  </button>
+                </div>
+              }
+            </section>
+          </mat-tab>
+        }
       </mat-tab-group>
     </mat-card-content>
+    </div>
     <mat-card-actions>
       @if (isMj()) {
         <a mat-button [routerLink]="['/parties', p.id, 'edit']">

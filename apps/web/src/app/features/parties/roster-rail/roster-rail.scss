@@ -1,0 +1,96 @@
+.roster-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 64px;
+  flex-shrink: 0;
+  padding: 1rem 0;
+  border-right: 1px solid var(--mat-sys-outline-variant, #ccc);
+  transition: width 0.2s ease;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+
+  &--expanded {
+    width: 260px;
+  }
+}
+
+.roster-rail__toggle {
+  align-self: flex-end;
+  margin: 0 0.5rem 0.5rem;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.roster-rail__item,
+.roster-rail__invite-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  min-height: 36px;
+  border: none;
+  background: transparent;
+  cursor: default;
+  text-align: left;
+  width: 100%;
+}
+
+.roster-rail__item--clickable {
+  cursor: pointer;
+}
+
+.roster-rail__avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  border-radius: 50%;
+}
+
+.roster-rail__avatar-wrap--mj {
+  box-shadow: 0 0 0 2px var(--mat-sys-primary, #6750a4);
+}
+
+.roster-rail__mj-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: var(--mat-sys-surface, #fff);
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--mat-sys-primary, #6750a4);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 3px;
+  line-height: 1.4;
+}
+
+.roster-rail__label {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.roster-rail__name {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.roster-rail__class {
+  font-size: 0.7rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+.roster-rail__invite-slot {
+  cursor: pointer;
+  color: var(--mat-sys-on-surface-variant, #666);
+}

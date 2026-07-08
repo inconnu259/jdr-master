@@ -1,0 +1,36 @@
+<div class="roster-strip">
+  @for (row of rows(); track row.member.userId) {
+    <div
+      class="roster-strip__item"
+      [class.roster-strip__item--mj]="row.isMj"
+      [class.roster-strip__item--clickable]="row.character"
+      [attr.data-user-id]="row.member.userId"
+      [attr.aria-label]="row.ariaLabel"
+      role="button"
+      [attr.tabindex]="row.character ? 0 : -1"
+      (click)="selectRow(row)"
+      (keydown.enter)="selectRow(row)"
+      (keydown.space)="$event.preventDefault(); selectRow(row)"
+    >
+      <span class="roster-strip__avatar-wrap" [class.roster-strip__avatar-wrap--mj]="row.isMj">
+        <app-character-avatar
+          [name]="row.displayName"
+          [size]="26"
+          [characterId]="row.character?.id ?? ''"
+          [portraitUrl]="row.character?.portraitUrl ?? null"
+          [cropData]="$any(row.character?.portraitCropData) ?? null"
+        />
+        @if (row.isMj) {
+          <span class="roster-strip__mj-badge">{{ theme.tone()['roster.mj_badge'] }}</span>
+        }
+      </span>
+      <span class="roster-strip__name">{{ row.displayName }}</span>
+    </div>
+  }
+
+  @if (hasFreeSlot()) {
+    <button type="button" class="roster-strip__invite-slot" [attr.aria-label]="theme.tone()['roster.invite_slot']" (click)="openInvitations.emit()">
+      <span aria-hidden="true">+</span>
+    </button>
+  }
+</div>
