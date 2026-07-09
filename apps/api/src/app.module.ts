@@ -14,6 +14,7 @@ import { AvailabilityModule } from './availability/availability.module';
 import { PollModule } from './poll/poll.module';
 import { GameSystemModule } from './game-systems/game-system.module';
 import { CharacterModule } from './characters/character.module';
+import { XpDistributionsModule } from './xp-distributions/xp-distributions.module';
 import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
 
@@ -31,6 +32,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     PollModule,
     GameSystemModule,
     CharacterModule,
+    XpDistributionsModule,
     EmailModule,
     NotificationsModule,
   ],

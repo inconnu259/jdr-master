@@ -23,6 +23,7 @@ import type {
   PartieMemberDto,
   SessionPollDto,
   UserSearchResultDto,
+  XpDistributionDto,
 } from '@master-jdr/shared';
 
 const SLOT_LABELS: Record<DaySlot, string> = {
@@ -44,6 +45,8 @@ import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 import { RosterRail } from '../roster-rail/roster-rail';
 import { RosterStrip } from '../roster-strip/roster-strip';
+import { XpDistributionPanel } from '../xp-distribution-panel/xp-distribution-panel';
+import { XpHistory } from '../xp-history/xp-history';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
 const MJ_INVITATIONS_TAB_INDEX = 1;
@@ -64,6 +67,8 @@ const MJ_INVITATIONS_TAB_INDEX = 1;
     CharacterSummaryCard,
     RosterRail,
     RosterStrip,
+    XpDistributionPanel,
+    XpHistory,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -91,6 +96,8 @@ export class PartieDetail implements OnInit {
   protected readonly activePoll = signal<SessionPollDto | null>(null);
   protected readonly links = signal<InviteLinkDto[]>([]);
   protected readonly characters = signal<CharacterDto[]>([]);
+  protected readonly xpDistributions = signal<XpDistributionDto[]>([]);
+  protected readonly showXpPanel = signal(false);
   protected readonly gameSystemContent = signal<GameSystemContentDto | null>(null);
   protected readonly search = signal('');
   protected readonly results = signal<UserSearchResultDto[]>([]);
@@ -167,6 +174,10 @@ export class PartieDetail implements OnInit {
   constructor() {
     effect(() => {
       if (this.isMj()) void this.loadLinks();
+    });
+
+    effect(() => {
+      if (this.isMj()) void this.loadXpDistributions();
     });
 
     effect(() => {
@@ -322,5 +333,20 @@ export class PartieDetail implements OnInit {
   private async loadLinks(): Promise<void> {
     const p = this.partie();
     if (p) this.links.set(await this.parties.inviteLinks(p.id));
+  }
+
+  private async loadXpDistributions(): Promise<void> {
+    const p = this.partie();
+    if (p) this.xpDistributions.set(await this.parties.listXpDistributions(p.id));
+  }
+
+  /** Après une distribution confirmée : recharge `characters`/`xpDistributions` — c'est le parent
+   *  qui recharge, pas le panneau lui-même (AD-10, pas de rechargement indépendant par composant). */
+  protected async onXpDistributed(): Promise<void> {
+    const p = this.partie();
+    if (!p) return;
+    this.showXpPanel.set(false);
+    this.characters.set(await this.characterSvc.listByPartie(p.id).catch(() => []));
+    await this.loadXpDistributions();
   }
 }

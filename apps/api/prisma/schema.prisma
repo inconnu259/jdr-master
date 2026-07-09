@@ -29,6 +29,7 @@ model User {
   pollVotes                PollVote[]
   characters               Character[]
   passwordResetTokens      PasswordResetToken[]
+  xpDistributionsGiven     XpDistribution[]          @relation("XpDistributionMj")
 }
 
 enum PartieKind {
@@ -52,11 +53,12 @@ model Partie {
   nextSessionSlot DaySlot? // Créneau confirmé
   reminderSentAt  DateTime? // null = rappel pas encore envoyé pour le créneau courant (Epic 5)
 
-  memberships Membership[]
-  invitations Invitation[]
-  inviteLinks InviteLink[]
-  polls       SessionPoll[]
-  characters  Character[]
+  memberships     Membership[]
+  invitations     Invitation[]
+  inviteLinks     InviteLink[]
+  polls           SessionPoll[]
+  characters      Character[]
+  xpDistributions XpDistribution[]
 }
 
 enum InvitationStatus {
@@ -271,12 +273,39 @@ model Character {
   portraitUrl         String?
   portraitCropData    Json?
   pdfPortraitCropData Json?
+  xp                  Int        @default(0)
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
+
+  xpDistributionEntries XpDistributionEntry[]
 
   @@unique([userId, partieId, gameSystemId])
   @@index([partieId])
   @@index([userId])
+}
+
+/// Distribution d'XP faite par le MJ après une session (Story 6.2) — historique par Partie.
+model XpDistribution {
+  id        String                @id @default(uuid())
+  partieId  String
+  partie    Partie                @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  mjId      String
+  mj        User                  @relation("XpDistributionMj", fields: [mjId], references: [id], onDelete: Cascade)
+  note      String?
+  createdAt DateTime              @default(now())
+  entries   XpDistributionEntry[]
+
+  @@index([partieId, createdAt])
+}
+
+model XpDistributionEntry {
+  id             String         @id @default(uuid())
+  distributionId String
+  distribution   XpDistribution @relation(fields: [distributionId], references: [id], onDelete: Cascade)
+  characterId    String
+  character      Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  amount         Int
+  isBonus        Boolean        @default(false)
 }
 
 /// Sessions HTTP (stockées par connect-pg-simple). Modélisées ici pour que **Prisma** les gère :

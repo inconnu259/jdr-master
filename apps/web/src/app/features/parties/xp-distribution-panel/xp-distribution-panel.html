@@ -1,0 +1,70 @@
+<div class="xp-panel">
+  <h2 class="xp-panel__title">{{ theme.tone()['evolution.xp_panel_title'] }}</h2>
+
+  <app-rules-reminder />
+
+  <div class="xp-panel__calc-row">
+    <mat-form-field appearance="outline">
+      <mat-label>Difficulté du voyage</mat-label>
+      <input matInput type="number" min="1" (change)="setDifficulty($any($event.target).value)" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Souffles de l'homme-dragon</mat-label>
+      <input matInput type="number" min="0" (change)="setBreaths($any($event.target).value)" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>Niveau du monstre le plus fort vaincu</mat-label>
+      <input matInput type="number" min="0" (change)="setMonsterLevel($any($event.target).value)" />
+    </mat-form-field>
+  </div>
+
+  <p class="xp-panel__suggested">Montant suggéré : {{ suggestedAmount() }} XP</p>
+
+  <ul class="xp-panel__rows">
+    @for (pair of rowsWithCharacter(); track pair.character.id) {
+      <li class="xp-panel__row">
+        <mat-checkbox [checked]="pair.row.included" (change)="toggleIncluded(pair.character.id)">
+          {{ characterName(pair.character) }}
+        </mat-checkbox>
+        <span class="xp-panel__current-xp">{{ pair.character.xp }} XP actuel</span>
+        <mat-form-field appearance="outline" class="xp-panel__amount">
+          <mat-label>Montant</mat-label>
+          <input
+            matInput
+            type="number"
+            [value]="pair.row.amount"
+            (change)="setAmount(pair.character.id, $any($event.target).value)"
+          />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="xp-panel__bonus">
+          <mat-label>{{ theme.tone()['evolution.xp_bonus_link'] }}</mat-label>
+          <input
+            matInput
+            type="number"
+            min="0"
+            [value]="pair.row.bonus"
+            (change)="setBonus(pair.character.id, $any($event.target).value)"
+          />
+        </mat-form-field>
+        @if (willLevelUp(pair.character, pair.row)) {
+          <p class="xp-panel__levelup-warning">
+            {{ theme.tone()['evolution.xp_levelup_warning'].replace('{name}', characterName(pair.character)) }}
+          </p>
+        }
+      </li>
+    }
+  </ul>
+
+  <mat-form-field appearance="outline" class="xp-panel__note">
+    <mat-label>{{ theme.tone()['evolution.xp_note_label'] }}</mat-label>
+    <textarea matInput [ngModel]="note()" (ngModelChange)="note.set($event)"></textarea>
+  </mat-form-field>
+
+  @if (submitError()) {
+    <p class="xp-panel__error">{{ submitError() }}</p>
+  }
+
+  <button mat-flat-button color="primary" class="xp-panel__confirm-cta" [disabled]="submitting()" (click)="submit()">
+    {{ theme.tone()['evolution.xp_confirm_btn'] }}
+  </button>
+</div>

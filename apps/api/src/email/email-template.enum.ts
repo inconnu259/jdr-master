@@ -1,4 +1,5 @@
 export type EmailTemplate =
   | 'invitation'
   | 'session-reminder'
-  | 'password-reset';
+  | 'password-reset'
+  | 'level-up';

@@ -1,0 +1,45 @@
+.xp-history {
+  margin-top: 1rem;
+}
+
+.xp-history__title {
+  margin: 0 0 0.5rem;
+}
+
+.xp-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.xp-history__item {
+  background: var(--mat-sys-surface-variant, #eee);
+  border-radius: 12px;
+  padding: 0.5rem 0.75rem;
+}
+
+.xp-history__item-header {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+}
+
+.xp-history__entries {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.xp-history__bonus-badge {
+  font-size: 0.75rem;
+  color: var(--mat-sys-primary, #6750a4);
+}
+
+.xp-history__note {
+  margin: 0.35rem 0 0;
+  font-style: italic;
+  font-size: 0.85rem;
+}

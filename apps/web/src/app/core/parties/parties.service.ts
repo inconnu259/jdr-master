@@ -2,12 +2,15 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type {
+  CreateXpDistributionDto,
   InviteLinkDto,
   PartieDto,
   PartieKind,
   PartieMemberDto,
   UserSearchResultDto,
+  XpDistributionDto,
 } from '@master-jdr/shared';
+import { API_BASE } from '../api-base';
 
 const API = 'http://localhost:3000';
 
@@ -118,6 +121,24 @@ export class PartiesService {
   revokeInviteLink(linkId: string): Promise<void> {
     return firstValueFrom(
       this.http.delete<void>(`${API}/invite-links/${linkId}`, { withCredentials: true }),
+    );
+  }
+
+  // --- Distribution d'XP (Story 6.2) ---
+
+  createXpDistribution(id: string, payload: CreateXpDistributionDto): Promise<XpDistributionDto> {
+    return firstValueFrom(
+      this.http.post<XpDistributionDto>(`${API_BASE}/parties/${id}/xp-distributions`, payload, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  listXpDistributions(id: string): Promise<XpDistributionDto[]> {
+    return firstValueFrom(
+      this.http.get<XpDistributionDto[]>(`${API_BASE}/parties/${id}/xp-distributions`, {
+        withCredentials: true,
+      }),
     );
   }
 }

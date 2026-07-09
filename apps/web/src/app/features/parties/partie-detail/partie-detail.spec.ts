@@ -85,6 +85,8 @@ function makePartiesService(
     createInviteLink: vi.fn(),
     revokeInviteLink: vi.fn(),
     remove: vi.fn(),
+    listXpDistributions: vi.fn().mockResolvedValue([]),
+    createXpDistribution: vi.fn(),
   };
 }
 
@@ -587,5 +589,67 @@ describe('PartieDetail — invitation par e-mail', () => {
     await secondCall;
 
     expect(parties.inviteByEmail).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Distribution d'XP (Story 6.2) ────────────────────────────────────────
+
+describe('PartieDetail — distribution d’XP', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('bouton "Distribuer de l’XP" visible pour le MJ uniquement', async () => {
+    const partie = makePartie({ mjId: MJ_ID });
+
+    const { el: elMj } = await createFixture(partie, MJ_ID);
+    const buttons = Array.from(elMj.querySelectorAll('button')).filter((b) =>
+      b.textContent?.includes('XP'),
+    );
+    expect(buttons.length).toBeGreaterThan(0);
+    TestBed.resetTestingModule();
+
+    const { el: elPlayer } = await createFixture(partie, PLAYER_ID);
+    const playerButtons = Array.from(elPlayer.querySelectorAll('button')).filter((b) =>
+      b.textContent?.includes('XP'),
+    );
+    expect(playerButtons.length).toBe(0);
+  });
+
+  it('section historique chargée seulement pour le MJ', async () => {
+    const partie = makePartie({ mjId: MJ_ID });
+    await createFixture(partie, MJ_ID);
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      listXpDistributions: ReturnType<typeof vi.fn>;
+    };
+    expect(parties.listXpDistributions).toHaveBeenCalledWith('party-1');
+    TestBed.resetTestingModule();
+
+    await createFixture(partie, PLAYER_ID);
+    const partiesPlayer = TestBed.inject(PartiesService) as unknown as {
+      listXpDistributions: ReturnType<typeof vi.fn>;
+    };
+    expect(partiesPlayer.listXpDistributions).not.toHaveBeenCalled();
+  });
+
+  it('après distributed(), characters()/xpDistributions() sont rechargés', async () => {
+    const partie = makePartie({ mjId: MJ_ID });
+    const { fixture } = await createFixture(partie, MJ_ID, {
+      characters: [makeCharacterDto({ id: 'c1' })],
+    });
+    const characters = TestBed.inject(CharacterService) as unknown as {
+      listByPartie: ReturnType<typeof vi.fn>;
+    };
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      listXpDistributions: ReturnType<typeof vi.fn>;
+    };
+    characters.listByPartie.mockClear();
+    parties.listXpDistributions.mockClear();
+
+    const component = fixture.componentInstance as unknown as {
+      onXpDistributed: () => Promise<void>;
+    };
+    await component.onXpDistributed();
+
+    expect(characters.listByPartie).toHaveBeenCalledWith('party-1');
+    expect(parties.listXpDistributions).toHaveBeenCalledWith('party-1');
   });
 });

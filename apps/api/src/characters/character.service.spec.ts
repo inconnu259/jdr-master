@@ -9,6 +9,8 @@ import { Test } from '@nestjs/testing';
 jest.mock('@master-jdr/game-rules', () => ({
   validate: jest.fn(),
   computeDerived: jest.fn(),
+  levelForXp: jest.fn((xp: number) => (xp >= 100 ? 2 : 1)),
+  pendingLevels: jest.fn(),
 }));
 
 jest.mock('node:fs/promises', () => ({
@@ -25,13 +27,18 @@ jest.mock('node:crypto', () => {
 });
 
 import { Prisma } from '@prisma/client';
-import { validate, computeDerived } from '@master-jdr/game-rules';
+import {
+  validate,
+  computeDerived,
+  pendingLevels,
+} from '@master-jdr/game-rules';
 import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises';
 import { CharacterService } from './character.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
+import { EmailService } from '../email/email.service';
 
 /** Nom de fichier légitime généré côté serveur (`randomUUID()` + extension) — cf. `image-mime.util.ts`. */
 const OLD_PORTRAIT_UUID = '11111111-1111-1111-1111-111111111111';
@@ -55,6 +62,7 @@ function makePrisma() {
       findUniqueOrThrow: jest.fn(),
       findMany: jest.fn(),
       updateMany: jest.fn(),
+      update: jest.fn(),
     },
     partie: {
       findUnique: jest.fn(),
@@ -75,6 +83,12 @@ function makePartiesService() {
 function makeUsersService() {
   return {
     findById: jest.fn(),
+  };
+}
+
+function makeEmailService() {
+  return {
+    sendMail: jest.fn().mockResolvedValue({ ok: true }),
   };
 }
 
@@ -114,6 +128,7 @@ function makeCharacter(overrides: Record<string, unknown> = {}) {
     },
     portraitUrl: null,
     portraitCropData: null,
+    xp: 0,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     ...overrides,
@@ -126,6 +141,7 @@ describe('CharacterService', () => {
   let parties: ReturnType<typeof makePartiesService>;
   let users: ReturnType<typeof makeUsersService>;
   let gameSystems: ReturnType<typeof makeGameSystemService>;
+  let email: ReturnType<typeof makeEmailService>;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -133,12 +149,15 @@ describe('CharacterService', () => {
     parties = makePartiesService();
     users = makeUsersService();
     gameSystems = makeGameSystemService();
+    email = makeEmailService();
     // Défauts neutres : la plupart des tests ne portent pas sur ownerPseudo/ownerIsMj.
     users.findById.mockResolvedValue({
       id: 'default',
       pseudo: 'default-pseudo',
+      email: 'default@example.com',
     });
     prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj-default' });
+    (pendingLevels as jest.Mock).mockReturnValue([]);
     const module = await Test.createTestingModule({
       providers: [
         CharacterService,
@@ -146,6 +165,7 @@ describe('CharacterService', () => {
         { provide: PartiesService, useValue: parties },
         { provide: UsersService, useValue: users },
         { provide: GameSystemService, useValue: gameSystems },
+        { provide: EmailService, useValue: email },
       ],
     }).compile();
     service = module.get(CharacterService);
@@ -746,6 +766,52 @@ describe('CharacterService', () => {
       await expect(service.getPortraitFile('unknown', 'u1')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('applyXpDelta()', () => {
+    it('incrémente via prisma.character.update (pas updateMany), aucun seuil franchi → pas d’e-mail', async () => {
+      prisma.character.update.mockResolvedValue(makeCharacter({ xp: 50 }));
+      (pendingLevels as jest.Mock).mockReturnValue([]);
+
+      await service.applyXpDelta('char1', 50);
+
+      expect(prisma.character.update).toHaveBeenCalledWith({
+        where: { id: 'char1' },
+        data: { xp: { increment: 50 } },
+      });
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('franchissement de seuil → déclenche EmailService.sendMail("level-up", ...)', async () => {
+      prisma.character.update.mockResolvedValue(
+        makeCharacter({ xp: 150, partieId: 'p1', userId: 'u1' }),
+      );
+      (pendingLevels as jest.Mock).mockReturnValue([2]);
+      users.findById.mockResolvedValue({
+        id: 'u1',
+        pseudo: 'alice',
+        email: 'alice@example.com',
+      });
+      prisma.partie.findUnique.mockResolvedValue({ name: 'Les Brumes' });
+
+      await service.applyXpDelta('char1', 150);
+
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'level-up',
+        'alice@example.com',
+        expect.objectContaining({ partieName: 'Les Brumes' }),
+      );
+    });
+
+    it('toDto() expose xp/level sur les méthodes existantes (findOne)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 150 }));
+
+      const result = await service.findOne('char1', 'u1');
+
+      expect(result.xp).toBe(150);
+      expect(result.level).toBe(2);
     });
   });
 });

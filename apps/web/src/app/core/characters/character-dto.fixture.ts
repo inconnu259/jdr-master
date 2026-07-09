@@ -21,6 +21,8 @@ export function makeCharacterDto(overrides: Partial<CharacterDto> = {}): Charact
     updatedAt: '2026-01-01T00:00:00.000Z',
     ownerPseudo: 'alice',
     ownerIsMj: false,
+    xp: 0,
+    level: 1,
     ...overrides,
   };
 }

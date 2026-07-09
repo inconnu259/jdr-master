@@ -100,6 +100,15 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'roster.invite_slot': 'Convier un compagnon',
     'roster.collapse_label': 'Replier la troupe',
     'roster.expand_label': 'Déplier la troupe',
+    /* — évolution du personnage (Story 6.2) — */
+    'evolution.xp_distribute_cta': "Distribuer de l'XP",
+    'evolution.xp_panel_title': "Distribution d'XP",
+    'evolution.xp_history_title': "Historique des distributions d'XP",
+    'evolution.xp_history_empty': 'Aucune distribution gravée pour le moment.',
+    'evolution.xp_note_label': 'Note de session',
+    'evolution.xp_confirm_btn': 'Sceller la distribution',
+    'evolution.xp_bonus_link': '+ bonus',
+    'evolution.xp_levelup_warning': '{name} franchira un niveau',
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -193,6 +202,15 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'roster.invite_slot': 'Accueillir un compagnon de route',
     'roster.collapse_label': 'Replier le cercle',
     'roster.expand_label': 'Déplier le cercle',
+    /* — évolution du personnage (Story 6.2) — */
+    'evolution.xp_distribute_cta': 'Partager les récits',
+    'evolution.xp_panel_title': 'Partage des récits',
+    'evolution.xp_history_title': 'Récits partagés',
+    'evolution.xp_history_empty': "Aucun récit partagé pour l'instant.",
+    'evolution.xp_note_label': 'Note du récit',
+    'evolution.xp_confirm_btn': 'Confier ce récit au cercle',
+    'evolution.xp_bonus_link': '+ éclat',
+    'evolution.xp_levelup_warning': '{name} va grandir',
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -286,5 +304,14 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'roster.invite_slot': 'Recruter un mécanicien',
     'roster.collapse_label': "Replier l'équipage",
     'roster.expand_label': "Déplier l'équipage",
+    /* — évolution du personnage (Story 6.2) — */
+    'evolution.xp_distribute_cta': "Distribuer les crédits d'expérience",
+    'evolution.xp_panel_title': "Distribution de crédits d'expérience",
+    'evolution.xp_history_title': "Registre des crédits d'expérience",
+    'evolution.xp_history_empty': 'Aucune distribution enregistrée dans le registre.',
+    'evolution.xp_note_label': 'Note technique',
+    'evolution.xp_confirm_btn': 'Valider la distribution',
+    'evolution.xp_bonus_link': '+ bonus',
+    'evolution.xp_levelup_warning': '{name} va être recalibré au niveau supérieur',
   },
 };

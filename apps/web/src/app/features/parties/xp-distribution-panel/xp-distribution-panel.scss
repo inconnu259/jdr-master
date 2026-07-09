@@ -1,0 +1,72 @@
+.xp-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.xp-panel__title {
+  margin: 0;
+}
+
+.xp-panel__calc-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.xp-panel__suggested {
+  font-size: 1.25rem;
+  font-weight: 600;
+  border-left: 3px solid var(--mat-sys-primary, #6750a4);
+  padding-left: 0.5rem;
+}
+
+.xp-panel__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.xp-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--mat-sys-surface-variant, #eee);
+  border-radius: 12px;
+  padding: 0.5rem 0.75rem;
+}
+
+.xp-panel__current-xp {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #555);
+}
+
+.xp-panel__amount,
+.xp-panel__bonus {
+  width: 6rem;
+}
+
+.xp-panel__levelup-warning {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant, #555);
+}
+
+.xp-panel__note {
+  width: 100%;
+}
+
+.xp-panel__error {
+  color: var(--mat-sys-error, #b3261e);
+}
+
+.xp-panel__confirm-cta {
+  align-self: flex-start;
+  min-height: 44px;
+}

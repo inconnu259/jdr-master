@@ -8,6 +8,7 @@ const SUBJECTS: Record<EmailTemplate, string> = {
   invitation: 'Invitation à rejoindre {{partieName}}',
   'session-reminder': 'Rappel : séance de {{partieName}} demain',
   'password-reset': 'Réinitialisation de votre mot de passe',
+  'level-up': 'Nouveau niveau disponible pour {{characterName}}',
 };
 
 @Injectable()

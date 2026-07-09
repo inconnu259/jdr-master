@@ -271,6 +271,36 @@ export interface CharacterDto {
   ownerPseudo: string;
   /** Le propriétaire de ce personnage est le MJ de la partie (distinct d'un personnage de joueur). */
   ownerIsMj: boolean;
+  /** Points d'expérience cumulés — seule source de vérité (jamais dépensés, jamais remis à zéro). */
+  xp: number;
+  /** Niveau dérivé de `xp`, calculé côté API — jamais écrit directement par le client. */
+  level: number;
+}
+
+/** Une ligne d'une distribution d'XP : le montant accordé à un personnage. */
+export interface XpDistributionEntryDto {
+  characterId: string;
+  amount: number;
+  isBonus: boolean;
+}
+
+/** Distribution d'XP faite par le MJ après une session, avec ses entrées par personnage. */
+export interface XpDistributionDto {
+  id: string;
+  partieId: string;
+  note?: string;
+  createdAt: string;
+  entries: XpDistributionEntryDto[];
+}
+
+/** Payload de création d'une distribution d'XP (POST /parties/:id/xp-distributions). */
+export interface CreateXpDistributionDto {
+  /** Calcul assisté (FR-2) — stockés pour audit/affichage uniquement, jamais revérifiés contre `amount`. */
+  difficulty?: number;
+  breaths?: number;
+  monsterLevel?: number;
+  entries: { characterId: string; amount: number; isBonus?: boolean }[];
+  note?: string;
 }
 
 /**

@@ -14,6 +14,8 @@ import type { CharacterDto } from '@master-jdr/shared';
 import {
   computeDerived,
   validate,
+  levelForXp,
+  pendingLevels,
   type RyuutamaCatalog,
   type RyuutamaSheetData,
 } from '@master-jdr/game-rules';
@@ -21,6 +23,7 @@ import { PartiesService } from '../parties/parties.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
+import { EmailService } from '../email/email.service';
 import { SUPPORTED_GAME_SYSTEMS } from '../game-systems/supported-game-systems';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import type { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
@@ -45,6 +48,7 @@ export class CharacterService {
     private readonly parties: PartiesService,
     private readonly users: UsersService,
     private readonly gameSystems: GameSystemService,
+    private readonly email: EmailService,
   ) {}
 
   async create(
@@ -307,6 +311,47 @@ export class CharacterService {
     return portrait;
   }
 
+  /**
+   * Incrément atomique commutatif de l'XP (AD-1) — appelé une fois par entrée d'une distribution
+   * (`XpDistributionsService`). Pas de verrou optimiste : deux increments concurrents sur le même
+   * personnage s'additionnent correctement sans lecture préalable, contrairement à `updatePortrait`.
+   */
+  async applyXpDelta(characterId: string, amount: number): Promise<void> {
+    const updated = await this.prisma.character.update({
+      where: { id: characterId },
+      data: { xp: { increment: amount } },
+    });
+
+    const sheetData = updated.sheetData as unknown as RyuutamaSheetData & {
+      levelUps?: unknown[];
+    };
+    const pending = pendingLevels(updated.xp, sheetData.levelUps?.length ?? 0);
+    if (pending.length === 0) return;
+
+    const [owner, partie] = await Promise.all([
+      this.users.findById(updated.userId),
+      this.prisma.partie.findUnique({
+        where: { id: updated.partieId },
+        select: { name: true },
+      }),
+    ]);
+    if (!owner) return;
+
+    const narrative = (sheetData as any)?.narrative as
+      | { name?: string }
+      | undefined;
+    const characterName = narrative?.name?.trim() || 'Personnage sans nom';
+    const link = `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${updated.partieId}/characters/${updated.id}`;
+
+    // `sendMail` ne relance jamais (déjà try/catch interne, { ok: false } silencieux) — pas de
+    // try/catch supplémentaire ici, un échec d'envoi ne doit jamais faire échouer la distribution.
+    await this.email.sendMail('level-up', owner.email, {
+      characterName,
+      partieName: partie?.name ?? '',
+      link,
+    });
+  }
+
   /** Pseudo du propriétaire + s'il est le MJ de la partie — résolu en une seule paire de requêtes ciblées (`select` minimal, jamais le hash). */
   private async resolveOwnerInfo(
     ownerId: string,
@@ -377,5 +422,7 @@ function toDto(
     updatedAt: character.updatedAt.toISOString(),
     ownerPseudo,
     ownerIsMj,
+    xp: character.xp ?? 0,
+    level: levelForXp(character.xp ?? 0),
   };
 }

@@ -78,6 +78,22 @@
             @if (notice()) {
               <p class="notice">{{ notice() }}</p>
             }
+
+            @if (isMj()) {
+              <section class="xp-section">
+                <button type="button" mat-stroked-button (click)="showXpPanel.set(!showXpPanel())">
+                  {{ theme.tone()['evolution.xp_distribute_cta'] }}
+                </button>
+                @if (showXpPanel()) {
+                  <app-xp-distribution-panel
+                    [partieId]="p.id"
+                    [characters]="characters()"
+                    (distributed)="onXpDistributed()"
+                  />
+                }
+                <app-xp-history [distributions]="xpDistributions()" [characters]="characters()" />
+              </section>
+            }
         </mat-tab>
 
         @if (!isMj() && !isDesktop()) {

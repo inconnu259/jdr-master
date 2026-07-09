@@ -43,6 +43,13 @@ describe('EmailService', () => {
         subject: 'Réinitialisation de votre mot de passe',
       }),
     );
+
+    await service.sendMail('level-up', 'joueur@example.com', {});
+    expect(mailer.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: 'Nouveau niveau disponible pour {{characterName}}',
+      }),
+    );
   });
 
   it("catch une erreur d'envoi, la logge, et renvoie { ok: false } sans relancer", async () => {

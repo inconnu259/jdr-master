@@ -1,0 +1,37 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
+import type { AuthUser } from '@master-jdr/shared';
+import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
+import { CurrentUser } from '../common/current-user.decorator';
+import { CreateXpDistributionDto } from './dto/create-xp-distribution.dto';
+import { XpDistributionsService } from './xp-distributions.service';
+
+@UseGuards(AuthenticatedGuard)
+@Controller('parties/:id/xp-distributions')
+export class XpDistributionsController {
+  constructor(private readonly xpDistributions: XpDistributionsService) {}
+
+  @Post()
+  create(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateXpDistributionDto,
+  ) {
+    return this.xpDistributions.createDistribution(partieId, user.id, dto);
+  }
+
+  @Get()
+  list(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.xpDistributions.listForPartie(partieId, user.id);
+  }
+}

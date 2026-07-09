@@ -1,0 +1,31 @@
+<section class="xp-history">
+  <h3 class="xp-history__title">{{ theme.tone()['evolution.xp_history_title'] }}</h3>
+
+  @if (rows().length === 0) {
+    <p class="xp-history__empty muted">{{ theme.tone()['evolution.xp_history_empty'] }}</p>
+  } @else {
+    <ul class="xp-history__list">
+      @for (row of rows(); track row.distribution.id) {
+        <li class="xp-history__item">
+          <div class="xp-history__item-header">
+            <span class="xp-history__date">{{ row.distribution.createdAt | date: 'short' }}</span>
+            <span class="xp-history__total">{{ row.total }} XP</span>
+          </div>
+          <ul class="xp-history__entries">
+            @for (entry of row.entries; track $index) {
+              <li>
+                {{ entry.label }} : {{ entry.amount }} XP
+                @if (entry.isBonus) {
+                  <span class="xp-history__bonus-badge">bonus</span>
+                }
+              </li>
+            }
+          </ul>
+          @if (row.distribution.note) {
+            <p class="xp-history__note">{{ row.distribution.note }}</p>
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>
