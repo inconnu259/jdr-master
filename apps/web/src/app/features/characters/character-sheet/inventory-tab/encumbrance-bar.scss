@@ -1,0 +1,29 @@
+.encumbrance-bar__track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--mat-sys-outline-variant, #ccc);
+  overflow: hidden;
+}
+
+.encumbrance-bar__fill {
+  height: 100%;
+  background: var(--jdr-gradient-cta);
+  transition: width 0.2s ease;
+}
+
+.encumbrance-bar--over .encumbrance-bar__fill {
+  background: linear-gradient(90deg, var(--color-unavailable), var(--color-mixed));
+}
+
+.encumbrance-bar__label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.encumbrance-bar__over-flag {
+  color: var(--color-unavailable);
+  font-weight: 600;
+}

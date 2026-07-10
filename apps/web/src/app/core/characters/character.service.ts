@@ -5,10 +5,12 @@ import type {
   CharacterDto,
   CharacterSnapshotDto,
   CreateCharacterDto,
+  CreateInventoryItemDto,
   CreateLevelUpDto,
   GameSystemContentDto,
   GameSystemDto,
   GameSystemSchemaDto,
+  UpdateInventoryItemDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
@@ -128,6 +130,37 @@ export class CharacterService {
       this.http.get<CharacterSnapshotDto[]>(`${API_BASE}/characters/${id}/history`, {
         withCredentials: true,
       }),
+    );
+  }
+
+  addInventoryItem(id: string, dto: CreateInventoryItemDto): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.post<CharacterDto>(`${API_BASE}/characters/${id}/inventory-items`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  updateInventoryItem(
+    id: string,
+    itemId: string,
+    dto: UpdateInventoryItemDto,
+  ): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.patch<CharacterDto>(
+        `${API_BASE}/characters/${id}/inventory-items/${itemId}`,
+        dto,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  removeInventoryItem(id: string, itemId: string): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.delete<CharacterDto>(
+        `${API_BASE}/characters/${id}/inventory-items/${itemId}`,
+        { withCredentials: true },
+      ),
     );
   }
 }

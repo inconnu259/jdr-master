@@ -1,0 +1,13 @@
+<div class="encumbrance-bar" [class.encumbrance-bar--over]="overLimit()">
+  <div class="encumbrance-bar__track">
+    <div class="encumbrance-bar__fill" [style.width.%]="limit() > 0 ? (totalWeight() / limit()) * 100 : 0"></div>
+  </div>
+  <div class="encumbrance-bar__label">
+    <span>{{ totalWeight() }} / {{ limit() }}</span>
+    @if (overLimit()) {
+      <span class="encumbrance-bar__over-flag">
+        ⚠ {{ theme.tone()['evolution.inventory_overweight_label'] }}
+      </span>
+    }
+  </div>
+</div>

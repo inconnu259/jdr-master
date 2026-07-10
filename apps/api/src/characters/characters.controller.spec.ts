@@ -27,6 +27,9 @@ function makeCharacterService() {
     removePortrait: jest.fn(),
     updatePdfPortraitCrop: jest.fn(),
     getPortraitFile: jest.fn(),
+    addInventoryItem: jest.fn(),
+    updateInventoryItem: jest.fn(),
+    removeInventoryItem: jest.fn(),
   };
 }
 
@@ -246,6 +249,53 @@ describe('CharactersController', () => {
     expect(result).toBeInstanceOf(StreamableFile);
   });
 
+  it('addInventoryItem() délègue à CharacterService', async () => {
+    characters.addInventoryItem.mockResolvedValue({ id: 'char1' });
+
+    await controller.addInventoryItem('char1', { name: 'Cape', weight: 1.2 } as any, {
+      id: 'u1',
+    } as any);
+
+    expect(characters.addInventoryItem).toHaveBeenCalledWith('char1', 'u1', {
+      name: 'Cape',
+      weight: 1.2,
+    });
+  });
+
+  it('updateInventoryItem() délègue à CharacterService avec itemId (UUID)', async () => {
+    characters.updateInventoryItem.mockResolvedValue({ id: 'char1' });
+
+    await controller.updateInventoryItem(
+      'char1',
+      '22222222-2222-2222-2222-222222222222',
+      { weight: 2 } as any,
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.updateInventoryItem).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      '22222222-2222-2222-2222-222222222222',
+      { weight: 2 },
+    );
+  });
+
+  it('removeInventoryItem() délègue à CharacterService avec itemId (UUID)', async () => {
+    characters.removeInventoryItem.mockResolvedValue({ id: 'char1' });
+
+    await controller.removeInventoryItem(
+      'char1',
+      '22222222-2222-2222-2222-222222222222',
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.removeInventoryItem).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      '22222222-2222-2222-2222-222222222222',
+    );
+  });
+
   describe('validation HTTP réelle (ValidationPipe global)', () => {
     let app: INestApplication;
 
@@ -367,6 +417,79 @@ describe('CharactersController', () => {
         '11111111-1111-1111-1111-111111111111',
         'u1',
         { scale: 1.5, offsetX: 10, offsetY: -10 },
+      );
+    });
+
+    it('POST inventory-items avec addedBy dans le body → 400 (ValidationPipe whitelist, AD-3)', async () => {
+      await request(app.getHttpServer())
+        .post('/characters/11111111-1111-1111-1111-111111111111/inventory-items')
+        .send({ name: 'Objet suspect', weight: 1, addedBy: 'mj' })
+        .expect(400);
+
+      expect(characters.addInventoryItem).not.toHaveBeenCalled();
+    });
+
+    it('POST inventory-items sans weight → 200, CharacterService appelé', async () => {
+      characters.addInventoryItem.mockResolvedValue({
+        id: '11111111-1111-1111-1111-111111111111',
+      });
+
+      await request(app.getHttpServer())
+        .post('/characters/11111111-1111-1111-1111-111111111111/inventory-items')
+        .send({ name: 'Sac' })
+        .expect(201);
+
+      expect(characters.addInventoryItem).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
+        { name: 'Sac' },
+      );
+    });
+
+    it('POST inventory-items sans name → 400 (class-validator)', async () => {
+      await request(app.getHttpServer())
+        .post('/characters/11111111-1111-1111-1111-111111111111/inventory-items')
+        .send({ weight: 1 })
+        .expect(400);
+
+      expect(characters.addInventoryItem).not.toHaveBeenCalled();
+    });
+
+    it('PATCH inventory-items/:itemId avec addedBy dans le body → 400', async () => {
+      await request(app.getHttpServer())
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/inventory-items/22222222-2222-2222-2222-222222222222',
+        )
+        .send({ addedBy: 'mj' })
+        .expect(400);
+
+      expect(characters.updateInventoryItem).not.toHaveBeenCalled();
+    });
+
+    it('PATCH inventory-items/:itemId avec itemId non UUID → 400 (ParseUUIDPipe)', async () => {
+      await request(app.getHttpServer())
+        .patch('/characters/11111111-1111-1111-1111-111111111111/inventory-items/abc')
+        .send({ weight: 2 })
+        .expect(400);
+
+      expect(characters.updateInventoryItem).not.toHaveBeenCalled();
+    });
+
+    it('DELETE inventory-items/:itemId → 200, CharacterService appelé', async () => {
+      characters.removeInventoryItem.mockResolvedValue({
+        id: '11111111-1111-1111-1111-111111111111',
+      });
+
+      await request(app.getHttpServer())
+        .delete(
+          '/characters/11111111-1111-1111-1111-111111111111/inventory-items/22222222-2222-2222-2222-222222222222',
+        )
+        .expect(200);
+
+      expect(characters.removeInventoryItem).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
+        '22222222-2222-2222-2222-222222222222',
       );
     });
   });

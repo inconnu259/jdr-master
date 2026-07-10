@@ -336,6 +336,21 @@ export interface CreateLevelUpDto {
 }
 
 /**
+ * Payload de POST /characters/:id/inventory-items. `addedBy` n'existe pas dans ce type —
+ * forcé côté serveur, jamais accepté du client (AD-3, Story 6.4).
+ */
+export interface CreateInventoryItemDto {
+  name: string;
+  weight?: number; // absent → 0 côté serveur
+}
+
+/** Payload de PATCH /characters/:id/inventory-items/:itemId — partiel, au moins un champ. */
+export interface UpdateInventoryItemDto {
+  name?: string;
+  weight?: number;
+}
+
+/**
  * Dimensions du cadre portrait de l'export PDF Ryuutama, mesurées empiriquement en Story 4.6
  * (`apps/api/game-systems/ryuutama/assets/README.md`, section "Zone du portrait"). Consommées
  * par `PortraitCropper` (web) pour que son masque de prévisualisation rectangulaire corresponde

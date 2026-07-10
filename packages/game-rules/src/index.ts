@@ -8,6 +8,7 @@ export type {
   ValidationResult,
   ValidationError,
   RyuutamaCatalog,
+  InventoryItem,
 } from './ryuutama/types.ts';
 export type {
   RyuutamaPdfContent,

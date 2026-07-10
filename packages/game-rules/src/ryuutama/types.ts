@@ -1,5 +1,19 @@
 import type { CapabilityType } from './leveling.ts';
 
+/**
+ * Un objet de l'inventaire individuel (Story 6.4). `addedBy` n'est jamais lu depuis l'entrée
+ * client — toujours forcé côté serveur selon la route (AD-3). `id` (UUID généré serveur, à
+ * l'ajout ou par la migration one-off pour les entrées legacy) adresse l'objet de façon stable
+ * — jamais par position de tableau (revue de code Story 6.4 : l'adressage par index laissait un
+ * client périmé modifier/supprimer le mauvais objet sans jamais déclencher de 409).
+ */
+export interface InventoryItem {
+  id: string;
+  name: string;
+  weight: number;
+  addedBy: 'player' | 'mj';
+}
+
 export interface RyuutamaSheetData {
   classId: string;
   specialtyTypeId?: string; // obligatoire si classId === "artisan"
@@ -7,7 +21,7 @@ export interface RyuutamaSheetData {
   attributes: { AGI: number; ESP: number; INT: number; VIG: number };
   weaponCategoryId: string;
   fetiqueObject?: string;
-  equipment?: { individual: string[]; group: string[] };
+  equipment?: { individual: InventoryItem[]; group: string[] };
   narrative?: {
     sex?: string;
     age?: string;

@@ -18,6 +18,7 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { LevelUpBanner } from './level-up-banner/level-up-banner';
 import { LevelUpWizard, type LevelUpWizardData } from './level-up-wizard/level-up-wizard';
 import { HistoryTab } from './history-tab/history-tab';
+import { InventoryTab } from './inventory-tab/inventory-tab';
 import {
   capabilityDescription,
   getCapabilitiesByType,
@@ -57,7 +58,7 @@ interface NarrativeFields {
 @Component({
   selector: 'app-character-sheet',
   standalone: true,
-  imports: [CharacterAvatar, MatButtonModule, PortraitPanel, LevelUpBanner, HistoryTab],
+  imports: [CharacterAvatar, MatButtonModule, PortraitPanel, LevelUpBanner, HistoryTab, InventoryTab],
   templateUrl: './character-sheet.html',
   styleUrl: './character-sheet.scss',
 })
@@ -233,8 +234,10 @@ export class CharacterSheet implements OnInit {
     return null;
   });
 
-  protected readonly equipment = computed<{ individual: string[]; group: string[] } | null>(
-    () => (this.sheetData()['equipment'] as { individual: string[]; group: string[] }) ?? null,
+  /** `individual` (InventoryItem[], Story 6.4) n'est plus lu ici — géré par `InventoryTab`
+   *  (son propre computed sur `sheetData.equipment.individual`, cf. `inventory-tab.ts`). */
+  protected readonly equipment = computed<{ group: string[] } | null>(
+    () => (this.sheetData()['equipment'] as { group: string[] }) ?? null,
   );
 
   protected readonly fetiqueObject = computed<string | undefined>(

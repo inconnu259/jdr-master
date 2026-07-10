@@ -31,6 +31,8 @@ import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
 import { CharacterService } from './character.service';
 import { RyuutamaPdfService } from './ryuutama-pdf.service';
 import { CreateLevelUpDto } from './dto/create-level-up.dto';
+import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
+import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { ExportCharacterPdfDto } from './dto/export-character-pdf.dto';
 import { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 
@@ -161,5 +163,38 @@ export class CharactersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.characters.getHistory(id, user.id);
+  }
+
+  @Post(':id/inventory-items')
+  addInventoryItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateInventoryItemDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.addInventoryItem(id, user.id, dto);
+  }
+
+  @Patch(':id/inventory-items/:itemId')
+  updateInventoryItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() dto: UpdateInventoryItemDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (dto.name === undefined && dto.weight === undefined) {
+      throw new BadRequestException(
+        'Au moins un champ (name ou weight) doit être fourni',
+      );
+    }
+    return this.characters.updateInventoryItem(id, user.id, itemId, dto);
+  }
+
+  @Delete(':id/inventory-items/:itemId')
+  removeInventoryItem(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.removeInventoryItem(id, user.id, itemId);
   }
 }

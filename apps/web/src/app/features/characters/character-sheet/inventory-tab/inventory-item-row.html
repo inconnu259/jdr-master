@@ -1,0 +1,11 @@
+<div class="inventory-item-row">
+  <span class="inventory-item-row__name">{{ item().name }}</span>
+  <span class="inventory-item-row__weight">{{ item().weight }}</span>
+  @if (item().addedBy === 'mj') {
+    <span class="inventory-item-row__badge">ajouté par le MJ</span>
+  }
+  @if (editable()) {
+    <button mat-icon-button type="button" aria-label="Modifier l'objet" (click)="edit.emit()">✎</button>
+    <button mat-icon-button type="button" aria-label="Supprimer l'objet" (click)="remove.emit()">✕</button>
+  }
+</div>

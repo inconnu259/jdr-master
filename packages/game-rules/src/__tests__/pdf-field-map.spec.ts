@@ -131,7 +131,11 @@ describe('mapToPdfFields', () => {
   });
 
   it('équipement partiel (individual sans group, ou inversement) => pas de crash', () => {
-    const data = baseData({ equipment: { individual: ['grand sac à dos'] } as any });
+    const data = baseData({
+      equipment: {
+        individual: [{ id: 'item-1', name: 'grand sac à dos', weight: 0, addedBy: 'player' }],
+      } as any,
+    });
     const fields = mapToPdfFields(data, computeDerived(data), content);
     expect(fields.find((f) => f.field === 'Notes')?.value).toBe('grand sac à dos');
 
@@ -152,7 +156,10 @@ describe('mapToPdfFields', () => {
   it('objet fétiche et équipement (individual + group) fusionnés dans Notes', () => {
     const data = baseData({
       fetiqueObject: 'Une pierre porte-bonheur',
-      equipment: { individual: ['grand sac à dos'], group: ['tente'] },
+      equipment: {
+        individual: [{ id: 'item-1', name: 'grand sac à dos', weight: 0, addedBy: 'player' }],
+        group: ['tente'],
+      },
     });
     const fields = mapToPdfFields(data, computeDerived(data), content);
     expect(fields.find((f) => f.field === 'Objet fétiche')?.value).toBe(

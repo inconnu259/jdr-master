@@ -1,0 +1,27 @@
+.inventory-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--mat-sys-surface-container, transparent);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+}
+
+.inventory-item-row__name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.inventory-item-row__weight {
+  color: var(--mat-sys-on-surface-variant, #888);
+  font-size: 0.85rem;
+}
+
+.inventory-item-row__badge {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--jdr-accent-2-rgb), 0.12);
+  color: var(--jdr-accent-2, currentColor);
+}

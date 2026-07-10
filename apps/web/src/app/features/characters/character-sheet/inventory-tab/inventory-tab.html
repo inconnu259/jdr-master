@@ -1,0 +1,61 @@
+<div class="inventory-tab">
+  <app-encumbrance-bar [totalWeight]="totalWeight()" [limit]="character().derived.Encombrement" />
+
+  @if (individual().length === 0) {
+    <p class="inventory-tab__empty">{{ theme.tone()['evolution.inventory_empty'] }}</p>
+  } @else {
+    <ul class="inventory-tab__list">
+      @for (item of individual(); track item.id) {
+        <li>
+          @if (editingId() === item.id) {
+            <div class="inventory-tab__edit-form">
+              <input type="text" [value]="editName()" (input)="editName.set($any($event.target).value)" />
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                [value]="editWeight()"
+                (input)="onEditWeightInput($any($event.target).valueAsNumber)"
+              />
+              <button mat-button type="button" (click)="submitEdit(item.id)">Valider</button>
+              <button mat-button type="button" (click)="cancelEdit()">Annuler</button>
+            </div>
+          } @else {
+            <app-inventory-item-row
+              [item]="item"
+              [editable]="isOwner()"
+              (edit)="startEdit(item)"
+              (remove)="removeItem(item.id)"
+            />
+          }
+        </li>
+      }
+    </ul>
+  }
+
+  @if (error(); as err) {
+    <p class="inventory-tab__error">{{ err }}</p>
+  }
+
+  @if (isOwner()) {
+    <form class="inventory-tab__add-form" (submit)="$event.preventDefault(); submitAdd()">
+      <input
+        type="text"
+        placeholder="Nom de l'objet"
+        [value]="newItemName()"
+        (input)="newItemName.set($any($event.target).value)"
+      />
+      <input
+        type="number"
+        min="0"
+        step="0.1"
+        placeholder="Poids"
+        [value]="newItemWeight()"
+        (input)="newItemWeight.set($any($event.target).valueAsNumber || undefined)"
+      />
+      <button mat-flat-button type="submit" [disabled]="submitting()">
+        {{ theme.tone()['evolution.inventory_add_cta'] }}
+      </button>
+    </form>
+  }
+</div>

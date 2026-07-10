@@ -1,0 +1,24 @@
+import { Component, input, output } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+
+export interface InventoryItemView {
+  id: string;
+  name: string;
+  weight: number;
+  addedBy: string;
+}
+
+@Component({
+  selector: 'app-inventory-item-row',
+  standalone: true,
+  imports: [MatButtonModule],
+  templateUrl: './inventory-item-row.html',
+  styleUrl: './inventory-item-row.scss',
+})
+export class InventoryItemRow {
+  readonly item = input.required<InventoryItemView>();
+  readonly editable = input(false);
+
+  readonly edit = output<void>();
+  readonly remove = output<void>();
+}

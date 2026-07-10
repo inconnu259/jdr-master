@@ -141,4 +141,35 @@ describe('CharacterService (front)', () => {
     req.flush({ ...character, pdfPortraitCropData: cropData });
     expect((await p).pdfPortraitCropData).toEqual(cropData);
   });
+
+  it('addInventoryItem(id, dto) → POST /characters/:id/inventory-items', async () => {
+    const dto = { name: 'Cape', weight: 1.2 };
+    const p = service.addInventoryItem('c1', dto);
+    const req = http.expectOne(`${API}/characters/c1/inventory-items`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual(dto);
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
+
+  it('updateInventoryItem(id, itemId, dto) → PATCH /characters/:id/inventory-items/:itemId', async () => {
+    const dto = { weight: 2 };
+    const p = service.updateInventoryItem('c1', 'item-1', dto);
+    const req = http.expectOne(`${API}/characters/c1/inventory-items/item-1`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual(dto);
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
+
+  it('removeInventoryItem(id, itemId) → DELETE /characters/:id/inventory-items/:itemId', async () => {
+    const p = service.removeInventoryItem('c1', 'item-2');
+    const req = http.expectOne(`${API}/characters/c1/inventory-items/item-2`);
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
 });

@@ -216,9 +216,6 @@
           <h2 class="sheet__card-title">Équipement</h2>
           @if (equipment(); as eq) {
             <ul class="sheet__equipment-list">
-              @for (item of eq.individual ?? []; track item) {
-                <li>{{ item }}</li>
-              }
               @for (item of eq.group ?? []; track item) {
                 <li>{{ item }}</li>
               }
@@ -227,6 +224,11 @@
           @if (fetiqueObject()) {
             <p class="sheet__fetish-box">Objet fétiche : {{ fetiqueObject() }}</p>
           }
+        </section>
+
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">{{ theme.tone()['evolution.inventory_section_title'] }}</h2>
+          <app-inventory-tab [character]="c" [isOwner]="isOwner()" (characterUpdated)="character.set($event)" />
         </section>
 
         <section class="sheet__card">

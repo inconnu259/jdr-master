@@ -94,10 +94,24 @@ export class CharacterWizard implements OnInit {
   protected readonly currentStepIndex = signal(0);
   protected readonly content = signal<GameSystemContentDto | null>(null);
   protected readonly sheetData = signal<Partial<RyuutamaSheetData>>({
-    equipment: { individual: FIXED_EQUIPMENT.individual, group: FIXED_EQUIPMENT.group },
+    equipment: {
+      individual: FIXED_EQUIPMENT.individual.map((name) => ({
+        id: crypto.randomUUID(),
+        name,
+        weight: 0,
+        addedBy: 'player' as const,
+      })),
+      group: FIXED_EQUIPMENT.group,
+    },
   });
   protected readonly submitting = signal(false);
   protected readonly stepErrors = signal<Record<string, string[]>>({});
+
+  /** Étape "équipement" du wizard : affiche uniquement les noms (poids/provenance gérés après
+   *  création, cf. Story 6.4 `InventoryTab`) — `EquipmentStep` reste un composant `string[]`. */
+  protected readonly individualEquipmentNames = computed(
+    () => this.sheetData().equipment?.individual?.map((item) => item.name) ?? [],
+  );
 
   /** Portrait : hors `sheetData` (vit sur `Character.portraitUrl`/`portraitCropData`, uploadé après création). */
   protected readonly pendingPortraitFile = signal<File | null>(null);

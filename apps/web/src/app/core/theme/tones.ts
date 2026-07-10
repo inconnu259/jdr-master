@@ -125,6 +125,12 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.landscape_section_title': 'Paysage/Climat favori',
     'evolution.immunity_section_title': 'Immunités',
     'evolution.other_capabilities_title': 'Autres capacités',
+    /* — inventaire chiffré (Story 6.4) — */
+    'evolution.inventory_section_title': 'Inventaire',
+    'evolution.inventory_add_cta': '+ Ajouter un objet',
+    'evolution.inventory_empty': "Aucun objet dans l'inventaire pour le moment.",
+    'evolution.inventory_overweight_label': 'Surchargé',
+    'evolution.inventory_error': "L'inventaire n'a pas pu être mis à jour. Réessayez.",
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -243,6 +249,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.landscape_section_title': 'Paysage/climat de coeur',
     'evolution.immunity_section_title': 'Immunités du cercle',
     'evolution.other_capabilities_title': 'Dons du voyage',
+    'evolution.inventory_section_title': 'Besace',
+    'evolution.inventory_add_cta': '+ Glisser un objet dans la besace',
+    'evolution.inventory_empty': 'La besace est vide pour le moment.',
+    'evolution.inventory_overweight_label': 'Surchargée',
+    'evolution.inventory_error': "La besace n'a pas pu être mise à jour. Réessaie.",
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -361,5 +372,10 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.landscape_section_title': 'Module paysage/climat',
     'evolution.immunity_section_title': 'Modules d’immunité',
     'evolution.other_capabilities_title': 'Modules installés',
+    'evolution.inventory_section_title': 'Compartiment de fret',
+    'evolution.inventory_add_cta': '+ Charger un composant',
+    'evolution.inventory_empty': 'Aucun composant chargé pour le moment.',
+    'evolution.inventory_overweight_label': 'Surcharge',
+    'evolution.inventory_error': 'Le fret n’a pas pu être mis à jour. Réessayez.',
   },
 };

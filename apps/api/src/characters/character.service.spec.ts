@@ -1091,4 +1091,292 @@ describe('CharacterService', () => {
       );
     });
   });
+
+  describe('inventoryItems', () => {
+    function makeCharacterWithEquipment(individual: unknown[] = []) {
+      return makeCharacter({
+        sheetData: { ...validSheet(), equipment: { individual, group: [] } },
+      });
+    }
+
+    describe('addInventoryItem()', () => {
+      it('ajoute un objet avec le poids fourni, addedBy forcé à player, id généré', async () => {
+        const character = makeCharacterWithEquipment();
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.addInventoryItem('char1', 'u1', { name: 'Cape', weight: 1.2 } as any);
+
+        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        expect(data.sheetData.equipment.individual).toEqual([
+          { id: 'fixed-uuid', name: 'Cape', weight: 1.2, addedBy: 'player' },
+        ]);
+      });
+
+      it('ajoute un objet sans poids → weight 0', async () => {
+        const character = makeCharacterWithEquipment();
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.addInventoryItem('char1', 'u1', { name: 'Sac' } as any);
+
+        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        expect(data.sheetData.equipment.individual[0]).toEqual({
+          id: 'fixed-uuid',
+          name: 'Sac',
+          weight: 0,
+          addedBy: 'player',
+        });
+      });
+
+      it('addedBy injecté dans le DTO (mock any) est ignoré — toujours player en sortie', async () => {
+        const character = makeCharacterWithEquipment();
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.addInventoryItem('char1', 'u1', {
+          name: 'Objet suspect',
+          addedBy: 'mj',
+        } as any);
+
+        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        expect(data.sheetData.equipment.individual[0].addedBy).toBe('player');
+      });
+
+      it('409 si updatedAt périmé', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacterWithEquipment());
+        prisma.character.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(
+          service.addInventoryItem('char1', 'u1', { name: 'Cape' } as any),
+        ).rejects.toThrow(ConflictException);
+      });
+
+      it('non-propriétaire → ForbiddenException', async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacter({ userId: 'owner' }),
+        );
+
+        await expect(
+          service.addInventoryItem('char1', 'stranger', { name: 'Cape' } as any),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it("n'appelle jamais characterSnapshot.create (FR-12 exclut l'inventaire)", async () => {
+        const character = makeCharacterWithEquipment();
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.addInventoryItem('char1', 'u1', { name: 'Cape' } as any);
+
+        expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
+      });
+
+      it('personnage legacy (equipment.individual encore string[]) → normalisé avant ajout, pas de tableau mixte (défense en profondeur, revue de code)', async () => {
+        const character = makeCharacterWithEquipment(['Vieux sac']);
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.addInventoryItem('char1', 'u1', { name: 'Cape' } as any);
+
+        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        expect(data.sheetData.equipment.individual).toEqual([
+          { id: 'fixed-uuid', name: 'Vieux sac', weight: 0, addedBy: 'player' },
+          { id: 'fixed-uuid', name: 'Cape', weight: 0, addedBy: 'player' },
+        ]);
+      });
+    });
+
+    describe('updateInventoryItem()', () => {
+      it('modifie le nom seul, poids inchangé', async () => {
+        const character = makeCharacterWithEquipment([
+          { id: 'item-1', name: 'Cape', weight: 1.2, addedBy: 'player' },
+        ]);
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.updateInventoryItem('char1', 'u1', 'item-1', { name: 'Cape usée' } as any);
+
+        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        expect(data.sheetData.equipment.individual[0]).toEqual({
+          id: 'item-1',
+          name: 'Cape usée',
+          weight: 1.2,
+          addedBy: 'player',
+        });
+      });
+
+      it('modifie le poids seul, nom inchangé', async () => {
+        const character = makeCharacterWithEquipment([
+          { id: 'item-1', name: 'Cape', weight: 1.2, addedBy: 'player' },
+        ]);
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.updateInventoryItem('char1', 'u1', 'item-1', { weight: 2 } as any);
+
+        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        expect(data.sheetData.equipment.individual[0]).toEqual({
+          id: 'item-1',
+          name: 'Cape',
+          weight: 2,
+          addedBy: 'player',
+        });
+      });
+
+      it('modifie le bon objet parmi plusieurs, quel que soit son index', async () => {
+        const character = makeCharacterWithEquipment([
+          { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' },
+          { id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' },
+        ]);
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.updateInventoryItem('char1', 'u1', 'item-2', { name: 'Sac usé' } as any);
+
+        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        expect(data.sheetData.equipment.individual).toEqual([
+          { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' },
+          { id: 'item-2', name: 'Sac usé', weight: 2, addedBy: 'player' },
+        ]);
+      });
+
+      it('itemId introuvable → NotFoundException (jamais un fallback sur un autre objet)', async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacterWithEquipment([{ id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' }]),
+        );
+
+        await expect(
+          service.updateInventoryItem('char1', 'u1', 'item-inconnu', { name: 'x' } as any),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it("objet déjà retiré par une autre requête (id périmé côté client) → NotFoundException, jamais une mauvaise cible (résout la faille d'adressage par index de la revue de code)", async () => {
+        // Simule : le personnage tel que relu par CETTE requête ne contient plus l'objet que le
+        // client pensait éditer (retiré entretemps par une autre requête, déjà appliquée).
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacterWithEquipment([{ id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' }]),
+        );
+
+        await expect(
+          service.updateInventoryItem('char1', 'u1', 'item-1', { weight: 5 } as any),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.character.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('409 si updatedAt périmé', async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacterWithEquipment([{ id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' }]),
+        );
+        prisma.character.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(
+          service.updateInventoryItem('char1', 'u1', 'item-1', { weight: 2 } as any),
+        ).rejects.toThrow(ConflictException);
+      });
+
+      it('non-propriétaire → ForbiddenException', async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacter({ userId: 'owner' }),
+        );
+
+        await expect(
+          service.updateInventoryItem('char1', 'stranger', 'item-1', { weight: 2 } as any),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it('n’appelle jamais characterSnapshot.create', async () => {
+        const character = makeCharacterWithEquipment([
+          { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' },
+        ]);
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.updateInventoryItem('char1', 'u1', 'item-1', { weight: 2 } as any);
+
+        expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('removeInventoryItem()', () => {
+      it('retire le bon objet par id, quel que soit son index', async () => {
+        const character = makeCharacterWithEquipment([
+          { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' },
+          { id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' },
+        ]);
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.removeInventoryItem('char1', 'u1', 'item-1');
+
+        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        expect(data.sheetData.equipment.individual).toEqual([
+          { id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' },
+        ]);
+      });
+
+      it('itemId introuvable → NotFoundException', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacterWithEquipment([]));
+
+        await expect(
+          service.removeInventoryItem('char1', 'u1', 'item-inconnu'),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it("objet déjà retiré par une autre requête → NotFoundException, jamais suppression d'un autre objet", async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacterWithEquipment([{ id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' }]),
+        );
+
+        await expect(
+          service.removeInventoryItem('char1', 'u1', 'item-1'),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.character.updateMany).not.toHaveBeenCalled();
+      });
+
+      it('409 si updatedAt périmé', async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacterWithEquipment([{ id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' }]),
+        );
+        prisma.character.updateMany.mockResolvedValue({ count: 0 });
+
+        await expect(
+          service.removeInventoryItem('char1', 'u1', 'item-1'),
+        ).rejects.toThrow(ConflictException);
+      });
+
+      it('non-propriétaire → ForbiddenException', async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacter({ userId: 'owner' }),
+        );
+
+        await expect(
+          service.removeInventoryItem('char1', 'stranger', 'item-1'),
+        ).rejects.toThrow(ForbiddenException);
+      });
+
+      it('n’appelle jamais characterSnapshot.create', async () => {
+        const character = makeCharacterWithEquipment([
+          { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' },
+        ]);
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.removeInventoryItem('char1', 'u1', 'item-1');
+
+        expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
+      });
+    });
+  });
 });

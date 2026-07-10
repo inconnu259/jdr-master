@@ -81,7 +81,7 @@
           }
           @case ('equipment') {
             <app-equipment-step
-              [individual]="sheetData().equipment?.individual ?? []"
+              [individual]="individualEquipmentNames()"
               [group]="sheetData().equipment?.group ?? []"
             />
           }

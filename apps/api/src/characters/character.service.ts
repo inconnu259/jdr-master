@@ -28,6 +28,8 @@ import { EmailService } from '../email/email.service';
 import { SUPPORTED_GAME_SYSTEMS } from '../game-systems/supported-game-systems';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import type { CreateLevelUpDto } from './dto/create-level-up.dto';
+import type { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
+import type { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import type { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 import {
   detectImageMime,
@@ -53,6 +55,28 @@ const CONTENT_KEY_BY_CAPABILITY: Record<string, string> = {
   type: 'type',
   'dragon-protection': 'season',
 };
+
+/**
+ * Défense en profondeur (revue de code Story 6.4) : `equipment.individual` ne devrait jamais
+ * contenir d'entrées `string` legacy à ce stade (la migration one-off `migrateInventoryFormat`
+ * doit tourner avant tout redémarrage de l'API sur ce changement), mais si un personnage y
+ * échappe malgré tout (échec partiel de migration, ordre de déploiement incorrect), un
+ * `addInventoryItem` qui spreadrait ces entrées telles quelles produirait un tableau mixte
+ * (string + InventoryItem) qui casse le rendu frontend et corrompt `totalWeight()` (NaN). Chaque
+ * méthode du service normalise donc systématiquement avant de lire/écrire — jamais de tableau
+ * mixte persisté, quel que soit l'état d'entrée.
+ */
+type InventoryItemEntry = NonNullable<RyuutamaSheetData['equipment']>['individual'][number];
+
+function normalizeInventoryIndividual(
+  individual: (InventoryItemEntry | string)[] | undefined,
+): InventoryItemEntry[] {
+  return (individual ?? []).map((item) =>
+    typeof item === 'string'
+      ? { id: randomUUID(), name: item, weight: 0, addedBy: 'player' as const }
+      : item,
+  );
+}
 
 @Injectable()
 export class CharacterService {
@@ -536,6 +560,101 @@ export class CharacterService {
       note: s.note ?? undefined,
       createdAt: s.createdAt.toISOString(),
     }));
+  }
+
+  /**
+   * Ajoute un objet à l'inventaire individuel : accès PROPRIÉTAIRE SEUL (FR-9), verrou optimiste
+   * (AD-9/NFR1). `addedBy` n'est jamais lu depuis `dto` (le type `CreateInventoryItemDto` ne le
+   * déclare même pas) — toujours forcé à `'player'`. Aucun `CharacterSnapshot` créé (FR-12 exclut
+   * explicitement l'inventaire de l'historique) — ne pas copier le pattern `$transaction` de
+   * `applyLevelUp`, ce n'est pas le même cas.
+   */
+  async addInventoryItem(
+    characterId: string,
+    userId: string,
+    dto: CreateInventoryItemDto,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    const equipment = sheetData.equipment ?? { individual: [], group: [] };
+    const individual = [
+      ...normalizeInventoryIndividual(equipment.individual),
+      { id: randomUUID(), name: dto.name, weight: dto.weight ?? 0, addedBy: 'player' as const },
+    ];
+    sheetData.equipment = { ...equipment, individual };
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
+  }
+
+  /**
+   * Modifie un objet existant de l'inventaire individuel — même règles d'accès et de verrouillage
+   * que `addInventoryItem`. `itemId` = `InventoryItem.id` (UUID stable, jamais une position de
+   * tableau — revue de code Story 6.4 : adresser par index laissait un client périmé agir sur le
+   * mauvais objet sans jamais déclencher de 409 ; par id, un objet déjà retiré/déplacé par une
+   * autre requête n'est simplement plus trouvé → 404, jamais une mauvaise cible silencieuse).
+   */
+  async updateInventoryItem(
+    characterId: string,
+    userId: string,
+    itemId: string,
+    dto: UpdateInventoryItemDto,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    const individual = normalizeInventoryIndividual(sheetData.equipment?.individual);
+    const index = individual.findIndex((i) => i.id === itemId);
+    if (index === -1) throw new NotFoundException("Objet d'inventaire introuvable");
+
+    const updated = [...individual];
+    updated[index] = {
+      ...updated[index],
+      name: dto.name ?? updated[index].name,
+      weight: dto.weight ?? updated[index].weight,
+    };
+    sheetData.equipment = { ...sheetData.equipment!, individual: updated };
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
+  }
+
+  /** Retire un objet existant de l'inventaire individuel — mêmes règles que `updateInventoryItem`. */
+  async removeInventoryItem(
+    characterId: string,
+    userId: string,
+    itemId: string,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    const individual = normalizeInventoryIndividual(sheetData.equipment?.individual);
+    if (!individual.some((i) => i.id === itemId)) {
+      throw new NotFoundException("Objet d'inventaire introuvable");
+    }
+    const updated = individual.filter((i) => i.id !== itemId);
+    sheetData.equipment = { ...sheetData.equipment!, individual: updated };
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
+  }
+
+  /**
+   * Écriture verrouillée commune aux 3 mutations d'inventaire — pas de recalcul `computeDerived`
+   * (le poids d'inventaire n'entre dans aucune formule de `DerivedStats`) et pas de snapshot.
+   */
+  private async writeInventoryChange(
+    characterId: string,
+    expectedUpdatedAt: Date,
+    sheetData: RyuutamaSheetData,
+    userId: string,
+  ): Promise<CharacterDto> {
+    const result = await this.prisma.character.updateMany({
+      where: { id: characterId, updatedAt: expectedUpdatedAt },
+      data: { sheetData: sheetData as any },
+    });
+    if (result.count === 0) {
+      throw new ConflictException(
+        'Le personnage a été modifié entretemps, réessayez.',
+      );
+    }
+    const updated = await this.prisma.character.findUniqueOrThrow({
+      where: { id: characterId },
+    });
+    const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    return toDto(updated, owner.pseudo, owner.isMj);
   }
 
   /** Pseudo du propriétaire + s'il est le MJ de la partie — résolu en une seule paire de requêtes ciblées (`select` minimal, jamais le hash). */

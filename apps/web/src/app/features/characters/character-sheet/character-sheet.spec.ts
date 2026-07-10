@@ -37,7 +37,10 @@ const CHARACTER: CharacterDto = makeCharacterDto({
     typeId: 'technique',
     weaponCategoryId: 'lance',
     attributes: { VIG: 8, AGI: 4, INT: 6, ESP: 6 },
-    equipment: { individual: ['Nécessaire de voyage'], group: ['Nécessaire de groupe'] },
+    equipment: {
+      individual: [{ id: 'item-1', name: 'Nécessaire de voyage', weight: 0, addedBy: 'player' }],
+      group: ['Nécessaire de groupe'],
+    },
     fetiqueObject: 'une plume de corbeau',
     narrative: { name: 'Fenn', homeTown: 'Aubval', motivation: 'Voir la mer' },
   },
@@ -56,6 +59,9 @@ function defaultSvc() {
     patchPdfPortraitCrop: vi.fn(),
     getHistory: vi.fn().mockResolvedValue([]),
     levelUp: vi.fn(),
+    addInventoryItem: vi.fn(),
+    updateInventoryItem: vi.fn(),
+    removeInventoryItem: vi.fn(),
   };
 }
 
@@ -719,5 +725,22 @@ describe('CharacterSheet', () => {
     const { fixture } = await createComponent(characterSvc);
 
     expect(fixture.nativeElement.textContent).toContain('XP 250');
+  });
+
+  it('section Inventaire visible pour le propriétaire', async () => {
+    const { fixture } = await createComponent();
+    expect(fixture.nativeElement.querySelector('app-inventory-tab')).not.toBeNull();
+  });
+
+  it('section Inventaire visible pour le MJ (lecture) — équipement individuel non dupliqué dans la carte Équipement', async () => {
+    const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'mj-stranger');
+    expect(fixture.nativeElement.querySelector('app-inventory-tab')).not.toBeNull();
+    // "Nécessaire de voyage" (individual) ne doit plus apparaître dans la carte "Équipement" —
+    // seul "Nécessaire de groupe" (group) y reste (régression Story 6.4, cf. Task 10).
+    const equipmentCard = Array.from(
+      fixture.nativeElement.querySelectorAll('.sheet__card'),
+    ).find((card: any) => card.textContent.includes('Équipement')) as HTMLElement;
+    expect(equipmentCard.textContent).not.toContain('Nécessaire de voyage');
+    expect(equipmentCard.textContent).toContain('Nécessaire de groupe');
   });
 });
