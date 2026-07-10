@@ -1,0 +1,35 @@
+.level-up-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  position: relative;
+  isolation: isolate;
+  border: 1px solid rgba(var(--jdr-accent-1-rgb), 0.4);
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+
+.level-up-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--jdr-gradient-cta);
+  opacity: 0.15;
+}
+
+.level-up-banner__text {
+  font-weight: 500;
+}
+
+.level-up-banner__cta {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  min-height: 44px;
+
+  @media (min-width: 768px) {
+    min-height: 36px;
+  }
+}

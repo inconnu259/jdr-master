@@ -15,6 +15,14 @@ import {
 } from '../portrait-cropper/portrait-cropper';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { AuthService } from '../../../core/auth/auth.service';
+import { LevelUpBanner } from './level-up-banner/level-up-banner';
+import { LevelUpWizard, type LevelUpWizardData } from './level-up-wizard/level-up-wizard';
+import { HistoryTab } from './history-tab/history-tab';
+import {
+  capabilityDescription,
+  getCapabilitiesByType,
+  getOtherCapabilities,
+} from './capability-label.util';
 
 interface ClassData {
   label: string;
@@ -49,7 +57,7 @@ interface NarrativeFields {
 @Component({
   selector: 'app-character-sheet',
   standalone: true,
-  imports: [CharacterAvatar, MatButtonModule, PortraitPanel],
+  imports: [CharacterAvatar, MatButtonModule, PortraitPanel, LevelUpBanner, HistoryTab],
   templateUrl: './character-sheet.html',
   styleUrl: './character-sheet.scss',
 })
@@ -123,6 +131,77 @@ export class CharacterSheet implements OnInit {
   protected readonly specialtyTypeId = computed<string | undefined>(
     () => this.sheetData()['specialtyTypeId'] as string | undefined,
   );
+
+  /**
+   * Capacités sans section structurelle dédiée (Protection d'un dragon, Voyage légendaire, et
+   * tout type futur du même genre) — petit encart générique, cf. EXPERIENCE.md §4. Le choix fait
+   * pour chaque montée de niveau structurelle (Attribut/Paysage/Immunité/Classe/Type) est, lui,
+   * visible directement dans la section Historique (fusion Historique/choix, cf. `HistoryTab`).
+   */
+  protected readonly otherCapabilities = computed(() => {
+    const c = this.character();
+    if (!c) return [];
+    return getOtherCapabilities(c).map((entry) => ({
+      level: entry.level,
+      text: capabilityDescription(entry, this.content()),
+    }));
+  });
+
+  /**
+   * Classe secondaire (capacité 'class', niveau 5) — sous-bloc de la section Vocation, cf.
+   * EXPERIENCE.md §4 "Intégration des capacités dans la fiche". Un seul choix possible par
+   * `LEVEL_TABLE` (contrairement au paysage/climat, obtenu jusqu'à 2 fois).
+   */
+  protected readonly secondaryClass = computed<ClassData | null>(() => {
+    const c = this.character();
+    if (!c) return null;
+    const key = getCapabilitiesByType(c, 'class')[0]?.capability.params['key'] as
+      | string
+      | undefined;
+    return findContentEntry<ClassData>(this.content(), 'class', key);
+  });
+
+  /** Type secondaire (capacité 'type', niveau 6) — sous-bloc de la section Voie. */
+  protected readonly secondaryType = computed<TypeData | null>(() => {
+    const c = this.character();
+    if (!c) return null;
+    const key = getCapabilitiesByType(c, 'type')[0]?.capability.params['key'] as
+      | string
+      | undefined;
+    return findContentEntry<TypeData>(this.content(), 'type', key);
+  });
+
+  /** Paysages/climats favoris obtenus (capacité 'landscape', niveaux 3 et 7 — jusqu'à 2). */
+  protected readonly landscapes = computed<string[]>(() => {
+    const c = this.character();
+    if (!c) return [];
+    return getCapabilitiesByType(c, 'landscape')
+      .map(
+        (entry) =>
+          findContentEntry<{ label: string }>(
+            this.content(),
+            'landscape',
+            entry.capability.params['key'] as string | undefined,
+          )?.label,
+      )
+      .filter((label): label is string => !!label);
+  });
+
+  /** Immunités obtenues (capacité 'immunity', niveau 4). */
+  protected readonly immunities = computed<string[]>(() => {
+    const c = this.character();
+    if (!c) return [];
+    return getCapabilitiesByType(c, 'immunity')
+      .map(
+        (entry) =>
+          findContentEntry<{ label: string }>(
+            this.content(),
+            'immunityState',
+            entry.capability.params['key'] as string | undefined,
+          )?.label,
+      )
+      .filter((label): label is string => !!label);
+  });
 
   protected readonly attributes = computed<{
     AGI: number;
@@ -283,5 +362,20 @@ export class CharacterSheet implements OnInit {
     } catch {
       this.portraitError.set('Le cadrage PDF n’a pas pu être enregistré. Réessayez.');
     }
+  }
+
+  protected openLevelUpWizard(): void {
+    if (this.portraitDialogOpen) return;
+    const c = this.character();
+    if (!c) return;
+    this.portraitDialogOpen = true;
+    const ref = this.dialog.open<LevelUpWizard, LevelUpWizardData, CharacterDto | null>(
+      LevelUpWizard,
+      { data: { character: c, content: this.content() } },
+    );
+    ref.afterClosed().subscribe((updated) => {
+      this.portraitDialogOpen = false;
+      if (updated) this.character.set(updated);
+    });
   }
 }

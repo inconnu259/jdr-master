@@ -13,7 +13,7 @@
       <div class="sheet__header-info">
         <h1 class="sheet__name">{{ name() }}</h1>
         <p class="sheet__meta">
-          {{ classData()?.label }} · {{ typeData()?.label }} · Niveau 1 · Ryuutama
+          {{ classData()?.label }} · {{ typeData()?.label }} · Niveau {{ c.level }} · Ryuutama
         </p>
         @if (viewerIsMj()) {
           @if (c.ownerIsMj) {
@@ -60,6 +60,10 @@
       </div>
     </header>
 
+    @if (isOwner()) {
+      <app-level-up-banner [character]="c" (levelUp)="openLevelUpWizard()" />
+    }
+
     @if (exportError(); as error) {
       <p class="sheet__export-error">{{ error }}</p>
     }
@@ -73,33 +77,6 @@
 
     <div class="sheet__body">
       <div class="sheet__column">
-        <section class="sheet__card">
-          <h2 class="sheet__card-title">Vocation — {{ classData()?.label }}</h2>
-          @if (specialtyTypeId()) {
-            <p class="sheet__detail">Spécialité : {{ specialtyTypeId() }}</p>
-          }
-          <ul class="sheet__talent-list">
-            @for (talent of classData()?.talents ?? []; track talent.name) {
-              <li>
-                <strong>{{ talent.name }}</strong>
-                <span class="sheet__detail">{{ talent.effect }}</span>
-              </li>
-            }
-          </ul>
-        </section>
-
-        <section class="sheet__card">
-          <h2 class="sheet__card-title">Voie — {{ typeData()?.label }}</h2>
-          <ul class="sheet__talent-list">
-            @for (advantage of typeData()?.advantages ?? []; track advantage.name) {
-              <li>
-                <strong>{{ advantage.name }}</strong>
-                <span class="sheet__detail">{{ advantage.effect }}</span>
-              </li>
-            }
-          </ul>
-        </section>
-
         <section class="sheet__card">
           <h2 class="sheet__card-title">
             Attributs{{ attributePatternLabel() ? ' — patron ' + attributePatternLabel() : '' }}
@@ -125,6 +102,88 @@
             </div>
           }
         </section>
+
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">Vocation — {{ classData()?.label }}</h2>
+          @if (specialtyTypeId()) {
+            <p class="sheet__detail">Spécialité : {{ specialtyTypeId() }}</p>
+          }
+          <ul class="sheet__talent-list">
+            @for (talent of classData()?.talents ?? []; track talent.name) {
+              <li>
+                <strong>{{ talent.name }}</strong>
+                <span class="sheet__detail">{{ talent.effect }}</span>
+              </li>
+            }
+          </ul>
+          @if (secondaryClass(); as secondary) {
+            <h3 class="sheet__card-subtitle">Classe secondaire : {{ secondary.label }}</h3>
+            <ul class="sheet__talent-list">
+              @for (talent of secondary.talents; track talent.name) {
+                <li>
+                  <strong>{{ talent.name }}</strong>
+                  <span class="sheet__detail">{{ talent.effect }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">Voie — {{ typeData()?.label }}</h2>
+          <ul class="sheet__talent-list">
+            @for (advantage of typeData()?.advantages ?? []; track advantage.name) {
+              <li>
+                <strong>{{ advantage.name }}</strong>
+                <span class="sheet__detail">{{ advantage.effect }}</span>
+              </li>
+            }
+          </ul>
+          @if (secondaryType(); as secondary) {
+            <h3 class="sheet__card-subtitle">Type secondaire : {{ secondary.label }}</h3>
+            <ul class="sheet__talent-list">
+              @for (advantage of secondary.advantages; track advantage.name) {
+                <li>
+                  <strong>{{ advantage.name }}</strong>
+                  <span class="sheet__detail">{{ advantage.effect }}</span>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+
+        @if (landscapes().length > 0) {
+          <section class="sheet__card">
+            <h2 class="sheet__card-title">{{ theme.tone()['evolution.landscape_section_title'] }}</h2>
+            <ul class="sheet__talent-list">
+              @for (label of landscapes(); track label) {
+                <li>{{ label }} <span class="sheet__detail">+2 aux tests appropriés</span></li>
+              }
+            </ul>
+          </section>
+        }
+
+        @if (immunities().length > 0) {
+          <section class="sheet__card">
+            <h2 class="sheet__card-title">{{ theme.tone()['evolution.immunity_section_title'] }}</h2>
+            <ul class="sheet__talent-list">
+              @for (label of immunities(); track label) {
+                <li>{{ label }}</li>
+              }
+            </ul>
+          </section>
+        }
+
+        @if (otherCapabilities().length > 0) {
+          <section class="sheet__card">
+            <h2 class="sheet__card-title">{{ theme.tone()['evolution.other_capabilities_title'] }}</h2>
+            <ul class="sheet__talent-list">
+              @for (capability of otherCapabilities(); track capability.level) {
+                <li>{{ capability.text }}</li>
+              }
+            </ul>
+          </section>
+        }
       </div>
 
       <div class="sheet__column">
@@ -136,6 +195,7 @@
             <span class="stat-pill">Condition {{ c.derived.Condition }}</span>
             <span class="stat-pill">Initiative {{ c.derived.Initiative }}</span>
             <span class="stat-pill">Encombrement max {{ c.derived.Encombrement }}</span>
+            <span class="stat-pill">XP {{ c.xp }}</span>
           </div>
         </section>
 
@@ -210,6 +270,13 @@
         </section>
       </div>
     </div>
+
+    @if (isOwner() || viewerIsMj()) {
+      <section class="sheet__card sheet__history">
+        <h2 class="sheet__card-title">{{ theme.tone()['evolution.history_tab_label'] }}</h2>
+        <app-history-tab [characterId]="c.id" [content]="content()" />
+      </section>
+    }
   </article>
 } @else {
   <p class="sheet__loading">Chargement…</p>

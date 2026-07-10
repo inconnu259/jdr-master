@@ -8,11 +8,20 @@ jest.mock('@master-jdr/game-rules', () => ({
     (
       _data: unknown,
       derived: { PV: number },
-      content: { classLabel: string },
-    ) => [
-      { field: 'PV max', value: String(derived.PV), kind: 'text' },
-      { field: 'Classe 1', value: content.classLabel, kind: 'dropdown' },
-    ],
+      content: {
+        classLabel: string;
+        capabilityLabels?: { landscape?: Record<string, string> };
+      },
+    ) => {
+      const fields = [
+        { field: 'PV max', value: String(derived.PV), kind: 'text' },
+        { field: 'Classe 1', value: content.classLabel, kind: 'dropdown' },
+      ];
+      for (const label of Object.values(content.capabilityLabels?.landscape ?? {})) {
+        fields.push({ field: label, value: '+2', kind: 'text' });
+      }
+      return fields;
+    },
   ),
 }));
 
@@ -26,6 +35,7 @@ import {
 import { GameSystemService } from '../game-systems/game-system.service';
 
 const mockSetText = jest.fn();
+const mockSetFontSize = jest.fn();
 const mockSelect = jest.fn();
 const mockFlatten = jest.fn();
 const mockSave = jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3]));
@@ -39,7 +49,7 @@ const mockEmbeddedImage = { width: 100, height: 100 };
 const mockEmbedJpg = jest.fn().mockResolvedValue(mockEmbeddedImage);
 const mockEmbedPng = jest.fn().mockResolvedValue(mockEmbeddedImage);
 const mockForm = {
-  getTextField: jest.fn(() => ({ setText: mockSetText })),
+  getTextField: jest.fn(() => ({ setText: mockSetText, setFontSize: mockSetFontSize })),
   getDropdown: jest.fn(() => ({ select: mockSelect })),
   flatten: mockFlatten,
 };
@@ -71,6 +81,7 @@ function makeContentService() {
             talents: [{ name: 'Pistage', effect: 'Suit une piste' }],
           },
         },
+        { key: 'marchand', data: { label: 'Marchand' } },
       ],
       type: [{ key: 'attaque', data: { label: 'Attaque' } }],
       weaponCategory: [
@@ -83,6 +94,8 @@ function makeContentService() {
           },
         },
       ],
+      landscape: [{ key: 'foret', data: { label: 'Forêt' } }],
+      immunityState: [{ key: 'blesse', data: { label: 'Blessé' } }],
     }),
   };
 }
@@ -113,6 +126,7 @@ function makeCharacter(overrides: Record<string, unknown> = {}) {
     updatedAt: '2026-01-01T00:00:00.000Z',
     ownerPseudo: 'alice',
     ownerIsMj: false,
+    xp: 0,
     ...overrides,
   };
 }
@@ -179,6 +193,112 @@ describe('RyuutamaPdfService', () => {
       expect.anything(),
       expect.objectContaining({ ownerPseudo: 'bob' }),
     );
+  });
+
+  it('résout capabilityLabels (landscape/immunity/class) depuis le contenu seedé (Story 6.3)', async () => {
+    await service.fillCharacterPdf(makeCharacter(), 'editable');
+
+    expect(mapToPdfFields).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        capabilityLabels: {
+          landscape: { foret: 'Forêt' },
+          immunity: { blesse: 'Blessé' },
+          class: { chasseur: 'Chasseur', marchand: 'Marchand' },
+        },
+      }),
+    );
+  });
+
+  it("transmet xp du CharacterDto à mapToPdfFields (champ 'PX')", async () => {
+    await service.fillCharacterPdf(makeCharacter({ xp: 250 }), 'editable');
+
+    expect(mapToPdfFields).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ xp: 250 }),
+    );
+  });
+
+  it('résout la classe secondaire (capacité class, niveau 5) depuis sheetData.levelUps', async () => {
+    const withSecondaryClass = makeCharacter({
+      sheetData: {
+        classId: 'chasseur',
+        typeId: 'attaque',
+        weaponCategoryId: 'arc',
+        attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
+        levelUps: [
+          {
+            level: 5,
+            pvAllocated: 0,
+            peAllocated: 3,
+            capabilities: [{ type: 'class', params: { key: 'marchand' } }],
+          },
+        ],
+      },
+    });
+    await service.fillCharacterPdf(withSecondaryClass, 'editable');
+
+    expect(mapToPdfFields).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        secondaryClassLabel: 'Marchand',
+      }),
+    );
+  });
+
+  it('résout landscapeDropdownValue depuis le premier paysage obtenu (levelUps type landscape)', async () => {
+    const withLandscape = makeCharacter({
+      sheetData: {
+        classId: 'chasseur',
+        typeId: 'attaque',
+        weaponCategoryId: 'arc',
+        attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
+        levelUps: [
+          {
+            level: 3,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'landscape', params: { key: 'foret' } }],
+          },
+        ],
+      },
+    });
+    await service.fillCharacterPdf(withLandscape, 'editable');
+
+    expect(mapToPdfFields).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ landscapeDropdownValue: 'Forêt' }),
+    );
+  });
+
+  it('champ auto-size connu (paysage/immunité) => setFontSize(8) appliqué avant setText, jamais sur un champ normal', async () => {
+    const withLandscape = makeCharacter({
+      sheetData: {
+        classId: 'chasseur',
+        typeId: 'attaque',
+        weaponCategoryId: 'arc',
+        attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
+        levelUps: [
+          {
+            level: 3,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'landscape', params: { key: 'foret' } }],
+          },
+        ],
+      },
+    });
+    await service.fillCharacterPdf(withLandscape, 'editable');
+
+    // Le mock mapToPdfFields (cf. jest.mock ci-dessus) pousse un champ "Forêt" quand
+    // capabilityLabels.landscape est peuplé — vérifie que setFontSize est appliqué dessus,
+    // jamais sur "PV max" (champ normal, déjà 14pt sur le vrai template).
+    expect(mockSetFontSize).toHaveBeenCalledWith(8);
+    expect(mockSetFontSize).toHaveBeenCalledTimes(1);
   });
 
   describe('intégration du portrait (Story 4.6)', () => {

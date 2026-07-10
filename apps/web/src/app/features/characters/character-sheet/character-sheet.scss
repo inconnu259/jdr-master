@@ -96,6 +96,13 @@
     margin: 0 0 0.75rem;
   }
 
+  &__card-subtitle {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--mat-sys-on-surface-variant, #555);
+    margin: 0.75rem 0 0.5rem;
+  }
+
   &__talent-list {
     list-style: none;
     margin: 0;

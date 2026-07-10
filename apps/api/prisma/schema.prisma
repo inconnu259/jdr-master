@@ -278,6 +278,7 @@ model Character {
   updatedAt           DateTime   @updatedAt
 
   xpDistributionEntries XpDistributionEntry[]
+  snapshots             CharacterSnapshot[]
 
   @@unique([userId, partieId, gameSystemId])
   @@index([partieId])
@@ -306,6 +307,27 @@ model XpDistributionEntry {
   character      Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
   amount         Int
   isBonus        Boolean        @default(false)
+}
+
+enum SnapshotTrigger {
+  LEVEL_UP
+  MJ_EDIT
+}
+
+/// Instantané immuable de la fiche d'un personnage (Story 6.3), créé à chaque montée de niveau
+/// (`LEVEL_UP`) ou édition MJ directe (`MJ_EDIT`, Story 6.6) — jamais de restauration (append-only).
+model CharacterSnapshot {
+  id          String          @id @default(uuid())
+  characterId String
+  character   Character       @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  sheetData   Json
+  derived     Json
+  level       Int
+  trigger     SnapshotTrigger
+  note        String?
+  createdAt   DateTime        @default(now())
+
+  @@index([characterId, createdAt])
 }
 
 /// Sessions HTTP (stockées par connect-pg-simple). Modélisées ici pour que **Prisma** les gère :

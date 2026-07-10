@@ -18,6 +18,11 @@
         <span class="character-summary-card__owner-badge">{{ character().ownerPseudo }}</span>
       }
     }
+    @if (hasPendingLevelUp()) {
+      <span class="character-summary-card__levelup-badge">
+        {{ theme.tone()['roster.levelup_badge'] }}
+      </span>
+    }
   </div>
   <div class="character-summary-card__badges">
     <span class="stat-pill">PV {{ character().derived.PV }}</span>

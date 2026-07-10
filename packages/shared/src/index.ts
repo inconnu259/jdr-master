@@ -273,7 +273,12 @@ export interface CharacterDto {
   ownerIsMj: boolean;
   /** Points d'expérience cumulés — seule source de vérité (jamais dépensés, jamais remis à zéro). */
   xp: number;
-  /** Niveau dérivé de `xp`, calculé côté API — jamais écrit directement par le client. */
+  /**
+   * Niveau réellement appliqué (1 + nombre de montées de niveau validées), calculé côté API —
+   * jamais écrit directement par le client. **Distinct** du niveau potentiel atteignable avec
+   * `xp` (cf. `pendingLevels`/`LevelUpBanner`) : un personnage peut avoir assez d'XP pour monter
+   * de niveau sans que `level` n'augmente tant que le joueur n'a pas validé le `LevelUpWizard`.
+   */
   level: number;
 }
 
@@ -301,6 +306,33 @@ export interface CreateXpDistributionDto {
   monsterLevel?: number;
   entries: { characterId: string; amount: number; isBonus?: boolean }[];
   note?: string;
+}
+
+/** Déclencheur d'un instantané de fiche (Story 6.3). */
+export type SnapshotTrigger = 'LEVEL_UP' | 'MJ_EDIT';
+
+/** Instantané immuable de la fiche d'un personnage (historique, jamais de restauration). */
+export interface CharacterSnapshotDto {
+  id: string;
+  characterId: string;
+  sheetData: SheetData;
+  derived: DerivedStats;
+  level: number;
+  trigger: SnapshotTrigger;
+  note?: string;
+  createdAt: string;
+}
+
+/**
+ * Payload de POST /characters/:id/level-up. `capabilities[].type` reste `string` ici (pas
+ * `CapabilityType`, qui vit dans `@master-jdr/game-rules` — `packages/shared` ne doit pas en
+ * dépendre). Aux niveaux 4/6/10, deux capacités sont octroyées conjointement (Attribut ET
+ * spéciale) — le tableau en contient alors deux ; sinon une seule.
+ */
+export interface CreateLevelUpDto {
+  pvAllocated: number;
+  peAllocated: number;
+  capabilities: { type: string; params: Record<string, unknown> }[];
 }
 
 /**

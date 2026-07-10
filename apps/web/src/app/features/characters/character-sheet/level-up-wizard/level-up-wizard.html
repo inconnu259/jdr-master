@@ -1,0 +1,130 @@
+@if (currentLevel(); as level) {
+  <div class="wizard">
+    <h2 class="wizard__title">
+      {{ theme.tone()['evolution.levelup_wizard_title'] }} — Niveau {{ level }}
+    </h2>
+
+    @if (totalSteps > 1) {
+      <div class="wizard__progress" role="progressbar" [attr.aria-valuenow]="currentStepNumber()" [attr.aria-valuemax]="totalSteps">
+        @for (i of progressSteps; track i) {
+          <span class="wizard__progress-segment" [class.wizard__progress-segment--done]="i < currentStepNumber() - 1"></span>
+        }
+      </div>
+    }
+
+    <section class="wizard__step">
+      <h3 class="wizard__step-title">{{ theme.tone()['evolution.levelup_step_pv_pe'] }}</h3>
+      <div class="pv-pe-stepper">
+        <div class="pv-pe-stepper__col">
+          <span class="pv-pe-stepper__label">PV</span>
+          <div class="pv-pe-stepper__controls">
+            <button
+              mat-icon-button
+              type="button"
+              aria-label="Diminuer PV"
+              [disabled]="pvAllocated() <= 0"
+              (click)="decrementPv()"
+            >
+              −
+            </button>
+            <span class="pv-pe-stepper__value">{{ pvAllocated() }}</span>
+            <button
+              mat-icon-button
+              type="button"
+              aria-label="Augmenter PV"
+              [disabled]="pvAllocated() + peAllocated() >= 3"
+              (click)="incrementPv()"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <div class="pv-pe-stepper__col">
+          <span class="pv-pe-stepper__label">PE</span>
+          <div class="pv-pe-stepper__controls">
+            <button
+              mat-icon-button
+              type="button"
+              aria-label="Diminuer PE"
+              [disabled]="peAllocated() <= 0"
+              (click)="decrementPe()"
+            >
+              −
+            </button>
+            <span class="pv-pe-stepper__value">{{ peAllocated() }}</span>
+            <button
+              mat-icon-button
+              type="button"
+              aria-label="Augmenter PE"
+              [disabled]="pvAllocated() + peAllocated() >= 3"
+              (click)="incrementPe()"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="wizard__step">
+      <h3 class="wizard__step-title">{{ theme.tone()['evolution.levelup_step_capability'] }}</h3>
+
+      @if (attributeRequired()) {
+        <div class="attribute-choice-grid">
+          @for (attr of ATTRIBUTE_KEYS; track attr) {
+            <button
+              type="button"
+              class="attribute-choice-grid__cell"
+              [class.attribute-choice-grid__cell--selected]="selectedAttribute() === attr"
+              [attr.aria-disabled]="isAttributeDisabled(attr)"
+              [attr.aria-describedby]="isAttributeDisabled(attr) ? 'attr-max-' + attr : null"
+              [disabled]="isAttributeDisabled(attr)"
+              (click)="selectAttribute(attr)"
+            >
+              <span>{{ attr }}</span>
+              <span>{{ attributes()?.[attr] }}</span>
+              @if (selectedAttribute() === attr) {
+                <span>→ {{ (attributes()?.[attr] ?? 0) + 2 }}</span>
+              }
+            </button>
+            @if (isAttributeDisabled(attr)) {
+              <span [id]="'attr-max-' + attr" class="wizard__sr-only">Déjà au maximum (12)</span>
+            }
+          }
+        </div>
+      }
+
+      @if (specialType() === 'legendary-journey') {
+        <p class="wizard__legendary-journey-text">
+          {{ theme.tone()['evolution.levelup_legendary_journey_text'] }}
+        </p>
+      } @else if (specialType()) {
+        <div class="wizard__content-choice-list">
+          @for (option of contentOptionsForSpecialType(); track option.key) {
+            <app-choice-card
+              [option]="option"
+              [selected]="selectedContentKey() === option.key"
+              (selectedOption)="selectContentKey($event)"
+            />
+          }
+        </div>
+      }
+    </section>
+
+    @if (submitError(); as error) {
+      <p class="wizard__error">{{ error }}</p>
+    }
+
+    <div class="wizard__actions">
+      <button mat-button type="button" (click)="cancel()">Annuler</button>
+      <button
+        mat-flat-button
+        type="button"
+        [disabled]="!canSubmit() || submitting()"
+        (click)="confirm()"
+      >
+        {{ theme.tone()['evolution.levelup_confirm_cta'] }}
+      </button>
+    </div>
+  </div>
+}

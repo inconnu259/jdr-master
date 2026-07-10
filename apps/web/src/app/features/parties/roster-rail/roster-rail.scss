@@ -72,6 +72,23 @@
   line-height: 1.4;
 }
 
+.roster-rail__levelup-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--jdr-gradient-cta, var(--mat-sys-primary, #6750a4));
+  color: #fff;
+  font-size: 0.55rem;
+  line-height: 1;
+  border: 1px solid var(--mat-sys-surface, #fff);
+}
+
 .roster-rail__label {
   display: flex;
   flex-direction: column;

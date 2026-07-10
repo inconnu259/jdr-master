@@ -96,4 +96,29 @@ describe('CharacterSummaryCard', () => {
     // 'Maître' (ryuutama), 'Guide' (default), 'Ingénieur' (steampunk).
     expect(['Maître', 'Guide', 'Ingénieur']).toContain(badge?.textContent?.trim());
   });
+
+  it('personnage avec un niveau en attente → badge de montée de niveau affiché', async () => {
+    const pending: CharacterDto = { ...CHARACTER, xp: 150 };
+    TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
+    const fixture = TestBed.createComponent(CharacterSummaryCard);
+    fixture.componentRef.setInput('character', pending);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(
+      fixture.nativeElement.querySelector('.character-summary-card__levelup-badge'),
+    ).not.toBeNull();
+  });
+
+  it('personnage sans niveau en attente → aucun badge de montée de niveau', async () => {
+    TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
+    const fixture = TestBed.createComponent(CharacterSummaryCard);
+    fixture.componentRef.setInput('character', CHARACTER);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(
+      fixture.nativeElement.querySelector('.character-summary-card__levelup-badge'),
+    ).toBeNull();
+  });
 });

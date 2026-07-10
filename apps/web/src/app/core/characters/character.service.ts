@@ -3,7 +3,9 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type {
   CharacterDto,
+  CharacterSnapshotDto,
   CreateCharacterDto,
+  CreateLevelUpDto,
   GameSystemContentDto,
   GameSystemDto,
   GameSystemSchemaDto,
@@ -108,6 +110,22 @@ export class CharacterService {
     return firstValueFrom(
       this.http.get(`${API_BASE}/characters/${id}/portrait`, {
         responseType: 'blob',
+        withCredentials: true,
+      }),
+    );
+  }
+
+  levelUp(id: string, dto: CreateLevelUpDto): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.post<CharacterDto>(`${API_BASE}/characters/${id}/level-up`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  getHistory(id: string): Promise<CharacterSnapshotDto[]> {
+    return firstValueFrom(
+      this.http.get<CharacterSnapshotDto[]>(`${API_BASE}/characters/${id}/history`, {
         withCredentials: true,
       }),
     );

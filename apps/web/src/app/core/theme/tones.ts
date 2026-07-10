@@ -100,6 +100,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'roster.invite_slot': 'Convier un compagnon',
     'roster.collapse_label': 'Replier la troupe',
     'roster.expand_label': 'Déplier la troupe',
+    'roster.levelup_badge': 'Montée de niveau disponible',
     /* — évolution du personnage (Story 6.2) — */
     'evolution.xp_distribute_cta': "Distribuer de l'XP",
     'evolution.xp_panel_title': "Distribution d'XP",
@@ -109,6 +110,21 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.xp_confirm_btn': 'Sceller la distribution',
     'evolution.xp_bonus_link': '+ bonus',
     'evolution.xp_levelup_warning': '{name} franchira un niveau',
+    /* — montée de niveau & historique (Story 6.3) — */
+    'evolution.levelup_banner': 'Niveau [N] disponible !',
+    'evolution.levelup_cta': 'Level up !',
+    'evolution.levelup_wizard_title': 'Montée de niveau',
+    'evolution.levelup_step_pv_pe': 'Répartir 3 points entre PV et PE',
+    'evolution.levelup_step_capability': 'Choisir la capacité débloquée',
+    'evolution.levelup_legendary_journey_text':
+      'Un voyage légendaire vous attend — aucun choix supplémentaire à faire.',
+    'evolution.levelup_confirm_cta': 'Valider ce niveau',
+    'evolution.history_tab_label': 'Historique',
+    'evolution.history_empty': 'Aucun instantané pour le moment.',
+    'evolution.mj_edit_trace': 'modifié par le MJ',
+    'evolution.landscape_section_title': 'Paysage/Climat favori',
+    'evolution.immunity_section_title': 'Immunités',
+    'evolution.other_capabilities_title': 'Autres capacités',
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -202,6 +218,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'roster.invite_slot': 'Accueillir un compagnon de route',
     'roster.collapse_label': 'Replier le cercle',
     'roster.expand_label': 'Déplier le cercle',
+    'roster.levelup_badge': 'Prêt à grandir',
     /* — évolution du personnage (Story 6.2) — */
     'evolution.xp_distribute_cta': 'Partager les récits',
     'evolution.xp_panel_title': 'Partage des récits',
@@ -211,6 +228,21 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.xp_confirm_btn': 'Confier ce récit au cercle',
     'evolution.xp_bonus_link': '+ éclat',
     'evolution.xp_levelup_warning': '{name} va grandir',
+    /* — montée de niveau & historique (Story 6.3) — */
+    'evolution.levelup_banner': "Le cercle t'appelle à grandir — niveau [N]",
+    'evolution.levelup_cta': 'Gravir un échelon',
+    'evolution.levelup_wizard_title': 'Croissance',
+    'evolution.levelup_step_pv_pe': 'Répartir 3 points entre PV et PE',
+    'evolution.levelup_step_capability': 'Choisir le don qui s’éveille',
+    'evolution.levelup_legendary_journey_text':
+      'Un chemin légendaire s’ouvre — rien de plus à choisir.',
+    'evolution.levelup_confirm_cta': 'Graver cet échelon',
+    'evolution.history_tab_label': 'Mémoire du cercle',
+    'evolution.history_empty': 'Aucun souvenir gravé pour le moment.',
+    'evolution.mj_edit_trace': 'modifié par le MJ',
+    'evolution.landscape_section_title': 'Paysage/climat de coeur',
+    'evolution.immunity_section_title': 'Immunités du cercle',
+    'evolution.other_capabilities_title': 'Dons du voyage',
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -304,6 +336,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'roster.invite_slot': 'Recruter un mécanicien',
     'roster.collapse_label': "Replier l'équipage",
     'roster.expand_label': "Déplier l'équipage",
+    'roster.levelup_badge': 'Calibrage niveau disponible',
     /* — évolution du personnage (Story 6.2) — */
     'evolution.xp_distribute_cta': "Distribuer les crédits d'expérience",
     'evolution.xp_panel_title': "Distribution de crédits d'expérience",
@@ -313,5 +346,20 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.xp_confirm_btn': 'Valider la distribution',
     'evolution.xp_bonus_link': '+ bonus',
     'evolution.xp_levelup_warning': '{name} va être recalibré au niveau supérieur',
+    /* — montée de niveau & historique (Story 6.3) — */
+    'evolution.levelup_banner': 'Calibrage niveau [N] disponible',
+    'evolution.levelup_cta': 'Recalibrer',
+    'evolution.levelup_wizard_title': 'Recalibrage',
+    'evolution.levelup_step_pv_pe': 'Répartir 3 points entre PV et PE',
+    'evolution.levelup_step_capability': 'Choisir le module débloqué',
+    'evolution.levelup_legendary_journey_text':
+      'Une trajectoire légendaire est engagée — aucun réglage supplémentaire requis.',
+    'evolution.levelup_confirm_cta': 'Valider le calibrage',
+    'evolution.history_tab_label': 'Journal de bord',
+    'evolution.history_empty': 'Aucune entrée consignée pour le moment.',
+    'evolution.mj_edit_trace': 'recalibré par le MJ',
+    'evolution.landscape_section_title': 'Module paysage/climat',
+    'evolution.immunity_section_title': 'Modules d’immunité',
+    'evolution.other_capabilities_title': 'Modules installés',
   },
 };

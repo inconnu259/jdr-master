@@ -1,0 +1,13 @@
+<!-- Région live persistante : présente dès le montage (propriétaire) pour que l'apparition de la
+     bannière soit annoncée. La plupart des lecteurs d'écran n'annoncent que les mutations d'une
+     région live *préexistante*, pas une région créée en même temps que son contenu. -->
+<div class="level-up-banner-live" aria-live="polite">
+  @if (nextLevel() !== null) {
+    <div class="level-up-banner">
+      <span class="level-up-banner__text">{{ bannerText() }}</span>
+      <button mat-flat-button type="button" class="level-up-banner__cta" (click)="onClick()">
+        {{ theme.tone()['evolution.levelup_cta'] }}
+      </button>
+    </div>
+  }
+</div>

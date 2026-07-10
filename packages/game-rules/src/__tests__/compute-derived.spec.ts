@@ -16,4 +16,51 @@ describe('computeDerived', () => {
     expect(computeDerived(base).Initiative).toBe(10));
   it('Encombrement = VIG + 3', () =>
     expect(computeDerived(base).Encombrement).toBe(11));
+
+  it('sans levelUps (régression) : PV/PE/Encombrement inchangés', () => {
+    const derived = computeDerived({ ...base, levelUps: undefined });
+    expect(derived.PV).toBe(16);
+    expect(derived.PE).toBe(12);
+    expect(derived.Encombrement).toBe(11);
+  });
+
+  it('avec 1 entrée levelUps : PV/PE/Encombrement +N', () => {
+    const derived = computeDerived({
+      ...base,
+      levelUps: [
+        {
+          level: 2,
+          pvAllocated: 2,
+          peAllocated: 1,
+          capabilities: [{ type: 'attribute', params: {} }],
+        },
+      ],
+    });
+    expect(derived.PV).toBe(18);
+    expect(derived.PE).toBe(13);
+    expect(derived.Encombrement).toBe(12);
+  });
+
+  it('avec 2 entrées levelUps cumulées', () => {
+    const derived = computeDerived({
+      ...base,
+      levelUps: [
+        {
+          level: 2,
+          pvAllocated: 2,
+          peAllocated: 1,
+          capabilities: [{ type: 'attribute', params: {} }],
+        },
+        {
+          level: 3,
+          pvAllocated: 0,
+          peAllocated: 3,
+          capabilities: [{ type: 'landscape', params: {} }],
+        },
+      ],
+    });
+    expect(derived.PV).toBe(18);
+    expect(derived.PE).toBe(16);
+    expect(derived.Encombrement).toBe(13);
+  });
 });

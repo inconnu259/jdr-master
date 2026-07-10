@@ -139,6 +139,29 @@ describe('RosterRail', () => {
     expect(minHeight).toBe(36);
   });
 
+  it('personnage avec un niveau en attente → badge de montée de niveau visible', () => {
+    const fixture = setup();
+    fixture.componentRef.setInput('characters', [
+      makeCharacterDto({
+        id: 'c1',
+        userId: 'u1',
+        xp: 150,
+        sheetData: { narrative: { name: 'Fenn' } },
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(playerItem.querySelector('.roster-rail__levelup-badge')).not.toBeNull();
+    expect(playerItem.getAttribute('aria-label')).toContain('montée de niveau disponible');
+  });
+
+  it("personnage sans niveau en attente → pas de badge de montée de niveau", () => {
+    const fixture = setup();
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(playerItem.querySelector('.roster-rail__levelup-badge')).toBeNull();
+  });
+
   it('la touche Espace active un membre au clavier comme Entrée', () => {
     const fixture = setup();
     let emitted: { characterId: string } | undefined;

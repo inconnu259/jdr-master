@@ -1,5 +1,6 @@
 import type { CharacterDto, PartieMemberDto } from '@master-jdr/shared';
 import { characterName } from '../../core/characters/character.util';
+import { pendingLevelsLocal } from '../characters/character-sheet/level-thresholds';
 
 export interface RosterRow {
   member: PartieMemberDto;
@@ -8,6 +9,19 @@ export interface RosterRow {
   displayName: string;
   classLabel: string;
   ariaLabel: string;
+  /** Le personnage a franchi un seuil de niveau pas encore traité par son propriétaire (cf. LevelUpBanner). */
+  hasPendingLevelUp: boolean;
+}
+
+function hasPendingLevelUp(character: CharacterDto | null): boolean {
+  if (!character) return false;
+  const appliedCount = ((character.sheetData as any)?.levelUps?.length as number | undefined) ?? 0;
+  return pendingLevelsLocal(character.xp, appliedCount).length > 0;
+}
+
+/** Suffixe d'accessibilité — même info que le badge visuel, jamais un indicateur couleur/icône seul. */
+function withLevelUpSuffix(label: string, pending: boolean): string {
+  return pending ? `${label} — montée de niveau disponible` : label;
 }
 
 /**
@@ -25,13 +39,15 @@ export function buildRosterRows(
     const isMj = member.userId === mjId;
     const character = characters.find((c) => c.userId === member.userId) ?? null;
     if (isMj) {
+      const pending = hasPendingLevelUp(character);
       return {
         member,
         isMj,
         character,
         displayName: member.pseudo,
         classLabel: '',
-        ariaLabel: `${member.pseudo} — MJ`,
+        ariaLabel: withLevelUpSuffix(`${member.pseudo} — MJ`, pending),
+        hasPendingLevelUp: pending,
       };
     }
     if (!character) {
@@ -42,17 +58,20 @@ export function buildRosterRows(
         displayName: member.pseudo,
         classLabel: '',
         ariaLabel: `${member.pseudo} — aucun personnage créé`,
+        hasPendingLevelUp: false,
       };
     }
     const name = characterName(character);
     const classLabel = classLabelFor(character);
+    const pending = hasPendingLevelUp(character);
     return {
       member,
       isMj,
       character,
       displayName: name,
       classLabel,
-      ariaLabel: `${member.pseudo} — ${name} (${classLabel})`,
+      ariaLabel: withLevelUpSuffix(`${member.pseudo} — ${name} (${classLabel})`, pending),
+      hasPendingLevelUp: pending,
     };
   });
 }

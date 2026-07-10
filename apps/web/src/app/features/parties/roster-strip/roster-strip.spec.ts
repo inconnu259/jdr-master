@@ -106,6 +106,22 @@ describe('RosterStrip', () => {
     expect(emitted).toEqual({ characterId: 'c1' });
   });
 
+  it('personnage avec un niveau en attente → badge de montée de niveau visible', () => {
+    const fixture = setup();
+    fixture.componentRef.setInput('characters', [
+      makeCharacterDto({
+        id: 'c1',
+        userId: 'u1',
+        xp: 150,
+        sheetData: { narrative: { name: 'Fenn' } },
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(playerItem.querySelector('.roster-strip__levelup-badge')).not.toBeNull();
+  });
+
   it('la zone de tap de chaque pastille atteint au moins 44px malgré un avatar visuel de 26px', () => {
     const fixture = setup();
     const item: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');

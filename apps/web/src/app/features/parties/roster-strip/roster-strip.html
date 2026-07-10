@@ -23,6 +23,14 @@
         @if (row.isMj) {
           <span class="roster-strip__mj-badge">{{ theme.tone()['roster.mj_badge'] }}</span>
         }
+        @if (row.hasPendingLevelUp) {
+          <span
+            class="roster-strip__levelup-badge"
+            [title]="theme.tone()['roster.levelup_badge']"
+            aria-hidden="true"
+            >▲</span
+          >
+        }
       </span>
       <span class="roster-strip__name">{{ row.displayName }}</span>
     </div>

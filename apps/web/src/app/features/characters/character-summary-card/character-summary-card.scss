@@ -37,6 +37,17 @@
     font-style: italic;
   }
 
+  &__levelup-badge {
+    align-self: flex-start;
+    margin-top: 0.15rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--jdr-gradient-cta, var(--mat-sys-primary, #6750a4));
+  }
+
   &__badges {
     display: flex;
     flex-wrap: wrap;

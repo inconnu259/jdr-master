@@ -28,6 +28,7 @@ const CONTENT: GameSystemContentDto = {
   weaponCategory: [
     { key: 'lance', data: { label: 'Lance', touchFormula: 'VIG+AGI', damageFormula: 'VIG+1' } },
   ],
+  landscape: [{ key: 'foret', data: { label: 'Forêt' } }],
 };
 
 const CHARACTER: CharacterDto = makeCharacterDto({
@@ -53,6 +54,8 @@ function defaultSvc() {
     exportPdf: vi.fn().mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
     updatePortrait: vi.fn(),
     patchPdfPortraitCrop: vi.fn(),
+    getHistory: vi.fn().mockResolvedValue([]),
+    levelUp: vi.fn(),
   };
 }
 
@@ -482,5 +485,239 @@ describe('CharacterSheet', () => {
 
     const comp = fixture.componentInstance as any;
     expect(comp.portraitError()).toBeTruthy();
+  });
+
+  it('niveau affiché dynamique (c.level) au lieu de "Niveau 1" figé', async () => {
+    const character = { ...CHARACTER, xp: 3000, level: 6 };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(character) });
+    const { fixture } = await createComponent(characterSvc);
+
+    expect(fixture.nativeElement.querySelector('.sheet__meta').textContent).toContain('Niveau 6');
+  });
+
+  it('propriétaire avec niveau en attente → LevelUpBanner visible', async () => {
+    const character = { ...CHARACTER, xp: 150 };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(character) });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'u1');
+
+    expect(fixture.nativeElement.querySelector('.level-up-banner')).not.toBeNull();
+  });
+
+  it('propriétaire sans niveau en attente → LevelUpBanner absent', async () => {
+    const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'u1');
+    expect(fixture.nativeElement.querySelector('.level-up-banner')).toBeNull();
+  });
+
+  it('MJ (non-propriétaire) → LevelUpBanner jamais affiché, même avec niveau en attente', async () => {
+    const character = { ...CHARACTER, xp: 150 };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(character) });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+
+    expect(fixture.nativeElement.querySelector('.level-up-banner')).toBeNull();
+  });
+
+  it('propriétaire → section Historique visible', async () => {
+    const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'u1');
+    expect(fixture.nativeElement.querySelector('.sheet__history')).not.toBeNull();
+  });
+
+  it('MJ (non-propriétaire) → section Historique visible également (AC4)', async () => {
+    const { fixture } = await createComponent(
+      makeCharacterService(),
+      'char1',
+      null,
+      'mj-stranger',
+    );
+    expect(fixture.nativeElement.querySelector('.sheet__history')).not.toBeNull();
+  });
+
+  it('aucune capacité sans section dédiée → section "Autres capacités" absente', async () => {
+    const { fixture } = await createComponent();
+    expect(fixture.nativeElement.textContent).not.toContain('Autres capacités');
+  });
+
+  it('capacité sans section dédiée (protection d\'un dragon) → section "Autres capacités" affichée, visible aussi pour le MJ', async () => {
+    const withDragonProtection = {
+      ...CHARACTER,
+      sheetData: {
+        ...CHARACTER.sheetData,
+        levelUps: [
+          {
+            level: 9,
+            pvAllocated: 2,
+            peAllocated: 1,
+            capabilities: [{ type: 'dragon-protection', params: { key: 'ete' } }],
+          },
+        ],
+      },
+    };
+    const characterSvc = makeCharacterService({
+      get: vi.fn().mockResolvedValue(withDragonProtection),
+    });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Autres capacités');
+    expect(text).toContain("Protection d'un dragon");
+    expect(text).not.toContain('Niveau 9 — ');
+  });
+
+  it('capacité structurelle (attribut/paysage/immunité/classe/type) → jamais dans "Autres capacités"', async () => {
+    const withStructural = {
+      ...CHARACTER,
+      sheetData: {
+        ...CHARACTER.sheetData,
+        levelUps: [
+          {
+            level: 2,
+            pvAllocated: 2,
+            peAllocated: 1,
+            capabilities: [{ type: 'attribute', params: { attribute: 'VIG' } }],
+          },
+        ],
+      },
+    };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(withStructural) });
+    const { fixture } = await createComponent(characterSvc);
+
+    expect(fixture.nativeElement.textContent).not.toContain('Autres capacités');
+  });
+
+  it('classe secondaire (capacité class) → sous-bloc "Classe secondaire" dans Vocation, avec ses talents', async () => {
+    const withSecondaryClass = {
+      ...CHARACTER,
+      sheetData: {
+        ...CHARACTER.sheetData,
+        levelUps: [
+          {
+            level: 5,
+            pvAllocated: 0,
+            peAllocated: 3,
+            capabilities: [{ type: 'class', params: { key: 'marchand' } }],
+          },
+        ],
+      },
+    };
+    const contentWithMarchand: GameSystemContentDto = {
+      ...CONTENT,
+      class: [
+        ...(CONTENT['class'] ?? []),
+        { key: 'marchand', data: { label: 'Marchand', talents: [{ name: 'Négociation', effect: 'Baisse un prix' }] } },
+      ],
+    };
+    const characterSvc = makeCharacterService({
+      get: vi.fn().mockResolvedValue(withSecondaryClass),
+      getGameSystemContent: vi.fn().mockResolvedValue(contentWithMarchand),
+    });
+    const { fixture } = await createComponent(characterSvc);
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Classe secondaire : Marchand');
+    expect(text).toContain('Négociation');
+  });
+
+  it('type secondaire (capacité type) → sous-bloc "Type secondaire" dans Voie, avec ses avantages', async () => {
+    const withSecondaryType = {
+      ...CHARACTER,
+      sheetData: {
+        ...CHARACTER.sheetData,
+        levelUps: [
+          {
+            level: 6,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'type', params: { key: 'magie' } }],
+          },
+        ],
+      },
+    };
+    const contentWithMagie: GameSystemContentDto = {
+      ...CONTENT,
+      type: [
+        ...(CONTENT['type'] ?? []),
+        { key: 'magie', data: { label: 'Magie', advantages: [{ name: 'Incantation', effect: '+2' }] } },
+      ],
+    };
+    const characterSvc = makeCharacterService({
+      get: vi.fn().mockResolvedValue(withSecondaryType),
+      getGameSystemContent: vi.fn().mockResolvedValue(contentWithMagie),
+    });
+    const { fixture } = await createComponent(characterSvc);
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Type secondaire : Magie');
+    expect(text).toContain('Incantation');
+  });
+
+  it('paysage obtenu → nouvelle section Paysage/Climat favori affichée avec "+2 aux tests appropriés"', async () => {
+    const withLandscape = {
+      ...CHARACTER,
+      sheetData: {
+        ...CHARACTER.sheetData,
+        levelUps: [
+          {
+            level: 3,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'landscape', params: { key: 'foret' } }],
+          },
+        ],
+      },
+    };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(withLandscape) });
+    const { fixture } = await createComponent(characterSvc);
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Paysage/Climat favori');
+    expect(text).toContain('Forêt');
+    expect(text).toContain('+2 aux tests appropriés');
+  });
+
+  it('aucun paysage obtenu → section Paysage/Climat favori absente', async () => {
+    const { fixture } = await createComponent();
+    expect(fixture.nativeElement.textContent).not.toContain('Paysage/Climat favori');
+  });
+
+  it('immunité obtenue → nouvelle section Immunités affichée', async () => {
+    const withImmunity = {
+      ...CHARACTER,
+      sheetData: {
+        ...CHARACTER.sheetData,
+        levelUps: [
+          {
+            level: 4,
+            pvAllocated: 2,
+            peAllocated: 1,
+            capabilities: [{ type: 'immunity', params: { key: 'blesse' } }],
+          },
+        ],
+      },
+    };
+    const contentWithImmunity: GameSystemContentDto = {
+      ...CONTENT,
+      immunityState: [{ key: 'blesse', data: { label: 'Blessé' } }],
+    };
+    const characterSvc = makeCharacterService({
+      get: vi.fn().mockResolvedValue(withImmunity),
+      getGameSystemContent: vi.fn().mockResolvedValue(contentWithImmunity),
+    });
+    const { fixture } = await createComponent(characterSvc);
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Immunités');
+    expect(text).toContain('Blessé');
+  });
+
+  it('aucune immunité obtenue → section Immunités absente', async () => {
+    const { fixture } = await createComponent();
+    expect(fixture.nativeElement.textContent).not.toContain('Immunités');
+  });
+
+  it('XP affiché comme stat-pill dans Statistiques dérivées', async () => {
+    const withXp = { ...CHARACTER, xp: 250 };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(withXp) });
+    const { fixture } = await createComponent(characterSvc);
+
+    expect(fixture.nativeElement.textContent).toContain('XP 250');
   });
 });

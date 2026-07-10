@@ -1,3 +1,5 @@
+import type { CapabilityType } from './leveling.ts';
+
 export interface RyuutamaSheetData {
   classId: string;
   specialtyTypeId?: string; // obligatoire si classId === "artisan"
@@ -15,6 +17,18 @@ export interface RyuutamaSheetData {
     name?: string;
     personality?: string;
   };
+  /** Montées de niveau appliquées (Story 6.3). Absent sur les personnages créés avant ce palier. */
+  levelUps?: {
+    level: number;
+    pvAllocated: number; // 0-3
+    peAllocated: number; // 0-3, pvAllocated+peAllocated === 3
+    /**
+     * Capacités octroyées à ce niveau. Aux niveaux 4/6/10, `LEVEL_TABLE` accorde **deux** capacités
+     * conjointement (ex. niveau 4 = un Attribut ET une Immunité) — jamais un choix exclusif ; le
+     * tableau en contient alors deux. Les autres niveaux n'en accordent qu'une seule.
+     */
+    capabilities: { type: CapabilityType; params: Record<string, unknown> }[];
+  }[];
 }
 
 export interface DerivedStats {

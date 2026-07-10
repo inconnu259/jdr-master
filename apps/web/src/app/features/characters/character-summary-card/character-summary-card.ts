@@ -3,6 +3,7 @@ import type { CharacterDto } from '@master-jdr/shared';
 import { characterName } from '../../../core/characters/character.util';
 import { CharacterAvatar } from '../character-avatar/character-avatar';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { pendingLevelsLocal } from '../character-sheet/level-thresholds';
 
 @Component({
   selector: 'app-character-summary-card',
@@ -22,6 +23,12 @@ export class CharacterSummaryCard {
   readonly selected = output<void>();
 
   protected readonly name = computed(() => characterName(this.character()));
+
+  protected readonly hasPendingLevelUp = computed(() => {
+    const c = this.character();
+    const appliedCount = ((c.sheetData as any)?.levelUps?.length as number | undefined) ?? 0;
+    return pendingLevelsLocal(c.xp, appliedCount).length > 0;
+  });
 
   protected onClick(): void {
     this.selected.emit();

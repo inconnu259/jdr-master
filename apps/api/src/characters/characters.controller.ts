@@ -10,6 +10,7 @@ import {
   ParseFilePipe,
   ParseUUIDPipe,
   Patch,
+  Post,
   Put,
   Query,
   StreamableFile,
@@ -29,6 +30,7 @@ import { MulterExceptionFilter } from '../common/filters/multer-exception.filter
 import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
 import { CharacterService } from './character.service';
 import { RyuutamaPdfService } from './ryuutama-pdf.service';
+import { CreateLevelUpDto } from './dto/create-level-up.dto';
 import { ExportCharacterPdfDto } from './dto/export-character-pdf.dto';
 import { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 
@@ -142,5 +144,22 @@ export class CharactersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.characters.updatePdfPortraitCrop(id, user.id, cropData);
+  }
+
+  @Post(':id/level-up')
+  levelUp(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateLevelUpDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.applyLevelUp(id, user.id, dto);
+  }
+
+  @Get(':id/history')
+  history(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.getHistory(id, user.id);
   }
 }

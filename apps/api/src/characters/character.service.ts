@@ -10,12 +10,13 @@ import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import type { CharacterDto } from '@master-jdr/shared';
+import type { CharacterDto, CharacterSnapshotDto } from '@master-jdr/shared';
 import {
   computeDerived,
   validate,
-  levelForXp,
   pendingLevels,
+  LEVEL_TABLE,
+  type CapabilityType,
   type RyuutamaCatalog,
   type RyuutamaSheetData,
 } from '@master-jdr/game-rules';
@@ -26,6 +27,7 @@ import { GameSystemService } from '../game-systems/game-system.service';
 import { EmailService } from '../email/email.service';
 import { SUPPORTED_GAME_SYSTEMS } from '../game-systems/supported-game-systems';
 import { CreateCharacterDto } from './dto/create-character.dto';
+import type { CreateLevelUpDto } from './dto/create-level-up.dto';
 import type { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 import {
   detectImageMime,
@@ -38,6 +40,19 @@ import {
   extractPortraitFilename,
   readPortraitFile,
 } from './portrait-storage.util';
+
+/**
+ * Mapping type de capacité (`CapabilityType`) → clé de contenu seedé (`GameSystemService`
+ * `CONTENT_TYPES`) permettant de valider `params.key` à l'application d'une montée de niveau.
+ * `attribute`/`legendary-journey` n'ont pas de contenu seedé (validés autrement / sans params).
+ */
+const CONTENT_KEY_BY_CAPABILITY: Record<string, string> = {
+  landscape: 'landscape',
+  immunity: 'immunityState',
+  class: 'class',
+  type: 'type',
+  'dragon-protection': 'season',
+};
 
 @Injectable()
 export class CharacterService {
@@ -352,6 +367,177 @@ export class CharacterService {
     });
   }
 
+  /**
+   * Application d'une montée de niveau : accès PROPRIÉTAIRE SEUL (FR-6, c'est le joueur qui
+   * applique ses propres montées, jamais le MJ). Verrou optimiste sur `updatedAt` (AD-9,
+   * contrairement à `applyXpDelta` qui en est explicitement exclu).
+   */
+  async applyLevelUp(
+    characterId: string,
+    userId: string,
+    dto: CreateLevelUpDto,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    const levelUps = sheetData.levelUps ?? [];
+
+    const pending = pendingLevels(character.xp, levelUps.length);
+    if (pending.length === 0) {
+      throw new BadRequestException('Aucun niveau en attente');
+    }
+
+    if (
+      dto.pvAllocated + dto.peAllocated !== 3 ||
+      dto.pvAllocated < 0 ||
+      dto.peAllocated < 0
+    ) {
+      throw new BadRequestException(
+        'La répartition doit totaliser exactement 3 points entre PV et PE',
+      );
+    }
+
+    const nextLevel = pending[0];
+    const expectedCapabilities =
+      LEVEL_TABLE.find((entry) => entry.level === nextLevel)?.capabilities ??
+      [];
+
+    // Aux niveaux 4/6/10, deux capacités sont octroyées CONJOINTEMENT (Attribut ET spéciale),
+    // jamais un choix exclusif — l'ensemble des types fourni doit correspondre exactement à
+    // l'attendu (même cardinalité, mêmes types, sans doublon ni extra).
+    const providedTypes = dto.capabilities.map((c) => c.type).sort();
+    const expectedTypes = [...expectedCapabilities].sort();
+    if (
+      providedTypes.length !== expectedTypes.length ||
+      providedTypes.some((t, i) => t !== expectedTypes[i])
+    ) {
+      throw new BadRequestException(
+        `Capacités attendues pour le niveau ${nextLevel} : ${expectedCapabilities.join(', ')}`,
+      );
+    }
+
+    // Validation de chaque capacité AVANT toute mutation (pas d'application partielle si l'une
+    // échoue). Le contenu seedé n'est chargé que si une capacité data-driven doit être validée.
+    const needsContent = dto.capabilities.some(
+      (c) => c.type !== 'attribute' && c.type !== 'legendary-journey',
+    );
+    const content = needsContent
+      ? await this.gameSystems.getContent(character.gameSystemId)
+      : null;
+    for (const cap of dto.capabilities) {
+      if (cap.type === 'attribute') {
+        const attribute = (cap.params as { attribute?: string }).attribute;
+        if (
+          !attribute ||
+          !['AGI', 'ESP', 'INT', 'VIG'].includes(attribute) ||
+          sheetData.attributes[
+            attribute as keyof typeof sheetData.attributes
+          ] >= 12
+        ) {
+          throw new BadRequestException('Attribut invalide ou déjà au maximum');
+        }
+      } else if (cap.type !== 'legendary-journey') {
+        // Défense en profondeur : la clé choisie doit exister dans le contenu seedé du système
+        // (parité avec la validation de l'attribut ; le serveur ne fait jamais confiance au client).
+        const contentKey = CONTENT_KEY_BY_CAPABILITY[cap.type];
+        const key = (cap.params as { key?: string }).key;
+        const known =
+          !!contentKey &&
+          !!key &&
+          (content?.[contentKey] ?? []).some((e) => e.key === key);
+        if (!known) {
+          throw new BadRequestException(
+            `Choix de capacité invalide pour le type ${cap.type}`,
+          );
+        }
+      }
+    }
+
+    // Toutes les validations passées : appliquer les effets (seul l'Attribut mute `attributes`).
+    for (const cap of dto.capabilities) {
+      if (cap.type === 'attribute') {
+        const attribute = (cap.params as { attribute?: string }).attribute!;
+        sheetData.attributes[
+          attribute as keyof typeof sheetData.attributes
+        ] += 2;
+      }
+    }
+
+    sheetData.levelUps = [
+      ...levelUps,
+      {
+        level: nextLevel,
+        pvAllocated: dto.pvAllocated,
+        peAllocated: dto.peAllocated,
+        capabilities: dto.capabilities as {
+          type: CapabilityType;
+          params: Record<string, unknown>;
+        }[],
+      },
+    ];
+    const derived = computeDerived(sheetData);
+
+    // Écriture verrouillée (AD-9) + création du snapshot dans une même transaction : ni niveau
+    // appliqué sans snapshot, ni snapshot orphelin si le verrou optimiste échoue (`count === 0`).
+    await this.prisma.$transaction(async (tx) => {
+      const result = await tx.character.updateMany({
+        where: { id: characterId, updatedAt: character.updatedAt },
+        data: { sheetData: sheetData as any, derived: derived as any },
+      });
+      if (result.count === 0) {
+        throw new ConflictException(
+          'Le personnage a été modifié entretemps, réessayez.',
+        );
+      }
+      await tx.characterSnapshot.create({
+        data: {
+          characterId,
+          sheetData: sheetData as any,
+          derived: derived as any,
+          level: nextLevel,
+          trigger: 'LEVEL_UP',
+        },
+      });
+    });
+
+    const updated = await this.prisma.character.findUniqueOrThrow({
+      where: { id: characterId },
+    });
+    const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    return toDto(updated, owner.pseudo, owner.isMj);
+  }
+
+  /**
+   * Historique des instantanés d'un personnage : accès PROPRIÉTAIRE OU MJ (AD-8, même pattern
+   * que `findOne`), pas `getOwnCharacterOrThrow` qui est propriétaire-seul.
+   */
+  async getHistory(
+    characterId: string,
+    userId: string,
+  ): Promise<CharacterSnapshotDto[]> {
+    const character = await this.prisma.character.findUnique({
+      where: { id: characterId },
+    });
+    if (!character) throw new NotFoundException('Personnage introuvable');
+    if (character.userId !== userId) {
+      await this.parties.getOwned(character.partieId, userId);
+    }
+
+    const snapshots = await this.prisma.characterSnapshot.findMany({
+      where: { characterId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return snapshots.map((s) => ({
+      id: s.id,
+      characterId: s.characterId,
+      sheetData: s.sheetData as any,
+      derived: s.derived as any,
+      level: s.level,
+      trigger: s.trigger,
+      note: s.note ?? undefined,
+      createdAt: s.createdAt.toISOString(),
+    }));
+  }
+
   /** Pseudo du propriétaire + s'il est le MJ de la partie — résolu en une seule paire de requêtes ciblées (`select` minimal, jamais le hash). */
   private async resolveOwnerInfo(
     ownerId: string,
@@ -423,6 +609,12 @@ function toDto(
     ownerPseudo,
     ownerIsMj,
     xp: character.xp ?? 0,
-    level: levelForXp(character.xp ?? 0),
+    // Niveau réellement appliqué (nombre de montées de niveau validées + 1), PAS le niveau
+    // potentiel dérivé de l'xp (`levelForXp`) — sinon la fiche afficherait un niveau non encore
+    // acquis tant que le joueur n'a pas traité son `LevelUpBanner` (cf. `pendingLevels`).
+    level:
+      1 +
+      (((character.sheetData as any)?.levelUps?.length as number | undefined) ??
+        0),
   };
 }

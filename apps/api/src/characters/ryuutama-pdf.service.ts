@@ -171,7 +171,7 @@ function parsePdfPortraitCropData(value: unknown): PdfPortraitCropData | null {
 
 interface ClassContentData {
   label: string;
-  talents: { name: string; effect: string }[];
+  talents: { name: string; effect: string; attributes?: string[] }[];
 }
 
 interface TypeContentData {
@@ -182,6 +182,22 @@ interface WeaponContentData {
   label: string;
   touchFormula: string;
   damageFormula: string;
+}
+
+interface LabelledContentData {
+  label: string;
+}
+
+/** Construit une map `key → label` depuis une liste d'entrées de contenu seedé (`ContentEntryDto[]`). */
+function labelMap(
+  entries: { key: string; data: unknown }[] | undefined,
+): Record<string, string> {
+  const map: Record<string, string> = {};
+  for (const entry of entries ?? []) {
+    const label = (entry.data as LabelledContentData | undefined)?.label;
+    if (label) map[entry.key] = label;
+  }
+  return map;
 }
 
 @Injectable()
@@ -198,9 +214,22 @@ export class RyuutamaPdfService {
     const templateBytes = await this.loadTemplate();
     const sheetData = character.sheetData as unknown as RyuutamaSheetData;
     const derived = character.derived;
-    const content = await this.resolveContent(sheetData, character.ownerPseudo);
+    const content = await this.resolveContent(
+      sheetData,
+      character.ownerPseudo,
+      character.xp,
+    );
 
     const fields = mapToPdfFields(sheetData, derived, content);
+    // Champs auto-size du template officiel (résistances par terrain, statuts d'immunité) :
+    // leur `DA` (`/Font 0 Tf`) laisse pdf-lib calculer une taille disproportionnée pour un texte
+    // aussi court ("+2"/"Immunisé") — forcer une petite taille explicite, alignée sur les champs
+    // normaux du template qui utilisent ~9-14pt selon leur hauteur réelle (constaté visuellement,
+    // à réajuster si besoin après un export réel).
+    const smallFontFields = new Set([
+      ...Object.values(content.capabilityLabels?.landscape ?? {}),
+      ...Object.values(content.capabilityLabels?.immunity ?? {}),
+    ]);
 
     const doc = await PDFDocument.load(templateBytes);
     const form = doc.getForm();
@@ -208,7 +237,9 @@ export class RyuutamaPdfService {
       if (!f.value) continue;
       try {
         if (f.kind === 'text') {
-          form.getTextField(f.field).setText(f.value);
+          const textField = form.getTextField(f.field);
+          if (smallFontFields.has(f.field)) textField.setFontSize(8);
+          textField.setText(f.value);
         } else {
           form.getDropdown(f.field).select(f.value);
         }
@@ -354,6 +385,7 @@ export class RyuutamaPdfService {
   private async resolveContent(
     sheetData: RyuutamaSheetData,
     ownerPseudo: string,
+    xp: number,
   ): Promise<RyuutamaPdfContent> {
     const content = await this.gameSystems.getContent(RYUUTAMA_ID);
     const classEntry = content['class']?.find(
@@ -367,6 +399,27 @@ export class RyuutamaPdfService {
     const typeData = typeEntry?.data as TypeContentData | undefined;
     const weaponData = weaponEntry?.data as WeaponContentData | undefined;
 
+    const levelUps = sheetData.levelUps ?? [];
+    // Chaque montée de niveau accorde 1 ou 2 capacités (niveaux 4/6/10) — aplatir pour retrouver
+    // une capacité par type, quel que soit le niveau qui l'a octroyée.
+    const capabilities = levelUps.flatMap((e) => e.capabilities);
+    // Classe secondaire (capacité 'class', niveau 5) — un seul choix possible par LEVEL_TABLE,
+    // pas de boucle nécessaire (contrairement au paysage/climat, obtenu jusqu'à 2 fois).
+    const secondaryClassKey = capabilities.find((c) => c.type === 'class')
+      ?.params['key'] as string | undefined;
+    const secondaryClassData = content['class']?.find(
+      (c) => c.key === secondaryClassKey,
+    )?.data as ClassContentData | undefined;
+
+    // Paysage/climat résumé (dropdown "Paysage climat") : un seul champ pour jusqu'à 2 obtenus
+    // (niveaux 3 et 7) — le premier obtenu, faute de pouvoir en représenter deux sur ce dropdown
+    // (les 22 champs de résistance individuels, eux, couvrent chaque paysage obtenu séparément).
+    const landscapeKey = capabilities.find((c) => c.type === 'landscape')
+      ?.params['key'] as string | undefined;
+    const landscapeDropdownValue = content['landscape']?.find(
+      (l) => l.key === landscapeKey,
+    )?.data as { label?: string } | undefined;
+
     return {
       classLabel: classData?.label ?? '',
       classTalents: classData?.talents ?? [],
@@ -375,6 +428,15 @@ export class RyuutamaPdfService {
       weaponTouchFormula: weaponData?.touchFormula ?? '',
       weaponDamageFormula: weaponData?.damageFormula ?? '',
       ownerPseudo,
+      xp,
+      secondaryClassLabel: secondaryClassData?.label,
+      secondaryClassTalents: secondaryClassData?.talents,
+      landscapeDropdownValue: landscapeDropdownValue?.label,
+      capabilityLabels: {
+        landscape: labelMap(content['landscape']),
+        immunity: labelMap(content['immunityState']),
+        class: labelMap(content['class']),
+      },
     };
   }
 }

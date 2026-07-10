@@ -1,0 +1,20 @@
+@if (loadError(); as error) {
+  <p class="history-tab__error">{{ error }}</p>
+} @else if (snapshots().length === 0) {
+  <p class="history-tab__empty">{{ theme.tone()['evolution.history_empty'] }}</p>
+} @else {
+  <ul class="history-tab__list">
+    @for (snapshot of snapshots(); track snapshot.id) {
+      <li class="history-tab__entry">
+        <span class="history-tab__date">{{ snapshot.createdAt | date: 'medium' }}</span>
+        <span class="history-tab__trigger">{{ triggerLabel(snapshot) }}</span>
+        @if (capabilityChoice(snapshot); as choice) {
+          <span class="history-tab__choice">{{ choice }}</span>
+        }
+        @if (snapshot.note) {
+          <span class="history-tab__note">{{ snapshot.note }}</span>
+        }
+      </li>
+    }
+  </ul>
+}

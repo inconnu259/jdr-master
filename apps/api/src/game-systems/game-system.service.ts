@@ -36,6 +36,13 @@ const CONTENT_TYPES: ContentTypeSeed[] = [
     label: "Catégorie d'arme favorite",
     file: 'weapon-categories.json',
   },
+  {
+    key: 'immunityState',
+    label: 'État (immunité)',
+    file: 'immunity-states.json',
+  },
+  { key: 'season', label: 'Saison', file: 'seasons.json' },
+  { key: 'landscape', label: 'Paysage/climat', file: 'landscapes.json' },
 ];
 
 @Injectable()

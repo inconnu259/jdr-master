@@ -11,6 +11,11 @@ jest.mock('@master-jdr/game-rules', () => ({
   computeDerived: jest.fn(),
   levelForXp: jest.fn((xp: number) => (xp >= 100 ? 2 : 1)),
   pendingLevels: jest.fn(),
+  LEVEL_TABLE: [
+    { level: 2, xp: 100, capabilities: ['attribute'] },
+    { level: 3, xp: 600, capabilities: ['landscape'] },
+    { level: 4, xp: 1200, capabilities: ['attribute', 'immunity'] },
+  ],
 }));
 
 jest.mock('node:fs/promises', () => ({
@@ -55,7 +60,7 @@ function makeMulterFile(buffer: Buffer = JPEG_BUFFER): Express.Multer.File {
 }
 
 function makePrisma() {
-  return {
+  const prisma: any = {
     character: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -64,6 +69,10 @@ function makePrisma() {
       updateMany: jest.fn(),
       update: jest.fn(),
     },
+    characterSnapshot: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+    },
     partie: {
       findUnique: jest.fn(),
     },
@@ -71,6 +80,10 @@ function makePrisma() {
       findMany: jest.fn().mockResolvedValue([]),
     },
   };
+  // Le client transactionnel réutilise les mêmes mocks (updateMany/snapshot.create) que le client
+  // racine — suffisant pour asserter les appels ; le rollback réel n'est pas testé ici.
+  prisma.$transaction = jest.fn(async (cb: any) => cb(prisma));
+  return prisma;
 }
 
 function makePartiesService() {
@@ -805,13 +818,277 @@ describe('CharacterService', () => {
       );
     });
 
-    it('toDto() expose xp/level sur les méthodes existantes (findOne)', async () => {
+    it('toDto() expose xp/level sur les méthodes existantes (findOne) — level = niveau appliqué, pas le potentiel XP', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 150 }));
 
       const result = await service.findOne('char1', 'u1');
 
       expect(result.xp).toBe(150);
-      expect(result.level).toBe(2);
+      // xp=150 franchit le seuil du niveau 2, mais sheetData.levelUps est vide (aucune montée
+      // validée) → level doit rester 1, pas 2 (régression : level ne doit jamais dériver de xp).
+      expect(result.level).toBe(1);
+    });
+
+    it("level reste au niveau courant tant qu'un niveau en attente n'a pas été appliqué, même avec beaucoup d'XP", async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 700 }));
+
+      const result = await service.findOne('char1', 'u1');
+
+      expect(result.level).toBe(1);
+    });
+
+    it('level = 1 + nombre de levelUps appliqués, indépendamment de l’xp restant', async () => {
+      prisma.character.findUnique.mockResolvedValue(
+        makeCharacter({
+          xp: 700,
+          sheetData: {
+            ...validSheet(),
+            levelUps: [
+              { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+              { level: 3, pvAllocated: 1, peAllocated: 2, capabilities: [{ type: 'landscape', params: {} }] },
+            ],
+          },
+        }),
+      );
+
+      const result = await service.findOne('char1', 'u1');
+
+      expect(result.level).toBe(3);
+    });
+  });
+
+  describe('applyLevelUp()', () => {
+    const validDto = {
+      pvAllocated: 2,
+      peAllocated: 1,
+      capabilities: [{ type: 'attribute', params: { attribute: 'VIG' } }],
+    };
+
+    it('aucun niveau en attente → BadRequestException', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 0 }));
+      (pendingLevels as jest.Mock).mockReturnValue([]);
+
+      await expect(
+        service.applyLevelUp('char1', 'u1', validDto as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('somme PV+PE ≠ 3 → BadRequestException', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 150 }));
+      (pendingLevels as jest.Mock).mockReturnValue([2]);
+
+      await expect(
+        service.applyLevelUp('char1', 'u1', {
+          pvAllocated: 1,
+          peAllocated: 1,
+          capabilities: [{ type: 'attribute', params: { attribute: 'VIG' } }],
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('attribut déjà à 12 → BadRequestException', async () => {
+      prisma.character.findUnique.mockResolvedValue(
+        makeCharacter({
+          xp: 150,
+          sheetData: {
+            ...validSheet(),
+            attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 12 },
+          },
+        }),
+      );
+      (pendingLevels as jest.Mock).mockReturnValue([2]);
+
+      await expect(
+        service.applyLevelUp('char1', 'u1', {
+          pvAllocated: 2,
+          peAllocated: 1,
+          capabilities: [{ type: 'attribute', params: { attribute: 'VIG' } }],
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('succès → applique levelUps[]/derived, crée le snapshot', async () => {
+      const character = makeCharacter({ xp: 150 });
+      prisma.character.findUnique.mockResolvedValue(character);
+      (pendingLevels as jest.Mock).mockReturnValue([2]);
+      (computeDerived as jest.Mock).mockReturnValue({
+        PV: 18,
+        PE: 13,
+        Condition: 14,
+        Initiative: 10,
+        Encombrement: 12,
+      });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(
+        makeCharacter({ xp: 150 }),
+      );
+
+      await service.applyLevelUp('char1', 'u1', validDto as any);
+
+      expect(prisma.character.updateMany).toHaveBeenCalledWith({
+        where: { id: 'char1', updatedAt: character.updatedAt },
+        data: expect.objectContaining({
+          sheetData: expect.objectContaining({
+            levelUps: [
+              {
+                level: 2,
+                pvAllocated: 2,
+                peAllocated: 1,
+                capabilities: validDto.capabilities,
+              },
+            ],
+          }),
+        }),
+      });
+      expect(prisma.characterSnapshot.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          characterId: 'char1',
+          level: 2,
+          trigger: 'LEVEL_UP',
+        }),
+      });
+    });
+
+    it('409 si updatedAt périmé (conflit de concurrence)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 150 }));
+      (pendingLevels as jest.Mock).mockReturnValue([2]);
+      (computeDerived as jest.Mock).mockReturnValue({});
+      prisma.character.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.applyLevelUp('char1', 'u1', validDto as any),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
+    });
+
+    it('non-propriétaire → ForbiddenException', async () => {
+      prisma.character.findUnique.mockResolvedValue(
+        makeCharacter({ userId: 'owner', xp: 150 }),
+      );
+
+      await expect(
+        service.applyLevelUp('char1', 'stranger', validDto as any),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('niveau à deux capacités (4) → exige et applique les DEUX (Attribut ET immunité)', async () => {
+      const character = makeCharacter({ xp: 1200 });
+      prisma.character.findUnique.mockResolvedValue(character);
+      (pendingLevels as jest.Mock).mockReturnValue([4]);
+      (computeDerived as jest.Mock).mockReturnValue({});
+      gameSystems.getContent.mockResolvedValue({
+        immunityState: [{ key: 'blesse', data: { label: 'Blessé' } }],
+      });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+      await service.applyLevelUp('char1', 'u1', {
+        pvAllocated: 2,
+        peAllocated: 1,
+        capabilities: [
+          { type: 'attribute', params: { attribute: 'VIG' } },
+          { type: 'immunity', params: { key: 'blesse' } },
+        ],
+      } as any);
+
+      const data = prisma.character.updateMany.mock.calls[0][0].data;
+      expect(data.sheetData.attributes.VIG).toBe(10); // 8 + 2
+      expect(data.sheetData.levelUps[0].capabilities).toHaveLength(2);
+    });
+
+    it("niveau à deux capacités : n'en fournir qu'une → BadRequestException", async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 1200 }));
+      (pendingLevels as jest.Mock).mockReturnValue([4]);
+
+      await expect(
+        service.applyLevelUp('char1', 'u1', {
+          pvAllocated: 2,
+          peAllocated: 1,
+          capabilities: [{ type: 'attribute', params: { attribute: 'VIG' } }],
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('clé de capacité absente du contenu seedé → BadRequestException', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 600 }));
+      (pendingLevels as jest.Mock).mockReturnValue([3]);
+      gameSystems.getContent.mockResolvedValue({
+        landscape: [{ key: 'foret', data: { label: 'Forêt' } }],
+      });
+
+      await expect(
+        service.applyLevelUp('char1', 'u1', {
+          pvAllocated: 2,
+          peAllocated: 1,
+          capabilities: [{ type: 'landscape', params: { key: 'inconnu' } }],
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getHistory()', () => {
+    it('propriétaire → retourne la liste triée par la base (desc)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      prisma.characterSnapshot.findMany.mockResolvedValue([
+        {
+          id: 's2',
+          characterId: 'char1',
+          sheetData: {},
+          derived: {},
+          level: 3,
+          trigger: 'LEVEL_UP',
+          note: null,
+          createdAt: new Date('2026-02-01T00:00:00.000Z'),
+        },
+        {
+          id: 's1',
+          characterId: 'char1',
+          sheetData: {},
+          derived: {},
+          level: 2,
+          trigger: 'LEVEL_UP',
+          note: null,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ]);
+
+      const result = await service.getHistory('char1', 'u1');
+
+      expect(prisma.characterSnapshot.findMany).toHaveBeenCalledWith({
+        where: { characterId: 'char1' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(result.map((s) => s.id)).toEqual(['s2', 's1']);
+      expect(result[0].createdAt).toBe('2026-02-01T00:00:00.000Z');
+    });
+
+    it('MJ (non-propriétaire) → accès autorisé', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.characterSnapshot.findMany.mockResolvedValue([]);
+
+      await service.getHistory('char1', 'mj1');
+
+      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+    });
+
+    it('ni propriétaire ni MJ → ForbiddenException', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.getHistory('char1', 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('personnage introuvable → NotFoundException', async () => {
+      prisma.character.findUnique.mockResolvedValue(null);
+      await expect(service.getHistory('unknown', 'u1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

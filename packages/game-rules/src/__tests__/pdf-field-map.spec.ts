@@ -188,4 +188,206 @@ describe('mapToPdfFields', () => {
     expect(joueurField?.value).toBe('bob');
     expect(joueurField?.kind).toBe('text');
   });
+
+  describe('PX (XP, round 2)', () => {
+    it('mappe content.xp sur le champ PX', () => {
+      const data = baseData();
+      const fields = mapToPdfFields(data, computeDerived(data), { ...content, xp: 250 });
+      expect(fields.find((f) => f.field === 'PX')?.value).toBe('250');
+    });
+
+    it('content.xp absent → PX = "0", pas de crash', () => {
+      const data = baseData();
+      const fields = mapToPdfFields(data, computeDerived(data), content);
+      expect(fields.find((f) => f.field === 'PX')?.value).toBe('0');
+    });
+  });
+
+  describe('tableau de talents 6 lignes + attributs utilisés (round 2)', () => {
+    const contentWithAttributes = {
+      ...content,
+      classTalents: [
+        { name: 'Pistage', effect: 'Suit une piste', attributes: ['INT', 'AGI'] },
+        { name: 'Camouflage', effect: 'Se dissimule', attributes: ['AGI', 'ESP'] },
+        { name: 'Piège', effect: 'Pose un piège', attributes: ['AGI', 'INT'] },
+      ],
+    };
+
+    it('mappe les 2 attributs utilisés par talent sur les dropdowns Attribut 1.{i}.0/1', () => {
+      const data = baseData();
+      const fields = mapToPdfFields(data, computeDerived(data), contentWithAttributes);
+      expect(fields.find((f) => f.field === 'Attribut 1.0.0')?.value).toBe('INT');
+      expect(fields.find((f) => f.field === 'Attribut 1.0.1')?.value).toBe('AGI');
+      expect(fields.find((f) => f.field === 'Attribut 1.1.0')?.value).toBe('AGI');
+      expect(fields.find((f) => f.field === 'Attribut 1.1.1')?.value).toBe('ESP');
+    });
+
+    it('talent sans attributes → aucun dropdown Attribut poussé pour ce talent, pas de crash', () => {
+      const data = baseData();
+      const fields = mapToPdfFields(data, computeDerived(data), content);
+      expect(fields.find((f) => f.field === 'Attribut 1.0.0')).toBeUndefined();
+    });
+
+    it('classe secondaire (secondaryClassTalents) → remplit Talent 4-6/Effet 4-6 et leurs attributs', () => {
+      const data = baseData();
+      const fields = mapToPdfFields(data, computeDerived(data), {
+        ...contentWithAttributes,
+        secondaryClassLabel: 'Marchand',
+        secondaryClassTalents: [
+          { name: 'Négociation', effect: 'Baisse un prix', attributes: ['ESP', 'INT'] },
+        ],
+      });
+      expect(fields.find((f) => f.field === 'Talent 4')?.value).toBe('Négociation');
+      expect(fields.find((f) => f.field === 'Effet 4')?.value).toBe('Baisse un prix');
+      expect(fields.find((f) => f.field === 'Attribut 1.3.0')?.value).toBe('ESP');
+      expect(fields.find((f) => f.field === 'Attribut 1.3.1')?.value).toBe('INT');
+    });
+
+    it('sans classe secondaire → Talent 4-6/Effet 4-6 absents, pas de champ orphelin', () => {
+      const data = baseData();
+      const fields = mapToPdfFields(data, computeDerived(data), content);
+      expect(fields.find((f) => f.field === 'Talent 4')).toBeUndefined();
+      expect(fields.find((f) => f.field === 'Effet 4')).toBeUndefined();
+    });
+  });
+
+  describe('Paysage climat (dropdown résumé, round 2)', () => {
+    it('landscapeDropdownValue renseigné → remplit le dropdown "Paysage climat"', () => {
+      const data = baseData();
+      const fields = mapToPdfFields(data, computeDerived(data), {
+        ...content,
+        landscapeDropdownValue: 'Forêt',
+      });
+      const field = fields.find((f) => f.field === 'Paysage climat');
+      expect(field?.value).toBe('Forêt');
+      expect(field?.kind).toBe('dropdown');
+    });
+
+    it('landscapeDropdownValue absent → aucun champ "Paysage climat" poussé', () => {
+      const data = baseData();
+      const fields = mapToPdfFields(data, computeDerived(data), content);
+      expect(fields.find((f) => f.field === 'Paysage climat')).toBeUndefined();
+    });
+  });
+
+  describe('Niveau (Story 6.3)', () => {
+    it('sans levelUps → Niveau = 1', () => {
+      const data = baseData();
+      const fields = mapToPdfFields(data, computeDerived(data), content);
+      expect(fields.find((f) => f.field === 'Niveau')?.value).toBe('1');
+    });
+
+    it('avec 2 entrées levelUps → Niveau = 3, jamais dérivé de xp', () => {
+      const data = baseData({
+        levelUps: [
+          { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+          { level: 3, pvAllocated: 1, peAllocated: 2, capabilities: [{ type: 'landscape', params: {} }] },
+        ],
+      });
+      const fields = mapToPdfFields(data, computeDerived(data), content);
+      expect(fields.find((f) => f.field === 'Niveau')?.value).toBe('3');
+    });
+  });
+
+  describe('capacités de montée de niveau (Story 6.3)', () => {
+    const capabilityContent = {
+      ...content,
+      capabilityLabels: {
+        landscape: { foret: 'Forêt' },
+        immunity: { blesse: 'Blessé' },
+        class: { marchand: 'Marchand' },
+      },
+    };
+
+    it('capacité landscape connue → remplit le champ paysage correspondant avec "+2"', () => {
+      const data = baseData({
+        levelUps: [
+          {
+            level: 3,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'landscape', params: { key: 'foret' } }],
+          },
+        ],
+      });
+      const fields = mapToPdfFields(data, computeDerived(data), capabilityContent);
+      expect(fields.find((f) => f.field === 'Forêt')?.value).toBe('+2');
+    });
+
+    it('capacité immunity connue → remplit le champ statut correspondant avec "Immunisé"', () => {
+      const data = baseData({
+        levelUps: [
+          {
+            level: 4,
+            pvAllocated: 2,
+            peAllocated: 1,
+            capabilities: [{ type: 'immunity', params: { key: 'blesse' } }],
+          },
+        ],
+      });
+      const fields = mapToPdfFields(data, computeDerived(data), capabilityContent);
+      expect(fields.find((f) => f.field === 'Blessé')?.value).toBe('Immunisé');
+    });
+
+    it('capacité class connue → remplit le dropdown "Classe 2"', () => {
+      const data = baseData({
+        levelUps: [
+          {
+            level: 5,
+            pvAllocated: 0,
+            peAllocated: 3,
+            capabilities: [{ type: 'class', params: { key: 'marchand' } }],
+          },
+        ],
+      });
+      const fields = mapToPdfFields(data, computeDerived(data), capabilityContent);
+      const classe2 = fields.find((f) => f.field === 'Classe 2');
+      expect(classe2?.value).toBe('Marchand');
+      expect(classe2?.kind).toBe('dropdown');
+    });
+
+    it("capacités type/dragon-protection/legendary-journey → aucun champ supplémentaire (pas de destination PDF)", () => {
+      const data = baseData({
+        levelUps: [
+          { level: 6, pvAllocated: 1, peAllocated: 2, capabilities: [{ type: 'type', params: { key: 'technique' } }] },
+          { level: 9, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'dragon-protection', params: { key: 'ete' } }] },
+          { level: 10, pvAllocated: 1, peAllocated: 2, capabilities: [{ type: 'legendary-journey', params: {} }] },
+        ],
+      });
+      const before = mapToPdfFields(baseData(), computeDerived(baseData()), capabilityContent);
+      const after = mapToPdfFields(data, computeDerived(data), capabilityContent);
+      expect(after.length).toBe(before.length);
+    });
+
+    it('clé introuvable dans capabilityLabels → aucun champ poussé, pas de crash', () => {
+      const data = baseData({
+        levelUps: [
+          {
+            level: 3,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'landscape', params: { key: 'inconnu' } }],
+          },
+        ],
+      });
+      expect(() => mapToPdfFields(data, computeDerived(data), capabilityContent)).not.toThrow();
+      const fields = mapToPdfFields(data, computeDerived(data), capabilityContent);
+      const before = mapToPdfFields(baseData(), computeDerived(baseData()), capabilityContent);
+      expect(fields.length).toBe(before.length);
+    });
+
+    it('content.capabilityLabels absent (objet content littéral existant) → pas de crash', () => {
+      const data = baseData({
+        levelUps: [
+          {
+            level: 3,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'landscape', params: { key: 'foret' } }],
+          },
+        ],
+      });
+      expect(() => mapToPdfFields(data, computeDerived(data), content)).not.toThrow();
+    });
+  });
 });
