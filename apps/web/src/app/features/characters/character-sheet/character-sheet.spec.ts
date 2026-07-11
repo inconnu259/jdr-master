@@ -65,6 +65,8 @@ function defaultSvc() {
     getNotes: vi.fn().mockResolvedValue([]),
     addNote: vi.fn(),
     toggleNoteShare: vi.fn(),
+    setSheetField: vi.fn(),
+    setXp: vi.fn(),
   };
 }
 
@@ -626,7 +628,10 @@ describe('CharacterSheet', () => {
       ...CONTENT,
       class: [
         ...(CONTENT['class'] ?? []),
-        { key: 'marchand', data: { label: 'Marchand', talents: [{ name: 'Négociation', effect: 'Baisse un prix' }] } },
+        {
+          key: 'marchand',
+          data: { label: 'Marchand', talents: [{ name: 'Négociation', effect: 'Baisse un prix' }] },
+        },
       ],
     };
     const characterSvc = makeCharacterService({
@@ -659,7 +664,10 @@ describe('CharacterSheet', () => {
       ...CONTENT,
       type: [
         ...(CONTENT['type'] ?? []),
-        { key: 'magie', data: { label: 'Magie', advantages: [{ name: 'Incantation', effect: '+2' }] } },
+        {
+          key: 'magie',
+          data: { label: 'Magie', advantages: [{ name: 'Incantation', effect: '+2' }] },
+        },
       ],
     };
     const characterSvc = makeCharacterService({
@@ -755,9 +763,9 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.querySelector('app-inventory-tab')).not.toBeNull();
     // "Nécessaire de voyage" (individual) ne doit plus apparaître dans la carte "Équipement" —
     // seul "Nécessaire de groupe" (group) y reste (régression Story 6.4, cf. Task 10).
-    const equipmentCard = Array.from(
-      fixture.nativeElement.querySelectorAll('.sheet__card'),
-    ).find((card: any) => card.textContent.includes('Équipement')) as HTMLElement;
+    const equipmentCard = Array.from(fixture.nativeElement.querySelectorAll('.sheet__card')).find(
+      (card: any) => card.textContent.includes('Équipement'),
+    ) as HTMLElement;
     expect(equipmentCard.textContent).not.toContain('Nécessaire de voyage');
     expect(equipmentCard.textContent).toContain('Nécessaire de groupe');
   });
@@ -781,5 +789,119 @@ describe('CharacterSheet', () => {
       'joueur-tiers',
     );
     expect(fixture.nativeElement.querySelector('app-notes-journal')).not.toBeNull();
+  });
+
+  describe('édition MJ (FieldEditPencil, Story 6.6)', () => {
+    it('viewerIsMj:true → pencils attributs (×4) + objet fétiche + XP visibles', async () => {
+      const asMj = { ...CHARACTER, viewerIsMj: true };
+      const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+
+      const pencils = fixture.nativeElement.querySelectorAll('.field-edit-pencil__button');
+      // 4 attributs + fétiche + XP = 6 pencils (l'inventaire est géré séparément par InventoryTab).
+      expect(pencils.length).toBe(6);
+    });
+
+    it('propriétaire (isOwner:true) → aucun pencil MJ visible', async () => {
+      const { fixture } = await createComponent();
+      expect(fixture.nativeElement.querySelectorAll('.field-edit-pencil__button').length).toBe(0);
+    });
+
+    it('fellow player (ni propriétaire, ni MJ) → aucun pencil MJ visible', async () => {
+      const asFellowPlayer = { ...CHARACTER, viewerIsMj: false };
+      const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asFellowPlayer) });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'joueur-tiers');
+      expect(fixture.nativeElement.querySelectorAll('.field-edit-pencil__button').length).toBe(0);
+    });
+
+    it('submitFieldEdit() appelle setSheetField avec le bon path, met à jour character() avec result.character', async () => {
+      const updated = {
+        ...CHARACTER,
+        viewerIsMj: true,
+        sheetData: { ...CHARACTER.sheetData, fetiqueObject: 'un galet gravé' },
+      };
+      const asMj = { ...CHARACTER, viewerIsMj: true };
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(asMj),
+        setSheetField: vi.fn().mockResolvedValue({ character: updated, warnings: [] }),
+      });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+      const comp = fixture.componentInstance as any;
+
+      await comp.submitFieldEdit('fetiqueObject', 'un galet gravé');
+      fixture.detectChanges();
+
+      expect(characterSvc.setSheetField).toHaveBeenCalledWith(
+        'char1',
+        'fetiqueObject',
+        'un galet gravé',
+      );
+      expect(comp.character()).toEqual(updated);
+    });
+
+    it('submitFieldEdit() affiche les warnings non bloquants renvoyés par le serveur', async () => {
+      const asMj = { ...CHARACTER, viewerIsMj: true };
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(asMj),
+        setSheetField: vi.fn().mockResolvedValue({
+          character: asMj,
+          warnings: ['Classe hors catalogue seedé'],
+        }),
+      });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+      const comp = fixture.componentInstance as any;
+
+      await comp.submitFieldEdit('classId', 'classe-maison');
+      fixture.detectChanges();
+
+      expect(comp.fieldEditWarning()).toContain('Classe hors catalogue seedé');
+    });
+
+    it('submitFieldEdit() erreur réseau → fieldEditError() affiché', async () => {
+      const asMj = { ...CHARACTER, viewerIsMj: true };
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(asMj),
+        setSheetField: vi.fn().mockRejectedValue(new Error('boom')),
+      });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+      const comp = fixture.componentInstance as any;
+
+      await comp.submitFieldEdit('fetiqueObject', 'x');
+      fixture.detectChanges();
+
+      expect(comp.fieldEditError()).not.toBeNull();
+    });
+
+    it('submitXpEdit() appelle setXp, met à jour character()', async () => {
+      const updated = { ...CHARACTER, viewerIsMj: true, xp: 500 };
+      const asMj = { ...CHARACTER, viewerIsMj: true, xp: 10 };
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(asMj),
+        setXp: vi.fn().mockResolvedValue(updated),
+      });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+      const comp = fixture.componentInstance as any;
+
+      await comp.submitXpEdit(500);
+      fixture.detectChanges();
+
+      expect(characterSvc.setXp).toHaveBeenCalledWith('char1', 500);
+      expect(comp.character().xp).toBe(500);
+    });
+
+    it('submitXpEdit() erreur réseau → fieldEditError() affiché', async () => {
+      const asMj = { ...CHARACTER, viewerIsMj: true };
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(asMj),
+        setXp: vi.fn().mockRejectedValue(new Error('boom')),
+      });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+      const comp = fixture.componentInstance as any;
+
+      await comp.submitXpEdit(500);
+      fixture.detectChanges();
+
+      expect(comp.fieldEditError()).not.toBeNull();
+    });
   });
 });

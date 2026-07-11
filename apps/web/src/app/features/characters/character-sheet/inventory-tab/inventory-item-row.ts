@@ -18,6 +18,8 @@ export interface InventoryItemView {
 export class InventoryItemRow {
   readonly item = input.required<InventoryItemView>();
   readonly editable = input(false);
+  /** Propriétaire seul (DESIGN.md : le MJ "ajoute"/"édite" une ligne, jamais "supprime"). */
+  readonly removable = input(false);
 
   readonly edit = output<void>();
   readonly remove = output<void>();

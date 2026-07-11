@@ -796,7 +796,7 @@ describe('CharacterService', () => {
       expect(parties.getViewable).toHaveBeenCalledWith('p1', 'mj1');
     });
 
-    it("fellow player (ni propriétaire ni MJ, mais membre de la Partie) → accès autorisé (cohérence avec findOne, revue de code Story 6.5)", async () => {
+    it('fellow player (ni propriétaire ni MJ, mais membre de la Partie) → accès autorisé (cohérence avec findOne, revue de code Story 6.5)', async () => {
       prisma.character.findUnique.mockResolvedValue(
         makeCharacter({
           portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
@@ -902,8 +902,18 @@ describe('CharacterService', () => {
           sheetData: {
             ...validSheet(),
             levelUps: [
-              { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
-              { level: 3, pvAllocated: 1, peAllocated: 2, capabilities: [{ type: 'landscape', params: {} }] },
+              {
+                level: 2,
+                pvAllocated: 2,
+                peAllocated: 1,
+                capabilities: [{ type: 'attribute', params: {} }],
+              },
+              {
+                level: 3,
+                pvAllocated: 1,
+                peAllocated: 2,
+                capabilities: [{ type: 'landscape', params: {} }],
+              },
             ],
           },
         }),
@@ -912,6 +922,446 @@ describe('CharacterService', () => {
       const result = await service.findOne('char1', 'u1');
 
       expect(result.level).toBe(3);
+    });
+  });
+
+  describe('setXp()', () => {
+    it('non-MJ de la Partie → ForbiddenException, aucune écriture', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.setXp('char1', 'stranger', 500)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('MJ d’une AUTRE Partie → ForbiddenException (parties.getOwned rejette)', async () => {
+      prisma.character.findUnique.mockResolvedValue(
+        makeCharacter({ partieId: 'p1' }),
+      );
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.setXp('char1', 'mj-autre-partie', 500),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('409 si updatedAt périmé', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.setXp('char1', 'mj1', 500)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
+    });
+
+    it('succès → remplacement absolu (pas un increment), snapshot MJ_EDIT créé avec le bon level', async () => {
+      const character = makeCharacter({
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(
+        makeCharacter({ xp: 500 }),
+      );
+      (pendingLevels as jest.Mock).mockReturnValue([]);
+
+      await service.setXp('char1', 'mj1', 500);
+
+      expect(prisma.character.updateMany).toHaveBeenCalledWith({
+        where: { id: 'char1', updatedAt: character.updatedAt },
+        data: { xp: 500 },
+      });
+      expect(prisma.characterSnapshot.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          characterId: 'char1',
+          trigger: 'MJ_EDIT',
+          level: 1,
+        }),
+      });
+    });
+
+    it('franchissement de seuil → déclenche EmailService.sendMail("level-up", ...), comme applyXpDelta', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(
+        makeCharacter({ xp: 150, partieId: 'p1', userId: 'u1' }),
+      );
+      (pendingLevels as jest.Mock).mockReturnValue([2]);
+      users.findById.mockResolvedValue({
+        id: 'u1',
+        pseudo: 'alice',
+        email: 'alice@example.com',
+      });
+      prisma.partie.findUnique.mockResolvedValue({
+        name: 'Les Brumes',
+        mjId: 'mj1',
+      });
+
+      await service.setXp('char1', 'mj1', 150);
+
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'level-up',
+        'alice@example.com',
+        expect.objectContaining({ partieName: 'Les Brumes' }),
+      );
+    });
+
+    it('pas de franchissement de seuil → pas d’e-mail', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(
+        makeCharacter({ xp: 10 }),
+      );
+      (pendingLevels as jest.Mock).mockReturnValue([]);
+
+      await service.setXp('char1', 'mj1', 10);
+
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('viewerIsMj: true dans le CharacterDto retourné (le viewer est nécessairement le MJ appelant)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(
+        makeCharacter({ xp: 10 }),
+      );
+      (pendingLevels as jest.Mock).mockReturnValue([]);
+      users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice' });
+      prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
+
+      const result = await service.setXp('char1', 'mj1', 10);
+
+      expect(result.viewerIsMj).toBe(true);
+      expect(result.ownerIsMj).toBe(false);
+    });
+  });
+
+  describe('setSheetField()', () => {
+    beforeEach(() => {
+      (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+      (computeDerived as jest.Mock).mockReturnValue({});
+    });
+
+    it('non-MJ de la Partie → ForbiddenException, aucune écriture', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.setSheetField('char1', 'stranger', {
+          path: 'fetiqueObject',
+          value: 'Lanterne',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('non-MJ tentant "xp"/"levelUps" via sheet-field → ForbiddenException (auth vérifiée avant le denylist, AC5)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.setSheetField('char1', 'stranger', { path: 'xp', value: 999 }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(parties.getOwned).toHaveBeenCalled();
+    });
+
+    it('path racine "xp" → BadRequestException (MJ autorisé)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', { path: 'xp', value: 999 }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('path racine "levelUps" → BadRequestException', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', { path: 'levelUps', value: [] }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('path imbriqué sous "levelUps" (ex. levelUps.0.level) → toujours rejeté (denylist sur le segment racine)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', {
+          path: 'levelUps.0.level',
+          value: 99,
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('path "__proto__.polluted" → BadRequestException (protection pollution de prototype)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', {
+          path: '__proto__.polluted',
+          value: 'x',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(({} as any).polluted).toBeUndefined();
+    });
+
+    it('path "equipment" (1 segment, hors equipment.individual.<index>) → BadRequestException, jamais de remplacement en bloc', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', {
+          path: 'equipment',
+          value: {
+            individual: [
+              { id: 'x', name: 'Injecté', weight: 0, addedBy: 'player' },
+            ],
+            group: [],
+          },
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('409 si updatedAt périmé', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', {
+          path: 'fetiqueObject',
+          value: 'Lanterne',
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
+    });
+
+    it('succès sur un champ simple → warnings: [] si validate("mj", ...) ne remonte aucune erreur', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+      (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+
+      const result = await service.setSheetField('char1', 'mj1', {
+        path: 'fetiqueObject',
+        value: 'Lanterne magique',
+      });
+
+      expect(prisma.character.updateMany).toHaveBeenCalledWith({
+        where: { id: 'char1', updatedAt: expect.any(Date) },
+        data: expect.objectContaining({
+          sheetData: expect.objectContaining({
+            fetiqueObject: 'Lanterne magique',
+          }),
+        }),
+      });
+      expect(prisma.characterSnapshot.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          characterId: 'char1',
+          trigger: 'MJ_EDIT',
+        }),
+      });
+      expect(result.warnings).toEqual([]);
+    });
+
+    it('warnings non vides → écriture quand même effectuée (jamais bloquant, AD-7)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+      (validate as jest.Mock).mockReturnValue({
+        valid: true,
+        errors: [{ field: 'classId', message: 'Classe hors catalogue' }],
+      });
+
+      const result = await service.setSheetField('char1', 'mj1', {
+        path: 'classId',
+        value: 'classe-maison',
+      });
+
+      expect(prisma.character.updateMany).toHaveBeenCalled();
+      expect(result.warnings).toEqual(['Classe hors catalogue']);
+    });
+
+    it('equipment.individual : ajout (index === longueur) génère un nouvel id, addedBy forcé à "mj"', async () => {
+      const character = makeCharacter({
+        sheetData: {
+          ...validSheet(),
+          equipment: {
+            individual: [
+              { id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' },
+            ],
+            group: [],
+          },
+        },
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+      await service.setSheetField('char1', 'mj1', {
+        path: 'equipment.individual.1',
+        value: { name: 'Lettre scellée', weight: 0.1, addedBy: 'player' },
+      });
+
+      const written =
+        prisma.character.updateMany.mock.calls[0][0].data.sheetData;
+      expect(written.equipment.individual[1]).toEqual({
+        id: 'fixed-uuid',
+        name: 'Lettre scellée',
+        weight: 0.1,
+        addedBy: 'mj',
+      });
+    });
+
+    it('equipment.individual : édition d’un index existant avec le bon id conserve l’id d’origine, addedBy forcé à "mj"', async () => {
+      const character = makeCharacter({
+        sheetData: {
+          ...validSheet(),
+          equipment: {
+            individual: [
+              { id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' },
+            ],
+            group: [],
+          },
+        },
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+      await service.setSheetField('char1', 'mj1', {
+        path: 'equipment.individual.0',
+        value: {
+          id: 'existing-1',
+          name: 'Corde renforcée',
+          weight: 1.5,
+          addedBy: 'player',
+        },
+      });
+
+      const written =
+        prisma.character.updateMany.mock.calls[0][0].data.sheetData;
+      expect(written.equipment.individual[0]).toEqual({
+        id: 'existing-1',
+        name: 'Corde renforcée',
+        weight: 1.5,
+        addedBy: 'mj',
+      });
+    });
+
+    it('equipment.individual : édition avec un id absent ou périmé (objet déplacé/supprimé entretemps) → ConflictException, jamais d’écrasement du mauvais objet', async () => {
+      const character = makeCharacter({
+        sheetData: {
+          ...validSheet(),
+          equipment: {
+            individual: [
+              { id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' },
+            ],
+            group: [],
+          },
+        },
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', {
+          path: 'equipment.individual.0',
+          value: { id: 'stale-id', name: 'Corde renforcée', weight: 1.5 },
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('equipment.individual : index non canonique ("01") → BadRequestException', async () => {
+      const character = makeCharacter({
+        sheetData: {
+          ...validSheet(),
+          equipment: {
+            individual: [
+              { id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' },
+            ],
+            group: [],
+          },
+        },
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', {
+          path: 'equipment.individual.01',
+          value: { id: 'existing-1', name: 'Corde renforcée', weight: 1.5 },
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('equipment.individual : value non-objet (string/array/null) → BadRequestException', async () => {
+      const character = makeCharacter({
+        sheetData: {
+          ...validSheet(),
+          equipment: { individual: [], group: [] },
+        },
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', {
+          path: 'equipment.individual.0',
+          value: 'not-an-object',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('equipment.individual : index hors limites → BadRequestException', async () => {
+      const character = makeCharacter({
+        sheetData: {
+          ...validSheet(),
+          equipment: { individual: [], group: [] },
+        },
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', {
+          path: 'equipment.individual.5',
+          value: { name: 'Objet fantôme', weight: 0 },
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('equipment.individual sans index (2 segments) → BadRequestException', async () => {
+      const character = makeCharacter();
+      prisma.character.findUnique.mockResolvedValue(character);
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.setSheetField('char1', 'mj1', {
+          path: 'equipment.individual',
+          value: [],
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -982,7 +1432,7 @@ describe('CharacterService', () => {
         makeCharacter({ xp: 150 }),
       );
 
-      await service.applyLevelUp('char1', 'u1', validDto as any);
+      await service.applyLevelUp('char1', 'u1', validDto);
 
       expect(prisma.character.updateMany).toHaveBeenCalledWith({
         where: { id: 'char1', updatedAt: character.updatedAt },
@@ -1048,7 +1498,7 @@ describe('CharacterService', () => {
           { type: 'attribute', params: { attribute: 'VIG' } },
           { type: 'immunity', params: { key: 'blesse' } },
         ],
-      } as any);
+      });
 
       const data = prisma.character.updateMany.mock.calls[0][0].data;
       expect(data.sheetData.attributes.VIG).toBe(10); // 8 + 2
@@ -1056,7 +1506,9 @@ describe('CharacterService', () => {
     });
 
     it("niveau à deux capacités : n'en fournir qu'une → BadRequestException", async () => {
-      prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 1200 }));
+      prisma.character.findUnique.mockResolvedValue(
+        makeCharacter({ xp: 1200 }),
+      );
       (pendingLevels as jest.Mock).mockReturnValue([4]);
 
       await expect(
@@ -1164,7 +1616,10 @@ describe('CharacterService', () => {
         prisma.character.updateMany.mockResolvedValue({ count: 1 });
         prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
-        await service.addInventoryItem('char1', 'u1', { name: 'Cape', weight: 1.2 } as any);
+        await service.addInventoryItem('char1', 'u1', {
+          name: 'Cape',
+          weight: 1.2,
+        });
 
         const data = prisma.character.updateMany.mock.calls[0][0].data;
         expect(data.sheetData.equipment.individual).toEqual([
@@ -1178,7 +1633,7 @@ describe('CharacterService', () => {
         prisma.character.updateMany.mockResolvedValue({ count: 1 });
         prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
-        await service.addInventoryItem('char1', 'u1', { name: 'Sac' } as any);
+        await service.addInventoryItem('char1', 'u1', { name: 'Sac' });
 
         const data = prisma.character.updateMany.mock.calls[0][0].data;
         expect(data.sheetData.equipment.individual[0]).toEqual({
@@ -1205,7 +1660,9 @@ describe('CharacterService', () => {
       });
 
       it('409 si updatedAt périmé', async () => {
-        prisma.character.findUnique.mockResolvedValue(makeCharacterWithEquipment());
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacterWithEquipment(),
+        );
         prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
         await expect(
@@ -1219,7 +1676,9 @@ describe('CharacterService', () => {
         );
 
         await expect(
-          service.addInventoryItem('char1', 'stranger', { name: 'Cape' } as any),
+          service.addInventoryItem('char1', 'stranger', {
+            name: 'Cape',
+          } as any),
         ).rejects.toThrow(ForbiddenException);
       });
 
@@ -1229,7 +1688,7 @@ describe('CharacterService', () => {
         prisma.character.updateMany.mockResolvedValue({ count: 1 });
         prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
-        await service.addInventoryItem('char1', 'u1', { name: 'Cape' } as any);
+        await service.addInventoryItem('char1', 'u1', { name: 'Cape' });
 
         expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
       });
@@ -1240,7 +1699,7 @@ describe('CharacterService', () => {
         prisma.character.updateMany.mockResolvedValue({ count: 1 });
         prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
-        await service.addInventoryItem('char1', 'u1', { name: 'Cape' } as any);
+        await service.addInventoryItem('char1', 'u1', { name: 'Cape' });
 
         const data = prisma.character.updateMany.mock.calls[0][0].data;
         expect(data.sheetData.equipment.individual).toEqual([
@@ -1259,7 +1718,9 @@ describe('CharacterService', () => {
         prisma.character.updateMany.mockResolvedValue({ count: 1 });
         prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
-        await service.updateInventoryItem('char1', 'u1', 'item-1', { name: 'Cape usée' } as any);
+        await service.updateInventoryItem('char1', 'u1', 'item-1', {
+          name: 'Cape usée',
+        });
 
         const data = prisma.character.updateMany.mock.calls[0][0].data;
         expect(data.sheetData.equipment.individual[0]).toEqual({
@@ -1278,7 +1739,9 @@ describe('CharacterService', () => {
         prisma.character.updateMany.mockResolvedValue({ count: 1 });
         prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
-        await service.updateInventoryItem('char1', 'u1', 'item-1', { weight: 2 } as any);
+        await service.updateInventoryItem('char1', 'u1', 'item-1', {
+          weight: 2,
+        });
 
         const data = prisma.character.updateMany.mock.calls[0][0].data;
         expect(data.sheetData.equipment.individual[0]).toEqual({
@@ -1298,7 +1761,9 @@ describe('CharacterService', () => {
         prisma.character.updateMany.mockResolvedValue({ count: 1 });
         prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
-        await service.updateInventoryItem('char1', 'u1', 'item-2', { name: 'Sac usé' } as any);
+        await service.updateInventoryItem('char1', 'u1', 'item-2', {
+          name: 'Sac usé',
+        });
 
         const data = prisma.character.updateMany.mock.calls[0][0].data;
         expect(data.sheetData.equipment.individual).toEqual([
@@ -1309,11 +1774,15 @@ describe('CharacterService', () => {
 
       it('itemId introuvable → NotFoundException (jamais un fallback sur un autre objet)', async () => {
         prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithEquipment([{ id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' }]),
+          makeCharacterWithEquipment([
+            { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' },
+          ]),
         );
 
         await expect(
-          service.updateInventoryItem('char1', 'u1', 'item-inconnu', { name: 'x' } as any),
+          service.updateInventoryItem('char1', 'u1', 'item-inconnu', {
+            name: 'x',
+          } as any),
         ).rejects.toThrow(NotFoundException);
       });
 
@@ -1321,23 +1790,31 @@ describe('CharacterService', () => {
         // Simule : le personnage tel que relu par CETTE requête ne contient plus l'objet que le
         // client pensait éditer (retiré entretemps par une autre requête, déjà appliquée).
         prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithEquipment([{ id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' }]),
+          makeCharacterWithEquipment([
+            { id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' },
+          ]),
         );
 
         await expect(
-          service.updateInventoryItem('char1', 'u1', 'item-1', { weight: 5 } as any),
+          service.updateInventoryItem('char1', 'u1', 'item-1', {
+            weight: 5,
+          } as any),
         ).rejects.toThrow(NotFoundException);
         expect(prisma.character.updateMany).not.toHaveBeenCalled();
       });
 
       it('409 si updatedAt périmé', async () => {
         prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithEquipment([{ id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' }]),
+          makeCharacterWithEquipment([
+            { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' },
+          ]),
         );
         prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
         await expect(
-          service.updateInventoryItem('char1', 'u1', 'item-1', { weight: 2 } as any),
+          service.updateInventoryItem('char1', 'u1', 'item-1', {
+            weight: 2,
+          } as any),
         ).rejects.toThrow(ConflictException);
       });
 
@@ -1347,7 +1824,9 @@ describe('CharacterService', () => {
         );
 
         await expect(
-          service.updateInventoryItem('char1', 'stranger', 'item-1', { weight: 2 } as any),
+          service.updateInventoryItem('char1', 'stranger', 'item-1', {
+            weight: 2,
+          } as any),
         ).rejects.toThrow(ForbiddenException);
       });
 
@@ -1359,7 +1838,9 @@ describe('CharacterService', () => {
         prisma.character.updateMany.mockResolvedValue({ count: 1 });
         prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
-        await service.updateInventoryItem('char1', 'u1', 'item-1', { weight: 2 } as any);
+        await service.updateInventoryItem('char1', 'u1', 'item-1', {
+          weight: 2,
+        });
 
         expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
       });
@@ -1384,7 +1865,9 @@ describe('CharacterService', () => {
       });
 
       it('itemId introuvable → NotFoundException', async () => {
-        prisma.character.findUnique.mockResolvedValue(makeCharacterWithEquipment([]));
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacterWithEquipment([]),
+        );
 
         await expect(
           service.removeInventoryItem('char1', 'u1', 'item-inconnu'),
@@ -1393,7 +1876,9 @@ describe('CharacterService', () => {
 
       it("objet déjà retiré par une autre requête → NotFoundException, jamais suppression d'un autre objet", async () => {
         prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithEquipment([{ id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' }]),
+          makeCharacterWithEquipment([
+            { id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' },
+          ]),
         );
 
         await expect(
@@ -1404,7 +1889,9 @@ describe('CharacterService', () => {
 
       it('409 si updatedAt périmé', async () => {
         prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithEquipment([{ id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' }]),
+          makeCharacterWithEquipment([
+            { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' },
+          ]),
         );
         prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
@@ -1455,7 +1942,9 @@ describe('CharacterService', () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         prisma.characterNote.create.mockResolvedValue(makeNote());
 
-        const result = await service.addNote('char1', 'u1', { text: 'Une note' } as any);
+        const result = await service.addNote('char1', 'u1', {
+          text: 'Une note',
+        });
 
         expect(prisma.characterNote.create).toHaveBeenCalledWith({
           data: { characterId: 'char1', text: 'Une note', shared: false },
@@ -1470,7 +1959,9 @@ describe('CharacterService', () => {
       });
 
       it('non-propriétaire → ForbiddenException', async () => {
-        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacter({ userId: 'owner' }),
+        );
 
         await expect(
           service.addNote('char1', 'stranger', { text: 'x' } as any),
@@ -1482,7 +1973,7 @@ describe('CharacterService', () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         prisma.characterNote.create.mockResolvedValue(makeNote());
 
-        await service.addNote('char1', 'u1', { text: 'x' } as any);
+        await service.addNote('char1', 'u1', { text: 'x' });
 
         expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
       });
@@ -1491,10 +1982,19 @@ describe('CharacterService', () => {
     describe('toggleNoteShare()', () => {
       it('bascule shared de false à true', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        prisma.characterNote.findUnique.mockResolvedValue(makeNote({ shared: false }));
-        prisma.characterNote.update.mockResolvedValue(makeNote({ shared: true }));
+        prisma.characterNote.findUnique.mockResolvedValue(
+          makeNote({ shared: false }),
+        );
+        prisma.characterNote.update.mockResolvedValue(
+          makeNote({ shared: true }),
+        );
 
-        const result = await service.toggleNoteShare('char1', 'u1', 'note-1', true);
+        const result = await service.toggleNoteShare(
+          'char1',
+          'u1',
+          'note-1',
+          true,
+        );
 
         expect(prisma.characterNote.update).toHaveBeenCalledWith({
           where: { id: 'note-1' },
@@ -1526,7 +2026,9 @@ describe('CharacterService', () => {
       });
 
       it('non-propriétaire → ForbiddenException', async () => {
-        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacter({ userId: 'owner' }),
+        );
 
         await expect(
           service.toggleNoteShare('char1', 'stranger', 'note-1', true),

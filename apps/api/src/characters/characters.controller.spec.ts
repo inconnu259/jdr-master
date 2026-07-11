@@ -33,6 +33,8 @@ function makeCharacterService() {
     addNote: jest.fn(),
     toggleNoteShare: jest.fn(),
     getNotes: jest.fn(),
+    setXp: jest.fn(),
+    setSheetField: jest.fn(),
   };
 }
 
@@ -255,7 +257,7 @@ describe('CharactersController', () => {
   it('addInventoryItem() délègue à CharacterService', async () => {
     characters.addInventoryItem.mockResolvedValue({ id: 'char1' });
 
-    await controller.addInventoryItem('char1', { name: 'Cape', weight: 1.2 } as any, {
+    await controller.addInventoryItem('char1', { name: 'Cape', weight: 1.2 }, {
       id: 'u1',
     } as any);
 
@@ -271,7 +273,7 @@ describe('CharactersController', () => {
     await controller.updateInventoryItem(
       'char1',
       '22222222-2222-2222-2222-222222222222',
-      { weight: 2 } as any,
+      { weight: 2 },
       { id: 'u1' } as any,
     );
 
@@ -302,18 +304,25 @@ describe('CharactersController', () => {
   it('addNote() délègue à CharacterService', async () => {
     characters.addNote.mockResolvedValue({ id: 'note-1' });
 
-    await controller.addNote('char1', { text: 'Une note' } as any, { id: 'u1' } as any);
+    await controller.addNote('char1', { text: 'Une note' }, {
+      id: 'u1',
+    } as any);
 
-    expect(characters.addNote).toHaveBeenCalledWith('char1', 'u1', { text: 'Une note' });
+    expect(characters.addNote).toHaveBeenCalledWith('char1', 'u1', {
+      text: 'Une note',
+    });
   });
 
   it('toggleNoteShare() délègue à CharacterService', async () => {
-    characters.toggleNoteShare.mockResolvedValue({ id: 'note-1', shared: true });
+    characters.toggleNoteShare.mockResolvedValue({
+      id: 'note-1',
+      shared: true,
+    });
 
     await controller.toggleNoteShare(
       'char1',
       '33333333-3333-3333-3333-333333333333',
-      { shared: true } as any,
+      { shared: true },
       { id: 'u1' } as any,
     );
 
@@ -331,6 +340,32 @@ describe('CharactersController', () => {
     await controller.getNotes('char1', { id: 'u1' } as any);
 
     expect(characters.getNotes).toHaveBeenCalledWith('char1', 'u1');
+  });
+
+  it('setXp() délègue à CharacterService', async () => {
+    characters.setXp.mockResolvedValue({ id: 'char1', xp: 500 });
+
+    await controller.setXp('char1', { value: 500 }, { id: 'mj1' } as any);
+
+    expect(characters.setXp).toHaveBeenCalledWith('char1', 'mj1', 500);
+  });
+
+  it('setSheetField() délègue à CharacterService avec le dto complet', async () => {
+    characters.setSheetField.mockResolvedValue({
+      character: { id: 'char1' },
+      warnings: [],
+    });
+
+    await controller.setSheetField(
+      'char1',
+      { path: 'fetiqueObject', value: 'Lanterne' },
+      { id: 'mj1' } as any,
+    );
+
+    expect(characters.setSheetField).toHaveBeenCalledWith('char1', 'mj1', {
+      path: 'fetiqueObject',
+      value: 'Lanterne',
+    });
   });
 
   describe('validation HTTP réelle (ValidationPipe global)', () => {
@@ -459,7 +494,9 @@ describe('CharactersController', () => {
 
     it('POST inventory-items avec addedBy dans le body → 400 (ValidationPipe whitelist, AD-3)', async () => {
       await request(app.getHttpServer())
-        .post('/characters/11111111-1111-1111-1111-111111111111/inventory-items')
+        .post(
+          '/characters/11111111-1111-1111-1111-111111111111/inventory-items',
+        )
         .send({ name: 'Objet suspect', weight: 1, addedBy: 'mj' })
         .expect(400);
 
@@ -472,7 +509,9 @@ describe('CharactersController', () => {
       });
 
       await request(app.getHttpServer())
-        .post('/characters/11111111-1111-1111-1111-111111111111/inventory-items')
+        .post(
+          '/characters/11111111-1111-1111-1111-111111111111/inventory-items',
+        )
         .send({ name: 'Sac' })
         .expect(201);
 
@@ -485,7 +524,9 @@ describe('CharactersController', () => {
 
     it('POST inventory-items sans name → 400 (class-validator)', async () => {
       await request(app.getHttpServer())
-        .post('/characters/11111111-1111-1111-1111-111111111111/inventory-items')
+        .post(
+          '/characters/11111111-1111-1111-1111-111111111111/inventory-items',
+        )
         .send({ weight: 1 })
         .expect(400);
 
@@ -505,7 +546,9 @@ describe('CharactersController', () => {
 
     it('PATCH inventory-items/:itemId avec itemId non UUID → 400 (ParseUUIDPipe)', async () => {
       await request(app.getHttpServer())
-        .patch('/characters/11111111-1111-1111-1111-111111111111/inventory-items/abc')
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/inventory-items/abc',
+        )
         .send({ weight: 2 })
         .expect(400);
 
@@ -613,6 +656,96 @@ describe('CharactersController', () => {
       expect(characters.getNotes).toHaveBeenCalledWith(
         '11111111-1111-1111-1111-111111111111',
         'u1',
+      );
+    });
+
+    it('PATCH xp avec value non-entier → 400 (class-validator)', async () => {
+      await request(app.getHttpServer())
+        .patch('/characters/11111111-1111-1111-1111-111111111111/xp')
+        .send({ value: 12.5 })
+        .expect(400);
+
+      expect(characters.setXp).not.toHaveBeenCalled();
+    });
+
+    it('PATCH xp avec value négatif → 400', async () => {
+      await request(app.getHttpServer())
+        .patch('/characters/11111111-1111-1111-1111-111111111111/xp')
+        .send({ value: -1 })
+        .expect(400);
+
+      expect(characters.setXp).not.toHaveBeenCalled();
+    });
+
+    it('PATCH xp avec value valide → 200, CharacterService appelé', async () => {
+      characters.setXp.mockResolvedValue({
+        id: '11111111-1111-1111-1111-111111111111',
+        xp: 500,
+      });
+
+      await request(app.getHttpServer())
+        .patch('/characters/11111111-1111-1111-1111-111111111111/xp')
+        .send({ value: 500 })
+        .expect(200);
+
+      expect(characters.setXp).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
+        500,
+      );
+    });
+
+    it('PATCH sheet-field sans path → 400 (class-validator)', async () => {
+      await request(app.getHttpServer())
+        .patch('/characters/11111111-1111-1111-1111-111111111111/sheet-field')
+        .send({ value: 'x' })
+        .expect(400);
+
+      expect(characters.setSheetField).not.toHaveBeenCalled();
+    });
+
+    it('PATCH sheet-field avec value: null → 200 (null autorisé, on vide un champ)', async () => {
+      characters.setSheetField.mockResolvedValue({
+        character: { id: '11111111-1111-1111-1111-111111111111' },
+        warnings: [],
+      });
+
+      await request(app.getHttpServer())
+        .patch('/characters/11111111-1111-1111-1111-111111111111/sheet-field')
+        .send({ path: 'fetiqueObject', value: null })
+        .expect(200);
+
+      expect(characters.setSheetField).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
+        { path: 'fetiqueObject', value: null },
+      );
+    });
+
+    it('PATCH sheet-field avec un champ supplémentaire non déclaré → 400 (whitelist)', async () => {
+      await request(app.getHttpServer())
+        .patch('/characters/11111111-1111-1111-1111-111111111111/sheet-field')
+        .send({ path: 'fetiqueObject', value: 'Lanterne', extra: 'intrus' })
+        .expect(400);
+
+      expect(characters.setSheetField).not.toHaveBeenCalled();
+    });
+
+    it('PATCH sheet-field avec path/value valides → 200, CharacterService appelé', async () => {
+      characters.setSheetField.mockResolvedValue({
+        character: { id: '11111111-1111-1111-1111-111111111111' },
+        warnings: [],
+      });
+
+      await request(app.getHttpServer())
+        .patch('/characters/11111111-1111-1111-1111-111111111111/sheet-field')
+        .send({ path: 'fetiqueObject', value: 'Lanterne' })
+        .expect(200);
+
+      expect(characters.setSheetField).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
+        { path: 'fetiqueObject', value: 'Lanterne' },
       );
     });
   });

@@ -5,7 +5,10 @@ export interface InventoryMigrationClient {
     findMany(args: {
       select: { id: true; sheetData: true };
     }): Promise<{ id: string; sheetData: unknown }[]>;
-    update(args: { where: { id: string }; data: { sheetData: unknown } }): Promise<unknown>;
+    update(args: {
+      where: { id: string };
+      data: { sheetData: unknown };
+    }): Promise<unknown>;
   };
 }
 

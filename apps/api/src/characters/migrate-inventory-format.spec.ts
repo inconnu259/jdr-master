@@ -18,7 +18,10 @@ describe('migrateInventoryFormat', () => {
         id: 'char1',
         sheetData: {
           classId: 'chasseur',
-          equipment: { individual: ['Grand sac à dos', 'Outre'], group: ['Tente'] },
+          equipment: {
+            individual: ['Grand sac à dos', 'Outre'],
+            group: ['Tente'],
+          },
         },
       },
     ]);
@@ -33,7 +36,12 @@ describe('migrateInventoryFormat', () => {
           classId: 'chasseur',
           equipment: {
             individual: [
-              { id: 'fixed-uuid', name: 'Grand sac à dos', weight: 0, addedBy: 'player' },
+              {
+                id: 'fixed-uuid',
+                name: 'Grand sac à dos',
+                weight: 0,
+                addedBy: 'player',
+              },
               { id: 'fixed-uuid', name: 'Outre', weight: 0, addedBy: 'player' },
             ],
             group: ['Tente'],
@@ -74,7 +82,9 @@ describe('migrateInventoryFormat', () => {
   });
 
   it('sheetData sans equipment → ignoré, pas de crash', async () => {
-    const prisma = makePrisma([{ id: 'char4', sheetData: { classId: 'chasseur' } }]);
+    const prisma = makePrisma([
+      { id: 'char4', sheetData: { classId: 'chasseur' } },
+    ]);
 
     const migrated = await migrateInventoryFormat(prisma);
 
@@ -84,11 +94,17 @@ describe('migrateInventoryFormat', () => {
 
   it('plusieurs personnages : seuls ceux à l’ancien format sont migrés', async () => {
     const prisma = makePrisma([
-      { id: 'old', sheetData: { equipment: { individual: ['Sac'], group: [] } } },
+      {
+        id: 'old',
+        sheetData: { equipment: { individual: ['Sac'], group: [] } },
+      },
       {
         id: 'new',
         sheetData: {
-          equipment: { individual: [{ name: 'Cape', weight: 1, addedBy: 'player' }], group: [] },
+          equipment: {
+            individual: [{ name: 'Cape', weight: 1, addedBy: 'player' }],
+            group: [],
+          },
         },
       },
     ]);
@@ -104,7 +120,12 @@ describe('migrateInventoryFormat', () => {
 
   it('group non touché par la migration', async () => {
     const prisma = makePrisma([
-      { id: 'char5', sheetData: { equipment: { individual: ['Sac'], group: ['Tente', 'Briquet'] } } },
+      {
+        id: 'char5',
+        sheetData: {
+          equipment: { individual: ['Sac'], group: ['Tente', 'Briquet'] },
+        },
+      },
     ]);
 
     await migrateInventoryFormat(prisma);

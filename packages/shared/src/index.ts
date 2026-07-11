@@ -377,6 +377,23 @@ export interface ToggleNoteShareDto {
   shared: boolean;
 }
 
+/** Payload de PATCH /characters/:id/sheet-field (AD-6, édition MJ générique). */
+export interface SetSheetFieldDto {
+  path: string;
+  value: unknown;
+}
+
+/** Réponse de PATCH /characters/:id/sheet-field : `warnings` = errors[] consultatif de `validate('mj', ...)`, jamais bloquant (AD-7/NFR3). */
+export interface SetSheetFieldResultDto {
+  character: CharacterDto;
+  warnings: string[];
+}
+
+/** Payload de PATCH /characters/:id/xp (édition MJ directe, distincte de la distribution d'XP — AD-6). */
+export interface SetXpDto {
+  value: number;
+}
+
 /**
  * Dimensions du cadre portrait de l'export PDF Ryuutama, mesurées empiriquement en Story 4.6
  * (`apps/api/game-systems/ryuutama/assets/README.md`, section "Zone du portrait"). Consommées

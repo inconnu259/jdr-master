@@ -7,7 +7,12 @@ describe('InventoryItemRow', () => {
   it('affiche le nom et le poids', async () => {
     TestBed.configureTestingModule({ imports: [InventoryItemRow] });
     const fixture = TestBed.createComponent(InventoryItemRow);
-    fixture.componentRef.setInput('item', { id: 'item-1', name: 'Cape', weight: 1.2, addedBy: 'player' });
+    fixture.componentRef.setInput('item', {
+      id: 'item-1',
+      name: 'Cape',
+      weight: 1.2,
+      addedBy: 'player',
+    });
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -19,12 +24,22 @@ describe('InventoryItemRow', () => {
   it('badge "ajouté par le MJ" visible seulement si addedBy === "mj"', async () => {
     TestBed.configureTestingModule({ imports: [InventoryItemRow] });
     const fixture = TestBed.createComponent(InventoryItemRow);
-    fixture.componentRef.setInput('item', { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' });
+    fixture.componentRef.setInput('item', {
+      id: 'item-1',
+      name: 'Cape',
+      weight: 1,
+      addedBy: 'player',
+    });
     fixture.detectChanges();
     await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('.inventory-item-row__badge')).toBeNull();
 
-    fixture.componentRef.setInput('item', { id: 'item-2', name: 'Lettre', weight: 0, addedBy: 'mj' });
+    fixture.componentRef.setInput('item', {
+      id: 'item-2',
+      name: 'Lettre',
+      weight: 0,
+      addedBy: 'mj',
+    });
     fixture.detectChanges();
     await fixture.whenStable();
     expect(fixture.nativeElement.querySelector('.inventory-item-row__badge')).not.toBeNull();
@@ -33,7 +48,12 @@ describe('InventoryItemRow', () => {
   it('boutons éditer/supprimer absents si editable=false', async () => {
     TestBed.configureTestingModule({ imports: [InventoryItemRow] });
     const fixture = TestBed.createComponent(InventoryItemRow);
-    fixture.componentRef.setInput('item', { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' });
+    fixture.componentRef.setInput('item', {
+      id: 'item-1',
+      name: 'Cape',
+      weight: 1,
+      addedBy: 'player',
+    });
     fixture.componentRef.setInput('editable', false);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -41,11 +61,17 @@ describe('InventoryItemRow', () => {
     expect(fixture.nativeElement.querySelectorAll('button').length).toBe(0);
   });
 
-  it('clic éditer/supprimer émet les events attendus quand editable=true', async () => {
+  it('clic éditer/supprimer émet les events attendus quand editable=true et removable=true (propriétaire)', async () => {
     TestBed.configureTestingModule({ imports: [InventoryItemRow] });
     const fixture = TestBed.createComponent(InventoryItemRow);
-    fixture.componentRef.setInput('item', { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' });
+    fixture.componentRef.setInput('item', {
+      id: 'item-1',
+      name: 'Cape',
+      weight: 1,
+      addedBy: 'player',
+    });
     fixture.componentRef.setInput('editable', true);
+    fixture.componentRef.setInput('removable', true);
     fixture.detectChanges();
     await fixture.whenStable();
 
@@ -61,5 +87,27 @@ describe('InventoryItemRow', () => {
 
     expect(edited).toBe(true);
     expect(removed).toBe(true);
+  });
+
+  it('removable=false → bouton "Supprimer" absent même si editable=true (MJ : édite mais ne supprime pas)', async () => {
+    TestBed.configureTestingModule({ imports: [InventoryItemRow] });
+    const fixture = TestBed.createComponent(InventoryItemRow);
+    fixture.componentRef.setInput('item', {
+      id: 'item-1',
+      name: 'Cape',
+      weight: 1,
+      addedBy: 'player',
+    });
+    fixture.componentRef.setInput('editable', true);
+    fixture.componentRef.setInput('removable', false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(
+      fixture.nativeElement.querySelector('button[aria-label="Modifier l\'objet"]'),
+    ).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('button[aria-label="Supprimer l\'objet"]'),
+    ).toBeNull();
   });
 });

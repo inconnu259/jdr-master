@@ -182,4 +182,107 @@ describe('InventoryTab', () => {
     const fixture = await createComponent({ addInventoryItem: vi.fn() });
     expect(fixture.nativeElement.querySelector('.inventory-tab__empty')).not.toBeNull();
   });
+
+  describe('édition MJ (Story 6.6)', () => {
+    async function createMjComponent(
+      characterSvc: Partial<CharacterService>,
+      items: { id: string; name: string; weight: number; addedBy: string }[] = [
+        { id: 'item-1', name: 'Corde', weight: 1, addedBy: 'player' },
+      ],
+    ) {
+      await TestBed.configureTestingModule({
+        imports: [InventoryTab],
+        providers: [{ provide: CharacterService, useValue: characterSvc }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(InventoryTab);
+      fixture.componentRef.setInput('character', makeCharacterWithItems(items));
+      fixture.componentRef.setInput('isOwner', false);
+      fixture.componentRef.setInput('viewerIsMj', true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      return fixture;
+    }
+
+    it('MJ (viewerIsMj:true, isOwner:false) → pencil "Modifier" visible, "Supprimer" absent', async () => {
+      const fixture = await createMjComponent({});
+
+      expect(
+        fixture.nativeElement.querySelectorAll(
+          '.inventory-item-row button[aria-label="Modifier l\'objet"]',
+        ).length,
+      ).toBe(1);
+      expect(
+        fixture.nativeElement.querySelector('button[aria-label="Supprimer l\'objet"]'),
+      ).toBeNull();
+    });
+
+    it('MJ → formulaire d’ajout MJ visible', async () => {
+      const fixture = await createMjComponent({});
+      expect(fixture.nativeElement.querySelector('.inventory-tab__mj-add-form')).not.toBeNull();
+    });
+
+    it('submitMjEdit() appelle setSheetField avec equipment.individual.<index correct>', async () => {
+      const updated = makeCharacterWithItems([]);
+      const characterSvc = {
+        setSheetField: vi.fn().mockResolvedValue({ character: updated, warnings: [] }),
+      };
+      const fixture = await createMjComponent(characterSvc, [
+        { id: 'item-1', name: 'Corde', weight: 1, addedBy: 'player' },
+        { id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' },
+      ]);
+      const comp = fixture.componentInstance as any;
+
+      comp.startEdit({ id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' });
+      comp.editName.set('Sac renforcé');
+      await comp.submitMjEdit('item-2');
+
+      expect(characterSvc.setSheetField).toHaveBeenCalledWith('char1', 'equipment.individual.1', {
+        name: 'Sac renforcé',
+        weight: 2,
+        id: 'item-2',
+      });
+    });
+
+    it('submitMjAdd() appelle setSheetField avec equipment.individual.<longueur actuelle>', async () => {
+      const updated = makeCharacterWithItems([]);
+      const characterSvc = {
+        setSheetField: vi.fn().mockResolvedValue({ character: updated, warnings: [] }),
+      };
+      const fixture = await createMjComponent(characterSvc, [
+        { id: 'item-1', name: 'Corde', weight: 1, addedBy: 'player' },
+      ]);
+      const comp = fixture.componentInstance as any;
+
+      comp.newItemName.set('Lettre scellée');
+      comp.newItemWeight.set(0.1);
+      await comp.submitMjAdd();
+
+      expect(characterSvc.setSheetField).toHaveBeenCalledWith('char1', 'equipment.individual.1', {
+        name: 'Lettre scellée',
+        weight: 0.1,
+      });
+    });
+
+    it('propriétaire (isOwner:true, viewerIsMj:false) → comportement inchangé, submitEdit/submitAdd toujours appelés (pas setSheetField)', async () => {
+      const updated = makeCharacterWithItems([]);
+      const characterSvc = {
+        addInventoryItem: vi.fn().mockResolvedValue(updated),
+        setSheetField: vi.fn(),
+      };
+      const fixture = await createComponent(characterSvc, true);
+      const comp = fixture.componentInstance as any;
+
+      comp.newItemName.set('Cape');
+      await comp.submitAdd();
+
+      expect(characterSvc.addInventoryItem).toHaveBeenCalled();
+      expect(characterSvc.setSheetField).not.toHaveBeenCalled();
+      expect(
+        fixture.nativeElement.querySelectorAll(
+          '.inventory-item-row button[aria-label="Supprimer l\'objet"]',
+        ).length,
+      ).toBe(0); // liste vide dans ce test — juste vérifie qu'aucune erreur de rendu MJ n'apparaît
+      expect(fixture.nativeElement.querySelector('.inventory-tab__mj-add-form')).toBeNull();
+    });
+  });
 });

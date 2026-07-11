@@ -12,6 +12,7 @@ import type {
   GameSystemContentDto,
   GameSystemDto,
   GameSystemSchemaDto,
+  SetSheetFieldResultDto,
   UpdateInventoryItemDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
@@ -149,20 +150,17 @@ export class CharacterService {
     dto: UpdateInventoryItemDto,
   ): Promise<CharacterDto> {
     return firstValueFrom(
-      this.http.patch<CharacterDto>(
-        `${API_BASE}/characters/${id}/inventory-items/${itemId}`,
-        dto,
-        { withCredentials: true },
-      ),
+      this.http.patch<CharacterDto>(`${API_BASE}/characters/${id}/inventory-items/${itemId}`, dto, {
+        withCredentials: true,
+      }),
     );
   }
 
   removeInventoryItem(id: string, itemId: string): Promise<CharacterDto> {
     return firstValueFrom(
-      this.http.delete<CharacterDto>(
-        `${API_BASE}/characters/${id}/inventory-items/${itemId}`,
-        { withCredentials: true },
-      ),
+      this.http.delete<CharacterDto>(`${API_BASE}/characters/${id}/inventory-items/${itemId}`, {
+        withCredentials: true,
+      }),
     );
   }
 
@@ -189,6 +187,26 @@ export class CharacterService {
       this.http.get<CharacterNoteDto[]>(`${API_BASE}/characters/${id}/notes`, {
         withCredentials: true,
       }),
+    );
+  }
+
+  setXp(id: string, value: number): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.patch<CharacterDto>(
+        `${API_BASE}/characters/${id}/xp`,
+        { value },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  setSheetField(id: string, path: string, value: unknown): Promise<SetSheetFieldResultDto> {
+    return firstValueFrom(
+      this.http.patch<SetSheetFieldResultDto>(
+        `${API_BASE}/characters/${id}/sheet-field`,
+        { path, value },
+        { withCredentials: true },
+      ),
     );
   }
 }

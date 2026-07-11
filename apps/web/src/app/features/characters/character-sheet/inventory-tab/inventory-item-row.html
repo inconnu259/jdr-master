@@ -6,6 +6,8 @@
   }
   @if (editable()) {
     <button mat-icon-button type="button" aria-label="Modifier l'objet" (click)="edit.emit()">✎</button>
+  }
+  @if (removable()) {
     <button mat-icon-button type="button" aria-label="Supprimer l'objet" (click)="remove.emit()">✕</button>
   }
 </div>

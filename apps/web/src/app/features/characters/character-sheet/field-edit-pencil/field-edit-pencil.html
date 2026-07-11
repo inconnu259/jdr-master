@@ -1,0 +1,37 @@
+@if (editing()) {
+  <span class="field-edit-pencil__form">
+    <input
+      class="field-edit-pencil__input"
+      [type]="type()"
+      [value]="draft()"
+      (input)="onInput($any($event.target).value)"
+    />
+    <button
+      mat-icon-button
+      type="button"
+      class="field-edit-pencil__confirm"
+      aria-label="Valider"
+      (click)="submit()"
+    >
+      ✓
+    </button>
+    <button
+      mat-icon-button
+      type="button"
+      class="field-edit-pencil__cancel"
+      aria-label="Annuler"
+      (click)="cancel()"
+    >
+      ✕
+    </button>
+  </span>
+} @else {
+  <button
+    type="button"
+    class="field-edit-pencil__button"
+    [attr.aria-label]="'Modifier ' + label()"
+    (click)="startEdit()"
+  >
+    ✎
+  </button>
+}

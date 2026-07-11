@@ -77,12 +77,14 @@ describe('validate (strict)', () => {
     expect(result.errors).toEqual([]);
   });
 
-  it('mode "mj" → no-op, toujours valid: true (catalog non requis)', () => {
-    const result = validate(
-      { ...validSheet(), classId: '' },
-      'mj',
-      catalog(),
-    );
+  it('mode "mj" → règles réelles exécutées, mais valid: true même avec des erreurs', () => {
+    const result = validate({ ...validSheet(), classId: '' }, 'mj', catalog());
+    expect(result.valid).toBe(true);
+    expect(result.errors.some((e) => e.field === 'classId')).toBe(true);
+  });
+
+  it('mode "mj" → sheetData valide → valid: true, errors: []', () => {
+    const result = validate(validSheet(), 'mj', catalog());
     expect(result).toEqual({ valid: true, errors: [] });
   });
 

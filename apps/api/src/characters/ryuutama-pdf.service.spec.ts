@@ -17,7 +17,9 @@ jest.mock('@master-jdr/game-rules', () => ({
         { field: 'PV max', value: String(derived.PV), kind: 'text' },
         { field: 'Classe 1', value: content.classLabel, kind: 'dropdown' },
       ];
-      for (const label of Object.values(content.capabilityLabels?.landscape ?? {})) {
+      for (const label of Object.values(
+        content.capabilityLabels?.landscape ?? {},
+      )) {
         fields.push({ field: label, value: '+2', kind: 'text' });
       }
       return fields;
@@ -49,7 +51,10 @@ const mockEmbeddedImage = { width: 100, height: 100 };
 const mockEmbedJpg = jest.fn().mockResolvedValue(mockEmbeddedImage);
 const mockEmbedPng = jest.fn().mockResolvedValue(mockEmbeddedImage);
 const mockForm = {
-  getTextField: jest.fn(() => ({ setText: mockSetText, setFontSize: mockSetFontSize })),
+  getTextField: jest.fn(() => ({
+    setText: mockSetText,
+    setFontSize: mockSetFontSize,
+  })),
   getDropdown: jest.fn(() => ({ select: mockSelect })),
   flatten: mockFlatten,
 };

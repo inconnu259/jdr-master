@@ -20,6 +20,7 @@ import { LevelUpWizard, type LevelUpWizardData } from './level-up-wizard/level-u
 import { HistoryTab } from './history-tab/history-tab';
 import { InventoryTab } from './inventory-tab/inventory-tab';
 import { NotesJournal } from './notes-journal/notes-journal';
+import { FieldEditPencil } from './field-edit-pencil/field-edit-pencil';
 import {
   capabilityDescription,
   getCapabilitiesByType,
@@ -67,6 +68,7 @@ interface NarrativeFields {
     HistoryTab,
     InventoryTab,
     NotesJournal,
+    FieldEditPencil,
   ],
   templateUrl: './character-sheet.html',
   styleUrl: './character-sheet.scss',
@@ -178,9 +180,7 @@ export class CharacterSheet implements OnInit {
   protected readonly secondaryType = computed<TypeData | null>(() => {
     const c = this.character();
     if (!c) return null;
-    const key = getCapabilitiesByType(c, 'type')[0]?.capability.params['key'] as
-      | string
-      | undefined;
+    const key = getCapabilitiesByType(c, 'type')[0]?.capability.params['key'] as string | undefined;
     return findContentEntry<TypeData>(this.content(), 'type', key);
   });
 
@@ -392,5 +392,37 @@ export class CharacterSheet implements OnInit {
       this.portraitDialogOpen = false;
       if (updated) this.character.set(updated);
     });
+  }
+
+  protected readonly fieldEditWarning = signal<string | null>(null);
+  protected readonly fieldEditError = signal<string | null>(null);
+
+  /** Édition MJ générique d'un champ (AD-6) — attributs, objet fétiche, cf. `FieldEditPencil`. */
+  protected async submitFieldEdit(path: string, value: string | number): Promise<void> {
+    const c = this.character();
+    if (!c) return;
+    this.fieldEditError.set(null);
+    this.fieldEditWarning.set(null);
+    try {
+      const result = await this.characterSvc.setSheetField(c.id, path, value);
+      this.character.set(result.character);
+      if (result.warnings.length > 0) {
+        this.fieldEditWarning.set(result.warnings.join(' '));
+      }
+    } catch {
+      this.fieldEditError.set(this.theme.tone()['evolution.mj_edit_error']);
+    }
+  }
+
+  /** Édition MJ directe de l'XP (AD-6, endpoint dédié distinct de `submitFieldEdit`). */
+  protected async submitXpEdit(value: string | number): Promise<void> {
+    const c = this.character();
+    if (!c) return;
+    this.fieldEditError.set(null);
+    try {
+      this.character.set(await this.characterSvc.setXp(c.id, Number(value)));
+    } catch {
+      this.fieldEditError.set(this.theme.tone()['evolution.mj_edit_error']);
+    }
   }
 }

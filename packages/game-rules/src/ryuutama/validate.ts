@@ -10,8 +10,6 @@ export function validate(
   mode: 'strict' | 'mj',
   catalog: RyuutamaCatalog,
 ): ValidationResult {
-  if (mode === 'mj') return { valid: true, errors: [] }; // no-op réservé à P4
-
   const { validClasses, validTypes, validWeapons, attributePatterns } =
     catalog;
   const errors: ValidationError[] = [];
@@ -70,5 +68,5 @@ export function validate(
     });
   }
 
-  return { valid: errors.length === 0, errors };
+  return { valid: mode === 'strict' ? errors.length === 0 : true, errors };
 }

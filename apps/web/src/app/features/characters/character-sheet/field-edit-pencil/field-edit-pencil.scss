@@ -1,0 +1,31 @@
+.field-edit-pencil__button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mat-sys-on-surface-variant, #888);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--jdr-accent-2, currentColor);
+    border-color: var(--jdr-accent-2, currentColor);
+  }
+}
+
+.field-edit-pencil__form {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.field-edit-pencil__input {
+  width: 6rem;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 6px;
+}

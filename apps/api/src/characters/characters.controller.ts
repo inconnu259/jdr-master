@@ -35,6 +35,8 @@ import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { CreateCharacterNoteDto } from './dto/create-character-note.dto';
 import { ToggleNoteShareDto } from './dto/toggle-note-share.dto';
+import { SetSheetFieldDto } from './dto/set-sheet-field.dto';
+import { SetXpDto } from './dto/set-xp.dto';
 import { ExportCharacterPdfDto } from './dto/export-character-pdf.dto';
 import { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 
@@ -225,5 +227,23 @@ export class CharactersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.characters.getNotes(id, user.id);
+  }
+
+  @Patch(':id/xp')
+  setXp(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetXpDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.setXp(id, user.id, dto.value);
+  }
+
+  @Patch(':id/sheet-field')
+  setSheetField(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetSheetFieldDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.setSheetField(id, user.id, dto);
   }
 }

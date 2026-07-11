@@ -19,6 +19,7 @@ export class InventoryTab {
 
   readonly character = input.required<CharacterDto>();
   readonly isOwner = input.required<boolean>();
+  readonly viewerIsMj = input(false);
   readonly characterUpdated = output<CharacterDto>();
 
   /** `equipment.individual` n'est pas exposé par `CharacterDto` (type `SheetData` générique côté
@@ -96,6 +97,57 @@ export class InventoryTab {
       });
       this.characterUpdated.emit(updated);
       this.editingId.set(null);
+    } catch {
+      this.error.set(this.theme.tone()['evolution.inventory_error']);
+    } finally {
+      this.submitting.set(false);
+    }
+  }
+
+  /** Édition MJ d'une ligne existante (Story 6.6, AD-6) — via `sheet-field`, pas `updateInventoryItem` (propriétaire seul).
+   *  Envoie `id: itemId` pour que le serveur revérifie que l'objet à cet index est toujours celui visé
+   *  (revue de code — un index calculé côté client peut être obsolète si le tableau a changé entretemps). */
+  protected async submitMjEdit(itemId: string): Promise<void> {
+    const name = this.editName().trim();
+    if (!name || this.submitting()) return;
+    const index = this.individual().findIndex((i) => i.id === itemId);
+    if (index === -1) {
+      this.error.set(this.theme.tone()['evolution.inventory_error']);
+      this.editingId.set(null);
+      return;
+    }
+    this.submitting.set(true);
+    this.error.set(null);
+    try {
+      const result = await this.characterSvc.setSheetField(
+        this.character().id,
+        `equipment.individual.${index}`,
+        { name, weight: this.editWeight() ?? 0, id: itemId },
+      );
+      this.characterUpdated.emit(result.character);
+      this.editingId.set(null);
+    } catch {
+      this.error.set(this.theme.tone()['evolution.inventory_error']);
+    } finally {
+      this.submitting.set(false);
+    }
+  }
+
+  /** Ajout MJ d'un nouvel objet (Story 6.6, UJ Sylas — objet narratif reçu hors-jeu). */
+  protected async submitMjAdd(): Promise<void> {
+    const name = this.newItemName().trim();
+    if (!name || this.submitting()) return;
+    this.submitting.set(true);
+    this.error.set(null);
+    try {
+      const result = await this.characterSvc.setSheetField(
+        this.character().id,
+        `equipment.individual.${this.individual().length}`,
+        { name, weight: this.newItemWeight() ?? 0 },
+      );
+      this.characterUpdated.emit(result.character);
+      this.newItemName.set('');
+      this.newItemWeight.set(undefined);
     } catch {
       this.error.set(this.theme.tone()['evolution.inventory_error']);
     } finally {

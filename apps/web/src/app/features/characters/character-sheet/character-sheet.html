@@ -70,6 +70,14 @@
     @if (portraitError(); as error) {
       <p class="sheet__export-error">{{ error }}</p>
     }
+    @if (fieldEditError(); as error) {
+      <p class="sheet__export-error">{{ error }}</p>
+    }
+    @if (fieldEditWarning(); as warning) {
+      <p class="sheet__field-edit-warning">
+        {{ theme.tone()['evolution.mj_edit_warning_prefix'] }}{{ warning }}
+      </p>
+    }
 
     @if (c.portraitUrl) {
       <app-portrait-panel [characterId]="c.id" [portraitUrl]="c.portraitUrl" [name]="name()" />
@@ -86,18 +94,50 @@
               <div class="sheet__attr-box">
                 <span class="sheet__attr-key">VIG</span>
                 <span class="sheet__attr-val">{{ attrs.VIG }}</span>
+                @if (viewerIsMj()) {
+                  <app-field-edit-pencil
+                    label="l'attribut VIG"
+                    [value]="attrs.VIG"
+                    type="number"
+                    (confirm)="submitFieldEdit('attributes.VIG', $event)"
+                  />
+                }
               </div>
               <div class="sheet__attr-box">
                 <span class="sheet__attr-key">AGI</span>
                 <span class="sheet__attr-val">{{ attrs.AGI }}</span>
+                @if (viewerIsMj()) {
+                  <app-field-edit-pencil
+                    label="l'attribut AGI"
+                    [value]="attrs.AGI"
+                    type="number"
+                    (confirm)="submitFieldEdit('attributes.AGI', $event)"
+                  />
+                }
               </div>
               <div class="sheet__attr-box">
                 <span class="sheet__attr-key">INT</span>
                 <span class="sheet__attr-val">{{ attrs.INT }}</span>
+                @if (viewerIsMj()) {
+                  <app-field-edit-pencil
+                    label="l'attribut INT"
+                    [value]="attrs.INT"
+                    type="number"
+                    (confirm)="submitFieldEdit('attributes.INT', $event)"
+                  />
+                }
               </div>
               <div class="sheet__attr-box">
                 <span class="sheet__attr-key">ESP</span>
                 <span class="sheet__attr-val">{{ attrs.ESP }}</span>
+                @if (viewerIsMj()) {
+                  <app-field-edit-pencil
+                    label="l'attribut ESP"
+                    [value]="attrs.ESP"
+                    type="number"
+                    (confirm)="submitFieldEdit('attributes.ESP', $event)"
+                  />
+                }
               </div>
             </div>
           }
@@ -195,7 +235,17 @@
             <span class="stat-pill">Condition {{ c.derived.Condition }}</span>
             <span class="stat-pill">Initiative {{ c.derived.Initiative }}</span>
             <span class="stat-pill">Encombrement max {{ c.derived.Encombrement }}</span>
-            <span class="stat-pill">XP {{ c.xp }}</span>
+            <span class="stat-pill">
+              XP {{ c.xp }}
+              @if (viewerIsMj()) {
+                <app-field-edit-pencil
+                  label="l'XP"
+                  [value]="c.xp"
+                  type="number"
+                  (confirm)="submitXpEdit($event)"
+                />
+              }
+            </span>
           </div>
         </section>
 
@@ -221,14 +271,28 @@
               }
             </ul>
           }
-          @if (fetiqueObject()) {
-            <p class="sheet__fetish-box">Objet fétiche : {{ fetiqueObject() }}</p>
+          @if (fetiqueObject() || viewerIsMj()) {
+            <p class="sheet__fetish-box">
+              Objet fétiche : {{ fetiqueObject() }}
+              @if (viewerIsMj()) {
+                <app-field-edit-pencil
+                  label="l'objet fétiche"
+                  [value]="fetiqueObject() ?? ''"
+                  (confirm)="submitFieldEdit('fetiqueObject', $event)"
+                />
+              }
+            </p>
           }
         </section>
 
         <section class="sheet__card">
           <h2 class="sheet__card-title">{{ theme.tone()['evolution.inventory_section_title'] }}</h2>
-          <app-inventory-tab [character]="c" [isOwner]="isOwner()" (characterUpdated)="character.set($event)" />
+          <app-inventory-tab
+            [character]="c"
+            [isOwner]="isOwner()"
+            [viewerIsMj]="viewerIsMj()"
+            (characterUpdated)="character.set($event)"
+          />
         </section>
 
         <section class="sheet__card">

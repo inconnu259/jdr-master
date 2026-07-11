@@ -10,7 +10,12 @@ import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import type { CharacterDto, CharacterNoteDto, CharacterSnapshotDto } from '@master-jdr/shared';
+import type {
+  CharacterDto,
+  CharacterNoteDto,
+  CharacterSnapshotDto,
+  SetSheetFieldResultDto,
+} from '@master-jdr/shared';
 import {
   computeDerived,
   validate,
@@ -31,6 +36,7 @@ import type { CreateLevelUpDto } from './dto/create-level-up.dto';
 import type { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import type { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import type { CreateCharacterNoteDto } from './dto/create-character-note.dto';
+import type { SetSheetFieldDto } from './dto/set-sheet-field.dto';
 import type { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 import {
   detectImageMime,
@@ -67,7 +73,9 @@ const CONTENT_KEY_BY_CAPABILITY: Record<string, string> = {
  * méthode du service normalise donc systématiquement avant de lire/écrire — jamais de tableau
  * mixte persisté, quel que soit l'état d'entrée.
  */
-type InventoryItemEntry = NonNullable<RyuutamaSheetData['equipment']>['individual'][number];
+type InventoryItemEntry = NonNullable<
+  RyuutamaSheetData['equipment']
+>['individual'][number];
 
 function normalizeInventoryIndividual(
   individual: (InventoryItemEntry | string)[] | undefined,
@@ -77,6 +85,50 @@ function normalizeInventoryIndividual(
       ? { id: randomUUID(), name: item, weight: 0, addedBy: 'player' as const }
       : item,
   );
+}
+
+/**
+ * Écrit `value` au chemin pointé par `path` (notation à points, ex. "attributes.VIG" ou
+ * "equipment.individual.2") dans `obj`, en créant les structures intermédiaires manquantes
+ * (objet ou tableau selon que le segment suivant est numérique). Utilisé exclusivement par
+ * `setSheetField` (AD-6) — mécanisme générique volontairement minimal, pas de validation de
+ * forme ici (délégué à `validate('mj', ...)`, consultatif, cf. AD-7).
+ */
+const FORBIDDEN_PATH_SEGMENTS = new Set([
+  '__proto__',
+  'constructor',
+  'prototype',
+]);
+
+function setByPath(
+  obj: Record<string, unknown>,
+  path: string,
+  value: unknown,
+): void {
+  const segments = path.split('.');
+  if (segments.some((seg) => FORBIDDEN_PATH_SEGMENTS.has(seg))) {
+    throw new BadRequestException('Segment de chemin interdit');
+  }
+  let cursor: any = obj;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const seg = segments[i];
+    if (typeof cursor !== 'object' || cursor === null) {
+      throw new BadRequestException(
+        'Le chemin ne correspond pas à la structure de la fiche',
+      );
+    }
+    if (cursor[seg] === undefined || cursor[seg] === null) {
+      const nextSeg = segments[i + 1];
+      cursor[seg] = /^\d+$/.test(nextSeg) ? [] : {};
+    }
+    cursor = cursor[seg];
+  }
+  if (typeof cursor !== 'object' || cursor === null) {
+    throw new BadRequestException(
+      'Le chemin ne correspond pas à la structure de la fiche',
+    );
+  }
+  cursor[segments[segments.length - 1]] = value;
 }
 
 @Injectable()
@@ -226,7 +278,12 @@ export class CharacterService {
 
     const viewerIsMj = partie.mjId === userId;
     return characters.map((c) =>
-      toDto(c, pseudoById.get(c.userId) ?? '', c.userId === partie.mjId, viewerIsMj),
+      toDto(
+        c,
+        pseudoById.get(c.userId) ?? '',
+        c.userId === partie.mjId,
+        viewerIsMj,
+      ),
     );
   }
 
@@ -381,8 +438,23 @@ export class CharacterService {
       where: { id: characterId },
       data: { xp: { increment: amount } },
     });
+    await this.notifyPendingLevelUp(updated);
+  }
 
-    const sheetData = updated.sheetData as unknown as RyuutamaSheetData & {
+  /**
+   * Point de déclenchement UNIQUE de la notification "montée de niveau en attente" (AD-6) —
+   * partagé par `applyXpDelta` (distribution) et `setXp` (édition MJ directe) : les deux chemins
+   * d'écriture d'XP appellent cette même vérification juste après leur écriture respective,
+   * jamais deux implémentations séparées qui pourraient diverger.
+   */
+  private async notifyPendingLevelUp(updated: {
+    id: string;
+    xp: number;
+    sheetData: unknown;
+    userId: string;
+    partieId: string;
+  }): Promise<void> {
+    const sheetData = updated.sheetData as RyuutamaSheetData & {
       levelUps?: unknown[];
     };
     const pending = pendingLevels(updated.xp, sheetData.levelUps?.length ?? 0);
@@ -404,7 +476,7 @@ export class CharacterService {
     const link = `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${updated.partieId}/characters/${updated.id}`;
 
     // `sendMail` ne relance jamais (déjà try/catch interne, { ok: false } silencieux) — pas de
-    // try/catch supplémentaire ici, un échec d'envoi ne doit jamais faire échouer la distribution.
+    // try/catch supplémentaire ici, un échec d'envoi ne doit jamais faire échouer l'appelant.
     await this.email.sendMail('level-up', owner.email, {
       characterName,
       partieName: partie?.name ?? '',
@@ -501,9 +573,8 @@ export class CharacterService {
     for (const cap of dto.capabilities) {
       if (cap.type === 'attribute') {
         const attribute = (cap.params as { attribute?: string }).attribute!;
-        sheetData.attributes[
-          attribute as keyof typeof sheetData.attributes
-        ] += 2;
+        sheetData.attributes[attribute as keyof typeof sheetData.attributes] +=
+          2;
       }
     }
 
@@ -549,6 +620,177 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+  }
+
+  /**
+   * Édition MJ directe de l'XP (AD-6, structurellement distincte de `applyXpDelta`) : écriture
+   * ABSOLUE verrouillée (AD-1/AD-9 — updateMany sur `updatedAt`, 409 si conflit), contrairement à
+   * l'incrément atomique commutatif de la distribution — une lecture-puis-écriture est nécessaire
+   * ici car la valeur est un remplacement, pas un delta. Crée immédiatement un
+   * `CharacterSnapshot(trigger: 'MJ_EDIT')` et réutilise EXACTEMENT la même détection
+   * `notifyPendingLevelUp` qu'`applyXpDelta` (AD-6) : le MJ ne peut jamais faire sauter un
+   * niveau silencieusement, le joueur voit toujours sa `LevelUpBanner` et reçoit le même e-mail.
+   */
+  async setXp(
+    characterId: string,
+    userId: string,
+    value: number,
+  ): Promise<CharacterDto> {
+    const character = await this.prisma.character.findUnique({
+      where: { id: characterId },
+    });
+    if (!character) throw new NotFoundException('Personnage introuvable');
+    await this.parties.getOwned(character.partieId, userId);
+
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+
+    await this.prisma.$transaction(async (tx) => {
+      const result = await tx.character.updateMany({
+        where: { id: characterId, updatedAt: character.updatedAt },
+        data: { xp: value },
+      });
+      if (result.count === 0) {
+        throw new ConflictException(
+          'Le personnage a été modifié entretemps, réessayez.',
+        );
+      }
+      await tx.characterSnapshot.create({
+        data: {
+          characterId,
+          sheetData: character.sheetData as any,
+          derived: character.derived as any,
+          level: 1 + (sheetData.levelUps?.length ?? 0),
+          trigger: 'MJ_EDIT',
+        },
+      });
+    });
+
+    const updated = await this.prisma.character.findUniqueOrThrow({
+      where: { id: characterId },
+    });
+    await this.notifyPendingLevelUp(updated);
+
+    // viewerIsMj: true littéral — le viewer ICI est nécessairement le MJ (garanti par
+    // parties.getOwned ci-dessus), à ne pas confondre avec owner.isMj (le personnage édité
+    // appartient à un JOUEUR, pas au MJ appelant).
+    const owner = await this.resolveOwnerInfo(updated.userId, updated.partieId);
+    return toDto(updated, owner.pseudo, owner.isMj, true);
+  }
+
+  /**
+   * Édition MJ générique d'un champ de `sheetData` (AD-6/AD-7) : accès MJ-only (AD-8), denylist
+   * strict sur `xp`/`levelUps` (AD-6 — ces sous-arbres ne sont accessibles que via `setXp`/
+   * `applyLevelUp`), `equipment.individual` traité spécialement (AD-3 : `addedBy`/`id` forcés
+   * serveur, jamais confiance dans le client). `validate('mj', ...)` reste consultatif (AD-7) —
+   * les `warnings` retournés n'empêchent jamais l'écriture. Verrouillage optimiste + snapshot en
+   * transaction (AD-9), même pattern qu'`applyLevelUp`.
+   */
+  async setSheetField(
+    characterId: string,
+    userId: string,
+    dto: SetSheetFieldDto,
+  ): Promise<SetSheetFieldResultDto> {
+    const segments = dto.path.split('.');
+
+    const character = await this.prisma.character.findUnique({
+      where: { id: characterId },
+    });
+    if (!character) throw new NotFoundException('Personnage introuvable');
+    await this.parties.getOwned(character.partieId, userId);
+
+    if (segments[0] === 'xp' || segments[0] === 'levelUps') {
+      throw new BadRequestException(
+        'Les champs xp et levelUps ne sont pas éditables via ce mécanisme : utilisez PATCH /xp ou POST /level-up',
+      );
+    }
+
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    let value = dto.value;
+    let effectivePath = dto.path;
+
+    if (segments[0] === 'equipment') {
+      if (
+        segments[1] !== 'individual' ||
+        segments.length !== 3 ||
+        !/^(0|[1-9]\d*)$/.test(segments[2])
+      ) {
+        throw new BadRequestException(
+          'Le chemin doit cibler un objet précis : equipment.individual.<index>',
+        );
+      }
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new BadRequestException(
+          'La valeur doit être un objet { name, weight }',
+        );
+      }
+      const index = Number(segments[2]);
+      const individual = normalizeInventoryIndividual(
+        sheetData.equipment?.individual,
+      );
+      if (index > individual.length) {
+        throw new BadRequestException('Index hors limites');
+      }
+      let id: string;
+      if (index < individual.length) {
+        const expectedId = (value as Record<string, unknown>)['id'];
+        if (
+          typeof expectedId !== 'string' ||
+          expectedId !== individual[index].id
+        ) {
+          throw new ConflictException(
+            "L'objet visé n'existe plus à cet emplacement, réessayez.",
+          );
+        }
+        id = individual[index].id;
+      } else {
+        id = randomUUID();
+      }
+      value = {
+        ...(value as Record<string, unknown>),
+        id,
+        addedBy: 'mj' as const,
+      };
+      effectivePath = `equipment.individual.${index}`;
+    }
+
+    setByPath(
+      sheetData as unknown as Record<string, unknown>,
+      effectivePath,
+      value,
+    );
+    const derived = computeDerived(sheetData);
+    const catalog = await this.buildRyuutamaCatalog(character.gameSystemId);
+    const result = validate(sheetData, 'mj', catalog);
+
+    await this.prisma.$transaction(async (tx) => {
+      const updateResult = await tx.character.updateMany({
+        where: { id: characterId, updatedAt: character.updatedAt },
+        data: { sheetData: sheetData as any, derived: derived as any },
+      });
+      if (updateResult.count === 0) {
+        throw new ConflictException(
+          'Le personnage a été modifié entretemps, réessayez.',
+        );
+      }
+      await tx.characterSnapshot.create({
+        data: {
+          characterId,
+          sheetData: sheetData as any,
+          derived: derived as any,
+          level: 1 + (sheetData.levelUps?.length ?? 0),
+          trigger: 'MJ_EDIT',
+        },
+      });
+    });
+
+    const updated = await this.prisma.character.findUniqueOrThrow({
+      where: { id: characterId },
+    });
+    const owner = await this.resolveOwnerInfo(updated.userId, updated.partieId);
+    return {
+      character: toDto(updated, owner.pseudo, owner.isMj, true),
+      warnings: result.errors.map((e) => e.message),
+    };
   }
 
   /**
@@ -600,10 +842,20 @@ export class CharacterService {
     const equipment = sheetData.equipment ?? { individual: [], group: [] };
     const individual = [
       ...normalizeInventoryIndividual(equipment.individual),
-      { id: randomUUID(), name: dto.name, weight: dto.weight ?? 0, addedBy: 'player' as const },
+      {
+        id: randomUUID(),
+        name: dto.name,
+        weight: dto.weight ?? 0,
+        addedBy: 'player' as const,
+      },
     ];
     sheetData.equipment = { ...equipment, individual };
-    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
+    return this.writeInventoryChange(
+      characterId,
+      character.updatedAt,
+      sheetData,
+      userId,
+    );
   }
 
   /**
@@ -621,9 +873,12 @@ export class CharacterService {
   ): Promise<CharacterDto> {
     const character = await this.getOwnCharacterOrThrow(characterId, userId);
     const sheetData = character.sheetData as unknown as RyuutamaSheetData;
-    const individual = normalizeInventoryIndividual(sheetData.equipment?.individual);
+    const individual = normalizeInventoryIndividual(
+      sheetData.equipment?.individual,
+    );
     const index = individual.findIndex((i) => i.id === itemId);
-    if (index === -1) throw new NotFoundException("Objet d'inventaire introuvable");
+    if (index === -1)
+      throw new NotFoundException("Objet d'inventaire introuvable");
 
     const updated = [...individual];
     updated[index] = {
@@ -632,7 +887,12 @@ export class CharacterService {
       weight: dto.weight ?? updated[index].weight,
     };
     sheetData.equipment = { ...sheetData.equipment!, individual: updated };
-    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
+    return this.writeInventoryChange(
+      characterId,
+      character.updatedAt,
+      sheetData,
+      userId,
+    );
   }
 
   /** Retire un objet existant de l'inventaire individuel — mêmes règles que `updateInventoryItem`. */
@@ -643,13 +903,20 @@ export class CharacterService {
   ): Promise<CharacterDto> {
     const character = await this.getOwnCharacterOrThrow(characterId, userId);
     const sheetData = character.sheetData as unknown as RyuutamaSheetData;
-    const individual = normalizeInventoryIndividual(sheetData.equipment?.individual);
+    const individual = normalizeInventoryIndividual(
+      sheetData.equipment?.individual,
+    );
     if (!individual.some((i) => i.id === itemId)) {
       throw new NotFoundException("Objet d'inventaire introuvable");
     }
     const updated = individual.filter((i) => i.id !== itemId);
     sheetData.equipment = { ...sheetData.equipment!, individual: updated };
-    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
+    return this.writeInventoryChange(
+      characterId,
+      character.updatedAt,
+      sheetData,
+      userId,
+    );
   }
 
   /**
@@ -712,7 +979,9 @@ export class CharacterService {
     shared: boolean,
   ): Promise<CharacterNoteDto> {
     await this.getOwnCharacterOrThrow(characterId, userId);
-    const note = await this.prisma.characterNote.findUnique({ where: { id: noteId } });
+    const note = await this.prisma.characterNote.findUnique({
+      where: { id: noteId },
+    });
     if (!note || note.characterId !== characterId) {
       throw new NotFoundException('Note introuvable');
     }
@@ -729,7 +998,10 @@ export class CharacterService {
    * ni `getOwnCharacterOrThrow` (propriétaire seul) ni `findOne` (renvoie un `CharacterDto`, pas
    * ce dont on a besoin ici) — check inline dédié, même esprit que `getHistory`/`getPortraitFile`.
    */
-  async getNotes(characterId: string, userId: string): Promise<CharacterNoteDto[]> {
+  async getNotes(
+    characterId: string,
+    userId: string,
+  ): Promise<CharacterNoteDto[]> {
     const character = await this.prisma.character.findUnique({
       where: { id: characterId },
     });
@@ -824,9 +1096,7 @@ function toDto(
     // potentiel dérivé de l'xp (`levelForXp`) — sinon la fiche afficherait un niveau non encore
     // acquis tant que le joueur n'a pas traité son `LevelUpBanner` (cf. `pendingLevels`).
     level:
-      1 +
-      (((character.sheetData as any)?.levelUps?.length as number | undefined) ??
-        0),
+      1 + ((character.sheetData?.levelUps?.length as number | undefined) ?? 0),
   };
 }
 
