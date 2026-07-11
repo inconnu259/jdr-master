@@ -33,6 +33,8 @@ import { RyuutamaPdfService } from './ryuutama-pdf.service';
 import { CreateLevelUpDto } from './dto/create-level-up.dto';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
+import { CreateCharacterNoteDto } from './dto/create-character-note.dto';
+import { ToggleNoteShareDto } from './dto/toggle-note-share.dto';
 import { ExportCharacterPdfDto } from './dto/export-character-pdf.dto';
 import { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 
@@ -196,5 +198,32 @@ export class CharactersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.characters.removeInventoryItem(id, user.id, itemId);
+  }
+
+  @Post(':id/notes')
+  addNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateCharacterNoteDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.addNote(id, user.id, dto);
+  }
+
+  @Patch(':id/notes/:noteId/share')
+  toggleNoteShare(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: ToggleNoteShareDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.toggleNoteShare(id, user.id, noteId, dto.shared);
+  }
+
+  @Get(':id/notes')
+  getNotes(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.getNotes(id, user.id);
   }
 }

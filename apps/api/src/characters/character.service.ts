@@ -10,7 +10,7 @@ import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import type { CharacterDto, CharacterSnapshotDto } from '@master-jdr/shared';
+import type { CharacterDto, CharacterNoteDto, CharacterSnapshotDto } from '@master-jdr/shared';
 import {
   computeDerived,
   validate,
@@ -30,6 +30,7 @@ import { CreateCharacterDto } from './dto/create-character.dto';
 import type { CreateLevelUpDto } from './dto/create-level-up.dto';
 import type { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import type { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
+import type { CreateCharacterNoteDto } from './dto/create-character-note.dto';
 import type { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 import {
   detectImageMime,
@@ -122,7 +123,9 @@ export class CharacterService {
         },
       });
       const owner = await this.users.findById(userId);
-      return toDto(character, owner?.pseudo ?? '', partie.mjId === userId);
+      // Le créateur est toujours le propriétaire ici — ownerIsMj et viewerIsMj coïncident.
+      const isMj = partie.mjId === userId;
+      return toDto(character, owner?.pseudo ?? '', isMj, isMj);
     } catch (e: any) {
       if (e?.code === 'P2002') {
         throw new ConflictException(
@@ -169,11 +172,15 @@ export class CharacterService {
     });
     if (!character) throw new NotFoundException('Personnage introuvable');
 
-    // Le MJ a déjà été résolu par getOwned() pour un viewer non-propriétaire — pas besoin
-    // de re-requêter la partie via resolveOwnerInfo() dans ce cas.
+    // Le MJ a déjà été résolu par getViewable() pour un viewer non-propriétaire — pas besoin
+    // de re-requêter la partie via resolveOwnerInfo() dans ce cas. getViewable (MJ OU membre,
+    // pas getOwned qui est MJ-seul) — la fiche est visible par tout participant de la Partie
+    // depuis la Story 6.5 (prérequis du Journal de notes, cf. AC4 : un fellow player doit
+    // pouvoir atteindre cette page pour y voir les entrées partagées). getHistory/
+    // getPortraitFile ont leur propre check indépendant, non affectés par ce changement.
     let mjId: string | undefined;
     if (character.userId !== userId) {
-      mjId = (await this.parties.getOwned(character.partieId, userId)).mjId;
+      mjId = (await this.parties.getViewable(character.partieId, userId)).mjId;
     } else {
       mjId = (
         await this.prisma.partie.findUnique({
@@ -183,7 +190,17 @@ export class CharacterService {
       )?.mjId;
     }
     const owner = await this.users.findById(character.userId);
-    return toDto(character, owner?.pseudo ?? '', mjId === character.userId);
+    // ownerIsMj : le PROPRIÉTAIRE du personnage est-il le MJ. viewerIsMj : le VIEWER (userId, le
+    // demandeur de cette requête) est-il le MJ — distinct depuis que findOne est accessible à
+    // tout participant (Story 6.5) : un fellow player n'est ni l'un ni l'autre, mais l'ancienne
+    // heuristique frontend ("tout non-propriétaire = MJ") le traitait à tort comme MJ (cf. revue
+    // de code Story 6.5). C'est ce champ, pas une heuristique client, qui doit trancher.
+    return toDto(
+      character,
+      owner?.pseudo ?? '',
+      mjId === character.userId,
+      mjId === userId,
+    );
   }
 
   async findByPartie(
@@ -207,8 +224,9 @@ export class CharacterService {
     });
     const pseudoById = new Map(owners.map((o) => [o.id, o.pseudo]));
 
+    const viewerIsMj = partie.mjId === userId;
     return characters.map((c) =>
-      toDto(c, pseudoById.get(c.userId) ?? '', c.userId === partie.mjId),
+      toDto(c, pseudoById.get(c.userId) ?? '', c.userId === partie.mjId, viewerIsMj),
     );
   }
 
@@ -269,7 +287,7 @@ export class CharacterService {
       where: { id },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
-    return toDto(updated, owner.pseudo, owner.isMj);
+    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   async removePortrait(id: string, userId: string): Promise<CharacterDto> {
@@ -293,7 +311,7 @@ export class CharacterService {
       where: { id },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
-    return toDto(updated, owner.pseudo, owner.isMj);
+    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -326,7 +344,7 @@ export class CharacterService {
       where: { id },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
-    return toDto(updated, owner.pseudo, owner.isMj);
+    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -340,8 +358,11 @@ export class CharacterService {
   ): Promise<{ buffer: Buffer; mime: DetectedImageMime }> {
     const character = await this.prisma.character.findUnique({ where: { id } });
     if (!character) throw new NotFoundException('Personnage introuvable');
+    // getViewable (MJ ou membre), pas getOwned (MJ seul) — cohérent avec findOne depuis la
+    // Story 6.5 : un fellow player qui peut charger la fiche doit aussi pouvoir en voir le
+    // portrait, sous peine d'image cassée sur une page par ailleurs accessible (revue de code).
     if (character.userId !== userId) {
-      await this.parties.getOwned(character.partieId, userId);
+      await this.parties.getViewable(character.partieId, userId);
     }
 
     const portrait = await readPortraitFile(character.portraitUrl);
@@ -527,7 +548,7 @@ export class CharacterService {
       where: { id: characterId },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
-    return toDto(updated, owner.pseudo, owner.isMj);
+    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -654,7 +675,76 @@ export class CharacterService {
       where: { id: characterId },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
-    return toDto(updated, owner.pseudo, owner.isMj);
+    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+  }
+
+  /**
+   * Ajoute une entrée au journal de notes : PROPRIÉTAIRE SEUL (FR-11), toujours privée à la
+   * création (`shared: false`) — append-only, aucune modification de texte possible ensuite via
+   * ce chemin. Écriture ligne dédiée (pas de JSON sur `Character`) : PAS de verrou optimiste requis
+   * ici, contrairement à l'inventaire (Story 6.4) — c'est précisément le bénéfice d'un modèle
+   * Prisma dédié plutôt qu'un tableau JSON (AD-5) : un `create()` n'a aucun risque de perte
+   * d'écriture concurrente sur un blob partagé. Pas de `CharacterSnapshot` créé (FR-12 exclut
+   * explicitement les notes, comme l'inventaire).
+   */
+  async addNote(
+    characterId: string,
+    userId: string,
+    dto: CreateCharacterNoteDto,
+  ): Promise<CharacterNoteDto> {
+    await this.getOwnCharacterOrThrow(characterId, userId);
+    const note = await this.prisma.characterNote.create({
+      data: { characterId, text: dto.text, shared: false },
+    });
+    return toNoteDto(note);
+  }
+
+  /**
+   * Bascule le statut de partage d'une entrée existante : PROPRIÉTAIRE SEUL, par entrée (jamais
+   * un réglage global du journal). Vérifie explicitement que `noteId` appartient bien à
+   * `characterId` — sinon un propriétaire pourrait, en devinant/énumérant un UUID, basculer le
+   * partage d'une note d'un AUTRE personnage.
+   */
+  async toggleNoteShare(
+    characterId: string,
+    userId: string,
+    noteId: string,
+    shared: boolean,
+  ): Promise<CharacterNoteDto> {
+    await this.getOwnCharacterOrThrow(characterId, userId);
+    const note = await this.prisma.characterNote.findUnique({ where: { id: noteId } });
+    if (!note || note.characterId !== characterId) {
+      throw new NotFoundException('Note introuvable');
+    }
+    const updated = await this.prisma.characterNote.update({
+      where: { id: noteId },
+      data: { shared },
+    });
+    return toNoteDto(updated);
+  }
+
+  /**
+   * Liste le journal : PROPRIÉTAIRE (tout), MJ (tout), ou tout autre participant de la Partie
+   * (uniquement `shared: true` — 3e pattern d'accès introduit par cette story, AD-8). Ne réutilise
+   * ni `getOwnCharacterOrThrow` (propriétaire seul) ni `findOne` (renvoie un `CharacterDto`, pas
+   * ce dont on a besoin ici) — check inline dédié, même esprit que `getHistory`/`getPortraitFile`.
+   */
+  async getNotes(characterId: string, userId: string): Promise<CharacterNoteDto[]> {
+    const character = await this.prisma.character.findUnique({
+      where: { id: characterId },
+    });
+    if (!character) throw new NotFoundException('Personnage introuvable');
+
+    let sharedOnly = character.userId !== userId;
+    if (sharedOnly) {
+      const partie = await this.parties.getViewable(character.partieId, userId);
+      if (partie.mjId === userId) sharedOnly = false;
+    }
+    const notes = await this.prisma.characterNote.findMany({
+      where: { characterId, ...(sharedOnly ? { shared: true } : {}) },
+      orderBy: { createdAt: 'desc' },
+    });
+    return notes.map(toNoteDto);
   }
 
   /** Pseudo du propriétaire + s'il est le MJ de la partie — résolu en une seule paire de requêtes ciblées (`select` minimal, jamais le hash). */
@@ -712,6 +802,7 @@ function toDto(
   character: any,
   ownerPseudo: string,
   ownerIsMj: boolean,
+  viewerIsMj: boolean,
 ): CharacterDto {
   return {
     id: character.id,
@@ -727,6 +818,7 @@ function toDto(
     updatedAt: character.updatedAt.toISOString(),
     ownerPseudo,
     ownerIsMj,
+    viewerIsMj,
     xp: character.xp ?? 0,
     // Niveau réellement appliqué (nombre de montées de niveau validées + 1), PAS le niveau
     // potentiel dérivé de l'xp (`levelForXp`) — sinon la fiche afficherait un niveau non encore
@@ -735,5 +827,21 @@ function toDto(
       1 +
       (((character.sheetData as any)?.levelUps?.length as number | undefined) ??
         0),
+  };
+}
+
+function toNoteDto(note: {
+  id: string;
+  characterId: string;
+  text: string;
+  shared: boolean;
+  createdAt: Date;
+}): CharacterNoteDto {
+  return {
+    id: note.id,
+    characterId: note.characterId,
+    text: note.text,
+    shared: note.shared,
+    createdAt: note.createdAt.toISOString(),
   };
 }

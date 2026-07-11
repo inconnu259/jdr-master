@@ -131,6 +131,14 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.inventory_empty': "Aucun objet dans l'inventaire pour le moment.",
     'evolution.inventory_overweight_label': 'Surchargé',
     'evolution.inventory_error': "L'inventaire n'a pas pu être mis à jour. Réessayez.",
+    /* — journal de notes personnelles (Story 6.5) — */
+    'evolution.notes_journal_title': 'Journal de notes',
+    'evolution.notes_journal_empty': 'Aucune note pour le moment.',
+    'evolution.notes_add_cta': '+ Ajouter une entrée',
+    'evolution.note_share_toggle': 'Partager avec le groupe',
+    'evolution.note_private_label': 'Entrée privée',
+    'evolution.note_shared_label': 'Entrée partagée avec le groupe',
+    'evolution.notes_error': "Le journal n'a pas pu être mis à jour. Réessayez.",
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -254,6 +262,13 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.inventory_empty': 'La besace est vide pour le moment.',
     'evolution.inventory_overweight_label': 'Surchargée',
     'evolution.inventory_error': "La besace n'a pas pu être mise à jour. Réessaie.",
+    'evolution.notes_journal_title': 'Carnet du voyageur',
+    'evolution.notes_journal_empty': 'Le carnet est vierge pour le moment.',
+    'evolution.notes_add_cta': '+ Graver une entrée',
+    'evolution.note_share_toggle': 'Partager avec le cercle',
+    'evolution.note_private_label': 'Entrée gardée pour toi',
+    'evolution.note_shared_label': 'Entrée partagée avec le cercle',
+    'evolution.notes_error': "Le carnet n'a pas pu être mis à jour. Réessaie.",
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -377,5 +392,12 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.inventory_empty': 'Aucun composant chargé pour le moment.',
     'evolution.inventory_overweight_label': 'Surcharge',
     'evolution.inventory_error': 'Le fret n’a pas pu être mis à jour. Réessayez.',
+    'evolution.notes_journal_title': 'Journal de bord personnel',
+    'evolution.notes_journal_empty': 'Aucune entrée consignée pour le moment.',
+    'evolution.notes_add_cta': '+ Consigner une entrée',
+    'evolution.note_share_toggle': 'Diffuser à l’équipage',
+    'evolution.note_private_label': 'Entrée confidentielle',
+    'evolution.note_shared_label': 'Entrée diffusée à l’équipage',
+    'evolution.notes_error': 'Le journal n’a pas pu être mis à jour. Réessayez.',
   },
 };

@@ -20,6 +20,7 @@ function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
     updatedAt: '2026-01-01T00:00:00.000Z',
     ownerPseudo: 'alice',
     ownerIsMj: false,
+    viewerIsMj: false,
     xp: 100,
     level: 2,
     ...overrides,

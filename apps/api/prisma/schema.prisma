@@ -279,6 +279,7 @@ model Character {
 
   xpDistributionEntries XpDistributionEntry[]
   snapshots             CharacterSnapshot[]
+  notes                 CharacterNote[]
 
   @@unique([userId, partieId, gameSystemId])
   @@index([partieId])
@@ -326,6 +327,21 @@ model CharacterSnapshot {
   trigger     SnapshotTrigger
   note        String?
   createdAt   DateTime        @default(now())
+
+  @@index([characterId, createdAt])
+}
+
+/// Journal de notes personnelles du propriétaire d'un personnage (Story 6.5) — append-only,
+/// jamais éditée/supprimée après création. `shared` bascule la visibilité par entrée (jamais un
+/// réglage global) : privée par défaut (propriétaire + MJ), ou visible par tout participant de
+/// la Partie une fois partagée.
+model CharacterNote {
+  id          String    @id @default(uuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  text        String
+  shared      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
 
   @@index([characterId, createdAt])
 }

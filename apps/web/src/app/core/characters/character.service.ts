@@ -3,8 +3,10 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type {
   CharacterDto,
+  CharacterNoteDto,
   CharacterSnapshotDto,
   CreateCharacterDto,
+  CreateCharacterNoteDto,
   CreateInventoryItemDto,
   CreateLevelUpDto,
   GameSystemContentDto,
@@ -161,6 +163,32 @@ export class CharacterService {
         `${API_BASE}/characters/${id}/inventory-items/${itemId}`,
         { withCredentials: true },
       ),
+    );
+  }
+
+  addNote(id: string, dto: CreateCharacterNoteDto): Promise<CharacterNoteDto> {
+    return firstValueFrom(
+      this.http.post<CharacterNoteDto>(`${API_BASE}/characters/${id}/notes`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  toggleNoteShare(id: string, noteId: string, shared: boolean): Promise<CharacterNoteDto> {
+    return firstValueFrom(
+      this.http.patch<CharacterNoteDto>(
+        `${API_BASE}/characters/${id}/notes/${noteId}/share`,
+        { shared },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  getNotes(id: string): Promise<CharacterNoteDto[]> {
+    return firstValueFrom(
+      this.http.get<CharacterNoteDto[]>(`${API_BASE}/characters/${id}/notes`, {
+        withCredentials: true,
+      }),
     );
   }
 }

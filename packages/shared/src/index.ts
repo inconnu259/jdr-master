@@ -271,6 +271,14 @@ export interface CharacterDto {
   ownerPseudo: string;
   /** Le propriétaire de ce personnage est le MJ de la partie (distinct d'un personnage de joueur). */
   ownerIsMj: boolean;
+  /**
+   * L'utilisateur qui a demandé cette fiche (le *viewer* de la requête courante) est le MJ de la
+   * Partie — **distinct** de `ownerIsMj` (qui parle du propriétaire du personnage, pas de qui
+   * consulte). Introduit Story 6.5 (revue de code) pour remplacer l'heuristique frontend
+   * "n'importe quel non-propriétaire = MJ", devenue fausse dès qu'un fellow player (ni
+   * propriétaire, ni MJ) a pu consulter la fiche d'un coéquipier.
+   */
+  viewerIsMj: boolean;
   /** Points d'expérience cumulés — seule source de vérité (jamais dépensés, jamais remis à zéro). */
   xp: number;
   /**
@@ -348,6 +356,25 @@ export interface CreateInventoryItemDto {
 export interface UpdateInventoryItemDto {
   name?: string;
   weight?: number;
+}
+
+/** Entrée du journal de notes d'un personnage (Story 6.5) — append-only, jamais éditée/supprimée après création. */
+export interface CharacterNoteDto {
+  id: string;
+  characterId: string;
+  text: string;
+  shared: boolean;
+  createdAt: string;
+}
+
+/** Payload de POST /characters/:id/notes. */
+export interface CreateCharacterNoteDto {
+  text: string;
+}
+
+/** Payload de PATCH /characters/:id/notes/:noteId/share. */
+export interface ToggleNoteShareDto {
+  shared: boolean;
 }
 
 /**

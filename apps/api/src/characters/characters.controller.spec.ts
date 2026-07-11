@@ -30,6 +30,9 @@ function makeCharacterService() {
     addInventoryItem: jest.fn(),
     updateInventoryItem: jest.fn(),
     removeInventoryItem: jest.fn(),
+    addNote: jest.fn(),
+    toggleNoteShare: jest.fn(),
+    getNotes: jest.fn(),
   };
 }
 
@@ -296,6 +299,40 @@ describe('CharactersController', () => {
     );
   });
 
+  it('addNote() délègue à CharacterService', async () => {
+    characters.addNote.mockResolvedValue({ id: 'note-1' });
+
+    await controller.addNote('char1', { text: 'Une note' } as any, { id: 'u1' } as any);
+
+    expect(characters.addNote).toHaveBeenCalledWith('char1', 'u1', { text: 'Une note' });
+  });
+
+  it('toggleNoteShare() délègue à CharacterService', async () => {
+    characters.toggleNoteShare.mockResolvedValue({ id: 'note-1', shared: true });
+
+    await controller.toggleNoteShare(
+      'char1',
+      '33333333-3333-3333-3333-333333333333',
+      { shared: true } as any,
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.toggleNoteShare).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      '33333333-3333-3333-3333-333333333333',
+      true,
+    );
+  });
+
+  it('getNotes() délègue à CharacterService', async () => {
+    characters.getNotes.mockResolvedValue([]);
+
+    await controller.getNotes('char1', { id: 'u1' } as any);
+
+    expect(characters.getNotes).toHaveBeenCalledWith('char1', 'u1');
+  });
+
   describe('validation HTTP réelle (ValidationPipe global)', () => {
     let app: INestApplication;
 
@@ -490,6 +527,92 @@ describe('CharactersController', () => {
         '11111111-1111-1111-1111-111111111111',
         'u1',
         '22222222-2222-2222-2222-222222222222',
+      );
+    });
+
+    it('POST notes sans text → 400 (class-validator)', async () => {
+      await request(app.getHttpServer())
+        .post('/characters/11111111-1111-1111-1111-111111111111/notes')
+        .send({})
+        .expect(400);
+
+      expect(characters.addNote).not.toHaveBeenCalled();
+    });
+
+    it('POST notes avec text valide → 201, CharacterService appelé', async () => {
+      characters.addNote.mockResolvedValue({
+        id: 'note-1',
+        characterId: '11111111-1111-1111-1111-111111111111',
+        text: 'Une note',
+        shared: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      });
+
+      await request(app.getHttpServer())
+        .post('/characters/11111111-1111-1111-1111-111111111111/notes')
+        .send({ text: 'Une note' })
+        .expect(201);
+
+      expect(characters.addNote).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
+        { text: 'Une note' },
+      );
+    });
+
+    it('PATCH notes/:noteId/share avec shared non-booléen → 400', async () => {
+      await request(app.getHttpServer())
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/notes/22222222-2222-2222-2222-222222222222/share',
+        )
+        .send({ shared: 'yes' })
+        .expect(400);
+
+      expect(characters.toggleNoteShare).not.toHaveBeenCalled();
+    });
+
+    it('PATCH notes/:noteId/share avec un champ non déclaré → 400 (whitelist)', async () => {
+      await request(app.getHttpServer())
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/notes/22222222-2222-2222-2222-222222222222/share',
+        )
+        .send({ shared: true, text: 'injection' })
+        .expect(400);
+
+      expect(characters.toggleNoteShare).not.toHaveBeenCalled();
+    });
+
+    it('PATCH notes/:noteId/share avec shared valide → 200, CharacterService appelé', async () => {
+      characters.toggleNoteShare.mockResolvedValue({
+        id: '22222222-2222-2222-2222-222222222222',
+        shared: true,
+      });
+
+      await request(app.getHttpServer())
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/notes/22222222-2222-2222-2222-222222222222/share',
+        )
+        .send({ shared: true })
+        .expect(200);
+
+      expect(characters.toggleNoteShare).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
+        '22222222-2222-2222-2222-222222222222',
+        true,
+      );
+    });
+
+    it('GET notes → 200, CharacterService appelé', async () => {
+      characters.getNotes.mockResolvedValue([]);
+
+      await request(app.getHttpServer())
+        .get('/characters/11111111-1111-1111-1111-111111111111/notes')
+        .expect(200);
+
+      expect(characters.getNotes).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
       );
     });
   });

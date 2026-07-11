@@ -73,6 +73,12 @@ function makePrisma() {
       create: jest.fn(),
       findMany: jest.fn(),
     },
+    characterNote: {
+      create: jest.fn(),
+      update: jest.fn(),
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+    },
     partie: {
       findUnique: jest.fn(),
     },
@@ -267,15 +273,23 @@ describe('CharacterService', () => {
 
   it('findOne() par le MJ (non-propriétaire) → retourne le personnage', async () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
     const result = await service.findOne('char1', 'mj1');
     expect(result.id).toBe('char1');
-    expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+    expect(parties.getViewable).toHaveBeenCalledWith('p1', 'mj1');
+  });
+
+  it('findOne() par un joueur membre de la Partie (ni propriétaire ni MJ) → accès autorisé (Story 6.5, prérequis Notes)', async () => {
+    prisma.character.findUnique.mockResolvedValue(makeCharacter());
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    const result = await service.findOne('char1', 'joueur-tiers');
+    expect(result.id).toBe('char1');
+    expect(parties.getViewable).toHaveBeenCalledWith('p1', 'joueur-tiers');
   });
 
   it('findOne() par non-membre → ForbiddenException', async () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
-    parties.getOwned.mockRejectedValue(new ForbiddenException());
+    parties.getViewable.mockRejectedValue(new ForbiddenException());
     await expect(service.findOne('char1', 'stranger')).rejects.toThrow(
       ForbiddenException,
     );
@@ -310,6 +324,36 @@ describe('CharacterService', () => {
 
     expect(result.ownerPseudo).toBe('le-mj');
     expect(result.ownerIsMj).toBe(true);
+  });
+
+  it('findOne() par le propriétaire (non-MJ) → viewerIsMj=false', async () => {
+    prisma.character.findUnique.mockResolvedValue(makeCharacter());
+    users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice' });
+    prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
+
+    const result = await service.findOne('char1', 'u1');
+
+    expect(result.viewerIsMj).toBe(false);
+  });
+
+  it('findOne() par le MJ (non-propriétaire) → viewerIsMj=true, distinct de ownerIsMj', async () => {
+    prisma.character.findUnique.mockResolvedValue(makeCharacter());
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+    const result = await service.findOne('char1', 'mj1');
+
+    expect(result.viewerIsMj).toBe(true);
+    expect(result.ownerIsMj).toBe(false); // le propriétaire (u1) n'est pas le MJ
+  });
+
+  it("findOne() par un fellow player (ni propriétaire ni MJ) → viewerIsMj=false — corrige l'ambiguïté qui rendait la section Historique visible à tort (revue de code Story 6.5)", async () => {
+    prisma.character.findUnique.mockResolvedValue(makeCharacter());
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+    const result = await service.findOne('char1', 'joueur-tiers');
+
+    expect(result.viewerIsMj).toBe(false);
+    expect(result.ownerIsMj).toBe(false);
   });
 
   it('create() utilise validate et computeDerived de @master-jdr/game-rules', async () => {
@@ -745,20 +789,34 @@ describe('CharacterService', () => {
           portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
         }),
       );
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
       await service.getPortraitFile('char1', 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'mj1');
     });
 
-    it('tiers (ni propriétaire ni MJ) → ForbiddenException', async () => {
+    it("fellow player (ni propriétaire ni MJ, mais membre de la Partie) → accès autorisé (cohérence avec findOne, revue de code Story 6.5)", async () => {
       prisma.character.findUnique.mockResolvedValue(
         makeCharacter({
           portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
         }),
       );
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      (readFile as jest.Mock).mockResolvedValue(Buffer.from('bytes'));
+
+      const result = await service.getPortraitFile('char1', 'joueur-tiers');
+
+      expect(result.buffer).toEqual(Buffer.from('bytes'));
+    });
+
+    it('tiers (ni propriétaire ni membre de la Partie) → ForbiddenException', async () => {
+      prisma.character.findUnique.mockResolvedValue(
+        makeCharacter({
+          portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
+        }),
+      );
+      parties.getViewable.mockRejectedValue(new ForbiddenException());
 
       await expect(
         service.getPortraitFile('char1', 'stranger'),
@@ -1376,6 +1434,167 @@ describe('CharacterService', () => {
         await service.removeInventoryItem('char1', 'u1', 'item-1');
 
         expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('notes', () => {
+    function makeNote(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'note-1',
+        characterId: 'char1',
+        text: 'Une note',
+        shared: false,
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        ...overrides,
+      };
+    }
+
+    describe('addNote()', () => {
+      it('crée une note avec shared: false par défaut', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.create.mockResolvedValue(makeNote());
+
+        const result = await service.addNote('char1', 'u1', { text: 'Une note' } as any);
+
+        expect(prisma.characterNote.create).toHaveBeenCalledWith({
+          data: { characterId: 'char1', text: 'Une note', shared: false },
+        });
+        expect(result).toEqual({
+          id: 'note-1',
+          characterId: 'char1',
+          text: 'Une note',
+          shared: false,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        });
+      });
+
+      it('non-propriétaire → ForbiddenException', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
+
+        await expect(
+          service.addNote('char1', 'stranger', { text: 'x' } as any),
+        ).rejects.toThrow(ForbiddenException);
+        expect(prisma.characterNote.create).not.toHaveBeenCalled();
+      });
+
+      it("n'appelle jamais characterSnapshot.create (FR-12 exclut les notes)", async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.create.mockResolvedValue(makeNote());
+
+        await service.addNote('char1', 'u1', { text: 'x' } as any);
+
+        expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('toggleNoteShare()', () => {
+      it('bascule shared de false à true', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote({ shared: false }));
+        prisma.characterNote.update.mockResolvedValue(makeNote({ shared: true }));
+
+        const result = await service.toggleNoteShare('char1', 'u1', 'note-1', true);
+
+        expect(prisma.characterNote.update).toHaveBeenCalledWith({
+          where: { id: 'note-1' },
+          data: { shared: true },
+        });
+        expect(result.shared).toBe(true);
+      });
+
+      it('noteId introuvable → NotFoundException', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.toggleNoteShare('char1', 'u1', 'note-inconnue', true),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.characterNote.update).not.toHaveBeenCalled();
+      });
+
+      it('noteId appartient à un AUTRE personnage → NotFoundException (garde anti-énumération)', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(
+          makeNote({ characterId: 'char-autre' }),
+        );
+
+        await expect(
+          service.toggleNoteShare('char1', 'u1', 'note-1', true),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.characterNote.update).not.toHaveBeenCalled();
+      });
+
+      it('non-propriétaire → ForbiddenException', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
+
+        await expect(
+          service.toggleNoteShare('char1', 'stranger', 'note-1', true),
+        ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('getNotes()', () => {
+      it('propriétaire → toutes les entrées (privées + partagées)', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findMany.mockResolvedValue([
+          makeNote({ id: 'n1', shared: false }),
+          makeNote({ id: 'n2', shared: true }),
+        ]);
+
+        const result = await service.getNotes('char1', 'u1');
+
+        expect(prisma.characterNote.findMany).toHaveBeenCalledWith({
+          where: { characterId: 'char1' },
+          orderBy: { createdAt: 'desc' },
+        });
+        expect(result).toHaveLength(2);
+        expect(parties.getViewable).not.toHaveBeenCalled();
+      });
+
+      it('MJ → toutes les entrées', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+        prisma.characterNote.findMany.mockResolvedValue([
+          makeNote({ id: 'n1', shared: false }),
+        ]);
+
+        await service.getNotes('char1', 'mj1');
+
+        expect(prisma.characterNote.findMany).toHaveBeenCalledWith({
+          where: { characterId: 'char1' },
+          orderBy: { createdAt: 'desc' },
+        });
+      });
+
+      it('autre participant (membre non-MJ) → uniquement shared: true', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+        prisma.characterNote.findMany.mockResolvedValue([]);
+
+        await service.getNotes('char1', 'joueur-tiers');
+
+        expect(prisma.characterNote.findMany).toHaveBeenCalledWith({
+          where: { characterId: 'char1', shared: true },
+          orderBy: { createdAt: 'desc' },
+        });
+      });
+
+      it('non-participant (ni MJ ni membre) → ForbiddenException', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        parties.getViewable.mockRejectedValue(new ForbiddenException());
+
+        await expect(service.getNotes('char1', 'stranger')).rejects.toThrow(
+          ForbiddenException,
+        );
+      });
+
+      it('personnage introuvable → NotFoundException', async () => {
+        prisma.character.findUnique.mockResolvedValue(null);
+
+        await expect(service.getNotes('unknown', 'u1')).rejects.toThrow(
+          NotFoundException,
+        );
       });
     });
   });

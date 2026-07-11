@@ -19,6 +19,7 @@ import { LevelUpBanner } from './level-up-banner/level-up-banner';
 import { LevelUpWizard, type LevelUpWizardData } from './level-up-wizard/level-up-wizard';
 import { HistoryTab } from './history-tab/history-tab';
 import { InventoryTab } from './inventory-tab/inventory-tab';
+import { NotesJournal } from './notes-journal/notes-journal';
 import {
   capabilityDescription,
   getCapabilitiesByType,
@@ -58,7 +59,15 @@ interface NarrativeFields {
 @Component({
   selector: 'app-character-sheet',
   standalone: true,
-  imports: [CharacterAvatar, MatButtonModule, PortraitPanel, LevelUpBanner, HistoryTab, InventoryTab],
+  imports: [
+    CharacterAvatar,
+    MatButtonModule,
+    PortraitPanel,
+    LevelUpBanner,
+    HistoryTab,
+    InventoryTab,
+    NotesJournal,
+  ],
   templateUrl: './character-sheet.html',
   styleUrl: './character-sheet.scss',
 })
@@ -94,14 +103,17 @@ export class CharacterSheet implements OnInit {
   );
 
   /**
-   * Le viewer est le MJ si l'accès en lecture a réussi (owner OU MJ, cf. Story 4.1) et qu'il n'est
-   * pas le propriétaire — raccourci logique valide qui évite un appel réseau supplémentaire pour
-   * connaître le `mjId` de la partie côté front. Affiche le pseudo du propriétaire (Story 4.6, AC2).
-   * Exige un `currentUser()` non nul pour éviter d'afficher ce badge à un viewer déconnecté
-   * (session invalidée alors que `character()` est déjà chargé).
+   * Le viewer est le MJ de la Partie — lu directement depuis `CharacterDto.viewerIsMj` (résolu
+   * côté serveur, Story 6.5 revue de code), **pas** une heuristique "tout non-propriétaire = MJ".
+   * Cette ancienne heuristique était fausse dès qu'un fellow player (ni propriétaire, ni MJ) a pu
+   * consulter la fiche d'un coéquipier (`findOne` élargi à tout participant, cf. Story 6.5) : il
+   * aurait alors vu à tort la section Historique et le badge MJ. `!isOwner()` reste requis en plus
+   * du champ API : un MJ consultant **sa propre** fiche (`viewerIsMj` API = true, `isOwner()` =
+   * true aussi) ne doit pas afficher le badge "vous consultez la fiche de quelqu'un d'autre" —
+   * `isOwner()` prime toujours (cf. tests dédiés).
    */
   protected readonly viewerIsMj = computed(
-    () => !!this.character() && !!this.auth.currentUser() && !this.isOwner(),
+    () => !this.isOwner() && (this.character()?.viewerIsMj ?? false),
   );
 
   protected readonly classData = computed<ClassData | null>(() =>

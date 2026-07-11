@@ -62,6 +62,9 @@ function defaultSvc() {
     addInventoryItem: vi.fn(),
     updateInventoryItem: vi.fn(),
     removeInventoryItem: vi.fn(),
+    getNotes: vi.fn().mockResolvedValue([]),
+    addNote: vi.fn(),
+    toggleNoteShare: vi.fn(),
   };
 }
 
@@ -278,9 +281,20 @@ describe('CharacterSheet', () => {
   });
 
   it('MJ (non-propriétaire) consultant la fiche d’un joueur → pseudo du propriétaire affiché (AC2)', async () => {
-    const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'mj-stranger');
+    // viewerIsMj résolu côté API (Story 6.5 revue de code) — explicite ici car ce test simule
+    // un VRAI MJ, distinct d'un simple fellow player non-MJ (cf. test dédié plus bas).
+    const asMj = { ...CHARACTER, viewerIsMj: true };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
     const badge = fixture.nativeElement.querySelector('.sheet__owner-badge');
     expect(badge?.textContent?.trim()).toBe('alice');
+  });
+
+  it("fellow player (ni propriétaire, ni MJ) consultant la fiche d'un coéquipier → aucun badge affiché (corrige l'ancienne heuristique 'tout non-propriétaire = MJ', revue de code Story 6.5)", async () => {
+    const asFellowPlayer = { ...CHARACTER, viewerIsMj: false };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asFellowPlayer) });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'joueur-tiers');
+    expect(fixture.nativeElement.querySelector('.sheet__owner-badge')).toBeNull();
   });
 
   it('MJ consultant la fiche de son propre personnage → aucun badge affiché (isOwner prime sur viewerIsMj)', async () => {
@@ -528,13 +542,17 @@ describe('CharacterSheet', () => {
   });
 
   it('MJ (non-propriétaire) → section Historique visible également (AC4)', async () => {
-    const { fixture } = await createComponent(
-      makeCharacterService(),
-      'char1',
-      null,
-      'mj-stranger',
-    );
+    const asMj = { ...CHARACTER, viewerIsMj: true };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
     expect(fixture.nativeElement.querySelector('.sheet__history')).not.toBeNull();
+  });
+
+  it("fellow player (ni propriétaire, ni MJ) → section Historique ABSENTE (corrige la fuite d'accès identifiée en revue de code Story 6.5 : un fellow player pouvait auparavant la voir, sans jamais accéder aux données réelles derrière — getHistory reste MJ-seul côté serveur)", async () => {
+    const asFellowPlayer = { ...CHARACTER, viewerIsMj: false };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asFellowPlayer) });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'joueur-tiers');
+    expect(fixture.nativeElement.querySelector('.sheet__history')).toBeNull();
   });
 
   it('aucune capacité sans section dédiée → section "Autres capacités" absente', async () => {
@@ -742,5 +760,26 @@ describe('CharacterSheet', () => {
     ).find((card: any) => card.textContent.includes('Équipement')) as HTMLElement;
     expect(equipmentCard.textContent).not.toContain('Nécessaire de voyage');
     expect(equipmentCard.textContent).toContain('Nécessaire de groupe');
+  });
+
+  it('section Notes visible pour le propriétaire, isOwner=true transmis', async () => {
+    const { fixture } = await createComponent();
+    const notesEl = fixture.nativeElement.querySelector('app-notes-journal');
+    expect(notesEl).not.toBeNull();
+  });
+
+  it('section Notes visible pour le MJ (lecture)', async () => {
+    const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'mj-stranger');
+    expect(fixture.nativeElement.querySelector('app-notes-journal')).not.toBeNull();
+  });
+
+  it('section Notes visible pour un participant tiers (ni propriétaire ni MJ) — Story 6.5 AC4', async () => {
+    const { fixture } = await createComponent(
+      makeCharacterService(),
+      'char1',
+      null,
+      'joueur-tiers',
+    );
+    expect(fixture.nativeElement.querySelector('app-notes-journal')).not.toBeNull();
   });
 });

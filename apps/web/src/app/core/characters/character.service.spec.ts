@@ -172,4 +172,57 @@ describe('CharacterService (front)', () => {
     req.flush(character);
     expect(await p).toEqual(character);
   });
+
+  it('addNote(id, dto) → POST /characters/:id/notes', async () => {
+    const dto = { text: 'Une note' };
+    const note = {
+      id: 'note-1',
+      characterId: 'c1',
+      text: 'Une note',
+      shared: false,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    const p = service.addNote('c1', dto);
+    const req = http.expectOne(`${API}/characters/c1/notes`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual(dto);
+    req.flush(note);
+    expect(await p).toEqual(note);
+  });
+
+  it('toggleNoteShare(id, noteId, shared) → PATCH /characters/:id/notes/:noteId/share', async () => {
+    const note = {
+      id: 'note-1',
+      characterId: 'c1',
+      text: 'Une note',
+      shared: true,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    const p = service.toggleNoteShare('c1', 'note-1', true);
+    const req = http.expectOne(`${API}/characters/c1/notes/note-1/share`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ shared: true });
+    req.flush(note);
+    expect(await p).toEqual(note);
+  });
+
+  it('getNotes(id) → GET /characters/:id/notes', async () => {
+    const notes = [
+      {
+        id: 'note-1',
+        characterId: 'c1',
+        text: 'Une note',
+        shared: false,
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    const p = service.getNotes('c1');
+    const req = http.expectOne(`${API}/characters/c1/notes`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(notes);
+    expect(await p).toEqual(notes);
+  });
 });

@@ -279,6 +279,11 @@
         <app-history-tab [characterId]="c.id" [content]="content()" />
       </section>
     }
+
+    <section class="sheet__card">
+      <h2 class="sheet__card-title">{{ theme.tone()['evolution.notes_journal_title'] }}</h2>
+      <app-notes-journal [characterId]="c.id" [isOwner]="isOwner()" />
+    </section>
   </article>
 } @else {
   <p class="sheet__loading">Chargement…</p>

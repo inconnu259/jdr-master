@@ -1,0 +1,56 @@
+@if (loadError(); as error) {
+  <p class="notes-journal__error">{{ error }}</p>
+} @else if (notes().length === 0) {
+  <p class="notes-journal__empty">{{ theme.tone()['evolution.notes_journal_empty'] }}</p>
+} @else {
+  <ul class="notes-journal__list">
+    @for (note of notes(); track note.id) {
+      <li class="notes-journal__entry">
+        <span class="notes-journal__date">{{ note.createdAt | date: 'medium' }}</span>
+        <span class="notes-journal__text">{{ note.text }}</span>
+        @if (isOwner()) {
+          <button
+            type="button"
+            class="notes-journal__share-toggle"
+            [attr.aria-label]="
+              note.shared
+                ? theme.tone()['evolution.note_shared_label']
+                : theme.tone()['evolution.note_private_label']
+            "
+            (click)="toggleShare(note)"
+          >
+            {{ note.shared ? '🔓' : '🔒' }} {{ theme.tone()['evolution.note_share_toggle'] }}
+          </button>
+        } @else {
+          <span
+            class="notes-journal__share-indicator"
+            [attr.aria-label]="
+              note.shared
+                ? theme.tone()['evolution.note_shared_label']
+                : theme.tone()['evolution.note_private_label']
+            "
+          >
+            {{ note.shared ? '🔓' : '🔒' }}
+          </span>
+        }
+      </li>
+    }
+  </ul>
+}
+
+@if (submitError(); as error) {
+  <p class="notes-journal__error">{{ error }}</p>
+}
+
+@if (isOwner()) {
+  <form class="notes-journal__add-form" (submit)="$event.preventDefault(); submitAdd()">
+    <textarea
+      [value]="newText()"
+      (input)="newText.set($any($event.target).value)"
+      rows="2"
+    ></textarea>
+    <button mat-stroked-button type="submit" [disabled]="submitting()">
+      {{ theme.tone()['evolution.notes_add_cta'] }}
+    </button>
+  </form>
+}
