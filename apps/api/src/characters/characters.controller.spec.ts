@@ -35,6 +35,7 @@ function makeCharacterService() {
     getNotes: jest.fn(),
     setXp: jest.fn(),
     setSheetField: jest.fn(),
+    updateNarrativeField: jest.fn(),
   };
 }
 
@@ -366,6 +367,25 @@ describe('CharactersController', () => {
       path: 'fetiqueObject',
       value: 'Lanterne',
     });
+  });
+
+  it('updateNarrativeField() délègue à CharacterService avec le dto complet', async () => {
+    characters.updateNarrativeField.mockResolvedValue({ id: 'char1' });
+
+    await controller.updateNarrativeField(
+      'char1',
+      { field: 'motivation', value: 'Venger son village' },
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.updateNarrativeField).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      {
+        field: 'motivation',
+        value: 'Venger son village',
+      },
+    );
   });
 
   describe('validation HTTP réelle (ValidationPipe global)', () => {
@@ -746,6 +766,58 @@ describe('CharactersController', () => {
         '11111111-1111-1111-1111-111111111111',
         'u1',
         { path: 'fetiqueObject', value: 'Lanterne' },
+      );
+    });
+
+    it('PATCH narrative-field avec field hors liste autorisée (ex. "xp") → 400', async () => {
+      await request(app.getHttpServer())
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/narrative-field',
+        )
+        .send({ field: 'xp', value: 999 })
+        .expect(400);
+
+      expect(characters.updateNarrativeField).not.toHaveBeenCalled();
+    });
+
+    it('PATCH narrative-field avec field hors liste autorisée (ex. "classId") → 400', async () => {
+      await request(app.getHttpServer())
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/narrative-field',
+        )
+        .send({ field: 'classId', value: 'chasseur' })
+        .expect(400);
+
+      expect(characters.updateNarrativeField).not.toHaveBeenCalled();
+    });
+
+    it('PATCH narrative-field avec un champ supplémentaire non déclaré → 400 (whitelist)', async () => {
+      await request(app.getHttpServer())
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/narrative-field',
+        )
+        .send({ field: 'motivation', value: 'x', extra: 'intrus' })
+        .expect(400);
+
+      expect(characters.updateNarrativeField).not.toHaveBeenCalled();
+    });
+
+    it('PATCH narrative-field avec field/value valides → 200, CharacterService appelé', async () => {
+      characters.updateNarrativeField.mockResolvedValue({
+        id: '11111111-1111-1111-1111-111111111111',
+      });
+
+      await request(app.getHttpServer())
+        .patch(
+          '/characters/11111111-1111-1111-1111-111111111111/narrative-field',
+        )
+        .send({ field: 'motivation', value: 'Venger son village' })
+        .expect(200);
+
+      expect(characters.updateNarrativeField).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
+        { field: 'motivation', value: 'Venger son village' },
       );
     });
   });

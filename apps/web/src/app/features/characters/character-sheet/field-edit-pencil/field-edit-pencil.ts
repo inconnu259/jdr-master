@@ -1,6 +1,13 @@
 import { Component, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 
+export interface FieldEditPencilOption {
+  key: string;
+  label: string;
+}
+
+let nextDatalistId = 0;
+
 @Component({
   selector: 'app-field-edit-pencil',
   standalone: true,
@@ -13,7 +20,11 @@ export class FieldEditPencil {
   readonly label = input.required<string>();
   readonly value = input.required<string | number>();
   readonly type = input<'text' | 'number'>('text');
+  /** Suggestions catalogue optionnelles (ex. armes seedées) — combobox, jamais un select strict (AC7 Story 6.7). */
+  readonly options = input<FieldEditPencilOption[]>([]);
   readonly confirm = output<string | number>();
+
+  protected readonly datalistId = `field-edit-pencil-datalist-${nextDatalistId++}`;
 
   protected readonly editing = signal(false);
   protected readonly draft = signal<string | number>('');

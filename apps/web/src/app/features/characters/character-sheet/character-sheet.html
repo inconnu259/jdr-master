@@ -251,15 +251,23 @@
 
         <section class="sheet__card">
           <h2 class="sheet__card-title">Arme de prédilection</h2>
-          @if (weaponData(); as weapon) {
-            <div class="sheet__weapon-row">
+          <div class="sheet__weapon-row">
+            @if (weaponData(); as weapon) {
               <span class="sheet__weapon-name">{{ weapon.label }}</span>
               <div class="sheet__pill-grid">
                 <span class="stat-pill">Toucher {{ weapon.touchFormula }}</span>
                 <span class="stat-pill">Dégâts {{ weapon.damageFormula }}</span>
               </div>
-            </div>
-          }
+            }
+            @if (viewerIsMj()) {
+              <app-field-edit-pencil
+                label="l'arme de prédilection"
+                [value]="$any(sheetData()['weaponCategoryId']) ?? ''"
+                [options]="weaponOptions()"
+                (confirm)="submitFieldEdit('weaponCategoryId', $event)"
+              />
+            }
+          </div>
         </section>
 
         <section class="sheet__card">
@@ -297,40 +305,70 @@
 
         <section class="sheet__card">
           <h2 class="sheet__card-title">Notes narratives</h2>
-          @if (narrative().sex) {
+          @if (narrative().sex || viewerIsMj() || isOwner()) {
             <div class="sheet__narrative-field">
               <span class="sheet__narrative-label">Sexe</span>
               <span class="sheet__narrative-value">{{ narrative().sex }}</span>
+              @if (viewerIsMj()) {
+                <app-field-edit-pencil label="le sexe" [value]="narrative().sex ?? ''" (confirm)="submitFieldEdit('narrative.sex', $event)" />
+              } @else if (isOwner()) {
+                <app-field-edit-pencil label="le sexe" [value]="narrative().sex ?? ''" (confirm)="submitNarrativeFieldEdit('sex', $event)" />
+              }
             </div>
           }
-          @if (narrative().age) {
+          @if (narrative().age || viewerIsMj() || isOwner()) {
             <div class="sheet__narrative-field">
               <span class="sheet__narrative-label">Âge</span>
               <span class="sheet__narrative-value">{{ narrative().age }}</span>
+              @if (viewerIsMj()) {
+                <app-field-edit-pencil label="l'âge" [value]="narrative().age ?? ''" (confirm)="submitFieldEdit('narrative.age', $event)" />
+              } @else if (isOwner()) {
+                <app-field-edit-pencil label="l'âge" [value]="narrative().age ?? ''" (confirm)="submitNarrativeFieldEdit('age', $event)" />
+              }
             </div>
           }
-          @if (narrative().physicalTraits) {
+          @if (narrative().physicalTraits || viewerIsMj() || isOwner()) {
             <div class="sheet__narrative-field">
               <span class="sheet__narrative-label">Traits physiques</span>
               <span class="sheet__narrative-value">{{ narrative().physicalTraits }}</span>
+              @if (viewerIsMj()) {
+                <app-field-edit-pencil label="les traits physiques" [value]="narrative().physicalTraits ?? ''" (confirm)="submitFieldEdit('narrative.physicalTraits', $event)" />
+              } @else if (isOwner()) {
+                <app-field-edit-pencil label="les traits physiques" [value]="narrative().physicalTraits ?? ''" (confirm)="submitNarrativeFieldEdit('physicalTraits', $event)" />
+              }
             </div>
           }
-          @if (narrative().homeTown) {
+          @if (narrative().homeTown || viewerIsMj() || isOwner()) {
             <div class="sheet__narrative-field">
               <span class="sheet__narrative-label">Village natal</span>
               <span class="sheet__narrative-value">{{ narrative().homeTown }}</span>
+              @if (viewerIsMj()) {
+                <app-field-edit-pencil label="le village natal" [value]="narrative().homeTown ?? ''" (confirm)="submitFieldEdit('narrative.homeTown', $event)" />
+              } @else if (isOwner()) {
+                <app-field-edit-pencil label="le village natal" [value]="narrative().homeTown ?? ''" (confirm)="submitNarrativeFieldEdit('homeTown', $event)" />
+              }
             </div>
           }
-          @if (narrative().motivation) {
+          @if (narrative().motivation || viewerIsMj() || isOwner()) {
             <div class="sheet__narrative-field">
               <span class="sheet__narrative-label">Motivation</span>
               <span class="sheet__narrative-value">{{ narrative().motivation }}</span>
+              @if (viewerIsMj()) {
+                <app-field-edit-pencil label="la motivation" [value]="narrative().motivation ?? ''" (confirm)="submitFieldEdit('narrative.motivation', $event)" />
+              } @else if (isOwner()) {
+                <app-field-edit-pencil label="la motivation" [value]="narrative().motivation ?? ''" (confirm)="submitNarrativeFieldEdit('motivation', $event)" />
+              }
             </div>
           }
-          @if (narrative().personality) {
+          @if (narrative().personality || viewerIsMj() || isOwner()) {
             <div class="sheet__narrative-field">
               <span class="sheet__narrative-label">Personnalité</span>
               <span class="sheet__narrative-value">{{ narrative().personality }}</span>
+              @if (viewerIsMj()) {
+                <app-field-edit-pencil label="la personnalité" [value]="narrative().personality ?? ''" (confirm)="submitFieldEdit('narrative.personality', $event)" />
+              } @else if (isOwner()) {
+                <app-field-edit-pencil label="la personnalité" [value]="narrative().personality ?? ''" (confirm)="submitNarrativeFieldEdit('personality', $event)" />
+              }
             </div>
           }
         </section>

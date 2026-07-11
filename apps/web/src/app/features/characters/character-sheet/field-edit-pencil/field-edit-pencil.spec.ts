@@ -119,6 +119,47 @@ describe('FieldEditPencil', () => {
     expect(fixture.nativeElement.querySelector('.field-edit-pencil__form')).not.toBeNull();
   });
 
+  it('options fourni → input a un attribut list pointant vers un datalist avec une option par entrée', async () => {
+    const fixture = await createComponent('arc');
+    fixture.componentRef.setInput('options', [
+      { key: 'arc', label: 'Arc' },
+      { key: 'epee', label: 'Épée' },
+    ]);
+    fixture.detectChanges();
+
+    (
+      fixture.nativeElement.querySelector('.field-edit-pencil__button') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector(
+      '.field-edit-pencil__input',
+    ) as HTMLInputElement;
+    const listId = input.getAttribute('list');
+    expect(listId).toBeTruthy();
+    const datalist = fixture.nativeElement.querySelector(`datalist#${listId}`);
+    expect(datalist).not.toBeNull();
+    const options = datalist!.querySelectorAll('option');
+    expect(options.length).toBe(2);
+    expect(options[0].getAttribute('value')).toBe('arc');
+    expect(options[1].getAttribute('value')).toBe('epee');
+  });
+
+  it('options non fourni (défaut []) → pas d’attribut list, pas de datalist (régression)', async () => {
+    const fixture = await createComponent('Lanterne');
+
+    (
+      fixture.nativeElement.querySelector('.field-edit-pencil__button') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector(
+      '.field-edit-pencil__input',
+    ) as HTMLInputElement;
+    expect(input.getAttribute('list')).toBeNull();
+    expect(fixture.nativeElement.querySelector('datalist')).toBeNull();
+  });
+
   it('"Annuler" repasse en mode lecture sans émettre confirm', async () => {
     const fixture = await createComponent('Lanterne');
     const confirmSpy = vi.fn();

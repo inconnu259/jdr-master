@@ -37,6 +37,7 @@ import { CreateCharacterNoteDto } from './dto/create-character-note.dto';
 import { ToggleNoteShareDto } from './dto/toggle-note-share.dto';
 import { SetSheetFieldDto } from './dto/set-sheet-field.dto';
 import { SetXpDto } from './dto/set-xp.dto';
+import { UpdateNarrativeFieldDto } from './dto/update-narrative-field.dto';
 import { ExportCharacterPdfDto } from './dto/export-character-pdf.dto';
 import { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 
@@ -245,5 +246,14 @@ export class CharactersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.characters.setSheetField(id, user.id, dto);
+  }
+
+  @Patch(':id/narrative-field')
+  updateNarrativeField(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateNarrativeFieldDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.updateNarrativeField(id, user.id, dto);
   }
 }

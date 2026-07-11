@@ -135,6 +135,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.mj_edit_error': "L'édition n'a pas pu être enregistrée. Réessayez.",
     'evolution.mj_edit_warning_prefix': 'Avertissement : ',
     'evolution.inventory_mj_add_cta': '+ Ajouter un objet (MJ)',
+    'evolution.narrative_edit_error': "La modification n'a pas pu être enregistrée. Réessayez.",
     /* — journal de notes personnelles (Story 6.5) — */
     'evolution.notes_journal_title': 'Journal de notes',
     'evolution.notes_journal_empty': 'Aucune note pour le moment.',
@@ -269,6 +270,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.mj_edit_error': "L'édition n'a pas pu être gravée. Réessaie.",
     'evolution.mj_edit_warning_prefix': 'Avertissement : ',
     'evolution.inventory_mj_add_cta': '+ Glisser un objet du Guide dans la besace',
+    'evolution.narrative_edit_error': "La modification n'a pas pu être gravée. Réessaie.",
     'evolution.notes_journal_title': 'Carnet du voyageur',
     'evolution.notes_journal_empty': 'Le carnet est vierge pour le moment.',
     'evolution.notes_add_cta': '+ Graver une entrée',
@@ -402,6 +404,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.mj_edit_error': 'La modification n’a pas pu être enregistrée. Réessayez.',
     'evolution.mj_edit_warning_prefix': 'Avertissement : ',
     'evolution.inventory_mj_add_cta': '+ Charger un composant (MJ)',
+    'evolution.narrative_edit_error': 'La modification n’a pas pu être enregistrée. Réessayez.',
     'evolution.notes_journal_title': 'Journal de bord personnel',
     'evolution.notes_journal_empty': 'Aucune entrée consignée pour le moment.',
     'evolution.notes_add_cta': '+ Consigner une entrée',

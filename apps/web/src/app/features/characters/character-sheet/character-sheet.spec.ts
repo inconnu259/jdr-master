@@ -67,6 +67,7 @@ function defaultSvc() {
     toggleNoteShare: vi.fn(),
     setSheetField: vi.fn(),
     setXp: vi.fn(),
+    updateNarrativeField: vi.fn(),
   };
 }
 
@@ -163,12 +164,22 @@ describe('CharacterSheet', () => {
     await Promise.resolve();
   });
 
-  it('affiche les notes narratives renseignées uniquement', async () => {
-    const { fixture } = await createComponent();
+  it('fellow player (lecture seule) → affiche les notes narratives renseignées uniquement', async () => {
+    const asFellowPlayer = { ...CHARACTER, viewerIsMj: false };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asFellowPlayer) });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'joueur-tiers');
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Aubval');
     expect(text).toContain('Voir la mer');
     expect(text).not.toContain('Sexe');
+  });
+
+  it('propriétaire → affiche même les champs narratifs vides (Story 6.7 AC2, pour pouvoir les renseigner)', async () => {
+    const { fixture } = await createComponent();
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Aubval');
+    expect(text).toContain('Voir la mer');
+    expect(text).toContain('Sexe');
   });
 
   it("403 → message d'erreur explicite affiché, pas de plantage", async () => {
@@ -792,19 +803,19 @@ describe('CharacterSheet', () => {
   });
 
   describe('édition MJ (FieldEditPencil, Story 6.6)', () => {
-    it('viewerIsMj:true → pencils attributs (×4) + objet fétiche + XP visibles', async () => {
+    it('viewerIsMj:true → pencils attributs (×4) + objet fétiche + XP + arme + 6 champs narratifs visibles', async () => {
       const asMj = { ...CHARACTER, viewerIsMj: true };
       const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
       const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
 
       const pencils = fixture.nativeElement.querySelectorAll('.field-edit-pencil__button');
-      // 4 attributs + fétiche + XP = 6 pencils (l'inventaire est géré séparément par InventoryTab).
-      expect(pencils.length).toBe(6);
+      // 4 attributs + fétiche + XP + arme + 6 narratifs = 13 (l'inventaire est géré séparément par InventoryTab).
+      expect(pencils.length).toBe(13);
     });
 
-    it('propriétaire (isOwner:true) → aucun pencil MJ visible', async () => {
+    it('propriétaire (isOwner:true) → seuls les 6 pencils narratifs visibles (pas attributs/fétiche/XP/arme, MJ-only)', async () => {
       const { fixture } = await createComponent();
-      expect(fixture.nativeElement.querySelectorAll('.field-edit-pencil__button').length).toBe(0);
+      expect(fixture.nativeElement.querySelectorAll('.field-edit-pencil__button').length).toBe(6);
     });
 
     it('fellow player (ni propriétaire, ni MJ) → aucun pencil MJ visible', async () => {
@@ -902,6 +913,97 @@ describe('CharacterSheet', () => {
       fixture.detectChanges();
 
       expect(comp.fieldEditError()).not.toBeNull();
+    });
+  });
+
+  describe('champs narratifs et arme éditables (Story 6.7)', () => {
+    it('MJ (viewerIsMj:true) → pencils narratifs appellent setSheetField avec le path narrative.<champ>', async () => {
+      const asMj = { ...CHARACTER, viewerIsMj: true };
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(asMj),
+        setSheetField: vi.fn().mockResolvedValue({ character: asMj, warnings: [] }),
+      });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+      const comp = fixture.componentInstance as any;
+
+      await comp.submitFieldEdit('narrative.motivation', 'Nouvelle motivation');
+
+      expect(characterSvc.setSheetField).toHaveBeenCalledWith(
+        'char1',
+        'narrative.motivation',
+        'Nouvelle motivation',
+      );
+    });
+
+    it('MJ → pencil arme appelle setSheetField avec le path weaponCategoryId', async () => {
+      const asMj = { ...CHARACTER, viewerIsMj: true };
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(asMj),
+        setSheetField: vi.fn().mockResolvedValue({ character: asMj, warnings: [] }),
+      });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+      const comp = fixture.componentInstance as any;
+
+      await comp.submitFieldEdit('weaponCategoryId', 'epee');
+
+      expect(characterSvc.setSheetField).toHaveBeenCalledWith('char1', 'weaponCategoryId', 'epee');
+    });
+
+    it('propriétaire (isOwner:true, viewerIsMj:false) → pas de pencil arme (MJ-only, AC1)', async () => {
+      const { fixture } = await createComponent();
+      // Le pencil arme a l'aria-label "Modifier l'arme de prédilection" — absent pour le propriétaire.
+      expect(
+        fixture.nativeElement.querySelector(
+          'button[aria-label="Modifier l\'arme de prédilection"]',
+        ),
+      ).toBeNull();
+    });
+
+    it('submitNarrativeFieldEdit() appelle characterSvc.updateNarrativeField (pas setSheetField), met à jour character()', async () => {
+      const updated = {
+        ...CHARACTER,
+        sheetData: {
+          ...CHARACTER.sheetData,
+          narrative: { name: 'Fenn', homeTown: 'Aubval', motivation: 'Nouvelle motivation' },
+        },
+      };
+      const characterSvc = makeCharacterService({
+        updateNarrativeField: vi.fn().mockResolvedValue(updated),
+      });
+      const { fixture } = await createComponent(characterSvc);
+      const comp = fixture.componentInstance as any;
+
+      await comp.submitNarrativeFieldEdit('motivation', 'Nouvelle motivation');
+      fixture.detectChanges();
+
+      expect(characterSvc.updateNarrativeField).toHaveBeenCalledWith(
+        'char1',
+        'motivation',
+        'Nouvelle motivation',
+      );
+      expect(characterSvc.setSheetField).not.toHaveBeenCalled();
+      expect(comp.character()).toEqual(updated);
+    });
+
+    it('submitNarrativeFieldEdit() erreur réseau → fieldEditError() affiché', async () => {
+      const characterSvc = makeCharacterService({
+        updateNarrativeField: vi.fn().mockRejectedValue(new Error('boom')),
+      });
+      const { fixture } = await createComponent(characterSvc);
+      const comp = fixture.componentInstance as any;
+
+      await comp.submitNarrativeFieldEdit('motivation', 'x');
+      fixture.detectChanges();
+
+      expect(comp.fieldEditError()).not.toBeNull();
+    });
+
+    it('ni propriétaire ni MJ → aucun pencil narratif/arme visible (AC3)', async () => {
+      const asFellowPlayer = { ...CHARACTER, viewerIsMj: false };
+      const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asFellowPlayer) });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'joueur-tiers');
+
+      expect(fixture.nativeElement.querySelectorAll('.field-edit-pencil__button').length).toBe(0);
     });
   });
 });

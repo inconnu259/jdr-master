@@ -394,6 +394,12 @@ export interface SetXpDto {
   value: number;
 }
 
+/** Payload de PATCH /characters/:id/narrative-field (Story 6.7, édition propriétaire-seul). */
+export interface UpdateNarrativeFieldDto {
+  field: 'sex' | 'age' | 'physicalTraits' | 'homeTown' | 'motivation' | 'personality';
+  value: unknown;
+}
+
 /**
  * Dimensions du cadre portrait de l'export PDF Ryuutama, mesurées empiriquement en Story 4.6
  * (`apps/api/game-systems/ryuutama/assets/README.md`, section "Zone du portrait"). Consommées

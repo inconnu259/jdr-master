@@ -20,7 +20,7 @@ import { LevelUpWizard, type LevelUpWizardData } from './level-up-wizard/level-u
 import { HistoryTab } from './history-tab/history-tab';
 import { InventoryTab } from './inventory-tab/inventory-tab';
 import { NotesJournal } from './notes-journal/notes-journal';
-import { FieldEditPencil } from './field-edit-pencil/field-edit-pencil';
+import { FieldEditPencil, type FieldEditPencilOption } from './field-edit-pencil/field-edit-pencil';
 import {
   capabilityDescription,
   getCapabilitiesByType,
@@ -140,6 +140,14 @@ export class CharacterSheet implements OnInit {
       'weaponCategory',
       this.sheetData()['weaponCategoryId'] as string | undefined,
     ),
+  );
+
+  /** Suggestions catalogue pour la combobox de l'arme de prédilection (AC7, Story 6.7). */
+  protected readonly weaponOptions = computed<FieldEditPencilOption[]>(() =>
+    (this.content()?.['weaponCategory'] ?? []).map((entry) => ({
+      key: entry.key,
+      label: (entry.data as WeaponData).label,
+    })),
   );
 
   /** Spécialité texte libre de la classe Artisan (seule classe l'exigeant), sinon `undefined`. */
@@ -423,6 +431,18 @@ export class CharacterSheet implements OnInit {
       this.character.set(await this.characterSvc.setXp(c.id, Number(value)));
     } catch {
       this.fieldEditError.set(this.theme.tone()['evolution.mj_edit_error']);
+    }
+  }
+
+  /** Édition propriétaire-seul d'un champ narratif (Story 6.7) — chemin dédié, pas `sheet-field`. */
+  protected async submitNarrativeFieldEdit(field: string, value: string | number): Promise<void> {
+    const c = this.character();
+    if (!c) return;
+    this.fieldEditError.set(null);
+    try {
+      this.character.set(await this.characterSvc.updateNarrativeField(c.id, field, value));
+    } catch {
+      this.fieldEditError.set(this.theme.tone()['evolution.narrative_edit_error']);
     }
   }
 }

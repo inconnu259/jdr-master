@@ -37,6 +37,7 @@ import type { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import type { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import type { CreateCharacterNoteDto } from './dto/create-character-note.dto';
 import type { SetSheetFieldDto } from './dto/set-sheet-field.dto';
+import type { UpdateNarrativeFieldDto } from './dto/update-narrative-field.dto';
 import type { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 import {
   detectImageMime,
@@ -920,8 +921,32 @@ export class CharacterService {
   }
 
   /**
-   * Écriture verrouillée commune aux 3 mutations d'inventaire — pas de recalcul `computeDerived`
-   * (le poids d'inventaire n'entre dans aucune formule de `DerivedStats`) et pas de snapshot.
+   * Édition propriétaire-seul d'un champ narratif (Story 6.7, extension hors FR14 — le MJ édite
+   * via `sheet-field`, cf. setSheetField ; ceci est un chemin séparé pour le propriétaire).
+   * `field` restreint aux 6 clés `narrative.*` affichées sur la fiche (denylist implicite via
+   * whitelist DTO — jamais un path libre côté propriétaire). Pas de `computeDerived` (narratif
+   * n'entre dans aucun calcul), pas de `CharacterSnapshot` (cohérent avec FR9/FR11 : édition
+   * propriétaire de contenu non structurel = pas d'instantané).
+   */
+  async updateNarrativeField(
+    characterId: string,
+    userId: string,
+    dto: UpdateNarrativeFieldDto,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    sheetData.narrative = { ...sheetData.narrative, [dto.field]: dto.value };
+    return this.writeInventoryChange(
+      characterId,
+      character.updatedAt,
+      sheetData,
+      userId,
+    );
+  }
+
+  /**
+   * Écriture verrouillée commune aux mutations propriétaire-seul sans recalcul (inventaire,
+   * champs narratifs Story 6.7) — pas de `computeDerived`, pas de snapshot.
    */
   private async writeInventoryChange(
     characterId: string,

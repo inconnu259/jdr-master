@@ -4,8 +4,16 @@
       class="field-edit-pencil__input"
       [type]="type()"
       [value]="draft()"
+      [attr.list]="options().length ? datalistId : null"
       (input)="onInput($any($event.target).value)"
     />
+    @if (options().length) {
+      <datalist [id]="datalistId">
+        @for (opt of options(); track opt.key) {
+          <option [value]="opt.key">{{ opt.label }}</option>
+        }
+      </datalist>
+    }
     <button
       mat-icon-button
       type="button"

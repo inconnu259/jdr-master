@@ -1365,6 +1365,106 @@ describe('CharacterService', () => {
     });
   });
 
+  describe('updateNarrativeField()', () => {
+    it('non-propriétaire (y compris MJ de la Partie) → ForbiddenException, aucune écriture', async () => {
+      prisma.character.findUnique.mockResolvedValue(
+        makeCharacter({ userId: 'owner' }),
+      );
+
+      await expect(
+        service.updateNarrativeField('char1', 'mj1', {
+          field: 'motivation',
+          value: 'Venger son village',
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.character.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('succès sur un champ (motivation) → sheetData.narrative.motivation mis à jour, characterSnapshot.create jamais appelé', async () => {
+      const character = makeCharacter({
+        sheetData: { ...validSheet(), narrative: { sex: 'Homme' } },
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+      await service.updateNarrativeField('char1', 'u1', {
+        field: 'motivation',
+        value: 'Venger son village',
+      });
+
+      const data = prisma.character.updateMany.mock.calls[0][0].data;
+      expect(data.sheetData.narrative).toEqual({
+        sex: 'Homme',
+        motivation: 'Venger son village',
+      });
+      expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
+    });
+
+    it('value: null vide bien le champ (pas de valeur fantôme)', async () => {
+      const character = makeCharacter({
+        sheetData: { ...validSheet(), narrative: { sex: 'Homme' } },
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+      await service.updateNarrativeField('char1', 'u1', {
+        field: 'sex',
+        value: null,
+      });
+
+      const data = prisma.character.updateMany.mock.calls[0][0].data;
+      expect(data.sheetData.narrative).toEqual({ sex: null });
+    });
+
+    it('value omis du body (undefined) → même effet que value: null, la clé disparaît (comportement figé, revue de code)', async () => {
+      const character = makeCharacter({
+        sheetData: { ...validSheet(), narrative: { sex: 'Homme' } },
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+      await service.updateNarrativeField('char1', 'u1', {
+        field: 'sex',
+      } as any);
+
+      const data = prisma.character.updateMany.mock.calls[0][0].data;
+      expect(data.sheetData.narrative.sex).toBeUndefined();
+      // JSON.stringify (sérialisation Prisma) supprime les clés `undefined` — la valeur ne
+      // "fantôme" pas côté base, cohérent avec le cas `value: null` testé ci-dessus.
+      expect(JSON.parse(JSON.stringify(data.sheetData.narrative))).toEqual({});
+    });
+
+    it('409 si updatedAt périmé', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      prisma.character.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.updateNarrativeField('char1', 'u1', {
+          field: 'age',
+          value: '25',
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('sheetData.narrative initialement undefined (premier champ jamais renseigné) → pas de crash, narrative créé avec juste ce champ', async () => {
+      const character = makeCharacter({ sheetData: validSheet() });
+      prisma.character.findUnique.mockResolvedValue(character);
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+      await service.updateNarrativeField('char1', 'u1', {
+        field: 'homeTown',
+        value: 'Village de Ryu',
+      });
+
+      const data = prisma.character.updateMany.mock.calls[0][0].data;
+      expect(data.sheetData.narrative).toEqual({ homeTown: 'Village de Ryu' });
+    });
+  });
+
   describe('applyLevelUp()', () => {
     const validDto = {
       pvAllocated: 2,

@@ -209,4 +209,14 @@ export class CharacterService {
       ),
     );
   }
+
+  updateNarrativeField(id: string, field: string, value: unknown): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.patch<CharacterDto>(
+        `${API_BASE}/characters/${id}/narrative-field`,
+        { field, value },
+        { withCredentials: true },
+      ),
+    );
+  }
 }
