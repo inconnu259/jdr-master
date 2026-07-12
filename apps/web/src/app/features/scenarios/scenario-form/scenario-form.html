@@ -1,0 +1,32 @@
+<mat-card class="form-card">
+  <mat-card-title>Nouveau scénario</mat-card-title>
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <mat-form-field appearance="outline">
+      <mat-label>Titre</mat-label>
+      <input matInput formControlName="title" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Description (optionnel)</mat-label>
+      <textarea matInput formControlName="description" rows="3"></textarea>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Durée en heures (optionnel)</mat-label>
+      <input matInput type="number" formControlName="dureeHeures" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Durée en séances (optionnel)</mat-label>
+      <input matInput type="number" formControlName="dureeSeances" />
+    </mat-form-field>
+
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+    <div class="actions">
+      <button mat-button type="button" (click)="cancel()">Annuler</button>
+      <button mat-flat-button type="submit" [disabled]="saving() || form.invalid">Créer</button>
+    </div>
+  </form>
+</mat-card>

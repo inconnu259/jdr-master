@@ -42,6 +42,25 @@ export const routes: Routes = [
             (m) => m.CharacterSheet,
           ),
       },
+      {
+        path: 'parties/:id/scenarios/drafts',
+        loadComponent: () =>
+          import('./features/scenarios/scenario-drafts/scenario-drafts').then(
+            (m) => m.ScenarioDrafts,
+          ),
+      },
+      {
+        path: 'parties/:id/scenarios/new',
+        loadComponent: () =>
+          import('./features/scenarios/scenario-form/scenario-form').then((m) => m.ScenarioForm),
+      },
+      {
+        path: 'parties/:id/scenarios/:scenarioId',
+        loadComponent: () =>
+          import('./features/scenarios/scenario-detail/scenario-detail').then(
+            (m) => m.ScenarioDetail,
+          ),
+      },
       { path: 'profile/calendar', component: CalendarView, data: { mode: 'personal' } },
     ],
   },

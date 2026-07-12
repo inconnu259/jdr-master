@@ -1,0 +1,40 @@
+.scenario-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.status {
+  font-size: 0.8rem;
+  color: var(--jdr-text-muted, #666);
+}
+.description textarea {
+  width: 100%;
+  min-height: 4rem;
+}
+.durations {
+  display: flex;
+  gap: 1rem;
+}
+.document-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+.document-row mat-icon {
+  font-size: 1.1rem;
+  height: 1.1rem;
+  width: 1.1rem;
+}
+.document-row.library-tag {
+  color: var(--jdr-text-muted, #666);
+}
+.error {
+  color: var(--mat-sys-error, #b00020);
+}

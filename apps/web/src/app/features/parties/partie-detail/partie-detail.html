@@ -195,6 +195,17 @@
             </section>
           </mat-tab>
         }
+
+        @if (isMj() && p.kind === 'ONE_SHOT') {
+          <mat-tab label="Scénario">
+            <app-scenario-one-shot-tab [partieId]="p.id" />
+          </mat-tab>
+        }
+        @if (isMj() && p.kind !== 'ONE_SHOT') {
+          <mat-tab label="Scénarios">
+            <app-scenario-drafts [partieId]="p.id" />
+          </mat-tab>
+        }
       </mat-tab-group>
     </mat-card-content>
     </div>

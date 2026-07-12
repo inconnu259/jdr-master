@@ -1,0 +1,5 @@
+@if (loadError()) {
+  <p class="error">{{ loadError() }}</p>
+} @else if (scenario(); as s) {
+  <app-scenario-editor [scenario]="s" />
+}

@@ -1,0 +1,88 @@
+@if (scenario(); as s) {
+  <section class="scenario-editor">
+    <header>
+      @if (!isReadOnly()) {
+        <app-field-edit-pencil
+          label="le titre"
+          [value]="s.title"
+          (confirm)="onFieldConfirm('title', $event)"
+        />
+      } @else {
+        <h1>{{ s.title }}</h1>
+      }
+      <span class="status">{{ s.status }}</span>
+    </header>
+
+    <section class="description">
+      @if (!isReadOnly()) {
+        <textarea
+          [value]="descriptionDraft()"
+          (input)="descriptionDraft.set($any($event.target).value)"
+        ></textarea>
+        <button mat-button type="button" (click)="submitDescription()">Enregistrer</button>
+      } @else {
+        <p>{{ s.description }}</p>
+      }
+    </section>
+
+    <section class="durations">
+      @if (!isReadOnly()) {
+        <app-field-edit-pencil
+          label="la durée en heures"
+          type="number"
+          [value]="s.dureeHeures ?? ''"
+          (confirm)="onFieldConfirm('dureeHeures', $event)"
+        />
+        <app-field-edit-pencil
+          label="la durée en séances"
+          type="number"
+          [value]="s.dureeSeances ?? ''"
+          (confirm)="onFieldConfirm('dureeSeances', $event)"
+        />
+      } @else {
+        <p>{{ s.dureeHeures ?? '—' }} h · {{ s.dureeSeances ?? '—' }} séances</p>
+      }
+    </section>
+
+    @if (fieldEditError()) {
+      <p class="error">{{ fieldEditError() }}</p>
+    }
+
+    <section class="documents">
+      @if (documentsError()) {
+        <p class="error">{{ documentsError() }}</p>
+      }
+
+      <h2>Documents du scénario</h2>
+      <ul>
+        @for (doc of ownDocuments(); track doc.id) {
+          <li class="document-row" (click)="downloadDocument(doc)">
+            <mat-icon>description</mat-icon>
+            {{ doc.originalName }} ({{ doc.sizeBytes }} o)
+          </li>
+        }
+      </ul>
+      @if (!isReadOnly()) {
+        <input type="file" accept=".pdf,.txt" (change)="onScenarioFileSelected($event)" />
+      }
+
+      <h2>Bibliothèque de campagne</h2>
+      <ul>
+        @for (doc of libraryDocuments(); track doc.id) {
+          <li class="document-row library-tag" (click)="downloadDocument(doc)">
+            <mat-icon>description</mat-icon>
+            {{ doc.originalName }} ({{ doc.sizeBytes }} o) — bibliothèque campagne
+          </li>
+        }
+      </ul>
+      <input type="file" accept=".pdf,.txt" (change)="onLibraryFileSelected($event)" />
+
+      @if (uploadError()) {
+        <p class="error">{{ uploadError() }}</p>
+      }
+      @if (downloadError()) {
+        <p class="error">{{ downloadError() }}</p>
+      }
+    </section>
+  </section>
+}

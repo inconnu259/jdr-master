@@ -47,6 +47,8 @@ import { RosterRail } from '../roster-rail/roster-rail';
 import { RosterStrip } from '../roster-strip/roster-strip';
 import { XpDistributionPanel } from '../xp-distribution-panel/xp-distribution-panel';
 import { XpHistory } from '../xp-history/xp-history';
+import { ScenarioDrafts } from '../../scenarios/scenario-drafts/scenario-drafts';
+import { ScenarioOneShotTab } from '../../scenarios/scenario-one-shot-tab/scenario-one-shot-tab';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
 const MJ_INVITATIONS_TAB_INDEX = 1;
@@ -69,6 +71,8 @@ const MJ_INVITATIONS_TAB_INDEX = 1;
     RosterStrip,
     XpDistributionPanel,
     XpHistory,
+    ScenarioDrafts,
+    ScenarioOneShotTab,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',

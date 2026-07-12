@@ -22,8 +22,13 @@ import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { MatDialog } from '@angular/material/dialog';
 import { TONE_MAP } from '../../../core/theme/tones';
+
+function makeScenariosService() {
+  return { listDrafts: vi.fn().mockResolvedValue([]) };
+}
 
 /** jsdom n'implémente pas de vraie détection de largeur — desktop=true par défaut pour préserver
  *  le comportement historique des tests existants (onglet "Détails" actif par défaut) ; les tests
@@ -133,6 +138,7 @@ async function createFixture(
         },
       },
       { provide: ThemeToneService, useValue: makeToneService() },
+      { provide: ScenariosService, useValue: makeScenariosService() },
       { provide: MatDialog, useValue: { open: vi.fn() } },
     ],
   }).compileComponents();
@@ -394,6 +400,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
           },
         },
         { provide: ThemeToneService, useValue: makeToneService() },
+        { provide: ScenariosService, useValue: makeScenariosService() },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();
@@ -651,5 +658,48 @@ describe('PartieDetail — distribution d’XP', () => {
 
     expect(characters.listByPartie).toHaveBeenCalledWith('party-1');
     expect(parties.listXpDistributions).toHaveBeenCalledWith('party-1');
+  });
+});
+
+describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('Partie ONE_SHOT + MJ → onglet "Scénario" (singulier), app-scenario-one-shot-tab, jamais app-scenario-drafts', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'ONE_SHOT' });
+    const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
+
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    const scenarioTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Scénario');
+    expect(scenarioTab).toBeTruthy();
+    scenarioTab?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('app-scenario-one-shot-tab')).toBeTruthy();
+    expect(el.querySelector('app-scenario-drafts')).toBeNull();
+  });
+
+  it('Partie CAMPAGNE_LINEAIRE + MJ → onglet "Scénarios" (pluriel), app-scenario-drafts, jamais app-scenario-one-shot-tab', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
+
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    const scenarioTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Scénarios');
+    expect(scenarioTab).toBeTruthy();
+    scenarioTab?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('app-scenario-drafts')).toBeTruthy();
+    expect(el.querySelector('app-scenario-one-shot-tab')).toBeNull();
+  });
+
+  it('joueur (non-MJ) → aucun des deux onglets Scénario(s), quel que soit le kind', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+    expect(el.querySelector('app-scenario-drafts')).toBeNull();
+    expect(el.querySelector('app-scenario-one-shot-tab')).toBeNull();
   });
 });
