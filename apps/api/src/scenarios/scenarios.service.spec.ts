@@ -30,6 +30,7 @@ function makePrisma() {
       create: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+      findMany: jest.fn(),
     },
     scenarioDocument: {
       create: jest.fn(),
@@ -548,6 +549,104 @@ describe('ScenariosService', () => {
       await expect(service.getDocumentFile('d1', 'stranger')).rejects.toThrow(
         ForbiddenException,
       );
+    });
+  });
+
+  describe('listDrafts()', () => {
+    it('retourne uniquement les scénarios BROUILLON de la Partie (AC2)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.scenario.findMany.mockResolvedValue([]);
+
+      await service.listDrafts('p1', 'mj1');
+
+      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(prisma.scenario.findMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1', status: 'BROUILLON' },
+        orderBy: { createdAt: 'desc' },
+      });
+    });
+
+    it('non-MJ → 403 propagé par getOwned, aucune lecture', async () => {
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.listDrafts('p1', 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.scenario.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('open()', () => {
+    it('transition BROUILLON → A_VENIR réussie (AC3)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'BROUILLON',
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.scenario.update.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Le Marché aux Ombres',
+        description: null,
+        status: 'A_VENIR',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-12T00:00:00.000Z'),
+        closedAt: null,
+      });
+
+      const result = await service.open(VALID_SCENARIO_ID, 'mj1');
+
+      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(prisma.scenario.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: VALID_SCENARIO_ID },
+          data: { status: 'A_VENIR' },
+        }),
+      );
+      expect(result.status).toBe('A_VENIR');
+    });
+
+    it.each(['A_VENIR', 'COURANT', 'PASSE'])(
+      'scénario déjà %s → rejet, aucune écriture (AC4)',
+      async (status) => {
+        prisma.scenario.findUnique.mockResolvedValue({
+          id: VALID_SCENARIO_ID,
+          partieId: 'p1',
+          status,
+        });
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+        await expect(
+          service.open(VALID_SCENARIO_ID, 'mj1'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.scenario.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('scénario introuvable → 404', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(null);
+
+      await expect(service.open(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.scenario.update).not.toHaveBeenCalled();
+    });
+
+    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'BROUILLON',
+      });
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.open(VALID_SCENARIO_ID, 'stranger'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.scenario.update).not.toHaveBeenCalled();
     });
   });
 });

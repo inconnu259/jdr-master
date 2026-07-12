@@ -54,6 +54,22 @@ export class ScenariosController {
     return this.scenarios.update(scenarioId, user.id, dto);
   }
 
+  @Get('parties/:id/scenarios/drafts')
+  listDrafts(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.listDrafts(partieId, user.id);
+  }
+
+  @Patch('scenarios/:id/open')
+  open(
+    @Param('id', ParseUUIDPipe) scenarioId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.open(scenarioId, user.id);
+  }
+
   @Post('parties/:id/documents')
   @UseFilters(MulterExceptionFilter)
   @UseInterceptors(

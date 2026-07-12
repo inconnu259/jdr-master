@@ -176,6 +176,37 @@ export class ScenariosService {
     return documents.map(toDocumentDto);
   }
 
+  async listDrafts(partieId: string, mjId: string): Promise<ScenarioDto[]> {
+    await this.parties.getOwned(partieId, mjId);
+
+    const scenarios = await this.prisma.scenario.findMany({
+      where: { partieId, status: 'BROUILLON' },
+      orderBy: { createdAt: 'desc' },
+    });
+    return scenarios.map(toDto);
+  }
+
+  async open(scenarioId: string, mjId: string): Promise<ScenarioDto> {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+    });
+    if (!scenario) throw new NotFoundException('Scénario introuvable');
+    await this.parties.getOwned(scenario.partieId, mjId);
+
+    if (scenario.status !== 'BROUILLON') {
+      throw new BadRequestException(
+        'Seul un scénario Brouillon peut être ouvert aux joueurs',
+      );
+    }
+
+    const updated = await this.prisma.scenario.update({
+      where: { id: scenarioId },
+      data: { status: 'A_VENIR' },
+    });
+
+    return toDto(updated);
+  }
+
   async getDocumentFile(
     documentId: string,
     userId: string,

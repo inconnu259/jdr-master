@@ -11,6 +11,8 @@ function makeScenariosService() {
   return {
     create: jest.fn(),
     update: jest.fn(),
+    listDrafts: jest.fn(),
+    open: jest.fn(),
     uploadDocument: jest.fn(),
     listDocuments: jest.fn(),
     listLibraryDocuments: jest.fn(),
@@ -53,6 +55,16 @@ describe('ScenariosController', () => {
     const dto = { title: 'Nouveau titre' };
     await controller.update('s1', user, dto);
     expect(scenarios.update).toHaveBeenCalledWith('s1', 'mj1', dto);
+  });
+
+  it('listDrafts() route partieId/user vers ScenariosService.listDrafts', async () => {
+    await controller.listDrafts('p1', user);
+    expect(scenarios.listDrafts).toHaveBeenCalledWith('p1', 'mj1');
+  });
+
+  it('open() route scenarioId/user vers ScenariosService.open', async () => {
+    await controller.open('s1', user);
+    expect(scenarios.open).toHaveBeenCalledWith('s1', 'mj1');
   });
 
   it('uploadDocument() route partieId/user/file/scenarioId vers ScenariosService.uploadDocument', async () => {
