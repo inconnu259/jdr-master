@@ -30,6 +30,8 @@ model User {
   characters               Character[]
   passwordResetTokens      PasswordResetToken[]
   xpDistributionsGiven     XpDistribution[]          @relation("XpDistributionMj")
+  inscriptions             Inscription[]
+  scenarioParticipations   ScenarioParticipant[]
 }
 
 enum PartieKind {
@@ -53,12 +55,15 @@ model Partie {
   nextSessionSlot DaySlot? // Créneau confirmé
   reminderSentAt  DateTime? // null = rappel pas encore envoyé pour le créneau courant (Epic 5)
 
-  memberships     Membership[]
-  invitations     Invitation[]
-  inviteLinks     InviteLink[]
-  polls           SessionPoll[]
-  characters      Character[]
-  xpDistributions XpDistribution[]
+  memberships       Membership[]
+  invitations       Invitation[]
+  inviteLinks       InviteLink[]
+  polls             SessionPoll[]
+  characters        Character[]
+  xpDistributions   XpDistribution[]
+  scenarios         Scenario[]
+  scenarioDocuments ScenarioDocument[]
+  announcements     Announcement[]
 }
 
 enum InvitationStatus {
@@ -188,6 +193,7 @@ model SessionPoll {
   createdAt   DateTime     @default(now())
   options     PollOption[]
   votes       PollVote[]
+  seance      Seance?
 
   @@index([partieId, status])
 }
@@ -261,21 +267,22 @@ model ContentEntry {
 
 /// Personnage d'un joueur (ou du MJ) pour une partie et un système de jeu donnés.
 model Character {
-  id                  String     @id @default(uuid())
-  userId              String
-  user                User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partieId            String
-  partie              Partie     @relation(fields: [partieId], references: [id], onDelete: Cascade)
-  gameSystemId        String
-  gameSystem          GameSystem @relation(fields: [gameSystemId], references: [id])
-  sheetData           Json
-  derived             Json
-  portraitUrl         String?
-  portraitCropData    Json?
-  pdfPortraitCropData Json?
-  xp                  Int        @default(0)
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
+  id                   String     @id @default(uuid())
+  userId               String
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partieId             String
+  partie               Partie     @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  gameSystemId         String
+  gameSystem           GameSystem @relation(fields: [gameSystemId], references: [id])
+  sheetData            Json
+  derived              Json
+  portraitUrl          String?
+  portraitCropData     Json?
+  pdfPortraitCropData  Json?
+  xp                   Int        @default(0)
+  journalAutoAssociate Boolean    @default(false)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
 
   xpDistributionEntries XpDistributionEntry[]
   snapshots             CharacterSnapshot[]
@@ -355,4 +362,108 @@ model Session {
 
   @@index([expire], map: "IDX_session_expire")
   @@map("session")
+}
+
+// ─── Palier 4 (suite) : Scénarios, Séances, rétrospective, annonces MJ ────────
+
+enum ScenarioStatus {
+  BROUILLON
+  A_VENIR
+  COURANT
+  PASSE
+}
+
+/// Unité de contenu narratif d'une Partie (Story 7.1). Un one-shot = un scénario unique
+/// (créé automatiquement, cf. PartiesService.create). Cycle de vie anti-spoil :
+/// BROUILLON (invisible joueurs) → A_VENIR (titre+date seuls) → COURANT (contenu complet) → PASSE.
+/// Pas de verrouillage optimiste (AD-3) : MJ seul écrivain de son contenu propre.
+model Scenario {
+  id           String         @id @default(uuid())
+  partieId     String
+  partie       Partie         @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  status       ScenarioStatus @default(BROUILLON)
+  dureeHeures  Int?
+  dureeSeances Int?
+  resumeFin    String? // rétrospective, FR-15 (Epic 8) — champ créé maintenant, non écrit par 7.1
+  createdAt    DateTime       @default(now())
+  closedAt     DateTime?
+
+  seances       Seance[]
+  documents     ScenarioDocument[]
+  participants  ScenarioParticipant[]
+  announcements Announcement[]
+
+  @@index([partieId, status])
+}
+
+/// Une soirée de jeu rattachée à un scénario (Epic 8, non exploité par la Story 7.1).
+/// Relation vers SessionPoll (linéaire/one-shot) OU Inscription[] (épisodique), jamais les deux (AD-4).
+model Seance {
+  id             String       @id @default(uuid())
+  scenarioId     String
+  scenario       Scenario     @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  pollId         String?      @unique
+  poll           SessionPoll? @relation(fields: [pollId], references: [id])
+  inscriptionMin Int?
+  inscriptionMax Int?
+  dateValidee    DateTime?
+  compteRendu    String?
+  createdAt      DateTime     @default(now())
+
+  inscriptions Inscription[]
+}
+
+/// Inscription à capacité limitée (Epic 8, Story 8.3 — campagne épisodique uniquement).
+model Inscription {
+  id        String   @id @default(uuid())
+  seanceId  String
+  seance    Seance   @relation(fields: [seanceId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([seanceId, userId])
+}
+
+/// Participation individuelle à un scénario (Epic 8, campagne épisodique uniquement — AD-4).
+/// Jamais peuplé/lu pour ONE_SHOT/CAMPAGNE_LINEAIRE (participants dérivés de Membership).
+model ScenarioParticipant {
+  id         String   @id @default(uuid())
+  scenarioId String
+  scenario   Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([scenarioId, userId])
+}
+
+/// Document joint à un scénario (anti-spoil, Story 7.2) ou à la bibliothèque de Partie
+/// (scenarioId null = toujours visible, Story 7.2). Non exploité par la Story 7.1.
+model ScenarioDocument {
+  id           String    @id @default(uuid())
+  partieId     String
+  partie       Partie    @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  scenarioId   String?
+  scenario     Scenario? @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  filename     String
+  originalName String
+  sizeBytes    Int
+  createdAt    DateTime  @default(now())
+
+  @@index([partieId])
+}
+
+/// Annonce MJ à portée variable (Epic 9, Story 9.1 — non exploité par la Story 7.1).
+model Announcement {
+  id         String    @id @default(uuid())
+  partieId   String
+  partie     Partie    @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  scenarioId String?
+  scenario   Scenario? @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  text       String
+  createdAt  DateTime  @default(now())
+
+  @@index([partieId, createdAt])
 }

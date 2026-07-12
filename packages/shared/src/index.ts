@@ -95,6 +95,41 @@ export interface InviteLinkPreviewDto {
   reason?: string;
 }
 
+// ─── Palier 4 (suite) : Scénarios ──────────────────────────────────────────────
+
+/** Statut du cycle de vie anti-spoil d'un scénario (Story 7.1). */
+export type ScenarioStatus = 'BROUILLON' | 'A_VENIR' | 'COURANT' | 'PASSE';
+
+/** Un scénario tel que renvoyé par l'API — contenu toujours complet (anti-spoil = rendu frontend, AD-6). */
+export interface ScenarioDto {
+  id: string;
+  partieId: string;
+  title: string;
+  description: string | null;
+  status: ScenarioStatus;
+  dureeHeures: number | null;
+  dureeSeances: number | null;
+  resumeFin: string | null;
+  createdAt: string;
+  closedAt: string | null;
+}
+
+/** Payload de création d'un scénario (POST /parties/:id/scenarios). */
+export interface CreateScenarioDto {
+  title: string;
+  description?: string;
+  dureeHeures?: number;
+  dureeSeances?: number;
+}
+
+/** Payload d'édition d'un scénario (PATCH /scenarios/:id). */
+export interface UpdateScenarioDto {
+  title?: string;
+  description?: string;
+  dureeHeures?: number;
+  dureeSeances?: number;
+}
+
 // ─── Palier 2 : Calendrier de disponibilités ──────────────────────────────────
 
 /** Granularité d'un créneau de disponibilité. */

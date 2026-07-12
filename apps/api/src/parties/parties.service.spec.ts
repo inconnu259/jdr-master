@@ -29,6 +29,10 @@ describe('PartiesService', () => {
     user: {
       findUnique: jest.Mock;
     };
+    scenario: {
+      create: jest.Mock;
+    };
+    $transaction: jest.Mock;
   };
   let avail: {
     getActiveDeclarations: jest.Mock;
@@ -46,7 +50,7 @@ describe('PartiesService', () => {
   };
 
   beforeEach(() => {
-    prisma = {
+    const p: any = {
       partie: {
         create: jest.fn(),
         findUnique: jest.fn(),
@@ -62,7 +66,13 @@ describe('PartiesService', () => {
       user: {
         findUnique: jest.fn().mockResolvedValue(null),
       },
+      scenario: {
+        create: jest.fn(),
+      },
     };
+    // $transaction exécute le callback avec le même mock en guise de `tx`
+    p.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(p));
+    prisma = p;
     avail = {
       getActiveDeclarations: jest.fn().mockResolvedValue(new Map()),
       computeSlotStatus: jest.fn().mockReturnValue('UNKNOWN'),
@@ -87,6 +97,43 @@ describe('PartiesService', () => {
         description: null,
       }),
     });
+  });
+
+  it('create ONE_SHOT crée automatiquement son scénario unique BROUILLON dans la même transaction (AC3, Story 7.1)', async () => {
+    prisma.partie.create.mockResolvedValue(partie);
+    await service.create('mj1', {
+      name: 'La Nuit',
+      kind: 'ONE_SHOT',
+      gameSystemId: 'draconis',
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.scenario.create).toHaveBeenCalledWith({
+      data: {
+        partieId: partie.id,
+        title: partie.name,
+        status: 'BROUILLON',
+      },
+    });
+  });
+
+  it('create CAMPAGNE_LINEAIRE/CAMPAGNE_EPISODIQUE ne crée aucun scénario automatique (Story 7.1)', async () => {
+    prisma.partie.create.mockResolvedValue({
+      ...partie,
+      kind: 'CAMPAGNE_LINEAIRE',
+    });
+    await service.create('mj1', {
+      name: 'Les Chroniques',
+      kind: 'CAMPAGNE_LINEAIRE',
+      gameSystemId: 'draconis',
+    });
+    expect(prisma.scenario.create).not.toHaveBeenCalled();
+
+    await service.create('mj1', {
+      name: 'Agence',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      gameSystemId: 'draconis',
+    });
+    expect(prisma.scenario.create).not.toHaveBeenCalled();
   });
 
   it('listForUser(player) renvoie les parties des memberships', async () => {

@@ -17,15 +17,32 @@ export class PartiesService {
     private readonly availability: AvailabilityService,
   ) {}
 
-  create(mjId: string, dto: CreatePartieDto) {
-    return this.prisma.partie.create({
-      data: {
-        name: dto.name,
-        kind: dto.kind,
-        gameSystemId: dto.gameSystemId,
-        description: dto.description ?? null,
-        mjId,
-      },
+  async create(mjId: string, dto: CreatePartieDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const partie = await tx.partie.create({
+        data: {
+          name: dto.name,
+          kind: dto.kind,
+          gameSystemId: dto.gameSystemId,
+          description: dto.description ?? null,
+          mjId,
+        },
+      });
+
+      // AD-7 : une Partie ONE_SHOT n'existe jamais sans son scénario unique — créé au même titre
+      // que la Partie, statut BROUILLON, ouverture (BROUILLON→A_VENIR) toujours une action MJ
+      // explicite ultérieure (Story 7.3), jamais automatique ici.
+      if (dto.kind === 'ONE_SHOT') {
+        await tx.scenario.create({
+          data: {
+            partieId: partie.id,
+            title: partie.name,
+            status: 'BROUILLON',
+          },
+        });
+      }
+
+      return partie;
     });
   }
 

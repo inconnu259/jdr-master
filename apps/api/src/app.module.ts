@@ -17,6 +17,7 @@ import { CharacterModule } from './characters/character.module';
 import { XpDistributionsModule } from './xp-distributions/xp-distributions.module';
 import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ScenariosModule } from './scenarios/scenarios.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     XpDistributionsModule,
     EmailModule,
     NotificationsModule,
+    ScenariosModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
