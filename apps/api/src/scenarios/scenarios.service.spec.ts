@@ -1,6 +1,25 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
+jest.mock('./document-mime.util', () => ({
+  detectDocumentMime: jest.fn(),
+}));
+jest.mock('./document-storage.util', () => ({
+  writeDocumentFile: jest.fn(),
+  readDocumentFile: jest.fn(),
+  deleteDocumentFile: jest.fn(),
+}));
+
+import { detectDocumentMime } from './document-mime.util';
+import {
+  deleteDocumentFile,
+  readDocumentFile,
+  writeDocumentFile,
+} from './document-storage.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from './scenarios.service';
@@ -12,11 +31,29 @@ function makePrisma() {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    scenarioDocument: {
+      create: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+    },
   };
 }
 
 function makeParties() {
-  return { getOwned: jest.fn() };
+  return { getOwned: jest.fn(), getViewable: jest.fn() };
+}
+
+const VALID_SCENARIO_ID = '22222222-2222-4222-a222-222222222222';
+
+function makeFile(
+  overrides: Partial<Express.Multer.File> = {},
+): Express.Multer.File {
+  return {
+    buffer: Buffer.from('%PDF-1.4\n...'),
+    originalname: 'lettre-ossian.pdf',
+    size: 12,
+    ...overrides,
+  } as Express.Multer.File;
 }
 
 describe('ScenariosService', () => {
@@ -217,6 +254,300 @@ describe('ScenariosService', () => {
         service.update('s1', 'stranger', { title: 'X' }),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.scenario.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('uploadDocument()', () => {
+    it('upload avec scenarioId → ScenarioDocument rattaché au scénario (AC1)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'BROUILLON',
+      });
+      (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
+      (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.pdf');
+      prisma.scenarioDocument.create.mockResolvedValue({
+        id: 'd1',
+        partieId: 'p1',
+        scenarioId: VALID_SCENARIO_ID,
+        originalName: 'lettre-ossian.pdf',
+        sizeBytes: 12,
+        createdAt: new Date('2026-07-12T00:00:00.000Z'),
+      });
+
+      const result = await service.uploadDocument(
+        'p1',
+        'mj1',
+        makeFile(),
+        VALID_SCENARIO_ID,
+      );
+
+      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(prisma.scenarioDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            partieId: 'p1',
+            scenarioId: VALID_SCENARIO_ID,
+          }),
+        }),
+      );
+      expect(result.scenarioId).toBe(VALID_SCENARIO_ID);
+    });
+
+    it('upload sans scenarioId → scenarioId: null (AC3)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
+      (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.pdf');
+      prisma.scenarioDocument.create.mockResolvedValue({
+        id: 'd1',
+        partieId: 'p1',
+        scenarioId: null,
+        originalName: 'regles-maison.pdf',
+        sizeBytes: 12,
+        createdAt: new Date('2026-07-12T00:00:00.000Z'),
+      });
+
+      const result = await service.uploadDocument('p1', 'mj1', makeFile());
+
+      expect(prisma.scenario.findUnique).not.toHaveBeenCalled();
+      expect(prisma.scenarioDocument.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ partieId: 'p1', scenarioId: null }),
+        }),
+      );
+      expect(result.scenarioId).toBeNull();
+    });
+
+    it('upload sur un scénario PASSE → rejet, aucune écriture (exigence croisée 7.1 AC5)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'PASSE',
+      });
+
+      await expect(
+        service.uploadDocument('p1', 'mj1', makeFile(), VALID_SCENARIO_ID),
+      ).rejects.toThrow(BadRequestException);
+      expect(writeDocumentFile).not.toHaveBeenCalled();
+      expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('upload sur un scenarioId n’appartenant pas à la Partie → rejet', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'AUTRE_PARTIE',
+        status: 'BROUILLON',
+      });
+
+      await expect(
+        service.uploadDocument('p1', 'mj1', makeFile(), VALID_SCENARIO_ID),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('scenarioId inexistant → 404, aucune écriture', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.scenario.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.uploadDocument('p1', 'mj1', makeFile(), VALID_SCENARIO_ID),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('fichier non reconnu (ni PDF ni texte) → rejet, aucune écriture (AC1/AC2)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      (detectDocumentMime as jest.Mock).mockReturnValue(null);
+
+      await expect(
+        service.uploadDocument('p1', 'mj1', makeFile()),
+      ).rejects.toThrow(BadRequestException);
+      expect(writeDocumentFile).not.toHaveBeenCalled();
+      expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.uploadDocument('p1', 'stranger', makeFile()),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('scenarioId malformé (pas un UUID) → rejet, aucune écriture', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.uploadDocument('p1', 'mj1', makeFile(), 'not-a-uuid'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.scenario.findUnique).not.toHaveBeenCalled();
+      expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('scenarioId fourni en chaîne vide → rejet explicite, jamais traité comme absent', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.uploadDocument('p1', 'mj1', makeFile(), ''),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('échec de l’insertion Prisma → nettoie le fichier orphelin puis relance l’erreur', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
+      (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.pdf');
+      const dbError = new Error('DB down');
+      prisma.scenarioDocument.create.mockRejectedValue(dbError);
+
+      await expect(
+        service.uploadDocument('p1', 'mj1', makeFile()),
+      ).rejects.toThrow(dbError);
+      expect(deleteDocumentFile).toHaveBeenCalledWith('uuid.pdf');
+    });
+  });
+
+  describe('listDocuments()', () => {
+    it('combine documents du scénario ET bibliothèque de Partie (AC4)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 's1',
+        partieId: 'p1',
+        status: 'BROUILLON',
+      });
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.scenarioDocument.findMany.mockResolvedValue([]);
+
+      await service.listDocuments('s1', 'u1');
+
+      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(prisma.scenarioDocument.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            OR: [{ scenarioId: 's1' }, { partieId: 'p1', scenarioId: null }],
+          },
+        }),
+      );
+    });
+
+    it('aucun filtre sur le statut du scénario, même BROUILLON (AC6, AD-6)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 's1',
+        partieId: 'p1',
+        status: 'BROUILLON',
+      });
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.scenarioDocument.findMany.mockResolvedValue([
+        {
+          id: 'd1',
+          partieId: 'p1',
+          scenarioId: 's1',
+          originalName: 'x.pdf',
+          sizeBytes: 1,
+          createdAt: new Date('2026-07-12T00:00:00.000Z'),
+        },
+      ]);
+
+      const result = await service.listDocuments('s1', 'u1');
+      expect(result).toHaveLength(1);
+    });
+
+    it('scénario introuvable → 404', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(null);
+      await expect(service.listDocuments('s1', 'u1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('non-membre → 403 propagé par getViewable', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 's1',
+        partieId: 'p1',
+        status: 'BROUILLON',
+      });
+      parties.getViewable.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.listDocuments('s1', 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+  });
+
+  describe('listLibraryDocuments()', () => {
+    it('ne renvoie que les documents scenarioId: null d’une Partie sans aucun scénario créé', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.scenarioDocument.findMany.mockResolvedValue([]);
+
+      await service.listLibraryDocuments('p1', 'u1');
+
+      expect(prisma.scenario.findUnique).not.toHaveBeenCalled();
+      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(prisma.scenarioDocument.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { partieId: 'p1', scenarioId: null },
+        }),
+      );
+    });
+  });
+
+  describe('getDocumentFile()', () => {
+    it('téléchargement réussi, aucun filtre sur le statut du scénario parent (AC6, AD-6)', async () => {
+      prisma.scenarioDocument.findUnique.mockResolvedValue({
+        id: 'd1',
+        partieId: 'p1',
+        filename: 'uuid.pdf',
+        originalName: 'lettre-ossian.pdf',
+      });
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      (readDocumentFile as jest.Mock).mockResolvedValue({
+        buffer: Buffer.from('bytes'),
+        mime: 'application/pdf',
+      });
+
+      const result = await service.getDocumentFile('d1', 'u1');
+
+      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(result.originalName).toBe('lettre-ossian.pdf');
+      expect(result.mime).toBe('application/pdf');
+    });
+
+    it('document introuvable → 404', async () => {
+      prisma.scenarioDocument.findUnique.mockResolvedValue(null);
+      await expect(service.getDocumentFile('d1', 'u1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('fichier disque manquant → 404', async () => {
+      prisma.scenarioDocument.findUnique.mockResolvedValue({
+        id: 'd1',
+        partieId: 'p1',
+        filename: 'uuid.pdf',
+        originalName: 'x.pdf',
+      });
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      (readDocumentFile as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.getDocumentFile('d1', 'u1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('non-membre → 403 propagé par getViewable', async () => {
+      prisma.scenarioDocument.findUnique.mockResolvedValue({
+        id: 'd1',
+        partieId: 'p1',
+        filename: 'uuid.pdf',
+        originalName: 'x.pdf',
+      });
+      parties.getViewable.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.getDocumentFile('d1', 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 });

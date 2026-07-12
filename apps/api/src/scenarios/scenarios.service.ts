@@ -3,11 +3,18 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { ScenarioDto } from '@master-jdr/shared';
+import { isUUID } from 'class-validator';
+import type { ScenarioDocumentDto, ScenarioDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
+import { detectDocumentMime } from './document-mime.util';
+import {
+  deleteDocumentFile,
+  readDocumentFile,
+  writeDocumentFile,
+} from './document-storage.util';
 
 @Injectable()
 export class ScenariosService {
@@ -76,6 +83,129 @@ export class ScenariosService {
 
     return toDto(updated);
   }
+
+  async uploadDocument(
+    partieId: string,
+    mjId: string,
+    file: Express.Multer.File,
+    scenarioId?: string,
+  ): Promise<ScenarioDocumentDto> {
+    await this.parties.getOwned(partieId, mjId);
+
+    // scenarioId est un champ multipart optionnel : `undefined` = bibliothèque (voulu), mais
+    // une chaîne vide ou malformée est une entrée cliente invalide, jamais interprétée
+    // silencieusement comme "absent" (contrairement à un simple `if (scenarioId)`).
+    if (scenarioId !== undefined) {
+      if (!isUUID(scenarioId)) {
+        throw new BadRequestException(
+          'scenarioId doit être un UUID valide ou absent',
+        );
+      }
+      const scenario = await this.prisma.scenario.findUnique({
+        where: { id: scenarioId },
+      });
+      if (!scenario) throw new NotFoundException('Scénario introuvable');
+      if (scenario.partieId !== partieId) {
+        throw new BadRequestException(
+          "Ce scénario n'appartient pas à cette Partie",
+        );
+      }
+      if (scenario.status === 'PASSE') {
+        throw new BadRequestException(
+          'Un scénario clôturé ne peut plus recevoir de nouveaux documents — seul le résumé de fin (Epic 8) reste éditable',
+        );
+      }
+    }
+
+    const mime = detectDocumentMime(file.buffer);
+    if (!mime) {
+      throw new BadRequestException(
+        "Le fichier fourni n'est pas un PDF ou un texte valide",
+      );
+    }
+
+    const filename = await writeDocumentFile(file.buffer, mime);
+    try {
+      const document = await this.prisma.scenarioDocument.create({
+        data: {
+          partieId,
+          scenarioId: scenarioId ?? null,
+          filename,
+          originalName: file.originalname,
+          sizeBytes: file.size,
+        },
+      });
+      return toDocumentDto(document);
+    } catch (e) {
+      // Nettoyage du fichier orphelin si l'insertion échoue — même pattern que
+      // updatePortrait (Story 4.5) : jamais de fichier sur disque sans ligne correspondante.
+      await deleteDocumentFile(filename);
+      throw e;
+    }
+  }
+
+  async listDocuments(
+    scenarioId: string,
+    userId: string,
+  ): Promise<ScenarioDocumentDto[]> {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+    });
+    if (!scenario) throw new NotFoundException('Scénario introuvable');
+    await this.parties.getViewable(scenario.partieId, userId);
+
+    const documents = await this.prisma.scenarioDocument.findMany({
+      where: {
+        OR: [{ scenarioId }, { partieId: scenario.partieId, scenarioId: null }],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return documents.map(toDocumentDto);
+  }
+
+  async listLibraryDocuments(
+    partieId: string,
+    userId: string,
+  ): Promise<ScenarioDocumentDto[]> {
+    await this.parties.getViewable(partieId, userId);
+
+    const documents = await this.prisma.scenarioDocument.findMany({
+      where: { partieId, scenarioId: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    return documents.map(toDocumentDto);
+  }
+
+  async getDocumentFile(
+    documentId: string,
+    userId: string,
+  ): Promise<{ buffer: Buffer; mime: string; originalName: string }> {
+    const document = await this.prisma.scenarioDocument.findUnique({
+      where: { id: documentId },
+    });
+    if (!document) throw new NotFoundException('Document introuvable');
+    await this.parties.getViewable(document.partieId, userId);
+
+    const file = await readDocumentFile(document.filename);
+    if (!file) throw new NotFoundException('Fichier introuvable');
+
+    return {
+      buffer: file.buffer,
+      mime: file.mime,
+      originalName: document.originalName,
+    };
+  }
+}
+
+function toDocumentDto(document: any): ScenarioDocumentDto {
+  return {
+    id: document.id,
+    partieId: document.partieId,
+    scenarioId: document.scenarioId,
+    originalName: document.originalName,
+    sizeBytes: document.sizeBytes,
+    createdAt: document.createdAt.toISOString(),
+  };
 }
 
 function toDto(scenario: any): ScenarioDto {

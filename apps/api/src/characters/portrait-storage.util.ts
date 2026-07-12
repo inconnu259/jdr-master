@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
+import { UPLOADS_ROOT } from '../common/uploads-root';
 import {
   isValidPortraitFilename,
   mimeForExtension,
   type DetectedImageMime,
 } from './image-mime.util';
 
-export const UPLOADS_ROOT = join(process.cwd(), 'uploads');
 export const PORTRAITS_DIR = join(UPLOADS_ROOT, 'portraits');
 export const PORTRAITS_URL_PREFIX = '/uploads/portraits/';
 

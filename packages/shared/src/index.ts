@@ -122,6 +122,16 @@ export interface CreateScenarioDto {
   dureeSeances?: number;
 }
 
+/** Un document de scénario ou de bibliothèque de Partie (Story 7.2) — `scenarioId: null` = bibliothèque. */
+export interface ScenarioDocumentDto {
+  id: string;
+  partieId: string;
+  scenarioId: string | null;
+  originalName: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
 /** Payload d'édition d'un scénario (PATCH /scenarios/:id). */
 export interface UpdateScenarioDto {
   title?: string;

@@ -13,7 +13,9 @@ export class CreateScenarioDto {
   @IsString()
   @MinLength(1)
   @MaxLength(120)
-  @Matches(/\S/, { message: 'title ne peut pas être uniquement composé d’espaces' })
+  @Matches(/\S/, {
+    message: 'title ne peut pas être uniquement composé d’espaces',
+  })
   title!: string;
 
   @IsOptional()
