@@ -88,6 +88,16 @@ describe('ScenariosService', () => {
     await p;
   });
 
+  it('markCourant → PATCH /scenarios/:id/courant sans body', async () => {
+    const p = service.markCourant('s1');
+    const req = http.expectOne(`${API}/scenarios/s1/courant`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({});
+    expect(req.request.withCredentials).toBe(true);
+    req.flush({ ...scenario, status: 'COURANT' });
+    await p;
+  });
+
   it('uploadDocument avec scenarioId → POST multipart avec scenarioId dans le FormData', async () => {
     const file = new File(['%PDF-1.4'], 'lettre.pdf', { type: 'application/pdf' });
     const p = service.uploadDocument('p1', file, 's1');

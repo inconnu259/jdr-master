@@ -284,8 +284,26 @@ describe('ScenarioTimeline', () => {
     expect(dialog.open).not.toHaveBeenCalled();
   });
 
-  it('MJ + clic sur un scénario non-BROUILLON → ouvre bien ScenarioReadDialog (comportement inchangé)', async () => {
+  it('MJ + clic sur un COURANT/PASSE → ouvre bien ScenarioReadDialog (comportement inchangé)', async () => {
+    const { fixture, dialog, router } = await createComponent([COURANT_1], { isMj: true });
+    const comp = fixture.componentInstance as any;
+    comp.openDetail(COURANT_1);
+    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: COURANT_1 } });
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('MJ + clic sur un A_VENIR → navigue vers la fiche d’édition (CTA Marquer comme Courant, AC8)', async () => {
     const { fixture, dialog, router } = await createComponent([A_VENIR], { isMj: true });
+    const comp = fixture.componentInstance as any;
+    comp.openDetail(A_VENIR);
+    expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'scenarios', 'a-venir'], {
+      state: { scenario: A_VENIR },
+    });
+    expect(dialog.open).not.toHaveBeenCalled();
+  });
+
+  it('joueur (isMj=false) + clic sur un A_VENIR → ouvre ScenarioReadDialog, anti-spoil inchangé', async () => {
+    const { fixture, dialog, router } = await createComponent([A_VENIR], { isMj: false });
     const comp = fixture.componentInstance as any;
     comp.openDetail(A_VENIR);
     expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: A_VENIR } });

@@ -50,6 +50,7 @@ export class ScenarioEditor implements OnInit {
   protected readonly fieldEditError = signal<string | null>(null);
   protected readonly uploadError = signal<string | null>(null);
   protected readonly downloadError = signal<string | null>(null);
+  protected readonly markCourantError = signal<string | null>(null);
 
   constructor() {
     effect(() => {
@@ -119,6 +120,19 @@ export class ScenarioEditor implements OnInit {
       if (s) this.documents.set(await this.scenarios.listDocuments(s.id));
     } catch (err) {
       this.uploadError.set(extractErrorMessage(err, "Impossible d'envoyer le document. Réessayez."));
+    }
+  }
+
+  protected async markCourant(): Promise<void> {
+    const s = this.scenario();
+    if (!s || s.status !== 'A_VENIR') return;
+    this.markCourantError.set(null);
+    try {
+      this.scenario.set(await this.scenarios.markCourant(s.id));
+    } catch (err) {
+      this.markCourantError.set(
+        extractErrorMessage(err, 'Impossible de marquer ce scénario comme Courant.'),
+      );
     }
   }
 

@@ -68,6 +68,18 @@ export class ScenariosService {
     return result;
   }
 
+  async markCourant(scenarioId: string): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
+      this.http.patch<ScenarioDto>(
+        `${API_BASE}/scenarios/${scenarioId}/courant`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+    this._changed.update((v) => v + 1);
+    return result;
+  }
+
   uploadDocument(
     partieId: string,
     file: File,

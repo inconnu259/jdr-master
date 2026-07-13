@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -217,6 +218,64 @@ export class ScenariosService {
       data: { status: 'A_VENIR' },
     });
 
+    return toDto(updated);
+  }
+
+  // AD-10 : unicité du scénario Courant vérifiée en service (verrou SELECT ... FOR UPDATE, même
+  // mécanisme qu'AD-5), uniquement pour CAMPAGNE_LINEAIRE — CAMPAGNE_EPISODIQUE/ONE_SHOT autorisent
+  // plusieurs COURANT simultanés (AD-4), aucun verrou/vérification pour ces kinds.
+  async markCourant(scenarioId: string, mjId: string): Promise<ScenarioDto> {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+    });
+    if (!scenario) throw new NotFoundException('Scénario introuvable');
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    if (scenario.status !== 'A_VENIR') {
+      throw new BadRequestException(
+        'Seul un scénario À venir peut être marqué Courant',
+      );
+    }
+
+    if (partie.kind === 'CAMPAGNE_LINEAIRE') {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Scenario" WHERE "partieId" = ${partie.id} FOR UPDATE`;
+        const existingCourant = await tx.scenario.findFirst({
+          where: { partieId: partie.id, status: 'COURANT' },
+        });
+        if (existingCourant) {
+          throw new ConflictException(
+            'Un scénario est déjà marqué Courant sur cette Partie.',
+          );
+        }
+        // `status: 'A_VENIR'` dans le where empêche d'écraser un statut ayant changé
+        // entre la lecture hors verrou plus haut et cette écriture sous verrou.
+        const { count } = await tx.scenario.updateMany({
+          where: { id: scenarioId, status: 'A_VENIR' },
+          data: { status: 'COURANT' },
+        });
+        if (count === 0) {
+          throw new ConflictException(
+            'Le statut du scénario a changé entretemps, réessayez.',
+          );
+        }
+        return tx.scenario.findUniqueOrThrow({ where: { id: scenarioId } });
+      });
+      return toDto(updated);
+    }
+
+    const { count } = await this.prisma.scenario.updateMany({
+      where: { id: scenarioId, status: 'A_VENIR' },
+      data: { status: 'COURANT' },
+    });
+    if (count === 0) {
+      throw new ConflictException(
+        'Le statut du scénario a changé entretemps, réessayez.',
+      );
+    }
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenarioId },
+    });
     return toDto(updated);
   }
 

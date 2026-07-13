@@ -43,6 +43,7 @@ async function createComponent(scenario: ScenarioDto = SCENARIO) {
     update: vi.fn(),
     uploadDocument: vi.fn(),
     downloadDocument: vi.fn(),
+    markCourant: vi.fn(),
   };
 
   await TestBed.configureTestingModule({
@@ -128,5 +129,51 @@ describe('ScenarioEditor', () => {
     scenariosSvc.downloadDocument.mockRejectedValue(new Error('network'));
     await comp.downloadDocument(OWN_DOC);
     expect(comp.downloadError()).toBeTruthy();
+  });
+
+  describe('CTA « Marquer comme Courant » (AC8)', () => {
+    it.each(['BROUILLON', 'COURANT', 'PASSE'] as const)(
+      'statut %s → bouton absent',
+      async (status) => {
+        const { fixture } = await createComponent({ ...SCENARIO, status });
+        expect(
+          Array.from(fixture.nativeElement.querySelectorAll('button')).some((b) =>
+            (b as HTMLElement).textContent?.includes('Marquer comme Courant'),
+          ),
+        ).toBe(false);
+      },
+    );
+
+    it('statut A_VENIR → bouton présent', async () => {
+      const { fixture } = await createComponent({ ...SCENARIO, status: 'A_VENIR' });
+      expect(
+        Array.from(fixture.nativeElement.querySelectorAll('button')).some((b) =>
+          (b as HTMLElement).textContent?.includes('Marquer comme Courant'),
+        ),
+      ).toBe(true);
+    });
+
+    it('clic → appelle markCourant, met à jour scenario() avec le retour', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...SCENARIO, status: 'A_VENIR' });
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.markCourant.mockResolvedValue({ ...SCENARIO, status: 'COURANT' });
+      await comp.markCourant();
+      expect(scenariosSvc.markCourant).toHaveBeenCalledWith('s1');
+      expect(comp.scenario().status).toBe('COURANT');
+    });
+
+    it('échec (409) → markCourantError affiche le message serveur, scenario() inchangé', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...SCENARIO, status: 'A_VENIR' });
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.markCourant.mockRejectedValue(
+        new HttpErrorResponse({
+          status: 409,
+          error: { message: 'Un scénario est déjà marqué Courant sur cette Partie.' },
+        }),
+      );
+      await comp.markCourant();
+      expect(comp.markCourantError()).toBe('Un scénario est déjà marqué Courant sur cette Partie.');
+      expect(comp.scenario().status).toBe('A_VENIR');
+    });
   });
 });

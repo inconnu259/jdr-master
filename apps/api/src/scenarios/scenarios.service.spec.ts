@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -25,11 +26,21 @@ import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from './scenarios.service';
 
 function makePrisma() {
+  const tx = {
+    $queryRaw: jest.fn(),
+    scenario: {
+      findFirst: jest.fn(),
+      updateMany: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+    },
+  };
   return {
     scenario: {
       create: jest.fn(),
       findUnique: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
       findMany: jest.fn(),
     },
     scenarioDocument: {
@@ -37,6 +48,8 @@ function makePrisma() {
       findMany: jest.fn(),
       findUnique: jest.fn(),
     },
+    $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(tx)),
+    tx,
   };
 }
 
@@ -695,6 +708,223 @@ describe('ScenariosService', () => {
         service.open(VALID_SCENARIO_ID, 'stranger'),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.scenario.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('markCourant()', () => {
+    it('CAMPAGNE_LINEAIRE, aucun autre COURANT → transition réussie sous verrou (AC1)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'A_VENIR',
+      });
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.tx.scenario.findFirst.mockResolvedValue(null);
+      prisma.tx.scenario.updateMany.mockResolvedValue({ count: 1 });
+      prisma.tx.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 2',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-12T00:00:00.000Z'),
+        closedAt: null,
+      });
+
+      const result = await service.markCourant(VALID_SCENARIO_ID, 'mj1');
+
+      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(prisma.tx.scenario.findFirst).toHaveBeenCalledWith({
+        where: { partieId: 'p1', status: 'COURANT' },
+      });
+      expect(prisma.tx.scenario.updateMany).toHaveBeenCalledWith({
+        where: { id: VALID_SCENARIO_ID, status: 'A_VENIR' },
+        data: { status: 'COURANT' },
+      });
+      expect(result.status).toBe('COURANT');
+    });
+
+    it('CAMPAGNE_LINEAIRE, statut changé sous le nez du verrou (count 0) → 409, aucune écriture (AC1, TOCTOU)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'A_VENIR',
+      });
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.tx.scenario.findFirst.mockResolvedValue(null);
+      prisma.tx.scenario.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.markCourant(VALID_SCENARIO_ID, 'mj1'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.tx.scenario.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('CAMPAGNE_LINEAIRE, un scénario déjà COURANT → 409, aucune écriture (AC2)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'A_VENIR',
+      });
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.tx.scenario.findFirst.mockResolvedValue({
+        id: 'autre-scenario',
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+
+      await expect(
+        service.markCourant(VALID_SCENARIO_ID, 'mj1'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.tx.scenario.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('CAMPAGNE_EPISODIQUE, un COURANT existant → transition réussie sans verrou (AC3)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'A_VENIR',
+      });
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+      prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Digression',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-12T00:00:00.000Z'),
+        closedAt: null,
+      });
+
+      const result = await service.markCourant(VALID_SCENARIO_ID, 'mj1');
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.scenario.updateMany).toHaveBeenCalledWith({
+        where: { id: VALID_SCENARIO_ID, status: 'A_VENIR' },
+        data: { status: 'COURANT' },
+      });
+      expect(result.status).toBe('COURANT');
+    });
+
+    it('statut changé sous le nez de l’écriture directe (count 0, hors CAMPAGNE_LINEAIRE) → 409 (AC1, TOCTOU)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'A_VENIR',
+      });
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+      prisma.scenario.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.markCourant(VALID_SCENARIO_ID, 'mj1'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.scenario.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('ONE_SHOT → transition réussie sans verrou (AC6)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'A_VENIR',
+      });
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'ONE_SHOT',
+      });
+      prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'One-shot',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-12T00:00:00.000Z'),
+        closedAt: null,
+      });
+
+      const result = await service.markCourant(VALID_SCENARIO_ID, 'mj1');
+
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(result.status).toBe('COURANT');
+    });
+
+    it.each(['BROUILLON', 'COURANT', 'PASSE'])(
+      'statut source %s (≠ A_VENIR) → rejet, aucune écriture (AC4)',
+      async (status) => {
+        prisma.scenario.findUnique.mockResolvedValue({
+          id: VALID_SCENARIO_ID,
+          partieId: 'p1',
+          status,
+        });
+        parties.getOwned.mockResolvedValue({
+          id: 'p1',
+          mjId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        });
+
+        await expect(
+          service.markCourant(VALID_SCENARIO_ID, 'mj1'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('scénario introuvable → 404', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.markCourant(VALID_SCENARIO_ID, 'mj1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('non-MJ → 403 propagé par getOwned, aucune lecture/écriture (AC5)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'A_VENIR',
+      });
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.markCourant(VALID_SCENARIO_ID, 'stranger'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
     });
   });
 });

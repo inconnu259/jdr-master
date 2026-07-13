@@ -10,7 +10,14 @@
         />
       }
       <app-scenario-status-badge [status]="s.status" />
+      @if (s.status === 'A_VENIR') {
+        <button mat-button type="button" (click)="markCourant()">Marquer comme Courant</button>
+      }
     </header>
+
+    @if (markCourantError()) {
+      <p class="error">{{ markCourantError() }}</p>
+    }
 
     <section class="description">
       @if (!isReadOnly()) {
