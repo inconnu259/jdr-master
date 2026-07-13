@@ -279,6 +279,35 @@ export class ScenariosService {
     return toDto(updated);
   }
 
+  // AD-9 : écriture MJ-only (getOwned). Contrairement à markCourant/AD-10, close() ne
+  // contraint que le scénario ciblé lui-même — updateMany + count suffit (pas de verrou
+  // FOR UPDATE/$transaction, aucune contrainte d'unicité entre scénarios ici).
+  async close(scenarioId: string, mjId: string): Promise<ScenarioDto> {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+    });
+    if (!scenario) throw new NotFoundException('Scénario introuvable');
+    await this.parties.getOwned(scenario.partieId, mjId);
+
+    if (scenario.status !== 'COURANT') {
+      throw new BadRequestException('Seul un scénario Courant peut être clôturé');
+    }
+
+    const { count } = await this.prisma.scenario.updateMany({
+      where: { id: scenarioId, status: 'COURANT' },
+      data: { status: 'PASSE', closedAt: new Date() },
+    });
+    if (count === 0) {
+      throw new ConflictException(
+        'Le statut du scénario a changé entretemps, réessayez.',
+      );
+    }
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenarioId },
+    });
+    return toDto(updated);
+  }
+
   async getDocumentFile(
     documentId: string,
     userId: string,

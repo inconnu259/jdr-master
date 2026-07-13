@@ -44,6 +44,7 @@ async function createComponent(scenario: ScenarioDto = SCENARIO) {
     uploadDocument: vi.fn(),
     downloadDocument: vi.fn(),
     markCourant: vi.fn(),
+    close: vi.fn(),
   };
 
   await TestBed.configureTestingModule({
@@ -174,6 +175,57 @@ describe('ScenarioEditor', () => {
       await comp.markCourant();
       expect(comp.markCourantError()).toBe('Un scénario est déjà marqué Courant sur cette Partie.');
       expect(comp.scenario().status).toBe('A_VENIR');
+    });
+  });
+
+  describe('CTA « Clôturer le scénario » (AC6, Story 7.7)', () => {
+    it.each(['BROUILLON', 'A_VENIR', 'PASSE'] as const)(
+      'statut %s → bouton absent',
+      async (status) => {
+        const { fixture } = await createComponent({ ...SCENARIO, status });
+        expect(
+          Array.from(fixture.nativeElement.querySelectorAll('button')).some((b) =>
+            (b as HTMLElement).textContent?.includes('Clôturer le scénario'),
+          ),
+        ).toBe(false);
+      },
+    );
+
+    it('statut COURANT → bouton présent', async () => {
+      const { fixture } = await createComponent({ ...SCENARIO, status: 'COURANT' });
+      expect(
+        Array.from(fixture.nativeElement.querySelectorAll('button')).some((b) =>
+          (b as HTMLElement).textContent?.includes('Clôturer le scénario'),
+        ),
+      ).toBe(true);
+    });
+
+    it('clic → appelle close, met à jour scenario() avec le retour et bascule isReadOnly() à true', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...SCENARIO, status: 'COURANT' });
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.close.mockResolvedValue({
+        ...SCENARIO,
+        status: 'PASSE',
+        closedAt: '2026-07-13T10:00:00.000Z',
+      });
+      await comp.close();
+      expect(scenariosSvc.close).toHaveBeenCalledWith('s1');
+      expect(comp.scenario().status).toBe('PASSE');
+      expect(comp.isReadOnly()).toBe(true);
+    });
+
+    it('échec → closeError affiche le message serveur, scenario() inchangé', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...SCENARIO, status: 'COURANT' });
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.close.mockRejectedValue(
+        new HttpErrorResponse({
+          status: 400,
+          error: { message: 'Seul un scénario Courant peut être clôturé' },
+        }),
+      );
+      await comp.close();
+      expect(comp.closeError()).toBe('Seul un scénario Courant peut être clôturé');
+      expect(comp.scenario().status).toBe('COURANT');
     });
   });
 });

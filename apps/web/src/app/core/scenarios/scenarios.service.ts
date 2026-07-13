@@ -80,6 +80,18 @@ export class ScenariosService {
     return result;
   }
 
+  async close(scenarioId: string): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
+      this.http.patch<ScenarioDto>(
+        `${API_BASE}/scenarios/${scenarioId}/passe`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+    this._changed.update((v) => v + 1);
+    return result;
+  }
+
   uploadDocument(
     partieId: string,
     file: File,

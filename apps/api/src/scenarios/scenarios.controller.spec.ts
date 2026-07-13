@@ -15,6 +15,7 @@ function makeScenariosService() {
     findAllForPartie: jest.fn(),
     open: jest.fn(),
     markCourant: jest.fn(),
+    close: jest.fn(),
     uploadDocument: jest.fn(),
     listDocuments: jest.fn(),
     listLibraryDocuments: jest.fn(),
@@ -77,6 +78,11 @@ describe('ScenariosController', () => {
   it('markCourant() route scenarioId/user vers ScenariosService.markCourant', async () => {
     await controller.markCourant('s1', user);
     expect(scenarios.markCourant).toHaveBeenCalledWith('s1', 'mj1');
+  });
+
+  it('close() route scenarioId/user vers ScenariosService.close', async () => {
+    await controller.close('s1', user);
+    expect(scenarios.close).toHaveBeenCalledWith('s1', 'mj1');
   });
 
   it('uploadDocument() route partieId/user/file/scenarioId vers ScenariosService.uploadDocument', async () => {

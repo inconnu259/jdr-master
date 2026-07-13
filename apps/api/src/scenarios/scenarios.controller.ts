@@ -86,6 +86,14 @@ export class ScenariosController {
     return this.scenarios.markCourant(scenarioId, user.id);
   }
 
+  @Patch('scenarios/:id/passe')
+  close(
+    @Param('id', ParseUUIDPipe) scenarioId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.close(scenarioId, user.id);
+  }
+
   @Post('parties/:id/documents')
   @UseFilters(MulterExceptionFilter)
   @UseInterceptors(

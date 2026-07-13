@@ -927,4 +927,148 @@ describe('ScenariosService', () => {
       expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
     });
   });
+
+  describe('close()', () => {
+    it('COURANT → transition réussie vers PASSE, closedAt renseigné (AC1)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+      prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
+      const closedAt = new Date('2026-07-13T10:00:00.000Z');
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'PASSE',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt,
+      });
+
+      const result = await service.close(VALID_SCENARIO_ID, 'mj1');
+
+      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(prisma.scenario.updateMany).toHaveBeenCalledWith({
+        where: { id: VALID_SCENARIO_ID, status: 'COURANT' },
+        data: { status: 'PASSE', closedAt: expect.any(Date) },
+      });
+      expect(result.status).toBe('PASSE');
+      expect(result.closedAt).toEqual(closedAt.toISOString());
+    });
+
+    it.each(['BROUILLON', 'A_VENIR', 'PASSE'])(
+      'statut source %s (≠ COURANT) → rejet, aucune écriture (AC2)',
+      async (status) => {
+        prisma.scenario.findUnique.mockResolvedValue({
+          id: VALID_SCENARIO_ID,
+          partieId: 'p1',
+          status,
+        });
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+
+        await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
+          BadRequestException,
+        );
+        expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('scénario introuvable → 404', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(null);
+
+      await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('non-MJ → 403 propagé par getOwned, aucune lecture/écriture (AC3)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.close(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('count 0 (course concurrente) → 409, aucune reconstruction du DTO', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+      prisma.scenario.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(prisma.scenario.findUniqueOrThrow).not.toHaveBeenCalled();
+    });
+
+    it('AC5 : après close() sur CAMPAGNE_LINEAIRE, markCourant() sur un autre A_VENIR de la même Partie réussit sans 409', async () => {
+      // close() du scénario COURANT
+      prisma.scenario.findUnique.mockResolvedValueOnce({
+        id: 'courant-1',
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+      parties.getOwned.mockResolvedValueOnce({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+      prisma.scenario.updateMany.mockResolvedValueOnce({ count: 1 });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValueOnce({
+        id: 'courant-1',
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'PASSE',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: new Date('2026-07-13T10:00:00.000Z'),
+      });
+
+      await service.close('courant-1', 'mj1');
+
+      // markCourant() sur un second scénario A_VENIR — plus aucun COURANT après la clôture ci-dessus
+      prisma.scenario.findUnique.mockResolvedValueOnce({
+        id: 'a-venir-2',
+        partieId: 'p1',
+        status: 'A_VENIR',
+      });
+      parties.getOwned.mockResolvedValueOnce({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+      prisma.tx.scenario.findFirst.mockResolvedValueOnce(null);
+      prisma.tx.scenario.updateMany.mockResolvedValueOnce({ count: 1 });
+      prisma.tx.scenario.findUniqueOrThrow.mockResolvedValueOnce({
+        id: 'a-venir-2',
+        partieId: 'p1',
+        title: 'Chapitre 2',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+      });
+
+      const promoted = await service.markCourant('a-venir-2', 'mj1');
+
+      expect(promoted.status).toBe('COURANT');
+      expect(prisma.tx.scenario.findFirst).toHaveBeenCalledWith({
+        where: { partieId: 'p1', status: 'COURANT' },
+      });
+    });
+  });
 });

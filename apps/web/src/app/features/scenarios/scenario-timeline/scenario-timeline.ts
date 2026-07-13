@@ -155,12 +155,17 @@ export class ScenarioTimeline {
       this.dragMoved = false;
       return;
     }
-    // MJ + BROUILLON/A_VENIR : direction la fiche d'édition (comme depuis ScenarioDrafts), jamais le
-    // dialogue anti-spoil lecture seule — le MJ est l'auteur du scénario, il n'a rien à se cacher à
-    // lui-même, et A_VENIR est le statut où vit le CTA « Marquer comme Courant » (Story 7.6, AC8).
-    // COURANT/PASSE restent ouverts via ScenarioReadDialog même pour le MJ (pas de vue MJ dédiée
-    // pour ces statuts dans cette story).
-    if (this.isMj() && (scenario.status === 'BROUILLON' || scenario.status === 'A_VENIR')) {
+    // MJ + BROUILLON/A_VENIR/COURANT : direction la fiche d'édition (comme depuis ScenarioDrafts),
+    // jamais le dialogue anti-spoil lecture seule — le MJ est l'auteur du scénario, il n'a rien à se
+    // cacher à lui-même ; A_VENIR porte le CTA « Marquer comme Courant » (Story 7.6, AC8), COURANT
+    // porte le CTA « Clôturer le scénario » (Story 7.7, AC6). PASSE reste ouvert via
+    // ScenarioReadDialog même pour le MJ (pas de vue MJ dédiée pour ce statut, contenu déjà complet).
+    if (
+      this.isMj() &&
+      (scenario.status === 'BROUILLON' ||
+        scenario.status === 'A_VENIR' ||
+        scenario.status === 'COURANT')
+    ) {
       void this.router.navigate(['/parties', this.partieId(), 'scenarios', scenario.id], {
         state: { scenario },
       });

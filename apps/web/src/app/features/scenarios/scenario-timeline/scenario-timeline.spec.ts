@@ -284,8 +284,26 @@ describe('ScenarioTimeline', () => {
     expect(dialog.open).not.toHaveBeenCalled();
   });
 
-  it('MJ + clic sur un COURANT/PASSE → ouvre bien ScenarioReadDialog (comportement inchangé)', async () => {
+  it('MJ + clic sur un PASSE → ouvre bien ScenarioReadDialog (comportement inchangé)', async () => {
+    const { fixture, dialog, router } = await createComponent([PASSE], { isMj: true });
+    const comp = fixture.componentInstance as any;
+    comp.openDetail(PASSE);
+    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: PASSE } });
+    expect(router.navigate).not.toHaveBeenCalled();
+  });
+
+  it('MJ + clic sur un COURANT → navigue vers la fiche d’édition (CTA Clôturer le scénario, Story 7.7 AC6)', async () => {
     const { fixture, dialog, router } = await createComponent([COURANT_1], { isMj: true });
+    const comp = fixture.componentInstance as any;
+    comp.openDetail(COURANT_1);
+    expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'scenarios', 'courant-1'], {
+      state: { scenario: COURANT_1 },
+    });
+    expect(dialog.open).not.toHaveBeenCalled();
+  });
+
+  it('joueur (isMj=false) + clic sur un COURANT → ouvre ScenarioReadDialog, anti-spoil inchangé', async () => {
+    const { fixture, dialog, router } = await createComponent([COURANT_1], { isMj: false });
     const comp = fixture.componentInstance as any;
     comp.openDetail(COURANT_1);
     expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: COURANT_1 } });

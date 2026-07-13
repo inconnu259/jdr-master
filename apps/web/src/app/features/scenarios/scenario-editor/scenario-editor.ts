@@ -51,6 +51,7 @@ export class ScenarioEditor implements OnInit {
   protected readonly uploadError = signal<string | null>(null);
   protected readonly downloadError = signal<string | null>(null);
   protected readonly markCourantError = signal<string | null>(null);
+  protected readonly closeError = signal<string | null>(null);
 
   constructor() {
     effect(() => {
@@ -133,6 +134,17 @@ export class ScenarioEditor implements OnInit {
       this.markCourantError.set(
         extractErrorMessage(err, 'Impossible de marquer ce scénario comme Courant.'),
       );
+    }
+  }
+
+  protected async close(): Promise<void> {
+    const s = this.scenario();
+    if (!s || s.status !== 'COURANT') return;
+    this.closeError.set(null);
+    try {
+      this.scenario.set(await this.scenarios.close(s.id));
+    } catch (err) {
+      this.closeError.set(extractErrorMessage(err, 'Impossible de clôturer ce scénario.'));
     }
   }
 

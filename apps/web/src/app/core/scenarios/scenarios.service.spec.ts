@@ -98,6 +98,16 @@ describe('ScenariosService', () => {
     await p;
   });
 
+  it('close → PATCH /scenarios/:id/passe sans body', async () => {
+    const p = service.close('s1');
+    const req = http.expectOne(`${API}/scenarios/s1/passe`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({});
+    expect(req.request.withCredentials).toBe(true);
+    req.flush({ ...scenario, status: 'PASSE', closedAt: '2026-07-13T10:00:00.000Z' });
+    await p;
+  });
+
   it('uploadDocument avec scenarioId → POST multipart avec scenarioId dans le FormData', async () => {
     const file = new File(['%PDF-1.4'], 'lettre.pdf', { type: 'application/pdf' });
     const p = service.uploadDocument('p1', file, 's1');
