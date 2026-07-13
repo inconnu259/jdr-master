@@ -8,11 +8,12 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { GAME_SYSTEMS } from '@master-jdr/shared';
+import type { PartieKind } from '@master-jdr/shared';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
-type FormKind = 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE';
+type FormKind = PartieKind;
 
 @Component({
   selector: 'app-partie-form',
@@ -56,7 +57,7 @@ export class PartieForm implements OnInit {
     this.form.patchValue({
       name: p.name,
       gameSystemId: p.gameSystemId,
-      kind: p.kind === 'ONE_SHOT' ? 'ONE_SHOT' : 'CAMPAGNE_LINEAIRE',
+      kind: p.kind,
       description: p.description ?? '',
     });
   }

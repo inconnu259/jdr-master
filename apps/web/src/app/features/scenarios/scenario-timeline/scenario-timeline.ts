@@ -15,7 +15,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
-import type { ScenarioDto } from '@master-jdr/shared';
+import type { CharacterDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 import { ScenarioReadDialog, type ScenarioReadDialogData } from '../scenario-read-dialog/scenario-read-dialog';
@@ -76,6 +76,8 @@ export class ScenarioTimeline {
   readonly partieId = input.required<string>();
   /** Vue MJ : affiche aussi les BROUILLON (jamais pour un joueur, AD-6), stylés distinctement. */
   readonly isMj = input(false);
+  readonly partieKind = input.required<PartieKind>();
+  readonly characters = input<CharacterDto[]>([]);
 
   protected readonly isDesktop = toSignal(
     this.breakpointObserver.observe(DESKTOP_QUERY).pipe(map((r) => r.matches)),
@@ -172,7 +174,7 @@ export class ScenarioTimeline {
       return;
     }
     this.dialog.open<ScenarioReadDialog, ScenarioReadDialogData, void>(ScenarioReadDialog, {
-      data: { scenario },
+      data: { scenario, partieKind: this.partieKind(), characters: this.characters() },
     });
   }
 

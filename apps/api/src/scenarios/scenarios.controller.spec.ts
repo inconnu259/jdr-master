@@ -16,6 +16,7 @@ function makeScenariosService() {
     open: jest.fn(),
     markCourant: jest.fn(),
     close: jest.fn(),
+    participate: jest.fn(),
     uploadDocument: jest.fn(),
     listDocuments: jest.fn(),
     listLibraryDocuments: jest.fn(),
@@ -83,6 +84,11 @@ describe('ScenariosController', () => {
   it('close() route scenarioId/user vers ScenariosService.close', async () => {
     await controller.close('s1', user);
     expect(scenarios.close).toHaveBeenCalledWith('s1', 'mj1');
+  });
+
+  it('participate() route scenarioId/user vers ScenariosService.participate', async () => {
+    await controller.participate('s1', user);
+    expect(scenarios.participate).toHaveBeenCalledWith('s1', 'mj1');
   });
 
   it('uploadDocument() route partieId/user/file/scenarioId vers ScenariosService.uploadDocument', async () => {

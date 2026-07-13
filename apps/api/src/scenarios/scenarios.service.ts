@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
-import type { ScenarioDocumentDto, ScenarioDto } from '@master-jdr/shared';
+import type { PartieKind, ScenarioDocumentDto, ScenarioDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
@@ -62,7 +62,7 @@ export class ScenariosService {
       where: { id: scenarioId },
     });
     if (!scenario) throw new NotFoundException('Scénario introuvable');
-    await this.parties.getOwned(scenario.partieId, mjId);
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status === 'PASSE') {
       throw new BadRequestException(
@@ -82,7 +82,7 @@ export class ScenariosService {
       },
     });
 
-    return toDto(updated);
+    return toEnrichedDto(this.prisma, updated, partie.kind);
   }
 
   async uploadDocument(
@@ -184,20 +184,35 @@ export class ScenariosService {
       where: { partieId, status: 'BROUILLON' },
       orderBy: { createdAt: 'desc' },
     });
-    return scenarios.map(toDto);
+    return scenarios.map((s) => toDto(s));
   }
 
   // AD-6 : aucun filtrage par statut — l'anti-spoil est un rendu frontend, jamais serveur. Lecture
   // ouverte à tout membre (getViewable), pas MJ-only comme listDrafts. Tri chronologique croissant
   // (passé → futur) pour alimenter la timeline joueur (Story 7.5).
   async findAllForPartie(partieId: string, userId: string): Promise<ScenarioDto[]> {
-    await this.parties.getViewable(partieId, userId);
+    const partie = await this.parties.getViewable(partieId, userId);
 
     const scenarios = await this.prisma.scenario.findMany({
       where: { partieId },
       orderBy: { createdAt: 'asc' },
     });
-    return scenarios.map(toDto);
+
+    if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
+      return scenarios.map((s) => toDto(s, partie.kind));
+    }
+
+    const participants = await this.prisma.scenarioParticipant.findMany({
+      where: { scenarioId: { in: scenarios.map((s) => s.id) } },
+      include: { user: { select: { pseudo: true } } },
+    });
+    const byScenario = new Map<string, { userId: string; pseudo: string }[]>();
+    for (const p of participants) {
+      const list = byScenario.get(p.scenarioId) ?? [];
+      list.push({ userId: p.userId, pseudo: p.user.pseudo });
+      byScenario.set(p.scenarioId, list);
+    }
+    return scenarios.map((s) => toDto(s, partie.kind, byScenario.get(s.id) ?? []));
   }
 
   async open(scenarioId: string, mjId: string): Promise<ScenarioDto> {
@@ -205,7 +220,7 @@ export class ScenariosService {
       where: { id: scenarioId },
     });
     if (!scenario) throw new NotFoundException('Scénario introuvable');
-    await this.parties.getOwned(scenario.partieId, mjId);
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status !== 'BROUILLON') {
       throw new BadRequestException(
@@ -218,7 +233,7 @@ export class ScenariosService {
       data: { status: 'A_VENIR' },
     });
 
-    return toDto(updated);
+    return toEnrichedDto(this.prisma, updated, partie.kind);
   }
 
   // AD-10 : unicité du scénario Courant vérifiée en service (verrou SELECT ... FOR UPDATE, même
@@ -276,7 +291,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
-    return toDto(updated);
+    return toEnrichedDto(this.prisma, updated, partie.kind);
   }
 
   // AD-9 : écriture MJ-only (getOwned). Contrairement à markCourant/AD-10, close() ne
@@ -287,7 +302,7 @@ export class ScenariosService {
       where: { id: scenarioId },
     });
     if (!scenario) throw new NotFoundException('Scénario introuvable');
-    await this.parties.getOwned(scenario.partieId, mjId);
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status !== 'COURANT') {
       throw new BadRequestException('Seul un scénario Courant peut être clôturé');
@@ -305,7 +320,34 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
-    return toDto(updated);
+    return toEnrichedDto(this.prisma, updated, partie.kind);
+  }
+
+  // AD-9 : action joueur, getViewable (pas getOwned) — MJ+membre. AD-4 : ScenarioParticipant
+  // n'existe que pour CAMPAGNE_EPISODIQUE, jamais peuplé/lu pour ONE_SHOT/CAMPAGNE_LINEAIRE.
+  async participate(scenarioId: string, userId: string): Promise<ScenarioDto> {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+    });
+    if (!scenario) throw new NotFoundException('Scénario introuvable');
+    const partie = await this.parties.getViewable(scenario.partieId, userId);
+
+    if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
+      throw new BadRequestException(
+        "La participation individuelle n'est disponible que pour les campagnes épisodiques",
+      );
+    }
+
+    await this.prisma.scenarioParticipant.upsert({
+      where: { scenarioId_userId: { scenarioId, userId } },
+      create: { scenarioId, userId },
+      update: {},
+    });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenarioId },
+    });
+    return toDto(updated, partie.kind, await loadParticipants(this.prisma, scenarioId));
   }
 
   async getDocumentFile(
@@ -340,7 +382,11 @@ function toDocumentDto(document: any): ScenarioDocumentDto {
   };
 }
 
-function toDto(scenario: any): ScenarioDto {
+function toDto(
+  scenario: any,
+  partieKind?: PartieKind,
+  participants?: { userId: string; pseudo: string }[],
+): ScenarioDto {
   return {
     id: scenario.id,
     partieId: scenario.partieId,
@@ -352,5 +398,30 @@ function toDto(scenario: any): ScenarioDto {
     resumeFin: scenario.resumeFin,
     createdAt: scenario.createdAt.toISOString(),
     closedAt: scenario.closedAt ? scenario.closedAt.toISOString() : null,
+    ...(partieKind === 'CAMPAGNE_EPISODIQUE' && { participants: participants ?? [] }),
   };
+}
+
+async function loadParticipants(
+  prisma: PrismaService,
+  scenarioId: string,
+): Promise<{ userId: string; pseudo: string }[]> {
+  const participants = await prisma.scenarioParticipant.findMany({
+    where: { scenarioId },
+    include: { user: { select: { pseudo: true } } },
+  });
+  return participants.map((p) => ({ userId: p.userId, pseudo: p.user.pseudo }));
+}
+
+// Garantit que `participants` reste toujours cohérent sur le DTO retourné par toute transition
+// d'état (open/update/markCourant/close), pas seulement participate()/findAllForPartie() — sinon
+// le champ redeviendrait `undefined` après une action MJ sur un scénario CAMPAGNE_EPISODIQUE,
+// faisant disparaître à tort la liste des participants côté frontend (ScenarioEditor).
+async function toEnrichedDto(
+  prisma: PrismaService,
+  scenario: any,
+  partieKind: PartieKind,
+): Promise<ScenarioDto> {
+  if (partieKind !== 'CAMPAGNE_EPISODIQUE') return toDto(scenario, partieKind);
+  return toDto(scenario, partieKind, await loadParticipants(prisma, scenario.id));
 }

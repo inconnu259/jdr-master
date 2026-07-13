@@ -16,6 +16,30 @@
       </section>
     }
   }
+
+  @if (isEpisodique()) {
+    <section class="participants">
+      <h3>Participants</h3>
+      @if (participantCharacters().length > 0) {
+        @for (c of participantCharacters(); track c.id) {
+          <app-character-summary-card [character]="c" />
+        }
+      }
+      @if (participantsWithoutCharacter().length > 0) {
+        <ul class="participants-pseudo">
+          @for (p of participantsWithoutCharacter(); track p.userId) {
+            <li>{{ p.pseudo }} <span class="hint">(pas encore de personnage)</span></li>
+          }
+        </ul>
+      }
+      @if (!isParticipating()) {
+        <button mat-button type="button" (click)="participate()">Participer à cette enquête</button>
+      }
+      @if (participantError()) {
+        <p class="error">{{ participantError() }}</p>
+      }
+    </section>
+  }
 </mat-dialog-content>
 
 <mat-dialog-actions align="end">

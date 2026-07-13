@@ -2,9 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
-import type { ScenarioDocumentDto, ScenarioDto } from '@master-jdr/shared';
+import type { CharacterDto, ScenarioDocumentDto, ScenarioDto } from '@master-jdr/shared';
 import { ScenarioEditor } from './scenario-editor';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { CharacterService } from '../../../core/characters/character.service';
+import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 
 const SCENARIO: ScenarioDto = {
   id: 's1',
@@ -37,7 +39,10 @@ const LIBRARY_DOC: ScenarioDocumentDto = {
   createdAt: '2026-07-12T00:00:00.000Z',
 };
 
-async function createComponent(scenario: ScenarioDto = SCENARIO) {
+async function createComponent(
+  scenario: ScenarioDto = SCENARIO,
+  characters: CharacterDto[] = [],
+) {
   const scenariosSvc = {
     listDocuments: vi.fn().mockResolvedValue([OWN_DOC, LIBRARY_DOC]),
     update: vi.fn(),
@@ -46,18 +51,27 @@ async function createComponent(scenario: ScenarioDto = SCENARIO) {
     markCourant: vi.fn(),
     close: vi.fn(),
   };
+  const characterSvc = { listByPartie: vi.fn().mockResolvedValue(characters) };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioEditor],
-    providers: [provideAnimationsAsync(), { provide: ScenariosService, useValue: scenariosSvc }],
+    providers: [
+      provideAnimationsAsync(),
+      { provide: ScenariosService, useValue: scenariosSvc },
+      { provide: CharacterService, useValue: characterSvc },
+    ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ScenarioEditor);
   fixture.componentRef.setInput('scenario', scenario);
   fixture.detectChanges();
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, scenariosSvc };
+  return { fixture, scenariosSvc, characterSvc };
 }
 
 describe('ScenarioEditor', () => {
@@ -226,6 +240,75 @@ describe('ScenarioEditor', () => {
       await comp.close();
       expect(comp.closeError()).toBe('Seul un scénario Courant peut être clôturé');
       expect(comp.scenario().status).toBe('COURANT');
+    });
+  });
+
+  describe('Section participants (vue MJ, non-régression 8.1)', () => {
+    it('scénario ONE_SHOT/CAMPAGNE_LINEAIRE (participants undefined) → section absente', async () => {
+      const { fixture } = await createComponent({ ...SCENARIO, status: 'COURANT' });
+      expect(fixture.nativeElement.textContent).not.toContain('Participants');
+    });
+
+    it('CAMPAGNE_EPISODIQUE avec participants → CharacterSummaryCard affichée pour chacun', async () => {
+      const alice = makeCharacterDto({ id: 'c1', userId: 'u1' });
+      const { fixture } = await createComponent(
+        {
+          ...SCENARIO,
+          status: 'COURANT',
+          participants: [{ userId: 'u1', pseudo: 'Alice' }],
+        },
+        [alice],
+      );
+      expect(fixture.nativeElement.textContent).toContain('Participants');
+      expect(fixture.nativeElement.querySelectorAll('app-character-summary-card')).toHaveLength(1);
+    });
+
+    it('CAMPAGNE_EPISODIQUE sans participant → message neutre, aucune carte', async () => {
+      const { fixture } = await createComponent({
+        ...SCENARIO,
+        status: 'COURANT',
+        participants: [],
+      });
+      expect(fixture.nativeElement.textContent).toContain('Aucun participant pour l’instant.');
+      expect(fixture.nativeElement.querySelectorAll('app-character-summary-card')).toHaveLength(0);
+    });
+
+    it('participant sans personnage dans characters → aucune carte fantôme, mais pseudo affiché en secours', async () => {
+      const { fixture } = await createComponent(
+        {
+          ...SCENARIO,
+          status: 'COURANT',
+          participants: [{ userId: 'no-character-user', pseudo: 'Bob' }],
+        },
+        [],
+      );
+      expect(fixture.nativeElement.querySelectorAll('app-character-summary-card')).toHaveLength(0);
+      expect(fixture.nativeElement.textContent).toContain('Bob');
+      expect(fixture.nativeElement.textContent).toContain('pas encore de personnage');
+    });
+
+    it('reste peuplée après une action MJ (close()) grâce au DTO enrichi renvoyé par le backend', async () => {
+      const alice = makeCharacterDto({ id: 'c1', userId: 'u1' });
+      const { fixture, scenariosSvc } = await createComponent(
+        {
+          ...SCENARIO,
+          status: 'COURANT',
+          participants: [{ userId: 'u1', pseudo: 'Alice' }],
+        },
+        [alice],
+      );
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.close.mockResolvedValue({
+        ...SCENARIO,
+        status: 'PASSE',
+        closedAt: '2026-07-13T10:00:00.000Z',
+        participants: [{ userId: 'u1', pseudo: 'Alice' }],
+      });
+
+      await comp.close();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelectorAll('app-character-summary-card')).toHaveLength(1);
     });
   });
 });

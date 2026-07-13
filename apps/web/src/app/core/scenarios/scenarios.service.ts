@@ -92,6 +92,18 @@ export class ScenariosService {
     return result;
   }
 
+  async participate(scenarioId: string): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
+      this.http.post<ScenarioDto>(
+        `${API_BASE}/scenarios/${scenarioId}/participate`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+    this._changed.update((v) => v + 1);
+    return result;
+  }
+
   uploadDocument(
     partieId: string,
     file: File,

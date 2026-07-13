@@ -2,9 +2,11 @@ import { Component, OnInit, computed, effect, inject, input, signal } from '@ang
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import type { ScenarioDocumentDto, ScenarioDto, UpdateScenarioDto } from '@master-jdr/shared';
+import type { CharacterDto, ScenarioDocumentDto, ScenarioDto, UpdateScenarioDto } from '@master-jdr/shared';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { CharacterService } from '../../../core/characters/character.service';
 import { FieldEditPencil } from '../../characters/character-sheet/field-edit-pencil/field-edit-pencil';
+import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 
 type ScenarioTextField = keyof UpdateScenarioDto;
@@ -24,12 +26,19 @@ function extractErrorMessage(err: unknown, fallback: string): string {
  */
 @Component({
   selector: 'app-scenario-editor',
-  imports: [MatButtonModule, MatIconModule, FieldEditPencil, ScenarioStatusBadge],
+  imports: [
+    MatButtonModule,
+    MatIconModule,
+    FieldEditPencil,
+    ScenarioStatusBadge,
+    CharacterSummaryCard,
+  ],
   templateUrl: './scenario-editor.html',
   styleUrl: './scenario-editor.scss',
 })
 export class ScenarioEditor implements OnInit {
   private readonly scenarios = inject(ScenariosService);
+  private readonly characterService = inject(CharacterService);
 
   readonly scenarioInput = input.required<ScenarioDto>({ alias: 'scenario' });
 
@@ -53,6 +62,22 @@ export class ScenarioEditor implements OnInit {
   protected readonly markCourantError = signal<string | null>(null);
   protected readonly closeError = signal<string | null>(null);
 
+  // AD-4 : `participants` n'est renvoyé par le backend que pour CAMPAGNE_EPISODIQUE (toujours
+  // `undefined` sinon) — sa seule présence sert de signal fiable, sans avoir à threader `partieKind`
+  // jusqu'ici (cette page routée n'a pas accès au signal `characters` de `partie-detail`).
+  protected readonly isEpisodique = computed(() => this.scenario()?.participants !== undefined);
+  protected readonly characters = signal<CharacterDto[]>([]);
+  protected readonly participantCharacters = computed(() => {
+    const ids = new Set((this.scenario()?.participants ?? []).map((p) => p.userId));
+    return this.characters().filter((c) => ids.has(c.userId));
+  });
+  // Un participant peut rejoindre une enquête avant d'avoir créé son personnage sur cette Partie —
+  // sans ce fallback, la section resterait vide pour lui malgré une participation bien enregistrée.
+  protected readonly participantsWithoutCharacter = computed(() => {
+    const characterUserIds = new Set(this.characters().map((c) => c.userId));
+    return (this.scenario()?.participants ?? []).filter((p) => !characterUserIds.has(p.userId));
+  });
+
   constructor() {
     effect(() => {
       const s = this.scenarioInput();
@@ -66,6 +91,12 @@ export class ScenarioEditor implements OnInit {
       this.documents.set(await this.scenarios.listDocuments(this.scenarioInput().id));
     } catch {
       this.documentsError.set('Impossible de charger les documents. Réessayez.');
+    }
+    try {
+      this.characters.set(await this.characterService.listByPartie(this.scenarioInput().partieId));
+    } catch {
+      // Liste de participants non-critique pour cette page — dégradation silencieuse plutôt
+      // qu'un blocage, cohérent avec le fait que la section participants reste secondaire ici.
     }
   }
 

@@ -20,8 +20,17 @@ const SCENARIO: ScenarioDto = {
   closedAt: null,
 };
 
-async function createComponent(scenario: ScenarioDto | undefined) {
-  const scenariosSvc = { listDocuments: vi.fn().mockResolvedValue([]) };
+async function createComponent(
+  scenario: ScenarioDto | undefined,
+  listAllResult: ScenarioDto[] | 'reject' = [],
+) {
+  const scenariosSvc = {
+    listDocuments: vi.fn().mockResolvedValue([]),
+    listAll:
+      listAllResult === 'reject'
+        ? vi.fn().mockRejectedValue(new Error('network'))
+        : vi.fn().mockResolvedValue(listAllResult),
+  };
 
   const router = {
     getCurrentNavigation: () => ({ extras: { state: scenario ? { scenario } : undefined } }),
@@ -44,7 +53,12 @@ async function createComponent(scenario: ScenarioDto | undefined) {
 
   const fixture = TestBed.createComponent(ScenarioDetail);
   fixture.detectChanges();
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
   await fixture.whenStable();
+  fixture.detectChanges();
   return { fixture, scenariosSvc };
 }
 
@@ -56,16 +70,31 @@ describe('ScenarioDetail', () => {
     expect(fixture.nativeElement.querySelector('app-scenario-editor')).toBeTruthy();
   });
 
-  it('sans état de navigation → message d’erreur, aucun rendu de l’éditeur', async () => {
-    const { fixture, scenariosSvc } = await createComponent(undefined);
+  it('sans état de navigation, scénario introuvable via la liste de secours → message d’erreur', async () => {
+    const { fixture, scenariosSvc } = await createComponent(undefined, []);
     const comp = fixture.componentInstance as any;
+    expect(scenariosSvc.listAll).toHaveBeenCalledWith('s1');
     expect(comp.loadError()).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-scenario-editor')).toBeNull();
-    expect(scenariosSvc.listDocuments).not.toHaveBeenCalled();
+  });
+
+  it('sans état de navigation (F5/accès direct), scénario retrouvé via GET /parties/:id/scenarios → charge quand même', async () => {
+    const { fixture, scenariosSvc } = await createComponent(undefined, [SCENARIO]);
+    const comp = fixture.componentInstance as any;
+    expect(scenariosSvc.listAll).toHaveBeenCalledWith('s1');
+    expect(comp.loadError()).toBeNull();
+    expect(comp.scenario()).toEqual(SCENARIO);
+    expect(fixture.nativeElement.querySelector('app-scenario-editor')).toBeTruthy();
+  });
+
+  it('sans état de navigation, la liste de secours échoue (réseau) → message d’erreur générique', async () => {
+    const { fixture } = await createComponent(undefined, 'reject');
+    const comp = fixture.componentInstance as any;
+    expect(comp.loadError()).toBeTruthy();
   });
 
   it('lien "Retour à la partie" présent même sur la branche d’erreur (pas seulement quand le scénario a chargé)', async () => {
-    const { fixture } = await createComponent(undefined);
+    const { fixture } = await createComponent(undefined, []);
     expect(fixture.nativeElement.querySelector('a')?.textContent).toContain('Retour à la partie');
   });
 
@@ -74,9 +103,13 @@ describe('ScenarioDetail', () => {
     expect(fixture.nativeElement.querySelector('a')?.textContent).toContain('Retour à la partie');
   });
 
-  it('état de navigation présent mais scenarioId différent du paramètre de route → message d’erreur', async () => {
-    const { fixture } = await createComponent({ ...SCENARIO, id: 'autre-scenario' });
+  it('état de navigation présent mais scenarioId différent du paramètre de route → tente la liste de secours', async () => {
+    const { fixture, scenariosSvc } = await createComponent(
+      { ...SCENARIO, id: 'autre-scenario' },
+      [],
+    );
     const comp = fixture.componentInstance as any;
+    expect(scenariosSvc.listAll).toHaveBeenCalledWith('s1');
     expect(comp.loadError()).toBeTruthy();
     expect(comp.scenario()).toBeNull();
   });

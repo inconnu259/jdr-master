@@ -112,6 +112,8 @@ export interface ScenarioDto {
   resumeFin: string | null;
   createdAt: string;
   closedAt: string | null;
+  /** Participants (CAMPAGNE_EPISODIQUE uniquement, Story 8.1) — toujours undefined pour ONE_SHOT/CAMPAGNE_LINEAIRE (AD-4). */
+  participants?: { userId: string; pseudo: string }[];
 }
 
 /** Payload de création d'un scénario (POST /parties/:id/scenarios). */

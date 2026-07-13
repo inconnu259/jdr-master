@@ -208,7 +208,7 @@
         }
         @if (p.kind !== 'ONE_SHOT') {
           <mat-tab label="Chronologie">
-            <app-scenario-timeline [partieId]="p.id" [isMj]="isMj()" />
+            <app-scenario-timeline [partieId]="p.id" [isMj]="isMj()" [partieKind]="p.kind" [characters]="characters()" />
           </mat-tab>
         }
       </mat-tab-group>

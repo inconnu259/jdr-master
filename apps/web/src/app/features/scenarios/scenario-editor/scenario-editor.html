@@ -26,6 +26,27 @@
       <p class="error">{{ closeError() }}</p>
     }
 
+    @if (isEpisodique()) {
+      <section class="participants">
+        <h2>Participants</h2>
+        @if (participantCharacters().length > 0) {
+          @for (c of participantCharacters(); track c.id) {
+            <app-character-summary-card [character]="c" [showOwnerInfo]="true" />
+          }
+        }
+        @if (participantsWithoutCharacter().length > 0) {
+          <ul class="participants-pseudo">
+            @for (p of participantsWithoutCharacter(); track p.userId) {
+              <li>{{ p.pseudo }} <span class="hint">(pas encore de personnage)</span></li>
+            }
+          </ul>
+        }
+        @if (participantCharacters().length === 0 && participantsWithoutCharacter().length === 0) {
+          <p>Aucun participant pour l’instant.</p>
+        }
+      </section>
+    }
+
     <section class="description">
       @if (!isReadOnly()) {
         <textarea

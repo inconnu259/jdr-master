@@ -108,6 +108,16 @@ describe('ScenariosService', () => {
     await p;
   });
 
+  it('participate → POST /scenarios/:id/participate sans body', async () => {
+    const p = service.participate('s1');
+    const req = http.expectOne(`${API}/scenarios/s1/participate`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({});
+    expect(req.request.withCredentials).toBe(true);
+    req.flush({ ...scenario, participants: [{ userId: 'u1', pseudo: 'Alice' }] });
+    await p;
+  });
+
   it('uploadDocument avec scenarioId → POST multipart avec scenarioId dans le FormData', async () => {
     const file = new File(['%PDF-1.4'], 'lettre.pdf', { type: 'application/pdf' });
     const p = service.uploadDocument('p1', file, 's1');

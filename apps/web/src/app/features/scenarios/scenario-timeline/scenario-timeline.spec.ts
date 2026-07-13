@@ -36,7 +36,17 @@ function makeBreakpointObserver(desktop: boolean) {
 
 async function createComponent(
   scenarios: ScenarioDto[],
-  { desktop = true, isMj = false }: { desktop?: boolean; isMj?: boolean } = {},
+  {
+    desktop = true,
+    isMj = false,
+    partieKind = 'ONE_SHOT',
+    characters = [],
+  }: {
+    desktop?: boolean;
+    isMj?: boolean;
+    partieKind?: 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE' | 'CAMPAGNE_EPISODIQUE';
+    characters?: unknown[];
+  } = {},
 ) {
   const scenariosSvc = {
     listAll: vi.fn().mockResolvedValue(scenarios),
@@ -59,6 +69,8 @@ async function createComponent(
   const fixture = TestBed.createComponent(ScenarioTimeline);
   fixture.componentRef.setInput('partieId', 'p1');
   fixture.componentRef.setInput('isMj', isMj);
+  fixture.componentRef.setInput('partieKind', partieKind);
+  fixture.componentRef.setInput('characters', characters);
   fixture.detectChanges();
   for (let i = 0; i < 10; i++) {
     await Promise.resolve();
@@ -102,7 +114,7 @@ describe('ScenarioTimeline', () => {
     const { fixture, dialog } = await createComponent([A_VENIR]);
     const comp = fixture.componentInstance as any;
     comp.openDetail(A_VENIR);
-    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: A_VENIR } });
+    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [] } });
   });
 
   it('bascule mobile : rendu vertical, aucun scroll interne recherché', async () => {
@@ -200,7 +212,7 @@ describe('ScenarioTimeline', () => {
     comp.onMouseMove({ clientX: 101 } as unknown as MouseEvent); // sous le seuil
     comp.openDetail(A_VENIR);
 
-    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: A_VENIR } });
+    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [] } });
   });
 
   it('relâcher la souris hors du composant (document:mouseup) réinitialise dragging', async () => {
@@ -223,7 +235,7 @@ describe('ScenarioTimeline', () => {
     const preventDefault = vi.fn();
     comp.onCardKeydown({ key: 'Enter', preventDefault } as unknown as KeyboardEvent, A_VENIR);
     expect(preventDefault).toHaveBeenCalled();
-    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: A_VENIR } });
+    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [] } });
   });
 
   it('touche Espace sur une carte ouvre le dialogue, une autre touche l’ignore', async () => {
@@ -288,7 +300,7 @@ describe('ScenarioTimeline', () => {
     const { fixture, dialog, router } = await createComponent([PASSE], { isMj: true });
     const comp = fixture.componentInstance as any;
     comp.openDetail(PASSE);
-    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: PASSE } });
+    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: PASSE, partieKind: 'ONE_SHOT', characters: [] } });
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
@@ -306,7 +318,7 @@ describe('ScenarioTimeline', () => {
     const { fixture, dialog, router } = await createComponent([COURANT_1], { isMj: false });
     const comp = fixture.componentInstance as any;
     comp.openDetail(COURANT_1);
-    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: COURANT_1 } });
+    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: COURANT_1, partieKind: 'ONE_SHOT', characters: [] } });
     expect(router.navigate).not.toHaveBeenCalled();
   });
 
@@ -324,7 +336,7 @@ describe('ScenarioTimeline', () => {
     const { fixture, dialog, router } = await createComponent([A_VENIR], { isMj: false });
     const comp = fixture.componentInstance as any;
     comp.openDetail(A_VENIR);
-    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: A_VENIR } });
+    expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, { data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [] } });
     expect(router.navigate).not.toHaveBeenCalled();
   });
 

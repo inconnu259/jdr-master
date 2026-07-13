@@ -1,9 +1,12 @@
 import { TestBed } from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
-import type { ScenarioDto } from '@master-jdr/shared';
+import type { CharacterDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
 import { ScenarioReadDialog, type ScenarioReadDialogData } from './scenario-read-dialog';
+import { AuthService } from '../../../core/auth/auth.service';
+import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 
 const BASE: ScenarioDto = {
   id: 's1',
@@ -18,9 +21,18 @@ const BASE: ScenarioDto = {
   closedAt: null,
 };
 
-async function createComponent(scenario: ScenarioDto) {
+async function createComponent(
+  scenario: ScenarioDto,
+  {
+    partieKind = 'ONE_SHOT' as PartieKind,
+    characters = [] as CharacterDto[],
+    currentUserId = 'viewer1',
+  }: { partieKind?: PartieKind; characters?: CharacterDto[]; currentUserId?: string } = {},
+) {
   const dialogRef = { close: vi.fn() };
-  const data: ScenarioReadDialogData = { scenario };
+  const data: ScenarioReadDialogData = { scenario, partieKind, characters };
+  const scenariosSvc = { participate: vi.fn() };
+  const authSvc = { currentUser: () => ({ id: currentUserId }) };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioReadDialog],
@@ -28,12 +40,14 @@ async function createComponent(scenario: ScenarioDto) {
       provideAnimationsAsync(),
       { provide: MatDialogRef, useValue: dialogRef },
       { provide: MAT_DIALOG_DATA, useValue: data },
+      { provide: ScenariosService, useValue: scenariosSvc },
+      { provide: AuthService, useValue: authSvc },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ScenarioReadDialog);
   fixture.detectChanges();
-  return { fixture, dialogRef };
+  return { fixture, dialogRef, scenariosSvc };
 }
 
 describe('ScenarioReadDialog', () => {
@@ -93,5 +107,88 @@ describe('ScenarioReadDialog', () => {
     const comp = fixture.componentInstance as unknown as { close: () => void };
     comp.close();
     expect(dialogRef.close).toHaveBeenCalled();
+  });
+
+  describe('Participation (AC8, Story 8.1)', () => {
+    it.each(['ONE_SHOT', 'CAMPAGNE_LINEAIRE'] as const)(
+      '%s → section participants/bouton absents',
+      async (partieKind) => {
+        const { fixture } = await createComponent(
+          { ...BASE, status: 'COURANT' },
+          { partieKind },
+        );
+        expect(fixture.nativeElement.textContent).not.toContain('Participer à cette enquête');
+        expect(fixture.nativeElement.querySelector('.participants')).toBeNull();
+      },
+    );
+
+    it('CAMPAGNE_EPISODIQUE, utilisateur non participant → bouton visible', async () => {
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'COURANT', participants: [] },
+        { partieKind: 'CAMPAGNE_EPISODIQUE', currentUserId: 'viewer1' },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Participer à cette enquête');
+    });
+
+    it('clic → appelle participate, scenario() réassigné, bouton disparaît sans rechargement', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...BASE, status: 'COURANT', participants: [] },
+        { partieKind: 'CAMPAGNE_EPISODIQUE', currentUserId: 'viewer1' },
+      );
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.participate.mockResolvedValue({
+        ...BASE,
+        status: 'COURANT',
+        participants: [{ userId: 'viewer1', pseudo: 'Viewer' }],
+      });
+
+      await comp.participate();
+      fixture.detectChanges();
+
+      expect(scenariosSvc.participate).toHaveBeenCalledWith('s1');
+      expect(comp.isParticipating()).toBe(true);
+      expect(fixture.nativeElement.textContent).not.toContain('Participer à cette enquête');
+    });
+
+    it('échec → participantError affiche le message serveur, scenario() inchangé', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...BASE, status: 'COURANT', participants: [] },
+        { partieKind: 'CAMPAGNE_EPISODIQUE', currentUserId: 'viewer1' },
+      );
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.participate.mockRejectedValue(
+        new HttpErrorResponse({ status: 500, error: { message: 'Erreur serveur' } }),
+      );
+
+      await comp.participate();
+
+      expect(comp.participantError()).toBe('Erreur serveur');
+      expect(comp.isParticipating()).toBe(false);
+    });
+
+    it('participant sans personnage dans characters → aucune CharacterSummaryCard fantôme, pseudo affiché en secours', async () => {
+      const char: CharacterDto = {
+        id: 'c1',
+        userId: 'other-user',
+        partieId: 'p1',
+        gameSystemId: 'ryuutama',
+        sheetData: {},
+        derived: {} as any,
+        portraitUrl: null,
+        portraitCropData: null,
+        pdfPortraitCropData: null,
+      } as CharacterDto;
+      const { fixture } = await createComponent(
+        {
+          ...BASE,
+          status: 'COURANT',
+          participants: [{ userId: 'viewer1', pseudo: 'Viewer' }],
+        },
+        { partieKind: 'CAMPAGNE_EPISODIQUE', characters: [char], currentUserId: 'viewer1' },
+      );
+      expect(fixture.nativeElement.querySelector('app-character-summary-card')).toBeNull();
+      expect(fixture.nativeElement.textContent).toContain('Viewer');
+      expect(fixture.nativeElement.textContent).toContain('pas encore de personnage');
+    });
   });
 });
