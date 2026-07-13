@@ -62,6 +62,14 @@ export class ScenariosController {
     return this.scenarios.listDrafts(partieId, user.id);
   }
 
+  @Get('parties/:id/scenarios')
+  findAll(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.findAllForPartie(partieId, user.id);
+  }
+
   @Patch('scenarios/:id/open')
   open(
     @Param('id', ParseUUIDPipe) scenarioId: string,

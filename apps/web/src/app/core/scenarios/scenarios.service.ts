@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type {
@@ -13,20 +13,31 @@ import { API_BASE } from '../api-base';
 export class ScenariosService {
   private readonly http = inject(HttpClient);
 
-  create(partieId: string, dto: CreateScenarioDto): Promise<ScenarioDto> {
-    return firstValueFrom(
+  // Incrémenté après chaque mutation réussie (create/update/open) — permet aux composants qui
+  // affichent une liste de scénarios chargée ailleurs (ex. ScenarioTimeline, chargée une fois dans
+  // un onglet séparé de ScenarioDrafts/ScenarioForm) de savoir qu'ils doivent se recharger, sans
+  // dépendre d'une navigation complète (F5) pour voir un changement fait dans un autre onglet.
+  private readonly _changed = signal(0);
+  readonly changed = this._changed.asReadonly();
+
+  async create(partieId: string, dto: CreateScenarioDto): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
       this.http.post<ScenarioDto>(`${API_BASE}/parties/${partieId}/scenarios`, dto, {
         withCredentials: true,
       }),
     );
+    this._changed.update((v) => v + 1);
+    return result;
   }
 
-  update(scenarioId: string, dto: UpdateScenarioDto): Promise<ScenarioDto> {
-    return firstValueFrom(
+  async update(scenarioId: string, dto: UpdateScenarioDto): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
       this.http.patch<ScenarioDto>(`${API_BASE}/scenarios/${scenarioId}`, dto, {
         withCredentials: true,
       }),
     );
+    this._changed.update((v) => v + 1);
+    return result;
   }
 
   listDrafts(partieId: string): Promise<ScenarioDto[]> {
@@ -37,14 +48,24 @@ export class ScenariosService {
     );
   }
 
-  open(scenarioId: string): Promise<ScenarioDto> {
+  listAll(partieId: string): Promise<ScenarioDto[]> {
     return firstValueFrom(
+      this.http.get<ScenarioDto[]>(`${API_BASE}/parties/${partieId}/scenarios`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  async open(scenarioId: string): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
       this.http.patch<ScenarioDto>(
         `${API_BASE}/scenarios/${scenarioId}/open`,
         {},
         { withCredentials: true },
       ),
     );
+    this._changed.update((v) => v + 1);
+    return result;
   }
 
   uploadDocument(

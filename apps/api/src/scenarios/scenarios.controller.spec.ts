@@ -12,6 +12,7 @@ function makeScenariosService() {
     create: jest.fn(),
     update: jest.fn(),
     listDrafts: jest.fn(),
+    findAllForPartie: jest.fn(),
     open: jest.fn(),
     uploadDocument: jest.fn(),
     listDocuments: jest.fn(),
@@ -60,6 +61,11 @@ describe('ScenariosController', () => {
   it('listDrafts() route partieId/user vers ScenariosService.listDrafts', async () => {
     await controller.listDrafts('p1', user);
     expect(scenarios.listDrafts).toHaveBeenCalledWith('p1', 'mj1');
+  });
+
+  it('findAll() route partieId/user vers ScenariosService.findAllForPartie', async () => {
+    await controller.findAll('p1', user);
+    expect(scenarios.findAllForPartie).toHaveBeenCalledWith('p1', 'mj1');
   });
 
   it('open() route scenarioId/user vers ScenariosService.open', async () => {

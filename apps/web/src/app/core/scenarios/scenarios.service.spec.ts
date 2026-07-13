@@ -70,6 +70,15 @@ describe('ScenariosService', () => {
     expect(await p).toEqual([scenario]);
   });
 
+  it('listAll → GET /parties/:id/scenarios', async () => {
+    const p = service.listAll('p1');
+    const req = http.expectOne(`${API}/parties/p1/scenarios`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush([scenario]);
+    expect(await p).toEqual([scenario]);
+  });
+
   it('open → PATCH /scenarios/:id/open sans body', async () => {
     const p = service.open('s1');
     const req = http.expectOne(`${API}/scenarios/s1/open`);

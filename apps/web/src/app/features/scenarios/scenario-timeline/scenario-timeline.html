@@ -1,0 +1,56 @@
+@if (loadError()) {
+  <p class="error">{{ loadError() }}</p>
+} @else if (isDesktop()) {
+  <div class="timeline-desktop">
+    @if (fadeStart()) {
+      <div class="fade fade-start"></div>
+    }
+    <div
+      #track
+      class="track"
+      [class.dragging]="dragging()"
+      (wheel)="onWheel($event)"
+      (scroll)="onScroll()"
+      (mousedown)="onMouseDown($event)"
+    >
+      @for (node of nodes(); track node.key; let i = $index) {
+        <div class="node" tabindex="0" role="group" (focus)="onNodeFocus(i)">
+          @for (scenario of node.scenarios; track scenario.id) {
+            <div
+              class="card"
+              tabindex="0"
+              role="button"
+              (click)="openDetail(scenario)"
+              (keydown)="onCardKeydown($event, scenario)"
+            >
+              <span class="title">{{ scenario.title }}</span>
+              <app-scenario-status-badge [status]="scenario.status" />
+            </div>
+          }
+        </div>
+      }
+    </div>
+    @if (fadeEnd()) {
+      <div class="fade fade-end"></div>
+    }
+  </div>
+} @else {
+  <ul class="timeline-mobile">
+    @for (node of nodes(); track node.key) {
+      <li class="node">
+        @for (scenario of node.scenarios; track scenario.id) {
+          <div
+            class="card"
+            tabindex="0"
+            role="button"
+            (click)="openDetail(scenario)"
+            (keydown)="onCardKeydown($event, scenario)"
+          >
+            <span class="title">{{ scenario.title }}</span>
+            <app-scenario-status-badge [status]="scenario.status" />
+          </div>
+        }
+      </li>
+    }
+  </ul>
+}

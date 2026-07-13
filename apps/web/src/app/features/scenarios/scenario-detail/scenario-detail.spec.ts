@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
+import { of } from 'rxjs';
 import { vi } from 'vitest';
 import type { ScenarioDto } from '@master-jdr/shared';
 import { ScenarioDetail } from './scenario-detail';
@@ -24,6 +25,11 @@ async function createComponent(scenario: ScenarioDto | undefined) {
 
   const router = {
     getCurrentNavigation: () => ({ extras: { state: scenario ? { scenario } : undefined } }),
+    // Stubs requis par RouterLink (bouton "Retour à la partie") — pas de navigation réelle testée ici.
+    createUrlTree: vi.fn().mockReturnValue({}),
+    serializeUrl: vi.fn().mockReturnValue('/parties/p1'),
+    navigateByUrl: vi.fn(),
+    events: of(),
   };
 
   await TestBed.configureTestingModule({
@@ -56,6 +62,16 @@ describe('ScenarioDetail', () => {
     expect(comp.loadError()).toBeTruthy();
     expect(fixture.nativeElement.querySelector('app-scenario-editor')).toBeNull();
     expect(scenariosSvc.listDocuments).not.toHaveBeenCalled();
+  });
+
+  it('lien "Retour à la partie" présent même sur la branche d’erreur (pas seulement quand le scénario a chargé)', async () => {
+    const { fixture } = await createComponent(undefined);
+    expect(fixture.nativeElement.querySelector('a')?.textContent).toContain('Retour à la partie');
+  });
+
+  it('lien "Retour à la partie" présent quand le scénario a chargé', async () => {
+    const { fixture } = await createComponent(SCENARIO);
+    expect(fixture.nativeElement.querySelector('a')?.textContent).toContain('Retour à la partie');
   });
 
   it('état de navigation présent mais scenarioId différent du paramètre de route → message d’erreur', async () => {

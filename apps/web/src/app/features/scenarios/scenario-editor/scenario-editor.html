@@ -1,16 +1,15 @@
 @if (scenario(); as s) {
   <section class="scenario-editor">
     <header>
+      <h1>{{ s.title }}</h1>
       @if (!isReadOnly()) {
         <app-field-edit-pencil
           label="le titre"
           [value]="s.title"
           (confirm)="onFieldConfirm('title', $event)"
         />
-      } @else {
-        <h1>{{ s.title }}</h1>
       }
-      <span class="status">{{ s.status }}</span>
+      <app-scenario-status-badge [status]="s.status" />
     </header>
 
     <section class="description">
@@ -26,6 +25,9 @@
     </section>
 
     <section class="durations">
+      <span class="duration-value">
+        {{ s.dureeHeures ?? '—' }} h · {{ s.dureeSeances ?? '—' }} séances
+      </span>
       @if (!isReadOnly()) {
         <app-field-edit-pencil
           label="la durée en heures"
@@ -39,8 +41,6 @@
           [value]="s.dureeSeances ?? ''"
           (confirm)="onFieldConfirm('dureeSeances', $event)"
         />
-      } @else {
-        <p>{{ s.dureeHeures ?? '—' }} h · {{ s.dureeSeances ?? '—' }} séances</p>
       }
     </section>
 

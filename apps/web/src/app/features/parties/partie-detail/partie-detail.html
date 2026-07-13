@@ -206,6 +206,11 @@
             <app-scenario-drafts [partieId]="p.id" />
           </mat-tab>
         }
+        @if (p.kind !== 'ONE_SHOT') {
+          <mat-tab label="Chronologie">
+            <app-scenario-timeline [partieId]="p.id" [isMj]="isMj()" />
+          </mat-tab>
+        }
       </mat-tab-group>
     </mat-card-content>
     </div>

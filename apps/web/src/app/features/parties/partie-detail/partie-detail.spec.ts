@@ -27,7 +27,11 @@ import { MatDialog } from '@angular/material/dialog';
 import { TONE_MAP } from '../../../core/theme/tones';
 
 function makeScenariosService() {
-  return { listDrafts: vi.fn().mockResolvedValue([]) };
+  return {
+    listDrafts: vi.fn().mockResolvedValue([]),
+    listAll: vi.fn().mockResolvedValue([]),
+    changed: signal(0),
+  };
 }
 
 /** jsdom n'implémente pas de vraie détection de largeur — desktop=true par défaut pour préserver
@@ -701,5 +705,42 @@ describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
     const { el } = await createFixture(partie, PLAYER_ID);
     expect(el.querySelector('app-scenario-drafts')).toBeNull();
     expect(el.querySelector('app-scenario-one-shot-tab')).toBeNull();
+  });
+});
+
+describe('PartieDetail — onglet Chronologie (Story 7.5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('Partie CAMPAGNE_LINEAIRE + MJ → onglet "Chronologie" présent, app-scenario-timeline rendu au clic', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
+
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    const chronoTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Chronologie');
+    expect(chronoTab).toBeTruthy();
+    chronoTab?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('app-scenario-timeline')).toBeTruthy();
+  });
+
+  it('Partie CAMPAGNE_LINEAIRE + joueur (non-MJ) → onglet "Chronologie" présent (visible à tout membre)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const { el } = await createFixture(partie, PLAYER_ID, { noopAnimations: true });
+
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    const chronoTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Chronologie');
+    expect(chronoTab).toBeTruthy();
+  });
+
+  it('Partie ONE_SHOT → onglet "Chronologie" absent (un ONE_SHOT n’a pas de timeline)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'ONE_SHOT' });
+    const { el } = await createFixture(partie, MJ_ID);
+    const tabLabels = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
+      t.textContent?.trim(),
+    );
+    expect(tabLabels).not.toContain('Chronologie');
   });
 });

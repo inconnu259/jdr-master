@@ -1,0 +1,23 @@
+<h2 mat-dialog-title>{{ scenario().title }}</h2>
+
+<mat-dialog-content>
+  @if (isRestricted()) {
+    <p class="a-venir-note">Date à définir.</p>
+  } @else {
+    <app-scenario-status-badge [status]="scenario().status" />
+    <p class="description">{{ scenario().description }}</p>
+    <p class="durations">
+      {{ scenario().dureeHeures ?? '—' }} h · {{ scenario().dureeSeances ?? '—' }} séances
+    </p>
+    @if (isPasse()) {
+      <section class="resume">
+        <h3>Résumé de fin</h3>
+        <p>{{ scenario().resumeFin ?? 'Aucun résumé pour l’instant.' }}</p>
+      </section>
+    }
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="close()">Fermer</button>
+</mat-dialog-actions>

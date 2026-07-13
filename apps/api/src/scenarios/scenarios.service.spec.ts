@@ -576,6 +576,54 @@ describe('ScenariosService', () => {
     });
   });
 
+  describe('findAllForPartie()', () => {
+    it('lecture ouverte à tout membre (getViewable, pas getOwned), tri chronologique croissant (AC1)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.scenario.findMany.mockResolvedValue([]);
+
+      await service.findAllForPartie('p1', 'u1');
+
+      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(parties.getOwned).not.toHaveBeenCalled();
+      expect(prisma.scenario.findMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+        orderBy: { createdAt: 'asc' },
+      });
+    });
+
+    it('aucun filtrage par statut — un scénario BROUILLON est bien retourné (AD-6)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.scenario.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          partieId: 'p1',
+          title: 'Brouillon secret',
+          description: null,
+          status: 'BROUILLON',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01'),
+          closedAt: null,
+        },
+      ]);
+
+      const result = await service.findAllForPartie('p1', 'u1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({ id: 's1', status: 'BROUILLON' });
+    });
+
+    it('non-membre → 403 propagé par getViewable, aucune lecture', async () => {
+      parties.getViewable.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.findAllForPartie('p1', 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.scenario.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('open()', () => {
     it('transition BROUILLON → A_VENIR réussie (AC3)', async () => {
       prisma.scenario.findUnique.mockResolvedValue({

@@ -186,6 +186,19 @@ export class ScenariosService {
     return scenarios.map(toDto);
   }
 
+  // AD-6 : aucun filtrage par statut — l'anti-spoil est un rendu frontend, jamais serveur. Lecture
+  // ouverte à tout membre (getViewable), pas MJ-only comme listDrafts. Tri chronologique croissant
+  // (passé → futur) pour alimenter la timeline joueur (Story 7.5).
+  async findAllForPartie(partieId: string, userId: string): Promise<ScenarioDto[]> {
+    await this.parties.getViewable(partieId, userId);
+
+    const scenarios = await this.prisma.scenario.findMany({
+      where: { partieId },
+      orderBy: { createdAt: 'asc' },
+    });
+    return scenarios.map(toDto);
+  }
+
   async open(scenarioId: string, mjId: string): Promise<ScenarioDto> {
     const scenario = await this.prisma.scenario.findUnique({
       where: { id: scenarioId },

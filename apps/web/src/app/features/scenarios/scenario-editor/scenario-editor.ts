@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import type { ScenarioDocumentDto, ScenarioDto, UpdateScenarioDto } from '@master-jdr/shared';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { FieldEditPencil } from '../../characters/character-sheet/field-edit-pencil/field-edit-pencil';
+import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 
 type ScenarioTextField = keyof UpdateScenarioDto;
 
@@ -23,7 +24,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
  */
 @Component({
   selector: 'app-scenario-editor',
-  imports: [MatButtonModule, MatIconModule, FieldEditPencil],
+  imports: [MatButtonModule, MatIconModule, FieldEditPencil, ScenarioStatusBadge],
   templateUrl: './scenario-editor.html',
   styleUrl: './scenario-editor.scss',
 })

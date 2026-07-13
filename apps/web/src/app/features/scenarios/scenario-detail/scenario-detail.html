@@ -1,3 +1,8 @@
+@if (partieId) {
+  <a mat-button [routerLink]="['/parties', partieId]">
+    <mat-icon>arrow_back</mat-icon> Retour à la partie
+  </a>
+}
 @if (loadError()) {
   <p class="error">{{ loadError() }}</p>
 } @else if (scenario(); as s) {

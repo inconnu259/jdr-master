@@ -1,0 +1,84 @@
+.timeline-desktop {
+  position: relative;
+}
+
+.track {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 40px 0.5rem 0.5rem;
+  cursor: grab;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 34px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--color-border-subtle, #444);
+  }
+
+  &.dragging {
+    cursor: grabbing;
+  }
+}
+
+.node {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--color-border-subtle, #444);
+}
+
+.fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 32px;
+  pointer-events: none;
+}
+.fade-start {
+  left: 0;
+  background: linear-gradient(to right, var(--jdr-accent-2, #333), transparent);
+}
+.fade-end {
+  right: 0;
+  background: linear-gradient(to left, var(--jdr-accent-2, #333), transparent);
+}
+
+.timeline-mobile {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 28px;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 9px;
+    width: 1px;
+    background: var(--color-border-subtle, #444);
+  }
+}
+
+.timeline-mobile .node {
+  margin-bottom: 1rem;
+}
+
+.error {
+  color: var(--mat-sys-error, #b00020);
+}

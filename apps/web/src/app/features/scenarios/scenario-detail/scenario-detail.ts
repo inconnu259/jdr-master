@@ -1,11 +1,13 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
 import type { ScenarioDto } from '@master-jdr/shared';
 import { ScenarioEditor } from '../scenario-editor/scenario-editor';
 
 @Component({
   selector: 'app-scenario-detail',
-  imports: [ScenarioEditor],
+  imports: [ScenarioEditor, RouterLink, MatButtonModule, MatIconModule],
   templateUrl: './scenario-detail.html',
   styleUrl: './scenario-detail.scss',
 })
@@ -22,6 +24,9 @@ export class ScenarioDetail implements OnInit {
 
   protected readonly scenario = signal<ScenarioDto | null>(null);
   protected readonly loadError = signal<string | null>(null);
+  // Lu depuis le paramètre de route `:id` — disponible même en cas d'erreur (contrairement à
+  // `scenario().partieId`), pour que le lien "Retour à la partie" fonctionne aussi sur cette branche.
+  protected readonly partieId = this.route.snapshot.paramMap.get('id');
 
   ngOnInit(): void {
     const scenarioId = this.route.snapshot.paramMap.get('scenarioId');
