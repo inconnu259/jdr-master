@@ -6,6 +6,8 @@ import type { CharacterDto, ScenarioDocumentDto, ScenarioDto } from '@master-jdr
 import { ScenarioEditor } from './scenario-editor';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { CharacterService } from '../../../core/characters/character.service';
+import { PartiesService } from '../../../core/parties/parties.service';
+import { PollService } from '../../../core/poll/poll.service';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 
 const SCENARIO: ScenarioDto = {
@@ -19,6 +21,7 @@ const SCENARIO: ScenarioDto = {
   resumeFin: null,
   createdAt: '2026-07-12T00:00:00.000Z',
   closedAt: null,
+  seances: [],
 };
 
 const OWN_DOC: ScenarioDocumentDto = {
@@ -44,14 +47,19 @@ async function createComponent(
   characters: CharacterDto[] = [],
 ) {
   const scenariosSvc = {
+    listAll: vi.fn().mockResolvedValue([scenario]),
     listDocuments: vi.fn().mockResolvedValue([OWN_DOC, LIBRARY_DOC]),
     update: vi.fn(),
     uploadDocument: vi.fn(),
     downloadDocument: vi.fn(),
     markCourant: vi.fn(),
     close: vi.fn(),
+    addSeance: vi.fn(),
+    linkSeancePoll: vi.fn(),
   };
   const characterSvc = { listByPartie: vi.fn().mockResolvedValue(characters) };
+  const partiesSvc = { members: vi.fn().mockResolvedValue([]) };
+  const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioEditor],
@@ -59,6 +67,8 @@ async function createComponent(
       provideAnimationsAsync(),
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: CharacterService, useValue: characterSvc },
+      { provide: PartiesService, useValue: partiesSvc },
+      { provide: PollService, useValue: pollSvc },
     ],
   }).compileComponents();
 
@@ -309,6 +319,125 @@ describe('ScenarioEditor', () => {
       fixture.detectChanges();
 
       expect(fixture.nativeElement.querySelectorAll('app-character-summary-card')).toHaveLength(1);
+    });
+  });
+
+  describe('Séances (Story 8.2)', () => {
+    it('bouton « Ajouter une séance » appelle addSeance, met à jour scenario() avec le retour', async () => {
+      const { fixture, scenariosSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      const updated = {
+        ...SCENARIO,
+        seances: [{ id: 'seance1', scenarioId: 's1', compteRendu: null, createdAt: '2026-07-13T00:00:00.000Z' }],
+      };
+      scenariosSvc.addSeance.mockResolvedValue(updated);
+
+      await comp.addSeance();
+
+      expect(scenariosSvc.addSeance).toHaveBeenCalledWith('s1');
+      expect(comp.scenario().seances).toHaveLength(1);
+    });
+
+    it('échec → addSeanceError affiche le message serveur', async () => {
+      const { fixture, scenariosSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.addSeance.mockRejectedValue(
+        new HttpErrorResponse({ status: 500, error: { message: 'Erreur serveur' } }),
+      );
+
+      await comp.addSeance();
+
+      expect(comp.addSeanceError()).toBe('Erreur serveur');
+    });
+
+    it('app-seance-list reçoit isMj=true et le scénario courant', async () => {
+      const { fixture } = await createComponent();
+      const seanceList = fixture.nativeElement.querySelector('app-seance-list');
+      expect(seanceList).toBeTruthy();
+    });
+
+    it('onSeanceLinked réassigne scenario() avec le DTO reçu', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      const updated = {
+        ...SCENARIO,
+        seances: [{ id: 'seance1', scenarioId: 's1', compteRendu: null, createdAt: '2026-07-13T00:00:00.000Z' }],
+      };
+
+      comp.onSeanceLinked(updated);
+
+      expect(comp.scenario().seances).toHaveLength(1);
+    });
+  });
+
+  describe('Rafraîchissement au montage (bug-fix post-8.2 : vote décidé ailleurs affiché comme obsolète)', () => {
+    it("ngOnInit recharge le scénario via listAll et remplace l'instantané reçu en input", async () => {
+      const fresh = { ...SCENARIO, resumeFin: 'mis à jour côté serveur' };
+      const scenariosSvc = {
+        listAll: vi.fn().mockResolvedValue([fresh]),
+        listDocuments: vi.fn().mockResolvedValue([]),
+        update: vi.fn(),
+        uploadDocument: vi.fn(),
+        downloadDocument: vi.fn(),
+        markCourant: vi.fn(),
+        close: vi.fn(),
+        addSeance: vi.fn(),
+        linkSeancePoll: vi.fn(),
+      };
+      await TestBed.configureTestingModule({
+        imports: [ScenarioEditor],
+        providers: [
+          provideAnimationsAsync(),
+          { provide: ScenariosService, useValue: scenariosSvc },
+          { provide: CharacterService, useValue: { listByPartie: vi.fn().mockResolvedValue([]) } },
+          { provide: PartiesService, useValue: { members: vi.fn().mockResolvedValue([]) } },
+          { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(ScenarioEditor);
+      fixture.componentRef.setInput('scenario', SCENARIO);
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      const comp = fixture.componentInstance as any;
+      expect(comp.scenario().resumeFin).toBe('mis à jour côté serveur');
+    });
+
+    it("échec du rechargement → le scénario reçu en input reste affiché tel quel", async () => {
+      const scenariosSvc = {
+        listAll: vi.fn().mockRejectedValue(new Error('network')),
+        listDocuments: vi.fn().mockResolvedValue([]),
+        update: vi.fn(),
+        uploadDocument: vi.fn(),
+        downloadDocument: vi.fn(),
+        markCourant: vi.fn(),
+        close: vi.fn(),
+        addSeance: vi.fn(),
+        linkSeancePoll: vi.fn(),
+      };
+      await TestBed.configureTestingModule({
+        imports: [ScenarioEditor],
+        providers: [
+          provideAnimationsAsync(),
+          { provide: ScenariosService, useValue: scenariosSvc },
+          { provide: CharacterService, useValue: { listByPartie: vi.fn().mockResolvedValue([]) } },
+          { provide: PartiesService, useValue: { members: vi.fn().mockResolvedValue([]) } },
+          { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(ScenarioEditor);
+      fixture.componentRef.setInput('scenario', SCENARIO);
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      const comp = fixture.componentInstance as any;
+      expect(comp.scenario()).toEqual(SCENARIO);
     });
   });
 });

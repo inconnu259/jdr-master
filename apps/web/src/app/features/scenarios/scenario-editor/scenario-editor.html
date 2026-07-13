@@ -16,6 +16,7 @@
       @if (s.status === 'COURANT') {
         <button mat-button type="button" (click)="close()">Clôturer le scénario</button>
       }
+      <button mat-button type="button" (click)="addSeance()">Ajouter une séance</button>
     </header>
 
     @if (markCourantError()) {
@@ -25,6 +26,19 @@
     @if (closeError()) {
       <p class="error">{{ closeError() }}</p>
     }
+
+    @if (addSeanceError()) {
+      <p class="error">{{ addSeanceError() }}</p>
+    }
+
+    <app-seance-list
+      [scenario]="s"
+      [partieId]="s.partieId"
+      [isMj]="true"
+      [isEpisodique]="isEpisodique()"
+      [members]="members()"
+      (seanceLinked)="onSeanceLinked($event)"
+    />
 
     @if (isEpisodique()) {
       <section class="participants">

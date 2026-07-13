@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatDialogModule, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -7,6 +7,7 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
+import { SeanceList } from '../seance-list/seance-list';
 
 export interface ScenarioReadDialogData {
   scenario: ScenarioDto;
@@ -28,11 +29,11 @@ function extractErrorMessage(err: unknown, fallback: string): string {
  */
 @Component({
   selector: 'app-scenario-read-dialog',
-  imports: [MatDialogModule, MatButtonModule, ScenarioStatusBadge, CharacterSummaryCard],
+  imports: [MatDialogModule, MatButtonModule, ScenarioStatusBadge, CharacterSummaryCard, SeanceList],
   templateUrl: './scenario-read-dialog.html',
   styleUrl: './scenario-read-dialog.scss',
 })
-export class ScenarioReadDialog {
+export class ScenarioReadDialog implements OnInit {
   private readonly data = inject<ScenarioReadDialogData>(MAT_DIALOG_DATA);
   private readonly dialogRef = inject<MatDialogRef<ScenarioReadDialog, void>>(MatDialogRef);
   private readonly scenarios = inject(ScenariosService);
@@ -66,6 +67,21 @@ export class ScenarioReadDialog {
   });
   protected readonly participantError = signal<string | null>(null);
 
+  // Le scénario reçu via MAT_DIALOG_DATA peut être un instantané mis en cache par l'appelant (ex.
+  // ScenarioTimeline chargée avant qu'un vote lié à une séance ait été tranché via le calendrier, en
+  // dehors de ce dialogue) — on recharge une version fraîche à l'ouverture plutôt que de faire
+  // confiance à l'instantané pour la durée de vie du dialogue.
+  async ngOnInit(): Promise<void> {
+    try {
+      const fresh = (await this.scenarios.listAll(this.data.scenario.partieId)).find(
+        (s) => s.id === this.data.scenario.id,
+      );
+      if (fresh) this.scenario.set(fresh);
+    } catch {
+      // Le scénario reçu en donnée de dialogue reste affiché tel quel si le rafraîchissement échoue.
+    }
+  }
+
   protected async participate(): Promise<void> {
     this.participantError.set(null);
     try {
@@ -73,6 +89,10 @@ export class ScenarioReadDialog {
     } catch (err) {
       this.participantError.set(extractErrorMessage(err, 'Impossible de participer à ce scénario.'));
     }
+  }
+
+  protected onSeanceLinked(updated: ScenarioDto): void {
+    this.scenario.set(updated);
   }
 
   protected close(): void {

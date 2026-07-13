@@ -17,6 +17,8 @@ function makeScenariosService() {
     markCourant: jest.fn(),
     close: jest.fn(),
     participate: jest.fn(),
+    addSeance: jest.fn(),
+    linkSeancePoll: jest.fn(),
     uploadDocument: jest.fn(),
     listDocuments: jest.fn(),
     listLibraryDocuments: jest.fn(),
@@ -89,6 +91,16 @@ describe('ScenariosController', () => {
   it('participate() route scenarioId/user vers ScenariosService.participate', async () => {
     await controller.participate('s1', user);
     expect(scenarios.participate).toHaveBeenCalledWith('s1', 'mj1');
+  });
+
+  it('addSeance() route scenarioId/user vers ScenariosService.addSeance', async () => {
+    await controller.addSeance('s1', user);
+    expect(scenarios.addSeance).toHaveBeenCalledWith('s1', 'mj1');
+  });
+
+  it('linkSeancePoll() route seanceId/user/pollId vers ScenariosService.linkSeancePoll', async () => {
+    await controller.linkSeancePoll('seance1', user, { pollId: 'poll1' });
+    expect(scenarios.linkSeancePoll).toHaveBeenCalledWith('seance1', 'mj1', 'poll1');
   });
 
   it('uploadDocument() route partieId/user/file/scenarioId vers ScenariosService.uploadDocument', async () => {

@@ -1,0 +1,67 @@
+@if (!isEpisodique()) {
+  <section class="seance-list">
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+    @for (seance of scenario().seances; track seance.id) {
+      <div class="seance-row">
+        @if (isMj()) {
+          @if (!seance.poll) {
+            @if (openPanelSeanceId() === seance.id) {
+              <app-poll-creation
+                [partieId]="partieId()"
+                [preselectedSlots]="availableSlots()"
+                (created)="onPollCreated(seance.id, $event)"
+                (cancelled)="closePollPanel()"
+              />
+            } @else {
+              <button mat-flat-button color="primary" type="button" (click)="openPollPanel(seance.id)">
+                Lancer le vote
+              </button>
+            }
+          } @else if (seance.poll.status === 'OPEN') {
+            <app-poll-status
+              [poll]="seance.poll"
+              [members]="members()"
+              [busy]="pollActionPending()"
+              (chosen)="onChoose(seance.poll.id, $event)"
+            />
+            <button
+              mat-stroked-button
+              color="warn"
+              type="button"
+              [disabled]="pollActionPending()"
+              (click)="onClosePoll(seance.poll.id)"
+            >
+              Clôturer le vote
+            </button>
+          } @else {
+            <p class="seance-row__chosen-date">
+              @if (seance.poll.chosenDate) {
+                Date retenue : {{ formatChosenDate(seance.poll) }}
+              } @else {
+                Vote clôturé sans date retenue.
+              }
+            </p>
+          }
+        } @else if (seance.poll) {
+          @if (seance.poll.status === 'OPEN') {
+            <app-poll-response
+              [partieId]="partieId()"
+              [poll]="seance.poll"
+              (responded)="onPollResponded($event)"
+            />
+          } @else {
+            <p class="seance-row__chosen-date">
+              @if (seance.poll.chosenDate) {
+                Date retenue : {{ formatChosenDate(seance.poll) }}
+              } @else {
+                Vote clôturé sans date retenue.
+              }
+            </p>
+          }
+        }
+      </div>
+    }
+  </section>
+}

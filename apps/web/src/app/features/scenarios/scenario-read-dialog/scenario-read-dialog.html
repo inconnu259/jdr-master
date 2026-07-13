@@ -40,6 +40,14 @@
       }
     </section>
   }
+
+  <app-seance-list
+    [scenario]="scenario()"
+    [partieId]="scenario().partieId"
+    [isMj]="false"
+    [isEpisodique]="isEpisodique()"
+    (seanceLinked)="onSeanceLinked($event)"
+  />
 </mat-dialog-content>
 
 <mat-dialog-actions align="end">

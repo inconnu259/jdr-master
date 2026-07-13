@@ -11,6 +11,8 @@ export interface RosterRow {
   ariaLabel: string;
   /** Le personnage a franchi un seuil de niveau pas encore traité par son propriétaire (cf. LevelUpBanner). */
   hasPendingLevelUp: boolean;
+  /** La ligne correspond à l'utilisateur courant — seul cas où un slot vide doit proposer de créer un personnage. */
+  isSelf: boolean;
 }
 
 function hasPendingLevelUp(character: CharacterDto | null): boolean {
@@ -34,9 +36,11 @@ export function buildRosterRows(
   characters: CharacterDto[],
   mjId: string,
   classLabelFor: (c: CharacterDto) => string,
+  currentUserId?: string,
 ): RosterRow[] {
   return members.map((member) => {
     const isMj = member.userId === mjId;
+    const isSelf = member.userId === currentUserId;
     const character = characters.find((c) => c.userId === member.userId) ?? null;
     if (isMj) {
       const pending = hasPendingLevelUp(character);
@@ -48,6 +52,7 @@ export function buildRosterRows(
         classLabel: '',
         ariaLabel: withLevelUpSuffix(`${member.pseudo} — MJ`, pending),
         hasPendingLevelUp: pending,
+        isSelf,
       };
     }
     if (!character) {
@@ -57,8 +62,11 @@ export function buildRosterRows(
         character,
         displayName: member.pseudo,
         classLabel: '',
-        ariaLabel: `${member.pseudo} — aucun personnage créé`,
+        ariaLabel: isSelf
+          ? `${member.pseudo} — créer mon personnage`
+          : `${member.pseudo} — aucun personnage créé`,
         hasPendingLevelUp: false,
+        isSelf,
       };
     }
     const name = characterName(character);
@@ -72,6 +80,7 @@ export function buildRosterRows(
       classLabel,
       ariaLabel: withLevelUpSuffix(`${member.pseudo} — ${name} (${classLabel})`, pending),
       hasPendingLevelUp: pending,
+      isSelf,
     };
   });
 }

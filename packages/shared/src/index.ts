@@ -112,8 +112,24 @@ export interface ScenarioDto {
   resumeFin: string | null;
   createdAt: string;
   closedAt: string | null;
+  /** Séances du scénario (Story 8.2) — toujours un tableau, potentiellement vide, quel que soit le kind. */
+  seances: SeanceDto[];
   /** Participants (CAMPAGNE_EPISODIQUE uniquement, Story 8.1) — toujours undefined pour ONE_SHOT/CAMPAGNE_LINEAIRE (AD-4). */
   participants?: { userId: string; pseudo: string }[];
+}
+
+/** Une séance d'un scénario (Story 8.2) — `poll` peuplé si une date a été liée via linkSeancePoll. */
+export interface SeanceDto {
+  id: string;
+  scenarioId: string;
+  poll?: SessionPollDto;
+  compteRendu: string | null;
+  createdAt: string;
+}
+
+/** Payload de liaison d'un SessionPoll existant à une Seance (PATCH /scenarios/seances/:id/poll). */
+export interface LinkSeancePollDto {
+  pollId: string;
 }
 
 /** Payload de création d'un scénario (POST /parties/:id/scenarios). */

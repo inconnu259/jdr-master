@@ -25,12 +25,13 @@ const CHARACTERS = [
 describe('RosterRail', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  function setup(hasFreeSlot = true) {
+  function setup(hasFreeSlot = true, currentUserId = 'mj1') {
     TestBed.configureTestingModule({ imports: [RosterRail] });
     const fixture = TestBed.createComponent(RosterRail);
     fixture.componentRef.setInput('members', MEMBERS);
     fixture.componentRef.setInput('characters', CHARACTERS);
     fixture.componentRef.setInput('mjId', 'mj1');
+    fixture.componentRef.setInput('currentUserId', currentUserId);
     fixture.componentRef.setInput('hasFreeSlot', hasFreeSlot);
     fixture.componentRef.setInput('classLabelFor', () => 'Ménestrel');
     fixture.detectChanges();
@@ -160,6 +161,37 @@ describe('RosterRail', () => {
     const fixture = setup();
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
     expect(playerItem.querySelector('.roster-rail__levelup-badge')).toBeNull();
+  });
+
+  it('joueur sans personnage sur sa propre ligne → clic émet createCharacter (pas selectCharacter)', () => {
+    const fixture = setup(true, 'u1');
+    fixture.componentRef.setInput('characters', []);
+    fixture.detectChanges();
+    let createEmitted = false;
+    let selectEmitted: unknown;
+    fixture.componentInstance.createCharacter.subscribe(() => (createEmitted = true));
+    fixture.componentInstance.selectCharacter.subscribe((v: unknown) => (selectEmitted = v));
+
+    const ownItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(ownItem.getAttribute('tabindex')).toBe('0');
+    ownItem.click();
+
+    expect(createEmitted).toBe(true);
+    expect(selectEmitted).toBeUndefined();
+  });
+
+  it("un membre SANS personnage qui n'est pas l'utilisateur courant reste non cliquable (tabindex -1), aucun événement émis", () => {
+    const fixture = setup(true, 'mj1');
+    fixture.componentRef.setInput('characters', []);
+    fixture.detectChanges();
+    let createEmitted = false;
+    fixture.componentInstance.createCharacter.subscribe(() => (createEmitted = true));
+
+    const otherItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(otherItem.getAttribute('tabindex')).toBe('-1');
+    otherItem.click();
+
+    expect(createEmitted).toBe(false);
   });
 
   it('la touche Espace active un membre au clavier comme Entrée', () => {

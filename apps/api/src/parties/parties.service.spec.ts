@@ -32,6 +32,9 @@ describe('PartiesService', () => {
     scenario: {
       create: jest.Mock;
     };
+    seance: {
+      create: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
   let avail: {
@@ -67,6 +70,9 @@ describe('PartiesService', () => {
         findUnique: jest.fn().mockResolvedValue(null),
       },
       scenario: {
+        create: jest.fn().mockResolvedValue({ id: 'scenario1' }),
+      },
+      seance: {
         create: jest.fn(),
       },
     };
@@ -114,6 +120,7 @@ describe('PartiesService', () => {
         status: 'BROUILLON',
       },
     });
+    expect(prisma.seance.create).toHaveBeenCalledWith({ data: { scenarioId: 'scenario1' } });
   });
 
   it('create CAMPAGNE_LINEAIRE/CAMPAGNE_EPISODIQUE ne crée aucun scénario automatique (Story 7.1)', async () => {

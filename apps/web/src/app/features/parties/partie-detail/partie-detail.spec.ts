@@ -378,6 +378,20 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     expect(tabLabels).not.toContain('Ma fiche');
   });
 
+  it('desktop + joueur sans personnage → clic sur sa propre ligne du roster navigue vers la création de personnage', async () => {
+    const partie = makePartie({ gameSystemId: 'draconis' });
+    const { el } = await createFixture(partie, PLAYER_ID, { members, desktop: true });
+    const router = TestBed.inject((await import('@angular/router')).Router);
+    const navigateSpy = vi.spyOn(router, 'navigate');
+
+    const ownItem: HTMLElement = el.querySelector(`[data-user-id="${PLAYER_ID}"]`)!;
+    ownItem.click();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/parties', 'party-1', 'characters', 'new'], {
+      queryParams: { gameSystemId: 'draconis' },
+    });
+  });
+
   it("réinitialise la sélection manuelle d'onglet quand le redimensionnement fait disparaître l'onglet sélectionné", async () => {
     const breakpoint$ = new BehaviorSubject({ matches: false, breakpoints: {} });
     const dynamicBreakpointObserver = {

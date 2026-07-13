@@ -18,6 +18,7 @@ const SCENARIO: ScenarioDto = {
   resumeFin: null,
   createdAt: '2026-07-12T00:00:00.000Z',
   closedAt: null,
+  seances: [],
 };
 
 async function createComponent(partieId = 'p1') {

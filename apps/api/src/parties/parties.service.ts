@@ -33,13 +33,16 @@ export class PartiesService {
       // que la Partie, statut BROUILLON, ouverture (BROUILLON→A_VENIR) toujours une action MJ
       // explicite ultérieure (Story 7.3), jamais automatique ici.
       if (dto.kind === 'ONE_SHOT') {
-        await tx.scenario.create({
+        const scenario = await tx.scenario.create({
           data: {
             partieId: partie.id,
             title: partie.name,
             status: 'BROUILLON',
           },
         });
+        // Un scénario a systématiquement besoin d'au moins une séance pour planifier sa date — le
+        // MJ peut toujours en ajouter d'autres ensuite (ScenariosService.addSeance, aucun plafond).
+        await tx.seance.create({ data: { scenarioId: scenario.id } });
       }
 
       return partie;

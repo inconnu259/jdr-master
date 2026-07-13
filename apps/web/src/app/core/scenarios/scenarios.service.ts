@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type {
   CreateScenarioDto,
+  LinkSeancePollDto,
   ScenarioDocumentDto,
   ScenarioDto,
   UpdateScenarioDto,
@@ -97,6 +98,30 @@ export class ScenariosService {
       this.http.post<ScenarioDto>(
         `${API_BASE}/scenarios/${scenarioId}/participate`,
         {},
+        { withCredentials: true },
+      ),
+    );
+    this._changed.update((v) => v + 1);
+    return result;
+  }
+
+  async addSeance(scenarioId: string): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
+      this.http.post<ScenarioDto>(
+        `${API_BASE}/scenarios/${scenarioId}/seances`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+    this._changed.update((v) => v + 1);
+    return result;
+  }
+
+  async linkSeancePoll(seanceId: string, pollId: string): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
+      this.http.patch<ScenarioDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/poll`,
+        { pollId } satisfies LinkSeancePollDto,
         { withCredentials: true },
       ),
     );

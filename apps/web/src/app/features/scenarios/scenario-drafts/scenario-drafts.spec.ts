@@ -17,6 +17,7 @@ const DRAFT_1: ScenarioDto = {
   resumeFin: null,
   createdAt: '2026-07-12T00:00:00.000Z',
   closedAt: null,
+  seances: [],
 };
 
 const DRAFT_2: ScenarioDto = { ...DRAFT_1, id: 's2', title: 'Les Ombres du Passé' };

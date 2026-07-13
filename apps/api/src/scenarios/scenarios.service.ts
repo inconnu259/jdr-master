@@ -5,7 +5,13 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
-import type { PartieKind, ScenarioDocumentDto, ScenarioDto } from '@master-jdr/shared';
+import type {
+  PartieKind,
+  ScenarioDocumentDto,
+  ScenarioDto,
+  SeanceDto,
+  SessionPollDto,
+} from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
@@ -49,8 +55,11 @@ export class ScenariosService {
         status: 'BROUILLON',
       },
     });
+    // Un scénario a systématiquement besoin d'au moins une séance pour planifier sa date — le MJ
+    // peut toujours en ajouter d'autres ensuite (addSeance, aucun plafond, cf. AC1 Story 8.2).
+    await this.prisma.seance.create({ data: { scenarioId: scenario.id } });
 
-    return toDto(scenario);
+    return toEnrichedDto(this.prisma, scenario, partie.kind);
   }
 
   async update(
@@ -178,13 +187,19 @@ export class ScenariosService {
   }
 
   async listDrafts(partieId: string, mjId: string): Promise<ScenarioDto[]> {
-    await this.parties.getOwned(partieId, mjId);
+    const partie = await this.parties.getOwned(partieId, mjId);
 
     const scenarios = await this.prisma.scenario.findMany({
       where: { partieId, status: 'BROUILLON' },
       orderBy: { createdAt: 'desc' },
     });
-    return scenarios.map((s) => toDto(s));
+    const seancesByScenario = await loadSeancesBatch(
+      this.prisma,
+      scenarios.map((s) => s.id),
+    );
+    return scenarios.map((s) =>
+      toDto(s, partie.kind, undefined, seancesByScenario.get(s.id) ?? []),
+    );
   }
 
   // AD-6 : aucun filtrage par statut — l'anti-spoil est un rendu frontend, jamais serveur. Lecture
@@ -197,13 +212,17 @@ export class ScenariosService {
       where: { partieId },
       orderBy: { createdAt: 'asc' },
     });
+    const scenarioIds = scenarios.map((s) => s.id);
+    const seancesByScenario = await loadSeancesBatch(this.prisma, scenarioIds);
 
     if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
-      return scenarios.map((s) => toDto(s, partie.kind));
+      return scenarios.map((s) =>
+        toDto(s, partie.kind, undefined, seancesByScenario.get(s.id) ?? []),
+      );
     }
 
     const participants = await this.prisma.scenarioParticipant.findMany({
-      where: { scenarioId: { in: scenarios.map((s) => s.id) } },
+      where: { scenarioId: { in: scenarioIds } },
       include: { user: { select: { pseudo: true } } },
     });
     const byScenario = new Map<string, { userId: string; pseudo: string }[]>();
@@ -212,7 +231,9 @@ export class ScenariosService {
       list.push({ userId: p.userId, pseudo: p.user.pseudo });
       byScenario.set(p.scenarioId, list);
     }
-    return scenarios.map((s) => toDto(s, partie.kind, byScenario.get(s.id) ?? []));
+    return scenarios.map((s) =>
+      toDto(s, partie.kind, byScenario.get(s.id) ?? [], seancesByScenario.get(s.id) ?? []),
+    );
   }
 
   async open(scenarioId: string, mjId: string): Promise<ScenarioDto> {
@@ -276,7 +297,7 @@ export class ScenariosService {
         }
         return tx.scenario.findUniqueOrThrow({ where: { id: scenarioId } });
       });
-      return toDto(updated);
+      return toEnrichedDto(this.prisma, updated, partie.kind);
     }
 
     const { count } = await this.prisma.scenario.updateMany({
@@ -347,7 +368,72 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
-    return toDto(updated, partie.kind, await loadParticipants(this.prisma, scenarioId));
+    return toEnrichedDto(this.prisma, updated, partie.kind);
+  }
+
+  // AD-9 : écriture MJ-only (getOwned, comme create/update/open/markCourant/close) — ajouter une
+  // séance est une action MJ, contrairement à participate() (AD-9 joueur). Aucun plafond (AC1).
+  async addSeance(scenarioId: string, mjId: string): Promise<ScenarioDto> {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+    });
+    if (!scenario) throw new NotFoundException('Scénario introuvable');
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    await this.prisma.seance.create({ data: { scenarioId } });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenarioId },
+    });
+    return toEnrichedDto(this.prisma, updated, partie.kind);
+  }
+
+  // AD-4 : une Seance CAMPAGNE_EPISODIQUE ne peut jamais être liée à un SessionPoll (Inscription à
+  // la place, Story 8.3). P2-AD-2 : PollModule reste le seul écrivain de SessionPoll — cette méthode
+  // ne fait que poser la relation Seance.pollId (déjà @unique en base), jamais créer/modifier un poll.
+  async linkSeancePoll(
+    seanceId: string,
+    mjId: string,
+    pollId: string,
+  ): Promise<ScenarioDto> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: seanceId },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    const scenario = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: seance.scenarioId },
+    });
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    if (partie.kind === 'CAMPAGNE_EPISODIQUE') {
+      throw new BadRequestException(
+        "Une séance de campagne épisodique ne peut jamais être liée à un vote de date — utilisez l'inscription à capacité limitée",
+      );
+    }
+
+    if (seance.pollId) {
+      throw new BadRequestException('Cette séance est déjà liée à un vote de date');
+    }
+
+    const poll = await this.prisma.sessionPoll.findUnique({
+      where: { id: pollId },
+    });
+    if (!poll || poll.partieId !== scenario.partieId) {
+      throw new BadRequestException("Ce vote de date n'appartient pas à cette Partie");
+    }
+    if (poll.status !== 'OPEN') {
+      throw new BadRequestException("Ce vote de date n'est plus ouvert");
+    }
+
+    await this.prisma.seance.update({
+      where: { id: seanceId },
+      data: { pollId },
+    });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenario.id },
+    });
+    return toEnrichedDto(this.prisma, updated, partie.kind);
   }
 
   async getDocumentFile(
@@ -386,6 +472,7 @@ function toDto(
   scenario: any,
   partieKind?: PartieKind,
   participants?: { userId: string; pseudo: string }[],
+  seances?: SeanceDto[],
 ): ScenarioDto {
   return {
     id: scenario.id,
@@ -398,6 +485,7 @@ function toDto(
     resumeFin: scenario.resumeFin,
     createdAt: scenario.createdAt.toISOString(),
     closedAt: scenario.closedAt ? scenario.closedAt.toISOString() : null,
+    seances: seances ?? [],
     ...(partieKind === 'CAMPAGNE_EPISODIQUE' && { participants: participants ?? [] }),
   };
 }
@@ -413,15 +501,81 @@ async function loadParticipants(
   return participants.map((p) => ({ userId: p.userId, pseudo: p.user.pseudo }));
 }
 
-// Garantit que `participants` reste toujours cohérent sur le DTO retourné par toute transition
-// d'état (open/update/markCourant/close), pas seulement participate()/findAllForPartie() — sinon
-// le champ redeviendrait `undefined` après une action MJ sur un scénario CAMPAGNE_EPISODIQUE,
-// faisant disparaître à tort la liste des participants côté frontend (ScenarioEditor).
+const SEANCE_POLL_INCLUDE = {
+  poll: {
+    include: {
+      options: { include: { votes: { include: { user: { select: { pseudo: true } } } } } },
+    },
+  },
+} as const;
+
+function toSessionPollDto(poll: any): SessionPollDto {
+  return {
+    id: poll.id,
+    partieId: poll.partieId,
+    status: poll.status,
+    scenarioRef: poll.scenarioRef,
+    expiresAt: poll.expiresAt?.toISOString() ?? null,
+    chosenDate: poll.chosenDate?.toISOString() ?? null,
+    chosenSlot: poll.chosenSlot,
+    options: (poll.options ?? []).map((opt: any) => ({
+      id: opt.id,
+      date: opt.date.toISOString(),
+      slot: opt.slot,
+      votes: (opt.votes ?? []).map((v: any) => ({
+        userId: v.userId,
+        pseudo: v.user.pseudo,
+        answer: v.answer,
+      })),
+    })),
+  };
+}
+
+function toSeanceDto(seance: any): SeanceDto {
+  return {
+    id: seance.id,
+    scenarioId: seance.scenarioId,
+    poll: seance.poll ? toSessionPollDto(seance.poll) : undefined,
+    compteRendu: seance.compteRendu,
+    createdAt: seance.createdAt.toISOString(),
+  };
+}
+
+async function loadSeancesBatch(
+  prisma: PrismaService,
+  scenarioIds: string[],
+): Promise<Map<string, SeanceDto[]>> {
+  const seances = await prisma.seance.findMany({
+    where: { scenarioId: { in: scenarioIds } },
+    orderBy: { createdAt: 'asc' },
+    include: SEANCE_POLL_INCLUDE,
+  });
+  const byScenario = new Map<string, SeanceDto[]>();
+  for (const s of seances) {
+    const list = byScenario.get(s.scenarioId) ?? [];
+    list.push(toSeanceDto(s));
+    byScenario.set(s.scenarioId, list);
+  }
+  return byScenario;
+}
+
+async function loadSeances(prisma: PrismaService, scenarioId: string): Promise<SeanceDto[]> {
+  const byScenario = await loadSeancesBatch(prisma, [scenarioId]);
+  return byScenario.get(scenarioId) ?? [];
+}
+
+// Garantit que `participants`/`seances` restent toujours cohérents sur le DTO retourné par toute
+// transition d'état (create/open/update/markCourant/close/participate/addSeance/linkSeancePoll) —
+// sinon ces champs redeviendraient `undefined`/vides après une action MJ, faisant disparaître à
+// tort la liste des participants/séances côté frontend (ScenarioEditor/ScenarioReadDialog).
 async function toEnrichedDto(
   prisma: PrismaService,
   scenario: any,
   partieKind: PartieKind,
 ): Promise<ScenarioDto> {
-  if (partieKind !== 'CAMPAGNE_EPISODIQUE') return toDto(scenario, partieKind);
-  return toDto(scenario, partieKind, await loadParticipants(prisma, scenario.id));
+  const seances = await loadSeances(prisma, scenario.id);
+  if (partieKind !== 'CAMPAGNE_EPISODIQUE') {
+    return toDto(scenario, partieKind, undefined, seances);
+  }
+  return toDto(scenario, partieKind, await loadParticipants(prisma, scenario.id), seances);
 }

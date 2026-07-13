@@ -24,6 +24,7 @@ import { MulterExceptionFilter } from '../common/filters/multer-exception.filter
 import { ScenariosService } from './scenarios.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
+import { LinkSeancePollDto } from './dto/link-seance-poll.dto';
 
 const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024;
 
@@ -100,6 +101,23 @@ export class ScenariosController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.scenarios.participate(scenarioId, user.id);
+  }
+
+  @Post('scenarios/:id/seances')
+  addSeance(
+    @Param('id', ParseUUIDPipe) scenarioId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.addSeance(scenarioId, user.id);
+  }
+
+  @Patch('scenarios/seances/:id/poll')
+  linkSeancePoll(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: LinkSeancePollDto,
+  ) {
+    return this.scenarios.linkSeancePoll(seanceId, user.id, dto.pollId);
   }
 
   @Post('parties/:id/documents')

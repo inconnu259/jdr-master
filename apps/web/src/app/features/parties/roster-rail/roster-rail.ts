@@ -22,16 +22,24 @@ export class RosterRail {
   readonly members = input.required<PartieMemberDto[]>();
   readonly characters = input.required<CharacterDto[]>();
   readonly mjId = input.required<string>();
+  readonly currentUserId = input.required<string>();
   readonly hasFreeSlot = input.required<boolean>();
   readonly classLabelFor = input.required<(c: CharacterDto) => string>();
 
   readonly selectCharacter = output<{ characterId: string }>();
+  readonly createCharacter = output<void>();
   readonly openInvitations = output<void>();
 
   protected readonly expanded = signal(false);
 
   protected readonly rows = computed<RosterRow[]>(() =>
-    buildRosterRows(this.members(), this.characters(), this.mjId(), this.classLabelFor()),
+    buildRosterRows(
+      this.members(),
+      this.characters(),
+      this.mjId(),
+      this.classLabelFor(),
+      this.currentUserId(),
+    ),
   );
 
   protected toggle(): void {
@@ -40,5 +48,6 @@ export class RosterRail {
 
   protected selectRow(row: RosterRow): void {
     if (row.character) this.selectCharacter.emit({ characterId: row.character.id });
+    else if (row.isSelf) this.createCharacter.emit();
   }
 }

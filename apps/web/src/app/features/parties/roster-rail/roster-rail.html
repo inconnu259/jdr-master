@@ -13,11 +13,12 @@
     <div
       class="roster-rail__item"
       [class.roster-rail__item--mj]="row.isMj"
-      [class.roster-rail__item--clickable]="row.character"
+      [class.roster-rail__item--clickable]="row.character || row.isSelf"
+      [class.roster-rail__item--create]="!row.character && row.isSelf"
       [attr.data-user-id]="row.member.userId"
       [attr.aria-label]="row.ariaLabel"
       role="button"
-      [attr.tabindex]="row.character ? 0 : -1"
+      [attr.tabindex]="row.character || row.isSelf ? 0 : -1"
       (click)="selectRow(row)"
       (keydown.enter)="selectRow(row)"
       (keydown.space)="$event.preventDefault(); selectRow(row)"
@@ -33,6 +34,9 @@
         @if (row.isMj) {
           <span class="roster-rail__mj-badge">{{ theme.tone()['roster.mj_badge'] }}</span>
         }
+        @if (!row.character && row.isSelf) {
+          <span class="roster-rail__create-badge" aria-hidden="true">+</span>
+        }
         @if (row.hasPendingLevelUp) {
           <span
             class="roster-rail__levelup-badge"
@@ -44,7 +48,9 @@
       </span>
       @if (expanded()) {
         <span class="roster-rail__label">
-          <span class="roster-rail__name">{{ row.displayName }}</span>
+          <span class="roster-rail__name">
+            {{ !row.character && row.isSelf ? theme.tone()['character.create_cta'] : row.displayName }}
+          </span>
           @if (row.classLabel) {
             <span class="roster-rail__class">{{ row.classLabel }}</span>
           }

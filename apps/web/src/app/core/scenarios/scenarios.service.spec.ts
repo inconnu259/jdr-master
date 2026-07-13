@@ -20,6 +20,7 @@ describe('ScenariosService', () => {
     resumeFin: null,
     createdAt: '2026-07-12T00:00:00.000Z',
     closedAt: null,
+  seances: [],
   };
 
   const document: ScenarioDocumentDto = {
@@ -115,6 +116,26 @@ describe('ScenariosService', () => {
     expect(req.request.body).toEqual({});
     expect(req.request.withCredentials).toBe(true);
     req.flush({ ...scenario, participants: [{ userId: 'u1', pseudo: 'Alice' }] });
+    await p;
+  });
+
+  it('addSeance → POST /scenarios/:id/seances sans body', async () => {
+    const p = service.addSeance('s1');
+    const req = http.expectOne(`${API}/scenarios/s1/seances`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({});
+    expect(req.request.withCredentials).toBe(true);
+    req.flush({ ...scenario, seances: [{ id: 'seance1', scenarioId: 's1', compteRendu: null, createdAt: '2026-07-13T00:00:00.000Z' }] });
+    await p;
+  });
+
+  it('linkSeancePoll → PATCH /scenarios/seances/:id/poll avec pollId', async () => {
+    const p = service.linkSeancePoll('seance1', 'poll1');
+    const req = http.expectOne(`${API}/scenarios/seances/seance1/poll`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ pollId: 'poll1' });
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(scenario);
     await p;
   });
 

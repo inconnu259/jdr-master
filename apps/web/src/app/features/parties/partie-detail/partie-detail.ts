@@ -82,7 +82,7 @@ const MJ_INVITATIONS_TAB_INDEX = 1;
 export class PartieDetail implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
   private readonly parties = inject(PartiesService);
   private readonly modeSvc = inject(ModeService);
   private readonly pollSvc = inject(PollService);
@@ -164,6 +164,14 @@ export class PartieDetail implements OnInit {
   protected onSelectRosterCharacter(event: { characterId: string }): void {
     const p = this.partie();
     if (p) this.openCharacterSheet(p.id, event.characterId);
+  }
+
+  /** Slot "créer mon personnage" du roster desktop (joueur sans personnage sur cette partie) —
+   *  seul point d'entrée équivalent au CTA de l'onglet "Ma fiche" (mobile) sur cette vue. */
+  protected createCharacter(p: PartieDto): void {
+    void this.router.navigate(['/parties', p.id, 'characters', 'new'], {
+      queryParams: { gameSystemId: p.gameSystemId },
+    });
   }
 
   /** Label de classe résolu depuis le contenu seedé (jamais codé en dur). */

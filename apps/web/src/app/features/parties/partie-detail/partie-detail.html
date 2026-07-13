@@ -23,9 +23,11 @@
           [members]="members()"
           [characters]="characters()"
           [mjId]="p.mjId"
+          [currentUserId]="auth.currentUser()?.id ?? ''"
           [hasFreeSlot]="isMj() && hasFreeSlot"
           [classLabelFor]="classLabelFor"
           (selectCharacter)="onSelectRosterCharacter($event)"
+          (createCharacter)="createCharacter(p)"
           (openInvitations)="openInvitationsTab()"
         />
       }

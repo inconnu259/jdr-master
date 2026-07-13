@@ -52,6 +52,16 @@ function makePrisma() {
       upsert: jest.fn(),
       findMany: jest.fn(),
     },
+    seance: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+      update: jest.fn(),
+      findMany: jest.fn(),
+    },
+    sessionPoll: {
+      findUnique: jest.fn(),
+    },
     $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(tx)),
     tx,
   };
@@ -83,6 +93,9 @@ describe('ScenariosService', () => {
     jest.clearAllMocks();
     prisma = makePrisma();
     parties = makeParties();
+    // Chaque transition d'état (toEnrichedDto) charge désormais les séances — [] par défaut pour
+    // les tests qui ne portent pas explicitement sur `seances` (AC7, jamais undefined).
+    prisma.seance.findMany.mockResolvedValue([]);
     const module = await Test.createTestingModule({
       providers: [
         ScenariosService,
@@ -125,6 +138,26 @@ describe('ScenariosService', () => {
       );
       expect(result.status).toBe('BROUILLON');
       expect(result.id).toBe('s1');
+    });
+
+    it('crée automatiquement une première Seance rattachée (le scénario a toujours besoin d’au moins une date à planifier)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.scenario.create.mockResolvedValue({
+        id: 's1',
+        partieId: 'p1',
+        title: 'Le Marché aux Ombres',
+        description: null,
+        status: 'BROUILLON',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-12T00:00:00.000Z'),
+        closedAt: null,
+      });
+
+      await service.create('p1', 'mj1', { title: 'Le Marché aux Ombres' });
+
+      expect(prisma.seance.create).toHaveBeenCalledWith({ data: { scenarioId: 's1' } });
     });
 
     it('non-MJ → 403 propagé par getOwned, aucune écriture (AC2)', async () => {
@@ -1337,6 +1370,346 @@ describe('ScenariosService', () => {
       expect(prisma.tx.scenario.findFirst).toHaveBeenCalledWith({
         where: { partieId: 'p1', status: 'COURANT' },
       });
+    });
+  });
+
+  describe('addSeance()', () => {
+    it('crée une Seance rattachée au scénario, seances peuplées dans le DTO retourné (AC1, AC7)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: 3,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+      });
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 'seance-1',
+          scenarioId: VALID_SCENARIO_ID,
+          poll: null,
+          compteRendu: null,
+          createdAt: new Date('2026-07-13T00:00:00.000Z'),
+        },
+      ]);
+
+      const result = await service.addSeance(VALID_SCENARIO_ID, 'mj1');
+
+      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(prisma.seance.create).toHaveBeenCalledWith({
+        data: { scenarioId: VALID_SCENARIO_ID },
+      });
+      expect(result.seances).toEqual([
+        {
+          id: 'seance-1',
+          scenarioId: VALID_SCENARIO_ID,
+          poll: undefined,
+          compteRendu: null,
+          createdAt: '2026-07-13T00:00:00.000Z',
+        },
+      ]);
+    });
+
+    it('aucun plafond — une 3e séance se crée sans erreur', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+      });
+      prisma.seance.findMany.mockResolvedValue([
+        { id: 's1', scenarioId: VALID_SCENARIO_ID, poll: null, compteRendu: null, createdAt: new Date() },
+        { id: 's2', scenarioId: VALID_SCENARIO_ID, poll: null, compteRendu: null, createdAt: new Date() },
+        { id: 's3', scenarioId: VALID_SCENARIO_ID, poll: null, compteRendu: null, createdAt: new Date() },
+      ]);
+
+      const result = await service.addSeance(VALID_SCENARIO_ID, 'mj1');
+
+      expect(result.seances).toHaveLength(3);
+    });
+
+    it('scénario introuvable → 404', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(null);
+
+      await expect(service.addSeance(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.seance.create).not.toHaveBeenCalled();
+    });
+
+    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.addSeance(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.seance.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('linkSeancePoll()', () => {
+    const SEANCE_ID = '33333333-3333-4333-a333-333333333333';
+    const POLL_ID = '44444444-4444-4444-a444-444444444444';
+
+    it('ONE_SHOT/CAMPAGNE_LINEAIRE : liaison réussie, Seance.pollId renseigné (AC2)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: null,
+      });
+      prisma.scenario.findUniqueOrThrow
+        .mockResolvedValueOnce({
+          id: VALID_SCENARIO_ID,
+          partieId: 'p1',
+          title: 'Chapitre 1',
+          description: null,
+          status: 'COURANT',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01T00:00:00.000Z'),
+          closedAt: null,
+        })
+        .mockResolvedValueOnce({
+          id: VALID_SCENARIO_ID,
+          partieId: 'p1',
+          title: 'Chapitre 1',
+          description: null,
+          status: 'COURANT',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01T00:00:00.000Z'),
+          closedAt: null,
+        });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+      prisma.sessionPoll.findUnique.mockResolvedValue({ id: POLL_ID, partieId: 'p1', status: 'OPEN' });
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: SEANCE_ID,
+          scenarioId: VALID_SCENARIO_ID,
+          poll: {
+            id: POLL_ID,
+            partieId: 'p1',
+            status: 'OPEN',
+            scenarioRef: null,
+            expiresAt: null,
+            chosenDate: null,
+            chosenSlot: null,
+            options: [],
+          },
+          compteRendu: null,
+          createdAt: new Date('2026-07-13T00:00:00.000Z'),
+        },
+      ]);
+
+      const result = await service.linkSeancePoll(SEANCE_ID, 'mj1', POLL_ID);
+
+      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(prisma.seance.update).toHaveBeenCalledWith({
+        where: { id: SEANCE_ID },
+        data: { pollId: POLL_ID },
+      });
+      expect(result.seances[0].poll?.id).toBe(POLL_ID);
+    });
+
+    it('CAMPAGNE_EPISODIQUE → rejet 400, aucune écriture (AC4)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Enquête',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_EPISODIQUE' });
+
+      await expect(service.linkSeancePoll(SEANCE_ID, 'mj1', POLL_ID)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('séance déjà liée à un poll → rejet 400, aucune écriture (pas d’écrasement silencieux)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: 'ancien-poll',
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+
+      await expect(service.linkSeancePoll(SEANCE_ID, 'mj1', POLL_ID)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('poll non OPEN (déjà clôturé) → rejet 400, aucune écriture', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        id: POLL_ID,
+        partieId: 'p1',
+        status: 'CLOSED',
+      });
+
+      await expect(service.linkSeancePoll(SEANCE_ID, 'mj1', POLL_ID)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('poll appartenant à une autre Partie → rejet 400, aucune écriture', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+      prisma.sessionPoll.findUnique.mockResolvedValue({ id: POLL_ID, partieId: 'autre-partie' });
+
+      await expect(service.linkSeancePoll(SEANCE_ID, 'mj1', POLL_ID)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('poll introuvable → rejet 400, aucune écriture', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind: 'CAMPAGNE_LINEAIRE' });
+      prisma.sessionPoll.findUnique.mockResolvedValue(null);
+
+      await expect(service.linkSeancePoll(SEANCE_ID, 'mj1', POLL_ID)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('séance introuvable → 404', async () => {
+      prisma.seance.findUnique.mockResolvedValue(null);
+
+      await expect(service.linkSeancePoll(SEANCE_ID, 'mj1', POLL_ID)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+      });
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.linkSeancePoll(SEANCE_ID, 'stranger', POLL_ID)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.seance.update).not.toHaveBeenCalled();
     });
   });
 });

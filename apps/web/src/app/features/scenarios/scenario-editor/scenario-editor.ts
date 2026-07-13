@@ -2,12 +2,20 @@ import { Component, OnInit, computed, effect, inject, input, signal } from '@ang
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import type { CharacterDto, ScenarioDocumentDto, ScenarioDto, UpdateScenarioDto } from '@master-jdr/shared';
+import type {
+  CharacterDto,
+  PartieMemberDto,
+  ScenarioDocumentDto,
+  ScenarioDto,
+  UpdateScenarioDto,
+} from '@master-jdr/shared';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { CharacterService } from '../../../core/characters/character.service';
+import { PartiesService } from '../../../core/parties/parties.service';
 import { FieldEditPencil } from '../../characters/character-sheet/field-edit-pencil/field-edit-pencil';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
+import { SeanceList } from '../seance-list/seance-list';
 
 type ScenarioTextField = keyof UpdateScenarioDto;
 
@@ -32,6 +40,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
     FieldEditPencil,
     ScenarioStatusBadge,
     CharacterSummaryCard,
+    SeanceList,
   ],
   templateUrl: './scenario-editor.html',
   styleUrl: './scenario-editor.scss',
@@ -39,6 +48,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
 export class ScenarioEditor implements OnInit {
   private readonly scenarios = inject(ScenariosService);
   private readonly characterService = inject(CharacterService);
+  private readonly partiesService = inject(PartiesService);
 
   readonly scenarioInput = input.required<ScenarioDto>({ alias: 'scenario' });
 
@@ -61,6 +71,8 @@ export class ScenarioEditor implements OnInit {
   protected readonly downloadError = signal<string | null>(null);
   protected readonly markCourantError = signal<string | null>(null);
   protected readonly closeError = signal<string | null>(null);
+  protected readonly addSeanceError = signal<string | null>(null);
+  protected readonly members = signal<PartieMemberDto[]>([]);
 
   // AD-4 : `participants` n'est renvoyé par le backend que pour CAMPAGNE_EPISODIQUE (toujours
   // `undefined` sinon) — sa seule présence sert de signal fiable, sans avoir à threader `partieKind`
@@ -87,6 +99,18 @@ export class ScenarioEditor implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    // Le scénario reçu en input peut être un instantané mis en cache par l'appelant (ex. une
+    // ScenarioTimeline chargée avant qu'un vote lié à une séance ait été tranché via le calendrier,
+    // en dehors de cette page) — on recharge une version fraîche au montage plutôt que de faire
+    // confiance à l'input pour la durée de vie du composant.
+    try {
+      const fresh = (await this.scenarios.listAll(this.scenarioInput().partieId)).find(
+        (s) => s.id === this.scenarioInput().id,
+      );
+      if (fresh) this.scenario.set(fresh);
+    } catch {
+      // Le scénario reçu en input reste affiché tel quel si le rafraîchissement échoue.
+    }
     try {
       this.documents.set(await this.scenarios.listDocuments(this.scenarioInput().id));
     } catch {
@@ -97,6 +121,11 @@ export class ScenarioEditor implements OnInit {
     } catch {
       // Liste de participants non-critique pour cette page — dégradation silencieuse plutôt
       // qu'un blocage, cohérent avec le fait que la section participants reste secondaire ici.
+    }
+    try {
+      this.members.set(await this.partiesService.members(this.scenarioInput().partieId));
+    } catch {
+      // Liste MJ pour PollStatusPanel (relance de vote) — non-critique, même dégradation silencieuse.
     }
   }
 
@@ -177,6 +206,21 @@ export class ScenarioEditor implements OnInit {
     } catch (err) {
       this.closeError.set(extractErrorMessage(err, 'Impossible de clôturer ce scénario.'));
     }
+  }
+
+  protected async addSeance(): Promise<void> {
+    const s = this.scenario();
+    if (!s) return;
+    this.addSeanceError.set(null);
+    try {
+      this.scenario.set(await this.scenarios.addSeance(s.id));
+    } catch (err) {
+      this.addSeanceError.set(extractErrorMessage(err, 'Impossible d’ajouter une séance.'));
+    }
+  }
+
+  protected onSeanceLinked(updated: ScenarioDto): void {
+    this.scenario.set(updated);
   }
 
   protected async downloadDocument(doc: ScenarioDocumentDto): Promise<void> {

@@ -1,0 +1,19 @@
+.seance-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.seance-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.error {
+  color: var(--mat-sys-error, #b3261e);
+}
+
+.seance-row__chosen-date {
+  font-weight: 600;
+}
