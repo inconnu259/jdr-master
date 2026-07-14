@@ -175,7 +175,12 @@ export class ScenarioTimeline {
       return;
     }
     this.dialog.open<ScenarioReadDialog, ScenarioReadDialogData, void>(ScenarioReadDialog, {
-      data: { scenario, partieKind: this.partieKind(), characters: this.characters() },
+      data: {
+        scenario,
+        partieKind: this.partieKind(),
+        characters: this.characters(),
+        isMj: this.isMj(),
+      },
     });
   }
 

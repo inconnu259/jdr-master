@@ -31,6 +31,27 @@
       <p class="error">{{ addSeanceError() }}</p>
     }
 
+    @if (s.status === 'PASSE') {
+      <section class="resume-fin">
+        <h2>Résumé de fin</h2>
+        @if (!s.resumeFin) {
+          <p class="hint">
+            Aucun résumé pour l’instant — rédigez-le pour clore la rétrospective.
+          </p>
+        }
+        <textarea
+          [value]="resumeFinDraft()"
+          (input)="resumeFinDraft.set($any($event.target).value)"
+        ></textarea>
+        <button mat-button type="button" (click)="submitResumeFin()">
+          Enregistrer le résumé de fin
+        </button>
+        @if (resumeFinError()) {
+          <p class="error">{{ resumeFinError() }}</p>
+        }
+      </section>
+    }
+
     <app-seance-list
       [scenario]="s"
       [partieId]="s.partieId"

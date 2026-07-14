@@ -66,6 +66,8 @@ export class ScenarioEditor implements OnInit {
   );
 
   protected readonly descriptionDraft = signal('');
+  protected readonly resumeFinDraft = signal('');
+  protected readonly resumeFinError = signal<string | null>(null);
   protected readonly fieldEditError = signal<string | null>(null);
   protected readonly uploadError = signal<string | null>(null);
   protected readonly downloadError = signal<string | null>(null);
@@ -95,6 +97,7 @@ export class ScenarioEditor implements OnInit {
       const s = this.scenarioInput();
       this.scenario.set(s);
       this.descriptionDraft.set(s.description ?? '');
+      this.resumeFinDraft.set(s.resumeFin ?? '');
     });
   }
 
@@ -226,6 +229,19 @@ export class ScenarioEditor implements OnInit {
       this.scenario.set(await this.scenarios.addSeance(s.id));
     } catch (err) {
       this.addSeanceError.set(extractErrorMessage(err, 'Impossible d’ajouter une séance.'));
+    }
+  }
+
+  protected async submitResumeFin(): Promise<void> {
+    const s = this.scenario();
+    if (!s) return;
+    this.resumeFinError.set(null);
+    try {
+      this.scenario.set(await this.scenarios.setResumeFin(s.id, this.resumeFinDraft()));
+    } catch (err) {
+      this.resumeFinError.set(
+        extractErrorMessage(err, 'Impossible d’enregistrer le résumé de fin.'),
+      );
     }
   }
 

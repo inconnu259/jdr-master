@@ -7,6 +7,7 @@ import type {
   ScenarioDocumentDto,
   ScenarioDto,
   SetCompteRenduDto,
+  SetResumeFinDto,
   SetSeanceCapacityDto,
   UpdateScenarioDto,
 } from '@master-jdr/shared';
@@ -186,6 +187,18 @@ export class ScenariosService {
       this.http.patch<ScenarioDto>(
         `${API_BASE}/scenarios/seances/${seanceId}/compte-rendu`,
         { compteRendu } satisfies SetCompteRenduDto,
+        { withCredentials: true },
+      ),
+    );
+    this._changed.update((v) => v + 1);
+    return result;
+  }
+
+  async setResumeFin(scenarioId: string, resumeFin: string): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
+      this.http.patch<ScenarioDto>(
+        `${API_BASE}/scenarios/${scenarioId}/resume-fin`,
+        { resumeFin } satisfies SetResumeFinDto,
         { withCredentials: true },
       ),
     );

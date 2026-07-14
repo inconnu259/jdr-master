@@ -2487,4 +2487,123 @@ describe('ScenariosService', () => {
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
   });
+
+  describe('setResumeFin()', () => {
+    function mockScenario(overrides: Record<string, unknown> = {}) {
+      return {
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'La Dette du Forgeron',
+        description: null,
+        status: 'PASSE',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+        ...overrides,
+      };
+    }
+
+    it('scénario PASSE : résumé de fin enregistré (AC1)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(mockScenario());
+      prisma.scenario.update.mockResolvedValue(mockScenario());
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+
+      await service.setResumeFin(
+        VALID_SCENARIO_ID,
+        'mj1',
+        'Les PJ ont vaincu le dragon et sauvé le village.',
+      );
+
+      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(prisma.scenario.update).toHaveBeenCalledWith({
+        where: { id: VALID_SCENARIO_ID },
+        data: { resumeFin: 'Les PJ ont vaincu le dragon et sauvé le village.' },
+      });
+    });
+
+    it('chaîne vide acceptée — efface un résumé déjà rédigé', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(
+        mockScenario({ resumeFin: 'Ancien résumé' }),
+      );
+      prisma.scenario.update.mockResolvedValue(mockScenario({ resumeFin: '' }));
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+
+      await service.setResumeFin(VALID_SCENARIO_ID, 'mj1', '');
+
+      expect(prisma.scenario.update).toHaveBeenCalledWith({
+        where: { id: VALID_SCENARIO_ID },
+        data: { resumeFin: '' },
+      });
+    });
+
+    it('rédaction acceptée une seconde fois après une première écriture (AC3, non-régression)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(
+        mockScenario({ resumeFin: 'Premier jet' }),
+      );
+      prisma.scenario.update.mockResolvedValue(
+        mockScenario({ resumeFin: 'Version corrigée' }),
+      );
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+
+      await service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'Version corrigée');
+
+      expect(prisma.scenario.update).toHaveBeenCalledWith({
+        where: { id: VALID_SCENARIO_ID },
+        data: { resumeFin: 'Version corrigée' },
+      });
+    });
+
+    it.each(['BROUILLON', 'A_VENIR', 'COURANT'] as const)(
+      'statut %s : rejet 400, aucune écriture (AC2)',
+      async (status) => {
+        prisma.scenario.findUnique.mockResolvedValue(mockScenario({ status }));
+        parties.getOwned.mockResolvedValue({
+          id: 'p1',
+          mjId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        });
+
+        await expect(
+          service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.scenario.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('scénario introuvable → 404', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.scenario.update).not.toHaveBeenCalled();
+    });
+
+    it('non-MJ → 403 propagé par getOwned, aucune écriture (AC5)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(mockScenario());
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.setResumeFin(VALID_SCENARIO_ID, 'stranger', 'texte'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.scenario.update).not.toHaveBeenCalled();
+    });
+  });
 });

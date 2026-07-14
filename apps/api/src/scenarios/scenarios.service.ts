@@ -640,6 +640,35 @@ export class ScenariosService {
     return toEnrichedDto(this.prisma, updated, partie.kind);
   }
 
+  // AD-1/AD-9 : résumé de fin = champ de Scenario, écriture MJ-only (getOwned). Garde de statut
+  // inversée par rapport à update() (scenarios.service.ts:76-80) : celle-ci rejette tant que le
+  // scénario n'est pas encore PASSE, update() rejette une fois PASSE — les deux se complètent.
+  // Aucune restriction de kind, rappelable à volonté après la première rédaction (AC3).
+  async setResumeFin(
+    scenarioId: string,
+    mjId: string,
+    resumeFin: string,
+  ): Promise<ScenarioDto> {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+    });
+    if (!scenario) throw new NotFoundException('Scénario introuvable');
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    if (scenario.status !== 'PASSE') {
+      throw new BadRequestException(
+        "Le résumé de fin ne peut être rédigé qu'après clôture du scénario",
+      );
+    }
+
+    const updated = await this.prisma.scenario.update({
+      where: { id: scenarioId },
+      data: { resumeFin },
+    });
+
+    return toEnrichedDto(this.prisma, updated, partie.kind);
+  }
+
   async getDocumentFile(
     documentId: string,
     userId: string,

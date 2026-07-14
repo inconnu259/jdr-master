@@ -148,6 +148,11 @@ export interface SetSeanceCapacityDto {
   inscriptionMax: number;
 }
 
+/** Payload de rédaction du résumé de fin d'un Scenario (PATCH /scenarios/:id/resume-fin). */
+export interface SetResumeFinDto {
+  resumeFin: string;
+}
+
 /** Payload de liaison d'un SessionPoll existant à une Seance (PATCH /scenarios/seances/:id/poll). */
 export interface LinkSeancePollDto {
   pollId: string;

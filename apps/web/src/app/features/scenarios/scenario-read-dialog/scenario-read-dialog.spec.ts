@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
+import { Router } from '@angular/router';
 import { vi } from 'vitest';
 import type { CharacterDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
 import { ScenarioReadDialog, type ScenarioReadDialogData } from './scenario-read-dialog';
@@ -29,10 +30,16 @@ async function createComponent(
     partieKind = 'ONE_SHOT' as PartieKind,
     characters = [] as CharacterDto[],
     currentUserId = 'viewer1',
-  }: { partieKind?: PartieKind; characters?: CharacterDto[]; currentUserId?: string } = {},
+    isMj = false,
+  }: {
+    partieKind?: PartieKind;
+    characters?: CharacterDto[];
+    currentUserId?: string;
+    isMj?: boolean;
+  } = {},
 ) {
   const dialogRef = { close: vi.fn() };
-  const data: ScenarioReadDialogData = { scenario, partieKind, characters };
+  const data: ScenarioReadDialogData = { scenario, partieKind, characters, isMj };
   const scenariosSvc = {
     participate: vi.fn(),
     linkSeancePoll: vi.fn(),
@@ -40,6 +47,7 @@ async function createComponent(
   };
   const authSvc = { currentUser: () => ({ id: currentUserId }) };
   const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
+  const router = { navigate: vi.fn() };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioReadDialog],
@@ -50,6 +58,7 @@ async function createComponent(
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: AuthService, useValue: authSvc },
       { provide: PollService, useValue: pollSvc },
+      { provide: Router, useValue: router },
     ],
   }).compileComponents();
 
@@ -61,7 +70,7 @@ async function createComponent(
     await Promise.resolve();
     fixture.detectChanges();
   }
-  return { fixture, dialogRef, scenariosSvc };
+  return { fixture, dialogRef, scenariosSvc, router };
 }
 
 describe('ScenarioReadDialog', () => {
@@ -121,6 +130,52 @@ describe('ScenarioReadDialog', () => {
     const comp = fixture.componentInstance as unknown as { close: () => void };
     comp.close();
     expect(dialogRef.close).toHaveBeenCalled();
+  });
+
+  describe('CTA « Rédiger/Modifier le résumé de fin » (AC4, Story 8.5 — fix accessibilité de navigation)', () => {
+    it('MJ + PASSE sans résumé → bouton « Rédiger le résumé de fin » visible', async () => {
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'PASSE', resumeFin: null },
+        { isMj: true },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Rédiger le résumé de fin');
+    });
+
+    it('MJ + PASSE avec résumé déjà rédigé → bouton « Modifier le résumé de fin » visible', async () => {
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'PASSE', resumeFin: 'Les PJ ont vaincu le dragon.' },
+        { isMj: true },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Modifier le résumé de fin');
+    });
+
+    it('joueur (isMj=false) + PASSE → aucun CTA de rédaction', async () => {
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'PASSE', resumeFin: null },
+        { isMj: false },
+      );
+      expect(fixture.nativeElement.textContent).not.toContain('résumé de fin');
+    });
+
+    it('MJ + statut non-PASSE → aucun CTA (section résumé absente)', async () => {
+      const { fixture } = await createComponent({ ...BASE, status: 'COURANT' }, { isMj: true });
+      expect(fixture.nativeElement.textContent).not.toContain('résumé de fin');
+    });
+
+    it('clic → ferme le dialogue et navigue vers la fiche d’édition (ScenarioEditor)', async () => {
+      const { fixture, dialogRef, router } = await createComponent(
+        { ...BASE, status: 'PASSE', resumeFin: null },
+        { isMj: true },
+      );
+      const comp = fixture.componentInstance as any;
+
+      comp.editResume();
+
+      expect(dialogRef.close).toHaveBeenCalled();
+      expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'scenarios', 's1'], {
+        state: { scenario: expect.objectContaining({ id: 's1' }) },
+      });
+    });
   });
 
   describe('Participation (AC8, Story 8.1)', () => {

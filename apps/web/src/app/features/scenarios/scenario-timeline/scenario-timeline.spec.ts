@@ -140,7 +140,7 @@ describe('ScenarioTimeline', () => {
     const comp = fixture.componentInstance as any;
     comp.openDetail(A_VENIR);
     expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, {
-      data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [] },
+      data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [], isMj: false },
     });
   });
 
@@ -240,7 +240,7 @@ describe('ScenarioTimeline', () => {
     comp.openDetail(A_VENIR);
 
     expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, {
-      data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [] },
+      data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [], isMj: false },
     });
   });
 
@@ -265,7 +265,7 @@ describe('ScenarioTimeline', () => {
     comp.onCardKeydown({ key: 'Enter', preventDefault } as unknown as KeyboardEvent, A_VENIR);
     expect(preventDefault).toHaveBeenCalled();
     expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, {
-      data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [] },
+      data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [], isMj: false },
     });
   });
 
@@ -330,12 +330,12 @@ describe('ScenarioTimeline', () => {
     expect(dialog.open).not.toHaveBeenCalled();
   });
 
-  it('MJ + clic sur un PASSE → ouvre bien ScenarioReadDialog (comportement inchangé)', async () => {
+  it('MJ + clic sur un PASSE → ouvre ScenarioReadDialog avec isMj=true (CTA résumé de fin, Story 8.5)', async () => {
     const { fixture, dialog, router } = await createComponent([PASSE], { isMj: true });
     const comp = fixture.componentInstance as any;
     comp.openDetail(PASSE);
     expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, {
-      data: { scenario: PASSE, partieKind: 'ONE_SHOT', characters: [] },
+      data: { scenario: PASSE, partieKind: 'ONE_SHOT', characters: [], isMj: true },
     });
     expect(router.navigate).not.toHaveBeenCalled();
   });
@@ -355,7 +355,7 @@ describe('ScenarioTimeline', () => {
     const comp = fixture.componentInstance as any;
     comp.openDetail(COURANT_1);
     expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, {
-      data: { scenario: COURANT_1, partieKind: 'ONE_SHOT', characters: [] },
+      data: { scenario: COURANT_1, partieKind: 'ONE_SHOT', characters: [], isMj: false },
     });
     expect(router.navigate).not.toHaveBeenCalled();
   });
@@ -375,7 +375,7 @@ describe('ScenarioTimeline', () => {
     const comp = fixture.componentInstance as any;
     comp.openDetail(A_VENIR);
     expect(dialog.open).toHaveBeenCalledWith(ScenarioReadDialog, {
-      data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [] },
+      data: { scenario: A_VENIR, partieKind: 'ONE_SHOT', characters: [], isMj: false },
     });
     expect(router.navigate).not.toHaveBeenCalled();
   });

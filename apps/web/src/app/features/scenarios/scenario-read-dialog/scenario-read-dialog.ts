@@ -2,6 +2,7 @@ import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatDialogModule, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
+import { Router } from '@angular/router';
 import type { CharacterDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
@@ -13,6 +14,12 @@ export interface ScenarioReadDialogData {
   scenario: ScenarioDto;
   partieKind: PartieKind;
   characters: CharacterDto[];
+  /**
+   * Le viewer courant est le MJ de la Partie (Story 8.5) — seul cas où ce dialogue, normalement
+   * strictement lecture seule, expose un CTA de navigation vers ScenarioEditor pour rédiger le
+   * résumé de fin. Optionnel (défaut `false`) : seul `ScenarioTimeline` le renseigne aujourd'hui.
+   */
+  isMj?: boolean;
 }
 
 function extractErrorMessage(err: unknown, fallback: string): string {
@@ -44,7 +51,9 @@ export class ScenarioReadDialog implements OnInit {
   private readonly dialogRef = inject<MatDialogRef<ScenarioReadDialog, void>>(MatDialogRef);
   private readonly scenarios = inject(ScenariosService);
   private readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
   protected readonly currentUserId = computed(() => this.auth.currentUser()?.id);
+  protected readonly isMj = computed(() => this.data.isMj ?? false);
 
   protected readonly scenario = signal<ScenarioDto>(this.data.scenario);
   // Garde défensive : BROUILLON ne devrait jamais atteindre ce dialogue (ScenarioTimeline le filtre
@@ -105,5 +114,16 @@ export class ScenarioReadDialog implements OnInit {
 
   protected close(): void {
     this.dialogRef.close();
+  }
+
+  // Story 8.5 : seul chemin de navigation MJ → ScenarioEditor pour un scénario PASSE (fix revue de
+  // code — ScenarioTimeline route toujours PASSE vers ce dialogue en lecture seule, sans quoi le
+  // panneau de rédaction du résumé de fin serait inatteignable en pratique).
+  protected editResume(): void {
+    const s = this.scenario();
+    this.dialogRef.close();
+    void this.router.navigate(['/parties', s.partieId, 'scenarios', s.id], {
+      state: { scenario: s },
+    });
   }
 }

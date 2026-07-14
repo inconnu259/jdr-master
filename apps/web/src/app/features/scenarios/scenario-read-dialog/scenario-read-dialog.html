@@ -13,6 +13,11 @@
       <section class="resume">
         <h3>Résumé de fin</h3>
         <p>{{ scenario().resumeFin ?? 'Aucun résumé pour l’instant.' }}</p>
+        @if (isMj()) {
+          <button mat-button type="button" (click)="editResume()">
+            {{ scenario().resumeFin ? 'Modifier le résumé de fin' : 'Rédiger le résumé de fin' }}
+          </button>
+        }
       </section>
     }
   }

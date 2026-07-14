@@ -28,6 +28,7 @@ import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import { LinkSeancePollDto } from './dto/link-seance-poll.dto';
 import { SetSeanceCapacityDto } from './dto/set-seance-capacity.dto';
 import { SetCompteRenduDto } from './dto/set-compte-rendu.dto';
+import { SetResumeFinDto } from './dto/set-resume-fin.dto';
 
 const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024;
 
@@ -96,6 +97,15 @@ export class ScenariosController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.scenarios.close(scenarioId, user.id);
+  }
+
+  @Patch('scenarios/:id/resume-fin')
+  setResumeFin(
+    @Param('id', ParseUUIDPipe) scenarioId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SetResumeFinDto,
+  ) {
+    return this.scenarios.setResumeFin(scenarioId, user.id, dto.resumeFin);
   }
 
   @Post('scenarios/:id/participate')

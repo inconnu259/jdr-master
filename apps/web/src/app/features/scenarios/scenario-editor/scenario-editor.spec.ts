@@ -53,6 +53,7 @@ async function createComponent(scenario: ScenarioDto = SCENARIO, characters: Cha
     close: vi.fn(),
     addSeance: vi.fn(),
     linkSeancePoll: vi.fn(),
+    setResumeFin: vi.fn(),
   };
   const characterSvc = { listByPartie: vi.fn().mockResolvedValue(characters) };
   const partiesSvc = { members: vi.fn().mockResolvedValue([]) };
@@ -381,6 +382,79 @@ describe('ScenarioEditor', () => {
       comp.onSeanceLinked(updated);
 
       expect(comp.scenario().seances).toHaveLength(1);
+    });
+  });
+
+  describe('Résumé de fin (Story 8.5)', () => {
+    it.each(['BROUILLON', 'A_VENIR', 'COURANT'] as const)(
+      'statut %s → section résumé de fin absente',
+      async (status) => {
+        const { fixture } = await createComponent({ ...SCENARIO, status });
+        expect(fixture.nativeElement.textContent).not.toContain('résumé de fin');
+      },
+    );
+
+    it('statut PASSE sans résumé → texte incitatif affiché', async () => {
+      const { fixture } = await createComponent({
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: null,
+      });
+      expect(fixture.nativeElement.textContent).toContain('Aucun résumé pour l’instant');
+    });
+
+    it('statut PASSE avec résumé déjà rédigé → valeur pré-remplie dans le textarea', async () => {
+      const { fixture } = await createComponent({
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: 'Les PJ ont vaincu le dragon.',
+      });
+      const comp = fixture.componentInstance as any;
+      expect(comp.resumeFinDraft()).toBe('Les PJ ont vaincu le dragon.');
+    });
+
+    it('submitResumeFin() appelle scenariosService.setResumeFin et met à jour scenario()', async () => {
+      const { fixture, scenariosSvc } = await createComponent({
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: null,
+      });
+      const comp = fixture.componentInstance as any;
+      comp.resumeFinDraft.set('Les PJ ont vaincu le dragon.');
+      scenariosSvc.setResumeFin.mockResolvedValue({
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: 'Les PJ ont vaincu le dragon.',
+      });
+
+      await comp.submitResumeFin();
+
+      expect(scenariosSvc.setResumeFin).toHaveBeenCalledWith(
+        's1',
+        'Les PJ ont vaincu le dragon.',
+      );
+      expect(comp.scenario().resumeFin).toBe('Les PJ ont vaincu le dragon.');
+    });
+
+    it('échec → resumeFinError affiche le message serveur', async () => {
+      const { fixture, scenariosSvc } = await createComponent({
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: null,
+      });
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.setResumeFin.mockRejectedValue(
+        new HttpErrorResponse({ status: 500, error: { message: 'Erreur serveur' } }),
+      );
+
+      await comp.submitResumeFin();
+
+      expect(comp.resumeFinError()).toBe('Erreur serveur');
+    });
+
+    it('les comptes-rendus de séance (app-seance-list) restent affichés indépendamment du résumé', async () => {
+      const { fixture } = await createComponent({ ...SCENARIO, status: 'PASSE', resumeFin: null });
+      expect(fixture.nativeElement.querySelector('app-seance-list')).toBeTruthy();
     });
   });
 

@@ -24,6 +24,7 @@ function makeScenariosService() {
     desinscrire: jest.fn(),
     validerDate: jest.fn(),
     setCompteRendu: jest.fn(),
+    setResumeFin: jest.fn(),
     uploadDocument: jest.fn(),
     listDocuments: jest.fn(),
     listLibraryDocuments: jest.fn(),
@@ -143,6 +144,11 @@ describe('ScenariosController', () => {
   it('setCompteRendu() route seanceId/user/compteRendu vers ScenariosService.setCompteRendu', async () => {
     await controller.setCompteRendu('seance1', user, { compteRendu: 'texte' });
     expect(scenarios.setCompteRendu).toHaveBeenCalledWith('seance1', 'mj1', 'texte');
+  });
+
+  it('setResumeFin() route scenarioId/user/resumeFin vers ScenariosService.setResumeFin', async () => {
+    await controller.setResumeFin('scenario1', user, { resumeFin: 'texte' });
+    expect(scenarios.setResumeFin).toHaveBeenCalledWith('scenario1', 'mj1', 'texte');
   });
 
   it('uploadDocument() route partieId/user/file/scenarioId vers ScenariosService.uploadDocument', async () => {
