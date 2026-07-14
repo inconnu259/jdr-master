@@ -188,6 +188,16 @@ describe('ScenariosService', () => {
     await p;
   });
 
+  it('setCompteRendu → PATCH /scenarios/seances/:id/compte-rendu avec le texte', async () => {
+    const p = service.setCompteRendu('seance1', 'Les PJ ont vaincu le dragon.');
+    const req = http.expectOne(`${API}/scenarios/seances/seance1/compte-rendu`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ compteRendu: 'Les PJ ont vaincu le dragon.' });
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(scenario);
+    await p;
+  });
+
   it('uploadDocument avec scenarioId → POST multipart avec scenarioId dans le FormData', async () => {
     const file = new File(['%PDF-1.4'], 'lettre.pdf', { type: 'application/pdf' });
     const p = service.uploadDocument('p1', file, 's1');

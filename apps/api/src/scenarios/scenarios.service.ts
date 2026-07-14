@@ -612,6 +612,34 @@ export class ScenariosService {
     return toEnrichedDto(this.prisma, updated, partie.kind);
   }
 
+  // AD-1/AD-9 : compte-rendu = champ neutre de Seance, jamais restreint par kind ni par un
+  // hypothétique statut (Seance n'en a aucun) — contrairement à setSeanceCapacity/inscrire/
+  // validerDate (Story 8.3, réservés à CAMPAGNE_EPISODIQUE). Écriture MJ-only (getOwned).
+  async setCompteRendu(
+    seanceId: string,
+    mjId: string,
+    compteRendu: string,
+  ): Promise<ScenarioDto> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: seanceId },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    const scenario = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: seance.scenarioId },
+    });
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    await this.prisma.seance.update({
+      where: { id: seanceId },
+      data: { compteRendu },
+    });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenario.id },
+    });
+    return toEnrichedDto(this.prisma, updated, partie.kind);
+  }
+
   async getDocumentFile(
     documentId: string,
     userId: string,

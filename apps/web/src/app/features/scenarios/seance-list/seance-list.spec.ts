@@ -66,6 +66,7 @@ async function createComponent(
     desinscrire: vi.fn(),
     validerDate: vi.fn(),
     addSeance: vi.fn(),
+    setCompteRendu: vi.fn(),
   };
   const pollSvc = {
     chooseDate: vi.fn(),
@@ -561,6 +562,104 @@ describe('SeanceList', () => {
 
       expect(scenariosSvc.addSeance).toHaveBeenCalledWith('s1');
       expect(emitted?.seances).toHaveLength(2);
+    });
+  });
+
+  describe('Compte-rendu de séance (Story 8.4, commun aux branches linéaire et épisodique)', () => {
+    const SEANCE_WITH_COMPTE_RENDU: SeanceDto = {
+      ...SEANCE_NO_POLL,
+      compteRendu: 'Les PJ ont vaincu le dragon.',
+    };
+    const SEANCE_EMPTY_COMPTE_RENDU: SeanceDto = { ...SEANCE_NO_POLL, compteRendu: '' };
+    const SEANCE_WHITESPACE_COMPTE_RENDU: SeanceDto = { ...SEANCE_NO_POLL, compteRendu: '   ' };
+
+    it('MJ, branche linéaire → textarea + bouton toujours visibles, même sans compte-rendu (AC5)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL] },
+        { isMj: true },
+      );
+      expect(fixture.nativeElement.querySelector('textarea')).toBeTruthy();
+      expect(fixture.nativeElement.textContent).toContain('Enregistrer le compte-rendu');
+    });
+
+    it('MJ, branche épisodique → textarea + bouton également visibles (AC1, indépendant du kind)', async () => {
+      const seanceEpisodique: SeanceDto = {
+        ...SEANCE_NO_POLL,
+        inscription: { min: 4, max: 6, inscrits: [], dateValidee: null },
+      };
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [seanceEpisodique] },
+        { isMj: true, isEpisodique: true },
+      );
+      expect(fixture.nativeElement.querySelector('textarea')).toBeTruthy();
+    });
+
+    it('MJ, séance avec compte-rendu existant → textarea pré-rempli', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_COMPTE_RENDU] },
+        { isMj: true },
+      );
+      const textarea: HTMLTextAreaElement = fixture.nativeElement.querySelector('textarea');
+      expect(textarea.value).toBe('Les PJ ont vaincu le dragon.');
+    });
+
+    it('joueur, compte-rendu présent → texte affiché, jamais de champ de saisie', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_COMPTE_RENDU] },
+        { isMj: false },
+      );
+      expect(fixture.nativeElement.querySelector('textarea')).toBeNull();
+      expect(fixture.nativeElement.textContent).toContain('Les PJ ont vaincu le dragon.');
+    });
+
+    it('joueur, compte-rendu null → état incitatif (AC4)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL] },
+        { isMj: false },
+      );
+      expect(fixture.nativeElement.textContent).toContain(
+        'Aucun compte-rendu pour cette séance pour le moment.',
+      );
+    });
+
+    it('joueur, compte-rendu chaîne vide → état incitatif également (jamais un vide silencieux)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_EMPTY_COMPTE_RENDU] },
+        { isMj: false },
+      );
+      expect(fixture.nativeElement.textContent).toContain(
+        'Aucun compte-rendu pour cette séance pour le moment.',
+      );
+    });
+
+    it('joueur, compte-rendu composé uniquement d’espaces → état incitatif également', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WHITESPACE_COMPTE_RENDU] },
+        { isMj: false },
+      );
+      expect(fixture.nativeElement.textContent).toContain(
+        'Aucun compte-rendu pour cette séance pour le moment.',
+      );
+    });
+
+    it('onSetCompteRendu appelle setCompteRendu et émet seanceLinked', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL] },
+        { isMj: true },
+      );
+      const comp = fixture.componentInstance as any;
+      const updated = { ...SCENARIO, seances: [SEANCE_WITH_COMPTE_RENDU] };
+      scenariosSvc.setCompteRendu.mockResolvedValue(updated);
+      let emitted: ScenarioDto | undefined;
+      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
+
+      await comp.onSetCompteRendu('seance1', 'Les PJ ont vaincu le dragon.');
+
+      expect(scenariosSvc.setCompteRendu).toHaveBeenCalledWith(
+        'seance1',
+        'Les PJ ont vaincu le dragon.',
+      );
+      expect(emitted).toEqual(updated);
     });
   });
 });

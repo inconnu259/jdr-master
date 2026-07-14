@@ -215,6 +215,21 @@ export class SeanceList implements OnInit {
     }
   }
 
+  // AC1 : aucune restriction de kind — s'applique aux branches linéaire ET épisodique.
+  protected async onSetCompteRendu(seanceId: string, compteRendu: string): Promise<void> {
+    if (this.pollActionPending()) return;
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.scenarios.setCompteRendu(seanceId, compteRendu);
+      this.seanceLinked.emit(updated);
+    } catch {
+      this.error.set('Impossible d’enregistrer le compte-rendu. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
   protected formatValidatedDate(iso: string): string {
     return new Intl.DateTimeFormat('fr-FR', {
       weekday: 'short',

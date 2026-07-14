@@ -6,6 +6,7 @@ import type {
   LinkSeancePollDto,
   ScenarioDocumentDto,
   ScenarioDto,
+  SetCompteRenduDto,
   SetSeanceCapacityDto,
   UpdateScenarioDto,
 } from '@master-jdr/shared';
@@ -173,6 +174,18 @@ export class ScenariosService {
       this.http.patch<ScenarioDto>(
         `${API_BASE}/scenarios/seances/${seanceId}/valider-date`,
         {},
+        { withCredentials: true },
+      ),
+    );
+    this._changed.update((v) => v + 1);
+    return result;
+  }
+
+  async setCompteRendu(seanceId: string, compteRendu: string): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
+      this.http.patch<ScenarioDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/compte-rendu`,
+        { compteRendu } satisfies SetCompteRenduDto,
         { withCredentials: true },
       ),
     );

@@ -159,6 +159,30 @@
           }
         }
       }
+
+      <div class="seance-row__compte-rendu">
+        @if (isMj()) {
+          <textarea
+            #compteRenduInput
+            rows="3"
+            maxlength="5000"
+            placeholder="Compte-rendu de la séance…"
+            aria-label="Compte-rendu de la séance"
+          >{{ seance.compteRendu ?? '' }}</textarea>
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="pollActionPending()"
+            (click)="onSetCompteRendu(seance.id, compteRenduInput.value)"
+          >
+            Enregistrer le compte-rendu
+          </button>
+        } @else if (seance.compteRendu?.trim()) {
+          <p class="seance-row__compte-rendu-text">{{ seance.compteRendu }}</p>
+        } @else {
+          <p class="seance-row__compte-rendu-empty">Aucun compte-rendu pour cette séance pour le moment.</p>
+        }
+      </div>
     </div>
   }
 </section>

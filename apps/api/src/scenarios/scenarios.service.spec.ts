@@ -2404,4 +2404,87 @@ describe('ScenariosService', () => {
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
   });
+
+  describe('setCompteRendu()', () => {
+    const SEANCE_ID = '99999999-9999-4999-a999-999999999999';
+
+    function mockScenario(overrides: Record<string, unknown> = {}) {
+      return {
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'La Dette du Forgeron',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+        ...overrides,
+      };
+    }
+
+    it.each(['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as const)(
+      '%s : compte-rendu enregistré, aucune restriction de kind (AC1)',
+      async (kind) => {
+        prisma.seance.findUnique.mockResolvedValue({
+          id: SEANCE_ID,
+          scenarioId: VALID_SCENARIO_ID,
+        });
+        prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind });
+
+        await service.setCompteRendu(SEANCE_ID, 'mj1', 'Les PJ ont vaincu le dragon.');
+
+        expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+        expect(prisma.seance.update).toHaveBeenCalledWith({
+          where: { id: SEANCE_ID },
+          data: { compteRendu: 'Les PJ ont vaincu le dragon.' },
+        });
+      },
+    );
+
+    it('chaîne vide acceptée — efface un compte-rendu déjà rédigé', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+
+      await service.setCompteRendu(SEANCE_ID, 'mj1', '');
+
+      expect(prisma.seance.update).toHaveBeenCalledWith({
+        where: { id: SEANCE_ID },
+        data: { compteRendu: '' },
+      });
+    });
+
+    it('séance introuvable → 404', async () => {
+      prisma.seance.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.setCompteRendu(SEANCE_ID, 'mj1', 'texte'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.setCompteRendu(SEANCE_ID, 'stranger', 'texte'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+  });
 });

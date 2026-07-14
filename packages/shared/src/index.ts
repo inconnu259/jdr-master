@@ -137,6 +137,11 @@ export interface SeanceInscriptionDto {
   dateValidee: string | null;
 }
 
+/** Payload de rédaction du compte-rendu d'une Seance (PATCH /scenarios/seances/:id/compte-rendu). */
+export interface SetCompteRenduDto {
+  compteRendu: string;
+}
+
 /** Payload de définition de la capacité d'une Seance (PATCH /scenarios/seances/:id/capacite). */
 export interface SetSeanceCapacityDto {
   inscriptionMin: number;

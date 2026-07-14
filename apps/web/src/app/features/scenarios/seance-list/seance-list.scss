@@ -38,3 +38,21 @@
   display: flex;
   gap: 0.5rem;
 }
+
+.seance-row__compte-rendu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+
+  textarea {
+    width: 100%;
+    resize: vertical;
+    font: inherit;
+  }
+}
+
+.seance-row__compte-rendu-empty {
+  color: var(--mat-sys-on-surface-variant, #666);
+  font-style: italic;
+}

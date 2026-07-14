@@ -27,6 +27,7 @@ import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import { LinkSeancePollDto } from './dto/link-seance-poll.dto';
 import { SetSeanceCapacityDto } from './dto/set-seance-capacity.dto';
+import { SetCompteRenduDto } from './dto/set-compte-rendu.dto';
 
 const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024;
 
@@ -158,6 +159,15 @@ export class ScenariosController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.scenarios.validerDate(seanceId, user.id);
+  }
+
+  @Patch('scenarios/seances/:id/compte-rendu')
+  setCompteRendu(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SetCompteRenduDto,
+  ) {
+    return this.scenarios.setCompteRendu(seanceId, user.id, dto.compteRendu);
   }
 
   @Post('parties/:id/documents')
