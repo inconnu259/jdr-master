@@ -1,8 +1,7 @@
-import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { Router } from '@angular/router';
 import type {
-  AvailableSlotDto,
   DaySlot,
   PartieMemberDto,
   ScenarioDto,
@@ -24,11 +23,11 @@ const SLOT_LABELS: Record<DaySlot, string> = {
 };
 
 /**
- * Liste des séances d'un scénario (Story 8.2, retravaillé Story 8.7) — la création de vote pour le
- * linéaire/one-shot ne vit plus ici (panneau `<app-poll-creation>` retiré, point d'entrée unique
- * désormais le calendrier via `goToCalendarForSeance`, cf. AC2/AC3 Story 8.7). AD-4 : le mécanisme
- * de vote (PollStatusPanel/PollResponseComponent) reste inchangé et jamais affiché pour
- * CAMPAGNE_EPISODIQUE (Inscription à capacité limitée à la place, Story 8.3).
+ * Liste des séances d'un scénario (Story 8.2, retravaillé Story 8.7/8.8) — la création de vote ne
+ * vit plus ici (panneau `<app-poll-creation>` retiré, point d'entrée unique désormais le calendrier
+ * via `goToCalendarForSeance`, cf. AC2/AC3 Story 8.7). AD-4 révisé (Story 8.8) : une séance
+ * épisodique peut désormais avoir à la fois un vote (`PollStatusPanel`/`PollResponseComponent`,
+ * choisit *quand*) et une inscription à capacité limitée (choisit *qui*) — les deux coexistent.
  */
 @Component({
   selector: 'app-seance-list',
@@ -36,7 +35,7 @@ const SLOT_LABELS: Record<DaySlot, string> = {
   templateUrl: './seance-list.html',
   styleUrl: './seance-list.scss',
 })
-export class SeanceList implements OnInit {
+export class SeanceList {
   private readonly scenarios = inject(ScenariosService);
   private readonly pollSvc = inject(PollService);
   private readonly auth = inject(AuthService);
@@ -54,40 +53,19 @@ export class SeanceList implements OnInit {
 
   protected readonly pollActionPending = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly availableSlots = signal<AvailableSlotDto[]>([]);
   /** Séance dont le formulaire de capacité est rouvert pour édition (AC6, Story 8.7) — un seul à la
    *  fois. Pré-rempli avec les valeurs déjà définies, contrairement à la création initiale. */
   protected readonly editingCapacitySeanceId = signal<string | null>(null);
 
   readonly SLOT_LABELS = SLOT_LABELS;
 
-  async ngOnInit(): Promise<void> {
-    if (!this.isMj()) return;
-    try {
-      const slots = await this.pollSvc.getAvailableSlots(this.partieId());
-      this.availableSlots.set(slots.filter((s): s is AvailableSlotDto => 'members' in s));
-    } catch {
-      // Non-critique : les créneaux calculés ne s'afficheront simplement pas.
-    }
-  }
-
   // Story 8.7, AC2/AC3 : point d'entrée unique — envoie le MJ sur le calendrier (mode MJ) avec
   // cette séance pré-sélectionnée/verrouillée, plutôt qu'un panneau de création dupliqué ici.
+  // Story 8.8 : ce même point d'entrée est désormais aussi utilisé pour l'épisodique.
   protected goToCalendarForSeance(seanceId: string): void {
     void this.router.navigate(['/parties', this.partieId(), 'calendar'], {
       queryParams: { seanceId },
     });
-  }
-
-  protected formatSlotLabel(slot: AvailableSlotDto): string {
-    const d = new Date(slot.date + 'T00:00:00Z');
-    const dateStr = new Intl.DateTimeFormat('fr-FR', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      timeZone: 'UTC',
-    }).format(d);
-    return `${dateStr} — ${SLOT_LABELS[slot.slot]}`;
   }
 
   protected openCapacityEdit(seanceId: string): void {
@@ -186,22 +164,6 @@ export class SeanceList implements OnInit {
     }
   }
 
-  // Story 8.7, AC4 : `date` désormais choisie explicitement parmi les créneaux calculés (au lieu de
-  // l'instant du clic).
-  protected async onValiderDate(seanceId: string, date: string): Promise<void> {
-    if (this.pollActionPending()) return;
-    this.pollActionPending.set(true);
-    this.error.set(null);
-    try {
-      const updated = await this.scenarios.validerDate(seanceId, date);
-      this.seanceLinked.emit(updated);
-    } catch {
-      this.error.set('Impossible de valider cette date. Réessayez.');
-    } finally {
-      this.pollActionPending.set(false);
-    }
-  }
-
   // Story 8.7, AC5 : la toute première séance d'un scénario ne peut jamais être supprimée (garde
   // déjà posée côté backend, `window.confirm` ici évite un clic accidentel destructeur). Revue de
   // code : confirmation renforcée quand une date a déjà été validée (roster/planning déjà figés) —
@@ -225,18 +187,19 @@ export class SeanceList implements OnInit {
     }
   }
 
-  // [ASSUMPTION] (cf. Dev Notes Story 8.3) : « Proposer une autre date » crée une nouvelle Seance
-  // vierge (addSeance, Story 8.2, aucun plafond) plutôt que de ne rien faire — l'ancienne Seance et
-  // ses Inscription restent intactes, non supprimées.
-  protected async onProposerAutreDate(): Promise<void> {
+  // Story 8.8, AC4 : détache le vote de la séance (et retire l'éventuelle dateValidee héritée)
+  // pour permettre d'en relancer un nouveau — confirmation avant réinitialisation (action
+  // destructive, même style que la suppression de séance à date validée, Story 8.7 revue).
+  protected async onResetSeanceDate(seanceId: string): Promise<void> {
     if (this.pollActionPending()) return;
+    if (!window.confirm('Réinitialiser la date de cette séance ? Un nouveau vote pourra être lancé.')) return;
     this.pollActionPending.set(true);
     this.error.set(null);
     try {
-      const updated = await this.scenarios.addSeance(this.scenario().id);
+      const updated = await this.scenarios.resetSeanceDate(seanceId);
       this.seanceLinked.emit(updated);
     } catch {
-      this.error.set('Impossible de proposer une nouvelle date. Réessayez.');
+      this.error.set('Impossible de réinitialiser la date. Réessayez.');
     } finally {
       this.pollActionPending.set(false);
     }

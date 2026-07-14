@@ -114,12 +114,26 @@ export class PollResponseComponent {
     });
     this.failedOptionIds.set(failed);
 
-    try {
-      const refreshed = await this.pollSvc.getCurrentPoll(this.partieId());
-      if (refreshed) this.responded.emit(refreshed);
-    } catch {
-      // Le refetch a échoué mais les votes ont potentiellement réussi — ne pas
-      // afficher le succès sans confirmation, mais ne pas masquer non plus l'état des votes.
+    // Story 8.8 (revue de code) : mise à jour locale optimiste du poll précis plutôt qu'un refetch
+    // via getCurrentPoll() — celui-ci suppose « un seul poll par Partie » (findFirst arbitraire),
+    // hypothèse invalidée depuis que plusieurs votes peuvent être actifs en parallèle (Décision 2) :
+    // un refetch pouvait renvoyer un tout autre poll, laissant l'entrée réellement votée périmée
+    // dans l'Oracle multi-poll (bug « rien ne se passe après avoir voté », réintroduit sans ce fix).
+    const currentUser = this.authSvc.currentUser();
+    if (currentUser) {
+      const poll = this.poll();
+      const updatedPoll: SessionPollDto = {
+        ...poll,
+        options: poll.options.map((opt) => {
+          if (failed.has(opt.id)) return opt;
+          const answer = this.pendingAnswers().get(opt.id);
+          if (!answer) return opt;
+          const votes = opt.votes.filter((v) => v.userId !== currentUser.id);
+          votes.push({ userId: currentUser.id, pseudo: currentUser.pseudo, answer });
+          return { ...opt, votes };
+        }),
+      };
+      this.responded.emit(updatedPoll);
     }
 
     if (failed.size === 0) {

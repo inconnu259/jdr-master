@@ -66,36 +66,38 @@
                 </button>
               }
             </div>
-          } @else if (!seance.inscription.dateValidee) {
+          } @else if (seance.poll?.chosenDate || seance.inscription.dateValidee) {
+            <p class="seance-row__chosen-date">
+              Date retenue :
+              {{
+                seance.poll?.chosenDate
+                  ? formatChosenDate(seance.poll!)
+                  : formatValidatedDate(seance.inscription.dateValidee!)
+              }}
+            </p>
+            <button
+              mat-stroked-button
+              color="warn"
+              type="button"
+              [disabled]="pollActionPending()"
+              (click)="onResetSeanceDate(seance.id)"
+            >
+              Réinitialiser la date
+            </button>
+          } @else if (!seance.poll) {
             <app-fill-indicator
               [count]="seance.inscription.inscrits.length"
               [min]="seance.inscription.min"
               [max]="seance.inscription.max"
             />
-            <div class="seance-row__slots">
-              <p>Choisir une date parmi les créneaux calculés :</p>
-              @for (slot of availableSlots(); track slot.date + slot.slot) {
-                <button
-                  mat-stroked-button
-                  type="button"
-                  [disabled]="pollActionPending()"
-                  (click)="onValiderDate(seance.id, slot.date)"
-                >
-                  {{ formatSlotLabel(slot) }}
-                </button>
-              }
-              @if (availableSlots().length === 0) {
-                <p class="hint">Aucun créneau calculé disponible.</p>
-              }
-            </div>
             <div class="seance-row__mj-actions">
               <button
-                mat-stroked-button
+                mat-flat-button
+                color="primary"
                 type="button"
-                [disabled]="pollActionPending()"
-                (click)="onProposerAutreDate()"
+                (click)="goToCalendarForSeance(seance.id)"
               >
-                Proposer une autre date
+                Lancer le vote
               </button>
               <button
                 mat-stroked-button
@@ -106,12 +108,49 @@
                 Modifier la capacité
               </button>
             </div>
+          } @else if (seance.poll.status === 'OPEN') {
+            <app-fill-indicator
+              [count]="seance.inscription.inscrits.length"
+              [min]="seance.inscription.min"
+              [max]="seance.inscription.max"
+            />
+            <app-poll-status
+              [poll]="seance.poll"
+              [members]="members()"
+              [busy]="pollActionPending()"
+              (chosen)="onChoose(seance.poll.id, $event)"
+            />
+            <button
+              mat-stroked-button
+              color="warn"
+              type="button"
+              [disabled]="pollActionPending()"
+              (click)="onClosePoll(seance.poll.id)"
+            >
+              Clôturer le vote
+            </button>
           } @else {
-            <p class="seance-row__chosen-date">
-              Date retenue : {{ formatValidatedDate(seance.inscription.dateValidee) }}
-            </p>
+            <p class="seance-row__chosen-date">Vote clôturé sans date retenue.</p>
+            <button
+              mat-stroked-button
+              color="warn"
+              type="button"
+              [disabled]="pollActionPending()"
+              (click)="onResetSeanceDate(seance.id)"
+            >
+              Réinitialiser la date
+            </button>
           }
-        } @else if (seance.inscription && !seance.inscription.dateValidee) {
+        } @else if (seance.inscription && (seance.poll?.chosenDate || seance.inscription.dateValidee)) {
+          <p class="seance-row__chosen-date">
+            Date retenue :
+            {{
+              seance.poll?.chosenDate
+                ? formatChosenDate(seance.poll!)
+                : formatValidatedDate(seance.inscription.dateValidee!)
+            }}
+          </p>
+        } @else if (seance.inscription) {
           <app-fill-indicator
             [count]="seance.inscription.inscrits.length"
             [min]="seance.inscription.min"
@@ -137,10 +176,15 @@
               S'inscrire
             </button>
           }
-        } @else if (seance.inscription?.dateValidee) {
-          <p class="seance-row__chosen-date">
-            Date retenue : {{ formatValidatedDate(seance.inscription.dateValidee ?? '') }}
-          </p>
+          @if (seance.poll?.status === 'OPEN') {
+            <app-poll-response
+              [partieId]="partieId()"
+              [poll]="seance.poll!"
+              (responded)="onPollResponded($event)"
+            />
+          } @else if (seance.poll) {
+            <p class="seance-row__chosen-date">Vote clôturé sans date retenue.</p>
+          }
         }
       } @else {
         @if (isMj()) {
@@ -177,6 +221,15 @@
                 Vote clôturé sans date retenue.
               }
             </p>
+            <button
+              mat-stroked-button
+              color="warn"
+              type="button"
+              [disabled]="pollActionPending()"
+              (click)="onResetSeanceDate(seance.id)"
+            >
+              Réinitialiser la date
+            </button>
           }
         } @else if (seance.poll) {
           @if (seance.poll.status === 'OPEN') {

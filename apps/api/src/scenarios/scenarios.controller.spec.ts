@@ -30,10 +30,10 @@ function makeScenariosService() {
     addSeance: jest.fn(),
     deleteSeance: jest.fn(),
     createSeancePoll: jest.fn(),
+    resetSeanceDate: jest.fn(),
     setSeanceCapacity: jest.fn(),
     inscrire: jest.fn(),
     desinscrire: jest.fn(),
-    validerDate: jest.fn(),
     setCompteRendu: jest.fn(),
     setResumeFin: jest.fn(),
     uploadDocument: jest.fn(),
@@ -133,6 +133,11 @@ describe('ScenariosController', () => {
     );
   });
 
+  it('resetSeanceDate() route seanceId/user vers ScenariosService.resetSeanceDate', async () => {
+    await controller.resetSeanceDate('seance1', user);
+    expect(scenarios.resetSeanceDate).toHaveBeenCalledWith('seance1', 'mj1');
+  });
+
   it('setSeanceCapacity() route seanceId/user/min/max vers ScenariosService.setSeanceCapacity', async () => {
     await controller.setSeanceCapacity('seance1', user, {
       inscriptionMin: 4,
@@ -154,17 +159,6 @@ describe('ScenariosController', () => {
   it('desinscrire() route seanceId/user vers ScenariosService.desinscrire', async () => {
     await controller.desinscrire('seance1', user);
     expect(scenarios.desinscrire).toHaveBeenCalledWith('seance1', 'mj1');
-  });
-
-  it('validerDate() route seanceId/user/date vers ScenariosService.validerDate', async () => {
-    await controller.validerDate('seance1', user, {
-      date: '2026-08-15T14:00:00.000Z',
-    });
-    expect(scenarios.validerDate).toHaveBeenCalledWith(
-      'seance1',
-      'mj1',
-      '2026-08-15T14:00:00.000Z',
-    );
   });
 
   it('setCompteRendu() route seanceId/user/compteRendu vers ScenariosService.setCompteRendu', async () => {

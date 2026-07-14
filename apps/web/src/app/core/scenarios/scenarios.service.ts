@@ -11,7 +11,6 @@ import type {
   SetResumeFinDto,
   SetSeanceCapacityDto,
   UpdateScenarioDto,
-  ValiderDateDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
@@ -147,6 +146,18 @@ export class ScenariosService {
     return result;
   }
 
+  async resetSeanceDate(seanceId: string): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
+      this.http.patch<ScenarioDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/reset-date`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+    this._changed.update((v) => v + 1);
+    return result;
+  }
+
   async setSeanceCapacity(
     seanceId: string,
     inscriptionMin: number,
@@ -180,18 +191,6 @@ export class ScenariosService {
       this.http.delete<ScenarioDto>(`${API_BASE}/scenarios/seances/${seanceId}/inscription`, {
         withCredentials: true,
       }),
-    );
-    this._changed.update((v) => v + 1);
-    return result;
-  }
-
-  async validerDate(seanceId: string, date: string): Promise<ScenarioDto> {
-    const result = await firstValueFrom(
-      this.http.patch<ScenarioDto>(
-        `${API_BASE}/scenarios/seances/${seanceId}/valider-date`,
-        { date } satisfies ValiderDateDto,
-        { withCredentials: true },
-      ),
     );
     this._changed.update((v) => v + 1);
     return result;

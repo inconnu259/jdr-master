@@ -37,7 +37,7 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { characterName, findContentEntry } from '../../../core/characters/character.util';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
-import { PollService } from '../../../core/poll/poll.service';
+import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { getRespondedCount } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
@@ -85,7 +85,7 @@ export class PartieDetail implements OnInit {
   protected readonly auth = inject(AuthService);
   private readonly parties = inject(PartiesService);
   private readonly modeSvc = inject(ModeService);
-  private readonly pollSvc = inject(PollService);
+  private readonly scenariosSvc = inject(ScenariosService);
   private readonly characterSvc = inject(CharacterService);
   private readonly dialog = inject(MatDialog);
   private readonly breakpointObserver = inject(BreakpointObserver);
@@ -99,7 +99,11 @@ export class PartieDetail implements OnInit {
 
   protected readonly partie = signal<PartieDto | null>(null);
   protected readonly members = signal<PartieMemberDto[]>([]);
-  protected readonly activePoll = signal<SessionPollDto | null>(null);
+  // Story 8.8 (revue de code) : plusieurs votes actifs peuvent désormais coexister sur une même
+  // Partie (Décision 2) — remplace l'ancien `activePoll` unique (`PollService.getCurrentPoll()`,
+  // hypothèse « un seul poll par Partie » invalidée). Chargé via ScenariosService.listAll(), même
+  // source que CalendarView/ScenarioTimeline.
+  protected readonly activePolls = signal<SessionPollDto[]>([]);
   protected readonly links = signal<InviteLinkDto[]>([]);
   protected readonly characters = signal<CharacterDto[]>([]);
   protected readonly xpDistributions = signal<XpDistributionDto[]>([]);
@@ -224,16 +228,23 @@ export class PartieDetail implements OnInit {
   protected readonly system = gameSystemName;
   protected readonly kind = partieKindLabel;
 
+  // Un seul poll actif → détail « X/Y réponses » précis (comportement historique conservé).
+  // Plusieurs → l'agrégation par réponse individuelle n'a plus de sens à ce niveau (chaque poll a
+  // son propre roster de réponses), le libellé devient un simple compte de votes en cours.
   protected readonly respondedCount = computed(() => {
-    const poll = this.activePoll();
-    return poll ? getRespondedCount(poll, this.members()) : 0;
+    const polls = this.activePolls();
+    return polls.length === 1 ? getRespondedCount(polls[0], this.members()) : 0;
   });
 
   protected pollStatusLabel(): string {
-    return this.theme
-      .tone()
-      ['poll.status_summary'].replace('{responded}', String(this.respondedCount()))
-      .replace('{total}', String(this.members().length));
+    const polls = this.activePolls();
+    if (polls.length === 1) {
+      return this.theme
+        .tone()
+        ['poll.status_summary'].replace('{responded}', String(this.respondedCount()))
+        .replace('{total}', String(this.members().length));
+    }
+    return `${polls.length} votes de date en cours`;
   }
 
   async ngOnInit(): Promise<void> {
@@ -242,7 +253,7 @@ export class PartieDetail implements OnInit {
     this.showTroupe.set(false);
     this.partie.set(await this.parties.get(id));
     await this.loadMembers();
-    this.activePoll.set(await this.pollSvc.getCurrentPoll(id).catch(() => null));
+    await this.loadActivePolls(id);
     this.characters.set(await this.characterSvc.listByPartie(id).catch(() => []));
     this.gameSystemContent.set(
       await this.characterSvc.getGameSystemContent(this.partie()!.gameSystemId).catch(() => null),
@@ -342,6 +353,21 @@ export class PartieDetail implements OnInit {
   private async loadMembers(): Promise<void> {
     const p = this.partie();
     if (p) this.members.set(await this.parties.members(p.id));
+  }
+
+  private async loadActivePolls(partieId: string): Promise<void> {
+    try {
+      const scenarios = await this.scenariosSvc.listAll(partieId);
+      const polls: SessionPollDto[] = [];
+      for (const scenario of scenarios) {
+        for (const seance of scenario.seances) {
+          if (seance.poll?.status === 'OPEN') polls.push(seance.poll);
+        }
+      }
+      this.activePolls.set(polls);
+    } catch {
+      // non-bloquant — le bandeau reste utilisable sans la liste des votes actifs
+    }
   }
 
   private async loadLinks(): Promise<void> {

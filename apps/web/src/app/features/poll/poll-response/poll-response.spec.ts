@@ -30,7 +30,6 @@ const fakePoll: SessionPollDto = {
 function makePollService() {
   return {
     castVote: vi.fn().mockResolvedValue(undefined),
-    getCurrentPoll: vi.fn().mockResolvedValue(fakePoll),
   };
 }
 
@@ -108,6 +107,38 @@ describe('PollResponseComponent', () => {
     await comp.onConfirm();
     expect(pollSvc.castVote).toHaveBeenCalledTimes(2);
     expect(snack.open).toHaveBeenCalledWith('Réponse enregistrée !', undefined, { duration: 3000 });
+  });
+
+  it('confirmation réussie → émet (responded) avec une mise à jour locale du poll précis, sans refetch (Story 8.8, revue de code)', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    let emitted: SessionPollDto | undefined;
+    comp.responded.subscribe((p: SessionPollDto) => (emitted = p));
+
+    comp.setAnswer('opt1', 'NO');
+    await comp.onConfirm();
+
+    expect(emitted).toBeDefined();
+    expect(emitted!.id).toBe('poll1'); // le poll précis sur lequel on vient de voter, pas un autre
+    const opt1 = emitted!.options.find((o) => o.id === 'opt1')!;
+    expect(opt1.votes.find((v) => v.userId === 'u1')?.answer).toBe('NO');
+  });
+
+  it('échec partiel → l’option en échec conserve son état d’origine dans le poll émis', async () => {
+    const { fixture, pollSvc } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    let emitted: SessionPollDto | undefined;
+    comp.responded.subscribe((p: SessionPollDto) => (emitted = p));
+    pollSvc.castVote = vi.fn((_partieId: string, _pollId: string, dto: { optionId: string }) =>
+      dto.optionId === 'opt1' ? Promise.reject(new Error('network')) : Promise.resolve(undefined),
+    );
+
+    comp.setAnswer('opt1', 'NO');
+    await comp.onConfirm();
+
+    const opt1 = emitted!.options.find((o) => o.id === 'opt1')!;
+    // opt1 a échoué : aucun nouveau vote 'NO' de u1 ajouté (état d'origine du poll conservé).
+    expect(opt1.votes.some((v) => v.userId === 'u1' && v.answer === 'NO')).toBe(false);
   });
 
   it("échec partiel → l'option en échec est marquée, message avec compteur, pas de toast de succès", async () => {

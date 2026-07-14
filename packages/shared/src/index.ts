@@ -163,13 +163,6 @@ export interface CreateSeancePollDto {
   options: { date: string; slot: DaySlot }[];
 }
 
-/** Payload de validation d'une date réelle pour une Seance épisodique (PATCH
- * /scenarios/seances/:id/valider-date, Story 8.7) — remplace l'ancien appel sans corps qui posait
- * l'instant du clic (`new Date()`) plutôt qu'une date réellement choisie. */
-export interface ValiderDateDto {
-  date: string;
-}
-
 /** Payload de création d'un scénario (POST /parties/:id/scenarios). */
 export interface CreateScenarioDto {
   title: string;

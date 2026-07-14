@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { PartiesModule } from '../parties/parties.module';
 import { CharacterModule } from '../characters/character.module';
 import { PollModule } from '../poll/poll.module';
@@ -10,7 +10,9 @@ import { ScenariosService } from './scenarios.service';
   // jamais d'accès Prisma direct à CharacterNote depuis ScenariosModule.
   // Story 8.7 : PollModule importé pour orchestrer createSeancePoll() (PollService.create()
   // appelé tel quel, CreatePollDto inchangé — P2-AD-2).
-  imports: [PartiesModule, CharacterModule, PollModule],
+  // Story 8.8 : forwardRef nécessaire — PollModule importe désormais ScenariosModule en retour
+  // (PollController a besoin de ScenariosService.recalculateNextSession()).
+  imports: [PartiesModule, CharacterModule, forwardRef(() => PollModule)],
   controllers: [ScenariosController],
   providers: [ScenariosService],
   exports: [ScenariosService],

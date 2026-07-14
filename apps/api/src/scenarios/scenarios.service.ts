@@ -422,13 +422,58 @@ export class ScenariosService {
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
+  // Story 8.8 (Décision 2) : un seul vote actif par Séance (pas par Partie, cf. PollService.create()
+  // qui ne ferme plus l'existant) — Partie.nextSessionDate/nextSessionSlot ne peuvent donc plus être
+  // posés par un seul choose() isolé, ils doivent refléter la date la plus proche dans le futur
+  // parmi TOUTES les séances actives de la Partie (poll.chosenDate ?? dateValidee, même logique de
+  // résolution que ScenarioTimeline/SeanceList depuis la Story 8.7). Appelé après tout événement
+  // pouvant faire changer cette date la plus proche : PollController.choose() (via forwardRef —
+  // PollService lui-même reste générique, P2-AD-2, c'est le contrôleur qui orchestre),
+  // resetSeanceDate(), deleteSeance(). Reproduit le comportement de reset de `reminderSentAt`
+  // (Palier 4 e-mail) déjà établi dans PollService.choose() : seulement si la date/le créneau change
+  // réellement.
+  async recalculateNextSession(partieId: string): Promise<void> {
+    const seances = await this.prisma.seance.findMany({
+      where: { scenario: { partieId } },
+      include: { poll: true },
+    });
+
+    const now = Date.now();
+    type Candidate = { date: Date; slot: DaySlot | null };
+    const nearest = seances
+      .map((s): Candidate | null => {
+        if (s.poll?.chosenDate) return { date: s.poll.chosenDate, slot: s.poll.chosenSlot };
+        if (s.dateValidee) return { date: s.dateValidee, slot: null };
+        return null;
+      })
+      .filter((c): c is Candidate => c !== null && c.date.getTime() >= now)
+      .sort((a, b) => a.date.getTime() - b.date.getTime())[0] ?? null;
+
+    const partie = await this.prisma.partie.findUniqueOrThrow({
+      where: { id: partieId },
+    });
+    const unchanged =
+      (partie.nextSessionDate?.getTime() ?? null) === (nearest?.date.getTime() ?? null) &&
+      partie.nextSessionSlot === (nearest?.slot ?? null);
+
+    await this.prisma.partie.update({
+      where: { id: partieId },
+      data: {
+        nextSessionDate: nearest?.date ?? null,
+        nextSessionSlot: nearest?.slot ?? null,
+        ...(unchanged ? {} : { reminderSentAt: null }),
+      },
+    });
+  }
+
   // AD-9 : écriture MJ-only (getOwned). Un scénario a toujours au moins une séance (invariant
   // posé à sa création, cf. create()) — la toute première (par createdAt croissant, id en
   // tie-breaker si égalité exacte) ne peut donc jamais être supprimée (Story 8.7, AC5). Un
   // scénario PASSE (clôturé) est figé — sa découpe en séances ne doit plus changer rétroactivement
   // (revue de code Story 8.7). Inscription.onDelete: Cascade (déjà en place) supprime
   // automatiquement les inscriptions liées ; le SessionPoll lié (si pollId posé) n'est PAS
-  // supprimé — cycle de vie indépendant (P2-AD-2), seule la ligne Seance disparaît.
+  // supprimé — cycle de vie indépendant (P2-AD-2), seule la ligne Seance disparaît. Story 8.8 :
+  // supprimer une séance peut faire disparaître la date la plus proche de la Partie → recalcul.
   async deleteSeance(seanceId: string, mjId: string): Promise<ScenarioDto> {
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
@@ -456,7 +501,16 @@ export class ScenariosService {
       );
     }
 
+    // Revue de code Story 8.8 (décision utilisateur) : sans Séance, un vote de date n'a plus de
+    // sens — supprimer le SessionPoll lié plutôt que le laisser orphelin et injoignable (plus aucun
+    // écran ne dérive l'affichage que de `seance.poll`). Seance.pollId référence SessionPoll (FK) :
+    // la Seance doit être supprimée avant le SessionPoll, jamais l'inverse.
+    const pollIdToDelete = seance.pollId;
     await this.prisma.seance.delete({ where: { id: seanceId } });
+    if (pollIdToDelete) {
+      await this.prisma.sessionPoll.delete({ where: { id: pollIdToDelete } });
+    }
+    await this.recalculateNextSession(scenario.partieId);
 
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
@@ -464,15 +518,17 @@ export class ScenariosService {
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
-  // AD-4 : une Seance CAMPAGNE_EPISODIQUE ne peut jamais être liée à un SessionPoll (Inscription à
-  // la place, Story 8.3). P2-AD-2 : PollModule reste le seul écrivain de SessionPoll — cette méthode
-  // ne fait que poser la relation Seance.pollId (déjà @unique en base), jamais créer/modifier un poll.
-  // Story 8.7 : point d'entrée unique — remplace l'ancien linkSeancePoll() (créer un poll PUIS le
-  // lier en 2 appels séparés côté utilisateur). ScenariosModule importe PollModule (lecture ET
-  // écriture ici, via PollService.create()) mais PollModule/CreatePollDto restent inchangés
-  // (P2-AD-2) : aucune connaissance de Seance/Scenario n'est ajoutée côté PollModule, c'est
-  // ScenariosService qui orchestre les deux écritures. Non-atomique par construction (deux
-  // écritures séparées, cf. `[ASSUMPTION]` Dev Notes Story 8.7) — risque accepté.
+  // AD-4 révisé (Story 8.8, Décision 1) : une Seance CAMPAGNE_EPISODIQUE peut désormais être liée à
+  // un SessionPoll comme n'importe quel autre kind — le vote choisit *quand*, l'Inscription choisit
+  // *qui* ; les deux coexistent sur la même séance. P2-AD-2 : PollModule reste le seul écrivain de
+  // SessionPoll — cette méthode ne fait que poser la relation Seance.pollId (déjà @unique en base),
+  // jamais créer/modifier un poll. Story 8.7 : point d'entrée unique — remplace l'ancien
+  // linkSeancePoll() (créer un poll PUIS le lier en 2 appels séparés côté utilisateur).
+  // ScenariosModule importe PollModule (lecture ET écriture ici, via PollService.create()) mais
+  // PollModule/CreatePollDto restent inchangés (P2-AD-2) : aucune connaissance de Seance/Scenario
+  // n'est ajoutée côté PollModule, c'est ScenariosService qui orchestre les deux écritures.
+  // Non-atomique par construction (deux écritures séparées, cf. `[ASSUMPTION]` Dev Notes Story 8.7)
+  // — risque accepté (revue de code Story 8.7, confirmé par l'utilisateur).
   async createSeancePoll(
     seanceId: string,
     mjId: string,
@@ -487,9 +543,11 @@ export class ScenariosService {
     });
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
-    if (partie.kind === 'CAMPAGNE_EPISODIQUE') {
+    // Un scénario PASSE est figé (cohérent avec deleteSeance/resetSeanceDate) : pas de nouveau
+    // vote de date sur une séance dont le scénario est clôturé (revue de code, 2026-07-14).
+    if (scenario.status === 'PASSE') {
       throw new BadRequestException(
-        "Une séance de campagne épisodique ne peut jamais être liée à un vote de date — utilisez l'inscription à capacité limitée",
+        "Impossible de créer un vote de date pour une séance d'un scénario clôturé",
       );
     }
 
@@ -507,6 +565,44 @@ export class ScenariosService {
       where: { id: seanceId },
       data: { pollId: poll.id },
     });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenario.id },
+    });
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+  }
+
+  // Story 8.8, AC4 : détache le poll de la séance (Seance.pollId = null) et retire l'éventuel
+  // Seance.dateValidee hérité, PUIS supprime le SessionPoll lui-même (revue de code, décision
+  // utilisateur : sans séance à dater, le vote n'a plus de sens — plus d'orphelin injoignable).
+  // Ordre requis : détacher avant de supprimer (Seance.pollId référence SessionPoll en FK). Permet
+  // de rappeler createSeancePoll() ensuite (sa garde « déjà liée à un vote » n'est plus bloquée une
+  // fois pollId à null). Un scénario PASSE est figé (cohérent avec deleteSeance, revue Story 8.7).
+  async resetSeanceDate(seanceId: string, mjId: string): Promise<ScenarioDto> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: seanceId },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    const scenario = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: seance.scenarioId },
+    });
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    if (scenario.status === 'PASSE') {
+      throw new BadRequestException(
+        "Impossible de réinitialiser la date d'une séance d'un scénario clôturé",
+      );
+    }
+
+    const pollIdToDelete = seance.pollId;
+    await this.prisma.seance.update({
+      where: { id: seanceId },
+      data: { pollId: null, dateValidee: null },
+    });
+    if (pollIdToDelete) {
+      await this.prisma.sessionPoll.delete({ where: { id: pollIdToDelete } });
+    }
+    await this.recalculateNextSession(scenario.partieId);
 
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
@@ -560,6 +656,7 @@ export class ScenariosService {
   async inscrire(seanceId: string, userId: string): Promise<ScenarioDto> {
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
+      include: { poll: true },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
     const scenario = await this.prisma.scenario.findUniqueOrThrow({
@@ -577,7 +674,10 @@ export class ScenariosService {
         "Cette séance n'a pas encore de capacité définie par le MJ",
       );
     }
-    if (seance.dateValidee) {
+    // Story 8.8 : la date peut désormais aussi provenir d'un vote (Décision 1) — Seance.dateValidee
+    // seul ne suffit plus à détecter le gel du roster (gap trouvé en analyse : validerDate(), seule
+    // à écrire ce champ, a été retirée).
+    if (seance.poll?.chosenDate ?? seance.dateValidee) {
       throw new BadRequestException(
         'Cette séance a déjà une date validée — les inscriptions sont figées',
       );
@@ -591,10 +691,19 @@ export class ScenariosService {
       // AC2 vs AC4 : ce check précède le comptage — un joueur déjà inscrit reste inscrit sans
       // jamais être rejeté par un quota déjà atteint par d'autres (idempotence).
       if (existing) return;
-      // Relit inscriptionMax sous le verrou — sinon un setSeanceCapacity() concurrent entre la
-      // lecture initiale (hors transaction) et cette comparaison utiliserait une valeur périmée,
-      // ce que le verrou FOR UPDATE est censé prévenir (trouvé en revue de code, 2026-07-14).
-      const locked = await tx.seance.findUniqueOrThrow({ where: { id: seanceId } });
+      // Relit inscriptionMax ET le poll sous le verrou — sinon un setSeanceCapacity() ou une
+      // date validée (via poll ou dateValidee) concurrents entre la lecture initiale (hors
+      // transaction) et cette comparaison utiliseraient un état périmé, ce que le verrou FOR
+      // UPDATE est censé prévenir (trouvé en revue de code, 2026-07-14).
+      const locked = await tx.seance.findUniqueOrThrow({
+        where: { id: seanceId },
+        include: { poll: true },
+      });
+      if (locked.poll?.chosenDate ?? locked.dateValidee) {
+        throw new ConflictException(
+          'Cette séance a déjà une date validée — les inscriptions sont figées',
+        );
+      }
       const count = await tx.inscription.count({ where: { seanceId } });
       if (count >= locked.inscriptionMax!) {
         throw new ConflictException(
@@ -615,6 +724,7 @@ export class ScenariosService {
   async desinscrire(seanceId: string, userId: string): Promise<ScenarioDto> {
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
+      include: { poll: true },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
     const scenario = await this.prisma.scenario.findUniqueOrThrow({
@@ -623,60 +733,15 @@ export class ScenariosService {
     const partie = await this.parties.getViewable(scenario.partieId, userId);
 
     // Décision utilisateur (revue de code, 2026-07-14) : la date validée fige le roster — un
-    // joueur ne peut plus se désinscrire une fois la séance confirmée par le MJ.
-    if (seance.dateValidee) {
+    // joueur ne peut plus se désinscrire une fois la séance confirmée par le MJ. Story 8.8 : la
+    // date peut désormais aussi provenir d'un vote (Décision 1), cf. inscrire() ci-dessus.
+    if (seance.poll?.chosenDate ?? seance.dateValidee) {
       throw new BadRequestException(
         'Cette séance a déjà une date validée — les inscriptions sont figées',
       );
     }
 
     await this.prisma.inscription.deleteMany({ where: { seanceId, userId } });
-
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenario.id },
-    });
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
-  }
-
-  // AC6 : aucune validation de remplissage — validable à tout niveau, y compris 0 inscrit. Ne
-  // touche jamais Partie.nextSessionDate/nextSessionSlot (exclusivement piloté par PollService
-  // pour le linéaire/one-shot — aucune notion de « prochaine séance » unique en épisodique, AD-4).
-  // Story 8.7 (AC4) : `date` désormais fournie explicitement par le MJ (choisie parmi les
-  // créneaux calculés, réutilisés en lecture seule) — remplace l'instant du clic (`new Date()`),
-  // gap déjà noté dans `deferred-work.md`. Aucune garde de cohérence entre `date` et les créneaux
-  // proposés (`[ASSUMPTION]`, style permissif déjà établi pour ce module).
-  async validerDate(
-    seanceId: string,
-    mjId: string,
-    date: string,
-  ): Promise<ScenarioDto> {
-    const seance = await this.prisma.seance.findUnique({
-      where: { id: seanceId },
-    });
-    if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: seance.scenarioId },
-    });
-    const partie = await this.parties.getOwned(scenario.partieId, mjId);
-
-    if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
-      throw new BadRequestException(
-        'La validation de date ne concerne que les campagnes épisodiques',
-      );
-    }
-    // Sans capacité définie, dateValidee serait écrite mais resterait invisible côté DTO
-    // (toSeanceDto ne peuple `inscription` que si inscriptionMax != null) — trouvé en revue de
-    // code (2026-07-14), état silencieusement perdu jusqu'à ce que la capacité soit enfin définie.
-    if (seance.inscriptionMax == null) {
-      throw new BadRequestException(
-        "Impossible de valider une date sans capacité d'inscription définie",
-      );
-    }
-
-    await this.prisma.seance.update({
-      where: { id: seanceId },
-      data: { dateValidee: new Date(date) },
-    });
 
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },

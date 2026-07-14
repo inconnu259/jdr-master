@@ -162,6 +162,16 @@ describe('ScenariosService', () => {
     await p;
   });
 
+  it('resetSeanceDate → PATCH /scenarios/seances/:id/reset-date (Story 8.8, AC4)', async () => {
+    const p = service.resetSeanceDate('seance1');
+    const req = http.expectOne(`${API}/scenarios/seances/seance1/reset-date`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({});
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(scenario);
+    await p;
+  });
+
   it('setSeanceCapacity → PATCH /scenarios/seances/:id/capacite avec min/max', async () => {
     const p = service.setSeanceCapacity('seance1', 4, 6);
     const req = http.expectOne(`${API}/scenarios/seances/seance1/capacite`);
@@ -186,16 +196,6 @@ describe('ScenariosService', () => {
     const p = service.desinscrire('seance1');
     const req = http.expectOne(`${API}/scenarios/seances/seance1/inscription`);
     expect(req.request.method).toBe('DELETE');
-    expect(req.request.withCredentials).toBe(true);
-    req.flush(scenario);
-    await p;
-  });
-
-  it('validerDate → PATCH /scenarios/seances/:id/valider-date avec la date choisie', async () => {
-    const p = service.validerDate('seance1', '2026-08-15T14:00:00.000Z');
-    const req = http.expectOne(`${API}/scenarios/seances/seance1/valider-date`);
-    expect(req.request.method).toBe('PATCH');
-    expect(req.request.body).toEqual({ date: '2026-08-15T14:00:00.000Z' });
     expect(req.request.withCredentials).toBe(true);
     req.flush(scenario);
     await p;

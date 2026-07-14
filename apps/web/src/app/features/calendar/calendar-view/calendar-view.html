@@ -1,4 +1,7 @@
 <div class="calendar-page" [class.calendar-page--mj]="isMjMode()">
+  <button class="oracle-back-btn" mat-stroked-button type="button" (click)="goBack()">
+    ← Retour
+  </button>
   <div class="calendar-main">
     @if (error()) {
       <p class="calendar-error" role="alert">{{ error() }}</p>
@@ -45,15 +48,65 @@
 
   @if (isMjMode()) {
     <div class="mj-results-panel" #slotsPanel>
-      <div class="poll-section">
-        @if (!activePoll()) {
-          <!-- Story 8.7, AC1 (corrigé en revue) : plus de vote sans séance — se lance depuis
-               « Lancer le vote » sur la fiche du scénario (SeanceList), jamais ici directement. -->
-        } @else {
-          <app-poll-status [poll]="activePoll()!" [members]="members()" [busy]="pollActionPending()" (chosen)="onChooseDate($event)" />
-          <button mat-stroked-button color="warn" [disabled]="pollActionPending()" (click)="onClosePoll()">
-            {{ theme.tone()['cta.cancel_poll'] }}
+      <!-- Story 8.8, AC9 : sélecteur de séance pour lancer un vote directement depuis l'Oracle —
+           n'affiche que les séances éligibles (scénario non clôturé, aucun vote déjà lié, aucune
+           date déjà validée) ; étiquette toujours scénario ET séance, sans ambiguïté. -->
+      @if (eligibleSeances().length > 0) {
+        <div class="new-vote-form">
+          <label class="new-vote-form__label">
+            Planifier un vote pour :
+            <select #seanceSelect class="new-vote-form__select">
+              <option value="" selected>Choisir une séance…</option>
+              @for (entry of eligibleSeances(); track entry.seance.id) {
+                <option [value]="entry.seance.id">
+                  {{ entry.scenario.title }} — Séance {{ entry.seanceIndex }}
+                </option>
+              }
+            </select>
+          </label>
+          <button
+            mat-flat-button
+            color="primary"
+            type="button"
+            [disabled]="!seanceSelect.value"
+            (click)="startVoteFor(seanceSelect.value)"
+          >
+            Lancer le vote
           </button>
+        </div>
+      }
+
+      <div class="poll-section">
+        <!-- Story 8.7, AC1 (corrigé en revue) : plus de vote sans séance — se lance depuis
+             « Lancer le vote » sur la fiche du scénario (SeanceList) ou le sélecteur ci-dessus.
+             Story 8.8, AC7 : plusieurs votes actifs peuvent coexister (un par Séance), chacun
+             étiqueté par son scénario/séance — remplace l'ancien panneau à un seul poll. -->
+        @if (activePolls().length === 0) {
+          <p class="hint">Aucun vote de date en cours.</p>
+        }
+        @for (entry of activePolls(); track entry.poll.id) {
+          <div class="poll-entry">
+            <p class="poll-entry__label">
+              {{ entry.scenario.title }}
+              @if (entry.scenario.seances.length > 1) {
+                — Séance {{ entry.seanceIndex }}
+              }
+            </p>
+            <app-poll-status
+              [poll]="entry.poll"
+              [members]="members()"
+              [busy]="pollActionPending()"
+              (chosen)="onChooseDate(entry.poll.id, $event)"
+            />
+            <button
+              mat-stroked-button
+              color="warn"
+              [disabled]="pollActionPending()"
+              (click)="onClosePoll(entry.poll.id)"
+            >
+              {{ theme.tone()['cta.cancel_poll'] }}
+            </button>
+          </div>
         }
       </div>
 
@@ -88,12 +141,22 @@
 
   @if (!isMjMode() && partieId()) {
     <div class="guild-slots-panel" #slotsPanel>
-      @if (activePoll()) {
-        <app-poll-response
-          [partieId]="partieId()!"
-          [poll]="activePoll()!"
-          (responded)="onPollResponded($event)"
-        />
+      <!-- Story 8.8, AC8 : même refonte multi-votes côté joueur — un app-poll-response par vote
+           actif, étiqueté par scénario/séance comme côté MJ. -->
+      @for (entry of activePolls(); track entry.poll.id) {
+        <div class="poll-entry">
+          <p class="poll-entry__label">
+            {{ entry.scenario.title }}
+            @if (entry.scenario.seances.length > 1) {
+              — Séance {{ entry.seanceIndex }}
+            }
+          </p>
+          <app-poll-response
+            [partieId]="partieId()!"
+            [poll]="entry.poll"
+            (responded)="onPollResponded($event)"
+          />
+        </div>
       }
       <div class="date-range-form">
         <label class="date-range-label">

@@ -48,7 +48,7 @@
               } @else {
                 <p class="muted">{{ theme.tone()['partie.no_session'] }}</p>
               }
-              @if (activePoll(); as poll) {
+              @if (activePolls().length > 0) {
                 <p class="poll-status-line">{{ pollStatusLabel() }}</p>
               }
               @if (isMj()) {
@@ -57,7 +57,7 @@
                 </a>
               } @else {
                 <a mat-stroked-button [routerLink]="['/parties', p.id, 'guild-calendar']">
-                  {{ activePoll() ? theme.tone()['poll.vote_pending'] : theme.tone()['cta.guild_calendar'] }}
+                  {{ activePolls().length > 0 ? theme.tone()['poll.vote_pending'] : theme.tone()['cta.guild_calendar'] }}
                 </a>
               }
             </section>

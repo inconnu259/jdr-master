@@ -26,7 +26,6 @@ import { ScenariosService } from './scenarios.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import { CreateSeancePollDto } from './dto/create-seance-poll.dto';
-import { ValiderDateDto } from './dto/valider-date.dto';
 import { SetSeanceCapacityDto } from './dto/set-seance-capacity.dto';
 import { SetCompteRenduDto } from './dto/set-compte-rendu.dto';
 import { SetResumeFinDto } from './dto/set-resume-fin.dto';
@@ -142,6 +141,14 @@ export class ScenariosController {
     return this.scenarios.createSeancePoll(seanceId, user.id, dto.options);
   }
 
+  @Patch('scenarios/seances/:id/reset-date')
+  resetSeanceDate(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.resetSeanceDate(seanceId, user.id);
+  }
+
   @Patch('scenarios/seances/:id/capacite')
   setSeanceCapacity(
     @Param('id', ParseUUIDPipe) seanceId: string,
@@ -170,15 +177,6 @@ export class ScenariosController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.scenarios.desinscrire(seanceId, user.id);
-  }
-
-  @Patch('scenarios/seances/:id/valider-date')
-  validerDate(
-    @Param('id', ParseUUIDPipe) seanceId: string,
-    @CurrentUser() user: AuthUser,
-    @Body() dto: ValiderDateDto,
-  ) {
-    return this.scenarios.validerDate(seanceId, user.id, dto.date);
   }
 
   @Patch('scenarios/seances/:id/compte-rendu')

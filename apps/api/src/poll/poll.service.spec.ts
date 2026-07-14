@@ -76,31 +76,27 @@ describe('PollService', () => {
     service = module.get(PollService);
   });
 
-  it('create() sans poll OPEN → crée sans appeler updateMany', async () => {
-    prisma.sessionPoll.findFirst.mockResolvedValue(null);
+  it('create() → crée sans jamais appeler findFirst/updateMany (Story 8.8)', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
     await service.create('p1', 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
+    expect(prisma.sessionPoll.findFirst).not.toHaveBeenCalled();
     expect(prisma.sessionPoll.updateMany).not.toHaveBeenCalled();
     expect(prisma.sessionPoll.create).toHaveBeenCalledTimes(1);
   });
 
-  it("create() avec poll OPEN existant → ferme l'existant puis crée", async () => {
-    prisma.sessionPoll.findFirst.mockResolvedValue({ id: 'old-poll' });
-    prisma.sessionPoll.updateMany.mockResolvedValue({ count: 1 });
+  it('create() avec un poll OPEN déjà existant sur la Partie → ne le ferme pas (Story 8.8, un vote par Séance, pas par Partie)', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
     await service.create('p1', 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
-    const updateCall =
-      prisma.sessionPoll.updateMany.mock.invocationCallOrder[0];
-    const createCall = prisma.sessionPoll.create.mock.invocationCallOrder[0];
-    expect(updateCall).toBeLessThan(createCall);
+    expect(prisma.sessionPoll.findFirst).not.toHaveBeenCalled();
+    expect(prisma.sessionPoll.updateMany).not.toHaveBeenCalled();
+    expect(prisma.sessionPoll.create).toHaveBeenCalledTimes(1);
   });
 
-  it('create() → exécute findFirst/updateMany/create dans une transaction Prisma', async () => {
-    prisma.sessionPoll.findFirst.mockResolvedValue(null);
+  it('create() → exécute create dans une transaction Prisma', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
     await service.create('p1', 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],

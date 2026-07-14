@@ -41,16 +41,10 @@ export class PollService {
     }
 
     const poll = await this.prisma.$transaction(async (tx) => {
-      // AD-4: fermer le poll OPEN existant s'il y en a un
-      const existing = await tx.sessionPoll.findFirst({
-        where: { partieId, status: 'OPEN' },
-      });
-      if (existing) {
-        await tx.sessionPoll.updateMany({
-          where: { partieId, status: 'OPEN' },
-          data: { status: 'CLOSED' },
-        });
-      }
+      // Story 8.8 (Décision 2) : un seul vote actif par Séance, pas par Partie — plusieurs
+      // SessionPoll OPEN peuvent désormais coexister sur la même Partie (un par Séance). La garde
+      // « déjà liée à un vote de date » de ScenariosService.createSeancePoll() (Story 8.7) suffit à
+      // garantir l'unicité au niveau Séance ; retiré : la fermeture auto de tout poll OPEN existant.
       return tx.sessionPoll.create({
         data: {
           partieId,

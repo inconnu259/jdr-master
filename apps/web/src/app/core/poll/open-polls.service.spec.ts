@@ -6,7 +6,7 @@ import type { PartieDto, SessionPollDto } from '@master-jdr/shared';
 import { OpenPollsService } from './open-polls.service';
 import { AuthService } from '../auth/auth.service';
 import { ModeService } from '../mode/mode.service';
-import { PollService } from './poll.service';
+import { ScenariosService } from '../scenarios/scenarios.service';
 
 function makeParty(id: string): PartieDto {
   return {
@@ -41,6 +41,27 @@ function makePoll(
   };
 }
 
+/** Story 8.8 (revue de code) : `refresh()` utilise désormais `ScenariosService.listAll()` (plus
+ *  `PollService.getCurrentPoll()`, un seul poll par Partie) — enveloppe chaque poll dans un
+ *  scénario/séance synthétique minimal. */
+function wrapPollsAsScenarios(polls: SessionPollDto[]): any[] {
+  return polls.map((poll, i) => ({
+    id: `s-${poll.id}`,
+    partieId: poll.partieId,
+    title: `Scénario ${i + 1}`,
+    description: null,
+    status: 'COURANT',
+    dureeHeures: null,
+    dureeSeances: null,
+    resumeFin: null,
+    createdAt: '',
+    closedAt: null,
+    seances: [
+      { id: `seance-${poll.id}`, scenarioId: `s-${poll.id}`, compteRendu: null, createdAt: '', poll },
+    ],
+  }));
+}
+
 // Harnais minimal : instancier le service dans un contexte de composant permet à `fixture.whenStable()`
 // de vider la queue d'effects (`effect()` planifié dans le constructeur du service), contrairement à un
 // simple `TestBed.inject()` hors composant.
@@ -51,7 +72,7 @@ class TestHost {
 
 async function createHarness(
   playerParties: PartieDto[],
-  getCurrentPoll: ReturnType<typeof vi.fn>,
+  listAll: ReturnType<typeof vi.fn>,
   currentUserId: string | undefined = 'u1',
 ) {
   const playerPartiesSignal = signal(playerParties);
@@ -59,7 +80,7 @@ async function createHarness(
     imports: [TestHost],
     providers: [
       { provide: ModeService, useValue: { playerParties: playerPartiesSignal } },
-      { provide: PollService, useValue: { getCurrentPoll } },
+      { provide: ScenariosService, useValue: { listAll } },
       {
         provide: AuthService,
         useValue: { currentUser: () => (currentUserId ? { id: currentUserId } : null) },
@@ -78,10 +99,12 @@ describe('OpenPollsService', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('count() reflète le nombre de parties avec un poll OPEN', async () => {
-    const getCurrentPoll = vi.fn((id: string) =>
-      id === 'p1' ? Promise.resolve(makePoll('p1')) : Promise.resolve(null),
+    const listAll = vi.fn((id: string) =>
+      id === 'p1'
+        ? Promise.resolve(wrapPollsAsScenarios([makePoll('p1')]))
+        : Promise.resolve([]),
     );
-    const { svc } = await createHarness([makeParty('p1'), makeParty('p2')], getCurrentPoll);
+    const { svc } = await createHarness([makeParty('p1'), makeParty('p2')], listAll);
 
     expect(svc.count()).toBe(1);
     expect(svc.openPolls().has('p1')).toBe(true);
@@ -89,18 +112,18 @@ describe('OpenPollsService', () => {
   });
 
   it("count() à 0 si aucune partie n'a de poll OPEN", async () => {
-    const getCurrentPoll = vi.fn().mockResolvedValue(null);
-    const { svc } = await createHarness([makeParty('p1')], getCurrentPoll);
+    const listAll = vi.fn().mockResolvedValue([]);
+    const { svc } = await createHarness([makeParty('p1')], listAll);
 
-    expect(getCurrentPoll).toHaveBeenCalled();
+    expect(listAll).toHaveBeenCalled();
     expect(svc.count()).toBe(0);
   });
 
   it('openPolls se vide quand playerParties() passe de non-vide à vide (dernière partie quittée)', async () => {
-    const getCurrentPoll = vi.fn().mockResolvedValue(makePoll('p1'));
+    const listAll = vi.fn().mockResolvedValue(wrapPollsAsScenarios([makePoll('p1')]));
     const { svc, playerPartiesSignal, fixture } = await createHarness(
       [makeParty('p1')],
-      getCurrentPoll,
+      listAll,
     );
 
     expect(svc.count()).toBe(1);
@@ -125,13 +148,35 @@ describe('OpenPollsService', () => {
       },
     ]);
     const unansweredPoll = makePoll('p2'); // option par défaut sans vote
-    const getCurrentPoll = vi.fn((id: string) =>
-      id === 'p1' ? Promise.resolve(answeredPoll) : Promise.resolve(unansweredPoll),
+    const listAll = vi.fn((id: string) =>
+      id === 'p1'
+        ? Promise.resolve(wrapPollsAsScenarios([answeredPoll]))
+        : Promise.resolve(wrapPollsAsScenarios([unansweredPoll])),
     );
-    const { svc } = await createHarness([makeParty('p1'), makeParty('p2')], getCurrentPoll);
+    const { svc } = await createHarness([makeParty('p1'), makeParty('p2')], listAll);
 
     expect(svc.count()).toBe(1);
     expect(svc.openPolls().has('p1')).toBe(false);
     expect(svc.openPolls().has('p2')).toBe(true);
+  });
+
+  it('une partie avec plusieurs polls OPEN (un par séance) compte si au moins un a une option non répondue', async () => {
+    const answeredPoll: SessionPollDto = {
+      ...makePoll('p1', [
+        {
+          id: 'opt-a',
+          date: '2026-08-01T00:00:00.000Z',
+          slot: 'MORNING',
+          votes: [{ userId: 'u1', pseudo: 'Moi', answer: 'YES' }],
+        },
+      ]),
+      id: 'poll-a',
+    };
+    const pendingPoll: SessionPollDto = { ...makePoll('p1'), id: 'poll-b' };
+    const listAll = vi.fn().mockResolvedValue(wrapPollsAsScenarios([answeredPoll, pendingPoll]));
+    const { svc } = await createHarness([makeParty('p1')], listAll);
+
+    expect(svc.count()).toBe(1);
+    expect(svc.openPolls().get('p1')?.id).toBe('poll-b');
   });
 });

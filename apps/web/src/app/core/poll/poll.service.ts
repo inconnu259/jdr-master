@@ -6,7 +6,6 @@ import type {
   AvailableSlotDto,
   CastVoteDto,
   ChooseDateDto,
-  CreatePollDto,
   SessionPollDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
@@ -40,14 +39,6 @@ export class PollService {
         `${API_BASE}/parties/${partieId}/heatmap?from=${from}&to=${to}`,
         { withCredentials: true },
       ),
-    );
-  }
-
-  createPoll(partieId: string, dto: CreatePollDto): Promise<SessionPollDto> {
-    return firstValueFrom(
-      this.http.post<SessionPollDto>(`${API_BASE}/parties/${partieId}/poll`, dto, {
-        withCredentials: true,
-      }),
     );
   }
 

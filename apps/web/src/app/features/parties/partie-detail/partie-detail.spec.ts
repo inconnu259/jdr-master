@@ -20,16 +20,36 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
-import { PollService } from '../../../core/poll/poll.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { MatDialog } from '@angular/material/dialog';
 import { TONE_MAP } from '../../../core/theme/tones';
 
-function makeScenariosService() {
+/** Story 8.8 (revue de code) : `activePolls` est désormais chargé via `ScenariosService.listAll()`
+ *  (plus `PollService.getCurrentPoll()`, un seul poll par Partie) — enveloppe chaque poll fourni
+ *  dans un scénario/séance synthétique minimal pour alimenter le mock `listAll`. */
+function wrapPollsAsScenarios(polls: SessionPollDto[]): any[] {
+  return polls.map((poll, i) => ({
+    id: `s-${poll.id}`,
+    partieId: poll.partieId,
+    title: `Scénario ${i + 1}`,
+    description: null,
+    status: 'COURANT',
+    dureeHeures: null,
+    dureeSeances: null,
+    resumeFin: null,
+    createdAt: '',
+    closedAt: null,
+    seances: [
+      { id: `seance-${poll.id}`, scenarioId: `s-${poll.id}`, compteRendu: null, createdAt: '', poll },
+    ],
+  }));
+}
+
+function makeScenariosService(polls: SessionPollDto[] = []) {
   return {
     listDrafts: vi.fn().mockResolvedValue([]),
-    listAll: vi.fn().mockResolvedValue([]),
+    listAll: vi.fn().mockResolvedValue(wrapPollsAsScenarios(polls)),
     changed: signal(0),
   };
 }
@@ -102,6 +122,7 @@ function makePartiesService(
 interface CreateFixtureOptions {
   members?: PartieMemberDto[];
   poll?: SessionPollDto | null;
+  polls?: SessionPollDto[];
   characters?: CharacterDto[];
   links?: InviteLinkDto[];
   noopAnimations?: boolean;
@@ -129,10 +150,6 @@ async function createFixture(
       { provide: BreakpointObserver, useValue: makeBreakpointObserver(options.desktop ?? true) },
       { provide: ModeService, useValue: { refreshMjParties: vi.fn() } },
       {
-        provide: PollService,
-        useValue: { getCurrentPoll: vi.fn().mockResolvedValue(options.poll ?? null) },
-      },
-      {
         provide: CharacterService,
         useValue: {
           listByPartie: vi.fn().mockResolvedValue(options.characters ?? []),
@@ -142,7 +159,10 @@ async function createFixture(
         },
       },
       { provide: ThemeToneService, useValue: makeToneService() },
-      { provide: ScenariosService, useValue: makeScenariosService() },
+      {
+        provide: ScenariosService,
+        useValue: makeScenariosService(options.polls ?? (options.poll ? [options.poll] : [])),
+      },
       { provide: MatDialog, useValue: { open: vi.fn() } },
     ],
   }).compileComponents();
@@ -258,6 +278,16 @@ describe('PartieDetail — statut du vote', () => {
     const link = el.querySelector('.scheduling-widget a[mat-stroked-button]');
     expect(link).toBeTruthy();
     expect(link!.textContent).toContain('Vote de date en cours');
+  });
+
+  it('plusieurs votes OPEN en parallèle → message agrégé "N votes de date en cours" (Story 8.8, revue de code)', async () => {
+    const poll1 = { ...makePoll(['u1']), id: 'poll1', partieId: 'party-1' };
+    const poll2 = { ...makePoll([]), id: 'poll2', partieId: 'party-1' };
+    const { el } = await createFixture(makePartie(), MJ_ID, { members, polls: [poll1, poll2] });
+
+    const line = el.querySelector('.poll-status-line');
+    expect(line).toBeTruthy();
+    expect(line!.textContent).toContain('2 votes de date en cours');
   });
 });
 
@@ -409,7 +439,6 @@ describe('PartieDetail — roster (Story 6.1)', () => {
         { provide: PartiesService, useValue: makePartiesService(makePartie(), members, []) },
         { provide: BreakpointObserver, useValue: dynamicBreakpointObserver },
         { provide: ModeService, useValue: { refreshMjParties: vi.fn() } },
-        { provide: PollService, useValue: { getCurrentPoll: vi.fn().mockResolvedValue(null) } },
         {
           provide: CharacterService,
           useValue: {

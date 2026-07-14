@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { Router } from '@angular/router';
 import { vi } from 'vitest';
-import type { AvailableSlotDto, ScenarioDto, SeanceDto, SessionPollDto } from '@master-jdr/shared';
+import type { ScenarioDto, SeanceDto, SessionPollDto } from '@master-jdr/shared';
 import { SeanceList } from './seance-list';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
@@ -50,30 +50,26 @@ async function createComponent(
   {
     isMj = false,
     isEpisodique = false,
-    availableSlots = [],
     currentUserId = 'u1',
   }: {
     isMj?: boolean;
     isEpisodique?: boolean;
-    availableSlots?: AvailableSlotDto[];
     currentUserId?: string;
   } = {},
 ) {
   const scenariosSvc = {
     createSeancePoll: vi.fn(),
     deleteSeance: vi.fn(),
+    resetSeanceDate: vi.fn(),
     listAll: vi.fn().mockResolvedValue([scenario]),
     setSeanceCapacity: vi.fn(),
     inscrire: vi.fn(),
     desinscrire: vi.fn(),
-    validerDate: vi.fn(),
-    addSeance: vi.fn(),
     setCompteRendu: vi.fn(),
   };
   const pollSvc = {
     chooseDate: vi.fn(),
     closePoll: vi.fn(),
-    getAvailableSlots: vi.fn().mockResolvedValue(availableSlots),
   };
   const authSvc = { currentUser: () => ({ id: currentUserId }) };
   const router = { navigate: vi.fn() };
@@ -95,12 +91,8 @@ async function createComponent(
   fixture.componentRef.setInput('isMj', isMj);
   fixture.componentRef.setInput('isEpisodique', isEpisodique);
   fixture.detectChanges();
-  // ngOnInit charge les créneaux calculés de façon async (mock résolu) — zoneless, on vide la file
-  // de microtasks avant de faire des assertions sur le rendu qui en dépend.
-  for (let i = 0; i < 10; i++) {
-    await Promise.resolve();
-    fixture.detectChanges();
-  }
+  await fixture.whenStable();
+  fixture.detectChanges();
   return { fixture, scenariosSvc, pollSvc, router };
 }
 
@@ -162,16 +154,6 @@ describe('SeanceList', () => {
     const { fixture } = await createComponent(
       { ...SCENARIO, seances: [SEANCE_NO_POLL] },
       { isMj: false },
-    );
-    expect(fixture.nativeElement.querySelector('app-poll-creation')).toBeNull();
-    expect(fixture.nativeElement.querySelector('app-poll-status')).toBeNull();
-    expect(fixture.nativeElement.querySelector('app-poll-response')).toBeNull();
-  });
-
-  it('épisodique : aucun composant de vote affiché, quel que soit isMj', async () => {
-    const { fixture } = await createComponent(
-      { ...SCENARIO, seances: [SEANCE_WITH_POLL] },
-      { isMj: true, isEpisodique: true },
     );
     expect(fixture.nativeElement.querySelector('app-poll-creation')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-poll-status')).toBeNull();
@@ -255,6 +237,60 @@ describe('SeanceList', () => {
       expect(fixture.nativeElement.querySelector('app-poll-response')).toBeNull();
     });
 
+    it('MJ, poll CLOSED avec chosenDate → bouton "Réinitialiser la date" visible (Story 8.8, AC4)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [CLOSED_WITH_DATE] },
+        { isMj: true },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Réinitialiser la date');
+    });
+
+    it('MJ, clic sur "Réinitialiser la date" (confirmé) → appelle resetSeanceDate et émet seanceLinked', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [CLOSED_WITH_DATE] },
+        { isMj: true },
+      );
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const updated = { ...SCENARIO, seances: [SEANCE_NO_POLL] };
+      scenariosSvc.resetSeanceDate.mockResolvedValue(updated);
+      const comp = fixture.componentInstance as any;
+      let emitted: ScenarioDto | undefined;
+      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
+
+      const btn: HTMLButtonElement = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      ).find((b: any) => b.textContent.includes('Réinitialiser la date')) as HTMLButtonElement;
+      btn.click();
+      await Promise.resolve();
+
+      expect(scenariosSvc.resetSeanceDate).toHaveBeenCalledWith('seance1');
+      expect(emitted).toEqual(updated);
+    });
+
+    it('MJ, clic sur "Réinitialiser la date" (refusé) → aucun appel à resetSeanceDate', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [CLOSED_WITH_DATE] },
+        { isMj: true },
+      );
+      vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+      const btn: HTMLButtonElement = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      ).find((b: any) => b.textContent.includes('Réinitialiser la date')) as HTMLButtonElement;
+      btn.click();
+      await Promise.resolve();
+
+      expect(scenariosSvc.resetSeanceDate).not.toHaveBeenCalled();
+    });
+
+    it('poll CLOSED sans chosenDate → bouton "Réinitialiser la date" quand même visible (revue de code : sinon la séance reste bloquée)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [CLOSED_NO_DATE] },
+        { isMj: true },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Réinitialiser la date');
+    });
+
     it("poll CLOSED sans chosenDate → message neutre plutôt qu'une date vide", async () => {
       const { fixture } = await createComponent(
         { ...SCENARIO, seances: [CLOSED_NO_DATE] },
@@ -264,7 +300,7 @@ describe('SeanceList', () => {
     });
   });
 
-  describe('Inscription à capacité limitée (Story 8.3, CAMPAGNE_EPISODIQUE)', () => {
+  describe('Inscription à capacité limitée (Story 8.3, révisé Story 8.8 : coexiste désormais avec le vote)', () => {
     const SEANCE_NO_CAPACITY: SeanceDto = { ...SEANCE_NO_POLL };
     const SEANCE_WITH_CAPACITY: SeanceDto = {
       ...SEANCE_NO_POLL,
@@ -296,7 +332,9 @@ describe('SeanceList', () => {
         dateValidee: null,
       },
     };
-    const SEANCE_VALIDATED: SeanceDto = {
+    // Compat rétroactive : une date posée par l'ancienne validerDate() (Story 8.3/8.7, retirée en
+    // 8.8), jamais issue d'un vote — le champ Seance.dateValidee brut reste lu en repli.
+    const SEANCE_VALIDATED_LEGACY: SeanceDto = {
       ...SEANCE_NO_POLL,
       inscription: {
         min: 4,
@@ -304,6 +342,23 @@ describe('SeanceList', () => {
         inscrits: [{ userId: 'u2', pseudo: 'Bob' }],
         dateValidee: '2026-08-01T00:00:00.000Z',
       },
+    };
+    const SEANCE_WITH_CAPACITY_AND_OPEN_POLL: SeanceDto = {
+      ...SEANCE_WITH_CAPACITY,
+      poll: POLL,
+    };
+    const SEANCE_VALIDATED_VIA_POLL: SeanceDto = {
+      ...SEANCE_WITH_CAPACITY,
+      poll: {
+        ...POLL,
+        status: 'CLOSED',
+        chosenDate: '2026-08-15T00:00:00.000Z',
+        chosenSlot: 'AFTERNOON',
+      },
+    };
+    const SEANCE_CLOSED_NO_DATE: SeanceDto = {
+      ...SEANCE_WITH_CAPACITY,
+      poll: { ...POLL, status: 'CLOSED' },
     };
 
     it('MJ, séance sans capacité définie → formulaire visible, aucun FillIndicator', async () => {
@@ -349,44 +404,89 @@ describe('SeanceList', () => {
       expect(submitBtn.disabled).toBe(false);
     });
 
-    it('MJ, capacité définie non validée → FillIndicator + créneaux calculés cliquables + Proposer une autre date + Modifier la capacité (Story 8.7, AC4/AC6)', async () => {
-      const slot: AvailableSlotDto = { date: '2026-08-15', slot: 'AFTERNOON', members: [] };
+    it('MJ, capacité définie, pas de vote en cours → FillIndicator + "Lancer le vote" + "Modifier la capacité" (Story 8.8, AC1/AC5)', async () => {
       const { fixture } = await createComponent(
         { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
-        { isMj: true, isEpisodique: true, availableSlots: [slot] },
+        { isMj: true, isEpisodique: true },
       );
       expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
-      expect(fixture.nativeElement.textContent).toContain('Proposer une autre date');
+      expect(fixture.nativeElement.textContent).toContain('Lancer le vote');
       expect(fixture.nativeElement.textContent).toContain('Modifier la capacité');
-      const slotBtn = Array.from(fixture.nativeElement.querySelectorAll('button')).find((b: any) =>
-        b.textContent.includes('août'),
-      );
-      expect(slotBtn).toBeTruthy();
     });
 
-    it('MJ, clic sur un créneau calculé → appelle validerDate avec la date du créneau (AC4)', async () => {
-      const slot: AvailableSlotDto = { date: '2026-08-15', slot: 'AFTERNOON', members: [] };
-      const { fixture, scenariosSvc } = await createComponent(
+    it('MJ, clic sur "Lancer le vote" (épisodique) → navigue vers le calendrier avec seanceId (Story 8.8, AC1)', async () => {
+      const { fixture, router } = await createComponent(
         { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
-        { isMj: true, isEpisodique: true, availableSlots: [slot] },
+        { isMj: true, isEpisodique: true },
       );
-      scenariosSvc.validerDate.mockResolvedValue({ ...SCENARIO, seances: [SEANCE_VALIDATED] });
-      const slotBtn: HTMLButtonElement = Array.from(
+      const btn: HTMLButtonElement = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
-      ).find((b: any) => b.textContent.includes('août')) as HTMLButtonElement;
+      ).find((b: any) => b.textContent.includes('Lancer le vote')) as HTMLButtonElement;
+      btn.click();
 
-      slotBtn.click();
+      expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'calendar'], {
+        queryParams: { seanceId: 'seance1' },
+      });
+    });
+
+    it('MJ, capacité définie + vote OPEN → FillIndicator + app-poll-status + "Clôturer le vote" (Story 8.8, AC2)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY_AND_OPEN_POLL] },
+        { isMj: true, isEpisodique: true },
+      );
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('app-poll-status')).toBeTruthy();
+      expect(fixture.nativeElement.textContent).toContain('Clôturer le vote');
+    });
+
+    it('MJ, capacité définie + vote clôturé avec chosenDate → "Date retenue", plus de FillIndicator/CTA (Story 8.8, AC2)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_VALIDATED_VIA_POLL] },
+        { isMj: true, isEpisodique: true },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Date retenue');
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
+      expect(fixture.nativeElement.querySelector('app-poll-status')).toBeNull();
+    });
+
+    it('MJ, capacité définie + vote clôturé sans date retenue → bouton "Réinitialiser la date" quand même visible (revue de code)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_CLOSED_NO_DATE] },
+        { isMj: true, isEpisodique: true },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Vote clôturé sans date retenue');
+      expect(fixture.nativeElement.textContent).toContain('Réinitialiser la date');
+    });
+
+    it('MJ, date validée (épisodique, via poll) → bouton "Réinitialiser la date" visible, appelle resetSeanceDate (Story 8.8, AC4)', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_VALIDATED_VIA_POLL] },
+        { isMj: true, isEpisodique: true },
+      );
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const updated = { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] };
+      scenariosSvc.resetSeanceDate.mockResolvedValue(updated);
+      const comp = fixture.componentInstance as any;
+      let emitted: ScenarioDto | undefined;
+      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
+
+      const btn: HTMLButtonElement = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      ).find((b: any) => b.textContent.includes('Réinitialiser la date')) as HTMLButtonElement;
+      expect(btn).toBeTruthy();
+      btn.click();
       await Promise.resolve();
 
-      expect(scenariosSvc.validerDate).toHaveBeenCalledWith('seance1', '2026-08-15');
+      expect(scenariosSvc.resetSeanceDate).toHaveBeenCalledWith('seance1');
+      expect(emitted).toEqual(updated);
     });
 
-    it('MJ, aucun créneau calculé → message neutre au lieu d’une liste vide', async () => {
+    it('MJ, date validée (épisodique, héritage dateValidee sans poll) → bouton "Réinitialiser la date" visible (Story 8.8, AC4)', async () => {
       const { fixture } = await createComponent(
-        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
-        { isMj: true, isEpisodique: true, availableSlots: [] },
+        { ...SCENARIO, seances: [SEANCE_VALIDATED_LEGACY] },
+        { isMj: true, isEpisodique: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Aucun créneau calculé disponible');
+      expect(fixture.nativeElement.textContent).toContain('Réinitialiser la date');
     });
 
     it('MJ, clic sur "Modifier la capacité" → réaffiche le formulaire pré-rempli (AC6)', async () => {
@@ -429,9 +529,9 @@ describe('SeanceList', () => {
       expect(fixture.nativeElement.querySelectorAll('input[type="number"]').length).toBe(0);
     });
 
-    it('MJ, date validée → texte "Date retenue", plus de CTA ni FillIndicator', async () => {
+    it('MJ, date validée (héritage validerDate(), sans poll) → texte "Date retenue", plus de CTA ni FillIndicator', async () => {
       const { fixture } = await createComponent(
-        { ...SCENARIO, seances: [SEANCE_VALIDATED] },
+        { ...SCENARIO, seances: [SEANCE_VALIDATED_LEGACY] },
         { isMj: true, isEpisodique: true },
       );
       expect(fixture.nativeElement.textContent).toContain('Date retenue');
@@ -481,9 +581,27 @@ describe('SeanceList', () => {
       expect(btn.disabled).toBe(true);
     });
 
-    it('joueur, date validée → texte "Date retenue", plus de FillIndicator ni bouton', async () => {
+    it('joueur, capacité définie + vote OPEN → FillIndicator/inscrire ET app-poll-response, tous deux visibles (Story 8.8, AC2)', async () => {
       const { fixture } = await createComponent(
-        { ...SCENARIO, seances: [SEANCE_VALIDATED] },
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY_AND_OPEN_POLL] },
+        { isMj: false, isEpisodique: true, currentUserId: 'u1' },
+      );
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('app-poll-response')).toBeTruthy();
+    });
+
+    it('joueur, date validée via poll.chosenDate → texte "Date retenue", plus de FillIndicator ni bouton', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_VALIDATED_VIA_POLL] },
+        { isMj: false, isEpisodique: true },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Date retenue');
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
+    });
+
+    it('joueur, date validée (héritage validerDate(), sans poll) → texte "Date retenue", plus de FillIndicator ni bouton', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_VALIDATED_LEGACY] },
         { isMj: false, isEpisodique: true },
       );
       expect(fixture.nativeElement.textContent).toContain('Date retenue');
@@ -539,46 +657,6 @@ describe('SeanceList', () => {
 
       expect(scenariosSvc.desinscrire).toHaveBeenCalledWith('seance1');
       expect(emitted).toEqual(updated);
-    });
-
-    it('onValiderDate appelle validerDate avec la date fournie et émet seanceLinked', async () => {
-      const { fixture, scenariosSvc } = await createComponent(
-        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
-        { isMj: true, isEpisodique: true },
-      );
-      const comp = fixture.componentInstance as any;
-      const updated = { ...SCENARIO, seances: [SEANCE_VALIDATED] };
-      scenariosSvc.validerDate.mockResolvedValue(updated);
-      let emitted: ScenarioDto | undefined;
-      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
-
-      await comp.onValiderDate('seance1', '2026-08-15');
-
-      expect(scenariosSvc.validerDate).toHaveBeenCalledWith('seance1', '2026-08-15');
-      expect(emitted).toEqual(updated);
-    });
-
-    it('onProposerAutreDate appelle addSeance(scenarioId) et émet seanceLinked, sans supprimer l’ancienne Seance', async () => {
-      const { fixture, scenariosSvc } = await createComponent(
-        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
-        { isMj: true, isEpisodique: true },
-      );
-      const comp = fixture.componentInstance as any;
-      const nouvelleSeance: SeanceDto = {
-        id: 'seance2',
-        scenarioId: 's1',
-        compteRendu: null,
-        createdAt: '2026-07-14T00:00:00.000Z',
-      };
-      const updated = { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY, nouvelleSeance] };
-      scenariosSvc.addSeance.mockResolvedValue(updated);
-      let emitted: ScenarioDto | undefined;
-      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
-
-      await comp.onProposerAutreDate();
-
-      expect(scenariosSvc.addSeance).toHaveBeenCalledWith('s1');
-      expect(emitted?.seances).toHaveLength(2);
     });
   });
 
