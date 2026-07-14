@@ -5,7 +5,11 @@ import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../../core/characters/character.service';
 import { ThemeToneService } from '../../../../core/theme/theme-tone.service';
 import { ChoiceCard, type ChoiceCardOption } from '../../character-wizard/choice-card/choice-card';
-import { LEVEL_TABLE_LOCAL, pendingLevelsLocal, type CapabilityTypeLocal } from '../level-thresholds';
+import {
+  LEVEL_TABLE_LOCAL,
+  pendingLevelsLocal,
+  type CapabilityTypeLocal,
+} from '../level-thresholds';
 
 export interface LevelUpWizardData {
   character: CharacterDto;
@@ -33,9 +37,8 @@ const CONTENT_KEY_BY_CAPABILITY: Partial<Record<CapabilityTypeLocal, string>> = 
 export class LevelUpWizard {
   private readonly characterSvc = inject(CharacterService);
   protected readonly theme = inject(ThemeToneService);
-  private readonly dialogRef = inject<MatDialogRef<LevelUpWizard, CharacterDto | null>>(
-    MatDialogRef,
-  );
+  private readonly dialogRef =
+    inject<MatDialogRef<LevelUpWizard, CharacterDto | null>>(MatDialogRef);
   private readonly dialogData = inject<LevelUpWizardData>(MAT_DIALOG_DATA);
 
   protected readonly ATTRIBUTE_KEYS = ATTRIBUTE_KEYS;
@@ -75,7 +78,9 @@ export class LevelUpWizard {
   });
 
   /** Ce niveau accorde-t-il un point d'attribut (à répartir dans la grille) ? */
-  protected readonly attributeRequired = computed(() => this.capabilityTypes().includes('attribute'));
+  protected readonly attributeRequired = computed(() =>
+    this.capabilityTypes().includes('attribute'),
+  );
 
   /** Capacité spéciale (non-Attribut) du niveau, si présente — au plus une par niveau. */
   protected readonly specialType = computed<CapabilityTypeLocal | null>(

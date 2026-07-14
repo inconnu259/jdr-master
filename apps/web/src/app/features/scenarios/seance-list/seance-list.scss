@@ -10,10 +10,31 @@
   gap: 0.5rem;
 }
 
+.seance-row__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
 .error {
   color: var(--mat-sys-error, #b3261e);
 }
 
 .seance-row__chosen-date {
   font-weight: 600;
+}
+
+.capacity-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  input[type='number'] {
+    width: 4rem;
+  }
+}
+
+.seance-row__mj-actions {
+  display: flex;
+  gap: 0.5rem;
 }

@@ -28,7 +28,13 @@ export class RosterStrip {
   readonly openInvitations = output<void>();
 
   protected readonly rows = computed<RosterRow[]>(() =>
-    buildRosterRows(this.members(), this.characters(), this.mjId(), this.classLabelFor(), this.mjId()),
+    buildRosterRows(
+      this.members(),
+      this.characters(),
+      this.mjId(),
+      this.classLabelFor(),
+      this.mjId(),
+    ),
   );
 
   protected selectRow(row: RosterRow): void {

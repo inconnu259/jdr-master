@@ -51,7 +51,9 @@ describe('LevelUpWizard', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('stepper PV/PE empêche de dépasser 3 au total', async () => {
-    const { fixture } = await createComponent(makeCharacter(), () => Promise.resolve(makeCharacter()));
+    const { fixture } = await createComponent(makeCharacter(), () =>
+      Promise.resolve(makeCharacter()),
+    );
     const comp = fixture.componentInstance as any;
 
     comp.incrementPv();
@@ -82,7 +84,12 @@ describe('LevelUpWizard', () => {
       sheetData: {
         attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 10 },
         levelUps: [
-          { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+          {
+            level: 2,
+            pvAllocated: 2,
+            peAllocated: 1,
+            capabilities: [{ type: 'attribute', params: {} }],
+          },
         ],
       },
     });
@@ -114,7 +121,12 @@ describe('LevelUpWizard', () => {
       sheetData: {
         attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 10 },
         levelUps: [
-          { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+          {
+            level: 2,
+            pvAllocated: 2,
+            peAllocated: 1,
+            capabilities: [{ type: 'attribute', params: {} }],
+          },
         ],
       },
     });
@@ -123,8 +135,18 @@ describe('LevelUpWizard', () => {
       sheetData: {
         attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 10 },
         levelUps: [
-          { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
-          { level: 3, pvAllocated: 1, peAllocated: 2, capabilities: [{ type: 'landscape', params: {} }] },
+          {
+            level: 2,
+            pvAllocated: 2,
+            peAllocated: 1,
+            capabilities: [{ type: 'attribute', params: {} }],
+          },
+          {
+            level: 3,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'landscape', params: {} }],
+          },
         ],
       },
     });

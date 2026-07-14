@@ -69,9 +69,7 @@ describe('PartieForm', () => {
       const comp = fixture.componentInstance as any;
       comp.form.patchValue({ name: 'Ma partie', gameSystemId: 'draconis', kind });
       await comp.submit();
-      expect(partiesSvc.create).toHaveBeenCalledWith(
-        expect.objectContaining({ kind }),
-      );
+      expect(partiesSvc.create).toHaveBeenCalledWith(expect.objectContaining({ kind }));
     },
   );
 

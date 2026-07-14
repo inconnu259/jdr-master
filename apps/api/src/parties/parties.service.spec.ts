@@ -120,7 +120,9 @@ describe('PartiesService', () => {
         status: 'BROUILLON',
       },
     });
-    expect(prisma.seance.create).toHaveBeenCalledWith({ data: { scenarioId: 'scenario1' } });
+    expect(prisma.seance.create).toHaveBeenCalledWith({
+      data: { scenarioId: 'scenario1' },
+    });
   });
 
   it('create CAMPAGNE_LINEAIRE/CAMPAGNE_EPISODIQUE ne crée aucun scénario automatique (Story 7.1)', async () => {

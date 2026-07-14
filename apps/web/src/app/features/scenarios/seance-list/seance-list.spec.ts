@@ -3,6 +3,7 @@ import { provideAnimationsAsync } from '@angular/platform-browser/animations/asy
 import { vi } from 'vitest';
 import type { AvailableSlotDto, ScenarioDto, SeanceDto, SessionPollDto } from '@master-jdr/shared';
 import { SeanceList } from './seance-list';
+import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { PollService } from '../../../core/poll/poll.service';
 
@@ -49,14 +50,29 @@ async function createComponent(
     isMj = false,
     isEpisodique = false,
     availableSlots = [],
-  }: { isMj?: boolean; isEpisodique?: boolean; availableSlots?: AvailableSlotDto[] } = {},
+    currentUserId = 'u1',
+  }: {
+    isMj?: boolean;
+    isEpisodique?: boolean;
+    availableSlots?: AvailableSlotDto[];
+    currentUserId?: string;
+  } = {},
 ) {
-  const scenariosSvc = { linkSeancePoll: vi.fn(), listAll: vi.fn().mockResolvedValue([scenario]) };
+  const scenariosSvc = {
+    linkSeancePoll: vi.fn(),
+    listAll: vi.fn().mockResolvedValue([scenario]),
+    setSeanceCapacity: vi.fn(),
+    inscrire: vi.fn(),
+    desinscrire: vi.fn(),
+    validerDate: vi.fn(),
+    addSeance: vi.fn(),
+  };
   const pollSvc = {
     chooseDate: vi.fn(),
     closePoll: vi.fn(),
     getAvailableSlots: vi.fn().mockResolvedValue(availableSlots),
   };
+  const authSvc = { currentUser: () => ({ id: currentUserId }) };
 
   await TestBed.configureTestingModule({
     imports: [SeanceList],
@@ -64,6 +80,7 @@ async function createComponent(
       provideAnimationsAsync(),
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: PollService, useValue: pollSvc },
+      { provide: AuthService, useValue: authSvc },
     ],
   }).compileComponents();
 
@@ -83,6 +100,18 @@ async function createComponent(
 }
 
 describe('SeanceList', () => {
+  it('numérote chaque séance dans l’ordre (« Séance 1 », « Séance 2 »…)', async () => {
+    const seance2: SeanceDto = { ...SEANCE_NO_POLL, id: 'seance2' };
+    const { fixture } = await createComponent(
+      { ...SCENARIO, seances: [SEANCE_NO_POLL, seance2] },
+      { isMj: true },
+    );
+    const titles = Array.from(fixture.nativeElement.querySelectorAll('.seance-row__title')).map(
+      (el: any) => el.textContent.trim(),
+    );
+    expect(titles).toEqual(['Séance 1', 'Séance 2']);
+  });
+
   it('MJ, séance sans poll → bouton "Lancer le vote" visible, panneau fermé par défaut', async () => {
     const { fixture } = await createComponent(
       { ...SCENARIO, seances: [SEANCE_NO_POLL] },
@@ -278,12 +307,260 @@ describe('SeanceList', () => {
       expect(fixture.nativeElement.querySelector('app-poll-response')).toBeNull();
     });
 
-    it('poll CLOSED sans chosenDate → message neutre plutôt qu\'une date vide', async () => {
+    it("poll CLOSED sans chosenDate → message neutre plutôt qu'une date vide", async () => {
       const { fixture } = await createComponent(
         { ...SCENARIO, seances: [CLOSED_NO_DATE] },
         { isMj: true },
       );
       expect(fixture.nativeElement.textContent).toContain('Vote clôturé sans date retenue');
+    });
+  });
+
+  describe('Inscription à capacité limitée (Story 8.3, CAMPAGNE_EPISODIQUE)', () => {
+    const SEANCE_NO_CAPACITY: SeanceDto = { ...SEANCE_NO_POLL };
+    const SEANCE_WITH_CAPACITY: SeanceDto = {
+      ...SEANCE_NO_POLL,
+      inscription: {
+        min: 4,
+        max: 6,
+        inscrits: [{ userId: 'u2', pseudo: 'Bob' }],
+        dateValidee: null,
+      },
+    };
+    const SEANCE_AT_MAX: SeanceDto = {
+      ...SEANCE_NO_POLL,
+      inscription: {
+        min: 4,
+        max: 2,
+        inscrits: [
+          { userId: 'u2', pseudo: 'Bob' },
+          { userId: 'u3', pseudo: 'Carl' },
+        ],
+        dateValidee: null,
+      },
+    };
+    const SEANCE_INSCRIT = {
+      ...SEANCE_NO_POLL,
+      inscription: {
+        min: 4,
+        max: 6,
+        inscrits: [{ userId: 'u1', pseudo: 'Alice' }],
+        dateValidee: null,
+      },
+    };
+    const SEANCE_VALIDATED: SeanceDto = {
+      ...SEANCE_NO_POLL,
+      inscription: {
+        min: 4,
+        max: 6,
+        inscrits: [{ userId: 'u2', pseudo: 'Bob' }],
+        dateValidee: '2026-08-01T00:00:00.000Z',
+      },
+    };
+
+    it('MJ, séance sans capacité définie → formulaire visible, aucun FillIndicator', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_CAPACITY] },
+        { isMj: true, isEpisodique: true },
+      );
+      expect(fixture.nativeElement.querySelector('.capacity-form')).toBeTruthy();
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
+    });
+
+    it('formulaire de capacité : bouton désactivé si un champ est vide ou si max < min, activé sinon', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_CAPACITY] },
+        { isMj: true, isEpisodique: true },
+      );
+      const el = fixture.nativeElement as HTMLElement;
+      const inputs = Array.from(el.querySelectorAll('input[type="number"]')) as HTMLInputElement[];
+      const [minInput, maxInput] = inputs;
+      const submitBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('Définir la capacité'),
+      ) as HTMLButtonElement;
+
+      // Champs vides par défaut → désactivé.
+      expect(submitBtn.disabled).toBe(true);
+
+      minInput.value = '4';
+      minInput.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      // min seul rempli, max toujours vide → toujours désactivé.
+      expect(submitBtn.disabled).toBe(true);
+
+      maxInput.value = '2';
+      maxInput.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      // max < min → toujours désactivé.
+      expect(submitBtn.disabled).toBe(true);
+
+      maxInput.value = '6';
+      maxInput.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      // min=4, max=6 → valide, activé.
+      expect(submitBtn.disabled).toBe(false);
+    });
+
+    it('MJ, capacité définie non validée → FillIndicator + 2 CTA (Valider/Proposer une autre date)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
+        { isMj: true, isEpisodique: true },
+      );
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
+      expect(fixture.nativeElement.textContent).toContain('Valider cette date');
+      expect(fixture.nativeElement.textContent).toContain('Proposer une autre date');
+    });
+
+    it('MJ, date validée → texte "Date retenue", plus de CTA ni FillIndicator', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_VALIDATED] },
+        { isMj: true, isEpisodique: true },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Date retenue');
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
+      expect(fixture.nativeElement.textContent).not.toContain('Valider cette date');
+    });
+
+    it('joueur, séance sans capacité définie → rien affiché', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_CAPACITY] },
+        { isMj: false, isEpisodique: true },
+      );
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.capacity-form')).toBeNull();
+    });
+
+    it('joueur non-inscrit → FillIndicator + bouton "S\'inscrire" actif', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
+        { isMj: false, isEpisodique: true, currentUserId: 'u1' },
+      );
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
+      const btn: HTMLButtonElement = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      ).find((b: any) => b.textContent.includes("S'inscrire")) as HTMLButtonElement;
+      expect(btn).toBeTruthy();
+      expect(btn.disabled).toBe(false);
+    });
+
+    it('joueur déjà inscrit → bouton "Se désinscrire" affiché à la place', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_INSCRIT] },
+        { isMj: false, isEpisodique: true, currentUserId: 'u1' },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Se désinscrire');
+      expect(fixture.nativeElement.textContent).not.toContain("S'inscrire");
+    });
+
+    it('joueur non-inscrit, capacité au max → bouton "S\'inscrire" désactivé (AC4)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_AT_MAX] },
+        { isMj: false, isEpisodique: true, currentUserId: 'u1' },
+      );
+      const btn: HTMLButtonElement = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      ).find((b: any) => b.textContent.includes("S'inscrire")) as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+    });
+
+    it('joueur, date validée → texte "Date retenue", plus de FillIndicator ni bouton', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_VALIDATED] },
+        { isMj: false, isEpisodique: true },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Date retenue');
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
+    });
+
+    it('onSetCapacity appelle setSeanceCapacity et émet seanceLinked', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_CAPACITY] },
+        { isMj: true, isEpisodique: true },
+      );
+      const comp = fixture.componentInstance as any;
+      const updated = { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] };
+      scenariosSvc.setSeanceCapacity.mockResolvedValue(updated);
+      let emitted: ScenarioDto | undefined;
+      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
+
+      await comp.onSetCapacity('seance1', 4, 6);
+
+      expect(scenariosSvc.setSeanceCapacity).toHaveBeenCalledWith('seance1', 4, 6);
+      expect(emitted).toEqual(updated);
+    });
+
+    it('onInscrire appelle inscrire et émet seanceLinked', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
+        { isMj: false, isEpisodique: true },
+      );
+      const comp = fixture.componentInstance as any;
+      const updated = { ...SCENARIO, seances: [SEANCE_INSCRIT] };
+      scenariosSvc.inscrire.mockResolvedValue(updated);
+      let emitted: ScenarioDto | undefined;
+      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
+
+      await comp.onInscrire('seance1');
+
+      expect(scenariosSvc.inscrire).toHaveBeenCalledWith('seance1');
+      expect(emitted).toEqual(updated);
+    });
+
+    it('onDesinscrire appelle desinscrire et émet seanceLinked', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_INSCRIT] },
+        { isMj: false, isEpisodique: true },
+      );
+      const comp = fixture.componentInstance as any;
+      const updated = { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] };
+      scenariosSvc.desinscrire.mockResolvedValue(updated);
+      let emitted: ScenarioDto | undefined;
+      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
+
+      await comp.onDesinscrire('seance1');
+
+      expect(scenariosSvc.desinscrire).toHaveBeenCalledWith('seance1');
+      expect(emitted).toEqual(updated);
+    });
+
+    it('onValiderDate appelle validerDate et émet seanceLinked', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
+        { isMj: true, isEpisodique: true },
+      );
+      const comp = fixture.componentInstance as any;
+      const updated = { ...SCENARIO, seances: [SEANCE_VALIDATED] };
+      scenariosSvc.validerDate.mockResolvedValue(updated);
+      let emitted: ScenarioDto | undefined;
+      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
+
+      await comp.onValiderDate('seance1');
+
+      expect(scenariosSvc.validerDate).toHaveBeenCalledWith('seance1');
+      expect(emitted).toEqual(updated);
+    });
+
+    it('onProposerAutreDate appelle addSeance(scenarioId) et émet seanceLinked, sans supprimer l’ancienne Seance', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
+        { isMj: true, isEpisodique: true },
+      );
+      const comp = fixture.componentInstance as any;
+      const nouvelleSeance: SeanceDto = {
+        id: 'seance2',
+        scenarioId: 's1',
+        compteRendu: null,
+        createdAt: '2026-07-14T00:00:00.000Z',
+      };
+      const updated = { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY, nouvelleSeance] };
+      scenariosSvc.addSeance.mockResolvedValue(updated);
+      let emitted: ScenarioDto | undefined;
+      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
+
+      await comp.onProposerAutreDate();
+
+      expect(scenariosSvc.addSeance).toHaveBeenCalledWith('s1');
+      expect(emitted?.seances).toHaveLength(2);
     });
   });
 });

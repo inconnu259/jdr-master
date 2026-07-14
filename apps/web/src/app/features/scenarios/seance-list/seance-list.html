@@ -1,10 +1,107 @@
-@if (!isEpisodique()) {
-  <section class="seance-list">
-    @if (error()) {
-      <p class="error">{{ error() }}</p>
-    }
-    @for (seance of scenario().seances; track seance.id) {
-      <div class="seance-row">
+<section class="seance-list">
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @for (seance of scenario().seances; track seance.id; let i = $index) {
+    <div class="seance-row">
+      <h3 class="seance-row__title">Séance {{ i + 1 }}</h3>
+      @if (isEpisodique()) {
+        @if (isMj()) {
+          @if (!seance.inscription) {
+            <div class="capacity-form">
+              <input
+                type="number"
+                min="1"
+                #minInput
+                placeholder="min"
+                aria-label="Nombre minimum d'inscrits"
+                (input)="onCapacityFormInput()"
+              />
+              <input
+                type="number"
+                min="1"
+                #maxInput
+                placeholder="max"
+                aria-label="Nombre maximum d'inscrits"
+                (input)="onCapacityFormInput()"
+              />
+              <button
+                mat-stroked-button
+                type="button"
+                [disabled]="
+                  pollActionPending() ||
+                  !minInput.value ||
+                  !maxInput.value ||
+                  minInput.valueAsNumber < 1 ||
+                  maxInput.valueAsNumber < minInput.valueAsNumber
+                "
+                (click)="onSetCapacity(seance.id, minInput.valueAsNumber, maxInput.valueAsNumber)"
+              >
+                Définir la capacité
+              </button>
+            </div>
+          } @else if (!seance.inscription.dateValidee) {
+            <app-fill-indicator
+              [count]="seance.inscription.inscrits.length"
+              [min]="seance.inscription.min"
+              [max]="seance.inscription.max"
+            />
+            <div class="seance-row__mj-actions">
+              <button
+                mat-flat-button
+                color="primary"
+                type="button"
+                [disabled]="pollActionPending()"
+                (click)="onValiderDate(seance.id)"
+              >
+                Valider cette date
+              </button>
+              <button
+                mat-stroked-button
+                type="button"
+                [disabled]="pollActionPending()"
+                (click)="onProposerAutreDate()"
+              >
+                Proposer une autre date
+              </button>
+            </div>
+          } @else {
+            <p class="seance-row__chosen-date">
+              Date retenue : {{ formatValidatedDate(seance.inscription.dateValidee) }}
+            </p>
+          }
+        } @else if (seance.inscription && !seance.inscription.dateValidee) {
+          <app-fill-indicator
+            [count]="seance.inscription.inscrits.length"
+            [min]="seance.inscription.min"
+            [max]="seance.inscription.max"
+          />
+          @if (isInscrit(seance.inscription.inscrits)) {
+            <button
+              mat-stroked-button
+              type="button"
+              [disabled]="pollActionPending()"
+              (click)="onDesinscrire(seance.id)"
+            >
+              Se désinscrire
+            </button>
+          } @else {
+            <button
+              mat-flat-button
+              color="primary"
+              type="button"
+              [disabled]="pollActionPending() || seance.inscription.inscrits.length >= seance.inscription.max"
+              (click)="onInscrire(seance.id)"
+            >
+              S'inscrire
+            </button>
+          }
+        } @else if (seance.inscription?.dateValidee) {
+          <p class="seance-row__chosen-date">
+            Date retenue : {{ formatValidatedDate(seance.inscription.dateValidee ?? '') }}
+          </p>
+        }
+      } @else {
         @if (isMj()) {
           @if (!seance.poll) {
             @if (openPanelSeanceId() === seance.id) {
@@ -61,7 +158,7 @@
             </p>
           }
         }
-      </div>
-    }
-  </section>
-}
+      }
+    </div>
+  }
+</section>

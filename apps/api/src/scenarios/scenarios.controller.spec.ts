@@ -19,6 +19,10 @@ function makeScenariosService() {
     participate: jest.fn(),
     addSeance: jest.fn(),
     linkSeancePoll: jest.fn(),
+    setSeanceCapacity: jest.fn(),
+    inscrire: jest.fn(),
+    desinscrire: jest.fn(),
+    validerDate: jest.fn(),
     uploadDocument: jest.fn(),
     listDocuments: jest.fn(),
     listLibraryDocuments: jest.fn(),
@@ -100,7 +104,39 @@ describe('ScenariosController', () => {
 
   it('linkSeancePoll() route seanceId/user/pollId vers ScenariosService.linkSeancePoll', async () => {
     await controller.linkSeancePoll('seance1', user, { pollId: 'poll1' });
-    expect(scenarios.linkSeancePoll).toHaveBeenCalledWith('seance1', 'mj1', 'poll1');
+    expect(scenarios.linkSeancePoll).toHaveBeenCalledWith(
+      'seance1',
+      'mj1',
+      'poll1',
+    );
+  });
+
+  it('setSeanceCapacity() route seanceId/user/min/max vers ScenariosService.setSeanceCapacity', async () => {
+    await controller.setSeanceCapacity('seance1', user, {
+      inscriptionMin: 4,
+      inscriptionMax: 6,
+    });
+    expect(scenarios.setSeanceCapacity).toHaveBeenCalledWith(
+      'seance1',
+      'mj1',
+      4,
+      6,
+    );
+  });
+
+  it('inscrire() route seanceId/user vers ScenariosService.inscrire', async () => {
+    await controller.inscrire('seance1', user);
+    expect(scenarios.inscrire).toHaveBeenCalledWith('seance1', 'mj1');
+  });
+
+  it('desinscrire() route seanceId/user vers ScenariosService.desinscrire', async () => {
+    await controller.desinscrire('seance1', user);
+    expect(scenarios.desinscrire).toHaveBeenCalledWith('seance1', 'mj1');
+  });
+
+  it('validerDate() route seanceId/user vers ScenariosService.validerDate', async () => {
+    await controller.validerDate('seance1', user);
+    expect(scenarios.validerDate).toHaveBeenCalledWith('seance1', 'mj1');
   });
 
   it('uploadDocument() route partieId/user/file/scenarioId vers ScenariosService.uploadDocument', async () => {
@@ -140,9 +176,7 @@ describe('ScenariosController', () => {
     const result = await controller.downloadDocument('d1', user);
     const { disposition } = result.getHeaders();
     expect(disposition).not.toMatch(/[\r\n]/);
-    expect(disposition).toBe(
-      'attachment; filename="x.pdfX-Injected: evil"',
-    );
+    expect(disposition).toBe('attachment; filename="x.pdfX-Injected: evil"');
   });
 
   describe('upload de document — pipeline HTTP réel (multer + ParseFilePipe)', () => {

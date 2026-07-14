@@ -1,0 +1,33 @@
+.fill-indicator {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fill-indicator__track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-unknown);
+  overflow: hidden;
+}
+
+.fill-indicator__fill {
+  height: 100%;
+  border-radius: 4px;
+
+  &--under-min {
+    background: var(--color-unavailable);
+  }
+
+  &--mixed {
+    background: var(--color-mixed);
+  }
+
+  &--at-max {
+    background: var(--color-available);
+  }
+}
+
+.fill-indicator__label {
+  font-size: 0.85rem;
+}

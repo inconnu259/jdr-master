@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, input, output, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import type {
   AvailableSlotDto,
@@ -7,11 +7,13 @@ import type {
   ScenarioDto,
   SessionPollDto,
 } from '@master-jdr/shared';
+import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { PollCreationComponent } from '../../poll/poll-creation/poll-creation';
 import { PollStatusPanel } from '../../poll/poll-status/poll-status';
 import { PollResponseComponent } from '../../poll/poll-response/poll-response';
+import { FillIndicator } from '../fill-indicator/fill-indicator';
 
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
@@ -28,13 +30,22 @@ const SLOT_LABELS: Record<DaySlot, string> = {
  */
 @Component({
   selector: 'app-seance-list',
-  imports: [MatButtonModule, PollCreationComponent, PollStatusPanel, PollResponseComponent],
+  imports: [
+    MatButtonModule,
+    PollCreationComponent,
+    PollStatusPanel,
+    PollResponseComponent,
+    FillIndicator,
+  ],
   templateUrl: './seance-list.html',
   styleUrl: './seance-list.scss',
 })
 export class SeanceList implements OnInit {
   private readonly scenarios = inject(ScenariosService);
   private readonly pollSvc = inject(PollService);
+  private readonly auth = inject(AuthService);
+
+  protected readonly currentUserId = computed(() => this.auth.currentUser()?.id);
 
   readonly scenario = input.required<ScenarioDto>();
   readonly partieId = input.required<string>();
@@ -121,6 +132,98 @@ export class SeanceList implements OnInit {
     });
   }
 
+  protected isInscrit(inscrits: { userId: string; pseudo: string }[]): boolean {
+    const userId = this.currentUserId();
+    return userId !== undefined && inscrits.some((i) => i.userId === userId);
+  }
+
+  /** Aucun état à mettre à jour — sert uniquement à déclencher un cycle de détection de
+   *  changements zoneless sur `(input)`, pour que le bouton `[disabled]` (qui lit `minInput.value`/
+   *  `maxInput.value` directement) reflète l'état courant des champs au fil de la saisie. */
+  protected onCapacityFormInput(): void {}
+
+  protected async onSetCapacity(seanceId: string, min: number, max: number): Promise<void> {
+    if (this.pollActionPending()) return;
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.scenarios.setSeanceCapacity(seanceId, min, max);
+      this.seanceLinked.emit(updated);
+    } catch {
+      this.error.set('Impossible de définir la capacité. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
+  protected async onInscrire(seanceId: string): Promise<void> {
+    if (this.pollActionPending()) return;
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.scenarios.inscrire(seanceId);
+      this.seanceLinked.emit(updated);
+    } catch {
+      this.error.set('Impossible de vous inscrire. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
+  protected async onDesinscrire(seanceId: string): Promise<void> {
+    if (this.pollActionPending()) return;
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.scenarios.desinscrire(seanceId);
+      this.seanceLinked.emit(updated);
+    } catch {
+      this.error.set('Impossible de vous désinscrire. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
+  protected async onValiderDate(seanceId: string): Promise<void> {
+    if (this.pollActionPending()) return;
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.scenarios.validerDate(seanceId);
+      this.seanceLinked.emit(updated);
+    } catch {
+      this.error.set('Impossible de valider cette date. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
+  // [ASSUMPTION] (cf. Dev Notes Story 8.3) : « Proposer une autre date » crée une nouvelle Seance
+  // vierge (addSeance, Story 8.2, aucun plafond) plutôt que de ne rien faire — l'ancienne Seance et
+  // ses Inscription restent intactes, non supprimées.
+  protected async onProposerAutreDate(): Promise<void> {
+    if (this.pollActionPending()) return;
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.scenarios.addSeance(this.scenario().id);
+      this.seanceLinked.emit(updated);
+    } catch {
+      this.error.set('Impossible de proposer une nouvelle date. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
+  protected formatValidatedDate(iso: string): string {
+    return new Intl.DateTimeFormat('fr-FR', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+    }).format(new Date(iso));
+  }
+
   protected formatChosenDate(poll: SessionPollDto): string {
     if (!poll.chosenDate) return '';
     const d = new Date(poll.chosenDate);
@@ -143,7 +246,9 @@ export class SeanceList implements OnInit {
       );
       if (fresh) this.seanceLinked.emit(fresh);
     } catch {
-      this.error.set('Action effectuée, mais impossible de rafraîchir l’affichage. Rechargez la page.');
+      this.error.set(
+        'Action effectuée, mais impossible de rafraîchir l’affichage. Rechargez la page.',
+      );
     }
   }
 }

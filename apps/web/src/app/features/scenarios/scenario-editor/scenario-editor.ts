@@ -136,7 +136,9 @@ export class ScenarioEditor implements OnInit {
     try {
       this.scenario.set(await this.scenarios.update(s.id, { [field]: value }));
     } catch (err) {
-      this.fieldEditError.set(extractErrorMessage(err, 'Impossible d’enregistrer la modification.'));
+      this.fieldEditError.set(
+        extractErrorMessage(err, 'Impossible d’enregistrer la modification.'),
+      );
     }
   }
 
@@ -149,7 +151,9 @@ export class ScenarioEditor implements OnInit {
         await this.scenarios.update(s.id, { description: this.descriptionDraft() }),
       );
     } catch (err) {
-      this.fieldEditError.set(extractErrorMessage(err, 'Impossible d’enregistrer la modification.'));
+      this.fieldEditError.set(
+        extractErrorMessage(err, 'Impossible d’enregistrer la modification.'),
+      );
     }
   }
 
@@ -173,14 +177,20 @@ export class ScenarioEditor implements OnInit {
     await this.upload(file, s.partieId, undefined);
   }
 
-  private async upload(file: File, partieId: string, scenarioId: string | undefined): Promise<void> {
+  private async upload(
+    file: File,
+    partieId: string,
+    scenarioId: string | undefined,
+  ): Promise<void> {
     this.uploadError.set(null);
     try {
       await this.scenarios.uploadDocument(partieId, file, scenarioId);
       const s = this.scenario();
       if (s) this.documents.set(await this.scenarios.listDocuments(s.id));
     } catch (err) {
-      this.uploadError.set(extractErrorMessage(err, "Impossible d'envoyer le document. Réessayez."));
+      this.uploadError.set(
+        extractErrorMessage(err, "Impossible d'envoyer le document. Réessayez."),
+      );
     }
   }
 

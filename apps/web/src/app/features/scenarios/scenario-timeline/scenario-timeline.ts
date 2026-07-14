@@ -18,7 +18,10 @@ import { Router } from '@angular/router';
 import type { CharacterDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
-import { ScenarioReadDialog, type ScenarioReadDialogData } from '../scenario-read-dialog/scenario-read-dialog';
+import {
+  ScenarioReadDialog,
+  type ScenarioReadDialogData,
+} from '../scenario-read-dialog/scenario-read-dialog';
 
 export interface TimelineNode {
   key: string;
@@ -40,9 +43,7 @@ function createdAtMs(s: ScenarioDto): number {
  * fusionnés en un seul nœud empilé (AC5), positionné à la date de création du plus ancien.
  */
 function buildNodes(scenarios: ScenarioDto[], includeBrouillon: boolean): TimelineNode[] {
-  const visible = includeBrouillon
-    ? scenarios
-    : scenarios.filter((s) => s.status !== 'BROUILLON');
+  const visible = includeBrouillon ? scenarios : scenarios.filter((s) => s.status !== 'BROUILLON');
   const sorted = [...visible].sort((a, b) => createdAtMs(a) - createdAtMs(b));
 
   const nodes: TimelineNode[] = [];

@@ -42,10 +42,7 @@ const LIBRARY_DOC: ScenarioDocumentDto = {
   createdAt: '2026-07-12T00:00:00.000Z',
 };
 
-async function createComponent(
-  scenario: ScenarioDto = SCENARIO,
-  characters: CharacterDto[] = [],
-) {
+async function createComponent(scenario: ScenarioDto = SCENARIO, characters: CharacterDto[] = []) {
   const scenariosSvc = {
     listAll: vi.fn().mockResolvedValue([scenario]),
     listDocuments: vi.fn().mockResolvedValue([OWN_DOC, LIBRARY_DOC]),
@@ -142,7 +139,10 @@ describe('ScenarioEditor', () => {
     const comp = fixture.componentInstance as any;
     const file = new File(['%PDF'], 'trop-gros.pdf', { type: 'application/pdf' });
     scenariosSvc.uploadDocument.mockRejectedValue(
-      new HttpErrorResponse({ status: 413, error: { message: 'Fichier trop volumineux (max 5 Mo).' } }),
+      new HttpErrorResponse({
+        status: 413,
+        error: { message: 'Fichier trop volumineux (max 5 Mo).' },
+      }),
     );
     await comp.onScenarioFileSelected({ target: { files: [file], value: 'trop-gros.pdf' } });
     expect(comp.uploadError()).toBe('Fichier trop volumineux (max 5 Mo).');
@@ -328,7 +328,14 @@ describe('ScenarioEditor', () => {
       const comp = fixture.componentInstance as any;
       const updated = {
         ...SCENARIO,
-        seances: [{ id: 'seance1', scenarioId: 's1', compteRendu: null, createdAt: '2026-07-13T00:00:00.000Z' }],
+        seances: [
+          {
+            id: 'seance1',
+            scenarioId: 's1',
+            compteRendu: null,
+            createdAt: '2026-07-13T00:00:00.000Z',
+          },
+        ],
       };
       scenariosSvc.addSeance.mockResolvedValue(updated);
 
@@ -361,7 +368,14 @@ describe('ScenarioEditor', () => {
       const comp = fixture.componentInstance as any;
       const updated = {
         ...SCENARIO,
-        seances: [{ id: 'seance1', scenarioId: 's1', compteRendu: null, createdAt: '2026-07-13T00:00:00.000Z' }],
+        seances: [
+          {
+            id: 'seance1',
+            scenarioId: 's1',
+            compteRendu: null,
+            createdAt: '2026-07-13T00:00:00.000Z',
+          },
+        ],
       };
 
       comp.onSeanceLinked(updated);
@@ -406,7 +420,7 @@ describe('ScenarioEditor', () => {
       expect(comp.scenario().resumeFin).toBe('mis à jour côté serveur');
     });
 
-    it("échec du rechargement → le scénario reçu en input reste affiché tel quel", async () => {
+    it('échec du rechargement → le scénario reçu en input reste affiché tel quel', async () => {
       const scenariosSvc = {
         listAll: vi.fn().mockRejectedValue(new Error('network')),
         listDocuments: vi.fn().mockResolvedValue([]),

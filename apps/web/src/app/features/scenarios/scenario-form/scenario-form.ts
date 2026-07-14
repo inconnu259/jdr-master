@@ -10,7 +10,13 @@ import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 
 @Component({
   selector: 'app-scenario-form',
-  imports: [ReactiveFormsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule],
+  imports: [
+    ReactiveFormsModule,
+    MatCardModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatButtonModule,
+  ],
   templateUrl: './scenario-form.html',
   styleUrl: './scenario-form.scss',
 })

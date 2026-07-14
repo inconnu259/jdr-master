@@ -24,7 +24,12 @@ describe('getLevelUps', () => {
 
   it('sheetData.levelUps présent → renvoyé tel quel', () => {
     const levelUps: LevelUpEntry[] = [
-      { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+      {
+        level: 2,
+        pvAllocated: 2,
+        peAllocated: 1,
+        capabilities: [{ type: 'attribute', params: {} }],
+      },
     ];
     const character: CharacterDto = makeCharacterDto({ sheetData: { levelUps } });
     expect(getLevelUps(character)).toEqual(levelUps);
@@ -34,7 +39,12 @@ describe('getLevelUps', () => {
 describe('getCapabilitiesByType', () => {
   it('filtre les capacités par type (aplaties depuis levelUps[].capabilities)', () => {
     const levelUps: LevelUpEntry[] = [
-      { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+      {
+        level: 2,
+        pvAllocated: 2,
+        peAllocated: 1,
+        capabilities: [{ type: 'attribute', params: {} }],
+      },
       {
         level: 3,
         pvAllocated: 1,

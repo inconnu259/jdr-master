@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpStatus,
   MaxFileSizeValidator,
@@ -25,6 +26,7 @@ import { ScenariosService } from './scenarios.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import { LinkSeancePollDto } from './dto/link-seance-poll.dto';
+import { SetSeanceCapacityDto } from './dto/set-seance-capacity.dto';
 
 const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024;
 
@@ -118,6 +120,44 @@ export class ScenariosController {
     @Body() dto: LinkSeancePollDto,
   ) {
     return this.scenarios.linkSeancePoll(seanceId, user.id, dto.pollId);
+  }
+
+  @Patch('scenarios/seances/:id/capacite')
+  setSeanceCapacity(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SetSeanceCapacityDto,
+  ) {
+    return this.scenarios.setSeanceCapacity(
+      seanceId,
+      user.id,
+      dto.inscriptionMin,
+      dto.inscriptionMax,
+    );
+  }
+
+  @Post('scenarios/seances/:id/inscription')
+  inscrire(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.inscrire(seanceId, user.id);
+  }
+
+  @Delete('scenarios/seances/:id/inscription')
+  desinscrire(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.desinscrire(seanceId, user.id);
+  }
+
+  @Patch('scenarios/seances/:id/valider-date')
+  validerDate(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.scenarios.validerDate(seanceId, user.id);
   }
 
   @Post('parties/:id/documents')

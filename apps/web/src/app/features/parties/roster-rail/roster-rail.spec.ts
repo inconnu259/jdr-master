@@ -157,7 +157,7 @@ describe('RosterRail', () => {
     expect(playerItem.getAttribute('aria-label')).toContain('montée de niveau disponible');
   });
 
-  it("personnage sans niveau en attente → pas de badge de montée de niveau", () => {
+  it('personnage sans niveau en attente → pas de badge de montée de niveau', () => {
     const fixture = setup();
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
     expect(playerItem.querySelector('.roster-rail__levelup-badge')).toBeNull();

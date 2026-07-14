@@ -205,7 +205,10 @@ export class ScenariosService {
   // AD-6 : aucun filtrage par statut — l'anti-spoil est un rendu frontend, jamais serveur. Lecture
   // ouverte à tout membre (getViewable), pas MJ-only comme listDrafts. Tri chronologique croissant
   // (passé → futur) pour alimenter la timeline joueur (Story 7.5).
-  async findAllForPartie(partieId: string, userId: string): Promise<ScenarioDto[]> {
+  async findAllForPartie(
+    partieId: string,
+    userId: string,
+  ): Promise<ScenarioDto[]> {
     const partie = await this.parties.getViewable(partieId, userId);
 
     const scenarios = await this.prisma.scenario.findMany({
@@ -232,7 +235,12 @@ export class ScenariosService {
       byScenario.set(p.scenarioId, list);
     }
     return scenarios.map((s) =>
-      toDto(s, partie.kind, byScenario.get(s.id) ?? [], seancesByScenario.get(s.id) ?? []),
+      toDto(
+        s,
+        partie.kind,
+        byScenario.get(s.id) ?? [],
+        seancesByScenario.get(s.id) ?? [],
+      ),
     );
   }
 
@@ -326,7 +334,9 @@ export class ScenariosService {
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status !== 'COURANT') {
-      throw new BadRequestException('Seul un scénario Courant peut être clôturé');
+      throw new BadRequestException(
+        'Seul un scénario Courant peut être clôturé',
+      );
     }
 
     const { count } = await this.prisma.scenario.updateMany({
@@ -412,14 +422,18 @@ export class ScenariosService {
     }
 
     if (seance.pollId) {
-      throw new BadRequestException('Cette séance est déjà liée à un vote de date');
+      throw new BadRequestException(
+        'Cette séance est déjà liée à un vote de date',
+      );
     }
 
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
     if (!poll || poll.partieId !== scenario.partieId) {
-      throw new BadRequestException("Ce vote de date n'appartient pas à cette Partie");
+      throw new BadRequestException(
+        "Ce vote de date n'appartient pas à cette Partie",
+      );
     }
     if (poll.status !== 'OPEN') {
       throw new BadRequestException("Ce vote de date n'est plus ouvert");
@@ -428,6 +442,168 @@ export class ScenariosService {
     await this.prisma.seance.update({
       where: { id: seanceId },
       data: { pollId },
+    });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenario.id },
+    });
+    return toEnrichedDto(this.prisma, updated, partie.kind);
+  }
+
+  // AD-4/AD-5 : capacité d'inscription réservée à CAMPAGNE_EPISODIQUE — symétrique au rejet
+  // CAMPAGNE_EPISODIQUE de linkSeancePoll (ici c'est l'inverse qui est rejeté). addSeance() reste
+  // inchangé (Story 8.2) : la capacité se définit dans un second temps, comme linkSeancePoll pour
+  // le linéaire (cf. Dev Notes Story 8.3 — schéma en deux temps cohérent entre les deux mécanismes).
+  async setSeanceCapacity(
+    seanceId: string,
+    mjId: string,
+    inscriptionMin: number,
+    inscriptionMax: number,
+  ): Promise<ScenarioDto> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: seanceId },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    const scenario = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: seance.scenarioId },
+    });
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
+      throw new BadRequestException(
+        "La capacité d'inscription ne peut être définie que pour les campagnes épisodiques",
+      );
+    }
+    if (inscriptionMax < inscriptionMin) {
+      throw new BadRequestException(
+        'Le maximum doit être supérieur ou égal au minimum',
+      );
+    }
+
+    await this.prisma.seance.update({
+      where: { id: seanceId },
+      data: { inscriptionMin, inscriptionMax },
+    });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenario.id },
+    });
+    return toEnrichedDto(this.prisma, updated, partie.kind);
+  }
+
+  // AD-5 (verbatim) : verrou de ligne explicite SELECT ... FOR UPDATE obligatoire — READ COMMITTED
+  // seul ne suffit pas à empêcher un dépassement de max entre deux inscriptions concurrentes.
+  async inscrire(seanceId: string, userId: string): Promise<ScenarioDto> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: seanceId },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    const scenario = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: seance.scenarioId },
+    });
+    const partie = await this.parties.getViewable(scenario.partieId, userId);
+
+    if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
+      throw new BadRequestException(
+        "L'inscription à capacité limitée n'est disponible que pour les campagnes épisodiques",
+      );
+    }
+    if (seance.inscriptionMax == null) {
+      throw new BadRequestException(
+        "Cette séance n'a pas encore de capacité définie par le MJ",
+      );
+    }
+    if (seance.dateValidee) {
+      throw new BadRequestException(
+        'Cette séance a déjà une date validée — les inscriptions sont figées',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Seance" WHERE id = ${seanceId} FOR UPDATE`;
+      const existing = await tx.inscription.findUnique({
+        where: { seanceId_userId: { seanceId, userId } },
+      });
+      // AC2 vs AC4 : ce check précède le comptage — un joueur déjà inscrit reste inscrit sans
+      // jamais être rejeté par un quota déjà atteint par d'autres (idempotence).
+      if (existing) return;
+      // Relit inscriptionMax sous le verrou — sinon un setSeanceCapacity() concurrent entre la
+      // lecture initiale (hors transaction) et cette comparaison utiliserait une valeur périmée,
+      // ce que le verrou FOR UPDATE est censé prévenir (trouvé en revue de code, 2026-07-14).
+      const locked = await tx.seance.findUniqueOrThrow({ where: { id: seanceId } });
+      const count = await tx.inscription.count({ where: { seanceId } });
+      if (count >= locked.inscriptionMax!) {
+        throw new ConflictException(
+          'Cette séance a atteint son nombre maximal d’inscrits',
+        );
+      }
+      await tx.inscription.create({ data: { seanceId, userId } });
+    });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenario.id },
+    });
+    return toEnrichedDto(this.prisma, updated, partie.kind);
+  }
+
+  // deleteMany (pas delete) : idempotent si l'utilisateur n'était pas inscrit — pas d'effet de
+  // bord dangereux possible, aucune garde de kind/capacité nécessaire (cf. Dev Notes Story 8.3).
+  async desinscrire(seanceId: string, userId: string): Promise<ScenarioDto> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: seanceId },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    const scenario = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: seance.scenarioId },
+    });
+    const partie = await this.parties.getViewable(scenario.partieId, userId);
+
+    // Décision utilisateur (revue de code, 2026-07-14) : la date validée fige le roster — un
+    // joueur ne peut plus se désinscrire une fois la séance confirmée par le MJ.
+    if (seance.dateValidee) {
+      throw new BadRequestException(
+        'Cette séance a déjà une date validée — les inscriptions sont figées',
+      );
+    }
+
+    await this.prisma.inscription.deleteMany({ where: { seanceId, userId } });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenario.id },
+    });
+    return toEnrichedDto(this.prisma, updated, partie.kind);
+  }
+
+  // AC6 : aucune validation de remplissage — validable à tout niveau, y compris 0 inscrit. Ne
+  // touche jamais Partie.nextSessionDate/nextSessionSlot (exclusivement piloté par PollService
+  // pour le linéaire/one-shot — aucune notion de « prochaine séance » unique en épisodique, AD-4).
+  async validerDate(seanceId: string, mjId: string): Promise<ScenarioDto> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: seanceId },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    const scenario = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: seance.scenarioId },
+    });
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
+      throw new BadRequestException(
+        'La validation de date ne concerne que les campagnes épisodiques',
+      );
+    }
+    // Sans capacité définie, dateValidee serait écrite mais resterait invisible côté DTO
+    // (toSeanceDto ne peuple `inscription` que si inscriptionMax != null) — trouvé en revue de
+    // code (2026-07-14), état silencieusement perdu jusqu'à ce que la capacité soit enfin définie.
+    if (seance.inscriptionMax == null) {
+      throw new BadRequestException(
+        "Impossible de valider une date sans capacité d'inscription définie",
+      );
+    }
+
+    await this.prisma.seance.update({
+      where: { id: seanceId },
+      data: { dateValidee: new Date() },
     });
 
     const updated = await this.prisma.scenario.findUniqueOrThrow({
@@ -486,7 +662,9 @@ function toDto(
     createdAt: scenario.createdAt.toISOString(),
     closedAt: scenario.closedAt ? scenario.closedAt.toISOString() : null,
     seances: seances ?? [],
-    ...(partieKind === 'CAMPAGNE_EPISODIQUE' && { participants: participants ?? [] }),
+    ...(partieKind === 'CAMPAGNE_EPISODIQUE' && {
+      participants: participants ?? [],
+    }),
   };
 }
 
@@ -501,12 +679,15 @@ async function loadParticipants(
   return participants.map((p) => ({ userId: p.userId, pseudo: p.user.pseudo }));
 }
 
-const SEANCE_POLL_INCLUDE = {
+const SEANCE_INCLUDE = {
   poll: {
     include: {
-      options: { include: { votes: { include: { user: { select: { pseudo: true } } } } } },
+      options: {
+        include: { votes: { include: { user: { select: { pseudo: true } } } } },
+      },
     },
   },
+  inscriptions: { include: { user: { select: { pseudo: true } } } },
 } as const;
 
 function toSessionPollDto(poll: any): SessionPollDto {
@@ -536,6 +717,20 @@ function toSeanceDto(seance: any): SeanceDto {
     id: seance.id,
     scenarioId: seance.scenarioId,
     poll: seance.poll ? toSessionPollDto(seance.poll) : undefined,
+    inscription:
+      seance.inscriptionMax != null
+        ? {
+            min: seance.inscriptionMin ?? 0,
+            max: seance.inscriptionMax,
+            inscrits: (seance.inscriptions ?? []).map((i: any) => ({
+              userId: i.userId,
+              pseudo: i.user.pseudo,
+            })),
+            dateValidee: seance.dateValidee
+              ? seance.dateValidee.toISOString()
+              : null,
+          }
+        : undefined,
     compteRendu: seance.compteRendu,
     createdAt: seance.createdAt.toISOString(),
   };
@@ -548,7 +743,7 @@ async function loadSeancesBatch(
   const seances = await prisma.seance.findMany({
     where: { scenarioId: { in: scenarioIds } },
     orderBy: { createdAt: 'asc' },
-    include: SEANCE_POLL_INCLUDE,
+    include: SEANCE_INCLUDE,
   });
   const byScenario = new Map<string, SeanceDto[]>();
   for (const s of seances) {
@@ -559,7 +754,10 @@ async function loadSeancesBatch(
   return byScenario;
 }
 
-async function loadSeances(prisma: PrismaService, scenarioId: string): Promise<SeanceDto[]> {
+async function loadSeances(
+  prisma: PrismaService,
+  scenarioId: string,
+): Promise<SeanceDto[]> {
   const byScenario = await loadSeancesBatch(prisma, [scenarioId]);
   return byScenario.get(scenarioId) ?? [];
 }
@@ -577,5 +775,10 @@ async function toEnrichedDto(
   if (partieKind !== 'CAMPAGNE_EPISODIQUE') {
     return toDto(scenario, partieKind, undefined, seances);
   }
-  return toDto(scenario, partieKind, await loadParticipants(prisma, scenario.id), seances);
+  return toDto(
+    scenario,
+    partieKind,
+    await loadParticipants(prisma, scenario.id),
+    seances,
+  );
 }

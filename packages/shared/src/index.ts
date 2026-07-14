@@ -123,8 +123,24 @@ export interface SeanceDto {
   id: string;
   scenarioId: string;
   poll?: SessionPollDto;
+  /** Inscription à capacité limitée (CAMPAGNE_EPISODIQUE uniquement, Story 8.3) — peuplé seulement si `inscriptionMax` est défini sur la Seance (AD-4 : jamais en même temps que `poll`). */
+  inscription?: SeanceInscriptionDto;
   compteRendu: string | null;
   createdAt: string;
+}
+
+/** État d'inscription à capacité limitée d'une Seance (Story 8.3). */
+export interface SeanceInscriptionDto {
+  min: number;
+  max: number;
+  inscrits: { userId: string; pseudo: string }[];
+  dateValidee: string | null;
+}
+
+/** Payload de définition de la capacité d'une Seance (PATCH /scenarios/seances/:id/capacite). */
+export interface SetSeanceCapacityDto {
+  inscriptionMin: number;
+  inscriptionMax: number;
 }
 
 /** Payload de liaison d'un SessionPoll existant à une Seance (PATCH /scenarios/seances/:id/poll). */

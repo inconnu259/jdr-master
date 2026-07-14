@@ -127,10 +127,7 @@ describe('ScenarioReadDialog', () => {
     it.each(['ONE_SHOT', 'CAMPAGNE_LINEAIRE'] as const)(
       '%s → section participants/bouton absents',
       async (partieKind) => {
-        const { fixture } = await createComponent(
-          { ...BASE, status: 'COURANT' },
-          { partieKind },
-        );
+        const { fixture } = await createComponent({ ...BASE, status: 'COURANT' }, { partieKind });
         expect(fixture.nativeElement.textContent).not.toContain('Participer à cette enquête');
         expect(fixture.nativeElement.querySelector('.participants')).toBeNull();
       },
@@ -244,7 +241,11 @@ describe('ScenarioReadDialog', () => {
     it('ngOnInit recharge le scénario via listAll et remplace l’instantané reçu en donnée de dialogue', async () => {
       const stale = { ...BASE, status: 'COURANT' as const };
       const dialogRef = { close: vi.fn() };
-      const data: ScenarioReadDialogData = { scenario: stale, partieKind: 'ONE_SHOT', characters: [] };
+      const data: ScenarioReadDialogData = {
+        scenario: stale,
+        partieKind: 'ONE_SHOT',
+        characters: [],
+      };
       const fresh = { ...stale, resumeFin: 'mis à jour côté serveur' };
       const scenariosSvc = {
         participate: vi.fn(),
@@ -275,7 +276,11 @@ describe('ScenarioReadDialog', () => {
 
     it('échec du rechargement → le scénario reçu en donnée de dialogue reste affiché tel quel', async () => {
       const dialogRef = { close: vi.fn() };
-      const data: ScenarioReadDialogData = { scenario: BASE, partieKind: 'ONE_SHOT', characters: [] };
+      const data: ScenarioReadDialogData = {
+        scenario: BASE,
+        partieKind: 'ONE_SHOT',
+        characters: [],
+      };
       const scenariosSvc = {
         participate: vi.fn(),
         linkSeancePoll: vi.fn(),

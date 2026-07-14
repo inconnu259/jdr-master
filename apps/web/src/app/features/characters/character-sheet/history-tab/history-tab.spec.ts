@@ -63,12 +63,24 @@ describe('HistoryTab', () => {
       level: 3,
       sheetData: {
         levelUps: [
-          { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: { attribute: 'VIG' } }] },
-          { level: 3, pvAllocated: 1, peAllocated: 2, capabilities: [{ type: 'landscape', params: { key: 'foret' } }] },
+          {
+            level: 2,
+            pvAllocated: 2,
+            peAllocated: 1,
+            capabilities: [{ type: 'attribute', params: { attribute: 'VIG' } }],
+          },
+          {
+            level: 3,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'landscape', params: { key: 'foret' } }],
+          },
         ],
       },
     });
-    const content: GameSystemContentDto = { landscape: [{ key: 'foret', data: { label: 'Forêt' } }] };
+    const content: GameSystemContentDto = {
+      landscape: [{ key: 'foret', data: { label: 'Forêt' } }],
+    };
     const fixture = await createComponent(() => Promise.resolve([snapshot]), content);
 
     const entry = fixture.nativeElement.querySelector('.history-tab__entry');

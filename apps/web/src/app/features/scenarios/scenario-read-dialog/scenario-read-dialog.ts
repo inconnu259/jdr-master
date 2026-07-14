@@ -29,7 +29,13 @@ function extractErrorMessage(err: unknown, fallback: string): string {
  */
 @Component({
   selector: 'app-scenario-read-dialog',
-  imports: [MatDialogModule, MatButtonModule, ScenarioStatusBadge, CharacterSummaryCard, SeanceList],
+  imports: [
+    MatDialogModule,
+    MatButtonModule,
+    ScenarioStatusBadge,
+    CharacterSummaryCard,
+    SeanceList,
+  ],
   templateUrl: './scenario-read-dialog.html',
   styleUrl: './scenario-read-dialog.scss',
 })
@@ -87,7 +93,9 @@ export class ScenarioReadDialog implements OnInit {
     try {
       this.scenario.set(await this.scenarios.participate(this.scenario().id));
     } catch (err) {
-      this.participantError.set(extractErrorMessage(err, 'Impossible de participer à ce scénario.'));
+      this.participantError.set(
+        extractErrorMessage(err, 'Impossible de participer à ce scénario.'),
+      );
     }
   }
 

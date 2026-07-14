@@ -20,7 +20,7 @@ describe('ScenariosService', () => {
     resumeFin: null,
     createdAt: '2026-07-12T00:00:00.000Z',
     closedAt: null,
-  seances: [],
+    seances: [],
   };
 
   const document: ScenarioDocumentDto = {
@@ -125,7 +125,17 @@ describe('ScenariosService', () => {
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual({});
     expect(req.request.withCredentials).toBe(true);
-    req.flush({ ...scenario, seances: [{ id: 'seance1', scenarioId: 's1', compteRendu: null, createdAt: '2026-07-13T00:00:00.000Z' }] });
+    req.flush({
+      ...scenario,
+      seances: [
+        {
+          id: 'seance1',
+          scenarioId: 's1',
+          compteRendu: null,
+          createdAt: '2026-07-13T00:00:00.000Z',
+        },
+      ],
+    });
     await p;
   });
 
@@ -134,6 +144,45 @@ describe('ScenariosService', () => {
     const req = http.expectOne(`${API}/scenarios/seances/seance1/poll`);
     expect(req.request.method).toBe('PATCH');
     expect(req.request.body).toEqual({ pollId: 'poll1' });
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(scenario);
+    await p;
+  });
+
+  it('setSeanceCapacity → PATCH /scenarios/seances/:id/capacite avec min/max', async () => {
+    const p = service.setSeanceCapacity('seance1', 4, 6);
+    const req = http.expectOne(`${API}/scenarios/seances/seance1/capacite`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ inscriptionMin: 4, inscriptionMax: 6 });
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(scenario);
+    await p;
+  });
+
+  it('inscrire → POST /scenarios/seances/:id/inscription sans body', async () => {
+    const p = service.inscrire('seance1');
+    const req = http.expectOne(`${API}/scenarios/seances/seance1/inscription`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({});
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(scenario);
+    await p;
+  });
+
+  it('desinscrire → DELETE /scenarios/seances/:id/inscription', async () => {
+    const p = service.desinscrire('seance1');
+    const req = http.expectOne(`${API}/scenarios/seances/seance1/inscription`);
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(scenario);
+    await p;
+  });
+
+  it('validerDate → PATCH /scenarios/seances/:id/valider-date sans body', async () => {
+    const p = service.validerDate('seance1');
+    const req = http.expectOne(`${API}/scenarios/seances/seance1/valider-date`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({});
     expect(req.request.withCredentials).toBe(true);
     req.flush(scenario);
     await p;

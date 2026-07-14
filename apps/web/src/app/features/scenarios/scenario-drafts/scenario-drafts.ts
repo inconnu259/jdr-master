@@ -45,10 +45,9 @@ export class ScenarioDrafts implements OnInit {
   }
 
   protected openScenario(scenario: ScenarioDto): void {
-    void this.router.navigate(
-      ['/parties', this.resolvePartieId(), 'scenarios', scenario.id],
-      { state: { scenario } },
-    );
+    void this.router.navigate(['/parties', this.resolvePartieId(), 'scenarios', scenario.id], {
+      state: { scenario },
+    });
   }
 
   protected async openToPlayers(scenario: ScenarioDto, event: Event): Promise<void> {
