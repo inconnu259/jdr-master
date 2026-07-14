@@ -28,7 +28,8 @@ function makeScenariosService() {
     close: jest.fn(),
     participate: jest.fn(),
     addSeance: jest.fn(),
-    linkSeancePoll: jest.fn(),
+    deleteSeance: jest.fn(),
+    createSeancePoll: jest.fn(),
     setSeanceCapacity: jest.fn(),
     inscrire: jest.fn(),
     desinscrire: jest.fn(),
@@ -114,12 +115,21 @@ describe('ScenariosController', () => {
     expect(scenarios.addSeance).toHaveBeenCalledWith('s1', 'mj1');
   });
 
-  it('linkSeancePoll() route seanceId/user/pollId vers ScenariosService.linkSeancePoll', async () => {
-    await controller.linkSeancePoll('seance1', user, { pollId: 'poll1' });
-    expect(scenarios.linkSeancePoll).toHaveBeenCalledWith(
+  it('deleteSeance() route seanceId/user vers ScenariosService.deleteSeance', async () => {
+    await controller.deleteSeance('seance1', user);
+    expect(scenarios.deleteSeance).toHaveBeenCalledWith('seance1', 'mj1');
+  });
+
+  it('createSeancePoll() route seanceId/user/options vers ScenariosService.createSeancePoll', async () => {
+    const options = [
+      { date: '2026-08-01T00:00:00.000Z', slot: 'AFTERNOON' as const },
+      { date: '2026-08-02T00:00:00.000Z', slot: 'AFTERNOON' as const },
+    ];
+    await controller.createSeancePoll('seance1', user, { options });
+    expect(scenarios.createSeancePoll).toHaveBeenCalledWith(
       'seance1',
       'mj1',
-      'poll1',
+      options,
     );
   });
 
@@ -146,9 +156,15 @@ describe('ScenariosController', () => {
     expect(scenarios.desinscrire).toHaveBeenCalledWith('seance1', 'mj1');
   });
 
-  it('validerDate() route seanceId/user vers ScenariosService.validerDate', async () => {
-    await controller.validerDate('seance1', user);
-    expect(scenarios.validerDate).toHaveBeenCalledWith('seance1', 'mj1');
+  it('validerDate() route seanceId/user/date vers ScenariosService.validerDate', async () => {
+    await controller.validerDate('seance1', user, {
+      date: '2026-08-15T14:00:00.000Z',
+    });
+    expect(scenarios.validerDate).toHaveBeenCalledWith(
+      'seance1',
+      'mj1',
+      '2026-08-15T14:00:00.000Z',
+    );
   });
 
   it('setCompteRendu() route seanceId/user/compteRendu vers ScenariosService.setCompteRendu', async () => {

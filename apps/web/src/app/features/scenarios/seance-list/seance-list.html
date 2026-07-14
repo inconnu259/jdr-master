@@ -4,10 +4,24 @@
   }
   @for (seance of scenario().seances; track seance.id; let i = $index) {
     <div class="seance-row">
-      <h3 class="seance-row__title">Séance {{ i + 1 }}</h3>
+      <div class="seance-row__header">
+        <h3 class="seance-row__title">Séance {{ i + 1 }}</h3>
+        @if (isMj() && i > 0) {
+          <button
+            mat-stroked-button
+            color="warn"
+            type="button"
+            class="seance-row__delete"
+            [disabled]="pollActionPending()"
+            (click)="onDeleteSeance(seance)"
+          >
+            Supprimer cette séance
+          </button>
+        }
+      </div>
       @if (isEpisodique()) {
         @if (isMj()) {
-          @if (!seance.inscription) {
+          @if (!seance.inscription || editingCapacitySeanceId() === seance.id) {
             <div class="capacity-form">
               <input
                 type="number"
@@ -15,6 +29,7 @@
                 #minInput
                 placeholder="min"
                 aria-label="Nombre minimum d'inscrits"
+                [value]="seance.inscription?.min ?? ''"
                 (input)="onCapacityFormInput()"
               />
               <input
@@ -23,6 +38,7 @@
                 #maxInput
                 placeholder="max"
                 aria-label="Nombre maximum d'inscrits"
+                [value]="seance.inscription?.max ?? ''"
                 (input)="onCapacityFormInput()"
               />
               <button
@@ -39,6 +55,16 @@
               >
                 Définir la capacité
               </button>
+              @if (seance.inscription) {
+                <button
+                  mat-stroked-button
+                  type="button"
+                  [disabled]="pollActionPending()"
+                  (click)="cancelCapacityEdit()"
+                >
+                  Annuler
+                </button>
+              }
             </div>
           } @else if (!seance.inscription.dateValidee) {
             <app-fill-indicator
@@ -46,16 +72,23 @@
               [min]="seance.inscription.min"
               [max]="seance.inscription.max"
             />
+            <div class="seance-row__slots">
+              <p>Choisir une date parmi les créneaux calculés :</p>
+              @for (slot of availableSlots(); track slot.date + slot.slot) {
+                <button
+                  mat-stroked-button
+                  type="button"
+                  [disabled]="pollActionPending()"
+                  (click)="onValiderDate(seance.id, slot.date)"
+                >
+                  {{ formatSlotLabel(slot) }}
+                </button>
+              }
+              @if (availableSlots().length === 0) {
+                <p class="hint">Aucun créneau calculé disponible.</p>
+              }
+            </div>
             <div class="seance-row__mj-actions">
-              <button
-                mat-flat-button
-                color="primary"
-                type="button"
-                [disabled]="pollActionPending()"
-                (click)="onValiderDate(seance.id)"
-              >
-                Valider cette date
-              </button>
               <button
                 mat-stroked-button
                 type="button"
@@ -63,6 +96,14 @@
                 (click)="onProposerAutreDate()"
               >
                 Proposer une autre date
+              </button>
+              <button
+                mat-stroked-button
+                type="button"
+                [disabled]="pollActionPending()"
+                (click)="openCapacityEdit(seance.id)"
+              >
+                Modifier la capacité
               </button>
             </div>
           } @else {
@@ -104,18 +145,14 @@
       } @else {
         @if (isMj()) {
           @if (!seance.poll) {
-            @if (openPanelSeanceId() === seance.id) {
-              <app-poll-creation
-                [partieId]="partieId()"
-                [preselectedSlots]="availableSlots()"
-                (created)="onPollCreated(seance.id, $event)"
-                (cancelled)="closePollPanel()"
-              />
-            } @else {
-              <button mat-flat-button color="primary" type="button" (click)="openPollPanel(seance.id)">
-                Lancer le vote
-              </button>
-            }
+            <button
+              mat-flat-button
+              color="primary"
+              type="button"
+              (click)="goToCalendarForSeance(seance.id)"
+            >
+              Lancer le vote
+            </button>
           } @else if (seance.poll.status === 'OPEN') {
             <app-poll-status
               [poll]="seance.poll"

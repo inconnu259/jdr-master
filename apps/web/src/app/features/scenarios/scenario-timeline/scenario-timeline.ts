@@ -15,7 +15,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
-import type { CharacterDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
+import type { CharacterDto, PartieKind, ScenarioDto, SeanceDto } from '@master-jdr/shared';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 import {
@@ -182,6 +182,19 @@ export class ScenarioTimeline {
         isMj: this.isMj(),
       },
     });
+  }
+
+  // Story 8.7, AC7 : date résolue d'une séance affichée sur la carte du scénario — même source
+  // que SeanceList (poll.chosenDate ?? inscription.dateValidee), simple ajout de contenu, aucune
+  // refonte visuelle du composant (hors scope explicite, cf. Dev Notes).
+  protected seanceDateLabel(seance: SeanceDto): string {
+    const iso = seance.poll?.chosenDate ?? seance.inscription?.dateValidee ?? null;
+    if (!iso) return 'Date à définir';
+    return new Intl.DateTimeFormat('fr-FR', {
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+    }).format(new Date(iso));
   }
 
   protected onCardKeydown(event: KeyboardEvent, scenario: ScenarioDto): void {

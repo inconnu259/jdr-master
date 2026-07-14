@@ -25,6 +25,13 @@
             >
               <span class="title">{{ scenario.title }}</span>
               <app-scenario-status-badge [status]="scenario.status" />
+              @if (scenario.seances.length > 0) {
+                <ul class="card-seances">
+                  @for (seance of scenario.seances; track seance.id) {
+                    <li>{{ seanceDateLabel(seance) }}</li>
+                  }
+                </ul>
+              }
             </div>
           }
         </div>
@@ -48,6 +55,13 @@
           >
             <span class="title">{{ scenario.title }}</span>
             <app-scenario-status-badge [status]="scenario.status" />
+            @if (scenario.seances.length > 0) {
+              <ul class="card-seances">
+                @for (seance of scenario.seances; track seance.id) {
+                  <li>{{ seanceDateLabel(seance) }}</li>
+                }
+              </ul>
+            }
           </div>
         }
       </li>

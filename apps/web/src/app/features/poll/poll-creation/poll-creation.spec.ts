@@ -3,20 +3,40 @@ import { provideAnimationsAsync } from '@angular/platform-browser/animations/asy
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { vi } from 'vitest';
 import { PollCreationComponent } from './poll-creation';
-import { PollService } from '../../../core/poll/poll.service';
+import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
-function makePollService() {
+function makeScenariosService() {
   return {
-    createPoll: vi.fn().mockResolvedValue({
-      id: 'poll1',
+    createSeancePoll: vi.fn().mockResolvedValue({
+      id: 's1',
       partieId: 'p1',
-      status: 'OPEN',
-      scenarioRef: null,
-      expiresAt: null,
-      chosenDate: null,
-      chosenSlot: null,
-      options: [],
+      title: 'Chapitre 1',
+      description: null,
+      status: 'COURANT',
+      dureeHeures: null,
+      dureeSeances: null,
+      resumeFin: null,
+      createdAt: '2026-07-01T00:00:00.000Z',
+      closedAt: null,
+      seances: [
+        {
+          id: 'seance1',
+          scenarioId: 's1',
+          compteRendu: null,
+          createdAt: '2026-07-13T00:00:00.000Z',
+          poll: {
+            id: 'poll1',
+            partieId: 'p1',
+            status: 'OPEN',
+            scenarioRef: null,
+            expiresAt: null,
+            chosenDate: null,
+            chosenSlot: null,
+            options: [],
+          },
+        },
+      ],
     }),
   };
 }
@@ -29,20 +49,21 @@ function makeSnackBar() {
   return { open: vi.fn() };
 }
 
-async function createComponent(preselectedCount = 0) {
-  const pollSvc = makePollService();
+async function createComponent(preselectedCount = 0, seanceId = 'seance1') {
+  const scenariosSvc = makeScenariosService();
   const snack = makeSnackBar();
   await TestBed.configureTestingModule({
     imports: [PollCreationComponent],
     providers: [
       provideAnimationsAsync(),
-      { provide: PollService, useValue: pollSvc },
+      { provide: ScenariosService, useValue: scenariosSvc },
       { provide: ThemeToneService, useValue: makeThemeService() },
       { provide: MatSnackBar, useValue: snack },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(PollCreationComponent);
   fixture.componentRef.setInput('partieId', 'p1');
+  fixture.componentRef.setInput('seanceId', seanceId);
   const slots = Array.from({ length: preselectedCount }, (_, i) => ({
     date: `2026-08-0${i + 1}`,
     slot: 'MORNING' as const,
@@ -51,7 +72,7 @@ async function createComponent(preselectedCount = 0) {
   fixture.componentRef.setInput('preselectedSlots', slots);
   fixture.detectChanges();
   await fixture.whenStable();
-  return { fixture, pollSvc, snack };
+  return { fixture, scenariosSvc, snack };
 }
 
 describe('PollCreationComponent', () => {
@@ -95,7 +116,7 @@ describe('PollCreationComponent', () => {
   });
 
   it('créneau personnalisé identique à un créneau pré-sélectionné coché → dédoublonné avant envoi (AC3)', async () => {
-    const { fixture, pollSvc } = await createComponent(2);
+    const { fixture, scenariosSvc } = await createComponent(2);
     const comp = fixture.componentInstance as any;
     comp.toggleSlot(0); // 2026-08-01, MORNING
     comp.toggleSlot(1); // 2026-08-02, MORNING
@@ -105,40 +126,92 @@ describe('PollCreationComponent', () => {
 
     await comp.onSubmit();
 
-    expect(pollSvc.createPoll).toHaveBeenCalledTimes(1);
-    const dto = pollSvc.createPoll.mock.calls[0][1];
-    expect(dto.options).toHaveLength(2);
-    expect(dto.options).toEqual([
+    expect(scenariosSvc.createSeancePoll).toHaveBeenCalledTimes(1);
+    const options = scenariosSvc.createSeancePoll.mock.calls[0][1];
+    expect(options).toHaveLength(2);
+    expect(options).toEqual([
       { date: '2026-08-01', slot: 'MORNING' },
       { date: '2026-08-02', slot: 'MORNING' },
     ]);
   });
 
-  it('soumission réussie → émet created, toast affiché', async () => {
-    const { fixture, pollSvc, snack } = await createComponent(2);
-    const comp = fixture.componentInstance as any;
-    comp.toggleSlot(0);
-    comp.toggleSlot(1);
-    fixture.detectChanges();
-    const createdValues: any[] = [];
-    fixture.componentInstance.created.subscribe((v: any) => createdValues.push(v));
-    await comp.onSubmit();
-    expect(pollSvc.createPoll).toHaveBeenCalledTimes(1);
-    expect(createdValues).toHaveLength(1);
-    expect(snack.open).toHaveBeenCalledWith('Vote créé !', undefined, { duration: 3000 });
-    expect(comp.saving()).toBe(false);
+  it('champ "Nom de la séance" (scenarioRef) absent du DOM (Story 8.7 — mort, jamais exploité)', async () => {
+    const { fixture } = await createComponent(2);
+    expect(fixture.nativeElement.querySelector('#scenario-ref-input')).toBeNull();
   });
 
-  it('soumission en erreur → error non-null, saving false, formulaire intact', async () => {
-    const { fixture, pollSvc } = await createComponent(2);
-    pollSvc.createPoll.mockRejectedValue(new Error('network'));
-    const comp = fixture.componentInstance as any;
-    comp.toggleSlot(0);
-    comp.toggleSlot(1);
-    fixture.detectChanges();
-    await comp.onSubmit();
-    expect(comp.error()).not.toBeNull();
-    expect(comp.saving()).toBe(false);
-    expect(comp.checkedSlots().size).toBe(2);
+  describe('seanceId fourni (Story 8.7, AC1 — point d’entrée unique, un vote exige toujours une séance)', () => {
+    it('onSubmit() appelle scenariosService.createSeancePoll avec les options attendues', async () => {
+      const { fixture, scenariosSvc } = await createComponent(2, 'seance1');
+      const comp = fixture.componentInstance as any;
+      comp.toggleSlot(0);
+      comp.toggleSlot(1);
+      fixture.detectChanges();
+
+      await comp.onSubmit();
+
+      expect(scenariosSvc.createSeancePoll).toHaveBeenCalledWith('seance1', [
+        { date: '2026-08-01', slot: 'MORNING' },
+        { date: '2026-08-02', slot: 'MORNING' },
+      ]);
+    });
+
+    it('soumission réussie avec seanceId → émet created, toast affiché', async () => {
+      const { fixture, scenariosSvc, snack } = await createComponent(2, 'seance1');
+      const comp = fixture.componentInstance as any;
+      comp.toggleSlot(0);
+      comp.toggleSlot(1);
+      fixture.detectChanges();
+      const createdValues: any[] = [];
+      fixture.componentInstance.created.subscribe((v: any) => createdValues.push(v));
+
+      await comp.onSubmit();
+
+      expect(scenariosSvc.createSeancePoll).toHaveBeenCalledTimes(1);
+      expect(createdValues).toHaveLength(1);
+      expect(snack.open).toHaveBeenCalledWith('Vote créé !', undefined, { duration: 3000 });
+    });
+
+    it('soumission en erreur (panne réseau) → error non-null, saving false, formulaire intact', async () => {
+      const { fixture, scenariosSvc } = await createComponent(2, 'seance1');
+      scenariosSvc.createSeancePoll.mockRejectedValueOnce(new Error('network'));
+      const comp = fixture.componentInstance as any;
+      comp.toggleSlot(0);
+      comp.toggleSlot(1);
+      fixture.detectChanges();
+
+      await comp.onSubmit();
+
+      expect(comp.error()).toBe('Impossible de créer le vote. Réessayez.');
+      expect(comp.saving()).toBe(false);
+      expect(comp.checkedSlots().size).toBe(2);
+    });
+
+    it('vote créé mais introuvable dans la séance retournée (désync) → message distinct, pas d’invitation à réessayer (revue de code)', async () => {
+      const { fixture, scenariosSvc } = await createComponent(2, 'seance1');
+      scenariosSvc.createSeancePoll.mockResolvedValueOnce({
+        id: 's1',
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: '2026-07-01T00:00:00.000Z',
+        closedAt: null,
+        seances: [], // désync : la séance attendue n'y figure pas
+      });
+      const comp = fixture.componentInstance as any;
+      comp.toggleSlot(0);
+      comp.toggleSlot(1);
+      fixture.detectChanges();
+
+      await comp.onSubmit();
+
+      expect(comp.error()).toContain('a été créé');
+      expect(comp.error()).not.toBe('Impossible de créer le vote. Réessayez.');
+      expect(comp.saving()).toBe(false);
+    });
   });
 });

@@ -155,9 +155,19 @@ export interface SetResumeFinDto {
   resumeFin: string;
 }
 
-/** Payload de liaison d'un SessionPoll existant à une Seance (PATCH /scenarios/seances/:id/poll). */
-export interface LinkSeancePollDto {
-  pollId: string;
+/** Payload de création + liaison d'un SessionPoll pour une Seance (POST /scenarios/seances/:id/poll,
+ * Story 8.7) — remplace LinkSeancePollDto : plus de round-trip créer-puis-lier séparé, un seul
+ * appel crée le vote (PollService.create() appelé tel quel, CreatePollDto inchangé) ET pose
+ * Seance.pollId. */
+export interface CreateSeancePollDto {
+  options: { date: string; slot: DaySlot }[];
+}
+
+/** Payload de validation d'une date réelle pour une Seance épisodique (PATCH
+ * /scenarios/seances/:id/valider-date, Story 8.7) — remplace l'ancien appel sans corps qui posait
+ * l'instant du clic (`new Date()`) plutôt qu'une date réellement choisie. */
+export interface ValiderDateDto {
+  date: string;
 }
 
 /** Payload de création d'un scénario (POST /parties/:id/scenarios). */

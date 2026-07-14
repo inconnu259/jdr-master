@@ -86,6 +86,9 @@ export class CalendarView implements OnInit {
 
   protected readonly activePoll = signal<SessionPollDto | null>(null);
   protected readonly pollPanelOpen = signal(false);
+  // Story 8.7, AC1/AC2 : renseigné depuis ?seanceId=... (arrivée depuis SeanceList) — verrouille
+  // PollCreationComponent sur cette séance, ouvre automatiquement le panneau sans re-clic du MJ.
+  protected readonly lockedSeanceId = signal<string | null>(null);
   protected readonly members = signal<PartieMemberDto[]>([]);
   /** true pendant qu'une requête choose/close est en cours — évite une double action concurrente (double-clic, choix + annulation simultanés). */
   protected readonly pollActionPending = signal(false);
@@ -114,6 +117,16 @@ export class CalendarView implements OnInit {
     const toParam = this.route.snapshot.queryParamMap.get('to');
     if (fromParam && CalendarView.ISO_DATE_RE.test(fromParam)) this.fromDateStr.set(fromParam);
     if (toParam && CalendarView.ISO_DATE_RE.test(toParam)) this.toDateStr.set(toParam);
+
+    // Story 8.7, AC1/AC2 (corrigé en revue) : un vote de date exige toujours une séance — le
+    // panneau ne s'ouvre que si `id` (partieId) est résolu ET que le mode est MJ (sinon un joueur
+    // pourrait forger l'URL guild-calendar/profile pour voir le panneau MJ-only, même si le
+    // backend bloque déjà l'écriture via getOwned).
+    const seanceIdParam = this.route.snapshot.queryParamMap.get('seanceId');
+    if (seanceIdParam && id && this.isMjMode()) {
+      this.lockedSeanceId.set(seanceIdParam);
+      this.pollPanelOpen.set(true);
+    }
 
     if (id) {
       this.partieId.set(id);
@@ -168,16 +181,15 @@ export class CalendarView implements OnInit {
     this.pendingDto.set(null);
   }
 
-  protected openPollPanel(): void {
-    this.pollPanelOpen.set(true);
-  }
   protected closePollPanel(): void {
     this.pollPanelOpen.set(false);
+    this.lockedSeanceId.set(null);
   }
 
   protected onPollCreated(poll: SessionPollDto): void {
     this.activePoll.set(poll);
     this.pollPanelOpen.set(false);
+    this.lockedSeanceId.set(null);
   }
 
   protected onPollResponded(poll: SessionPollDto): void {

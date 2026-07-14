@@ -3,13 +3,15 @@ import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type {
   CreateScenarioDto,
-  LinkSeancePollDto,
+  CreateSeancePollDto,
+  DaySlot,
   ScenarioDocumentDto,
   ScenarioDto,
   SetCompteRenduDto,
   SetResumeFinDto,
   SetSeanceCapacityDto,
   UpdateScenarioDto,
+  ValiderDateDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
@@ -120,13 +122,26 @@ export class ScenariosService {
     return result;
   }
 
-  async linkSeancePoll(seanceId: string, pollId: string): Promise<ScenarioDto> {
+  async createSeancePoll(
+    seanceId: string,
+    options: { date: string; slot: DaySlot }[],
+  ): Promise<ScenarioDto> {
     const result = await firstValueFrom(
-      this.http.patch<ScenarioDto>(
+      this.http.post<ScenarioDto>(
         `${API_BASE}/scenarios/seances/${seanceId}/poll`,
-        { pollId } satisfies LinkSeancePollDto,
+        { options } satisfies CreateSeancePollDto,
         { withCredentials: true },
       ),
+    );
+    this._changed.update((v) => v + 1);
+    return result;
+  }
+
+  async deleteSeance(seanceId: string): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
+      this.http.delete<ScenarioDto>(`${API_BASE}/scenarios/seances/${seanceId}`, {
+        withCredentials: true,
+      }),
     );
     this._changed.update((v) => v + 1);
     return result;
@@ -170,11 +185,11 @@ export class ScenariosService {
     return result;
   }
 
-  async validerDate(seanceId: string): Promise<ScenarioDto> {
+  async validerDate(seanceId: string, date: string): Promise<ScenarioDto> {
     const result = await firstValueFrom(
       this.http.patch<ScenarioDto>(
         `${API_BASE}/scenarios/seances/${seanceId}/valider-date`,
-        {},
+        { date } satisfies ValiderDateDto,
         { withCredentials: true },
       ),
     );

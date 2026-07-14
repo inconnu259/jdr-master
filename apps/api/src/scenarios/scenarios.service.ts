@@ -7,6 +7,7 @@ import {
 import { isUUID } from 'class-validator';
 import type {
   CharacterNoteDto,
+  DaySlot,
   PartieKind,
   ScenarioDocumentDto,
   ScenarioDto,
@@ -16,6 +17,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { CharacterService } from '../characters/character.service';
+import { PollService } from '../poll/poll.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import { detectDocumentMime } from './document-mime.util';
@@ -31,6 +33,7 @@ export class ScenariosService {
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
     private readonly characters: CharacterService,
+    private readonly pollService: PollService,
   ) {}
 
   async create(
@@ -419,13 +422,61 @@ export class ScenariosService {
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
+  // AD-9 : écriture MJ-only (getOwned). Un scénario a toujours au moins une séance (invariant
+  // posé à sa création, cf. create()) — la toute première (par createdAt croissant, id en
+  // tie-breaker si égalité exacte) ne peut donc jamais être supprimée (Story 8.7, AC5). Un
+  // scénario PASSE (clôturé) est figé — sa découpe en séances ne doit plus changer rétroactivement
+  // (revue de code Story 8.7). Inscription.onDelete: Cascade (déjà en place) supprime
+  // automatiquement les inscriptions liées ; le SessionPoll lié (si pollId posé) n'est PAS
+  // supprimé — cycle de vie indépendant (P2-AD-2), seule la ligne Seance disparaît.
+  async deleteSeance(seanceId: string, mjId: string): Promise<ScenarioDto> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: seanceId },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    const scenario = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: seance.scenarioId },
+    });
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    if (scenario.status === 'PASSE') {
+      throw new BadRequestException(
+        "Impossible de supprimer une séance d'un scénario clôturé",
+      );
+    }
+
+    const [firstSeance] = await this.prisma.seance.findMany({
+      where: { scenarioId: seance.scenarioId },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: 1,
+    });
+    if (firstSeance?.id === seanceId) {
+      throw new BadRequestException(
+        "La première séance d'un scénario ne peut pas être supprimée",
+      );
+    }
+
+    await this.prisma.seance.delete({ where: { id: seanceId } });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenario.id },
+    });
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+  }
+
   // AD-4 : une Seance CAMPAGNE_EPISODIQUE ne peut jamais être liée à un SessionPoll (Inscription à
   // la place, Story 8.3). P2-AD-2 : PollModule reste le seul écrivain de SessionPoll — cette méthode
   // ne fait que poser la relation Seance.pollId (déjà @unique en base), jamais créer/modifier un poll.
-  async linkSeancePoll(
+  // Story 8.7 : point d'entrée unique — remplace l'ancien linkSeancePoll() (créer un poll PUIS le
+  // lier en 2 appels séparés côté utilisateur). ScenariosModule importe PollModule (lecture ET
+  // écriture ici, via PollService.create()) mais PollModule/CreatePollDto restent inchangés
+  // (P2-AD-2) : aucune connaissance de Seance/Scenario n'est ajoutée côté PollModule, c'est
+  // ScenariosService qui orchestre les deux écritures. Non-atomique par construction (deux
+  // écritures séparées, cf. `[ASSUMPTION]` Dev Notes Story 8.7) — risque accepté.
+  async createSeancePoll(
     seanceId: string,
     mjId: string,
-    pollId: string,
+    options: { date: string; slot: DaySlot }[],
   ): Promise<ScenarioDto> {
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
@@ -448,21 +499,13 @@ export class ScenariosService {
       );
     }
 
-    const poll = await this.prisma.sessionPoll.findUnique({
-      where: { id: pollId },
+    const poll = await this.pollService.create(scenario.partieId, mjId, {
+      options,
     });
-    if (!poll || poll.partieId !== scenario.partieId) {
-      throw new BadRequestException(
-        "Ce vote de date n'appartient pas à cette Partie",
-      );
-    }
-    if (poll.status !== 'OPEN') {
-      throw new BadRequestException("Ce vote de date n'est plus ouvert");
-    }
 
     await this.prisma.seance.update({
       where: { id: seanceId },
-      data: { pollId },
+      data: { pollId: poll.id },
     });
 
     const updated = await this.prisma.scenario.findUniqueOrThrow({
@@ -598,7 +641,15 @@ export class ScenariosService {
   // AC6 : aucune validation de remplissage — validable à tout niveau, y compris 0 inscrit. Ne
   // touche jamais Partie.nextSessionDate/nextSessionSlot (exclusivement piloté par PollService
   // pour le linéaire/one-shot — aucune notion de « prochaine séance » unique en épisodique, AD-4).
-  async validerDate(seanceId: string, mjId: string): Promise<ScenarioDto> {
+  // Story 8.7 (AC4) : `date` désormais fournie explicitement par le MJ (choisie parmi les
+  // créneaux calculés, réutilisés en lecture seule) — remplace l'instant du clic (`new Date()`),
+  // gap déjà noté dans `deferred-work.md`. Aucune garde de cohérence entre `date` et les créneaux
+  // proposés (`[ASSUMPTION]`, style permissif déjà établi pour ce module).
+  async validerDate(
+    seanceId: string,
+    mjId: string,
+    date: string,
+  ): Promise<ScenarioDto> {
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
     });
@@ -624,7 +675,7 @@ export class ScenariosService {
 
     await this.prisma.seance.update({
       where: { id: seanceId },
-      data: { dateValidee: new Date() },
+      data: { dateValidee: new Date(date) },
     });
 
     const updated = await this.prisma.scenario.findUniqueOrThrow({

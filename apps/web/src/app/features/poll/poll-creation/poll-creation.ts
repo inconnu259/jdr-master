@@ -4,14 +4,16 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import type { AvailableSlotDto, CreatePollDto, DaySlot, SessionPollDto } from '@master-jdr/shared';
-import { PollService } from '../../../core/poll/poll.service';
+import type { AvailableSlotDto, DaySlot, SessionPollDto } from '@master-jdr/shared';
+import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 interface CustomSlot {
   date: string;
   slot: DaySlot;
 }
+
+const POLL_DESYNC_MESSAGE = 'Vote créé mais introuvable dans la séance retournée';
 
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
@@ -30,18 +32,21 @@ const SLOT_LABELS: Record<DaySlot, string> = {
 export class PollCreationComponent {
   readonly partieId = input.required<string>();
   readonly preselectedSlots = input<AvailableSlotDto[]>([]);
+  // Story 8.7 (AC1, corrigé en revue) : un vote de date exige toujours une séance — verrouillé en
+  // amont par SeanceList → CalendarView (queryParam `seanceId`), jamais un texte libre saisi ici
+  // (remplace le champ scenarioRef mort, jamais exploité) ni un vote sans séance.
+  readonly seanceId = input.required<string>();
 
   readonly created = output<SessionPollDto>();
   readonly cancelled = output<void>();
 
-  private readonly pollSvc = inject(PollService);
+  private readonly scenariosSvc = inject(ScenariosService);
   protected readonly theme = inject(ThemeToneService);
   private readonly snack = inject(MatSnackBar);
 
   protected readonly checkedSlots = signal<Set<string>>(new Set());
   protected readonly customSlots = signal<CustomSlot[]>([]);
   protected readonly visibleSlotsCount = signal(5);
-  protected scenarioRef = '';
 
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -161,15 +166,27 @@ export class PollCreationComponent {
         seen.add(key);
         return true;
       });
-      const dto: CreatePollDto = {
-        options,
-        scenarioRef: this.scenarioRef.trim() || null,
-      };
-      const poll = await this.pollSvc.createPoll(this.partieId(), dto);
+
+      // Story 8.7, AC1 : point d'entrée unique — un seul appel crée le vote ET le lie à la séance
+      // (ScenariosService.createSeancePoll), CreatePollDto/PollService.create() inchangés. Plus
+      // aucun chemin ne crée de vote sans séance (corrigé en revue de code, cf. Story 8-8 pour
+      // l'extension à l'épisodique et la refonte de la vue Oracle multi-votes).
+      const sid = this.seanceId();
+      const scenario = await this.scenariosSvc.createSeancePoll(sid, options);
+      const linked = scenario.seances.find((s) => s.id === sid)?.poll;
+      if (!linked) throw new Error(POLL_DESYNC_MESSAGE);
+
       this.snack.open(this.theme.tone()['success.poll_created'], undefined, { duration: 3000 });
-      this.created.emit(poll);
-    } catch {
-      this.error.set('Impossible de créer le vote. Réessayez.');
+      this.created.emit(linked);
+    } catch (err) {
+      // Distingue le cas « vote bien créé côté serveur mais introuvable dans la réponse » d'une
+      // vraie panne réseau/validation — le même message générique inviterait à relancer une
+      // soumission et créerait un doublon (revue de code Story 8.7).
+      this.error.set(
+        err instanceof Error && err.message === POLL_DESYNC_MESSAGE
+          ? 'Le vote a été créé, mais son état n’a pas pu être rafraîchi ici. Rechargez la page pour le voir plutôt que de recréer un vote.'
+          : 'Impossible de créer le vote. Réessayez.',
+      );
     } finally {
       this.saving.set(false);
     }

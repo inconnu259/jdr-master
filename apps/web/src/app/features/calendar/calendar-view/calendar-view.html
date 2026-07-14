@@ -47,9 +47,8 @@
     <div class="mj-results-panel" #slotsPanel>
       <div class="poll-section">
         @if (!activePoll()) {
-          <button mat-flat-button color="primary" (click)="openPollPanel()">
-            {{ theme.tone()['cta.launch_vote'] }}
-          </button>
+          <!-- Story 8.7, AC1 (corrigé en revue) : plus de vote sans séance — se lance depuis
+               « Lancer le vote » sur la fiche du scénario (SeanceList), jamais ici directement. -->
         } @else {
           <app-poll-status [poll]="activePoll()!" [members]="members()" [busy]="pollActionPending()" (chosen)="onChooseDate($event)" />
           <button mat-stroked-button color="warn" [disabled]="pollActionPending()" (click)="onClosePoll()">
@@ -126,10 +125,12 @@
   }
 </div>
 
-@if (pollPanelOpen()) {
+@if (pollPanelOpen() && lockedSeanceId(); as sid) {
+  <p class="locked-seance-indicator">Vote pour la séance sélectionnée depuis la fiche scénario.</p>
   <app-poll-creation
     [partieId]="partieId()!"
     [preselectedSlots]="mjSlots()"
+    [seanceId]="sid"
     (created)="onPollCreated($event)"
     (cancelled)="closePollPanel()"
   />

@@ -25,7 +25,8 @@ import { MulterExceptionFilter } from '../common/filters/multer-exception.filter
 import { ScenariosService } from './scenarios.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
-import { LinkSeancePollDto } from './dto/link-seance-poll.dto';
+import { CreateSeancePollDto } from './dto/create-seance-poll.dto';
+import { ValiderDateDto } from './dto/valider-date.dto';
 import { SetSeanceCapacityDto } from './dto/set-seance-capacity.dto';
 import { SetCompteRenduDto } from './dto/set-compte-rendu.dto';
 import { SetResumeFinDto } from './dto/set-resume-fin.dto';
@@ -124,13 +125,21 @@ export class ScenariosController {
     return this.scenarios.addSeance(scenarioId, user.id);
   }
 
-  @Patch('scenarios/seances/:id/poll')
-  linkSeancePoll(
+  @Delete('scenarios/seances/:id')
+  deleteSeance(
     @Param('id', ParseUUIDPipe) seanceId: string,
     @CurrentUser() user: AuthUser,
-    @Body() dto: LinkSeancePollDto,
   ) {
-    return this.scenarios.linkSeancePoll(seanceId, user.id, dto.pollId);
+    return this.scenarios.deleteSeance(seanceId, user.id);
+  }
+
+  @Post('scenarios/seances/:id/poll')
+  createSeancePoll(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateSeancePollDto,
+  ) {
+    return this.scenarios.createSeancePoll(seanceId, user.id, dto.options);
   }
 
   @Patch('scenarios/seances/:id/capacite')
@@ -167,8 +176,9 @@ export class ScenariosController {
   validerDate(
     @Param('id', ParseUUIDPipe) seanceId: string,
     @CurrentUser() user: AuthUser,
+    @Body() dto: ValiderDateDto,
   ) {
-    return this.scenarios.validerDate(seanceId, user.id);
+    return this.scenarios.validerDate(seanceId, user.id, dto.date);
   }
 
   @Patch('scenarios/seances/:id/compte-rendu')

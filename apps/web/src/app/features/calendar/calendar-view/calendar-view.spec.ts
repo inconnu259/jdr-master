@@ -8,17 +8,19 @@ import { ActivatedRoute } from '@angular/router';
 import { AvailabilityService } from '../../../core/availability/availability.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
+import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 
 interface CreateOptions {
   mode?: 'mj' | 'personal';
   partieId?: string;
+  queryParams?: Record<string, string>;
 }
 
-function makeActivatedRoute(partieId?: string) {
+function makeActivatedRoute(partieId?: string, queryParams: Record<string, string> = {}) {
   return {
     snapshot: {
       paramMap: { get: (key: string) => (key === 'id' ? (partieId ?? null) : null) },
-      queryParamMap: { get: () => null },
+      queryParamMap: { get: (key: string) => queryParams[key] ?? null },
     },
   };
 }
@@ -45,6 +47,10 @@ function makePartiesService() {
   return { members: vi.fn().mockResolvedValue([]) };
 }
 
+function makeScenariosService() {
+  return { createSeancePoll: vi.fn() };
+}
+
 async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   const opts: CreateOptions = typeof options === 'string' ? { mode: options } : (options ?? {});
 
@@ -58,11 +64,12 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
     providers: [
       provideRouter([]),
       provideAnimationsAsync(),
-      { provide: ActivatedRoute, useValue: makeActivatedRoute(opts.partieId) },
+      { provide: ActivatedRoute, useValue: makeActivatedRoute(opts.partieId, opts.queryParams) },
       { provide: AvailabilityService, useValue: availabilitySvc },
       { provide: PartiesService, useValue: partiesSvc },
       { provide: PollService, useValue: pollSvc },
       { provide: MatSnackBar, useValue: snack },
+      { provide: ScenariosService, useValue: makeScenariosService() },
     ],
   }).compileComponents();
 
@@ -97,6 +104,73 @@ describe('CalendarView — signal mode', () => {
     const { fixture } = await createCalendarView('personal');
     const panel = fixture.nativeElement.querySelector('.mj-results-panel');
     expect(panel).toBeNull();
+  });
+});
+
+// ─── Pré-sélection de séance depuis SeanceList (Story 8.7, AC1/AC2) ──────────
+
+describe('CalendarView — pré-sélection de séance (?seanceId=...)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('?seanceId=xxx → ouvre pollPanelOpen automatiquement et transmet lockedSeanceId', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      queryParams: { seanceId: 'seance1' },
+    });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.pollPanelOpen()).toBe(true);
+    expect(comp.lockedSeanceId()).toBe('seance1');
+
+    const pollCreation = fixture.nativeElement.querySelector('app-poll-creation');
+    expect(pollCreation).toBeTruthy();
+  });
+
+  it('sans seanceId → pollPanelOpen fermé par défaut', async () => {
+    const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.pollPanelOpen()).toBe(false);
+    expect(comp.lockedSeanceId()).toBeNull();
+  });
+
+  it('closePollPanel() réinitialise lockedSeanceId', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      queryParams: { seanceId: 'seance1' },
+    });
+    const comp = fixture.componentInstance as any;
+
+    comp.closePollPanel();
+
+    expect(comp.lockedSeanceId()).toBeNull();
+    expect(comp.pollPanelOpen()).toBe(false);
+  });
+
+  it('?seanceId=xxx sans partieId (route :id absente) → panneau non ouvert (revue de code)', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      queryParams: { seanceId: 'seance1' },
+    });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.pollPanelOpen()).toBe(false);
+    expect(comp.lockedSeanceId()).toBeNull();
+  });
+
+  it('?seanceId=xxx en mode personal (non-MJ) → panneau MJ-only non ouvert, non exposé à un joueur (revue de code)', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'personal',
+      partieId: 'partie-1',
+      queryParams: { seanceId: 'seance1' },
+    });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.pollPanelOpen()).toBe(false);
+    expect(comp.lockedSeanceId()).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-poll-creation')).toBeNull();
   });
 });
 

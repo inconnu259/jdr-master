@@ -448,4 +448,74 @@ describe('ScenarioTimeline', () => {
     const nodeIds = comp.nodes().map((n: any) => n.scenarios[0].id);
     expect(nodeIds).toEqual(['a-venir']);
   });
+
+  describe('Affichage des séances sur la carte (Story 8.7, AC7)', () => {
+    it('scénario avec séances datées (poll.chosenDate) → dates affichées sur la carte', async () => {
+      const scenarioWithSeances = makeScenario({
+        id: 's-avec-seances',
+        status: 'COURANT',
+        seances: [
+          {
+            id: 'seance1',
+            scenarioId: 's-avec-seances',
+            compteRendu: null,
+            createdAt: '2026-07-01T00:00:00.000Z',
+            poll: {
+              id: 'poll1',
+              partieId: 'p1',
+              status: 'CLOSED',
+              scenarioRef: null,
+              expiresAt: null,
+              chosenDate: '2026-08-15T00:00:00.000Z',
+              chosenSlot: 'AFTERNOON',
+              options: [],
+            },
+          },
+        ],
+      });
+      const { fixture } = await createComponent([scenarioWithSeances]);
+      expect(fixture.nativeElement.querySelector('.card-seances')).toBeTruthy();
+      expect(fixture.nativeElement.textContent).toContain('août');
+    });
+
+    it('scénario avec séance non datée → "Date à définir" affiché', async () => {
+      const scenarioWithSeances = makeScenario({
+        id: 's-non-datee',
+        status: 'COURANT',
+        seances: [
+          {
+            id: 'seance1',
+            scenarioId: 's-non-datee',
+            compteRendu: null,
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+        ],
+      });
+      const { fixture } = await createComponent([scenarioWithSeances]);
+      expect(fixture.nativeElement.textContent).toContain('Date à définir');
+    });
+
+    it('scénario sans séance → aucune liste .card-seances affichée', async () => {
+      const scenarioNoSeances = makeScenario({ id: 's-sans-seances', status: 'COURANT' });
+      const { fixture } = await createComponent([scenarioNoSeances]);
+      expect(fixture.nativeElement.querySelector('.card-seances')).toBeNull();
+    });
+
+    it('mode mobile → séances également affichées sur la carte', async () => {
+      const scenarioWithSeances = makeScenario({
+        id: 's-mobile',
+        status: 'COURANT',
+        seances: [
+          {
+            id: 'seance1',
+            scenarioId: 's-mobile',
+            compteRendu: null,
+            createdAt: '2026-07-01T00:00:00.000Z',
+          },
+        ],
+      });
+      const { fixture } = await createComponent([scenarioWithSeances], { desktop: false });
+      expect(fixture.nativeElement.querySelector('.card-seances')).toBeTruthy();
+    });
+  });
 });

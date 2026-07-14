@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
+import { Router } from '@angular/router';
 import { vi } from 'vitest';
 import type { AvailableSlotDto, ScenarioDto, SeanceDto, SessionPollDto } from '@master-jdr/shared';
 import { SeanceList } from './seance-list';
@@ -59,7 +60,8 @@ async function createComponent(
   } = {},
 ) {
   const scenariosSvc = {
-    linkSeancePoll: vi.fn(),
+    createSeancePoll: vi.fn(),
+    deleteSeance: vi.fn(),
     listAll: vi.fn().mockResolvedValue([scenario]),
     setSeanceCapacity: vi.fn(),
     inscrire: vi.fn(),
@@ -74,6 +76,7 @@ async function createComponent(
     getAvailableSlots: vi.fn().mockResolvedValue(availableSlots),
   };
   const authSvc = { currentUser: () => ({ id: currentUserId }) };
+  const router = { navigate: vi.fn() };
 
   await TestBed.configureTestingModule({
     imports: [SeanceList],
@@ -82,6 +85,7 @@ async function createComponent(
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: PollService, useValue: pollSvc },
       { provide: AuthService, useValue: authSvc },
+      { provide: Router, useValue: router },
     ],
   }).compileComponents();
 
@@ -97,7 +101,7 @@ async function createComponent(
     await Promise.resolve();
     fixture.detectChanges();
   }
-  return { fixture, scenariosSvc, pollSvc };
+  return { fixture, scenariosSvc, pollSvc, router };
 }
 
 describe('SeanceList', () => {
@@ -113,47 +117,28 @@ describe('SeanceList', () => {
     expect(titles).toEqual(['Séance 1', 'Séance 2']);
   });
 
-  it('MJ, séance sans poll → bouton "Lancer le vote" visible, panneau fermé par défaut', async () => {
+  it('MJ, séance sans poll → bouton "Lancer le vote" visible', async () => {
     const { fixture } = await createComponent(
       { ...SCENARIO, seances: [SEANCE_NO_POLL] },
       { isMj: true },
     );
-    expect(fixture.nativeElement.querySelector('app-poll-creation')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Lancer le vote');
     expect(fixture.nativeElement.querySelector('app-poll-status')).toBeNull();
   });
 
-  it('MJ, clic sur "Lancer le vote" → app-poll-creation apparaît avec les créneaux calculés', async () => {
-    const slot: AvailableSlotDto = { date: '2026-08-01', slot: 'EVENING', members: [] };
-    const { fixture } = await createComponent(
+  it('MJ, clic sur "Lancer le vote" → navigue vers le calendrier avec seanceId en queryParam (Story 8.7, AC2/AC3)', async () => {
+    const { fixture, router } = await createComponent(
       { ...SCENARIO, seances: [SEANCE_NO_POLL] },
-      { isMj: true, availableSlots: [slot] },
+      { isMj: true },
     );
     const btn: HTMLButtonElement = Array.from(
       fixture.nativeElement.querySelectorAll('button'),
     ).find((b: any) => b.textContent.includes('Lancer le vote')) as HTMLButtonElement;
     btn.click();
-    fixture.detectChanges();
 
-    const creation = fixture.nativeElement.querySelector('app-poll-creation');
-    expect(creation).toBeTruthy();
-  });
-
-  it('panneau de création ouvert, (cancelled) → panneau se referme, bouton "Lancer le vote" réapparaît', async () => {
-    const { fixture } = await createComponent(
-      { ...SCENARIO, seances: [SEANCE_NO_POLL] },
-      { isMj: true },
-    );
-    const comp = fixture.componentInstance as any;
-    comp.openPollPanel('seance1');
-    fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('app-poll-creation')).toBeTruthy();
-
-    comp.closePollPanel();
-    fixture.detectChanges();
-
-    expect(fixture.nativeElement.querySelector('app-poll-creation')).toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Lancer le vote');
+    expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'calendar'], {
+      queryParams: { seanceId: 'seance1' },
+    });
   });
 
   it('MJ, séance avec poll → app-poll-status + members visibles', async () => {
@@ -191,44 +176,6 @@ describe('SeanceList', () => {
     expect(fixture.nativeElement.querySelector('app-poll-creation')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-poll-status')).toBeNull();
     expect(fixture.nativeElement.querySelector('app-poll-response')).toBeNull();
-  });
-
-  it('onPollCreated appelle linkSeancePoll et émet seanceLinked', async () => {
-    const { fixture, scenariosSvc } = await createComponent(
-      { ...SCENARIO, seances: [SEANCE_NO_POLL] },
-      { isMj: true },
-    );
-    const comp = fixture.componentInstance as any;
-    const updated = { ...SCENARIO, seances: [SEANCE_WITH_POLL] };
-    scenariosSvc.linkSeancePoll.mockResolvedValue(updated);
-    let emitted: ScenarioDto | undefined;
-    comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
-
-    await comp.onPollCreated('seance1', POLL);
-
-    expect(scenariosSvc.linkSeancePoll).toHaveBeenCalledWith('seance1', 'poll1');
-    expect(emitted).toEqual(updated);
-  });
-
-  it('onPollCreated ignore les appels concurrents pendant qu’un premier est en cours (anti double-clic)', async () => {
-    const { fixture, scenariosSvc } = await createComponent(
-      { ...SCENARIO, seances: [SEANCE_NO_POLL] },
-      { isMj: true },
-    );
-    const comp = fixture.componentInstance as any;
-    let resolveFirst!: (v: ScenarioDto) => void;
-    scenariosSvc.linkSeancePoll.mockReturnValue(
-      new Promise((resolve) => {
-        resolveFirst = resolve;
-      }),
-    );
-
-    const first = comp.onPollCreated('seance1', POLL);
-    await comp.onPollCreated('seance1', POLL);
-
-    expect(scenariosSvc.linkSeancePoll).toHaveBeenCalledTimes(1);
-    resolveFirst({ ...SCENARIO, seances: [SEANCE_WITH_POLL] });
-    await first;
   });
 
   describe('onChoose()/onClosePoll() rafraîchissent l’affichage (bug-fix : « rien ne se passe » après avoir scellé un créneau)', () => {
@@ -402,14 +349,84 @@ describe('SeanceList', () => {
       expect(submitBtn.disabled).toBe(false);
     });
 
-    it('MJ, capacité définie non validée → FillIndicator + 2 CTA (Valider/Proposer une autre date)', async () => {
+    it('MJ, capacité définie non validée → FillIndicator + créneaux calculés cliquables + Proposer une autre date + Modifier la capacité (Story 8.7, AC4/AC6)', async () => {
+      const slot: AvailableSlotDto = { date: '2026-08-15', slot: 'AFTERNOON', members: [] };
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
+        { isMj: true, isEpisodique: true, availableSlots: [slot] },
+      );
+      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
+      expect(fixture.nativeElement.textContent).toContain('Proposer une autre date');
+      expect(fixture.nativeElement.textContent).toContain('Modifier la capacité');
+      const slotBtn = Array.from(fixture.nativeElement.querySelectorAll('button')).find((b: any) =>
+        b.textContent.includes('août'),
+      );
+      expect(slotBtn).toBeTruthy();
+    });
+
+    it('MJ, clic sur un créneau calculé → appelle validerDate avec la date du créneau (AC4)', async () => {
+      const slot: AvailableSlotDto = { date: '2026-08-15', slot: 'AFTERNOON', members: [] };
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
+        { isMj: true, isEpisodique: true, availableSlots: [slot] },
+      );
+      scenariosSvc.validerDate.mockResolvedValue({ ...SCENARIO, seances: [SEANCE_VALIDATED] });
+      const slotBtn: HTMLButtonElement = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      ).find((b: any) => b.textContent.includes('août')) as HTMLButtonElement;
+
+      slotBtn.click();
+      await Promise.resolve();
+
+      expect(scenariosSvc.validerDate).toHaveBeenCalledWith('seance1', '2026-08-15');
+    });
+
+    it('MJ, aucun créneau calculé → message neutre au lieu d’une liste vide', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
+        { isMj: true, isEpisodique: true, availableSlots: [] },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Aucun créneau calculé disponible');
+    });
+
+    it('MJ, clic sur "Modifier la capacité" → réaffiche le formulaire pré-rempli (AC6)', async () => {
       const { fixture } = await createComponent(
         { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
         { isMj: true, isEpisodique: true },
       );
-      expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
-      expect(fixture.nativeElement.textContent).toContain('Valider cette date');
-      expect(fixture.nativeElement.textContent).toContain('Proposer une autre date');
+      const btn: HTMLButtonElement = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      ).find((b: any) => b.textContent.includes('Modifier la capacité')) as HTMLButtonElement;
+      btn.click();
+      fixture.detectChanges();
+
+      const inputs = Array.from(
+        fixture.nativeElement.querySelectorAll('input[type="number"]'),
+      ) as HTMLInputElement[];
+      expect(inputs[0].value).toBe('4');
+      expect(inputs[1].value).toBe('6');
+    });
+
+    it('MJ, mode édition capacité → bouton "Annuler" ferme le formulaire sans soumettre (revue de code)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
+        { isMj: true, isEpisodique: true },
+      );
+      const editBtn: HTMLButtonElement = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      ).find((b: any) => b.textContent.includes('Modifier la capacité')) as HTMLButtonElement;
+      editBtn.click();
+      fixture.detectChanges();
+
+      const cancelBtn: HTMLButtonElement = Array.from(
+        fixture.nativeElement.querySelectorAll('button'),
+      ).find((b: any) => b.textContent.trim() === 'Annuler') as HTMLButtonElement;
+      expect(cancelBtn).toBeTruthy();
+      cancelBtn.click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.textContent).toContain('Modifier la capacité');
+      expect(fixture.nativeElement.querySelectorAll('input[type="number"]').length).toBe(0);
     });
 
     it('MJ, date validée → texte "Date retenue", plus de CTA ni FillIndicator', async () => {
@@ -419,7 +436,7 @@ describe('SeanceList', () => {
       );
       expect(fixture.nativeElement.textContent).toContain('Date retenue');
       expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
-      expect(fixture.nativeElement.textContent).not.toContain('Valider cette date');
+      expect(fixture.nativeElement.textContent).not.toContain('Modifier la capacité');
     });
 
     it('joueur, séance sans capacité définie → rien affiché', async () => {
@@ -524,7 +541,7 @@ describe('SeanceList', () => {
       expect(emitted).toEqual(updated);
     });
 
-    it('onValiderDate appelle validerDate et émet seanceLinked', async () => {
+    it('onValiderDate appelle validerDate avec la date fournie et émet seanceLinked', async () => {
       const { fixture, scenariosSvc } = await createComponent(
         { ...SCENARIO, seances: [SEANCE_WITH_CAPACITY] },
         { isMj: true, isEpisodique: true },
@@ -535,9 +552,9 @@ describe('SeanceList', () => {
       let emitted: ScenarioDto | undefined;
       comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
 
-      await comp.onValiderDate('seance1');
+      await comp.onValiderDate('seance1', '2026-08-15');
 
-      expect(scenariosSvc.validerDate).toHaveBeenCalledWith('seance1');
+      expect(scenariosSvc.validerDate).toHaveBeenCalledWith('seance1', '2026-08-15');
       expect(emitted).toEqual(updated);
     });
 
@@ -562,6 +579,140 @@ describe('SeanceList', () => {
 
       expect(scenariosSvc.addSeance).toHaveBeenCalledWith('s1');
       expect(emitted?.seances).toHaveLength(2);
+    });
+  });
+
+  describe('Suppression d’une séance (Story 8.7, AC5)', () => {
+    const SEANCE_2: SeanceDto = { ...SEANCE_NO_POLL, id: 'seance2' };
+
+    it('MJ, première séance (i=0) → aucun bouton de suppression', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL, SEANCE_2] },
+        { isMj: true },
+      );
+      const rows = fixture.nativeElement.querySelectorAll('.seance-row');
+      expect(
+        Array.from(rows[0].querySelectorAll('button')).some((b: any) =>
+          b.textContent.includes('Supprimer cette séance'),
+        ),
+      ).toBe(false);
+    });
+
+    it('MJ, séance non-première (i>0) → bouton de suppression visible', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL, SEANCE_2] },
+        { isMj: true },
+      );
+      const rows = fixture.nativeElement.querySelectorAll('.seance-row');
+      expect(
+        Array.from(rows[1].querySelectorAll('button')).some((b: any) =>
+          b.textContent.includes('Supprimer cette séance'),
+        ),
+      ).toBe(true);
+    });
+
+    it('joueur (isMj=false) → jamais de bouton de suppression, quelle que soit la séance', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL, SEANCE_2] },
+        { isMj: false },
+      );
+      expect(fixture.nativeElement.textContent).not.toContain('Supprimer cette séance');
+    });
+
+    it('clic sur "Supprimer cette séance" (confirmé) → appelle deleteSeance et émet seanceLinked', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL, SEANCE_2] },
+        { isMj: true },
+      );
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      const updated = { ...SCENARIO, seances: [SEANCE_NO_POLL] };
+      scenariosSvc.deleteSeance.mockResolvedValue(updated);
+      const comp = fixture.componentInstance as any;
+      let emitted: ScenarioDto | undefined;
+      comp.seanceLinked.subscribe((v: ScenarioDto) => (emitted = v));
+
+      await comp.onDeleteSeance(SEANCE_2);
+
+      expect(scenariosSvc.deleteSeance).toHaveBeenCalledWith('seance2');
+      expect(emitted).toEqual(updated);
+    });
+
+    it('confirmation refusée (window.confirm → false) → aucun appel à deleteSeance', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL, SEANCE_2] },
+        { isMj: true },
+      );
+      vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const comp = fixture.componentInstance as any;
+
+      await comp.onDeleteSeance(SEANCE_2);
+
+      expect(scenariosSvc.deleteSeance).not.toHaveBeenCalled();
+    });
+
+    it('séance sans date validée → confirmation générique (revue de code)', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL, SEANCE_2] },
+        { isMj: true },
+      );
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const comp = fixture.componentInstance as any;
+
+      await comp.onDeleteSeance(SEANCE_2);
+
+      expect(confirmSpy).toHaveBeenCalledWith('Supprimer cette séance ? Cette action est définitive.');
+    });
+
+    it('séance épisodique avec date validée (inscription.dateValidee) → confirmation renforcée (revue de code)', async () => {
+      const SEANCE_DATE_VALIDEE: SeanceDto = {
+        ...SEANCE_2,
+        inscription: {
+          min: 2,
+          max: 4,
+          inscrits: [],
+          dateValidee: '2026-08-15T00:00:00.000Z',
+        },
+      };
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL, SEANCE_DATE_VALIDEE] },
+        { isMj: true, isEpisodique: true },
+      );
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const comp = fixture.componentInstance as any;
+
+      await comp.onDeleteSeance(SEANCE_DATE_VALIDEE);
+
+      expect(confirmSpy).toHaveBeenCalledWith(
+        'Cette séance a une date validée. La supprimer quand même ? Cette action est définitive.',
+      );
+    });
+
+    it('séance linéaire avec vote clôturé et date choisie (poll.chosenDate) → confirmation renforcée (revue de code)', async () => {
+      const SEANCE_POLL_CHOSEN: SeanceDto = {
+        ...SEANCE_2,
+        poll: {
+          id: 'poll1',
+          partieId: 'p1',
+          status: 'CLOSED',
+          scenarioRef: null,
+          expiresAt: null,
+          chosenDate: '2026-08-15T00:00:00.000Z',
+          chosenSlot: 'AFTERNOON',
+          options: [],
+        },
+      };
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL, SEANCE_POLL_CHOSEN] },
+        { isMj: true },
+      );
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const comp = fixture.componentInstance as any;
+
+      await comp.onDeleteSeance(SEANCE_POLL_CHOSEN);
+
+      expect(confirmSpy).toHaveBeenCalledWith(
+        'Cette séance a une date validée. La supprimer quand même ? Cette action est définitive.',
+      );
     });
   });
 

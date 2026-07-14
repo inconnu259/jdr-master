@@ -60,20 +60,6 @@
     </button>
   </section>
 
-  <section class="poll-creation-panel__section">
-    <label class="poll-creation-panel__label" for="scenario-ref-input">
-      Nom de la séance
-      <span class="poll-creation-panel__hint">— aide les joueurs à identifier l'aventure (optionnel)</span>
-    </label>
-    <input
-      id="scenario-ref-input"
-      class="poll-creation-panel__scenario-input"
-      type="text"
-      [(ngModel)]="scenarioRef"
-      placeholder="ex. La Forêt de l'Oubli — Séance 3"
-    />
-  </section>
-
   <div class="poll-creation-panel__footer">
     <span class="poll-creation-panel__count">{{ totalSelected() }} option(s) sélectionnée(s)</span>
     <button mat-stroked-button (click)="cancelled.emit()">Annuler</button>

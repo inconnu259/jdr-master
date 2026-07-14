@@ -139,11 +139,24 @@ describe('ScenariosService', () => {
     await p;
   });
 
-  it('linkSeancePoll → PATCH /scenarios/seances/:id/poll avec pollId', async () => {
-    const p = service.linkSeancePoll('seance1', 'poll1');
+  it('createSeancePoll → POST /scenarios/seances/:id/poll avec options', async () => {
+    const options = [
+      { date: '2026-08-01T00:00:00.000Z', slot: 'AFTERNOON' as const },
+      { date: '2026-08-02T00:00:00.000Z', slot: 'AFTERNOON' as const },
+    ];
+    const p = service.createSeancePoll('seance1', options);
     const req = http.expectOne(`${API}/scenarios/seances/seance1/poll`);
-    expect(req.request.method).toBe('PATCH');
-    expect(req.request.body).toEqual({ pollId: 'poll1' });
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ options });
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(scenario);
+    await p;
+  });
+
+  it('deleteSeance → DELETE /scenarios/seances/:id', async () => {
+    const p = service.deleteSeance('seance1');
+    const req = http.expectOne(`${API}/scenarios/seances/seance1`);
+    expect(req.request.method).toBe('DELETE');
     expect(req.request.withCredentials).toBe(true);
     req.flush(scenario);
     await p;
@@ -178,11 +191,11 @@ describe('ScenariosService', () => {
     await p;
   });
 
-  it('validerDate → PATCH /scenarios/seances/:id/valider-date sans body', async () => {
-    const p = service.validerDate('seance1');
+  it('validerDate → PATCH /scenarios/seances/:id/valider-date avec la date choisie', async () => {
+    const p = service.validerDate('seance1', '2026-08-15T14:00:00.000Z');
     const req = http.expectOne(`${API}/scenarios/seances/seance1/valider-date`);
     expect(req.request.method).toBe('PATCH');
-    expect(req.request.body).toEqual({});
+    expect(req.request.body).toEqual({ date: '2026-08-15T14:00:00.000Z' });
     expect(req.request.withCredentials).toBe(true);
     req.flush(scenario);
     await p;
