@@ -3,6 +3,16 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { AuthUser } from '@master-jdr/shared';
 
+// ScenariosService importe désormais CharacterService (Story 8.6), qui importe transitivement
+// @master-jdr/game-rules (ESM, non transformé par ts-jest) — même mock que
+// character.service.spec.ts/scenarios.service.spec.ts pour éviter "Unexpected token export".
+jest.mock('@master-jdr/game-rules', () => ({
+  validate: jest.fn(),
+  computeDerived: jest.fn(),
+  pendingLevels: jest.fn(),
+  LEVEL_TABLE: [],
+}));
+
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { ScenariosController } from './scenarios.controller';
 import { ScenariosService } from './scenarios.service';

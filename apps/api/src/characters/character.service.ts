@@ -289,6 +289,23 @@ export class CharacterService {
   }
 
   /**
+   * Liste tous les personnages d'une Partie, sans notion de viewer (Story 8.6) — usage interne
+   * cross-module uniquement (`ScenariosService.loadRetrospectiveNotes`), déjà en aval d'un
+   * `getViewable`/`getOwned` réussi sur la Partie côté appelant. Contrairement à `findByPartie`
+   * (scope au viewer : MJ voit tout, joueur seulement son propre personnage), cette méthode n'a
+   * pas de restriction — nécessaire pour agréger le journal de TOUS les participants, pas
+   * seulement celui du viewer courant (cf. `[ASSUMPTION]` Dev Notes Story 8.6, Task 6).
+   */
+  async findAllByPartie(
+    partieId: string,
+  ): Promise<{ id: string; userId: string }[]> {
+    return this.prisma.character.findMany({
+      where: { partieId },
+      select: { id: true, userId: true },
+    });
+  }
+
+  /**
    * Mutation du portrait : accès PROPRIÉTAIRE SEUL, contrairement à `findOne`
    * qui autorise aussi le MJ. Le MJ reste strictement en lecture seule sur les
    * personnages de ses joueurs (FR39) — aucune action d'édition à aucun palier.
@@ -1018,6 +1035,134 @@ export class CharacterService {
   }
 
   /**
+   * Bascule le réglage d'association automatique du journal aux rétrospectives (Story 8.6, AD-11) :
+   * PROPRIÉTAIRE SEUL, par personnage (pas un réglage global du compte joueur, AC6). Aucun impact
+   * immédiat sur `CharacterNote.scenarioId` — seulement sur le calcul de l'ensemble « auto » côté
+   * lecture (`getRetrospectiveNotes`), cohérent avec AC4 (désactiver ne désassocie jamais le manuel).
+   */
+  async setJournalAutoAssociate(
+    characterId: string,
+    userId: string,
+    value: boolean,
+  ): Promise<CharacterDto> {
+    await this.getOwnCharacterOrThrow(characterId, userId);
+    const updated = await this.prisma.character.update({
+      where: { id: characterId },
+      data: { journalAutoAssociate: value },
+    });
+    const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+  }
+
+  /**
+   * Association manuelle d'une entrée de journal à un scénario (Story 8.6) : même structure de
+   * base que `toggleNoteShare` (vérifie `note.characterId === characterId` avant d'écrire — garde
+   * anti-énumération, empêche un propriétaire de manipuler la note d'un autre personnage en
+   * devinant un UUID). `scenarioId: null` désassocie, sans validation (toujours permis).
+   *
+   * Revue de code (2026-07-14) — durci après un `[ASSUMPTION]` initial trop permissif : un
+   * `scenarioId` non-null doit désormais appartenir à la Partie de ce personnage (isolation
+   * multi-Partie), et pour une Partie `CAMPAGNE_EPISODIQUE`, le personnage doit effectivement
+   * participer à ce scénario (`ScenarioParticipant`) — sans quoi l'association était acceptée en
+   * écriture mais silencieusement absente en lecture (`loadRetrospectiveNotes` filtre déjà les
+   * personnages non-participants), une incohérence relevée par l'Acceptance Auditor.
+   */
+  async setNoteScenario(
+    characterId: string,
+    userId: string,
+    noteId: string,
+    scenarioId: string | null,
+  ): Promise<CharacterNoteDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const note = await this.prisma.characterNote.findUnique({
+      where: { id: noteId },
+    });
+    if (!note || note.characterId !== characterId) {
+      throw new NotFoundException('Note introuvable');
+    }
+
+    if (scenarioId !== null) {
+      const scenario = await this.prisma.scenario.findUnique({
+        where: { id: scenarioId },
+      });
+      if (!scenario || scenario.partieId !== character.partieId) {
+        throw new BadRequestException(
+          "Ce scénario n'appartient pas à la Partie de ce personnage",
+        );
+      }
+      const partie = await this.prisma.partie.findUnique({
+        where: { id: scenario.partieId },
+        select: { kind: true },
+      });
+      if (partie?.kind === 'CAMPAGNE_EPISODIQUE') {
+        const participation = await this.prisma.scenarioParticipant.findUnique({
+          where: { scenarioId_userId: { scenarioId, userId: character.userId } },
+        });
+        if (!participation) {
+          throw new BadRequestException(
+            'Ce personnage ne participe pas à ce scénario',
+          );
+        }
+      }
+    }
+
+    const updated = await this.prisma.characterNote.update({
+      where: { id: noteId },
+      data: { scenarioId },
+    });
+    return toNoteDto(updated);
+  }
+
+  /**
+   * Agrège les notes de journal pertinentes pour la rétrospective d'un scénario (Story 8.6, AD-11)
+   * — méthode EXPORTÉE, appelée uniquement par `ScenariosService.loadRetrospectiveNotes`, déjà en
+   * aval d'un `getViewable`/`getOwned` réussi sur la Partie. Aucune vérification d'autorisation
+   * interne ici (même confiance inter-module que `PartiesService.getOwned`/`getViewable` déjà
+   * appelées ainsi depuis `ScenariosService`).
+   * Une seule requête combine par `OR` : la branche manuelle (`scenarioId` correspond à ce
+   * scénario) et la branche automatique (`shared: true` + datée dans `[windowStart, windowEnd]`),
+   * incluse SEULEMENT si `journalAutoAssociate: true` ET qu'une fenêtre valide existe — sinon une
+   * entrée partagée dans la fenêtre apparaîtrait même réglage désactivé, violant AC2/AC4.
+   *
+   * Revue de code (2026-07-14) — `shared: true` ajouté à la branche manuelle : une entrée privée
+   * associée manuellement ne doit jamais devenir visible du MJ/des autres membres via
+   * `ScenarioDto.retrospectiveNotes`, sous peine de contourner silencieusement le modèle de
+   * confidentialité déjà établi par `getNotes()`/`toggleNoteShare()` (bug trouvé indépendamment
+   * par le Blind Hunter et l'Edge Case Hunter). Le frontend (`ScenarioReadDialog`) affiche
+   * désormais un cadenas déverrouillable directement sur la note pour que le joueur comprenne
+   * pourquoi une note cochée mais privée n'apparaît pas encore, plutôt qu'un filtrage muet.
+   */
+  async getRetrospectiveNotes(
+    characterId: string,
+    scenarioId: string,
+    windowStart: Date | null,
+    windowEnd: Date | null,
+  ): Promise<CharacterNoteDto[]> {
+    const character = await this.prisma.character.findUnique({
+      where: { id: characterId },
+      select: { journalAutoAssociate: true },
+    });
+    const autoEligible =
+      !!character?.journalAutoAssociate &&
+      windowStart !== null &&
+      windowEnd !== null;
+
+    const notes = await this.prisma.characterNote.findMany({
+      where: {
+        characterId,
+        OR: [
+          { scenarioId, shared: true },
+          ...(autoEligible
+            ? [{ shared: true, createdAt: { gte: windowStart!, lte: windowEnd! } }]
+            : []),
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return notes.map(toNoteDto);
+  }
+
+  /**
    * Liste le journal : PROPRIÉTAIRE (tout), MJ (tout), ou tout autre participant de la Partie
    * (uniquement `shared: true` — 3e pattern d'accès introduit par cette story, AD-8). Ne réutilise
    * ni `getOwnCharacterOrThrow` (propriétaire seul) ni `findOne` (renvoie un `CharacterDto`, pas
@@ -1066,7 +1211,7 @@ export class CharacterService {
     if (!character) throw new NotFoundException('Personnage introuvable');
     if (character.userId !== userId) {
       throw new ForbiddenException(
-        'Seul le propriétaire du personnage peut modifier son portrait',
+        'Seul le propriétaire du personnage peut effectuer cette action',
       );
     }
     return character;
@@ -1122,6 +1267,7 @@ function toDto(
     // acquis tant que le joueur n'a pas traité son `LevelUpBanner` (cf. `pendingLevels`).
     level:
       1 + ((character.sheetData?.levelUps?.length as number | undefined) ?? 0),
+    journalAutoAssociate: character.journalAutoAssociate ?? false,
   };
 }
 
@@ -1130,6 +1276,7 @@ function toNoteDto(note: {
   characterId: string;
   text: string;
   shared: boolean;
+  scenarioId?: string | null;
   createdAt: Date;
 }): CharacterNoteDto {
   return {
@@ -1137,6 +1284,7 @@ function toNoteDto(note: {
     characterId: note.characterId,
     text: note.text,
     shared: note.shared,
+    scenarioId: note.scenarioId ?? null,
     createdAt: note.createdAt.toISOString(),
   };
 }

@@ -208,6 +208,43 @@ describe('CharacterService (front)', () => {
     expect(await p).toEqual(note);
   });
 
+  it('setJournalAutoAssociate(id, value) → PATCH /characters/:id/journal-auto-associate', async () => {
+    const character = { id: 'c1', journalAutoAssociate: true };
+    const p = service.setJournalAutoAssociate('c1', true);
+    const req = http.expectOne(`${API}/characters/c1/journal-auto-associate`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ journalAutoAssociate: true });
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
+
+  it('setNoteScenario(id, noteId, scenarioId) → PATCH /characters/:id/notes/:noteId/scenario', async () => {
+    const note = {
+      id: 'note-1',
+      characterId: 'c1',
+      text: 'Une note',
+      shared: true,
+      scenarioId: 'scenario1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    const p = service.setNoteScenario('c1', 'note-1', 'scenario1');
+    const req = http.expectOne(`${API}/characters/c1/notes/note-1/scenario`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ scenarioId: 'scenario1' });
+    req.flush(note);
+    expect(await p).toEqual(note);
+  });
+
+  it('setNoteScenario(id, noteId, null) → désassocie', async () => {
+    const p = service.setNoteScenario('c1', 'note-1', null);
+    const req = http.expectOne(`${API}/characters/c1/notes/note-1/scenario`);
+    expect(req.request.body).toEqual({ scenarioId: null });
+    req.flush({});
+    await p;
+  });
+
   it('getNotes(id) → GET /characters/:id/notes', async () => {
     const notes = [
       {

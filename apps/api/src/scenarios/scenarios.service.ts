@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 import type {
+  CharacterNoteDto,
   PartieKind,
   ScenarioDocumentDto,
   ScenarioDto,
@@ -14,6 +15,7 @@ import type {
 } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { CharacterService } from '../characters/character.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import { detectDocumentMime } from './document-mime.util';
@@ -28,6 +30,7 @@ export class ScenariosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
+    private readonly characters: CharacterService,
   ) {}
 
   async create(
@@ -59,7 +62,7 @@ export class ScenariosService {
     // peut toujours en ajouter d'autres ensuite (addSeance, aucun plafond, cf. AC1 Story 8.2).
     await this.prisma.seance.create({ data: { scenarioId: scenario.id } });
 
-    return toEnrichedDto(this.prisma, scenario, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, scenario, partie.kind);
   }
 
   async update(
@@ -91,7 +94,7 @@ export class ScenariosService {
       },
     });
 
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   async uploadDocument(
@@ -219,8 +222,19 @@ export class ScenariosService {
     const seancesByScenario = await loadSeancesBatch(this.prisma, scenarioIds);
 
     if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
-      return scenarios.map((s) =>
-        toDto(s, partie.kind, undefined, seancesByScenario.get(s.id) ?? []),
+      return Promise.all(
+        scenarios.map(async (s) => {
+          const seances = seancesByScenario.get(s.id) ?? [];
+          const retrospectiveNotes = await loadRetrospectiveNotes(
+            this.prisma,
+            this.characters,
+            s,
+            partie.kind,
+            seances,
+            undefined,
+          );
+          return toDto(s, partie.kind, undefined, seances, retrospectiveNotes);
+        }),
       );
     }
 
@@ -234,13 +248,20 @@ export class ScenariosService {
       list.push({ userId: p.userId, pseudo: p.user.pseudo });
       byScenario.set(p.scenarioId, list);
     }
-    return scenarios.map((s) =>
-      toDto(
-        s,
-        partie.kind,
-        byScenario.get(s.id) ?? [],
-        seancesByScenario.get(s.id) ?? [],
-      ),
+    return Promise.all(
+      scenarios.map(async (s) => {
+        const seances = seancesByScenario.get(s.id) ?? [];
+        const scenarioParticipants = byScenario.get(s.id) ?? [];
+        const retrospectiveNotes = await loadRetrospectiveNotes(
+          this.prisma,
+          this.characters,
+          s,
+          partie.kind,
+          seances,
+          scenarioParticipants,
+        );
+        return toDto(s, partie.kind, scenarioParticipants, seances, retrospectiveNotes);
+      }),
     );
   }
 
@@ -262,7 +283,7 @@ export class ScenariosService {
       data: { status: 'A_VENIR' },
     });
 
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // AD-10 : unicité du scénario Courant vérifiée en service (verrou SELECT ... FOR UPDATE, même
@@ -305,7 +326,7 @@ export class ScenariosService {
         }
         return tx.scenario.findUniqueOrThrow({ where: { id: scenarioId } });
       });
-      return toEnrichedDto(this.prisma, updated, partie.kind);
+      return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
     }
 
     const { count } = await this.prisma.scenario.updateMany({
@@ -320,7 +341,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // AD-9 : écriture MJ-only (getOwned). Contrairement à markCourant/AD-10, close() ne
@@ -351,7 +372,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // AD-9 : action joueur, getViewable (pas getOwned) — MJ+membre. AD-4 : ScenarioParticipant
@@ -378,7 +399,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // AD-9 : écriture MJ-only (getOwned, comme create/update/open/markCourant/close) — ajouter une
@@ -395,7 +416,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // AD-4 : une Seance CAMPAGNE_EPISODIQUE ne peut jamais être liée à un SessionPoll (Inscription à
@@ -447,7 +468,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // AD-4/AD-5 : capacité d'inscription réservée à CAMPAGNE_EPISODIQUE — symétrique au rejet
@@ -488,7 +509,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // AD-5 (verbatim) : verrou de ligne explicite SELECT ... FOR UPDATE obligatoire — READ COMMITTED
@@ -543,7 +564,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // deleteMany (pas delete) : idempotent si l'utilisateur n'était pas inscrit — pas d'effet de
@@ -571,7 +592,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // AC6 : aucune validation de remplissage — validable à tout niveau, y compris 0 inscrit. Ne
@@ -609,7 +630,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // AD-1/AD-9 : compte-rendu = champ neutre de Seance, jamais restreint par kind ni par un
@@ -637,7 +658,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   // AD-1/AD-9 : résumé de fin = champ de Scenario, écriture MJ-only (getOwned). Garde de statut
@@ -666,7 +687,7 @@ export class ScenariosService {
       data: { resumeFin },
     });
 
-    return toEnrichedDto(this.prisma, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
   async getDocumentFile(
@@ -706,6 +727,7 @@ function toDto(
   partieKind?: PartieKind,
   participants?: { userId: string; pseudo: string }[],
   seances?: SeanceDto[],
+  retrospectiveNotes?: CharacterNoteDto[],
 ): ScenarioDto {
   return {
     id: scenario.id,
@@ -722,6 +744,7 @@ function toDto(
     ...(partieKind === 'CAMPAGNE_EPISODIQUE' && {
       participants: participants ?? [],
     }),
+    retrospectiveNotes,
   };
 }
 
@@ -825,17 +848,79 @@ async function loadSeances(
 // tort la liste des participants/séances côté frontend (ScenarioEditor/ScenarioReadDialog).
 async function toEnrichedDto(
   prisma: PrismaService,
+  characters: CharacterService,
   scenario: any,
   partieKind: PartieKind,
 ): Promise<ScenarioDto> {
   const seances = await loadSeances(prisma, scenario.id);
   if (partieKind !== 'CAMPAGNE_EPISODIQUE') {
-    return toDto(scenario, partieKind, undefined, seances);
+    const retrospectiveNotes = await loadRetrospectiveNotes(
+      prisma,
+      characters,
+      scenario,
+      partieKind,
+      seances,
+      undefined,
+    );
+    return toDto(scenario, partieKind, undefined, seances, retrospectiveNotes);
   }
-  return toDto(
+  const participants = await loadParticipants(prisma, scenario.id);
+  const retrospectiveNotes = await loadRetrospectiveNotes(
+    prisma,
+    characters,
     scenario,
     partieKind,
-    await loadParticipants(prisma, scenario.id),
     seances,
+    participants,
   );
+  return toDto(scenario, partieKind, participants, seances, retrospectiveNotes);
+}
+
+// AD-11 : agrégation en lecture seule via CharacterService (jamais d'accès Prisma direct à
+// CharacterNote depuis ScenariosModule). Ne s'exécute que pour un scénario PASSE (AC7) — sinon
+// retourne `undefined` immédiatement, sans appel CharacterService. Fenêtre = [min, max] des dates
+// effectives des séances (poll.chosenDate ?? inscription.dateValidee), `null`/`null` si aucune
+// séance datée (cf. `[ASSUMPTION]` Story 8.6 : aucune automatisation sur donnée non confirmée).
+async function loadRetrospectiveNotes(
+  prisma: PrismaService,
+  characters: CharacterService,
+  scenario: { id: string; partieId: string; status: string },
+  partieKind: PartieKind,
+  seances: SeanceDto[],
+  participants: { userId: string; pseudo: string }[] | undefined,
+): Promise<CharacterNoteDto[] | undefined> {
+  if (scenario.status !== 'PASSE') return undefined;
+
+  const dates = seances
+    .map((s) => s.poll?.chosenDate ?? s.inscription?.dateValidee ?? null)
+    .filter((d): d is string => d !== null)
+    .map((d) => new Date(d));
+  const windowStart =
+    dates.length > 0
+      ? new Date(Math.min(...dates.map((d) => d.getTime())))
+      : null;
+  const windowEnd =
+    dates.length > 0
+      ? new Date(Math.max(...dates.map((d) => d.getTime())))
+      : null;
+
+  const allCharacters = await characters.findAllByPartie(scenario.partieId);
+  const relevantCharacters =
+    partieKind === 'CAMPAGNE_EPISODIQUE'
+      ? allCharacters.filter((c) =>
+          (participants ?? []).some((p) => p.userId === c.userId),
+        )
+      : allCharacters;
+
+  const notesPerCharacter = await Promise.all(
+    relevantCharacters.map((c) =>
+      characters.getRetrospectiveNotes(
+        c.id,
+        scenario.id,
+        windowStart,
+        windowEnd,
+      ),
+    ),
+  );
+  return notesPerCharacter.flat();
 }

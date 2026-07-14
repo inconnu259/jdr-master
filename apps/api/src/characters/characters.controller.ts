@@ -35,6 +35,8 @@ import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
 import { CreateCharacterNoteDto } from './dto/create-character-note.dto';
 import { ToggleNoteShareDto } from './dto/toggle-note-share.dto';
+import { SetJournalAutoAssociateDto } from './dto/set-journal-auto-associate.dto';
+import { SetNoteScenarioDto } from './dto/set-note-scenario.dto';
 import { SetSheetFieldDto } from './dto/set-sheet-field.dto';
 import { SetXpDto } from './dto/set-xp.dto';
 import { UpdateNarrativeFieldDto } from './dto/update-narrative-field.dto';
@@ -220,6 +222,29 @@ export class CharactersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.characters.toggleNoteShare(id, user.id, noteId, dto.shared);
+  }
+
+  @Patch(':id/journal-auto-associate')
+  setJournalAutoAssociate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetJournalAutoAssociateDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.setJournalAutoAssociate(
+      id,
+      user.id,
+      dto.journalAutoAssociate,
+    );
+  }
+
+  @Patch(':id/notes/:noteId/scenario')
+  setNoteScenario(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: SetNoteScenarioDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.setNoteScenario(id, user.id, noteId, dto.scenarioId);
   }
 
   @Get(':id/notes')

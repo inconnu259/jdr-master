@@ -32,6 +32,8 @@ function makeCharacterService() {
     removeInventoryItem: jest.fn(),
     addNote: jest.fn(),
     toggleNoteShare: jest.fn(),
+    setJournalAutoAssociate: jest.fn(),
+    setNoteScenario: jest.fn(),
     getNotes: jest.fn(),
     setXp: jest.fn(),
     setSheetField: jest.fn(),
@@ -332,6 +334,46 @@ describe('CharactersController', () => {
       'u1',
       '33333333-3333-3333-3333-333333333333',
       true,
+    );
+  });
+
+  it('setJournalAutoAssociate() délègue à CharacterService', async () => {
+    characters.setJournalAutoAssociate.mockResolvedValue({
+      id: 'char1',
+      journalAutoAssociate: true,
+    });
+
+    await controller.setJournalAutoAssociate(
+      'char1',
+      { journalAutoAssociate: true },
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.setJournalAutoAssociate).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      true,
+    );
+  });
+
+  it('setNoteScenario() délègue à CharacterService', async () => {
+    characters.setNoteScenario.mockResolvedValue({
+      id: 'note-1',
+      scenarioId: 'scenario1',
+    });
+
+    await controller.setNoteScenario(
+      'char1',
+      '33333333-3333-3333-3333-333333333333',
+      { scenarioId: 'scenario1' },
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.setNoteScenario).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      '33333333-3333-3333-3333-333333333333',
+      'scenario1',
     );
   });
 

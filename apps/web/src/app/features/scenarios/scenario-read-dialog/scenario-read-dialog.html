@@ -19,6 +19,67 @@
           </button>
         }
       </section>
+
+      @if (ownCharacter(); as owner) {
+        <section class="journal-associe">
+          <h3>Journal associé</h3>
+          <label>
+            <input
+              type="checkbox"
+              class="journal-auto-associate-toggle"
+              [checked]="owner.journalAutoAssociate"
+              (change)="toggleAutoAssociate($any($event.target).checked)"
+            />
+            Association automatique
+          </label>
+          @if (ownNotes().length > 0) {
+            <ul class="own-notes">
+              @for (note of ownNotes(); track note.id) {
+                <li>
+                  <label>
+                    <input
+                      type="checkbox"
+                      class="note-scenario-toggle"
+                      [checked]="note.scenarioId === scenario().id"
+                      (change)="toggleNoteAssociation(note, $any($event.target).checked)"
+                    />
+                    {{ note.text }}
+                  </label>
+                  <button
+                    type="button"
+                    class="note-share-toggle"
+                    [attr.aria-label]="note.shared ? 'Note partagée' : 'Note privée'"
+                    (click)="toggleShare(note)"
+                  >
+                    {{ note.shared ? '🔓' : '🔒' }}
+                  </button>
+                  @if (note.scenarioId === scenario().id && !note.shared) {
+                    <p class="hint">
+                      Note privée — déverrouillez-la (🔒) pour qu'elle apparaisse dans la rétrospective.
+                    </p>
+                  }
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="hint">Vous n’avez pas encore d’entrée de journal.</p>
+          }
+          @if (journalError()) {
+            <p class="error">{{ journalError() }}</p>
+          }
+        </section>
+      }
+
+      @if (scenario().retrospectiveNotes?.length) {
+        <section class="retrospective-notes">
+          <h3>Journal de la rétrospective</h3>
+          <ul>
+            @for (note of scenario().retrospectiveNotes; track note.id) {
+              <li>{{ note.text }}</li>
+            }
+          </ul>
+        </section>
+      }
     }
   }
 

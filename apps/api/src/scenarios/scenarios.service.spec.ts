@@ -14,6 +14,15 @@ jest.mock('./document-storage.util', () => ({
   readDocumentFile: jest.fn(),
   deleteDocumentFile: jest.fn(),
 }));
+// CharacterService (import réel pour servir de jeton DI, cf. plus bas) importe transitivement
+// @master-jdr/game-rules (ESM, non transformé par ts-jest) — même mock que character.service.spec.ts
+// pour éviter "Unexpected token export" au chargement du module.
+jest.mock('@master-jdr/game-rules', () => ({
+  validate: jest.fn(),
+  computeDerived: jest.fn(),
+  pendingLevels: jest.fn(),
+  LEVEL_TABLE: [],
+}));
 
 import { detectDocumentMime } from './document-mime.util';
 import {
@@ -23,6 +32,7 @@ import {
 } from './document-storage.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { CharacterService } from '../characters/character.service';
 import { ScenariosService } from './scenarios.service';
 
 function makePrisma() {
@@ -82,6 +92,13 @@ function makeParties() {
   return { getOwned: jest.fn(), getViewable: jest.fn() };
 }
 
+function makeCharacters() {
+  return {
+    findAllByPartie: jest.fn().mockResolvedValue([]),
+    getRetrospectiveNotes: jest.fn().mockResolvedValue([]),
+  };
+}
+
 const VALID_SCENARIO_ID = '22222222-2222-4222-a222-222222222222';
 
 function makeFile(
@@ -99,11 +116,13 @@ describe('ScenariosService', () => {
   let service: ScenariosService;
   let prisma: ReturnType<typeof makePrisma>;
   let parties: ReturnType<typeof makeParties>;
+  let characters: ReturnType<typeof makeCharacters>;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     prisma = makePrisma();
     parties = makeParties();
+    characters = makeCharacters();
     // Chaque transition d'état (toEnrichedDto) charge désormais les séances — [] par défaut pour
     // les tests qui ne portent pas explicitement sur `seances` (AC7, jamais undefined).
     prisma.seance.findMany.mockResolvedValue([]);
@@ -115,6 +134,7 @@ describe('ScenariosService', () => {
         ScenariosService,
         { provide: PrismaService, useValue: prisma },
         { provide: PartiesService, useValue: parties },
+        { provide: CharacterService, useValue: characters },
       ],
     }).compile();
     service = module.get(ScenariosService);
@@ -797,6 +817,195 @@ describe('ScenariosService', () => {
         expect(prisma.scenarioParticipant.findMany).not.toHaveBeenCalled();
       },
     );
+
+    describe('retrospectiveNotes (AC5, AC7, Story 8.6)', () => {
+      function makeScenario(overrides: Record<string, unknown> = {}) {
+        return {
+          id: 's1',
+          partieId: 'p1',
+          title: 'Chapitre 1',
+          description: null,
+          status: 'COURANT',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01'),
+          closedAt: null,
+          ...overrides,
+        };
+      }
+
+      it('status !== PASSE → retrospectiveNotes undefined, CharacterService jamais appelé (AC7)', async () => {
+        parties.getViewable.mockResolvedValue({
+          id: 'p1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        });
+        prisma.scenario.findMany.mockResolvedValue([
+          makeScenario({ status: 'COURANT' }),
+        ]);
+
+        const result = await service.findAllForPartie('p1', 'u1');
+
+        expect(result[0].retrospectiveNotes).toBeUndefined();
+        expect(characters.findAllByPartie).not.toHaveBeenCalled();
+        expect(characters.getRetrospectiveNotes).not.toHaveBeenCalled();
+      });
+
+      it('PASSE, CAMPAGNE_LINEAIRE → agrège les notes de TOUS les membres de la Partie', async () => {
+        parties.getViewable.mockResolvedValue({
+          id: 'p1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        });
+        prisma.scenario.findMany.mockResolvedValue([
+          makeScenario({ status: 'PASSE' }),
+        ]);
+        characters.findAllByPartie.mockResolvedValue([
+          { id: 'char1', userId: 'u1' },
+          { id: 'char2', userId: 'u2' },
+        ]);
+        characters.getRetrospectiveNotes
+          .mockResolvedValueOnce([
+            { id: 'n1', characterId: 'char1', text: 'A', shared: true, scenarioId: null, createdAt: '2026-07-01T00:00:00.000Z' },
+          ])
+          .mockResolvedValueOnce([
+            { id: 'n2', characterId: 'char2', text: 'B', shared: false, scenarioId: 's1', createdAt: '2026-07-02T00:00:00.000Z' },
+          ]);
+
+        const result = await service.findAllForPartie('p1', 'u1');
+
+        expect(characters.findAllByPartie).toHaveBeenCalledWith('p1');
+        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith(
+          'char1',
+          's1',
+          null,
+          null,
+        );
+        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith(
+          'char2',
+          's1',
+          null,
+          null,
+        );
+        expect(result[0].retrospectiveNotes).toEqual([
+          expect.objectContaining({ id: 'n1' }),
+          expect.objectContaining({ id: 'n2' }),
+        ]);
+      });
+
+      it('PASSE, CAMPAGNE_EPISODIQUE → agrège seulement les personnages des participants du scénario', async () => {
+        parties.getViewable.mockResolvedValue({
+          id: 'p1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        });
+        prisma.scenario.findMany.mockResolvedValue([
+          makeScenario({ status: 'PASSE' }),
+        ]);
+        prisma.scenarioParticipant.findMany.mockResolvedValue([
+          { scenarioId: 's1', userId: 'u1', user: { pseudo: 'Alice' } },
+        ]);
+        characters.findAllByPartie.mockResolvedValue([
+          { id: 'char1', userId: 'u1' },
+          { id: 'char2', userId: 'u2' },
+        ]);
+        characters.getRetrospectiveNotes.mockResolvedValue([]);
+
+        await service.findAllForPartie('p1', 'u1');
+
+        expect(characters.getRetrospectiveNotes).toHaveBeenCalledTimes(1);
+        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith(
+          'char1',
+          's1',
+          null,
+          null,
+        );
+      });
+
+      it('fenêtre calculée à partir de poll.chosenDate/inscription.dateValidee mixtes (min/max)', async () => {
+        parties.getViewable.mockResolvedValue({
+          id: 'p1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        });
+        prisma.scenario.findMany.mockResolvedValue([
+          makeScenario({ status: 'PASSE' }),
+        ]);
+        prisma.seance.findMany.mockResolvedValue([
+          {
+            id: 'seance1',
+            scenarioId: 's1',
+            poll: {
+              id: 'poll1',
+              partieId: 'p1',
+              status: 'CLOSED',
+              scenarioRef: null,
+              expiresAt: null,
+              chosenDate: new Date('2026-06-10T00:00:00.000Z'),
+              chosenSlot: 'MORNING',
+              options: [],
+            },
+            inscriptions: [],
+            compteRendu: null,
+            createdAt: new Date('2026-06-01'),
+          },
+          {
+            id: 'seance2',
+            scenarioId: 's1',
+            poll: null,
+            inscriptionMin: 2,
+            inscriptionMax: 5,
+            dateValidee: new Date('2026-06-20T00:00:00.000Z'),
+            inscriptions: [],
+            compteRendu: null,
+            createdAt: new Date('2026-06-05'),
+          },
+        ]);
+        characters.findAllByPartie.mockResolvedValue([
+          { id: 'char1', userId: 'u1' },
+        ]);
+        characters.getRetrospectiveNotes.mockResolvedValue([]);
+
+        await service.findAllForPartie('p1', 'u1');
+
+        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith(
+          'char1',
+          's1',
+          new Date('2026-06-10T00:00:00.000Z'),
+          new Date('2026-06-20T00:00:00.000Z'),
+        );
+      });
+
+      it('aucune séance datée → fenêtre null/null, seule la branche manuelle s’applique côté CharacterService', async () => {
+        parties.getViewable.mockResolvedValue({
+          id: 'p1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        });
+        prisma.scenario.findMany.mockResolvedValue([
+          makeScenario({ status: 'PASSE' }),
+        ]);
+        prisma.seance.findMany.mockResolvedValue([
+          {
+            id: 'seance1',
+            scenarioId: 's1',
+            poll: null,
+            inscriptions: [],
+            compteRendu: null,
+            createdAt: new Date('2026-06-01'),
+          },
+        ]);
+        characters.findAllByPartie.mockResolvedValue([
+          { id: 'char1', userId: 'u1' },
+        ]);
+        characters.getRetrospectiveNotes.mockResolvedValue([]);
+
+        await service.findAllForPartie('p1', 'u1');
+
+        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith(
+          'char1',
+          's1',
+          null,
+          null,
+        );
+      });
+    });
   });
 
   describe('participate()', () => {

@@ -10,6 +10,7 @@ function makeNote(overrides: Partial<CharacterNoteDto> = {}): CharacterNoteDto {
     characterId: 'char1',
     text: 'Une note',
     shared: false,
+    scenarioId: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
   };

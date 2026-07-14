@@ -82,6 +82,12 @@ function makePrisma() {
     partie: {
       findUnique: jest.fn(),
     },
+    scenario: {
+      findUnique: jest.fn(),
+    },
+    scenarioParticipant: {
+      findUnique: jest.fn(),
+    },
     user: {
       findMany: jest.fn().mockResolvedValue([]),
     },
@@ -2054,6 +2060,7 @@ describe('CharacterService', () => {
           characterId: 'char1',
           text: 'Une note',
           shared: false,
+          scenarioId: null,
           createdAt: '2026-01-01T00:00:00.000Z',
         });
       });
@@ -2133,6 +2140,331 @@ describe('CharacterService', () => {
         await expect(
           service.toggleNoteShare('char1', 'stranger', 'note-1', true),
         ).rejects.toThrow(ForbiddenException);
+      });
+    });
+
+    describe('setJournalAutoAssociate()', () => {
+      it('propriétaire → écrit journalAutoAssociate et le reflète dans le CharacterDto', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.character.update.mockResolvedValue(
+          makeCharacter({ journalAutoAssociate: true }),
+        );
+        parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+        const result = await service.setJournalAutoAssociate('char1', 'u1', true);
+
+        expect(prisma.character.update).toHaveBeenCalledWith({
+          where: { id: 'char1' },
+          data: { journalAutoAssociate: true },
+        });
+        expect(result.journalAutoAssociate).toBe(true);
+      });
+
+      it('non-propriétaire → ForbiddenException, aucune écriture', async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacter({ userId: 'owner' }),
+        );
+
+        await expect(
+          service.setJournalAutoAssociate('char1', 'stranger', true),
+        ).rejects.toThrow(ForbiddenException);
+        expect(prisma.character.update).not.toHaveBeenCalled();
+      });
+
+      it('personnage introuvable → NotFoundException', async () => {
+        prisma.character.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.setJournalAutoAssociate('char1', 'u1', true),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.character.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('setNoteScenario()', () => {
+      it('propriétaire → associe une note à un scénario de sa Partie (non-épisodique)', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote());
+        prisma.scenario.findUnique.mockResolvedValue({
+          id: 'scenario1',
+          partieId: 'p1',
+        });
+        prisma.partie.findUnique.mockResolvedValue({
+          kind: 'CAMPAGNE_LINEAIRE',
+        });
+        prisma.characterNote.update.mockResolvedValue(
+          makeNote({ scenarioId: 'scenario1' }),
+        );
+
+        const result = await service.setNoteScenario(
+          'char1',
+          'u1',
+          'note-1',
+          'scenario1',
+        );
+
+        expect(prisma.characterNote.update).toHaveBeenCalledWith({
+          where: { id: 'note-1' },
+          data: { scenarioId: 'scenario1' },
+        });
+        expect(result.scenarioId).toBe('scenario1');
+      });
+
+      it('CAMPAGNE_EPISODIQUE, personnage participant → association acceptée', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote());
+        prisma.scenario.findUnique.mockResolvedValue({
+          id: 'scenario1',
+          partieId: 'p1',
+        });
+        prisma.partie.findUnique.mockResolvedValue({
+          kind: 'CAMPAGNE_EPISODIQUE',
+        });
+        prisma.scenarioParticipant.findUnique.mockResolvedValue({
+          id: 'sp1',
+          scenarioId: 'scenario1',
+          userId: 'u1',
+        });
+        prisma.characterNote.update.mockResolvedValue(
+          makeNote({ scenarioId: 'scenario1' }),
+        );
+
+        await service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1');
+
+        expect(prisma.scenarioParticipant.findUnique).toHaveBeenCalledWith({
+          where: {
+            scenarioId_userId: { scenarioId: 'scenario1', userId: 'u1' },
+          },
+        });
+        expect(prisma.characterNote.update).toHaveBeenCalledWith({
+          where: { id: 'note-1' },
+          data: { scenarioId: 'scenario1' },
+        });
+      });
+
+      it('CAMPAGNE_EPISODIQUE, personnage NON participant → rejet 400, aucune écriture', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote());
+        prisma.scenario.findUnique.mockResolvedValue({
+          id: 'scenario1',
+          partieId: 'p1',
+        });
+        prisma.partie.findUnique.mockResolvedValue({
+          kind: 'CAMPAGNE_EPISODIQUE',
+        });
+        prisma.scenarioParticipant.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.characterNote.update).not.toHaveBeenCalled();
+      });
+
+      it('scénario appartenant à une AUTRE Partie → rejet 400 (isolation multi-Partie), aucune écriture', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote());
+        prisma.scenario.findUnique.mockResolvedValue({
+          id: 'scenario1',
+          partieId: 'partie-autre',
+        });
+
+        await expect(
+          service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.characterNote.update).not.toHaveBeenCalled();
+      });
+
+      it('scénario introuvable → rejet 400, aucune écriture', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote());
+        prisma.scenario.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.characterNote.update).not.toHaveBeenCalled();
+      });
+
+      it('scenarioId null → désassocie, aucune validation de scénario', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(
+          makeNote({ scenarioId: 'scenario1' }),
+        );
+        prisma.characterNote.update.mockResolvedValue(
+          makeNote({ scenarioId: null }),
+        );
+
+        await service.setNoteScenario('char1', 'u1', 'note-1', null);
+
+        expect(prisma.scenario.findUnique).not.toHaveBeenCalled();
+        expect(prisma.characterNote.update).toHaveBeenCalledWith({
+          where: { id: 'note-1' },
+          data: { scenarioId: null },
+        });
+      });
+
+      it('noteId introuvable → NotFoundException', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.setNoteScenario('char1', 'u1', 'note-inconnue', 'scenario1'),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.characterNote.update).not.toHaveBeenCalled();
+      });
+
+      it('noteId appartient à un AUTRE personnage → NotFoundException (garde anti-énumération)', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(
+          makeNote({ characterId: 'char-autre' }),
+        );
+
+        await expect(
+          service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1'),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.characterNote.update).not.toHaveBeenCalled();
+      });
+
+      it('non-propriétaire → ForbiddenException', async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacter({ userId: 'owner' }),
+        );
+
+        await expect(
+          service.setNoteScenario('char1', 'stranger', 'note-1', 'scenario1'),
+        ).rejects.toThrow(ForbiddenException);
+        expect(prisma.characterNote.update).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('getRetrospectiveNotes()', () => {
+      const WINDOW_START = new Date('2026-06-01T00:00:00.000Z');
+      const WINDOW_END = new Date('2026-06-30T00:00:00.000Z');
+
+      it('journalAutoAssociate: true + fenêtre valide → OR inclut la branche manuelle ET la branche auto', async () => {
+        prisma.character.findUnique.mockResolvedValue({
+          journalAutoAssociate: true,
+        });
+        prisma.characterNote.findMany.mockResolvedValue([]);
+
+        await service.getRetrospectiveNotes(
+          'char1',
+          'scenario1',
+          WINDOW_START,
+          WINDOW_END,
+        );
+
+        expect(prisma.characterNote.findMany).toHaveBeenCalledWith({
+          where: {
+            characterId: 'char1',
+            OR: [
+              { scenarioId: 'scenario1', shared: true },
+              {
+                shared: true,
+                createdAt: { gte: WINDOW_START, lte: WINDOW_END },
+              },
+            ],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+      });
+
+      it('journalAutoAssociate: false → OR ne contient que la branche manuelle (AC2/AC4)', async () => {
+        prisma.character.findUnique.mockResolvedValue({
+          journalAutoAssociate: false,
+        });
+        prisma.characterNote.findMany.mockResolvedValue([]);
+
+        await service.getRetrospectiveNotes(
+          'char1',
+          'scenario1',
+          WINDOW_START,
+          WINDOW_END,
+        );
+
+        expect(prisma.characterNote.findMany).toHaveBeenCalledWith({
+          where: {
+            characterId: 'char1',
+            OR: [{ scenarioId: 'scenario1', shared: true }],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+      });
+
+      it('journalAutoAssociate: true mais fenêtre null/null (aucune séance datée) → seule la branche manuelle s’applique', async () => {
+        prisma.character.findUnique.mockResolvedValue({
+          journalAutoAssociate: true,
+        });
+        prisma.characterNote.findMany.mockResolvedValue([]);
+
+        await service.getRetrospectiveNotes('char1', 'scenario1', null, null);
+
+        expect(prisma.characterNote.findMany).toHaveBeenCalledWith({
+          where: {
+            characterId: 'char1',
+            OR: [{ scenarioId: 'scenario1', shared: true }],
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+      });
+
+      it('note manuellement associée mais NON partagée → jamais incluse (fix revue de code, fuite de confidentialité)', async () => {
+        prisma.character.findUnique.mockResolvedValue({
+          journalAutoAssociate: false,
+        });
+        prisma.characterNote.findMany.mockResolvedValue([]);
+
+        await service.getRetrospectiveNotes('char1', 'scenario1', null, null);
+
+        const call = prisma.characterNote.findMany.mock.calls[0][0];
+        expect(call.where.OR).toContainEqual({
+          scenarioId: 'scenario1',
+          shared: true,
+        });
+        expect(call.where.OR).not.toContainEqual({ scenarioId: 'scenario1' });
+      });
+
+      it('personnage sans notes pertinentes → tableau vide, jamais une erreur', async () => {
+        prisma.character.findUnique.mockResolvedValue({
+          journalAutoAssociate: false,
+        });
+        prisma.characterNote.findMany.mockResolvedValue([]);
+
+        const result = await service.getRetrospectiveNotes(
+          'char1',
+          'scenario1',
+          null,
+          null,
+        );
+
+        expect(result).toEqual([]);
+      });
+
+      it('mappe les notes trouvées via toNoteDto', async () => {
+        prisma.character.findUnique.mockResolvedValue({
+          journalAutoAssociate: false,
+        });
+        prisma.characterNote.findMany.mockResolvedValue([
+          makeNote({ id: 'n1', scenarioId: 'scenario1' }),
+        ]);
+
+        const result = await service.getRetrospectiveNotes(
+          'char1',
+          'scenario1',
+          null,
+          null,
+        );
+
+        expect(result).toEqual([
+          {
+            id: 'n1',
+            characterId: 'char1',
+            text: 'Une note',
+            shared: false,
+            scenarioId: 'scenario1',
+            createdAt: '2026-01-01T00:00:00.000Z',
+          },
+        ]);
       });
     });
 

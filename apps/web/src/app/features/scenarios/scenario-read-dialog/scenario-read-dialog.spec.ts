@@ -9,6 +9,8 @@ import { ScenarioReadDialog, type ScenarioReadDialogData } from './scenario-read
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { PollService } from '../../../core/poll/poll.service';
+import { CharacterService } from '../../../core/characters/character.service';
+import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 
 const BASE: ScenarioDto = {
   id: 's1',
@@ -31,11 +33,13 @@ async function createComponent(
     characters = [] as CharacterDto[],
     currentUserId = 'viewer1',
     isMj = false,
+    ownNotes = [] as unknown[],
   }: {
     partieKind?: PartieKind;
     characters?: CharacterDto[];
     currentUserId?: string;
     isMj?: boolean;
+    ownNotes?: unknown[];
   } = {},
 ) {
   const dialogRef = { close: vi.fn() };
@@ -48,6 +52,12 @@ async function createComponent(
   const authSvc = { currentUser: () => ({ id: currentUserId }) };
   const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
   const router = { navigate: vi.fn() };
+  const characterSvc = {
+    getNotes: vi.fn().mockResolvedValue(ownNotes),
+    setJournalAutoAssociate: vi.fn(),
+    setNoteScenario: vi.fn(),
+    toggleNoteShare: vi.fn(),
+  };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioReadDialog],
@@ -59,6 +69,7 @@ async function createComponent(
       { provide: AuthService, useValue: authSvc },
       { provide: PollService, useValue: pollSvc },
       { provide: Router, useValue: router },
+      { provide: CharacterService, useValue: characterSvc },
     ],
   }).compileComponents();
 
@@ -70,7 +81,7 @@ async function createComponent(
     await Promise.resolve();
     fixture.detectChanges();
   }
-  return { fixture, dialogRef, scenariosSvc, router };
+  return { fixture, dialogRef, scenariosSvc, router, characterSvc };
 }
 
 describe('ScenarioReadDialog', () => {
@@ -175,6 +186,233 @@ describe('ScenarioReadDialog', () => {
       expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'scenarios', 's1'], {
         state: { scenario: expect.objectContaining({ id: 's1' }) },
       });
+    });
+  });
+
+  describe('Journal associé (Story 8.6)', () => {
+    it('propriétaire d’un personnage participant + PASSE → switch et journal visibles', async () => {
+      const owner = makeCharacterDto({ id: 'char1', userId: 'viewer1' });
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'PASSE' },
+        { characters: [owner], currentUserId: 'viewer1' },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Association automatique');
+    });
+
+    it('non-participant (aucun personnage sur cette Partie) → section absente', async () => {
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'PASSE' },
+        { characters: [], currentUserId: 'viewer1' },
+      );
+      expect(fixture.nativeElement.textContent).not.toContain('Association automatique');
+    });
+
+    it('scénario non-PASSE → section absente même avec un personnage participant', async () => {
+      const owner = makeCharacterDto({ id: 'char1', userId: 'viewer1' });
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'COURANT' },
+        { characters: [owner], currentUserId: 'viewer1' },
+      );
+      expect(fixture.nativeElement.textContent).not.toContain('Association automatique');
+    });
+
+    it('switch reflète journalAutoAssociate du personnage', async () => {
+      const owner = makeCharacterDto({
+        id: 'char1',
+        userId: 'viewer1',
+        journalAutoAssociate: true,
+      });
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'PASSE' },
+        { characters: [owner], currentUserId: 'viewer1' },
+      );
+      const checkbox = fixture.nativeElement.querySelector(
+        'input.journal-auto-associate-toggle',
+      ) as HTMLInputElement;
+      expect(checkbox.checked).toBe(true);
+    });
+
+    it('changer le switch → appelle setJournalAutoAssociate', async () => {
+      const owner = makeCharacterDto({
+        id: 'char1',
+        userId: 'viewer1',
+        journalAutoAssociate: false,
+      });
+      const { fixture, characterSvc } = await createComponent(
+        { ...BASE, status: 'PASSE' },
+        { characters: [owner], currentUserId: 'viewer1' },
+      );
+      characterSvc.setJournalAutoAssociate.mockResolvedValue({
+        ...owner,
+        journalAutoAssociate: true,
+      });
+      const comp = fixture.componentInstance as any;
+
+      await comp.toggleAutoAssociate(true);
+
+      expect(characterSvc.setJournalAutoAssociate).toHaveBeenCalledWith('char1', true);
+    });
+
+    it('case à cocher d’une note reflète note.scenarioId === scenario.id', async () => {
+      const owner = makeCharacterDto({ id: 'char1', userId: 'viewer1' });
+      const notes = [
+        {
+          id: 'n1',
+          characterId: 'char1',
+          text: 'Associée',
+          shared: false,
+          scenarioId: 's1',
+          createdAt: '2026-07-01T00:00:00.000Z',
+        },
+        {
+          id: 'n2',
+          characterId: 'char1',
+          text: 'Non associée',
+          shared: false,
+          scenarioId: null,
+          createdAt: '2026-07-01T00:00:00.000Z',
+        },
+      ];
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'PASSE' },
+        { characters: [owner], currentUserId: 'viewer1', ownNotes: notes },
+      );
+      const checkboxes = fixture.nativeElement.querySelectorAll(
+        'input.note-scenario-toggle',
+      ) as NodeListOf<HTMLInputElement>;
+      expect(checkboxes[0].checked).toBe(true);
+      expect(checkboxes[1].checked).toBe(false);
+    });
+
+    it('cocher une note → appelle setNoteScenario avec l’id du scénario courant', async () => {
+      const owner = makeCharacterDto({ id: 'char1', userId: 'viewer1' });
+      const notes = [
+        {
+          id: 'n1',
+          characterId: 'char1',
+          text: 'Non associée',
+          shared: false,
+          scenarioId: null,
+          createdAt: '2026-07-01T00:00:00.000Z',
+        },
+      ];
+      const { fixture, characterSvc } = await createComponent(
+        { ...BASE, status: 'PASSE' },
+        { characters: [owner], currentUserId: 'viewer1', ownNotes: notes },
+      );
+      characterSvc.setNoteScenario.mockResolvedValue({ ...notes[0], scenarioId: 's1' });
+      const comp = fixture.componentInstance as any;
+
+      await comp.toggleNoteAssociation(notes[0], true);
+
+      expect(characterSvc.setNoteScenario).toHaveBeenCalledWith('char1', 'n1', 's1');
+    });
+
+    it('décocher une note → appelle setNoteScenario avec null', async () => {
+      const owner = makeCharacterDto({ id: 'char1', userId: 'viewer1' });
+      const notes = [
+        {
+          id: 'n1',
+          characterId: 'char1',
+          text: 'Associée',
+          shared: false,
+          scenarioId: 's1',
+          createdAt: '2026-07-01T00:00:00.000Z',
+        },
+      ];
+      const { fixture, characterSvc } = await createComponent(
+        { ...BASE, status: 'PASSE' },
+        { characters: [owner], currentUserId: 'viewer1', ownNotes: notes },
+      );
+      characterSvc.setNoteScenario.mockResolvedValue({ ...notes[0], scenarioId: null });
+      const comp = fixture.componentInstance as any;
+
+      await comp.toggleNoteAssociation(notes[0], false);
+
+      expect(characterSvc.setNoteScenario).toHaveBeenCalledWith('char1', 'n1', null);
+    });
+
+    it('retrospectiveNotes affichées pour tout membre, y compris non-propriétaire', async () => {
+      const { fixture } = await createComponent(
+        {
+          ...BASE,
+          status: 'PASSE',
+          retrospectiveNotes: [
+            {
+              id: 'n1',
+              characterId: 'char-other',
+              text: 'Un souvenir marquant',
+              shared: true,
+              scenarioId: null,
+              createdAt: '2026-07-01T00:00:00.000Z',
+            },
+          ],
+        },
+        { characters: [], currentUserId: 'viewer1' },
+      );
+      expect(fixture.nativeElement.textContent).toContain('Un souvenir marquant');
+    });
+
+    it('note privée cochée → indice affiché invitant à déverrouiller (revue de code, fuite de confidentialité)', async () => {
+      const owner = makeCharacterDto({ id: 'char1', userId: 'viewer1' });
+      const notes = [
+        {
+          id: 'n1',
+          characterId: 'char1',
+          text: 'Note privée associée',
+          shared: false,
+          scenarioId: 's1',
+          createdAt: '2026-07-01T00:00:00.000Z',
+        },
+      ];
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'PASSE' },
+        { characters: [owner], currentUserId: 'viewer1', ownNotes: notes },
+      );
+      expect(fixture.nativeElement.textContent).toContain('déverrouillez-la');
+    });
+
+    it('note partagée cochée → aucun indice de déverrouillage', async () => {
+      const owner = makeCharacterDto({ id: 'char1', userId: 'viewer1' });
+      const notes = [
+        {
+          id: 'n1',
+          characterId: 'char1',
+          text: 'Note partagée associée',
+          shared: true,
+          scenarioId: 's1',
+          createdAt: '2026-07-01T00:00:00.000Z',
+        },
+      ];
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'PASSE' },
+        { characters: [owner], currentUserId: 'viewer1', ownNotes: notes },
+      );
+      expect(fixture.nativeElement.textContent).not.toContain('déverrouillez-la');
+    });
+
+    it('clic sur le cadenas → appelle toggleNoteShare et bascule shared', async () => {
+      const owner = makeCharacterDto({ id: 'char1', userId: 'viewer1' });
+      const notes = [
+        {
+          id: 'n1',
+          characterId: 'char1',
+          text: 'Note privée',
+          shared: false,
+          scenarioId: null,
+          createdAt: '2026-07-01T00:00:00.000Z',
+        },
+      ];
+      const { fixture, characterSvc } = await createComponent(
+        { ...BASE, status: 'PASSE' },
+        { characters: [owner], currentUserId: 'viewer1', ownNotes: notes },
+      );
+      characterSvc.toggleNoteShare.mockResolvedValue({ ...notes[0], shared: true });
+      const comp = fixture.componentInstance as any;
+
+      await comp.toggleShare(notes[0]);
+
+      expect(characterSvc.toggleNoteShare).toHaveBeenCalledWith('char1', 'n1', true);
     });
   });
 

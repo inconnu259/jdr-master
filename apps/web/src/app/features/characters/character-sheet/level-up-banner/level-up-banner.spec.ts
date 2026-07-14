@@ -20,6 +20,7 @@ function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
     viewerIsMj: false,
     xp: 0,
     level: 1,
+    journalAutoAssociate: false,
     ...overrides,
   };
 }

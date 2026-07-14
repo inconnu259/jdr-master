@@ -12,6 +12,8 @@ import type {
   GameSystemContentDto,
   GameSystemDto,
   GameSystemSchemaDto,
+  SetJournalAutoAssociateDto,
+  SetNoteScenarioDto,
   SetSheetFieldResultDto,
   UpdateInventoryItemDto,
 } from '@master-jdr/shared';
@@ -177,6 +179,30 @@ export class CharacterService {
       this.http.patch<CharacterNoteDto>(
         `${API_BASE}/characters/${id}/notes/${noteId}/share`,
         { shared },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  setJournalAutoAssociate(id: string, value: boolean): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.patch<CharacterDto>(
+        `${API_BASE}/characters/${id}/journal-auto-associate`,
+        { journalAutoAssociate: value } satisfies SetJournalAutoAssociateDto,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  setNoteScenario(
+    id: string,
+    noteId: string,
+    scenarioId: string | null,
+  ): Promise<CharacterNoteDto> {
+    return firstValueFrom(
+      this.http.patch<CharacterNoteDto>(
+        `${API_BASE}/characters/${id}/notes/${noteId}/scenario`,
+        { scenarioId } satisfies SetNoteScenarioDto,
         { withCredentials: true },
       ),
     );

@@ -116,6 +116,8 @@ export interface ScenarioDto {
   seances: SeanceDto[];
   /** Participants (CAMPAGNE_EPISODIQUE uniquement, Story 8.1) — toujours undefined pour ONE_SHOT/CAMPAGNE_LINEAIRE (AD-4). */
   participants?: { userId: string; pseudo: string }[];
+  /** Notes de journal associées à la rétrospective (Story 8.6) — peuplé uniquement si `status === 'PASSE'`, sinon `undefined`. */
+  retrospectiveNotes?: CharacterNoteDto[];
 }
 
 /** Une séance d'un scénario (Story 8.2) — `poll` peuplé si une date a été liée via linkSeancePoll. */
@@ -370,6 +372,8 @@ export interface CharacterDto {
   viewerIsMj: boolean;
   /** Points d'expérience cumulés — seule source de vérité (jamais dépensés, jamais remis à zéro). */
   xp: number;
+  /** Association automatique du journal partagé aux rétrospectives de scénario (Story 8.6). Réglage par personnage, pas par compte joueur. */
+  journalAutoAssociate: boolean;
   /**
    * Niveau réellement appliqué (1 + nombre de montées de niveau validées), calculé côté API —
    * jamais écrit directement par le client. **Distinct** du niveau potentiel atteignable avec
@@ -453,6 +457,8 @@ export interface CharacterNoteDto {
   characterId: string;
   text: string;
   shared: boolean;
+  /** Scénario auquel cette entrée est manuellement associée (Story 8.6), `null` si aucune. Indépendant de l'association automatique. */
+  scenarioId: string | null;
   createdAt: string;
 }
 
@@ -481,6 +487,16 @@ export interface SetSheetFieldResultDto {
 /** Payload de PATCH /characters/:id/xp (édition MJ directe, distincte de la distribution d'XP — AD-6). */
 export interface SetXpDto {
   value: number;
+}
+
+/** Payload de PATCH /characters/:id/journal-auto-associate (Story 8.6, propriétaire seul). */
+export interface SetJournalAutoAssociateDto {
+  journalAutoAssociate: boolean;
+}
+
+/** Payload de PATCH /characters/:id/notes/:noteId/scenario (Story 8.6, propriétaire seul). `null` = désassocier. */
+export interface SetNoteScenarioDto {
+  scenarioId: string | null;
 }
 
 /** Payload de PATCH /characters/:id/narrative-field (Story 6.7, édition propriétaire-seul). */

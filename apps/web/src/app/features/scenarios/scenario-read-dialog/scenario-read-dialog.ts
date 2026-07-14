@@ -3,9 +3,10 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { MatDialogModule, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { Router } from '@angular/router';
-import type { CharacterDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
+import type { CharacterDto, CharacterNoteDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { CharacterService } from '../../../core/characters/character.service';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 import { SeanceList } from '../seance-list/seance-list';
@@ -50,12 +51,21 @@ export class ScenarioReadDialog implements OnInit {
   private readonly data = inject<ScenarioReadDialogData>(MAT_DIALOG_DATA);
   private readonly dialogRef = inject<MatDialogRef<ScenarioReadDialog, void>>(MatDialogRef);
   private readonly scenarios = inject(ScenariosService);
+  private readonly characterSvc = inject(CharacterService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   protected readonly currentUserId = computed(() => this.auth.currentUser()?.id);
   protected readonly isMj = computed(() => this.data.isMj ?? false);
 
   protected readonly scenario = signal<ScenarioDto>(this.data.scenario);
+  // Copie locale mutable de data.characters (Story 8.6) — mise à jour après
+  // setJournalAutoAssociate() pour que le switch reflète le nouveau réglage sans rechargement.
+  protected readonly characters = signal<CharacterDto[]>(this.data.characters);
+  protected readonly ownCharacter = computed(() =>
+    this.characters().find((c) => c.userId === this.currentUserId()),
+  );
+  protected readonly ownNotes = signal<CharacterNoteDto[]>([]);
+  protected readonly journalError = signal<string | null>(null);
   // Garde défensive : BROUILLON ne devrait jamais atteindre ce dialogue (ScenarioTimeline le filtre
   // toujours en amont), mais si un futur appelant l'ouvrait quand même, il reste protégé comme
   // A_VENIR (titre seul) plutôt que de tomber dans la branche complète par défaut.
@@ -71,13 +81,13 @@ export class ScenarioReadDialog implements OnInit {
   );
   protected readonly participantCharacters = computed(() => {
     const ids = new Set((this.scenario().participants ?? []).map((p) => p.userId));
-    return this.data.characters.filter((c) => ids.has(c.userId));
+    return this.characters().filter((c) => ids.has(c.userId));
   });
   // Un participant peut rejoindre une enquête avant d'avoir créé son personnage sur cette Partie —
   // sans ce fallback, cliquer « Participer » ne montre alors aucune confirmation visuelle (ni carte,
   // ni texte), ce qui donne l'impression que l'action n'a pas fonctionné.
   protected readonly participantsWithoutCharacter = computed(() => {
-    const characterUserIds = new Set(this.data.characters.map((c) => c.userId));
+    const characterUserIds = new Set(this.characters().map((c) => c.userId));
     return (this.scenario().participants ?? []).filter((p) => !characterUserIds.has(p.userId));
   });
   protected readonly participantError = signal<string | null>(null);
@@ -95,6 +105,15 @@ export class ScenarioReadDialog implements OnInit {
     } catch {
       // Le scénario reçu en donnée de dialogue reste affiché tel quel si le rafraîchissement échoue.
     }
+
+    const owner = this.ownCharacter();
+    if (owner) {
+      try {
+        this.ownNotes.set(await this.characterSvc.getNotes(owner.id));
+      } catch {
+        this.journalError.set("Impossible de charger votre journal.");
+      }
+    }
   }
 
   protected async participate(): Promise<void> {
@@ -110,6 +129,59 @@ export class ScenarioReadDialog implements OnInit {
 
   protected onSeanceLinked(updated: ScenarioDto): void {
     this.scenario.set(updated);
+  }
+
+  // Story 8.6 : réglage propriétaire-seul, par personnage (AC6) — aucun impact sur les notes déjà
+  // associées manuellement (AC4), seulement sur le calcul de l'ensemble « auto » côté backend.
+  protected async toggleAutoAssociate(value: boolean): Promise<void> {
+    const owner = this.ownCharacter();
+    if (!owner) return;
+    this.journalError.set(null);
+    try {
+      const updated = await this.characterSvc.setJournalAutoAssociate(owner.id, value);
+      this.characters.update((list) => list.map((c) => (c.id === updated.id ? updated : c)));
+    } catch (err) {
+      this.journalError.set(extractErrorMessage(err, 'Impossible de modifier ce réglage.'));
+    }
+  }
+
+  // Revue de code (2026-07-14) : une note associée mais non partagée (`shared: false`) n'apparaît
+  // jamais dans `retrospectiveNotes` (le backend filtre désormais `shared: true` sur la branche
+  // manuelle, cf. fix confidentialité) — plutôt qu'un filtrage muet qui laisserait le joueur
+  // perplexe devant une note cochée mais invisible, le cadenas est actionnable directement ici,
+  // sans aller-retour vers la fiche de personnage.
+  protected async toggleShare(note: CharacterNoteDto): Promise<void> {
+    const owner = this.ownCharacter();
+    if (!owner) return;
+    this.journalError.set(null);
+    try {
+      const updated = await this.characterSvc.toggleNoteShare(owner.id, note.id, !note.shared);
+      this.ownNotes.update((list) => list.map((n) => (n.id === updated.id ? updated : n)));
+    } catch (err) {
+      this.journalError.set(
+        extractErrorMessage(err, 'Impossible de modifier la visibilité de cette note.'),
+      );
+    }
+  }
+
+  // Association manuelle indépendante du switch (AC2) — `checked` détermine si on pose
+  // `scenario().id` ou `null` (désassociation) sur la note visée.
+  protected async toggleNoteAssociation(note: CharacterNoteDto, checked: boolean): Promise<void> {
+    const owner = this.ownCharacter();
+    if (!owner) return;
+    this.journalError.set(null);
+    try {
+      const updated = await this.characterSvc.setNoteScenario(
+        owner.id,
+        note.id,
+        checked ? this.scenario().id : null,
+      );
+      this.ownNotes.update((list) => list.map((n) => (n.id === updated.id ? updated : n)));
+    } catch (err) {
+      this.journalError.set(
+        extractErrorMessage(err, "Impossible de mettre à jour cette association."),
+      );
+    }
   }
 
   protected close(): void {

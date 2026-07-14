@@ -24,6 +24,7 @@ export function makeCharacterDto(overrides: Partial<CharacterDto> = {}): Charact
     viewerIsMj: false,
     xp: 0,
     level: 1,
+    journalAutoAssociate: false,
     ...overrides,
   };
 }

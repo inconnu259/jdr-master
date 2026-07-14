@@ -348,6 +348,8 @@ model CharacterNote {
   character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
   text        String
   shared      Boolean   @default(false)
+  scenarioId  String?
+  scenario    Scenario? @relation(fields: [scenarioId], references: [id], onDelete: SetNull)
   createdAt   DateTime  @default(now())
 
   @@index([characterId, createdAt])
@@ -390,10 +392,11 @@ model Scenario {
   createdAt    DateTime       @default(now())
   closedAt     DateTime?
 
-  seances       Seance[]
-  documents     ScenarioDocument[]
-  participants  ScenarioParticipant[]
-  announcements Announcement[]
+  seances        Seance[]
+  documents      ScenarioDocument[]
+  participants   ScenarioParticipant[]
+  announcements  Announcement[]
+  characterNotes CharacterNote[]
 
   @@index([partieId, status])
 }
