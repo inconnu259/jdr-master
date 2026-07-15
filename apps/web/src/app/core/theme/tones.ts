@@ -80,6 +80,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.vote_closed': "Ce vote est clos. L'oracle a tranché.",
     'alert.all_responded': 'Tous les compagnons ont répondu au vote.',
     'poll.status_summary': 'Vote ouvert — {responded}/{total} compagnons ont répondu',
+    /* — annonces (Epic 9) — */
+    'announcement.scope_campaign_label': 'Toute la campagne',
+    'announcement.publish_cta': 'Proclamer une annonce',
+    'announcement.text_placeholder': 'Rédiger une annonce...',
+    'announcement.published_notice': 'Annonce proclamée.',
     /* — personnages (Palier P3) — */
     'character.create_cta': 'Créer un voyageur',
     'character.tab_label': 'Personnages',
@@ -218,6 +223,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.vote_closed': 'Le vote de la forêt est terminé.',
     'alert.all_responded': "Tous les habitants ont répondu à l'appel.",
     'poll.status_summary': 'Vote ouvert — {responded}/{total} habitants ont répondu',
+    /* — annonces (Epic 9) — */
+    'announcement.scope_campaign_label': 'Toute la forêt',
+    'announcement.publish_cta': 'Lancer un appel dans la forêt',
+    'announcement.text_placeholder': 'Composer un appel...',
+    'announcement.published_notice': "L'appel résonne dans la forêt.",
     /* — personnages (Palier P3) — */
     'character.create_cta': 'Éveiller un compagnon de route',
     'character.tab_label': 'Personnages',
@@ -351,6 +361,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.vote_closed': 'Registre de vote verrouillé.',
     'alert.all_responded': "Tout l'équipage a répondu au registre.",
     'poll.status_summary': 'Registre ouvert — {responded}/{total} membres ont répondu',
+    /* — annonces (Epic 9) — */
+    'announcement.scope_campaign_label': 'Toute la mission',
+    'announcement.publish_cta': 'Diffuser une transmission',
+    'announcement.text_placeholder': 'Rédiger une transmission...',
+    'announcement.published_notice': 'Transmission diffusée.',
     /* — personnages (Palier P3) — */
     'character.create_cta': 'Assembler un automate-voyageur',
     'character.tab_label': 'Personnages',

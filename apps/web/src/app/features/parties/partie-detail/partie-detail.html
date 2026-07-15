@@ -96,6 +96,21 @@
                 <app-xp-history [distributions]="xpDistributions()" [characters]="characters()" />
               </section>
             }
+
+            @if (isMj()) {
+              <section class="announcement-section">
+                <button
+                  type="button"
+                  mat-stroked-button
+                  (click)="showAnnouncementForm.set(!showAnnouncementForm())"
+                >
+                  {{ theme.tone()['announcement.publish_cta'] }}
+                </button>
+                @if (showAnnouncementForm()) {
+                  <app-announcement-form [partieId]="p.id" />
+                }
+              </section>
+            }
         </mat-tab>
 
         @if (!isMj() && !isDesktop()) {

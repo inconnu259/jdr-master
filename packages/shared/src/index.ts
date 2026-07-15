@@ -189,6 +189,23 @@ export interface UpdateScenarioDto {
   dureeSeances?: number;
 }
 
+// ─── Epic 9 : Annonces MJ ──────────────────────────────────────────────────
+
+/** Une annonce MJ à portée variable (Story 9.1) — `scenarioId: null` = portée Partie/campagne entière. */
+export interface AnnouncementDto {
+  id: string;
+  partieId: string;
+  scenarioId: string | null;
+  text: string;
+  createdAt: string;
+}
+
+/** Payload de publication d'une annonce (POST /parties/:id/announcements). */
+export interface CreateAnnouncementDto {
+  text: string;
+  scenarioId?: string;
+}
+
 // ─── Palier 2 : Calendrier de disponibilités ──────────────────────────────────
 
 /** Granularité d'un créneau de disponibilité. */

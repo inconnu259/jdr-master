@@ -50,6 +50,7 @@ import { XpHistory } from '../xp-history/xp-history';
 import { ScenarioDrafts } from '../../scenarios/scenario-drafts/scenario-drafts';
 import { ScenarioOneShotTab } from '../../scenarios/scenario-one-shot-tab/scenario-one-shot-tab';
 import { ScenarioTimeline } from '../../scenarios/scenario-timeline/scenario-timeline';
+import { AnnouncementFormComponent } from '../../announcements/announcement-form/announcement-form';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
 const MJ_INVITATIONS_TAB_INDEX = 1;
@@ -75,6 +76,7 @@ const MJ_INVITATIONS_TAB_INDEX = 1;
     ScenarioDrafts,
     ScenarioOneShotTab,
     ScenarioTimeline,
+    AnnouncementFormComponent,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -108,6 +110,7 @@ export class PartieDetail implements OnInit {
   protected readonly characters = signal<CharacterDto[]>([]);
   protected readonly xpDistributions = signal<XpDistributionDto[]>([]);
   protected readonly showXpPanel = signal(false);
+  protected readonly showAnnouncementForm = signal(false);
   protected readonly gameSystemContent = signal<GameSystemContentDto | null>(null);
   protected readonly search = signal('');
   protected readonly results = signal<UserSearchResultDto[]>([]);

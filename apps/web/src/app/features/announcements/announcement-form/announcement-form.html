@@ -1,0 +1,38 @@
+<div class="announcement-form">
+  <textarea
+    class="announcement-form__text"
+    [placeholder]="theme.tone()['announcement.text_placeholder']"
+    [ngModel]="text()"
+    (ngModelChange)="text.set($event)"
+  ></textarea>
+
+  <label class="announcement-form__scope">
+    <select
+      class="announcement-form__select"
+      [ngModel]="selectedScenarioId()"
+      (ngModelChange)="selectedScenarioId.set($event)"
+    >
+      <option [ngValue]="null">{{ theme.tone()['announcement.scope_campaign_label'] }}</option>
+      @for (scenario of eligibleScenarios(); track scenario.id) {
+        <option [ngValue]="scenario.id">{{ scenario.title }}</option>
+      }
+    </select>
+  </label>
+
+  <button
+    mat-flat-button
+    color="primary"
+    type="button"
+    [disabled]="!isValid() || publishing()"
+    (click)="onSubmit()"
+  >
+    {{ theme.tone()['announcement.publish_cta'] }}
+  </button>
+
+  @if (justPublished()) {
+    <p class="announcement-form__notice">{{ theme.tone()['announcement.published_notice'] }}</p>
+  }
+  @if (error()) {
+    <p class="announcement-form__error">{{ error() }}</p>
+  }
+</div>

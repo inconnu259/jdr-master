@@ -806,6 +806,25 @@ export class ScenariosService {
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
+  /** Story 9.1 (AD-2) : valide qu'un scenarioId existe et appartient à la Partie donnée — utilisé
+   * par AnnouncementsService pour la portée d'une annonce. AUCUNE validation de statut ici
+   * (contrairement à uploadDocument() qui bloque PASSE) : AD-2 est explicite, une annonce peut
+   * viser un scénario BROUILLON/A_VENIR, seul le rendu frontend (Story 9.2) protège l'anti-spoil. */
+  async verifyScenarioBelongsToPartie(
+    scenarioId: string,
+    partieId: string,
+  ): Promise<void> {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+    });
+    if (!scenario) throw new NotFoundException('Scénario introuvable');
+    if (scenario.partieId !== partieId) {
+      throw new BadRequestException(
+        "Ce scénario n'appartient pas à cette Partie",
+      );
+    }
+  }
+
   async getDocumentFile(
     documentId: string,
     userId: string,

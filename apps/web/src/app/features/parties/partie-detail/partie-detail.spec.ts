@@ -4,7 +4,7 @@ import { ActivatedRoute } from '@angular/router';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
-import { signal } from '@angular/core';
+import { signal, type WritableSignal } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { BehaviorSubject, of } from 'rxjs';
 import { vi } from 'vitest';
@@ -22,6 +22,7 @@ import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { AnnouncementsService } from '../../../core/announcements/announcements.service';
 import { MatDialog } from '@angular/material/dialog';
 import { TONE_MAP } from '../../../core/theme/tones';
 
@@ -163,6 +164,7 @@ async function createFixture(
         provide: ScenariosService,
         useValue: makeScenariosService(options.polls ?? (options.poll ? [options.poll] : [])),
       },
+      { provide: AnnouncementsService, useValue: { create: vi.fn() } },
       { provide: MatDialog, useValue: { open: vi.fn() } },
     ],
   }).compileComponents();
@@ -705,6 +707,34 @@ describe('PartieDetail — distribution d’XP', () => {
 
     expect(characters.listByPartie).toHaveBeenCalledWith('party-1');
     expect(parties.listXpDistributions).toHaveBeenCalledWith('party-1');
+  });
+});
+
+describe('PartieDetail — publication d’annonce (Story 9.1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('bouton de publication d’annonce visible pour le MJ, absent pour un joueur (AC6)', async () => {
+    const partie = makePartie({ mjId: MJ_ID });
+
+    const { el: elMj } = await createFixture(partie, MJ_ID);
+    expect(elMj.querySelector('.announcement-section')).toBeTruthy();
+    TestBed.resetTestingModule();
+
+    const { el: elPlayer } = await createFixture(partie, PLAYER_ID);
+    expect(elPlayer.querySelector('.announcement-section')).toBeFalsy();
+  });
+
+  it('le panel reste ouvert après publication (revue de code : le MJ voit la confirmation avant de fermer lui-même)', async () => {
+    const partie = makePartie({ mjId: MJ_ID });
+    const { fixture } = await createFixture(partie, MJ_ID);
+
+    const component = fixture.componentInstance as unknown as {
+      showAnnouncementForm: WritableSignal<boolean>;
+    };
+    component.showAnnouncementForm.set(true);
+    fixture.detectChanges();
+
+    expect(component.showAnnouncementForm()).toBe(true);
   });
 });
 

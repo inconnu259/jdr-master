@@ -3162,4 +3162,64 @@ describe('ScenariosService', () => {
       expect(prisma.scenario.update).not.toHaveBeenCalled();
     });
   });
+
+  describe('verifyScenarioBelongsToPartie() (Story 9.1, AD-2)', () => {
+    const OTHER_PARTIE_ID = 'p2';
+
+    it('scénario existant et appartenant à la Partie → résout sans erreur', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+
+      await expect(
+        service.verifyScenarioBelongsToPartie(VALID_SCENARIO_ID, 'p1'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('scénario BROUILLON de la Partie → résout sans erreur (AC7, aucune validation de statut)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'BROUILLON',
+      });
+
+      await expect(
+        service.verifyScenarioBelongsToPartie(VALID_SCENARIO_ID, 'p1'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('scénario A_VENIR de la Partie → résout sans erreur (AC7, aucune validation de statut)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'A_VENIR',
+      });
+
+      await expect(
+        service.verifyScenarioBelongsToPartie(VALID_SCENARIO_ID, 'p1'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('scénario introuvable → 404', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.verifyScenarioBelongsToPartie(VALID_SCENARIO_ID, 'p1'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it("scénario appartenant à une autre Partie → 400 (AC3)", async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: OTHER_PARTIE_ID,
+        status: 'COURANT',
+      });
+
+      await expect(
+        service.verifyScenarioBelongsToPartie(VALID_SCENARIO_ID, 'p1'),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
 });
