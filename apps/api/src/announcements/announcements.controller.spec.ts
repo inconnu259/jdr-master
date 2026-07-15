@@ -16,6 +16,7 @@ import { AnnouncementsService } from './announcements.service';
 function makeAnnouncementsService() {
   return {
     create: jest.fn(),
+    findAll: jest.fn(),
   };
 }
 
@@ -48,5 +49,22 @@ describe('AnnouncementsController', () => {
 
     expect(announcements.create).toHaveBeenCalledWith('p1', 'mj1', dto);
     expect(result.id).toBe('ann1');
+  });
+
+  it('findAll() délègue à AnnouncementsService.findAll() avec partieId/user.id', async () => {
+    announcements.findAll.mockResolvedValue([
+      {
+        id: 'ann1',
+        partieId: 'p1',
+        scenarioId: null,
+        text: 'Une annonce',
+        createdAt: '2026-07-15T00:00:00.000Z',
+      },
+    ]);
+
+    const result = await controller.findAll('p1', { id: 'u1' } as any);
+
+    expect(announcements.findAll).toHaveBeenCalledWith('p1', 'u1');
+    expect(result).toHaveLength(1);
   });
 });

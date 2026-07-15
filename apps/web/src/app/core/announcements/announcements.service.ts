@@ -15,4 +15,12 @@ export class AnnouncementsService {
       }),
     );
   }
+
+  listAll(partieId: string): Promise<AnnouncementDto[]> {
+    return firstValueFrom(
+      this.http.get<AnnouncementDto[]>(`${API_BASE}/parties/${partieId}/announcements`, {
+        withCredentials: true,
+      }),
+    );
+  }
 }

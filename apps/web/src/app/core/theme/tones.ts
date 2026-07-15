@@ -82,6 +82,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.status_summary': 'Vote ouvert — {responded}/{total} compagnons ont répondu',
     /* — annonces (Epic 9) — */
     'announcement.scope_campaign_label': 'Toute la campagne',
+    'announcement.scope_oneshot_label': 'Cette quête',
+    'announcement.scope_scenario_label': 'Ce chapitre',
     'announcement.publish_cta': 'Proclamer une annonce',
     'announcement.text_placeholder': 'Rédiger une annonce...',
     'announcement.published_notice': 'Annonce proclamée.',
@@ -225,6 +227,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.status_summary': 'Vote ouvert — {responded}/{total} habitants ont répondu',
     /* — annonces (Epic 9) — */
     'announcement.scope_campaign_label': 'Toute la forêt',
+    'announcement.scope_oneshot_label': 'Cette expédition',
+    'announcement.scope_scenario_label': 'Cette clairière',
     'announcement.publish_cta': 'Lancer un appel dans la forêt',
     'announcement.text_placeholder': 'Composer un appel...',
     'announcement.published_notice': "L'appel résonne dans la forêt.",
@@ -363,6 +367,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.status_summary': 'Registre ouvert — {responded}/{total} membres ont répondu',
     /* — annonces (Epic 9) — */
     'announcement.scope_campaign_label': 'Toute la mission',
+    'announcement.scope_oneshot_label': 'Cette opération',
+    'announcement.scope_scenario_label': 'Ce dossier',
     'announcement.publish_cta': 'Diffuser une transmission',
     'announcement.text_placeholder': 'Rédiger une transmission...',
     'announcement.published_notice': 'Transmission diffusée.',

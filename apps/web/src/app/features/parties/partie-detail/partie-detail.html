@@ -107,7 +107,15 @@
                   {{ theme.tone()['announcement.publish_cta'] }}
                 </button>
                 @if (showAnnouncementForm()) {
-                  <app-announcement-form [partieId]="p.id" />
+                  <app-announcement-form [partieId]="p.id" (published)="onAnnouncementPublished()" />
+                }
+              </section>
+            }
+
+            @if (campaignAnnouncements().length > 0) {
+              <section class="announcements-feed">
+                @for (a of campaignAnnouncements(); track a.id) {
+                  <app-annonce-card [announcement]="a" [scopeLabel]="campaignScopeLabel()" />
                 }
               </section>
             }

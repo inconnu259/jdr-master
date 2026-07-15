@@ -154,5 +154,14 @@
         <p class="error">{{ downloadError() }}</p>
       }
     </section>
+
+    @if (scenarioAnnouncements().length > 0) {
+      <section class="scenario-announcements">
+        <h2>Annonces</h2>
+        @for (a of scenarioAnnouncements(); track a.id) {
+          <app-annonce-card [announcement]="a" [scopeLabel]="theme.tone()['announcement.scope_scenario_label']" />
+        }
+      </section>
+    }
   </section>
 }

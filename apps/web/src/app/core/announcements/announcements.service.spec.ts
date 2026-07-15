@@ -38,4 +38,25 @@ describe('AnnouncementsService', () => {
 
     await expect(promise).resolves.toEqual(response);
   });
+
+  it('listAll() appelle GET /parties/:id/announcements avec withCredentials (Story 9.2)', async () => {
+    const promise = service.listAll('p1');
+
+    const req = http.expectOne(`${API_BASE}/parties/p1/announcements`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.withCredentials).toBe(true);
+
+    const response: AnnouncementDto[] = [
+      {
+        id: 'ann1',
+        partieId: 'p1',
+        scenarioId: null,
+        text: 'Une annonce',
+        createdAt: '2026-07-15T00:00:00.000Z',
+      },
+    ];
+    req.flush(response);
+
+    await expect(promise).resolves.toEqual(response);
+  });
 });

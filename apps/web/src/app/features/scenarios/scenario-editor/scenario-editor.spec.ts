@@ -2,12 +2,19 @@ import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
-import type { CharacterDto, ScenarioDocumentDto, ScenarioDto } from '@master-jdr/shared';
+import type {
+  AnnouncementDto,
+  CharacterDto,
+  ScenarioDocumentDto,
+  ScenarioDto,
+} from '@master-jdr/shared';
 import { ScenarioEditor } from './scenario-editor';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
+import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { makeAnnouncementDto } from '../../../core/announcements/announcement-dto.fixture';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 
 const SCENARIO: ScenarioDto = {
@@ -42,7 +49,11 @@ const LIBRARY_DOC: ScenarioDocumentDto = {
   createdAt: '2026-07-12T00:00:00.000Z',
 };
 
-async function createComponent(scenario: ScenarioDto = SCENARIO, characters: CharacterDto[] = []) {
+async function createComponent(
+  scenario: ScenarioDto = SCENARIO,
+  characters: CharacterDto[] = [],
+  announcements: AnnouncementDto[] = [],
+) {
   const scenariosSvc = {
     listAll: vi.fn().mockResolvedValue([scenario]),
     listDocuments: vi.fn().mockResolvedValue([OWN_DOC, LIBRARY_DOC]),
@@ -58,6 +69,7 @@ async function createComponent(scenario: ScenarioDto = SCENARIO, characters: Cha
   const characterSvc = { listByPartie: vi.fn().mockResolvedValue(characters) };
   const partiesSvc = { members: vi.fn().mockResolvedValue([]) };
   const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
+  const announcementsSvc = { listAll: vi.fn().mockResolvedValue(announcements) };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioEditor],
@@ -67,6 +79,7 @@ async function createComponent(scenario: ScenarioDto = SCENARIO, characters: Cha
       { provide: CharacterService, useValue: characterSvc },
       { provide: PartiesService, useValue: partiesSvc },
       { provide: PollService, useValue: pollSvc },
+      { provide: AnnouncementsService, useValue: announcementsSvc },
     ],
   }).compileComponents();
 
@@ -79,7 +92,7 @@ async function createComponent(scenario: ScenarioDto = SCENARIO, characters: Cha
   }
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, scenariosSvc, characterSvc };
+  return { fixture, scenariosSvc, characterSvc, announcementsSvc };
 }
 
 describe('ScenarioEditor', () => {
@@ -480,6 +493,7 @@ describe('ScenarioEditor', () => {
           { provide: CharacterService, useValue: { listByPartie: vi.fn().mockResolvedValue([]) } },
           { provide: PartiesService, useValue: { members: vi.fn().mockResolvedValue([]) } },
           { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
+          { provide: AnnouncementsService, useValue: { listAll: vi.fn().mockResolvedValue([]) } },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(ScenarioEditor);
@@ -514,6 +528,7 @@ describe('ScenarioEditor', () => {
           { provide: CharacterService, useValue: { listByPartie: vi.fn().mockResolvedValue([]) } },
           { provide: PartiesService, useValue: { members: vi.fn().mockResolvedValue([]) } },
           { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
+          { provide: AnnouncementsService, useValue: { listAll: vi.fn().mockResolvedValue([]) } },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(ScenarioEditor);
@@ -526,6 +541,32 @@ describe('ScenarioEditor', () => {
 
       const comp = fixture.componentInstance as any;
       expect(comp.scenario()).toEqual(SCENARIO);
+    });
+  });
+
+  describe('annonces scopées au scénario (Story 9.2)', () => {
+    it("filtre au scenarioId du scénario affiché — une annonce d'un autre scénario ou scenarioId: null n'apparaît jamais", async () => {
+      const announcements = [
+        makeAnnouncementDto({ id: 'ann-ce-scenario', scenarioId: 's1', text: 'Pour ce scénario' }),
+        makeAnnouncementDto({ id: 'ann-autre', scenarioId: 's2', text: 'Pour un autre scénario' }),
+        makeAnnouncementDto({ id: 'ann-campagne', scenarioId: null, text: 'Toute la campagne' }),
+      ];
+      const { fixture } = await createComponent(SCENARIO, [], announcements);
+
+      const comp = fixture.componentInstance as any;
+      expect(comp.scenarioAnnouncements().map((a: AnnouncementDto) => a.id)).toEqual([
+        'ann-ce-scenario',
+      ]);
+    });
+
+    it('visible même si le scénario est BROUILLON (pas de gate de statut côté MJ)', async () => {
+      const brouillon = { ...SCENARIO, status: 'BROUILLON' as const };
+      const announcements = [
+        makeAnnouncementDto({ scenarioId: 's1', text: 'Annonce visible même en brouillon' }),
+      ];
+      const { fixture } = await createComponent(brouillon, [], announcements);
+
+      expect(fixture.nativeElement.textContent).toContain('Annonce visible même en brouillon');
     });
   });
 });

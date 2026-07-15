@@ -3,13 +3,22 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { MatDialogModule, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { Router } from '@angular/router';
-import type { CharacterDto, CharacterNoteDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
+import type {
+  AnnouncementDto,
+  CharacterDto,
+  CharacterNoteDto,
+  PartieKind,
+  ScenarioDto,
+} from '@master-jdr/shared';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { CharacterService } from '../../../core/characters/character.service';
+import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 import { SeanceList } from '../seance-list/seance-list';
+import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
 
 export interface ScenarioReadDialogData {
   scenario: ScenarioDto;
@@ -43,6 +52,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
     ScenarioStatusBadge,
     CharacterSummaryCard,
     SeanceList,
+    AnnonceCard,
   ],
   templateUrl: './scenario-read-dialog.html',
   styleUrl: './scenario-read-dialog.scss',
@@ -54,6 +64,8 @@ export class ScenarioReadDialog implements OnInit {
   private readonly characterSvc = inject(CharacterService);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly announcementsSvc = inject(AnnouncementsService);
+  protected readonly theme = inject(ThemeToneService);
   protected readonly currentUserId = computed(() => this.auth.currentUser()?.id);
   protected readonly isMj = computed(() => this.data.isMj ?? false);
 
@@ -78,6 +90,16 @@ export class ScenarioReadDialog implements OnInit {
   protected readonly isEpisodique = computed(() => this.data.partieKind === 'CAMPAGNE_EPISODIQUE');
   protected readonly isParticipating = computed(() =>
     (this.scenario().participants ?? []).some((p) => p.userId === this.currentUserId()),
+  );
+
+  // Story 9.2 (AC3) : un non-participant d'un scénario épisodique ne voit jamais ses annonces ;
+  // le MJ et les scénarios non-épisodiques ne sont pas concernés par cette restriction.
+  protected readonly announcements = signal<AnnouncementDto[]>([]);
+  protected readonly scenarioAnnouncements = computed(() =>
+    this.announcements().filter((a) => a.scenarioId === this.scenario().id),
+  );
+  protected readonly canSeeAnnouncements = computed(
+    () => this.isMj() || !this.isEpisodique() || this.isParticipating(),
   );
   protected readonly participantCharacters = computed(() => {
     const ids = new Set((this.scenario().participants ?? []).map((p) => p.userId));
@@ -113,6 +135,12 @@ export class ScenarioReadDialog implements OnInit {
       } catch {
         this.journalError.set("Impossible de charger votre journal.");
       }
+    }
+
+    try {
+      this.announcements.set(await this.announcementsSvc.listAll(this.data.scenario.partieId));
+    } catch {
+      // Non-critique — la section annonces reste vide plutôt que de bloquer le dialogue.
     }
   }
 

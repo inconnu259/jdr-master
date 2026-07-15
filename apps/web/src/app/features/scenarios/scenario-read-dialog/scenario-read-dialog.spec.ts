@@ -4,12 +4,14 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { Router } from '@angular/router';
 import { vi } from 'vitest';
-import type { CharacterDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
+import type { AnnouncementDto, CharacterDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
 import { ScenarioReadDialog, type ScenarioReadDialogData } from './scenario-read-dialog';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { CharacterService } from '../../../core/characters/character.service';
+import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { makeAnnouncementDto } from '../../../core/announcements/announcement-dto.fixture';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 
 const BASE: ScenarioDto = {
@@ -34,12 +36,14 @@ async function createComponent(
     currentUserId = 'viewer1',
     isMj = false,
     ownNotes = [] as unknown[],
+    announcements = [] as AnnouncementDto[],
   }: {
     partieKind?: PartieKind;
     characters?: CharacterDto[];
     currentUserId?: string;
     isMj?: boolean;
     ownNotes?: unknown[];
+    announcements?: AnnouncementDto[];
   } = {},
 ) {
   const dialogRef = { close: vi.fn() };
@@ -58,6 +62,7 @@ async function createComponent(
     setNoteScenario: vi.fn(),
     toggleNoteShare: vi.fn(),
   };
+  const announcementsSvc = { listAll: vi.fn().mockResolvedValue(announcements) };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioReadDialog],
@@ -70,6 +75,7 @@ async function createComponent(
       { provide: PollService, useValue: pollSvc },
       { provide: Router, useValue: router },
       { provide: CharacterService, useValue: characterSvc },
+      { provide: AnnouncementsService, useValue: announcementsSvc },
     ],
   }).compileComponents();
 
@@ -81,7 +87,7 @@ async function createComponent(
     await Promise.resolve();
     fixture.detectChanges();
   }
-  return { fixture, dialogRef, scenariosSvc, router, characterSvc };
+  return { fixture, dialogRef, scenariosSvc, router, characterSvc, announcementsSvc };
 }
 
 describe('ScenarioReadDialog', () => {
@@ -588,6 +594,7 @@ describe('ScenarioReadDialog', () => {
           { provide: ScenariosService, useValue: scenariosSvc },
           { provide: AuthService, useValue: { currentUser: () => ({ id: 'viewer1' }) } },
           { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
+          { provide: AnnouncementsService, useValue: { listAll: vi.fn().mockResolvedValue([]) } },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(ScenarioReadDialog);
@@ -599,6 +606,78 @@ describe('ScenarioReadDialog', () => {
 
       const comp = fixture.componentInstance as any;
       expect(comp.scenario()).toEqual(BASE);
+    });
+  });
+
+  describe('annonces scopées au scénario (Story 9.2)', () => {
+    it('AC2 : annonce scopée affichée pour un membre quand le statut est COURANT/PASSE', async () => {
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'COURANT' },
+        { announcements: [makeAnnouncementDto({ scenarioId: 's1', text: 'Annonce visible' })] },
+      );
+
+      expect(fixture.nativeElement.textContent).toContain('Annonce visible');
+    });
+
+    it("AC6 : jamais affichée quand le statut est A_VENIR/BROUILLON, même si la donnée est présente", async () => {
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'A_VENIR' },
+        {
+          announcements: [
+            makeAnnouncementDto({ scenarioId: 's1', text: 'Ne doit jamais apparaître' }),
+          ],
+        },
+      );
+
+      expect(fixture.nativeElement.textContent).not.toContain('Ne doit jamais apparaître');
+    });
+
+    it('AC3 : joueur non participant à un scénario CAMPAGNE_EPISODIQUE → aucune annonce visible', async () => {
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'COURANT', participants: [] },
+        {
+          partieKind: 'CAMPAGNE_EPISODIQUE',
+          currentUserId: 'viewer1',
+          announcements: [
+            makeAnnouncementDto({ scenarioId: 's1', text: 'Réservé aux participants' }),
+          ],
+        },
+      );
+
+      expect(fixture.nativeElement.textContent).not.toContain('Réservé aux participants');
+    });
+
+    it('AC3 : joueur participant à un scénario CAMPAGNE_EPISODIQUE → annonce visible', async () => {
+      const { fixture } = await createComponent(
+        {
+          ...BASE,
+          status: 'COURANT',
+          participants: [{ userId: 'viewer1', pseudo: 'Viewer' }],
+        },
+        {
+          partieKind: 'CAMPAGNE_EPISODIQUE',
+          currentUserId: 'viewer1',
+          announcements: [
+            makeAnnouncementDto({ scenarioId: 's1', text: 'Visible du participant' }),
+          ],
+        },
+      );
+
+      expect(fixture.nativeElement.textContent).toContain('Visible du participant');
+    });
+
+    it('MJ → annonce toujours visible sur un scénario épisodique, même sans être participant', async () => {
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'COURANT', participants: [] },
+        {
+          partieKind: 'CAMPAGNE_EPISODIQUE',
+          currentUserId: 'mj1',
+          isMj: true,
+          announcements: [makeAnnouncementDto({ scenarioId: 's1', text: 'Visible du MJ' })],
+        },
+      );
+
+      expect(fixture.nativeElement.textContent).toContain('Visible du MJ');
     });
   });
 });

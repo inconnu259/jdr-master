@@ -1,0 +1,7 @@
+<article class="annonce-card">
+  <!-- AC4/AC5 : le libellé de portée est un texte réel dans le DOM, jamais seulement une couleur
+       d'accent CSS — lu par un lecteur d'écran au même titre que le reste du contenu. -->
+  <span class="annonce-card__scope-label">{{ scopeLabel() }}</span>
+  <p class="annonce-card__text">{{ announcement().text }}</p>
+  <span class="annonce-card__date-label">{{ announcement().createdAt | date: 'short' }}</span>
+</article>

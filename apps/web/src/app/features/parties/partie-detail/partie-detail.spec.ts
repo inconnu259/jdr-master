@@ -9,6 +9,7 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { BehaviorSubject, of } from 'rxjs';
 import { vi } from 'vitest';
 import type {
+  AnnouncementDto,
   CharacterDto,
   InviteLinkDto,
   PartieDto,
@@ -17,6 +18,7 @@ import type {
 } from '@master-jdr/shared';
 import { AuthService } from '../../../core/auth/auth.service';
 import { CharacterService } from '../../../core/characters/character.service';
+import { makeAnnouncementDto } from '../../../core/announcements/announcement-dto.fixture';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
@@ -126,6 +128,7 @@ interface CreateFixtureOptions {
   polls?: SessionPollDto[];
   characters?: CharacterDto[];
   links?: InviteLinkDto[];
+  announcements?: AnnouncementDto[];
   noopAnimations?: boolean;
   desktop?: boolean;
 }
@@ -164,7 +167,13 @@ async function createFixture(
         provide: ScenariosService,
         useValue: makeScenariosService(options.polls ?? (options.poll ? [options.poll] : [])),
       },
-      { provide: AnnouncementsService, useValue: { create: vi.fn() } },
+      {
+        provide: AnnouncementsService,
+        useValue: {
+          create: vi.fn(),
+          listAll: vi.fn().mockResolvedValue(options.announcements ?? []),
+        },
+      },
       { provide: MatDialog, useValue: { open: vi.fn() } },
     ],
   }).compileComponents();
@@ -450,6 +459,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
         },
         { provide: ThemeToneService, useValue: makeToneService() },
         { provide: ScenariosService, useValue: makeScenariosService() },
+        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]) } },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();
@@ -735,6 +745,81 @@ describe('PartieDetail — publication d’annonce (Story 9.1)', () => {
     fixture.detectChanges();
 
     expect(component.showAnnouncementForm()).toBe(true);
+  });
+});
+
+describe('PartieDetail — consultation des annonces « toute la campagne » (Story 9.2)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC1 : affiche les annonces scenarioId: null, triées (ordre déjà renvoyé par le backend)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [
+      makeAnnouncementDto({ id: 'ann-recent', text: 'La plus récente' }),
+      makeAnnouncementDto({ id: 'ann-ancien', text: 'La plus ancienne' }),
+    ];
+
+    const { el } = await createFixture(partie, MJ_ID, { announcements });
+
+    const feed = el.querySelector('.announcements-feed');
+    expect(feed).toBeTruthy();
+    expect(feed!.textContent).toContain('La plus récente');
+    expect(feed!.textContent).toContain('La plus ancienne');
+  });
+
+  it("une annonce scopée à un scénario n'apparaît jamais dans ce flux (filtrée côté client)", async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [
+      makeAnnouncementDto({ id: 'ann-campagne', text: 'Annonce campagne', scenarioId: null }),
+      makeAnnouncementDto({ id: 'ann-scenario', text: 'Annonce scénario', scenarioId: 's1' }),
+    ];
+
+    const { el } = await createFixture(partie, MJ_ID, { announcements });
+
+    const feed = el.querySelector('.announcements-feed');
+    expect(feed!.textContent).toContain('Annonce campagne');
+    expect(feed!.textContent).not.toContain('Annonce scénario');
+  });
+
+  it('libellé « Ce one-shot » pour une Partie ONE_SHOT, « Toute la campagne » sinon', async () => {
+    const oneShot = makePartie({ mjId: MJ_ID, kind: 'ONE_SHOT' });
+    const { el: elOneShot } = await createFixture(oneShot, MJ_ID, {
+      announcements: [makeAnnouncementDto()],
+    });
+    expect(elOneShot.querySelector('.announcements-feed')!.textContent).toContain('Cette quête');
+    TestBed.resetTestingModule();
+
+    const campagne = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const { el: elCampagne } = await createFixture(campagne, MJ_ID, {
+      announcements: [makeAnnouncementDto()],
+    });
+    expect(elCampagne.querySelector('.announcements-feed')!.textContent).toContain(
+      'Toute la campagne',
+    );
+  });
+
+  it('visible pour un joueur, pas seulement le MJ', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const { el } = await createFixture(partie, PLAYER_ID, {
+      announcements: [makeAnnouncementDto({ text: 'Visible du joueur' })],
+    });
+
+    expect(el.querySelector('.announcements-feed')!.textContent).toContain('Visible du joueur');
+  });
+
+  it('publication réussie recharge la liste (announcementsSvc.listAll rappelé)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const { fixture } = await createFixture(partie, MJ_ID);
+    const announcementsSvc = TestBed.inject(AnnouncementsService) as unknown as {
+      listAll: ReturnType<typeof vi.fn>;
+    };
+    const callsBefore = announcementsSvc.listAll.mock.calls.length;
+
+    const component = fixture.componentInstance as unknown as {
+      onAnnouncementPublished: () => Promise<void>;
+    };
+    await component.onAnnouncementPublished();
+
+    expect(announcementsSvc.listAll.mock.calls.length).toBeGreaterThan(callsBefore);
   });
 });
 

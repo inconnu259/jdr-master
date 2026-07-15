@@ -47,4 +47,16 @@ export class AnnouncementsService {
 
     return toDto(announcement);
   }
+
+  /** Story 9.2 (AD-9/AD-6) : lecture ouverte à tout membre (getViewable), retourne TOUTES les
+   * annonces de la Partie sans filtrage de statut de scénario — l'anti-spoil (AC6) est un rendu
+   * Angular conditionnel côté consommateur, jamais un filtrage serveur. */
+  async findAll(partieId: string, userId: string): Promise<AnnouncementDto[]> {
+    await this.parties.getViewable(partieId, userId);
+    const announcements = await this.prisma.announcement.findMany({
+      where: { partieId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return announcements.map(toDto);
+  }
 }

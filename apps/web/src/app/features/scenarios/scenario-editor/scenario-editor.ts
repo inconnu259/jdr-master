@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import type {
+  AnnouncementDto,
   CharacterDto,
   PartieMemberDto,
   ScenarioDocumentDto,
@@ -12,10 +13,13 @@ import type {
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
+import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { FieldEditPencil } from '../../characters/character-sheet/field-edit-pencil/field-edit-pencil';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 import { SeanceList } from '../seance-list/seance-list';
+import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
 
 type ScenarioTextField = keyof UpdateScenarioDto;
 
@@ -41,6 +45,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
     ScenarioStatusBadge,
     CharacterSummaryCard,
     SeanceList,
+    AnnonceCard,
   ],
   templateUrl: './scenario-editor.html',
   styleUrl: './scenario-editor.scss',
@@ -49,6 +54,8 @@ export class ScenarioEditor implements OnInit {
   private readonly scenarios = inject(ScenariosService);
   private readonly characterService = inject(CharacterService);
   private readonly partiesService = inject(PartiesService);
+  private readonly announcementsService = inject(AnnouncementsService);
+  protected readonly theme = inject(ThemeToneService);
 
   readonly scenarioInput = input.required<ScenarioDto>({ alias: 'scenario' });
 
@@ -75,6 +82,12 @@ export class ScenarioEditor implements OnInit {
   protected readonly closeError = signal<string | null>(null);
   protected readonly addSeanceError = signal<string | null>(null);
   protected readonly members = signal<PartieMemberDto[]>([]);
+  // Story 9.2 : vue MJ — aucun filtrage de statut (le MJ ne peut pas se spoiler son propre contenu,
+  // AC6 protège les joueurs, pas l'auteur).
+  protected readonly announcements = signal<AnnouncementDto[]>([]);
+  protected readonly scenarioAnnouncements = computed(() =>
+    this.announcements().filter((a) => a.scenarioId === this.scenario()?.id),
+  );
 
   // AD-4 : `participants` n'est renvoyé par le backend que pour CAMPAGNE_EPISODIQUE (toujours
   // `undefined` sinon) — sa seule présence sert de signal fiable, sans avoir à threader `partieKind`
@@ -129,6 +142,13 @@ export class ScenarioEditor implements OnInit {
       this.members.set(await this.partiesService.members(this.scenarioInput().partieId));
     } catch {
       // Liste MJ pour PollStatusPanel (relance de vote) — non-critique, même dégradation silencieuse.
+    }
+    try {
+      this.announcements.set(
+        await this.announcementsService.listAll(this.scenarioInput().partieId),
+      );
+    } catch {
+      // Non-critique — la section annonces reste vide plutôt que de bloquer la page.
     }
   }
 

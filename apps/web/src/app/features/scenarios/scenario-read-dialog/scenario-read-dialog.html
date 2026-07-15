@@ -81,6 +81,15 @@
         </section>
       }
     }
+
+    @if (canSeeAnnouncements() && scenarioAnnouncements().length > 0) {
+      <section class="scenario-announcements">
+        <h3>Annonces</h3>
+        @for (a of scenarioAnnouncements(); track a.id) {
+          <app-annonce-card [announcement]="a" [scopeLabel]="theme.tone()['announcement.scope_scenario_label']" />
+        }
+      </section>
+    }
   }
 
   @if (isEpisodique()) {

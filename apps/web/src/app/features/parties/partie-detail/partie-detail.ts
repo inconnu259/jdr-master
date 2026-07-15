@@ -15,6 +15,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import { map } from 'rxjs/operators';
 import type {
+  AnnouncementDto,
   CharacterDto,
   DaySlot,
   GameSystemContentDto,
@@ -51,6 +52,8 @@ import { ScenarioDrafts } from '../../scenarios/scenario-drafts/scenario-drafts'
 import { ScenarioOneShotTab } from '../../scenarios/scenario-one-shot-tab/scenario-one-shot-tab';
 import { ScenarioTimeline } from '../../scenarios/scenario-timeline/scenario-timeline';
 import { AnnouncementFormComponent } from '../../announcements/announcement-form/announcement-form';
+import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
+import { AnnouncementsService } from '../../../core/announcements/announcements.service';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
 const MJ_INVITATIONS_TAB_INDEX = 1;
@@ -77,6 +80,7 @@ const MJ_INVITATIONS_TAB_INDEX = 1;
     ScenarioOneShotTab,
     ScenarioTimeline,
     AnnouncementFormComponent,
+    AnnonceCard,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -88,6 +92,7 @@ export class PartieDetail implements OnInit {
   private readonly parties = inject(PartiesService);
   private readonly modeSvc = inject(ModeService);
   private readonly scenariosSvc = inject(ScenariosService);
+  private readonly announcementsSvc = inject(AnnouncementsService);
   private readonly characterSvc = inject(CharacterService);
   private readonly dialog = inject(MatDialog);
   private readonly breakpointObserver = inject(BreakpointObserver);
@@ -111,6 +116,18 @@ export class PartieDetail implements OnInit {
   protected readonly xpDistributions = signal<XpDistributionDto[]>([]);
   protected readonly showXpPanel = signal(false);
   protected readonly showAnnouncementForm = signal(false);
+  // Story 9.2 : liste complète (campagne + scopée) chargée une fois, filtrée côté client par
+  // consommateur (AD-6 — même principe que activePolls/ScenariosService.listAll()).
+  protected readonly announcements = signal<AnnouncementDto[]>([]);
+  private announcementsReqId = 0;
+  protected readonly campaignAnnouncements = computed(() =>
+    this.announcements().filter((a) => a.scenarioId === null),
+  );
+  protected readonly campaignScopeLabel = computed(() =>
+    this.partie()?.kind === 'ONE_SHOT'
+      ? this.theme.tone()['announcement.scope_oneshot_label']
+      : this.theme.tone()['announcement.scope_campaign_label'],
+  );
   protected readonly gameSystemContent = signal<GameSystemContentDto | null>(null);
   protected readonly search = signal('');
   protected readonly results = signal<UserSearchResultDto[]>([]);
@@ -257,6 +274,7 @@ export class PartieDetail implements OnInit {
     this.partie.set(await this.parties.get(id));
     await this.loadMembers();
     await this.loadActivePolls(id);
+    this.announcements.set(await this.announcementsSvc.listAll(id).catch(() => []));
     this.characters.set(await this.characterSvc.listByPartie(id).catch(() => []));
     this.gameSystemContent.set(
       await this.characterSvc.getGameSystemContent(this.partie()!.gameSystemId).catch(() => null),
@@ -391,5 +409,15 @@ export class PartieDetail implements OnInit {
     this.showXpPanel.set(false);
     this.characters.set(await this.characterSvc.listByPartie(p.id).catch(() => []));
     await this.loadXpDistributions();
+  }
+
+  /** Story 9.2 : recharge la liste après publication — sans ça, l'annonce fraîchement publiée par
+   *  le MJ n'apparaîtrait dans son propre flux qu'au prochain rechargement de page. */
+  protected async onAnnouncementPublished(): Promise<void> {
+    const p = this.partie();
+    if (!p) return;
+    const reqId = ++this.announcementsReqId;
+    const list = await this.announcementsSvc.listAll(p.id).catch(() => this.announcements());
+    if (reqId === this.announcementsReqId) this.announcements.set(list);
   }
 }

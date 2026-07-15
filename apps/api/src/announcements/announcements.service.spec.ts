@@ -20,6 +20,7 @@ function makePrisma() {
   return {
     announcement: {
       create: jest.fn(),
+      findMany: jest.fn(),
     },
   } as any;
 }
@@ -141,6 +142,46 @@ describe('AnnouncementsService', () => {
       ).rejects.toThrow(ForbiddenException);
       expect(scenarios.verifyScenarioBelongsToPartie).not.toHaveBeenCalled();
       expect(prisma.announcement.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findAll() (Story 9.2, AD-6/AD-9)', () => {
+    it('liste les annonces de la Partie triées par createdAt desc, membre quelconque (AC1/AC2)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.announcement.findMany.mockResolvedValue([
+        makeAnnouncement({ id: 'ann2', createdAt: new Date('2026-07-15T10:00:00.000Z') }),
+        makeAnnouncement({ id: 'ann1', createdAt: new Date('2026-07-14T10:00:00.000Z') }),
+      ]);
+
+      const result = await service.findAll('p1', 'u1');
+
+      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(prisma.announcement.findMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(result.map((a) => a.id)).toEqual(['ann2', 'ann1']);
+    });
+
+    it('inclut une annonce scopée à un scénario BROUILLON/A_VENIR sans distinction (AC6, aucun filtrage serveur)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.announcement.findMany.mockResolvedValue([
+        makeAnnouncement({ id: 'ann-brouillon', scenarioId: 's-brouillon' }),
+      ]);
+
+      const result = await service.findAll('p1', 'u1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].scenarioId).toBe('s-brouillon');
+    });
+
+    it('non-membre → ForbiddenException propagée par getViewable, aucune lecture', async () => {
+      parties.getViewable.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.findAll('p1', 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(prisma.announcement.findMany).not.toHaveBeenCalled();
     });
   });
 });

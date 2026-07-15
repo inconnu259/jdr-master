@@ -1,0 +1,21 @@
+// DESIGN.md §7 AnnonceCard
+.annonce-card {
+  display: block;
+  background: var(--mat-sys-surface-container-high, #2a2a38);
+  border: 1px solid var(--mat-sys-outline-variant, #444);
+  border-radius: 8px;
+  padding: 8px 16px;
+}
+
+.annonce-card__scope-label {
+  display: block;
+  color: var(--jdr-accent-2, #a68cf0);
+  font-size: 0.85em;
+  text-transform: uppercase;
+}
+
+.annonce-card__date-label {
+  display: block;
+  color: var(--jdr-text-muted, #9a9aaa);
+  font-size: 0.85em;
+}
