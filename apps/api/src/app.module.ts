@@ -14,6 +14,7 @@ import { AvailabilityModule } from './availability/availability.module';
 import { PollModule } from './poll/poll.module';
 import { GameSystemModule } from './game-systems/game-system.module';
 import { CharacterModule } from './characters/character.module';
+import { HommeDragonModule } from './homme-dragon/homme-dragon.module';
 import { XpDistributionsModule } from './xp-distributions/xp-distributions.module';
 import { EmailModule } from './email/email.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -34,6 +35,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     PollModule,
     GameSystemModule,
     CharacterModule,
+    HommeDragonModule,
     XpDistributionsModule,
     EmailModule,
     NotificationsModule,

@@ -25,6 +25,7 @@ import { ModeService } from '../../../core/mode/mode.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { MatDialog } from '@angular/material/dialog';
 import { TONE_MAP } from '../../../core/theme/tones';
 
@@ -173,6 +174,10 @@ async function createFixture(
           create: vi.fn(),
           listAll: vi.fn().mockResolvedValue(options.announcements ?? []),
         },
+      },
+      {
+        provide: HommeDragonService,
+        useValue: { findOne: vi.fn().mockResolvedValue(null), create: vi.fn(), update: vi.fn() },
       },
       { provide: MatDialog, useValue: { open: vi.fn() } },
     ],
@@ -900,5 +905,121 @@ describe('PartieDetail — onglet Chronologie (Story 7.5)', () => {
       t.textContent?.trim(),
     );
     expect(tabLabels).not.toContain('Chronologie');
+  });
+});
+
+describe('PartieDetail — onglet Homme Dragon (Story 10.1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('MJ + Partie Ryuutama → onglet "Homme Dragon" présent, app-homme-dragon-sheet rendu au clic', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
+
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    const hdTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Homme Dragon');
+    expect(hdTab).toBeTruthy();
+    hdTab?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('app-homme-dragon-sheet')).toBeTruthy();
+  });
+
+  it('joueur (non-MJ) → onglet "Homme Dragon" absent, même sur une Partie Ryuutama (AC3)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+    const tabLabels = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
+      t.textContent?.trim(),
+    );
+    expect(tabLabels).not.toContain('Homme Dragon');
+  });
+
+  it('Partie non-Ryuutama → onglet "Homme Dragon" absent, même pour le MJ (AD-1/AD-5)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const { el } = await createFixture(partie, MJ_ID);
+    const tabLabels = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
+      t.textContent?.trim(),
+    );
+    expect(tabLabels).not.toContain('Homme Dragon');
+  });
+});
+
+describe('PartieDetail — rechargement au retour de focus (bug-fix hors story, 2026-07-17)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('la Partie éditée ailleurs (ex. gameSystemId) apparaît sans F5 quand l’onglet redevient visible', async () => {
+    const initial = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const updated = { ...initial, gameSystemId: 'ryuutama' };
+    const partiesSvc = {
+      get: vi.fn().mockResolvedValueOnce(initial).mockResolvedValue(updated),
+      members: vi.fn().mockResolvedValue([]),
+      inviteLinks: vi.fn().mockResolvedValue([]),
+      searchUsers: vi.fn().mockResolvedValue([]),
+      inviteUser: vi.fn(),
+      inviteByEmail: vi.fn(),
+      removeMember: vi.fn(),
+      createInviteLink: vi.fn(),
+      revokeInviteLink: vi.fn(),
+      remove: vi.fn(),
+      listXpDistributions: vi.fn().mockResolvedValue([]),
+      createXpDistribution: vi.fn(),
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [PartieDetail],
+      providers: [
+        provideRouter([]),
+        provideAnimationsAsync(),
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => initial.id } } } },
+        { provide: AuthService, useValue: makeAuthService(MJ_ID) },
+        { provide: PartiesService, useValue: partiesSvc },
+        { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
+        { provide: ModeService, useValue: { refreshMjParties: vi.fn() } },
+        {
+          provide: CharacterService,
+          useValue: {
+            listByPartie: vi.fn().mockResolvedValue([]),
+            getGameSystemContent: vi.fn().mockResolvedValue({}),
+          },
+        },
+        { provide: ThemeToneService, useValue: makeToneService() },
+        { provide: ScenariosService, useValue: makeScenariosService([]) },
+        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]) } },
+        {
+          provide: HommeDragonService,
+          useValue: { findOne: vi.fn().mockResolvedValue(null), create: vi.fn(), update: vi.fn() },
+        },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(PartieDetail);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(Array.from(el.querySelectorAll('div[role="tab"]')).map((t) => t.textContent?.trim())).not.toContain(
+      'Homme Dragon',
+    );
+
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(partiesSvc.get).toHaveBeenCalledTimes(2);
+    expect(Array.from(el.querySelectorAll('div[role="tab"]')).map((t) => t.textContent?.trim())).toContain(
+      'Homme Dragon',
+    );
   });
 });

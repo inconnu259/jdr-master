@@ -221,6 +221,12 @@
           </mat-tab>
         }
 
+        @if (isMj() && p.gameSystemId === 'ryuutama') {
+          <mat-tab label="Homme Dragon">
+            <app-homme-dragon-sheet [partieId]="p.id" [partieName]="p.name" />
+          </mat-tab>
+        }
+
         @if (isMj() && p.kind === 'ONE_SHOT') {
           <mat-tab label="Scénario">
             <app-scenario-one-shot-tab [partieId]="p.id" />

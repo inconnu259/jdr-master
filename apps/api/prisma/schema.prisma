@@ -32,6 +32,7 @@ model User {
   xpDistributionsGiven     XpDistribution[]          @relation("XpDistributionMj")
   inscriptions             Inscription[]
   scenarioParticipations   ScenarioParticipant[]
+  hommeDragons             HommeDragon[]
 }
 
 enum PartieKind {
@@ -64,6 +65,7 @@ model Partie {
   scenarios         Scenario[]
   scenarioDocuments ScenarioDocument[]
   announcements     Announcement[]
+  hommeDragons      HommeDragon[]
 }
 
 enum InvitationStatus {
@@ -238,6 +240,7 @@ model GameSystem {
 
   contentTypes ContentType[]
   characters   Character[]
+  hommeDragons HommeDragon[]
 }
 
 /// Type de contenu d'un système de jeu (ex: classe, type, catégorie d'arme).
@@ -287,6 +290,27 @@ model Character {
   xpDistributionEntries XpDistributionEntry[]
   snapshots             CharacterSnapshot[]
   notes                 CharacterNote[]
+
+  @@unique([userId, partieId, gameSystemId])
+  @@index([partieId])
+  @@index([userId])
+}
+
+/// Personnage du MJ pour Ryuutama (Story 10.1, Epic 10). Un seul par [userId, partieId,
+/// gameSystemId] — toujours le MJ de la Partie. Pas de verrouillage optimiste (AD-2, MJ seul
+/// écrivain) ; pas de colonne `derived` (AD-3, niveau/PS/historique/voyageurs protégés calculés
+/// à la lecture par HommeDragonService, jamais persistés).
+model HommeDragon {
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partieId     String
+  partie       Partie     @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  gameSystemId String
+  gameSystem   GameSystem @relation(fields: [gameSystemId], references: [id])
+  sheetData    Json
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@unique([userId, partieId, gameSystemId])
   @@index([partieId])

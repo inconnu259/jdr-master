@@ -43,6 +43,11 @@ const CONTENT_TYPES: ContentTypeSeed[] = [
   },
   { key: 'season', label: 'Saison', file: 'seasons.json' },
   { key: 'landscape', label: 'Paysage/climat', file: 'landscapes.json' },
+  {
+    key: 'hommeDragonArtefact',
+    label: 'Artefact (Homme Dragon)',
+    file: 'homme-dragon-artefacts.json',
+  },
 ];
 
 @Injectable()

@@ -2,6 +2,7 @@ export { computeDerived } from './ryuutama/compute-derived.ts';
 export { validate } from './ryuutama/validate.ts';
 export { mapToPdfFields } from './ryuutama/pdf-field-map.ts';
 export { levelForXp, pendingLevels, LEVEL_TABLE } from './ryuutama/leveling.ts';
+export { validateHommeDragon } from './ryuutama/validate-homme-dragon.ts';
 export type {
   RyuutamaSheetData,
   DerivedStats,
@@ -15,3 +16,8 @@ export type {
   PdfFieldValue,
 } from './ryuutama/pdf-field-map.ts';
 export type { CapabilityType } from './ryuutama/leveling.ts';
+export type {
+  HommeDragonRace,
+  HommeDragonSheetData,
+  HommeDragonArtefactCatalogEntry,
+} from './ryuutama/validate-homme-dragon.ts';

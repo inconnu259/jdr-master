@@ -1,0 +1,134 @@
+<div class="homme-dragon-sheet">
+  @if (loadError()) {
+    <p class="error">{{ loadError() }}</p>
+  } @else if (hommeDragon() === undefined) {
+    <p class="muted">Chargement...</p>
+  } @else if (hommeDragon() === null) {
+    <form class="homme-dragon-sheet__create-form">
+      <label>
+        {{ theme.tone()['homme-dragon.race_label'] }}
+        <select
+          [ngModel]="race()"
+          name="race"
+          (ngModelChange)="onRaceChange($event)"
+        >
+          <option [ngValue]="null" disabled>—</option>
+          @for (r of races; track r) {
+            <option [ngValue]="r">{{ raceLabel(r) }}</option>
+          }
+        </select>
+      </label>
+
+      @if (race()) {
+        <label>
+          {{ theme.tone()['homme-dragon.artefact_label'] }}
+          <select [ngModel]="artefactKey()" name="artefact" (ngModelChange)="artefactKey.set($event)">
+            <option [ngValue]="null" disabled>—</option>
+            @for (a of artefactsForRace(); track a.key) {
+              <option [ngValue]="a.key">{{ $any(a.data).label }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <label>
+        Nom
+        <input type="text" [ngModel]="nom()" name="nom" (ngModelChange)="nom.set($event)" />
+      </label>
+      <label>
+        Apparence
+        <input type="text" [ngModel]="apparence()" name="apparence" (ngModelChange)="apparence.set($event)" />
+      </label>
+      <label>
+        Caractère
+        <input type="text" [ngModel]="caractere()" name="caractere" (ngModelChange)="caractere.set($event)" />
+      </label>
+      <label>
+        Vocation
+        <input type="text" [ngModel]="vocation()" name="vocation" (ngModelChange)="vocation.set($event)" />
+      </label>
+      <label>
+        Demeure
+        <input type="text" [ngModel]="demeure()" name="demeure" (ngModelChange)="demeure.set($event)" />
+      </label>
+      <label>
+        Avatar
+        <input type="text" [ngModel]="avatar()" name="avatar" (ngModelChange)="avatar.set($event)" />
+      </label>
+      <label>
+        Mondes protégés
+        <input
+          type="text"
+          [ngModel]="mondesProteges()"
+          name="mondesProteges"
+          (ngModelChange)="mondesProteges.set($event)"
+        />
+      </label>
+
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        [disabled]="!isValid() || creating()"
+        (click)="onSubmit()"
+      >
+        {{ theme.tone()['homme-dragon.create_cta'] }}
+      </button>
+
+      @if (createError()) {
+        <p class="error">{{ createError() }}</p>
+      }
+    </form>
+  } @else {
+    <div class="homme-dragon-sheet__fiche">
+      @if (justCreated()) {
+        <p class="notice">{{ theme.tone()['homme-dragon.created_notice'] }}</p>
+      }
+
+      <h3>{{ hommeDragon()!.sheetData.nom }}</h3>
+      <p>{{ theme.tone()['homme-dragon.race_label'] }} : {{ raceLabel(hommeDragon()!.sheetData.race) }}</p>
+
+      @if (!editingArtefact()) {
+        <p>
+          {{ theme.tone()['homme-dragon.artefact_label'] }} :
+          {{ hommeDragon()!.sheetData.artefact.nom || hommeDragon()!.sheetData.artefact.key }}
+          <button mat-button type="button" (click)="openArtefactEdit()">Modifier</button>
+        </p>
+      } @else {
+        <div class="homme-dragon-sheet__artefact-edit">
+          <select [ngModel]="editArtefactKey()" name="editArtefact" (ngModelChange)="editArtefactKey.set($event)">
+            @for (a of artefactsForExistingRace(); track a.key) {
+              <option [ngValue]="a.key">{{ $any(a.data).label }}</option>
+            }
+          </select>
+          <button mat-flat-button color="primary" type="button" [disabled]="updating()" (click)="onArtefactSubmit()">
+            Confirmer
+          </button>
+          <button mat-button type="button" (click)="editingArtefact.set(false)">Annuler</button>
+          @if (updateError()) {
+            <p class="error">{{ updateError() }}</p>
+          }
+        </div>
+      }
+
+      @if (hommeDragon()!.sheetData.apparence) {
+        <p>Apparence : {{ hommeDragon()!.sheetData.apparence }}</p>
+      }
+      @if (hommeDragon()!.sheetData.caractere) {
+        <p>Caractère : {{ hommeDragon()!.sheetData.caractere }}</p>
+      }
+      @if (hommeDragon()!.sheetData.vocation) {
+        <p>Vocation : {{ hommeDragon()!.sheetData.vocation }}</p>
+      }
+      @if (hommeDragon()!.sheetData.demeure) {
+        <p>Demeure : {{ hommeDragon()!.sheetData.demeure }}</p>
+      }
+      @if (hommeDragon()!.sheetData.avatar) {
+        <p>Avatar : {{ hommeDragon()!.sheetData.avatar }}</p>
+      }
+      @if (hommeDragon()!.sheetData.mondesProteges) {
+        <p>Mondes protégés : {{ hommeDragon()!.sheetData.mondesProteges }}</p>
+      }
+    </div>
+  }
+</div>

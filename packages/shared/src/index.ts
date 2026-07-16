@@ -575,3 +575,38 @@ export interface ResetPasswordDto {
   token: string;
   newPassword: string;
 }
+
+// ─── Epic 10 : Homme Dragon (MJ) ───────────────────────────────────────────
+
+/** Race de l'Homme Dragon (Story 10.1) — fixée à la création, détermine les artefacts proposés. */
+export type HommeDragonRace = 'DRAGON_VERT' | 'DRAGON_BLEU' | 'DRAGON_ROUGE' | 'DRAGON_NOIR';
+
+/** Fiche du personnage du MJ pour Ryuutama (Story 10.1). Forme minimale — `derived`/
+ * `voyageursProteges`/`historique` seront ajoutés par les Stories 10.2/10.3, pas encore calculés. */
+export interface HommeDragonSheetData {
+  race: HommeDragonRace;
+  artefact: { key: string; nom?: string; inscription?: string };
+  nom: string;
+  apparence?: string;
+  caractere?: string;
+  vocation?: string;
+  demeure?: string;
+  avatar?: string;
+  mondesProteges?: string;
+}
+
+export interface HommeDragonDto {
+  id: string;
+  userId: string;
+  partieId: string;
+  gameSystemId: string;
+  sheetData: HommeDragonSheetData;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Payload de création (POST /parties/:id/homme-dragon) — mêmes champs que la fiche, à plat. */
+export type CreateHommeDragonDto = HommeDragonSheetData;
+
+/** Payload de mise à jour (PATCH /parties/:id/homme-dragon) — race jamais éditable après création. */
+export type UpdateHommeDragonDto = Partial<Omit<HommeDragonSheetData, 'race'>>;

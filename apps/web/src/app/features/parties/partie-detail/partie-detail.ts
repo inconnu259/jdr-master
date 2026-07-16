@@ -1,4 +1,13 @@
-import { Component, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -54,6 +63,7 @@ import { ScenarioTimeline } from '../../scenarios/scenario-timeline/scenario-tim
 import { AnnouncementFormComponent } from '../../announcements/announcement-form/announcement-form';
 import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { HommeDragonSheet } from '../../homme-dragon/homme-dragon-sheet/homme-dragon-sheet';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
 const MJ_INVITATIONS_TAB_INDEX = 1;
@@ -81,6 +91,7 @@ const MJ_INVITATIONS_TAB_INDEX = 1;
     ScenarioTimeline,
     AnnouncementFormComponent,
     AnnonceCard,
+    HommeDragonSheet,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -97,6 +108,7 @@ export class PartieDetail implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly breakpointObserver = inject(BreakpointObserver);
   protected readonly theme = inject(ThemeToneService);
+  private readonly destroyRef = inject(DestroyRef);
 
   private static readonly DESKTOP_QUERY = '(min-width: 1024px)';
 
@@ -222,6 +234,28 @@ export class PartieDetail implements OnInit {
       this.tabSetKey();
       untracked(() => this.manualTabIndex.set(null));
     });
+
+    // Bug-fix hors story (retour utilisateur, 2026-07-17) : `partie` n'était chargée qu'une fois
+    // au montage (ngOnInit) — un changement fait ailleurs (autre onglet, PartieForm en édition)
+    // restait invisible sans F5, y compris l'apparition/disparition d'onglets pilotés par
+    // `p.gameSystemId`/`p.kind` (ex. l'onglet Homme Dragon). Recharge au retour de focus de
+    // l'onglet navigateur — patch ciblé, pas la solution systémique (cf. deferred-work.md).
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void this.refreshPartie();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    this.destroyRef.onDestroy(() =>
+      document.removeEventListener('visibilitychange', onVisibilityChange),
+    );
+  }
+
+  /** Recharge `partie` sans re-déclencher tout `ngOnInit` (membres/scénarios/annonces restent
+   *  inchangés) — évite un aller-retour réseau superflu pour des données qui ont leurs propres
+   *  chemins de rafraîchissement déjà établis (`loadMembers`, `onAnnouncementPublished`, etc.). */
+  private async refreshPartie(): Promise<void> {
+    const id = this.partie()?.id;
+    if (!id) return;
+    this.partie.set(await this.parties.get(id));
   }
 
   /** Libellé formaté de la prochaine séance, ou null si aucune date confirmée. */

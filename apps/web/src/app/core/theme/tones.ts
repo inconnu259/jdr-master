@@ -102,6 +102,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_error': "Le parchemin n'a pas pu être copié. Réessayez.",
     'character.owner_badge_mj': 'Maître',
     'character.my_sheet_tab_label': 'Ma fiche',
+    /* — Homme Dragon (Epic 10, Story 10.1) — */
+    'homme-dragon.create_cta': 'Créer mon Homme Dragon',
+    'homme-dragon.race_label': 'Race',
+    'homme-dragon.artefact_label': 'Artefact',
+    'homme-dragon.created_notice': 'Votre Homme Dragon a pris vie.',
     /* — roster (Story 6.1) — */
     'roster.mj_badge': 'MJ',
     'roster.invite_slot': 'Convier un compagnon',
@@ -246,6 +251,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_error': "L'écureuil s'est perdu en chemin. Réessayez.",
     'character.owner_badge_mj': 'Guide',
     'character.my_sheet_tab_label': 'Ma fiche',
+    /* — Homme Dragon (Epic 10, Story 10.1) — */
+    'homme-dragon.create_cta': 'Éveiller mon Homme Dragon',
+    'homme-dragon.race_label': 'Lignée',
+    'homme-dragon.artefact_label': 'Talisman',
+    'homme-dragon.created_notice': "Votre Homme Dragon veille sur la forêt.",
     /* — roster (Story 6.1) — */
     'roster.mj_badge': 'MJ',
     'roster.invite_slot': 'Accueillir un compagnon de route',
@@ -387,6 +397,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_error': "Échec de l'impression pneumatique. Réessayez.",
     'character.owner_badge_mj': 'Ingénieur',
     'character.my_sheet_tab_label': 'Ma fiche',
+    /* — Homme Dragon (Epic 10, Story 10.1) — */
+    'homme-dragon.create_cta': 'Assembler mon Homme Dragon',
+    'homme-dragon.race_label': 'Modèle',
+    'homme-dragon.artefact_label': 'Composant emblématique',
+    'homme-dragon.created_notice': 'Votre Homme Dragon est opérationnel.',
     /* — roster (Story 6.1) — */
     'roster.mj_badge': 'MJ',
     'roster.invite_slot': 'Recruter un mécanicien',
