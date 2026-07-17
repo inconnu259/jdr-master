@@ -30,6 +30,8 @@ import { MulterExceptionFilter } from '../common/filters/multer-exception.filter
 import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
 import { CharacterService } from './character.service';
 import { RyuutamaPdfService } from './ryuutama-pdf.service';
+import { EquipmentPdfService } from './equipment-pdf.service';
+import { NotesPdfService } from './notes-pdf.service';
 import { CreateLevelUpDto } from './dto/create-level-up.dto';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
@@ -51,6 +53,8 @@ export class CharactersController {
   constructor(
     private readonly characters: CharacterService,
     private readonly ryuutamaPdf: RyuutamaPdfService,
+    private readonly equipmentPdf: EquipmentPdfService,
+    private readonly notesPdf: NotesPdfService,
   ) {}
 
   @Get(':id')
@@ -80,6 +84,43 @@ export class CharactersController {
     return new StreamableFile(pdfBytes, {
       type: 'application/pdf',
       disposition: `attachment; filename="fiche-${id}-${query.format}.pdf"`,
+    });
+  }
+
+  @Get(':id/export-equipment.pdf')
+  async exportEquipmentPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<StreamableFile> {
+    const character = await this.characters.findOne(id, user.id);
+    if (character.gameSystemId !== RYUUTAMA_ID) {
+      throw new BadRequestException(
+        `Export PDF non supporté pour le système de jeu "${character.gameSystemId}"`,
+      );
+    }
+    const pdfBytes = await this.equipmentPdf.fillEquipmentPdf(character);
+    return new StreamableFile(pdfBytes, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="equipement-${id}.pdf"`,
+    });
+  }
+
+  @Get(':id/export-notes.pdf')
+  async exportNotesPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthUser,
+  ): Promise<StreamableFile> {
+    const character = await this.characters.findOne(id, user.id);
+    if (character.gameSystemId !== RYUUTAMA_ID) {
+      throw new BadRequestException(
+        `Export PDF non supporté pour le système de jeu "${character.gameSystemId}"`,
+      );
+    }
+    const notes = await this.characters.getNotes(id, user.id);
+    const pdfBytes = await this.notesPdf.fillNotesPdf(notes);
+    return new StreamableFile(pdfBytes, {
+      type: 'application/pdf',
+      disposition: `attachment; filename="notes-${id}.pdf"`,
     });
   }
 

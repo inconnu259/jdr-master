@@ -161,6 +161,9 @@ async function createFixture(
           getGameSystemContent: vi.fn().mockResolvedValue({
             class: [{ key: 'menestrel', data: { label: 'Ménestrel' } }],
           }),
+          getGameSystemAsset: vi
+            .fn()
+            .mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
         },
       },
       { provide: ThemeToneService, useValue: makeToneService() },
@@ -942,6 +945,146 @@ describe('PartieDetail — onglet Homme Dragon (Story 10.1)', () => {
       t.textContent?.trim(),
     );
     expect(tabLabels).not.toContain('Homme Dragon');
+  });
+});
+
+describe('PartieDetail — fiches de référence (Story 12.1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('Partie Ryuutama → section "Fiches de référence" présente, visible à tout membre (pas seulement au MJ)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+    expect(el.querySelector('.reference-sheets')).toBeTruthy();
+  });
+
+  it('Partie non-Ryuutama → section "Fiches de référence" absente', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+    expect(el.querySelector('.reference-sheets')).toBeNull();
+  });
+
+  it('clic sur "Journal" → appelle getGameSystemAsset(partieId, gameSystemId, "journal") et déclenche un téléchargement', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { fixture, el } = await createFixture(partie, PLAYER_ID);
+    const characterSvc = TestBed.inject(CharacterService) as any;
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
+
+    const buttons = el.querySelectorAll<HTMLButtonElement>('.reference-sheets__links button');
+    buttons[0].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(characterSvc.getGameSystemAsset).toHaveBeenCalledWith(partie.id, 'ryuutama', 'journal');
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it('clic sur "Carte" → appelle getGameSystemAsset(partieId, gameSystemId, "carte")', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { fixture, el } = await createFixture(partie, PLAYER_ID);
+    const characterSvc = TestBed.inject(CharacterService) as any;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
+
+    const buttons = el.querySelectorAll<HTMLButtonElement>('.reference-sheets__links button');
+    buttons[1].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(characterSvc.getGameSystemAsset).toHaveBeenCalledWith(partie.id, 'ryuutama', 'carte');
+  });
+
+  it('échec du téléchargement → message d\'erreur affiché, pas de plantage', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { fixture, el } = await createFixture(partie, PLAYER_ID);
+    const characterSvc = TestBed.inject(CharacterService) as any;
+    characterSvc.getGameSystemAsset.mockRejectedValueOnce(new Error('network down'));
+
+    const buttons = el.querySelectorAll<HTMLButtonElement>('.reference-sheets__links button');
+    buttons[0].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(el.querySelector('.reference-sheets__error')).toBeTruthy();
+  });
+
+  it('les 2 boutons sont désactivés pendant un téléchargement en cours (revue de code : garde anti-double-clic)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { fixture, el } = await createFixture(partie, PLAYER_ID);
+    const characterSvc = TestBed.inject(CharacterService) as any;
+    let resolveDownload: (blob: Blob) => void;
+    characterSvc.getGameSystemAsset.mockReturnValueOnce(
+      new Promise<Blob>((resolve) => {
+        resolveDownload = resolve;
+      }),
+    );
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
+
+    const buttons = el.querySelectorAll<HTMLButtonElement>('.reference-sheets__links button');
+    buttons[0].click();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const refreshedButtons = el.querySelectorAll<HTMLButtonElement>(
+      '.reference-sheets__links button',
+    );
+    expect(refreshedButtons[0].disabled).toBe(true);
+    expect(refreshedButtons[1].disabled).toBe(true);
+
+    resolveDownload!(new Blob(['%PDF-1.6'], { type: 'application/pdf' }));
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+  });
+});
+
+describe('PartieDetail — fiches de préparation MJ-only (Story 12.2)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('MJ + Partie Ryuutama → section "Fiches de préparation" présente avec les 8 liens', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { el } = await createFixture(partie, MJ_ID);
+    const section = el.querySelector('.prep-sheets');
+    expect(section).toBeTruthy();
+    expect(section?.querySelectorAll('.prep-sheets__links button').length).toBe(8);
+  });
+
+  it('joueur (non-MJ) → section "Fiches de préparation" absente, même sur une Partie Ryuutama (AC2)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+    expect(el.querySelector('.prep-sheets')).toBeNull();
+  });
+
+  it('MJ + Partie non-Ryuutama → section "Fiches de préparation" absente', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const { el } = await createFixture(partie, MJ_ID);
+    expect(el.querySelector('.prep-sheets')).toBeNull();
+  });
+
+  it.each([
+    ['monde', 0],
+    ['monstre', 1],
+    ['ville', 2],
+    ['objectif-chasse', 3],
+    ['objectif-quete', 4],
+    ['objectif-voyage', 5],
+    ['oeuf-de-bataille', 6],
+    ['structure', 7],
+  ])('clic sur le lien #%s (index %i) → appelle getGameSystemAsset(partieId, "ryuutama", "%s")', async (key, index) => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { fixture, el } = await createFixture(partie, MJ_ID);
+    const characterSvc = TestBed.inject(CharacterService) as any;
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
+
+    const buttons = el.querySelectorAll<HTMLButtonElement>('.prep-sheets__links button');
+    buttons[index as number].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(characterSvc.getGameSystemAsset).toHaveBeenCalledWith(partie.id, 'ryuutama', key);
   });
 });
 

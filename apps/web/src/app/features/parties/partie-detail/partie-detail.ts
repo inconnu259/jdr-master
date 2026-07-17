@@ -148,6 +148,10 @@ export class PartieDetail implements OnInit {
   protected readonly invitingByEmail = signal(false);
   protected readonly inviteEmailError = signal<string | null>(null);
   protected readonly showTroupe = signal(false);
+  protected readonly referenceAssetError = signal<string | null>(null);
+  protected readonly downloadingReferenceAsset = signal(false);
+  protected readonly prepAssetError = signal<string | null>(null);
+  protected readonly downloadingPrepAsset = signal(false);
 
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
   protected readonly isMj = computed(() => this.partie()?.mjId === this.auth.currentUser()?.id);
@@ -453,5 +457,35 @@ export class PartieDetail implements OnInit {
     const reqId = ++this.announcementsReqId;
     const list = await this.announcementsSvc.listAll(p.id).catch(() => this.announcements());
     if (reqId === this.announcementsReqId) this.announcements.set(list);
+  }
+
+  /**
+   * Story 12.1/12.2 : téléchargement d'une fiche de référence Ryuutama servie telle quelle.
+   * `section` scope l'état de chargement/erreur à la section appelante (`.reference-sheets` vs
+   * `.prep-sheets`) — deux sections distinctes peuvent coexister sur le même écran (MJ sur une
+   * Partie Ryuutama), un état partagé ferait fuiter l'erreur/le disabled de l'une vers l'autre.
+   */
+  protected async downloadAsset(key: string, section: 'reference' | 'prep'): Promise<void> {
+    const p = this.partie();
+    const downloading = section === 'reference' ? this.downloadingReferenceAsset : this.downloadingPrepAsset;
+    const error = section === 'reference' ? this.referenceAssetError : this.prepAssetError;
+    if (!p || downloading()) return;
+    error.set(null);
+    downloading.set(true);
+    try {
+      const blob = await this.characterSvc.getGameSystemAsset(p.id, p.gameSystemId, key);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${key}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      error.set(this.theme.tone()['partie.asset_download_error']);
+    } finally {
+      downloading.set(false);
+    }
   }
 }

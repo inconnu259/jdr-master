@@ -119,6 +119,108 @@
                 }
               </section>
             }
+
+            @if (p.gameSystemId === 'ryuutama') {
+              <section class="reference-sheets">
+                <h3>{{ theme.tone()['partie.reference_sheets_title'] }}</h3>
+                <div class="reference-sheets__links">
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="downloadingReferenceAsset()"
+                    (click)="downloadAsset('journal', 'reference')"
+                  >
+                    {{ theme.tone()['partie.asset_journal_cta'] }}
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="downloadingReferenceAsset()"
+                    (click)="downloadAsset('carte', 'reference')"
+                  >
+                    {{ theme.tone()['partie.asset_carte_cta'] }}
+                  </button>
+                </div>
+                @if (referenceAssetError(); as error) {
+                  <p class="reference-sheets__error">{{ error }}</p>
+                }
+              </section>
+            }
+
+            @if (isMj() && p.gameSystemId === 'ryuutama') {
+              <section class="prep-sheets">
+                <h3>{{ theme.tone()['partie.prep_sheets_title'] }}</h3>
+                <div class="prep-sheets__links">
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="downloadingPrepAsset()"
+                    (click)="downloadAsset('monde', 'prep')"
+                  >
+                    {{ theme.tone()['partie.asset_monde_cta'] }}
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="downloadingPrepAsset()"
+                    (click)="downloadAsset('monstre', 'prep')"
+                  >
+                    {{ theme.tone()['partie.asset_monstre_cta'] }}
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="downloadingPrepAsset()"
+                    (click)="downloadAsset('ville', 'prep')"
+                  >
+                    {{ theme.tone()['partie.asset_ville_cta'] }}
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="downloadingPrepAsset()"
+                    (click)="downloadAsset('objectif-chasse', 'prep')"
+                  >
+                    {{ theme.tone()['partie.asset_objectif_chasse_cta'] }}
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="downloadingPrepAsset()"
+                    (click)="downloadAsset('objectif-quete', 'prep')"
+                  >
+                    {{ theme.tone()['partie.asset_objectif_quete_cta'] }}
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="downloadingPrepAsset()"
+                    (click)="downloadAsset('objectif-voyage', 'prep')"
+                  >
+                    {{ theme.tone()['partie.asset_objectif_voyage_cta'] }}
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="downloadingPrepAsset()"
+                    (click)="downloadAsset('oeuf-de-bataille', 'prep')"
+                  >
+                    {{ theme.tone()['partie.asset_oeuf_de_bataille_cta'] }}
+                  </button>
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="downloadingPrepAsset()"
+                    (click)="downloadAsset('structure', 'prep')"
+                  >
+                    {{ theme.tone()['partie.asset_structure_cta'] }}
+                  </button>
+                </div>
+                @if (prepAssetError(); as error) {
+                  <p class="prep-sheets__error">{{ error }}</p>
+                }
+              </section>
+            }
         </mat-tab>
 
         @if (!isMj() && !isDesktop()) {

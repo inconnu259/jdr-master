@@ -10,6 +10,8 @@ export {
   HOMME_DRAGON_LEVEL_THRESHOLDS,
 } from './ryuutama/homme-dragon-derived.ts';
 export { mapHommeDragonToPdfFields } from './ryuutama/homme-dragon-pdf-field-map.ts';
+export { mapEquipmentToPdfFields } from './ryuutama/equipment-pdf-field-map.ts';
+export { mapNotesToPdfFields } from './ryuutama/notes-pdf-field-map.ts';
 export type {
   RyuutamaSheetData,
   DerivedStats,
@@ -33,3 +35,4 @@ export type {
   HommeDragonPdfContent,
   HommeDragonPdfInput,
 } from './ryuutama/homme-dragon-pdf-field-map.ts';
+export type { EquipmentPdfInput } from './ryuutama/equipment-pdf-field-map.ts';

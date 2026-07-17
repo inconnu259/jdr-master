@@ -70,3 +70,48 @@
 .troupe-toggle {
   margin-top: 1rem;
 }
+
+.reference-sheets {
+  margin-top: 1rem;
+
+  h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--mat-sys-on-surface-variant, #666);
+  }
+
+  &__links {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  &__error {
+    color: var(--mat-sys-error, #b3261e);
+    margin: 0.5rem 0 0;
+  }
+}
+
+.prep-sheets {
+  margin-top: 1rem;
+
+  h3 {
+    margin: 0 0 0.5rem;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--mat-sys-on-surface-variant, #666);
+  }
+
+  &__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  &__error {
+    color: var(--mat-sys-error, #b3261e);
+    margin: 0.5rem 0 0;
+  }
+}

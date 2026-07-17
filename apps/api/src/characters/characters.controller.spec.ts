@@ -18,6 +18,8 @@ jest.mock('@master-jdr/game-rules', () => ({
 import { CharactersController } from './characters.controller';
 import { CharacterService } from './character.service';
 import { RyuutamaPdfService } from './ryuutama-pdf.service';
+import { EquipmentPdfService } from './equipment-pdf.service';
+import { NotesPdfService } from './notes-pdf.service';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 
 function makeCharacterService() {
@@ -47,19 +49,37 @@ function makePdfService() {
   };
 }
 
+function makeEquipmentPdfService() {
+  return {
+    fillEquipmentPdf: jest.fn(),
+  };
+}
+
+function makeNotesPdfService() {
+  return {
+    fillNotesPdf: jest.fn(),
+  };
+}
+
 describe('CharactersController', () => {
   let controller: CharactersController;
   let characters: ReturnType<typeof makeCharacterService>;
   let ryuutamaPdf: ReturnType<typeof makePdfService>;
+  let equipmentPdf: ReturnType<typeof makeEquipmentPdfService>;
+  let notesPdf: ReturnType<typeof makeNotesPdfService>;
 
   beforeEach(async () => {
     characters = makeCharacterService();
     ryuutamaPdf = makePdfService();
+    equipmentPdf = makeEquipmentPdfService();
+    notesPdf = makeNotesPdfService();
     const module = await Test.createTestingModule({
       controllers: [CharactersController],
       providers: [
         { provide: CharacterService, useValue: characters },
         { provide: RyuutamaPdfService, useValue: ryuutamaPdf },
+        { provide: EquipmentPdfService, useValue: equipmentPdf },
+        { provide: NotesPdfService, useValue: notesPdf },
       ],
     }).compile();
     controller = module.get(CharactersController);
@@ -133,6 +153,142 @@ describe('CharactersController', () => {
       } as any),
     ).rejects.toThrow(BadRequestException);
     expect(ryuutamaPdf.fillCharacterPdf).not.toHaveBeenCalled();
+  });
+
+  it('exportEquipmentPdf() charge le personnage via findOne puis retourne un StreamableFile', async () => {
+    const character = {
+      id: 'char1',
+      gameSystemId: 'ryuutama',
+      sheetData: {},
+      derived: { Encombrement: 11 },
+      ownerPseudo: 'Alice',
+    };
+    characters.findOne.mockResolvedValue(character);
+    equipmentPdf.fillEquipmentPdf.mockResolvedValue(Buffer.from('pdf-bytes'));
+
+    const result = await controller.exportEquipmentPdf('char1', { id: 'u1' } as any);
+
+    expect(characters.findOne).toHaveBeenCalledWith('char1', 'u1');
+    expect(equipmentPdf.fillEquipmentPdf).toHaveBeenCalledWith(character);
+    expect(result).toBeInstanceOf(StreamableFile);
+  });
+
+  it("exportEquipmentPdf() rejette un personnage d'un autre système de jeu que Ryuutama (BadRequestException)", async () => {
+    const character = {
+      id: 'char1',
+      gameSystemId: 'conte-de-minuit',
+      sheetData: {},
+      derived: { Encombrement: 11 },
+      ownerPseudo: 'Alice',
+    };
+    characters.findOne.mockResolvedValue(character);
+
+    await expect(
+      controller.exportEquipmentPdf('char1', { id: 'u1' } as any),
+    ).rejects.toThrow(BadRequestException);
+    expect(equipmentPdf.fillEquipmentPdf).not.toHaveBeenCalled();
+  });
+
+  it('exportEquipmentPdf() propage le 403 de findOne (accès refusé)', async () => {
+    characters.findOne.mockRejectedValue(new ForbiddenException());
+
+    await expect(
+      controller.exportEquipmentPdf('char1', { id: 'stranger' } as any),
+    ).rejects.toThrow(ForbiddenException);
+    expect(equipmentPdf.fillEquipmentPdf).not.toHaveBeenCalled();
+  });
+
+  it('exportEquipmentPdf() fonctionne pour le MJ exportant un personnage joueur (AC3)', async () => {
+    const character = {
+      id: 'char1',
+      userId: 'player1',
+      gameSystemId: 'ryuutama',
+      sheetData: {},
+      derived: { Encombrement: 11 },
+      ownerPseudo: 'Bob',
+      ownerIsMj: false,
+      viewerIsMj: true,
+    };
+    characters.findOne.mockResolvedValue(character);
+    equipmentPdf.fillEquipmentPdf.mockResolvedValue(Buffer.from('pdf-bytes'));
+
+    const result = await controller.exportEquipmentPdf('char1', { id: 'mj1' } as any);
+
+    expect(characters.findOne).toHaveBeenCalledWith('char1', 'mj1');
+    expect(equipmentPdf.fillEquipmentPdf).toHaveBeenCalledWith(character);
+    expect(result).toBeInstanceOf(StreamableFile);
+  });
+
+  it('exportNotesPdf() charge le personnage, récupère les notes via getNotes() puis retourne un StreamableFile', async () => {
+    const character = {
+      id: 'char1',
+      gameSystemId: 'ryuutama',
+      sheetData: {},
+      derived: {},
+    };
+    const notes = [{ id: 'n1', characterId: 'char1', text: 'Une note', shared: true, scenarioId: null, createdAt: '2026-07-01T00:00:00.000Z' }];
+    characters.findOne.mockResolvedValue(character);
+    characters.getNotes.mockResolvedValue(notes);
+    notesPdf.fillNotesPdf.mockResolvedValue(Buffer.from('pdf-bytes'));
+
+    const result = await controller.exportNotesPdf('char1', { id: 'u1' } as any);
+
+    expect(characters.findOne).toHaveBeenCalledWith('char1', 'u1');
+    expect(characters.getNotes).toHaveBeenCalledWith('char1', 'u1');
+    expect(notesPdf.fillNotesPdf).toHaveBeenCalledWith(notes);
+    expect(result).toBeInstanceOf(StreamableFile);
+  });
+
+  it("exportNotesPdf() rejette un personnage d'un autre système de jeu que Ryuutama (BadRequestException)", async () => {
+    const character = {
+      id: 'char1',
+      gameSystemId: 'conte-de-minuit',
+      sheetData: {},
+      derived: {},
+    };
+    characters.findOne.mockResolvedValue(character);
+
+    await expect(
+      controller.exportNotesPdf('char1', { id: 'u1' } as any),
+    ).rejects.toThrow(BadRequestException);
+    expect(characters.getNotes).not.toHaveBeenCalled();
+    expect(notesPdf.fillNotesPdf).not.toHaveBeenCalled();
+  });
+
+  it('exportNotesPdf() propage le 403 de findOne (accès refusé)', async () => {
+    characters.findOne.mockRejectedValue(new ForbiddenException());
+
+    await expect(
+      controller.exportNotesPdf('char1', { id: 'stranger' } as any),
+    ).rejects.toThrow(ForbiddenException);
+    expect(notesPdf.fillNotesPdf).not.toHaveBeenCalled();
+  });
+
+  it('exportNotesPdf() — AC3 : le MJ exportant les notes d\'un joueur reçoit la liste complète telle que retournée par getNotes() (privées incluses, décision utilisateur : rien n\'est privé pour le MJ)', async () => {
+    const character = {
+      id: 'char1',
+      userId: 'player1',
+      gameSystemId: 'ryuutama',
+      sheetData: {},
+      derived: {},
+      ownerIsMj: false,
+      viewerIsMj: true,
+    };
+    const notesIncludingPrivate = [
+      { id: 'n1', characterId: 'char1', text: 'Note privée', shared: false, scenarioId: null, createdAt: '2026-07-01T00:00:00.000Z' },
+      { id: 'n2', characterId: 'char1', text: 'Note partagée', shared: true, scenarioId: null, createdAt: '2026-07-02T00:00:00.000Z' },
+    ];
+    characters.findOne.mockResolvedValue(character);
+    characters.getNotes.mockResolvedValue(notesIncludingPrivate);
+    notesPdf.fillNotesPdf.mockResolvedValue(Buffer.from('pdf-bytes'));
+
+    await controller.exportNotesPdf('char1', { id: 'mj1' } as any);
+
+    expect(characters.getNotes).toHaveBeenCalledWith('char1', 'mj1');
+    // Aucun filtrage côté controller : la liste passée à fillNotesPdf() est EXACTEMENT celle
+    // renvoyée par getNotes() (référence égale), y compris la note privée — le controller ne doit
+    // jamais reconstruire un sous-ensemble.
+    expect(notesPdf.fillNotesPdf).toHaveBeenCalledWith(notesIncludingPrivate);
   });
 
   it('updatePortrait() parse cropData JSON et délègue à CharacterService', async () => {
@@ -439,6 +595,8 @@ describe('CharactersController', () => {
         providers: [
           { provide: CharacterService, useValue: characters },
           { provide: RyuutamaPdfService, useValue: ryuutamaPdf },
+          { provide: EquipmentPdfService, useValue: equipmentPdf },
+          { provide: NotesPdfService, useValue: notesPdf },
         ],
       })
         .overrideGuard(AuthenticatedGuard)

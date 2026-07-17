@@ -7,11 +7,13 @@ import { CharactersController } from './characters.controller';
 import { PartieCharactersController } from './partie-characters.controller';
 import { CharacterService } from './character.service';
 import { RyuutamaPdfService } from './ryuutama-pdf.service';
+import { EquipmentPdfService } from './equipment-pdf.service';
+import { NotesPdfService } from './notes-pdf.service';
 
 @Module({
   imports: [PartiesModule, GameSystemModule, UsersModule, EmailModule],
   controllers: [CharactersController, PartieCharactersController],
-  providers: [CharacterService, RyuutamaPdfService],
+  providers: [CharacterService, RyuutamaPdfService, EquipmentPdfService, NotesPdfService],
   exports: [CharacterService],
 })
 export class CharacterModule {}

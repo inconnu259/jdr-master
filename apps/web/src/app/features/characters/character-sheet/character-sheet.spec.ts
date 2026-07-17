@@ -55,6 +55,12 @@ function defaultSvc() {
     get: vi.fn().mockResolvedValue(CHARACTER),
     getGameSystemContent: vi.fn().mockResolvedValue(CONTENT),
     exportPdf: vi.fn().mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
+    exportEquipmentPdf: vi
+      .fn()
+      .mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
+    exportNotesPdf: vi
+      .fn()
+      .mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
     updatePortrait: vi.fn(),
     patchPdfPortraitCrop: vi.fn(),
     getHistory: vi.fn().mockResolvedValue([]),
@@ -267,6 +273,109 @@ describe('CharacterSheet', () => {
     fixture.detectChanges();
 
     expect(characterSvc.exportPdf).toHaveBeenCalledWith('char1', '2pages');
+  });
+
+  it('clic sur "Exporter l\'équipement en PDF" → appelle exportEquipmentPdf(id) et déclenche un téléchargement', async () => {
+    const { fixture, characterSvc } = await createComponent();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
+
+    const buttons = fixture.nativeElement.querySelectorAll(
+      '.sheet__export-actions button',
+    ) as NodeListOf<HTMLButtonElement>;
+    buttons[2].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(characterSvc.exportEquipmentPdf).toHaveBeenCalledWith('char1');
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it("échec de l'export équipement → message d'erreur affiché, pas de plantage", async () => {
+    const characterSvc = makeCharacterService({
+      exportEquipmentPdf: vi.fn().mockRejectedValue(new Error('network down')),
+    });
+    const { fixture } = await createComponent(characterSvc);
+
+    const buttons = fixture.nativeElement.querySelectorAll(
+      '.sheet__export-actions button',
+    ) as NodeListOf<HTMLButtonElement>;
+    buttons[2].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.exportEquipmentError()).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain(comp.exportEquipmentError());
+  });
+
+  it('clic sur "Exporter les notes en PDF" → appelle exportNotesPdf(id) et déclenche un téléchargement', async () => {
+    const { fixture, characterSvc } = await createComponent();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
+
+    const buttons = fixture.nativeElement.querySelectorAll(
+      '.sheet__export-actions button',
+    ) as NodeListOf<HTMLButtonElement>;
+    buttons[3].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(characterSvc.exportNotesPdf).toHaveBeenCalledWith('char1');
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it("échec de l'export notes → message d'erreur affiché, pas de plantage", async () => {
+    const characterSvc = makeCharacterService({
+      exportNotesPdf: vi.fn().mockRejectedValue(new Error('network down')),
+    });
+    const { fixture } = await createComponent(characterSvc);
+
+    const buttons = fixture.nativeElement.querySelectorAll(
+      '.sheet__export-actions button',
+    ) as NodeListOf<HTMLButtonElement>;
+    buttons[3].click();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.exportNotesError()).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain(comp.exportNotesError());
+  });
+
+  it('les 4 boutons d\'export sont tous désactivés pendant un export notes en cours (garde étendue)', async () => {
+    let resolveExport: (blob: Blob) => void;
+    const pending = new Promise<Blob>((resolve) => {
+      resolveExport = resolve;
+    });
+    const characterSvc = makeCharacterService({
+      exportNotesPdf: vi.fn().mockReturnValue(pending),
+    });
+    const { fixture } = await createComponent(characterSvc);
+
+    const buttons = fixture.nativeElement.querySelectorAll(
+      '.sheet__export-actions button',
+    ) as NodeListOf<HTMLButtonElement>;
+    buttons[3].click();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const refreshedButtons = fixture.nativeElement.querySelectorAll(
+      '.sheet__export-actions button',
+    ) as NodeListOf<HTMLButtonElement>;
+    expect(refreshedButtons[0].disabled).toBe(true);
+    expect(refreshedButtons[1].disabled).toBe(true);
+    expect(refreshedButtons[2].disabled).toBe(true);
+    expect(refreshedButtons[3].disabled).toBe(true);
+
+    resolveExport!(new Blob(['%PDF-1.6'], { type: 'application/pdf' }));
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
   });
 
   it("échec de l'export → message d'erreur affiché, pas de plantage", async () => {

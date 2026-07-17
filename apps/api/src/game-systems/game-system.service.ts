@@ -13,9 +13,39 @@ import type {
   GameSystemContentDto,
 } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { PartiesService } from '../parties/parties.service';
 import { RYUUTAMA_ID } from './supported-game-systems';
 
 const RYUUTAMA_DATA_DIR = join(process.cwd(), 'game-systems/ryuutama/data');
+const ASSETS_DIR = join(process.cwd(), 'game-systems/ryuutama/assets');
+
+interface ReferenceAsset {
+  file: string;
+  access: 'member' | 'mj';
+}
+
+/**
+ * Table de correspondance exhaustive clé → fichier/accès pour les fiches de référence Ryuutama
+ * servies telles quelles (AD-5, Story 12.1). Les 4 fichiers de `assets/` hors de cette table
+ * (voyageur, homme-dragon, équipement, notes) sont déjà couverts par d'autres services d'export
+ * (`RyuutamaPdfService`/`HommeDragonPdfService`/`EquipmentPdfService`/`NotesPdfService`) — ne
+ * jamais les dupliquer ici. Toute clé absente de cette table renvoie un 404 explicite
+ * (`getAssetFile`), jamais un fallback silencieux.
+ */
+const REFERENCE_ASSETS: Record<string, ReferenceAsset> = {
+  journal: { file: 'Ryuutama_journal.pdf', access: 'member' },
+  carte: { file: 'Ryuutama_carte.pdf', access: 'member' },
+  evenements: { file: 'Ryuutama_evenements_edit.pdf', access: 'mj' },
+  monde: { file: 'Ryuutama_fiche_de_monde_edit.pdf', access: 'mj' },
+  monstre: { file: 'Ryuutama_fiche_de_monstre_edit.pdf', access: 'mj' },
+  ville: { file: 'Ryuutama_fiche_de_ville_edit.pdf', access: 'mj' },
+  provisions: { file: 'Ryuutama_fiche_de_provisions.pdf', access: 'mj' },
+  'objectif-chasse': { file: 'Ryuutama_objectif_chasse_edit.pdf', access: 'mj' },
+  'objectif-quete': { file: 'Ryuutama_objectif_quête_edit.pdf', access: 'mj' },
+  'objectif-voyage': { file: 'Ryuutama_objectif_voyage_edit.pdf', access: 'mj' },
+  'oeuf-de-bataille': { file: 'Ryuutama_oeuf_de_bataille.pdf', access: 'mj' },
+  structure: { file: 'Ryuutama_structure_edit.pdf', access: 'mj' },
+};
 
 interface ContentTypeSeed {
   key: string;
@@ -68,7 +98,10 @@ export class GameSystemService implements OnApplicationBootstrap {
    */
   private readonly contentCache = new Map<string, GameSystemContentDto>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly parties: PartiesService,
+  ) {}
 
   async onApplicationBootstrap(): Promise<void> {
     await this.seedRyuutama();
@@ -207,5 +240,45 @@ export class GameSystemService implements OnApplicationBootstrap {
         { key: 'portrait', label: 'Portrait' },
       ],
     };
+  }
+
+  /**
+   * Fiche de référence Ryuutama servie telle quelle (AD-5, Story 12.1) — aucune donnée de
+   * campagne injectée, contrairement aux services d'export PDF (`RyuutamaPdfService` et
+   * consorts). Aucun cache : ces fichiers sont volumineux et rarement demandés, contrairement au
+   * contenu structuré de `getContent()` sur le chemin chaud de création de personnage.
+   */
+  async getAssetFile(
+    partieId: string,
+    systemId: string,
+    key: string,
+    userId: string,
+  ): Promise<Buffer> {
+    if (systemId !== RYUUTAMA_ID) {
+      throw new NotFoundException('Système de jeu introuvable');
+    }
+    // `Object.hasOwn` (pas un simple `!REFERENCE_ASSETS[key]`) : une clé comme `__proto__` ou
+    // `constructor` renverrait sinon une valeur héritée truthy (`Object.prototype`), contournant
+    // le 404 et provoquant un crash plus loin (`asset.file` undefined) — cf. revue de code.
+    if (!Object.hasOwn(REFERENCE_ASSETS, key)) {
+      throw new NotFoundException('Fiche introuvable');
+    }
+    const asset = REFERENCE_ASSETS[key];
+
+    if (asset.access === 'member') {
+      await this.parties.getViewable(partieId, userId);
+    } else {
+      await this.parties.getOwned(partieId, userId);
+    }
+
+    return readFile(join(ASSETS_DIR, asset.file)).catch((e) => {
+      this.logger.error(
+        `Échec du chargement de la fiche de référence "${key}" (${asset.file})`,
+        e,
+      );
+      throw new Error(
+        `Fiche de référence Ryuutama "${key}" introuvable sur le disque. Consultez apps/api/game-systems/ryuutama/assets/README.md`,
+      );
+    });
   }
 }

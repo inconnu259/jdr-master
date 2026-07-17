@@ -85,6 +85,10 @@ export class CharacterSheet implements OnInit {
   protected readonly loadError = signal<string | null>(null);
   protected readonly exportError = signal<string | null>(null);
   protected readonly exporting = signal<'editable' | '2pages' | null>(null);
+  protected readonly exportEquipmentError = signal<string | null>(null);
+  protected readonly exportingEquipment = signal(false);
+  protected readonly exportNotesError = signal<string | null>(null);
+  protected readonly exportingNotes = signal(false);
   protected readonly portraitError = signal<string | null>(null);
 
   protected readonly sheetData = computed(
@@ -313,6 +317,52 @@ export class CharacterSheet implements OnInit {
       this.exportError.set(this.theme.tone()['character.export_error']);
     } finally {
       this.exporting.set(null);
+    }
+  }
+
+  protected async exportEquipmentPdf(): Promise<void> {
+    const c = this.character();
+    if (!c) return;
+    this.exportEquipmentError.set(null);
+    this.exportingEquipment.set(true);
+    try {
+      const blob = await this.characterSvc.exportEquipmentPdf(c.id);
+      const url = URL.createObjectURL(blob);
+      const safeName = (this.name() || 'personnage').replace(/[^a-z0-9-_]+/gi, '_');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `equipement-${safeName}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      this.exportEquipmentError.set(this.theme.tone()['character.export_error']);
+    } finally {
+      this.exportingEquipment.set(false);
+    }
+  }
+
+  protected async exportNotesPdf(): Promise<void> {
+    const c = this.character();
+    if (!c) return;
+    this.exportNotesError.set(null);
+    this.exportingNotes.set(true);
+    try {
+      const blob = await this.characterSvc.exportNotesPdf(c.id);
+      const url = URL.createObjectURL(blob);
+      const safeName = (this.name() || 'personnage').replace(/[^a-z0-9-_]+/gi, '_');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `notes-${safeName}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      this.exportNotesError.set(this.theme.tone()['character.export_error']);
+    } finally {
+      this.exportingNotes.set(false);
     }
   }
 

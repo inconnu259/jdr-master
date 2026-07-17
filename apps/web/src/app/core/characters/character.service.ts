@@ -45,6 +45,15 @@ export class CharacterService {
     );
   }
 
+  getGameSystemAsset(partieId: string, systemId: string, key: string): Promise<Blob> {
+    return firstValueFrom(
+      this.http.get(`${API_BASE}/parties/${partieId}/game-systems/${systemId}/assets/${key}`, {
+        responseType: 'blob',
+        withCredentials: true,
+      }),
+    );
+  }
+
   create(partieId: string, dto: CreateCharacterDto): Promise<CharacterDto> {
     return firstValueFrom(
       this.http.post<CharacterDto>(`${API_BASE}/parties/${partieId}/characters`, dto, {
@@ -71,6 +80,24 @@ export class CharacterService {
     return firstValueFrom(
       this.http.get(`${API_BASE}/characters/${id}/export.pdf`, {
         params: { format },
+        responseType: 'blob',
+        withCredentials: true,
+      }),
+    );
+  }
+
+  exportEquipmentPdf(id: string): Promise<Blob> {
+    return firstValueFrom(
+      this.http.get(`${API_BASE}/characters/${id}/export-equipment.pdf`, {
+        responseType: 'blob',
+        withCredentials: true,
+      }),
+    );
+  }
+
+  exportNotesPdf(id: string): Promise<Blob> {
+    return firstValueFrom(
+      this.http.get(`${API_BASE}/characters/${id}/export-notes.pdf`, {
         responseType: 'blob',
         withCredentials: true,
       }),
