@@ -129,6 +129,32 @@
       @if (hommeDragon()!.sheetData.mondesProteges) {
         <p>Mondes protégés : {{ hommeDragon()!.sheetData.mondesProteges }}</p>
       }
+
+      <section class="homme-dragon-sheet__voyageurs">
+        <h4>Voyageurs protégés</h4>
+        @if (hommeDragon()!.voyageursProteges.length === 0) {
+          <p class="muted">Aucun voyageur pour l'instant.</p>
+        } @else {
+          <ul>
+            @for (v of hommeDragon()!.voyageursProteges; track v.userId) {
+              <li>{{ v.pseudo }}</li>
+            }
+          </ul>
+        }
+      </section>
+
+      <section class="homme-dragon-sheet__historique">
+        <h4>Historique</h4>
+        @if (hommeDragon()!.historique.length === 0) {
+          <p class="muted">Aucun scénario joué pour l'instant.</p>
+        } @else {
+          <ul>
+            @for (h of hommeDragon()!.historique; track h.scenarioTitle + h.date) {
+              <li>{{ h.scenarioTitle }} — {{ h.date | date: 'longDate' }} — {{ h.participants.join(', ') }}</li>
+            }
+          </ul>
+        }
+      </section>
     </div>
   }
 </div>

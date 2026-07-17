@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import type { ContentEntryDto, HommeDragonDto, HommeDragonRace } from '@master-jdr/shared';
@@ -23,7 +24,7 @@ const RACE_LABELS: Record<HommeDragonRace, string> = {
  */
 @Component({
   selector: 'app-homme-dragon-sheet',
-  imports: [FormsModule, MatButtonModule],
+  imports: [FormsModule, MatButtonModule, DatePipe],
   templateUrl: './homme-dragon-sheet.html',
 })
 export class HommeDragonSheet implements OnInit {

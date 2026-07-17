@@ -27,6 +27,8 @@ function makeDto(overrides: Partial<HommeDragonDto> = {}): HommeDragonDto {
     sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' },
     createdAt: '2026-07-16T00:00:00.000Z',
     updatedAt: '2026-07-16T00:00:00.000Z',
+    voyageursProteges: [],
+    historique: [],
     ...overrides,
   };
 }
@@ -220,5 +222,41 @@ describe('HommeDragonSheet', () => {
     component['openArtefactEdit']();
 
     expect(component['justCreated']()).toBe(false);
+  });
+
+  it('voyageurs protégés et historique affichés sur la fiche existante (AC1, Story 10.2)', async () => {
+    const dto = makeDto({
+      voyageursProteges: [
+        { userId: 'u1', pseudo: 'alice' },
+        { userId: 'u2', pseudo: 'bob' },
+      ],
+      historique: [
+        {
+          scenarioTitle: 'Le Marché aux Ombres',
+          date: '2026-07-10T00:00:00.000Z',
+          participants: ['alice', 'bob'],
+        },
+      ],
+    });
+    const { fixture } = await createComponent(makeHommeDragonService(dto));
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('alice');
+    expect(text).toContain('bob');
+    expect(text).toContain('Le Marché aux Ombres');
+  });
+
+  it('voyageursProteges vide → état vide, pas de liste', async () => {
+    const { fixture } = await createComponent(makeHommeDragonService(makeDto({ voyageursProteges: [] })));
+
+    expect(fixture.debugElement.query(By.css('.homme-dragon-sheet__voyageurs ul'))).toBeFalsy();
+    expect((fixture.nativeElement.textContent as string)).toContain('Aucun voyageur');
+  });
+
+  it('historique vide → état vide, pas de liste (AC2)', async () => {
+    const { fixture } = await createComponent(makeHommeDragonService(makeDto({ historique: [] })));
+
+    expect(fixture.debugElement.query(By.css('.homme-dragon-sheet__historique ul'))).toBeFalsy();
+    expect((fixture.nativeElement.textContent as string)).toContain('Aucun scénario joué');
   });
 });

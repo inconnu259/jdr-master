@@ -13,6 +13,7 @@ import { HommeDragonService } from './homme-dragon.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { GameSystemService } from '../game-systems/game-system.service';
+import { ScenariosService } from '../scenarios/scenarios.service';
 
 const mockValidate = validateHommeDragon as jest.Mock;
 
@@ -30,12 +31,19 @@ function makePartiesService() {
   return {
     getOwned: jest.fn(),
     getViewable: jest.fn(),
+    listMembers: jest.fn(),
   };
 }
 
 function makeGameSystems() {
   return {
     getContent: jest.fn(),
+  };
+}
+
+function makeScenarios() {
+  return {
+    findAllForPartie: jest.fn(),
   };
 }
 
@@ -68,14 +76,20 @@ describe('HommeDragonService', () => {
   let prisma: ReturnType<typeof makePrisma>;
   let parties: ReturnType<typeof makePartiesService>;
   let gameSystems: ReturnType<typeof makeGameSystems>;
+  let scenarios: ReturnType<typeof makeScenarios>;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     prisma = makePrisma();
     parties = makePartiesService();
     gameSystems = makeGameSystems();
+    scenarios = makeScenarios();
     gameSystems.getContent.mockResolvedValue(CATALOG_CONTENT);
     mockValidate.mockReturnValue({ valid: true, errors: [] });
+    // Valeurs neutres par défaut (Story 10.2) — ne doivent PAS casser les tests Story 10.1
+    // existants qui n'assertent pas sur voyageursProteges/historique.
+    parties.listMembers.mockResolvedValue([]);
+    scenarios.findAllForPartie.mockResolvedValue([]);
 
     const module = await Test.createTestingModule({
       providers: [
@@ -83,6 +97,7 @@ describe('HommeDragonService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: PartiesService, useValue: parties },
         { provide: GameSystemService, useValue: gameSystems },
+        { provide: ScenariosService, useValue: scenarios },
       ],
     }).compile();
     service = module.get(HommeDragonService);
@@ -328,6 +343,140 @@ describe('HommeDragonService', () => {
 
       await expect(service.findOne('p1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.hommeDragon.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('voyageursProteges / historique (Story 10.2)', () => {
+    function makeMembers() {
+      return [
+        { userId: 'u1', pseudo: 'alice', email: 'a@x.test', joinedAt: new Date() },
+        { userId: 'u2', pseudo: 'bob', email: 'b@x.test', joinedAt: new Date() },
+      ];
+    }
+
+    function makeScenarioDto(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 's1',
+        partieId: 'p1',
+        title: 'Le Marché aux Ombres',
+        description: null,
+        status: 'PASSE',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: '2026-07-01T00:00:00.000Z',
+        closedAt: '2026-07-10T00:00:00.000Z',
+        seances: [],
+        ...overrides,
+      };
+    }
+
+    it('findOne() : voyageursProteges reflète les membres actuels, historique liste le scénario PASSE avec titre/date/participants (AC1)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue(makeMembers());
+      scenarios.findAllForPartie.mockResolvedValue([makeScenarioDto()]);
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.findOne('p1', 'u2');
+
+      expect(result?.voyageursProteges).toEqual([
+        { userId: 'u1', pseudo: 'alice' },
+        { userId: 'u2', pseudo: 'bob' },
+      ]);
+      expect(result?.historique).toEqual([
+        {
+          scenarioTitle: 'Le Marché aux Ombres',
+          date: '2026-07-10T00:00:00.000Z',
+          participants: ['alice', 'bob'],
+        },
+      ]);
+    });
+
+    it('aucun scénario PASSE → historique: [], pas d’exception (AC2)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue(makeMembers());
+      scenarios.findAllForPartie.mockResolvedValue([]);
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.findOne('p1', 'mj1');
+
+      expect(result?.historique).toEqual([]);
+    });
+
+    it('scénarios BROUILLON/A_VENIR/COURANT mélangés avec un PASSE → seul le PASSE apparaît (AC3)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue(makeMembers());
+      scenarios.findAllForPartie.mockResolvedValue([
+        makeScenarioDto({ id: 's-brouillon', title: 'Brouillon', status: 'BROUILLON', closedAt: null }),
+        makeScenarioDto({ id: 's-avenir', title: 'À venir', status: 'A_VENIR', closedAt: null }),
+        makeScenarioDto({ id: 's-courant', title: 'Courant', status: 'COURANT', closedAt: null }),
+        makeScenarioDto({ id: 's-passe', title: 'Passé', status: 'PASSE' }),
+      ]);
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.findOne('p1', 'mj1');
+
+      expect(result?.historique).toHaveLength(1);
+      expect(result?.historique[0].scenarioTitle).toBe('Passé');
+    });
+
+    it('CAMPAGNE_EPISODIQUE avec participants peuplés sur le ScenarioDto → historique ne liste que ces participants, pas tous les membres', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue(makeMembers());
+      scenarios.findAllForPartie.mockResolvedValue([
+        makeScenarioDto({ participants: [{ userId: 'u1', pseudo: 'alice' }] }),
+      ]);
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.findOne('p1', 'mj1');
+
+      expect(result?.historique[0].participants).toEqual(['alice']);
+    });
+
+    it('ONE_SHOT/CAMPAGNE_LINEAIRE (participants undefined sur le ScenarioDto) → historique liste tous les membres actuels (fallback)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue(makeMembers());
+      scenarios.findAllForPartie.mockResolvedValue([makeScenarioDto({ participants: undefined })]);
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.findOne('p1', 'mj1');
+
+      expect(result?.historique[0].participants).toEqual(['alice', 'bob']);
+    });
+
+    it('create() retourne aussi voyageursProteges/historique peuplés, pas seulement findOne()', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama', name: 'Ma Campagne' });
+      parties.listMembers.mockResolvedValue(makeMembers());
+      scenarios.findAllForPartie.mockResolvedValue([makeScenarioDto()]);
+      prisma.hommeDragon.create.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.create('p1', 'mj1', {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc' },
+        nom: 'Ignis',
+      });
+
+      expect(result.voyageursProteges).toEqual([
+        { userId: 'u1', pseudo: 'alice' },
+        { userId: 'u2', pseudo: 'bob' },
+      ]);
+      expect(result.historique).toHaveLength(1);
+    });
+
+    it('update() retourne aussi voyageursProteges/historique peuplés, pas seulement findOne()', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue(makeMembers());
+      scenarios.findAllForPartie.mockResolvedValue([makeScenarioDto()]);
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+      prisma.hommeDragon.update.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.update('p1', 'mj1', { demeure: 'Une auberge' });
+
+      expect(result.voyageursProteges).toEqual([
+        { userId: 'u1', pseudo: 'alice' },
+        { userId: 'u2', pseudo: 'bob' },
+      ]);
+      expect(result.historique).toHaveLength(1);
     });
   });
 });

@@ -603,6 +603,10 @@ export interface HommeDragonDto {
   sheetData: HommeDragonSheetData;
   createdAt: string;
   updatedAt: string;
+  /** Membres actuels de la Partie (hors MJ) — calculé à la lecture, jamais stocké (AD-3, Story 10.2). */
+  voyageursProteges: { userId: string; pseudo: string }[];
+  /** Scénarios `PASSE` de la Partie — calculé à la lecture, jamais stocké (AD-3, Story 10.2). */
+  historique: { scenarioTitle: string; date: string; participants: string[] }[];
 }
 
 /** Payload de création (POST /parties/:id/homme-dragon) — mêmes champs que la fiche, à plat. */

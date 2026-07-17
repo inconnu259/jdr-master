@@ -9,6 +9,7 @@ import { validateHommeDragon, type HommeDragonArtefactCatalogEntry } from '@mast
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { GameSystemService } from '../game-systems/game-system.service';
+import { ScenariosService } from '../scenarios/scenarios.service';
 import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class HommeDragonService {
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
     private readonly gameSystems: GameSystemService,
+    private readonly scenarios: ScenariosService,
   ) {}
 
   async create(
@@ -51,7 +53,7 @@ export class HommeDragonService {
           sheetData: sheetData as any,
         },
       });
-      return toDto(hommeDragon);
+      return this.buildDto(hommeDragon, partieId, userId);
     } catch (e: any) {
       if (e?.code === 'P2002') {
         throw new ConflictException('Vous avez déjà un Homme Dragon sur cette Partie');
@@ -118,7 +120,7 @@ export class HommeDragonService {
       },
       data: { sheetData: sheetData as any },
     });
-    return toDto(updated);
+    return this.buildDto(updated, partieId, userId);
   }
 
   /**
@@ -141,7 +143,7 @@ export class HommeDragonService {
         },
       },
     });
-    return hommeDragon ? toDto(hommeDragon) : null;
+    return hommeDragon ? this.buildDto(hommeDragon, partieId, userId) : null;
   }
 
   private async buildArtefactCatalog(
@@ -153,16 +155,60 @@ export class HommeDragonService {
       race: (entry.data as { race?: string })?.race ?? '',
     }));
   }
-}
 
-function toDto(hommeDragon: any): HommeDragonDto {
-  return {
-    id: hommeDragon.id,
-    userId: hommeDragon.userId,
-    partieId: hommeDragon.partieId,
-    gameSystemId: hommeDragon.gameSystemId,
-    sheetData: hommeDragon.sheetData,
-    createdAt: hommeDragon.createdAt.toISOString(),
-    updatedAt: hommeDragon.updatedAt.toISOString(),
-  };
+  /**
+   * AD-3 : `voyageursProteges`/`historique` sont calculés à la lecture, jamais stockés — cette
+   * règle s'applique à TOUTE réponse contenant l'état de la fiche (`create`/`update`/`findOne`),
+   * pas seulement `findOne()`, pour ne jamais renvoyer une forme de DTO incohérente selon l'endpoint
+   * appelé (Story 10.2).
+   */
+  private async buildDto(
+    hommeDragon: any,
+    partieId: string,
+    userId: string,
+  ): Promise<HommeDragonDto> {
+    // Revue de code : voyageursProteges calculé une seule fois puis partagé avec computeHistorique
+    // (au lieu d'un 2e appel interne à listMembers) — évite un aller-retour Prisma redondant et une
+    // divergence possible entre les deux champs si la composition de la Partie changeait entre deux
+    // appels non coordonnés.
+    const voyageursProteges = await this.computeVoyageursProteges(partieId, userId);
+    const historique = await this.computeHistorique(partieId, userId, voyageursProteges);
+    return {
+      id: hommeDragon.id,
+      userId: hommeDragon.userId,
+      partieId: hommeDragon.partieId,
+      gameSystemId: hommeDragon.gameSystemId,
+      sheetData: hommeDragon.sheetData,
+      createdAt: hommeDragon.createdAt.toISOString(),
+      updatedAt: hommeDragon.updatedAt.toISOString(),
+      voyageursProteges,
+      historique,
+    };
+  }
+
+  private async computeVoyageursProteges(
+    partieId: string,
+    userId: string,
+  ): Promise<{ userId: string; pseudo: string }[]> {
+    const members = await this.parties.listMembers(partieId, userId);
+    return members.map((m) => ({ userId: m.userId, pseudo: m.pseudo }));
+  }
+
+  private async computeHistorique(
+    partieId: string,
+    userId: string,
+    voyageurs: { userId: string; pseudo: string }[],
+  ): Promise<{ scenarioTitle: string; date: string; participants: string[] }[]> {
+    const scenarios = await this.scenarios.findAllForPartie(partieId, userId);
+    return scenarios
+      .filter((s) => s.status === 'PASSE' && s.closedAt !== null)
+      .map((s) => ({
+        scenarioTitle: s.title,
+        date: s.closedAt as string,
+        // AD-4 (Story 8.1) : ScenarioDto.participants n'est peuplé QUE pour CAMPAGNE_EPISODIQUE.
+        // Pour ONE_SHOT/CAMPAGNE_LINEAIRE (undefined), tous les membres actuels sont réputés
+        // avoir participé — pas d'inscription individuelle pour ces deux kinds.
+        participants: s.participants?.map((p) => p.pseudo) ?? voyageurs.map((v) => v.pseudo),
+      }));
+  }
 }
