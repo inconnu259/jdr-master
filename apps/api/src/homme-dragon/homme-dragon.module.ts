@@ -4,6 +4,7 @@ import { GameSystemModule } from '../game-systems/game-system.module';
 import { ScenariosModule } from '../scenarios/scenarios.module';
 import { HommeDragonController } from './homme-dragon.controller';
 import { HommeDragonService } from './homme-dragon.service';
+import { HommeDragonPdfService } from './homme-dragon.pdf.service';
 
 @Module({
   // Story 10.2 (AD-3) : ScenariosModule pour l'historique des scénarios PASSE — import à sens
@@ -11,7 +12,7 @@ import { HommeDragonService } from './homme-dragon.service';
   // situation que AnnouncementsModule → ScenariosModule, Story 9.1).
   imports: [PartiesModule, GameSystemModule, ScenariosModule],
   controllers: [HommeDragonController],
-  providers: [HommeDragonService],
+  providers: [HommeDragonService, HommeDragonPdfService],
   exports: [HommeDragonService],
 })
 export class HommeDragonModule {}

@@ -195,4 +195,33 @@ export class HommeDragonSheet implements OnInit {
       this.choosingEveilPower.set(false);
     }
   }
+
+  // — Export PDF (Story 10.5) —
+  protected readonly exporting = signal(false);
+  protected readonly exportError = signal<string | null>(null);
+
+  protected async onExportPdf(): Promise<void> {
+    if (this.exporting()) return;
+    this.exportError.set(null);
+    this.exporting.set(true);
+    try {
+      const blob = await this.hommeDragonSvc.exportPdf(this.partieId());
+      const url = URL.createObjectURL(blob);
+      const safeName = (this.hommeDragon()?.sheetData.nom || 'homme-dragon').replace(
+        /[^a-z0-9-_]+/gi,
+        '_',
+      );
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `homme-dragon-${safeName}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      this.exportError.set('Impossible d\'exporter la fiche en PDF. Réessayez.');
+    } finally {
+      this.exporting.set(false);
+    }
+  }
 }

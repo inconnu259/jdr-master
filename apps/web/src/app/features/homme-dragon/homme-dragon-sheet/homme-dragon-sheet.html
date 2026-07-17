@@ -88,6 +88,13 @@
       <h3>{{ hommeDragon()!.sheetData.nom }}</h3>
       <p>{{ theme.tone()['homme-dragon.race_label'] }} : {{ raceLabel(hommeDragon()!.sheetData.race) }}</p>
 
+      <button mat-stroked-button type="button" [disabled]="exporting()" (click)="onExportPdf()">
+        Exporter en PDF
+      </button>
+      @if (exportError()) {
+        <p class="error">{{ exportError() }}</p>
+      }
+
       @if (!editingArtefact()) {
         <p>
           {{ theme.tone()['homme-dragon.artefact_label'] }} :

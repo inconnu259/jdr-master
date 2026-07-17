@@ -46,4 +46,13 @@ export class HommeDragonService {
       ),
     );
   }
+
+  exportPdf(partieId: string): Promise<Blob> {
+    return firstValueFrom(
+      this.http.get(`${API_BASE}/parties/${partieId}/homme-dragon/export.pdf`, {
+        responseType: 'blob',
+        withCredentials: true,
+      }),
+    );
+  }
 }

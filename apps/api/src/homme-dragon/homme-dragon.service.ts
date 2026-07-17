@@ -215,6 +215,19 @@ export class HommeDragonService {
   }
 
   /**
+   * `hommeDragon.userId` EST le MJ (contrainte unique `[userId, partieId, gameSystemId]`, toujours
+   * créé par le MJ via `getOwned` — jamais un joueur). Utilisé pour l'export PDF (Story 10.5),
+   * `HommeDragonDto` n'exposant pas le pseudo du propriétaire.
+   */
+  async getOwnerPseudo(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { pseudo: true },
+    });
+    return user.pseudo;
+  }
+
+  /**
    * Lecture ouverte à tout membre (NFR1) — cible toujours le Homme Dragon DU MJ de la Partie
    * (`partie.mjId`), pas celui du `userId` courant : un joueur qui consulte n'en a pas le sien.
    * `null` = pas encore créé, jamais un 404 (état normal, pas une erreur) — y compris si la Partie

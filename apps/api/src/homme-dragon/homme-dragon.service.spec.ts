@@ -59,6 +59,9 @@ function makePrisma() {
       update: jest.fn(),
       findUnique: jest.fn(),
     },
+    user: {
+      findUniqueOrThrow: jest.fn(),
+    },
     $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(tx)),
     tx,
   } as any;
@@ -361,6 +364,20 @@ describe('HommeDragonService', () => {
         ForbiddenException,
       );
       expect(prisma.hommeDragon.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getOwnerPseudo()', () => {
+    it("retourne le pseudo de l'utilisateur (le MJ, propriétaire de la fiche)", async () => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ pseudo: 'admin' });
+
+      const result = await service.getOwnerPseudo('mj1');
+
+      expect(prisma.user.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { id: 'mj1' },
+        select: { pseudo: true },
+      });
+      expect(result).toBe('admin');
     });
   });
 

@@ -46,6 +46,7 @@ function makeHommeDragonService(findOneResult: HommeDragonDto | null = null) {
     create: vi.fn(),
     update: vi.fn(),
     chooseEveilPower: vi.fn(),
+    exportPdf: vi.fn(),
   };
 }
 
@@ -90,6 +91,18 @@ async function createComponent(
 }
 
 describe('HommeDragonSheet', () => {
+  beforeEach(() => {
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:mock-url'),
+      revokeObjectURL: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("aucun Homme Dragon existant → formulaire de création affiché, mondesProteges pré-rempli avec le nom de la Partie (AC1)", async () => {
     const { fixture } = await createComponent();
     const component = fixture.componentInstance;
@@ -217,6 +230,7 @@ describe('HommeDragonSheet', () => {
       create: vi.fn(),
       update: vi.fn(),
       chooseEveilPower: vi.fn(),
+      exportPdf: vi.fn(),
     };
     const { fixture } = await createComponent(hommeDragonSvc);
     const component = fixture.componentInstance;
@@ -376,5 +390,30 @@ describe('HommeDragonSheet', () => {
 
     expect(component['eveilPowerError']()).toBeTruthy();
     expect(component['choosingEveilPower']()).toBe(false);
+  });
+
+  it('clic sur "Exporter en PDF" appelle exportPdf() avec le bon partieId et déclenche un téléchargement', async () => {
+    const hommeDragonSvc = makeHommeDragonService(makeDto());
+    hommeDragonSvc.exportPdf.mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' }));
+    const { fixture } = await createComponent(hommeDragonSvc);
+    const component = fixture.componentInstance;
+
+    await component['onExportPdf']();
+
+    expect(hommeDragonSvc.exportPdf).toHaveBeenCalledWith('p1');
+    expect(component['exportError']()).toBeNull();
+    expect(component['exporting']()).toBe(false);
+  });
+
+  it("échec de exportPdf() → exportError() renseigné, formulaire non cassé", async () => {
+    const hommeDragonSvc = makeHommeDragonService(makeDto());
+    hommeDragonSvc.exportPdf.mockRejectedValue(new Error('network down'));
+    const { fixture } = await createComponent(hommeDragonSvc);
+    const component = fixture.componentInstance;
+
+    await component['onExportPdf']();
+
+    expect(component['exportError']()).toBeTruthy();
+    expect(component['exporting']()).toBe(false);
   });
 });

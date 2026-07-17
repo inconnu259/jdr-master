@@ -9,6 +9,7 @@ export {
   pendingEveilLevels,
   HOMME_DRAGON_LEVEL_THRESHOLDS,
 } from './ryuutama/homme-dragon-derived.ts';
+export { mapHommeDragonToPdfFields } from './ryuutama/homme-dragon-pdf-field-map.ts';
 export type {
   RyuutamaSheetData,
   DerivedStats,
@@ -28,3 +29,7 @@ export type {
   HommeDragonArtefactCatalogEntry,
 } from './ryuutama/validate-homme-dragon.ts';
 export type { HommeDragonDerivedStats } from './ryuutama/homme-dragon-derived.ts';
+export type {
+  HommeDragonPdfContent,
+  HommeDragonPdfInput,
+} from './ryuutama/homme-dragon-pdf-field-map.ts';
