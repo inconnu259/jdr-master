@@ -5,6 +5,7 @@ import { CurrentUser } from '../common/current-user.decorator';
 import { HommeDragonService } from './homme-dragon.service';
 import { CreateHommeDragonDto } from './dto/create-homme-dragon.dto';
 import { UpdateHommeDragonDto } from './dto/update-homme-dragon.dto';
+import { ChooseEveilPowerDto } from './dto/choose-eveil-power.dto';
 
 @UseGuards(AuthenticatedGuard)
 @Controller('parties/:id/homme-dragon')
@@ -32,5 +33,14 @@ export class HommeDragonController {
     @Body() dto: UpdateHommeDragonDto,
   ) {
     return this.hommeDragon.update(partieId, user.id, dto);
+  }
+
+  @Post('eveil-power')
+  chooseEveilPower(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ChooseEveilPowerDto,
+  ) {
+    return this.hommeDragon.chooseEveilPower(partieId, user.id, dto);
   }
 }

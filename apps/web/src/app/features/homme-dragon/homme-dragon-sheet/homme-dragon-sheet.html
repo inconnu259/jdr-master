@@ -130,6 +130,50 @@
         <p>Mondes protégés : {{ hommeDragon()!.sheetData.mondesProteges }}</p>
       }
 
+      @if (currentPendingLevel()) {
+        <section class="homme-dragon-sheet__eveil-prompt">
+          <p>Niveau {{ currentPendingLevel() }} atteint — choisissez un pouvoir d'éveil parmi ceux restants :</p>
+          @if (eveilPowersForCurrentLevel().length === 0) {
+            <p class="muted">Aucun pouvoir d'éveil disponible.</p>
+          } @else {
+            <select [ngModel]="selectedEveilPowerKey()" name="eveilPower" (ngModelChange)="selectedEveilPowerKey.set($event)">
+              <option [ngValue]="null" disabled>—</option>
+              @for (p of eveilPowersForCurrentLevel(); track p.key) {
+                <option [ngValue]="p.key">{{ eveilPowerLabel(p.key) }}</option>
+              }
+            </select>
+            <button
+              mat-flat-button
+              color="primary"
+              type="button"
+              [disabled]="!selectedEveilPowerKey() || choosingEveilPower()"
+              (click)="onChooseEveilPower()"
+            >
+              Confirmer
+            </button>
+          }
+          @if (eveilPowerError()) {
+            <p class="error">{{ eveilPowerError() }}</p>
+          }
+        </section>
+      }
+
+      @if (hommeDragon()!.eveilPowers.length > 0) {
+        <section class="homme-dragon-sheet__eveil-powers">
+          <h4>Pouvoirs d'éveil</h4>
+          <ul>
+            @for (ep of hommeDragon()!.eveilPowers; track ep.level) {
+              <li>Niveau {{ ep.level }} : {{ eveilPowerLabel(ep.key) }}</li>
+            }
+          </ul>
+        </section>
+      }
+
+      <section class="homme-dragon-sheet__derived">
+        <p>Niveau : {{ hommeDragon()!.derived.level }}</p>
+        <p>Points de Souffle : {{ hommeDragon()!.derived.PS }}</p>
+      </section>
+
       <section class="homme-dragon-sheet__voyageurs">
         <h4>Voyageurs protégés</h4>
         @if (hommeDragon()!.voyageursProteges.length === 0) {

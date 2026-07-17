@@ -48,6 +48,11 @@ const CONTENT_TYPES: ContentTypeSeed[] = [
     label: 'Artefact (Homme Dragon)',
     file: 'homme-dragon-artefacts.json',
   },
+  {
+    key: 'eveilPower',
+    label: "Pouvoir d'éveil",
+    file: 'eveil-powers.json',
+  },
 ];
 
 @Injectable()

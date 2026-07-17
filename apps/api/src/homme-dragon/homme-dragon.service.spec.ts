@@ -1,11 +1,39 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
-// HommeDragonService importe validateHommeDragon depuis @master-jdr/game-rules (ESM, non
-// transformé par ts-jest) — même mécanisme que ailleurs dans le projet (cf. mémoire d'équipe :
-// "game-rules ESM jest.mock") pour éviter "Unexpected token export" au chargement du module.
+// HommeDragonService importe validateHommeDragon/computeHommeDragonDerived/levelForScenariosPasse
+// depuis @master-jdr/game-rules (ESM, non transformé par ts-jest) — même mécanisme que ailleurs
+// dans le projet (cf. mémoire d'équipe : "game-rules ESM jest.mock") pour éviter "Unexpected token
+// export" au chargement du module. levelForScenariosPasse/computeHommeDragonDerived sont réimplémentées
+// ici à l'identique (fonctions pures, triviales) plutôt que mockées en jest.fn() — les tests Story 10.3
+// vérifient une vraie table de vérité niveau/PS, pas juste que la fonction est appelée.
 jest.mock('@master-jdr/game-rules', () => ({
   validateHommeDragon: jest.fn(),
+  levelForScenariosPasse: (count: number) => {
+    const thresholds = [
+      { level: 2, scenariosPasse: 1 },
+      { level: 3, scenariosPasse: 3 },
+      { level: 4, scenariosPasse: 7 },
+      { level: 5, scenariosPasse: 12 },
+    ];
+    let level = 1;
+    for (const entry of thresholds) {
+      if (count >= entry.scenariosPasse) level = entry.level;
+    }
+    return level;
+  },
+  computeHommeDragonDerived: (level: number) => {
+    if (level <= 2) return { PS: 3 };
+    if (level <= 4) return { PS: 5 };
+    return { PS: 10 };
+  },
+  pendingEveilLevels: (currentLevel: number, appliedLevels: number[]) => {
+    const pending: number[] = [];
+    for (let level = 2; level <= currentLevel; level++) {
+      if (!appliedLevels.includes(level)) pending.push(level);
+    }
+    return pending;
+  },
 }));
 
 import { validateHommeDragon } from '@master-jdr/game-rules';
@@ -18,12 +46,21 @@ import { ScenariosService } from '../scenarios/scenarios.service';
 const mockValidate = validateHommeDragon as jest.Mock;
 
 function makePrisma() {
+  const tx = {
+    $queryRaw: jest.fn(),
+    hommeDragon: {
+      findUnique: jest.fn(),
+      update: jest.fn(),
+    },
+  };
   return {
     hommeDragon: {
       create: jest.fn(),
       update: jest.fn(),
       findUnique: jest.fn(),
     },
+    $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(tx)),
+    tx,
   } as any;
 }
 
@@ -64,10 +101,31 @@ function makeHommeDragon(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeScenarioDto(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 's1',
+    partieId: 'p1',
+    title: 'Le Marché aux Ombres',
+    description: null,
+    status: 'PASSE',
+    dureeHeures: null,
+    dureeSeances: null,
+    resumeFin: null,
+    createdAt: '2026-07-01T00:00:00.000Z',
+    closedAt: '2026-07-10T00:00:00.000Z',
+    seances: [],
+    ...overrides,
+  };
+}
+
 const CATALOG_CONTENT = {
   hommeDragonArtefact: [
     { key: 'grand-arc', data: { key: 'grand-arc', label: 'Grand arc', race: 'DRAGON_ROUGE' } },
     { key: 'lanterne', data: { key: 'lanterne', label: 'Lanterne', race: 'DRAGON_VERT' } },
+  ],
+  eveilPower: [
+    { key: 'escorte-du-dragon', data: { key: 'escorte-du-dragon', label: 'Escorte du dragon', ps: 2 } },
+    { key: 'couche-du-dragon', data: { key: 'couche-du-dragon', label: 'Couche du dragon', ps: 2 } },
   ],
 };
 
@@ -354,23 +412,6 @@ describe('HommeDragonService', () => {
       ];
     }
 
-    function makeScenarioDto(overrides: Record<string, unknown> = {}) {
-      return {
-        id: 's1',
-        partieId: 'p1',
-        title: 'Le Marché aux Ombres',
-        description: null,
-        status: 'PASSE',
-        dureeHeures: null,
-        dureeSeances: null,
-        resumeFin: null,
-        createdAt: '2026-07-01T00:00:00.000Z',
-        closedAt: '2026-07-10T00:00:00.000Z',
-        seances: [],
-        ...overrides,
-      };
-    }
-
     it('findOne() : voyageursProteges reflète les membres actuels, historique liste le scénario PASSE avec titre/date/participants (AC1)', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
       parties.listMembers.mockResolvedValue(makeMembers());
@@ -477,6 +518,298 @@ describe('HommeDragonService', () => {
         { userId: 'u2', pseudo: 'bob' },
       ]);
       expect(result.historique).toHaveLength(1);
+    });
+  });
+
+  describe('derived (niveau/PS, Story 10.3)', () => {
+    function makePasseScenarios(count: number) {
+      return Array.from({ length: count }, (_, i) =>
+        makeScenarioDto({
+          id: `s${i}`,
+          title: `Scénario ${i}`,
+          status: 'PASSE',
+          closedAt: '2026-07-10T00:00:00.000Z',
+        }),
+      );
+    }
+
+    it('findOne() : 0 scénario PASSE → derived: { level: 1, PS: 3 } (AC1)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue([]);
+      scenarios.findAllForPartie.mockResolvedValue([]);
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.findOne('p1', 'mj1');
+
+      expect(result?.derived).toEqual({ level: 1, PS: 3 });
+    });
+
+    it.each([
+      [1, 2, 3],
+      [3, 3, 5],
+      [7, 4, 5],
+      [12, 5, 10],
+    ])(
+      'findOne() : %i scénarios PASSE → niveau %i, PS %i (AC2)',
+      async (count, level, PS) => {
+        parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+        parties.listMembers.mockResolvedValue([]);
+        scenarios.findAllForPartie.mockResolvedValue(makePasseScenarios(count));
+        prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+        const result = await service.findOne('p1', 'mj1');
+
+        expect(result?.derived).toEqual({ level, PS });
+      },
+    );
+
+    it('create() retourne aussi derived peuplé (AC3)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama', name: 'Ma Campagne' });
+      parties.listMembers.mockResolvedValue([]);
+      scenarios.findAllForPartie.mockResolvedValue(makePasseScenarios(3));
+      prisma.hommeDragon.create.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.create('p1', 'mj1', {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc' },
+        nom: 'Ignis',
+      });
+
+      expect(result.derived).toEqual({ level: 3, PS: 5 });
+    });
+
+    it('update() retourne aussi derived peuplé (AC3)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue([]);
+      scenarios.findAllForPartie.mockResolvedValue(makePasseScenarios(7));
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+      prisma.hommeDragon.update.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.update('p1', 'mj1', { demeure: 'Une auberge' });
+
+      expect(result.derived).toEqual({ level: 4, PS: 5 });
+    });
+
+    it('scénarios BROUILLON/A_VENIR/COURANT mélangés à des PASSE → seuls les PASSE comptent pour le niveau', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue([]);
+      scenarios.findAllForPartie.mockResolvedValue([
+        ...makePasseScenarios(1),
+        makeScenarioDto({ id: 's-brouillon', status: 'BROUILLON', closedAt: null }),
+        makeScenarioDto({ id: 's-avenir', status: 'A_VENIR', closedAt: null }),
+        makeScenarioDto({ id: 's-courant', status: 'COURANT', closedAt: null }),
+      ]);
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.findOne('p1', 'mj1');
+
+      expect(result?.derived).toEqual({ level: 2, PS: 3 });
+    });
+  });
+
+  describe('eveilPowers / pendingEveilLevels (Story 10.4)', () => {
+    it("findOne() : niveau 2, aucun eveilPowers en sheetData → pendingEveilLevels: [2] (AC1)", async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue([]);
+      scenarios.findAllForPartie.mockResolvedValue([
+        makeScenarioDto({ status: 'PASSE', closedAt: '2026-07-10T00:00:00.000Z' }),
+      ]);
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.findOne('p1', 'mj1');
+
+      expect(result?.eveilPowers).toEqual([]);
+      expect(result?.pendingEveilLevels).toEqual([2]);
+    });
+
+    it('findOne() : eveilPowers déjà choisi pour le niveau atteint → pendingEveilLevels: [] (AC2)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue([]);
+      scenarios.findAllForPartie.mockResolvedValue([
+        makeScenarioDto({ status: 'PASSE', closedAt: '2026-07-10T00:00:00.000Z' }),
+      ]);
+      prisma.hommeDragon.findUnique.mockResolvedValue(
+        makeHommeDragon({
+          sheetData: {
+            race: 'DRAGON_ROUGE',
+            artefact: { key: 'grand-arc' },
+            nom: 'Ignis',
+            eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }],
+          },
+        }),
+      );
+
+      const result = await service.findOne('p1', 'mj1');
+
+      expect(result?.eveilPowers).toEqual([{ level: 2, key: 'escorte-du-dragon' }]);
+      expect(result?.pendingEveilLevels).toEqual([]);
+    });
+
+    it('findOne() : plusieurs seuils franchis d’un coup, aucun choix fait → pendingEveilLevels liste tous les niveaux intermédiaires (AC3)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      parties.listMembers.mockResolvedValue([]);
+      scenarios.findAllForPartie.mockResolvedValue(makePasseScenariosFor(12));
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+      const result = await service.findOne('p1', 'mj1');
+
+      expect(result?.pendingEveilLevels).toEqual([2, 3, 4, 5]);
+    });
+
+    function makePasseScenariosFor(count: number) {
+      return Array.from({ length: count }, (_, i) =>
+        makeScenarioDto({ id: `s${i}`, status: 'PASSE', closedAt: '2026-07-10T00:00:00.000Z' }),
+      );
+    }
+
+    describe('chooseEveilPower()', () => {
+      it('niveau en attente + clé valide du catalogue → choix enregistré, append sans écraser les précédents', async () => {
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+        parties.listMembers.mockResolvedValue([]);
+        scenarios.findAllForPartie.mockResolvedValue(makePasseScenariosFor(3));
+        prisma.tx.hommeDragon.findUnique.mockResolvedValue(
+          makeHommeDragon({
+            sheetData: {
+              race: 'DRAGON_ROUGE',
+              artefact: { key: 'grand-arc' },
+              nom: 'Ignis',
+              eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }],
+            },
+          }),
+        );
+        prisma.tx.hommeDragon.update.mockResolvedValue(makeHommeDragon());
+
+        await service.chooseEveilPower('p1', 'mj1', { level: 3, key: 'couche-du-dragon' });
+
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
+        expect(prisma.tx.hommeDragon.update).toHaveBeenCalledWith({
+          where: { userId_partieId_gameSystemId: { userId: 'mj1', partieId: 'p1', gameSystemId: 'ryuutama' } },
+          data: {
+            sheetData: expect.objectContaining({
+              eveilPowers: [
+                { level: 2, key: 'escorte-du-dragon' },
+                { level: 3, key: 'couche-du-dragon' },
+              ],
+            }),
+          },
+        });
+      });
+
+      it("écriture ne mute jamais l'objet sheetData renvoyé par la lecture (copie, pas mutation en place)", async () => {
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+        parties.listMembers.mockResolvedValue([]);
+        scenarios.findAllForPartie.mockResolvedValue(makePasseScenariosFor(1));
+        const originalSheetData = {
+          race: 'DRAGON_ROUGE',
+          artefact: { key: 'grand-arc' },
+          nom: 'Ignis',
+        };
+        prisma.tx.hommeDragon.findUnique.mockResolvedValue(
+          makeHommeDragon({ sheetData: originalSheetData }),
+        );
+        prisma.tx.hommeDragon.update.mockResolvedValue(makeHommeDragon());
+
+        await service.chooseEveilPower('p1', 'mj1', { level: 2, key: 'escorte-du-dragon' });
+
+        expect(originalSheetData).not.toHaveProperty('eveilPowers');
+      });
+
+      it('niveau pas en attente (déjà pourvu) → BadRequestException, aucune écriture (AC2)', async () => {
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+        parties.listMembers.mockResolvedValue([]);
+        scenarios.findAllForPartie.mockResolvedValue(makePasseScenariosFor(1));
+        prisma.tx.hommeDragon.findUnique.mockResolvedValue(
+          makeHommeDragon({
+            sheetData: {
+              race: 'DRAGON_ROUGE',
+              artefact: { key: 'grand-arc' },
+              nom: 'Ignis',
+              eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }],
+            },
+          }),
+        );
+
+        await expect(
+          service.chooseEveilPower('p1', 'mj1', { level: 2, key: 'couche-du-dragon' }),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+      });
+
+      it('niveau au-delà du niveau actuel → BadRequestException, aucune écriture', async () => {
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+        parties.listMembers.mockResolvedValue([]);
+        scenarios.findAllForPartie.mockResolvedValue(makePasseScenariosFor(1));
+        prisma.tx.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+        await expect(
+          service.chooseEveilPower('p1', 'mj1', { level: 5, key: 'escorte-du-dragon' }),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+      });
+
+      it('clé inconnue du catalogue → BadRequestException, aucune écriture', async () => {
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+        parties.listMembers.mockResolvedValue([]);
+        scenarios.findAllForPartie.mockResolvedValue(makePasseScenariosFor(1));
+        prisma.tx.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+
+        await expect(
+          service.chooseEveilPower('p1', 'mj1', { level: 2, key: 'pouvoir-inconnu' }),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+      });
+
+      it("pouvoir déjà choisi pour un autre niveau (pool commun) → BadRequestException, aucune écriture", async () => {
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+        parties.listMembers.mockResolvedValue([]);
+        scenarios.findAllForPartie.mockResolvedValue(makePasseScenariosFor(3));
+        prisma.tx.hommeDragon.findUnique.mockResolvedValue(
+          makeHommeDragon({
+            sheetData: {
+              race: 'DRAGON_ROUGE',
+              artefact: { key: 'grand-arc' },
+              nom: 'Ignis',
+              eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }],
+            },
+          }),
+        );
+
+        await expect(
+          service.chooseEveilPower('p1', 'mj1', { level: 3, key: 'escorte-du-dragon' }),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+      });
+
+      it('non-MJ → ForbiddenException propagée par getOwned, aucune écriture', async () => {
+        parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+        await expect(
+          service.chooseEveilPower('p1', 'stranger', { level: 2, key: 'escorte-du-dragon' }),
+        ).rejects.toThrow(ForbiddenException);
+        expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+      });
+
+      it('aucun Homme Dragon existant → NotFoundException', async () => {
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+        parties.listMembers.mockResolvedValue([]);
+        scenarios.findAllForPartie.mockResolvedValue([]);
+        prisma.tx.hommeDragon.findUnique.mockResolvedValue(null);
+
+        await expect(
+          service.chooseEveilPower('p1', 'mj1', { level: 2, key: 'escorte-du-dragon' }),
+        ).rejects.toThrow(NotFoundException);
+        expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+      });
+
+      it('Partie basculée hors Ryuutama → BadRequestException, aucune écriture (même garde que update())', async () => {
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'draconis' });
+
+        await expect(
+          service.chooseEveilPower('p1', 'mj1', { level: 2, key: 'escorte-du-dragon' }),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      });
     });
   });
 });

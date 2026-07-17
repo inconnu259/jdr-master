@@ -593,6 +593,9 @@ export interface HommeDragonSheetData {
   demeure?: string;
   avatar?: string;
   mondesProteges?: string;
+  /** Pouvoirs d'éveil choisis, un par niveau franchi (2-5) — jamais recalculé, c'est un choix
+   * du MJ (Story 10.4). Absent sur les fiches créées avant cette story. */
+  eveilPowers?: { level: number; key: string }[];
 }
 
 export interface HommeDragonDto {
@@ -607,6 +610,14 @@ export interface HommeDragonDto {
   voyageursProteges: { userId: string; pseudo: string }[];
   /** Scénarios `PASSE` de la Partie — calculé à la lecture, jamais stocké (AD-3, Story 10.2). */
   historique: { scenarioTitle: string; date: string; participants: string[] }[];
+  /** Niveau (1-5) et Points de Souffle max — calculés à la lecture depuis le nombre de scénarios
+   * `PASSE`, jamais stockés (AD-3, Story 10.3). */
+  derived: { level: number; PS: number };
+  /** Miroir de `sheetData.eveilPowers`, toujours un tableau (jamais `undefined`). */
+  eveilPowers: { level: number; key: string }[];
+  /** Niveaux 2-5 en attente d'un choix de pouvoir d'éveil — calculé à la lecture (AD-3),
+   * jamais stocké. Vide si aucun choix n'est en attente. */
+  pendingEveilLevels: number[];
 }
 
 /** Payload de création (POST /parties/:id/homme-dragon) — mêmes champs que la fiche, à plat. */
@@ -614,3 +625,13 @@ export type CreateHommeDragonDto = HommeDragonSheetData;
 
 /** Payload de mise à jour (PATCH /parties/:id/homme-dragon) — race jamais éditable après création. */
 export type UpdateHommeDragonDto = Partial<Omit<HommeDragonSheetData, 'race'>>;
+
+/** Payload de choix d'un pouvoir d'éveil (POST /parties/:id/homme-dragon/eveil-power).
+ * Décision utilisateur (Story 10.4) : le catalogue `eveilPower` est un pool commun à toutes les
+ * races, sans niveau de déblocage par pouvoir — `level` désigne ici le seuil de niveau franchi
+ * pour lequel ce choix est fait (doit appartenir à `pendingEveilLevels`), pas un attribut du
+ * pouvoir lui-même. */
+export interface ChooseEveilPowerDto {
+  level: number;
+  key: string;
+}

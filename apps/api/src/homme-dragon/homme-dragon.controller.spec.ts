@@ -11,6 +11,7 @@ function makeService() {
     create: jest.fn(),
     update: jest.fn(),
     findOne: jest.fn(),
+    chooseEveilPower: jest.fn(),
   };
 }
 
@@ -42,5 +43,11 @@ describe('HommeDragonController', () => {
     const dto = { demeure: 'Une auberge' } as any;
     controller.update('p1', { id: 'mj1' } as any, dto);
     expect(service.update).toHaveBeenCalledWith('p1', 'mj1', dto);
+  });
+
+  it('POST eveil-power délègue à chooseEveilPower() avec partieId/user.id/dto', () => {
+    const dto = { level: 2, key: 'escorte-du-dragon' } as any;
+    controller.chooseEveilPower('p1', { id: 'mj1' } as any, dto);
+    expect(service.chooseEveilPower).toHaveBeenCalledWith('p1', 'mj1', dto);
   });
 });

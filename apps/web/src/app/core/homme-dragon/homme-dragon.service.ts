@@ -1,7 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { CreateHommeDragonDto, HommeDragonDto, UpdateHommeDragonDto } from '@master-jdr/shared';
+import type {
+  ChooseEveilPowerDto,
+  CreateHommeDragonDto,
+  HommeDragonDto,
+  UpdateHommeDragonDto,
+} from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
 @Injectable({ providedIn: 'root' })
@@ -29,6 +34,16 @@ export class HommeDragonService {
       this.http.patch<HommeDragonDto>(`${API_BASE}/parties/${partieId}/homme-dragon`, dto, {
         withCredentials: true,
       }),
+    );
+  }
+
+  chooseEveilPower(partieId: string, dto: ChooseEveilPowerDto): Promise<HommeDragonDto> {
+    return firstValueFrom(
+      this.http.post<HommeDragonDto>(
+        `${API_BASE}/parties/${partieId}/homme-dragon/eveil-power`,
+        dto,
+        { withCredentials: true },
+      ),
     );
   }
 }

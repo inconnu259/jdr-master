@@ -89,6 +89,7 @@ export class HommeDragonSheet implements OnInit {
       ]);
       this.hommeDragon.set(hommeDragon);
       this.artefactCatalog.set(content['hommeDragonArtefact'] ?? []);
+      this.eveilPowerCatalog.set(content['eveilPower'] ?? []);
       if (hommeDragon === null) {
         this.mondesProteges.set(this.partieName());
       }
@@ -156,6 +157,42 @@ export class HommeDragonSheet implements OnInit {
       this.updateError.set("Impossible de changer d'artefact. Réessayez.");
     } finally {
       this.updating.set(false);
+    }
+  }
+
+  // — Choix d'un pouvoir d'éveil (Story 10.4) —
+  protected readonly eveilPowerCatalog = signal<ContentEntryDto[]>([]);
+  protected readonly currentPendingLevel = computed(() => this.hommeDragon()?.pendingEveilLevels[0] ?? null);
+  /** Pool commun à toutes les races (décision utilisateur, Story 10.4) : le sélecteur propose tous
+   * les pouvoirs du catalogue non encore choisis, pas un filtrage par niveau — un pouvoir d'éveil
+   * n'est jamais lié à un niveau de déblocage précis. */
+  protected readonly eveilPowersForCurrentLevel = computed(() => {
+    const chosenKeys = new Set((this.hommeDragon()?.eveilPowers ?? []).map((ep) => ep.key));
+    return this.eveilPowerCatalog().filter((e) => !chosenKeys.has(e.key));
+  });
+  protected readonly selectedEveilPowerKey = signal<string | null>(null);
+  protected readonly choosingEveilPower = signal(false);
+  protected readonly eveilPowerError = signal<string | null>(null);
+
+  protected eveilPowerLabel(key: string): string {
+    const entry = this.eveilPowerCatalog().find((e) => e.key === key);
+    return entry ? (entry.data as { label?: string }).label ?? key : key;
+  }
+
+  protected async onChooseEveilPower(): Promise<void> {
+    const level = this.currentPendingLevel();
+    const key = this.selectedEveilPowerKey();
+    if (!key || !level || this.choosingEveilPower()) return;
+    this.choosingEveilPower.set(true);
+    this.eveilPowerError.set(null);
+    try {
+      const updated = await this.hommeDragonSvc.chooseEveilPower(this.partieId(), { level, key });
+      this.hommeDragon.set(updated);
+      this.selectedEveilPowerKey.set(null);
+    } catch {
+      this.eveilPowerError.set("Impossible d'enregistrer ce choix. Réessayez.");
+    } finally {
+      this.choosingEveilPower.set(false);
     }
   }
 }

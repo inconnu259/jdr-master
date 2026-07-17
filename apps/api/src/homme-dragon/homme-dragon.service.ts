@@ -4,8 +4,19 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { CreateHommeDragonDto, HommeDragonDto, UpdateHommeDragonDto } from '@master-jdr/shared';
-import { validateHommeDragon, type HommeDragonArtefactCatalogEntry } from '@master-jdr/game-rules';
+import type {
+  ChooseEveilPowerDto as ChooseEveilPowerPayload,
+  CreateHommeDragonDto,
+  HommeDragonDto,
+  UpdateHommeDragonDto,
+} from '@master-jdr/shared';
+import {
+  validateHommeDragon,
+  computeHommeDragonDerived,
+  levelForScenariosPasse,
+  pendingEveilLevels,
+  type HommeDragonArtefactCatalogEntry,
+} from '@master-jdr/game-rules';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { GameSystemService } from '../game-systems/game-system.service';
@@ -124,6 +135,86 @@ export class HommeDragonService {
   }
 
   /**
+   * Choix d'un pouvoir d'éveil pour un niveau franchi (Story 10.4) — MJ seul via `getOwned`, même
+   * garde que `create()`/`update()`. Décision utilisateur : le catalogue `eveilPower` est un pool
+   * commun à toutes les races, sans niveau de déblocage par pouvoir — un pouvoir ne peut donc être
+   * choisi qu'une seule fois, quel que soit le niveau pour lequel il est choisi.
+   */
+  /**
+   * Revue de code : verrou de ligne explicite `SELECT ... FOR UPDATE` (même pattern que
+   * `ScenariosService`, AD-5/AD-10) — sans lui, deux appels concurrents (ou un double-clic
+   * contournant le bouton désactivé côté frontend) liraient le même `sheetData.eveilPowers` et
+   * s'écraseraient mutuellement à l'écriture. `sheetData` est copié (`{ ...sheetData }`) plutôt
+   * que muté en place, pour ne jamais modifier l'objet renvoyé par Prisma avant d'avoir validé
+   * la requête.
+   */
+  async chooseEveilPower(
+    partieId: string,
+    userId: string,
+    dto: ChooseEveilPowerPayload,
+  ): Promise<HommeDragonDto> {
+    const partie = await this.parties.getOwned(partieId, userId);
+    if (partie.gameSystemId !== RYUUTAMA_ID) {
+      throw new BadRequestException(
+        `L'Homme Dragon n'existe que pour Ryuutama, pas pour "${partie.gameSystemId}"`,
+      );
+    }
+
+    // Même calcul que buildDto() (niveau depuis historique.length) — dupliqué ici plutôt que
+    // factorisé car chooseEveilPower() n'a pas besoin du reste du DTO (voyageursProteges,
+    // historique complet) avant d'avoir validé la requête ; buildDto() est appelé à la toute fin
+    // pour construire la réponse, une fois l'écriture faite.
+    const voyageurs = await this.computeVoyageursProteges(partieId, userId);
+    const historique = await this.computeHistorique(partieId, userId, voyageurs);
+    const level = levelForScenariosPasse(historique.length);
+    const catalogKeys = await this.buildEveilPowerCatalogKeys(partie.gameSystemId);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "HommeDragon" WHERE "userId" = ${userId} AND "partieId" = ${partieId} AND "gameSystemId" = ${RYUUTAMA_ID} FOR UPDATE`;
+
+      const existing = await tx.hommeDragon.findUnique({
+        where: {
+          userId_partieId_gameSystemId: { userId, partieId, gameSystemId: RYUUTAMA_ID },
+        },
+      });
+      if (!existing) throw new NotFoundException('Homme Dragon introuvable');
+
+      const existingSheetData = existing.sheetData as any;
+      const appliedEveilPowers: { level: number; key: string }[] =
+        existingSheetData.eveilPowers ?? [];
+
+      const pending = pendingEveilLevels(
+        level,
+        appliedEveilPowers.map((e) => e.level),
+      );
+      if (!pending.includes(dto.level)) {
+        throw new BadRequestException(
+          "Ce niveau n'est pas en attente d'un choix de pouvoir d'éveil",
+        );
+      }
+
+      if (!catalogKeys.has(dto.key)) {
+        throw new BadRequestException("Pouvoir d'éveil invalide");
+      }
+      // Pool commun (décision utilisateur) : un pouvoir n'est jamais proposé deux fois, quel que
+      // soit le niveau pour lequel il aurait déjà été choisi.
+      if (appliedEveilPowers.some((e) => e.key === dto.key)) {
+        throw new BadRequestException("Ce pouvoir d'éveil a déjà été choisi");
+      }
+
+      const sheetData = {
+        ...existingSheetData,
+        eveilPowers: [...appliedEveilPowers, { level: dto.level, key: dto.key }],
+      };
+      return tx.hommeDragon.update({
+        where: { userId_partieId_gameSystemId: { userId, partieId, gameSystemId: RYUUTAMA_ID } },
+        data: { sheetData: sheetData as any },
+      });
+    });
+    return this.buildDto(updated, partieId, userId);
+  }
+
+  /**
    * Lecture ouverte à tout membre (NFR1) — cible toujours le Homme Dragon DU MJ de la Partie
    * (`partie.mjId`), pas celui du `userId` courant : un joueur qui consulte n'en a pas le sien.
    * `null` = pas encore créé, jamais un 404 (état normal, pas une erreur) — y compris si la Partie
@@ -156,6 +247,11 @@ export class HommeDragonService {
     }));
   }
 
+  private async buildEveilPowerCatalogKeys(gameSystemId: string): Promise<Set<string>> {
+    const content = await this.gameSystems.getContent(gameSystemId);
+    return new Set((content['eveilPower'] ?? []).map((entry) => entry.key));
+  }
+
   /**
    * AD-3 : `voyageursProteges`/`historique` sont calculés à la lecture, jamais stockés — cette
    * règle s'applique à TOUTE réponse contenant l'état de la fiche (`create`/`update`/`findOne`),
@@ -173,6 +269,18 @@ export class HommeDragonService {
     // appels non coordonnés.
     const voyageursProteges = await this.computeVoyageursProteges(partieId, userId);
     const historique = await this.computeHistorique(partieId, userId, voyageursProteges);
+    // Story 10.3 : `historique` est déjà filtré `status === 'PASSE'` — sa longueur EST le nombre
+    // de scénarios Passé recherché, aucune requête Prisma supplémentaire nécessaire.
+    const level = levelForScenariosPasse(historique.length);
+    const { PS } = computeHommeDragonDerived(level);
+    const eveilPowers = ((hommeDragon.sheetData as any).eveilPowers ?? []) as {
+      level: number;
+      key: string;
+    }[];
+    const pending = pendingEveilLevels(
+      level,
+      eveilPowers.map((e) => e.level),
+    );
     return {
       id: hommeDragon.id,
       userId: hommeDragon.userId,
@@ -183,6 +291,9 @@ export class HommeDragonService {
       updatedAt: hommeDragon.updatedAt.toISOString(),
       voyageursProteges,
       historique,
+      derived: { level, PS },
+      eveilPowers,
+      pendingEveilLevels: pending,
     };
   }
 

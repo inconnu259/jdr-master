@@ -20,6 +20,9 @@ function makeDto(overrides: Partial<HommeDragonDto> = {}): HommeDragonDto {
     updatedAt: '2026-07-16T00:00:00.000Z',
     voyageursProteges: [],
     historique: [],
+    derived: { level: 1, PS: 3 },
+    eveilPowers: [],
+    pendingEveilLevels: [],
     ...overrides,
   };
 }
@@ -74,6 +77,20 @@ describe('HommeDragonService', () => {
     expect(req.request.withCredentials).toBe(true);
 
     req.flush(makeDto({ sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grande-epee' }, nom: 'Ignis' } }));
+
+    await expect(promise).resolves.toBeDefined();
+  });
+
+  it('chooseEveilPower() appelle POST /parties/:id/homme-dragon/eveil-power avec le DTO, withCredentials', async () => {
+    const dto = { level: 2, key: 'escorte-du-dragon' };
+    const promise = service.chooseEveilPower('p1', dto);
+
+    const req = http.expectOne(`${API_BASE}/parties/p1/homme-dragon/eveil-power`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(dto);
+    expect(req.request.withCredentials).toBe(true);
+
+    req.flush(makeDto({ eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }] }));
 
     await expect(promise).resolves.toBeDefined();
   });
