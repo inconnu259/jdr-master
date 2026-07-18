@@ -37,7 +37,11 @@ function makeCharacter(overrides: Record<string, unknown> = {}) {
     gameSystemId: 'ryuutama',
     sheetData: {
       narrative: { name: 'Miren' },
-      equipment: { individual: [{ id: 'i1', name: 'Corde', weight: 2, addedBy: 'player' }], group: [] },
+      equipment: {
+        individual: [{ id: 'i1', name: 'Corde', weight: 2, price: '5po', addedBy: 'player' }],
+        contenants: [{ id: 'c1', name: 'Sac à dos', weight: 3, addedBy: 'player' }],
+        animaux: [{ id: 'a1', name: 'Cheval', addedBy: 'player' }],
+      },
     },
     derived: { PV: 10, PE: 8, Condition: 10, Initiative: 5, Encombrement: 11 },
     ownerPseudo: 'Alice',
@@ -95,8 +99,9 @@ describe('EquipmentPdfService', () => {
       characterName: 'Miren',
       encombrementLimit: 11,
       equipment: {
-        individual: [{ name: 'Corde', weight: 2 }],
-        group: [],
+        individual: [{ name: 'Corde', weight: 2, price: '5po', effect: undefined }],
+        contenants: [{ name: 'Sac à dos', weight: 3, price: undefined, effect: undefined }],
+        animaux: [{ name: 'Cheval', price: undefined, effect: undefined }],
       },
     });
   });

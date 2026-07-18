@@ -27,12 +27,20 @@ export class EquipmentPdfService {
         individual: (sheetData.equipment?.individual ?? []).map((i) => ({
           name: i.name,
           weight: i.weight,
+          price: i.price,
+          effect: i.effect,
         })),
-        // Story 14.1 : `group` n'existe plus dans RyuutamaSheetData (fusionné dans `individual`
-        // par la migration) — `EquipmentPdfInput.group` reste ici pour compiler sans régression
-        // (les anciennes entrées group sont déjà comptées via `individual` ci-dessus). Le mapping
-        // complet Prix/Effets/Contenant/Animal est hors scope (FR-9, Story 14.3).
-        group: [],
+        contenants: (sheetData.equipment?.contenants ?? []).map((c) => ({
+          name: c.name,
+          weight: c.weight,
+          price: c.price,
+          effect: c.effect,
+        })),
+        animaux: (sheetData.equipment?.animaux ?? []).map((a) => ({
+          name: a.name,
+          price: a.price,
+          effect: a.effect,
+        })),
       },
     });
 
