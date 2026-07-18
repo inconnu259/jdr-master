@@ -12,6 +12,8 @@ import { EmailService } from '../email/email.service';
 import { RegisterDto } from './dto/register.dto';
 
 const RESET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // +24h (FR-6)
+const RESET_TOKEN_INVALID_MESSAGE =
+  'Lien invalide ou expiré. Merci de refaire une demande.';
 
 @Injectable()
 export class AuthService {
@@ -77,44 +79,76 @@ export class AuthService {
   async requestPasswordReset(email: string): Promise<{ ok: true }> {
     const user = await this.users.findByEmail(email);
     if (user) {
-      const token = randomBytes(32).toString('base64url');
-      await this.prisma.passwordResetToken.create({
+      // Le secret est l'unique donnée capable de prouver la possession du lien ; jamais stocké
+      // tel quel (AD-4) — seul son hash argon2 va en base. `id` (retourné par `create()`) sert de
+      // clé de recherche publique côté vérification, un hash argon2 n'étant pas indexable.
+      const secret = randomBytes(32).toString('base64url');
+      const tokenHash = await argon2.hash(secret);
+      const created = await this.prisma.passwordResetToken.create({
         data: {
           userId: user.id,
-          token,
+          tokenHash,
           expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
         },
       });
       await this.email.sendMail('password-reset', user.email, {
-        link: `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/reset-password/${token}`,
+        link: `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/reset-password/${created.id}.${secret}`,
       });
     }
     return { ok: true };
   }
 
   /**
-   * Message générique unique pour token inconnu/expiré/déjà utilisé (AC4) — ne distingue jamais
-   * la cause. La réclamation du token (`updateMany` avec garde `WHERE`) est atomique, comme
-   * `InviteLinksService.consumeLink` — protège contre la course entre deux requêtes concurrentes
-   * utilisant le même token.
+   * Message générique unique pour token malformé/inconnu/expiré/déjà utilisé/secret invalide —
+   * ne distingue jamais la cause côté appelant.
+   *
+   * Le secret doit être vérifié (`argon2.verify`) **avant** la réclamation atomique (`updateMany`) :
+   * inverser l'ordre brûlerait le token légitime de l'utilisateur dès qu'une tentative avec un
+   * mauvais secret sur un `id` valide serait soumise, l'empêchant de réutiliser son propre lien.
+   *
+   * Le hachage (`argon2.verify`/`argon2.hash`, CPU-bound) reste hors de la transaction Prisma —
+   * seule la réclamation atomique du token et la mise à jour du mot de passe (les deux opérations
+   * qui doivent rester ensemble) sont transactionnelles, pour ne pas tenir une connexion DB
+   * pendant tout le temps de calcul du hachage.
    */
   async resetPassword(token: string, newPassword: string): Promise<void> {
+    const separatorIndex = token.indexOf('.');
+    if (separatorIndex <= 0 || separatorIndex === token.length - 1) {
+      throw new NotFoundException(RESET_TOKEN_INVALID_MESSAGE);
+    }
+    const id = token.slice(0, separatorIndex);
+    const secret = token.slice(separatorIndex + 1);
+
+    const record = await this.prisma.passwordResetToken.findUnique({
+      where: { id },
+    });
+    if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
+      throw new NotFoundException(RESET_TOKEN_INVALID_MESSAGE);
+    }
+
+    let valid: boolean;
+    try {
+      valid = await argon2.verify(record.tokenHash, secret);
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      throw new NotFoundException(RESET_TOKEN_INVALID_MESSAGE);
+    }
+
     const passwordHash = await argon2.hash(newPassword);
+
     await this.prisma.$transaction(async (tx) => {
       const claim = await tx.passwordResetToken.updateMany({
-        where: { token, usedAt: null, expiresAt: { gt: new Date() } },
+        where: { id, usedAt: null, expiresAt: { gt: new Date() } },
         data: { usedAt: new Date() },
       });
       if (claim.count === 0) {
-        throw new NotFoundException(
-          'Lien invalide ou expiré. Merci de refaire une demande.',
-        );
+        throw new NotFoundException(RESET_TOKEN_INVALID_MESSAGE);
       }
-      const reset = await tx.passwordResetToken.findUniqueOrThrow({
-        where: { token },
-      });
+
       await tx.user.update({
-        where: { id: reset.userId },
+        where: { id: record.userId },
         data: { passwordHash },
       });
     });
