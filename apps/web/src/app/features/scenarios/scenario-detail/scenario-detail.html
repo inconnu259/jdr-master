@@ -3,7 +3,9 @@
     <mat-icon>arrow_back</mat-icon> Retour à la partie
   </a>
 }
-@if (loadError()) {
+@if (loading()) {
+  <p>Chargement…</p>
+} @else if (loadError()) {
   <p class="error">{{ loadError() }}</p>
 } @else if (scenario(); as s) {
   <app-scenario-editor [scenario]="s" />

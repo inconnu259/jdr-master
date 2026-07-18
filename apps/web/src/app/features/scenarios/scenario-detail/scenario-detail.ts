@@ -26,6 +26,7 @@ export class ScenarioDetail implements OnInit {
 
   protected readonly scenario = signal<ScenarioDto | null>(null);
   protected readonly loadError = signal<string | null>(null);
+  protected readonly loading = signal(true);
   // Lu depuis le paramètre de route `:id` — disponible même en cas d'erreur (contrairement à
   // `scenario().partieId`), pour que le lien "Retour à la partie" fonctionne aussi sur cette branche.
   protected readonly partieId = this.route.snapshot.paramMap.get('id');
@@ -34,11 +35,13 @@ export class ScenarioDetail implements OnInit {
     const scenarioId = this.route.snapshot.paramMap.get('scenarioId');
     if (!scenarioId || !this.partieId) {
       this.loadError.set('Scénario introuvable — revenez à la liste des Brouillons.');
+      this.loading.set(false);
       return;
     }
 
     if (this.navigationScenario && this.navigationScenario.id === scenarioId) {
       this.scenario.set(this.navigationScenario);
+      this.loading.set(false);
       return;
     }
 
@@ -54,6 +57,8 @@ export class ScenarioDetail implements OnInit {
       this.scenario.set(found);
     } catch {
       this.loadError.set('Impossible de charger le scénario. Réessayez.');
+    } finally {
+      this.loading.set(false);
     }
   }
 }

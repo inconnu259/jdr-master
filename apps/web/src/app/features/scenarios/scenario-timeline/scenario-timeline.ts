@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   HostListener,
   computed,
@@ -73,6 +74,7 @@ export class ScenarioTimeline {
   private readonly dialog = inject(MatDialog);
   private readonly breakpointObserver = inject(BreakpointObserver);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly partieId = input.required<string>();
   /** Vue MJ : affiche aussi les BROUILLON (jamais pour un joueur, AD-6), stylés distinctement. */
@@ -102,8 +104,15 @@ export class ScenarioTimeline {
   // résoudrait après une réponse plus récente (deux changed() rapprochés, ex. deux champs modifiés
   // coup sur coup), pour ne jamais laisser une réponse périmée écraser un état plus à jour.
   private loadGeneration = 0;
+  // Garde anti-démontage (AC3) : évite une écriture sur `scenarios`/`loadError` si la réponse HTTP
+  // résout après que le composant a été détruit (ex. navigation rapide hors de la page).
+  private destroyed = false;
 
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      this.destroyed = true;
+    });
+
     // Recharge au montage ET à chaque mutation notifiée par ScenariosService (create/update/open
     // déclenchés depuis un autre onglet Angular Material de la même page, ex. ScenarioDrafts — pas
     // un onglet navigateur, qu'un simple signal ne peut pas synchroniser) — évite d'exiger un F5
@@ -144,11 +153,11 @@ export class ScenarioTimeline {
     const generation = ++this.loadGeneration;
     try {
       const scenarios = await this.scenariosService.listAll(partieId);
-      if (generation !== this.loadGeneration) return; // réponse obsolète, une requête plus récente est en vol
+      if (this.destroyed || generation !== this.loadGeneration) return; // réponse obsolète, une requête plus récente est en vol
       this.scenarios.set(scenarios);
       this.loadError.set(null);
     } catch {
-      if (generation !== this.loadGeneration) return;
+      if (this.destroyed || generation !== this.loadGeneration) return;
       this.loadError.set('Impossible de charger la chronologie. Réessayez.');
     }
   }

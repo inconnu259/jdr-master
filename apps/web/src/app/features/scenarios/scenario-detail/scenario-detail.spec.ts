@@ -64,6 +64,54 @@ async function createComponent(
 }
 
 describe('ScenarioDetail', () => {
+  it('AC4 : pendant le fallback réseau (F5), un indicateur de chargement est affiché puis disparaît', async () => {
+    let resolveListAll!: (value: ScenarioDto[]) => void;
+    const scenariosSvc = {
+      listDocuments: vi.fn().mockResolvedValue([]),
+      listAll: vi.fn().mockReturnValue(
+        new Promise<ScenarioDto[]>((resolve) => {
+          resolveListAll = resolve;
+        }),
+      ),
+    };
+    const router = {
+      getCurrentNavigation: () => ({ extras: { state: undefined } }),
+      createUrlTree: vi.fn().mockReturnValue({}),
+      serializeUrl: vi.fn().mockReturnValue('/parties/p1'),
+      navigateByUrl: vi.fn(),
+      events: of(),
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [ScenarioDetail],
+      providers: [
+        provideAnimationsAsync(),
+        { provide: ScenariosService, useValue: scenariosSvc },
+        { provide: Router, useValue: router },
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 's1' } } } },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(ScenarioDetail);
+    fixture.detectChanges();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.loading()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Chargement…');
+
+    resolveListAll([SCENARIO]);
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(comp.loading()).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('Chargement…');
+    expect(comp.scenario()).toEqual(SCENARIO);
+  });
+
   it('charge le scénario depuis l’état de navigation et affiche l’éditeur', async () => {
     const { fixture } = await createComponent(SCENARIO);
     const comp = fixture.componentInstance as any;

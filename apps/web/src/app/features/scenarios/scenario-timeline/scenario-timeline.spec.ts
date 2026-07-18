@@ -449,6 +449,76 @@ describe('ScenarioTimeline', () => {
     expect(nodeIds).toEqual(['a-venir']);
   });
 
+  it('AC1 (non-régression) : un changement de partieId() sur un composant déjà monté recharge la chronologie', async () => {
+    const { scenariosSvc, fixture } = await createComponent([PASSE]);
+    scenariosSvc.listAll.mockClear();
+
+    fixture.componentRef.setInput('partieId', 'p2');
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(scenariosSvc.listAll).toHaveBeenCalledWith('p2');
+  });
+
+  it('AC3 : une réponse résolue après démontage du composant n’écrit plus aucun signal', async () => {
+    const { scenariosSvc, fixture } = await createComponent([PASSE]);
+    const comp = fixture.componentInstance as any;
+
+    let resolveListAll!: (value: ScenarioDto[]) => void;
+    scenariosSvc.listAll.mockClear();
+    scenariosSvc.listAll.mockReturnValueOnce(
+      new Promise<ScenarioDto[]>((resolve) => {
+        resolveListAll = resolve;
+      }),
+    );
+
+    scenariosSvc.changed.update((v: number) => v + 1);
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    fixture.destroy();
+
+    expect(() => {
+      resolveListAll([A_VENIR]);
+    }).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(comp.scenarios()).toEqual([PASSE]);
+    expect(comp.loadError()).toBeNull();
+  });
+
+  it('AC3 (branche catch) : un rejet résolu après démontage du composant n’écrit pas loadError()', async () => {
+    const { scenariosSvc, fixture } = await createComponent([PASSE]);
+    const comp = fixture.componentInstance as any;
+
+    let rejectListAll!: (reason: unknown) => void;
+    scenariosSvc.listAll.mockClear();
+    scenariosSvc.listAll.mockReturnValueOnce(
+      new Promise<ScenarioDto[]>((_resolve, reject) => {
+        rejectListAll = reject;
+      }),
+    );
+
+    scenariosSvc.changed.update((v: number) => v + 1);
+    fixture.detectChanges();
+    await Promise.resolve();
+
+    fixture.destroy();
+
+    expect(() => {
+      rejectListAll(new Error('réseau'));
+    }).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(comp.loadError()).toBeNull();
+    expect(comp.scenarios()).toEqual([PASSE]);
+  });
+
   describe('Affichage des séances sur la carte (Story 8.7, AC7)', () => {
     it('scénario avec séances datées (poll.chosenDate) → dates affichées sur la carte', async () => {
       const scenarioWithSeances = makeScenario({

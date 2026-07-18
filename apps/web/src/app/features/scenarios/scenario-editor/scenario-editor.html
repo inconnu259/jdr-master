@@ -80,6 +80,9 @@
     @if (isEpisodique()) {
       <section class="participants">
         <h2>Participants</h2>
+        @if (participantsLoadError()) {
+          <p class="error">{{ participantsLoadError() }}</p>
+        }
         @if (participantCharacters().length > 0) {
           @for (c of participantCharacters(); track c.id) {
             <app-character-summary-card [character]="c" [showOwnerInfo]="true" />

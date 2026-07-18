@@ -62,6 +62,7 @@ export class ScenarioEditor implements OnInit {
   protected readonly scenario = signal<ScenarioDto | null>(null);
   protected readonly documents = signal<ScenarioDocumentDto[]>([]);
   protected readonly documentsError = signal<string | null>(null);
+  protected readonly participantsLoadError = signal<string | null>(null);
 
   protected readonly isReadOnly = computed(() => this.scenario()?.status === 'PASSE');
 
@@ -159,8 +160,7 @@ export class ScenarioEditor implements OnInit {
     try {
       this.characters.set(await this.characterService.listByPartie(this.scenarioInput().partieId));
     } catch {
-      // Liste de participants non-critique pour cette page — dégradation silencieuse plutôt
-      // qu'un blocage, cohérent avec le fait que la section participants reste secondaire ici.
+      this.participantsLoadError.set('Impossible de charger les participants. Réessayez.');
     }
     try {
       this.members.set(await this.partiesService.members(this.scenarioInput().partieId));

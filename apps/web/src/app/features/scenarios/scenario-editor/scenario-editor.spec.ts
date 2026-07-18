@@ -574,6 +574,59 @@ describe('ScenarioEditor', () => {
       expect(fixture.nativeElement.querySelectorAll('app-character-summary-card')).toHaveLength(0);
     });
 
+    it('AC2 : échec de chargement des personnages → message d’erreur visible dans la section participants', async () => {
+      const characterSvc = { listByPartie: vi.fn().mockRejectedValue(new Error('réseau')) };
+      const scenariosSvc = {
+        listAll: vi.fn().mockResolvedValue([
+          { ...SCENARIO, status: 'COURANT', participants: [{ userId: 'u1', pseudo: 'Alice' }] },
+        ]),
+        listDocuments: vi.fn().mockResolvedValue([]),
+        update: vi.fn(),
+        uploadDocument: vi.fn(),
+        downloadDocument: vi.fn(),
+        markCourant: vi.fn(),
+        close: vi.fn(),
+        addSeance: vi.fn(),
+        linkSeancePoll: vi.fn(),
+        setResumeFin: vi.fn(),
+      };
+      const partiesSvc = { members: vi.fn().mockResolvedValue([]) };
+      const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
+      const announcementsSvc = { listAll: vi.fn().mockResolvedValue([]) };
+
+      await TestBed.configureTestingModule({
+        imports: [ScenarioEditor],
+        providers: [
+          provideAnimationsAsync(),
+          { provide: ScenariosService, useValue: scenariosSvc },
+          { provide: CharacterService, useValue: characterSvc },
+          { provide: PartiesService, useValue: partiesSvc },
+          { provide: PollService, useValue: pollSvc },
+          { provide: AnnouncementsService, useValue: announcementsSvc },
+        ],
+      }).compileComponents();
+
+      const fixture = TestBed.createComponent(ScenarioEditor);
+      fixture.componentRef.setInput('scenario', {
+        ...SCENARIO,
+        status: 'COURANT',
+        participants: [{ userId: 'u1', pseudo: 'Alice' }],
+      });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const comp = fixture.componentInstance as any;
+      expect(comp.participantsLoadError()).toBe('Impossible de charger les participants. Réessayez.');
+      expect(fixture.nativeElement.textContent).toContain(
+        'Impossible de charger les participants. Réessayez.',
+      );
+    });
+
     it('participant sans personnage dans characters → aucune carte fantôme, mais pseudo affiché en secours', async () => {
       const { fixture } = await createComponent(
         {
