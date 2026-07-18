@@ -39,7 +39,8 @@ const CHARACTER: CharacterDto = makeCharacterDto({
     attributes: { VIG: 8, AGI: 4, INT: 6, ESP: 6 },
     equipment: {
       individual: [{ id: 'item-1', name: 'Nécessaire de voyage', weight: 0, addedBy: 'player' }],
-      group: ['Nécessaire de groupe'],
+      contenants: [],
+      animaux: [],
     },
     fetiqueObject: 'une plume de corbeau',
     narrative: { name: 'Fenn', homeTown: 'Aubval', motivation: 'Voir la mer' },
@@ -878,16 +879,16 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.querySelector('app-inventory-tab')).not.toBeNull();
   });
 
-  it('section Inventaire visible pour le MJ (lecture) — équipement individuel non dupliqué dans la carte Équipement', async () => {
+  it('section Inventaire visible pour le MJ (lecture) — équipement individuel non dupliqué dans la carte Équipement (Story 14.2)', async () => {
     const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'mj-stranger');
     expect(fixture.nativeElement.querySelector('app-inventory-tab')).not.toBeNull();
-    // "Nécessaire de voyage" (individual) ne doit plus apparaître dans la carte "Équipement" —
-    // seul "Nécessaire de groupe" (group) y reste (régression Story 6.4, cf. Task 10).
+    // "Nécessaire de voyage" (individual) ne doit jamais apparaître dans la carte "Équipement" —
+    // seul l'objet fétiche y reste, la liste group/individual a été retirée (Story 14.2, AC5).
     const equipmentCard = Array.from(fixture.nativeElement.querySelectorAll('.sheet__card')).find(
       (card: any) => card.textContent.includes('Équipement'),
     ) as HTMLElement;
     expect(equipmentCard.textContent).not.toContain('Nécessaire de voyage');
-    expect(equipmentCard.textContent).toContain('Nécessaire de groupe');
+    expect(equipmentCard.textContent).toContain('une plume de corbeau');
   });
 
   it('section Notes visible pour le propriétaire, isOwner=true transmis', async () => {

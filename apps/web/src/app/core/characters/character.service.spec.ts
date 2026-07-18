@@ -173,6 +173,68 @@ describe('CharacterService (front)', () => {
     expect(await p).toEqual(character);
   });
 
+  it('addContenant(id, dto) → POST /characters/:id/contenants (Story 14.2)', async () => {
+    const dto = { name: 'Sac à dos', weight: 2 };
+    const p = service.addContenant('c1', dto);
+    const req = http.expectOne(`${API}/characters/c1/contenants`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual(dto);
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
+
+  it('updateContenant(id, itemId, dto) → PATCH /characters/:id/contenants/:itemId', async () => {
+    const dto = { weight: 3 };
+    const p = service.updateContenant('c1', 'cont-1', dto);
+    const req = http.expectOne(`${API}/characters/c1/contenants/cont-1`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual(dto);
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
+
+  it('removeContenant(id, itemId) → DELETE /characters/:id/contenants/:itemId', async () => {
+    const p = service.removeContenant('c1', 'cont-2');
+    const req = http.expectOne(`${API}/characters/c1/contenants/cont-2`);
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
+
+  it('addAnimal(id, dto) → POST /characters/:id/animaux (Story 14.2)', async () => {
+    const dto = { name: 'Cheval' };
+    const p = service.addAnimal('c1', dto);
+    const req = http.expectOne(`${API}/characters/c1/animaux`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual(dto);
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
+
+  it('updateAnimal(id, itemId, dto) → PATCH /characters/:id/animaux/:itemId', async () => {
+    const dto = { effect: 'Rapide' };
+    const p = service.updateAnimal('c1', 'ani-1', dto);
+    const req = http.expectOne(`${API}/characters/c1/animaux/ani-1`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual(dto);
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
+
+  it('removeAnimal(id, itemId) → DELETE /characters/:id/animaux/:itemId', async () => {
+    const p = service.removeAnimal('c1', 'ani-2');
+    const req = http.expectOne(`${API}/characters/c1/animaux/ani-2`);
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(character);
+    expect(await p).toEqual(character);
+  });
+
   it('addNote(id, dto) → POST /characters/:id/notes', async () => {
     const dto = { text: 'Une note' };
     const note = {

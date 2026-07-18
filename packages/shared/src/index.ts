@@ -463,12 +463,53 @@ export interface CreateLevelUpDto {
 export interface CreateInventoryItemDto {
   name: string;
   weight?: number; // absent → 0 côté serveur
+  price?: string;
+  effect?: string;
 }
 
 /** Payload de PATCH /characters/:id/inventory-items/:itemId — partiel, au moins un champ. */
 export interface UpdateInventoryItemDto {
   name?: string;
   weight?: number;
+  price?: string;
+  effect?: string;
+}
+
+/**
+ * Payload de POST /characters/:id/contenants (Story 14.1/14.2) — même forme qu'`individual`,
+ * poids obligatoire (contrairement à `individual`, dont le poids reste facultatif — gap
+ * pré-existant Story 6.4, non reproduit ici).
+ */
+export interface CreateContenantDto {
+  name: string;
+  weight: number;
+  price?: string;
+  effect?: string;
+}
+
+/** Payload de PATCH /characters/:id/contenants/:itemId — partiel, au moins un champ. */
+export interface UpdateContenantDto {
+  name?: string;
+  weight?: number;
+  price?: string;
+  effect?: string;
+}
+
+/**
+ * Payload de POST /characters/:id/animaux (Story 14.1/14.2) — **jamais** de propriété `weight`,
+ * même optionnelle : un animal n'a jamais de poids (FR8), absence structurelle.
+ */
+export interface CreateAnimalDto {
+  name: string;
+  price?: string;
+  effect?: string;
+}
+
+/** Payload de PATCH /characters/:id/animaux/:itemId — partiel, au moins un champ. */
+export interface UpdateAnimalDto {
+  name?: string;
+  price?: string;
+  effect?: string;
 }
 
 /** Entrée du journal de notes d'un personnage (Story 6.5) — append-only, jamais éditée/supprimée après création. */

@@ -89,6 +89,54 @@ describe('InventoryItemRow', () => {
     expect(removed).toBe(true);
   });
 
+  it('weight absent (animal) → aucun élément de poids rendu (Story 14.2, FR8)', async () => {
+    TestBed.configureTestingModule({ imports: [InventoryItemRow] });
+    const fixture = TestBed.createComponent(InventoryItemRow);
+    fixture.componentRef.setInput('item', {
+      id: 'ani-1',
+      name: 'Cheval',
+      addedBy: 'player',
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('.inventory-item-row__weight')).toBeNull();
+  });
+
+  it('price/effect renseignés → affichés ; absents → aucun élément vide/orphelin (Story 14.2)', async () => {
+    TestBed.configureTestingModule({ imports: [InventoryItemRow] });
+    const fixture = TestBed.createComponent(InventoryItemRow);
+    fixture.componentRef.setInput('item', {
+      id: 'item-1',
+      name: 'Sac',
+      weight: 2,
+      price: '5 po',
+      effect: 'Contient 10 objets',
+      addedBy: 'player',
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('.inventory-item-row__price')?.textContent).toBe(
+      '5 po',
+    );
+    expect(fixture.nativeElement.querySelector('.inventory-item-row__effect')?.textContent).toBe(
+      'Contient 10 objets',
+    );
+
+    fixture.componentRef.setInput('item', {
+      id: 'item-2',
+      name: 'Corde',
+      weight: 1,
+      addedBy: 'player',
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('.inventory-item-row__price')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.inventory-item-row__effect')).toBeNull();
+  });
+
   it('removable=false → bouton "Supprimer" absent même si editable=true (MJ : édite mais ne supprime pas)', async () => {
     TestBed.configureTestingModule({ imports: [InventoryItemRow] });
     const fixture = TestBed.createComponent(InventoryItemRow);

@@ -1,90 +1,369 @@
 <div class="inventory-tab">
   <app-encumbrance-bar [totalWeight]="totalWeight()" [limit]="character().derived.Encombrement" />
 
-  @if (individual().length === 0) {
-    <p class="inventory-tab__empty">{{ theme.tone()['evolution.inventory_empty'] }}</p>
-  } @else {
-    <ul class="inventory-tab__list">
-      @for (item of individual(); track item.id) {
-        <li>
-          @if (editingId() === item.id) {
-            <div class="inventory-tab__edit-form">
-              <input type="text" [value]="editName()" (input)="editName.set($any($event.target).value)" />
-              <input
-                type="number"
-                min="0"
-                step="0.1"
-                [value]="editWeight()"
-                (input)="onEditWeightInput($any($event.target).valueAsNumber)"
+  <section class="inventory-tab__section">
+    <h3>Objets</h3>
+    @if (individual().length === 0) {
+      <p class="inventory-tab__empty">{{ theme.tone()['evolution.inventory_empty'] }}</p>
+    } @else {
+      <ul class="inventory-tab__list">
+        @for (item of individual(); track item.id) {
+          <li>
+            @if (editingId() === item.id) {
+              <div class="inventory-tab__edit-form">
+                <input type="text" [value]="editName()" (input)="editName.set($any($event.target).value)" />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  [value]="editWeight()"
+                  (input)="onEditWeightInput($any($event.target).valueAsNumber)"
+                />
+                <input
+                  type="text"
+                  placeholder="Prix (facultatif)"
+                  [value]="editPrice() ?? ''"
+                  (input)="editPrice.set($any($event.target).value)"
+                />
+                <input
+                  type="text"
+                  placeholder="Effet (facultatif)"
+                  [value]="editEffect() ?? ''"
+                  (input)="editEffect.set($any($event.target).value)"
+                />
+                <button
+                  mat-button
+                  type="button"
+                  (click)="isOwner() ? submitEdit(item.id) : submitMjEdit(item.id)"
+                >
+                  Valider
+                </button>
+                <button mat-button type="button" (click)="cancelEdit()">Annuler</button>
+              </div>
+            } @else {
+              <app-inventory-item-row
+                [item]="item"
+                [editable]="isOwner() || viewerIsMj()"
+                [removable]="isOwner()"
+                (edit)="startEdit(item)"
+                (remove)="removeItem(item.id)"
               />
-              <button
-                mat-button
-                type="button"
-                (click)="isOwner() ? submitEdit(item.id) : submitMjEdit(item.id)"
-              >
-                Valider
-              </button>
-              <button mat-button type="button" (click)="cancelEdit()">Annuler</button>
-            </div>
-          } @else {
-            <app-inventory-item-row
-              [item]="item"
-              [editable]="isOwner() || viewerIsMj()"
-              [removable]="isOwner()"
-              (edit)="startEdit(item)"
-              (remove)="removeItem(item.id)"
-            />
-          }
-        </li>
-      }
-    </ul>
-  }
+            }
+          </li>
+        }
+      </ul>
+    }
 
-  @if (error(); as err) {
-    <p class="inventory-tab__error">{{ err }}</p>
-  }
+    @if (error(); as err) {
+      <p class="inventory-tab__error">{{ err }}</p>
+    }
 
-  @if (isOwner()) {
-    <form class="inventory-tab__add-form" (submit)="$event.preventDefault(); submitAdd()">
-      <input
-        type="text"
-        placeholder="Nom de l'objet"
-        [value]="newItemName()"
-        (input)="newItemName.set($any($event.target).value)"
-      />
-      <input
-        type="number"
-        min="0"
-        step="0.1"
-        placeholder="Poids"
-        [value]="newItemWeight()"
-        (input)="newItemWeight.set($any($event.target).valueAsNumber || undefined)"
-      />
-      <button mat-flat-button type="submit" [disabled]="submitting()">
-        {{ theme.tone()['evolution.inventory_add_cta'] }}
-      </button>
-    </form>
-  }
+    @if (isOwner()) {
+      <form class="inventory-tab__add-form" (submit)="$event.preventDefault(); submitAdd()">
+        <input
+          type="text"
+          placeholder="Nom de l'objet"
+          [value]="newItemName()"
+          (input)="newItemName.set($any($event.target).value)"
+        />
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          placeholder="Poids"
+          [value]="newItemWeight()"
+          (input)="newItemWeight.set($any($event.target).valueAsNumber || undefined)"
+        />
+        <input
+          type="text"
+          placeholder="Prix (facultatif)"
+          [value]="newItemPrice() ?? ''"
+          (input)="newItemPrice.set($any($event.target).value)"
+        />
+        <input
+          type="text"
+          placeholder="Effet (facultatif)"
+          [value]="newItemEffect() ?? ''"
+          (input)="newItemEffect.set($any($event.target).value)"
+        />
+        <button mat-flat-button type="submit" [disabled]="submitting()">
+          {{ theme.tone()['evolution.inventory_add_cta'] }}
+        </button>
+      </form>
+    }
 
-  @if (viewerIsMj()) {
-    <form class="inventory-tab__mj-add-form" (submit)="$event.preventDefault(); submitMjAdd()">
-      <input
-        type="text"
-        placeholder="Nom de l'objet"
-        [value]="newItemName()"
-        (input)="newItemName.set($any($event.target).value)"
-      />
-      <input
-        type="number"
-        min="0"
-        step="0.1"
-        placeholder="Poids"
-        [value]="newItemWeight()"
-        (input)="newItemWeight.set($any($event.target).valueAsNumber || undefined)"
-      />
-      <button mat-flat-button type="submit" [disabled]="submitting()">
-        {{ theme.tone()['evolution.inventory_mj_add_cta'] }}
-      </button>
-    </form>
-  }
+    @if (viewerIsMj()) {
+      <form class="inventory-tab__mj-add-form" (submit)="$event.preventDefault(); submitMjAdd()">
+        <input
+          type="text"
+          placeholder="Nom de l'objet"
+          [value]="newItemName()"
+          (input)="newItemName.set($any($event.target).value)"
+        />
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          placeholder="Poids"
+          [value]="newItemWeight()"
+          (input)="newItemWeight.set($any($event.target).valueAsNumber || undefined)"
+        />
+        <input
+          type="text"
+          placeholder="Prix (facultatif)"
+          [value]="newItemPrice() ?? ''"
+          (input)="newItemPrice.set($any($event.target).value)"
+        />
+        <input
+          type="text"
+          placeholder="Effet (facultatif)"
+          [value]="newItemEffect() ?? ''"
+          (input)="newItemEffect.set($any($event.target).value)"
+        />
+        <button mat-flat-button type="submit" [disabled]="submitting()">
+          {{ theme.tone()['evolution.inventory_mj_add_cta'] }}
+        </button>
+      </form>
+    }
+  </section>
+
+  <section class="inventory-tab__section">
+    <h3>Contenants</h3>
+    @if (contenants().length === 0) {
+      <p class="inventory-tab__empty">Aucun contenant pour le moment.</p>
+    } @else {
+      <ul class="inventory-tab__list">
+        @for (item of contenants(); track item.id) {
+          <li>
+            @if (editingContenantId() === item.id) {
+              <div class="inventory-tab__edit-form">
+                <input
+                  type="text"
+                  [value]="editContenantName()"
+                  (input)="editContenantName.set($any($event.target).value)"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  required
+                  [value]="editContenantWeight()"
+                  (input)="onEditContenantWeightInput($any($event.target).valueAsNumber)"
+                />
+                <input
+                  type="text"
+                  placeholder="Prix (facultatif)"
+                  [value]="editContenantPrice() ?? ''"
+                  (input)="editContenantPrice.set($any($event.target).value)"
+                />
+                <input
+                  type="text"
+                  placeholder="Effet (facultatif)"
+                  [value]="editContenantEffect() ?? ''"
+                  (input)="editContenantEffect.set($any($event.target).value)"
+                />
+                <button
+                  mat-button
+                  type="button"
+                  (click)="isOwner() ? submitEditContenant(item.id) : submitMjEditContenant(item.id)"
+                >
+                  Valider
+                </button>
+                <button mat-button type="button" (click)="cancelEditContenant()">Annuler</button>
+              </div>
+            } @else {
+              <app-inventory-item-row
+                [item]="item"
+                [editable]="isOwner() || viewerIsMj()"
+                [removable]="isOwner()"
+                (edit)="startEditContenant(item)"
+                (remove)="removeContenant(item.id)"
+              />
+            }
+          </li>
+        }
+      </ul>
+    }
+
+    @if (contenantError(); as err) {
+      <p class="inventory-tab__error">{{ err }}</p>
+    }
+
+    @if (isOwner()) {
+      <form class="inventory-tab__add-form" (submit)="$event.preventDefault(); submitAddContenant()">
+        <input
+          type="text"
+          placeholder="Nom du contenant"
+          [value]="newContenantName()"
+          (input)="newContenantName.set($any($event.target).value)"
+        />
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          required
+          placeholder="Poids"
+          [value]="newContenantWeight()"
+          (input)="onNewContenantWeightInput($any($event.target).valueAsNumber)"
+        />
+        <input
+          type="text"
+          placeholder="Prix (facultatif)"
+          [value]="newContenantPrice() ?? ''"
+          (input)="newContenantPrice.set($any($event.target).value)"
+        />
+        <input
+          type="text"
+          placeholder="Effet (facultatif)"
+          [value]="newContenantEffect() ?? ''"
+          (input)="newContenantEffect.set($any($event.target).value)"
+        />
+        <button mat-flat-button type="submit" [disabled]="contenantSubmitting()">
+          + Ajouter un contenant
+        </button>
+      </form>
+    }
+
+    @if (viewerIsMj()) {
+      <form class="inventory-tab__mj-add-form" (submit)="$event.preventDefault(); submitMjAddContenant()">
+        <input
+          type="text"
+          placeholder="Nom du contenant"
+          [value]="newContenantName()"
+          (input)="newContenantName.set($any($event.target).value)"
+        />
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          required
+          placeholder="Poids"
+          [value]="newContenantWeight()"
+          (input)="onNewContenantWeightInput($any($event.target).valueAsNumber)"
+        />
+        <input
+          type="text"
+          placeholder="Prix (facultatif)"
+          [value]="newContenantPrice() ?? ''"
+          (input)="newContenantPrice.set($any($event.target).value)"
+        />
+        <input
+          type="text"
+          placeholder="Effet (facultatif)"
+          [value]="newContenantEffect() ?? ''"
+          (input)="newContenantEffect.set($any($event.target).value)"
+        />
+        <button mat-flat-button type="submit" [disabled]="contenantSubmitting()">
+          + Ajouter un contenant (MJ)
+        </button>
+      </form>
+    }
+  </section>
+
+  <section class="inventory-tab__section">
+    <h3>Animaux</h3>
+    @if (animaux().length === 0) {
+      <p class="inventory-tab__empty">Aucun animal pour le moment.</p>
+    } @else {
+      <ul class="inventory-tab__list">
+        @for (item of animaux(); track item.id) {
+          <li>
+            @if (editingAnimalId() === item.id) {
+              <div class="inventory-tab__edit-form">
+                <input
+                  type="text"
+                  [value]="editAnimalName()"
+                  (input)="editAnimalName.set($any($event.target).value)"
+                />
+                <input
+                  type="text"
+                  placeholder="Prix (facultatif)"
+                  [value]="editAnimalPrice() ?? ''"
+                  (input)="editAnimalPrice.set($any($event.target).value)"
+                />
+                <input
+                  type="text"
+                  placeholder="Effet (facultatif)"
+                  [value]="editAnimalEffect() ?? ''"
+                  (input)="editAnimalEffect.set($any($event.target).value)"
+                />
+                <button
+                  mat-button
+                  type="button"
+                  (click)="isOwner() ? submitEditAnimal(item.id) : submitMjEditAnimal(item.id)"
+                >
+                  Valider
+                </button>
+                <button mat-button type="button" (click)="cancelEditAnimal()">Annuler</button>
+              </div>
+            } @else {
+              <app-inventory-item-row
+                [item]="item"
+                [editable]="isOwner() || viewerIsMj()"
+                [removable]="isOwner()"
+                (edit)="startEditAnimal(item)"
+                (remove)="removeAnimal(item.id)"
+              />
+            }
+          </li>
+        }
+      </ul>
+    }
+
+    @if (animalError(); as err) {
+      <p class="inventory-tab__error">{{ err }}</p>
+    }
+
+    @if (isOwner()) {
+      <form class="inventory-tab__add-form" (submit)="$event.preventDefault(); submitAddAnimal()">
+        <input
+          type="text"
+          placeholder="Nom de l'animal"
+          [value]="newAnimalName()"
+          (input)="newAnimalName.set($any($event.target).value)"
+        />
+        <input
+          type="text"
+          placeholder="Prix (facultatif)"
+          [value]="newAnimalPrice() ?? ''"
+          (input)="newAnimalPrice.set($any($event.target).value)"
+        />
+        <input
+          type="text"
+          placeholder="Effet (facultatif)"
+          [value]="newAnimalEffect() ?? ''"
+          (input)="newAnimalEffect.set($any($event.target).value)"
+        />
+        <button mat-flat-button type="submit" [disabled]="animalSubmitting()">
+          + Ajouter un animal
+        </button>
+      </form>
+    }
+
+    @if (viewerIsMj()) {
+      <form class="inventory-tab__mj-add-form" (submit)="$event.preventDefault(); submitMjAddAnimal()">
+        <input
+          type="text"
+          placeholder="Nom de l'animal"
+          [value]="newAnimalName()"
+          (input)="newAnimalName.set($any($event.target).value)"
+        />
+        <input
+          type="text"
+          placeholder="Prix (facultatif)"
+          [value]="newAnimalPrice() ?? ''"
+          (input)="newAnimalPrice.set($any($event.target).value)"
+        />
+        <input
+          type="text"
+          placeholder="Effet (facultatif)"
+          [value]="newAnimalEffect() ?? ''"
+          (input)="newAnimalEffect.set($any($event.target).value)"
+        />
+        <button mat-flat-button type="submit" [disabled]="animalSubmitting()">
+          + Ajouter un animal (MJ)
+        </button>
+      </form>
+    }
+  </section>
 </div>

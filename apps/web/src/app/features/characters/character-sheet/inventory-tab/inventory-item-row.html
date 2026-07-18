@@ -1,6 +1,14 @@
 <div class="inventory-item-row">
   <span class="inventory-item-row__name">{{ item().name }}</span>
-  <span class="inventory-item-row__weight">{{ item().weight }}</span>
+  @if (item().weight !== undefined) {
+    <span class="inventory-item-row__weight">{{ item().weight }}</span>
+  }
+  @if (item().price) {
+    <span class="inventory-item-row__price">{{ item().price }}</span>
+  }
+  @if (item().effect) {
+    <span class="inventory-item-row__effect">{{ item().effect }}</span>
+  }
   @if (item().addedBy === 'mj') {
     <span class="inventory-item-row__badge">ajouté par le MJ</span>
   }

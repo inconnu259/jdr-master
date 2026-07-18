@@ -294,13 +294,6 @@
 
         <section class="sheet__card">
           <h2 class="sheet__card-title">Équipement</h2>
-          @if (equipment(); as eq) {
-            <ul class="sheet__equipment-list">
-              @for (item of eq.group ?? []; track item) {
-                <li>{{ item }}</li>
-              }
-            </ul>
-          }
           @if (fetiqueObject() || viewerIsMj()) {
             <p class="sheet__fetish-box">
               Objet fétiche : {{ fetiqueObject() }}

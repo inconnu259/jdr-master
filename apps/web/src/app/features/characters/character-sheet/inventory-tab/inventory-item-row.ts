@@ -4,7 +4,10 @@ import { MatButtonModule } from '@angular/material/button';
 export interface InventoryItemView {
   id: string;
   name: string;
-  weight: number;
+  /** Absent pour un animal (jamais de poids, FR8) — absence structurelle, jamais une valeur fictive. */
+  weight?: number;
+  price?: string;
+  effect?: string;
   addedBy: string;
 }
 

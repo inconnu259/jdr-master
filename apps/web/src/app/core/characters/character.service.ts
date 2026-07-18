@@ -5,8 +5,10 @@ import type {
   CharacterDto,
   CharacterNoteDto,
   CharacterSnapshotDto,
+  CreateAnimalDto,
   CreateCharacterDto,
   CreateCharacterNoteDto,
+  CreateContenantDto,
   CreateInventoryItemDto,
   CreateLevelUpDto,
   GameSystemContentDto,
@@ -15,6 +17,8 @@ import type {
   SetJournalAutoAssociateDto,
   SetNoteScenarioDto,
   SetSheetFieldResultDto,
+  UpdateAnimalDto,
+  UpdateContenantDto,
   UpdateInventoryItemDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
@@ -188,6 +192,58 @@ export class CharacterService {
   removeInventoryItem(id: string, itemId: string): Promise<CharacterDto> {
     return firstValueFrom(
       this.http.delete<CharacterDto>(`${API_BASE}/characters/${id}/inventory-items/${itemId}`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  addContenant(id: string, dto: CreateContenantDto): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.post<CharacterDto>(`${API_BASE}/characters/${id}/contenants`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  updateContenant(
+    id: string,
+    itemId: string,
+    dto: UpdateContenantDto,
+  ): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.patch<CharacterDto>(`${API_BASE}/characters/${id}/contenants/${itemId}`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  removeContenant(id: string, itemId: string): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.delete<CharacterDto>(`${API_BASE}/characters/${id}/contenants/${itemId}`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  addAnimal(id: string, dto: CreateAnimalDto): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.post<CharacterDto>(`${API_BASE}/characters/${id}/animaux`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  updateAnimal(id: string, itemId: string, dto: UpdateAnimalDto): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.patch<CharacterDto>(`${API_BASE}/characters/${id}/animaux/${itemId}`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  removeAnimal(id: string, itemId: string): Promise<CharacterDto> {
+    return firstValueFrom(
+      this.http.delete<CharacterDto>(`${API_BASE}/characters/${id}/animaux/${itemId}`, {
         withCredentials: true,
       }),
     );

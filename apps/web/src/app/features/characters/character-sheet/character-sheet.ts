@@ -258,12 +258,6 @@ export class CharacterSheet implements OnInit {
     return null;
   });
 
-  /** `individual` (InventoryItem[], Story 6.4) n'est plus lu ici — géré par `InventoryTab`
-   *  (son propre computed sur `sheetData.equipment.individual`, cf. `inventory-tab.ts`). */
-  protected readonly equipment = computed<{ group: string[] } | null>(
-    () => (this.sheetData()['equipment'] as { group: string[] }) ?? null,
-  );
-
   protected readonly fetiqueObject = computed<string | undefined>(
     () => this.sheetData()['fetiqueObject'] as string | undefined,
   );

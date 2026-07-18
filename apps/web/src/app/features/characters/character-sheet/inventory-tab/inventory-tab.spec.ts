@@ -6,9 +6,11 @@ import { makeCharacterDto } from '../../../../core/characters/character-dto.fixt
 
 function makeCharacterWithItems(
   items: { id: string; name: string; weight: number; addedBy: string }[],
+  contenants: { id: string; name: string; weight: number; addedBy: string }[] = [],
+  animaux: { id: string; name: string; addedBy: string }[] = [],
 ) {
   return makeCharacterDto({
-    sheetData: { equipment: { individual: items, group: [] } },
+    sheetData: { equipment: { individual: items, contenants, animaux } },
     derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 9 },
   });
 }
@@ -283,6 +285,283 @@ describe('InventoryTab', () => {
         ).length,
       ).toBe(0); // liste vide dans ce test — juste vérifie qu'aucune erreur de rendu MJ n'apparaît
       expect(fixture.nativeElement.querySelector('.inventory-tab__mj-add-form')).toBeNull();
+    });
+  });
+
+  describe('Contenants (Story 14.2, FR7)', () => {
+    it('rend la liste des contenants, poids inclus dans totalWeight()', async () => {
+      const characterSvc = { addContenant: vi.fn() };
+      await TestBed.configureTestingModule({
+        imports: [InventoryTab],
+        providers: [{ provide: CharacterService, useValue: characterSvc }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(InventoryTab);
+      fixture.componentRef.setInput(
+        'character',
+        makeCharacterWithItems(
+          [{ id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' }],
+          [{ id: 'cont-1', name: 'Sac à dos', weight: 2, addedBy: 'player' }],
+        ),
+      );
+      fixture.componentRef.setInput('isOwner', true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.textContent).toContain('Sac à dos');
+      expect(el.textContent).toContain('3'); // 1 (individual) + 2 (contenant)
+    });
+
+    it('ajout propriétaire sans poids → ne soumet pas (poids obligatoire, AC3)', async () => {
+      const characterSvc = { addContenant: vi.fn() };
+      const fixture = await createComponent(characterSvc);
+      const comp = fixture.componentInstance as any;
+
+      comp.newContenantName.set('Sac');
+      await comp.submitAddContenant();
+
+      expect(characterSvc.addContenant).not.toHaveBeenCalled();
+    });
+
+    it('ajout appelle characterSvc.addContenant avec le payload attendu et émet characterUpdated', async () => {
+      const updated = makeCharacterWithItems(
+        [],
+        [{ id: 'cont-1', name: 'Sac à dos', weight: 2, addedBy: 'player' }],
+      );
+      const characterSvc = { addContenant: vi.fn().mockResolvedValue(updated) };
+      const fixture = await createComponent(characterSvc);
+      const comp = fixture.componentInstance as any;
+
+      let emitted: unknown = null;
+      comp.characterUpdated.subscribe((c: unknown) => (emitted = c));
+
+      comp.newContenantName.set('Sac à dos');
+      comp.newContenantWeight.set(2);
+      await comp.submitAddContenant();
+
+      expect(characterSvc.addContenant).toHaveBeenCalledWith('char1', {
+        name: 'Sac à dos',
+        weight: 2,
+      });
+      expect(emitted).toEqual(updated);
+    });
+
+    it('onNewContenantWeightInput(0) → poids 0 accepté, ne soumet pas à undefined (régression revue de code)', async () => {
+      const updated = makeCharacterWithItems(
+        [],
+        [{ id: 'cont-1', name: 'Boîte vide', weight: 0, addedBy: 'player' }],
+      );
+      const characterSvc = { addContenant: vi.fn().mockResolvedValue(updated) };
+      const fixture = await createComponent(characterSvc);
+      const comp = fixture.componentInstance as any;
+
+      comp.newContenantName.set('Boîte vide');
+      comp.onNewContenantWeightInput(0);
+      await comp.submitAddContenant();
+
+      expect(characterSvc.addContenant).toHaveBeenCalledWith('char1', {
+        name: 'Boîte vide',
+        weight: 0,
+      });
+    });
+
+    it('édition avec poids vidé (NaN) → ne soumet pas, poids obligatoire non contourné (régression revue de code, AC3)', async () => {
+      const characterSvc = { updateContenant: vi.fn() };
+      await TestBed.configureTestingModule({
+        imports: [InventoryTab],
+        providers: [{ provide: CharacterService, useValue: characterSvc }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(InventoryTab);
+      fixture.componentRef.setInput(
+        'character',
+        makeCharacterWithItems(
+          [],
+          [{ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' }],
+        ),
+      );
+      fixture.componentRef.setInput('isOwner', true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const comp = fixture.componentInstance as any;
+
+      comp.startEditContenant({ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' });
+      comp.onEditContenantWeightInput(NaN); // simule un <input type="number"> vidé
+      await comp.submitEditContenant('cont-1');
+
+      expect(characterSvc.updateContenant).not.toHaveBeenCalled();
+    });
+
+    it('édition MJ avec poids vidé (NaN) → ne soumet pas via setSheetField (régression revue de code, AC3)', async () => {
+      const characterSvc = { setSheetField: vi.fn() };
+      await TestBed.configureTestingModule({
+        imports: [InventoryTab],
+        providers: [{ provide: CharacterService, useValue: characterSvc }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(InventoryTab);
+      fixture.componentRef.setInput(
+        'character',
+        makeCharacterWithItems(
+          [],
+          [{ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' }],
+        ),
+      );
+      fixture.componentRef.setInput('isOwner', false);
+      fixture.componentRef.setInput('viewerIsMj', true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const comp = fixture.componentInstance as any;
+
+      comp.startEditContenant({ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' });
+      comp.onEditContenantWeightInput(NaN);
+      await comp.submitMjEditContenant('cont-1');
+
+      expect(characterSvc.setSheetField).not.toHaveBeenCalled();
+    });
+
+    it('édition appelle updateContenant avec le bon itemId', async () => {
+      const updated = makeCharacterWithItems([]);
+      const characterSvc = { updateContenant: vi.fn().mockResolvedValue(updated) };
+      await TestBed.configureTestingModule({
+        imports: [InventoryTab],
+        providers: [{ provide: CharacterService, useValue: characterSvc }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(InventoryTab);
+      fixture.componentRef.setInput(
+        'character',
+        makeCharacterWithItems(
+          [],
+          [{ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' }],
+        ),
+      );
+      fixture.componentRef.setInput('isOwner', true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const comp = fixture.componentInstance as any;
+
+      comp.startEditContenant({ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' });
+      comp.editContenantWeight.set(3);
+      await comp.submitEditContenant('cont-1');
+
+      expect(characterSvc.updateContenant).toHaveBeenCalledWith('char1', 'cont-1', {
+        name: 'Sac',
+        weight: 3,
+      });
+    });
+
+    it('suppression appelle removeContenant avec l’itemId', async () => {
+      const updated = makeCharacterWithItems([]);
+      const characterSvc = { removeContenant: vi.fn().mockResolvedValue(updated) };
+      const fixture = await createComponent(characterSvc);
+      const comp = fixture.componentInstance as any;
+
+      await comp.removeContenant('cont-1');
+
+      expect(characterSvc.removeContenant).toHaveBeenCalledWith('char1', 'cont-1');
+    });
+
+    it('erreur réseau à l’ajout de contenant n’affecte pas l’état des objets (sections indépendantes)', async () => {
+      const characterSvc = {
+        addContenant: vi.fn().mockRejectedValue(new Error('boom')),
+        addInventoryItem: vi.fn(),
+      };
+      const fixture = await createComponent(characterSvc);
+      const comp = fixture.componentInstance as any;
+
+      comp.newContenantName.set('Sac');
+      comp.newContenantWeight.set(1);
+      await comp.submitAddContenant();
+
+      expect(comp.contenantError()).toBeTruthy();
+      expect(comp.error()).toBeNull(); // signal d'erreur des objets non affecté
+    });
+  });
+
+  describe('Animaux (Story 14.2, FR8)', () => {
+    it('rend la liste des animaux, jamais de champ poids dans le DOM', async () => {
+      const characterSvc = { addAnimal: vi.fn() };
+      await TestBed.configureTestingModule({
+        imports: [InventoryTab],
+        providers: [{ provide: CharacterService, useValue: characterSvc }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(InventoryTab);
+      fixture.componentRef.setInput(
+        'character',
+        makeCharacterWithItems([], [], [{ id: 'ani-1', name: 'Cheval', addedBy: 'player' }]),
+      );
+      fixture.componentRef.setInput('isOwner', true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el = fixture.nativeElement as HTMLElement;
+      expect(el.textContent).toContain('Cheval');
+      expect(el.querySelector('.inventory-item-row__weight')).toBeNull();
+    });
+
+    it('ajout appelle characterSvc.addAnimal sans jamais de champ weight', async () => {
+      const updated = makeCharacterWithItems([], [], [{ id: 'ani-1', name: 'Cheval', addedBy: 'player' }]);
+      const characterSvc = { addAnimal: vi.fn().mockResolvedValue(updated) };
+      const fixture = await createComponent(characterSvc);
+      const comp = fixture.componentInstance as any;
+
+      comp.newAnimalName.set('Cheval');
+      comp.newAnimalPrice.set('20 po');
+      await comp.submitAddAnimal();
+
+      expect(characterSvc.addAnimal).toHaveBeenCalledWith('char1', {
+        name: 'Cheval',
+        price: '20 po',
+      });
+      const callArg = characterSvc.addAnimal.mock.calls[0][1];
+      expect(callArg).not.toHaveProperty('weight');
+    });
+
+    it('édition appelle updateAnimal avec le bon itemId, sans jamais de champ weight', async () => {
+      const updated = makeCharacterWithItems([]);
+      const characterSvc = { updateAnimal: vi.fn().mockResolvedValue(updated) };
+      await TestBed.configureTestingModule({
+        imports: [InventoryTab],
+        providers: [{ provide: CharacterService, useValue: characterSvc }],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(InventoryTab);
+      fixture.componentRef.setInput(
+        'character',
+        makeCharacterWithItems([], [], [{ id: 'ani-1', name: 'Cheval', addedBy: 'player' }]),
+      );
+      fixture.componentRef.setInput('isOwner', true);
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const comp = fixture.componentInstance as any;
+
+      comp.startEditAnimal({ id: 'ani-1', name: 'Cheval', addedBy: 'player' });
+      comp.editAnimalEffect.set('Rapide');
+      await comp.submitEditAnimal('ani-1');
+
+      expect(characterSvc.updateAnimal).toHaveBeenCalledWith('char1', 'ani-1', {
+        name: 'Cheval',
+        effect: 'Rapide',
+      });
+      const callArg = characterSvc.updateAnimal.mock.calls[0][2];
+      expect(callArg).not.toHaveProperty('weight');
+    });
+
+    it('suppression appelle removeAnimal avec l’itemId', async () => {
+      const updated = makeCharacterWithItems([]);
+      const characterSvc = { removeAnimal: vi.fn().mockResolvedValue(updated) };
+      const fixture = await createComponent(characterSvc);
+      const comp = fixture.componentInstance as any;
+
+      await comp.removeAnimal('ani-1');
+
+      expect(characterSvc.removeAnimal).toHaveBeenCalledWith('char1', 'ani-1');
+    });
+
+    it('aucun champ poids dans le formulaire d’ajout de la section Animaux (DOM)', async () => {
+      const fixture = await createComponent({ addAnimal: vi.fn() });
+      const forms = fixture.nativeElement.querySelectorAll('.inventory-tab__section');
+      const animauxSection = Array.from(forms).find((s: any) =>
+        s.querySelector('h3')?.textContent?.includes('Animaux'),
+      ) as HTMLElement;
+      expect(animauxSection.querySelector('input[type="number"]')).toBeNull();
     });
   });
 });
