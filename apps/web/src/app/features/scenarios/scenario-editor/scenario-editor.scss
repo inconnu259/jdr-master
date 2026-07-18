@@ -35,6 +35,10 @@ header {
 .document-row.library-tag {
   color: var(--jdr-text-muted, #666);
 }
+.document-row.disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
 .error {
   color: var(--mat-sys-error, #b00020);
 }

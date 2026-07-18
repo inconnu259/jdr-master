@@ -81,6 +81,20 @@ export class ScenarioEditor implements OnInit {
   protected readonly markCourantError = signal<string | null>(null);
   protected readonly closeError = signal<string | null>(null);
   protected readonly addSeanceError = signal<string | null>(null);
+  // AD-8 : un signal `pending` local par méthode de mutation (jamais partagé entre CTA
+  // indépendants — cf. revue de code Story 12.2 sur ce même piège dans PartieDetail).
+  // `onFieldConfirm()`/`submitDescription()` éditent chacun un champ indépendant (titre,
+  // dureeHeures, dureeSeances, description) : un `pendingFields` par champ (pas un booléen
+  // unique) évite qu'éditer un champ bloque silencieusement l'édition d'un autre (revue de code
+  // Story 13.1 — un simple booléen partagé faisait disparaître la modification d'un champ sans
+  // aucun feedback si un autre champ était déjà en cours d'envoi).
+  protected readonly pendingFields = signal<ReadonlySet<ScenarioTextField>>(new Set());
+  protected readonly uploadPending = signal(false);
+  protected readonly downloadPending = signal(false);
+  protected readonly markCourantPending = signal(false);
+  protected readonly closePending = signal(false);
+  protected readonly addSeancePending = signal(false);
+  protected readonly resumeFinPending = signal(false);
   protected readonly members = signal<PartieMemberDto[]>([]);
   // Story 9.2 : vue MJ — aucun filtrage de statut (le MJ ne peut pas se spoiler son propre contenu,
   // AC6 protège les joueurs, pas l'auteur).
@@ -111,6 +125,16 @@ export class ScenarioEditor implements OnInit {
       this.scenario.set(s);
       this.descriptionDraft.set(s.description ?? '');
       this.resumeFinDraft.set(s.resumeFin ?? '');
+      // FR2 : un message d'erreur périmé ne doit pas survivre à un changement du scénario reçu
+      // en entrée (équivalent au « remontage » pour ce composant qui n'est jamais réellement
+      // démonté tant que la page reste ouverte).
+      this.markCourantError.set(null);
+      this.closeError.set(null);
+      this.addSeanceError.set(null);
+      this.fieldEditError.set(null);
+      this.uploadError.set(null);
+      this.downloadError.set(null);
+      this.resumeFinError.set(null);
     });
   }
 
@@ -152,9 +176,23 @@ export class ScenarioEditor implements OnInit {
     }
   }
 
+  protected fieldPending(field: ScenarioTextField): boolean {
+    return this.pendingFields().has(field);
+  }
+
+  private setFieldPending(field: ScenarioTextField, pending: boolean): void {
+    this.pendingFields.update((fields) => {
+      const next = new Set(fields);
+      if (pending) next.add(field);
+      else next.delete(field);
+      return next;
+    });
+  }
+
   protected async onFieldConfirm(field: ScenarioTextField, value: string | number): Promise<void> {
     const s = this.scenario();
-    if (!s || this.isReadOnly()) return;
+    if (!s || this.isReadOnly() || this.fieldPending(field)) return;
+    this.setFieldPending(field, true);
     this.fieldEditError.set(null);
     try {
       this.scenario.set(await this.scenarios.update(s.id, { [field]: value }));
@@ -162,12 +200,15 @@ export class ScenarioEditor implements OnInit {
       this.fieldEditError.set(
         extractErrorMessage(err, 'Impossible d’enregistrer la modification.'),
       );
+    } finally {
+      this.setFieldPending(field, false);
     }
   }
 
   protected async submitDescription(): Promise<void> {
     const s = this.scenario();
-    if (!s || this.isReadOnly()) return;
+    if (!s || this.isReadOnly() || this.fieldPending('description')) return;
+    this.setFieldPending('description', true);
     this.fieldEditError.set(null);
     try {
       this.scenario.set(
@@ -177,6 +218,8 @@ export class ScenarioEditor implements OnInit {
       this.fieldEditError.set(
         extractErrorMessage(err, 'Impossible d’enregistrer la modification.'),
       );
+    } finally {
+      this.setFieldPending('description', false);
     }
   }
 
@@ -205,6 +248,8 @@ export class ScenarioEditor implements OnInit {
     partieId: string,
     scenarioId: string | undefined,
   ): Promise<void> {
+    if (this.uploadPending()) return;
+    this.uploadPending.set(true);
     this.uploadError.set(null);
     try {
       await this.scenarios.uploadDocument(partieId, file, scenarioId);
@@ -214,12 +259,15 @@ export class ScenarioEditor implements OnInit {
       this.uploadError.set(
         extractErrorMessage(err, "Impossible d'envoyer le document. Réessayez."),
       );
+    } finally {
+      this.uploadPending.set(false);
     }
   }
 
   protected async markCourant(): Promise<void> {
     const s = this.scenario();
-    if (!s || s.status !== 'A_VENIR') return;
+    if (!s || s.status !== 'A_VENIR' || this.markCourantPending()) return;
+    this.markCourantPending.set(true);
     this.markCourantError.set(null);
     try {
       this.scenario.set(await this.scenarios.markCourant(s.id));
@@ -227,34 +275,43 @@ export class ScenarioEditor implements OnInit {
       this.markCourantError.set(
         extractErrorMessage(err, 'Impossible de marquer ce scénario comme Courant.'),
       );
+    } finally {
+      this.markCourantPending.set(false);
     }
   }
 
   protected async close(): Promise<void> {
     const s = this.scenario();
-    if (!s || s.status !== 'COURANT') return;
+    if (!s || s.status !== 'COURANT' || this.closePending()) return;
+    this.closePending.set(true);
     this.closeError.set(null);
     try {
       this.scenario.set(await this.scenarios.close(s.id));
     } catch (err) {
       this.closeError.set(extractErrorMessage(err, 'Impossible de clôturer ce scénario.'));
+    } finally {
+      this.closePending.set(false);
     }
   }
 
   protected async addSeance(): Promise<void> {
     const s = this.scenario();
-    if (!s) return;
+    if (!s || this.addSeancePending()) return;
+    this.addSeancePending.set(true);
     this.addSeanceError.set(null);
     try {
       this.scenario.set(await this.scenarios.addSeance(s.id));
     } catch (err) {
       this.addSeanceError.set(extractErrorMessage(err, 'Impossible d’ajouter une séance.'));
+    } finally {
+      this.addSeancePending.set(false);
     }
   }
 
   protected async submitResumeFin(): Promise<void> {
     const s = this.scenario();
-    if (!s) return;
+    if (!s || this.resumeFinPending()) return;
+    this.resumeFinPending.set(true);
     this.resumeFinError.set(null);
     try {
       this.scenario.set(await this.scenarios.setResumeFin(s.id, this.resumeFinDraft()));
@@ -262,6 +319,8 @@ export class ScenarioEditor implements OnInit {
       this.resumeFinError.set(
         extractErrorMessage(err, 'Impossible d’enregistrer le résumé de fin.'),
       );
+    } finally {
+      this.resumeFinPending.set(false);
     }
   }
 
@@ -270,6 +329,8 @@ export class ScenarioEditor implements OnInit {
   }
 
   protected async downloadDocument(doc: ScenarioDocumentDto): Promise<void> {
+    if (this.downloadPending()) return;
+    this.downloadPending.set(true);
     this.downloadError.set(null);
     try {
       const blob = await this.scenarios.downloadDocument(doc.id);
@@ -283,6 +344,8 @@ export class ScenarioEditor implements OnInit {
       setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch (err) {
       this.downloadError.set(extractErrorMessage(err, 'Impossible de télécharger le document.'));
+    } finally {
+      this.downloadPending.set(false);
     }
   }
 }

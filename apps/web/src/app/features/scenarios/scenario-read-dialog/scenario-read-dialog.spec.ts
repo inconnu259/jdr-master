@@ -476,6 +476,102 @@ describe('ScenarioReadDialog', () => {
       expect(comp.isParticipating()).toBe(false);
     });
 
+    it('double-clic rapide → un seul appel réseau (Story 13.1, AC1)', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...BASE, status: 'COURANT', participants: [] },
+        { partieKind: 'CAMPAGNE_EPISODIQUE', currentUserId: 'viewer1' },
+      );
+      const comp = fixture.componentInstance as any;
+      let resolveCall: (v: unknown) => void;
+      scenariosSvc.participate.mockReturnValue(
+        new Promise((resolve) => {
+          resolveCall = resolve;
+        }),
+      );
+
+      const first = comp.participate();
+      const second = comp.participate();
+      resolveCall!({
+        ...BASE,
+        status: 'COURANT',
+        participants: [{ userId: 'viewer1', pseudo: 'Viewer' }],
+      });
+      await first;
+      await second;
+
+      expect(scenariosSvc.participate).toHaveBeenCalledTimes(1);
+    });
+
+    it('bouton désactivé pendant l’appel, réactivé après si l’appel échoue (Story 13.1, AC1/AC3)', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...BASE, status: 'COURANT', participants: [] },
+        { partieKind: 'CAMPAGNE_EPISODIQUE', currentUserId: 'viewer1' },
+      );
+      let rejectCall: (e: unknown) => void;
+      scenariosSvc.participate.mockReturnValue(
+        new Promise((_resolve, reject) => {
+          rejectCall = reject;
+        }),
+      );
+      const button = Array.from(
+        fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+      ).find((b) => b.textContent?.includes('Participer à cette enquête'))!;
+
+      const comp = fixture.componentInstance as any;
+      const clickPromise = comp.participate().catch(() => {});
+      fixture.detectChanges();
+      expect(button.disabled).toBe(true);
+
+      rejectCall!(new Error('network'));
+      await clickPromise;
+      fixture.detectChanges();
+      expect(button.disabled).toBe(false);
+    });
+
+    it('rechargement réussi (ngOnInit) → participantError se réinitialise (Story 13.1, AC2)', async () => {
+      const stale = { ...BASE, status: 'COURANT' as const, participants: [] };
+      const dialogRef = { close: vi.fn() };
+      const data: ScenarioReadDialogData = {
+        scenario: stale,
+        partieKind: 'CAMPAGNE_EPISODIQUE',
+        characters: [],
+      };
+      const fresh = { ...stale };
+      const scenariosSvc = {
+        participate: vi.fn(),
+        linkSeancePoll: vi.fn(),
+        listAll: vi.fn().mockResolvedValue([fresh]),
+      };
+      await TestBed.configureTestingModule({
+        imports: [ScenarioReadDialog],
+        providers: [
+          provideAnimationsAsync(),
+          { provide: MatDialogRef, useValue: dialogRef },
+          { provide: MAT_DIALOG_DATA, useValue: data },
+          { provide: ScenariosService, useValue: scenariosSvc },
+          { provide: AuthService, useValue: { currentUser: () => ({ id: 'viewer1' }) } },
+          { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
+          { provide: AnnouncementsService, useValue: { listAll: vi.fn().mockResolvedValue([]) } },
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(ScenarioReadDialog);
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.participate.mockRejectedValue(new Error('fail'));
+      await comp.participate();
+      expect(comp.participantError()).toBeTruthy();
+
+      // Second passage de ngOnInit simulé directement (le composant ne se remonte pas tant que
+      // le dialogue reste ouvert — cf. Dev Notes de la story sur le mécanisme de rechargement).
+      await comp.ngOnInit();
+
+      expect(comp.participantError()).toBeNull();
+    });
+
     it('participant sans personnage dans characters → aucune CharacterSummaryCard fantôme, pseudo affiché en secours', async () => {
       const char: CharacterDto = {
         id: 'c1',

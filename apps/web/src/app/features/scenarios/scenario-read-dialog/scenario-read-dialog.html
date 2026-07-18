@@ -108,7 +108,14 @@
         </ul>
       }
       @if (!isParticipating()) {
-        <button mat-button type="button" (click)="participate()">Participer à cette enquête</button>
+        <button
+          mat-button
+          type="button"
+          [disabled]="participatePending()"
+          (click)="participate()"
+        >
+          Participer à cette enquête
+        </button>
       }
       @if (participantError()) {
         <p class="error">{{ participantError() }}</p>

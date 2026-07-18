@@ -122,6 +122,105 @@ describe('ScenarioEditor', () => {
     expect(comp.fieldEditError()).toBe('Titre trop long.');
   });
 
+  it('onFieldConfirm : double-clic rapide → un seul appel réseau (Story 13.1, AC1)', async () => {
+    const { fixture, scenariosSvc } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    let resolveCall: (v: unknown) => void;
+    scenariosSvc.update.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCall = resolve;
+      }),
+    );
+
+    const first = comp.onFieldConfirm('title', 'A');
+    const second = comp.onFieldConfirm('title', 'B');
+    resolveCall!({ ...SCENARIO, title: 'A' });
+    await first;
+    await second;
+
+    expect(scenariosSvc.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('onFieldConfirm : éditer 2 champs différents en parallèle → les 2 appels réseau partent, aucune modification perdue (revue de code Story 13.1)', async () => {
+    const { fixture, scenariosSvc } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    let resolveTitle: (v: unknown) => void;
+    let resolveDuree: (v: unknown) => void;
+    scenariosSvc.update.mockImplementation((_id: string, dto: Record<string, unknown>) => {
+      if ('title' in dto) return new Promise((resolve) => (resolveTitle = resolve));
+      return new Promise((resolve) => (resolveDuree = resolve));
+    });
+
+    const titleCall = comp.onFieldConfirm('title', 'Nouveau titre');
+    const dureeCall = comp.onFieldConfirm('dureeHeures', 4);
+    resolveTitle!({ ...SCENARIO, title: 'Nouveau titre' });
+    resolveDuree!({ ...SCENARIO, dureeHeures: 4 });
+    await titleCall;
+    await dureeCall;
+
+    expect(scenariosSvc.update).toHaveBeenCalledTimes(2);
+    expect(scenariosSvc.update).toHaveBeenCalledWith('s1', { title: 'Nouveau titre' });
+    expect(scenariosSvc.update).toHaveBeenCalledWith('s1', { dureeHeures: 4 });
+  });
+
+  it('fieldPending(field) est vrai uniquement pour le champ effectivement en vol (revue de code Story 13.1)', async () => {
+    const { fixture, scenariosSvc } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    let resolveCall: (v: unknown) => void;
+    scenariosSvc.update.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCall = resolve;
+      }),
+    );
+
+    const titleCall = comp.onFieldConfirm('title', 'Nouveau titre');
+    expect(comp.fieldPending('title')).toBe(true);
+    expect(comp.fieldPending('dureeHeures')).toBe(false);
+    expect(comp.fieldPending('description')).toBe(false);
+
+    resolveCall!({ ...SCENARIO, title: 'Nouveau titre' });
+    await titleCall;
+
+    expect(comp.fieldPending('title')).toBe(false);
+  });
+
+  it('scenarioInput() change → fieldEditError se réinitialise (Story 13.1, AC2)', async () => {
+    const { fixture, scenariosSvc } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    scenariosSvc.update.mockRejectedValue(
+      new HttpErrorResponse({ status: 400, error: { message: 'Erreur.' } }),
+    );
+    await comp.onFieldConfirm('title', 'x');
+    expect(comp.fieldEditError()).toBe('Erreur.');
+
+    fixture.componentRef.setInput('scenario', { ...SCENARIO, title: 'Autre' });
+    fixture.detectChanges();
+
+    expect(comp.fieldEditError()).toBeNull();
+  });
+
+  it('submitDescription : bouton « Enregistrer » désactivé pendant l’appel, réactivé après (Story 13.1, AC1/AC3)', async () => {
+    const { fixture, scenariosSvc } = await createComponent();
+    let resolveCall: (v: unknown) => void;
+    scenariosSvc.update.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCall = resolve;
+      }),
+    );
+    const button = Array.from(
+      fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+    ).find((b) => b.textContent?.includes('Enregistrer'))!;
+
+    const clickPromise = (fixture.componentInstance as any).submitDescription();
+    fixture.detectChanges();
+    expect(button.disabled).toBe(true);
+
+    resolveCall!(SCENARIO);
+    await clickPromise;
+    fixture.detectChanges();
+    expect(button.disabled).toBe(false);
+  });
+
   it('statut PASSE → pas de FieldEditPencil, mais durées affichées en lecture seule', async () => {
     const { fixture } = await createComponent({ ...SCENARIO, status: 'PASSE' });
     expect(fixture.nativeElement.querySelector('app-field-edit-pencil')).toBeNull();
@@ -170,6 +269,64 @@ describe('ScenarioEditor', () => {
     expect(comp.downloadError()).toBeTruthy();
   });
 
+  it('upload : double-clic rapide → un seul appel réseau (Story 13.1, AC1)', async () => {
+    const { fixture, scenariosSvc } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    const file = new File(['%PDF'], 'nouveau.pdf', { type: 'application/pdf' });
+    let resolveCall: (v: unknown) => void;
+    scenariosSvc.uploadDocument.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCall = resolve;
+      }),
+    );
+
+    const first = comp.onScenarioFileSelected({ target: { files: [file], value: 'a.pdf' } });
+    const second = comp.onScenarioFileSelected({ target: { files: [file], value: 'a.pdf' } });
+    resolveCall!(OWN_DOC);
+    await first;
+    await second;
+
+    expect(scenariosSvc.uploadDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('scenarioInput() change → uploadError/downloadError se réinitialisent (Story 13.1, AC2)', async () => {
+    const { fixture, scenariosSvc } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    scenariosSvc.uploadDocument.mockRejectedValue(new Error('upload failed'));
+    scenariosSvc.downloadDocument.mockRejectedValue(new Error('download failed'));
+    const file = new File(['%PDF'], 'a.pdf', { type: 'application/pdf' });
+    await comp.onScenarioFileSelected({ target: { files: [file], value: 'a.pdf' } });
+    await comp.downloadDocument(OWN_DOC);
+    expect(comp.uploadError()).toBeTruthy();
+    expect(comp.downloadError()).toBeTruthy();
+
+    fixture.componentRef.setInput('scenario', { ...SCENARIO, title: 'Autre' });
+    fixture.detectChanges();
+
+    expect(comp.uploadError()).toBeNull();
+    expect(comp.downloadError()).toBeNull();
+  });
+
+  it('document-row : classe "disabled" pendant le téléchargement (Story 13.1, AC1)', async () => {
+    const { fixture, scenariosSvc } = await createComponent();
+    let resolveCall: (v: unknown) => void;
+    scenariosSvc.downloadDocument.mockReturnValue(
+      new Promise((resolve) => {
+        resolveCall = resolve;
+      }),
+    );
+    const row = fixture.nativeElement.querySelector('.document-row') as HTMLElement;
+
+    const clickPromise = (fixture.componentInstance as any).downloadDocument(OWN_DOC);
+    fixture.detectChanges();
+    expect(row.classList.contains('disabled')).toBe(true);
+
+    resolveCall!(new Blob(['%PDF']));
+    await clickPromise.catch(() => {});
+    fixture.detectChanges();
+    expect(row.classList.contains('disabled')).toBe(false);
+  });
+
   describe('CTA « Marquer comme Courant » (AC8)', () => {
     it.each(['BROUILLON', 'COURANT', 'PASSE'] as const)(
       'statut %s → bouton absent',
@@ -213,6 +370,66 @@ describe('ScenarioEditor', () => {
       await comp.markCourant();
       expect(comp.markCourantError()).toBe('Un scénario est déjà marqué Courant sur cette Partie.');
       expect(comp.scenario().status).toBe('A_VENIR');
+    });
+
+    it('double-clic rapide → un seul appel réseau (Story 13.1, AC1)', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...SCENARIO, status: 'A_VENIR' });
+      const comp = fixture.componentInstance as any;
+      let resolveCall: (v: unknown) => void;
+      scenariosSvc.markCourant.mockReturnValue(
+        new Promise((resolve) => {
+          resolveCall = resolve;
+        }),
+      );
+
+      const first = comp.markCourant();
+      const second = comp.markCourant();
+      resolveCall!({ ...SCENARIO, status: 'COURANT' });
+      await first;
+      await second;
+
+      expect(scenariosSvc.markCourant).toHaveBeenCalledTimes(1);
+    });
+
+    it('bouton désactivé pendant l’appel, réactivé après (Story 13.1, AC1/AC3)', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...SCENARIO, status: 'A_VENIR' });
+      let resolveCall: (v: unknown) => void;
+      scenariosSvc.markCourant.mockReturnValue(
+        new Promise((resolve) => {
+          resolveCall = resolve;
+        }),
+      );
+      const button = Array.from(
+        fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+      ).find((b) => b.textContent?.includes('Marquer comme Courant'))!;
+
+      const comp = fixture.componentInstance as any;
+      const clickPromise = comp.markCourant();
+      fixture.detectChanges();
+      expect(button.disabled).toBe(true);
+
+      resolveCall!({ ...SCENARIO, status: 'COURANT' });
+      await clickPromise;
+      fixture.detectChanges();
+      // Le statut passe à COURANT au succès → le bouton lui-même disparaît du DOM (garde @if
+      // existante), le signal pending n'a donc plus de bouton à réactiver, mais il doit tout de
+      // même être retombé à false (garantie du finally, AC3).
+      expect(comp.markCourantPending()).toBe(false);
+    });
+
+    it('scenarioInput() change → markCourantError se réinitialise (Story 13.1, AC2)', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...SCENARIO, status: 'A_VENIR' });
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.markCourant.mockRejectedValue(
+        new HttpErrorResponse({ status: 409, error: { message: 'Déjà Courant.' } }),
+      );
+      await comp.markCourant();
+      expect(comp.markCourantError()).toBe('Déjà Courant.');
+
+      fixture.componentRef.setInput('scenario', { ...SCENARIO, status: 'A_VENIR', title: 'Autre' });
+      fixture.detectChanges();
+
+      expect(comp.markCourantError()).toBeNull();
     });
   });
 
@@ -264,6 +481,66 @@ describe('ScenarioEditor', () => {
       await comp.close();
       expect(comp.closeError()).toBe('Seul un scénario Courant peut être clôturé');
       expect(comp.scenario().status).toBe('COURANT');
+    });
+
+    it('double-clic rapide → un seul appel réseau (Story 13.1, AC1)', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...SCENARIO, status: 'COURANT' });
+      const comp = fixture.componentInstance as any;
+      let resolveCall: (v: unknown) => void;
+      scenariosSvc.close.mockReturnValue(
+        new Promise((resolve) => {
+          resolveCall = resolve;
+        }),
+      );
+
+      const first = comp.close();
+      const second = comp.close();
+      resolveCall!({ ...SCENARIO, status: 'PASSE' });
+      await first;
+      await second;
+
+      expect(scenariosSvc.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('bouton désactivé pendant l’appel, réactivé après (Story 13.1, AC1/AC3)', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...SCENARIO, status: 'COURANT' });
+      let resolveCall: (v: unknown) => void;
+      scenariosSvc.close.mockReturnValue(
+        new Promise((resolve) => {
+          resolveCall = resolve;
+        }),
+      );
+      const button = Array.from(
+        fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+      ).find((b) => b.textContent?.includes('Clôturer le scénario'))!;
+
+      const comp = fixture.componentInstance as any;
+      const clickPromise = comp.close();
+      fixture.detectChanges();
+      expect(button.disabled).toBe(true);
+
+      resolveCall!({ ...SCENARIO, status: 'PASSE' });
+      await clickPromise;
+      fixture.detectChanges();
+      // Le statut passe à PASSE au succès → le bouton lui-même disparaît du DOM (garde @if
+      // existante), le signal pending n'a donc plus de bouton à réactiver, mais il doit tout de
+      // même être retombé à false (garantie du finally, AC3).
+      expect(comp.closePending()).toBe(false);
+    });
+
+    it('scenarioInput() change → closeError se réinitialise (Story 13.1, AC2)', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...SCENARIO, status: 'COURANT' });
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.close.mockRejectedValue(
+        new HttpErrorResponse({ status: 400, error: { message: 'Erreur.' } }),
+      );
+      await comp.close();
+      expect(comp.closeError()).toBe('Erreur.');
+
+      fixture.componentRef.setInput('scenario', { ...SCENARIO, status: 'COURANT', title: 'Autre' });
+      fixture.detectChanges();
+
+      expect(comp.closeError()).toBeNull();
     });
   });
 
@@ -371,6 +648,62 @@ describe('ScenarioEditor', () => {
       expect(comp.addSeanceError()).toBe('Erreur serveur');
     });
 
+    it('double-clic rapide → un seul appel réseau (Story 13.1, AC1)', async () => {
+      const { fixture, scenariosSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      let resolveCall: (v: unknown) => void;
+      scenariosSvc.addSeance.mockReturnValue(
+        new Promise((resolve) => {
+          resolveCall = resolve;
+        }),
+      );
+
+      const first = comp.addSeance();
+      const second = comp.addSeance();
+      resolveCall!(SCENARIO);
+      await first;
+      await second;
+
+      expect(scenariosSvc.addSeance).toHaveBeenCalledTimes(1);
+    });
+
+    it('bouton désactivé pendant l’appel, réactivé après (Story 13.1, AC1/AC3)', async () => {
+      const { fixture, scenariosSvc } = await createComponent();
+      let resolveCall: (v: unknown) => void;
+      scenariosSvc.addSeance.mockReturnValue(
+        new Promise((resolve) => {
+          resolveCall = resolve;
+        }),
+      );
+      const button = Array.from(
+        fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+      ).find((b) => b.textContent?.includes('Ajouter une séance'))!;
+
+      const clickPromise = (fixture.componentInstance as any).addSeance();
+      fixture.detectChanges();
+      expect(button.disabled).toBe(true);
+
+      resolveCall!(SCENARIO);
+      await clickPromise;
+      fixture.detectChanges();
+      expect(button.disabled).toBe(false);
+    });
+
+    it('scenarioInput() change → addSeanceError se réinitialise (Story 13.1, AC2)', async () => {
+      const { fixture, scenariosSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.addSeance.mockRejectedValue(
+        new HttpErrorResponse({ status: 500, error: { message: 'Erreur.' } }),
+      );
+      await comp.addSeance();
+      expect(comp.addSeanceError()).toBe('Erreur.');
+
+      fixture.componentRef.setInput('scenario', { ...SCENARIO, title: 'Autre' });
+      fixture.detectChanges();
+
+      expect(comp.addSeanceError()).toBeNull();
+    });
+
     it('app-seance-list reçoit isMj=true et le scénario courant', async () => {
       const { fixture } = await createComponent();
       const seanceList = fixture.nativeElement.querySelector('app-seance-list');
@@ -463,6 +796,79 @@ describe('ScenarioEditor', () => {
       await comp.submitResumeFin();
 
       expect(comp.resumeFinError()).toBe('Erreur serveur');
+    });
+
+    it('double-clic rapide → un seul appel réseau (Story 13.1, AC1)', async () => {
+      const { fixture, scenariosSvc } = await createComponent({
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: null,
+      });
+      const comp = fixture.componentInstance as any;
+      let resolveCall: (v: unknown) => void;
+      scenariosSvc.setResumeFin.mockReturnValue(
+        new Promise((resolve) => {
+          resolveCall = resolve;
+        }),
+      );
+
+      const first = comp.submitResumeFin();
+      const second = comp.submitResumeFin();
+      resolveCall!({ ...SCENARIO, status: 'PASSE', resumeFin: 'x' });
+      await first;
+      await second;
+
+      expect(scenariosSvc.setResumeFin).toHaveBeenCalledTimes(1);
+    });
+
+    it('bouton désactivé pendant l’appel, réactivé après (Story 13.1, AC1/AC3)', async () => {
+      const { fixture, scenariosSvc } = await createComponent({
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: null,
+      });
+      let resolveCall: (v: unknown) => void;
+      scenariosSvc.setResumeFin.mockReturnValue(
+        new Promise((resolve) => {
+          resolveCall = resolve;
+        }),
+      );
+      const button = Array.from(
+        fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
+      ).find((b) => b.textContent?.includes('Enregistrer le résumé de fin'))!;
+
+      const clickPromise = (fixture.componentInstance as any).submitResumeFin();
+      fixture.detectChanges();
+      expect(button.disabled).toBe(true);
+
+      resolveCall!({ ...SCENARIO, status: 'PASSE', resumeFin: 'x' });
+      await clickPromise;
+      fixture.detectChanges();
+      expect(button.disabled).toBe(false);
+    });
+
+    it('scenarioInput() change → resumeFinError se réinitialise (Story 13.1, AC2)', async () => {
+      const { fixture, scenariosSvc } = await createComponent({
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: null,
+      });
+      const comp = fixture.componentInstance as any;
+      scenariosSvc.setResumeFin.mockRejectedValue(
+        new HttpErrorResponse({ status: 500, error: { message: 'Erreur.' } }),
+      );
+      await comp.submitResumeFin();
+      expect(comp.resumeFinError()).toBe('Erreur.');
+
+      fixture.componentRef.setInput('scenario', {
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: null,
+        title: 'Autre',
+      });
+      fixture.detectChanges();
+
+      expect(comp.resumeFinError()).toBeNull();
     });
 
     it('les comptes-rendus de séance (app-seance-list) restent affichés indépendamment du résumé', async () => {

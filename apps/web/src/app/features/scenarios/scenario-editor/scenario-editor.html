@@ -11,12 +11,23 @@
       }
       <app-scenario-status-badge [status]="s.status" />
       @if (s.status === 'A_VENIR') {
-        <button mat-button type="button" (click)="markCourant()">Marquer comme Courant</button>
+        <button
+          mat-button
+          type="button"
+          [disabled]="markCourantPending()"
+          (click)="markCourant()"
+        >
+          Marquer comme Courant
+        </button>
       }
       @if (s.status === 'COURANT') {
-        <button mat-button type="button" (click)="close()">Clôturer le scénario</button>
+        <button mat-button type="button" [disabled]="closePending()" (click)="close()">
+          Clôturer le scénario
+        </button>
       }
-      <button mat-button type="button" (click)="addSeance()">Ajouter une séance</button>
+      <button mat-button type="button" [disabled]="addSeancePending()" (click)="addSeance()">
+        Ajouter une séance
+      </button>
     </header>
 
     @if (markCourantError()) {
@@ -43,7 +54,12 @@
           [value]="resumeFinDraft()"
           (input)="resumeFinDraft.set($any($event.target).value)"
         ></textarea>
-        <button mat-button type="button" (click)="submitResumeFin()">
+        <button
+          mat-button
+          type="button"
+          [disabled]="resumeFinPending()"
+          (click)="submitResumeFin()"
+        >
           Enregistrer le résumé de fin
         </button>
         @if (resumeFinError()) {
@@ -88,7 +104,14 @@
           [value]="descriptionDraft()"
           (input)="descriptionDraft.set($any($event.target).value)"
         ></textarea>
-        <button mat-button type="button" (click)="submitDescription()">Enregistrer</button>
+        <button
+          mat-button
+          type="button"
+          [disabled]="fieldPending('description')"
+          (click)="submitDescription()"
+        >
+          Enregistrer
+        </button>
       } @else {
         <p>{{ s.description }}</p>
       }
@@ -126,26 +149,44 @@
       <h2>Documents du scénario</h2>
       <ul>
         @for (doc of ownDocuments(); track doc.id) {
-          <li class="document-row" (click)="downloadDocument(doc)">
+          <li
+            class="document-row"
+            [class.disabled]="downloadPending()"
+            (click)="downloadDocument(doc)"
+          >
             <mat-icon>description</mat-icon>
             {{ doc.originalName }} ({{ doc.sizeBytes }} o)
           </li>
         }
       </ul>
       @if (!isReadOnly()) {
-        <input type="file" accept=".pdf,.txt" (change)="onScenarioFileSelected($event)" />
+        <input
+          type="file"
+          accept=".pdf,.txt"
+          [disabled]="uploadPending()"
+          (change)="onScenarioFileSelected($event)"
+        />
       }
 
       <h2>Bibliothèque de campagne</h2>
       <ul>
         @for (doc of libraryDocuments(); track doc.id) {
-          <li class="document-row library-tag" (click)="downloadDocument(doc)">
+          <li
+            class="document-row library-tag"
+            [class.disabled]="downloadPending()"
+            (click)="downloadDocument(doc)"
+          >
             <mat-icon>description</mat-icon>
             {{ doc.originalName }} ({{ doc.sizeBytes }} o) — bibliothèque campagne
           </li>
         }
       </ul>
-      <input type="file" accept=".pdf,.txt" (change)="onLibraryFileSelected($event)" />
+      <input
+        type="file"
+        accept=".pdf,.txt"
+        [disabled]="uploadPending()"
+        (change)="onLibraryFileSelected($event)"
+      />
 
       @if (uploadError()) {
         <p class="error">{{ uploadError() }}</p>

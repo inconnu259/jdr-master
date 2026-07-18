@@ -113,6 +113,8 @@ export class ScenarioReadDialog implements OnInit {
     return (this.scenario().participants ?? []).filter((p) => !characterUserIds.has(p.userId));
   });
   protected readonly participantError = signal<string | null>(null);
+  // AD-8 : signal `pending` local, même pattern que `SeanceList.pollActionPending`.
+  protected readonly participatePending = signal(false);
 
   // Le scénario reçu via MAT_DIALOG_DATA peut être un instantané mis en cache par l'appelant (ex.
   // ScenarioTimeline chargée avant qu'un vote lié à une séance ait été tranché via le calendrier, en
@@ -123,7 +125,12 @@ export class ScenarioReadDialog implements OnInit {
       const fresh = (await this.scenarios.listAll(this.data.scenario.partieId)).find(
         (s) => s.id === this.data.scenario.id,
       );
-      if (fresh) this.scenario.set(fresh);
+      if (fresh) {
+        this.scenario.set(fresh);
+        // FR2 : un message d'erreur périmé ne doit pas survivre à un rechargement effectif du
+        // scénario — pas d'effacement si le rechargement échoue (cf. catch ci-dessous).
+        this.participantError.set(null);
+      }
     } catch {
       // Le scénario reçu en donnée de dialogue reste affiché tel quel si le rafraîchissement échoue.
     }
@@ -145,6 +152,8 @@ export class ScenarioReadDialog implements OnInit {
   }
 
   protected async participate(): Promise<void> {
+    if (this.participatePending()) return;
+    this.participatePending.set(true);
     this.participantError.set(null);
     try {
       this.scenario.set(await this.scenarios.participate(this.scenario().id));
@@ -152,6 +161,8 @@ export class ScenarioReadDialog implements OnInit {
       this.participantError.set(
         extractErrorMessage(err, 'Impossible de participer à ce scénario.'),
       );
+    } finally {
+      this.participatePending.set(false);
     }
   }
 
