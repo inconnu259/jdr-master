@@ -1028,4 +1028,75 @@ describe('ScenarioEditor', () => {
       expect(fixture.nativeElement.textContent).toContain('Annonce visible même en brouillon');
     });
   });
+
+  describe('Cohérence du brouillon en édition concurrente (Story 13.3)', () => {
+    it('AC1 : rechargement qui ne touche pas description() → descriptionDraft conserve la saisie en cours', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      comp.descriptionDraft.set('brouillon en cours');
+
+      fixture.componentRef.setInput('scenario', { ...SCENARIO, title: 'Autre' });
+      fixture.detectChanges();
+
+      expect(comp.descriptionDraft()).toBe('brouillon en cours');
+    });
+
+    it('AC2 : rechargement avec description() différente → descriptionDraft est remplacé par la valeur serveur', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      comp.descriptionDraft.set('brouillon en cours');
+
+      fixture.componentRef.setInput('scenario', {
+        ...SCENARIO,
+        description: 'Nouvelle description serveur',
+      });
+      fixture.detectChanges();
+
+      expect(comp.descriptionDraft()).toBe('Nouvelle description serveur');
+    });
+
+    it('AC3 : rechargement qui ne touche pas resumeFin() → resumeFinDraft conserve la saisie en cours', async () => {
+      const { fixture } = await createComponent({ ...SCENARIO, status: 'PASSE', resumeFin: null });
+      const comp = fixture.componentInstance as any;
+      comp.resumeFinDraft.set('brouillon de résumé en cours');
+
+      fixture.componentRef.setInput('scenario', {
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: null,
+        title: 'Autre',
+      });
+      fixture.detectChanges();
+
+      expect(comp.resumeFinDraft()).toBe('brouillon de résumé en cours');
+    });
+
+    it('AC3 : rechargement avec resumeFin() différent → resumeFinDraft est remplacé par la valeur serveur', async () => {
+      const { fixture } = await createComponent({ ...SCENARIO, status: 'PASSE', resumeFin: null });
+      const comp = fixture.componentInstance as any;
+      comp.resumeFinDraft.set('brouillon de résumé en cours');
+
+      fixture.componentRef.setInput('scenario', {
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: 'Résumé rédigé ailleurs',
+      });
+      fixture.detectChanges();
+
+      expect(comp.resumeFinDraft()).toBe('Résumé rédigé ailleurs');
+    });
+
+    it('AC4 (non-régression) : montage initial peuple descriptionDraft/resumeFinDraft depuis le scénario reçu', async () => {
+      const { fixture } = await createComponent({
+        ...SCENARIO,
+        status: 'PASSE',
+        description: 'Description initiale',
+        resumeFin: 'Résumé initial',
+      });
+      const comp = fixture.componentInstance as any;
+
+      expect(comp.descriptionDraft()).toBe('Description initiale');
+      expect(comp.resumeFinDraft()).toBe('Résumé initial');
+    });
+  });
 });

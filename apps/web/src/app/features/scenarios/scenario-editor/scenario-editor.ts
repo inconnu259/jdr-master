@@ -1,4 +1,13 @@
-import { Component, OnInit, computed, effect, inject, input, signal } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -123,9 +132,20 @@ export class ScenarioEditor implements OnInit {
   constructor() {
     effect(() => {
       const s = this.scenarioInput();
+      // FR5 : capturer l'état précédent AVANT de l'écraser — inverser l'ordre lirait toujours la
+      // valeur qu'on vient d'écrire, désactivant silencieusement toute la logique ci-dessous.
+      // `untracked` évite de faire dépendre cet effect() de `this.scenario` (qu'il écrit lui-même
+      // juste après), ce qui créerait une boucle de ré-exécution.
+      const previous = untracked(() => this.scenario());
       this.scenario.set(s);
-      this.descriptionDraft.set(s.description ?? '');
-      this.resumeFinDraft.set(s.resumeFin ?? '');
+      // Un champ en cours de saisie ne doit pas être écrasé par un rechargement externe qui ne le
+      // touche pas — seule une valeur serveur effectivement différente remplace le brouillon local.
+      if (!previous || (previous.description ?? '') !== (s.description ?? '')) {
+        this.descriptionDraft.set(s.description ?? '');
+      }
+      if (!previous || (previous.resumeFin ?? '') !== (s.resumeFin ?? '')) {
+        this.resumeFinDraft.set(s.resumeFin ?? '');
+      }
       // FR2 : un message d'erreur périmé ne doit pas survivre à un changement du scénario reçu
       // en entrée (équivalent au « remontage » pour ce composant qui n'est jamais réellement
       // démonté tant que la page reste ouverte).
