@@ -94,4 +94,18 @@ describe('validate (strict)', () => {
     const result = validate(data, 'strict', twoPatterns);
     expect(result.valid).toBe(true);
   });
+
+  it('Story 14.1 : equipment (individual/contenants/animaux) sans price/effect → valid: true, aucune règle ne le touche', () => {
+    const data: RyuutamaSheetData = {
+      ...validSheet(),
+      equipment: {
+        individual: [{ id: 'i1', name: 'Corde', weight: 1, addedBy: 'player' }],
+        contenants: [{ id: 'c1', name: 'Sac', weight: 2, addedBy: 'player' }],
+        animaux: [{ id: 'a1', name: 'Cheval', addedBy: 'player' }],
+      },
+    };
+    const result = validate(data, 'strict', catalog());
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
 });

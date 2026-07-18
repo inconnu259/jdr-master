@@ -21,7 +21,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "seed": "ts-node prisma/seed.ts",
     "seed:demo": "ts-node prisma/seed-demo.ts",
-    "migrate:inventory-format": "ts-node prisma/migrate-inventory-format.ts"
+    "migrate:inventory-format": "ts-node prisma/migrate-inventory-format.ts",
+    "migrate:equipment-unify": "ts-node prisma/migrate-equipment-unify.ts"
   },
   "dependencies": {
     "@master-jdr/game-rules": "workspace:*",

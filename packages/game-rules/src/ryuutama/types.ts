@@ -11,8 +11,16 @@ export interface InventoryItem {
   id: string;
   name: string;
   weight: number;
+  price?: string; // texte libre (ex. "3 po") — aucun type monétaire structuré
+  effect?: string;
   addedBy: 'player' | 'mj';
 }
+
+/** Même forme que InventoryItem (poids obligatoire) — catégorie structurellement séparée (FR7). */
+export type Contenant = InventoryItem;
+
+/** Jamais de poids (FR8) — absence structurelle du champ, pas juste optionnel/undefined. */
+export type Animal = Omit<InventoryItem, 'weight'>;
 
 export interface RyuutamaSheetData {
   classId: string;
@@ -21,7 +29,7 @@ export interface RyuutamaSheetData {
   attributes: { AGI: number; ESP: number; INT: number; VIG: number };
   weaponCategoryId: string;
   fetiqueObject?: string;
-  equipment?: { individual: InventoryItem[]; group: string[] };
+  equipment?: { individual: InventoryItem[]; contenants: Contenant[]; animaux: Animal[] };
   narrative?: {
     sex?: string;
     age?: string;

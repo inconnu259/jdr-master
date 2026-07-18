@@ -107,11 +107,11 @@ export function mapToPdfFields(
 ): PdfFieldValue[] {
   const narrative = data.narrative ?? {};
   const attributes = data.attributes ?? { AGI: 0, ESP: 0, INT: 0, VIG: 0 };
-  const equipment = data.equipment ?? { individual: [], group: [] };
+  const equipment = data.equipment ?? { individual: [], contenants: [], animaux: [] };
   // `individual` est un InventoryItem[] (Story 6.4) — projeté sur les noms pour le champ texte
-  // "Notes" ci-dessous, qui attend une liste de string comme `groupEquipment`.
+  // "Notes" ci-dessous. Story 14.1 : les anciennes entrées `group` (texte libre) sont désormais
+  // fusionnées dans `individual` par la migration — plus de liste séparée à concaténer.
   const individualEquipment = (equipment.individual ?? []).map((item) => item.name);
-  const groupEquipment = equipment.group ?? [];
   const homeAndMotivation = [narrative.homeTown, narrative.motivation]
     .filter((v): v is string => Boolean(v?.trim()))
     .join(' — ');
@@ -167,7 +167,7 @@ export function mapToPdfFields(
     { field: 'A1 deg', value: content.weaponDamageFormula, kind: 'text' },
     {
       field: 'Notes',
-      value: [...individualEquipment, ...groupEquipment].join(', '),
+      value: individualEquipment.join(', '),
       kind: 'text',
     },
     { field: 'Classe 1', value: content.classLabel, kind: 'dropdown' },

@@ -93,25 +93,27 @@ export class CharacterWizard implements OnInit {
 
   protected readonly currentStepIndex = signal(0);
   protected readonly content = signal<GameSystemContentDto | null>(null);
+  /**
+   * Story 14.1 : `equipment.group` n'existe plus dans `RyuutamaSheetData` — l'ancien « Nécessaire
+   * d'intendance (groupe) » est désormais fusionné dans `individual` (poids `0`), même sémantique
+   * que la migration one-off pour les personnages existants. `contenants`/`animaux` : nouvelles
+   * catégories introduites par cette story, aucune donnée pertinente à cette étape de création
+   * (UI dédiée hors scope, cf. Story 14.2).
+   */
   protected readonly sheetData = signal<Partial<RyuutamaSheetData>>({
     equipment: {
-      individual: FIXED_EQUIPMENT.individual.map((name) => ({
+      individual: [...FIXED_EQUIPMENT.individual, ...FIXED_EQUIPMENT.group].map((name) => ({
         id: crypto.randomUUID(),
         name,
         weight: 0,
         addedBy: 'player' as const,
       })),
-      group: FIXED_EQUIPMENT.group,
+      contenants: [],
+      animaux: [],
     },
   });
   protected readonly submitting = signal(false);
   protected readonly stepErrors = signal<Record<string, string[]>>({});
-
-  /** Étape "équipement" du wizard : affiche uniquement les noms (poids/provenance gérés après
-   *  création, cf. Story 6.4 `InventoryTab`) — `EquipmentStep` reste un composant `string[]`. */
-  protected readonly individualEquipmentNames = computed(
-    () => this.sheetData().equipment?.individual?.map((item) => item.name) ?? [],
-  );
 
   /** Portrait : hors `sheetData` (vit sur `Character.portraitUrl`/`portraitCropData`, uploadé après création). */
   protected readonly pendingPortraitFile = signal<File | null>(null);

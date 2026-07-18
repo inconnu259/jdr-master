@@ -32,6 +32,12 @@ function makeCharacterService() {
     addInventoryItem: jest.fn(),
     updateInventoryItem: jest.fn(),
     removeInventoryItem: jest.fn(),
+    addContenant: jest.fn(),
+    updateContenant: jest.fn(),
+    removeContenant: jest.fn(),
+    addAnimal: jest.fn(),
+    updateAnimal: jest.fn(),
+    removeAnimal: jest.fn(),
     addNote: jest.fn(),
     toggleNoteShare: jest.fn(),
     setJournalAutoAssociate: jest.fn(),
@@ -454,6 +460,99 @@ describe('CharactersController', () => {
     );
 
     expect(characters.removeInventoryItem).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      '22222222-2222-2222-2222-222222222222',
+    );
+  });
+
+  it('addContenant() délègue à CharacterService (Story 14.1)', async () => {
+    characters.addContenant.mockResolvedValue({ id: 'char1' });
+
+    await controller.addContenant('char1', { name: 'Sac', weight: 2 }, {
+      id: 'u1',
+    } as any);
+
+    expect(characters.addContenant).toHaveBeenCalledWith('char1', 'u1', {
+      name: 'Sac',
+      weight: 2,
+    });
+  });
+
+  it('updateContenant() délègue à CharacterService avec itemId (UUID)', async () => {
+    characters.updateContenant.mockResolvedValue({ id: 'char1' });
+
+    await controller.updateContenant(
+      'char1',
+      '22222222-2222-2222-2222-222222222222',
+      { weight: 3 },
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.updateContenant).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      '22222222-2222-2222-2222-222222222222',
+      { weight: 3 },
+    );
+  });
+
+  it('removeContenant() délègue à CharacterService avec itemId (UUID)', async () => {
+    characters.removeContenant.mockResolvedValue({ id: 'char1' });
+
+    await controller.removeContenant(
+      'char1',
+      '22222222-2222-2222-2222-222222222222',
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.removeContenant).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      '22222222-2222-2222-2222-222222222222',
+    );
+  });
+
+  it('addAnimal() délègue à CharacterService (Story 14.1)', async () => {
+    characters.addAnimal.mockResolvedValue({ id: 'char1' });
+
+    await controller.addAnimal('char1', { name: 'Cheval' }, {
+      id: 'u1',
+    } as any);
+
+    expect(characters.addAnimal).toHaveBeenCalledWith('char1', 'u1', {
+      name: 'Cheval',
+    });
+  });
+
+  it('updateAnimal() délègue à CharacterService avec itemId (UUID)', async () => {
+    characters.updateAnimal.mockResolvedValue({ id: 'char1' });
+
+    await controller.updateAnimal(
+      'char1',
+      '22222222-2222-2222-2222-222222222222',
+      { effect: 'Rapide' },
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.updateAnimal).toHaveBeenCalledWith(
+      'char1',
+      'u1',
+      '22222222-2222-2222-2222-222222222222',
+      { effect: 'Rapide' },
+    );
+  });
+
+  it('removeAnimal() délègue à CharacterService avec itemId (UUID)', async () => {
+    characters.removeAnimal.mockResolvedValue({ id: 'char1' });
+
+    await controller.removeAnimal(
+      'char1',
+      '22222222-2222-2222-2222-222222222222',
+      { id: 'u1' } as any,
+    );
+
+    expect(characters.removeAnimal).toHaveBeenCalledWith(
       'char1',
       'u1',
       '22222222-2222-2222-2222-222222222222',

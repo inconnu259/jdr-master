@@ -20,4 +20,16 @@ export class UpdateInventoryItemDto {
   @IsNumber()
   @Min(0)
   weight?: number;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @MaxLength(50)
+  price?: string;
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @MaxLength(300)
+  effect?: string;
 }

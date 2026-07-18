@@ -8,12 +8,13 @@ import {
   Min,
 } from 'class-validator';
 
-export class CreateInventoryItemDto {
+export class UpdateContenantDto {
+  @IsOptional()
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty()
   @MaxLength(200)
-  name!: string;
+  name?: string;
 
   @IsOptional()
   @IsNumber()

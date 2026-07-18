@@ -35,6 +35,10 @@ import { CreateCharacterDto } from './dto/create-character.dto';
 import type { CreateLevelUpDto } from './dto/create-level-up.dto';
 import type { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import type { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
+import type { CreateContenantDto } from './dto/create-contenant.dto';
+import type { UpdateContenantDto } from './dto/update-contenant.dto';
+import type { CreateAnimalDto } from './dto/create-animal.dto';
+import type { UpdateAnimalDto } from './dto/update-animal.dto';
 import type { CreateCharacterNoteDto } from './dto/create-character-note.dto';
 import type { SetSheetFieldDto } from './dto/set-sheet-field.dto';
 import type { UpdateNarrativeFieldDto } from './dto/update-narrative-field.dto';
@@ -727,13 +731,15 @@ export class CharacterService {
     let effectivePath = dto.path;
 
     if (segments[0] === 'equipment') {
+      const category = segments[1];
+      const validCategories = ['individual', 'contenants', 'animaux'];
       if (
-        segments[1] !== 'individual' ||
+        !validCategories.includes(category) ||
         segments.length !== 3 ||
         !/^(0|[1-9]\d*)$/.test(segments[2])
       ) {
         throw new BadRequestException(
-          'Le chemin doit cibler un objet précis : equipment.individual.<index>',
+          'Le chemin doit cibler un objet précis : equipment.<individual|contenants|animaux>.<index>',
         );
       }
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -742,33 +748,38 @@ export class CharacterService {
         );
       }
       const index = Number(segments[2]);
-      const individual = normalizeInventoryIndividual(
-        sheetData.equipment?.individual,
-      );
-      if (index > individual.length) {
+      const list =
+        category === 'individual'
+          ? normalizeInventoryIndividual(sheetData.equipment?.individual)
+          : (sheetData.equipment?.[category as 'contenants' | 'animaux'] ??
+            []);
+      if (index > list.length) {
         throw new BadRequestException('Index hors limites');
       }
       let id: string;
-      if (index < individual.length) {
+      if (index < list.length) {
         const expectedId = (value as Record<string, unknown>)['id'];
-        if (
-          typeof expectedId !== 'string' ||
-          expectedId !== individual[index].id
-        ) {
+        if (typeof expectedId !== 'string' || expectedId !== list[index].id) {
           throw new ConflictException(
             "L'objet visé n'existe plus à cet emplacement, réessayez.",
           );
         }
-        id = individual[index].id;
+        id = list[index].id;
       } else {
         id = randomUUID();
       }
-      value = {
+      const nextValue: Record<string, unknown> = {
         ...(value as Record<string, unknown>),
         id,
         addedBy: 'mj' as const,
       };
-      effectivePath = `equipment.individual.${index}`;
+      // FR8 : un animal n'a jamais de poids — jamais accepté silencieusement via ce chemin
+      // générique, même si le MJ (ou un client malveillant) en injecte un.
+      if (category === 'animaux') {
+        delete nextValue['weight'];
+      }
+      value = nextValue;
+      effectivePath = `equipment.${category}.${index}`;
     }
 
     setByPath(
@@ -857,13 +868,19 @@ export class CharacterService {
   ): Promise<CharacterDto> {
     const character = await this.getOwnCharacterOrThrow(characterId, userId);
     const sheetData = character.sheetData as unknown as RyuutamaSheetData;
-    const equipment = sheetData.equipment ?? { individual: [], group: [] };
+    const equipment = sheetData.equipment ?? {
+      individual: [],
+      contenants: [],
+      animaux: [],
+    };
     const individual = [
       ...normalizeInventoryIndividual(equipment.individual),
       {
         id: randomUUID(),
         name: dto.name,
         weight: dto.weight ?? 0,
+        price: dto.price,
+        effect: dto.effect,
         addedBy: 'player' as const,
       },
     ];
@@ -903,6 +920,8 @@ export class CharacterService {
       ...updated[index],
       name: dto.name ?? updated[index].name,
       weight: dto.weight ?? updated[index].weight,
+      price: dto.price ?? updated[index].price,
+      effect: dto.effect ?? updated[index].effect,
     };
     sheetData.equipment = { ...sheetData.equipment!, individual: updated };
     return this.writeInventoryChange(
@@ -929,6 +948,180 @@ export class CharacterService {
     }
     const updated = individual.filter((i) => i.id !== itemId);
     sheetData.equipment = { ...sheetData.equipment!, individual: updated };
+    return this.writeInventoryChange(
+      characterId,
+      character.updatedAt,
+      sheetData,
+      userId,
+    );
+  }
+
+  /**
+   * Ajoute un contenant (Story 14.1, FR7) : même forme/règles qu'`addInventoryItem` — catégorie
+   * structurellement séparée de `individual` (poids obligatoire, comme individual).
+   */
+  async addContenant(
+    characterId: string,
+    userId: string,
+    dto: CreateContenantDto,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    const equipment = sheetData.equipment ?? {
+      individual: [],
+      contenants: [],
+      animaux: [],
+    };
+    const contenants = [
+      ...(equipment.contenants ?? []),
+      {
+        id: randomUUID(),
+        name: dto.name,
+        weight: dto.weight,
+        price: dto.price,
+        effect: dto.effect,
+        addedBy: 'player' as const,
+      },
+    ];
+    sheetData.equipment = { ...equipment, contenants };
+    return this.writeInventoryChange(
+      characterId,
+      character.updatedAt,
+      sheetData,
+      userId,
+    );
+  }
+
+  /** Modifie un contenant existant — mêmes règles que `updateInventoryItem`. */
+  async updateContenant(
+    characterId: string,
+    userId: string,
+    itemId: string,
+    dto: UpdateContenantDto,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    const contenants = sheetData.equipment?.contenants ?? [];
+    const index = contenants.findIndex((c) => c.id === itemId);
+    if (index === -1) throw new NotFoundException('Contenant introuvable');
+
+    const updated = [...contenants];
+    updated[index] = {
+      ...updated[index],
+      name: dto.name ?? updated[index].name,
+      weight: dto.weight ?? updated[index].weight,
+      price: dto.price ?? updated[index].price,
+      effect: dto.effect ?? updated[index].effect,
+    };
+    sheetData.equipment = { ...sheetData.equipment!, contenants: updated };
+    return this.writeInventoryChange(
+      characterId,
+      character.updatedAt,
+      sheetData,
+      userId,
+    );
+  }
+
+  /** Retire un contenant existant — mêmes règles que `removeInventoryItem`. */
+  async removeContenant(
+    characterId: string,
+    userId: string,
+    itemId: string,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    const contenants = sheetData.equipment?.contenants ?? [];
+    if (!contenants.some((c) => c.id === itemId)) {
+      throw new NotFoundException('Contenant introuvable');
+    }
+    const updated = contenants.filter((c) => c.id !== itemId);
+    sheetData.equipment = { ...sheetData.equipment!, contenants: updated };
+    return this.writeInventoryChange(
+      characterId,
+      character.updatedAt,
+      sheetData,
+      userId,
+    );
+  }
+
+  /**
+   * Ajoute un animal (Story 14.1, FR8) : même forme/règles qu'`addInventoryItem`, **sans jamais**
+   * de champ `weight` — `CreateAnimalDto` ne le déclare même pas, absence structurelle.
+   */
+  async addAnimal(
+    characterId: string,
+    userId: string,
+    dto: CreateAnimalDto,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    const equipment = sheetData.equipment ?? {
+      individual: [],
+      contenants: [],
+      animaux: [],
+    };
+    const animaux = [
+      ...(equipment.animaux ?? []),
+      {
+        id: randomUUID(),
+        name: dto.name,
+        price: dto.price,
+        effect: dto.effect,
+        addedBy: 'player' as const,
+      },
+    ];
+    sheetData.equipment = { ...equipment, animaux };
+    return this.writeInventoryChange(
+      characterId,
+      character.updatedAt,
+      sheetData,
+      userId,
+    );
+  }
+
+  /** Modifie un animal existant — mêmes règles que `updateInventoryItem`, jamais de `weight`. */
+  async updateAnimal(
+    characterId: string,
+    userId: string,
+    itemId: string,
+    dto: UpdateAnimalDto,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    const animaux = sheetData.equipment?.animaux ?? [];
+    const index = animaux.findIndex((a) => a.id === itemId);
+    if (index === -1) throw new NotFoundException('Animal introuvable');
+
+    const updated = [...animaux];
+    updated[index] = {
+      ...updated[index],
+      name: dto.name ?? updated[index].name,
+      price: dto.price ?? updated[index].price,
+      effect: dto.effect ?? updated[index].effect,
+    };
+    sheetData.equipment = { ...sheetData.equipment!, animaux: updated };
+    return this.writeInventoryChange(
+      characterId,
+      character.updatedAt,
+      sheetData,
+      userId,
+    );
+  }
+
+  /** Retire un animal existant — mêmes règles que `removeInventoryItem`. */
+  async removeAnimal(
+    characterId: string,
+    userId: string,
+    itemId: string,
+  ): Promise<CharacterDto> {
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
+    const sheetData = character.sheetData as unknown as RyuutamaSheetData;
+    const animaux = sheetData.equipment?.animaux ?? [];
+    if (!animaux.some((a) => a.id === itemId)) {
+      throw new NotFoundException('Animal introuvable');
+    }
+    const updated = animaux.filter((a) => a.id !== itemId);
+    sheetData.equipment = { ...sheetData.equipment!, animaux: updated };
     return this.writeInventoryChange(
       characterId,
       character.updatedAt,

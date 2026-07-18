@@ -35,6 +35,10 @@ import { NotesPdfService } from './notes-pdf.service';
 import { CreateLevelUpDto } from './dto/create-level-up.dto';
 import { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
 import { UpdateInventoryItemDto } from './dto/update-inventory-item.dto';
+import { CreateContenantDto } from './dto/create-contenant.dto';
+import { UpdateContenantDto } from './dto/update-contenant.dto';
+import { CreateAnimalDto } from './dto/create-animal.dto';
+import { UpdateAnimalDto } from './dto/update-animal.dto';
 import { CreateCharacterNoteDto } from './dto/create-character-note.dto';
 import { ToggleNoteShareDto } from './dto/toggle-note-share.dto';
 import { SetJournalAutoAssociateDto } from './dto/set-journal-auto-associate.dto';
@@ -229,9 +233,14 @@ export class CharactersController {
     @Body() dto: UpdateInventoryItemDto,
     @CurrentUser() user: AuthUser,
   ) {
-    if (dto.name === undefined && dto.weight === undefined) {
+    if (
+      dto.name === undefined &&
+      dto.weight === undefined &&
+      dto.price === undefined &&
+      dto.effect === undefined
+    ) {
       throw new BadRequestException(
-        'Au moins un champ (name ou weight) doit être fourni',
+        'Au moins un champ (name, weight, price ou effect) doit être fourni',
       );
     }
     return this.characters.updateInventoryItem(id, user.id, itemId, dto);
@@ -244,6 +253,81 @@ export class CharactersController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.characters.removeInventoryItem(id, user.id, itemId);
+  }
+
+  @Post(':id/contenants')
+  addContenant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateContenantDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.addContenant(id, user.id, dto);
+  }
+
+  @Patch(':id/contenants/:itemId')
+  updateContenant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() dto: UpdateContenantDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (
+      dto.name === undefined &&
+      dto.weight === undefined &&
+      dto.price === undefined &&
+      dto.effect === undefined
+    ) {
+      throw new BadRequestException(
+        'Au moins un champ (name, weight, price ou effect) doit être fourni',
+      );
+    }
+    return this.characters.updateContenant(id, user.id, itemId, dto);
+  }
+
+  @Delete(':id/contenants/:itemId')
+  removeContenant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.removeContenant(id, user.id, itemId);
+  }
+
+  @Post(':id/animaux')
+  addAnimal(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateAnimalDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.addAnimal(id, user.id, dto);
+  }
+
+  @Patch(':id/animaux/:itemId')
+  updateAnimal(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @Body() dto: UpdateAnimalDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (
+      dto.name === undefined &&
+      dto.price === undefined &&
+      dto.effect === undefined
+    ) {
+      throw new BadRequestException(
+        'Au moins un champ (name, price ou effect) doit être fourni',
+      );
+    }
+    return this.characters.updateAnimal(id, user.id, itemId, dto);
+  }
+
+  @Delete(':id/animaux/:itemId')
+  removeAnimal(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('itemId', ParseUUIDPipe) itemId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.characters.removeAnimal(id, user.id, itemId);
   }
 
   @Post(':id/notes')

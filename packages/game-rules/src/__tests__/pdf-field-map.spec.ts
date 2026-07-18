@@ -130,7 +130,7 @@ describe('mapToPdfFields', () => {
     expect(fields.find((f) => f.field === 'VIG')?.value).toBe('0');
   });
 
-  it('équipement partiel (individual sans group, ou inversement) => pas de crash', () => {
+  it('équipement partiel (individual seul, contenants/animaux absents) => pas de crash (Story 14.1)', () => {
     const data = baseData({
       equipment: {
         individual: [{ id: 'item-1', name: 'grand sac à dos', weight: 0, addedBy: 'player' }],
@@ -139,9 +139,11 @@ describe('mapToPdfFields', () => {
     const fields = mapToPdfFields(data, computeDerived(data), content);
     expect(fields.find((f) => f.field === 'Notes')?.value).toBe('grand sac à dos');
 
-    const data2 = baseData({ equipment: { group: ['tente'] } as any });
+    // Story 14.1 : `equipment.group` n'existe plus (fusionné dans `individual` par la migration) —
+    // équipement totalement absent doit rester sans crash, Notes vide.
+    const data2 = baseData({ equipment: undefined });
     const fields2 = mapToPdfFields(data2, computeDerived(data2), content);
-    expect(fields2.find((f) => f.field === 'Notes')?.value).toBe('tente');
+    expect(fields2.find((f) => f.field === 'Notes')?.value).toBe('');
   });
 
   it('mappe les talents et effets de la classe (talent 1/Talent 2/Talent 3, Effet 1/2/3)', () => {
@@ -153,12 +155,16 @@ describe('mapToPdfFields', () => {
     expect(fields.find((f) => f.field === 'Effet 1')?.value).toBe('Suit une piste');
   });
 
-  it('objet fétiche et équipement (individual + group) fusionnés dans Notes', () => {
+  it('objet fétiche mappé séparément, plusieurs objets individual fusionnés dans Notes (Story 14.1)', () => {
     const data = baseData({
       fetiqueObject: 'Une pierre porte-bonheur',
       equipment: {
-        individual: [{ id: 'item-1', name: 'grand sac à dos', weight: 0, addedBy: 'player' }],
-        group: ['tente'],
+        individual: [
+          { id: 'item-1', name: 'grand sac à dos', weight: 0, addedBy: 'player' },
+          { id: 'item-2', name: 'tente', weight: 0, addedBy: 'player' },
+        ],
+        contenants: [],
+        animaux: [],
       },
     });
     const fields = mapToPdfFields(data, computeDerived(data), content);

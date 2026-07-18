@@ -1,24 +1,14 @@
 import { Transform } from 'class-transformer';
-import {
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
-export class CreateInventoryItemDto {
+/** Jamais de champ `weight` — un animal n'a jamais de poids (FR8), absence structurelle. */
+export class UpdateAnimalDto {
+  @IsOptional()
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty()
   @MaxLength(200)
-  name!: string;
-
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  weight?: number;
+  name?: string;
 
   @IsOptional()
   @IsString()

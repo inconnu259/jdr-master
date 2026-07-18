@@ -8,17 +8,16 @@ import {
   Min,
 } from 'class-validator';
 
-export class CreateInventoryItemDto {
+export class CreateContenantDto {
   @IsString()
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsNotEmpty()
   @MaxLength(200)
   name!: string;
 
-  @IsOptional()
   @IsNumber()
   @Min(0)
-  weight?: number;
+  weight!: number;
 
   @IsOptional()
   @IsString()

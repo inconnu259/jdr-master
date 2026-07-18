@@ -28,7 +28,11 @@ export class EquipmentPdfService {
           name: i.name,
           weight: i.weight,
         })),
-        group: sheetData.equipment?.group ?? [],
+        // Story 14.1 : `group` n'existe plus dans RyuutamaSheetData (fusionné dans `individual`
+        // par la migration) — `EquipmentPdfInput.group` reste ici pour compiler sans régression
+        // (les anciennes entrées group sont déjà comptées via `individual` ci-dessus). Le mapping
+        // complet Prix/Effets/Contenant/Animal est hors scope (FR-9, Story 14.3).
+        group: [],
       },
     });
 
