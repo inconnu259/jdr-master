@@ -29,6 +29,7 @@ model User {
   pollVotes                PollVote[]
   characters               Character[]
   passwordResetTokens      PasswordResetToken[]
+  sessions                 UserSession[]
   xpDistributionsGiven     XpDistribution[]          @relation("XpDistributionMj")
   inscriptions             Inscription[]
   scenarioParticipations   ScenarioParticipant[]
@@ -128,6 +129,21 @@ model PasswordResetToken {
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// Index inverse des sessions actives d'un utilisateur (Story 15.2, AD-3). Créée juste après
+/// req.login() (POST /auth/login), supprimée juste avant req.session.destroy() (POST /auth/logout).
+/// Permet à AuthService.resetPassword() de retrouver/couper les lignes Session correspondantes
+/// sans requête non indexée sur Session.sess. Pas de FK Prisma stricte vers Session : la table
+/// "session" est gérée par connect-pg-simple (main.ts, createTableIfMissing: false).
+model UserSession {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sid       String   @unique
+  createdAt DateTime @default(now())
 
   @@index([userId])
 }

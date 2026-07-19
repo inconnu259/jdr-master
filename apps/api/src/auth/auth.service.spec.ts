@@ -16,10 +16,13 @@ describe('AuthService', () => {
   let tx: {
     user: { create: jest.Mock; update: jest.Mock };
     passwordResetToken: { updateMany: jest.Mock };
+    userSession: { findMany: jest.Mock; deleteMany: jest.Mock };
+    session: { deleteMany: jest.Mock };
   };
   let prisma: {
     $transaction: jest.Mock;
     passwordResetToken: { create: jest.Mock; findUnique: jest.Mock };
+    userSession: { upsert: jest.Mock; deleteMany: jest.Mock };
   };
   let inviteLinks: { consumeLink: jest.Mock };
   let email: { sendMail: jest.Mock };
@@ -44,11 +47,17 @@ describe('AuthService', () => {
       passwordResetToken: {
         updateMany: jest.fn(),
       },
+      userSession: {
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn(),
+      },
+      session: { deleteMany: jest.fn() },
     };
     // $transaction exécute le callback avec notre `tx` mocké.
     prisma = {
       $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
       passwordResetToken: { create: jest.fn(), findUnique: jest.fn() },
+      userSession: { upsert: jest.fn(), deleteMany: jest.fn() },
     };
     inviteLinks = {
       consumeLink: jest.fn().mockResolvedValue({ partieId: 'p1' }),
@@ -170,6 +179,26 @@ describe('AuthService', () => {
     });
   });
 
+  describe('recordSession', () => {
+    it('crée une ligne UserSession (userId, sid) via upsert (sid @unique, idempotent en cas de retry)', async () => {
+      await service.recordSession('u1', 'sess1');
+      expect(prisma.userSession.upsert).toHaveBeenCalledWith({
+        where: { sid: 'sess1' },
+        create: { userId: 'u1', sid: 'sess1' },
+        update: { userId: 'u1' },
+      });
+    });
+  });
+
+  describe('forgetSession', () => {
+    it('supprime la ligne UserSession correspondant au sid (deleteMany, idempotent)', async () => {
+      await service.forgetSession('sess1');
+      expect(prisma.userSession.deleteMany).toHaveBeenCalledWith({
+        where: { sid: 'sess1' },
+      });
+    });
+  });
+
   describe('resetPassword', () => {
     const validRecord = {
       id: 'r1',
@@ -179,11 +208,15 @@ describe('AuthService', () => {
       expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     };
 
-    it('token composite valide (id connu, secret correct) → vérifie via argon2.verify hors transaction, réclame atomiquement puis met à jour le mot de passe dans une transaction limitée au claim+update', async () => {
+    it('token composite valide (id connu, secret correct) → vérifie via argon2.verify hors transaction, réclame atomiquement, met à jour le mot de passe puis invalide les sessions actives (Session + UserSession), dans la même transaction limitée au claim+update+invalidation', async () => {
       prisma.passwordResetToken.findUnique.mockResolvedValue(validRecord);
       (argon2.verify as jest.Mock).mockResolvedValue(true);
       tx.passwordResetToken.updateMany.mockResolvedValue({ count: 1 });
       (argon2.hash as jest.Mock).mockResolvedValue('NEW_HASH');
+      tx.userSession.findMany.mockResolvedValue([
+        { sid: 's1' },
+        { sid: 's2' },
+      ]);
 
       await service.resetPassword('r1.secretvalue', 'newpassword123');
 
@@ -199,6 +232,35 @@ describe('AuthService', () => {
       expect(tx.user.update).toHaveBeenCalledWith({
         where: { id: 'u1' },
         data: { passwordHash: 'NEW_HASH' },
+      });
+      expect(tx.userSession.findMany).toHaveBeenCalledWith({
+        where: { userId: 'u1' },
+        select: { sid: true },
+      });
+      expect(tx.session.deleteMany).toHaveBeenCalledWith({
+        where: { sid: { in: ['s1', 's2'] } },
+      });
+      expect(tx.userSession.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'u1' },
+      });
+    });
+
+    it('aucune session active (UserSession.findMany vide) → invalidation en no-op, reset réussit normalement', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue(validRecord);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      tx.passwordResetToken.updateMany.mockResolvedValue({ count: 1 });
+      (argon2.hash as jest.Mock).mockResolvedValue('NEW_HASH');
+      tx.userSession.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.resetPassword('r1.secretvalue', 'newpassword123'),
+      ).resolves.toBeUndefined();
+
+      expect(tx.session.deleteMany).toHaveBeenCalledWith({
+        where: { sid: { in: [] } },
+      });
+      expect(tx.userSession.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'u1' },
       });
     });
 

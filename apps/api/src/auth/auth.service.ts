@@ -73,6 +73,28 @@ export class AuthService {
   }
 
   /**
+   * Crée l'index inverse UserSession — appelé juste après req.login() (AuthController.login).
+   * `upsert` (pas `create`) : `sid` est `@unique` (Story 15.2, revue de code) — un appel en double
+   * pour le même sessionID (retry client) est idempotent plutôt que de lever une erreur P2002.
+   */
+  async recordSession(userId: string, sid: string): Promise<void> {
+    await this.prisma.userSession.upsert({
+      where: { sid },
+      create: { userId, sid },
+      update: { userId },
+    });
+  }
+
+  /**
+   * Supprime l'index inverse UserSession — appelé juste avant req.session.destroy()
+   * (AuthController.logout). `deleteMany` (pas `delete`) : idempotent, ne lève pas si la ligne
+   * n'existe déjà plus.
+   */
+  async forgetSession(sid: string): Promise<void> {
+    await this.prisma.userSession.deleteMany({ where: { sid } });
+  }
+
+  /**
    * Répond toujours { ok: true }, que l'adresse corresponde ou non à un compte (anti-énumération,
    * AC1) — les deux branches convergent vers le même retour final, pas de court-circuit anticipé.
    */
@@ -151,6 +173,17 @@ export class AuthService {
         where: { id: record.userId },
         data: { passwordHash },
       });
+
+      // Invalidation des sessions actives (AD-3, FR-11) : les deux tables (Session, gérée par
+      // connect-pg-simple, et UserSession, notre index inverse) doivent rester synchronisées —
+      // une session supprimée d'un côté sans l'autre serait soit un fantôme soit non révoquée.
+      const activeSessions = await tx.userSession.findMany({
+        where: { userId: record.userId },
+        select: { sid: true },
+      });
+      const sids = activeSessions.map((s) => s.sid);
+      await tx.session.deleteMany({ where: { sid: { in: sids } } });
+      await tx.userSession.deleteMany({ where: { userId: record.userId } });
     });
   }
 }

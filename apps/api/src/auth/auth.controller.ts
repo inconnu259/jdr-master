@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Logger,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -10,6 +18,8 @@ import { AuthenticatedGuard } from './guards/authenticated.guard';
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private readonly auth: AuthService) {}
 
   @Post('register')
@@ -21,7 +31,11 @@ export class AuthController {
   @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @UseGuards(LocalAuthGuard)
   @Post('login')
-  login(@Req() req: Request) {
+  async login(@Req() req: Request) {
+    await this.auth.recordSession(
+      (req.user as { id: string }).id,
+      req.sessionID,
+    );
     return req.user;
   }
 
@@ -33,9 +47,18 @@ export class AuthController {
 
   @Post('logout')
   async logout(@Req() req: Request): Promise<{ ok: boolean }> {
+    const sid = req.sessionID;
     await new Promise<void>((resolve, reject) =>
       req.logout((err) => (err ? reject(err) : resolve())),
     );
+    // Best-effort : une erreur ici ne doit jamais empêcher la destruction de la session
+    // (l'utilisateur doit toujours pouvoir se déconnecter, même si le nettoyage de l'index
+    // UserSession échoue — cf. revue de code Story 15.2).
+    try {
+      await this.auth.forgetSession(sid);
+    } catch (e) {
+      this.logger.error(`Échec de forgetSession(${sid})`, e);
+    }
     await new Promise<void>((resolve) => req.session.destroy(() => resolve()));
     return { ok: true };
   }
