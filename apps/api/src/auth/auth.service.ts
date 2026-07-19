@@ -14,6 +14,8 @@ import { RegisterDto } from './dto/register.dto';
 const RESET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // +24h (FR-6)
 const RESET_TOKEN_INVALID_MESSAGE =
   'Lien invalide ou expiré. Merci de refaire une demande.';
+const EMAIL_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1h — fenêtre glissante de limitation par e-mail (FR-13)
+const EMAIL_RATE_LIMIT_MAX = 5; // même valeur que le throttle IP existant (5/60s), fenêtre différente
 
 @Injectable()
 export class AuthService {
@@ -101,6 +103,19 @@ export class AuthService {
   async requestPasswordReset(email: string): Promise<{ ok: true }> {
     const user = await this.users.findByEmail(email);
     if (user) {
+      // Limitation par e-mail (FR-13), en complément du throttle IP existant sur la route — un
+      // `429`/réponse distincte fuiterait "cette adresse existe et a déjà été sollicitée" ; on
+      // renvoie donc { ok: true } sans rien créer ni envoyer, comme pour un e-mail inconnu.
+      const recentCount = await this.prisma.passwordResetToken.count({
+        where: {
+          userId: user.id,
+          createdAt: { gt: new Date(Date.now() - EMAIL_RATE_LIMIT_WINDOW_MS) },
+        },
+      });
+      if (recentCount >= EMAIL_RATE_LIMIT_MAX) {
+        return { ok: true };
+      }
+
       // Le secret est l'unique donnée capable de prouver la possession du lien ; jamais stocké
       // tel quel (AD-4) — seul son hash argon2 va en base. `id` (retourné par `create()`) sert de
       // clé de recherche publique côté vérification, un hash argon2 n'étant pas indexable.
@@ -160,7 +175,7 @@ export class AuthService {
 
     const passwordHash = await argon2.hash(newPassword);
 
-    await this.prisma.$transaction(async (tx) => {
+    const updatedUser = await this.prisma.$transaction(async (tx) => {
       const claim = await tx.passwordResetToken.updateMany({
         where: { id, usedAt: null, expiresAt: { gt: new Date() } },
         data: { usedAt: new Date() },
@@ -169,7 +184,7 @@ export class AuthService {
         throw new NotFoundException(RESET_TOKEN_INVALID_MESSAGE);
       }
 
-      await tx.user.update({
+      const updated = await tx.user.update({
         where: { id: record.userId },
         data: { passwordHash },
       });
@@ -184,6 +199,13 @@ export class AuthService {
       const sids = activeSessions.map((s) => s.sid);
       await tx.session.deleteMany({ where: { sid: { in: sids } } });
       await tx.userSession.deleteMany({ where: { userId: record.userId } });
+
+      return updated;
     });
+
+    // Hors transaction (I/O réseau, best-effort — FR-12) : le mot de passe est déjà changé en
+    // base, un échec d'envoi ne doit jamais faire échouer le reset. EmailService.sendMail() ne
+    // relance jamais (catch interne → { ok: false }), aucun try/catch supplémentaire nécessaire.
+    await this.email.sendMail('password-changed', updatedUser.email, {});
   }
 }

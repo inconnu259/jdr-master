@@ -21,7 +21,7 @@ describe('AuthService', () => {
   };
   let prisma: {
     $transaction: jest.Mock;
-    passwordResetToken: { create: jest.Mock; findUnique: jest.Mock };
+    passwordResetToken: { create: jest.Mock; findUnique: jest.Mock; count: jest.Mock };
     userSession: { upsert: jest.Mock; deleteMany: jest.Mock };
   };
   let inviteLinks: { consumeLink: jest.Mock };
@@ -43,7 +43,17 @@ describe('AuthService', () => {
       create: jest.fn(),
     };
     tx = {
-      user: { create: jest.fn(), update: jest.fn() },
+      user: {
+        create: jest.fn(),
+        update: jest.fn().mockResolvedValue({
+          id: 'u1',
+          email: 'a@b.c',
+          pseudo: 'alice',
+          passwordHash: 'NEW_HASH',
+          role: 'USER',
+          createdAt: new Date(),
+        }),
+      },
       passwordResetToken: {
         updateMany: jest.fn(),
       },
@@ -56,7 +66,11 @@ describe('AuthService', () => {
     // $transaction exécute le callback avec notre `tx` mocké.
     prisma = {
       $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
-      passwordResetToken: { create: jest.fn(), findUnique: jest.fn() },
+      passwordResetToken: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
+      },
       userSession: { upsert: jest.fn(), deleteMany: jest.fn() },
     };
     inviteLinks = {
@@ -168,11 +182,35 @@ describe('AuthService', () => {
       expect(secret).not.toBe('SECRET_HASH');
       expect(secret.length).toBeGreaterThan(0);
       expect(result).toEqual({ ok: true });
+      expect(prisma.passwordResetToken.count).toHaveBeenCalledWith({
+        where: { userId: 'u1', createdAt: { gt: expect.any(Date) } },
+      });
     });
 
     it('e-mail sans compte correspondant → aucun token créé, aucun e-mail envoyé, renvoie quand même { ok: true } (AC1)', async () => {
       users.findByEmail.mockResolvedValue(null);
       const result = await service.requestPasswordReset('inconnu@x.y');
+      expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(prisma.passwordResetToken.count).not.toHaveBeenCalled();
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('sous le seuil de limitation par e-mail (4 tokens récents) → token créé et e-mail envoyé normalement (AC2)', async () => {
+      users.findByEmail.mockResolvedValue(fakeUser);
+      prisma.passwordResetToken.count.mockResolvedValue(4);
+      prisma.passwordResetToken.create.mockResolvedValue({ id: 'r1' });
+      (argon2.hash as jest.Mock).mockResolvedValue('SECRET_HASH');
+      const result = await service.requestPasswordReset('a@b.c');
+      expect(prisma.passwordResetToken.create).toHaveBeenCalledTimes(1);
+      expect(email.sendMail).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('seuil de limitation par e-mail atteint (5 tokens récents) → aucun token créé, aucun e-mail envoyé, renvoie quand même { ok: true } (AC2, anti-énumération préservée)', async () => {
+      users.findByEmail.mockResolvedValue(fakeUser);
+      prisma.passwordResetToken.count.mockResolvedValue(5);
+      const result = await service.requestPasswordReset('a@b.c');
       expect(prisma.passwordResetToken.create).not.toHaveBeenCalled();
       expect(email.sendMail).not.toHaveBeenCalled();
       expect(result).toEqual({ ok: true });
@@ -243,6 +281,11 @@ describe('AuthService', () => {
       expect(tx.userSession.deleteMany).toHaveBeenCalledWith({
         where: { userId: 'u1' },
       });
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'password-changed',
+        'a@b.c',
+        {},
+      );
     });
 
     it('aucune session active (UserSession.findMany vide) → invalidation en no-op, reset réussit normalement', async () => {

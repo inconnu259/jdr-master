@@ -8,6 +8,7 @@ const SUBJECTS: Record<EmailTemplate, string> = {
   invitation: 'Invitation à rejoindre {{partieName}}',
   'session-reminder': 'Rappel : séance de {{partieName}} demain',
   'password-reset': 'Réinitialisation de votre mot de passe',
+  'password-changed': 'Votre mot de passe a été modifié',
   'level-up': 'Nouveau niveau disponible pour {{characterName}}',
 };
 
