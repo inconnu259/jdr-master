@@ -1,8 +1,10 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -19,6 +21,8 @@ const EMAIL_RATE_LIMIT_MAX = 5; // même valeur que le throttle IP existant (5/6
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly users: UsersService,
     private readonly prisma: PrismaService,
@@ -207,5 +211,21 @@ export class AuthService {
     // base, un échec d'envoi ne doit jamais faire échouer le reset. EmailService.sendMail() ne
     // relance jamais (catch interne → { ok: false }), aucun try/catch supplémentaire nécessaire.
     await this.email.sendMail('password-changed', updatedUser.email, {});
+  }
+
+  /**
+   * Purge planifiée des tokens de réinitialisation expirés (AD-5, FR-14) — même cadence que
+   * NotificationsService.sendDueReminders. Un seul prédicat (`expiresAt < now`), utilisé ou non :
+   * `deleteMany` est un appel DB atomique et idempotent, aucune garde anti-chevauchement
+   * nécessaire (contrairement à NotificationsService, qui boucle sur des envois d'e-mail).
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async purgeExpiredResetTokens(): Promise<void> {
+    const { count } = await this.prisma.passwordResetToken.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    });
+    if (count > 0) {
+      this.logger.log(`${count} PasswordResetToken(s) expiré(s) purgé(s)`);
+    }
   }
 }

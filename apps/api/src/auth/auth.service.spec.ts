@@ -21,7 +21,12 @@ describe('AuthService', () => {
   };
   let prisma: {
     $transaction: jest.Mock;
-    passwordResetToken: { create: jest.Mock; findUnique: jest.Mock; count: jest.Mock };
+    passwordResetToken: {
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      count: jest.Mock;
+      deleteMany: jest.Mock;
+    };
     userSession: { upsert: jest.Mock; deleteMany: jest.Mock };
   };
   let inviteLinks: { consumeLink: jest.Mock };
@@ -70,6 +75,7 @@ describe('AuthService', () => {
         create: jest.fn(),
         findUnique: jest.fn(),
         count: jest.fn().mockResolvedValue(0),
+        deleteMany: jest.fn(),
       },
       userSession: { upsert: jest.fn(), deleteMany: jest.fn() },
     };
@@ -378,6 +384,21 @@ describe('AuthService', () => {
         service.resetPassword('r1.secretvalue', 'newpassword123'),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(tx.user.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('purgeExpiredResetTokens', () => {
+    it('supprime les PasswordResetToken dont expiresAt est dépassé (AC1, AC2)', async () => {
+      prisma.passwordResetToken.deleteMany.mockResolvedValue({ count: 3 });
+      await service.purgeExpiredResetTokens();
+      expect(prisma.passwordResetToken.deleteMany).toHaveBeenCalledWith({
+        where: { expiresAt: { lt: expect.any(Date) } },
+      });
+    });
+
+    it('aucun token expiré → se résout normalement sans erreur', async () => {
+      prisma.passwordResetToken.deleteMany.mockResolvedValue({ count: 0 });
+      await expect(service.purgeExpiredResetTokens()).resolves.toBeUndefined();
     });
   });
 });
