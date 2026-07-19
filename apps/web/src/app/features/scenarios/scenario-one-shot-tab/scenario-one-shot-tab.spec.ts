@@ -19,9 +19,10 @@ const SCENARIO: ScenarioDto = {
   seances: [],
 };
 
-async function createComponent(drafts: ScenarioDto[] = [SCENARIO]) {
+async function createComponent(drafts: ScenarioDto[] = [SCENARIO], all: ScenarioDto[] = []) {
   const scenariosSvc = {
     listDrafts: vi.fn().mockResolvedValue(drafts),
+    listAll: vi.fn().mockResolvedValue(all),
     open: vi.fn().mockResolvedValue({ ...SCENARIO, status: 'A_VENIR' }),
     listDocuments: vi.fn().mockResolvedValue([]),
   };
@@ -51,11 +52,21 @@ describe('ScenarioOneShotTab', () => {
     expect(fixture.nativeElement.textContent).toContain('Ouvrir aux joueurs');
   });
 
-  it('sans scénario en BROUILLON (déjà ouvert) → message expliquant la limite temporaire', async () => {
-    const { fixture } = await createComponent([]);
+  it('sans scénario en BROUILLON (déjà ouvert) → retombe sur listAll() et affiche l’éditeur', async () => {
+    const opened = { ...SCENARIO, status: 'PASSE' as const };
+    const { fixture, scenariosSvc } = await createComponent([], [opened]);
+    expect(scenariosSvc.listAll).toHaveBeenCalledWith('p1');
+    const comp = fixture.componentInstance as any;
+    expect(comp.notFound()).toBe(false);
+    expect(comp.scenario()?.status).toBe('PASSE');
+    expect(fixture.nativeElement.querySelector('app-scenario-editor')).toBeTruthy();
+  });
+
+  it('aucun scénario du tout (listDrafts et listAll vides) → message "aucun scénario trouvé"', async () => {
+    const { fixture } = await createComponent([], []);
     const comp = fixture.componentInstance as any;
     expect(comp.notFound()).toBe(true);
-    expect(fixture.nativeElement.textContent).toContain('Story 7.5');
+    expect(fixture.nativeElement.textContent).toContain('Aucun scénario trouvé');
   });
 
   it('clic sur Ouvrir aux joueurs appelle open() et met à jour le statut affiché (bouton disparaît)', async () => {

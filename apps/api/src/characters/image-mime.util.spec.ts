@@ -1,8 +1,10 @@
+import sharp from 'sharp';
 import {
   detectImageMime,
   extensionForImageMime,
   isValidPortraitFilename,
   mimeForExtension,
+  stripImageMetadata,
 } from './image-mime.util';
 
 const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
@@ -38,6 +40,100 @@ describe('detectImageMime', () => {
 
   it('rejette un buffer trop court pour contenir une signature', () => {
     expect(detectImageMime(Buffer.from([0xff]))).toBeNull();
+  });
+});
+
+describe('stripImageMetadata', () => {
+  it('supprime les métadonnées EXIF (GPS) d\'une image réelle', async () => {
+    const withExif = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: { r: 255, g: 0, b: 0 } },
+    })
+      .jpeg()
+      .withExif({
+        IFD0: { Copyright: 'Test' },
+        IFD3: {
+          GPSLatitudeRef: 'N',
+          GPSLatitude: '51/1 30/1 3230/100',
+          GPSLongitudeRef: 'W',
+          GPSLongitude: '0/1 7/1 4366/100',
+        },
+      })
+      .toBuffer();
+    const inputMeta = await sharp(withExif).metadata();
+    expect(inputMeta.exif).toBeDefined(); // sanity check : l'input a bien des métadonnées
+
+    const cleaned = await stripImageMetadata(withExif);
+    const outputMeta = await sharp(cleaned).metadata();
+    expect(outputMeta.exif).toBeUndefined();
+  });
+
+  it('applique la rotation EXIF aux pixels avant de retirer le tag Orientation (AC2)', async () => {
+    const oriented = await sharp({
+      create: { width: 8, height: 4, channels: 3, background: { r: 0, g: 255, b: 0 } },
+    })
+      .jpeg()
+      .withMetadata({ orientation: 6 })
+      .toBuffer();
+
+    const cleaned = await stripImageMetadata(oriented);
+    const meta = await sharp(cleaned).metadata();
+    expect(meta.width).toBe(4); // dimensions inversées : la rotation 90° a bien été appliquée
+    expect(meta.height).toBe(8);
+    expect(meta.orientation).toBeUndefined();
+  });
+
+  it('préserve le format d\'entrée (JPEG reste JPEG, AC3)', async () => {
+    const buf = await sharp({
+      create: { width: 4, height: 4, channels: 3, background: { r: 0, g: 0, b: 255 } },
+    })
+      .jpeg()
+      .toBuffer();
+    const cleaned = await stripImageMetadata(buf);
+    const meta = await sharp(cleaned).metadata();
+    expect(meta.format).toBe('jpeg');
+  });
+
+  it('préserve le format d\'entrée (PNG reste PNG, AC3)', async () => {
+    const buf = await sharp({
+      create: { width: 4, height: 4, channels: 3, background: { r: 0, g: 0, b: 255 } },
+    })
+      .png()
+      .toBuffer();
+    const cleaned = await stripImageMetadata(buf);
+    const meta = await sharp(cleaned).metadata();
+    expect(meta.format).toBe('png');
+  });
+
+  it('préserve le format d\'entrée (WEBP reste WEBP, AC3)', async () => {
+    const buf = await sharp({
+      create: { width: 4, height: 4, channels: 3, background: { r: 0, g: 0, b: 255 } },
+    })
+      .webp()
+      .toBuffer();
+    const cleaned = await stripImageMetadata(buf);
+    const meta = await sharp(cleaned).metadata();
+    expect(meta.format).toBe('webp');
+  });
+
+  it('laisse une image sans tag EXIF Orientation inchangée (pas de rotation intempestive)', async () => {
+    const buf = await sharp({
+      create: { width: 8, height: 4, channels: 3, background: { r: 10, g: 20, b: 30 } },
+    })
+      .jpeg()
+      .toBuffer();
+    const inputMeta = await sharp(buf).metadata();
+    expect(inputMeta.orientation).toBeUndefined();
+
+    const cleaned = await stripImageMetadata(buf);
+    const meta = await sharp(cleaned).metadata();
+    expect(meta.width).toBe(8);
+    expect(meta.height).toBe(4);
+    expect(meta.orientation).toBeUndefined();
+  });
+
+  it('rejette (lève) un buffer avec une signature magique valide mais un contenu indécodable', async () => {
+    const fakeJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+    await expect(stripImageMetadata(fakeJpeg)).rejects.toThrow();
   });
 });
 

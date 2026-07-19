@@ -1,7 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as argon2 from 'argon2';
+import { randomUUID } from 'node:crypto';
 import { RYUUTAMA_ID } from '../src/game-systems/supported-game-systems';
+import { writeDocumentFile } from '../src/scenarios/document-storage.util';
+import type { HommeDragonRace } from '@master-jdr/game-rules';
 
 // `@master-jdr/game-rules` est un package ESM — `ts-node` (CJS, ce script) ne peut pas le
 // `require()` (cf. package.json `"type": "module"` du package). Les stats dérivées sont donc
@@ -13,13 +16,22 @@ interface RyuutamaAttributes {
   INT: number;
   VIG: number;
 }
+interface InventoryItem {
+  id: string;
+  name: string;
+  weight: number;
+  price?: string;
+  effect?: string;
+  addedBy: 'player' | 'mj';
+}
 interface RyuutamaSheetData {
   classId: string;
   specialtyTypeId?: string;
   typeId: string;
   attributes: RyuutamaAttributes;
   weaponCategoryId: string;
-  equipment?: { individual: unknown[]; group: string[] };
+  // Modèle d'inventaire unifié (Story 14.1) — individual/contenants/animaux, plus de `group`.
+  equipment?: { individual: InventoryItem[]; contenants: InventoryItem[]; animaux: Omit<InventoryItem, 'weight'>[] };
   narrative?: { name?: string };
 }
 function computeDerived(sheetData: RyuutamaSheetData) {
@@ -42,10 +54,13 @@ function computeDerived(sheetData: RyuutamaSheetData) {
  * contrainte unique sur une base partiellement peuplée.
  *
  * Couvre : 1 MJ + 3 joueurs, une Partie de chaque `PartieKind`, un personnage Ryuutama par joueur
- * et par Partie, des scénarios à différents statuts (dont au moins un `PASSE` par Partie avec
- * résumé de fin + compte-rendu de séance), des entrées de journal (dont une associée manuellement
- * et une éligible à l'association automatique) — de quoi explorer la quasi-totalité des
- * fonctionnalités de l'Epic 8 sans ressaisie manuelle.
+ * et par Partie (dont un inventaire enrichi individual/contenants/animaux, Epic 14), des
+ * scénarios à différents statuts (dont au moins un `PASSE` par Partie avec résumé de fin +
+ * compte-rendu de séance), des entrées de journal (dont une associée manuellement et une éligible
+ * à l'association automatique), une distribution d'XP avec une montée de niveau en attente
+ * (Epic 6), une fiche Homme Dragon du MJ par Partie (Epic 10), des documents de scénario et de
+ * bibliothèque de Partie (Story 7.2) et des annonces MJ à portée variable (Epic 9) — de quoi
+ * explorer la quasi-totalité des fonctionnalités des Epics 6 à 10 sans ressaisie manuelle.
  */
 
 const connectionString = process.env.DATABASE_URL;
@@ -70,13 +85,14 @@ function makeSheetData(
   weaponCategoryId: string,
   attributeSet: number,
   specialtyTypeId?: string,
+  equipment?: RyuutamaSheetData['equipment'],
 ): RyuutamaSheetData {
   return {
     classId,
     typeId,
     weaponCategoryId,
     attributes: ATTRIBUTE_SETS[attributeSet],
-    equipment: { individual: [], group: [] },
+    equipment: equipment ?? { individual: [], contenants: [], animaux: [] },
     narrative: { name },
     ...(specialtyTypeId ? { specialtyTypeId } : {}),
   };
@@ -143,7 +159,16 @@ async function main() {
   const fenn = await createCharacter(
     alice.id,
     oneShot.id,
-    makeSheetData('Fenn', 'chasseur', 'attaque', 'arc', 0),
+    makeSheetData('Fenn', 'chasseur', 'attaque', 'arc', 0, undefined, {
+      individual: [
+        { id: randomUUID(), name: 'Corde (10m)', weight: 1, price: '5 po', addedBy: 'player' },
+        { id: randomUUID(), name: 'Torche', weight: 0.5, price: '2 po', addedBy: 'player' },
+      ],
+      contenants: [
+        { id: randomUUID(), name: 'Sac à dos', weight: 1, price: '10 po', addedBy: 'player' },
+      ],
+      animaux: [{ id: randomUUID(), name: 'Faucon messager', addedBy: 'player' }],
+    }),
   );
   const roland = await createCharacter(
     bob.id,
@@ -204,6 +229,65 @@ async function main() {
         createdAt: new Date('2026-06-14T18:00:00.000Z'), // dans la fenêtre → association auto (journalAutoAssociate=true)
       },
     ],
+  });
+
+  // XP distribuée après la clôture du scénario (Story 6.2) — Roland est en attente de montée
+  // de niveau (100 xp = seuil du niveau 2) pour explorer l'écran de montée de niveau (Story 6.3).
+  const oneShotXp = await prisma.xpDistribution.create({
+    data: {
+      partieId: oneShot.id,
+      mjId: mj.id,
+      note: "Naufrage de l'Aurore : enquête bouclée, bonus pour la scène de confrontation.",
+    },
+  });
+  await prisma.xpDistributionEntry.createMany({
+    data: [
+      { distributionId: oneShotXp.id, characterId: fenn.id, amount: 60 },
+      { distributionId: oneShotXp.id, characterId: roland.id, amount: 80 },
+      { distributionId: oneShotXp.id, characterId: roland.id, amount: 20, isBonus: true },
+    ],
+  });
+  await prisma.character.update({ where: { id: fenn.id }, data: { xp: 60 } });
+  await prisma.character.update({ where: { id: roland.id }, data: { xp: 100 } });
+
+  // Fiche Homme Dragon du MJ (Epic 10) — un artefact par race, associé à la Partie.
+  await prisma.hommeDragon.create({
+    data: {
+      userId: mj.id,
+      partieId: oneShot.id,
+      gameSystemId: RYUUTAMA_ID,
+      sheetData: {
+        race: 'DRAGON_VERT' satisfies HommeDragonRace,
+        artefact: { key: 'lanterne', nom: 'Lanterne des embruns' },
+        nom: 'Suisen',
+        apparence: 'Une brume verdâtre en forme de lanterne suspendue.',
+        vocation: 'Guider les naufragés vers la bonne route.',
+        demeure: "Les criques de l'Aurore",
+      } as any,
+    },
+  });
+
+  // Document de scénario (Story 7.2) — visible une fois le scénario COURANT/PASSE (anti-spoil).
+  const oneShotDocFilename = await writeDocumentFile(
+    Buffer.from(
+      "Journal de bord de l'Aurore (transcription) : \"...le chargement d'assurance " +
+        "doit disparaître avant l'inspection du port...\" — signé Ossian.",
+      'utf-8',
+    ),
+    'text/plain',
+  );
+  await prisma.scenarioDocument.create({
+    data: {
+      partieId: oneShot.id,
+      scenarioId: oneShotScenario.id,
+      filename: oneShotDocFilename,
+      originalName: 'journal-de-bord-aurore.txt',
+      sizeBytes: Buffer.byteLength(
+        "Journal de bord de l'Aurore (transcription) : \"...le chargement d'assurance " +
+          "doit disparaître avant l'inspection du port...\" — signé Ossian.",
+        'utf-8',
+      ),
+    },
   });
 
   // ─── Partie 2 : CAMPAGNE_LINEAIRE, en cours ───────────────────────────────
@@ -306,6 +390,58 @@ async function main() {
     data: [
       { characterId: liora.id, text: "Le marchand qu'on a relâché savait déjà nos noms...", shared: false },
       { characterId: garrick.id, text: 'La carte trouvée mène plus loin au nord que prévu.', shared: true },
+    ],
+  });
+
+  // Fiche Homme Dragon du MJ (Epic 10) pour cette Partie — race différente pour varier le catalogue.
+  await prisma.hommeDragon.create({
+    data: {
+      userId: mj.id,
+      partieId: lineaire.id,
+      gameSystemId: RYUUTAMA_ID,
+      sheetData: {
+        race: 'DRAGON_BLEU' satisfies HommeDragonRace,
+        artefact: { key: 'anneau', nom: "Anneau des routes liées" },
+        nom: 'Kaien',
+        apparence: 'Un anneau de brume bleutée qui suit la caravane à distance.',
+        vocation: 'Tisser des liens entre les voyageurs du Nord.',
+      } as any,
+    },
+  });
+
+  // Document de bibliothèque de Partie (Story 7.2) — scenarioId null = toujours visible.
+  const lineaireLibDocFilename = await writeDocumentFile(
+    Buffer.from(
+      'Carte des routes marchandes du Nord — repères, relais et distances entre villes.',
+      'utf-8',
+    ),
+    'text/plain',
+  );
+  await prisma.scenarioDocument.create({
+    data: {
+      partieId: lineaire.id,
+      scenarioId: null,
+      filename: lineaireLibDocFilename,
+      originalName: 'carte-routes-du-nord.txt',
+      sizeBytes: Buffer.byteLength(
+        'Carte des routes marchandes du Nord — repères, relais et distances entre villes.',
+        'utf-8',
+      ),
+    },
+  });
+
+  // Annonces MJ à portée variable (Epic 9) : une pour toute la Partie, une pour le scénario courant.
+  await prisma.announcement.createMany({
+    data: [
+      {
+        partieId: lineaire.id,
+        text: 'Prochaine séance décalée d\'une semaine, merci de répondre au sondage en cours.',
+      },
+      {
+        partieId: lineaire.id,
+        scenarioId: chap2.id,
+        text: 'Pensez à préparer vos fiches : le Chapitre 2 démarre par une scène de combat.',
+      },
     ],
   });
 

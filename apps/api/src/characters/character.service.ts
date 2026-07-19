@@ -46,6 +46,7 @@ import type { PortraitCropDataDto } from './dto/portrait-crop-data.dto';
 import {
   detectImageMime,
   extensionForImageMime,
+  stripImageMetadata,
   type DetectedImageMime,
 } from './image-mime.util';
 import {
@@ -67,6 +68,9 @@ const CONTENT_KEY_BY_CAPABILITY: Record<string, string> = {
   type: 'type',
   'dragon-protection': 'season',
 };
+
+const INVALID_PORTRAIT_IMAGE_MESSAGE =
+  "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
 
 /**
  * Défense en profondeur (revue de code Story 6.4) : `equipment.individual` ne devrait jamais
@@ -329,14 +333,21 @@ export class CharacterService {
 
     const mime = detectImageMime(file.buffer);
     if (!mime) {
-      throw new BadRequestException(
-        "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide",
+      throw new BadRequestException(INVALID_PORTRAIT_IMAGE_MESSAGE);
+    }
+    let cleanedBuffer: Buffer;
+    try {
+      cleanedBuffer = await stripImageMetadata(file.buffer);
+    } catch (err) {
+      this.logger.warn(
+        `Échec du nettoyage EXIF (sharp) sur un portrait uploadé : ${err instanceof Error ? err.message : String(err)}`,
       );
+      throw new BadRequestException(INVALID_PORTRAIT_IMAGE_MESSAGE);
     }
 
     await mkdir(PORTRAITS_DIR, { recursive: true });
     const filename = `${randomUUID()}${extensionForImageMime(mime)}`;
-    await writeFile(join(PORTRAITS_DIR, filename), file.buffer);
+    await writeFile(join(PORTRAITS_DIR, filename), cleanedBuffer);
 
     try {
       const result = await this.prisma.character.updateMany({

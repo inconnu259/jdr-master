@@ -6,14 +6,12 @@ import { ScenarioEditor } from '../scenario-editor/scenario-editor';
 
 /**
  * Un ONE_SHOT n'a jamais qu'un seul scénario (auto-créé à la création de la Partie, AD-7) : pas de
- * liste, pas de "+ Nouveau" (le backend rejette toute création supplémentaire). On l'atteint via
- * `listDrafts()` (le scénario ONE_SHOT démarre en BROUILLON comme les scénarios de campagne,
- * `parties.service.ts`), tant qu'il reste `BROUILLON`.
- *
- * `[DÉVIATION]` : une fois ouvert aux joueurs (`open()`), le scénario quitte `BROUILLON` et
- * `listDrafts()` ne le retourne plus — aucun endpoint `GET /parties/:id/scenarios` (liste complète
- * non filtrée) n'existe encore pour le retrouver ensuite. Limitation temporaire, documentée,
- * qui se résorbera avec la Story 7.5 (anti-spoil et vue chronologique).
+ * liste, pas de "+ Nouveau" (le backend rejette toute création supplémentaire). Tant qu'il reste
+ * `BROUILLON`, on le trouve via `listDrafts()`. Une fois ouvert aux joueurs (`open()`) ou passé
+ * `COURANT`/`PASSE`, il ne remonte plus dans `listDrafts()` : on retombe alors sur `listAll()`
+ * (`GET /parties/:id/scenarios`, ajouté par la Story 7.5) qui retourne tous les statuts — ce tab
+ * n'affiche pas d'onglet Chronologie séparé (réservé aux campagnes), donc c'est lui qui doit gérer
+ * les deux statuts.
  */
 @Component({
   selector: 'app-scenario-one-shot-tab',
@@ -35,11 +33,16 @@ export class ScenarioOneShotTab implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       const drafts = await this.scenarios.listDrafts(this.partieId());
-      if (drafts.length === 0) {
+      if (drafts.length > 0) {
+        this.scenario.set(drafts[0]);
+        return;
+      }
+      const all = await this.scenarios.listAll(this.partieId());
+      if (all.length === 0) {
         this.notFound.set(true);
         return;
       }
-      this.scenario.set(drafts[0]);
+      this.scenario.set(all[0]);
     } catch {
       this.loadError.set('Impossible de charger le scénario. Réessayez.');
     }

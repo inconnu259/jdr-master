@@ -1,10 +1,7 @@
 @if (loadError()) {
   <p class="error">{{ loadError() }}</p>
 } @else if (notFound()) {
-  <p class="empty">
-    Ce scénario n'est plus en brouillon — sa gestion complète sera disponible via la timeline
-    (Story 7.5).
-  </p>
+  <p class="empty">Aucun scénario trouvé pour cette Partie.</p>
 } @else if (scenario(); as s) {
   @if (s.status === 'BROUILLON') {
     <div class="open-bar">

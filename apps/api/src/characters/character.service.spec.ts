@@ -31,6 +31,15 @@ jest.mock('node:crypto', () => {
   return { ...actual, randomUUID: jest.fn(() => 'fixed-uuid') };
 });
 
+// Mock partiel : detectImageMime/extensionForImageMime/etc. restent réels (fonctions pures,
+// sans effet de bord), seule stripImageMetadata est mockée. Un vrai sharp() sur JPEG_BUFFER
+// (signature magique seule, non décodable) ferait échouer tous les tests updatePortrait()
+// existants — cf. Story 16.2 Dev Notes.
+jest.mock('./image-mime.util', () => ({
+  ...jest.requireActual('./image-mime.util'),
+  stripImageMetadata: jest.fn(),
+}));
+
 import { Prisma } from '@prisma/client';
 import {
   validate,
@@ -38,6 +47,7 @@ import {
   pendingLevels,
 } from '@master-jdr/game-rules';
 import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises';
+import { stripImageMetadata } from './image-mime.util';
 import { CharacterService } from './character.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
@@ -183,6 +193,12 @@ describe('CharacterService', () => {
     });
     prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj-default' });
     (pendingLevels as jest.Mock).mockReturnValue([]);
+    // Défaut passthrough : la plupart des tests updatePortrait() ne portent pas sur le
+    // nettoyage EXIF lui-même — sans ce défaut, JPEG_BUFFER (magic bytes seuls) résoudrait
+    // `undefined` (jest.fn() nu), cassant l'assertion writeFile(..., JPEG_BUFFER).
+    (stripImageMetadata as jest.Mock).mockImplementation((buf: Buffer) =>
+      Promise.resolve(buf),
+    );
     const module = await Test.createTestingModule({
       providers: [
         CharacterService,
@@ -576,6 +592,34 @@ describe('CharacterService', () => {
           makeMulterFile(Buffer.from('not an image')),
           null,
         ),
+      ).rejects.toThrow(BadRequestException);
+      expect(writeFile).not.toHaveBeenCalled();
+    });
+
+    it('nettoie les métadonnées EXIF avant écriture (Story 16.2 AC1) — écrit le buffer nettoyé, pas le buffer brut', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+      const cleaned = Buffer.from('cleaned-bytes');
+      (stripImageMetadata as jest.Mock).mockResolvedValue(cleaned);
+
+      await service.updatePortrait('char1', 'u1', makeMulterFile(), null);
+
+      expect(stripImageMetadata).toHaveBeenCalledWith(JPEG_BUFFER);
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('fixed-uuid.jpg'),
+        cleaned,
+      );
+    });
+
+    it('signature magique valide mais image indécodable par sharp → BadRequestException, aucune écriture disque (Story 16.2 AC3)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      (stripImageMetadata as jest.Mock).mockRejectedValue(
+        new Error('Input buffer has corrupt header'),
+      );
+
+      await expect(
+        service.updatePortrait('char1', 'u1', makeMulterFile(), null),
       ).rejects.toThrow(BadRequestException);
       expect(writeFile).not.toHaveBeenCalled();
     });

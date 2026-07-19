@@ -1,3 +1,5 @@
+import sharp from 'sharp';
+
 export type DetectedImageMime = 'image/jpeg' | 'image/png' | 'image/webp';
 
 const MIME_EXTENSION: Record<DetectedImageMime, string> = {
@@ -37,6 +39,21 @@ export function detectImageMime(buffer: Buffer): DetectedImageMime | null {
     return 'image/webp';
   }
   return null;
+}
+
+/**
+ * Nettoie les métadonnées EXIF/XMP/IPTC (position GPS notamment) d'une image avant
+ * stockage (FR-16). sharp() les retire déjà par défaut au toBuffer() — mais retire aussi
+ * le tag EXIF Orientation, qui détermine la rotation visuelle correcte d'une photo prise
+ * en mode portrait sur mobile. autoOrient() applique cette rotation dans les pixels AVANT
+ * que le tag ne soit supprimé, pour ne pas régresser visuellement les photos EXIF-orientées.
+ * Préserve le format d'entrée (JPEG reste JPEG, etc.) — aucun appel à toFormat()/jpeg().
+ * Pour une image animée (WEBP/PNG multi-frames), seule la première frame est conservée
+ * (comportement par défaut de sharp, aucune option `{ animated: true }` passée) — acceptable
+ * ici car un portrait de personnage est attendu comme une image statique.
+ */
+export async function stripImageMetadata(buffer: Buffer): Promise<Buffer> {
+  return sharp(buffer).autoOrient().toBuffer();
 }
 
 export function extensionForImageMime(mime: DetectedImageMime): string {
