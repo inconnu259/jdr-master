@@ -1,3 +1,5 @@
+import { PDFDocument } from 'pdf-lib';
+
 export type DetectedDocumentMime = 'application/pdf' | 'text/plain';
 
 const MIME_EXTENSION: Record<DetectedDocumentMime, string> = {
@@ -29,6 +31,26 @@ export function detectDocumentMime(
     return 'text/plain';
   }
   return null;
+}
+
+/**
+ * Validation structurelle additionnelle pour un fichier déjà détecté PDF par sa signature
+ * magique (AD-6, FR-15). PDFDocument.load() seul est INSUFFISANT — pdf-lib a un parseur de
+ * récupération tolérant qui accepte un buffer ne contenant que l'en-tête "%PDF-" suivi de
+ * bytes arbitraires (vérifié empiriquement, y compris en essayant l'option
+ * `{ throwOnInvalidObject: true }` de load(), qui ne change rien à ce comportement — cette
+ * option n'est donc pas utilisée ici, elle ne résout rien). Appeler getPageCount() force la
+ * résolution de l'arbre de pages et fait échouer le parsing sur un PDF réellement
+ * corrompu/malformé — c'est cette étape qui valide, pas load().
+ */
+export async function isStructurallyValidPdf(buffer: Buffer): Promise<boolean> {
+  try {
+    const doc = await PDFDocument.load(buffer);
+    doc.getPageCount();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function extensionForDocumentMime(mime: DetectedDocumentMime): string {

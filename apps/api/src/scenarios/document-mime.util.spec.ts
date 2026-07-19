@@ -1,6 +1,8 @@
+import { PDFDocument } from 'pdf-lib';
 import {
   detectDocumentMime,
   extensionForDocumentMime,
+  isStructurallyValidPdf,
   isValidDocumentFilename,
   mimeForExtension,
 } from './document-mime.util';
@@ -32,6 +34,26 @@ describe('detectDocumentMime', () => {
     const buffer = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
     // Un JPEG contient des bytes NUL rapidement dans son en-tête → correctement rejeté
     expect(detectDocumentMime(buffer)).toBeNull();
+  });
+});
+
+describe('isStructurallyValidPdf', () => {
+  it('accepte un PDF réellement structuré (généré par pdf-lib lui-même)', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage();
+    const buffer = Buffer.from(await doc.save());
+    await expect(isStructurallyValidPdf(buffer)).resolves.toBe(true);
+  });
+
+  it('rejette un buffer avec l’en-tête %PDF- valide mais un contenu arbitraire non structuré (load() seul ne suffit pas)', async () => {
+    const buffer = Buffer.from('%PDF-1.4\n' + 'garbage'.repeat(500));
+    await expect(isStructurallyValidPdf(buffer)).resolves.toBe(false);
+  });
+
+  it('rejette un buffer vide', async () => {
+    await expect(isStructurallyValidPdf(Buffer.alloc(0))).resolves.toBe(
+      false,
+    );
   });
 });
 

@@ -20,7 +20,10 @@ import { CharacterService } from '../characters/character.service';
 import { PollService } from '../poll/poll.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
-import { detectDocumentMime } from './document-mime.util';
+import {
+  detectDocumentMime,
+  isStructurallyValidPdf,
+} from './document-mime.util';
 import {
   deleteDocumentFile,
   readDocumentFile,
@@ -137,6 +140,11 @@ export class ScenariosService {
     if (!mime) {
       throw new BadRequestException(
         "Le fichier fourni n'est pas un PDF ou un texte valide",
+      );
+    }
+    if (mime === 'application/pdf' && !(await isStructurallyValidPdf(file.buffer))) {
+      throw new BadRequestException(
+        'Le fichier PDF fourni est corrompu ou structurellement invalide',
       );
     }
 

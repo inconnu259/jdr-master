@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 
 jest.mock('./document-mime.util', () => ({
   detectDocumentMime: jest.fn(),
+  isStructurallyValidPdf: jest.fn(),
 }));
 jest.mock('./document-storage.util', () => ({
   writeDocumentFile: jest.fn(),
@@ -24,7 +25,10 @@ jest.mock('@master-jdr/game-rules', () => ({
   LEVEL_TABLE: [],
 }));
 
-import { detectDocumentMime } from './document-mime.util';
+import {
+  detectDocumentMime,
+  isStructurallyValidPdf,
+} from './document-mime.util';
 import {
   deleteDocumentFile,
   readDocumentFile,
@@ -137,6 +141,10 @@ describe('ScenariosService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // Défaut : la plupart des tests uploadDocument() mockent detectDocumentMime → 'application/pdf'
+    // sans porter sur la validation structurelle elle-même — sans ce défaut, isStructurallyValidPdf
+    // (jest.fn() nu, non mocké explicitement) résoudrait `undefined`, faussement falsy.
+    (isStructurallyValidPdf as jest.Mock).mockResolvedValue(true);
     prisma = makePrisma();
     parties = makeParties();
     characters = makeCharacters();
@@ -507,6 +515,37 @@ describe('ScenariosService', () => {
       ).rejects.toThrow(BadRequestException);
       expect(writeDocumentFile).not.toHaveBeenCalled();
       expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('PDF détecté par signature magique mais structurellement invalide → rejet, aucune écriture (Story 16.1 AC1)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
+      (isStructurallyValidPdf as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        service.uploadDocument('p1', 'mj1', makeFile()),
+      ).rejects.toThrow(BadRequestException);
+      expect(writeDocumentFile).not.toHaveBeenCalled();
+      expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
+    });
+
+    it('fichier texte détecté → isStructurallyValidPdf jamais appelé, upload réussit (Story 16.1 AC3, non-régression texte)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      (detectDocumentMime as jest.Mock).mockReturnValue('text/plain');
+      (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.txt');
+      prisma.scenarioDocument.create.mockResolvedValue({
+        id: 'd1',
+        partieId: 'p1',
+        scenarioId: null,
+        originalName: 'regles-maison.txt',
+        sizeBytes: 12,
+        createdAt: new Date('2026-07-12T00:00:00.000Z'),
+      });
+
+      const result = await service.uploadDocument('p1', 'mj1', makeFile());
+
+      expect(isStructurallyValidPdf).not.toHaveBeenCalled();
+      expect(result.scenarioId).toBeNull();
     });
 
     it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
