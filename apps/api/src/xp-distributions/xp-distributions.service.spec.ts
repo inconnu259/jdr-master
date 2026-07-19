@@ -202,7 +202,7 @@ describe('XpDistributionsService', () => {
       );
     });
 
-    it('trie par createdAt desc (délégué à Prisma orderBy)', async () => {
+    it('trie par createdAt desc avec tie-breaker id (déterministe, Story 17.1)', async () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.xpDistribution.findMany.mockResolvedValue([]);
 
@@ -211,8 +211,30 @@ describe('XpDistributionsService', () => {
       expect(prisma.xpDistribution.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { partieId: 'p1' },
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         }),
+      );
+    });
+
+    it('skip/take fournis → transmis tels quels à Prisma (AC1)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.xpDistribution.findMany.mockResolvedValue([]);
+
+      await service.listForPartie('p1', 'mj1', { skip: 20, take: 10 });
+
+      expect(prisma.xpDistribution.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 20, take: 10 }),
+      );
+    });
+
+    it('skip/take absents → aucune limite appliquée (comportement par défaut inchangé)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.xpDistribution.findMany.mockResolvedValue([]);
+
+      await service.listForPartie('p1', 'mj1');
+
+      expect(prisma.xpDistribution.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: undefined, take: undefined }),
       );
     });
   });

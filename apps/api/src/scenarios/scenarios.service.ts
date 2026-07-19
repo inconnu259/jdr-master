@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
+import type { Prisma } from '@prisma/client';
 import type {
   CharacterNoteDto,
   DaySlot,
@@ -222,12 +223,15 @@ export class ScenariosService {
   async findAllForPartie(
     partieId: string,
     userId: string,
+    pagination?: { skip?: number; take?: number },
   ): Promise<ScenarioDto[]> {
     const partie = await this.parties.getViewable(partieId, userId);
 
     const scenarios = await this.prisma.scenario.findMany({
       where: { partieId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      skip: pagination?.skip,
+      take: pagination?.take,
     });
     const scenarioIds = scenarios.map((s) => s.id);
     const seancesByScenario = await loadSeancesBatch(this.prisma, scenarioIds);
@@ -910,7 +914,13 @@ const SEANCE_INCLUDE = {
       },
     },
   },
-  inscriptions: { include: { user: { select: { pseudo: true } } } },
+  inscriptions: {
+    orderBy: [
+      { createdAt: 'asc' },
+      { id: 'asc' },
+    ] as Prisma.InscriptionOrderByWithRelationInput[],
+    include: { user: { select: { pseudo: true } } },
+  },
 } as const;
 
 function toSessionPollDto(poll: any): SessionPollDto {

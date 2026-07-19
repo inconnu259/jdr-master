@@ -755,7 +755,7 @@ describe('ScenariosService', () => {
   });
 
   describe('findAllForPartie()', () => {
-    it('lecture ouverte à tout membre (getViewable, pas getOwned), tri chronologique croissant (AC1)', async () => {
+    it('lecture ouverte à tout membre (getViewable, pas getOwned), tri chronologique croissant avec tie-breaker id (Story 17.1)', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1' });
       prisma.scenario.findMany.mockResolvedValue([]);
 
@@ -763,10 +763,52 @@ describe('ScenariosService', () => {
 
       expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
       expect(parties.getOwned).not.toHaveBeenCalled();
-      expect(prisma.scenario.findMany).toHaveBeenCalledWith({
-        where: { partieId: 'p1' },
-        orderBy: { createdAt: 'asc' },
-      });
+      expect(prisma.scenario.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { partieId: 'p1' },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        }),
+      );
+    });
+
+    it('skip/take fournis → transmis tels quels à Prisma (AC1)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.scenario.findMany.mockResolvedValue([]);
+
+      await service.findAllForPartie('p1', 'u1', { skip: 20, take: 10 });
+
+      expect(prisma.scenario.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 20, take: 10 }),
+      );
+    });
+
+    it('skip/take absents → aucune limite appliquée (comportement par défaut inchangé)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.scenario.findMany.mockResolvedValue([]);
+
+      await service.findAllForPartie('p1', 'u1');
+
+      expect(prisma.scenario.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: undefined, take: undefined }),
+      );
+    });
+
+    it('inscriptions triées par createdAt asc avec tie-breaker id (AC2, Story 17.1)', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.scenario.findMany.mockResolvedValue([]);
+      prisma.seance.findMany.mockResolvedValue([]);
+
+      await service.findAllForPartie('p1', 'u1');
+
+      expect(prisma.seance.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            inscriptions: expect.objectContaining({
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            }),
+          }),
+        }),
+      );
     });
 
     it('aucun filtrage par statut — un scénario BROUILLON est bien retourné (AD-6)', async () => {

@@ -5,11 +5,13 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { CreateXpDistributionDto } from './dto/create-xp-distribution.dto';
 import { XpDistributionsService } from './xp-distributions.service';
 
@@ -31,7 +33,8 @@ export class XpDistributionsController {
   list(
     @Param('id', ParseUUIDPipe) partieId: string,
     @CurrentUser() user: AuthUser,
+    @Query() pagination: PaginationQueryDto,
   ) {
-    return this.xpDistributions.listForPartie(partieId, user.id);
+    return this.xpDistributions.listForPartie(partieId, user.id, pagination);
   }
 }

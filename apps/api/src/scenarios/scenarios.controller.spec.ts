@@ -86,8 +86,16 @@ describe('ScenariosController', () => {
   });
 
   it('findAll() route partieId/user vers ScenariosService.findAllForPartie', async () => {
-    await controller.findAll('p1', user);
-    expect(scenarios.findAllForPartie).toHaveBeenCalledWith('p1', 'mj1');
+    await controller.findAll('p1', user, {});
+    expect(scenarios.findAllForPartie).toHaveBeenCalledWith('p1', 'mj1', {});
+  });
+
+  it('findAll() transmet skip/take de la query vers ScenariosService.findAllForPartie (Story 17.1, AC1)', async () => {
+    await controller.findAll('p1', user, { skip: 20, take: 10 });
+    expect(scenarios.findAllForPartie).toHaveBeenCalledWith('p1', 'mj1', {
+      skip: 20,
+      take: 10,
+    });
   });
 
   it('open() route scenarioId/user vers ScenariosService.open', async () => {

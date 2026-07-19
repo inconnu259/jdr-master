@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   StreamableFile,
   UploadedFile,
   UseFilters,
@@ -22,6 +23,7 @@ import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { MulterExceptionFilter } from '../common/filters/multer-exception.filter';
+import { PaginationQueryDto } from '../common/dto/pagination-query.dto';
 import { ScenariosService } from './scenarios.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
@@ -71,8 +73,9 @@ export class ScenariosController {
   findAll(
     @Param('id', ParseUUIDPipe) partieId: string,
     @CurrentUser() user: AuthUser,
+    @Query() pagination: PaginationQueryDto,
   ) {
-    return this.scenarios.findAllForPartie(partieId, user.id);
+    return this.scenarios.findAllForPartie(partieId, user.id, pagination);
   }
 
   @Patch('scenarios/:id/open')

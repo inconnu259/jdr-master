@@ -90,12 +90,15 @@ export class XpDistributionsService {
   async listForPartie(
     partieId: string,
     mjId: string,
+    pagination?: { skip?: number; take?: number },
   ): Promise<XpDistributionDto[]> {
     await this.parties.getOwned(partieId, mjId);
     const distributions = await this.prisma.xpDistribution.findMany({
       where: { partieId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       include: { entries: true },
+      skip: pagination?.skip,
+      take: pagination?.take,
     });
     return distributions.map(toDto);
   }
