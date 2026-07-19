@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 
 jest.mock('./document-mime.util', () => ({
   detectDocumentMime: jest.fn(),
@@ -1762,6 +1763,24 @@ describe('ScenariosService', () => {
   });
 
   describe('addSeance()', () => {
+    it('scénario PASSE → rejet 400, aucune création de séance (Story 17.2 AC1)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'PASSE',
+      });
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+
+      await expect(
+        service.addSeance(VALID_SCENARIO_ID, 'mj1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.seance.create).not.toHaveBeenCalled();
+    });
+
     it('crée une Seance rattachée au scénario, seances peuplées dans le DTO retourné (AC1, AC7)', async () => {
       prisma.scenario.findUnique.mockResolvedValue({
         id: VALID_SCENARIO_ID,
@@ -2046,6 +2065,41 @@ describe('ScenariosService', () => {
       expect(prisma.seance.delete).toHaveBeenCalledWith({
         where: { id: SECOND_SEANCE_ID },
       });
+    });
+
+    it('référence scénario orpheline → 404 explicite, pas de 500 (Story 17.2 AC2)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SECOND_SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          'An operation failed because it depends on one or more records that were required but not found.',
+          { code: 'P2025', clientVersion: '7.8.0' },
+        ),
+      );
+
+      await expect(
+        service.deleteSeance(SECOND_SEANCE_ID, 'mj1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.seance.delete).not.toHaveBeenCalled();
+    });
+
+    it('erreur Prisma autre que P2025 → propagée telle quelle, pas absorbée en 404 (revue de code, Story 17.2)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SECOND_SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      const otherError = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed.',
+        { code: 'P2002', clientVersion: '7.8.0' },
+      );
+      prisma.scenario.findUniqueOrThrow.mockRejectedValue(otherError);
+
+      await expect(
+        service.deleteSeance(SECOND_SEANCE_ID, 'mj1'),
+      ).rejects.toBe(otherError);
+      expect(prisma.seance.delete).not.toHaveBeenCalled();
     });
 
     it('séance liée à un vote (OPEN ou CLOSED) → le SessionPoll est supprimé avec elle (revue de code : plus d’orphelin)', async () => {
@@ -2538,6 +2592,28 @@ describe('ScenariosService', () => {
       };
     }
 
+    it('scénario PASSE → rejet 400, aucune écriture (Story 17.2 AC1)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        inscriptionMin: null,
+        inscriptionMax: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
+        mockScenario({ status: 'PASSE' }),
+      );
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+
+      await expect(
+        service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
     it('CAMPAGNE_EPISODIQUE : capacité enregistrée, reflétée dans le DTO retourné (AC1, AC9)', async () => {
       prisma.seance.findUnique.mockResolvedValue({
         id: SEANCE_ID,
@@ -2664,6 +2740,75 @@ describe('ScenariosService', () => {
         ...overrides,
       };
     }
+
+    it('référence scénario orpheline → 404 explicite, pas de 500 (Story 17.2 AC2)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        inscriptionMin: 4,
+        inscriptionMax: 6,
+        dateValidee: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          'An operation failed because it depends on one or more records that were required but not found.',
+          { code: 'P2025', clientVersion: '7.8.0' },
+        ),
+      );
+
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+    });
+
+    it('scénario BROUILLON → rejet 400, aucune inscription créée (Story 17.2 AC1)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        inscriptionMin: 4,
+        inscriptionMax: 6,
+        dateValidee: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
+        mockScenario({ status: 'BROUILLON' }),
+      );
+      parties.getViewable.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('scénario PASSE → rejet 400, aucune inscription créée (Story 17.2 AC1)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        inscriptionMin: 4,
+        inscriptionMax: 6,
+        dateValidee: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
+        mockScenario({ status: 'PASSE' }),
+      );
+      parties.getViewable.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
 
     it('nouvel inscrit, count < max → Inscription créée sous verrou (AC2, AC5)', async () => {
       prisma.seance.findUnique.mockResolvedValue({
@@ -2957,6 +3102,27 @@ describe('ScenariosService', () => {
       await service.desinscrire(SEANCE_ID, 'u1');
 
       expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(prisma.inscription.deleteMany).toHaveBeenCalledWith({
+        where: { seanceId: SEANCE_ID, userId: 'u1' },
+      });
+    });
+
+    it('scénario PASSE → retrait toujours autorisé (décision explicite, Story 17.2 AC1)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
+        mockScenario({ status: 'PASSE' }),
+      );
+      parties.getViewable.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+
+      await service.desinscrire(SEANCE_ID, 'u1');
+
       expect(prisma.inscription.deleteMany).toHaveBeenCalledWith({
         where: { seanceId: SEANCE_ID, userId: 'u1' },
       });

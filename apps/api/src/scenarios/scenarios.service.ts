@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type {
   CharacterNoteDto,
   DaySlot,
@@ -426,6 +426,12 @@ export class ScenariosService {
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
+    if (scenario.status === 'PASSE') {
+      throw new BadRequestException(
+        "Impossible d'ajouter une séance à un scénario clôturé",
+      );
+    }
+
     await this.prisma.seance.create({ data: { scenarioId } });
 
     const updated = await this.prisma.scenario.findUniqueOrThrow({
@@ -491,9 +497,10 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: seance.scenarioId },
-    });
+    const scenario = await resolveScenarioOrThrow(
+      this.prisma,
+      seance.scenarioId,
+    );
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status === 'PASSE') {
@@ -550,9 +557,10 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: seance.scenarioId },
-    });
+    const scenario = await resolveScenarioOrThrow(
+      this.prisma,
+      seance.scenarioId,
+    );
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     // Un scénario PASSE est figé (cohérent avec deleteSeance/resetSeanceDate) : pas de nouveau
@@ -595,9 +603,10 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: seance.scenarioId },
-    });
+    const scenario = await resolveScenarioOrThrow(
+      this.prisma,
+      seance.scenarioId,
+    );
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status === 'PASSE') {
@@ -636,11 +645,17 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: seance.scenarioId },
-    });
+    const scenario = await resolveScenarioOrThrow(
+      this.prisma,
+      seance.scenarioId,
+    );
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
+    if (scenario.status === 'PASSE') {
+      throw new BadRequestException(
+        "Impossible de définir la capacité d'une séance d'un scénario clôturé",
+      );
+    }
     if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
       throw new BadRequestException(
         "La capacité d'inscription ne peut être définie que pour les campagnes épisodiques",
@@ -671,11 +686,17 @@ export class ScenariosService {
       include: { poll: true },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: seance.scenarioId },
-    });
+    const scenario = await resolveScenarioOrThrow(
+      this.prisma,
+      seance.scenarioId,
+    );
     const partie = await this.parties.getViewable(scenario.partieId, userId);
 
+    if (scenario.status === 'BROUILLON' || scenario.status === 'PASSE') {
+      throw new BadRequestException(
+        "Impossible de s'inscrire à une séance dont le scénario n'est pas actif",
+      );
+    }
     if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
       throw new BadRequestException(
         "L'inscription à capacité limitée n'est disponible que pour les campagnes épisodiques",
@@ -733,15 +754,18 @@ export class ScenariosService {
 
   // deleteMany (pas delete) : idempotent si l'utilisateur n'était pas inscrit — pas d'effet de
   // bord dangereux possible, aucune garde de kind/capacité nécessaire (cf. Dev Notes Story 8.3).
+  // Story 17.2 (AC1) : décision explicite de ne PAS ajouter de garde de statut scénario non plus —
+  // un retrait d'inscription reste sûr et réversible quel que soit le statut (y compris PASSE).
   async desinscrire(seanceId: string, userId: string): Promise<ScenarioDto> {
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
       include: { poll: true },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: seance.scenarioId },
-    });
+    const scenario = await resolveScenarioOrThrow(
+      this.prisma,
+      seance.scenarioId,
+    );
     const partie = await this.parties.getViewable(scenario.partieId, userId);
 
     // Décision utilisateur (revue de code, 2026-07-14) : la date validée fige le roster — un
@@ -773,9 +797,10 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: seance.scenarioId },
-    });
+    const scenario = await resolveScenarioOrThrow(
+      this.prisma,
+      seance.scenarioId,
+    );
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     await this.prisma.seance.update({
@@ -967,6 +992,23 @@ function toSeanceDto(seance: any): SeanceDto {
     compteRendu: seance.compteRendu,
     createdAt: seance.createdAt.toISOString(),
   };
+}
+
+// AC2 (Story 17.2) : résout la relation Seance.scenarioId → Scenario sans laisser fuiter un 500
+// non contrôlé si la clé étrangère se révèle orpheline (cas normalement impossible en usage
+// courant — findUniqueOrThrow() lève Prisma.PrismaClientKnownRequestError/P2025, vérifié
+// empiriquement contre la base de ce projet).
+async function resolveScenarioOrThrow(prisma: PrismaService, scenarioId: string) {
+  try {
+    return await prisma.scenario.findUniqueOrThrow({
+      where: { id: scenarioId },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+      throw new NotFoundException('Scénario introuvable');
+    }
+    throw e;
+  }
 }
 
 async function loadSeancesBatch(
