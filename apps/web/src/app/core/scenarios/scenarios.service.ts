@@ -18,12 +18,19 @@ import { API_BASE } from '../api-base';
 export class ScenariosService {
   private readonly http = inject(HttpClient);
 
-  // Incrémenté après chaque mutation réussie (create/update/open) — permet aux composants qui
+  // Émis après chaque mutation réussie (create/update/open) — permet aux composants qui
   // affichent une liste de scénarios chargée ailleurs (ex. ScenarioTimeline, chargée une fois dans
   // un onglet séparé de ScenarioDrafts/ScenarioForm) de savoir qu'ils doivent se recharger, sans
   // dépendre d'une navigation complète (F5) pour voir un changement fait dans un autre onglet.
-  private readonly _changed = signal(0);
+  // Scopé par Partie (Story 17.3, AC1) : un nouvel objet à chaque appel garantit la notification
+  // (Object.is sur la référence), le consommateur compare partieId pour ignorer les mutations
+  // survenues sur une autre Partie.
+  private readonly _changed = signal<{ partieId: string } | null>(null);
   readonly changed = this._changed.asReadonly();
+
+  private notifyChanged(partieId: string): void {
+    this._changed.set({ partieId });
+  }
 
   async create(partieId: string, dto: CreateScenarioDto): Promise<ScenarioDto> {
     const result = await firstValueFrom(
@@ -31,7 +38,7 @@ export class ScenariosService {
         withCredentials: true,
       }),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -41,7 +48,7 @@ export class ScenariosService {
         withCredentials: true,
       }),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -69,7 +76,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -81,7 +88,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -93,7 +100,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -105,7 +112,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -117,7 +124,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -132,7 +139,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -142,7 +149,7 @@ export class ScenariosService {
         withCredentials: true,
       }),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -154,7 +161,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -170,7 +177,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -182,7 +189,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -192,7 +199,7 @@ export class ScenariosService {
         withCredentials: true,
       }),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -204,7 +211,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 
@@ -216,7 +223,7 @@ export class ScenariosService {
         { withCredentials: true },
       ),
     );
-    this._changed.update((v) => v + 1);
+    this.notifyChanged(result.partieId);
     return result;
   }
 

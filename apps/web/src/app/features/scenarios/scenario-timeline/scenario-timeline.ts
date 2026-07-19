@@ -116,10 +116,18 @@ export class ScenarioTimeline {
     // Recharge au montage ET à chaque mutation notifiée par ScenariosService (create/update/open
     // déclenchés depuis un autre onglet Angular Material de la même page, ex. ScenarioDrafts — pas
     // un onglet navigateur, qu'un simple signal ne peut pas synchroniser) — évite d'exiger un F5
-    // pour voir un scénario nouvellement créé ou ouvert aux joueurs apparaître ici.
+    // pour voir un scénario nouvellement créé ou ouvert aux joueurs apparaître ici. Story 17.3 (AC1) :
+    // ignore les mutations notifiées pour une autre Partie — ne recharge que si la Partie affichée
+    // change (montage, réutilisation du composant) ou si la mutation concerne CETTE Partie.
+    let lastPartieId: string | undefined;
     effect(() => {
       const partieId = this.partieId();
-      this.scenariosService.changed();
+      const change = this.scenariosService.changed();
+      const partieIdChanged = partieId !== lastPartieId;
+      lastPartieId = partieId;
+      if (!partieIdChanged && change !== null && change.partieId !== partieId) {
+        return;
+      }
       untracked(() => this.loadScenarios(partieId));
     });
 

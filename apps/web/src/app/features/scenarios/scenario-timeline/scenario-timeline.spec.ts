@@ -51,7 +51,7 @@ async function createComponent(
 ) {
   const scenariosSvc = {
     listAll: vi.fn().mockResolvedValue(scenarios),
-    changed: signal(0),
+    changed: signal<{ partieId: string } | null>(null),
   };
   const dialog = { open: vi.fn() };
   const router = { navigate: vi.fn() };
@@ -292,7 +292,7 @@ describe('ScenarioTimeline', () => {
 
     // Force un rechargement (ex. mutation notifiée depuis un autre onglet, cf. `changed`) — les
     // données rechargées sont identiques, mais nodes() est recalculé.
-    scenariosSvc.changed.update((v: number) => v + 1);
+    scenariosSvc.changed.set({ partieId: 'p1' });
     fixture.detectChanges();
     for (let i = 0; i < 10; i++) {
       await Promise.resolve();
@@ -384,7 +384,7 @@ describe('ScenarioTimeline', () => {
     const { scenariosSvc, fixture } = await createComponent([PASSE]);
     scenariosSvc.listAll.mockClear();
 
-    scenariosSvc.changed.update((v: number) => v + 1);
+    scenariosSvc.changed.set({ partieId: 'p1' });
     fixture.detectChanges();
     for (let i = 0; i < 10; i++) {
       await Promise.resolve();
@@ -394,12 +394,26 @@ describe('ScenarioTimeline', () => {
     expect(scenariosSvc.listAll).toHaveBeenCalledWith('p1');
   });
 
+  it('une mutation notifiée pour une AUTRE Partie ne recharge pas (Story 17.3 AC1)', async () => {
+    const { scenariosSvc, fixture } = await createComponent([PASSE]);
+    scenariosSvc.listAll.mockClear();
+
+    scenariosSvc.changed.set({ partieId: 'p2-autre-partie' });
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(scenariosSvc.listAll).not.toHaveBeenCalled();
+  });
+
   it('un rechargement réussi efface une erreur de chargement précédente', async () => {
     const { scenariosSvc, fixture } = await createComponent([PASSE]);
     const comp = fixture.componentInstance as any;
     scenariosSvc.listAll.mockRejectedValueOnce(new Error('réseau'));
 
-    scenariosSvc.changed.update((v: number) => v + 1);
+    scenariosSvc.changed.set({ partieId: 'p1' });
     fixture.detectChanges();
     for (let i = 0; i < 10; i++) {
       await Promise.resolve();
@@ -408,7 +422,7 @@ describe('ScenarioTimeline', () => {
     expect(comp.loadError()).toBeTruthy();
 
     // Rechargement suivant réussi (ex. l'utilisateur réessaie via un autre changed()) : l'erreur doit disparaître.
-    scenariosSvc.changed.update((v: number) => v + 1);
+    scenariosSvc.changed.set({ partieId: 'p1' });
     fixture.detectChanges();
     for (let i = 0; i < 10; i++) {
       await Promise.resolve();
@@ -428,10 +442,10 @@ describe('ScenarioTimeline', () => {
     scenariosSvc.listAll.mockReturnValueOnce(firstCall).mockResolvedValueOnce([A_VENIR]);
 
     // Deux changed() rapprochés : la 1ère requête (lente) et la 2e (rapide) partent quasi ensemble.
-    scenariosSvc.changed.update((v: number) => v + 1);
+    scenariosSvc.changed.set({ partieId: 'p1' });
     fixture.detectChanges();
     await Promise.resolve();
-    scenariosSvc.changed.update((v: number) => v + 1);
+    scenariosSvc.changed.set({ partieId: 'p1' });
     fixture.detectChanges();
 
     // La 2e requête (plus récente) résout d'abord.
@@ -475,7 +489,7 @@ describe('ScenarioTimeline', () => {
       }),
     );
 
-    scenariosSvc.changed.update((v: number) => v + 1);
+    scenariosSvc.changed.set({ partieId: 'p1' });
     fixture.detectChanges();
     await Promise.resolve();
 
@@ -503,7 +517,7 @@ describe('ScenarioTimeline', () => {
       }),
     );
 
-    scenariosSvc.changed.update((v: number) => v + 1);
+    scenariosSvc.changed.set({ partieId: 'p1' });
     fixture.detectChanges();
     await Promise.resolve();
 
