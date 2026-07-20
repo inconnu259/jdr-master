@@ -54,6 +54,7 @@ import { PartiesService } from '../parties/parties.service';
 import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { EmailService } from '../email/email.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
 /** Nom de fichier légitime généré côté serveur (`randomUUID()` + extension) — cf. `image-mime.util.ts`. */
 const OLD_PORTRAIT_UUID = '11111111-1111-1111-1111-111111111111';
@@ -127,6 +128,10 @@ function makeEmailService() {
   };
 }
 
+function makeRealtimeEvents() {
+  return { emit: jest.fn() };
+}
+
 function makeGameSystemService() {
   return {
     getContent: jest.fn().mockResolvedValue({
@@ -177,6 +182,7 @@ describe('CharacterService', () => {
   let users: ReturnType<typeof makeUsersService>;
   let gameSystems: ReturnType<typeof makeGameSystemService>;
   let email: ReturnType<typeof makeEmailService>;
+  let realtimeEvents: ReturnType<typeof makeRealtimeEvents>;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -185,6 +191,7 @@ describe('CharacterService', () => {
     users = makeUsersService();
     gameSystems = makeGameSystemService();
     email = makeEmailService();
+    realtimeEvents = makeRealtimeEvents();
     // Défauts neutres : la plupart des tests ne portent pas sur ownerPseudo/ownerIsMj.
     users.findById.mockResolvedValue({
       id: 'default',
@@ -207,6 +214,7 @@ describe('CharacterService', () => {
         { provide: UsersService, useValue: users },
         { provide: GameSystemService, useValue: gameSystems },
         { provide: EmailService, useValue: email },
+        { provide: RealtimeEventsService, useValue: realtimeEvents },
       ],
     }).compile();
     service = module.get(CharacterService);
@@ -240,6 +248,20 @@ describe('CharacterService', () => {
         }),
       }),
     );
+  });
+
+  it('create() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+    (computeDerived as jest.Mock).mockReturnValue({});
+    prisma.character.create.mockResolvedValue(makeCharacter());
+
+    await service.create('p1', 'u1', {
+      gameSystemId: 'ryuutama',
+      sheetData: validSheet(),
+    });
+
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
   it('create() gameSystemId non supporté → BadRequestException, validate/computeDerived non appelés', async () => {
@@ -563,6 +585,16 @@ describe('CharacterService', () => {
       expect(result.portraitUrl).toBe('/uploads/portraits/fixed-uuid.jpg');
     });
 
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+
+      await service.updatePortrait('char1', 'u1', makeMulterFile(), null);
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
     it('non-propriétaire (y compris le MJ) → ForbiddenException, aucune écriture disque', async () => {
       prisma.character.findUnique.mockResolvedValue(
         makeCharacter({ userId: 'owner' }),
@@ -703,6 +735,16 @@ describe('CharacterService', () => {
       });
     });
 
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+
+      await service.removePortrait('char1', 'u1');
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
     it('non-propriétaire → ForbiddenException', async () => {
       prisma.character.findUnique.mockResolvedValue(
         makeCharacter({ userId: 'owner' }),
@@ -762,6 +804,19 @@ describe('CharacterService', () => {
         data: { pdfPortraitCropData: CROP_DATA },
       });
       expect(result.pdfPortraitCropData).toEqual(CROP_DATA);
+    });
+
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      const character = makeCharacter({
+        portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+
+      await service.updatePdfPortraitCrop('char1', 'u1', CROP_DATA);
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
     it('non-propriétaire → ForbiddenException', async () => {
@@ -905,6 +960,15 @@ describe('CharacterService', () => {
       expect(email.sendMail).not.toHaveBeenCalled();
     });
 
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      prisma.character.update.mockResolvedValue(makeCharacter({ xp: 50, partieId: 'p1' }));
+      (pendingLevels as jest.Mock).mockReturnValue([]);
+
+      await service.applyXpDelta('char1', 50);
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
     it('franchissement de seuil → déclenche EmailService.sendMail("level-up", ...)', async () => {
       prisma.character.update.mockResolvedValue(
         makeCharacter({ xp: 150, partieId: 'p1', userId: 'u1' }),
@@ -1033,6 +1097,23 @@ describe('CharacterService', () => {
           level: 1,
         }),
       });
+    });
+
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      const character = makeCharacter({
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      prisma.character.findUnique.mockResolvedValue(character);
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(
+        makeCharacter({ xp: 500, partieId: 'p1' }),
+      );
+      (pendingLevels as jest.Mock).mockReturnValue([]);
+
+      await service.setXp('char1', 'mj1', 500);
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
     it('franchissement de seuil → déclenche EmailService.sendMail("level-up", ...), comme applyXpDelta', async () => {
@@ -1226,6 +1307,23 @@ describe('CharacterService', () => {
         }),
       });
       expect(result.warnings).toEqual([]);
+    });
+
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(
+        makeCharacter({ partieId: 'p1' }),
+      );
+      (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+
+      await service.setSheetField('char1', 'mj1', {
+        path: 'fetiqueObject',
+        value: 'Lanterne magique',
+      });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
     it('warnings non vides → écriture quand même effectuée (jamais bloquant, AD-7)', async () => {
@@ -1701,6 +1799,21 @@ describe('CharacterService', () => {
       });
     });
 
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      const character = makeCharacter({ xp: 150 });
+      prisma.character.findUnique.mockResolvedValue(character);
+      (pendingLevels as jest.Mock).mockReturnValue([2]);
+      (computeDerived as jest.Mock).mockReturnValue({});
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(
+        makeCharacter({ xp: 150, partieId: 'p1' }),
+      );
+
+      await service.applyLevelUp('char1', 'u1', validDto);
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
     it('409 si updatedAt périmé (conflit de concurrence)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 150 }));
       (pendingLevels as jest.Mock).mockReturnValue([2]);
@@ -1871,6 +1984,20 @@ describe('CharacterService', () => {
         expect(data.sheetData.equipment.individual).toEqual([
           { id: 'fixed-uuid', name: 'Cape', weight: 1.2, addedBy: 'player' },
         ]);
+      });
+
+      it('émet un événement temps réel scopé sur la Partie, via writeInventoryChange (Story 18.1, AC1)', async () => {
+        const character = makeCharacterWithEquipment();
+        prisma.character.findUnique.mockResolvedValue(character);
+        prisma.character.updateMany.mockResolvedValue({ count: 1 });
+        prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+
+        await service.addInventoryItem('char1', 'u1', {
+          name: 'Cape',
+          weight: 1.2,
+        });
+
+        expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
       });
 
       it('ajoute un objet sans poids → weight 0', async () => {
@@ -2429,6 +2556,15 @@ describe('CharacterService', () => {
         });
       });
 
+      it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.create.mockResolvedValue(makeNote());
+
+        await service.addNote('char1', 'u1', { text: 'Une note' });
+
+        expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      });
+
       it('non-propriétaire → ForbiddenException', async () => {
         prisma.character.findUnique.mockResolvedValue(
           makeCharacter({ userId: 'owner' }),
@@ -2472,6 +2608,20 @@ describe('CharacterService', () => {
           data: { shared: true },
         });
         expect(result.shared).toBe(true);
+      });
+
+      it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(
+          makeNote({ shared: false }),
+        );
+        prisma.characterNote.update.mockResolvedValue(
+          makeNote({ shared: true }),
+        );
+
+        await service.toggleNoteShare('char1', 'u1', 'note-1', true);
+
+        expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
       });
 
       it('noteId introuvable → NotFoundException', async () => {
@@ -2524,6 +2674,18 @@ describe('CharacterService', () => {
         expect(result.journalAutoAssociate).toBe(true);
       });
 
+      it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.character.update.mockResolvedValue(
+          makeCharacter({ journalAutoAssociate: true }),
+        );
+        parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+        await service.setJournalAutoAssociate('char1', 'u1', true);
+
+        expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      });
+
       it('non-propriétaire → ForbiddenException, aucune écriture', async () => {
         prisma.character.findUnique.mockResolvedValue(
           makeCharacter({ userId: 'owner' }),
@@ -2572,6 +2734,25 @@ describe('CharacterService', () => {
           data: { scenarioId: 'scenario1' },
         });
         expect(result.scenarioId).toBe('scenario1');
+      });
+
+      it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+        prisma.character.findUnique.mockResolvedValue(makeCharacter());
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote());
+        prisma.scenario.findUnique.mockResolvedValue({
+          id: 'scenario1',
+          partieId: 'p1',
+        });
+        prisma.partie.findUnique.mockResolvedValue({
+          kind: 'CAMPAGNE_LINEAIRE',
+        });
+        prisma.characterNote.update.mockResolvedValue(
+          makeNote({ scenarioId: 'scenario1' }),
+        );
+
+        await service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1');
+
+        expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
       });
 
       it('CAMPAGNE_EPISODIQUE, personnage participant → association acceptée', async () => {

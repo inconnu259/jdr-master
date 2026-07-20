@@ -15,6 +15,7 @@ import { AnnouncementsService } from './announcements.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
 function makePrisma() {
   return {
@@ -38,6 +39,10 @@ function makeScenariosService() {
   };
 }
 
+function makeRealtimeEvents() {
+  return { emit: jest.fn() };
+}
+
 function makeAnnouncement(overrides: Record<string, unknown> = {}) {
   return {
     id: 'ann1',
@@ -54,17 +59,20 @@ describe('AnnouncementsService', () => {
   let prisma: ReturnType<typeof makePrisma>;
   let parties: ReturnType<typeof makePartiesService>;
   let scenarios: ReturnType<typeof makeScenariosService>;
+  let realtimeEvents: ReturnType<typeof makeRealtimeEvents>;
 
   beforeEach(async () => {
     prisma = makePrisma();
     parties = makePartiesService();
     scenarios = makeScenariosService();
+    realtimeEvents = makeRealtimeEvents();
     const module = await Test.createTestingModule({
       providers: [
         AnnouncementsService,
         { provide: PrismaService, useValue: prisma },
         { provide: PartiesService, useValue: parties },
         { provide: ScenariosService, useValue: scenarios },
+        { provide: RealtimeEventsService, useValue: realtimeEvents },
       ],
     }).compile();
     service = module.get(AnnouncementsService);
@@ -83,6 +91,15 @@ describe('AnnouncementsService', () => {
         data: { partieId: 'p1', scenarioId: null, text: 'Une annonce' },
       });
       expect(result.scenarioId).toBeNull();
+    });
+
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.announcement.create.mockResolvedValue(makeAnnouncement());
+
+      await service.create('p1', 'mj1', { text: 'Une annonce' });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
     it('scenarioId valide de la Partie → Announcement créée avec ce scenarioId (AC2)', async () => {

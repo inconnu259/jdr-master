@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { PrismaModule } from './prisma/prisma.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { HealthModule } from './health/health.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
@@ -26,6 +27,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 20 }]), // garde-fou global : 20 req/min
     ScheduleModule.forRoot(),
     PrismaModule,
+    RealtimeModule,
     HealthModule,
     UsersModule,
     AuthModule,

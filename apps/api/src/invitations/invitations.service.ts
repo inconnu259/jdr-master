@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { InviteLinksService } from './invite-links.service';
 import { EmailService } from '../email/email.service';
+import { RealtimeEventsService, userTopic } from '../realtime/realtime-events.service';
 
 @Injectable()
 export class InvitationsService {
@@ -18,6 +19,7 @@ export class InvitationsService {
     private readonly parties: PartiesService,
     private readonly inviteLinks: InviteLinksService,
     private readonly email: EmailService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   /** Le MJ invite un utilisateur déjà inscrit. Idempotent : ré-invite ranime une invitation close. */
@@ -41,11 +43,13 @@ export class InvitationsService {
         'Cet utilisateur est déjà membre de la partie.',
       );
 
-    return this.prisma.invitation.upsert({
+    const invitation = await this.prisma.invitation.upsert({
       where: { partieId_inviteeUserId: { partieId, inviteeUserId } },
       create: { partieId, inviterId, inviteeUserId },
       update: { status: 'PENDING', inviterId, respondedAt: null },
     });
+    this.realtimeEvents.emit(userTopic(inviteeUserId));
+    return invitation;
   }
 
   /** Invitations émises pour une partie (vue MJ). */
@@ -117,6 +121,7 @@ export class InvitationsService {
       where: { id: invitationId },
       data: { status: 'REVOKED', respondedAt: new Date() },
     });
+    this.realtimeEvents.emit(userTopic(inv.inviteeUserId));
     return { ok: true };
   }
 

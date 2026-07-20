@@ -3,6 +3,7 @@ import type { AnnouncementDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 
 function toDto(announcement: any): AnnouncementDto {
@@ -21,6 +22,7 @@ export class AnnouncementsService {
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
     private readonly scenarios: ScenariosService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   async create(
@@ -45,6 +47,7 @@ export class AnnouncementsService {
       },
     });
 
+    this.realtimeEvents.emit(partieTopic(partieId));
     return toDto(announcement);
   }
 

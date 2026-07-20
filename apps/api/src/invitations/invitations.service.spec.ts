@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { InviteLinksService } from './invite-links.service';
 import { EmailService } from '../email/email.service';
+import { RealtimeEventsService, userTopic } from '../realtime/realtime-events.service';
 
 describe('InvitationsService', () => {
   let service: InvitationsService;
@@ -26,6 +27,7 @@ describe('InvitationsService', () => {
   let parties: { getOwned: jest.Mock };
   let inviteLinks: { findOrCreateForEmail: jest.Mock };
   let email: { sendMail: jest.Mock };
+  let realtimeEvents: { emit: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -50,11 +52,13 @@ describe('InvitationsService', () => {
       findOrCreateForEmail: jest.fn().mockResolvedValue({ token: 'tok123' }),
     };
     email = { sendMail: jest.fn().mockResolvedValue({ ok: true }) };
+    realtimeEvents = { emit: jest.fn() };
     service = new InvitationsService(
       prisma as unknown as PrismaService,
       parties as unknown as PartiesService,
       inviteLinks as unknown as InviteLinksService,
       email as unknown as EmailService,
+      realtimeEvents as unknown as RealtimeEventsService,
     );
   });
 
@@ -93,6 +97,14 @@ describe('InvitationsService', () => {
         update: expect.objectContaining({ status: 'PENDING' }),
       }),
     );
+  });
+
+  it('invite : émet un événement temps réel scopé sur l’utilisateur invité (Story 18.1, AC1)', async () => {
+    prisma.user.findUnique.mockResolvedValue({ id: 'u' });
+    prisma.membership.findUnique.mockResolvedValue(null);
+    prisma.invitation.upsert.mockResolvedValue({ id: 'inv1' });
+    await service.invite('p1', 'mj1', 'u');
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
   });
 
   it('accept : 404 si l’invitation ne m’est pas adressée', async () => {
@@ -144,6 +156,17 @@ describe('InvitationsService', () => {
     await expect(service.revoke('inv1', 'intrus')).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it('revoke : émet un événement temps réel scopé sur l’invité de l’invitation révoquée (Story 18.1, AC1)', async () => {
+    prisma.invitation.findUnique.mockResolvedValue({
+      id: 'inv1',
+      inviterId: 'mj1',
+      inviteeUserId: 'u',
+      partie: { mjId: 'mj1' },
+    });
+    await service.revoke('inv1', 'mj1');
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
   });
 
   // --- inviteByEmail (Story 5.2) ---

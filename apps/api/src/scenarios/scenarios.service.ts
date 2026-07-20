@@ -19,6 +19,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { CharacterService } from '../characters/character.service';
 import { PollService } from '../poll/poll.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import {
@@ -38,6 +39,7 @@ export class ScenariosService {
     private readonly parties: PartiesService,
     private readonly characters: CharacterService,
     private readonly pollService: PollService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   async create(
@@ -69,6 +71,7 @@ export class ScenariosService {
     // peut toujours en ajouter d'autres ensuite (addSeance, aucun plafond, cf. AC1 Story 8.2).
     await this.prisma.seance.create({ data: { scenarioId: scenario.id } });
 
+    this.realtimeEvents.emit(partieTopic(partieId));
     return toEnrichedDto(this.prisma, this.characters, scenario, partie.kind);
   }
 
@@ -101,6 +104,7 @@ export class ScenariosService {
       },
     });
 
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -160,6 +164,7 @@ export class ScenariosService {
           sizeBytes: file.size,
         },
       });
+      this.realtimeEvents.emit(partieTopic(partieId));
       return toDocumentDto(document);
     } catch (e) {
       // Nettoyage du fichier orphelin si l'insertion échoue — même pattern que
@@ -298,6 +303,7 @@ export class ScenariosService {
       data: { status: 'A_VENIR' },
     });
 
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -341,6 +347,7 @@ export class ScenariosService {
         }
         return tx.scenario.findUniqueOrThrow({ where: { id: scenarioId } });
       });
+      this.realtimeEvents.emit(partieTopic(partie.id));
       return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
     }
 
@@ -356,6 +363,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
+    this.realtimeEvents.emit(partieTopic(partie.id));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -387,6 +395,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -414,6 +423,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
+    this.realtimeEvents.emit(partieTopic(partie.id));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -437,6 +447,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
+    this.realtimeEvents.emit(partieTopic(partie.id));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -534,6 +545,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -589,6 +601,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -628,6 +641,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -675,6 +689,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -749,6 +764,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -782,6 +798,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -811,6 +828,7 @@ export class ScenariosService {
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenario.id },
     });
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -840,6 +858,7 @@ export class ScenariosService {
       data: { resumeFin },
     });
 
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 

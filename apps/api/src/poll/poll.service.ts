@@ -6,6 +6,7 @@ import {
 import type { SessionPollDto } from '@master-jdr/shared';
 import { PartiesService } from '../parties/parties.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CastVoteDto } from './dto/cast-vote.dto';
 import { ChooseDateDto } from './dto/choose-date.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
@@ -21,6 +22,7 @@ export class PollService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   async create(
@@ -60,6 +62,7 @@ export class PollService {
         include: POLL_INCLUDE,
       });
     });
+    this.realtimeEvents.emit(partieTopic(partieId));
     return toDto(poll);
   }
 
@@ -104,6 +107,7 @@ export class PollService {
         answer: dto.answer as any,
       },
     });
+    this.realtimeEvents.emit(partieTopic(partieId));
   }
 
   async choose(
@@ -146,6 +150,7 @@ export class PollService {
         ...(dateUnchanged ? {} : { reminderSentAt: null }),
       },
     });
+    this.realtimeEvents.emit(partieTopic(partieId));
   }
 
   async close(partieId: string, pollId: string, userId: string): Promise<void> {
@@ -161,6 +166,7 @@ export class PollService {
       where: { id: pollId },
       data: { status: 'CLOSED' },
     });
+    this.realtimeEvents.emit(partieTopic(partieId));
   }
 }
 

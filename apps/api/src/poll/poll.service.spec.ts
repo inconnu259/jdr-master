@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { PollService } from './poll.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
 function makePrisma() {
   const prisma: any = {
@@ -39,6 +40,10 @@ function makePartiesService() {
   };
 }
 
+function makeRealtimeEvents() {
+  return { emit: jest.fn() };
+}
+
 function opt(date: string, slot: string) {
   return { date, slot };
 }
@@ -62,15 +67,18 @@ describe('PollService', () => {
   let service: PollService;
   let prisma: ReturnType<typeof makePrisma>;
   let parties: ReturnType<typeof makePartiesService>;
+  let realtimeEvents: ReturnType<typeof makeRealtimeEvents>;
 
   beforeEach(async () => {
     prisma = makePrisma();
     parties = makePartiesService();
+    realtimeEvents = makeRealtimeEvents();
     const module = await Test.createTestingModule({
       providers: [
         PollService,
         { provide: PrismaService, useValue: prisma },
         { provide: PartiesService, useValue: parties },
+        { provide: RealtimeEventsService, useValue: realtimeEvents },
       ],
     }).compile();
     service = module.get(PollService);
@@ -102,6 +110,14 @@ describe('PollService', () => {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('create() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+    prisma.sessionPoll.create.mockResolvedValue(makePoll());
+    await service.create('p1', 'mj1', {
+      options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
+    });
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
   it('create() avec deux options (date,slot) identiques → BadRequestException', async () => {
@@ -143,6 +159,25 @@ describe('PollService', () => {
     });
   });
 
+  it('castVote() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1' });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
+    prisma.pollOption.findUnique.mockResolvedValue({
+      id: 'opt1',
+      pollId: 'poll1',
+    });
+    prisma.pollVote.upsert.mockResolvedValue({});
+    await service.castVote('p1', 'poll1', 'u1', {
+      optionId: 'opt1',
+      answer: 'YES',
+    });
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+  });
+
   it('choose() par non-MJ → ForbiddenException', async () => {
     parties.getOwned.mockRejectedValue(new ForbiddenException());
     await expect(
@@ -179,6 +214,26 @@ describe('PollService', () => {
         reminderSentAt: null,
       },
     });
+  });
+
+  it('choose() → émet un événement temps réel scopé sur la Partie, après la résolution des DEUX écritures (Story 18.1, AC1)', async () => {
+    const d = new Date('2026-08-01T00:00:00.000Z');
+    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
+    prisma.pollOption.findUnique.mockResolvedValue({
+      id: 'opt1',
+      pollId: 'poll1',
+      date: d,
+      slot: 'MORNING',
+    });
+    prisma.sessionPoll.update.mockResolvedValue({});
+    prisma.partie.update.mockResolvedValue({});
+    await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
   it('choose() sur le même créneau déjà actif → ne remet PAS reminderSentAt à null', async () => {
@@ -222,6 +277,18 @@ describe('PollService', () => {
       where: { id: 'poll1' },
       data: { status: 'CLOSED' },
     });
+  });
+
+  it('close() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
+    prisma.sessionPoll.update.mockResolvedValue({});
+    await service.close('p1', 'poll1', 'mj1');
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
   it('close() sur un poll déjà CLOSED → BadRequestException', async () => {

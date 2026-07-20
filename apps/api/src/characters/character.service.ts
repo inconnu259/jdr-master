@@ -30,6 +30,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { EmailService } from '../email/email.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { SUPPORTED_GAME_SYSTEMS } from '../game-systems/supported-game-systems';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import type { CreateLevelUpDto } from './dto/create-level-up.dto';
@@ -150,6 +151,7 @@ export class CharacterService {
     private readonly users: UsersService,
     private readonly gameSystems: GameSystemService,
     private readonly email: EmailService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   async create(
@@ -183,6 +185,10 @@ export class CharacterService {
           derived: derived as any,
         },
       });
+      // Émis juste après l'écriture réussie, avant tout appel pouvant lever (users.findById) —
+      // sinon une exception ici laisserait la mutation committée sans jamais diffuser l'événement
+      // (revue de code Story 18.1).
+      this.realtimeEvents.emit(partieTopic(partieId));
       const owner = await this.users.findById(userId);
       // Le créateur est toujours le propriétaire ici — ownerIsMj et viewerIsMj coïncident.
       const isMj = partie.mjId === userId;
@@ -377,6 +383,7 @@ export class CharacterService {
       where: { id },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    this.realtimeEvents.emit(partieTopic(updated.partieId));
     return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
@@ -401,6 +408,7 @@ export class CharacterService {
       where: { id },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    this.realtimeEvents.emit(partieTopic(updated.partieId));
     return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
@@ -434,6 +442,7 @@ export class CharacterService {
       where: { id },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    this.realtimeEvents.emit(partieTopic(updated.partieId));
     return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
@@ -471,6 +480,10 @@ export class CharacterService {
       where: { id: characterId },
       data: { xp: { increment: amount } },
     });
+    // Émis avant notifyPendingLevelUp (envoi d'e-mail) — sinon une exception dans cet effet de
+    // bord laisserait l'incrément d'XP committé sans jamais diffuser l'événement (revue de code
+    // Story 18.1).
+    this.realtimeEvents.emit(partieTopic(updated.partieId));
     await this.notifyPendingLevelUp(updated);
   }
 
@@ -652,6 +665,7 @@ export class CharacterService {
       where: { id: characterId },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    this.realtimeEvents.emit(partieTopic(updated.partieId));
     return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
@@ -701,6 +715,10 @@ export class CharacterService {
     const updated = await this.prisma.character.findUniqueOrThrow({
       where: { id: characterId },
     });
+    // Émis avant notifyPendingLevelUp (envoi d'e-mail) — sinon une exception dans cet effet de
+    // bord laisserait l'écriture d'XP committée sans jamais diffuser l'événement (revue de code
+    // Story 18.1).
+    this.realtimeEvents.emit(partieTopic(updated.partieId));
     await this.notifyPendingLevelUp(updated);
 
     // viewerIsMj: true littéral — le viewer ICI est nécessairement le MJ (garanti par
@@ -827,6 +845,7 @@ export class CharacterService {
       where: { id: characterId },
     });
     const owner = await this.resolveOwnerInfo(updated.userId, updated.partieId);
+    this.realtimeEvents.emit(partieTopic(updated.partieId));
     return {
       character: toDto(updated, owner.pseudo, owner.isMj, true),
       warnings: result.errors.map((e) => e.message),
@@ -1188,6 +1207,7 @@ export class CharacterService {
       where: { id: characterId },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    this.realtimeEvents.emit(partieTopic(updated.partieId));
     return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
@@ -1205,10 +1225,11 @@ export class CharacterService {
     userId: string,
     dto: CreateCharacterNoteDto,
   ): Promise<CharacterNoteDto> {
-    await this.getOwnCharacterOrThrow(characterId, userId);
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
     const note = await this.prisma.characterNote.create({
       data: { characterId, text: dto.text, shared: false },
     });
+    this.realtimeEvents.emit(partieTopic(character.partieId));
     return toNoteDto(note);
   }
 
@@ -1224,7 +1245,7 @@ export class CharacterService {
     noteId: string,
     shared: boolean,
   ): Promise<CharacterNoteDto> {
-    await this.getOwnCharacterOrThrow(characterId, userId);
+    const character = await this.getOwnCharacterOrThrow(characterId, userId);
     const note = await this.prisma.characterNote.findUnique({
       where: { id: noteId },
     });
@@ -1235,6 +1256,7 @@ export class CharacterService {
       where: { id: noteId },
       data: { shared },
     });
+    this.realtimeEvents.emit(partieTopic(character.partieId));
     return toNoteDto(updated);
   }
 
@@ -1255,6 +1277,7 @@ export class CharacterService {
       data: { journalAutoAssociate: value },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
+    this.realtimeEvents.emit(partieTopic(updated.partieId));
     return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
@@ -1314,6 +1337,7 @@ export class CharacterService {
       where: { id: noteId },
       data: { scenarioId },
     });
+    this.realtimeEvents.emit(partieTopic(character.partieId));
     return toNoteDto(updated);
   }
 

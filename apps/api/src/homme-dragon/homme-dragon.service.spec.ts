@@ -42,6 +42,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
 const mockValidate = validateHommeDragon as jest.Mock;
 
@@ -85,6 +86,10 @@ function makeScenarios() {
   return {
     findAllForPartie: jest.fn(),
   };
+}
+
+function makeRealtimeEvents() {
+  return { emit: jest.fn() };
 }
 
 function makeHommeDragon(overrides: Record<string, unknown> = {}) {
@@ -138,6 +143,7 @@ describe('HommeDragonService', () => {
   let parties: ReturnType<typeof makePartiesService>;
   let gameSystems: ReturnType<typeof makeGameSystems>;
   let scenarios: ReturnType<typeof makeScenarios>;
+  let realtimeEvents: ReturnType<typeof makeRealtimeEvents>;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -145,6 +151,7 @@ describe('HommeDragonService', () => {
     parties = makePartiesService();
     gameSystems = makeGameSystems();
     scenarios = makeScenarios();
+    realtimeEvents = makeRealtimeEvents();
     gameSystems.getContent.mockResolvedValue(CATALOG_CONTENT);
     mockValidate.mockReturnValue({ valid: true, errors: [] });
     // Valeurs neutres par défaut (Story 10.2) — ne doivent PAS casser les tests Story 10.1
@@ -159,6 +166,7 @@ describe('HommeDragonService', () => {
         { provide: PartiesService, useValue: parties },
         { provide: GameSystemService, useValue: gameSystems },
         { provide: ScenariosService, useValue: scenarios },
+        { provide: RealtimeEventsService, useValue: realtimeEvents },
       ],
     }).compile();
     service = module.get(HommeDragonService);
@@ -187,6 +195,15 @@ describe('HommeDragonService', () => {
         },
       });
       expect(result.sheetData.nom).toBe('Ignis');
+    });
+
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama', name: 'Ma Campagne' });
+      prisma.hommeDragon.create.mockResolvedValue(makeHommeDragon());
+
+      await service.create('p1', 'mj1', dto);
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
     it("mondesProteges non fourni → pré-rempli avec partie.name en défense de profondeur", async () => {
@@ -269,6 +286,16 @@ describe('HommeDragonService', () => {
         },
       });
       expect(result.sheetData.artefact.key).toBe('grande-epee');
+    });
+
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+      prisma.hommeDragon.update.mockResolvedValue(makeHommeDragon());
+
+      await service.update('p1', 'mj1', { demeure: 'Une auberge' });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
     it("changement d'artefact vers la mauvaise race → BadRequestException, aucune écriture", async () => {
@@ -711,6 +738,27 @@ describe('HommeDragonService', () => {
             }),
           },
         });
+      });
+
+      it('émet un événement temps réel scopé sur la Partie, après la résolution de la transaction (Story 18.1, AC1)', async () => {
+        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+        parties.listMembers.mockResolvedValue([]);
+        scenarios.findAllForPartie.mockResolvedValue(makePasseScenariosFor(3));
+        prisma.tx.hommeDragon.findUnique.mockResolvedValue(
+          makeHommeDragon({
+            sheetData: {
+              race: 'DRAGON_ROUGE',
+              artefact: { key: 'grand-arc' },
+              nom: 'Ignis',
+              eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }],
+            },
+          }),
+        );
+        prisma.tx.hommeDragon.update.mockResolvedValue(makeHommeDragon());
+
+        await service.chooseEveilPower('p1', 'mj1', { level: 3, key: 'couche-du-dragon' });
+
+        expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
       });
 
       it("écriture ne mute jamais l'objet sheetData renvoyé par la lecture (copie, pas mutation en place)", async () => {

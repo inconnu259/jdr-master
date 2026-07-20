@@ -22,6 +22,7 @@ import { PartiesService } from '../parties/parties.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
 @Injectable()
 export class HommeDragonService {
@@ -30,6 +31,7 @@ export class HommeDragonService {
     private readonly parties: PartiesService,
     private readonly gameSystems: GameSystemService,
     private readonly scenarios: ScenariosService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   async create(
@@ -64,6 +66,7 @@ export class HommeDragonService {
           sheetData: sheetData as any,
         },
       });
+      this.realtimeEvents.emit(partieTopic(partieId));
       return this.buildDto(hommeDragon, partieId, userId);
     } catch (e: any) {
       if (e?.code === 'P2002') {
@@ -131,6 +134,7 @@ export class HommeDragonService {
       },
       data: { sheetData: sheetData as any },
     });
+    this.realtimeEvents.emit(partieTopic(partieId));
     return this.buildDto(updated, partieId, userId);
   }
 
@@ -211,6 +215,7 @@ export class HommeDragonService {
         data: { sheetData: sheetData as any },
       });
     });
+    this.realtimeEvents.emit(partieTopic(partieId));
     return this.buildDto(updated, partieId, userId);
   }
 
