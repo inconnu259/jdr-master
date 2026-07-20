@@ -7,6 +7,7 @@ import {
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CreatePartieDto } from './dto/create-partie.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
@@ -15,6 +16,7 @@ export class PartiesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly availability: AvailabilityService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   async create(mjId: string, dto: CreatePartieDto) {
@@ -114,7 +116,9 @@ export class PartiesService {
 
   async update(id: string, userId: string, dto: UpdatePartieDto) {
     await this.getOwned(id, userId);
-    return this.prisma.partie.update({ where: { id }, data: { ...dto } });
+    const updated = await this.prisma.partie.update({ where: { id }, data: { ...dto } });
+    this.realtimeEvents.emit(partieTopic(id));
+    return updated;
   }
 
   async remove(id: string, userId: string) {

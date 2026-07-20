@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type {
@@ -29,6 +29,17 @@ export interface InviteLinkPayload {
 @Injectable({ providedIn: 'root' })
 export class PartiesService {
   private readonly http = inject(HttpClient);
+
+  // AD-4 : contrat public générique, zéro argument. Compteur simple (pas de scoping par
+  // partieId comme ScenariosService/Story 17.3) — inutile ici : RealtimeService ne notifie ce
+  // service que pour le topic `partie:{id}` sur lequel PartieDetail s'est explicitement
+  // connecté (Story 18.2, un seul PartieDetail monté à la fois par instance d'app), donc tout
+  // appel de notifyChanged() concerne nécessairement LA Partie actuellement affichée.
+  private readonly _changed = signal(0);
+  readonly changed = this._changed.asReadonly();
+  notifyChanged(): void {
+    this._changed.update((v) => v + 1);
+  }
 
   list(role: 'mj' | 'player'): Promise<PartieDto[]> {
     return firstValueFrom(

@@ -46,6 +46,7 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { characterName, findContentEntry } from '../../../core/characters/character.util';
 import { PartiesService } from '../../../core/parties/parties.service';
+import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { ModeService } from '../../../core/mode/mode.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { getRespondedCount } from '../../../core/poll/poll.util';
@@ -101,6 +102,7 @@ export class PartieDetail implements OnInit {
   private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
   private readonly parties = inject(PartiesService);
+  private readonly realtime = inject(RealtimeService);
   private readonly modeSvc = inject(ModeService);
   private readonly scenariosSvc = inject(ScenariosService);
   private readonly announcementsSvc = inject(AnnouncementsService);
@@ -239,18 +241,24 @@ export class PartieDetail implements OnInit {
       untracked(() => this.manualTabIndex.set(null));
     });
 
-    // Bug-fix hors story (retour utilisateur, 2026-07-17) : `partie` n'était chargée qu'une fois
-    // au montage (ngOnInit) — un changement fait ailleurs (autre onglet, PartieForm en édition)
-    // restait invisible sans F5, y compris l'apparition/disparition d'onglets pilotés par
-    // `p.gameSystemId`/`p.kind` (ex. l'onglet Homme Dragon). Recharge au retour de focus de
-    // l'onglet navigateur — patch ciblé, pas la solution systémique (cf. deferred-work.md).
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') void this.refreshPartie();
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    this.destroyRef.onDestroy(() =>
-      document.removeEventListener('visibilitychange', onVisibilityChange),
-    );
+    // Story 18.3 : remplace le patch visibilitychange (retour de focus d'onglet, bug-fix
+    // 2026-07-17, AC2 — un seul mécanisme de rafraîchissement pour ce composant) par le signal
+    // temps réel SSE. `id` vient du snapshot de route, lu une seule fois (même limitation
+    // préexistante que `ngOnInit`, qui fait de même) : si Angular réutilisait cette instance de
+    // composant sur un simple changement de `:id` (comportement par défaut pour une route
+    // `parties/:id` sans `RouteReuseStrategy` custom — vérifié, aucune n'est déclarée dans cette
+    // app), la connexion resterait liée à l'ancien id. Aucun parcours de navigation actuel de
+    // l'app ne déclenche ce cas (pas de lien direct d'une Partie vers une autre) — limitation
+    // connue, différée (revue de code Story 18.3, voir deferred-work.md), pas propre au SSE.
+    const id = this.route.snapshot.paramMap.get('id');
+    if (id) {
+      this.realtime.connect(partieTopic(id));
+      this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(id)));
+    }
+    effect(() => {
+      this.parties.changed();
+      untracked(() => void this.refreshPartie());
+    });
   }
 
   /** Recharge `partie` sans re-déclencher tout `ngOnInit` (membres/scénarios/annonces restent

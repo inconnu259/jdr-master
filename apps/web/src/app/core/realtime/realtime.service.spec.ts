@@ -1,5 +1,8 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
+import { vi } from 'vitest';
 import { API_BASE } from '../api-base';
+import { PartiesService } from '../parties/parties.service';
 import { RealtimeService, matchingHandlers, partieTopic, userTopic } from './realtime.service';
 
 class FakeEventSource {
@@ -53,12 +56,19 @@ describe('matchingHandlers', () => {
 describe('RealtimeService', () => {
   let service: RealtimeService;
   let originalEventSource: unknown;
+  let partiesSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
 
   beforeEach(() => {
     originalEventSource = (globalThis as any).EventSource;
     FakeEventSource.instances = [];
     (globalThis as any).EventSource = FakeEventSource;
-    TestBed.configureTestingModule({});
+    partiesSvc = { notifyChanged: vi.fn(), changed: signal(0) };
+    // RealtimeService injecte désormais PartiesService (Story 18.3, Task 4) — PartiesService
+    // injecte lui-même HttpClient, jamais fourni par ce module de test isolé. Mock direct : ce
+    // test ne porte pas sur les appels HTTP de PartiesService.
+    TestBed.configureTestingModule({
+      providers: [{ provide: PartiesService, useValue: partiesSvc }],
+    });
     service = TestBed.inject(RealtimeService);
   });
 
@@ -80,16 +90,28 @@ describe('RealtimeService', () => {
     expect(FakeEventSource.instances[0].listeners.get('error')).toBeUndefined();
   });
 
-  it("déclenche le mécanisme de notification sur 'open' sans lever d'exception (AC4)", () => {
+  it("'open' déclenche notifyChanged() sur le handler mappé au préfixe du topic (AC4, Story 18.3)", () => {
     service.connect(partieTopic('p1'));
 
-    expect(() => FakeEventSource.instances[0].emit('open')).not.toThrow();
+    FakeEventSource.instances[0].emit('open');
+
+    expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
   });
 
-  it("déclenche le mécanisme de notification sur 'message', même chemin que 'open' (AC4)", () => {
+  it("'message' déclenche le même mécanisme de notification que 'open' (AC4)", () => {
     service.connect(partieTopic('p1'));
 
-    expect(() => FakeEventSource.instances[0].emit('message')).not.toThrow();
+    FakeEventSource.instances[0].emit('message');
+
+    expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("un topic 'user:' ne déclenche PAS notifyChanged() de PartiesService (préfixe non mappé)", () => {
+    service.connect(userTopic('u1'));
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(partiesSvc.notifyChanged).not.toHaveBeenCalled();
   });
 
   it('disconnect() ferme la connexion EventSource sous-jacente (AC5)', () => {

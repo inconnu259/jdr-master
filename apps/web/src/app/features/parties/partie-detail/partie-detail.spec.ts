@@ -29,6 +29,42 @@ import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.serv
 import { MatDialog } from '@angular/material/dialog';
 import { TONE_MAP } from '../../../core/theme/tones';
 
+// Story 18.3 : PartieDetail injecte désormais RealtimeService (providedIn: 'root', non fourni par
+// aucune des configurations TestBed de ce fichier — Angular l'auto-construit réellement partout).
+// jsdom (^28.0.0) n'implémente pas EventSource (piège déjà documenté Story 18.2) — stub global
+// plutôt qu'un mock RealtimeService par configuration : le comportement SSE réel n'est pas la
+// préoccupation des tests existants de ce fichier, seul le describe dédié plus bas l'exerce.
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+  readonly listeners = new Map<string, (() => void)[]>();
+  closed = false;
+  constructor(
+    public readonly url: string,
+    public readonly init?: EventSourceInit,
+  ) {
+    FakeEventSource.instances.push(this);
+  }
+  addEventListener(type: string, cb: () => void): void {
+    (this.listeners.get(type) ?? this.listeners.set(type, []).get(type)!).push(cb);
+  }
+  close(): void {
+    this.closed = true;
+  }
+  emit(type: string): void {
+    (this.listeners.get(type) ?? []).forEach((cb) => cb());
+  }
+}
+
+let originalEventSource: unknown;
+beforeEach(() => {
+  originalEventSource = (globalThis as any).EventSource;
+  FakeEventSource.instances = [];
+  (globalThis as any).EventSource = FakeEventSource;
+});
+afterEach(() => {
+  (globalThis as any).EventSource = originalEventSource;
+});
+
 /** Story 8.8 (revue de code) : `activePolls` est désormais chargé via `ScenariosService.listAll()`
  *  (plus `PollService.getCurrentPoll()`, un seul poll par Partie) — enveloppe chaque poll fourni
  *  dans un scénario/séance synthétique minimal pour alimenter le mock `listAll`. */
@@ -107,6 +143,10 @@ function makePartiesService(
   members: PartieMemberDto[] = [],
   links: InviteLinkDto[] = [],
 ) {
+  // Story 18.3 (AD-4) : contrat notifyChanged()/changed, consommé par l'effect() de PartieDetail.
+  // notifyChanged() incrémente réellement le signal (comme l'implémentation réelle), pour que
+  // l'effect() du composant sous test réagisse — pas un simple espion sans effet.
+  const changed = signal(0);
   return {
     get: vi.fn().mockResolvedValue(partie),
     members: vi.fn().mockResolvedValue(members),
@@ -120,6 +160,8 @@ function makePartiesService(
     remove: vi.fn(),
     listXpDistributions: vi.fn().mockResolvedValue([]),
     createXpDistribution: vi.fn(),
+    changed,
+    notifyChanged: vi.fn(() => changed.update((v) => v + 1)),
   };
 }
 
@@ -1088,12 +1130,13 @@ describe('PartieDetail — fiches de préparation MJ-only (Story 12.2)', () => {
   });
 });
 
-describe('PartieDetail — rechargement au retour de focus (bug-fix hors story, 2026-07-17)', () => {
+describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('la Partie éditée ailleurs (ex. gameSystemId) apparaît sans F5 quand l’onglet redevient visible', async () => {
+  it('la Partie éditée ailleurs (ex. gameSystemId) apparaît sans F5 quand un événement temps réel est reçu (AC1)', async () => {
     const initial = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
     const updated = { ...initial, gameSystemId: 'ryuutama' };
+    const changed = signal(0);
     const partiesSvc = {
       get: vi.fn().mockResolvedValueOnce(initial).mockResolvedValue(updated),
       members: vi.fn().mockResolvedValue([]),
@@ -1107,6 +1150,8 @@ describe('PartieDetail — rechargement au retour de focus (bug-fix hors story, 
       remove: vi.fn(),
       listXpDistributions: vi.fn().mockResolvedValue([]),
       createXpDistribution: vi.fn(),
+      changed,
+      notifyChanged: vi.fn(() => changed.update((v) => v + 1)),
     };
 
     await TestBed.configureTestingModule({
@@ -1151,8 +1196,13 @@ describe('PartieDetail — rechargement au retour de focus (bug-fix hors story, 
       'Homme Dragon',
     );
 
-    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
-    document.dispatchEvent(new Event('visibilitychange'));
+    // Revue de code Story 18.3 : déclenche un vrai événement SSE (pas un appel direct à
+    // notifyChanged()) — exerce la chaîne complète EventSource -> RealtimeService.onSignal ->
+    // matchingHandlers -> PartiesService.notifyChanged() -> effect() de PartieDetail, jamais
+    // couverte de bout en bout auparavant (chaque maillon n'était testé qu'isolément).
+    const es = FakeEventSource.instances.find((i) => i.url.includes(initial.id));
+    expect(es).toBeDefined();
+    es!.emit('message');
     for (let i = 0; i < 10; i++) {
       await Promise.resolve();
       fixture.detectChanges();
@@ -1164,5 +1214,24 @@ describe('PartieDetail — rechargement au retour de focus (bug-fix hors story, 
     expect(Array.from(el.querySelectorAll('div[role="tab"]')).map((t) => t.textContent?.trim())).toContain(
       'Homme Dragon',
     );
+  });
+
+  it('AC2 : le patch visibilitychange est retiré — un dispatch manuel ne déclenche plus aucun rechargement', async () => {
+    const initial = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const { fixture, el } = await createFixture(initial, MJ_ID);
+    const partiesSvcSpy = TestBed.inject(PartiesService) as unknown as { get: ReturnType<typeof vi.fn> };
+    const callsBefore = partiesSvcSpy.get.mock.calls.length;
+
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(partiesSvcSpy.get.mock.calls.length).toBe(callsBefore);
+    expect(el).toBeTruthy();
   });
 });

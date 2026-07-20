@@ -57,4 +57,12 @@ describe('PartiesService (front)', () => {
     req.flush(null);
     await p;
   });
+
+  it('notifyChanged() incrémente changed() (Story 18.3, AD-4)', () => {
+    expect(service.changed()).toBe(0);
+    service.notifyChanged();
+    expect(service.changed()).toBe(1);
+    service.notifyChanged();
+    expect(service.changed()).toBe(2);
+  });
 });

@@ -1,5 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { API_BASE } from '../api-base';
+import { PartiesService } from '../parties/parties.service';
 
 export function partieTopic(partieId: string): string {
   return `partie:${partieId}`;
@@ -34,12 +35,15 @@ function urlForTopic(topic: string): string {
 
 @Injectable({ providedIn: 'root' })
 export class RealtimeService {
-  // Table de correspondance topic-prefix -> services à notifier (AD-3). VIDE à la fin de la
-  // Story 18.2 — aucun composant n'appelle encore connect() (câblage = Story 18.3+). Étendue au
-  // fil des stories de câblage suivantes, au fur et à mesure qu'un service de domaine expose son
-  // propre notifyChanged() (AD-4). Jamais peuplée depuis l'extérieur : le composant appelant
-  // connect()/disconnect() ne choisit jamais quels services sont notifiés (AD-3).
-  private readonly handlers: TopicHandler[] = [];
+  private readonly parties = inject(PartiesService);
+
+  // Table de correspondance topic-prefix -> services à notifier (AD-3), câblée ici, dans
+  // RealtimeService lui-même (jamais par le composant appelant connect()/disconnect()) —
+  // première entrée réelle (Story 18.3) ; étendue par les prochaines stories de câblage (Epic
+  // 19+) au fur et à mesure qu'un service de domaine expose son propre notifyChanged() (AD-4).
+  private readonly handlers: TopicHandler[] = [
+    { prefix: 'partie:', notifyChanged: () => this.parties.notifyChanged() },
+  ];
 
   // Une entrée par connexion active (pas par topic) — deux connect() sur le même topic ouvrent
   // deux EventSource indépendants, jamais partagés/dédupliqués (AD-6). disconnect() dépile la

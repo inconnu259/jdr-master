@@ -10,6 +10,7 @@ import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
 describe('PartiesService', () => {
   let service: PartiesService;
@@ -41,6 +42,7 @@ describe('PartiesService', () => {
     getActiveDeclarations: jest.Mock;
     computeSlotStatus: jest.Mock;
   };
+  let realtimeEvents: { emit: jest.Mock };
 
   const partie = {
     id: 'p1',
@@ -83,9 +85,11 @@ describe('PartiesService', () => {
       getActiveDeclarations: jest.fn().mockResolvedValue(new Map()),
       computeSlotStatus: jest.fn().mockReturnValue('UNKNOWN'),
     };
+    realtimeEvents = { emit: jest.fn() };
     service = new PartiesService(
       prisma as unknown as PrismaService,
       avail as unknown as AvailabilityService,
+      realtimeEvents as unknown as RealtimeEventsService,
     );
   });
 
@@ -213,6 +217,13 @@ describe('PartiesService', () => {
   it('getOwned : renvoie la partie si MJ', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     expect(await service.getOwned('p1', 'mj1')).toEqual(partie);
+  });
+
+  it('update() émet un événement temps réel scopé sur la Partie (Story 18.3, AC1)', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.partie.update.mockResolvedValue({ ...partie, name: 'Nouveau nom' });
+    await service.update('p1', 'mj1', { name: 'Nouveau nom' });
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
   it('remove : vérifie la propriété puis supprime', async () => {
