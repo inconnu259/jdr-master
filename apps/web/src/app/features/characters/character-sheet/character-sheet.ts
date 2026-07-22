@@ -1,4 +1,13 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -6,6 +15,7 @@ import { MatDialog } from '@angular/material/dialog';
 import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
 import { characterName, findContentEntry } from '../../../core/characters/character.util';
+import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { CharacterAvatar } from '../character-avatar/character-avatar';
 import { PortraitPanel } from '../portrait-panel/portrait-panel';
 import {
@@ -79,6 +89,8 @@ export class CharacterSheet implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly auth = inject(AuthService);
   protected readonly theme = inject(ThemeToneService);
+  private readonly realtime = inject(RealtimeService);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly character = signal<CharacterDto | null>(null);
   protected readonly content = signal<GameSystemContentDto | null>(null);
@@ -266,7 +278,45 @@ export class CharacterSheet implements OnInit {
     () => (this.sheetData()['narrative'] as NarrativeFields) ?? {},
   );
 
+  constructor() {
+    // Story 20.1 (AC1) : réagit au signal générique CharacterService.changed (RealtimeService).
+    // PIÈGE (même classe que ScenarioEditor, Story 19.2 Task 1) : CharacterSheet a DÉJÀ un
+    // chargement dédié dans ngOnInit() (fetch au montage). La première exécution d'un effect() a
+    // lieu à la CONSTRUCTION du composant — si `changed()` porte déjà une valeur (mutation locale
+    // antérieure dans la même session applicative, CharacterService étant `providedIn: 'root'`),
+    // cette première exécution déclencherait un refetch REDONDANT avec celui que ngOnInit() fait
+    // juste après. Le flag `firstRun` neutralise uniquement cette toute première exécution.
+    let firstRun = true;
+    effect(() => {
+      this.characterSvc.changed();
+      if (firstRun) {
+        firstRun = false;
+        return;
+      }
+      untracked(() => void this.refreshCharacter());
+    });
+  }
+
+  // Utilisée UNIQUEMENT par l'effect() ci-dessus — PAS par le fetch initial de ngOnInit(), qui
+  // reste ciblé par le paramètre de route characterId (jamais par this.character(), pas encore
+  // garanti peuplé au moment où ngOnInit() s'exécute, même piège de timing que Story 19.2).
+  private async refreshCharacter(): Promise<void> {
+    const c = this.character();
+    if (!c) return;
+    try {
+      this.character.set(await this.characterSvc.get(c.id));
+    } catch {
+      // non-bloquant — la fiche affichée reste telle quelle si le rafraîchissement échoue
+    }
+  }
+
   async ngOnInit(): Promise<void> {
+    const partieId = this.route.snapshot.paramMap.get('id');
+    if (partieId) {
+      this.realtime.connect(partieTopic(partieId));
+      this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(partieId)));
+    }
+
     const characterId = this.route.snapshot.paramMap.get('characterId');
     if (!characterId) {
       this.loadError.set('Fiche introuvable.');

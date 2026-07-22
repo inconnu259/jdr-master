@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, input, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -80,6 +80,39 @@ export class HommeDragonSheet implements OnInit {
       (e) => (e.data as { race?: string }).race === hd.sheetData.race,
     );
   });
+
+  constructor() {
+    // Story 20.2 (AC1) : réagit au signal générique HommeDragonService.changed (RealtimeService).
+    // PIÈGE (même classe que CharacterSheet, Story 20.1) : HommeDragonSheet a DÉJÀ un chargement
+    // dédié dans ngOnInit() (fetch au montage). La première exécution d'un effect() a lieu à la
+    // CONSTRUCTION du composant — si `changed()` porte déjà une valeur (mutation locale antérieure
+    // dans la même session applicative, HommeDragonService étant `providedIn: 'root'`), cette
+    // première exécution déclencherait un refetch REDONDANT avec celui que ngOnInit() fait juste
+    // après. Le flag `firstRun` neutralise uniquement cette toute première exécution.
+    let firstRun = true;
+    effect(() => {
+      this.hommeDragonSvc.changed();
+      if (firstRun) {
+        firstRun = false;
+        return;
+      }
+      untracked(() => void this.refreshHommeDragon());
+    });
+  }
+
+  // Utilisée UNIQUEMENT par l'effect() ci-dessus — PAS par le fetch initial de ngOnInit(), qui
+  // reste ciblé par this.partieId() (jamais par une valeur dérivée de this.hommeDragon(), pas
+  // encore garantie peuplée au moment où ngOnInit() s'exécute, même piège de timing que
+  // Story 20.1). `hommeDragon() === undefined` signifie « chargement initial en cours » —
+  // distinct de `null` (« pas encore créé », un état stable, pas un signe qu'il faille attendre).
+  private async refreshHommeDragon(): Promise<void> {
+    if (this.hommeDragon() === undefined) return;
+    try {
+      this.hommeDragon.set(await this.hommeDragonSvc.findOne(this.partieId()));
+    } catch {
+      // non-bloquant — la fiche affichée reste telle quelle si le rafraîchissement échoue
+    }
+  }
 
   async ngOnInit(): Promise<void> {
     try {

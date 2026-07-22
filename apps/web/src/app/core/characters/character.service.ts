@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type {
@@ -26,6 +26,13 @@ import { API_BASE } from '../api-base';
 @Injectable({ providedIn: 'root' })
 export class CharacterService {
   private readonly http = inject(HttpClient);
+  // Story 20.1 (AC2) : première introduction de ce signal (contrat AD-4, même forme que
+  // PartiesService — compteur incrémenté, zéro information de Partie à porter).
+  private readonly _changed = signal(0);
+  readonly changed = this._changed.asReadonly();
+  notifyChanged(): void {
+    this._changed.update((v) => v + 1);
+  }
 
   getGameSystems(): Promise<GameSystemDto[]> {
     return firstValueFrom(

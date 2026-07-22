@@ -324,4 +324,10 @@ describe('CharacterService (front)', () => {
     req.flush(notes);
     expect(await p).toEqual(notes);
   });
+
+  it('notifyChanged() incrémente changed() (Story 20.1, AC2)', () => {
+    const before = service.changed();
+    service.notifyChanged();
+    expect(service.changed()).toBe(before + 1);
+  });
 });

@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { vi } from 'vitest';
 import type { GameSystemContentDto, HommeDragonDto } from '@master-jdr/shared';
@@ -40,13 +41,19 @@ function makeDto(overrides: Partial<HommeDragonDto> = {}): HommeDragonDto {
   };
 }
 
-function makeHommeDragonService(findOneResult: HommeDragonDto | null = null) {
+function makeHommeDragonService(
+  findOneResult: HommeDragonDto | null = null,
+  overrides: Partial<{ changed: ReturnType<typeof signal<number>> }> = {},
+) {
   return {
     findOne: vi.fn().mockResolvedValue(findOneResult),
     create: vi.fn(),
     update: vi.fn(),
     chooseEveilPower: vi.fn(),
     exportPdf: vi.fn(),
+    // Story 20.2 (Task 3) : HommeDragonSheet réagit désormais à ce signal (effect() du constructeur).
+    changed: signal(0),
+    ...overrides,
   };
 }
 
@@ -231,6 +238,7 @@ describe('HommeDragonSheet', () => {
       update: vi.fn(),
       chooseEveilPower: vi.fn(),
       exportPdf: vi.fn(),
+      changed: signal(0),
     };
     const { fixture } = await createComponent(hommeDragonSvc);
     const component = fixture.componentInstance;
@@ -415,5 +423,100 @@ describe('HommeDragonSheet', () => {
 
     expect(component['exportError']()).toBeTruthy();
     expect(component['exporting']()).toBe(false);
+  });
+
+  describe('Câblage temps réel (Story 20.2)', () => {
+    it('une notification HommeDragonService.changed() recharge la fiche affichée (AC1)', async () => {
+      const initial = makeDto();
+      const hommeDragonSvc = makeHommeDragonService(initial);
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const component = fixture.componentInstance;
+      const updated = makeDto({ pendingEveilLevels: [3] });
+      hommeDragonSvc.findOne.mockResolvedValue(updated);
+
+      hommeDragonSvc.changed.update((v) => v + 1);
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(component['hommeDragon']()).toEqual(updated);
+    });
+
+    it('un findOne() rejeté pendant refreshHommeDragon() est absorbé sans planter, la fiche reste affichée telle quelle', async () => {
+      const initial = makeDto();
+      const hommeDragonSvc = makeHommeDragonService(initial);
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const component = fixture.componentInstance;
+      hommeDragonSvc.findOne.mockRejectedValue(new Error('network'));
+
+      hommeDragonSvc.changed.update((v) => v + 1);
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      // non-bloquant : la fiche affichée reste celle du chargement initial, aucune exception,
+      // pas de loadError() déclenché (réservé au fetch initial de ngOnInit(), pas au rafraîchissement).
+      expect(component['hommeDragon']()).toEqual(initial);
+      expect(component['loadError']()).toBeNull();
+    });
+
+    it('garde firstRun : un changed() déjà non-nul au montage ne déclenche PAS de refetch redondant', async () => {
+      // HommeDragonService est providedIn:'root' — son signal _changed peut déjà porter une valeur
+      // non-nulle AVANT le montage (mutation locale antérieure dans la même session). Sans le garde
+      // firstRun, ce cas déclencherait un refetch en plus de celui déjà fait par ngOnInit().
+      // HommeDragonSheet ne rend aucun enfant réagissant lui aussi à HommeDragonService.changed —
+      // un compte exact de 1 est donc fiable ici.
+      const hommeDragonSvc = makeHommeDragonService(makeDto(), { changed: signal(1) });
+      await createComponent(hommeDragonSvc);
+
+      expect(hommeDragonSvc.findOne.mock.calls.length).toBe(1);
+    });
+
+    it('un changed() survenant avant la résolution du fetch initial ne plante pas (garde if (hommeDragon() === undefined) return)', async () => {
+      let resolveFindOne!: (hd: HommeDragonDto | null) => void;
+      const hommeDragonSvc = makeHommeDragonService();
+      hommeDragonSvc.findOne.mockReturnValue(
+        new Promise<HommeDragonDto | null>((resolve) => (resolveFindOne = resolve)),
+      );
+      const characterSvc = makeCharacterService();
+
+      await TestBed.configureTestingModule({
+        imports: [HommeDragonSheet],
+        providers: [
+          { provide: HommeDragonService, useValue: hommeDragonSvc },
+          { provide: CharacterService, useValue: characterSvc },
+          { provide: ThemeToneService, useValue: makeThemeService() },
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(HommeDragonSheet);
+      fixture.componentRef.setInput('partieId', 'p1');
+      fixture.componentRef.setInput('partieName', 'Ma Campagne');
+      fixture.detectChanges();
+      // firstRun est consommé au premier flush de l'effect() — le fetch initial (findOne()) est
+      // toujours en attente (resolveFindOne non appelé) à ce stade.
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      // Un événement temps réel survient PENDANT que this.hommeDragon() est encore undefined —
+      // refreshHommeDragon() doit no-op silencieusement (garde if (hommeDragon() === undefined)
+      // return), pas planter.
+      expect(() => hommeDragonSvc.changed.update((v) => v + 1)).not.toThrow();
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      const dto = makeDto();
+      resolveFindOne(dto);
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(fixture.componentInstance['hommeDragon']()).toEqual(dto);
+    });
   });
 });

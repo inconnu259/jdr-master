@@ -9,6 +9,7 @@ import type { AuthUser, CharacterDto, GameSystemContentDto } from '@master-jdr/s
 import { CharacterSheet } from './character-sheet';
 import { CharacterService } from '../../../core/characters/character.service';
 import { AuthService } from '../../../core/auth/auth.service';
+import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 
 const CONTENT: GameSystemContentDto = {
@@ -75,6 +76,8 @@ function defaultSvc() {
     setSheetField: vi.fn(),
     setXp: vi.fn(),
     updateNarrativeField: vi.fn(),
+    // Story 20.1 (Task 3) : CharacterSheet réagit désormais à ce signal (effect() du constructeur).
+    changed: signal(0),
   };
 }
 
@@ -83,6 +86,7 @@ async function createComponent(
   characterId: string | null = 'char1',
   dialogResult: unknown = null,
   currentUserId: string | null = 'u1',
+  partieId = 'p1',
 ) {
   const dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(dialogResult) }) };
   const auth = {
@@ -90,13 +94,22 @@ async function createComponent(
       currentUserId ? ({ id: currentUserId } as AuthUser) : null,
     ),
   };
+  // Story 20.1 (Task 3) : CharacterSheet ouvre désormais sa propre connexion RealtimeService —
+  // mock direct, jsdom n'implémente pas EventSource.
+  const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
   await TestBed.configureTestingModule({
     imports: [CharacterSheet],
     providers: [
       { provide: CharacterService, useValue: characterSvc },
       { provide: MatDialog, useValue: dialog },
       { provide: AuthService, useValue: auth },
-      { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => characterId } } } },
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          snapshot: { paramMap: { get: (key: string) => (key === 'id' ? partieId : characterId) } },
+        },
+      },
+      { provide: RealtimeService, useValue: realtimeSvc },
     ],
   }).compileComponents();
 
@@ -110,7 +123,7 @@ async function createComponent(
   }
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, characterSvc, dialog, auth };
+  return { fixture, characterSvc, dialog, auth, realtimeSvc };
 }
 
 describe('CharacterSheet', () => {
@@ -159,7 +172,13 @@ describe('CharacterSheet', () => {
         { provide: CharacterService, useValue: characterSvc },
         { provide: MatDialog, useValue: dialog },
         { provide: AuthService, useValue: auth },
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'char1' } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: { paramMap: { get: (key: string) => (key === 'id' ? 'p1' : 'char1') } },
+          },
+        },
+        { provide: RealtimeService, useValue: { connect: vi.fn(), disconnect: vi.fn() } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(CharacterSheet);
@@ -487,7 +506,13 @@ describe('CharacterSheet', () => {
           provide: AuthService,
           useValue: { currentUser: signal<AuthUser | null>({ id: 'u1' } as AuthUser) },
         },
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'char1' } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: { paramMap: { get: (key: string) => (key === 'id' ? 'p1' : 'char1') } },
+          },
+        },
+        { provide: RealtimeService, useValue: { connect: vi.fn(), disconnect: vi.fn() } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(CharacterSheet);
@@ -1114,6 +1139,96 @@ describe('CharacterSheet', () => {
       const { fixture } = await createComponent(characterSvc, 'char1', null, 'joueur-tiers');
 
       expect(fixture.nativeElement.querySelectorAll('.field-edit-pencil__button').length).toBe(0);
+    });
+  });
+
+  describe('Câblage temps réel (Story 20.1)', () => {
+    it('connect() est appelé avec partieTopic(partieId) au montage (AC1)', async () => {
+      const { realtimeSvc } = await createComponent();
+      expect(realtimeSvc.connect).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('disconnect() est appelé à la destruction du composant', async () => {
+      const { fixture, realtimeSvc } = await createComponent();
+      fixture.destroy();
+      expect(realtimeSvc.disconnect).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('une notification CharacterService.changed() recharge la fiche affichée (AC1)', async () => {
+      const characterSvc = makeCharacterService();
+      const { fixture } = await createComponent(characterSvc);
+      characterSvc.get.mockResolvedValue({ ...CHARACTER, xp: 999 });
+
+      characterSvc.changed.update((v) => v + 1);
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      const comp = fixture.componentInstance as any;
+      expect(comp.character().xp).toBe(999);
+    });
+
+    it('garde firstRun : un changed() déjà non-nul au montage ne déclenche PAS de refetch redondant', async () => {
+      // CharacterService est providedIn:'root' — son signal _changed peut déjà porter une valeur
+      // non-nulle AVANT le montage (mutation locale antérieure dans la même session). Sans le
+      // garde firstRun, ce cas déclencherait un refetch en plus de celui déjà fait par ngOnInit().
+      // Contrairement à Story 19.2 (ScenarioEditor/ScenarioReadDialog rendent SeanceList, qui
+      // contamine le comptage), CharacterSheet ne rend aucun enfant réagissant lui aussi à
+      // CharacterService.changed — un compte exact de 1 est donc fiable ici.
+      const characterSvc = makeCharacterService({ changed: signal(1) });
+      const { fixture } = await createComponent(characterSvc);
+      void fixture;
+
+      expect(characterSvc.get.mock.calls.length).toBe(1);
+    });
+
+    it('un changed() survenant avant la résolution du fetch initial ne plante pas (garde if (!c) return)', async () => {
+      let resolveGet!: (c: CharacterDto) => void;
+      const characterSvc = makeCharacterService({
+        get: vi.fn(() => new Promise<CharacterDto>((resolve) => (resolveGet = resolve))),
+      });
+      const dialog = { open: vi.fn() };
+      const auth = { currentUser: signal<AuthUser | null>({ id: 'u1' } as AuthUser) };
+      const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
+      await TestBed.configureTestingModule({
+        imports: [CharacterSheet],
+        providers: [
+          { provide: CharacterService, useValue: characterSvc },
+          { provide: MatDialog, useValue: dialog },
+          { provide: AuthService, useValue: auth },
+          {
+            provide: ActivatedRoute,
+            useValue: {
+              snapshot: { paramMap: { get: (key: string) => (key === 'id' ? 'p1' : 'char1') } },
+            },
+          },
+          { provide: RealtimeService, useValue: realtimeSvc },
+        ],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(CharacterSheet);
+      fixture.detectChanges();
+      // firstRun est consommé au premier flush de l'effect() — le fetch initial (get()) est
+      // toujours en attente (resolveGet non appelé) à ce stade.
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      // Un événement temps réel survient PENDANT que this.character() est encore null — refreshCharacter()
+      // doit no-op silencieusement (garde if (!c) return), pas planter.
+      expect(() => characterSvc.changed.update((v) => v + 1)).not.toThrow();
+      fixture.detectChanges();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      resolveGet(CHARACTER);
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      const comp = fixture.componentInstance as any;
+      expect(comp.character()).toEqual(CHARACTER);
     });
   });
 });

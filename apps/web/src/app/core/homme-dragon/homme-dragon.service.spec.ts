@@ -94,4 +94,10 @@ describe('HommeDragonService', () => {
 
     await expect(promise).resolves.toBeDefined();
   });
+
+  it('notifyChanged() incrémente changed() (Story 20.2, AC2)', () => {
+    const before = service.changed();
+    service.notifyChanged();
+    expect(service.changed()).toBe(before + 1);
+  });
 });

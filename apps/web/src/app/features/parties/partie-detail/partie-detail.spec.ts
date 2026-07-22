@@ -225,7 +225,13 @@ async function createFixture(
       },
       {
         provide: HommeDragonService,
-        useValue: { findOne: vi.fn().mockResolvedValue(null), create: vi.fn(), update: vi.fn() },
+        useValue: {
+          findOne: vi.fn().mockResolvedValue(null),
+          create: vi.fn(),
+          update: vi.fn(),
+          // Story 20.2 (Task 3) : HommeDragonSheet (rendu transitivement) réagit désormais à ce signal.
+          changed: signal(0),
+        },
       },
       { provide: MatDialog, useValue: { open: vi.fn() } },
     ],
@@ -1179,7 +1185,13 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]) } },
         {
           provide: HommeDragonService,
-          useValue: { findOne: vi.fn().mockResolvedValue(null), create: vi.fn(), update: vi.fn() },
+          useValue: {
+            findOne: vi.fn().mockResolvedValue(null),
+            create: vi.fn(),
+            update: vi.fn(),
+            // Story 20.2 (Task 3) : HommeDragonSheet (rendu transitivement) réagit désormais à ce signal.
+            changed: signal(0),
+          },
         },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],

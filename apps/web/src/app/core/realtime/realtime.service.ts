@@ -2,6 +2,8 @@ import { Injectable, inject } from '@angular/core';
 import { API_BASE } from '../api-base';
 import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
+import { CharacterService } from '../characters/character.service';
+import { HommeDragonService } from '../homme-dragon/homme-dragon.service';
 
 export function partieTopic(partieId: string): string {
   return `partie:${partieId}`;
@@ -38,14 +40,19 @@ function urlForTopic(topic: string): string {
 export class RealtimeService {
   private readonly parties = inject(PartiesService);
   private readonly scenarios = inject(ScenariosService);
+  private readonly characters = inject(CharacterService);
+  private readonly hommeDragon = inject(HommeDragonService);
 
   // Table de correspondance topic-prefix -> services à notifier (AD-3), câblée ici, dans
   // RealtimeService lui-même (jamais par le composant appelant connect()/disconnect()) —
-  // première entrée réelle (Story 18.3), étendue Story 19.1 avec une deuxième entrée au MÊME
-  // préfixe (plusieurs handlers peuvent partager un préfixe — matchingHandlers les appelle tous).
+  // première entrée réelle (Story 18.3), étendue Story 19.1 (deuxième entrée), Story 20.1
+  // (troisième entrée) puis Story 20.2 (quatrième entrée) au MÊME préfixe (plusieurs handlers
+  // peuvent partager un préfixe — matchingHandlers les appelle tous).
   private readonly handlers: TopicHandler[] = [
     { prefix: 'partie:', notifyChanged: () => this.parties.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.scenarios.notifyRealtimeChanged() },
+    { prefix: 'partie:', notifyChanged: () => this.characters.notifyChanged() },
+    { prefix: 'partie:', notifyChanged: () => this.hommeDragon.notifyChanged() },
   ];
 
   // Une entrée par connexion active (pas par topic) — deux connect() sur le même topic ouvrent

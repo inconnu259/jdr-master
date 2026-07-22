@@ -4,6 +4,8 @@ import { vi } from 'vitest';
 import { API_BASE } from '../api-base';
 import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
+import { CharacterService } from '../characters/character.service';
+import { HommeDragonService } from '../homme-dragon/homme-dragon.service';
 import { RealtimeService, matchingHandlers, partieTopic, userTopic } from './realtime.service';
 
 class FakeEventSource {
@@ -59,6 +61,8 @@ describe('RealtimeService', () => {
   let originalEventSource: unknown;
   let partiesSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
   let scenariosSvc: { notifyRealtimeChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<{ partieId: string } | null>> };
+  let charactersSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
+  let hommeDragonSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
 
   beforeEach(() => {
     originalEventSource = (globalThis as any).EventSource;
@@ -68,6 +72,12 @@ describe('RealtimeService', () => {
     // Story 19.1 (Task 2) : RealtimeService injecte désormais aussi ScenariosService (deuxième
     // entrée dans handlers, même préfixe 'partie:'). Mock direct, comme PartiesService.
     scenariosSvc = { notifyRealtimeChanged: vi.fn(), changed: signal(null) };
+    // Story 20.1 (Task 2) : RealtimeService injecte désormais aussi CharacterService (troisième
+    // entrée dans handlers, même préfixe 'partie:'). Mock direct, comme PartiesService.
+    charactersSvc = { notifyChanged: vi.fn(), changed: signal(0) };
+    // Story 20.2 (Task 2) : RealtimeService injecte désormais aussi HommeDragonService (quatrième
+    // entrée dans handlers, même préfixe 'partie:'). Mock direct, comme PartiesService.
+    hommeDragonSvc = { notifyChanged: vi.fn(), changed: signal(0) };
     // RealtimeService injecte désormais PartiesService (Story 18.3, Task 4) — PartiesService
     // injecte lui-même HttpClient, jamais fourni par ce module de test isolé. Mock direct : ce
     // test ne porte pas sur les appels HTTP de PartiesService.
@@ -75,6 +85,8 @@ describe('RealtimeService', () => {
       providers: [
         { provide: PartiesService, useValue: partiesSvc },
         { provide: ScenariosService, useValue: scenariosSvc },
+        { provide: CharacterService, useValue: charactersSvc },
+        { provide: HommeDragonService, useValue: hommeDragonSvc },
       ],
     });
     service = TestBed.inject(RealtimeService);
@@ -121,6 +133,27 @@ describe('RealtimeService', () => {
 
     expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
     expect(scenariosSvc.notifyRealtimeChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("'open' déclenche AUSSI notifyChanged() sur CharacterService — trois handlers au même préfixe (Story 20.1, AC1)", () => {
+    service.connect(partieTopic('p1'));
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(scenariosSvc.notifyRealtimeChanged).toHaveBeenCalledTimes(1);
+    expect(charactersSvc.notifyChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("'open' déclenche AUSSI notifyChanged() sur HommeDragonService — quatre handlers au même préfixe (Story 20.2, AC1)", () => {
+    service.connect(partieTopic('p1'));
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(scenariosSvc.notifyRealtimeChanged).toHaveBeenCalledTimes(1);
+    expect(charactersSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(hommeDragonSvc.notifyChanged).toHaveBeenCalledTimes(1);
   });
 
   it("un topic 'user:' ne déclenche PAS notifyChanged() de PartiesService (préfixe non mappé)", () => {
