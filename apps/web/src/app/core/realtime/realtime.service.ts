@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { API_BASE } from '../api-base';
 import { PartiesService } from '../parties/parties.service';
+import { ScenariosService } from '../scenarios/scenarios.service';
 
 export function partieTopic(partieId: string): string {
   return `partie:${partieId}`;
@@ -36,13 +37,15 @@ function urlForTopic(topic: string): string {
 @Injectable({ providedIn: 'root' })
 export class RealtimeService {
   private readonly parties = inject(PartiesService);
+  private readonly scenarios = inject(ScenariosService);
 
   // Table de correspondance topic-prefix -> services à notifier (AD-3), câblée ici, dans
   // RealtimeService lui-même (jamais par le composant appelant connect()/disconnect()) —
-  // première entrée réelle (Story 18.3) ; étendue par les prochaines stories de câblage (Epic
-  // 19+) au fur et à mesure qu'un service de domaine expose son propre notifyChanged() (AD-4).
+  // première entrée réelle (Story 18.3), étendue Story 19.1 avec une deuxième entrée au MÊME
+  // préfixe (plusieurs handlers peuvent partager un préfixe — matchingHandlers les appelle tous).
   private readonly handlers: TopicHandler[] = [
     { prefix: 'partie:', notifyChanged: () => this.parties.notifyChanged() },
+    { prefix: 'partie:', notifyChanged: () => this.scenarios.notifyRealtimeChanged() },
   ];
 
   // Une entrée par connexion active (pas par topic) — deux connect() sur le même topic ouvrent
@@ -54,7 +57,16 @@ export class RealtimeService {
   connect(topic: string): void {
     const es = new EventSource(urlForTopic(topic), { withCredentials: true });
     const onSignal = () => {
-      for (const h of matchingHandlers(this.handlers, topic)) h.notifyChanged();
+      // Chaque handler est isolé (Story 19.1, revue de code) : plusieurs services de domaine
+      // partagent désormais le même préfixe — une exception dans l'un ne doit jamais empêcher
+      // la notification des autres.
+      for (const h of matchingHandlers(this.handlers, topic)) {
+        try {
+          h.notifyChanged();
+        } catch {
+          // non-bloquant — un service de domaine en échec ne doit pas empêcher les autres
+        }
+      }
     };
     // 'open' : connexion initiale ET chaque reconnexion réussie (AC4, AD-8) — rattrapage.
     // 'message' : un par emit() serveur reçu pendant une connexion stable (AC4) — chemin

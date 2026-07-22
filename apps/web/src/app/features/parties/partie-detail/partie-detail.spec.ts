@@ -91,6 +91,9 @@ function makeScenariosService(polls: SessionPollDto[] = []) {
     listDrafts: vi.fn().mockResolvedValue([]),
     listAll: vi.fn().mockResolvedValue(wrapPollsAsScenarios(polls)),
     changed: signal(0),
+    // Story 19.1 (Task 2) : RealtimeService injecte désormais aussi ScenariosService — nécessaire
+    // pour que la connexion SSE réelle (stub EventSource global, cf. haut de fichier) ne lève pas.
+    notifyRealtimeChanged: vi.fn(),
   };
 }
 

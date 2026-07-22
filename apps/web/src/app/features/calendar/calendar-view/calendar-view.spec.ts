@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
@@ -11,6 +12,7 @@ import { AvailabilityService } from '../../../core/availability/availability.ser
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 
 interface CreateOptions {
   mode?: 'mj' | 'personal';
@@ -53,7 +55,12 @@ function makeScenariosService(scenarios: any[] = []) {
   return {
     createSeancePoll: vi.fn(),
     listAll: vi.fn().mockResolvedValue(scenarios),
+    changed: signal<{ partieId: string } | null>(null),
   };
+}
+
+function makeRealtimeService() {
+  return { connect: vi.fn(), disconnect: vi.fn() };
 }
 
 const ACTIVE_POLL_SCENARIO = {
@@ -95,6 +102,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   const snack = makeSnackBar();
   const partiesSvc = makePartiesService();
   const scenariosSvc = makeScenariosService(opts.scenarios ?? []);
+  const realtimeSvc = makeRealtimeService();
 
   await TestBed.configureTestingModule({
     imports: [CalendarView],
@@ -107,6 +115,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
       { provide: PollService, useValue: pollSvc },
       { provide: MatSnackBar, useValue: snack },
       { provide: ScenariosService, useValue: scenariosSvc },
+      { provide: RealtimeService, useValue: realtimeSvc },
     ],
   }).compileComponents();
 
@@ -120,7 +129,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges(); // D5: second cycle pour les bindings asynchrones
-  return { fixture, pollSvc, availabilitySvc, snack, partiesSvc, scenariosSvc, location };
+  return { fixture, pollSvc, availabilitySvc, snack, partiesSvc, scenariosSvc, realtimeSvc, location };
 }
 
 describe('CalendarView — signal mode', () => {
@@ -658,5 +667,46 @@ describe('CalendarView — onChooseDate()/onClosePoll() (multi-poll, Story 8.8)'
 
     expect(pollSvc.closePoll).toHaveBeenCalledWith('partie-1', 'poll1');
     expect(scenariosSvc.listAll.mock.calls.length).toBe(callsBefore + 1);
+  });
+});
+
+// ─── Connexion temps réel (Story 19.1, AC3) ──────────────────────────────────
+
+describe('CalendarView — connexion temps réel (Story 19.1, AC3)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('connect() est appelé avec partieTopic(partieId) au montage', async () => {
+    const { realtimeSvc } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    expect(realtimeSvc.connect).toHaveBeenCalledWith(partieTopic('partie-1'));
+  });
+
+  it('disconnect() est appelé à la destruction du composant', async () => {
+    const { fixture, realtimeSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+    });
+    fixture.destroy();
+    expect(realtimeSvc.disconnect).toHaveBeenCalledWith(partieTopic('partie-1'));
+  });
+
+  it('une notification ScenariosService.changed() recharge scénarios et créneaux/heatmap', async () => {
+    const { fixture, scenariosSvc, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+    });
+    const listAllCallsBefore = scenariosSvc.listAll.mock.calls.length;
+    const slotsCallsBefore = pollSvc.getAvailableSlots.mock.calls.length;
+    const heatmapCallsBefore = pollSvc.getHeatmap.mock.calls.length;
+
+    scenariosSvc.changed.set({ partieId: '*' });
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(scenariosSvc.listAll.mock.calls.length).toBe(listAllCallsBefore + 1);
+    expect(pollSvc.getAvailableSlots.mock.calls.length).toBe(slotsCallsBefore + 1);
+    expect(pollSvc.getHeatmap.mock.calls.length).toBe(heatmapCallsBefore + 1);
   });
 });

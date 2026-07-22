@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { of } from 'rxjs';
@@ -31,6 +32,8 @@ async function createComponent(
       listAllResult === 'reject'
         ? vi.fn().mockRejectedValue(new Error('network'))
         : vi.fn().mockResolvedValue(listAllResult),
+    // Story 19.1 (Task 4) : SeanceList (rendu transitivement) réagit désormais à ce signal.
+    changed: signal<{ partieId: string } | null>(null),
   };
 
   const router = {
@@ -73,6 +76,7 @@ describe('ScenarioDetail', () => {
           resolveListAll = resolve;
         }),
       ),
+      changed: signal<{ partieId: string } | null>(null),
     };
     const router = {
       getCurrentNavigation: () => ({ extras: { state: undefined } }),

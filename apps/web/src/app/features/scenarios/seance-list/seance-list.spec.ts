@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { Router } from '@angular/router';
+import { signal } from '@angular/core';
 import { vi } from 'vitest';
 import type { ScenarioDto, SeanceDto, SessionPollDto } from '@master-jdr/shared';
 import { SeanceList } from './seance-list';
@@ -66,6 +67,8 @@ async function createComponent(
     inscrire: vi.fn(),
     desinscrire: vi.fn(),
     setCompteRendu: vi.fn(),
+    // Story 19.1 (Task 4) : SeanceList réagit désormais à ce signal (effect() du constructeur).
+    changed: signal<{ partieId: string } | null>(null),
   };
   const pollSvc = {
     chooseDate: vi.fn(),
@@ -97,6 +100,23 @@ async function createComponent(
 }
 
 describe('SeanceList', () => {
+  it('une notification via ScenariosService.changed() recharge le scénario (Story 19.1, AC2)', async () => {
+    const { fixture, scenariosSvc } = await createComponent({
+      ...SCENARIO,
+      seances: [SEANCE_NO_POLL],
+    });
+    scenariosSvc.listAll.mockClear();
+
+    scenariosSvc.changed.set({ partieId: 'p1' });
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(scenariosSvc.listAll).toHaveBeenCalledWith('p1');
+  });
+
   it('numérote chaque séance dans l’ordre (« Séance 1 », « Séance 2 »…)', async () => {
     const seance2: SeanceDto = { ...SEANCE_NO_POLL, id: 'seance2' };
     const { fixture } = await createComponent(

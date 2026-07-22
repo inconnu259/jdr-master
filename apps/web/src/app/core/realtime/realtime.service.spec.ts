@@ -3,6 +3,7 @@ import { signal } from '@angular/core';
 import { vi } from 'vitest';
 import { API_BASE } from '../api-base';
 import { PartiesService } from '../parties/parties.service';
+import { ScenariosService } from '../scenarios/scenarios.service';
 import { RealtimeService, matchingHandlers, partieTopic, userTopic } from './realtime.service';
 
 class FakeEventSource {
@@ -57,17 +58,24 @@ describe('RealtimeService', () => {
   let service: RealtimeService;
   let originalEventSource: unknown;
   let partiesSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
+  let scenariosSvc: { notifyRealtimeChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<{ partieId: string } | null>> };
 
   beforeEach(() => {
     originalEventSource = (globalThis as any).EventSource;
     FakeEventSource.instances = [];
     (globalThis as any).EventSource = FakeEventSource;
     partiesSvc = { notifyChanged: vi.fn(), changed: signal(0) };
+    // Story 19.1 (Task 2) : RealtimeService injecte désormais aussi ScenariosService (deuxième
+    // entrée dans handlers, même préfixe 'partie:'). Mock direct, comme PartiesService.
+    scenariosSvc = { notifyRealtimeChanged: vi.fn(), changed: signal(null) };
     // RealtimeService injecte désormais PartiesService (Story 18.3, Task 4) — PartiesService
     // injecte lui-même HttpClient, jamais fourni par ce module de test isolé. Mock direct : ce
     // test ne porte pas sur les appels HTTP de PartiesService.
     TestBed.configureTestingModule({
-      providers: [{ provide: PartiesService, useValue: partiesSvc }],
+      providers: [
+        { provide: PartiesService, useValue: partiesSvc },
+        { provide: ScenariosService, useValue: scenariosSvc },
+      ],
     });
     service = TestBed.inject(RealtimeService);
   });
@@ -104,6 +112,15 @@ describe('RealtimeService', () => {
     FakeEventSource.instances[0].emit('message');
 
     expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("'open' déclenche AUSSI notifyRealtimeChanged() sur ScenariosService — deux handlers au même préfixe (Story 19.1, AC1)", () => {
+    service.connect(partieTopic('p1'));
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(scenariosSvc.notifyRealtimeChanged).toHaveBeenCalledTimes(1);
   });
 
   it("un topic 'user:' ne déclenche PAS notifyChanged() de PartiesService (préfixe non mappé)", () => {

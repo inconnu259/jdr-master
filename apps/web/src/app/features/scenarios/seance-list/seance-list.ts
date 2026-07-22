@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { Router } from '@angular/router';
 import type {
@@ -50,6 +50,18 @@ export class SeanceList {
   readonly members = input<PartieMemberDto[]>([]);
 
   readonly seanceLinked = output<ScenarioDto>();
+
+  constructor() {
+    // Story 19.1 (AC2) : réutilise le signal ScenariosService.changed déjà actif — SeanceList
+    // n'ouvre AUCUNE connexion SSE propre, son parent (ScenarioEditor/ScenarioReadDialog,
+    // toujours ouvert depuis ScenarioTimeline lui-même enfant de PartieDetail, Story 18.3)
+    // maintient déjà la connexion partie:{id}. Réutilise refreshScenario() existante — pas de
+    // nouvelle méthode.
+    effect(() => {
+      this.scenarios.changed();
+      untracked(() => void this.refreshScenario());
+    });
+  }
 
   protected readonly pollActionPending = signal(false);
   protected readonly error = signal<string | null>(null);

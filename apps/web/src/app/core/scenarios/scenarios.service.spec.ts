@@ -2,8 +2,27 @@ import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import type { ScenarioDocumentDto, ScenarioDto } from '@master-jdr/shared';
-import { ScenariosService } from './scenarios.service';
+import { ScenariosService, matchesPartie } from './scenarios.service';
 import { API_BASE as API } from '../api-base';
+
+describe('matchesPartie', () => {
+  it('retourne false si change est null', () => {
+    expect(matchesPartie(null, 'p1')).toBe(false);
+  });
+
+  it('retourne true si change.partieId correspond exactement', () => {
+    expect(matchesPartie({ partieId: 'p1' }, 'p1')).toBe(true);
+  });
+
+  it("retourne false si change.partieId concerne une AUTRE Partie", () => {
+    expect(matchesPartie({ partieId: 'p2' }, 'p1')).toBe(false);
+  });
+
+  it('retourne true pour le wildcard (Story 19.1, événement temps réel générique), quel que soit partieId', () => {
+    expect(matchesPartie({ partieId: '*' }, 'p1')).toBe(true);
+    expect(matchesPartie({ partieId: '*' }, 'nimporte-quoi')).toBe(true);
+  });
+});
 
 describe('ScenariosService', () => {
   let service: ScenariosService;
@@ -41,6 +60,12 @@ describe('ScenariosService', () => {
   });
 
   afterEach(() => http.verify());
+
+  it('notifyRealtimeChanged() → changed() devient { partieId: wildcard }, matché par matchesPartie() pour toute Partie (Story 19.1, AC1)', () => {
+    service.notifyRealtimeChanged();
+
+    expect(matchesPartie(service.changed(), 'nimporte-quelle-partie')).toBe(true);
+  });
 
   it('create → POST /parties/:id/scenarios avec le payload', async () => {
     const dto = { title: 'Le Marché aux Ombres' };

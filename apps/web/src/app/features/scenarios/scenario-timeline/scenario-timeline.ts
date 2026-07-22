@@ -17,7 +17,7 @@ import { map } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 import type { CharacterDto, PartieKind, ScenarioDto, SeanceDto } from '@master-jdr/shared';
-import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 import {
   ScenarioReadDialog,
@@ -125,7 +125,7 @@ export class ScenarioTimeline {
       const change = this.scenariosService.changed();
       const partieIdChanged = partieId !== lastPartieId;
       lastPartieId = partieId;
-      if (!partieIdChanged && change !== null && change.partieId !== partieId) {
+      if (!partieIdChanged && change !== null && !matchesPartie(change, partieId)) {
         return;
       }
       untracked(() => this.loadScenarios(partieId));

@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
 import type { ScenarioDto } from '@master-jdr/shared';
@@ -25,6 +26,7 @@ async function createComponent(drafts: ScenarioDto[] = [SCENARIO], all: Scenario
     listAll: vi.fn().mockResolvedValue(all),
     open: vi.fn().mockResolvedValue({ ...SCENARIO, status: 'A_VENIR' }),
     listDocuments: vi.fn().mockResolvedValue([]),
+    changed: signal<{ partieId: string } | null>(null),
   };
 
   await TestBed.configureTestingModule({

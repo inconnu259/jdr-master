@@ -1,12 +1,15 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
   OnInit,
   ViewChild,
   computed,
+  effect,
   inject,
   input,
   signal,
+  untracked,
 } from '@angular/core';
 import { Location } from '@angular/common';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -27,8 +30,9 @@ import type {
 import { AvailabilityService } from '../../../core/availability/availability.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
-import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
 import { CalendarWeekView } from '../calendar-week-view/calendar-week-view';
 import { ConstraintPanel } from '../constraint-panel/constraint-panel';
@@ -85,6 +89,8 @@ export class CalendarView implements OnInit {
   private readonly location = inject(Location);
   private readonly snack = inject(MatSnackBar);
   protected readonly theme = inject(ThemeToneService);
+  private readonly realtime = inject(RealtimeService);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly declarations = signal<AvailabilityDeclarationDto[]>([]);
   protected readonly loading = signal(true);
@@ -169,6 +175,23 @@ export class CalendarView implements OnInit {
 
   private static readonly ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+  constructor() {
+    // Story 19.1 (AC3) : un vote/une clôture/l'ouverture d'un nouveau sondage émettent déjà sur
+    // partie:{id} (Story 18.1, PollService/ScenariosService backend) — recharge à la fois les
+    // scénarios/séances (ScenariosService, pour activePolls/eligibleSeances) ET les créneaux
+    // calculés/heatmap (PollService, non concerné par ScenariosService.changed mais recalculés
+    // par la même mutation sous-jacente) : réutilise loadScenarios()/refreshMjPanels() existantes.
+    effect(() => {
+      const change = this.scenariosSvc.changed();
+      const id = this.partieId();
+      if (!id || !matchesPartie(change, id)) return;
+      untracked(() => {
+        void this.loadScenarios(id);
+        void this.refreshMjPanels();
+      });
+    });
+  }
+
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
     const fromParam = this.route.snapshot.queryParamMap.get('from');
@@ -188,6 +211,8 @@ export class CalendarView implements OnInit {
 
     if (id) {
       this.partieId.set(id);
+      this.realtime.connect(partieTopic(id));
+      this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(id)));
       await Promise.all([
         this.router.navigate([], {
           relativeTo: this.route,

@@ -394,6 +394,20 @@ describe('ScenarioTimeline', () => {
     expect(scenariosSvc.listAll).toHaveBeenCalledWith('p1');
   });
 
+  it('un événement temps réel générique (wildcard) recharge, quelle que soit la Partie affichée (Story 19.1, AC1)', async () => {
+    const { scenariosSvc, fixture } = await createComponent([PASSE]);
+    scenariosSvc.listAll.mockClear();
+
+    scenariosSvc.changed.set({ partieId: '*' });
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(scenariosSvc.listAll).toHaveBeenCalledWith('p1');
+  });
+
   it('une mutation notifiée pour une AUTRE Partie ne recharge pas (Story 17.3 AC1)', async () => {
     const { scenariosSvc, fixture } = await createComponent([PASSE]);
     scenariosSvc.listAll.mockClear();

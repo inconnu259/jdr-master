@@ -14,6 +14,20 @@ import type {
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
+// Sentinel reconnu par matchesPartie() — un événement temps réel générique (Story 19.1) n'a
+// jamais de partieId précis à fournir (contrat AD-4, notifyChanged(): void, zéro argument).
+const REALTIME_WILDCARD = '*';
+
+/** Vrai si `change` concerne exactement `partieId`, OU provient d'un événement temps réel
+ *  générique (wildcard). Fonction pure, testable isolément — même convention que
+ *  `matchingHandlers` (Story 18.2). */
+export function matchesPartie(
+  change: { partieId: string } | null,
+  partieId: string,
+): boolean {
+  return change !== null && (change.partieId === REALTIME_WILDCARD || change.partieId === partieId);
+}
+
 @Injectable({ providedIn: 'root' })
 export class ScenariosService {
   private readonly http = inject(HttpClient);
@@ -30,6 +44,13 @@ export class ScenariosService {
 
   private notifyChanged(partieId: string): void {
     this._changed.set({ partieId });
+  }
+
+  /** Contrat public AD-4 (zéro argument), appelé par RealtimeService sur un événement SSE
+   *  partie:{id} — nom délibérément différent de notifyChanged(partieId), privé et
+   *  incompatible en signature (Story 17.3), pour ne toucher aucun de ses 17 appelants. */
+  notifyRealtimeChanged(): void {
+    this._changed.set({ partieId: REALTIME_WILDCARD });
   }
 
   async create(partieId: string, dto: CreateScenarioDto): Promise<ScenarioDto> {

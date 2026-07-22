@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
@@ -52,6 +53,7 @@ async function createComponent(
     participate: vi.fn(),
     linkSeancePoll: vi.fn(),
     listAll: vi.fn().mockResolvedValue([scenario]),
+    changed: signal<{ partieId: string } | null>(null),
   };
   const authSvc = { currentUser: () => ({ id: currentUserId }) };
   const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
@@ -541,6 +543,7 @@ describe('ScenarioReadDialog', () => {
         participate: vi.fn(),
         linkSeancePoll: vi.fn(),
         listAll: vi.fn().mockResolvedValue([fresh]),
+        changed: signal<{ partieId: string } | null>(null),
       };
       await TestBed.configureTestingModule({
         imports: [ScenarioReadDialog],
@@ -646,6 +649,7 @@ describe('ScenarioReadDialog', () => {
         participate: vi.fn(),
         linkSeancePoll: vi.fn(),
         listAll: vi.fn().mockResolvedValue([fresh]),
+        changed: signal<{ partieId: string } | null>(null),
       };
       await TestBed.configureTestingModule({
         imports: [ScenarioReadDialog],
@@ -680,6 +684,7 @@ describe('ScenarioReadDialog', () => {
         participate: vi.fn(),
         linkSeancePoll: vi.fn(),
         listAll: vi.fn().mockRejectedValue(new Error('network')),
+        changed: signal<{ partieId: string } | null>(null),
       };
       await TestBed.configureTestingModule({
         imports: [ScenarioReadDialog],

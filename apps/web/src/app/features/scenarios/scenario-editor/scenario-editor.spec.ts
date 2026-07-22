@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
@@ -65,6 +66,7 @@ async function createComponent(
     addSeance: vi.fn(),
     linkSeancePoll: vi.fn(),
     setResumeFin: vi.fn(),
+    changed: signal<{ partieId: string } | null>(null),
   };
   const characterSvc = { listByPartie: vi.fn().mockResolvedValue(characters) };
   const partiesSvc = { members: vi.fn().mockResolvedValue([]) };
@@ -589,6 +591,7 @@ describe('ScenarioEditor', () => {
         addSeance: vi.fn(),
         linkSeancePoll: vi.fn(),
         setResumeFin: vi.fn(),
+        changed: signal<{ partieId: string } | null>(null),
       };
       const partiesSvc = { members: vi.fn().mockResolvedValue([]) };
       const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
@@ -943,6 +946,7 @@ describe('ScenarioEditor', () => {
         close: vi.fn(),
         addSeance: vi.fn(),
         linkSeancePoll: vi.fn(),
+        changed: signal<{ partieId: string } | null>(null),
       };
       await TestBed.configureTestingModule({
         imports: [ScenarioEditor],
@@ -978,6 +982,7 @@ describe('ScenarioEditor', () => {
         close: vi.fn(),
         addSeance: vi.fn(),
         linkSeancePoll: vi.fn(),
+        changed: signal<{ partieId: string } | null>(null),
       };
       await TestBed.configureTestingModule({
         imports: [ScenarioEditor],
