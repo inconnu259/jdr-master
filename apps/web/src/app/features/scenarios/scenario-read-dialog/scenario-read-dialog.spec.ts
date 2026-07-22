@@ -38,6 +38,7 @@ async function createComponent(
     isMj = false,
     ownNotes = [] as unknown[],
     announcements = [] as AnnouncementDto[],
+    initialChanged = null as { partieId: string } | null,
   }: {
     partieKind?: PartieKind;
     characters?: CharacterDto[];
@@ -45,6 +46,7 @@ async function createComponent(
     isMj?: boolean;
     ownNotes?: unknown[];
     announcements?: AnnouncementDto[];
+    initialChanged?: { partieId: string } | null;
   } = {},
 ) {
   const dialogRef = { close: vi.fn() };
@@ -53,7 +55,7 @@ async function createComponent(
     participate: vi.fn(),
     linkSeancePoll: vi.fn(),
     listAll: vi.fn().mockResolvedValue([scenario]),
-    changed: signal<{ partieId: string } | null>(null),
+    changed: signal<{ partieId: string } | null>(initialChanged),
   };
   const authSvc = { currentUser: () => ({ id: currentUserId }) };
   const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
@@ -780,5 +782,49 @@ describe('ScenarioReadDialog', () => {
 
       expect(fixture.nativeElement.textContent).toContain('Visible du MJ');
     });
+  });
+
+  describe('Câblage temps réel (Story 19.2)', () => {
+    it('une notification ScenariosService.changed() recharge le scénario affiché (AC1)', async () => {
+      const { fixture, scenariosSvc } = await createComponent({ ...BASE, status: 'COURANT' });
+      scenariosSvc.listAll.mockResolvedValue([{ ...BASE, status: 'COURANT', title: 'Titre mis à jour ailleurs' }]);
+
+      scenariosSvc.changed.set({ partieId: BASE.partieId });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      // Note : pas d'assertion sur le nombre d'appels à listAll() — SeanceList (rendu en enfant,
+      // Story 19.1) réagit lui aussi, sans filtre de Partie, au même signal partagé, ce qui rend le
+      // comptage brut non fiable. On vérifie directement l'effet observable sur ScenarioReadDialog.
+      expect(fixture.nativeElement.textContent).toContain('Titre mis à jour ailleurs');
+    });
+
+    it('garde firstRun : un changed() déjà peuplé (correspondant à cette Partie) au montage ne déclenche PAS de refetch redondant', async () => {
+      // ScenariosService est providedIn:'root' — son signal _changed peut déjà porter une valeur
+      // correspondant à cette Partie AVANT l'ouverture du dialogue. Sans le garde firstRun, ce cas
+      // déclencherait un refetch en plus de celui déjà fait par ngOnInit(). Seul SeanceList
+      // (Story 19.1, sans garde par conception) doit alors contribuer un appel supplémentaire.
+      const { scenariosSvc } = await createComponent(
+        { ...BASE, status: 'COURANT' },
+        { initialChanged: { partieId: BASE.partieId } },
+      );
+
+      // 1 appel de ngOnInit() (ScenarioReadDialog) + 1 appel de l'effect() inconditionnel de
+      // SeanceList (Story 19.1) = 2. Un troisième appel signalerait que le garde firstRun n'a pas
+      // neutralisé la première exécution du nouvel effect() de ScenarioReadDialog.
+      expect(scenariosSvc.listAll.mock.calls.length).toBe(2);
+    });
+
+    // Note : pas de test « un événement pour une autre Partie ne recharge pas » au niveau de ce
+    // composant — SeanceList (rendu en enfant) réagit à CE MÊME signal sans filtre de Partie
+    // (Story 19.1, décision assumée : « refetch superflu inoffensif ») et propage systématiquement
+    // son propre refetch vers le parent via (seanceLinked)="onSeanceLinked($event)", qui écrase
+    // `this.scenario` sans condition. Un tel test échouerait pour une raison étrangère à l'effect()
+    // ajouté par cette story — la garde `matchesPartie()` elle-même est déjà exhaustivement testée en
+    // tant que fonction pure (Story 19.1, scenarios.service.spec.ts) et son câblage ici est prouvé par
+    // le test positif ci-dessus.
   });
 });

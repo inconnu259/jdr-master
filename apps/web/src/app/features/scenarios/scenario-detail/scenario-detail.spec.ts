@@ -7,6 +7,7 @@ import { vi } from 'vitest';
 import type { ScenarioDto } from '@master-jdr/shared';
 import { ScenarioDetail } from './scenario-detail';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { RealtimeService } from '../../../core/realtime/realtime.service';
 
 const SCENARIO: ScenarioDto = {
   id: 's1',
@@ -35,6 +36,9 @@ async function createComponent(
     // Story 19.1 (Task 4) : SeanceList (rendu transitivement) réagit désormais à ce signal.
     changed: signal<{ partieId: string } | null>(null),
   };
+  // Story 19.2 (Task 1) : ScenarioEditor (rendu transitivement) ouvre désormais sa propre
+  // connexion RealtimeService — mock direct, jsdom n'implémente pas EventSource.
+  const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
 
   const router = {
     getCurrentNavigation: () => ({ extras: { state: scenario ? { scenario } : undefined } }),
@@ -52,6 +56,7 @@ async function createComponent(
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: Router, useValue: router },
       { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 's1' } } } },
+      { provide: RealtimeService, useValue: realtimeSvc },
     ],
   }).compileComponents();
 
@@ -78,6 +83,7 @@ describe('ScenarioDetail', () => {
       ),
       changed: signal<{ partieId: string } | null>(null),
     };
+    const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
     const router = {
       getCurrentNavigation: () => ({ extras: { state: undefined } }),
       createUrlTree: vi.fn().mockReturnValue({}),
@@ -93,6 +99,7 @@ describe('ScenarioDetail', () => {
         { provide: ScenariosService, useValue: scenariosSvc },
         { provide: Router, useValue: router },
         { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 's1' } } } },
+        { provide: RealtimeService, useValue: realtimeSvc },
       ],
     }).compileComponents();
 

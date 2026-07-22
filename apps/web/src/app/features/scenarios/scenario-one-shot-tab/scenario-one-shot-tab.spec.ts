@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 import type { ScenarioDto } from '@master-jdr/shared';
 import { ScenarioOneShotTab } from './scenario-one-shot-tab';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { RealtimeService } from '../../../core/realtime/realtime.service';
 
 const SCENARIO: ScenarioDto = {
   id: 's1',
@@ -28,10 +29,17 @@ async function createComponent(drafts: ScenarioDto[] = [SCENARIO], all: Scenario
     listDocuments: vi.fn().mockResolvedValue([]),
     changed: signal<{ partieId: string } | null>(null),
   };
+  // Story 19.2 (Task 1) : ScenarioEditor (rendu transitivement) ouvre désormais sa propre
+  // connexion RealtimeService — mock direct, jsdom n'implémente pas EventSource.
+  const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioOneShotTab],
-    providers: [provideAnimationsAsync(), { provide: ScenariosService, useValue: scenariosSvc }],
+    providers: [
+      provideAnimationsAsync(),
+      { provide: ScenariosService, useValue: scenariosSvc },
+      { provide: RealtimeService, useValue: realtimeSvc },
+    ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(ScenarioOneShotTab);

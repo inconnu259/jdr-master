@@ -1,5 +1,6 @@
 import {
   Component,
+  DestroyRef,
   OnInit,
   computed,
   effect,
@@ -19,11 +20,12 @@ import type {
   ScenarioDto,
   UpdateScenarioDto,
 } from '@master-jdr/shared';
-import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { FieldEditPencil } from '../../characters/character-sheet/field-edit-pencil/field-edit-pencil';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
@@ -65,6 +67,8 @@ export class ScenarioEditor implements OnInit {
   private readonly partiesService = inject(PartiesService);
   private readonly announcementsService = inject(AnnouncementsService);
   protected readonly theme = inject(ThemeToneService);
+  private readonly realtime = inject(RealtimeService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly scenarioInput = input.required<ScenarioDto>({ alias: 'scenario' });
 
@@ -132,20 +136,7 @@ export class ScenarioEditor implements OnInit {
   constructor() {
     effect(() => {
       const s = this.scenarioInput();
-      // FR5 : capturer l'état précédent AVANT de l'écraser — inverser l'ordre lirait toujours la
-      // valeur qu'on vient d'écrire, désactivant silencieusement toute la logique ci-dessous.
-      // `untracked` évite de faire dépendre cet effect() de `this.scenario` (qu'il écrit lui-même
-      // juste après), ce qui créerait une boucle de ré-exécution.
-      const previous = untracked(() => this.scenario());
-      this.scenario.set(s);
-      // Un champ en cours de saisie ne doit pas être écrasé par un rechargement externe qui ne le
-      // touche pas — seule une valeur serveur effectivement différente remplace le brouillon local.
-      if (!previous || (previous.description ?? '') !== (s.description ?? '')) {
-        this.descriptionDraft.set(s.description ?? '');
-      }
-      if (!previous || (previous.resumeFin ?? '') !== (s.resumeFin ?? '')) {
-        this.resumeFinDraft.set(s.resumeFin ?? '');
-      }
+      this.applyScenario(s);
       // FR2 : un message d'erreur périmé ne doit pas survivre à un changement du scénario reçu
       // en entrée (équivalent au « remontage » pour ce composant qui n'est jamais réellement
       // démonté tant que la page reste ouverte).
@@ -157,13 +148,78 @@ export class ScenarioEditor implements OnInit {
       this.downloadError.set(null);
       this.resumeFinError.set(null);
     });
+
+    // Story 19.2 (AC1) : réagit au signal générique ScenariosService.changed (RealtimeService,
+    // Story 19.1). PIÈGE SPÉCIFIQUE à ce composant (contrairement à SeanceList, Story 19.1 Task 4,
+    // qui n'a AUCUN autre chemin de chargement) : ScenarioEditor a DÉJÀ un chargement dédié dans
+    // ngOnInit() (fresh fetch au montage). La première exécution d'un effect() a lieu à la
+    // CONSTRUCTION du composant — si `changed()` porte déjà une valeur correspondant à cette Partie
+    // (mutation locale antérieure dans la même session applicative, très plausible : ScenariosService
+    // est `providedIn: 'root'`, son signal `_changed` persiste tant que l'onglet reste ouvert), cette
+    // première exécution déclencherait un refetch REDONDANT avec celui que ngOnInit() fait juste
+    // après. Le flag `firstRun` neutralise uniquement cette toute première exécution ; toute
+    // ré-exécution ultérieure (un `.set()` réel sur le signal, jamais silencieux même à valeur
+    // apparemment égale) reste traitée normalement.
+    let firstRun = true;
+    effect(() => {
+      const change = this.scenarios.changed();
+      if (firstRun) {
+        firstRun = false;
+        return;
+      }
+      const partieId = untracked(() => this.scenarioInput().partieId);
+      if (!matchesPartie(change, partieId)) return;
+      untracked(() => void this.refreshScenario());
+    });
+  }
+
+  private applyScenario(s: ScenarioDto): void {
+    // FR5 : capturer l'état précédent AVANT de l'écraser — inverser l'ordre lirait toujours la
+    // valeur qu'on vient d'écrire, désactivant silencieusement toute la logique ci-dessous.
+    // `untracked` évite de faire dépendre cet effect() de `this.scenario` (qu'il écrit lui-même
+    // juste après), ce qui créerait une boucle de ré-exécution.
+    const previous = untracked(() => this.scenario());
+    this.scenario.set(s);
+    // Un champ en cours de saisie ne doit pas être écrasé par un rechargement externe qui ne le
+    // touche pas — seule une valeur serveur effectivement différente remplace le brouillon local.
+    if (!previous || (previous.description ?? '') !== (s.description ?? '')) {
+      this.descriptionDraft.set(s.description ?? '');
+    }
+    if (!previous || (previous.resumeFin ?? '') !== (s.resumeFin ?? '')) {
+      this.resumeFinDraft.set(s.resumeFin ?? '');
+    }
+  }
+
+  // Utilisée UNIQUEMENT par le second effect() ci-dessus (déclenchement temps réel) — PAS par le
+  // fetch initial de ngOnInit(), qui reste un `.set()` direct ciblé par scenarioInput().id : à
+  // l'instant où ngOnInit() s'exécute, l'effect() du constructeur qui peuple this.scenario() n'a
+  // pas nécessairement encore flush (les effects Angular ne s'exécutent pas synchronément à la
+  // construction du composant) — un garde `if (!current) return` y sauterait silencieusement le
+  // chargement initial. Cette méthode est sûre ici car un événement temps réel ne peut survenir
+  // qu'après le montage complet du composant, quand this.scenario() est déjà garanti non-null.
+  private async refreshScenario(): Promise<void> {
+    const current = this.scenario();
+    if (!current) return;
+    try {
+      const fresh = (await this.scenarios.listAll(this.scenarioInput().partieId)).find(
+        (s) => s.id === current.id,
+      );
+      if (fresh) this.applyScenario(fresh);
+    } catch {
+      // non-bloquant — le scénario affiché reste tel quel si le rafraîchissement échoue
+    }
   }
 
   async ngOnInit(): Promise<void> {
+    const partieId = this.scenarioInput().partieId;
+    this.realtime.connect(partieTopic(partieId));
+    this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(partieId)));
+
     // Le scénario reçu en input peut être un instantané mis en cache par l'appelant (ex. une
     // ScenarioTimeline chargée avant qu'un vote lié à une séance ait été tranché via le calendrier,
     // en dehors de cette page) — on recharge une version fraîche au montage plutôt que de faire
-    // confiance à l'input pour la durée de vie du composant.
+    // confiance à l'input pour la durée de vie du composant. Ne passe volontairement PAS par
+    // applyScenario()/refreshScenario() (piège de timing, cf. commentaire de refreshScenario()).
     try {
       const fresh = (await this.scenarios.listAll(this.scenarioInput().partieId)).find(
         (s) => s.id === this.scenarioInput().id,

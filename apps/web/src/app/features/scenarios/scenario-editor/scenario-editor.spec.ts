@@ -15,6 +15,7 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { makeAnnouncementDto } from '../../../core/announcements/announcement-dto.fixture';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 
@@ -54,6 +55,7 @@ async function createComponent(
   scenario: ScenarioDto = SCENARIO,
   characters: CharacterDto[] = [],
   announcements: AnnouncementDto[] = [],
+  initialChanged: { partieId: string } | null = null,
 ) {
   const scenariosSvc = {
     listAll: vi.fn().mockResolvedValue([scenario]),
@@ -66,12 +68,13 @@ async function createComponent(
     addSeance: vi.fn(),
     linkSeancePoll: vi.fn(),
     setResumeFin: vi.fn(),
-    changed: signal<{ partieId: string } | null>(null),
+    changed: signal<{ partieId: string } | null>(initialChanged),
   };
   const characterSvc = { listByPartie: vi.fn().mockResolvedValue(characters) };
   const partiesSvc = { members: vi.fn().mockResolvedValue([]) };
   const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
   const announcementsSvc = { listAll: vi.fn().mockResolvedValue(announcements) };
+  const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioEditor],
@@ -82,6 +85,7 @@ async function createComponent(
       { provide: PartiesService, useValue: partiesSvc },
       { provide: PollService, useValue: pollSvc },
       { provide: AnnouncementsService, useValue: announcementsSvc },
+      { provide: RealtimeService, useValue: realtimeSvc },
     ],
   }).compileComponents();
 
@@ -94,7 +98,7 @@ async function createComponent(
   }
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, scenariosSvc, characterSvc, announcementsSvc };
+  return { fixture, scenariosSvc, characterSvc, announcementsSvc, realtimeSvc };
 }
 
 describe('ScenarioEditor', () => {
@@ -596,6 +600,7 @@ describe('ScenarioEditor', () => {
       const partiesSvc = { members: vi.fn().mockResolvedValue([]) };
       const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
       const announcementsSvc = { listAll: vi.fn().mockResolvedValue([]) };
+      const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
 
       await TestBed.configureTestingModule({
         imports: [ScenarioEditor],
@@ -606,6 +611,7 @@ describe('ScenarioEditor', () => {
           { provide: PartiesService, useValue: partiesSvc },
           { provide: PollService, useValue: pollSvc },
           { provide: AnnouncementsService, useValue: announcementsSvc },
+          { provide: RealtimeService, useValue: realtimeSvc },
         ],
       }).compileComponents();
 
@@ -957,6 +963,7 @@ describe('ScenarioEditor', () => {
           { provide: PartiesService, useValue: { members: vi.fn().mockResolvedValue([]) } },
           { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
           { provide: AnnouncementsService, useValue: { listAll: vi.fn().mockResolvedValue([]) } },
+          { provide: RealtimeService, useValue: { connect: vi.fn(), disconnect: vi.fn() } },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(ScenarioEditor);
@@ -993,6 +1000,7 @@ describe('ScenarioEditor', () => {
           { provide: PartiesService, useValue: { members: vi.fn().mockResolvedValue([]) } },
           { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
           { provide: AnnouncementsService, useValue: { listAll: vi.fn().mockResolvedValue([]) } },
+          { provide: RealtimeService, useValue: { connect: vi.fn(), disconnect: vi.fn() } },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(ScenarioEditor);
@@ -1102,6 +1110,143 @@ describe('ScenarioEditor', () => {
 
       expect(comp.descriptionDraft()).toBe('Description initiale');
       expect(comp.resumeFinDraft()).toBe('Résumé initial');
+    });
+  });
+
+  describe('Câblage temps réel (Story 19.2)', () => {
+    it('connect() est appelé avec partieTopic(partieId) au montage (AC1)', async () => {
+      const { realtimeSvc } = await createComponent();
+      expect(realtimeSvc.connect).toHaveBeenCalledWith(partieTopic(SCENARIO.partieId));
+    });
+
+    it('disconnect() est appelé à la destruction du composant', async () => {
+      const { fixture, realtimeSvc } = await createComponent();
+      fixture.destroy();
+      expect(realtimeSvc.disconnect).toHaveBeenCalledWith(partieTopic(SCENARIO.partieId));
+    });
+
+    it('garde firstRun : un changed() déjà peuplé (correspondant à cette Partie) au montage ne déclenche PAS de refetch redondant', async () => {
+      // ScenariosService est providedIn:'root' — son signal _changed peut déjà porter une valeur
+      // correspondant à cette Partie AVANT le montage (mutation locale antérieure dans la même
+      // session). Sans le garde firstRun, ce cas déclencherait un refetch en plus de celui déjà fait
+      // par ngOnInit(). Seul SeanceList (Story 19.1, sans garde par conception) doit alors contribuer
+      // un appel supplémentaire — pas ScenarioEditor lui-même.
+      const { scenariosSvc } = await createComponent(
+        SCENARIO,
+        [],
+        [],
+        { partieId: SCENARIO.partieId },
+      );
+
+      // 1 appel de ngOnInit() (ScenarioEditor) + 1 appel de l'effect() inconditionnel de SeanceList
+      // (Story 19.1) = 2. Un troisième appel signalerait que le garde firstRun n'a pas neutralisé la
+      // première exécution du second effect() de ScenarioEditor.
+      expect(scenariosSvc.listAll.mock.calls.length).toBe(2);
+    });
+
+    it('une notification ScenariosService.changed() recharge le scénario affiché (AC1)', async () => {
+      const { fixture, scenariosSvc } = await createComponent();
+      scenariosSvc.listAll.mockResolvedValue([{ ...SCENARIO, title: 'Titre mis à jour ailleurs' }]);
+
+      scenariosSvc.changed.set({ partieId: SCENARIO.partieId });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      // Note : pas d'assertion sur le nombre d'appels à listAll() — SeanceList (rendu en enfant,
+      // Story 19.1) réagit lui aussi, sans filtre de Partie, au même signal partagé, ce qui rend le
+      // comptage brut non fiable. On vérifie directement l'effet observable sur ScenarioEditor.
+      const comp = fixture.componentInstance as any;
+      expect(comp.scenario().title).toBe('Titre mis à jour ailleurs');
+    });
+
+    // Note : pas de test « un événement pour une autre Partie ne recharge pas » au niveau de ce
+    // composant — SeanceList (rendu en enfant) réagit à CE MÊME signal sans filtre de Partie
+    // (Story 19.1, décision assumée : « refetch superflu inoffensif ») et propage systématiquement
+    // son propre refetch vers le parent via (seanceLinked)="onSeanceLinked($event)", qui écrase
+    // `this.scenario` sans condition. Un tel test échouerait pour une raison étrangère à l'effect()
+    // ajouté par cette story — la garde `matchesPartie()` elle-même est déjà exhaustivement testée en
+    // tant que fonction pure (Story 19.1, scenarios.service.spec.ts) et son câblage ici est prouvé par
+    // le test positif ci-dessus.
+
+    it('AC2 : événement temps réel qui ne touche pas description() → descriptionDraft conserve la saisie en cours', async () => {
+      const { fixture, scenariosSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      comp.descriptionDraft.set('brouillon en cours');
+      scenariosSvc.listAll.mockResolvedValue([{ ...SCENARIO, resumeFin: 'Résumé ajouté ailleurs' }]);
+
+      scenariosSvc.changed.set({ partieId: SCENARIO.partieId });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(comp.descriptionDraft()).toBe('brouillon en cours');
+    });
+
+    it('AC3 : événement temps réel avec description() différente → descriptionDraft est remplacé par la valeur serveur', async () => {
+      const { fixture, scenariosSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      comp.descriptionDraft.set('brouillon en cours');
+      scenariosSvc.listAll.mockResolvedValue([
+        { ...SCENARIO, description: 'Nouvelle description serveur' },
+      ]);
+
+      scenariosSvc.changed.set({ partieId: SCENARIO.partieId });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(comp.descriptionDraft()).toBe('Nouvelle description serveur');
+    });
+
+    it('AC2 : événement temps réel qui ne touche pas resumeFin() → resumeFinDraft conserve la saisie en cours', async () => {
+      const { fixture, scenariosSvc } = await createComponent({
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: null,
+      });
+      const comp = fixture.componentInstance as any;
+      comp.resumeFinDraft.set('brouillon de résumé en cours');
+      scenariosSvc.listAll.mockResolvedValue([
+        { ...SCENARIO, status: 'PASSE', resumeFin: null, description: 'Autre description' },
+      ]);
+
+      scenariosSvc.changed.set({ partieId: SCENARIO.partieId });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(comp.resumeFinDraft()).toBe('brouillon de résumé en cours');
+    });
+
+    it('AC3 : événement temps réel avec resumeFin() différent → resumeFinDraft est remplacé par la valeur serveur', async () => {
+      const { fixture, scenariosSvc } = await createComponent({
+        ...SCENARIO,
+        status: 'PASSE',
+        resumeFin: null,
+      });
+      const comp = fixture.componentInstance as any;
+      comp.resumeFinDraft.set('brouillon de résumé en cours');
+      scenariosSvc.listAll.mockResolvedValue([
+        { ...SCENARIO, status: 'PASSE', resumeFin: 'Résumé rédigé ailleurs' },
+      ]);
+
+      scenariosSvc.changed.set({ partieId: SCENARIO.partieId });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(comp.resumeFinDraft()).toBe('Résumé rédigé ailleurs');
     });
   });
 });

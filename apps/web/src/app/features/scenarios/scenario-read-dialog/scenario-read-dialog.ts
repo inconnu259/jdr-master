@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatDialogModule, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -11,7 +11,7 @@ import type {
   ScenarioDto,
 } from '@master-jdr/shared';
 import { AuthService } from '../../../core/auth/auth.service';
-import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
@@ -116,14 +116,30 @@ export class ScenarioReadDialog implements OnInit {
   // AD-8 : signal `pending` local, même pattern que `SeanceList.pollActionPending`.
   protected readonly participatePending = signal(false);
 
-  // Le scénario reçu via MAT_DIALOG_DATA peut être un instantané mis en cache par l'appelant (ex.
-  // ScenarioTimeline chargée avant qu'un vote lié à une séance ait été tranché via le calendrier, en
-  // dehors de ce dialogue) — on recharge une version fraîche à l'ouverture plutôt que de faire
-  // confiance à l'instantané pour la durée de vie du dialogue.
-  async ngOnInit(): Promise<void> {
+  constructor() {
+    // Story 19.2 (AC1) : réagit au signal générique ScenariosService.changed (RealtimeService,
+    // Story 19.1). ScenarioReadDialog n'est ouvert QUE via MatDialog.open() depuis ScenarioTimeline
+    // (vérifié empiriquement), toujours enfant de PartieDetail qui maintient déjà sa propre
+    // connexion SSE (Story 18.3) — ce dialogue réutilise ce signal sans ouvrir sa propre connexion
+    // (même raisonnement que SeanceList, Story 19.1 Task 4). Garde `firstRun` : même piège que
+    // ScenarioEditor (Task 1) — ngOnInit() a son propre fetch initial juste en dessous, la première
+    // exécution de cet effect() (à la construction) doit être ignorée pour ne pas le doubler.
+    let firstRun = true;
+    effect(() => {
+      const change = this.scenarios.changed();
+      if (firstRun) {
+        firstRun = false;
+        return;
+      }
+      if (!matchesPartie(change, this.data.scenario.partieId)) return;
+      untracked(() => void this.refreshScenario());
+    });
+  }
+
+  private async refreshScenario(): Promise<void> {
     try {
       const fresh = (await this.scenarios.listAll(this.data.scenario.partieId)).find(
-        (s) => s.id === this.data.scenario.id,
+        (s) => s.id === this.scenario().id,
       );
       if (fresh) {
         this.scenario.set(fresh);
@@ -132,8 +148,16 @@ export class ScenarioReadDialog implements OnInit {
         this.participantError.set(null);
       }
     } catch {
-      // Le scénario reçu en donnée de dialogue reste affiché tel quel si le rafraîchissement échoue.
+      // non-bloquant — le scénario affiché reste tel quel si le rafraîchissement échoue
     }
+  }
+
+  // Le scénario reçu via MAT_DIALOG_DATA peut être un instantané mis en cache par l'appelant (ex.
+  // ScenarioTimeline chargée avant qu'un vote lié à une séance ait été tranché via le calendrier, en
+  // dehors de ce dialogue) — on recharge une version fraîche à l'ouverture plutôt que de faire
+  // confiance à l'instantané pour la durée de vie du dialogue.
+  async ngOnInit(): Promise<void> {
+    await this.refreshScenario();
 
     const owner = this.ownCharacter();
     if (owner) {
