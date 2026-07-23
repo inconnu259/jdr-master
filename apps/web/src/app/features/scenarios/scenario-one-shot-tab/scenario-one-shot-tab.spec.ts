@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 import type { ScenarioDto } from '@master-jdr/shared';
 import { ScenarioOneShotTab } from './scenario-one-shot-tab';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
-import { RealtimeService } from '../../../core/realtime/realtime.service';
+import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 
 const SCENARIO: ScenarioDto = {
   id: 's1',
@@ -21,14 +21,21 @@ const SCENARIO: ScenarioDto = {
   seances: [],
 };
 
-async function createComponent(drafts: ScenarioDto[] = [SCENARIO], all: ScenarioDto[] = []) {
-  const scenariosSvc = {
+function makeScenariosService(drafts: ScenarioDto[] = [SCENARIO], all: ScenarioDto[] = []) {
+  return {
     listDrafts: vi.fn().mockResolvedValue(drafts),
     listAll: vi.fn().mockResolvedValue(all),
     open: vi.fn().mockResolvedValue({ ...SCENARIO, status: 'A_VENIR' }),
     listDocuments: vi.fn().mockResolvedValue([]),
     changed: signal<{ partieId: string } | null>(null),
   };
+}
+
+async function createComponent(
+  drafts: ScenarioDto[] = [SCENARIO],
+  all: ScenarioDto[] = [],
+  scenariosSvc = makeScenariosService(drafts, all),
+) {
   // Story 19.2 (Task 1) : ScenarioEditor (rendu transitivement) ouvre désormais sa propre
   // connexion RealtimeService — mock direct, jsdom n'implémente pas EventSource.
   const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
@@ -51,7 +58,7 @@ async function createComponent(drafts: ScenarioDto[] = [SCENARIO], all: Scenario
   }
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, scenariosSvc };
+  return { fixture, scenariosSvc, realtimeSvc };
 }
 
 describe('ScenarioOneShotTab', () => {
@@ -95,5 +102,97 @@ describe('ScenarioOneShotTab', () => {
     scenariosSvc.open.mockRejectedValue(new Error('fail'));
     await comp.openToPlayers();
     expect(comp.openError()).toBeTruthy();
+  });
+
+  describe('câblage temps réel (Story 21.2, AC2)', () => {
+    it('connect() est appelé avec partieTopic(partieId) au montage', async () => {
+      const { realtimeSvc } = await createComponent();
+      expect(realtimeSvc.connect).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('connect() est appelé même sans scénario trouvé (cas notFound)', async () => {
+      const { realtimeSvc } = await createComponent([], []);
+      expect(realtimeSvc.connect).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('disconnect() est appelé à la destruction du composant', async () => {
+      const { fixture, realtimeSvc } = await createComponent();
+      fixture.destroy();
+      expect(realtimeSvc.disconnect).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('revue de code : disconnect() vise le partieId capturé à la connexion, pas sa valeur au moment de la destruction', async () => {
+      const { fixture, realtimeSvc } = await createComponent();
+      fixture.componentRef.setInput('partieId', 'p2');
+      fixture.detectChanges();
+
+      fixture.destroy();
+
+      expect(realtimeSvc.disconnect).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeSvc.disconnect).not.toHaveBeenCalledWith(partieTopic('p2'));
+    });
+
+    it('revue de code : un rechargement réussi via changed() efface une erreur de chargement précédente', async () => {
+      const scenariosSvc = makeScenariosService([SCENARIO], []);
+      scenariosSvc.listDrafts.mockRejectedValueOnce(new Error('network'));
+      const { fixture } = await createComponent([SCENARIO], [], scenariosSvc);
+      const comp = fixture.componentInstance as any;
+      expect(comp.loadError()).toBeTruthy();
+
+      scenariosSvc.changed.set({ partieId: 'p1' });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(comp.loadError()).toBeNull();
+      expect(comp.scenario()?.id).toBe(SCENARIO.id);
+    });
+
+    it('changed() pour cette Partie recharge le scénario — le bouton « Ouvrir aux joueurs » disparaît si publié ailleurs', async () => {
+      const scenariosSvc = makeScenariosService([SCENARIO], []);
+      const { fixture } = await createComponent([SCENARIO], [], scenariosSvc);
+      const comp = fixture.componentInstance as any;
+      expect(fixture.nativeElement.textContent).toContain('Ouvrir aux joueurs');
+
+      // Le scénario a été publié par un co-MJ ailleurs : il ne remonte plus dans listDrafts().
+      const opened = { ...SCENARIO, status: 'A_VENIR' as const };
+      scenariosSvc.listDrafts.mockResolvedValue([]);
+      scenariosSvc.listAll.mockResolvedValue([opened]);
+
+      scenariosSvc.changed.set({ partieId: 'p1' });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+      fixture.detectChanges();
+
+      expect(comp.scenario()?.status).toBe('A_VENIR');
+      expect(fixture.nativeElement.textContent).not.toContain('Ouvrir aux joueurs');
+    });
+
+    it("changed() pour une autre Partie ne déclenche AUCUN rechargement", async () => {
+      const scenariosSvc = makeScenariosService([SCENARIO], []);
+      const { fixture } = await createComponent([SCENARIO], [], scenariosSvc);
+
+      scenariosSvc.changed.set({ partieId: 'autre-partie' });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(scenariosSvc.listDrafts).toHaveBeenCalledTimes(1);
+    });
+
+    it("garde firstRun : un changed() déjà non-nul pour cette Partie au montage ne déclenche PAS de refetch redondant", async () => {
+      const scenariosSvc = makeScenariosService([SCENARIO], []);
+      scenariosSvc.changed.set({ partieId: 'p1' });
+      await createComponent([SCENARIO], [], scenariosSvc);
+
+      expect(scenariosSvc.listDrafts).toHaveBeenCalledTimes(1);
+    });
   });
 });
