@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { vi } from 'vitest';
 import type { ScenarioDto } from '@master-jdr/shared';
@@ -6,6 +7,7 @@ import { AnnouncementFormComponent } from './announcement-form';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 
 function makeScenario(overrides: Partial<ScenarioDto> = {}): ScenarioDto {
   return {
@@ -25,7 +27,10 @@ function makeScenario(overrides: Partial<ScenarioDto> = {}): ScenarioDto {
 }
 
 function makeScenariosService(scenarios: ScenarioDto[]) {
-  return { listAll: vi.fn().mockResolvedValue(scenarios) };
+  return {
+    listAll: vi.fn().mockResolvedValue(scenarios),
+    changed: signal<{ partieId: string } | null>(null),
+  };
 }
 
 function makeAnnouncementsService() {
@@ -54,14 +59,16 @@ function makeThemeService() {
 async function createComponent(
   scenarios: ScenarioDto[] = [],
   announcementsSvc = makeAnnouncementsService(),
+  scenariosSvc = makeScenariosService(scenarios),
 ) {
-  const scenariosSvc = makeScenariosService(scenarios);
+  const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
   await TestBed.configureTestingModule({
     imports: [AnnouncementFormComponent],
     providers: [
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: AnnouncementsService, useValue: announcementsSvc },
       { provide: ThemeToneService, useValue: makeThemeService() },
+      { provide: RealtimeService, useValue: realtimeSvc },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(AnnouncementFormComponent);
@@ -69,7 +76,7 @@ async function createComponent(
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, scenariosSvc, announcementsSvc };
+  return { fixture, scenariosSvc, announcementsSvc, realtimeSvc };
 }
 
 describe('AnnouncementFormComponent', () => {
@@ -154,13 +161,17 @@ describe('AnnouncementFormComponent', () => {
   });
 
   it('revue de code : échec de listAll() au chargement → error() renseigné, aucune exception non gérée', async () => {
-    const scenariosSvc = { listAll: vi.fn().mockRejectedValue(new Error('network')) };
+    const scenariosSvc = {
+      listAll: vi.fn().mockRejectedValue(new Error('network')),
+      changed: signal<{ partieId: string } | null>(null),
+    };
     await TestBed.configureTestingModule({
       imports: [AnnouncementFormComponent],
       providers: [
         { provide: ScenariosService, useValue: scenariosSvc },
         { provide: AnnouncementsService, useValue: makeAnnouncementsService() },
         { provide: ThemeToneService, useValue: makeThemeService() },
+        { provide: RealtimeService, useValue: { connect: vi.fn(), disconnect: vi.fn() } },
       ],
     }).compileComponents();
     const fixture = TestBed.createComponent(AnnouncementFormComponent);
@@ -185,5 +196,103 @@ describe('AnnouncementFormComponent', () => {
     expect(component['text']()).toBe('Une annonce');
     expect(component['selectedScenarioId']()).toBe('s1');
     expect(component['publishing']()).toBe(false);
+  });
+
+  describe('câblage temps réel (Story 21.3, AC1)', () => {
+    it('connect() est appelé avec partieTopic(partieId) au montage', async () => {
+      const { realtimeSvc } = await createComponent();
+      expect(realtimeSvc.connect).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('disconnect() est appelé à la destruction du composant', async () => {
+      const { fixture, realtimeSvc } = await createComponent();
+      fixture.destroy();
+      expect(realtimeSvc.disconnect).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('revue de code : un rechargement réussi via changed() efface une erreur de chargement précédente', async () => {
+      const scenariosSvc = {
+        listAll: vi.fn().mockRejectedValueOnce(new Error('network')),
+        changed: signal<{ partieId: string } | null>(null),
+      };
+      const { fixture } = await createComponent([], makeAnnouncementsService(), scenariosSvc as any);
+      const comp = fixture.componentInstance as any;
+      expect(comp.error()).toBeTruthy();
+
+      scenariosSvc.listAll.mockResolvedValue([makeScenario({ status: 'COURANT' })]);
+      scenariosSvc.changed.set({ partieId: 'p1' });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(comp.error()).toBeNull();
+    });
+
+    it('revue de code : un rechargement via changed() désélectionne un scénario devenu inéligible', async () => {
+      const scenariosSvc = makeScenariosService([makeScenario({ id: 's1', status: 'COURANT' })]);
+      const { fixture } = await createComponent(
+        [makeScenario({ id: 's1', status: 'COURANT' })],
+        makeAnnouncementsService(),
+        scenariosSvc,
+      );
+      const comp = fixture.componentInstance as any;
+      comp.selectedScenarioId.set('s1');
+
+      // Le scénario sélectionné a été repassé en BROUILLON par un autre MJ.
+      scenariosSvc.listAll.mockResolvedValue([makeScenario({ id: 's1', status: 'BROUILLON' })]);
+      scenariosSvc.changed.set({ partieId: 'p1' });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(comp.selectedScenarioId()).toBeNull();
+    });
+
+    it('changed() pour cette Partie recharge les scénarios et met à jour le sélecteur', async () => {
+      const scenariosSvc = makeScenariosService([]);
+      const { fixture } = await createComponent([], makeAnnouncementsService(), scenariosSvc);
+
+      const nowCourant = makeScenario({ id: 's-nouveau', title: 'Nouveau chapitre', status: 'COURANT' });
+      scenariosSvc.listAll.mockResolvedValue([nowCourant]);
+
+      scenariosSvc.changed.set({ partieId: 'p1' });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(scenariosSvc.listAll).toHaveBeenCalledTimes(2);
+      const optionTexts = fixture.debugElement
+        .queryAll(By.css('option'))
+        .map((el) => (el.nativeElement as HTMLOptionElement).textContent?.trim());
+      expect(optionTexts).toContain('Nouveau chapitre');
+    });
+
+    it("changed() pour une autre Partie ne déclenche AUCUN rechargement", async () => {
+      const scenariosSvc = makeScenariosService([]);
+      const { fixture } = await createComponent([], makeAnnouncementsService(), scenariosSvc);
+
+      scenariosSvc.changed.set({ partieId: 'autre-partie' });
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(scenariosSvc.listAll).toHaveBeenCalledTimes(1);
+    });
+
+    it("garde firstRun : un changed() déjà non-nul pour cette Partie au montage ne déclenche PAS de refetch redondant", async () => {
+      const scenariosSvc = makeScenariosService([]);
+      scenariosSvc.changed.set({ partieId: 'p1' });
+      await createComponent([], makeAnnouncementsService(), scenariosSvc);
+
+      expect(scenariosSvc.listAll).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -1,10 +1,22 @@
-import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import type { AnnouncementDto, ScenarioDto } from '@master-jdr/shared';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
-import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 
 @Component({
   selector: 'app-announcement-form',
@@ -19,6 +31,8 @@ export class AnnouncementFormComponent implements OnInit {
   private readonly scenariosSvc = inject(ScenariosService);
   private readonly announcementsSvc = inject(AnnouncementsService);
   protected readonly theme = inject(ThemeToneService);
+  private readonly realtime = inject(RealtimeService);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly scenarios = signal<ScenarioDto[]>([]);
   // AC4/AD-6 : filtrage frontend uniquement — jamais BROUILLON/A_VENIR dans le sélecteur (annoncer
@@ -34,7 +48,31 @@ export class AnnouncementFormComponent implements OnInit {
   protected readonly justPublished = signal(false);
   protected readonly error = signal<string | null>(null);
 
+  constructor() {
+    // Story 21.3 (AC1) : réagit au signal générique ScenariosService.changed (RealtimeService) —
+    // un scénario qui change de statut (ex. passe COURANT) pendant que le formulaire reste ouvert
+    // doit apparaître dans le sélecteur sans rechargement de page. Garde firstRun (même piège que
+    // ScenarioEditor/Dashboard/ScenarioOneShotTab, Stories 19.2/21.1/21.2) : ScenariosService est
+    // providedIn: 'root', son _changed peut déjà porter une valeur avant le montage.
+    let firstRun = true;
+    effect(() => {
+      const change = this.scenariosSvc.changed();
+      if (firstRun) {
+        firstRun = false;
+        return;
+      }
+      if (!matchesPartie(change, this.partieId())) return;
+      untracked(() => void this.loadScenarios());
+    });
+  }
+
   ngOnInit(): void {
+    // Revue de code Story 21.2 : capturer partieId() une seule fois ici plutôt que de relire le
+    // signal à la destruction — si l'input venait à changer sans réinstanciation du composant,
+    // disconnect() fermerait alors la mauvaise connexion.
+    const partieId = this.partieId();
+    this.realtime.connect(partieTopic(partieId));
+    this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(partieId)));
     void this.loadScenarios();
   }
 
@@ -43,6 +81,15 @@ export class AnnouncementFormComponent implements OnInit {
   private async loadScenarios(): Promise<void> {
     try {
       this.scenarios.set(await this.scenariosSvc.listAll(this.partieId()));
+      this.error.set(null);
+      // Revue de code (Story 21.3) : un rechargement temps réel peut faire disparaître le scénario
+      // actuellement sélectionné du sélecteur (ex. un autre MJ le repasse en BROUILLON, ou le
+      // supprime) — sans ce garde, onSubmit() soumettrait un scenarioId qui n'apparaît plus dans
+      // eligibleScenarios(). Lu après le .set() ci-dessus : le computed reflète déjà la nouvelle liste.
+      const selected = this.selectedScenarioId();
+      if (selected && !this.eligibleScenarios().some((s) => s.id === selected)) {
+        this.selectedScenarioId.set(null);
+      }
     } catch {
       this.error.set('Impossible de charger les scénarios. Réessayez.');
     }
