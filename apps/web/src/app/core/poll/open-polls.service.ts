@@ -22,6 +22,12 @@ export class OpenPollsService {
     });
   }
 
+  /** Contrat public AD-4 (zéro argument) — RealtimeService l'appelle sur un événement SSE
+   *  partie:{id}. Réutilise directement refresh(), déjà protégé contre la concurrence via `seq`. */
+  notifyChanged(): void {
+    void this.refresh();
+  }
+
   private async refresh(): Promise<void> {
     const parties = this.modeSvc.playerParties();
     const seq = ++this.seq;

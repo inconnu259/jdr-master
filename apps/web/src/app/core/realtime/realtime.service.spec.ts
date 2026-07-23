@@ -7,6 +7,8 @@ import { ScenariosService } from '../scenarios/scenarios.service';
 import { CharacterService } from '../characters/character.service';
 import { HommeDragonService } from '../homme-dragon/homme-dragon.service';
 import { InvitationsService } from '../invitations/invitations.service';
+import { OpenPollsService } from '../poll/open-polls.service';
+import { ModeService } from '../mode/mode.service';
 import { RealtimeService, matchingHandlers, partieTopic, userTopic } from './realtime.service';
 
 class FakeEventSource {
@@ -65,6 +67,8 @@ describe('RealtimeService', () => {
   let charactersSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
   let hommeDragonSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
   let invitationsSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
+  let openPollsSvc: { notifyChanged: ReturnType<typeof vi.fn> };
+  let modeSvc: { notifyChanged: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     originalEventSource = (globalThis as any).EventSource;
@@ -83,6 +87,10 @@ describe('RealtimeService', () => {
     // Story 21.1 (Task 3) : RealtimeService injecte désormais aussi InvitationsService (cinquième
     // entrée dans handlers, PREMIÈRE au préfixe 'user:'). Mock direct, comme PartiesService.
     invitationsSvc = { notifyChanged: vi.fn(), changed: signal(0) };
+    // Story 22.1 : RealtimeService injecte désormais aussi OpenPollsService/ModeService (sixième et
+    // septième entrées dans handlers, mêmes préfixe 'partie:' que PartiesService). Mocks directs.
+    openPollsSvc = { notifyChanged: vi.fn() };
+    modeSvc = { notifyChanged: vi.fn() };
     // RealtimeService injecte désormais PartiesService (Story 18.3, Task 4) — PartiesService
     // injecte lui-même HttpClient, jamais fourni par ce module de test isolé. Mock direct : ce
     // test ne porte pas sur les appels HTTP de PartiesService.
@@ -93,6 +101,8 @@ describe('RealtimeService', () => {
         { provide: CharacterService, useValue: charactersSvc },
         { provide: HommeDragonService, useValue: hommeDragonSvc },
         { provide: InvitationsService, useValue: invitationsSvc },
+        { provide: OpenPollsService, useValue: openPollsSvc },
+        { provide: ModeService, useValue: modeSvc },
       ],
     });
     service = TestBed.inject(RealtimeService);
@@ -160,6 +170,19 @@ describe('RealtimeService', () => {
     expect(scenariosSvc.notifyRealtimeChanged).toHaveBeenCalledTimes(1);
     expect(charactersSvc.notifyChanged).toHaveBeenCalledTimes(1);
     expect(hommeDragonSvc.notifyChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("'open' déclenche AUSSI notifyChanged() sur OpenPollsService ET ModeService — six/sept handlers au même préfixe (Story 22.1, AC1/AC2)", () => {
+    service.connect(partieTopic('p1'));
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(scenariosSvc.notifyRealtimeChanged).toHaveBeenCalledTimes(1);
+    expect(charactersSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(hommeDragonSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(openPollsSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(modeSvc.notifyChanged).toHaveBeenCalledTimes(1);
   });
 
   it("un topic 'user:' ne déclenche PAS notifyChanged() de PartiesService (préfixe non mappé)", () => {

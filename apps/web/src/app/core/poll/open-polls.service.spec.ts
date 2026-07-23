@@ -179,4 +179,20 @@ describe('OpenPollsService', () => {
     expect(svc.count()).toBe(1);
     expect(svc.openPolls().get('p1')?.id).toBe('poll-b');
   });
+
+  it("notifyChanged() (Story 22.1, AC1) recharge sans changement de playerParties()", async () => {
+    const listAll = vi.fn().mockResolvedValue([]);
+    const { svc, fixture } = await createHarness([makeParty('p1')], listAll);
+    expect(svc.count()).toBe(0);
+
+    listAll.mockResolvedValue(wrapPollsAsScenarios([makePoll('p1')]));
+    svc.notifyChanged();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(svc.count()).toBe(1);
+    expect(svc.openPolls().has('p1')).toBe(true);
+  });
 });

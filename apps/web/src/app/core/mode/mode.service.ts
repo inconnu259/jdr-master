@@ -40,6 +40,15 @@ export class ModeService {
     }
   }
 
+  /** Contrat public AD-4 (zéro argument) — RealtimeService l'appelle sur un événement SSE
+   *  partie:{id}. Pas d'effect() interne existant (contrairement à ce que suggère
+   *  ARCHITECTURE-SPINE.md AD-4 point 3, qui décrit en réalité l'effect() d'OpenPollsService) —
+   *  relance directement les deux méthodes de rafraîchissement publiques déjà existantes. */
+  notifyChanged(): void {
+    void this.refreshMjParties();
+    void this.refreshPlayerParties();
+  }
+
   private readStoredMode(): Mode {
     return localStorage.getItem(KEY) === 'mj' ? 'mj' : 'joueur';
   }

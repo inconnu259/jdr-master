@@ -198,7 +198,7 @@ async function createFixture(
         useValue: makePartiesService(partie, options.members ?? [], options.links ?? []),
       },
       { provide: BreakpointObserver, useValue: makeBreakpointObserver(options.desktop ?? true) },
-      { provide: ModeService, useValue: { refreshMjParties: vi.fn() } },
+      { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
       {
         provide: CharacterService,
         useValue: {
@@ -508,7 +508,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
         { provide: AuthService, useValue: makeAuthService(PLAYER_ID) },
         { provide: PartiesService, useValue: makePartiesService(makePartie(), members, []) },
         { provide: BreakpointObserver, useValue: dynamicBreakpointObserver },
-        { provide: ModeService, useValue: { refreshMjParties: vi.fn() } },
+        { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
         {
           provide: CharacterService,
           useValue: {
@@ -1172,7 +1172,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         { provide: AuthService, useValue: makeAuthService(MJ_ID) },
         { provide: PartiesService, useValue: partiesSvc },
         { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
-        { provide: ModeService, useValue: { refreshMjParties: vi.fn() } },
+        { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
         {
           provide: CharacterService,
           useValue: {
