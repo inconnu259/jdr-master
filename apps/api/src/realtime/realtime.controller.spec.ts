@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { RealtimeController } from './realtime.controller';
 import { PartiesService } from '../parties/parties.service';
-import { RealtimeEventsService, partieTopic } from './realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from './realtime-events.service';
 
 function makeParties() {
   return { getViewable: jest.fn() };
@@ -60,5 +60,24 @@ describe('RealtimeController', () => {
     realtimeEvents.emit(partieTopic('autre-id'));
 
     expect(receivedFromOther).toEqual([]);
+  });
+
+  it("un utilisateur authentifié reçoit les événements de son propre topic utilisateur (AC1, Story 21.1)", async () => {
+    const stream = controller.userEvents({ id: 'u1' } as any);
+    const received = firstValueFrom(stream.pipe(take(1)));
+
+    realtimeEvents.emit(userTopic('u1'));
+
+    await expect(received).resolves.toEqual({ data: {} });
+  });
+
+  it("emit() sur le topic d'un AUTRE utilisateur ne fait remonter aucun MessageEvent (AC1, Story 21.1)", () => {
+    const stream = controller.userEvents({ id: 'u1' } as any);
+    const received: unknown[] = [];
+    stream.subscribe((e) => received.push(e));
+
+    realtimeEvents.emit(userTopic('autre-utilisateur'));
+
+    expect(received).toEqual([]);
   });
 });

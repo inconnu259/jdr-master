@@ -5,7 +5,7 @@ import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import { PartiesService } from '../parties/parties.service';
-import { RealtimeEventsService, partieTopic } from './realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from './realtime-events.service';
 
 // Pas de préfixe de classe (contrairement aux autres controllers `parties/:id/...` du projet) :
 // ce fichier portera aussi GET /users/me/events (Story 21.1), un préfixe distinct dans le même
@@ -28,5 +28,10 @@ export class RealtimeController {
     return this.realtimeEvents
       .subscribe(partieTopic(id))
       .pipe(map(() => ({ data: {} })));
+  }
+
+  @Sse('users/me/events')
+  userEvents(@CurrentUser() user: AuthUser): Observable<MessageEvent> {
+    return this.realtimeEvents.subscribe(userTopic(user.id)).pipe(map(() => ({ data: {} })));
   }
 }

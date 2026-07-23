@@ -6,6 +6,7 @@ import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { CharacterService } from '../characters/character.service';
 import { HommeDragonService } from '../homme-dragon/homme-dragon.service';
+import { InvitationsService } from '../invitations/invitations.service';
 import { RealtimeService, matchingHandlers, partieTopic, userTopic } from './realtime.service';
 
 class FakeEventSource {
@@ -63,6 +64,7 @@ describe('RealtimeService', () => {
   let scenariosSvc: { notifyRealtimeChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<{ partieId: string } | null>> };
   let charactersSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
   let hommeDragonSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
+  let invitationsSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
 
   beforeEach(() => {
     originalEventSource = (globalThis as any).EventSource;
@@ -78,6 +80,9 @@ describe('RealtimeService', () => {
     // Story 20.2 (Task 2) : RealtimeService injecte désormais aussi HommeDragonService (quatrième
     // entrée dans handlers, même préfixe 'partie:'). Mock direct, comme PartiesService.
     hommeDragonSvc = { notifyChanged: vi.fn(), changed: signal(0) };
+    // Story 21.1 (Task 3) : RealtimeService injecte désormais aussi InvitationsService (cinquième
+    // entrée dans handlers, PREMIÈRE au préfixe 'user:'). Mock direct, comme PartiesService.
+    invitationsSvc = { notifyChanged: vi.fn(), changed: signal(0) };
     // RealtimeService injecte désormais PartiesService (Story 18.3, Task 4) — PartiesService
     // injecte lui-même HttpClient, jamais fourni par ce module de test isolé. Mock direct : ce
     // test ne porte pas sur les appels HTTP de PartiesService.
@@ -87,6 +92,7 @@ describe('RealtimeService', () => {
         { provide: ScenariosService, useValue: scenariosSvc },
         { provide: CharacterService, useValue: charactersSvc },
         { provide: HommeDragonService, useValue: hommeDragonSvc },
+        { provide: InvitationsService, useValue: invitationsSvc },
       ],
     });
     service = TestBed.inject(RealtimeService);
@@ -162,6 +168,23 @@ describe('RealtimeService', () => {
     FakeEventSource.instances[0].emit('open');
 
     expect(partiesSvc.notifyChanged).not.toHaveBeenCalled();
+  });
+
+  it("'open' sur un topic 'user:' déclenche notifyChanged() sur InvitationsService (AC1, Story 21.1)", () => {
+    service.connect(userTopic('u1'));
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(invitationsSvc.notifyChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("un topic 'partie:' ne déclenche PAS notifyChanged() sur InvitationsService (préfixe différent, Story 21.1)", () => {
+    service.connect(partieTopic('p1'));
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(invitationsSvc.notifyChanged).not.toHaveBeenCalled();
   });
 
   it('disconnect() ferme la connexion EventSource sous-jacente (AC5)', () => {

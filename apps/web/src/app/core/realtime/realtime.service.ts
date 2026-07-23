@@ -4,6 +4,7 @@ import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { CharacterService } from '../characters/character.service';
 import { HommeDragonService } from '../homme-dragon/homme-dragon.service';
+import { InvitationsService } from '../invitations/invitations.service';
 
 export function partieTopic(partieId: string): string {
   return `partie:${partieId}`;
@@ -42,17 +43,21 @@ export class RealtimeService {
   private readonly scenarios = inject(ScenariosService);
   private readonly characters = inject(CharacterService);
   private readonly hommeDragon = inject(HommeDragonService);
+  private readonly invitations = inject(InvitationsService);
 
   // Table de correspondance topic-prefix -> services à notifier (AD-3), câblée ici, dans
   // RealtimeService lui-même (jamais par le composant appelant connect()/disconnect()) —
   // première entrée réelle (Story 18.3), étendue Story 19.1 (deuxième entrée), Story 20.1
-  // (troisième entrée) puis Story 20.2 (quatrième entrée) au MÊME préfixe (plusieurs handlers
-  // peuvent partager un préfixe — matchingHandlers les appelle tous).
+  // (troisième entrée), Story 20.2 (quatrième entrée) puis Story 21.1 (cinquième entrée, PREMIÈRE
+  // au préfixe 'user:') — plusieurs handlers peuvent partager un préfixe (matchingHandlers les
+  // appelle tous), et matchingHandlers()/onSignal() sont déjà génériques par préfixe (Story 18.2),
+  // aucune adaptation nécessaire pour ce nouveau préfixe.
   private readonly handlers: TopicHandler[] = [
     { prefix: 'partie:', notifyChanged: () => this.parties.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.scenarios.notifyRealtimeChanged() },
     { prefix: 'partie:', notifyChanged: () => this.characters.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.hommeDragon.notifyChanged() },
+    { prefix: 'user:', notifyChanged: () => this.invitations.notifyChanged() },
   ];
 
   // Une entrée par connexion active (pas par topic) — deux connect() sur le même topic ouvrent
