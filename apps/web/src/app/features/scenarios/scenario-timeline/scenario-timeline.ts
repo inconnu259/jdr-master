@@ -15,6 +15,7 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { MatDialog } from '@angular/material/dialog';
+import { MatButtonModule } from '@angular/material/button';
 import { Router } from '@angular/router';
 import type { CharacterDto, PartieKind, ScenarioDto, SeanceDto } from '@master-jdr/shared';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
@@ -65,7 +66,7 @@ function buildNodes(scenarios: ScenarioDto[], includeBrouillon: boolean): Timeli
 
 @Component({
   selector: 'app-scenario-timeline',
-  imports: [ScenarioStatusBadge],
+  imports: [ScenarioStatusBadge, MatButtonModule],
   templateUrl: './scenario-timeline.html',
   styleUrl: './scenario-timeline.scss',
 })
@@ -168,6 +169,13 @@ export class ScenarioTimeline {
       if (this.destroyed || generation !== this.loadGeneration) return;
       this.loadError.set('Impossible de charger la chronologie. Réessayez.');
     }
+  }
+
+  // Bug fix : un premier chargement transitoirement en échec (réseau, montée en charge) ne se
+  // réparait auparavant que via un événement SSE fortuit (reconnexion native EventSource, ~3s+) —
+  // affordance manuelle immédiate plutôt que d'attendre.
+  protected retry(): void {
+    void this.loadScenarios(this.partieId());
   }
 
   protected openDetail(scenario: ScenarioDto): void {

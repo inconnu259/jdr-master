@@ -7,6 +7,7 @@ import { HommeDragonService } from '../homme-dragon/homme-dragon.service';
 import { InvitationsService } from '../invitations/invitations.service';
 import { OpenPollsService } from '../poll/open-polls.service';
 import { ModeService } from '../mode/mode.service';
+import { AvailabilityService } from '../availability/availability.service';
 
 export function partieTopic(partieId: string): string {
   return `partie:${partieId}`;
@@ -48,15 +49,22 @@ export class RealtimeService {
   private readonly invitations = inject(InvitationsService);
   private readonly openPolls = inject(OpenPollsService);
   private readonly mode = inject(ModeService);
+  private readonly availability = inject(AvailabilityService);
 
   // Table de correspondance topic-prefix -> services à notifier (AD-3), câblée ici, dans
   // RealtimeService lui-même (jamais par le composant appelant connect()/disconnect()) —
   // première entrée réelle (Story 18.3), étendue Story 19.1 (deuxième entrée), Story 20.1
   // (troisième entrée), Story 20.2 (quatrième entrée), Story 21.1 (cinquième entrée, PREMIÈRE
-  // au préfixe 'user:') puis Story 22.1 (sixième et septième entrées, mêmes préfixe 'partie:' que
-  // les quatre premières) — plusieurs handlers peuvent partager un préfixe (matchingHandlers les
-  // appelle tous), et matchingHandlers()/onSignal() sont déjà génériques par préfixe (Story 18.2),
-  // aucune adaptation nécessaire pour ce nouveau préfixe.
+  // au préfixe 'user:') puis Story 22.1 (sixième entrée, 'partie:', OpenPollsService).
+  // Bug fix post-22.1 (production) : `ModeService` était câblé au préfixe générique 'partie:',
+  // se déclenchant sur absolument toute mutation (scénario, personnage, poll...) — combiné à
+  // l'absence de garde de concurrence dans ModeService, un vote créé pouvait vider silencieusement
+  // toute la liste de Parties du joueur. `ModeService` ne représente que l'appartenance
+  // (mjParties/playerParties), qui ne change jamais via une mutation partie-scopée générique —
+  // reculé sur le préfixe 'user:' (mêmes auto-actions déjà couvertes directement sans SSE,
+  // cf. Dashboard.accept()/join.ts ; seul removeMember() émet désormais userTopic(removedUserId)).
+  // `AvailabilityService` ajoutée au préfixe 'partie:' : une déclaration de dispo/indispo modifiée
+  // par un joueur doit rafraîchir le calendrier de toute Partie où il est MJ/membre.
   private readonly handlers: TopicHandler[] = [
     { prefix: 'partie:', notifyChanged: () => this.parties.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.scenarios.notifyRealtimeChanged() },
@@ -64,7 +72,8 @@ export class RealtimeService {
     { prefix: 'partie:', notifyChanged: () => this.hommeDragon.notifyChanged() },
     { prefix: 'user:', notifyChanged: () => this.invitations.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.openPolls.notifyChanged() },
-    { prefix: 'partie:', notifyChanged: () => this.mode.notifyChanged() },
+    { prefix: 'user:', notifyChanged: () => this.mode.notifyChanged() },
+    { prefix: 'partie:', notifyChanged: () => this.availability.notifyChanged() },
   ];
 
   // Une entrée par connexion active (pas par topic) — deux connect() sur le même topic ouvrent

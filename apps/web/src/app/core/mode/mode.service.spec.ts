@@ -48,4 +48,65 @@ describe('ModeService', () => {
     expect(service.mjParties()).toEqual([{ id: 'p-mj' }]);
     expect(service.playerParties()).toEqual([{ id: 'p-player' }]);
   });
+
+  describe('bug fix critique : garde de concurrence + jamais de vidage sur échec transitoire', () => {
+    it("refreshMjParties() : un échec réseau conserve le dernier état connu bon (jamais de .set([]))", async () => {
+      mjResult = [{ id: 'p-mj' }];
+      await service.refreshMjParties();
+      expect(service.mjParties()).toEqual([{ id: 'p-mj' }]);
+
+      const partiesMock = TestBed.inject(PartiesService) as unknown as { list: ReturnType<typeof vi.fn> };
+      partiesMock.list.mockRejectedValueOnce(new Error('network down'));
+      await service.refreshMjParties();
+
+      expect(service.mjParties()).toEqual([{ id: 'p-mj' }]);
+    });
+
+    it("refreshPlayerParties() : un échec réseau conserve le dernier état connu bon (jamais de .set([]))", async () => {
+      playerResult = [{ id: 'p-player' }];
+      await service.refreshPlayerParties();
+      expect(service.playerParties()).toEqual([{ id: 'p-player' }]);
+
+      const partiesMock = TestBed.inject(PartiesService) as unknown as { list: ReturnType<typeof vi.fn> };
+      partiesMock.list.mockRejectedValueOnce(new Error('network down'));
+      await service.refreshPlayerParties();
+
+      expect(service.playerParties()).toEqual([{ id: 'p-player' }]);
+    });
+
+    it("refreshMjParties() : un échec transitoire ne fait jamais basculer le mode 'mj' -> 'joueur'", async () => {
+      mjResult = [{ id: 'p-mj' }];
+      await service.refreshMjParties();
+      service.setMode('mj');
+
+      const partiesMock = TestBed.inject(PartiesService) as unknown as { list: ReturnType<typeof vi.fn> };
+      partiesMock.list.mockRejectedValueOnce(new Error('network down'));
+      await service.refreshMjParties();
+
+      expect(service.mode()).toBe('mj');
+      expect(service.mjParties()).toEqual([{ id: 'p-mj' }]);
+    });
+
+    it("refreshPlayerParties() : une réponse obsolète (résolue en désordre) n'écrase jamais un état plus frais", async () => {
+      const partiesMock = TestBed.inject(PartiesService) as unknown as { list: ReturnType<typeof vi.fn> };
+      let resolveFirst!: (v: unknown[]) => void;
+      let resolveSecond!: (v: unknown[]) => void;
+      partiesMock.list
+        .mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)))
+        .mockImplementationOnce(() => new Promise((r) => (resolveSecond = r)));
+
+      const first = service.refreshPlayerParties(); // plus ancien, plus lent
+      const second = service.refreshPlayerParties(); // plus récent, plus rapide
+
+      // Le plus récent résout EN PREMIER (ex. le plus ancien a été ralenti par le réseau).
+      resolveSecond([{ id: 'fresh' }]);
+      await second;
+      expect(service.playerParties()).toEqual([{ id: 'fresh' }]);
+
+      // Le plus ancien résout ensuite — ne doit PAS écraser l'état plus frais déjà posé.
+      resolveFirst([{ id: 'stale' }]);
+      await first;
+      expect(service.playerParties()).toEqual([{ id: 'fresh' }]);
+    });
+  });
 });

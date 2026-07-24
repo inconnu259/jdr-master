@@ -445,6 +445,50 @@ describe('ScenarioTimeline', () => {
     expect(comp.loadError()).toBeNull();
   });
 
+  it("bug fix : bouton « Réessayer » affiché sur l'état d'erreur, recharge sans dépendre du SSE", async () => {
+    const scenariosSvc = {
+      listAll: vi.fn().mockRejectedValueOnce(new Error('réseau')),
+      changed: signal<{ partieId: string } | null>(null),
+    };
+    await TestBed.configureTestingModule({
+      imports: [ScenarioTimeline],
+      providers: [
+        provideAnimationsAsync(),
+        { provide: ScenariosService, useValue: scenariosSvc },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+        { provide: Router, useValue: { navigate: vi.fn() } },
+        { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ScenarioTimeline);
+    fixture.componentRef.setInput('partieId', 'p1');
+    fixture.componentRef.setInput('isMj', false);
+    fixture.componentRef.setInput('partieKind', 'ONE_SHOT');
+    fixture.componentRef.setInput('characters', []);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('.error button');
+    expect(button).toBeTruthy();
+    expect(button.textContent).toContain('Réessayer');
+
+    scenariosSvc.listAll.mockResolvedValue([PASSE]);
+    button.click();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.loadError()).toBeNull();
+    expect(scenariosSvc.listAll).toHaveBeenCalledTimes(2);
+  });
+
   it('une réponse obsolète (requête plus ancienne résolue après une plus récente) n’écrase pas l’état à jour', async () => {
     const { scenariosSvc, fixture } = await createComponent([PASSE]);
     const comp = fixture.componentInstance as any;

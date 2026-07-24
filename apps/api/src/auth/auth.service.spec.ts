@@ -5,6 +5,7 @@ import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteLinksService } from '../invitations/invite-links.service';
 import { EmailService } from '../email/email.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
 jest.mock('argon2');
 
@@ -31,6 +32,7 @@ describe('AuthService', () => {
   };
   let inviteLinks: { consumeLink: jest.Mock };
   let email: { sendMail: jest.Mock };
+  let realtimeEvents: { emit: jest.Mock };
 
   const fakeUser = {
     id: 'u1',
@@ -83,11 +85,13 @@ describe('AuthService', () => {
       consumeLink: jest.fn().mockResolvedValue({ partieId: 'p1' }),
     };
     email = { sendMail: jest.fn().mockResolvedValue({ ok: true }) };
+    realtimeEvents = { emit: jest.fn() };
     service = new AuthService(
       users as unknown as UsersService,
       prisma as unknown as PrismaService,
       inviteLinks as unknown as InviteLinksService,
       email as unknown as EmailService,
+      realtimeEvents as unknown as RealtimeEventsService,
     );
   });
 
@@ -146,6 +150,17 @@ describe('AuthService', () => {
       expect(inviteLinks.consumeLink).toHaveBeenCalledWith(tx, 'tok', 'u1');
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ pseudo: 'alice' });
+    });
+
+    it('bug fix : émet un événement temps réel scopé sur la Partie rejointe, après la transaction', async () => {
+      tx.user.create.mockResolvedValue(fakeUser);
+      await service.register({
+        email: 'a@b.c',
+        pseudo: 'alice',
+        password: 'password123',
+        token: 'tok',
+      });
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
     it('lève ConflictException si email/pseudo déjà pris (P2002)', async () => {

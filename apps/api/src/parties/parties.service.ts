@@ -7,7 +7,7 @@ import {
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { CreatePartieDto } from './dto/create-partie.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
@@ -111,6 +111,10 @@ export class PartiesService {
     await this.prisma.membership.deleteMany({
       where: { partieId, userId: targetUserId },
     });
+    // Bug fix : le MJ/les autres membres ne voyaient jamais le roster rétrécir sans recharger, et
+    // le joueur retiré ne voyait jamais sa propre liste de Parties se mettre à jour.
+    this.realtimeEvents.emit(partieTopic(partieId));
+    this.realtimeEvents.emit(userTopic(targetUserId));
     return { ok: true };
   }
 

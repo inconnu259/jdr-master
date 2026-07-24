@@ -9,6 +9,7 @@ import { HommeDragonService } from '../homme-dragon/homme-dragon.service';
 import { InvitationsService } from '../invitations/invitations.service';
 import { OpenPollsService } from '../poll/open-polls.service';
 import { ModeService } from '../mode/mode.service';
+import { AvailabilityService } from '../availability/availability.service';
 import { RealtimeService, matchingHandlers, partieTopic, userTopic } from './realtime.service';
 
 class FakeEventSource {
@@ -69,6 +70,7 @@ describe('RealtimeService', () => {
   let invitationsSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
   let openPollsSvc: { notifyChanged: ReturnType<typeof vi.fn> };
   let modeSvc: { notifyChanged: ReturnType<typeof vi.fn> };
+  let availabilitySvc: { notifyChanged: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     originalEventSource = (globalThis as any).EventSource;
@@ -87,10 +89,14 @@ describe('RealtimeService', () => {
     // Story 21.1 (Task 3) : RealtimeService injecte désormais aussi InvitationsService (cinquième
     // entrée dans handlers, PREMIÈRE au préfixe 'user:'). Mock direct, comme PartiesService.
     invitationsSvc = { notifyChanged: vi.fn(), changed: signal(0) };
-    // Story 22.1 : RealtimeService injecte désormais aussi OpenPollsService/ModeService (sixième et
-    // septième entrées dans handlers, mêmes préfixe 'partie:' que PartiesService). Mocks directs.
+    // Story 22.1 : RealtimeService injecte désormais aussi OpenPollsService (sixième entrée,
+    // préfixe 'partie:'). Mock direct.
     openPollsSvc = { notifyChanged: vi.fn() };
+    // Bug fix post-22.1 : ModeService rebranché sur le préfixe 'user:' (ne représente que
+    // l'appartenance, jamais déclenché par une mutation partie-scopée générique).
     modeSvc = { notifyChanged: vi.fn() };
+    // Bug fix (calendrier MJ jamais notifié) : AvailabilityService ajoutée au préfixe 'partie:'.
+    availabilitySvc = { notifyChanged: vi.fn() };
     // RealtimeService injecte désormais PartiesService (Story 18.3, Task 4) — PartiesService
     // injecte lui-même HttpClient, jamais fourni par ce module de test isolé. Mock direct : ce
     // test ne porte pas sur les appels HTTP de PartiesService.
@@ -103,6 +109,7 @@ describe('RealtimeService', () => {
         { provide: InvitationsService, useValue: invitationsSvc },
         { provide: OpenPollsService, useValue: openPollsSvc },
         { provide: ModeService, useValue: modeSvc },
+        { provide: AvailabilityService, useValue: availabilitySvc },
       ],
     });
     service = TestBed.inject(RealtimeService);
@@ -172,7 +179,7 @@ describe('RealtimeService', () => {
     expect(hommeDragonSvc.notifyChanged).toHaveBeenCalledTimes(1);
   });
 
-  it("'open' déclenche AUSSI notifyChanged() sur OpenPollsService ET ModeService — six/sept handlers au même préfixe (Story 22.1, AC1/AC2)", () => {
+  it("'open' déclenche AUSSI notifyChanged() sur OpenPollsService ET AvailabilityService — six handlers au même préfixe 'partie:' (Story 22.1, AC1 ; bug fix calendrier)", () => {
     service.connect(partieTopic('p1'));
 
     FakeEventSource.instances[0].emit('open');
@@ -182,6 +189,22 @@ describe('RealtimeService', () => {
     expect(charactersSvc.notifyChanged).toHaveBeenCalledTimes(1);
     expect(hommeDragonSvc.notifyChanged).toHaveBeenCalledTimes(1);
     expect(openPollsSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(availabilitySvc.notifyChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("un topic 'partie:' ne déclenche PAS notifyChanged() sur ModeService (bug fix : préfixe rebranché sur 'user:')", () => {
+    service.connect(partieTopic('p1'));
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(modeSvc.notifyChanged).not.toHaveBeenCalled();
+  });
+
+  it("'open' sur un topic 'user:' déclenche notifyChanged() sur ModeService (bug fix)", () => {
+    service.connect(userTopic('u1'));
+
+    FakeEventSource.instances[0].emit('open');
+
     expect(modeSvc.notifyChanged).toHaveBeenCalledTimes(1);
   });
 

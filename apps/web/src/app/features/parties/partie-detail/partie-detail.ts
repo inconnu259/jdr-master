@@ -257,8 +257,43 @@ export class PartieDetail implements OnInit {
     }
     effect(() => {
       this.parties.changed();
-      untracked(() => void this.refreshPartie());
+      // Bug fix (temps réel) : un nouveau membre (invitation acceptée, lien rejoint) n'apparaissait
+      // jamais dans le roster/l'onglet Invitations sans recharger — étend le rechargement déjà
+      // déclenché ici sur tout événement partie: (même wildcard générique que refreshPartie()) à
+      // la liste des membres.
+      untracked(() => {
+        void this.refreshPartie();
+        void this.loadMembers();
+      });
     });
+
+    // Bug fix (temps réel) : le MJ ne voyait jamais apparaître un personnage nouvellement créé par
+    // un joueur sans recharger — CharacterService.changed() est un simple compteur (comme dans
+    // CharacterSheet), aucun filtrage matchesPartie possible/nécessaire ici. Garde firstRun (même
+    // piège que partout ailleurs) : le signal peut déjà porter une valeur avant le montage.
+    let firstRunCharacters = true;
+    effect(() => {
+      this.characterSvc.changed();
+      if (firstRunCharacters) {
+        firstRunCharacters = false;
+        return;
+      }
+      untracked(() => void this.reloadCharacters());
+    });
+  }
+
+  /** Recharge `characters` seul (roster) — réutilisé par l'effet temps réel et par
+   *  `onXpDistributed()` (extrait pour éviter la duplication de `listByPartie(...).catch(...)`).
+   *  Bug fix (revue de code) : un échec réseau transitoire ne doit jamais vider le roster affiché —
+   *  même risque déjà corrigé pour `ModeService` (garder le dernier état connu bon). */
+  private async reloadCharacters(): Promise<void> {
+    const p = this.partie();
+    if (!p) return;
+    try {
+      this.characters.set(await this.characterSvc.listByPartie(p.id));
+    } catch {
+      // Échec transitoire : on garde le dernier état connu bon, pas de `.set([])`.
+    }
   }
 
   /** Recharge `partie` sans re-déclencher tout `ngOnInit` (membres/scénarios/annonces restent
@@ -450,10 +485,9 @@ export class PartieDetail implements OnInit {
   /** Après une distribution confirmée : recharge `characters`/`xpDistributions` — c'est le parent
    *  qui recharge, pas le panneau lui-même (AD-10, pas de rechargement indépendant par composant). */
   protected async onXpDistributed(): Promise<void> {
-    const p = this.partie();
-    if (!p) return;
+    if (!this.partie()) return;
     this.showXpPanel.set(false);
-    this.characters.set(await this.characterSvc.listByPartie(p.id).catch(() => []));
+    await this.reloadCharacters();
     await this.loadXpDistributions();
   }
 

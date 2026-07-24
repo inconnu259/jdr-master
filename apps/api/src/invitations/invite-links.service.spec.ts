@@ -7,6 +7,7 @@ import {
 import { InviteLinksService } from './invite-links.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 
 const future = () => new Date(Date.now() + 60_000);
 const past = () => new Date(Date.now() - 60_000);
@@ -19,8 +20,10 @@ describe('InviteLinksService', () => {
       findUnique: jest.Mock;
       findFirst: jest.Mock;
     };
+    $transaction: jest.Mock;
   };
   let parties: { getOwned: jest.Mock };
+  let realtimeEvents: { emit: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -29,13 +32,16 @@ describe('InviteLinksService', () => {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
       },
+      $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn({})),
     };
     parties = {
       getOwned: jest.fn().mockResolvedValue({ id: 'p1', mjId: 'mj1' }),
     };
+    realtimeEvents = { emit: jest.fn() };
     service = new InviteLinksService(
       prisma as unknown as PrismaService,
       parties as unknown as PartiesService,
+      realtimeEvents as unknown as RealtimeEventsService,
     );
   });
 
@@ -205,6 +211,25 @@ describe('InviteLinksService', () => {
       data: { userId: 'u', partieId: 'p1' },
     });
     expect(res).toBe(link);
+  });
+
+  // --- join (bug fix : roster MJ jamais notifié quand un joueur rejoint via lien) ---
+
+  it('join : émet un événement temps réel scopé sur la Partie après la transaction', async () => {
+    jest.spyOn(service, 'consumeLink').mockResolvedValue({
+      partieId: 'p1',
+    } as never);
+    const res = await service.join('tok', 'u');
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    expect(res).toEqual({ ok: true, partieId: 'p1' });
+  });
+
+  it("join : émet aussi userTopic(userId) (bug fix : les AUTRES sessions/onglets déjà ouverts du joueur n'étaient jamais notifiés)", async () => {
+    jest.spyOn(service, 'consumeLink').mockResolvedValue({
+      partieId: 'p1',
+    } as never);
+    await service.join('tok', 'u');
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
   });
 
   // --- findOrCreateForEmail (Story 5.2) ---

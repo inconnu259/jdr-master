@@ -19,6 +19,7 @@ interface CreateOptions {
   partieId?: string;
   queryParams?: Record<string, string>;
   scenarios?: any[];
+  availabilitySvc?: ReturnType<typeof makeAvailabilityService>;
 }
 
 function makeActivatedRoute(partieId?: string, queryParams: Record<string, string> = {}) {
@@ -31,7 +32,7 @@ function makeActivatedRoute(partieId?: string, queryParams: Record<string, strin
 }
 
 function makeAvailabilityService() {
-  return { getMyDeclarations: vi.fn().mockResolvedValue([]) };
+  return { getMyDeclarations: vi.fn().mockResolvedValue([]), changed: signal(0) };
 }
 
 function makePollService() {
@@ -97,7 +98,7 @@ const ACTIVE_POLL_SCENARIO = {
 async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   const opts: CreateOptions = typeof options === 'string' ? { mode: options } : (options ?? {});
 
-  const availabilitySvc = makeAvailabilityService();
+  const availabilitySvc = opts.availabilitySvc ?? makeAvailabilityService();
   const pollSvc = makePollService();
   const snack = makeSnackBar();
   const partiesSvc = makePartiesService();
@@ -708,5 +709,35 @@ describe('CalendarView — connexion temps réel (Story 19.1, AC3)', () => {
     expect(scenariosSvc.listAll.mock.calls.length).toBe(listAllCallsBefore + 1);
     expect(pollSvc.getAvailableSlots.mock.calls.length).toBe(slotsCallsBefore + 1);
     expect(pollSvc.getHeatmap.mock.calls.length).toBe(heatmapCallsBefore + 1);
+  });
+
+  it('bug fix : une notification AvailabilityService.changed() (dispo d’un autre membre) recharge créneaux/heatmap', async () => {
+    const { fixture, availabilitySvc, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+    });
+    const slotsCallsBefore = pollSvc.getAvailableSlots.mock.calls.length;
+    const heatmapCallsBefore = pollSvc.getHeatmap.mock.calls.length;
+
+    availabilitySvc.changed.set(1);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(pollSvc.getAvailableSlots.mock.calls.length).toBe(slotsCallsBefore + 1);
+    expect(pollSvc.getHeatmap.mock.calls.length).toBe(heatmapCallsBefore + 1);
+  });
+
+  it("garde firstRun : un AvailabilityService.changed() déjà non-nul au montage ne déclenche PAS de refetch redondant", async () => {
+    const availabilitySvc = { getMyDeclarations: vi.fn().mockResolvedValue([]), changed: signal(1) };
+    const { pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      availabilitySvc,
+    });
+    expect(pollSvc.getAvailableSlots.mock.calls.length).toBe(1);
+    expect(pollSvc.getHeatmap.mock.calls.length).toBe(1);
   });
 });

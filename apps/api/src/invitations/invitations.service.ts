@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { InviteLinksService } from './invite-links.service';
 import { EmailService } from '../email/email.service';
-import { RealtimeEventsService, userTopic } from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 
 @Injectable()
 export class InvitationsService {
@@ -95,6 +95,13 @@ export class InvitationsService {
         data: { status: 'ACCEPTED', respondedAt: new Date() },
       }),
     ]);
+    // Bug fix : le MJ/les autres membres ne voyaient jamais apparaître le nouveau membre sans
+    // recharger (PartieDetail.members/.characters n'étaient notifiés d'aucun événement).
+    this.realtimeEvents.emit(partieTopic(inv.partieId));
+    // Bug fix (revue de code) : le destinataire lui-même n'était notifié sur aucune de ses AUTRES
+    // sessions/onglets déjà ouverts (miroir de removeMember(), qui émet déjà userTopic(targetUserId)
+    // pour le membre retiré).
+    this.realtimeEvents.emit(userTopic(userId));
     return { ok: true, partieId: inv.partieId };
   }
 

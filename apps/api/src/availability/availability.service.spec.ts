@@ -7,6 +7,11 @@ import {
 import type { DaySlot } from '@master-jdr/shared';
 import { AvailabilityService, DeclarationLike } from './availability.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeEventsService } from '../realtime/realtime-events.service';
+
+function makeMockRealtimeEvents() {
+  return { emit: jest.fn() } as unknown as RealtimeEventsService;
+}
 
 // Dates de référence (UTC) :
 // June 24, 2026 = mercredi (getUTCDay() = 3)
@@ -79,6 +84,10 @@ function makeMockPrisma() {
   const mockUpdateMany = jest.fn(async () => ({ count: 0 }));
   const mockFindUnique = jest.fn();
   const mockFindMany = jest.fn(async () => [] as object[]);
+  // Story bug-fix temps réel : affectedPartieIds() interroge membership/partie — vides par défaut
+  // (aucun effet sur les tests existants, qui n'assertent pas sur les topics émis).
+  const mockMembershipFindMany = jest.fn(async () => [] as { partieId: string }[]);
+  const mockPartieFindMany = jest.fn(async () => [] as { id: string }[]);
 
   const tx: MockTxClient = {
     availabilityDeclaration: { create: mockCreate, update: mockUpdate },
@@ -90,6 +99,8 @@ function makeMockPrisma() {
       create: mockCreate,
       updateMany: mockUpdateMany,
     },
+    membership: { findMany: mockMembershipFindMany },
+    partie: { findMany: mockPartieFindMany },
     $transaction: jest.fn(async (fn: (tx: MockTxClient) => Promise<unknown>) =>
       fn(tx),
     ),
@@ -101,6 +112,8 @@ function makeMockPrisma() {
     mockUpdateMany,
     mockFindUnique,
     mockFindMany,
+    mockMembershipFindMany,
+    mockPartieFindMany,
   };
 }
 
@@ -114,6 +127,7 @@ describe('AvailabilityService.splitOccurrence', () => {
     const mocks = makeMockPrisma();
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
+      makeMockRealtimeEvents(),
     );
     mockCreate = mocks.mockCreate;
     mockUpdate = mocks.mockUpdate;
@@ -309,6 +323,7 @@ describe('AvailabilityService.findConflictsForCreate', () => {
     const mocks = makeMockPrisma();
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
+      makeMockRealtimeEvents(),
     );
     mockFindMany = mocks.mockFindMany;
   });
@@ -531,6 +546,7 @@ describe('AvailabilityService.create — conflict detection', () => {
     const mocks = makeMockPrisma();
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
+      makeMockRealtimeEvents(),
     );
     mockCreate = mocks.mockCreate;
     mockUpdateMany = mocks.mockUpdateMany;
@@ -603,13 +619,106 @@ describe('AvailabilityService.create — conflict detection', () => {
   });
 });
 
+// ─── Émission temps réel (bug fix : calendrier MJ jamais notifié) ────────────
+
+describe('AvailabilityService — émission temps réel', () => {
+  let service: AvailabilityService;
+  let mockRealtimeEvents: RealtimeEventsService;
+  let mockEmit: jest.Mock;
+  let mockMembershipFindMany: jest.Mock;
+  let mockPartieFindMany: jest.Mock;
+  let mockFindMany: jest.Mock;
+  let mockFindUnique: jest.Mock;
+
+  const baseDto = {
+    kind: 'AVAILABLE' as const,
+    recurKind: 'RECURRING' as const,
+    dayOfWeek: 3,
+    slot: 'EVENING' as DaySlot,
+    expiresAt: FUTURE.toISOString(),
+  };
+
+  beforeEach(() => {
+    const mocks = makeMockPrisma();
+    mockRealtimeEvents = makeMockRealtimeEvents();
+    mockEmit = mockRealtimeEvents.emit as jest.Mock;
+    service = new AvailabilityService(
+      mocks.mockPrisma as unknown as PrismaService,
+      mockRealtimeEvents,
+    );
+    mockMembershipFindMany = mocks.mockMembershipFindMany;
+    mockPartieFindMany = mocks.mockPartieFindMany;
+    mockFindMany = mocks.mockFindMany;
+    mockFindUnique = mocks.mockFindUnique;
+    // Par défaut : aucun conflit pour create().
+    mockFindMany.mockResolvedValue([]);
+  });
+
+  it('create() émet partieTopic pour chaque Partie où l’utilisateur est membre ou MJ', async () => {
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }, { partieId: 'p2' }]);
+    mockPartieFindMany.mockResolvedValue([{ id: 'p3' }]);
+
+    await service.create(USER_ID, baseDto);
+
+    expect(mockEmit).toHaveBeenCalledTimes(3);
+    expect(mockEmit).toHaveBeenCalledWith('partie:p1');
+    expect(mockEmit).toHaveBeenCalledWith('partie:p2');
+    expect(mockEmit).toHaveBeenCalledWith('partie:p3');
+  });
+
+  it('create() ne dédouble pas un partieId présent à la fois en membership et en Partie possédée', async () => {
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }]);
+    mockPartieFindMany.mockResolvedValue([{ id: 'p1' }]);
+
+    await service.create(USER_ID, baseDto);
+
+    expect(mockEmit).toHaveBeenCalledTimes(1);
+    expect(mockEmit).toHaveBeenCalledWith('partie:p1');
+  });
+
+  it('create() sans aucune Partie associée → aucune émission', async () => {
+    await service.create(USER_ID, baseDto);
+    expect(mockEmit).not.toHaveBeenCalled();
+  });
+
+  it('update() émet partieTopic après la résolution complète de l’écriture', async () => {
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }]);
+    mockFindUnique.mockResolvedValue({ id: DECL_ID, userId: USER_ID });
+
+    await service.update(DECL_ID, USER_ID, { kind: 'AVAILABLE' });
+
+    expect(mockEmit).toHaveBeenCalledWith('partie:p1');
+  });
+
+  it('softDelete() émet partieTopic', async () => {
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }]);
+    mockFindUnique.mockResolvedValue({ id: DECL_ID, userId: USER_ID });
+
+    await service.softDelete(DECL_ID, USER_ID);
+
+    expect(mockEmit).toHaveBeenCalledWith('partie:p1');
+  });
+
+  it('splitOccurrence() émet partieTopic après la transaction', async () => {
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }]);
+    mockFindUnique.mockResolvedValue(makeRecurring({ startDate: WED1, endDate: null }));
+
+    await service.splitOccurrence(DECL_ID, USER_ID, '2026-07-01', 'delete');
+
+    expect(mockEmit).toHaveBeenCalledWith('partie:p1');
+  });
+});
+
 // ─── computeSlotStatus ────────────────────────────────────────────────────────
 
 describe('AvailabilityService.computeSlotStatus', () => {
   let service: AvailabilityService;
 
   beforeEach(() => {
-    service = new AvailabilityService({} as PrismaService);
+    service = new AvailabilityService(
+      {} as PrismaService,
+      {} as RealtimeEventsService,
+    );
   });
 
   it('déclaration UNAVAILABLE sur le bon créneau → UNAVAILABLE', () => {

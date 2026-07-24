@@ -22,6 +22,7 @@ import { makeAnnouncementDto } from '../../../core/announcements/announcement-dt
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ModeService } from '../../../core/mode/mode.service';
+import { AvailabilityService } from '../../../core/availability/availability.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
@@ -199,6 +200,7 @@ async function createFixture(
       },
       { provide: BreakpointObserver, useValue: makeBreakpointObserver(options.desktop ?? true) },
       { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
+      { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
       {
         provide: CharacterService,
         useValue: {
@@ -209,6 +211,8 @@ async function createFixture(
           getGameSystemAsset: vi
             .fn()
             .mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
+          // Bug fix (temps réel) : PartieDetail réagit désormais à ce signal (roster).
+          changed: signal(0),
         },
       },
       { provide: ThemeToneService, useValue: makeToneService() },
@@ -509,11 +513,13 @@ describe('PartieDetail — roster (Story 6.1)', () => {
         { provide: PartiesService, useValue: makePartiesService(makePartie(), members, []) },
         { provide: BreakpointObserver, useValue: dynamicBreakpointObserver },
         { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
+      { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
           provide: CharacterService,
           useValue: {
             listByPartie: vi.fn().mockResolvedValue([]),
             getGameSystemContent: vi.fn().mockResolvedValue(null),
+            changed: signal(0),
           },
         },
         { provide: ThemeToneService, useValue: makeToneService() },
@@ -1173,11 +1179,13 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         { provide: PartiesService, useValue: partiesSvc },
         { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
         { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
+      { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
           provide: CharacterService,
           useValue: {
             listByPartie: vi.fn().mockResolvedValue([]),
             getGameSystemContent: vi.fn().mockResolvedValue({}),
+            changed: signal(0),
           },
         },
         { provide: ThemeToneService, useValue: makeToneService() },
@@ -1248,5 +1256,119 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
 
     expect(partiesSvcSpy.get.mock.calls.length).toBe(callsBefore);
     expect(el).toBeTruthy();
+  });
+
+  it('bug fix : un CharacterService.changed() (personnage créé par un joueur) recharge le roster sans reload', async () => {
+    const initial = makePartie({ mjId: MJ_ID });
+    const { fixture } = await createFixture(initial, MJ_ID);
+    const characterSvc = TestBed.inject(CharacterService) as unknown as {
+      listByPartie: ReturnType<typeof vi.fn>;
+      changed: WritableSignal<number>;
+    };
+    const newCharacter = makeCharacterDto({ id: 'c1', userId: PLAYER_ID });
+    characterSvc.listByPartie.mockResolvedValue([newCharacter]);
+    const callsBefore = characterSvc.listByPartie.mock.calls.length;
+
+    characterSvc.changed.set(1);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(characterSvc.listByPartie.mock.calls.length).toBe(callsBefore + 1);
+  });
+
+  it('bug fix (revue de code) : un échec réseau transitoire du rechargement de roster ne vide pas la liste affichée', async () => {
+    const initial = makePartie({ mjId: MJ_ID });
+    const { fixture } = await createFixture(initial, MJ_ID);
+    const characterSvc = TestBed.inject(CharacterService) as unknown as {
+      listByPartie: ReturnType<typeof vi.fn>;
+      changed: WritableSignal<number>;
+    };
+    const existing = makeCharacterDto({ id: 'c1', userId: PLAYER_ID });
+    characterSvc.listByPartie.mockResolvedValueOnce([existing]);
+
+    characterSvc.changed.set(1);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    const comp = fixture.componentInstance as unknown as { characters: () => unknown[] };
+    expect(comp.characters()).toEqual([existing]);
+
+    characterSvc.listByPartie.mockRejectedValueOnce(new Error('réseau'));
+    characterSvc.changed.set(2);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(comp.characters()).toEqual([existing]);
+  });
+
+  it("garde firstRun : un CharacterService.changed() déjà non-nul au montage ne déclenche PAS de refetch redondant", async () => {
+    const initial = makePartie({ mjId: MJ_ID });
+    await TestBed.configureTestingModule({
+      imports: [PartieDetail],
+      providers: [
+        provideRouter([]),
+        provideAnimationsAsync(),
+        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => initial.id } } } },
+        { provide: AuthService, useValue: makeAuthService(MJ_ID) },
+        { provide: PartiesService, useValue: makePartiesService(initial) },
+        { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
+        { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
+        { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
+        {
+          provide: CharacterService,
+          useValue: {
+            listByPartie: vi.fn().mockResolvedValue([]),
+            getGameSystemContent: vi.fn().mockResolvedValue({}),
+            changed: signal(1),
+          },
+        },
+        { provide: ThemeToneService, useValue: makeToneService() },
+        { provide: ScenariosService, useValue: makeScenariosService() },
+        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]) } },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PartieDetail);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const characterSvc = TestBed.inject(CharacterService) as unknown as {
+      listByPartie: ReturnType<typeof vi.fn>;
+    };
+    expect(characterSvc.listByPartie.mock.calls.length).toBe(1);
+  });
+
+  it('bug fix : un PartiesService.changed() (invitation acceptée par un joueur) recharge la liste des membres sans reload', async () => {
+    const initial = makePartie({ mjId: MJ_ID });
+    const { fixture } = await createFixture(initial, MJ_ID);
+    const partiesSvc = TestBed.inject(PartiesService) as unknown as {
+      members: ReturnType<typeof vi.fn>;
+      notifyChanged: () => void;
+    };
+    const callsBefore = partiesSvc.members.mock.calls.length;
+
+    partiesSvc.notifyChanged();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(partiesSvc.members.mock.calls.length).toBe(callsBefore + 1);
   });
 });

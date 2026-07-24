@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { InviteLinksService } from '../invitations/invite-links.service';
 import { EmailService } from '../email/email.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { RegisterDto } from './dto/register.dto';
 
 const RESET_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // +24h (FR-6)
@@ -28,6 +29,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly inviteLinks: InviteLinksService,
     private readonly email: EmailService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   /** Vérifie les identifiants (email OU pseudo) ; renvoie l'utilisateur (sans le hash) ou null. */
@@ -56,14 +58,20 @@ export class AuthService {
   async register(dto: RegisterDto) {
     try {
       const passwordHash = await argon2.hash(dto.password);
-      return await this.prisma.$transaction(async (tx) => {
+      let joinedPartieId: string | undefined;
+      const result = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: { email: dto.email, pseudo: dto.pseudo, passwordHash },
         });
-        await this.inviteLinks.consumeLink(tx, dto.token, user.id);
+        const link = await this.inviteLinks.consumeLink(tx, dto.token, user.id);
+        joinedPartieId = link.partieId;
         const { passwordHash: _hash, ...safe } = user;
         return safe;
       });
+      // Bug fix : le MJ/les autres membres ne voyaient jamais apparaître le nouveau membre sans
+      // recharger — émis après résolution complète de la transaction, jamais dans son callback.
+      if (joinedPartieId) this.realtimeEvents.emit(partieTopic(joinedPartieId));
+      return result;
     } catch (e: unknown) {
       // Email OU pseudo déjà pris → contrainte d'unicité (Prisma P2002) → 409 propre.
       // On teste le `code` (plus robuste que `instanceof` avec le driver adapter Prisma 7).

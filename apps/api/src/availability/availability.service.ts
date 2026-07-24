@@ -12,6 +12,7 @@ import type {
   SlotStatus,
 } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
 
@@ -38,7 +39,43 @@ export interface DeclarationLike {
 
 @Injectable()
 export class AvailabilityService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtimeEvents: RealtimeEventsService,
+  ) {}
+
+  // ─── Temps réel ─────────────────────────────────────────────────────────────
+
+  /** AvailabilityDeclaration est scopé par userId uniquement (aucune relation Partie en base,
+   *  cf. schema.prisma) — une déclaration modifiée peut affecter le calendrier de n'importe
+   *  quelle Partie où l'utilisateur est MJ ou membre. On résout donc ces Parties une fois, après
+   *  l'écriture, pour émettre un événement partie:{id} sur chacune (MJ.getHeatmap/getAvailableSlots
+   *  agrège déjà les disponibilités de tous les participants d'une Partie). */
+  private async affectedPartieIds(userId: string): Promise<string[]> {
+    const [memberships, ownedParties] = await Promise.all([
+      this.prisma.membership.findMany({
+        where: { userId },
+        select: { partieId: true },
+      }),
+      this.prisma.partie.findMany({
+        where: { mjId: userId },
+        select: { id: true },
+      }),
+    ]);
+    return [
+      ...new Set([
+        ...memberships.map((m) => m.partieId),
+        ...ownedParties.map((p) => p.id),
+      ]),
+    ];
+  }
+
+  private async emitForUser(userId: string): Promise<void> {
+    const partieIds = await this.affectedPartieIds(userId);
+    for (const id of partieIds) {
+      this.realtimeEvents.emit(partieTopic(id));
+    }
+  }
 
   // ─── CRUD ──────────────────────────────────────────────────────────────────
 
@@ -73,10 +110,13 @@ export class AvailabilityService {
 
     if (dto.conflictResolution === 'keep' && conflicts.length > 0) {
       const created = await this.createWithHoles(userId, dto, conflicts);
+      await this.emitForUser(userId);
       return { created };
     }
 
-    return { created: [await this.doCreate(userId, dto)] };
+    const created = await this.doCreate(userId, dto);
+    await this.emitForUser(userId);
+    return { created: [created] };
   }
 
   private doCreate(userId: string, dto: CreateAvailabilityDto) {
@@ -384,7 +424,11 @@ export class AvailabilityService {
         ...(dto.expiresAt && { expiresAt: new Date(dto.expiresAt) }),
       },
     });
-    return this.prisma.availabilityDeclaration.findUnique({ where: { id } });
+    const updated = await this.prisma.availabilityDeclaration.findUnique({
+      where: { id },
+    });
+    await this.emitForUser(userId);
+    return updated;
   }
 
   /** Soft-archive : ramène expiresAt à maintenant (filtrée hors des actives). */
@@ -399,6 +443,7 @@ export class AvailabilityService {
       where: { id, userId },
       data: { expiresAt: new Date() },
     });
+    await this.emitForUser(userId);
   }
 
   // ─── Calcul de disponibilité (utilisé par PartiesService) ──────────────────
@@ -579,6 +624,7 @@ export class AvailabilityService {
       return results;
     });
 
+    await this.emitForUser(userId);
     return { created, deleted: [id] };
   }
 

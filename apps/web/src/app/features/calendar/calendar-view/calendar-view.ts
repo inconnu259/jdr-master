@@ -190,6 +190,23 @@ export class CalendarView implements OnInit {
         void this.refreshMjPanels();
       });
     });
+
+    // Bug fix (temps réel) : une déclaration de dispo/indispo d'un autre membre ne rafraîchissait
+    // jamais le calendrier — AvailabilityService.changed() est un simple compteur (pas de
+    // { partieId } comme ScenariosService), aucun filtrage matchesPartie possible ici ; sans risque
+    // car ce composant ne reçoit l'événement SSE que sur SA propre connexion partie:{id} (le
+    // serveur ne route jamais un événement d'une autre Partie vers cette connexion). Garde firstRun
+    // (même piège que partout ailleurs, Stories 19.2/20.1/20.2/21.*) : le signal peut déjà porter
+    // une valeur avant le montage.
+    let firstRun = true;
+    effect(() => {
+      this.availabilitySvc.changed();
+      if (firstRun) {
+        firstRun = false;
+        return;
+      }
+      untracked(() => void this.refreshMjPanels());
+    });
   }
 
   async ngOnInit(): Promise<void> {

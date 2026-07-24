@@ -9,7 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { InviteLinksService } from './invite-links.service';
 import { EmailService } from '../email/email.service';
-import { RealtimeEventsService, userTopic } from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 
 describe('InvitationsService', () => {
   let service: InvitationsService;
@@ -145,6 +145,28 @@ describe('InvitationsService', () => {
       }),
     );
     expect(res).toEqual({ ok: true, partieId: 'p1' });
+  });
+
+  it('accept : émet un événement temps réel scopé sur la Partie (bug fix : roster MJ jamais notifié)', async () => {
+    prisma.invitation.findUnique.mockResolvedValue({
+      id: 'inv1',
+      inviteeUserId: 'u',
+      partieId: 'p1',
+      status: 'PENDING',
+    });
+    await service.accept('inv1', 'u');
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+  });
+
+  it("accept : émet aussi userTopic(userId) (bug fix : les AUTRES sessions/onglets déjà ouverts du destinataire n'étaient jamais notifiés)", async () => {
+    prisma.invitation.findUnique.mockResolvedValue({
+      id: 'inv1',
+      inviteeUserId: 'u',
+      partieId: 'p1',
+      status: 'PENDING',
+    });
+    await service.accept('inv1', 'u');
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
   });
 
   it('revoke : 403 si ni inviteur ni MJ', async () => {

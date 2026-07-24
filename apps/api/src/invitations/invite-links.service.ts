@@ -10,6 +10,7 @@ import type { InviteLink, Prisma } from '@prisma/client';
 import type { InviteLinkPreviewDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { CreateInviteLinkDto } from './dto/create-invite-link.dto';
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // +7 jours
@@ -19,6 +20,7 @@ export class InviteLinksService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
+    private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   /** Le MJ génère un lien d'invitation pour SA partie. */
@@ -88,6 +90,12 @@ export class InviteLinksService {
     const link = await this.prisma.$transaction((tx) =>
       this.consumeLink(tx, token, userId),
     );
+    // Bug fix : le MJ/les autres membres ne voyaient jamais apparaître le nouveau membre sans
+    // recharger — émis après résolution complète de la transaction, jamais dans son callback.
+    this.realtimeEvents.emit(partieTopic(link.partieId));
+    // Bug fix (revue de code) : l'utilisateur qui rejoint lui-même n'était notifié sur aucune de
+    // ses AUTRES sessions/onglets déjà ouverts (miroir de removeMember()).
+    this.realtimeEvents.emit(userTopic(userId));
     return { ok: true, partieId: link.partieId };
   }
 

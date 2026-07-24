@@ -10,7 +10,7 @@ import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 
 describe('PartiesService', () => {
   let service: PartiesService;
@@ -198,6 +198,14 @@ describe('PartiesService', () => {
       service.removeMember('p1', 'autre', 'u'),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('removeMember : bug fix — émet partieTopic (roster) et userTopic (liste de Parties du joueur retiré)', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.membership.deleteMany.mockResolvedValue({ count: 1 });
+    await service.removeMember('p1', 'mj1', 'u');
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
   });
 
   it('getOwned : 404 si introuvable', async () => {

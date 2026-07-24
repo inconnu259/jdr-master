@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { catchError, throwError } from 'rxjs';
 import { firstValueFrom } from 'rxjs';
@@ -38,6 +38,16 @@ export interface SplitOccurrenceResult {
 @Injectable({ providedIn: 'root' })
 export class AvailabilityService {
   private readonly http = inject(HttpClient);
+
+  // Bug fix (temps réel) : contrat public AD-4 (zéro argument), même forme que
+  // CharacterService/HommeDragonService/InvitationsService — appelé par RealtimeService sur un
+  // événement SSE partie:{id} (une déclaration modifiée par un joueur affecte le calendrier de
+  // toutes les Parties où il est MJ/membre, cf. AvailabilityService backend).
+  private readonly _changed = signal(0);
+  readonly changed = this._changed.asReadonly();
+  notifyChanged(): void {
+    this._changed.update((v) => v + 1);
+  }
 
   getMyDeclarations(): Promise<AvailabilityDeclarationDto[]> {
     return firstValueFrom(
