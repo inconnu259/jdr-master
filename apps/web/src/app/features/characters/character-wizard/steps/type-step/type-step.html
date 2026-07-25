@@ -18,6 +18,7 @@
 
   @if (selectedTypeData(); as data) {
     <div class="type-step__advantages">
+      <p class="type-step__description">{{ data.description }}</p>
       <h3>Avantages de {{ data.label }}</h3>
       <ul>
         @for (adv of data.advantages; track adv.name) {

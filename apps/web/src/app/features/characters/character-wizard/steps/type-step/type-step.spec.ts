@@ -5,11 +5,19 @@ import { TypeStep } from './type-step';
 const TYPES: ContentEntryDto[] = [
   {
     key: 'attaque',
-    data: { label: 'Attaque', advantages: [{ name: 'Endurance', effect: '+4 PV' }] },
+    data: {
+      label: 'Attaque',
+      description: 'Le personnage est très résistant et excelle en combat.',
+      advantages: [{ name: 'Endurance', effect: '+4 PV' }],
+    },
   },
   {
     key: 'magie',
-    data: { label: 'Magie', advantages: [{ name: 'Réserve', effect: '+4 PE' }] },
+    data: {
+      label: 'Magie',
+      description: "Le personnage peut à tout moment réaliser l'impossible.",
+      advantages: [{ name: 'Réserve', effect: '+4 PE' }],
+    },
   },
 ];
 
@@ -34,6 +42,9 @@ describe('TypeStep', () => {
     fixture.detectChanges();
     await fixture.whenStable();
     expect(fixture.nativeElement.textContent).toContain('Endurance');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Le personnage est très résistant et excelle en combat.',
+    );
   });
 
   it('sélection Magie → affiche la notice différée', async () => {

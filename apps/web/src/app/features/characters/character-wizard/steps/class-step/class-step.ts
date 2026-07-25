@@ -12,6 +12,7 @@ interface ClassTalent {
 
 interface ClassData {
   label: string;
+  description: string;
   talents: ClassTalent[];
   requiresSpecialty?: boolean;
   specialtyLabel?: string;

@@ -7,6 +7,8 @@ const CLASSES: ContentEntryDto[] = [
     key: 'chasseur',
     data: {
       label: 'Chasseur',
+      description:
+        'Les chasseurs abattent leurs proies grâce à leurs connaissances et à leur technique.',
       talents: [
         { name: 'Pistage', effect: 'Suit une piste' },
         { name: 'Camouflage', effect: 'Se dissimule' },
@@ -19,6 +21,8 @@ const CLASSES: ContentEntryDto[] = [
     key: 'artisan',
     data: {
       label: 'Artisan',
+      description:
+        'Ces spécialistes savent créer tout ce qui est joli, efficace ou simplement pratique.',
       talents: [{ name: 'Création', effect: 'Fabrique un objet' }],
       requiresSpecialty: true,
       specialtyLabel: "Type d'objet de spécialité",
@@ -50,6 +54,9 @@ describe('ClassStep', () => {
     expect(fixture.nativeElement.textContent).toContain('Pistage');
     expect(fixture.nativeElement.textContent).toContain('Camouflage');
     expect(fixture.nativeElement.textContent).toContain('Piège');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Les chasseurs abattent leurs proies grâce à leurs connaissances et à leur technique.',
+    );
   });
 
   it('classe Artisan → affiche le sous-choix obligatoire de spécialité', async () => {
@@ -62,6 +69,9 @@ describe('ClassStep', () => {
 
     const input: HTMLInputElement = fixture.nativeElement.querySelector('#specialtyTypeId');
     expect(input).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain(
+      'Ces spécialistes savent créer tout ce qui est joli, efficace ou simplement pratique.',
+    );
   });
 
   it('classe non-Artisan → pas de sous-choix de spécialité', async () => {

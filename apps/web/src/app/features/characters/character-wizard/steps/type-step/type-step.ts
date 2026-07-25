@@ -11,6 +11,7 @@ interface TypeAdvantage {
 
 interface TypeData {
   label: string;
+  description: string;
   advantages: TypeAdvantage[];
 }
 

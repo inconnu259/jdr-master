@@ -18,6 +18,7 @@
 
   @if (selectedClassData(); as data) {
     <div class="class-step__talents">
+      <p class="class-step__description">{{ data.description }}</p>
       <h3 class="class-step__talents-title">Talents de {{ data.label }}</h3>
       <ul>
         @for (talent of data.talents; track talent.name) {
