@@ -17,11 +17,19 @@ export class InvitationsService {
     this._changed.update((v) => v + 1);
   }
 
+  // Plusieurs composants montés simultanément peuvent recharger sur le même changed() (cf. bug
+  // 429 en rafale sur ScenariosService.listAll, même correctif ici) — les appels concurrents
+  // partagent la même requête en vol.
+  private inFlightListReceived: Promise<InvitationDto[]> | null = null;
+
   /** Invitations PENDING reçues par l'utilisateur courant. */
   listReceived(): Promise<InvitationDto[]> {
-    return firstValueFrom(
+    if (this.inFlightListReceived) return this.inFlightListReceived;
+    const request = firstValueFrom(
       this.http.get<InvitationDto[]>(`${API}/invitations`, { withCredentials: true }),
-    );
+    ).finally(() => (this.inFlightListReceived = null));
+    this.inFlightListReceived = request;
+    return request;
   }
 
   accept(id: string): Promise<unknown> {

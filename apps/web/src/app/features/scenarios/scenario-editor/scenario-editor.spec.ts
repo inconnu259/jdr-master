@@ -1128,9 +1128,10 @@ describe('ScenarioEditor', () => {
     it('garde firstRun : un changed() déjà peuplé (correspondant à cette Partie) au montage ne déclenche PAS de refetch redondant', async () => {
       // ScenariosService est providedIn:'root' — son signal _changed peut déjà porter une valeur
       // correspondant à cette Partie AVANT le montage (mutation locale antérieure dans la même
-      // session). Sans le garde firstRun, ce cas déclencherait un refetch en plus de celui déjà fait
-      // par ngOnInit(). Seul SeanceList (Story 19.1, sans garde par conception) doit alors contribuer
-      // un appel supplémentaire — pas ScenarioEditor lui-même.
+      // session). Sans le garde firstRun (ScenarioEditor ET SeanceList, cf. bug fix production
+      // tempête de requêtes — SeanceList est monté une fois par Séance affichée, donc N instances
+      // sans garde multiplieraient les refetch inutiles), ce cas déclencherait un ou plusieurs
+      // refetch en plus de celui déjà fait par ngOnInit().
       const { scenariosSvc } = await createComponent(
         SCENARIO,
         [],
@@ -1138,10 +1139,10 @@ describe('ScenarioEditor', () => {
         { partieId: SCENARIO.partieId },
       );
 
-      // 1 appel de ngOnInit() (ScenarioEditor) + 1 appel de l'effect() inconditionnel de SeanceList
-      // (Story 19.1) = 2. Un troisième appel signalerait que le garde firstRun n'a pas neutralisé la
-      // première exécution du second effect() de ScenarioEditor.
-      expect(scenariosSvc.listAll.mock.calls.length).toBe(2);
+      // 1 seul appel (celui de ngOnInit() de ScenarioEditor) : le garde firstRun de SeanceList
+      // neutralise désormais aussi sa première exécution. Un second appel signalerait qu'un des
+      // deux gardes firstRun (ScenarioEditor ou SeanceList) n'a pas neutralisé sa première exécution.
+      expect(scenariosSvc.listAll.mock.calls.length).toBe(1);
     });
 
     it('une notification ScenariosService.changed() recharge le scénario affiché (AC1)', async () => {

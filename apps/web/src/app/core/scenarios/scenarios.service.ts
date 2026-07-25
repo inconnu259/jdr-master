@@ -81,12 +81,23 @@ export class ScenariosService {
     );
   }
 
+  // Un seul événement temps réel (changed()) fait recharger plusieurs composants montés
+  // simultanément (ScenarioTimeline, SeanceList, CalendarView…) — sans déduplication, chacun émet
+  // sa propre requête GET identique, ce qui peut déclencher le throttler API en rafale (bug : 429
+  // en boucle, "impossible de charger la chronologie"). Les appels concurrents pour la même Partie
+  // partagent donc la même requête en vol.
+  private readonly inFlightListAll = new Map<string, Promise<ScenarioDto[]>>();
+
   listAll(partieId: string): Promise<ScenarioDto[]> {
-    return firstValueFrom(
+    const existing = this.inFlightListAll.get(partieId);
+    if (existing) return existing;
+    const request = firstValueFrom(
       this.http.get<ScenarioDto[]>(`${API_BASE}/parties/${partieId}/scenarios`, {
         withCredentials: true,
       }),
-    );
+    ).finally(() => this.inFlightListAll.delete(partieId));
+    this.inFlightListAll.set(partieId, request);
+    return request;
   }
 
   async open(scenarioId: string): Promise<ScenarioDto> {

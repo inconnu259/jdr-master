@@ -22,6 +22,10 @@ export class AuthController {
 
   constructor(private readonly auth: AuthService) {}
 
+  // Route sensible (création de compte, non authentifiée) — même limite que forgot-password/
+  // reset-password ci-dessous, ne doit jamais dépendre seule du plafond global (300/min, dimensionné
+  // pour l'usage GET normal, cf. app.module.ts).
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @Post('register')
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);

@@ -49,10 +49,18 @@ export class AvailabilityService {
     this._changed.update((v) => v + 1);
   }
 
+  // Plusieurs composants montés simultanément peuvent recharger sur le même changed() (cf. bug
+  // 429 en rafale sur ScenariosService.listAll, même correctif ici) — les appels concurrents
+  // partagent la même requête en vol.
+  private inFlightGetMyDeclarations: Promise<AvailabilityDeclarationDto[]> | null = null;
+
   getMyDeclarations(): Promise<AvailabilityDeclarationDto[]> {
-    return firstValueFrom(
+    if (this.inFlightGetMyDeclarations) return this.inFlightGetMyDeclarations;
+    const request = firstValueFrom(
       this.http.get<AvailabilityDeclarationDto[]>(`${API}/availability`, { withCredentials: true }),
-    );
+    ).finally(() => (this.inFlightGetMyDeclarations = null));
+    this.inFlightGetMyDeclarations = request;
+    return request;
   }
 
   createDeclaration(dto: CreateAvailabilityDto): Promise<CreateAvailabilityResult> {

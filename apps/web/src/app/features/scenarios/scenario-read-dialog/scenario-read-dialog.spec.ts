@@ -804,18 +804,20 @@ describe('ScenarioReadDialog', () => {
 
     it('garde firstRun : un changed() déjà peuplé (correspondant à cette Partie) au montage ne déclenche PAS de refetch redondant', async () => {
       // ScenariosService est providedIn:'root' — son signal _changed peut déjà porter une valeur
-      // correspondant à cette Partie AVANT l'ouverture du dialogue. Sans le garde firstRun, ce cas
-      // déclencherait un refetch en plus de celui déjà fait par ngOnInit(). Seul SeanceList
-      // (Story 19.1, sans garde par conception) doit alors contribuer un appel supplémentaire.
+      // correspondant à cette Partie AVANT l'ouverture du dialogue. Sans le garde firstRun
+      // (ScenarioReadDialog ET SeanceList, cf. bug fix production tempête de requêtes — SeanceList
+      // est monté une fois par Séance affichée), ce cas déclencherait un ou plusieurs refetch en
+      // plus de celui déjà fait par ngOnInit().
       const { scenariosSvc } = await createComponent(
         { ...BASE, status: 'COURANT' },
         { initialChanged: { partieId: BASE.partieId } },
       );
 
-      // 1 appel de ngOnInit() (ScenarioReadDialog) + 1 appel de l'effect() inconditionnel de
-      // SeanceList (Story 19.1) = 2. Un troisième appel signalerait que le garde firstRun n'a pas
-      // neutralisé la première exécution du nouvel effect() de ScenarioReadDialog.
-      expect(scenariosSvc.listAll.mock.calls.length).toBe(2);
+      // 1 seul appel (celui de ngOnInit() de ScenarioReadDialog) : le garde firstRun de SeanceList
+      // neutralise désormais aussi sa première exécution. Un second appel signalerait qu'un des
+      // deux gardes firstRun (ScenarioReadDialog ou SeanceList) n'a pas neutralisé sa première
+      // exécution.
+      expect(scenariosSvc.listAll.mock.calls.length).toBe(1);
     });
 
     // Note : pas de test « un événement pour une autre Partie ne recharge pas » au niveau de ce

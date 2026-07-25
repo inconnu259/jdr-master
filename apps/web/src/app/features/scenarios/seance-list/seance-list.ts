@@ -57,8 +57,17 @@ export class SeanceList {
     // toujours ouvert depuis ScenarioTimeline lui-même enfant de PartieDetail, Story 18.3)
     // maintient déjà la connexion partie:{id}. Réutilise refreshScenario() existante — pas de
     // nouvelle méthode.
+    // Garde firstRun (même piège que partout ailleurs, cf. PartieDetail/CalendarView) : le signal
+    // ScenariosService.changed peut déjà porter une valeur avant le montage — sans cette garde,
+    // chaque SeanceList (une par séance affichée) déclenchait un refreshScenario() inutile dès sa
+    // création, en plus de l'input `scenario` déjà à jour.
+    let firstRun = true;
     effect(() => {
       this.scenarios.changed();
+      if (firstRun) {
+        firstRun = false;
+        return;
+      }
       untracked(() => void this.refreshScenario());
     });
   }
@@ -253,19 +262,42 @@ export class SeanceList {
     return poll.chosenSlot ? `${dateStr} — ${SLOT_LABELS[poll.chosenSlot]}` : dateStr;
   }
 
+  // Bug fix (revue de code) : ScenariosService.listAll() déduplique désormais les appels en vol par
+  // partieId (cf. scenarios.service.ts, sans traçabilité de causalité) — sans ce compteur de
+  // génération, une réponse encore en vol au moment d'une mutation locale (ex. suppression de
+  // séance) pouvait se résoudre APRÈS coup et réappliquer un état périmé (la séance supprimée
+  // réapparaissait), écrasant silencieusement l'état pourtant à jour. Même pattern que
+  // PartieDetail.reloadAnnouncements()/ScenarioTimeline.loadScenarios() (reqId/génération).
+  private refreshGeneration = 0;
+
   /** `chooseDate`/`closePoll` ne renvoient pas le poll mis à jour (void) — sans ce rechargement, la
    *  séance restait affichée comme un vote OPEN avec les boutons de choix encore actifs après une
    *  action pourtant bien traitée côté serveur. */
   private async refreshScenario(): Promise<void> {
+    const generation = ++this.refreshGeneration;
     try {
       const fresh = (await this.scenarios.listAll(this.partieId())).find(
         (s) => s.id === this.scenario().id,
       );
+      if (generation !== this.refreshGeneration) return; // réponse obsolète, une requête plus récente est en vol
       if (fresh) this.seanceLinked.emit(fresh);
     } catch {
-      this.error.set(
-        'Action effectuée, mais impossible de rafraîchir l’affichage. Rechargez la page.',
-      );
+      if (generation !== this.refreshGeneration) return;
+      // Retry unique après un court délai — un échec transitoire (ex. throttling API en rafale
+      // sur un fan-out temps réel) ne doit pas laisser l'affichage figé sur l'état périmé.
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const fresh = (await this.scenarios.listAll(this.partieId())).find(
+          (s) => s.id === this.scenario().id,
+        );
+        if (generation !== this.refreshGeneration) return;
+        if (fresh) this.seanceLinked.emit(fresh);
+      } catch {
+        if (generation !== this.refreshGeneration) return;
+        this.error.set(
+          'Action effectuée, mais impossible de rafraîchir l’affichage. Rechargez la page.',
+        );
+      }
     }
   }
 }

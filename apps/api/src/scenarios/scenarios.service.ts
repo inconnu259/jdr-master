@@ -467,7 +467,13 @@ export class ScenariosService {
       include: { poll: true },
     });
 
-    const now = Date.now();
+    // Bug fix (production) : comparer à Date.now() excluait TOUJOURS une séance datée
+    // d'aujourd'hui dès que l'heure courante dépassait minuit, quel que soit le créneau
+    // (matin/après-midi/soir, un champ séparé de `date` — la date elle-même n'a pas d'heure
+    // propre). On compare donc au début du jour courant (UTC), pas à l'horodatage exact.
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+    const now = startOfToday.getTime();
     type Candidate = { date: Date; slot: DaySlot | null };
     const nearest = seances
       .map((s): Candidate | null => {

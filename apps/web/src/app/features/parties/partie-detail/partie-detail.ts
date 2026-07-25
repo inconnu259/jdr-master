@@ -48,7 +48,7 @@ import { characterName, findContentEntry } from '../../../core/characters/charac
 import { PartiesService } from '../../../core/parties/parties.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { ModeService } from '../../../core/mode/mode.service';
-import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { getRespondedCount } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
@@ -255,8 +255,17 @@ export class PartieDetail implements OnInit {
       this.realtime.connect(partieTopic(id));
       this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(id)));
     }
+    // Garde firstRun (même piège que partout ailleurs, cf. l'effect characterSvc.changed() juste
+    // en dessous) : le signal peut déjà porter une valeur avant le montage — sans cette garde,
+    // refreshPartie()/loadMembers() étaient rechargés une seconde fois inutilement au montage, en
+    // plus du chargement initial.
+    let firstRunParties = true;
     effect(() => {
       this.parties.changed();
+      if (firstRunParties) {
+        firstRunParties = false;
+        return;
+      }
       // Bug fix (temps réel) : un nouveau membre (invitation acceptée, lien rejoint) n'apparaissait
       // jamais dans le roster/l'onglet Invitations sans recharger — étend le rechargement déjà
       // déclenché ici sur tout événement partie: (même wildcard générique que refreshPartie()) à
@@ -279,6 +288,34 @@ export class PartieDetail implements OnInit {
         return;
       }
       untracked(() => void this.reloadCharacters());
+    });
+
+    // Bug fix (temps réel, production) : un nouveau sondage de date créé sur une Séance pendant
+    // que cette page est déjà ouverte n'apparaissait jamais dans le widget "Vote ouvert"
+    // (activePolls n'était chargé qu'une fois dans ngOnInit). Même garde `matchesPartie` que
+    // CalendarView/ScenarioEditor/ScenarioDrafts pour ce même signal.
+    let firstRunScenarios = true;
+    effect(() => {
+      const change = this.scenariosSvc.changed();
+      if (firstRunScenarios) {
+        firstRunScenarios = false;
+        return;
+      }
+      if (!id || !matchesPartie(change, id)) return;
+      untracked(() => void this.loadActivePolls(id));
+    });
+
+    // Bug fix (temps réel, production) : une annonce publiée par le MJ (ou dans un autre onglet)
+    // n'apparaissait jamais sans recharger la page — AnnouncementsService n'était pas câblé au
+    // signal temps réel.
+    let firstRunAnnouncements = true;
+    effect(() => {
+      this.announcementsSvc.changed();
+      if (firstRunAnnouncements) {
+        firstRunAnnouncements = false;
+        return;
+      }
+      untracked(() => void this.reloadAnnouncements());
     });
   }
 
@@ -492,8 +529,13 @@ export class PartieDetail implements OnInit {
   }
 
   /** Story 9.2 : recharge la liste après publication — sans ça, l'annonce fraîchement publiée par
-   *  le MJ n'apparaîtrait dans son propre flux qu'au prochain rechargement de page. */
+   *  le MJ n'apparaîtrait dans son propre flux qu'au prochain rechargement de page. Réutilisée par
+   *  l'effect `announcementsSvc.changed()` (bug fix temps réel, cf. constructeur). */
   protected async onAnnouncementPublished(): Promise<void> {
+    await this.reloadAnnouncements();
+  }
+
+  private async reloadAnnouncements(): Promise<void> {
     const p = this.partie();
     if (!p) return;
     const reqId = ++this.announcementsReqId;

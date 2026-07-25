@@ -225,6 +225,8 @@ async function createFixture(
         useValue: {
           create: vi.fn(),
           listAll: vi.fn().mockResolvedValue(options.announcements ?? []),
+          // Bug fix (temps réel) : PartieDetail réagit désormais à ce signal (annonces).
+          changed: signal(0),
         },
       },
       {
@@ -524,7 +526,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
         },
         { provide: ThemeToneService, useValue: makeToneService() },
         { provide: ScenariosService, useValue: makeScenariosService() },
-        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]) } },
+        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) } },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();
@@ -1190,7 +1192,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         },
         { provide: ThemeToneService, useValue: makeToneService() },
         { provide: ScenariosService, useValue: makeScenariosService([]) },
-        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]) } },
+        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) } },
         {
           provide: HommeDragonService,
           useValue: {
@@ -1333,7 +1335,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         },
         { provide: ThemeToneService, useValue: makeToneService() },
         { provide: ScenariosService, useValue: makeScenariosService() },
-        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]) } },
+        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) } },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();

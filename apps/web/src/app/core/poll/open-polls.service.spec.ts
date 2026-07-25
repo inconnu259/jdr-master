@@ -180,13 +180,13 @@ describe('OpenPollsService', () => {
     expect(svc.openPolls().get('p1')?.id).toBe('poll-b');
   });
 
-  it("notifyChanged() (Story 22.1, AC1) recharge sans changement de playerParties()", async () => {
+  it("notifyChanged('partie:p1') (Story 22.1, AC1) recharge sans changement de playerParties()", async () => {
     const listAll = vi.fn().mockResolvedValue([]);
     const { svc, fixture } = await createHarness([makeParty('p1')], listAll);
     expect(svc.count()).toBe(0);
 
     listAll.mockResolvedValue(wrapPollsAsScenarios([makePoll('p1')]));
-    svc.notifyChanged();
+    svc.notifyChanged('partie:p1');
     for (let i = 0; i < 10; i++) {
       await Promise.resolve();
       fixture.detectChanges();
@@ -194,5 +194,35 @@ describe('OpenPollsService', () => {
 
     expect(svc.count()).toBe(1);
     expect(svc.openPolls().has('p1')).toBe(true);
+  });
+
+  it('bug fix (production, tempête de requêtes) : notifyChanged(topic) ne refetch QUE la Partie du topic, pas toutes les playerParties()', async () => {
+    const listAll = vi.fn((id: string) =>
+      id === 'p1' ? Promise.resolve(wrapPollsAsScenarios([makePoll('p1')])) : Promise.resolve([]),
+    );
+    const { svc, fixture } = await createHarness(
+      [makeParty('p1'), makeParty('p2'), makeParty('p3')],
+      listAll,
+    );
+    expect(svc.count()).toBe(1); // seule p1 a un poll en attente au chargement initial
+    listAll.mockClear(); // ignore les 3 appels du chargement initial (refresh() complet, légitime)
+
+    // p2 a désormais aussi un poll en attente, mais l'événement temps réel ne concerne que p2.
+    listAll.mockImplementation((id: string) =>
+      id === 'p2' ? Promise.resolve(wrapPollsAsScenarios([makePoll('p2')])) : Promise.resolve([]),
+    );
+    svc.notifyChanged('partie:p2');
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    // Un seul appel réseau (celui de p2), pas un par Partie du joueur (p1/p3 non re-fetchées).
+    expect(listAll).toHaveBeenCalledTimes(1);
+    expect(listAll).toHaveBeenCalledWith('p2');
+    // p1 (état précédent, non re-fetché) et p2 (nouvellement connu) comptent tous les deux.
+    expect(svc.count()).toBe(2);
+    expect(svc.openPolls().has('p1')).toBe(true);
+    expect(svc.openPolls().has('p2')).toBe(true);
   });
 });

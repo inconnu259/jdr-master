@@ -270,6 +270,11 @@ export class CalendarView implements OnInit {
     this.pollPanelOpen.set(true);
   }
 
+  /** Aucun état à mettre à jour — force un cycle de détection de changements zoneless sur
+   *  (change), pour que [disabled] (qui lit seanceSelect.value directement) reflète la
+   *  sélection courante. Même pattern que SeanceList.onCapacityFormInput(). */
+  protected noop(): void {}
+
   protected onSlotSelected(event: SlotSelectedEvent): void {
     this.selectedDate.set(event.date);
     this.selectedSlot.set(event.slot);

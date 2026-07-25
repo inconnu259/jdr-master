@@ -20,12 +20,21 @@ export class HommeDragonService {
     this._changed.update((v) => v + 1);
   }
 
+  // Plusieurs composants montés simultanément peuvent recharger sur le même changed() (cf. bug
+  // 429 en rafale sur ScenariosService.listAll, même correctif ici) — les appels concurrents pour
+  // la même Partie partagent la même requête en vol.
+  private readonly inFlightFindOne = new Map<string, Promise<HommeDragonDto | null>>();
+
   findOne(partieId: string): Promise<HommeDragonDto | null> {
-    return firstValueFrom(
+    const existing = this.inFlightFindOne.get(partieId);
+    if (existing) return existing;
+    const request = firstValueFrom(
       this.http.get<HommeDragonDto | null>(`${API_BASE}/parties/${partieId}/homme-dragon`, {
         withCredentials: true,
       }),
-    );
+    ).finally(() => this.inFlightFindOne.delete(partieId));
+    this.inFlightFindOne.set(partieId, request);
+    return request;
   }
 
   create(partieId: string, dto: CreateHommeDragonDto): Promise<HommeDragonDto> {

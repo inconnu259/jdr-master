@@ -8,6 +8,7 @@ import { InvitationsService } from '../invitations/invitations.service';
 import { OpenPollsService } from '../poll/open-polls.service';
 import { ModeService } from '../mode/mode.service';
 import { AvailabilityService } from '../availability/availability.service';
+import { AnnouncementsService } from '../announcements/announcements.service';
 
 export function partieTopic(partieId: string): string {
   return `partie:${partieId}`;
@@ -19,7 +20,12 @@ export function userTopic(userId: string): string {
 
 export interface TopicHandler {
   readonly prefix: string;
-  notifyChanged(): void;
+  // Bug fix (production, tempête de requêtes) : le topic déclencheur (ex. 'partie:xyz') est
+  // désormais transmis — un handler qui n'a besoin que de savoir "quelque chose a changé" peut
+  // toujours l'ignorer (fonction à arité inférieure, valide en TypeScript), mais un handler comme
+  // OpenPollsService peut désormais scoper son rafraîchissement à la seule Partie concernée au
+  // lieu de refetch toutes les Parties du joueur à chaque événement.
+  notifyChanged(topic: string): void;
 }
 
 /** Pure, testable isolément — pas de couplage à Angular/EventSource. */
@@ -50,6 +56,7 @@ export class RealtimeService {
   private readonly openPolls = inject(OpenPollsService);
   private readonly mode = inject(ModeService);
   private readonly availability = inject(AvailabilityService);
+  private readonly announcements = inject(AnnouncementsService);
 
   // Table de correspondance topic-prefix -> services à notifier (AD-3), câblée ici, dans
   // RealtimeService lui-même (jamais par le composant appelant connect()/disconnect()) —
@@ -65,15 +72,18 @@ export class RealtimeService {
   // cf. Dashboard.accept()/join.ts ; seul removeMember() émet désormais userTopic(removedUserId)).
   // `AvailabilityService` ajoutée au préfixe 'partie:' : une déclaration de dispo/indispo modifiée
   // par un joueur doit rafraîchir le calendrier de toute Partie où il est MJ/membre.
+  // `AnnouncementsService` ajoutée au préfixe 'partie:' (bug fix production : une annonce publiée
+  // par le MJ n'apparaissait jamais chez les autres utilisateurs déjà sur la page sans recharger).
   private readonly handlers: TopicHandler[] = [
     { prefix: 'partie:', notifyChanged: () => this.parties.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.scenarios.notifyRealtimeChanged() },
     { prefix: 'partie:', notifyChanged: () => this.characters.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.hommeDragon.notifyChanged() },
     { prefix: 'user:', notifyChanged: () => this.invitations.notifyChanged() },
-    { prefix: 'partie:', notifyChanged: () => this.openPolls.notifyChanged() },
+    { prefix: 'partie:', notifyChanged: (topic) => this.openPolls.notifyChanged(topic) },
     { prefix: 'user:', notifyChanged: () => this.mode.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.availability.notifyChanged() },
+    { prefix: 'partie:', notifyChanged: () => this.announcements.notifyChanged() },
   ];
 
   // Une entrée par connexion active (pas par topic) — deux connect() sur le même topic ouvrent
@@ -90,7 +100,7 @@ export class RealtimeService {
       // la notification des autres.
       for (const h of matchingHandlers(this.handlers, topic)) {
         try {
-          h.notifyChanged();
+          h.notifyChanged(topic);
         } catch {
           // non-bloquant — un service de domaine en échec ne doit pas empêcher les autres
         }

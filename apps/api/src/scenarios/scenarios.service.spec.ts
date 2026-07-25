@@ -2192,6 +2192,24 @@ describe('ScenariosService', () => {
       });
     });
 
+    it('séance datée d\'aujourd\'hui (même jour que NOW, minuit) → toujours retenue comme prochaine séance', async () => {
+      const TODAY = new Date('2026-07-14T00:00:00.000Z');
+      prisma.seance.findMany.mockResolvedValue([
+        { id: 's1', dateValidee: null, poll: { chosenDate: TODAY, chosenSlot: 'MORNING' } },
+      ]);
+
+      await service.recalculateNextSession('p1');
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: {
+          nextSessionDate: TODAY,
+          nextSessionSlot: 'MORNING',
+          reminderSentAt: null,
+        },
+      });
+    });
+
     it('date passée ignorée — seules les dates futures comptent', async () => {
       prisma.seance.findMany.mockResolvedValue([
         { id: 's1', dateValidee: null, poll: { chosenDate: PAST, chosenSlot: 'MORNING' } },

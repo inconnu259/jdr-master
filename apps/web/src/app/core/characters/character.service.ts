@@ -73,18 +73,32 @@ export class CharacterService {
     );
   }
 
+  // Plusieurs composants montés simultanément peuvent recharger sur le même changed() (cf. bug
+  // 429 en rafale sur ScenariosService.listAll, même correctif ici) — les appels concurrents pour
+  // la même clé partagent la même requête en vol.
+  private readonly inFlightListByPartie = new Map<string, Promise<CharacterDto[]>>();
+  private readonly inFlightGet = new Map<string, Promise<CharacterDto>>();
+
   listByPartie(partieId: string): Promise<CharacterDto[]> {
-    return firstValueFrom(
+    const existing = this.inFlightListByPartie.get(partieId);
+    if (existing) return existing;
+    const request = firstValueFrom(
       this.http.get<CharacterDto[]>(`${API_BASE}/parties/${partieId}/characters`, {
         withCredentials: true,
       }),
-    );
+    ).finally(() => this.inFlightListByPartie.delete(partieId));
+    this.inFlightListByPartie.set(partieId, request);
+    return request;
   }
 
   get(id: string): Promise<CharacterDto> {
-    return firstValueFrom(
+    const existing = this.inFlightGet.get(id);
+    if (existing) return existing;
+    const request = firstValueFrom(
       this.http.get<CharacterDto>(`${API_BASE}/characters/${id}`, { withCredentials: true }),
-    );
+    ).finally(() => this.inFlightGet.delete(id));
+    this.inFlightGet.set(id, request);
+    return request;
   }
 
   exportPdf(id: string, format: 'editable' | '2pages'): Promise<Blob> {

@@ -47,10 +47,20 @@ export class PartiesService {
     );
   }
 
+  // Plusieurs composants montés simultanément peuvent recharger sur le même changed() (cf. bug
+  // 429 en rafale sur ScenariosService.listAll, même correctif ici) — les appels concurrents pour
+  // la même clé partagent la même requête en vol.
+  private readonly inFlightGet = new Map<string, Promise<PartieDto>>();
+  private readonly inFlightMembers = new Map<string, Promise<PartieMemberDto[]>>();
+
   get(id: string): Promise<PartieDto> {
-    return firstValueFrom(
+    const existing = this.inFlightGet.get(id);
+    if (existing) return existing;
+    const request = firstValueFrom(
       this.http.get<PartieDto>(`${API}/parties/${id}`, { withCredentials: true }),
-    );
+    ).finally(() => this.inFlightGet.delete(id));
+    this.inFlightGet.set(id, request);
+    return request;
   }
 
   create(payload: PartiePayload): Promise<PartieDto> {
@@ -82,9 +92,13 @@ export class PartiesService {
   }
 
   members(id: string): Promise<PartieMemberDto[]> {
-    return firstValueFrom(
+    const existing = this.inFlightMembers.get(id);
+    if (existing) return existing;
+    const request = firstValueFrom(
       this.http.get<PartieMemberDto[]>(`${API}/parties/${id}/members`, { withCredentials: true }),
-    );
+    ).finally(() => this.inFlightMembers.delete(id));
+    this.inFlightMembers.set(id, request);
+    return request;
   }
 
   removeMember(id: string, userId: string): Promise<void> {

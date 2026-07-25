@@ -55,7 +55,7 @@
         <div class="new-vote-form">
           <label class="new-vote-form__label">
             Planifier un vote pour :
-            <select #seanceSelect class="new-vote-form__select">
+            <select #seanceSelect class="new-vote-form__select" (change)="noop()">
               <option value="" selected>Choisir une séance…</option>
               @for (entry of eligibleSeances(); track entry.seance.id) {
                 <option [value]="entry.seance.id">
