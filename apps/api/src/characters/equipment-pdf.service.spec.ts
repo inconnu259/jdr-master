@@ -38,8 +38,18 @@ function makeCharacter(overrides: Record<string, unknown> = {}) {
     sheetData: {
       narrative: { name: 'Miren' },
       equipment: {
-        individual: [{ id: 'i1', name: 'Corde', weight: 2, price: '5po', addedBy: 'player' }],
-        contenants: [{ id: 'c1', name: 'Sac à dos', weight: 3, addedBy: 'player' }],
+        individual: [
+          {
+            id: 'i1',
+            name: 'Corde',
+            weight: 2,
+            price: '5po',
+            addedBy: 'player',
+          },
+        ],
+        contenants: [
+          { id: 'c1', name: 'Sac à dos', weight: 3, addedBy: 'player' },
+        ],
         animaux: [{ id: 'a1', name: 'Cheval', addedBy: 'player' }],
       },
     },
@@ -91,7 +101,7 @@ describe('EquipmentPdfService', () => {
     expect(mockForm.getTextField).not.toHaveBeenCalledWith('PrixRow1');
   });
 
-  it('construit l\'EquipmentPdfInput à partir du personnage (ownerPseudo, nom, encombrementLimit, equipment)', async () => {
+  it("construit l'EquipmentPdfInput à partir du personnage (ownerPseudo, nom, encombrementLimit, equipment)", async () => {
     await service.fillEquipmentPdf(makeCharacter());
 
     expect(mockMapFields).toHaveBeenCalledWith({
@@ -99,8 +109,12 @@ describe('EquipmentPdfService', () => {
       characterName: 'Miren',
       encombrementLimit: 11,
       equipment: {
-        individual: [{ name: 'Corde', weight: 2, price: '5po', effect: undefined }],
-        contenants: [{ name: 'Sac à dos', weight: 3, price: undefined, effect: undefined }],
+        individual: [
+          { name: 'Corde', weight: 2, price: '5po', effect: undefined },
+        ],
+        contenants: [
+          { name: 'Sac à dos', weight: 3, price: undefined, effect: undefined },
+        ],
         animaux: [{ name: 'Cheval', price: undefined, effect: undefined }],
       },
     });
@@ -114,7 +128,7 @@ describe('EquipmentPdfService', () => {
     );
   });
 
-  it("échec de setText sur un champ → erreur explicite, pas un crash silencieux", async () => {
+  it('échec de setText sur un champ → erreur explicite, pas un crash silencieux', async () => {
     mockForm.getTextField.mockImplementationOnce(() => {
       throw new Error('champ inconnu');
     });

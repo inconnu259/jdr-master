@@ -82,7 +82,9 @@ describe('NotesPdfService', () => {
     await service.fillNotesPdf(makeNotes());
 
     expect(mockMapFields).toHaveBeenCalledWith({
-      notes: [{ text: 'Première entrée', createdAt: '2026-07-01T00:00:00.000Z' }],
+      notes: [
+        { text: 'Première entrée', createdAt: '2026-07-01T00:00:00.000Z' },
+      ],
     });
   });
 
@@ -104,7 +106,7 @@ describe('NotesPdfService', () => {
     );
   });
 
-  it("échec de setText sur un champ → erreur explicite, pas un crash silencieux", async () => {
+  it('échec de setText sur un champ → erreur explicite, pas un crash silencieux', async () => {
     mockForm.getTextField.mockImplementationOnce(() => {
       throw new Error('champ inconnu');
     });

@@ -13,7 +13,12 @@ import { NotesPdfService } from './notes-pdf.service';
 @Module({
   imports: [PartiesModule, GameSystemModule, UsersModule, EmailModule],
   controllers: [CharactersController, PartieCharactersController],
-  providers: [CharacterService, RyuutamaPdfService, EquipmentPdfService, NotesPdfService],
+  providers: [
+    CharacterService,
+    RyuutamaPdfService,
+    EquipmentPdfService,
+    NotesPdfService,
+  ],
   exports: [CharacterService],
 })
 export class CharacterModule {}

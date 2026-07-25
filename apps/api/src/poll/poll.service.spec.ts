@@ -7,7 +7,10 @@ import { Test } from '@nestjs/testing';
 import { PollService } from './poll.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+} from '../realtime/realtime-events.service';
 
 function makePrisma() {
   const prisma: any = {

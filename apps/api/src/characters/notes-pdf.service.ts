@@ -55,7 +55,10 @@ export class NotesPdfService {
     if (!this.templatePromise) {
       this.templatePromise = readFile(PDF_TEMPLATE_PATH).catch((e) => {
         this.templatePromise = null;
-        this.logger.error('Échec du chargement du template PDF notes Ryuutama', e);
+        this.logger.error(
+          'Échec du chargement du template PDF notes Ryuutama',
+          e,
+        );
         throw new Error(
           'Template PDF notes Ryuutama introuvable. Consultez apps/api/game-systems/ryuutama/assets/README.md',
         );

@@ -28,14 +28,12 @@ describe('AnnouncementsController', () => {
     announcements = makeAnnouncementsService();
     const module = await Test.createTestingModule({
       controllers: [AnnouncementsController],
-      providers: [
-        { provide: AnnouncementsService, useValue: announcements },
-      ],
+      providers: [{ provide: AnnouncementsService, useValue: announcements }],
     }).compile();
     controller = module.get(AnnouncementsController);
   });
 
-  it("create() délègue à AnnouncementsService.create() avec partieId/user.id/dto", async () => {
+  it('create() délègue à AnnouncementsService.create() avec partieId/user.id/dto', async () => {
     const dto = { text: 'Une annonce', scenarioId: 's1' };
     announcements.create.mockResolvedValue({
       id: 'ann1',
@@ -45,7 +43,7 @@ describe('AnnouncementsController', () => {
       createdAt: '2026-07-15T00:00:00.000Z',
     });
 
-    const result = await controller.create('p1', { id: 'mj1' } as any, dto as any);
+    const result = await controller.create('p1', { id: 'mj1' } as any, dto);
 
     expect(announcements.create).toHaveBeenCalledWith('p1', 'mj1', dto);
     expect(result.id).toBe('ann1');

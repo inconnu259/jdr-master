@@ -19,7 +19,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { CharacterService } from '../characters/character.service';
 import { PollService } from '../poll/poll.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+} from '../realtime/realtime-events.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import {
@@ -147,7 +150,10 @@ export class ScenariosService {
         "Le fichier fourni n'est pas un PDF ou un texte valide",
       );
     }
-    if (mime === 'application/pdf' && !(await isStructurallyValidPdf(file.buffer))) {
+    if (
+      mime === 'application/pdf' &&
+      !(await isStructurallyValidPdf(file.buffer))
+    ) {
       throw new BadRequestException(
         'Le fichier PDF fourni est corrompu ou structurellement invalide',
       );
@@ -280,7 +286,13 @@ export class ScenariosService {
           seances,
           scenarioParticipants,
         );
-        return toDto(s, partie.kind, scenarioParticipants, seances, retrospectiveNotes);
+        return toDto(
+          s,
+          partie.kind,
+          scenarioParticipants,
+          seances,
+          retrospectiveNotes,
+        );
       }),
     );
   }
@@ -475,20 +487,23 @@ export class ScenariosService {
     startOfToday.setUTCHours(0, 0, 0, 0);
     const now = startOfToday.getTime();
     type Candidate = { date: Date; slot: DaySlot | null };
-    const nearest = seances
-      .map((s): Candidate | null => {
-        if (s.poll?.chosenDate) return { date: s.poll.chosenDate, slot: s.poll.chosenSlot };
-        if (s.dateValidee) return { date: s.dateValidee, slot: null };
-        return null;
-      })
-      .filter((c): c is Candidate => c !== null && c.date.getTime() >= now)
-      .sort((a, b) => a.date.getTime() - b.date.getTime())[0] ?? null;
+    const nearest =
+      seances
+        .map((s): Candidate | null => {
+          if (s.poll?.chosenDate)
+            return { date: s.poll.chosenDate, slot: s.poll.chosenSlot };
+          if (s.dateValidee) return { date: s.dateValidee, slot: null };
+          return null;
+        })
+        .filter((c): c is Candidate => c !== null && c.date.getTime() >= now)
+        .sort((a, b) => a.date.getTime() - b.date.getTime())[0] ?? null;
 
     const partie = await this.prisma.partie.findUniqueOrThrow({
       where: { id: partieId },
     });
     const unchanged =
-      (partie.nextSessionDate?.getTime() ?? null) === (nearest?.date.getTime() ?? null) &&
+      (partie.nextSessionDate?.getTime() ?? null) ===
+        (nearest?.date.getTime() ?? null) &&
       partie.nextSessionSlot === (nearest?.slot ?? null);
 
     await this.prisma.partie.update({
@@ -1023,13 +1038,19 @@ function toSeanceDto(seance: any): SeanceDto {
 // non contrôlé si la clé étrangère se révèle orpheline (cas normalement impossible en usage
 // courant — findUniqueOrThrow() lève Prisma.PrismaClientKnownRequestError/P2025, vérifié
 // empiriquement contre la base de ce projet).
-async function resolveScenarioOrThrow(prisma: PrismaService, scenarioId: string) {
+async function resolveScenarioOrThrow(
+  prisma: PrismaService,
+  scenarioId: string,
+) {
   try {
     return await prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+    if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === 'P2025'
+    ) {
       throw new NotFoundException('Scénario introuvable');
     }
     throw e;

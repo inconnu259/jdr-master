@@ -22,7 +22,10 @@
       <h3 class="class-step__talents-title">Talents de {{ data.label }}</h3>
       <ul>
         @for (talent of data.talents; track talent.name) {
-          <li><strong>{{ talent.name }}</strong> — {{ talent.effect }}</li>
+          <li>
+            <strong>{{ talent.name }}</strong> — {{ talent.effect }}
+            <p class="class-step__talent-description">{{ talent.description }}</p>
+          </li>
         }
       </ul>
     </div>

@@ -4,7 +4,11 @@ import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { RealtimeController } from './realtime.controller';
 import { PartiesService } from '../parties/parties.service';
-import { RealtimeEventsService, partieTopic, userTopic } from './realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+  userTopic,
+} from './realtime-events.service';
 
 function makeParties() {
   return { getViewable: jest.fn() };
@@ -62,7 +66,7 @@ describe('RealtimeController', () => {
     expect(receivedFromOther).toEqual([]);
   });
 
-  it("un utilisateur authentifié reçoit les événements de son propre topic utilisateur (AC1, Story 21.1)", async () => {
+  it('un utilisateur authentifié reçoit les événements de son propre topic utilisateur (AC1, Story 21.1)', async () => {
     const stream = controller.userEvents({ id: 'u1' } as any);
     const received = firstValueFrom(stream.pipe(take(1)));
 

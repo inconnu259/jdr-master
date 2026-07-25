@@ -144,7 +144,12 @@ describe('GameSystemService', () => {
     it('clé "member" (journal) + membre viewable → fichier retourné, getViewable appelé (pas getOwned)', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-      const result = await service.getAssetFile('p1', 'ryuutama', 'journal', 'u1');
+      const result = await service.getAssetFile(
+        'p1',
+        'ryuutama',
+        'journal',
+        'u1',
+      );
 
       expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
       expect(parties.getOwned).not.toHaveBeenCalled();
@@ -163,7 +168,12 @@ describe('GameSystemService', () => {
     it('clé "mj" (monde) + MJ → fichier retourné, getOwned appelé (pas getViewable)', async () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-      const result = await service.getAssetFile('p1', 'ryuutama', 'monde', 'mj1');
+      const result = await service.getAssetFile(
+        'p1',
+        'ryuutama',
+        'monde',
+        'mj1',
+      );
 
       expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
       expect(parties.getViewable).not.toHaveBeenCalled();
@@ -179,7 +189,7 @@ describe('GameSystemService', () => {
       expect(mockReadFile).not.toHaveBeenCalled();
     });
 
-    it('clé inconnue → NotFoundException explicite, aucune vérification d\'accès déclenchée', async () => {
+    it("clé inconnue → NotFoundException explicite, aucune vérification d'accès déclenchée", async () => {
       await expect(
         service.getAssetFile('p1', 'ryuutama', 'inexistante', 'u1'),
       ).rejects.toThrow('Fiche introuvable');
@@ -232,7 +242,12 @@ describe('GameSystemService', () => {
         async (key) => {
           parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-          const result = await service.getAssetFile('p1', 'ryuutama', key, 'mj1');
+          const result = await service.getAssetFile(
+            'p1',
+            'ryuutama',
+            key,
+            'mj1',
+          );
 
           expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
           expect(parties.getViewable).not.toHaveBeenCalled();

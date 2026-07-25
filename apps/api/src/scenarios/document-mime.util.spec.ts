@@ -51,9 +51,7 @@ describe('isStructurallyValidPdf', () => {
   });
 
   it('rejette un buffer vide', async () => {
-    await expect(isStructurallyValidPdf(Buffer.alloc(0))).resolves.toBe(
-      false,
-    );
+    await expect(isStructurallyValidPdf(Buffer.alloc(0))).resolves.toBe(false);
   });
 });
 

@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException, StreamableFile } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  StreamableFile,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PartieGameSystemController } from './partie-game-system.controller';
 import { GameSystemService } from './game-system.service';
@@ -52,7 +56,9 @@ describe('PartieGameSystemController', () => {
     gameSystems.getAssetFile.mockRejectedValue(new ForbiddenException());
 
     await expect(
-      controller.getAsset('p1', 'ryuutama', 'structure', { id: 'player1' } as any),
+      controller.getAsset('p1', 'ryuutama', 'structure', {
+        id: 'player1',
+      } as any),
     ).rejects.toThrow(ForbiddenException);
   });
 });

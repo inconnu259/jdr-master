@@ -28,7 +28,7 @@ describe('migrateEquipmentUnify', () => {
       },
     ]);
 
-    const migrated = await migrateEquipmentUnify(prisma as any);
+    const migrated = await migrateEquipmentUnify(prisma);
 
     expect(migrated).toBe(1);
     expect(prisma.character.update).toHaveBeenCalledWith({
@@ -70,7 +70,7 @@ describe('migrateEquipmentUnify', () => {
       },
     ]);
 
-    await migrateEquipmentUnify(prisma as any);
+    await migrateEquipmentUnify(prisma);
 
     const written = prisma.character.update.mock.calls[0][0].data.sheetData;
     expect(written.equipment.individual).toEqual([
@@ -86,7 +86,7 @@ describe('migrateEquipmentUnify', () => {
       },
     ]);
 
-    await migrateEquipmentUnify(prisma as any);
+    await migrateEquipmentUnify(prisma);
 
     const written = prisma.character.update.mock.calls[0][0].data.sheetData;
     expect(written.equipment).not.toHaveProperty('group');
@@ -98,7 +98,9 @@ describe('migrateEquipmentUnify', () => {
         id: 'char4',
         sheetData: {
           equipment: {
-            individual: [{ id: 'i1', name: 'Cape', weight: 1.2, addedBy: 'player' }],
+            individual: [
+              { id: 'i1', name: 'Cape', weight: 1.2, addedBy: 'player' },
+            ],
             contenants: [],
             animaux: [],
           },
@@ -106,16 +108,18 @@ describe('migrateEquipmentUnify', () => {
       },
     ]);
 
-    const migrated = await migrateEquipmentUnify(prisma as any);
+    const migrated = await migrateEquipmentUnify(prisma);
 
     expect(migrated).toBe(0);
     expect(prisma.character.update).not.toHaveBeenCalled();
   });
 
   it('sheetData sans equipment → normalisé sans crash (individual/contenants/animaux vides)', async () => {
-    const prisma = makePrisma([{ id: 'char5', sheetData: { classId: 'chasseur' } }]);
+    const prisma = makePrisma([
+      { id: 'char5', sheetData: { classId: 'chasseur' } },
+    ]);
 
-    const migrated = await migrateEquipmentUnify(prisma as any);
+    const migrated = await migrateEquipmentUnify(prisma);
 
     expect(migrated).toBe(1);
     expect(prisma.character.update).toHaveBeenCalledWith({
@@ -143,7 +147,7 @@ describe('migrateEquipmentUnify', () => {
       },
     ]);
 
-    const migrated = await migrateEquipmentUnify(prisma as any);
+    const migrated = await migrateEquipmentUnify(prisma);
 
     expect(migrated).toBe(1);
     expect(prisma.character.update).toHaveBeenCalledTimes(1);

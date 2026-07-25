@@ -1,4 +1,8 @@
-import { RealtimeEventsService, partieTopic, userTopic } from './realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+  userTopic,
+} from './realtime-events.service';
 
 describe('partieTopic', () => {
   it("construit le topic au format 'partie:{id}'", () => {

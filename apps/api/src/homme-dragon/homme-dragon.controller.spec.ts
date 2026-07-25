@@ -43,7 +43,11 @@ describe('HommeDragonController', () => {
   });
 
   it('POST délègue à create() avec partieId/user.id/dto', () => {
-    const dto = { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' } as any;
+    const dto = {
+      race: 'DRAGON_ROUGE',
+      artefact: { key: 'grand-arc' },
+      nom: 'Ignis',
+    } as any;
     controller.create('p1', { id: 'mj1' } as any, dto);
     expect(service.create).toHaveBeenCalledWith('p1', 'mj1', dto);
   });
@@ -76,16 +80,19 @@ describe('HommeDragonController', () => {
 
       expect(service.findOne).toHaveBeenCalledWith('p1', 'u1');
       expect(service.getOwnerPseudo).toHaveBeenCalledWith('mj1');
-      expect(pdfService.fillHommeDragonPdf).toHaveBeenCalledWith(hommeDragon, 'admin');
+      expect(pdfService.fillHommeDragonPdf).toHaveBeenCalledWith(
+        hommeDragon,
+        'admin',
+      );
       expect(result.getStream()).toBeDefined();
     });
 
     it('aucune fiche existante → NotFoundException, jamais un PDF vide', async () => {
       service.findOne.mockResolvedValue(null);
 
-      await expect(controller.exportPdf('p1', { id: 'u1' } as any)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        controller.exportPdf('p1', { id: 'u1' } as any),
+      ).rejects.toThrow(NotFoundException);
       expect(pdfService.fillHommeDragonPdf).not.toHaveBeenCalled();
     });
   });

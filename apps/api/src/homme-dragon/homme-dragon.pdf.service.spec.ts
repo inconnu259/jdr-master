@@ -34,7 +34,10 @@ function makeGameSystems() {
   return {
     getContent: jest.fn().mockResolvedValue({
       eveilPower: [
-        { key: 'escorte-du-dragon', data: { key: 'escorte-du-dragon', label: 'Escorte du dragon' } },
+        {
+          key: 'escorte-du-dragon',
+          data: { key: 'escorte-du-dragon', label: 'Escorte du dragon' },
+        },
       ],
     }),
   };
@@ -46,7 +49,11 @@ function makeHommeDragon(overrides: Record<string, unknown> = {}) {
     userId: 'mj1',
     partieId: 'p1',
     gameSystemId: 'ryuutama',
-    sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' },
+    sheetData: {
+      race: 'DRAGON_ROUGE',
+      artefact: { key: 'grand-arc' },
+      nom: 'Ignis',
+    },
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-17T00:00:00.000Z',
     voyageursProteges: [],
@@ -75,7 +82,10 @@ describe('HommeDragonPdfService', () => {
     ]);
 
     const module = await Test.createTestingModule({
-      providers: [HommeDragonPdfService, { provide: GameSystemService, useValue: gameSystems }],
+      providers: [
+        HommeDragonPdfService,
+        { provide: GameSystemService, useValue: gameSystems },
+      ],
     }).compile();
     service = module.get(HommeDragonPdfService);
   });
@@ -95,7 +105,7 @@ describe('HommeDragonPdfService', () => {
     expect(mockForm.getTextField).not.toHaveBeenCalledWith('inscription');
   });
 
-  it('résout le libellé du pouvoir d\'éveil via GameSystemService.getContent()', async () => {
+  it("résout le libellé du pouvoir d'éveil via GameSystemService.getContent()", async () => {
     await service.fillHommeDragonPdf(makeHommeDragon(), 'admin');
 
     expect(gameSystems.getContent).toHaveBeenCalledWith('ryuutama');
@@ -112,18 +122,18 @@ describe('HommeDragonPdfService', () => {
   it('template introuvable → erreur explicite pointant vers le README', async () => {
     mockReadFile.mockRejectedValue(new Error('ENOENT'));
 
-    await expect(service.fillHommeDragonPdf(makeHommeDragon(), 'admin')).rejects.toThrow(
-      'Template PDF Homme Dragon introuvable',
-    );
+    await expect(
+      service.fillHommeDragonPdf(makeHommeDragon(), 'admin'),
+    ).rejects.toThrow('Template PDF Homme Dragon introuvable');
   });
 
-  it("échec de setText sur un champ → erreur explicite, pas un crash silencieux", async () => {
+  it('échec de setText sur un champ → erreur explicite, pas un crash silencieux', async () => {
     mockForm.getTextField.mockImplementationOnce(() => {
       throw new Error('champ inconnu');
     });
 
-    await expect(service.fillHommeDragonPdf(makeHommeDragon(), 'admin')).rejects.toThrow(
-      /introuvable\/incompatible/,
-    );
+    await expect(
+      service.fillHommeDragonPdf(makeHommeDragon(), 'admin'),
+    ).rejects.toThrow(/introuvable\/incompatible/);
   });
 });

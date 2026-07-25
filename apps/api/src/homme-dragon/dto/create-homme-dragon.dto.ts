@@ -9,7 +9,12 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
-const RACES = ['DRAGON_VERT', 'DRAGON_BLEU', 'DRAGON_ROUGE', 'DRAGON_NOIR'] as const;
+const RACES = [
+  'DRAGON_VERT',
+  'DRAGON_BLEU',
+  'DRAGON_ROUGE',
+  'DRAGON_NOIR',
+] as const;
 
 export class ArtefactDto {
   @IsString()

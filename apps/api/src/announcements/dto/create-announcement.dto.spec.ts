@@ -22,14 +22,18 @@ describe('CreateAnnouncementDto', () => {
     expect(errors.some((e) => e.property === 'text')).toBe(true);
   });
 
-  it("text au-delà de la borne (MaxLength, revue de code) → invalide", async () => {
-    const dto = plainToInstance(CreateAnnouncementDto, { text: 'x'.repeat(5001) });
+  it('text au-delà de la borne (MaxLength, revue de code) → invalide', async () => {
+    const dto = plainToInstance(CreateAnnouncementDto, {
+      text: 'x'.repeat(5001),
+    });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'text')).toBe(true);
   });
 
   it('text à la borne exacte (5000) → aucune erreur', async () => {
-    const dto = plainToInstance(CreateAnnouncementDto, { text: 'x'.repeat(5000) });
+    const dto = plainToInstance(CreateAnnouncementDto, {
+      text: 'x'.repeat(5000),
+    });
     expect(await validate(dto)).toHaveLength(0);
   });
 

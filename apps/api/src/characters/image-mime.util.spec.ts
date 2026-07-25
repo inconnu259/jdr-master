@@ -44,9 +44,14 @@ describe('detectImageMime', () => {
 });
 
 describe('stripImageMetadata', () => {
-  it('supprime les métadonnées EXIF (GPS) d\'une image réelle', async () => {
+  it("supprime les métadonnées EXIF (GPS) d'une image réelle", async () => {
     const withExif = await sharp({
-      create: { width: 8, height: 8, channels: 3, background: { r: 255, g: 0, b: 0 } },
+      create: {
+        width: 8,
+        height: 8,
+        channels: 3,
+        background: { r: 255, g: 0, b: 0 },
+      },
     })
       .jpeg()
       .withExif({
@@ -69,7 +74,12 @@ describe('stripImageMetadata', () => {
 
   it('applique la rotation EXIF aux pixels avant de retirer le tag Orientation (AC2)', async () => {
     const oriented = await sharp({
-      create: { width: 8, height: 4, channels: 3, background: { r: 0, g: 255, b: 0 } },
+      create: {
+        width: 8,
+        height: 4,
+        channels: 3,
+        background: { r: 0, g: 255, b: 0 },
+      },
     })
       .jpeg()
       .withMetadata({ orientation: 6 })
@@ -82,9 +92,14 @@ describe('stripImageMetadata', () => {
     expect(meta.orientation).toBeUndefined();
   });
 
-  it('préserve le format d\'entrée (JPEG reste JPEG, AC3)', async () => {
+  it("préserve le format d'entrée (JPEG reste JPEG, AC3)", async () => {
     const buf = await sharp({
-      create: { width: 4, height: 4, channels: 3, background: { r: 0, g: 0, b: 255 } },
+      create: {
+        width: 4,
+        height: 4,
+        channels: 3,
+        background: { r: 0, g: 0, b: 255 },
+      },
     })
       .jpeg()
       .toBuffer();
@@ -93,9 +108,14 @@ describe('stripImageMetadata', () => {
     expect(meta.format).toBe('jpeg');
   });
 
-  it('préserve le format d\'entrée (PNG reste PNG, AC3)', async () => {
+  it("préserve le format d'entrée (PNG reste PNG, AC3)", async () => {
     const buf = await sharp({
-      create: { width: 4, height: 4, channels: 3, background: { r: 0, g: 0, b: 255 } },
+      create: {
+        width: 4,
+        height: 4,
+        channels: 3,
+        background: { r: 0, g: 0, b: 255 },
+      },
     })
       .png()
       .toBuffer();
@@ -104,9 +124,14 @@ describe('stripImageMetadata', () => {
     expect(meta.format).toBe('png');
   });
 
-  it('préserve le format d\'entrée (WEBP reste WEBP, AC3)', async () => {
+  it("préserve le format d'entrée (WEBP reste WEBP, AC3)", async () => {
     const buf = await sharp({
-      create: { width: 4, height: 4, channels: 3, background: { r: 0, g: 0, b: 255 } },
+      create: {
+        width: 4,
+        height: 4,
+        channels: 3,
+        background: { r: 0, g: 0, b: 255 },
+      },
     })
       .webp()
       .toBuffer();
@@ -117,7 +142,12 @@ describe('stripImageMetadata', () => {
 
   it('laisse une image sans tag EXIF Orientation inchangée (pas de rotation intempestive)', async () => {
     const buf = await sharp({
-      create: { width: 8, height: 4, channels: 3, background: { r: 10, g: 20, b: 30 } },
+      create: {
+        width: 8,
+        height: 4,
+        channels: 3,
+        background: { r: 10, g: 20, b: 30 },
+      },
     })
       .jpeg()
       .toBuffer();

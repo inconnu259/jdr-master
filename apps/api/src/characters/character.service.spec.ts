@@ -54,7 +54,10 @@ import { PartiesService } from '../parties/parties.service';
 import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { EmailService } from '../email/email.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+} from '../realtime/realtime-events.service';
 
 /** Nom de fichier légitime généré côté serveur (`randomUUID()` + extension) — cf. `image-mime.util.ts`. */
 const OLD_PORTRAIT_UUID = '11111111-1111-1111-1111-111111111111';
@@ -961,7 +964,9 @@ describe('CharacterService', () => {
     });
 
     it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-      prisma.character.update.mockResolvedValue(makeCharacter({ xp: 50, partieId: 'p1' }));
+      prisma.character.update.mockResolvedValue(
+        makeCharacter({ xp: 50, partieId: 'p1' }),
+      );
       (pendingLevels as jest.Mock).mockReturnValue([]);
 
       await service.applyXpDelta('char1', 50);
@@ -1584,7 +1589,7 @@ describe('CharacterService', () => {
 
       await service.setSheetField('char1', 'mj1', {
         path: 'equipment.animaux.0',
-        value: { name: 'Cheval', weight: 999 } as any,
+        value: { name: 'Cheval', weight: 999 },
       });
 
       const written =
@@ -2665,7 +2670,11 @@ describe('CharacterService', () => {
         );
         parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-        const result = await service.setJournalAutoAssociate('char1', 'u1', true);
+        const result = await service.setJournalAutoAssociate(
+          'char1',
+          'u1',
+          true,
+        );
 
         expect(prisma.character.update).toHaveBeenCalledWith({
           where: { id: 'char1' },

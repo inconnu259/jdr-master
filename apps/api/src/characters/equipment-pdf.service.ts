@@ -3,7 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import type { CharacterDto } from '@master-jdr/shared';
-import { mapEquipmentToPdfFields, type RyuutamaSheetData } from '@master-jdr/game-rules';
+import {
+  mapEquipmentToPdfFields,
+  type RyuutamaSheetData,
+} from '@master-jdr/game-rules';
 
 const PDF_TEMPLATE_PATH = join(
   process.cwd(),
@@ -72,7 +75,10 @@ export class EquipmentPdfService {
     if (!this.templatePromise) {
       this.templatePromise = readFile(PDF_TEMPLATE_PATH).catch((e) => {
         this.templatePromise = null;
-        this.logger.error('Échec du chargement du template PDF équipement Ryuutama', e);
+        this.logger.error(
+          'Échec du chargement du template PDF équipement Ryuutama',
+          e,
+        );
         throw new Error(
           'Template PDF équipement Ryuutama introuvable. Consultez apps/api/game-systems/ryuutama/assets/README.md',
         );

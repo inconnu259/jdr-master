@@ -9,7 +9,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { InviteLinksService } from './invite-links.service';
 import { EmailService } from '../email/email.service';
-import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+  userTopic,
+} from '../realtime/realtime-events.service';
 
 describe('InvitationsService', () => {
   let service: InvitationsService;

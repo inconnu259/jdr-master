@@ -40,9 +40,15 @@ const REFERENCE_ASSETS: Record<string, ReferenceAsset> = {
   monstre: { file: 'Ryuutama_fiche_de_monstre_edit.pdf', access: 'mj' },
   ville: { file: 'Ryuutama_fiche_de_ville_edit.pdf', access: 'mj' },
   provisions: { file: 'Ryuutama_fiche_de_provisions.pdf', access: 'mj' },
-  'objectif-chasse': { file: 'Ryuutama_objectif_chasse_edit.pdf', access: 'mj' },
+  'objectif-chasse': {
+    file: 'Ryuutama_objectif_chasse_edit.pdf',
+    access: 'mj',
+  },
   'objectif-quete': { file: 'Ryuutama_objectif_quête_edit.pdf', access: 'mj' },
-  'objectif-voyage': { file: 'Ryuutama_objectif_voyage_edit.pdf', access: 'mj' },
+  'objectif-voyage': {
+    file: 'Ryuutama_objectif_voyage_edit.pdf',
+    access: 'mj',
+  },
   'oeuf-de-bataille': { file: 'Ryuutama_oeuf_de_bataille.pdf', access: 'mj' },
   structure: { file: 'Ryuutama_structure_edit.pdf', access: 'mj' },
 };

@@ -86,7 +86,9 @@ function makeMockPrisma() {
   const mockFindMany = jest.fn(async () => [] as object[]);
   // Story bug-fix temps réel : affectedPartieIds() interroge membership/partie — vides par défaut
   // (aucun effet sur les tests existants, qui n'assertent pas sur les topics émis).
-  const mockMembershipFindMany = jest.fn(async () => [] as { partieId: string }[]);
+  const mockMembershipFindMany = jest.fn(
+    async () => [] as { partieId: string }[],
+  );
   const mockPartieFindMany = jest.fn(async () => [] as { id: string }[]);
 
   const tx: MockTxClient = {
@@ -655,7 +657,10 @@ describe('AvailabilityService — émission temps réel', () => {
   });
 
   it('create() émet partieTopic pour chaque Partie où l’utilisateur est membre ou MJ', async () => {
-    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }, { partieId: 'p2' }]);
+    mockMembershipFindMany.mockResolvedValue([
+      { partieId: 'p1' },
+      { partieId: 'p2' },
+    ]);
     mockPartieFindMany.mockResolvedValue([{ id: 'p3' }]);
 
     await service.create(USER_ID, baseDto);
@@ -701,7 +706,9 @@ describe('AvailabilityService — émission temps réel', () => {
 
   it('splitOccurrence() émet partieTopic après la transaction', async () => {
     mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }]);
-    mockFindUnique.mockResolvedValue(makeRecurring({ startDate: WED1, endDate: null }));
+    mockFindUnique.mockResolvedValue(
+      makeRecurring({ startDate: WED1, endDate: null }),
+    );
 
     await service.splitOccurrence(DECL_ID, USER_ID, '2026-07-01', 'delete');
 

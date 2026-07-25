@@ -22,7 +22,10 @@ import { PartiesService } from '../parties/parties.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+} from '../realtime/realtime-events.service';
 
 @Injectable()
 export class HommeDragonService {
@@ -70,7 +73,9 @@ export class HommeDragonService {
       return this.buildDto(hommeDragon, partieId, userId);
     } catch (e: any) {
       if (e?.code === 'P2002') {
-        throw new ConflictException('Vous avez déjà un Homme Dragon sur cette Partie');
+        throw new ConflictException(
+          'Vous avez déjà un Homme Dragon sur cette Partie',
+        );
       }
       throw e;
     }
@@ -132,7 +137,7 @@ export class HommeDragonService {
           gameSystemId: RYUUTAMA_ID,
         },
       },
-      data: { sheetData: sheetData as any },
+      data: { sheetData: sheetData },
     });
     this.realtimeEvents.emit(partieTopic(partieId));
     return this.buildDto(updated, partieId, userId);
@@ -169,16 +174,26 @@ export class HommeDragonService {
     // historique complet) avant d'avoir validé la requête ; buildDto() est appelé à la toute fin
     // pour construire la réponse, une fois l'écriture faite.
     const voyageurs = await this.computeVoyageursProteges(partieId, userId);
-    const historique = await this.computeHistorique(partieId, userId, voyageurs);
+    const historique = await this.computeHistorique(
+      partieId,
+      userId,
+      voyageurs,
+    );
     const level = levelForScenariosPasse(historique.length);
-    const catalogKeys = await this.buildEveilPowerCatalogKeys(partie.gameSystemId);
+    const catalogKeys = await this.buildEveilPowerCatalogKeys(
+      partie.gameSystemId,
+    );
 
     const updated = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM "HommeDragon" WHERE "userId" = ${userId} AND "partieId" = ${partieId} AND "gameSystemId" = ${RYUUTAMA_ID} FOR UPDATE`;
 
       const existing = await tx.hommeDragon.findUnique({
         where: {
-          userId_partieId_gameSystemId: { userId, partieId, gameSystemId: RYUUTAMA_ID },
+          userId_partieId_gameSystemId: {
+            userId,
+            partieId,
+            gameSystemId: RYUUTAMA_ID,
+          },
         },
       });
       if (!existing) throw new NotFoundException('Homme Dragon introuvable');
@@ -208,11 +223,20 @@ export class HommeDragonService {
 
       const sheetData = {
         ...existingSheetData,
-        eveilPowers: [...appliedEveilPowers, { level: dto.level, key: dto.key }],
+        eveilPowers: [
+          ...appliedEveilPowers,
+          { level: dto.level, key: dto.key },
+        ],
       };
       return tx.hommeDragon.update({
-        where: { userId_partieId_gameSystemId: { userId, partieId, gameSystemId: RYUUTAMA_ID } },
-        data: { sheetData: sheetData as any },
+        where: {
+          userId_partieId_gameSystemId: {
+            userId,
+            partieId,
+            gameSystemId: RYUUTAMA_ID,
+          },
+        },
+        data: { sheetData: sheetData },
       });
     });
     this.realtimeEvents.emit(partieTopic(partieId));
@@ -239,7 +263,10 @@ export class HommeDragonService {
    * a basculé hors Ryuutama depuis (revue de code : même raisonnement que `update()`, une fiche
    * orpheline n'est plus « la » fiche Homme Dragon de cette Partie).
    */
-  async findOne(partieId: string, userId: string): Promise<HommeDragonDto | null> {
+  async findOne(
+    partieId: string,
+    userId: string,
+  ): Promise<HommeDragonDto | null> {
     const partie = await this.parties.getViewable(partieId, userId);
     if (partie.gameSystemId !== RYUUTAMA_ID) return null;
 
@@ -265,7 +292,9 @@ export class HommeDragonService {
     }));
   }
 
-  private async buildEveilPowerCatalogKeys(gameSystemId: string): Promise<Set<string>> {
+  private async buildEveilPowerCatalogKeys(
+    gameSystemId: string,
+  ): Promise<Set<string>> {
     const content = await this.gameSystems.getContent(gameSystemId);
     return new Set((content['eveilPower'] ?? []).map((entry) => entry.key));
   }
@@ -285,13 +314,20 @@ export class HommeDragonService {
     // (au lieu d'un 2e appel interne à listMembers) — évite un aller-retour Prisma redondant et une
     // divergence possible entre les deux champs si la composition de la Partie changeait entre deux
     // appels non coordonnés.
-    const voyageursProteges = await this.computeVoyageursProteges(partieId, userId);
-    const historique = await this.computeHistorique(partieId, userId, voyageursProteges);
+    const voyageursProteges = await this.computeVoyageursProteges(
+      partieId,
+      userId,
+    );
+    const historique = await this.computeHistorique(
+      partieId,
+      userId,
+      voyageursProteges,
+    );
     // Story 10.3 : `historique` est déjà filtré `status === 'PASSE'` — sa longueur EST le nombre
     // de scénarios Passé recherché, aucune requête Prisma supplémentaire nécessaire.
     const level = levelForScenariosPasse(historique.length);
     const { PS } = computeHommeDragonDerived(level);
-    const eveilPowers = ((hommeDragon.sheetData as any).eveilPowers ?? []) as {
+    const eveilPowers = (hommeDragon.sheetData.eveilPowers ?? []) as {
       level: number;
       key: string;
     }[];
@@ -327,7 +363,9 @@ export class HommeDragonService {
     partieId: string,
     userId: string,
     voyageurs: { userId: string; pseudo: string }[],
-  ): Promise<{ scenarioTitle: string; date: string; participants: string[] }[]> {
+  ): Promise<
+    { scenarioTitle: string; date: string; participants: string[] }[]
+  > {
     const scenarios = await this.scenarios.findAllForPartie(partieId, userId);
     return scenarios
       .filter((s) => s.status === 'PASSE' && s.closedAt !== null)
@@ -337,7 +375,9 @@ export class HommeDragonService {
         // AD-4 (Story 8.1) : ScenarioDto.participants n'est peuplé QUE pour CAMPAGNE_EPISODIQUE.
         // Pour ONE_SHOT/CAMPAGNE_LINEAIRE (undefined), tous les membres actuels sont réputés
         // avoir participé — pas d'inscription individuelle pour ces deux kinds.
-        participants: s.participants?.map((p) => p.pseudo) ?? voyageurs.map((v) => v.pseudo),
+        participants:
+          s.participants?.map((p) => p.pseudo) ??
+          voyageurs.map((v) => v.pseudo),
       }));
   }
 }

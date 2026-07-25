@@ -50,10 +50,13 @@ describe('PollController', () => {
   it('choose() appelle PollService.choose() PUIS ScenariosService.recalculateNextSession() (Story 8.8, Décision 2)', async () => {
     await controller.choose('p1', 'poll1', user, { optionId: 'opt1' });
 
-    expect(poll.choose).toHaveBeenCalledWith('p1', 'poll1', 'mj1', { optionId: 'opt1' });
+    expect(poll.choose).toHaveBeenCalledWith('p1', 'poll1', 'mj1', {
+      optionId: 'opt1',
+    });
     expect(scenarios.recalculateNextSession).toHaveBeenCalledWith('p1');
     const chooseCall = poll.choose.mock.invocationCallOrder[0];
-    const recalcCall = scenarios.recalculateNextSession.mock.invocationCallOrder[0];
+    const recalcCall =
+      scenarios.recalculateNextSession.mock.invocationCallOrder[0];
     expect(chooseCall).toBeLessThan(recalcCall);
   });
 
@@ -67,12 +70,16 @@ describe('PollController', () => {
   });
 
   it('choose() : si ScenariosService.recalculateNextSession() échoue après un choose() déjà réussi, l’erreur est absorbée (revue de code)', async () => {
-    scenarios.recalculateNextSession.mockRejectedValue(new Error('partie introuvable'));
+    scenarios.recalculateNextSession.mockRejectedValue(
+      new Error('partie introuvable'),
+    );
 
     await expect(
       controller.choose('p1', 'poll1', user, { optionId: 'opt1' }),
     ).resolves.toBeUndefined();
-    expect(poll.choose).toHaveBeenCalledWith('p1', 'poll1', 'mj1', { optionId: 'opt1' });
+    expect(poll.choose).toHaveBeenCalledWith('p1', 'poll1', 'mj1', {
+      optionId: 'opt1',
+    });
   });
 
   it('findOpen() route vers PollService.findOpen()', async () => {
@@ -81,7 +88,10 @@ describe('PollController', () => {
   });
 
   it('castVote() route vers PollService.castVote()', async () => {
-    await controller.castVote('p1', 'poll1', user, { optionId: 'opt1', answer: 'YES' });
+    await controller.castVote('p1', 'poll1', user, {
+      optionId: 'opt1',
+      answer: 'YES',
+    });
     expect(poll.castVote).toHaveBeenCalledWith('p1', 'poll1', 'mj1', {
       optionId: 'opt1',
       answer: 'YES',

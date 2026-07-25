@@ -10,7 +10,11 @@ import type { InviteLink, Prisma } from '@prisma/client';
 import type { InviteLinkPreviewDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
-import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+  userTopic,
+} from '../realtime/realtime-events.service';
 import { CreateInviteLinkDto } from './dto/create-invite-link.dto';
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // +7 jours

@@ -30,7 +30,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { EmailService } from '../email/email.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+} from '../realtime/realtime-events.service';
 import { SUPPORTED_GAME_SYSTEMS } from '../game-systems/supported-game-systems';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import type { CreateLevelUpDto } from './dto/create-level-up.dto';
@@ -780,8 +783,7 @@ export class CharacterService {
       const list =
         category === 'individual'
           ? normalizeInventoryIndividual(sheetData.equipment?.individual)
-          : (sheetData.equipment?.[category as 'contenants' | 'animaux'] ??
-            []);
+          : (sheetData.equipment?.[category as 'contenants' | 'animaux'] ?? []);
       if (index > list.length) {
         throw new BadRequestException('Index hors limites');
       }
@@ -1323,7 +1325,9 @@ export class CharacterService {
       });
       if (partie?.kind === 'CAMPAGNE_EPISODIQUE') {
         const participation = await this.prisma.scenarioParticipant.findUnique({
-          where: { scenarioId_userId: { scenarioId, userId: character.userId } },
+          where: {
+            scenarioId_userId: { scenarioId, userId: character.userId },
+          },
         });
         if (!participation) {
           throw new BadRequestException(
@@ -1381,7 +1385,12 @@ export class CharacterService {
         OR: [
           { scenarioId, shared: true },
           ...(autoEligible
-            ? [{ shared: true, createdAt: { gte: windowStart!, lte: windowEnd! } }]
+            ? [
+                {
+                  shared: true,
+                  createdAt: { gte: windowStart, lte: windowEnd },
+                },
+              ]
             : []),
         ],
       },

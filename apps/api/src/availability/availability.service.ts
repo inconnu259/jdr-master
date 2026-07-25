@@ -12,7 +12,10 @@ import type {
   SlotStatus,
 } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+} from '../realtime/realtime-events.service';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
 

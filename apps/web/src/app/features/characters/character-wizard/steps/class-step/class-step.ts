@@ -8,6 +8,7 @@ import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.direct
 interface ClassTalent {
   name: string;
   effect: string;
+  description: string;
 }
 
 interface ClassData {

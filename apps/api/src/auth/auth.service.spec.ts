@@ -5,7 +5,10 @@ import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteLinksService } from '../invitations/invite-links.service';
 import { EmailService } from '../email/email.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+} from '../realtime/realtime-events.service';
 
 jest.mock('argon2');
 
@@ -272,10 +275,7 @@ describe('AuthService', () => {
       (argon2.verify as jest.Mock).mockResolvedValue(true);
       tx.passwordResetToken.updateMany.mockResolvedValue({ count: 1 });
       (argon2.hash as jest.Mock).mockResolvedValue('NEW_HASH');
-      tx.userSession.findMany.mockResolvedValue([
-        { sid: 's1' },
-        { sid: 's2' },
-      ]);
+      tx.userSession.findMany.mockResolvedValue([{ sid: 's1' }, { sid: 's2' }]);
 
       await service.resetPassword('r1.secretvalue', 'newpassword123');
 

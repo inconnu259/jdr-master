@@ -172,7 +172,9 @@ describe('CharactersController', () => {
     characters.findOne.mockResolvedValue(character);
     equipmentPdf.fillEquipmentPdf.mockResolvedValue(Buffer.from('pdf-bytes'));
 
-    const result = await controller.exportEquipmentPdf('char1', { id: 'u1' } as any);
+    const result = await controller.exportEquipmentPdf('char1', {
+      id: 'u1',
+    } as any);
 
     expect(characters.findOne).toHaveBeenCalledWith('char1', 'u1');
     expect(equipmentPdf.fillEquipmentPdf).toHaveBeenCalledWith(character);
@@ -218,7 +220,9 @@ describe('CharactersController', () => {
     characters.findOne.mockResolvedValue(character);
     equipmentPdf.fillEquipmentPdf.mockResolvedValue(Buffer.from('pdf-bytes'));
 
-    const result = await controller.exportEquipmentPdf('char1', { id: 'mj1' } as any);
+    const result = await controller.exportEquipmentPdf('char1', {
+      id: 'mj1',
+    } as any);
 
     expect(characters.findOne).toHaveBeenCalledWith('char1', 'mj1');
     expect(equipmentPdf.fillEquipmentPdf).toHaveBeenCalledWith(character);
@@ -232,12 +236,23 @@ describe('CharactersController', () => {
       sheetData: {},
       derived: {},
     };
-    const notes = [{ id: 'n1', characterId: 'char1', text: 'Une note', shared: true, scenarioId: null, createdAt: '2026-07-01T00:00:00.000Z' }];
+    const notes = [
+      {
+        id: 'n1',
+        characterId: 'char1',
+        text: 'Une note',
+        shared: true,
+        scenarioId: null,
+        createdAt: '2026-07-01T00:00:00.000Z',
+      },
+    ];
     characters.findOne.mockResolvedValue(character);
     characters.getNotes.mockResolvedValue(notes);
     notesPdf.fillNotesPdf.mockResolvedValue(Buffer.from('pdf-bytes'));
 
-    const result = await controller.exportNotesPdf('char1', { id: 'u1' } as any);
+    const result = await controller.exportNotesPdf('char1', {
+      id: 'u1',
+    } as any);
 
     expect(characters.findOne).toHaveBeenCalledWith('char1', 'u1');
     expect(characters.getNotes).toHaveBeenCalledWith('char1', 'u1');
@@ -270,7 +285,7 @@ describe('CharactersController', () => {
     expect(notesPdf.fillNotesPdf).not.toHaveBeenCalled();
   });
 
-  it('exportNotesPdf() — AC3 : le MJ exportant les notes d\'un joueur reçoit la liste complète telle que retournée par getNotes() (privées incluses, décision utilisateur : rien n\'est privé pour le MJ)', async () => {
+  it("exportNotesPdf() — AC3 : le MJ exportant les notes d'un joueur reçoit la liste complète telle que retournée par getNotes() (privées incluses, décision utilisateur : rien n'est privé pour le MJ)", async () => {
     const character = {
       id: 'char1',
       userId: 'player1',
@@ -281,8 +296,22 @@ describe('CharactersController', () => {
       viewerIsMj: true,
     };
     const notesIncludingPrivate = [
-      { id: 'n1', characterId: 'char1', text: 'Note privée', shared: false, scenarioId: null, createdAt: '2026-07-01T00:00:00.000Z' },
-      { id: 'n2', characterId: 'char1', text: 'Note partagée', shared: true, scenarioId: null, createdAt: '2026-07-02T00:00:00.000Z' },
+      {
+        id: 'n1',
+        characterId: 'char1',
+        text: 'Note privée',
+        shared: false,
+        scenarioId: null,
+        createdAt: '2026-07-01T00:00:00.000Z',
+      },
+      {
+        id: 'n2',
+        characterId: 'char1',
+        text: 'Note partagée',
+        shared: true,
+        scenarioId: null,
+        createdAt: '2026-07-02T00:00:00.000Z',
+      },
     ];
     characters.findOne.mockResolvedValue(character);
     characters.getNotes.mockResolvedValue(notesIncludingPrivate);

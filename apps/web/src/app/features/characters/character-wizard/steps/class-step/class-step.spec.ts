@@ -10,9 +10,22 @@ const CLASSES: ContentEntryDto[] = [
       description:
         'Les chasseurs abattent leurs proies grâce à leurs connaissances et à leur technique.',
       talents: [
-        { name: 'Pistage', effect: 'Suit une piste' },
-        { name: 'Camouflage', effect: 'Se dissimule' },
-        { name: 'Piège', effect: 'Pose un piège' },
+        {
+          name: 'Chasse',
+          effect: 'Nourrit le groupe selon le résultat du test',
+          description:
+            'Les chasseurs se sont fait une spécialité de ramener des animaux sauvages pour nourrir leurs compagnons.',
+        },
+        {
+          name: 'Transformation',
+          effect: 'Transforme une dépouille',
+          description: 'Les chasseurs savent utiliser les dépouilles des monstres.',
+        },
+        {
+          name: 'Traque',
+          effect: 'Découvre un monstre',
+          description: "Les chasseurs savent remonter les traces d'un type de monstre particulier.",
+        },
       ],
       requiresSpecialty: false,
     },
@@ -23,7 +36,13 @@ const CLASSES: ContentEntryDto[] = [
       label: 'Artisan',
       description:
         'Ces spécialistes savent créer tout ce qui est joli, efficace ou simplement pratique.',
-      talents: [{ name: 'Création', effect: 'Fabrique un objet' }],
+      talents: [
+        {
+          name: 'Création',
+          effect: 'Fabrique un objet',
+          description: 'Les artisans gagnent leur vie en créant des objets de tout type.',
+        },
+      ],
       requiresSpecialty: true,
       specialtyLabel: "Type d'objet de spécialité",
     },
@@ -51,11 +70,20 @@ describe('ClassStep', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(fixture.nativeElement.textContent).toContain('Pistage');
-    expect(fixture.nativeElement.textContent).toContain('Camouflage');
-    expect(fixture.nativeElement.textContent).toContain('Piège');
+    expect(fixture.nativeElement.textContent).toContain('Chasse');
+    expect(fixture.nativeElement.textContent).toContain('Transformation');
+    expect(fixture.nativeElement.textContent).toContain('Traque');
     expect(fixture.nativeElement.textContent).toContain(
       'Les chasseurs abattent leurs proies grâce à leurs connaissances et à leur technique.',
+    );
+    expect(fixture.nativeElement.textContent).toContain(
+      'Les chasseurs se sont fait une spécialité de ramener des animaux sauvages pour nourrir leurs compagnons.',
+    );
+    expect(fixture.nativeElement.textContent).toContain(
+      'Les chasseurs savent utiliser les dépouilles des monstres.',
+    );
+    expect(fixture.nativeElement.textContent).toContain(
+      "Les chasseurs savent remonter les traces d'un type de monstre particulier.",
     );
   });
 

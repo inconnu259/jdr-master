@@ -7,7 +7,11 @@ import {
 import { InviteLinksService } from './invite-links.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
-import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+  userTopic,
+} from '../realtime/realtime-events.service';
 
 const future = () => new Date(Date.now() + 60_000);
 const past = () => new Date(Date.now() - 60_000);

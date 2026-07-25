@@ -29,7 +29,10 @@ export class HommeDragonPdfService {
 
   constructor(private readonly gameSystems: GameSystemService) {}
 
-  async fillHommeDragonPdf(hommeDragon: HommeDragonDto, mjPseudo: string): Promise<Buffer> {
+  async fillHommeDragonPdf(
+    hommeDragon: HommeDragonDto,
+    mjPseudo: string,
+  ): Promise<Buffer> {
     const templateBytes = await this.loadTemplate();
     const eveilPowerLabels = await this.resolveEveilPowerLabels();
 
@@ -69,7 +72,10 @@ export class HommeDragonPdfService {
     if (!this.templatePromise) {
       this.templatePromise = readFile(PDF_TEMPLATE_PATH).catch((e) => {
         this.templatePromise = null;
-        this.logger.error('Échec du chargement du template PDF Homme Dragon', e);
+        this.logger.error(
+          'Échec du chargement du template PDF Homme Dragon',
+          e,
+        );
         throw new Error(
           'Template PDF Homme Dragon introuvable. Consultez apps/api/game-systems/ryuutama/assets/README.md',
         );

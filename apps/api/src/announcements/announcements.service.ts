@@ -3,7 +3,10 @@ import type { AnnouncementDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+} from '../realtime/realtime-events.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 
 function toDto(announcement: any): AnnouncementDto {

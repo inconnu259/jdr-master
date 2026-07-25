@@ -83,7 +83,12 @@ function makeContentService() {
           key: 'chasseur',
           data: {
             label: 'Chasseur',
-            talents: [{ name: 'Pistage', effect: 'Suit une piste' }],
+            talents: [
+              {
+                name: 'Chasse',
+                effect: 'Nourrit le groupe selon le résultat du test',
+              },
+            ],
           },
         },
         { key: 'marchand', data: { label: 'Marchand' } },

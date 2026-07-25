@@ -6,7 +6,10 @@ import {
 import type { SessionPollDto } from '@master-jdr/shared';
 import { PartiesService } from '../parties/parties.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+} from '../realtime/realtime-events.service';
 import { CastVoteDto } from './dto/cast-vote.dto';
 import { ChooseDateDto } from './dto/choose-date.dto';
 import { CreatePollDto } from './dto/create-poll.dto';

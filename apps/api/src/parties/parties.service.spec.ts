@@ -10,7 +10,11 @@ import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
-import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+  userTopic,
+} from '../realtime/realtime-events.service';
 
 describe('PartiesService', () => {
   let service: PartiesService;

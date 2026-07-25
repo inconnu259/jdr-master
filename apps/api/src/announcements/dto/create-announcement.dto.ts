@@ -1,4 +1,10 @@
-import { IsString, IsUUID, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import {
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
 
 export class CreateAnnouncementDto {
   @IsString()

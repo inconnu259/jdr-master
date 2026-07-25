@@ -15,7 +15,10 @@ import { AnnouncementsService } from './announcements.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import {
+  RealtimeEventsService,
+  partieTopic,
+} from '../realtime/realtime-events.service';
 
 function makePrisma() {
   return {
@@ -79,7 +82,7 @@ describe('AnnouncementsService', () => {
   });
 
   describe('create()', () => {
-    it("pas de scenarioId → Announcement créée avec scenarioId: null (AC1)", async () => {
+    it('pas de scenarioId → Announcement créée avec scenarioId: null (AC1)', async () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.announcement.create.mockResolvedValue(makeAnnouncement());
 
@@ -166,8 +169,14 @@ describe('AnnouncementsService', () => {
     it('liste les annonces de la Partie triées par createdAt desc, membre quelconque (AC1/AC2)', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1' });
       prisma.announcement.findMany.mockResolvedValue([
-        makeAnnouncement({ id: 'ann2', createdAt: new Date('2026-07-15T10:00:00.000Z') }),
-        makeAnnouncement({ id: 'ann1', createdAt: new Date('2026-07-14T10:00:00.000Z') }),
+        makeAnnouncement({
+          id: 'ann2',
+          createdAt: new Date('2026-07-15T10:00:00.000Z'),
+        }),
+        makeAnnouncement({
+          id: 'ann1',
+          createdAt: new Date('2026-07-14T10:00:00.000Z'),
+        }),
       ]);
 
       const result = await service.findAll('p1', 'u1');
