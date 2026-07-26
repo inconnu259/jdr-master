@@ -228,11 +228,25 @@ export class CharacterService {
       .filter(isNumberArray)
       .map((values) => [...values].sort((a, b) => a - b));
 
+    const requiredChoicesByClass: Record<string, { key: string; kind: string }[]> = {};
+    for (const entry of content['class'] ?? []) {
+      const requiredChoices = (
+        entry.data as { requiredChoices?: { key: string; kind: string }[] }
+      ).requiredChoices;
+      if (requiredChoices?.length) {
+        requiredChoicesByClass[entry.key] = requiredChoices.map((c) => ({
+          key: c.key,
+          kind: c.kind,
+        }));
+      }
+    }
+
     return {
       validClasses: keysOf('class'),
       validTypes: keysOf('type'),
       validWeapons: keysOf('weaponCategory'),
       attributePatterns,
+      requiredChoicesByClass,
     };
   }
 

@@ -51,6 +51,22 @@ export interface RyuutamaSheetData {
      */
     capabilities: { type: CapabilityType; params: Record<string, unknown> }[];
   }[];
+  /**
+   * Choix imposés à la création par certains talents de classe (Story 23.8), résolus depuis
+   * `requiredChoices` du contenu `class` seedé. Clé = `requiredChoices[].key`. Valeur : pour
+   * `kind: "eligible-talent"` (ex. Métier d'appoint), `` `${classeOrigine}:${talentId}` `` pour
+   * désambiguïser un talentId partagé entre classes (ex. "guerisseur:soins") ; pour
+   * `kind: "landscape-flavor"`/`"closed-list"`, directement la clé du paysage/l'`option.value`.
+   */
+  classChoices?: Record<string, string>;
+  /**
+   * Capacités octroyées à la création par certains talents de classe (ex. Climatophile du
+   * Météomancien, `kind: "landscape-capability"`) — même forme que `levelUps[].capabilities`
+   * pour réutiliser l'affichage existant (`getFlatCapabilities`), mais stockées **séparément**
+   * de `levelUps[]` : ce choix n'est pas une montée de niveau et ne doit jamais compter dans
+   * `1 + levelUps.length` (calcul du niveau du personnage).
+   */
+  classCapabilities?: { type: CapabilityType; params: Record<string, unknown> }[];
 }
 
 export interface DerivedStats {
@@ -82,4 +98,15 @@ export interface RyuutamaCatalog {
   validWeapons: string[];
   /** Chaque pattern est un tableau de 4 valeurs déjà trié (ex. [4, 6, 6, 8] pour "Polyvalent"). */
   attributePatterns: number[][];
+  /**
+   * Projection minimale de `requiredChoices` par classe (Story 23.8) — `key` + `kind`
+   * (pas `label`/`options`, pour garder `validate()` découplé de la forme complète du contenu
+   * seedé). `kind` reste nécessaire (revue de code, 2026-07-26) : sans lui, `validate()` ne peut
+   * pas distinguer un choix `landscape-capability` (répondu via `classCapabilities`) d'un choix
+   * `eligible-talent`/`landscape-flavor`/`closed-list` (répondu via `classChoices`) — un
+   * `classCapabilities` non vide validerait alors à tort N'IMPORTE quel choix manquant de la
+   * classe, y compris ceux qui n'ont rien à voir avec lui (ex. l'Ermite, qui n'a aucun choix
+   * `landscape-capability` mais deux autres choix que ce contournement laisserait passer).
+   */
+  requiredChoicesByClass?: Record<string, { key: string; kind: string }[]>;
 }

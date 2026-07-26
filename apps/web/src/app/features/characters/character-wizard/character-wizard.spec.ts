@@ -41,6 +41,36 @@ const CONTENT: GameSystemContentDto = {
         requiresSpecialty: true,
       },
     },
+    {
+      key: 'fermier',
+      data: {
+        label: 'Fermier',
+        talents: [{ id: 'metier-d-appoint', name: "Métier d'appoint", effect: { description: '...', conditions: '-' }, attributes: [] }],
+        requiredChoices: [
+          {
+            key: 'fermier-metier-appoint',
+            talentId: 'metier-d-appoint',
+            kind: 'eligible-talent',
+            label: "Talent emprunté (Métier d'appoint)",
+          },
+        ],
+      },
+    },
+    {
+      key: 'meteomancien',
+      data: {
+        label: 'Météomancien',
+        talents: [{ id: 'climatophile', name: 'Climatophile', effect: { description: '...', conditions: '-' }, attributes: [] }],
+        requiredChoices: [
+          {
+            key: 'meteomancien-climatophile',
+            talentId: 'climatophile',
+            kind: 'landscape-capability',
+            label: 'Climat favori supplémentaire (Climatophile)',
+          },
+        ],
+      },
+    },
   ],
   type: [
     {
@@ -49,6 +79,7 @@ const CONTENT: GameSystemContentDto = {
     },
   ],
   attributePattern: [{ key: 'polyvalent', data: { label: 'Polyvalent', values: [8, 4, 6, 6] } }],
+  landscape: [{ key: 'foret', data: { label: 'Forêt' } }],
   weaponCategory: [
     { key: 'arc', data: { label: 'Arc', touchFormula: 'AGI+INT-2', damageFormula: 'AGI' } },
   ],
@@ -297,6 +328,63 @@ describe('CharacterWizard', () => {
     comp.updateSheetData({ classId: 'chasseur' });
     fixture.detectChanges();
     expect(comp.sheetData().specialtyTypeId).toBeUndefined();
+  });
+
+  it('Story 23.8 : classe Fermier sans classChoices → canGoNext=false ; renseigné → true', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    comp.updateSheetData({ classId: 'fermier' });
+    fixture.detectChanges();
+    expect(comp.canGoNext()).toBe(false);
+
+    comp.onClassChoiceChange({ key: 'fermier-metier-appoint', value: 'guerisseur:soins' });
+    fixture.detectChanges();
+    expect(comp.canGoNext()).toBe(true);
+  });
+
+  it('Story 23.8 : classe Météomancien (landscape-capability) sans classCapabilities → canGoNext=false ; renseigné → true', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    comp.updateSheetData({ classId: 'meteomancien' });
+    fixture.detectChanges();
+    expect(comp.canGoNext()).toBe(false);
+
+    comp.onClassCapabilityChange({ key: 'meteomancien-climatophile', landscapeKey: 'foret' });
+    fixture.detectChanges();
+    expect(comp.canGoNext()).toBe(true);
+    expect(comp.sheetData().classCapabilities).toEqual([
+      { type: 'landscape', params: { key: 'foret' } },
+    ]);
+  });
+
+  it('Story 23.8 : changer de classe efface classChoices/classCapabilities obsolètes', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    comp.updateSheetData({ classId: 'fermier' });
+    comp.onClassChoiceChange({ key: 'fermier-metier-appoint', value: 'guerisseur:soins' });
+    fixture.detectChanges();
+    expect(comp.sheetData().classChoices).toEqual({ 'fermier-metier-appoint': 'guerisseur:soins' });
+
+    comp.updateSheetData({ classId: 'chasseur' });
+    fixture.detectChanges();
+    expect(comp.sheetData().classChoices).toBeUndefined();
+  });
+
+  it('Story 23.8 : changer de classe efface classCapabilities si la nouvelle classe n’a pas de choix landscape-capability', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    comp.updateSheetData({ classId: 'meteomancien' });
+    comp.onClassCapabilityChange({ key: 'meteomancien-climatophile', landscapeKey: 'foret' });
+    fixture.detectChanges();
+    expect(comp.sheetData().classCapabilities).toBeTruthy();
+
+    comp.updateSheetData({ classId: 'chasseur' });
+    fixture.detectChanges();
+    expect(comp.sheetData().classCapabilities).toBeUndefined();
   });
 
   it('derived() reste null tant que les attributs ne sont pas assignés, puis se calcule en direct', async () => {

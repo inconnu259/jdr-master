@@ -1,7 +1,9 @@
-import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
+import type { CharacterDto, CharacterSnapshotDto, GameSystemContentDto } from '@master-jdr/shared';
 import {
   capabilityDescription,
   getCapabilitiesByType,
+  getFlatCapabilities,
+  getLevelUpEntryForSnapshot,
   getLevelUps,
   type FlatCapability,
   type LevelUpEntry,
@@ -152,5 +154,64 @@ describe('capabilityDescription', () => {
       capability: { type: 'landscape', params: { key: 'inconnu' } },
     };
     expect(capabilityDescription(entry, CONTENT)).toBe('Paysage/climat favori : inconnu');
+  });
+});
+
+describe('getFlatCapabilities (Story 23.8 : fusion de classCapabilities)', () => {
+  it('sheetData.classCapabilities absent → seules les capacités de levelUps[] sont retournées', () => {
+    const levelUps: LevelUpEntry[] = [
+      { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+    ];
+    const character: CharacterDto = makeCharacterDto({ sheetData: { levelUps } });
+    expect(getFlatCapabilities(character)).toEqual([
+      { level: 2, capability: { type: 'attribute', params: {} } },
+    ]);
+  });
+
+  it('classCapabilities présent → fusionné avec level: 1 conventionnel, sans toucher levelUps[]', () => {
+    const levelUps: LevelUpEntry[] = [
+      { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+    ];
+    const classCapabilities = [{ type: 'landscape', params: { key: 'foret' } }];
+    const character: CharacterDto = makeCharacterDto({
+      sheetData: { levelUps, classCapabilities },
+    });
+
+    const flat = getFlatCapabilities(character);
+    expect(flat).toEqual([
+      { level: 2, capability: { type: 'attribute', params: {} } },
+      { level: 1, capability: { type: 'landscape', params: { key: 'foret' } } },
+    ]);
+    // levelUps[] lui-même reste inchangé (jamais fusionné dedans, cf. calcul du niveau).
+    expect(getLevelUps(character)).toEqual(levelUps);
+  });
+
+  it('getCapabilitiesByType inclut les entrées de classCapabilities (ex. Climatophile dans "landscape")', () => {
+    const classCapabilities = [{ type: 'landscape', params: { key: 'foret' } }];
+    const character: CharacterDto = makeCharacterDto({
+      sheetData: { classCapabilities },
+    });
+    const landscapes = getCapabilitiesByType(character, 'landscape');
+    expect(landscapes).toHaveLength(1);
+    expect(landscapes[0].level).toBe(1);
+  });
+
+  it('Historique (getLevelUpEntryForSnapshot) non affecté par classCapabilities — lit exclusivement levelUps[]', () => {
+    const levelUps: LevelUpEntry[] = [
+      { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+    ];
+    const snapshot: CharacterSnapshotDto = {
+      id: 's1',
+      characterId: 'char1',
+      sheetData: {
+        levelUps,
+        classCapabilities: [{ type: 'landscape', params: { key: 'foret' } }],
+      },
+      derived: { PV: 16, PE: 12, Condition: 14, Initiative: 10, Encombrement: 11 },
+      level: 2,
+      trigger: 'LEVEL_UP',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    expect(getLevelUpEntryForSnapshot(snapshot)).toEqual(levelUps[0]);
   });
 });

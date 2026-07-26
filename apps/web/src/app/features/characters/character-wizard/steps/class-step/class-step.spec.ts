@@ -63,6 +63,143 @@ const CLASSES: ContentEntryDto[] = [
   },
 ];
 
+const LANDSCAPES: ContentEntryDto[] = [
+  { key: 'foret', data: { label: 'Forêt' } },
+  { key: 'montagne', data: { label: 'Montagne' } },
+];
+
+const CLASSES_WITH_CHOICES: ContentEntryDto[] = [
+  ...CLASSES,
+  {
+    key: 'guerisseur',
+    data: {
+      label: 'Guérisseur',
+      description: 'Respectés de tous, les guérisseurs soignent les maladies.',
+      talents: [
+        {
+          id: 'soins',
+          name: 'Soins',
+          effect: { description: 'Soigne des PV', conditions: '-' },
+          attributes: ['INT', 'ESP'],
+          description: 'Les guérisseurs utilisent des plantes et de l’eau.',
+        },
+        {
+          id: 'dressage',
+          name: 'Dressage',
+          effect: { description: 'Deux animaux supplémentaires', conditions: '-' },
+          attributes: [],
+          description: 'Sans test.',
+        },
+      ],
+      requiresSpecialty: false,
+    },
+  },
+  {
+    key: 'fermier',
+    data: {
+      label: 'Fermier',
+      description: 'Vivant en accord avec la nature.',
+      talents: [
+        {
+          id: 'metier-d-appoint',
+          name: "Métier d'appoint",
+          effect: { description: 'Talent emprunté', conditions: 'Selon talent' },
+          attributes: [],
+          description: 'Emprunte un talent.',
+        },
+      ],
+      requiresSpecialty: false,
+      requiredChoices: [
+        {
+          key: 'fermier-metier-appoint',
+          talentId: 'metier-d-appoint',
+          kind: 'eligible-talent',
+          label: "Talent emprunté (Métier d'appoint)",
+        },
+      ],
+    },
+  },
+  {
+    key: 'ermite',
+    data: {
+      label: 'Ermite',
+      description: 'Ces hommes étranges vivent à l’écart des cités.',
+      talents: [
+        {
+          id: 'metamorphose',
+          name: 'Métamorphose',
+          effect: { description: 'Se transforme', conditions: '-' },
+          attributes: [],
+          description: 'Choisit un paysage.',
+        },
+      ],
+      requiresSpecialty: false,
+      requiredChoices: [
+        {
+          key: 'ermite-metamorphose',
+          talentId: 'metamorphose',
+          kind: 'landscape-flavor',
+          label: 'Type de paysage (Métamorphose)',
+        },
+      ],
+    },
+  },
+  {
+    key: 'dresseur',
+    data: {
+      label: 'Dresseur',
+      description: 'Les dresseurs apprivoisent les monstres.',
+      talents: [
+        {
+          id: 'autorite',
+          name: 'Autorité',
+          effect: { description: 'Contrôle un monstre', conditions: '-' },
+          attributes: [],
+          description: 'Choisit un type de créature.',
+        },
+      ],
+      requiresSpecialty: false,
+      requiredChoices: [
+        {
+          key: 'dresseur-autorite',
+          talentId: 'autorite',
+          kind: 'closed-list',
+          label: 'Type de créature (Autorité)',
+          options: [
+            { value: 'animaux', label: 'Animaux' },
+            { value: 'demons', label: 'Démons' },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    key: 'meteomancien',
+    data: {
+      label: 'Météomancien',
+      description: 'Les météomanciens prédisent la météo.',
+      talents: [
+        {
+          id: 'climatophile',
+          name: 'Climatophile',
+          effect: { description: '+2 aux tests de climat favori', conditions: '-' },
+          attributes: [],
+          description: 'Un climat favori supplémentaire.',
+        },
+      ],
+      requiresSpecialty: false,
+      requiredChoices: [
+        {
+          key: 'meteomancien-climatophile',
+          talentId: 'climatophile',
+          kind: 'landscape-capability',
+          label: 'Climat favori supplémentaire (Climatophile)',
+        },
+      ],
+    },
+  },
+];
+
 describe('ClassStep', () => {
   afterEach(() => TestBed.resetTestingModule());
 
@@ -157,5 +294,142 @@ describe('ClassStep', () => {
 
     const input = fixture.nativeElement.querySelector('#specialtyTypeId');
     expect(input).toBeNull();
+  });
+
+  describe('Story 23.8 : choix requis à la création', () => {
+    it('Fermier (eligible-talent) → propose uniquement les talents avec attributs non vides, hors classe courante', async () => {
+      TestBed.configureTestingModule({ imports: [ClassStep] });
+      const fixture = TestBed.createComponent(ClassStep);
+      fixture.componentRef.setInput('classes', CLASSES_WITH_CHOICES);
+      fixture.componentRef.setInput('classId', 'fermier');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+        '#fermier-metier-appoint',
+      );
+      expect(select).toBeTruthy();
+      const optionValues = Array.from(select.querySelectorAll('option')).map(
+        (o: HTMLOptionElement) => o.value,
+      );
+      expect(optionValues).toContain('guerisseur:soins');
+      expect(optionValues).not.toContain('guerisseur:dressage');
+      expect(optionValues.some((v) => v.startsWith('fermier:'))).toBe(false);
+    });
+
+    it('Fermier (eligible-talent) → sélection émet classChoiceChange avec la clé composite classe:talentId', async () => {
+      TestBed.configureTestingModule({ imports: [ClassStep] });
+      const fixture = TestBed.createComponent(ClassStep);
+      fixture.componentRef.setInput('classes', CLASSES_WITH_CHOICES);
+      fixture.componentRef.setInput('classId', 'fermier');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const emitted: { key: string; value: string }[] = [];
+      fixture.componentInstance.classChoiceChange.subscribe((p: { key: string; value: string }) =>
+        emitted.push(p),
+      );
+      const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+        '#fermier-metier-appoint',
+      );
+      select.value = 'guerisseur:soins';
+      select.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+
+      expect(emitted).toEqual([{ key: 'fermier-metier-appoint', value: 'guerisseur:soins' }]);
+    });
+
+    it('Ermite (landscape-flavor) → menu peuplé depuis le catalogue landscape', async () => {
+      TestBed.configureTestingModule({ imports: [ClassStep] });
+      const fixture = TestBed.createComponent(ClassStep);
+      fixture.componentRef.setInput('classes', CLASSES_WITH_CHOICES);
+      fixture.componentRef.setInput('classId', 'ermite');
+      fixture.componentRef.setInput('landscapes', LANDSCAPES);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+        '#ermite-metamorphose',
+      );
+      const labels = Array.from(select.querySelectorAll('option')).map(
+        (o: HTMLOptionElement) => o.textContent?.trim(),
+      );
+      expect(labels).toContain('Forêt');
+      expect(labels).toContain('Montagne');
+    });
+
+    it('Dresseur (closed-list) → menu peuplé depuis requiredChoices[].options', async () => {
+      TestBed.configureTestingModule({ imports: [ClassStep] });
+      const fixture = TestBed.createComponent(ClassStep);
+      fixture.componentRef.setInput('classes', CLASSES_WITH_CHOICES);
+      fixture.componentRef.setInput('classId', 'dresseur');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const select: HTMLSelectElement = fixture.nativeElement.querySelector('#dresseur-autorite');
+      const optionValues = Array.from(select.querySelectorAll('option')).map(
+        (o: HTMLOptionElement) => o.value,
+      );
+      expect(optionValues).toContain('animaux');
+      expect(optionValues).toContain('demons');
+    });
+
+    it('Météomancien (landscape-capability) → émet classCapabilityChange (pas classChoiceChange)', async () => {
+      TestBed.configureTestingModule({ imports: [ClassStep] });
+      const fixture = TestBed.createComponent(ClassStep);
+      fixture.componentRef.setInput('classes', CLASSES_WITH_CHOICES);
+      fixture.componentRef.setInput('classId', 'meteomancien');
+      fixture.componentRef.setInput('landscapes', LANDSCAPES);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const capabilityEmitted: { key: string; landscapeKey: string }[] = [];
+      const choiceEmitted: { key: string; value: string }[] = [];
+      fixture.componentInstance.classCapabilityChange.subscribe(
+        (p: { key: string; landscapeKey: string }) => capabilityEmitted.push(p),
+      );
+      fixture.componentInstance.classChoiceChange.subscribe((p: { key: string; value: string }) =>
+        choiceEmitted.push(p),
+      );
+
+      const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+        '#meteomancien-climatophile',
+      );
+      select.value = 'foret';
+      select.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+
+      expect(capabilityEmitted).toEqual([
+        { key: 'meteomancien-climatophile', landscapeKey: 'foret' },
+      ]);
+      expect(choiceEmitted).toEqual([]);
+    });
+
+    it('revue de code (2026-07-26) : kind imprévu (contenu malformé) → aucune option, pas de crash de rendu', async () => {
+      TestBed.configureTestingModule({ imports: [ClassStep] });
+      const fixture = TestBed.createComponent(ClassStep);
+      const malformedClasses: ContentEntryDto[] = [
+        ...CLASSES_WITH_CHOICES,
+        {
+          key: 'classe-malformee',
+          data: {
+            label: 'Classe malformée',
+            talents: [],
+            requiredChoices: [
+              { key: 'choix-inconnu', talentId: 'x', kind: 'kind-inconnu', label: 'Choix inconnu' },
+            ],
+          },
+        },
+      ];
+      fixture.componentRef.setInput('classes', malformedClasses);
+      fixture.componentRef.setInput('classId', 'classe-malformee');
+
+      expect(() => fixture.detectChanges()).not.toThrow();
+      await fixture.whenStable();
+
+      const select: HTMLSelectElement = fixture.nativeElement.querySelector('#choix-inconnu');
+      expect(select).toBeTruthy();
+      expect(select.querySelectorAll('option')).toHaveLength(1); // seulement "-- Choisir --"
+    });
   });
 });

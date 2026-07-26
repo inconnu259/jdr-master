@@ -60,5 +60,25 @@
         />
       </div>
     }
+
+    @if (data.requiredChoices; as choices) {
+      <div class="class-step__required-choices">
+        @for (choice of choices; track choice.key) {
+          <div class="class-step__required-choice">
+            <label [for]="choice.key">{{ choice.label }}</label>
+            <select
+              [id]="choice.key"
+              [ngModel]="valueForChoice(choice)"
+              (ngModelChange)="onChoiceInput(choice, $event)"
+            >
+              <option value="" disabled>-- Choisir --</option>
+              @for (opt of optionsForChoice(choice); track opt.key) {
+                <option [value]="opt.key">{{ opt.label }}</option>
+              }
+            </select>
+          </div>
+        }
+      </div>
+    }
   }
 </div>

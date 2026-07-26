@@ -1240,4 +1240,221 @@ describe('CharacterSheet', () => {
       expect(comp.character()).toEqual(CHARACTER);
     });
   });
+
+  describe('Story 23.8 : cas particuliers de création par classe', () => {
+    const CONTENT_23_8: GameSystemContentDto = {
+      class: [
+        {
+          key: 'guerisseur',
+          data: {
+            label: 'Guérisseur',
+            talents: [
+              {
+                id: 'soins',
+                name: 'Soins',
+                effect: { description: 'Soigne des PV', conditions: '-' },
+              },
+            ],
+          },
+        },
+        {
+          key: 'fermier',
+          data: {
+            label: 'Fermier',
+            talents: [
+              {
+                id: 'metier-d-appoint',
+                name: "Métier d'appoint",
+                effect: { description: "Talent emprunté d'une autre classe", conditions: '-' },
+              },
+            ],
+            requiredChoices: [
+              {
+                key: 'fermier-metier-appoint',
+                talentId: 'metier-d-appoint',
+                kind: 'eligible-talent',
+                label: "Talent emprunté (Métier d'appoint)",
+              },
+            ],
+          },
+        },
+        {
+          key: 'ermite',
+          data: {
+            label: 'Ermite',
+            talents: [
+              {
+                id: 'metamorphose',
+                name: 'Métamorphose',
+                effect: { description: 'Se transforme en animal', conditions: '-' },
+              },
+            ],
+            requiredChoices: [
+              {
+                key: 'ermite-metamorphose',
+                talentId: 'metamorphose',
+                kind: 'landscape-flavor',
+                label: 'Type de paysage (Métamorphose)',
+              },
+            ],
+          },
+        },
+        {
+          key: 'dresseur',
+          data: {
+            label: 'Dresseur',
+            talents: [
+              {
+                id: 'autorite',
+                name: 'Autorité',
+                effect: { description: 'Contrôle un monstre', conditions: '-' },
+              },
+            ],
+            requiredChoices: [
+              {
+                key: 'dresseur-autorite',
+                talentId: 'autorite',
+                kind: 'closed-list',
+                label: 'Type de créature (Autorité)',
+                options: [
+                  { value: 'animaux', label: 'Animaux' },
+                  { value: 'demons', label: 'Démons' },
+                ],
+              },
+            ],
+          },
+        },
+        {
+          key: 'meteomancien',
+          data: {
+            label: 'Météomancien',
+            talents: [
+              {
+                id: 'climatophile',
+                name: 'Climatophile',
+                effect: { description: '+2 aux tests de climat favori', conditions: '-' },
+              },
+            ],
+            requiredChoices: [
+              {
+                key: 'meteomancien-climatophile',
+                talentId: 'climatophile',
+                kind: 'landscape-capability',
+                label: 'Climat favori supplémentaire (Climatophile)',
+              },
+            ],
+          },
+        },
+      ],
+      type: CONTENT['type'],
+      attributePattern: CONTENT['attributePattern'],
+      weaponCategory: CONTENT['weaponCategory'],
+      landscape: [
+        { key: 'foret', data: { label: 'Forêt' } },
+        { key: 'montagne', data: { label: 'Montagne' } },
+      ],
+    };
+
+    function baseSheetData(classId: string, extra: Record<string, unknown> = {}) {
+      return {
+        classId,
+        typeId: 'technique',
+        weaponCategoryId: 'lance',
+        attributes: { VIG: 8, AGI: 4, INT: 6, ESP: 6 },
+        ...extra,
+      };
+    }
+
+    it('Fermier + talent emprunté (Métier d\'appoint) → nom du talent, effet, malus -1, classe d\'origine', async () => {
+      const character = makeCharacterDto({
+        sheetData: baseSheetData('fermier', {
+          classChoices: { 'fermier-metier-appoint': 'guerisseur:soins' },
+        }),
+      });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_23_8),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      const text = fixture.nativeElement.textContent;
+      expect(text).toContain("Talent emprunté (Métier d'appoint)");
+      expect(text).toContain('Soins');
+      expect(text).toContain('Guérisseur');
+      expect(text).toContain('-1');
+    });
+
+    it('Ermite + Métamorphose → affiche le paysage choisi (résolu depuis le catalogue landscape)', async () => {
+      const character = makeCharacterDto({
+        sheetData: baseSheetData('ermite', {
+          classChoices: { 'ermite-metamorphose': 'foret' },
+        }),
+      });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_23_8),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      expect(fixture.nativeElement.textContent).toContain('Forêt');
+    });
+
+    it('Dresseur + Autorité → affiche le type de créature choisi (résolu depuis requiredChoices[].options)', async () => {
+      const character = makeCharacterDto({
+        sheetData: baseSheetData('dresseur', {
+          classChoices: { 'dresseur-autorite': 'demons' },
+        }),
+      });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_23_8),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      expect(fixture.nativeElement.textContent).toContain('Démons');
+    });
+
+    it('Météomancien + Climatophile (classCapabilities) → apparaît dans la section Paysage/climat favori existante', async () => {
+      const character = makeCharacterDto({
+        sheetData: baseSheetData('meteomancien', {
+          classCapabilities: [{ type: 'landscape', params: { key: 'montagne' } }],
+        }),
+      });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_23_8),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      expect(fixture.nativeElement.textContent).toContain('Montagne');
+    });
+
+    it('Aucun requiredChoices renseigné (classChoices absent) → aucune section de choix affichée, pas de crash', async () => {
+      const character = makeCharacterDto({ sheetData: baseSheetData('fermier') });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_23_8),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      expect(fixture.nativeElement.textContent).not.toContain("Métier d'appoint) Soins");
+    });
+
+    it('revue de code (2026-07-26) : classChoices malformé (talent introuvable) → aucun affichage trompeur (pas de malus avec nom vide)', async () => {
+      const character = makeCharacterDto({
+        sheetData: baseSheetData('fermier', {
+          classChoices: { 'fermier-metier-appoint': 'guerisseur:talent-inexistant' },
+        }),
+      });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_23_8),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      const comp = fixture.componentInstance as any;
+      expect(comp.classChoiceDisplays()).toEqual([]);
+      expect(fixture.nativeElement.textContent).not.toContain('malus');
+    });
+  });
 });

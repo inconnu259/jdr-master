@@ -54,4 +54,24 @@
       border-radius: 6px;
     }
   }
+
+  &__required-choices {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+
+  &__required-choice {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+
+    select {
+      min-height: 44px;
+      padding: 0 0.75rem;
+      border: 1px solid var(--mat-sys-outline-variant, #ccc);
+      border-radius: 6px;
+    }
+  }
 }

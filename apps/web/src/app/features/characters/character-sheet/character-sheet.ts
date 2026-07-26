@@ -37,9 +37,53 @@ import {
   getOtherCapabilities,
 } from './capability-label.util';
 
+interface ClassTalentFull {
+  id?: string;
+  name: string;
+  effect: { description: string; conditions: string };
+}
+
+export type RequiredChoiceKind =
+  | 'eligible-talent'
+  | 'landscape-flavor'
+  | 'closed-list'
+  | 'landscape-capability';
+
+interface RequiredChoiceOption {
+  value: string;
+  label: string;
+}
+
+interface RequiredChoice {
+  key: string;
+  talentId: string;
+  kind: RequiredChoiceKind;
+  label: string;
+  options?: RequiredChoiceOption[];
+}
+
 interface ClassData {
   label: string;
-  talents: { name: string; effect: { description: string; conditions: string } }[];
+  talents: ClassTalentFull[];
+  requiredChoices?: RequiredChoice[];
+}
+
+/**
+ * Choix de classe résolu pour affichage (Story 23.8) — le talent emprunté (Métier d'appoint), le
+ * paysage narratif (Métamorphose) ou le type de créature (Autorité). Climatophile (kind
+ * `landscape-capability`) n'apparaît jamais ici : il est affiché par la section "Paysage/climat
+ * favori" existante (`landscapes` ci-dessus), une fois `classCapabilities` fusionné par
+ * `getFlatCapabilities()` (Task 6).
+ */
+export interface ClassChoiceDisplay {
+  key: string;
+  kind: RequiredChoiceKind;
+  label: string;
+  talentName?: string;
+  talentEffectDescription?: string;
+  malus?: string;
+  originClassLabel?: string;
+  valueLabel?: string;
 }
 
 interface TypeData {
@@ -222,6 +266,72 @@ export class CharacterSheet implements OnInit {
           )?.label,
       )
       .filter((label): label is string => !!label);
+  });
+
+  /**
+   * Choix de classe résolus pour affichage (Story 23.8) — talent emprunté (Métier d'appoint),
+   * paysage narratif (Métamorphose), type de créature (Autorité). Le climat de Climatophile
+   * (kind `landscape-capability`) n'est jamais inclus ici : il apparaît via la section
+   * "Paysage/climat favori" existante (`landscapes` ci-dessus), cf. Task 6/Dev Notes.
+   */
+  protected readonly classChoiceDisplays = computed<ClassChoiceDisplay[]>(() => {
+    const data = this.classData();
+    if (!data?.requiredChoices?.length) return [];
+    const classChoices =
+      (this.sheetData()['classChoices'] as Record<string, string> | undefined) ?? {};
+
+    return data.requiredChoices
+      .map((choice): ClassChoiceDisplay | null => {
+        if (choice.kind === 'landscape-capability') return null;
+        const value = classChoices[choice.key];
+        if (!value) return null;
+
+        if (choice.kind === 'eligible-talent') {
+          const [originClassKey, talentId] = value.split(':');
+          const originClassData = findContentEntry<ClassData>(
+            this.content(),
+            'class',
+            originClassKey,
+          );
+          const talent = originClassData?.talents.find((t) => t.id === talentId);
+          // Valeur malformée ou talent introuvable (revue de code, 2026-07-26) : ne pas afficher
+          // un malus/label incomplets avec un nom de talent vide — préférer ne rien afficher.
+          if (!talent) return null;
+          return {
+            key: choice.key,
+            kind: choice.kind,
+            label: choice.label,
+            talentName: talent.name,
+            talentEffectDescription: talent.effect.description,
+            malus: '-1',
+            originClassLabel: originClassData?.label,
+          };
+        }
+
+        if (choice.kind === 'landscape-flavor') {
+          const landscapeLabel = findContentEntry<{ label: string }>(
+            this.content(),
+            'landscape',
+            value,
+          )?.label;
+          return {
+            key: choice.key,
+            kind: choice.kind,
+            label: choice.label,
+            valueLabel: landscapeLabel ?? value,
+          };
+        }
+
+        // closed-list (ex. Autorité du Dresseur)
+        const optionLabel = choice.options?.find((o) => o.value === value)?.label;
+        return {
+          key: choice.key,
+          kind: choice.kind,
+          label: choice.label,
+          valueLabel: optionLabel ?? value,
+        };
+      })
+      .filter((d): d is ClassChoiceDisplay => d !== null);
   });
 
   /** Immunités obtenues (capacité 'immunity', niveau 4). */

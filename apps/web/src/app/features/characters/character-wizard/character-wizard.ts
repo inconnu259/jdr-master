@@ -8,7 +8,11 @@ import type { ContentEntryDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
-import { ClassStep } from './steps/class-step/class-step';
+import {
+  ClassStep,
+  type ClassCapabilityPatch,
+  type ClassChoicePatch,
+} from './steps/class-step/class-step';
 import { TypeStep } from './steps/type-step/type-step';
 import { AttributesStep } from './steps/attributes-step/attributes-step';
 import { WeaponStep } from './steps/weapon-step/weapon-step';
@@ -22,6 +26,12 @@ import {
 } from '../portrait-cropper/portrait-cropper';
 
 type AttrKey = 'AGI' | 'ESP' | 'INT' | 'VIG';
+
+/** Projection minimale de `RequiredChoice` (cf. class-step.ts) utile au wizard — `kind`/`key` seulement. */
+interface RequiredChoiceLike {
+  key: string;
+  kind: 'eligible-talent' | 'landscape-flavor' | 'closed-list' | 'landscape-capability';
+}
 
 /** Les 8 étapes du plugin Ryuutama, portrait inclus (Story 4.5). */
 const SUPPORTED_STEP_KEYS = new Set([
@@ -56,6 +66,13 @@ const FIELD_TO_STEP_KEY: Record<string, string> = {
   typeId: 'typeId',
   attributes: 'attributes',
   weaponCategoryId: 'weaponCategoryId',
+  // Règle 6 (Story 23.8) : `field` = `requiredChoices[].key` (ex. "fermier-metier-appoint",
+  // "meteomancien-climatophile") — toujours résolu dans l'étape classId.
+  'fermier-metier-appoint': 'classId',
+  'ermite-metier-appoint': 'classId',
+  'ermite-metamorphose': 'classId',
+  'dresseur-autorite': 'classId',
+  'meteomancien-climatophile': 'classId',
 };
 
 interface ServerValidationError {
@@ -160,17 +177,35 @@ export class CharacterWizard implements OnInit {
   protected readonly weapons = computed<ContentEntryDto[]>(
     () => this.content()?.['weaponCategory'] ?? [],
   );
+  protected readonly landscapes = computed<ContentEntryDto[]>(
+    () => this.content()?.['landscape'] ?? [],
+  );
   protected readonly attributePattern = computed<ContentEntryDto | null>(
     () => this.content()?.['attributePattern']?.[0] ?? null,
   );
 
+  /** `requiredChoices` de la classe sélectionnée (Story 23.8) — [] si la classe n'en a aucun. */
+  private readonly selectedClassRequiredChoices = computed<RequiredChoiceLike[]>(() => {
+    const entry = this.classes().find((c) => c.key === this.sheetData().classId);
+    return (entry?.data as { requiredChoices?: RequiredChoiceLike[] } | undefined)
+      ?.requiredChoices ?? [];
+  });
+
   protected readonly canGoNext = computed(() => {
     const data = this.sheetData();
     switch (this.currentStepKey()) {
-      case 'classId':
+      case 'classId': {
         if (!data.classId) return false;
         if (data.classId === 'artisan' && !data.specialtyTypeId?.trim()) return false;
+        const allChoicesAnswered = this.selectedClassRequiredChoices().every((choice) => {
+          if (choice.kind === 'landscape-capability') {
+            return (data.classCapabilities?.length ?? 0) > 0;
+          }
+          return !!data.classChoices?.[choice.key]?.trim();
+        });
+        if (!allChoicesAnswered) return false;
         return true;
+      }
       case 'typeId':
         return !!data.typeId;
       case 'attributes':
@@ -235,8 +270,45 @@ export class CharacterWizard implements OnInit {
       if ('classId' in patch && patch.classId !== 'artisan') {
         delete next.specialtyTypeId;
       }
+      // Les choix de classe (Métier d'appoint, Métamorphose, Autorité, Climatophile) ne
+      // survivent pas à un changement de classe — ne garder que ceux dont la `key` correspond
+      // à un `requiredChoices` de la NOUVELLE classe sélectionnée (Story 23.8).
+      if ('classId' in patch) {
+        const entry = this.classes().find((c) => c.key === patch.classId);
+        const newRequiredChoices =
+          (entry?.data as { requiredChoices?: RequiredChoiceLike[] } | undefined)
+            ?.requiredChoices ?? [];
+        const newKeys = new Set(newRequiredChoices.map((c) => c.key));
+        const hasLandscapeCapability = newRequiredChoices.some(
+          (c) => c.kind === 'landscape-capability',
+        );
+        if (next.classChoices) {
+          const filtered = Object.fromEntries(
+            Object.entries(next.classChoices).filter(([key]) => newKeys.has(key)),
+          );
+          if (Object.keys(filtered).length > 0) next.classChoices = filtered;
+          else delete next.classChoices;
+        }
+        if (next.classCapabilities && !hasLandscapeCapability) {
+          delete next.classCapabilities;
+        }
+      }
       return next;
     });
+  }
+
+  protected onClassChoiceChange(patch: ClassChoicePatch): void {
+    this.sheetData.update((d) => ({
+      ...d,
+      classChoices: { ...(d.classChoices ?? {}), [patch.key]: patch.value },
+    }));
+  }
+
+  protected onClassCapabilityChange(patch: ClassCapabilityPatch): void {
+    this.sheetData.update((d) => ({
+      ...d,
+      classCapabilities: [{ type: 'landscape', params: { key: patch.landscapeKey } }],
+    }));
   }
 
   protected onAttributesChange(attrs: Record<AttrKey, number> | null): void {

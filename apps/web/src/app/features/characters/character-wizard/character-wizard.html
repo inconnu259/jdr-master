@@ -48,8 +48,13 @@
               [classes]="classes()"
               [classId]="sheetData().classId"
               [specialtyTypeId]="sheetData().specialtyTypeId"
+              [landscapes]="landscapes()"
+              [classChoices]="sheetData().classChoices"
+              [classCapabilities]="sheetData().classCapabilities"
               (classIdChange)="updateSheetData({ classId: $event })"
               (specialtyTypeIdChange)="updateSheetData({ specialtyTypeId: $event })"
+              (classChoiceChange)="onClassChoiceChange($event)"
+              (classCapabilityChange)="onClassCapabilityChange($event)"
             />
           }
           @case ('typeId') {

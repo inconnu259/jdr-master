@@ -27,11 +27,35 @@ export function getLevelUps(character: CharacterDto): LevelUpEntry[] {
   return ((character.sheetData as any)?.levelUps as LevelUpEntry[] | undefined) ?? [];
 }
 
-/** Aplatit toutes les capacités obtenues, chacune rattachée à son niveau. */
+/**
+ * Capacités octroyées à la création par certains talents de classe (Story 23.8, ex. Climatophile
+ * du Météomancien) — stockées séparément de `levelUps[]` pour ne jamais fausser le calcul du
+ * niveau (`1 + levelUps.length`). Absent sur les personnages qui n'en ont pas.
+ */
+function getClassCapabilities(
+  character: CharacterDto,
+): { type: string; params: Record<string, unknown> }[] {
+  return (
+    ((character.sheetData as any)?.classCapabilities as
+      | { type: string; params: Record<string, unknown> }[]
+      | undefined) ?? []
+  );
+}
+
+/**
+ * Aplatit toutes les capacités obtenues, chacune rattachée à son niveau. Fusionne aussi
+ * `classCapabilities` (Story 23.8) avec un `level: 1` conventionnel (obtenues à la création) —
+ * sans jamais les insérer dans `levelUps[]` lui-même (cf. Dev Notes 23.8, calcul du niveau).
+ */
 export function getFlatCapabilities(character: CharacterDto): FlatCapability[] {
-  return getLevelUps(character).flatMap((entry) =>
+  const fromLevelUps = getLevelUps(character).flatMap((entry) =>
     (entry.capabilities ?? []).map((capability) => ({ level: entry.level, capability })),
   );
+  const fromClassCapabilities = getClassCapabilities(character).map((capability) => ({
+    level: 1,
+    capability,
+  }));
+  return [...fromLevelUps, ...fromClassCapabilities];
 }
 
 /** Filtre les capacités par type (ex. tous les paysages/climats obtenus). */

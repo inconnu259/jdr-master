@@ -108,4 +108,97 @@ describe('validate (strict)', () => {
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
   });
+
+  describe('Règle 6 (Story 23.8) : choix requis à la création', () => {
+    function catalogWithRequiredChoices(): RyuutamaCatalog {
+      return {
+        ...catalog(),
+        validClasses: [...catalog().validClasses, 'fermier', 'meteomancien', 'ermite'],
+        requiredChoicesByClass: {
+          fermier: [{ key: 'fermier-metier-appoint', kind: 'eligible-talent' }],
+          meteomancien: [{ key: 'meteomancien-climatophile', kind: 'landscape-capability' }],
+          ermite: [
+            { key: 'ermite-metier-appoint', kind: 'eligible-talent' },
+            { key: 'ermite-metamorphose', kind: 'landscape-flavor' },
+          ],
+        },
+      };
+    }
+
+    it('classe avec requiredChoices, classChoices manquant → valid: false, errors[].field = key du choix', () => {
+      const data = { ...validSheet(), classId: 'fermier' };
+      const result = validate(data, 'strict', catalogWithRequiredChoices());
+      expect(result.valid).toBe(false);
+      expect(
+        result.errors.some((e) => e.field === 'fermier-metier-appoint'),
+      ).toBe(true);
+    });
+
+    it('classe avec requiredChoices, classChoices renseigné → valid: true', () => {
+      const data = {
+        ...validSheet(),
+        classId: 'fermier',
+        classChoices: { 'fermier-metier-appoint': 'guerisseur:soins' },
+      };
+      const result = validate(data, 'strict', catalogWithRequiredChoices());
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('choix landscape-capability (Climatophile) satisfait via classCapabilities (pas classChoices)', () => {
+      const data = {
+        ...validSheet(),
+        classId: 'meteomancien',
+        classCapabilities: [
+          { type: 'landscape' as const, params: { key: 'foret' } },
+        ],
+      };
+      const result = validate(data, 'strict', catalogWithRequiredChoices());
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('classe sans requiredChoices dans le catalogue → aucune erreur Règle 6', () => {
+      const result = validate(validSheet(), 'strict', catalogWithRequiredChoices());
+      expect(result.valid).toBe(true);
+    });
+
+    it('revue de code (2026-07-26) : classCapabilities non vide ne doit PAS contourner un choix eligible-talent/landscape-flavor d\'une AUTRE nature (Ermite)', () => {
+      const data = {
+        ...validSheet(),
+        classId: 'ermite',
+        // classCapabilities non vide, sans rapport avec les choix requis de l'Ermite (qui n'a
+        // aucun choix landscape-capability) — ne doit satisfaire ni ermite-metier-appoint ni
+        // ermite-metamorphose.
+        classCapabilities: [{ type: 'landscape' as const, params: { key: 'foret' } }],
+      };
+      const result = validate(data, 'strict', catalogWithRequiredChoices());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'ermite-metier-appoint')).toBe(true);
+      expect(result.errors.some((e) => e.field === 'ermite-metamorphose')).toBe(true);
+    });
+
+    it('Ermite avec classChoices renseignés pour les deux choix → valid: true', () => {
+      const data = {
+        ...validSheet(),
+        classId: 'ermite',
+        classChoices: {
+          'ermite-metier-appoint': 'guerisseur:soins',
+          'ermite-metamorphose': 'foret',
+        },
+      };
+      const result = validate(data, 'strict', catalogWithRequiredChoices());
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('Règle 5 (Artisan) reste inchangée en présence de requiredChoicesByClass', () => {
+      const data = { ...validSheet(), classId: 'artisan' };
+      const result = validate(data, 'strict', catalogWithRequiredChoices());
+      expect(result.valid).toBe(false);
+      expect(
+        result.errors.some((e) => e.field === 'specialtyTypeId'),
+      ).toBe(true);
+    });
+  });
 });

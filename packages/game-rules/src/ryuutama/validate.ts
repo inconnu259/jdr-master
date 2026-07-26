@@ -68,5 +68,32 @@ export function validate(
     });
   }
 
+  // Règle 6 : choix requis à la création propres à certaines classes (Story 23.8), ex.
+  // Métier d'appoint (Fermier/Ermite), Métamorphose (Ermite), Autorité (Dresseur),
+  // Climatophile (Météomancien). Le choix Climatophile (kind "landscape-capability") est
+  // stocké dans `classCapabilities` plutôt que `classChoices` (cf. types.ts) — `kind` est donc
+  // requis ici pour ne délester vers `classCapabilities` QUE ce choix précis (revue de code,
+  // 2026-07-26) : sans cette distinction, un `classCapabilities` non vide validerait à tort
+  // n'importe quel autre choix manquant de la même classe (ex. l'Ermite, qui n'a aucun choix
+  // "landscape-capability" mais deux choix "eligible-talent"/"landscape-flavor" à ne jamais
+  // pouvoir contourner ainsi).
+  const requiredChoices = data.classId
+    ? catalog.requiredChoicesByClass?.[data.classId]
+    : undefined;
+  if (requiredChoices) {
+    for (const choice of requiredChoices) {
+      const answered =
+        choice.kind === 'landscape-capability'
+          ? Boolean(data.classCapabilities && data.classCapabilities.length > 0)
+          : Boolean(data.classChoices?.[choice.key]?.trim());
+      if (!answered) {
+        errors.push({
+          field: choice.key,
+          message: `Le choix requis "${choice.key}" est obligatoire pour cette classe`,
+        });
+      }
+    }
+  }
+
   return { valid: mode === 'strict' ? errors.length === 0 : true, errors };
 }
