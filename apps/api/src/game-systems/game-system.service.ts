@@ -94,6 +94,7 @@ const CONTENT_TYPES: ContentTypeSeed[] = [
     label: "Texte d'introduction d'étape (assistant)",
     file: 'wizard-step-intros.json',
   },
+  { key: 'spell', label: 'Sort', file: 'spells.json' },
 ];
 
 @Injectable()
