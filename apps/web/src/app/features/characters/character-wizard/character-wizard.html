@@ -32,6 +32,8 @@
 
     <div class="wizard__body">
       <div class="wizard__main">
+        <p class="wizard__step-intro">{{ stepIntroText() }}</p>
+
         @if (stepErrors()[currentStepKey()]; as errors) {
           <ul class="wizard__errors" role="alert" aria-live="assertive">
             @for (msg of errors; track msg) {

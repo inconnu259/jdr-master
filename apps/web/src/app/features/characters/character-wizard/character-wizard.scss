@@ -66,6 +66,12 @@
     padding-bottom: 5rem; /* laisse la place à la barre inférieure fixe mobile */
   }
 
+  &__step-intro {
+    font-style: italic;
+    color: var(--mat-sys-on-surface-variant, #555);
+    margin: 0 0 1rem;
+  }
+
   &__errors {
     color: var(--mat-sys-error, #c00);
     background: var(--mat-sys-error-container, #fdecea);

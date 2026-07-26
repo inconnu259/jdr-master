@@ -46,6 +46,24 @@ const CONTENT: GameSystemContentDto = {
   weaponCategory: [
     { key: 'arc', data: { label: 'Arc', touchFormula: 'AGI+INT-2', damageFormula: 'AGI' } },
   ],
+  wizardStepIntro: [
+    { key: 'classId', data: { text: 'La première chose à faire est de choisir sa classe.' } },
+    {
+      key: 'typeId',
+      data: { text: 'Les voyageurs sont confrontés à des difficultés très diverses.' },
+    },
+    { key: 'attributes', data: { text: 'On détermine les quatre attributs des personnages.' } },
+    {
+      key: 'weaponCategoryId',
+      data: { text: "Choisissez la famille d'armes favorite du voyageur." },
+    },
+    { key: 'fetiqueObject', data: { text: 'Votre voyageur possède un objet fétiche.' } },
+    {
+      key: 'equipment',
+      data: { text: 'Vous pouvez partir en pique-nique pour simplifier la création.' },
+    },
+    { key: 'narrative', data: { text: 'Prenez le temps de décider des détails suivants.' } },
+  ],
 };
 
 function makeCharacterService() {
@@ -58,7 +76,12 @@ function makeCharacterService() {
 }
 
 function makeThemeService() {
-  return { tone: () => ({ 'character.create_cta': 'Créer un voyageur' }) };
+  return {
+    tone: () => ({
+      'character.create_cta': 'Créer un voyageur',
+      'character.step_portrait_intro': 'Ajoute un portrait si tu le souhaites.',
+    }),
+  };
 }
 
 function makePartiesService(partieId: string) {
@@ -118,6 +141,63 @@ describe('CharacterWizard', () => {
     const comp = fixture.componentInstance as any;
     expect(comp.currentStepKey()).toBe('classId');
     expect(comp.canGoNext()).toBe(false);
+  });
+
+  it("affiche le texte d'introduction de l'étape Classe avant toute sélection (AC1)", async () => {
+    const { fixture } = await createComponent();
+    expect(fixture.nativeElement.textContent).toContain(
+      'La première chose à faire est de choisir sa classe.',
+    );
+  });
+
+  it("le texte d'introduction change avec l'étape courante (classId → typeId, AC1/AC2)", async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    comp.updateSheetData({ classId: 'chasseur' });
+    fixture.detectChanges();
+    comp.goNext();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain(
+      'Les voyageurs sont confrontés à des difficultés très diverses.',
+    );
+    expect(fixture.nativeElement.textContent).not.toContain(
+      'La première chose à faire est de choisir sa classe.',
+    );
+  });
+
+  it("chacune des 7 étapes seedées (content['wizardStepIntro']) affiche son propre texte d'intro (AC1)", async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    const expectedByIndex = [
+      'La première chose à faire est de choisir sa classe.',
+      'Les voyageurs sont confrontés à des difficultés très diverses.',
+      'On détermine les quatre attributs des personnages.',
+      "Choisissez la famille d'armes favorite du voyageur.",
+      'Votre voyageur possède un objet fétiche.',
+      'Vous pouvez partir en pique-nique pour simplifier la création.',
+      'Prenez le temps de décider des détails suivants.',
+    ];
+
+    for (const [index, expectedText] of expectedByIndex.entries()) {
+      comp.currentStepIndex.set(index);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain(expectedText);
+    }
+  });
+
+  it("affiche le texte d'intro thémé de l'étape Portrait (seule clé sans source livre, AC5)", async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    comp.currentStepIndex.set(7); // portrait
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Ajoute un portrait si tu le souhaites.');
   });
 
   it('gameSystemId fourni en query param (navigation depuis partie-detail) → ne re-fetch pas la partie', async () => {

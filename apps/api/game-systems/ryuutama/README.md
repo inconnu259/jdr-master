@@ -11,6 +11,7 @@ apps/api/game-systems/ryuutama/data/
   types.json
   attribute-patterns.json
   weapon-categories.json
+  wizard-step-intros.json
 ```
 
 ## classes.json
@@ -79,3 +80,19 @@ Tableau de 5 objets (arc, epee-courte, epee-longue, hache, lance) :
   { "key": "lance",       "label": "Lance",         "touchFormula": "VIG+AGI",   "damageFormula": "VIG+1", "price": 350, "encumbrance": 3, "hands": 2 }
 ]
 ```
+
+## wizard-step-intros.json
+
+Tableau de 7 objets (une entrée par étape de l'assistant de création — hors `portrait`,
+qui n'a pas de texte dans le livre et reste géré en dur côté frontend, `tones.ts`) :
+
+```json
+[
+  { "key": "classId", "label": "Choisir sa classe", "text": "La première chose à faire est de choisir sa classe. ..." }
+]
+```
+
+`key` correspond aux clés d'étape du wizard (`classId`, `typeId`, `attributes`,
+`weaponCategoryId`, `fetiqueObject`, `equipment`, `narrative`). `text` est le texte
+d'introduction affiché avant toute sélection, transcrit tel quel de `docs/assistant.md`
+(*Guide du Voyageur*, chapitre « Créer un Voyageur ») — Story 23.3.

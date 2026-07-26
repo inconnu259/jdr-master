@@ -89,6 +89,11 @@ const CONTENT_TYPES: ContentTypeSeed[] = [
     label: "Pouvoir d'éveil",
     file: 'eveil-powers.json',
   },
+  {
+    key: 'wizardStepIntro',
+    label: "Texte d'introduction d'étape (assistant)",
+    file: 'wizard-step-intros.json',
+  },
 ];
 
 @Injectable()

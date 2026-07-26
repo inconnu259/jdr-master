@@ -40,6 +40,15 @@ interface CreationStep {
   label: string;
 }
 
+/**
+ * L'étape Portrait n'a pas de texte dans le *Guide du Voyageur* (propre à cette app, pas au
+ * système de jeu) — elle reste seule à vivre dans `tones.ts` (Story 23.3, AC5). Les 7 autres
+ * étapes ont leur texte seedé dans `content['wizardStepIntro']` (`ContentType` Ryuutama,
+ * cohérent avec AD-1) plutôt que codé en dur, pour rester générique multi-système (retour
+ * utilisateur en revue de code du 2026-07-26 — corrige AD-9, cf. story file).
+ */
+const PORTRAIT_STEP_KEY = 'portrait';
+
 /** Mapping du `field` retourné par `validate()` (packages/game-rules) vers la clé d'étape à rouvrir. */
 const FIELD_TO_STEP_KEY: Record<string, string> = {
   classId: 'classId',
@@ -125,6 +134,16 @@ export class CharacterWizard implements OnInit {
   protected readonly currentStepLabel = computed(
     () => this.steps()[this.currentStepIndex()]?.label ?? '',
   );
+  protected readonly wizardStepIntros = computed<ContentEntryDto[]>(
+    () => this.content()?.['wizardStepIntro'] ?? [],
+  );
+  /** Texte d'introduction propre à l'étape courante (Story 23.3) — distinct du label court ci-dessus. */
+  protected readonly stepIntroText = computed(() => {
+    const key = this.currentStepKey();
+    if (key === PORTRAIT_STEP_KEY) return this.theme.tone()['character.step_portrait_intro'];
+    const entry = this.wizardStepIntros().find((e) => e.key === key);
+    return (entry?.data as { text?: string } | undefined)?.text ?? '';
+  });
   protected readonly isFirstStep = computed(() => this.currentStepIndex() === 0);
   protected readonly isLastStep = computed(
     () => this.currentStepIndex() === this.steps().length - 1,

@@ -105,6 +105,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.tab_label': 'Personnages',
     'character.step_class': 'Choisir sa vocation',
     'character.step_type': 'Choisir sa voie',
+    'character.step_portrait_intro':
+      'Ajoute un portrait si tu le souhaites — cette étape est entièrement facultative et peut être passée à tout moment.',
     'character.magic_deferred_notice':
       "La magie s'apprendra plus tard, jeune sorcier — pour l'instant, seuls les dons passifs s'activent.",
     'character.portrait_missing': 'Aucun portrait — le conteur imagine un visage',
@@ -270,6 +272,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.tab_label': 'Personnages',
     'character.step_class': 'Choisir son rôle dans le cercle',
     'character.step_type': 'Choisir son chemin',
+    'character.step_portrait_intro':
+      "Grave un visage si le cœur t'en dit — cette étape reste facultative, tu peux la traverser sans t'arrêter.",
     'character.magic_deferred_notice':
       'Les sortilèges des saisons dorment encore — reviens quand le cercle sera prêt.',
     'character.portrait_missing': 'Aucun visage gravé — la forêt garde son mystère',
@@ -285,7 +289,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'homme-dragon.create_cta': 'Éveiller mon Homme Dragon',
     'homme-dragon.race_label': 'Lignée',
     'homme-dragon.artefact_label': 'Talisman',
-    'homme-dragon.created_notice': "Votre Homme Dragon veille sur la forêt.",
+    'homme-dragon.created_notice': 'Votre Homme Dragon veille sur la forêt.',
     /* — roster (Story 6.1) — */
     'roster.mj_badge': 'MJ',
     'roster.invite_slot': 'Accueillir un compagnon de route',
@@ -430,6 +434,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.tab_label': 'Personnages',
     'character.step_class': 'Choisir sa fonction',
     'character.step_type': 'Choisir son mécanisme',
+    'character.step_portrait_intro':
+      'Grave un portrait sur la plaque si tu le souhaites — étape optionnelle, ignorable sans conséquence.',
     'character.magic_deferred_notice':
       "Le grimoire à vapeur n'est pas encore calibré pour les formules — les avantages de base restent actifs.",
     'character.portrait_missing': 'Aucun portrait gravé sur la plaque',
