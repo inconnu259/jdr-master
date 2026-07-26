@@ -1558,4 +1558,47 @@ describe('CharacterSheet', () => {
       expect(comp.magicData()).toBeNull();
     });
   });
+
+  describe('Story 24.1 : attributePatternLabel générique sur 3 profils (Équilibré/Polyvalent/Spécialiste)', () => {
+    const CONTENT_24_1: GameSystemContentDto = {
+      ...CONTENT,
+      attributePattern: [
+        { key: 'equilibre', data: { label: 'Équilibré', values: [6, 6, 6, 6] } },
+        { key: 'polyvalent', data: { label: 'Polyvalent', values: [8, 4, 6, 6] } },
+        { key: 'specialiste', data: { label: 'Spécialiste', values: [4, 4, 8, 8] } },
+      ],
+    };
+
+    it('résout "Spécialiste" (pas seulement "Polyvalent") pour des attributs [4,4,8,8]', async () => {
+      const character = makeCharacterDto({
+        sheetData: {
+          ...CHARACTER.sheetData,
+          attributes: { AGI: 4, ESP: 4, INT: 8, VIG: 8 },
+        },
+      });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_24_1),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      expect(fixture.nativeElement.textContent).toContain('patron Spécialiste');
+    });
+
+    it('résout "Équilibré" pour des attributs [6,6,6,6]', async () => {
+      const character = makeCharacterDto({
+        sheetData: {
+          ...CHARACTER.sheetData,
+          attributes: { AGI: 6, ESP: 6, INT: 6, VIG: 6 },
+        },
+      });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_24_1),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      expect(fixture.nativeElement.textContent).toContain('patron Équilibré');
+    });
+  });
 });

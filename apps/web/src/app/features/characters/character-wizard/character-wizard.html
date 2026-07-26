@@ -75,13 +75,11 @@
             />
           }
           @case ('attributes') {
-            @if (attributePattern(); as pattern) {
-              <app-attributes-step
-                [pattern]="pattern"
-                [attributes]="sheetData().attributes"
-                (attributesChange)="onAttributesChange($event)"
-              />
-            }
+            <app-attributes-step
+              [patterns]="attributePatterns()"
+              [attributes]="sheetData().attributes"
+              (attributesChange)="onAttributesChange($event)"
+            />
           }
           @case ('weaponCategoryId') {
             <app-weapon-step

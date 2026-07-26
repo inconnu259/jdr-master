@@ -95,6 +95,45 @@ describe('validate (strict)', () => {
     expect(result.valid).toBe(true);
   });
 
+  describe('Story 24.1 : 3 profils d’attributs (Équilibré/Polyvalent/Spécialiste)', () => {
+    function catalogWithThreePatterns(): RyuutamaCatalog {
+      return {
+        ...catalog(),
+        // Reflète le contenu réellement seedé (attribute-patterns.json) après cette story.
+        attributePatterns: [
+          [6, 6, 6, 6], // Équilibré
+          [4, 6, 6, 8], // Polyvalent
+          [4, 4, 8, 8], // Spécialiste
+        ],
+      };
+    }
+
+    it('profil Équilibré (6,6,6,6) → valid: true', () => {
+      const data = { ...validSheet(), attributes: { AGI: 6, ESP: 6, INT: 6, VIG: 6 } };
+      const result = validate(data, 'strict', catalogWithThreePatterns());
+      expect(result.valid).toBe(true);
+    });
+
+    it('profil Polyvalent (assigné dans un ordre quelconque) → valid: true', () => {
+      const data = { ...validSheet(), attributes: { AGI: 4, ESP: 8, INT: 6, VIG: 6 } };
+      const result = validate(data, 'strict', catalogWithThreePatterns());
+      expect(result.valid).toBe(true);
+    });
+
+    it('profil Spécialiste (4,4,8,8) → valid: true', () => {
+      const data = { ...validSheet(), attributes: { AGI: 4, ESP: 4, INT: 8, VIG: 8 } };
+      const result = validate(data, 'strict', catalogWithThreePatterns());
+      expect(result.valid).toBe(true);
+    });
+
+    it('répartition ne correspondant à aucun des 3 profils → valid: false', () => {
+      const data = { ...validSheet(), attributes: { AGI: 4, ESP: 4, INT: 4, VIG: 12 } };
+      const result = validate(data, 'strict', catalogWithThreePatterns());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'attributes')).toBe(true);
+    });
+  });
+
   it('Story 14.1 : equipment (individual/contenants/animaux) sans price/effect → valid: true, aucune règle ne le touche', () => {
     const data: RyuutamaSheetData = {
       ...validSheet(),

@@ -83,7 +83,11 @@ const CONTENT: GameSystemContentDto = {
       data: { label: 'Magie', advantages: [{ name: 'Volonté', effect: '+4 PE' }] },
     },
   ],
-  attributePattern: [{ key: 'polyvalent', data: { label: 'Polyvalent', values: [8, 4, 6, 6] } }],
+  attributePattern: [
+    { key: 'equilibre', data: { label: 'Équilibré', values: [6, 6, 6, 6] } },
+    { key: 'polyvalent', data: { label: 'Polyvalent', values: [8, 4, 6, 6] } },
+    { key: 'specialiste', data: { label: 'Spécialiste', values: [4, 4, 8, 8] } },
+  ],
   landscape: [{ key: 'foret', data: { label: 'Forêt' } }],
   season: [
     { key: 'printemps', data: { label: 'Printemps' } },
@@ -291,6 +295,16 @@ describe('CharacterWizard', () => {
       'equipment',
       'narrative',
       'portrait',
+    ]);
+  });
+
+  it('Story 24.1 : attributePatterns() expose les 3 profils seedés, pas seulement le premier', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    expect(comp.attributePatterns().map((p: { key: string }) => p.key)).toEqual([
+      'equilibre',
+      'polyvalent',
+      'specialiste',
     ]);
   });
 

@@ -228,8 +228,9 @@ export class CharacterWizard implements OnInit {
   );
   /** Catalogue de sorts complet — `MagicStep` filtre lui-même rituelle/débutant (Story 23.9). */
   protected readonly spells = computed<ContentEntryDto[]>(() => this.content()?.['spell'] ?? []);
-  protected readonly attributePattern = computed<ContentEntryDto | null>(
-    () => this.content()?.['attributePattern']?.[0] ?? null,
+  /** Toutes les entrées du catalogue `attributePattern` (Story 24.1) — plus seulement la première. */
+  protected readonly attributePatterns = computed<ContentEntryDto[]>(
+    () => this.content()?.['attributePattern'] ?? [],
   );
 
   /** `requiredChoices` de la classe sélectionnée (Story 23.8) — [] si la classe n'en a aucun. */

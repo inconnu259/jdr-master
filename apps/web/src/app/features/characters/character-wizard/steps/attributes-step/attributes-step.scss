@@ -1,4 +1,11 @@
 .attributes-step {
+  &__patterns {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
   &__banner {
     padding: 0.5rem 0.75rem;
     background: var(--mat-sys-surface-container-high, #f0ebe3);
