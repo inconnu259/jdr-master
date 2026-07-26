@@ -46,8 +46,6 @@ export class TypeStep {
     return entry ? (entry.data as TypeData) : null;
   });
 
-  protected readonly isMagie = computed(() => this.typeId() === 'magie');
-
   protected onSelect(key: string): void {
     this.typeIdChange.emit(key);
   }

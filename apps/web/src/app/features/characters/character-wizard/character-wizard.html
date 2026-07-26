@@ -64,6 +64,16 @@
               (typeIdChange)="updateSheetData({ typeId: $event })"
             />
           }
+          @case ('magic') {
+            <app-magic-step
+              [seasons]="seasons()"
+              [spells]="spells()"
+              [magicSeason]="sheetData().magicSeason"
+              [knownRitualSpells]="sheetData().knownRitualSpells"
+              (magicSeasonChange)="updateSheetData({ magicSeason: $event })"
+              (knownRitualSpellsChange)="updateSheetData({ knownRitualSpells: $event })"
+            />
+          }
           @case ('attributes') {
             @if (attributePattern(); as pattern) {
               <app-attributes-step

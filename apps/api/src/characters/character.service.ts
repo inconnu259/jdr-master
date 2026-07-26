@@ -241,12 +241,21 @@ export class CharacterService {
       }
     }
 
+    const validDebutantRitualSpells = (content['spell'] ?? [])
+      .filter((entry) => {
+        const data = entry.data as { magicType?: string; tier?: string };
+        return data.magicType === 'rituelle' && data.tier === 'debutant';
+      })
+      .map((entry) => entry.key);
+
     return {
       validClasses: keysOf('class'),
       validTypes: keysOf('type'),
       validWeapons: keysOf('weaponCategory'),
       attributePatterns,
       requiredChoicesByClass,
+      validSeasons: keysOf('season'),
+      validDebutantRitualSpells,
     };
   }
 

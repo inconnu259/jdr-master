@@ -67,6 +67,21 @@ export interface RyuutamaSheetData {
    * `1 + levelUps.length` (calcul du niveau du personnage).
    */
   classCapabilities?: { type: CapabilityType; params: Record<string, unknown> }[];
+  /**
+   * Saison d'affinité pour la magie des saisons (Story 23.9), clé du catalogue `season`.
+   * Uniquement pertinent si `typeId === 'magie'`. Nommé `magicSeason` (pas `seasonAffinity`)
+   * pour ne pas se confondre avec un mécanisme distinct de climat/paysage favori (ex.
+   * Climatophile du Météomancien, Story 23.8, qui utilise `classCapabilities`/catalogue
+   * `landscape` — aucun lien avec ce champ).
+   */
+  magicSeason?: string;
+  /**
+   * Sorts de magie rituelle connus à la création (Story 23.9) — exactement 2 clés du catalogue
+   * `spell` avec `magicType: "rituelle"` et `tier: "debutant"`. Contrairement à la magie des
+   * saisons (`magicSeason` seul, aucun sort stocké — le personnage les connaît automatiquement,
+   * cf. docs/magie.md), la magie rituelle se transmet et se choisit explicitement.
+   */
+  knownRitualSpells?: string[];
 }
 
 export interface DerivedStats {
@@ -109,4 +124,12 @@ export interface RyuutamaCatalog {
    * `landscape-capability` mais deux autres choix que ce contournement laisserait passer).
    */
   requiredChoicesByClass?: Record<string, { key: string; kind: string }[]>;
+  /** Clés valides du catalogue `season` (Story 23.9), pour valider `magicSeason`. */
+  validSeasons?: string[];
+  /**
+   * Clés valides du catalogue `spell` filtrées sur `magicType: "rituelle"` et `tier: "debutant"`
+   * (Story 23.9), pour valider `knownRitualSpells` — projection minimale (juste les clés), pas
+   * le contenu complet des sorts.
+   */
+  validDebutantRitualSpells?: string[];
 }

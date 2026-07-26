@@ -1457,4 +1457,105 @@ describe('CharacterSheet', () => {
       expect(fixture.nativeElement.textContent).not.toContain('malus');
     });
   });
+
+  describe('Story 23.9 : choix de magie à la création (type Magie)', () => {
+    const CONTENT_23_9: GameSystemContentDto = {
+      class: CONTENT['class'],
+      type: [
+        {
+          key: 'magie',
+          data: { label: 'Magie', advantages: [{ name: 'Volonté', effect: '+4 PE' }] },
+        },
+      ],
+      attributePattern: CONTENT['attributePattern'],
+      weaponCategory: CONTENT['weaponCategory'],
+      season: [
+        { key: 'printemps', data: { label: 'Printemps' } },
+        { key: 'ete', data: { label: 'Été' } },
+      ],
+      spell: [
+        {
+          key: 'benediction-main-rouge',
+          data: {
+            name: 'Bénédiction de la main rouge',
+            magicType: 'rituelle',
+            tier: 'debutant',
+            peCost: 4,
+            description: 'La main devient rouge et plus forte.',
+          },
+        },
+        {
+          key: 'cloche-alarme',
+          data: {
+            name: "Cloche d'alarme",
+            magicType: 'rituelle',
+            tier: 'debutant',
+            peCost: 4,
+            description: "Prévient en cas d'intrusion.",
+          },
+        },
+      ],
+    };
+
+    function magieSheetData(extra: Record<string, unknown> = {}) {
+      return {
+        classId: 'menestrel',
+        typeId: 'magie',
+        weaponCategoryId: 'lance',
+        attributes: { VIG: 8, AGI: 4, INT: 6, ESP: 6 },
+        ...extra,
+      };
+    }
+
+    it('typeId "magie" + magicSeason/knownRitualSpells renseignés → affiche la saison et les 2 sorts (labels résolus)', async () => {
+      const character = makeCharacterDto({
+        sheetData: magieSheetData({
+          magicSeason: 'printemps',
+          knownRitualSpells: ['benediction-main-rouge', 'cloche-alarme'],
+        }),
+      });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_23_9),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      const text = fixture.nativeElement.textContent;
+      expect(text).toContain('Printemps');
+      expect(text).toContain('Bénédiction de la main rouge');
+      expect(text).toContain("Cloche d'alarme");
+    });
+
+    it('typeId différent de "magie" → aucune section Magie affichée', async () => {
+      const character = makeCharacterDto({
+        sheetData: {
+          classId: 'menestrel',
+          typeId: 'attaque',
+          weaponCategoryId: 'lance',
+          attributes: { VIG: 8, AGI: 4, INT: 6, ESP: 6 },
+        },
+      });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_23_9),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      const comp = fixture.componentInstance as any;
+      expect(comp.magicData()).toBeNull();
+      expect(fixture.nativeElement.textContent).not.toContain('Sorts de magie rituelle connus');
+    });
+
+    it('typeId "magie" mais magicSeason absent (personnage créé avant cette story) → pas d’affichage trompeur, pas de crash', async () => {
+      const character = makeCharacterDto({ sheetData: magieSheetData() });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_23_9),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      const comp = fixture.componentInstance as any;
+      expect(comp.magicData()).toBeNull();
+    });
+  });
 });

@@ -86,6 +86,22 @@ export interface ClassChoiceDisplay {
   valueLabel?: string;
 }
 
+interface SeasonData {
+  label: string;
+}
+
+interface SpellData {
+  name: string;
+  description: string;
+  peCost: number;
+}
+
+/** Saison d'affinité + 2 sorts rituels connus, résolus pour affichage (Story 23.9). */
+export interface MagicDisplay {
+  seasonLabel: string;
+  ritualSpells: { key: string; name: string; description: string; peCost: number }[];
+}
+
 interface TypeData {
   label: string;
   advantages: { name: string; effect: string }[];
@@ -201,6 +217,28 @@ export class CharacterSheet implements OnInit {
       this.sheetData()['weaponCategoryId'] as string | undefined,
     ),
   );
+
+  /**
+   * Saison d'affinité + 2 sorts rituels connus (Story 23.9) — `null` pour tout personnage dont
+   * `typeId !== 'magie'`. Ne concerne jamais Climatophile (Story 23.8, `classCapabilities`),
+   * affiché lui via la section "Paysage/climat favori" existante.
+   */
+  protected readonly magicData = computed<MagicDisplay | null>(() => {
+    if (this.sheetData()['typeId'] !== 'magie') return null;
+    const seasonKey = this.sheetData()['magicSeason'] as string | undefined;
+    const seasonLabel = findContentEntry<SeasonData>(this.content(), 'season', seasonKey)?.label;
+    if (!seasonLabel) return null;
+
+    const spellKeys = (this.sheetData()['knownRitualSpells'] as string[] | undefined) ?? [];
+    const ritualSpells = spellKeys
+      .map((key) => {
+        const data = findContentEntry<SpellData>(this.content(), 'spell', key);
+        return data ? { key, name: data.name, description: data.description, peCost: data.peCost } : null;
+      })
+      .filter((s): s is MagicDisplay['ritualSpells'][number] => s !== null);
+
+    return { seasonLabel, ritualSpells };
+  });
 
   /** Suggestions catalogue pour la combobox de l'arme de prédilection (AC7, Story 6.7). */
   protected readonly weaponOptions = computed<FieldEditPencilOption[]>(() =>

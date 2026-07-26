@@ -201,4 +201,130 @@ describe('validate (strict)', () => {
       ).toBe(true);
     });
   });
+
+  describe('Règle 7 (Story 23.9) : choix de magie à la création (type Magie)', () => {
+    function catalogWithMagie(): RyuutamaCatalog {
+      return {
+        ...catalog(),
+        validSeasons: ['printemps', 'ete', 'automne', 'hiver'],
+        validDebutantRitualSpells: [
+          'benediction-main-rouge',
+          'cloche-alarme',
+          'eclatante-purete-cristal',
+        ],
+      };
+    }
+
+    function magieSheet(overrides: Partial<RyuutamaSheetData> = {}): RyuutamaSheetData {
+      return { ...validSheet(), typeId: 'magie', ...overrides };
+    }
+
+    it('typeId "magie" sans magicSeason → valid: false, errors[].field = magicSeason', () => {
+      const data = magieSheet({
+        knownRitualSpells: ['benediction-main-rouge', 'cloche-alarme'],
+      });
+      const result = validate(data, 'strict', catalogWithMagie());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'magicSeason')).toBe(true);
+    });
+
+    it('typeId "magie" avec magicSeason hors catalogue → valid: false', () => {
+      const data = magieSheet({
+        magicSeason: 'saison-inexistante',
+        knownRitualSpells: ['benediction-main-rouge', 'cloche-alarme'],
+      });
+      const result = validate(data, 'strict', catalogWithMagie());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'magicSeason')).toBe(true);
+    });
+
+    it('typeId "magie" sans knownRitualSpells → valid: false, errors[].field = knownRitualSpells', () => {
+      const data = magieSheet({ magicSeason: 'printemps' });
+      const result = validate(data, 'strict', catalogWithMagie());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'knownRitualSpells')).toBe(true);
+    });
+
+    it('typeId "magie" avec 1 seul sort connu → valid: false (exactement 2 requis)', () => {
+      const data = magieSheet({
+        magicSeason: 'printemps',
+        knownRitualSpells: ['benediction-main-rouge'],
+      });
+      const result = validate(data, 'strict', catalogWithMagie());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'knownRitualSpells')).toBe(true);
+    });
+
+    it('typeId "magie" avec 3 sorts connus → valid: false (exactement 2 requis)', () => {
+      const data = magieSheet({
+        magicSeason: 'printemps',
+        knownRitualSpells: [
+          'benediction-main-rouge',
+          'cloche-alarme',
+          'eclatante-purete-cristal',
+        ],
+      });
+      const result = validate(data, 'strict', catalogWithMagie());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'knownRitualSpells')).toBe(true);
+    });
+
+    it('typeId "magie" avec un sort dupliqué (même clé deux fois) → valid: false', () => {
+      const data = magieSheet({
+        magicSeason: 'printemps',
+        knownRitualSpells: ['benediction-main-rouge', 'benediction-main-rouge'],
+      });
+      const result = validate(data, 'strict', catalogWithMagie());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'knownRitualSpells')).toBe(true);
+    });
+
+    it('typeId "magie" avec un sort hors catalogue rituel débutant → valid: false', () => {
+      const data = magieSheet({
+        magicSeason: 'printemps',
+        knownRitualSpells: ['benediction-main-rouge', 'sort-inconnu'],
+      });
+      const result = validate(data, 'strict', catalogWithMagie());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'knownRitualSpells')).toBe(true);
+    });
+
+    it('revue de code (2026-07-26) : knownRitualSpells non-tableau (client malveillant/buggé) → valid: false, ne plante pas', () => {
+      const data = {
+        ...magieSheet({ magicSeason: 'printemps' }),
+        knownRitualSpells: { foo: 'bar' } as unknown as string[],
+      };
+      expect(() => validate(data, 'strict', catalogWithMagie())).not.toThrow();
+      const result = validate(data, 'strict', catalogWithMagie());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'knownRitualSpells')).toBe(true);
+    });
+
+    it('revue de code (2026-07-26) : catalog.validSeasons vide → message ne se termine pas par "Saisons acceptées : " sans rien après', () => {
+      const data = magieSheet({
+        magicSeason: 'printemps',
+        knownRitualSpells: ['benediction-main-rouge', 'cloche-alarme'],
+      });
+      const catalogNoSeasons: RyuutamaCatalog = { ...catalogWithMagie(), validSeasons: [] };
+      const result = validate(data, 'strict', catalogNoSeasons);
+      const message = result.errors.find((e) => e.field === 'magicSeason')?.message;
+      expect(message).not.toMatch(/Saisons acceptées : $/);
+    });
+
+    it('typeId "magie" avec magicSeason et 2 sorts valides et distincts → valid: true', () => {
+      const data = magieSheet({
+        magicSeason: 'printemps',
+        knownRitualSpells: ['benediction-main-rouge', 'cloche-alarme'],
+      });
+      const result = validate(data, 'strict', catalogWithMagie());
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('typeId différent de "magie" → aucune erreur de la Règle 7 même sans magicSeason/knownRitualSpells', () => {
+      const result = validate(validSheet(), 'strict', catalogWithMagie());
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+  });
 });

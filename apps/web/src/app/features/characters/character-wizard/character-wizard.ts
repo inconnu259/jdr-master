@@ -14,6 +14,7 @@ import {
   type ClassChoicePatch,
 } from './steps/class-step/class-step';
 import { TypeStep } from './steps/type-step/type-step';
+import { MagicStep } from './steps/magic-step/magic-step';
 import { AttributesStep } from './steps/attributes-step/attributes-step';
 import { WeaponStep } from './steps/weapon-step/weapon-step';
 import { FetishStep } from './steps/fetish-step/fetish-step';
@@ -33,10 +34,11 @@ interface RequiredChoiceLike {
   kind: 'eligible-talent' | 'landscape-flavor' | 'closed-list' | 'landscape-capability';
 }
 
-/** Les 8 étapes du plugin Ryuutama, portrait inclus (Story 4.5). */
+/** Les 9 étapes du plugin Ryuutama, portrait inclus (Story 4.5) — `magic` ajoutée Story 23.9. */
 const SUPPORTED_STEP_KEYS = new Set([
   'classId',
   'typeId',
+  'magic',
   'attributes',
   'weaponCategoryId',
   'fetiqueObject',
@@ -44,6 +46,17 @@ const SUPPORTED_STEP_KEYS = new Set([
   'narrative',
   'portrait',
 ]);
+
+/**
+ * `magic` (Story 23.9) est la toute première étape **conditionnelle** du wizard — visible
+ * uniquement si `typeId === 'magie'`. Jusqu'ici, `SUPPORTED_STEP_KEYS` suffisait à filtrer les
+ * étapes (un filtre **statique**, jamais dépendant d'une donnée du personnage) : `steps()` est
+ * donc désormais dérivé aussi de `sheetData().typeId`, recalculé à chaque changement de type.
+ */
+const CONDITIONAL_STEP_VISIBILITY: Record<string, (data: Partial<RyuutamaSheetData>) => boolean> =
+  {
+    magic: (data) => data.typeId === 'magie',
+  };
 
 interface CreationStep {
   key: string;
@@ -73,6 +86,9 @@ const FIELD_TO_STEP_KEY: Record<string, string> = {
   'ermite-metamorphose': 'classId',
   'dresseur-autorite': 'classId',
   'meteomancien-climatophile': 'classId',
+  // Règle 7 (Story 23.9) : choix de magie à la création, toujours résolus dans l'étape magic.
+  magicSeason: 'magic',
+  knownRitualSpells: 'magic',
 };
 
 interface ServerValidationError {
@@ -87,6 +103,7 @@ interface ServerValidationError {
     MatButtonModule,
     ClassStep,
     TypeStep,
+    MagicStep,
     AttributesStep,
     WeaponStep,
     FetishStep,
@@ -111,13 +128,38 @@ export class CharacterWizard implements OnInit {
   private gameSystemId = '';
 
   /**
-   * Piloté par `GameSystemSchemaDto.creationSteps` (AC1) — jamais codé en dur, pour que le
-   * wizard reste générique et réutilisable par un futur plugin (NFR5).
+   * Liste brute reçue du backend (`GameSystemSchemaDto.creationSteps`, filtrée par
+   * `SUPPORTED_STEP_KEYS`) — jamais codée en dur, pour que le wizard reste générique et
+   * réutilisable par un futur plugin (NFR5). Ne PAS utiliser directement pour la navigation :
+   * cf. `steps` ci-dessous, qui filtre en plus les étapes conditionnelles (Story 23.9).
    */
-  protected readonly steps = signal<CreationStep[]>([]);
+  protected readonly allStepsRaw = signal<CreationStep[]>([]);
   protected readonly loadError = signal<string | null>(null);
 
-  protected readonly currentStepIndex = signal(0);
+  /**
+   * Étapes réellement visibles compte tenu des données déjà saisies (Story 23.9 : `magic`
+   * n'apparaît que si `typeId === 'magie'`). Recalculée à chaque changement de `sheetData()`.
+   */
+  protected readonly steps = computed<CreationStep[]>(() =>
+    this.allStepsRaw().filter((s) => {
+      const visible = CONDITIONAL_STEP_VISIBILITY[s.key];
+      return !visible || visible(this.sheetData());
+    }),
+  );
+
+  /**
+   * Piloté par la **clé** de l'étape courante, pas par un index brut (Story 23.9) : si l'étape
+   * `magic` disparaît de `steps()` après un aller-retour (le joueur change `typeId` après avoir
+   * dépassé cette étape), un simple entier deviendrait incohérent (il pointerait sur la mauvaise
+   * étape après le rétrécissement du tableau). `currentStepIndex`/`currentStepKey` ci-dessous
+   * sont dérivés de cette clé à chaque lecture, jamais l'inverse — auto-cohérents même si la clé
+   * suivie a disparu de `steps()` (repli sur la première étape visible, cf. `currentStepIndex`).
+   */
+  private readonly currentStepKeyTracked = signal('');
+  protected readonly currentStepIndex = computed(() => {
+    const idx = this.steps().findIndex((s) => s.key === this.currentStepKeyTracked());
+    return idx >= 0 ? idx : 0;
+  });
   protected readonly content = signal<GameSystemContentDto | null>(null);
   /**
    * Story 14.1 : `equipment.group` n'existe plus dans `RyuutamaSheetData` — l'ancien « Nécessaire
@@ -145,6 +187,7 @@ export class CharacterWizard implements OnInit {
   protected readonly pendingPortraitFile = signal<File | null>(null);
   protected readonly pendingCropData = signal<PortraitCropData | null>(null);
 
+  /** Toujours dérivée de `currentStepIndex()`/`steps()` — jamais directement de `currentStepKeyTracked()`, pour rester auto-cohérente si la clé suivie a disparu de `steps()`. */
   protected readonly currentStepKey = computed(
     () => this.steps()[this.currentStepIndex()]?.key ?? '',
   );
@@ -180,6 +223,11 @@ export class CharacterWizard implements OnInit {
   protected readonly landscapes = computed<ContentEntryDto[]>(
     () => this.content()?.['landscape'] ?? [],
   );
+  protected readonly seasons = computed<ContentEntryDto[]>(
+    () => this.content()?.['season'] ?? [],
+  );
+  /** Catalogue de sorts complet — `MagicStep` filtre lui-même rituelle/débutant (Story 23.9). */
+  protected readonly spells = computed<ContentEntryDto[]>(() => this.content()?.['spell'] ?? []);
   protected readonly attributePattern = computed<ContentEntryDto | null>(
     () => this.content()?.['attributePattern']?.[0] ?? null,
   );
@@ -208,6 +256,8 @@ export class CharacterWizard implements OnInit {
       }
       case 'typeId':
         return !!data.typeId;
+      case 'magic':
+        return !!data.magicSeason && (data.knownRitualSpells?.length ?? 0) === 2;
       case 'attributes':
         return !!data.attributes;
       case 'weaponCategoryId':
@@ -232,8 +282,9 @@ export class CharacterWizard implements OnInit {
         this.characterSvc.getGameSystemContent(this.gameSystemId),
       ]);
       const allSteps = (schema.creationSteps as CreationStep[]) ?? [];
-      this.steps.set(allSteps.filter((s) => SUPPORTED_STEP_KEYS.has(s.key)));
+      this.allStepsRaw.set(allSteps.filter((s) => SUPPORTED_STEP_KEYS.has(s.key)));
       this.content.set(content);
+      this.currentStepKeyTracked.set(this.steps()[0]?.key ?? '');
     } catch {
       this.loadError.set(
         "Impossible de charger l'assistant de création. Vérifiez votre connexion et réessayez.",
@@ -243,12 +294,14 @@ export class CharacterWizard implements OnInit {
 
   protected goNext(): void {
     if (this.submitting() || !this.canGoNext() || this.isLastStep()) return;
-    this.currentStepIndex.update((i) => i + 1);
+    const next = this.steps()[this.currentStepIndex() + 1];
+    if (next) this.currentStepKeyTracked.set(next.key);
   }
 
   protected goPrev(): void {
     if (this.submitting() || this.isFirstStep()) return;
-    this.currentStepIndex.update((i) => i - 1);
+    const prev = this.steps()[this.currentStepIndex() - 1];
+    if (prev) this.currentStepKeyTracked.set(prev.key);
   }
 
   protected onPortraitSaved(result: PortraitCropResult): void {
@@ -269,6 +322,12 @@ export class CharacterWizard implements OnInit {
       // Une spécialité saisie pour Artisan n'a plus de sens si le joueur change de classe.
       if ('classId' in patch && patch.classId !== 'artisan') {
         delete next.specialtyTypeId;
+      }
+      // Les choix de magie n'ont plus de sens si le joueur change de type pour autre chose que
+      // "magie" (Story 23.9) — même principe que le nettoyage specialtyTypeId ci-dessus.
+      if ('typeId' in patch && patch.typeId !== 'magie') {
+        delete next.magicSeason;
+        delete next.knownRitualSpells;
       }
       // Les choix de classe (Métier d'appoint, Métamorphose, Autorité, Climatophile) ne
       // survivent pas à un changement de classe — ne garder que ceux dont la `key` correspond
@@ -391,8 +450,7 @@ export class CharacterWizard implements OnInit {
       this.stepErrors.set(grouped);
 
       const firstStepKey = FIELD_TO_STEP_KEY[errors[0].field] ?? errors[0].field;
-      const stepIndex = this.steps().findIndex((s) => s.key === firstStepKey);
-      this.currentStepIndex.set(stepIndex >= 0 ? stepIndex : 0);
+      this.currentStepKeyTracked.set(firstStepKey);
       return;
     }
 

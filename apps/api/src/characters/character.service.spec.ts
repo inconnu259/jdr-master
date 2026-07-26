@@ -468,6 +468,42 @@ describe('CharacterService', () => {
     );
   });
 
+  it('create() dérive validSeasons/validDebutantRitualSpells du contenu seedé (Story 23.9)', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    gameSystems.getContent.mockResolvedValue({
+      class: [{ key: 'chasseur', data: {} }],
+      type: [{ key: 'attaque', data: {} }],
+      weaponCategory: [{ key: 'arc', data: {} }],
+      attributePattern: [{ key: 'polyvalent', data: { values: [8, 4, 6, 6] } }],
+      season: [
+        { key: 'printemps', data: {} },
+        { key: 'ete', data: {} },
+      ],
+      spell: [
+        { key: 'benediction-main-rouge', data: { magicType: 'rituelle', tier: 'debutant' } },
+        { key: 'foudre', data: { magicType: 'saison', tier: 'avance' } },
+        { key: 'ailes-de-libellule', data: { magicType: 'rituelle', tier: 'avance' } },
+      ],
+    });
+    (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+    (computeDerived as jest.Mock).mockReturnValue({});
+    prisma.character.create.mockResolvedValue(makeCharacter());
+
+    await service.create('p1', 'u1', {
+      gameSystemId: 'ryuutama',
+      sheetData: validSheet(),
+    });
+
+    expect(validate).toHaveBeenCalledWith(
+      validSheet(),
+      'strict',
+      expect.objectContaining({
+        validSeasons: ['printemps', 'ete'],
+        validDebutantRitualSpells: ['benediction-main-rouge'],
+      }),
+    );
+  });
+
   it('create() résout ownerPseudo/ownerIsMj du créateur sans requête partie supplémentaire (réutilise getViewable)', async () => {
     parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'u1' });
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });

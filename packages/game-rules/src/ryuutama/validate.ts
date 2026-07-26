@@ -95,5 +95,52 @@ export function validate(
     }
   }
 
+  // Règle 7 : choix de magie à la création pour le type Magie (Story 23.9). Contrairement à la
+  // magie des saisons (choix unique de saison, le personnage connaît automatiquement ses sorts,
+  // cf. docs/magie.md), la magie rituelle exige un choix explicite : exactement 2 sorts du
+  // catalogue rituel débutant. Ne pas se contenter de vérifier la présence (leçon de la revue de
+  // code Règle 6, Story 23.8) : vérifier aussi le contenu (appartenance au catalogue, absence de
+  // doublon, nombre exact) pour ne jamais faire confiance au seul client.
+  if (data.typeId === 'magie') {
+    const validSeasons = catalog.validSeasons ?? [];
+    if (!data.magicSeason || !validSeasons.includes(data.magicSeason)) {
+      errors.push({
+        field: 'magicSeason',
+        message:
+          validSeasons.length > 0
+            ? `Saison d'affinité invalide. Saisons acceptées : ${validSeasons.join(', ')}`
+            : "Saison d'affinité invalide (aucune saison disponible dans le catalogue)",
+      });
+    }
+
+    // `data.knownRitualSpells` vient de `sheetData: Record<string, unknown>` (aucune contrainte
+    // de forme au niveau du DTO, cf. create-character.dto.ts) — un client pourrait envoyer
+    // n'importe quelle valeur JSON pour ce champ. Sans cette garde, `new Set(...)`/`.every(...)`
+    // lèveraient une exception non interceptée (500) plutôt qu'une erreur de validation propre
+    // (400) si la valeur n'est pas un tableau (revue de code, 2026-07-26).
+    const knownRitualSpells = Array.isArray(data.knownRitualSpells)
+      ? data.knownRitualSpells
+      : undefined;
+    const validRitualSpells = catalog.validDebutantRitualSpells ?? [];
+    const hasNoDuplicates =
+      !!knownRitualSpells &&
+      new Set(knownRitualSpells).size === knownRitualSpells.length;
+    const allValid =
+      !!knownRitualSpells &&
+      knownRitualSpells.every((key) => validRitualSpells.includes(key));
+    if (
+      !knownRitualSpells ||
+      knownRitualSpells.length !== 2 ||
+      !hasNoDuplicates ||
+      !allValid
+    ) {
+      errors.push({
+        field: 'knownRitualSpells',
+        message:
+          'Exactement 2 sorts de magie rituelle débutants distincts sont requis pour le type Magie',
+      });
+    }
+  }
+
   return { valid: mode === 'strict' ? errors.length === 0 : true, errors };
 }

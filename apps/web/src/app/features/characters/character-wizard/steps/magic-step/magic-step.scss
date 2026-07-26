@@ -1,0 +1,44 @@
+.magic-step {
+  &__section {
+    margin-bottom: 1.5rem;
+  }
+
+  &__section-title {
+    margin: 0 0 0.5rem;
+  }
+
+  &__seasons {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.5rem;
+  }
+
+  &__spells {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  &__spell {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--mat-sys-outline-variant, #ccc);
+    border-radius: 8px;
+    cursor: pointer;
+
+    &--selected {
+      background: var(--mat-sys-surface-container-high, #f0ebe3);
+      border-color: var(--mat-sys-primary, #2e7d32);
+    }
+  }
+
+  &__spell-detail {
+    color: var(--mat-sys-on-surface-variant, #555);
+    font-size: 0.9em;
+  }
+}

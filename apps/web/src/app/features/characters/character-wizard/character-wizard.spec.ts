@@ -15,6 +15,7 @@ const SCHEMA: GameSystemSchemaDto = {
   creationSteps: [
     { key: 'classId', label: 'Classe' },
     { key: 'typeId', label: 'Type' },
+    { key: 'magic', label: 'Magie' },
     { key: 'attributes', label: 'Attributs' },
     { key: 'weaponCategoryId', label: 'Arme favorite' },
     { key: 'fetiqueObject', label: 'Objet fétiche' },
@@ -77,9 +78,39 @@ const CONTENT: GameSystemContentDto = {
       key: 'attaque',
       data: { label: 'Attaque', advantages: [{ name: 'Endurance', effect: '+4 PV' }] },
     },
+    {
+      key: 'magie',
+      data: { label: 'Magie', advantages: [{ name: 'Volonté', effect: '+4 PE' }] },
+    },
   ],
   attributePattern: [{ key: 'polyvalent', data: { label: 'Polyvalent', values: [8, 4, 6, 6] } }],
   landscape: [{ key: 'foret', data: { label: 'Forêt' } }],
+  season: [
+    { key: 'printemps', data: { label: 'Printemps' } },
+    { key: 'ete', data: { label: 'Été' } },
+  ],
+  spell: [
+    {
+      key: 'benediction-main-rouge',
+      data: {
+        name: 'Bénédiction de la main rouge',
+        magicType: 'rituelle',
+        tier: 'debutant',
+        peCost: 4,
+        description: '...',
+      },
+    },
+    {
+      key: 'cloche-alarme',
+      data: {
+        name: "Cloche d'alarme",
+        magicType: 'rituelle',
+        tier: 'debutant',
+        peCost: 4,
+        description: '...',
+      },
+    },
+  ],
   weaponCategory: [
     { key: 'arc', data: { label: 'Arc', touchFormula: 'AGI+INT-2', damageFormula: 'AGI' } },
   ],
@@ -221,7 +252,7 @@ describe('CharacterWizard', () => {
     ];
 
     for (const [index, expectedText] of expectedByIndex.entries()) {
-      comp.currentStepIndex.set(index);
+      comp.currentStepKeyTracked.set(comp.steps()[index].key);
       fixture.detectChanges();
       expect(fixture.nativeElement.textContent).toContain(expectedText);
     }
@@ -231,7 +262,7 @@ describe('CharacterWizard', () => {
     const { fixture } = await createComponent();
     const comp = fixture.componentInstance as any;
 
-    comp.currentStepIndex.set(7); // portrait
+    comp.currentStepKeyTracked.set(comp.steps()[7].key); // portrait
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Ajoute un portrait si tu le souhaites.');
@@ -387,6 +418,101 @@ describe('CharacterWizard', () => {
     expect(comp.sheetData().classCapabilities).toBeUndefined();
   });
 
+  describe('Story 23.9 : étape Magie conditionnelle', () => {
+    it("typeId !== 'magie' → l'étape magic est absente de steps()", async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+
+      comp.updateSheetData({ typeId: 'attaque' });
+      fixture.detectChanges();
+
+      expect(comp.steps().map((s: { key: string }) => s.key)).not.toContain('magic');
+    });
+
+    it("typeId === 'magie' → l'étape magic apparaît juste après typeId", async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+
+      comp.updateSheetData({ typeId: 'magie' });
+      fixture.detectChanges();
+
+      const keys = comp.steps().map((s: { key: string }) => s.key);
+      expect(keys).toContain('magic');
+      expect(keys.indexOf('magic')).toBe(keys.indexOf('typeId') + 1);
+    });
+
+    it("canGoNext() bloque tant que magicSeason/knownRitualSpells ne sont pas complets, pour typeId === 'magie'", async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+
+      comp.updateSheetData({ typeId: 'magie' });
+      comp.currentStepKeyTracked.set('magic');
+      fixture.detectChanges();
+      expect(comp.canGoNext()).toBe(false);
+
+      comp.updateSheetData({ magicSeason: 'printemps' });
+      fixture.detectChanges();
+      expect(comp.canGoNext()).toBe(false); // sorts manquants
+
+      comp.updateSheetData({
+        knownRitualSpells: ['benediction-main-rouge', 'cloche-alarme'],
+      });
+      fixture.detectChanges();
+      expect(comp.canGoNext()).toBe(true);
+    });
+
+    it("changer de type vers autre chose que 'magie' efface magicSeason/knownRitualSpells", async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+
+      comp.updateSheetData({
+        typeId: 'magie',
+        magicSeason: 'printemps',
+        knownRitualSpells: ['benediction-main-rouge', 'cloche-alarme'],
+      });
+      fixture.detectChanges();
+      expect(comp.sheetData().magicSeason).toBe('printemps');
+
+      comp.updateSheetData({ typeId: 'attaque' });
+      fixture.detectChanges();
+      expect(comp.sheetData().magicSeason).toBeUndefined();
+      expect(comp.sheetData().knownRitualSpells).toBeUndefined();
+    });
+
+    it("piège de navigation : dépasse l'étape magic puis revient changer typeId → la navigation reste cohérente (pas d'étape fantôme)", async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+
+      // Progresse jusqu'à l'étape magic en tant que magicien.
+      comp.updateSheetData({ classId: 'chasseur' });
+      comp.goNext(); // classId -> typeId
+      comp.updateSheetData({ typeId: 'magie' });
+      fixture.detectChanges();
+      comp.goNext(); // typeId -> magic
+      expect(comp.currentStepKey()).toBe('magic');
+
+      comp.updateSheetData({
+        magicSeason: 'printemps',
+        knownRitualSpells: ['benediction-main-rouge', 'cloche-alarme'],
+      });
+      fixture.detectChanges();
+      comp.goNext(); // magic -> attributes
+      expect(comp.currentStepKey()).toBe('attributes');
+
+      // Revient en arrière jusqu'à typeId et change de type — l'étape magic disparaît de steps().
+      comp.goPrev(); // attributes -> magic (encore visible un court instant)
+      comp.goPrev(); // magic -> typeId
+      expect(comp.currentStepKey()).toBe('typeId');
+      comp.updateSheetData({ typeId: 'attaque' });
+      fixture.detectChanges();
+
+      // La navigation doit rester sur typeId (pas une étape fantôme ni un index décalé).
+      expect(comp.currentStepKey()).toBe('typeId');
+      comp.goNext(); // typeId -> attributes directement (magic n'existe plus)
+      expect(comp.currentStepKey()).toBe('attributes');
+    });
+  });
+
   it('derived() reste null tant que les attributs ne sont pas assignés, puis se calcule en direct', async () => {
     const { fixture } = await createComponent();
     const comp = fixture.componentInstance as any;
@@ -435,7 +561,7 @@ describe('CharacterWizard', () => {
   it('soumission 400 sur "attributes" → retour à l\'étape fautive avec les erreurs contextualisées', async () => {
     const { fixture, characterSvc } = await createComponent('p1');
     const comp = fixture.componentInstance as any;
-    comp.currentStepIndex.set(3); // simulate being on a later step
+    comp.currentStepKeyTracked.set(comp.steps()[3].key); // simulate being on a later step
 
     characterSvc.create.mockRejectedValue(
       new HttpErrorResponse({
@@ -453,7 +579,7 @@ describe('CharacterWizard', () => {
   it('soumission 400 sur "specialtyTypeId" → retour à l\'étape Classe ET affiche le message (bug corrigé)', async () => {
     const { fixture, characterSvc } = await createComponent('p1');
     const comp = fixture.componentInstance as any;
-    comp.currentStepIndex.set(3);
+    comp.currentStepKeyTracked.set(comp.steps()[3].key);
 
     characterSvc.create.mockRejectedValue(
       new HttpErrorResponse({

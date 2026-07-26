@@ -1,0 +1,46 @@
+<div class="magic-step">
+  <h2 class="magic-step__heading">{{ theme.tone()['character.step_magic'] }}</h2>
+
+  <div class="magic-step__section">
+    <h3 class="magic-step__section-title">Saison d'affinité</h3>
+    <div
+      class="magic-step__seasons"
+      role="radiogroup"
+      aria-label="Saison d'affinité"
+      appRadioGroupNav
+    >
+      @for (opt of seasonOptions(); track opt.key) {
+        <app-choice-card
+          [option]="opt"
+          [selected]="magicSeason() === opt.key"
+          (selectedOption)="onSelectSeason($event)"
+        />
+      }
+    </div>
+  </div>
+
+  <div class="magic-step__section">
+    <h3 class="magic-step__section-title">
+      Sorts de magie rituelle connus ({{ (knownRitualSpells() ?? []).length }}/{{ requiredCount }})
+    </h3>
+    <ul class="magic-step__spells">
+      @for (spell of ritualSpellChoices(); track spell.key) {
+        <li>
+          <label
+            class="magic-step__spell"
+            [class.magic-step__spell--selected]="isSpellSelected(spell.key)"
+          >
+            <input
+              type="checkbox"
+              [checked]="isSpellSelected(spell.key)"
+              [disabled]="isSpellDisabled(spell.key)"
+              (change)="onToggleSpell(spell.key)"
+            />
+            <span class="magic-step__spell-name">{{ spell.name }}</span>
+            <span class="magic-step__spell-detail">{{ spell.peCost }} PE — {{ spell.description }}</span>
+          </label>
+        </li>
+      }
+    </ul>
+  </div>
+</div>

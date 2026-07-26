@@ -244,6 +244,7 @@ export class GameSystemService implements OnApplicationBootstrap {
       creationSteps: [
         { key: 'classId', label: 'Classe' },
         { key: 'typeId', label: 'Type' },
+        { key: 'magic', label: 'Magie' },
         { key: 'attributes', label: 'Attributs' },
         { key: 'weaponCategoryId', label: 'Arme favorite' },
         { key: 'fetiqueObject', label: 'Objet fétiche' },

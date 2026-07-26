@@ -225,6 +225,22 @@
           }
         </section>
 
+        @if (magicData(); as magic) {
+          <section class="sheet__card">
+            <h2 class="sheet__card-title">Magie</h2>
+            <p class="sheet__detail">Saison d'affinité : {{ magic.seasonLabel }}</p>
+            <h3 class="sheet__card-subtitle">Sorts de magie rituelle connus</h3>
+            <ul class="sheet__talent-list">
+              @for (spell of magic.ritualSpells; track spell.key) {
+                <li>
+                  <strong>{{ spell.name }}</strong>
+                  <span class="sheet__detail">{{ spell.peCost }} PE — {{ spell.description }}</span>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
         @if (landscapes().length > 0) {
           <section class="sheet__card">
             <h2 class="sheet__card-title">{{ theme.tone()['evolution.landscape_section_title'] }}</h2>

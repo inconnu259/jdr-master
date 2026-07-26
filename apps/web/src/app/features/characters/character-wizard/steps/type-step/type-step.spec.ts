@@ -81,25 +81,4 @@ describe('TypeStep', () => {
     expect(fixture.nativeElement.querySelector('.type-step__advantage-description')).toBeNull();
   });
 
-  it('sélection Magie → affiche la notice différée', async () => {
-    TestBed.configureTestingModule({ imports: [TypeStep] });
-    const fixture = TestBed.createComponent(TypeStep);
-    fixture.componentRef.setInput('types', TYPES);
-    fixture.componentRef.setInput('typeId', 'magie');
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    expect(fixture.nativeElement.querySelector('.type-step__magic-notice')).toBeTruthy();
-  });
-
-  it('type non-Magie → pas de notice', async () => {
-    TestBed.configureTestingModule({ imports: [TypeStep] });
-    const fixture = TestBed.createComponent(TypeStep);
-    fixture.componentRef.setInput('types', TYPES);
-    fixture.componentRef.setInput('typeId', 'attaque');
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    expect(fixture.nativeElement.querySelector('.type-step__magic-notice')).toBeNull();
-  });
 });
