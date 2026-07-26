@@ -35,9 +35,9 @@ function baseData(overrides: Partial<RyuutamaSheetData> = {}): RyuutamaSheetData
 const content = {
   classLabel: 'Chasseur',
   classTalents: [
-    { name: 'Pistage', effect: 'Suit une piste' },
-    { name: 'Camouflage', effect: 'Se dissimule' },
-    { name: 'Piège', effect: 'Pose un piège' },
+    { name: 'Pistage', effect: { description: 'Suit une piste', conditions: '-' } },
+    { name: 'Camouflage', effect: { description: 'Se dissimule', conditions: '-' } },
+    { name: 'Piège', effect: { description: 'Pose un piège', conditions: '-' } },
   ],
   typeLabel: 'Attaque',
   weaponLabel: 'Arc',
@@ -220,9 +220,21 @@ describe('mapToPdfFields', () => {
     const contentWithAttributes = {
       ...content,
       classTalents: [
-        { name: 'Pistage', effect: 'Suit une piste', attributes: ['INT', 'AGI'] },
-        { name: 'Camouflage', effect: 'Se dissimule', attributes: ['AGI', 'ESP'] },
-        { name: 'Piège', effect: 'Pose un piège', attributes: ['AGI', 'INT'] },
+        {
+          name: 'Pistage',
+          effect: { description: 'Suit une piste', conditions: '-' },
+          attributes: ['INT', 'AGI'],
+        },
+        {
+          name: 'Camouflage',
+          effect: { description: 'Se dissimule', conditions: '-' },
+          attributes: ['AGI', 'ESP'],
+        },
+        {
+          name: 'Piège',
+          effect: { description: 'Pose un piège', conditions: '-' },
+          attributes: ['AGI', 'INT'],
+        },
       ],
     };
 
@@ -247,7 +259,11 @@ describe('mapToPdfFields', () => {
         ...contentWithAttributes,
         secondaryClassLabel: 'Marchand',
         secondaryClassTalents: [
-          { name: 'Négociation', effect: 'Baisse un prix', attributes: ['ESP', 'INT'] },
+          {
+            name: 'Négociation',
+            effect: { description: 'Baisse un prix', conditions: '-' },
+            attributes: ['ESP', 'INT'],
+          },
         ],
       });
       expect(fields.find((f) => f.field === 'Talent 4')?.value).toBe('Négociation');

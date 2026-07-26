@@ -16,7 +16,10 @@ const CONTENT: GameSystemContentDto = {
   class: [
     {
       key: 'menestrel',
-      data: { label: 'Ménestrel', talents: [{ name: 'Légendes', effect: '...' }] },
+      data: {
+        label: 'Ménestrel',
+        talents: [{ name: 'Légendes', effect: { description: '...', conditions: '-' } }],
+      },
     },
   ],
   type: [
@@ -776,7 +779,12 @@ describe('CharacterSheet', () => {
         ...(CONTENT['class'] ?? []),
         {
           key: 'marchand',
-          data: { label: 'Marchand', talents: [{ name: 'Négociation', effect: 'Baisse un prix' }] },
+          data: {
+            label: 'Marchand',
+            talents: [
+              { name: 'Négociation', effect: { description: 'Baisse un prix', conditions: '-' } },
+            ],
+          },
         },
       ],
     };
@@ -789,6 +797,7 @@ describe('CharacterSheet', () => {
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Classe secondaire : Marchand');
     expect(text).toContain('Négociation');
+    expect(text).toContain('Baisse un prix');
   });
 
   it('type secondaire (capacité type) → sous-bloc "Type secondaire" dans Voie, avec ses avantages', async () => {

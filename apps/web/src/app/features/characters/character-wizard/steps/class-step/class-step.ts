@@ -7,7 +7,7 @@ import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.direct
 
 interface ClassTalent {
   name: string;
-  effect: string;
+  effect: { description: string; conditions: string };
   description: string;
 }
 
@@ -15,6 +15,8 @@ interface ClassData {
   label: string;
   description: string;
   talents: ClassTalent[];
+  occupations: string[];
+  actions: string[];
   requiresSpecialty?: boolean;
   specialtyLabel?: string;
 }

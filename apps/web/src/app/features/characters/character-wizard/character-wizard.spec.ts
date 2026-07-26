@@ -26,12 +26,18 @@ const SCHEMA: GameSystemSchemaDto = {
 
 const CONTENT: GameSystemContentDto = {
   class: [
-    { key: 'chasseur', data: { label: 'Chasseur', talents: [{ name: 'Pistage', effect: '...' }] } },
+    {
+      key: 'chasseur',
+      data: {
+        label: 'Chasseur',
+        talents: [{ name: 'Pistage', effect: { description: '...', conditions: '-' } }],
+      },
+    },
     {
       key: 'artisan',
       data: {
         label: 'Artisan',
-        talents: [{ name: 'Création', effect: '...' }],
+        talents: [{ name: 'Création', effect: { description: '...', conditions: '-' } }],
         requiresSpecialty: true,
       },
     },

@@ -171,7 +171,11 @@ function parsePdfPortraitCropData(value: unknown): PdfPortraitCropData | null {
 
 interface ClassContentData {
   label: string;
-  talents: { name: string; effect: string; attributes?: string[] }[];
+  talents: {
+    name: string;
+    effect: { description: string; conditions: string };
+    attributes?: string[];
+  }[];
 }
 
 interface TypeContentData {

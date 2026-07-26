@@ -174,7 +174,7 @@
             @for (talent of classData()?.talents ?? []; track talent.name) {
               <li>
                 <strong>{{ talent.name }}</strong>
-                <span class="sheet__detail">{{ talent.effect }}</span>
+                <span class="sheet__detail">{{ talent.effect.description }}</span>
               </li>
             }
           </ul>
@@ -184,7 +184,7 @@
               @for (talent of secondary.talents; track talent.name) {
                 <li>
                   <strong>{{ talent.name }}</strong>
-                  <span class="sheet__detail">{{ talent.effect }}</span>
+                  <span class="sheet__detail">{{ talent.effect.description }}</span>
                 </li>
               }
             </ul>

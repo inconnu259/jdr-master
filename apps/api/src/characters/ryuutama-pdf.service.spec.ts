@@ -86,7 +86,10 @@ function makeContentService() {
             talents: [
               {
                 name: 'Chasse',
-                effect: 'Nourrit le groupe selon le résultat du test',
+                effect: {
+                  description: 'Nourrit le groupe selon le résultat du test',
+                  conditions: 'Avant le test de campement. Une fois par jour.',
+                },
               },
             ],
           },

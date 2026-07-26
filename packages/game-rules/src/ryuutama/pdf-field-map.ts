@@ -27,7 +27,7 @@ function weaponPdfOption(weaponCategoryId: string): string {
 
 interface TalentField {
   name: string;
-  effect: string;
+  effect: { description: string; conditions: string };
   /** Attributs utilisés par le talent (0 à 2 valeurs, ex. `['INT', 'AGI']`) — remplit les
    *  dropdowns "Attribut 1.{i}.0"/"Attribut 1.{i}.1" du template PDF. */
   attributes?: string[];
@@ -99,6 +99,12 @@ export interface PdfFieldValue {
  * `type` (niveau 6), `dragon-protection` (niveau 9) et `legendary-journey` (niveau 10) n'ont,
  * elles, **aucun** champ AcroForm dédié sur ce template (vérifié) — affichées en référence sur
  * la fiche web uniquement (`character-sheet.ts`), jamais dans le PDF.
+ *
+ * Depuis la Story 23.6 (effet structuré) : `TalentField.effect` est un objet
+ * `{ description, conditions }` — seul `effect.description` est mappé sur `Effet N`.
+ * `effect.conditions` n'a **aucun** champ AcroForm correspondant (vérifié exhaustivement
+ * sur les 119 champs, aucun champ `Condition*` lié aux talents n'existe sur ce template),
+ * volontairement non mappé.
  */
 export function mapToPdfFields(
   data: RyuutamaSheetData,
@@ -132,7 +138,7 @@ export function mapToPdfFields(
   const talentFields: PdfFieldValue[] = talentSlots.flatMap((talent, i) => {
     const rows: PdfFieldValue[] = [
       { field: TALENT_FIELD_NAMES[i], value: talent.name, kind: 'text' },
-      { field: EFFET_FIELD_NAMES[i], value: talent.effect, kind: 'text' },
+      { field: EFFET_FIELD_NAMES[i], value: talent.effect.description, kind: 'text' },
     ];
     const [attr0, attr1] = talent.attributes ?? [];
     if (attr0) rows.push({ field: `Attribut 1.${i}.0`, value: attr0, kind: 'dropdown' });

@@ -9,21 +9,32 @@ const CLASSES: ContentEntryDto[] = [
       label: 'Chasseur',
       description:
         'Les chasseurs abattent leurs proies grâce à leurs connaissances et à leur technique.',
+      occupations: ['Barbare', 'Chasseur de monstres', 'Pisteur', 'Trappeur'],
+      actions: ['Capturer', 'Chasser', 'Écorcher', 'Pêcher', 'Piéger', 'Pister', 'Traquer'],
       talents: [
         {
           name: 'Chasse',
-          effect: 'Nourrit le groupe selon le résultat du test',
+          effect: {
+            description: 'Nourrit le groupe selon le résultat du test',
+            conditions: 'Avant le test de campement. Une fois par jour.',
+          },
           description:
             'Les chasseurs se sont fait une spécialité de ramener des animaux sauvages pour nourrir leurs compagnons.',
         },
         {
           name: 'Transformation',
-          effect: 'Transforme une dépouille',
+          effect: {
+            description: 'Transforme une dépouille',
+            conditions: "Avoir accès à la dépouille d'un monstre.",
+          },
           description: 'Les chasseurs savent utiliser les dépouilles des monstres.',
         },
         {
           name: 'Traque',
-          effect: 'Découvre un monstre',
+          effect: {
+            description: 'Découvre un monstre',
+            conditions: "Avoir découvert les traces d'un monstre.",
+          },
           description: "Les chasseurs savent remonter les traces d'un type de monstre particulier.",
         },
       ],
@@ -39,7 +50,10 @@ const CLASSES: ContentEntryDto[] = [
       talents: [
         {
           name: 'Création',
-          effect: 'Fabrique un objet',
+          effect: {
+            description: 'Fabrique un objet',
+            conditions: "Durée: encombrement de l'objet en jours. Coût: moitié de son prix.",
+          },
           description: 'Les artisans gagnent leur vie en créant des objets de tout type.',
         },
       ],
@@ -85,6 +99,37 @@ describe('ClassStep', () => {
     expect(fixture.nativeElement.textContent).toContain(
       "Les chasseurs savent remonter les traces d'un type de monstre particulier.",
     );
+    expect(fixture.nativeElement.textContent).toContain('Nourrit le groupe selon le résultat du test');
+    expect(fixture.nativeElement.textContent).toContain('Transforme une dépouille');
+    expect(fixture.nativeElement.textContent).toContain('Découvre un monstre');
+  });
+
+  it("sélection d'une classe → affiche les occupations et actions en texte de référence pur", async () => {
+    TestBed.configureTestingModule({ imports: [ClassStep] });
+    const fixture = TestBed.createComponent(ClassStep);
+    fixture.componentRef.setInput('classes', CLASSES);
+    fixture.componentRef.setInput('classId', 'chasseur');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Barbare');
+    expect(text).toContain('Chasseur de monstres');
+    expect(text).toContain('Pisteur');
+    expect(text).toContain('Trappeur');
+    expect(text).toContain('Capturer');
+    expect(text).toContain('Chasser');
+    expect(text).toContain('Écorcher');
+    expect(text).toContain('Pêcher');
+    expect(text).toContain('Piéger');
+    expect(text).toContain('Pister');
+    expect(text).toContain('Traquer');
+
+    // Texte de référence pur : aucun élément interactif (bouton/input/role="radio") sur ces listes.
+    const occupationsList = fixture.nativeElement.querySelector('.class-step__occupations');
+    const actionsList = fixture.nativeElement.querySelector('.class-step__actions');
+    expect(occupationsList.querySelector('button, input, [role="radio"]')).toBeNull();
+    expect(actionsList.querySelector('button, input, [role="radio"]')).toBeNull();
   });
 
   it('classe Artisan → affiche le sous-choix obligatoire de spécialité', async () => {

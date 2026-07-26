@@ -23,11 +23,30 @@
       <ul>
         @for (talent of data.talents; track talent.name) {
           <li>
-            <strong>{{ talent.name }}</strong> — {{ talent.effect }}
+            <strong>{{ talent.name }}</strong> — {{ talent.effect.description }}
             <p class="class-step__talent-description">{{ talent.description }}</p>
           </li>
         }
       </ul>
+    </div>
+
+    <div class="class-step__reference">
+      <div class="class-step__occupations">
+        <h3 class="class-step__reference-title">Occupations</h3>
+        <ul>
+          @for (occupation of data.occupations; track $index) {
+            <li>{{ occupation }}</li>
+          }
+        </ul>
+      </div>
+      <div class="class-step__actions">
+        <h3 class="class-step__reference-title">Actions</h3>
+        <ul>
+          @for (action of data.actions; track $index) {
+            <li>{{ action }}</li>
+          }
+        </ul>
+      </div>
     </div>
 
     @if (data.requiresSpecialty) {

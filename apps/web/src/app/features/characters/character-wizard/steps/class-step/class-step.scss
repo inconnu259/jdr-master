@@ -18,6 +18,30 @@
     }
   }
 
+  &__reference {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--mat-sys-surface-container-high, #f0ebe3);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+
+    ul {
+      margin: 0.5rem 0 0;
+      padding-left: 1.25rem;
+    }
+  }
+
+  &__reference-title {
+    margin: 0;
+  }
+
+  &__occupations,
+  &__actions {
+    flex: 1 1 200px;
+  }
+
   &__specialty {
     display: flex;
     flex-direction: column;

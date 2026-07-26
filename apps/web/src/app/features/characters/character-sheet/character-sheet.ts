@@ -39,7 +39,7 @@ import {
 
 interface ClassData {
   label: string;
-  talents: { name: string; effect: string }[];
+  talents: { name: string; effect: { description: string; conditions: string } }[];
 }
 
 interface TypeData {
