@@ -18,7 +18,7 @@ import { MagicStep } from './steps/magic-step/magic-step';
 import { AttributesStep } from './steps/attributes-step/attributes-step';
 import { WeaponStep } from './steps/weapon-step/weapon-step';
 import { FetishStep } from './steps/fetish-step/fetish-step';
-import { EquipmentStep, FIXED_EQUIPMENT } from './steps/equipment-step/equipment-step';
+import { EquipmentStep } from './steps/equipment-step/equipment-step';
 import { NarrativeStep } from './steps/narrative-step/narrative-step';
 import {
   PortraitCropper,
@@ -89,6 +89,9 @@ const FIELD_TO_STEP_KEY: Record<string, string> = {
   // Règle 7 (Story 23.9) : choix de magie à la création, toujours résolus dans l'étape magic.
   magicSeason: 'magic',
   knownRitualSpells: 'magic',
+  // Story 26.1 : erreur budget (BadRequestException([{field:'equipment',...}])) — déjà couvert
+  // par le fallback `?? e.field` (clé de champ = clé d'étape), entrée explicite pour la lisibilité.
+  equipment: 'equipment',
 };
 
 interface ServerValidationError {
@@ -162,23 +165,15 @@ export class CharacterWizard implements OnInit {
   });
   protected readonly content = signal<GameSystemContentDto | null>(null);
   /**
-   * Story 14.1 : `equipment.group` n'existe plus dans `RyuutamaSheetData` — l'ancien « Nécessaire
-   * d'intendance (groupe) » est désormais fusionné dans `individual` (poids `0`), même sémantique
-   * que la migration one-off pour les personnages existants. `contenants`/`animaux` : nouvelles
-   * catégories introduites par cette story, aucune donnée pertinente à cette étape de création
-   * (UI dédiée hors scope, cf. Story 14.2).
+   * Story 26.1 : `equipment.*` n'est plus pré-rempli côté client — le joueur choisit
+   * explicitement entre le nécessaire pré-fait et l'achat libre (`EquipmentStep`), qui peuple
+   * `startingEquipment` (clés du catalogue `equipmentItem` + quantités). Champ purement
+   * transitoire : `CharacterService.create()` le résout en `equipment.individual`/`contenants`/
+   * `animaux` réels (id/addedBy générés serveur) et le retire avant persistance — jamais dans le
+   * payload de lecture `CharacterDto`.
    */
   protected readonly sheetData = signal<Partial<RyuutamaSheetData>>({
-    equipment: {
-      individual: [...FIXED_EQUIPMENT.individual, ...FIXED_EQUIPMENT.group].map((name) => ({
-        id: crypto.randomUUID(),
-        name,
-        weight: 0,
-        addedBy: 'player' as const,
-      })),
-      contenants: [],
-      animaux: [],
-    },
+    startingEquipment: [],
   });
   protected readonly submitting = signal(false);
   protected readonly stepErrors = signal<Record<string, string[]>>({});
@@ -232,6 +227,25 @@ export class CharacterWizard implements OnInit {
   );
   /** Catalogue de sorts complet — `MagicStep` filtre lui-même rituelle/débutant (Story 23.9). */
   protected readonly spells = computed<ContentEntryDto[]>(() => this.content()?.['spell'] ?? []);
+  /** Équipement de départ (Story 26.1) — objets achetables et nécessaires pré-faits. */
+  protected readonly equipmentItems = computed<ContentEntryDto[]>(
+    () => this.content()?.['equipmentItem'] ?? [],
+  );
+  protected readonly equipmentPackages = computed<ContentEntryDto[]>(
+    () => this.content()?.['equipmentPackage'] ?? [],
+  );
+  /** Total Po de `sheetData().startingEquipment` — résolu depuis `equipmentItems()`, même calcul
+   *  que `EquipmentStep.totalSpent` (dupliqué volontairement, cohérent avec le reste de ce
+   *  fichier qui ne partage pas de logique avec les steps). */
+  private readonly startingEquipmentTotalGold = computed(() => {
+    const items = this.equipmentItems();
+    const selection = this.sheetData().startingEquipment ?? [];
+    return selection.reduce((sum, s) => {
+      const entry = items.find((e) => e.key === s.key);
+      const priceGold = (entry?.data as { priceGold?: number } | undefined)?.priceGold ?? 0;
+      return sum + priceGold * s.quantity;
+    }, 0);
+  });
   /** Toutes les entrées du catalogue `attributePattern` (Story 24.1) — plus seulement la première. */
   protected readonly attributePatterns = computed<ContentEntryDto[]>(
     () => this.content()?.['attributePattern'] ?? [],
@@ -267,6 +281,11 @@ export class CharacterWizard implements OnInit {
         return !!data.attributes;
       case 'weaponId':
         return !!data.weaponId || !!(data.customWeapon?.name?.trim() && data.customWeapon?.categoryId);
+      case 'equipment':
+        return (
+          (data.startingEquipment?.length ?? 0) > 0 &&
+          this.startingEquipmentTotalGold() <= 1000
+        );
       default:
         return true;
     }
@@ -390,6 +409,10 @@ export class CharacterWizard implements OnInit {
     customWeapon: { name: string; categoryId: string } | null,
   ): void {
     this.sheetData.update((d) => ({ ...d, customWeapon: customWeapon ?? undefined, weaponId: undefined }));
+  }
+
+  protected onStartingEquipmentChange(selection: { key: string; quantity: number }[]): void {
+    this.sheetData.update((d) => ({ ...d, startingEquipment: selection }));
   }
 
   protected async onSubmit(): Promise<void> {

@@ -11,6 +11,16 @@ jest.mock('@master-jdr/game-rules', () => ({
   computeDerived: jest.fn(),
   levelForXp: jest.fn((xp: number) => (xp >= 100 ? 2 : 1)),
   pendingLevels: jest.fn(),
+  // Story 26.1 : par défaut, sélection vide résolue sans achat (déjà le cas pour la quasi-totalité
+  // des tests existants, qui n'exercent pas ce chemin) — chaque test dédié au budget/équipement
+  // fournit sa propre implémentation via `mockReturnValue`/`mockImplementation`.
+  resolveStartingEquipment: jest.fn(() => ({
+    individual: [],
+    contenants: [],
+    animaux: [],
+    totalPriceGold: 0,
+    unresolvedKeys: [],
+  })),
   LEVEL_TABLE: [
     { level: 2, xp: 100, capabilities: ['attribute'] },
     { level: 3, xp: 600, capabilities: ['landscape'] },
@@ -45,6 +55,7 @@ import {
   validate,
   computeDerived,
   pendingLevels,
+  resolveStartingEquipment,
 } from '@master-jdr/game-rules';
 import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises';
 import { stripImageMetadata } from './image-mime.util';
@@ -143,6 +154,9 @@ function makeGameSystemService() {
       weaponCategory: [{ key: 'arc', data: {} }],
       weaponItem: [{ key: 'arc-de-chasse', data: { categoryId: 'arc' } }],
       attributePattern: [{ key: 'polyvalent', data: { values: [8, 4, 6, 6] } }],
+      equipmentItem: [
+        { key: 'rations', data: { label: 'Rations', priceGold: 10, nature: 'individual', weight: 1 } },
+      ],
     }),
   };
 }
@@ -204,6 +218,17 @@ describe('CharacterService', () => {
     });
     prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj-default' });
     (pendingLevels as jest.Mock).mockReturnValue([]);
+    // `jest.clearAllMocks()` ne réinitialise pas l'implémentation posée par un `mockReturnValue()`
+    // d'un test précédent (seulement `mock.calls`/`mock.results`) — sans ce reset explicite, un
+    // test qui override `resolveStartingEquipment` (ex. clé inconnue) polluerait tous les tests
+    // suivants qui ne s'attendent pas à un `startingEquipment` non vide.
+    (resolveStartingEquipment as jest.Mock).mockReturnValue({
+      individual: [],
+      contenants: [],
+      animaux: [],
+      totalPriceGold: 0,
+      unresolvedKeys: [],
+    });
     // Défaut passthrough : la plupart des tests updatePortrait() ne portent pas sur le
     // nettoyage EXIF lui-même — sans ce défaut, JPEG_BUFFER (magic bytes seuls) résoudrait
     // `undefined` (jest.fn() nu), cassant l'assertion writeFile(..., JPEG_BUFFER).
@@ -298,6 +323,108 @@ describe('CharacterService', () => {
     expect(prisma.character.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ sheetData }) }),
     );
+  });
+
+  describe('startingEquipment (Story 26.1)', () => {
+    it('sélection valide, total ≤ 1000 Po → personnage créé, equipment.* peuplé avec id/addedBy serveur, startingEquipment absent du sheetData persisté', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+      (computeDerived as jest.Mock).mockReturnValue({});
+      (resolveStartingEquipment as jest.Mock).mockReturnValue({
+        individual: [{ name: 'Rations', weight: 1, price: '10 Po' }],
+        contenants: [],
+        animaux: [],
+        totalPriceGold: 20,
+        unresolvedKeys: [],
+      });
+      prisma.character.create.mockResolvedValue(makeCharacter());
+
+      await service.create('p1', 'u1', {
+        gameSystemId: 'ryuutama',
+        sheetData: { ...validSheet(), startingEquipment: [{ key: 'rations', quantity: 2 }] },
+      });
+
+      expect(resolveStartingEquipment).toHaveBeenCalledWith(
+        [{ key: 'rations', quantity: 2 }],
+        expect.arrayContaining([
+          expect.objectContaining({ key: 'rations', priceGold: 10, nature: 'individual' }),
+        ]),
+      );
+      const created = prisma.character.create.mock.calls[0][0].data.sheetData;
+      expect(created.equipment.individual).toEqual([
+        { name: 'Rations', weight: 1, price: '10 Po', id: 'fixed-uuid', addedBy: 'player' },
+      ]);
+      expect(created.startingEquipment).toBeUndefined();
+    });
+
+    it('total > 1000 Po → BadRequestException, prisma.character.create non appelé', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      (resolveStartingEquipment as jest.Mock).mockReturnValue({
+        individual: [],
+        contenants: [],
+        animaux: [{ name: 'Monture (grande)', price: '3800 Po' }],
+        totalPriceGold: 3800,
+        unresolvedKeys: [],
+      });
+
+      await expect(
+        service.create('p1', 'u1', {
+          gameSystemId: 'ryuutama',
+          sheetData: { ...validSheet(), startingEquipment: [{ key: 'monture-grande', quantity: 1 }] },
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.create).not.toHaveBeenCalled();
+      expect(validate).not.toHaveBeenCalled();
+    });
+
+    it('revue de code (2026-07-29) : startingEquipment non-tableau (objet direct API) → BadRequestException, resolveStartingEquipment jamais appelé avec une valeur non-itérable', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      await expect(
+        service.create('p1', 'u1', {
+          gameSystemId: 'ryuutama',
+          sheetData: { ...validSheet(), startingEquipment: { key: 'rations', quantity: 1 } as any },
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.create).not.toHaveBeenCalled();
+    });
+
+    it('clé de sélection inconnue du catalogue → BadRequestException, prisma.character.create non appelé', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      (resolveStartingEquipment as jest.Mock).mockReturnValue({
+        individual: [],
+        contenants: [],
+        animaux: [],
+        totalPriceGold: 0,
+        unresolvedKeys: ['clef-inexistante'],
+      });
+
+      await expect(
+        service.create('p1', 'u1', {
+          gameSystemId: 'ryuutama',
+          sheetData: { ...validSheet(), startingEquipment: [{ key: 'clef-inexistante', quantity: 1 }] },
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.character.create).not.toHaveBeenCalled();
+    });
+
+    it('setSheetField() modifiant equipment.* après création → aucun appel à resolveStartingEquipment (AC6, budget jamais revérifié en édition MJ)', async () => {
+      (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+      (computeDerived as jest.Mock).mockReturnValue({});
+      const character = makeCharacter();
+      prisma.character.findUnique.mockResolvedValue(character);
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(character);
+      (resolveStartingEquipment as jest.Mock).mockClear();
+
+      await service.setSheetField('char1', 'mj1', {
+        path: 'equipment.individual.0',
+        value: { name: 'Fléau maison', weight: 1 },
+      });
+
+      expect(resolveStartingEquipment).not.toHaveBeenCalled();
+    });
   });
 
   it('create() sheetData avec weaponId ET customWeapon simultanés (Story 25.2, revue de code) → BadRequestException, prisma.character.create non appelé', async () => {
@@ -456,7 +583,7 @@ describe('CharacterService', () => {
     });
 
     expect(validate).toHaveBeenCalledWith(
-      validSheet(),
+      { ...validSheet(), equipment: { individual: [], contenants: [], animaux: [] } },
       'strict',
       expect.objectContaining({
         validClasses: ['chasseur'],
@@ -466,7 +593,10 @@ describe('CharacterService', () => {
         attributePatterns: [[4, 6, 6, 8]],
       }),
     );
-    expect(computeDerived).toHaveBeenCalledWith(validSheet());
+    expect(computeDerived).toHaveBeenCalledWith({
+      ...validSheet(),
+      equipment: { individual: [], contenants: [], animaux: [] },
+    });
   });
 
   it('create() dérive le catalog de validate() du contenu réellement seedé (GameSystemService.getContent)', async () => {
@@ -504,7 +634,7 @@ describe('CharacterService', () => {
     });
 
     expect(validate).toHaveBeenCalledWith(
-      validSheet(),
+      { ...validSheet(), equipment: { individual: [], contenants: [], animaux: [] } },
       'strict',
       expect.objectContaining({ attributePatterns: [[4, 6, 6, 8]] }),
     );
@@ -537,7 +667,7 @@ describe('CharacterService', () => {
     });
 
     expect(validate).toHaveBeenCalledWith(
-      validSheet(),
+      { ...validSheet(), equipment: { individual: [], contenants: [], animaux: [] } },
       'strict',
       expect.objectContaining({
         validSeasons: ['printemps', 'ete'],

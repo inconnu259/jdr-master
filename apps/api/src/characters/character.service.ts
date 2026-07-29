@@ -21,9 +21,11 @@ import {
   validate,
   pendingLevels,
   LEVEL_TABLE,
+  resolveStartingEquipment,
   type CapabilityType,
   type RyuutamaCatalog,
   type RyuutamaSheetData,
+  type EquipmentCatalogEntry,
 } from '@master-jdr/game-rules';
 import { PartiesService } from '../parties/parties.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -172,6 +174,65 @@ export class CharacterService {
 
     const catalog = await this.buildRyuutamaCatalog(dto.gameSystemId);
     const sheetData = dto.sheetData as unknown as RyuutamaSheetData;
+
+    // Story 26.1 : résolution de la sélection d'équipement de départ (nécessaire pré-fait ou
+    // achat libre, indistinctement — un seul pipeline) AVANT validate()/computeDerived(), pour
+    // que sheetData.equipment soit déjà peuplé quand le reste de la création s'exécute.
+    // Budget/génération d'id ne sont vérifiés/faits qu'ici, jamais sur une édition MJ ultérieure
+    // (setSheetField, AC6) — resolveStartingEquipment() reste hors de buildRyuutamaCatalog()/
+    // validate() intentionnellement.
+    // `sheetData.startingEquipment` vient de `dto.sheetData: Record<string, unknown>` — `?? []`
+    // ne garde que `null`/`undefined` ; toute autre valeur non-tableau (objet, string, nombre)
+    // doit être rejetée explicitement, sinon `resolveStartingEquipment()` planterait sur une
+    // valeur non-itérable (revue de code).
+    if (
+      sheetData.startingEquipment !== undefined &&
+      !Array.isArray(sheetData.startingEquipment)
+    ) {
+      throw new BadRequestException(
+        "startingEquipment doit être un tableau de { key, quantity }",
+      );
+    }
+    const equipmentCatalog = await this.buildEquipmentCatalog(dto.gameSystemId);
+    const {
+      individual,
+      contenants,
+      animaux,
+      totalPriceGold,
+      unresolvedKeys,
+    } = resolveStartingEquipment(sheetData.startingEquipment ?? [], equipmentCatalog);
+    if (unresolvedKeys.length > 0) {
+      throw new BadRequestException(
+        `Sélection d'équipement invalide. Clés inconnues : ${unresolvedKeys.join(', ')}`,
+      );
+    }
+    if (totalPriceGold > 1000) {
+      throw new BadRequestException([
+        {
+          field: 'equipment',
+          message: `Le total de l'équipement (${totalPriceGold} Po) dépasse le budget de 1000 Po`,
+        },
+      ]);
+    }
+    sheetData.equipment = {
+      individual: individual.map((item) => ({
+        ...item,
+        id: randomUUID(),
+        addedBy: 'player' as const,
+      })),
+      contenants: contenants.map((item) => ({
+        ...item,
+        id: randomUUID(),
+        addedBy: 'player' as const,
+      })),
+      animaux: animaux.map((item) => ({
+        ...item,
+        id: randomUUID(),
+        addedBy: 'player' as const,
+      })),
+    };
+    delete sheetData.startingEquipment;
+
     const result = validate(sheetData, 'strict', catalog);
     if (!result.valid) {
       throw new BadRequestException(result.errors);
@@ -258,6 +319,22 @@ export class CharacterService {
       validSeasons: keysOf('season'),
       validDebutantRitualSpells,
     };
+  }
+
+  /**
+   * Catalogue `equipmentItem` (Story 26.1) pour `resolveStartingEquipment()` — budget/prix, un
+   * besoin propre à `create()` (AC3/AC6), volontairement séparé de `RyuutamaCatalog`/
+   * `buildRyuutamaCatalog()` (utilisé par `validate()`, aussi appelé en mode `'mj'` permissif pour
+   * `setSheetField` où le budget ne doit jamais être revérifié).
+   */
+  private async buildEquipmentCatalog(
+    gameSystemId: string,
+  ): Promise<EquipmentCatalogEntry[]> {
+    const content = await this.gameSystems.getContent(gameSystemId);
+    return (content['equipmentItem'] ?? []).map((entry) => ({
+      key: entry.key,
+      ...(entry.data as Omit<EquipmentCatalogEntry, 'key'>),
+    }));
   }
 
   async findOne(id: string, userId: string): Promise<CharacterDto> {

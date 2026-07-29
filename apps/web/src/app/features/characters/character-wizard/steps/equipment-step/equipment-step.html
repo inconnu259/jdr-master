@@ -1,23 +1,75 @@
 <div class="equipment-step">
-  <p class="equipment-step__notice">
-    Équipement attribué automatiquement (mode pique-nique) — aucune action requise.
-  </p>
-
-  <div class="equipment-step__group">
-    <h3>Nécessaire de voyage</h3>
-    <ul>
-      @for (item of individual(); track item) {
-        <li>{{ item }}</li>
-      }
-    </ul>
+  <div class="equipment-step__mode-toggle" role="radiogroup" aria-label="Choisir un mode d'équipement">
+    <button
+      type="button"
+      class="equipment-step__mode-button"
+      [class.equipment-step__mode-button--selected]="mode() === 'kit'"
+      role="radio"
+      [attr.aria-checked]="mode() === 'kit'"
+      (click)="selectMode('kit')"
+    >
+      Nécessaire pré-fait
+    </button>
+    <button
+      type="button"
+      class="equipment-step__mode-button"
+      [class.equipment-step__mode-button--selected]="mode() === 'shopping'"
+      role="radio"
+      [attr.aria-checked]="mode() === 'shopping'"
+      (click)="selectMode('shopping')"
+    >
+      Achat libre
+    </button>
   </div>
 
-  <div class="equipment-step__group">
-    <h3>Nécessaire d'intendance (groupe)</h3>
-    <ul>
-      @for (item of group(); track item) {
-        <li>{{ item }}</li>
+  @if (mode() === 'kit') {
+    <div class="equipment-step__kit">
+      @for (pkg of packageEntries(); track pkg.key) {
+        <div class="equipment-step__group">
+          <h3>{{ pkg.label }} ({{ pkg.priceGold }} Po)</h3>
+          <ul>
+            @for (line of pkg.items; track line.itemKey) {
+              <li>
+                {{ line.quantity }}× {{ labelFor(line.itemKey) }}
+              </li>
+            }
+          </ul>
+        </div>
       }
-    </ul>
-  </div>
+    </div>
+  }
+
+  @if (mode() === 'shopping') {
+    <div class="equipment-step__shopping">
+      <p class="equipment-step__budget" [class.equipment-step__budget--over]="overBudget()">
+        Budget : {{ totalSpent() }} / {{ budgetGold }} Po
+        @if (overBudget()) {
+          — dépassement de {{ totalSpent() - budgetGold }} Po
+        }
+      </p>
+
+      <ul class="equipment-step__catalog">
+        @for (item of itemEntries(); track item.key) {
+          <li class="equipment-step__catalog-item">
+            <span>{{ item.label }} — {{ item.priceGold }} Po</span>
+            <button type="button" (click)="addItem(item.key)">Ajouter</button>
+          </li>
+        }
+      </ul>
+
+      @if (selectedLines().length > 0) {
+        <div class="equipment-step__cart">
+          <h3>Panier</h3>
+          <ul>
+            @for (line of selectedLines(); track line.key) {
+              <li class="equipment-step__cart-line">
+                <span>{{ line.quantity }}× {{ line.entry.label }} ({{ line.entry.priceGold * line.quantity }} Po)</span>
+                <button type="button" (click)="removeItem(line.key)">Retirer</button>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+    </div>
+  }
 </div>

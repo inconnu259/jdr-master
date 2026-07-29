@@ -121,6 +121,23 @@ const CONTENT: GameSystemContentDto = {
   weaponItem: [
     { key: 'arc-de-chasse', data: { label: 'Arc de chasse', categoryId: 'arc' } },
   ],
+  equipmentItem: [
+    { key: 'rations', data: { label: 'Rations', priceGold: 10, nature: 'individual', weight: 1 } },
+    {
+      key: 'monture-grande',
+      data: { label: 'Monture (grande)', priceGold: 3800, nature: 'animal' },
+    },
+  ],
+  equipmentPackage: [
+    {
+      key: 'necessaire-voyage',
+      data: {
+        label: 'Nécessaire de voyage',
+        priceGold: 150,
+        items: [{ itemKey: 'rations', quantity: 2 }],
+      },
+    },
+  ],
   wizardStepIntro: [
     { key: 'classId', data: { text: 'La première chose à faire est de choisir sa classe.' } },
     {
@@ -395,6 +412,33 @@ describe('CharacterWizard', () => {
     fixture.detectChanges();
     expect(comp.sheetData().customWeapon).toEqual({ name: 'Fléau maison', categoryId: 'arc' });
     expect(comp.sheetData().weaponId).toBeUndefined();
+  });
+
+  it("Story 26.1 : étape Équipement — canGoNext() false tant que startingEquipment est vide, true sous le budget, false au-delà de 1000 Po", async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    comp.currentStepKeyTracked.set(comp.steps()[5].key); // equipment
+    fixture.detectChanges();
+    expect(comp.canGoNext()).toBe(false);
+
+    comp.onStartingEquipmentChange([{ key: 'rations', quantity: 2 }]); // 20 Po
+    fixture.detectChanges();
+    expect(comp.canGoNext()).toBe(true);
+
+    comp.onStartingEquipmentChange([{ key: 'monture-grande', quantity: 1 }]); // 3800 Po
+    fixture.detectChanges();
+    expect(comp.canGoNext()).toBe(false);
+  });
+
+  it('Story 26.1 : onStartingEquipmentChange met à jour sheetData().startingEquipment', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    comp.onStartingEquipmentChange([{ key: 'rations', quantity: 2 }]);
+    fixture.detectChanges();
+
+    expect(comp.sheetData().startingEquipment).toEqual([{ key: 'rations', quantity: 2 }]);
   });
 
   it('changer de classe après Artisan efface la spécialité obsolète', async () => {

@@ -98,7 +98,12 @@
             />
           }
           @case ('equipment') {
-            <app-equipment-step />
+            <app-equipment-step
+              [equipmentItems]="equipmentItems()"
+              [equipmentPackages]="equipmentPackages()"
+              [selection]="sheetData().startingEquipment ?? []"
+              (selectionChange)="onStartingEquipmentChange($event)"
+            />
           }
           @case ('narrative') {
             <app-narrative-step

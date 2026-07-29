@@ -13,6 +13,7 @@ export { mapHommeDragonToPdfFields } from './ryuutama/homme-dragon-pdf-field-map
 export { mapEquipmentToPdfFields } from './ryuutama/equipment-pdf-field-map.ts';
 export { mapNotesToPdfFields } from './ryuutama/notes-pdf-field-map.ts';
 export { resolveWeaponCategory, resolveWeapon } from './ryuutama/resolve-weapon-category.ts';
+export { resolveStartingEquipment } from './ryuutama/resolve-starting-equipment.ts';
 export type {
   RyuutamaSheetData,
   DerivedStats,
@@ -45,3 +46,7 @@ export type {
   WeaponResolutionCatalog,
   ResolvedWeapon,
 } from './ryuutama/resolve-weapon-category.ts';
+export type {
+  EquipmentCatalogEntry,
+  ResolvedStartingEquipment,
+} from './ryuutama/resolve-starting-equipment.ts';

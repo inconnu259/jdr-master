@@ -100,6 +100,16 @@ const CONTENT_TYPES: ContentTypeSeed[] = [
     file: 'wizard-step-intros.json',
   },
   { key: 'spell', label: 'Sort', file: 'spells.json' },
+  {
+    key: 'equipmentItem',
+    label: 'Équipement',
+    file: 'equipment-items.json',
+  },
+  {
+    key: 'equipmentPackage',
+    label: 'Nécessaire de départ',
+    file: 'equipment-packages.json',
+  },
 ];
 
 @Injectable()
@@ -245,6 +255,7 @@ export class GameSystemService implements OnApplicationBootstrap {
         customWeapon: { type: 'object', optional: true },
         fetiqueObject: { type: 'string', optional: true },
         equipment: { type: 'object', optional: true },
+        startingEquipment: { type: 'array', optional: true },
         narrative: { type: 'object', optional: true },
       },
       creationSteps: [

@@ -97,6 +97,15 @@ export interface RyuutamaSheetData {
    * cf. docs/magie.md), la magie rituelle se transmet et se choisit explicitement.
    */
   knownRitualSpells?: string[];
+  /**
+   * Sélection d'équipement de départ à la création (Story 26.1) — clés du catalogue
+   * `equipmentItem` + quantités, jamais persistée telle quelle : `CharacterService.create()`
+   * la résout en équipement réel (`equipment.individual`/`contenants`/`animaux`) et la retire
+   * de `sheetData` avant écriture. Absente sur tout personnage déjà créé, et sur tout
+   * personnage créé après cette story (champ purement transitoire, jamais dans le payload de
+   * lecture `CharacterDto`).
+   */
+  startingEquipment?: { key: string; quantity: number }[];
 }
 
 export interface DerivedStats {
