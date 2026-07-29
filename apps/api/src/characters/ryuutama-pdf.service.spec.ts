@@ -25,6 +25,32 @@ jest.mock('@master-jdr/game-rules', () => ({
       return fields;
     },
   ),
+  resolveWeaponCategory: jest.fn(
+    (
+      weaponId: string,
+      catalog: {
+        weaponItems: { key: string; label: string; categoryId: string }[];
+        weaponCategories: {
+          key: string;
+          label: string;
+          touchFormula: string;
+          damageFormula: string;
+        }[];
+      },
+    ) => {
+      const item = catalog.weaponItems.find((w) => w.key === weaponId);
+      if (!item) return null;
+      const category = catalog.weaponCategories.find((c) => c.key === item.categoryId);
+      if (!category) return null;
+      return {
+        weaponLabel: item.label,
+        categoryId: category.key,
+        categoryLabel: category.label,
+        touchFormula: category.touchFormula,
+        damageFormula: category.damageFormula,
+      };
+    },
+  ),
 }));
 
 import { readFile } from 'node:fs/promises';
@@ -107,6 +133,9 @@ function makeContentService() {
           },
         },
       ],
+      weaponItem: [
+        { key: 'arc-de-chasse', data: { label: 'Arc de chasse', categoryId: 'arc' } },
+      ],
       landscape: [{ key: 'foret', data: { label: 'Forêt' } }],
       immunityState: [{ key: 'blesse', data: { label: 'Blessé' } }],
     }),
@@ -122,7 +151,7 @@ function makeCharacter(overrides: Record<string, unknown> = {}) {
     sheetData: {
       classId: 'chasseur',
       typeId: 'attaque',
-      weaponCategoryId: 'arc',
+      weaponId: 'arc-de-chasse',
       attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
     },
     derived: {
@@ -208,6 +237,21 @@ describe('RyuutamaPdfService', () => {
     );
   });
 
+  it('résout l\'arme via resolveWeaponCategory et transmet weaponLabel/formules/categoryId à mapToPdfFields (Story 25.1)', async () => {
+    await service.fillCharacterPdf(makeCharacter(), 'editable');
+
+    expect(mapToPdfFields).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        weaponLabel: 'Arc de chasse',
+        weaponTouchFormula: 'AGI+INT-2',
+        weaponDamageFormula: 'AGI',
+        weaponCategoryId: 'arc',
+      }),
+    );
+  });
+
   it('résout capabilityLabels (landscape/immunity/class) depuis le contenu seedé (Story 6.3)', async () => {
     await service.fillCharacterPdf(makeCharacter(), 'editable');
 
@@ -239,7 +283,7 @@ describe('RyuutamaPdfService', () => {
       sheetData: {
         classId: 'chasseur',
         typeId: 'attaque',
-        weaponCategoryId: 'arc',
+        weaponId: 'arc-de-chasse',
         attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
         levelUps: [
           {
@@ -267,7 +311,7 @@ describe('RyuutamaPdfService', () => {
       sheetData: {
         classId: 'chasseur',
         typeId: 'attaque',
-        weaponCategoryId: 'arc',
+        weaponId: 'arc-de-chasse',
         attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
         levelUps: [
           {
@@ -293,7 +337,7 @@ describe('RyuutamaPdfService', () => {
       sheetData: {
         classId: 'chasseur',
         typeId: 'attaque',
-        weaponCategoryId: 'arc',
+        weaponId: 'arc-de-chasse',
         attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
         levelUps: [
           {

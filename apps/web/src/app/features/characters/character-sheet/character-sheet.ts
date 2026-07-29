@@ -36,6 +36,14 @@ import {
   getCapabilitiesByType,
   getOtherCapabilities,
 } from './capability-label.util';
+import {
+  resolveWeaponCategory,
+  type ResolvedWeapon,
+  type WeaponCategoryEntry,
+  type WeaponItemEntry,
+  type WeaponItemContentData,
+  type WeaponCategoryContentData,
+} from '@master-jdr/game-rules';
 
 interface ClassTalentFull {
   id?: string;
@@ -105,12 +113,6 @@ export interface MagicDisplay {
 interface TypeData {
   label: string;
   advantages: { name: string; effect: string }[];
-}
-
-interface WeaponData {
-  label: string;
-  touchFormula: string;
-  damageFormula: string;
 }
 
 interface AttributePatternData {
@@ -210,13 +212,19 @@ export class CharacterSheet implements OnInit {
     ),
   );
 
-  protected readonly weaponData = computed<WeaponData | null>(() =>
-    findContentEntry<WeaponData>(
-      this.content(),
-      'weaponCategory',
-      this.sheetData()['weaponCategoryId'] as string | undefined,
-    ),
-  );
+  /** Arme précise + catégorie résolue (Story 25.1) — plus une simple catégorie stockée directement. */
+  protected readonly weaponData = computed<ResolvedWeapon | null>(() => {
+    const weaponId = this.sheetData()['weaponId'] as string | undefined;
+    if (!weaponId) return null;
+    const weaponItems: WeaponItemEntry[] = (this.content()?.['weaponItem'] ?? []).map((entry) => ({
+      key: entry.key,
+      ...(entry.data as WeaponItemContentData),
+    }));
+    const weaponCategories: WeaponCategoryEntry[] = (this.content()?.['weaponCategory'] ?? []).map(
+      (entry) => ({ key: entry.key, ...(entry.data as WeaponCategoryContentData) }),
+    );
+    return resolveWeaponCategory(weaponId, { weaponItems, weaponCategories });
+  });
 
   /**
    * Saison d'affinité + 2 sorts rituels connus (Story 23.9) — `null` pour tout personnage dont
@@ -242,9 +250,9 @@ export class CharacterSheet implements OnInit {
 
   /** Suggestions catalogue pour la combobox de l'arme de prédilection (AC7, Story 6.7). */
   protected readonly weaponOptions = computed<FieldEditPencilOption[]>(() =>
-    (this.content()?.['weaponCategory'] ?? []).map((entry) => ({
+    (this.content()?.['weaponItem'] ?? []).map((entry) => ({
       key: entry.key,
-      label: (entry.data as WeaponData).label,
+      label: (entry.data as WeaponItemContentData).label,
     })),
   );
 

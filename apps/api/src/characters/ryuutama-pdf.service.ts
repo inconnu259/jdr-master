@@ -13,8 +13,11 @@ import {
 import type { CharacterDto } from '@master-jdr/shared';
 import {
   mapToPdfFields,
+  resolveWeaponCategory,
   type RyuutamaSheetData,
   type RyuutamaPdfContent,
+  type WeaponItemContentData,
+  type WeaponCategoryContentData,
 } from '@master-jdr/game-rules';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
@@ -180,12 +183,6 @@ interface ClassContentData {
 
 interface TypeContentData {
   label: string;
-}
-
-interface WeaponContentData {
-  label: string;
-  touchFormula: string;
-  damageFormula: string;
 }
 
 interface LabelledContentData {
@@ -396,12 +393,21 @@ export class RyuutamaPdfService {
       (c) => c.key === sheetData.classId,
     );
     const typeEntry = content['type']?.find((t) => t.key === sheetData.typeId);
-    const weaponEntry = content['weaponCategory']?.find(
-      (w) => w.key === sheetData.weaponCategoryId,
-    );
     const classData = classEntry?.data as ClassContentData | undefined;
     const typeData = typeEntry?.data as TypeContentData | undefined;
-    const weaponData = weaponEntry?.data as WeaponContentData | undefined;
+
+    // Story 25.1 : la catégorie (et ses formules) se dérive désormais de `weaponId` à la lecture,
+    // jamais stockée en double — résolue une seule fois ici, jamais recalculée par pdf-field-map.ts.
+    const resolvedWeapon = resolveWeaponCategory(sheetData.weaponId, {
+      weaponItems: (content['weaponItem'] ?? []).map((entry) => ({
+        key: entry.key,
+        ...(entry.data as WeaponItemContentData),
+      })),
+      weaponCategories: (content['weaponCategory'] ?? []).map((entry) => ({
+        key: entry.key,
+        ...(entry.data as WeaponCategoryContentData),
+      })),
+    });
 
     const levelUps = sheetData.levelUps ?? [];
     // Chaque montée de niveau accorde 1 ou 2 capacités (niveaux 4/6/10) — aplatir pour retrouver
@@ -428,9 +434,10 @@ export class RyuutamaPdfService {
       classLabel: classData?.label ?? '',
       classTalents: classData?.talents ?? [],
       typeLabel: typeData?.label ?? '',
-      weaponLabel: weaponData?.label ?? '',
-      weaponTouchFormula: weaponData?.touchFormula ?? '',
-      weaponDamageFormula: weaponData?.damageFormula ?? '',
+      weaponLabel: resolvedWeapon?.weaponLabel ?? '',
+      weaponTouchFormula: resolvedWeapon?.touchFormula ?? '',
+      weaponDamageFormula: resolvedWeapon?.damageFormula ?? '',
+      weaponCategoryId: resolvedWeapon?.categoryId ?? '',
       ownerPseudo,
       xp,
       secondaryClassLabel: secondaryClassData?.label,

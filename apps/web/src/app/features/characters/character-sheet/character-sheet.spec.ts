@@ -32,6 +32,7 @@ const CONTENT: GameSystemContentDto = {
   weaponCategory: [
     { key: 'lance', data: { label: 'Lance', touchFormula: 'VIG+AGI', damageFormula: 'VIG+1' } },
   ],
+  weaponItem: [{ key: 'lance', data: { label: 'Lance', categoryId: 'lance' } }],
   landscape: [{ key: 'foret', data: { label: 'Forêt' } }],
 };
 
@@ -39,7 +40,7 @@ const CHARACTER: CharacterDto = makeCharacterDto({
   sheetData: {
     classId: 'menestrel',
     typeId: 'technique',
-    weaponCategoryId: 'lance',
+    weaponId: 'lance',
     attributes: { VIG: 8, AGI: 4, INT: 6, ESP: 6 },
     equipment: {
       individual: [{ id: 'item-1', name: 'Nécessaire de voyage', weight: 0, addedBy: 'player' }],
@@ -1079,7 +1080,7 @@ describe('CharacterSheet', () => {
       );
     });
 
-    it('MJ → pencil arme appelle setSheetField avec le path weaponCategoryId', async () => {
+    it('MJ → pencil arme appelle setSheetField avec le path weaponId', async () => {
       const asMj = { ...CHARACTER, viewerIsMj: true };
       const characterSvc = makeCharacterService({
         get: vi.fn().mockResolvedValue(asMj),
@@ -1088,9 +1089,9 @@ describe('CharacterSheet', () => {
       const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
       const comp = fixture.componentInstance as any;
 
-      await comp.submitFieldEdit('weaponCategoryId', 'epee');
+      await comp.submitFieldEdit('weaponId', 'dague');
 
-      expect(characterSvc.setSheetField).toHaveBeenCalledWith('char1', 'weaponCategoryId', 'epee');
+      expect(characterSvc.setSheetField).toHaveBeenCalledWith('char1', 'weaponId', 'dague');
     });
 
     it('propriétaire (isOwner:true, viewerIsMj:false) → pas de pencil arme (MJ-only, AC1)', async () => {
@@ -1349,6 +1350,7 @@ describe('CharacterSheet', () => {
       type: CONTENT['type'],
       attributePattern: CONTENT['attributePattern'],
       weaponCategory: CONTENT['weaponCategory'],
+      weaponItem: CONTENT['weaponItem'],
       landscape: [
         { key: 'foret', data: { label: 'Forêt' } },
         { key: 'montagne', data: { label: 'Montagne' } },
@@ -1359,7 +1361,7 @@ describe('CharacterSheet', () => {
       return {
         classId,
         typeId: 'technique',
-        weaponCategoryId: 'lance',
+        weaponId: 'lance',
         attributes: { VIG: 8, AGI: 4, INT: 6, ESP: 6 },
         ...extra,
       };
@@ -1469,6 +1471,7 @@ describe('CharacterSheet', () => {
       ],
       attributePattern: CONTENT['attributePattern'],
       weaponCategory: CONTENT['weaponCategory'],
+      weaponItem: CONTENT['weaponItem'],
       season: [
         { key: 'printemps', data: { label: 'Printemps' } },
         { key: 'ete', data: { label: 'Été' } },
@@ -1501,7 +1504,7 @@ describe('CharacterSheet', () => {
       return {
         classId: 'menestrel',
         typeId: 'magie',
-        weaponCategoryId: 'lance',
+        weaponId: 'lance',
         attributes: { VIG: 8, AGI: 4, INT: 6, ESP: 6 },
         ...extra,
       };
@@ -1531,7 +1534,7 @@ describe('CharacterSheet', () => {
         sheetData: {
           classId: 'menestrel',
           typeId: 'attaque',
-          weaponCategoryId: 'lance',
+          weaponId: 'lance',
           attributes: { VIG: 8, AGI: 4, INT: 6, ESP: 6 },
         },
       });

@@ -11,4 +11,10 @@
     background: var(--mat-sys-surface-container-high, #f0ebe3);
     border-radius: 8px;
   }
+
+  &__category-description {
+    padding: 0.5rem 0.75rem;
+    color: var(--mat-sys-on-surface-variant, #555);
+    font-style: italic;
+  }
 }

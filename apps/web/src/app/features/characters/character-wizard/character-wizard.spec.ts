@@ -17,7 +17,7 @@ const SCHEMA: GameSystemSchemaDto = {
     { key: 'typeId', label: 'Type' },
     { key: 'magic', label: 'Magie' },
     { key: 'attributes', label: 'Attributs' },
-    { key: 'weaponCategoryId', label: 'Arme favorite' },
+    { key: 'weaponId', label: 'Arme favorite' },
     { key: 'fetiqueObject', label: 'Objet fétiche' },
     { key: 'equipment', label: 'Équipement' },
     { key: 'narrative', label: 'Narratif' },
@@ -118,6 +118,9 @@ const CONTENT: GameSystemContentDto = {
   weaponCategory: [
     { key: 'arc', data: { label: 'Arc', touchFormula: 'AGI+INT-2', damageFormula: 'AGI' } },
   ],
+  weaponItem: [
+    { key: 'arc-de-chasse', data: { label: 'Arc de chasse', categoryId: 'arc' } },
+  ],
   wizardStepIntro: [
     { key: 'classId', data: { text: 'La première chose à faire est de choisir sa classe.' } },
     {
@@ -126,7 +129,7 @@ const CONTENT: GameSystemContentDto = {
     },
     { key: 'attributes', data: { text: 'On détermine les quatre attributs des personnages.' } },
     {
-      key: 'weaponCategoryId',
+      key: 'weaponId',
       data: { text: "Choisissez la famille d'armes favorite du voyageur." },
     },
     { key: 'fetiqueObject', data: { text: 'Votre voyageur possède un objet fétiche.' } },
@@ -290,7 +293,7 @@ describe('CharacterWizard', () => {
       'classId',
       'typeId',
       'attributes',
-      'weaponCategoryId',
+      'weaponId',
       'fetiqueObject',
       'equipment',
       'narrative',

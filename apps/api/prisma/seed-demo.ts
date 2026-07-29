@@ -29,7 +29,7 @@ interface RyuutamaSheetData {
   specialtyTypeId?: string;
   typeId: string;
   attributes: RyuutamaAttributes;
-  weaponCategoryId: string;
+  weaponId: string;
   // Modèle d'inventaire unifié (Story 14.1) — individual/contenants/animaux, plus de `group`.
   equipment?: { individual: InventoryItem[]; contenants: InventoryItem[]; animaux: Omit<InventoryItem, 'weight'>[] };
   narrative?: { name?: string };
@@ -82,7 +82,7 @@ function makeSheetData(
   name: string,
   classId: string,
   typeId: string,
-  weaponCategoryId: string,
+  weaponId: string,
   attributeSet: number,
   specialtyTypeId?: string,
   equipment?: RyuutamaSheetData['equipment'],
@@ -90,7 +90,7 @@ function makeSheetData(
   return {
     classId,
     typeId,
-    weaponCategoryId,
+    weaponId,
     attributes: ATTRIBUTE_SETS[attributeSet],
     equipment: equipment ?? { individual: [], contenants: [], animaux: [] },
     narrative: { name },
@@ -159,7 +159,7 @@ async function main() {
   const fenn = await createCharacter(
     alice.id,
     oneShot.id,
-    makeSheetData('Fenn', 'chasseur', 'attaque', 'arc', 0, undefined, {
+    makeSheetData('Fenn', 'chasseur', 'attaque', 'arc-de-chasse', 0, undefined, {
       individual: [
         { id: randomUUID(), name: 'Corde (10m)', weight: 1, price: '5 po', addedBy: 'player' },
         { id: randomUUID(), name: 'Torche', weight: 0.5, price: '2 po', addedBy: 'player' },
@@ -173,7 +173,7 @@ async function main() {
   const roland = await createCharacter(
     bob.id,
     oneShot.id,
-    makeSheetData('Roland', 'guerisseur', 'technique', 'epee-courte', 1),
+    makeSheetData('Roland', 'guerisseur', 'technique', 'dague', 1),
     true, // journalAutoAssociate — pour démontrer l'association automatique
   );
 
@@ -311,17 +311,17 @@ async function main() {
   const liora = await createCharacter(
     alice.id,
     lineaire.id,
-    makeSheetData('Liora', 'marchand', 'magie', 'epee-longue', 2),
+    makeSheetData('Liora', 'marchand', 'magie', 'epee-large', 2),
   );
   const garrick = await createCharacter(
     bob.id,
     lineaire.id,
-    makeSheetData('Garrick', 'noble', 'attaque', 'epee-longue', 0),
+    makeSheetData('Garrick', 'noble', 'attaque', 'epee-large', 0),
   );
   await createCharacter(
     chloe.id,
     lineaire.id,
-    makeSheetData('Mira', 'menestrel', 'technique', 'arc', 1),
+    makeSheetData('Mira', 'menestrel', 'technique', 'arc-de-chasse', 1),
   );
 
   const chap1Poll = await prisma.sessionPoll.create({
@@ -466,17 +466,17 @@ async function main() {
   const yuna = await createCharacter(
     alice.id,
     episodique.id,
-    makeSheetData('Yuna', 'chasseur', 'attaque', 'arc', 1),
+    makeSheetData('Yuna', 'chasseur', 'attaque', 'arc-de-chasse', 1),
   );
   await createCharacter(
     bob.id,
     episodique.id,
-    makeSheetData('Theo', 'artisan', 'technique', 'epee-courte', 2, 'Forgeron'),
+    makeSheetData('Theo', 'artisan', 'technique', 'dague', 2, 'Forgeron'),
   );
   const sable = await createCharacter(
     chloe.id,
     episodique.id,
-    makeSheetData('Sable', 'guerisseur', 'magie', 'arc', 0),
+    makeSheetData('Sable', 'guerisseur', 'magie', 'arc-de-chasse', 0),
   );
 
   const bijou = await prisma.scenario.create({

@@ -81,11 +81,12 @@
               (attributesChange)="onAttributesChange($event)"
             />
           }
-          @case ('weaponCategoryId') {
+          @case ('weaponId') {
             <app-weapon-step
-              [weapons]="weapons()"
-              [weaponCategoryId]="sheetData().weaponCategoryId"
-              (weaponCategoryIdChange)="updateSheetData({ weaponCategoryId: $event })"
+              [weaponItems]="weaponItems()"
+              [weaponCategories]="weaponCategories()"
+              [weaponId]="sheetData().weaponId"
+              (weaponIdChange)="onWeaponIdChange($event)"
             />
           }
           @case ('fetiqueObject') {

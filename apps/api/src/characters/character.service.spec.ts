@@ -141,6 +141,7 @@ function makeGameSystemService() {
       class: [{ key: 'chasseur', data: {} }],
       type: [{ key: 'attaque', data: {} }],
       weaponCategory: [{ key: 'arc', data: {} }],
+      weaponItem: [{ key: 'arc-de-chasse', data: { categoryId: 'arc' } }],
       attributePattern: [{ key: 'polyvalent', data: { values: [8, 4, 6, 6] } }],
     }),
   };
@@ -150,7 +151,7 @@ function validSheet() {
   return {
     classId: 'chasseur',
     typeId: 'attaque',
-    weaponCategoryId: 'arc',
+    weaponId: 'arc-de-chasse',
     attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
   };
 }
@@ -420,7 +421,7 @@ describe('CharacterService', () => {
       expect.objectContaining({
         validClasses: ['chasseur'],
         validTypes: ['attaque'],
-        validWeapons: ['arc'],
+        validWeaponItems: ['arc-de-chasse'],
         attributePatterns: [[4, 6, 6, 8]],
       }),
     );

@@ -1,17 +1,45 @@
 <div class="weapon-step">
-  <div class="weapon-step__grid" role="radiogroup" aria-label="Choisir son arme" appRadioGroupNav>
-    @for (opt of options(); track opt.key) {
+  <div
+    class="weapon-step__grid"
+    role="radiogroup"
+    aria-label="Choisir une catégorie d'arme"
+    appRadioGroupNav
+  >
+    @for (opt of categoryOptions(); track opt.key) {
       <app-choice-card
         [option]="opt"
-        [selected]="weaponCategoryId() === opt.key"
-        (selectedOption)="onSelect($event)"
+        [selected]="selectedCategoryKey() === opt.key"
+        (selectedOption)="selectCategory($event)"
       />
     }
   </div>
 
-  @if (selectedWeaponData(); as data) {
+  @if (selectedCategoryData(); as category) {
+    <p class="weapon-step__category-description">{{ category.description }}</p>
+  }
+
+  @if (itemOptions().length > 0) {
+    <div
+      class="weapon-step__grid"
+      role="radiogroup"
+      aria-label="Choisir son arme précise"
+      appRadioGroupNav
+    >
+      @for (opt of itemOptions(); track opt.key) {
+        <app-choice-card
+          [option]="opt"
+          [selected]="weaponId() === opt.key"
+          (selectedOption)="selectItem($event)"
+        />
+      }
+    </div>
+  }
+
+  @if (resolvedWeapon(); as weapon) {
     <p class="weapon-step__detail">
-      Toucher : <strong>{{ data.touchFormula }}</strong> · Dégâts : <strong>{{ data.damageFormula }}</strong>
+      <strong>{{ weapon.weaponLabel }}</strong> ({{ weapon.categoryLabel }}) —
+      Toucher : <strong>{{ weapon.touchFormula }}</strong> · Dégâts :
+      <strong>{{ weapon.damageFormula }}</strong>
     </p>
   }
 </div>

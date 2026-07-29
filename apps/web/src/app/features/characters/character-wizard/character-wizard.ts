@@ -40,7 +40,7 @@ const SUPPORTED_STEP_KEYS = new Set([
   'typeId',
   'magic',
   'attributes',
-  'weaponCategoryId',
+  'weaponId',
   'fetiqueObject',
   'equipment',
   'narrative',
@@ -78,7 +78,7 @@ const FIELD_TO_STEP_KEY: Record<string, string> = {
   specialtyTypeId: 'classId',
   typeId: 'typeId',
   attributes: 'attributes',
-  weaponCategoryId: 'weaponCategoryId',
+  weaponId: 'weaponId',
   // Règle 6 (Story 23.8) : `field` = `requiredChoices[].key` (ex. "fermier-metier-appoint",
   // "meteomancien-climatophile") — toujours résolu dans l'étape classId.
   'fermier-metier-appoint': 'classId',
@@ -217,7 +217,11 @@ export class CharacterWizard implements OnInit {
 
   protected readonly classes = computed<ContentEntryDto[]>(() => this.content()?.['class'] ?? []);
   protected readonly types = computed<ContentEntryDto[]>(() => this.content()?.['type'] ?? []);
-  protected readonly weapons = computed<ContentEntryDto[]>(
+  /** Armes précises sélectionnables (Story 25.1) — remplace l'ancien choix direct de catégorie. */
+  protected readonly weaponItems = computed<ContentEntryDto[]>(
+    () => this.content()?.['weaponItem'] ?? [],
+  );
+  protected readonly weaponCategories = computed<ContentEntryDto[]>(
     () => this.content()?.['weaponCategory'] ?? [],
   );
   protected readonly landscapes = computed<ContentEntryDto[]>(
@@ -261,8 +265,8 @@ export class CharacterWizard implements OnInit {
         return !!data.magicSeason && (data.knownRitualSpells?.length ?? 0) === 2;
       case 'attributes':
         return !!data.attributes;
-      case 'weaponCategoryId':
-        return !!data.weaponCategoryId;
+      case 'weaponId':
+        return !!data.weaponId;
       default:
         return true;
     }
@@ -373,6 +377,10 @@ export class CharacterWizard implements OnInit {
 
   protected onAttributesChange(attrs: Record<AttrKey, number> | null): void {
     this.sheetData.update((d) => ({ ...d, attributes: attrs ?? undefined }));
+  }
+
+  protected onWeaponIdChange(weaponId: string | null): void {
+    this.sheetData.update((d) => ({ ...d, weaponId: weaponId ?? undefined }));
   }
 
   protected async onSubmit(): Promise<void> {

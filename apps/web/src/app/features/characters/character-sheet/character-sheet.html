@@ -302,7 +302,7 @@
           <h2 class="sheet__card-title">Arme de prédilection</h2>
           <div class="sheet__weapon-row">
             @if (weaponData(); as weapon) {
-              <span class="sheet__weapon-name">{{ weapon.label }}</span>
+              <span class="sheet__weapon-name">{{ weapon.weaponLabel }} ({{ weapon.categoryLabel }})</span>
               <div class="sheet__pill-grid">
                 <span class="stat-pill">Toucher {{ weapon.touchFormula }}</span>
                 <span class="stat-pill">Dégâts {{ weapon.damageFormula }}</span>
@@ -311,9 +311,9 @@
             @if (viewerIsMj()) {
               <app-field-edit-pencil
                 label="l'arme de prédilection"
-                [value]="$any(sheetData()['weaponCategoryId']) ?? ''"
+                [value]="$any(sheetData()['weaponId']) ?? ''"
                 [options]="weaponOptions()"
-                (confirm)="submitFieldEdit('weaponCategoryId', $event)"
+                (confirm)="submitFieldEdit('weaponId', $event)"
               />
             }
           </div>
