@@ -6,7 +6,7 @@ function validSheet(): RyuutamaSheetData {
   return {
     classId: 'chasseur',
     typeId: 'attaque',
-    weaponCategoryId: 'arc',
+    weaponId: 'arc-de-chasse',
     attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
   };
 }
@@ -24,7 +24,23 @@ function catalog(): RyuutamaCatalog {
       'noble',
     ],
     validTypes: ['attaque', 'technique', 'magie'],
-    validWeapons: ['arc', 'epee-courte', 'epee-longue', 'hache', 'lance'],
+    validWeaponItems: [
+      'arbalete',
+      'arc-court',
+      'arc-de-chasse',
+      'dague',
+      'poignard',
+      'wakizashi',
+      'epee-large',
+      'katana',
+      'rapiere',
+      'hache-de-bataille',
+      'hache-de-bucheron',
+      'epieu',
+      'hallebarde',
+      'lance',
+      'trident',
+    ],
     attributePatterns: [[4, 6, 6, 8]],
   };
 }
@@ -53,12 +69,12 @@ describe('validate (strict)', () => {
     expect(result.errors.some((e) => e.field === 'attributes')).toBe(true);
   });
 
-  it('weaponCategoryId invalide (ex. "mains-nues") → valid: false, errors[0].field = weaponCategoryId', () => {
-    const data = { ...validSheet(), weaponCategoryId: 'mains-nues' };
+  it('weaponId invalide (ex. "mains-nues") → valid: false, errors[0].field = weaponId', () => {
+    const data = { ...validSheet(), weaponId: 'mains-nues' };
     const result = validate(data, 'strict', catalog());
     expect(result.valid).toBe(false);
     expect(
-      result.errors.some((e) => e.field === 'weaponCategoryId'),
+      result.errors.some((e) => e.field === 'weaponId'),
     ).toBe(true);
   });
 

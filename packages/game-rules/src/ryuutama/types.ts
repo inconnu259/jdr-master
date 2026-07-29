@@ -27,7 +27,13 @@ export interface RyuutamaSheetData {
   specialtyTypeId?: string; // obligatoire si classId === "artisan"
   typeId: string;
   attributes: { AGI: number; ESP: number; INT: number; VIG: number };
-  weaponCategoryId: string;
+  /**
+   * Arme précise choisie (Story 25.1), clé du catalogue `weaponItem` — remplace l'ancien
+   * `weaponCategoryId` qui stockait directement une catégorie abstraite. La catégorie (et ses
+   * formules de toucher/dégâts) se dérive désormais à la lecture via `resolveWeaponCategory()`,
+   * jamais stockée en double.
+   */
+  weaponId: string;
   fetiqueObject?: string;
   equipment?: { individual: InventoryItem[]; contenants: Contenant[]; animaux: Animal[] };
   narrative?: {
@@ -110,7 +116,8 @@ export interface ValidationResult {
 export interface RyuutamaCatalog {
   validClasses: string[];
   validTypes: string[];
-  validWeapons: string[];
+  /** Clés valides du catalogue `weaponItem` (Story 25.1) — remplace `validWeapons` (catégories). */
+  validWeaponItems: string[];
   /** Chaque pattern est un tableau de 4 valeurs déjà trié (ex. [4, 6, 6, 8] pour "Polyvalent"). */
   attributePatterns: number[][];
   /**

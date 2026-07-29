@@ -26,7 +26,7 @@ function baseData(overrides: Partial<RyuutamaSheetData> = {}): RyuutamaSheetData
   return {
     classId: 'chasseur',
     typeId: 'attaque',
-    weaponCategoryId: 'arc',
+    weaponId: 'arc-de-chasse',
     attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
     ...overrides,
   };
@@ -40,9 +40,10 @@ const content = {
     { name: 'Piège', effect: { description: 'Pose un piège', conditions: '-' } },
   ],
   typeLabel: 'Attaque',
-  weaponLabel: 'Arc',
+  weaponLabel: 'Arc de chasse',
   weaponTouchFormula: 'AGI+INT-2',
   weaponDamageFormula: 'AGI',
+  weaponCategoryId: 'arc',
   ownerPseudo: 'alice',
 };
 
@@ -70,10 +71,13 @@ describe('mapToPdfFields', () => {
     }
   });
 
-  it('mappe chacune des 5 armes vers son option PDF exacte', () => {
+  it('mappe chacune des 5 catégories vers son option PDF exacte (résolue via content.weaponCategoryId)', () => {
     for (const weaponCategoryId of WEAPONS) {
-      const data = baseData({ weaponCategoryId });
-      const fields = mapToPdfFields(data, computeDerived(data), content);
+      const data = baseData();
+      const fields = mapToPdfFields(data, computeDerived(data), {
+        ...content,
+        weaponCategoryId,
+      });
       const weaponField = fields.find((f) => f.field === 'Arme Fav');
       expect(weaponField?.value).toBe(WEAPON_PDF_OPTIONS[weaponCategoryId]);
       expect(weaponField?.value).not.toBe('');

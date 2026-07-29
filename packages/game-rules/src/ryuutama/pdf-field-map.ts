@@ -41,6 +41,12 @@ export interface RyuutamaPdfContent {
   weaponLabel: string;
   weaponTouchFormula: string;
   weaponDamageFormula: string;
+  /**
+   * Catégorie résolue depuis `sheetData.weaponId` (Story 25.1) — `weaponPdfOption()` continue de
+   * chercher par catégorie (le PDF officiel n'a qu'un dropdown à 5 options, pas une par arme
+   * précise), résolue une fois par l'appelant via `resolveWeaponCategory`, jamais recalculée ici.
+   */
+  weaponCategoryId: string;
   /** Pseudo du propriétaire du personnage (joueur ou MJ) — remplit le champ "Joueur" (Story 4.6). */
   ownerPseudo: string;
   /** Points d'expérience cumulés — remplit le champ "PX". Optionnel (défaut 0) pour ne pas casser les objets `content` littéraux existants. */
@@ -179,7 +185,7 @@ export function mapToPdfFields(
     { field: 'Classe 1', value: content.classLabel, kind: 'dropdown' },
     {
       field: 'Arme Fav',
-      value: weaponPdfOption(data.weaponCategoryId),
+      value: weaponPdfOption(content.weaponCategoryId),
       kind: 'dropdown',
     },
     {

@@ -12,6 +12,7 @@ export {
 export { mapHommeDragonToPdfFields } from './ryuutama/homme-dragon-pdf-field-map.ts';
 export { mapEquipmentToPdfFields } from './ryuutama/equipment-pdf-field-map.ts';
 export { mapNotesToPdfFields } from './ryuutama/notes-pdf-field-map.ts';
+export { resolveWeaponCategory } from './ryuutama/resolve-weapon-category.ts';
 export type {
   RyuutamaSheetData,
   DerivedStats,
@@ -36,3 +37,11 @@ export type {
   HommeDragonPdfInput,
 } from './ryuutama/homme-dragon-pdf-field-map.ts';
 export type { EquipmentPdfInput } from './ryuutama/equipment-pdf-field-map.ts';
+export type {
+  WeaponItemEntry,
+  WeaponCategoryEntry,
+  WeaponItemContentData,
+  WeaponCategoryContentData,
+  WeaponResolutionCatalog,
+  ResolvedWeapon,
+} from './ryuutama/resolve-weapon-category.ts';

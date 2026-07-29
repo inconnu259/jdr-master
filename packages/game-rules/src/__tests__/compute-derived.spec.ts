@@ -5,7 +5,7 @@ describe('computeDerived', () => {
   const base = {
     classId: 'chasseur',
     typeId: 'attaque',
-    weaponCategoryId: 'arc',
+    weaponId: 'arc-de-chasse',
     attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
   };
   it('PV = VIG × 2', () => expect(computeDerived(base).PV).toBe(16));

@@ -10,7 +10,7 @@ export function validate(
   mode: 'strict' | 'mj',
   catalog: RyuutamaCatalog,
 ): ValidationResult {
-  const { validClasses, validTypes, validWeapons, attributePatterns } =
+  const { validClasses, validTypes, validWeaponItems, attributePatterns } =
     catalog;
   const errors: ValidationError[] = [];
 
@@ -51,11 +51,12 @@ export function validate(
     }
   }
 
-  // Règle 4 : arme favorite parmi les catégories seedées en base
-  if (!data.weaponCategoryId || !validWeapons.includes(data.weaponCategoryId)) {
+  // Règle 4 : arme précise parmi celles seedées en base (Story 25.1 : catalogue weaponItem,
+  // remplace l'ancien choix direct de catégorie)
+  if (!data.weaponId || !validWeaponItems.includes(data.weaponId)) {
     errors.push({
-      field: 'weaponCategoryId',
-      message: `Arme favorite invalide. Catégories acceptées : ${validWeapons.join(', ')}`,
+      field: 'weaponId',
+      message: `Arme invalide. Armes acceptées : ${validWeaponItems.join(', ')}`,
     });
   }
 
