@@ -31,9 +31,18 @@ export interface RyuutamaSheetData {
    * Arme précise choisie (Story 25.1), clé du catalogue `weaponItem` — remplace l'ancien
    * `weaponCategoryId` qui stockait directement une catégorie abstraite. La catégorie (et ses
    * formules de toucher/dégâts) se dérive désormais à la lecture via `resolveWeaponCategory()`,
-   * jamais stockée en double.
+   * jamais stockée en double. Optionnel depuis la Story 25.2 : sibling **exclusif** de
+   * `customWeapon` — jamais les deux renseignés, jamais aucun des deux.
    */
-  weaponId: string;
+  weaponId?: string;
+  /**
+   * Arme libre créée par le joueur (Story 25.2), sibling exclusif de `weaponId` — jamais les
+   * deux renseignés, jamais aucun des deux (appliqué par `validate()` Règle 4). Hérite
+   * exactement des formules de toucher/dégâts de la catégorie référencée par `categoryId`,
+   * résolues à la lecture via `resolveWeapon()`, jamais stockées en double. Ne crée jamais de
+   * `ContentEntry` — reste strictement inline, jamais partagée entre personnages.
+   */
+  customWeapon?: { name: string; categoryId: string };
   fetiqueObject?: string;
   equipment?: { individual: InventoryItem[]; contenants: Contenant[]; animaux: Animal[] };
   narrative?: {
@@ -118,6 +127,8 @@ export interface RyuutamaCatalog {
   validTypes: string[];
   /** Clés valides du catalogue `weaponItem` (Story 25.1) — remplace `validWeapons` (catégories). */
   validWeaponItems: string[];
+  /** Clés valides du catalogue `weaponCategory` (Story 25.2), pour valider `customWeapon.categoryId`. */
+  validWeaponCategories?: string[];
   /** Chaque pattern est un tableau de 4 valeurs déjà trié (ex. [4, 6, 6, 8] pour "Polyvalent"). */
   attributePatterns: number[][];
   /**

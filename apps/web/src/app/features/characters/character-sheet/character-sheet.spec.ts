@@ -160,6 +160,25 @@ describe('CharacterSheet', () => {
     expect(text).not.toContain('technique');
   });
 
+  it('Story 25.2 : personnage avec customWeapon (arme libre) affiche le nom libre + formules de la catégorie référencée', async () => {
+    const character = makeCharacterDto({
+      sheetData: {
+        classId: 'menestrel',
+        typeId: 'technique',
+        weaponId: undefined,
+        customWeapon: { name: 'Fléau maison', categoryId: 'lance' },
+        attributes: { VIG: 8, AGI: 4, INT: 6, ESP: 6 },
+      },
+    });
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(character) });
+    const { fixture } = await createComponent(characterSvc);
+
+    const text = fixture.nativeElement.textContent;
+    expect(text).toContain('Fléau maison');
+    expect(text).toContain('VIG+AGI');
+    expect(text).toContain('VIG+1');
+  });
+
   it('composant détruit avant la résolution de get() → pas d’erreur (résolution tardive sans garde)', async () => {
     // Angular ne lève aucune erreur/avertissement quand un signal est mis à jour sur un composant
     // déjà détruit (ce n'est ni un ChangeDetectorRef ni un effect() actif) — pas de garde

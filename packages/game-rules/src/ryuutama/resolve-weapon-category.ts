@@ -60,3 +60,32 @@ export function resolveWeaponCategory(
     damageFormula: category.damageFormula,
   };
 }
+
+/**
+ * Point d'entrée unique de résolution pour tous les consommateurs de lecture (Story 25.2) —
+ * `weaponId` (catalogue) et `customWeapon` (arme libre, hérite des formules de sa catégorie)
+ * sont sibling **exclusifs** sur `RyuutamaSheetData`, mais peuvent transitoirement coexister en
+ * mode d'édition MJ (`validate(data, 'mj', catalog)`, permissif) — la résolution privilégie
+ * alors toujours `weaponId` en premier, un seul chemin déterministe. Enveloppe
+ * `resolveWeaponCategory()` pour la branche `weaponId`, ne la duplique jamais.
+ */
+export function resolveWeapon(
+  data: { weaponId?: string; customWeapon?: { name: string; categoryId: string } },
+  catalog: WeaponResolutionCatalog,
+): ResolvedWeapon | null {
+  if (data.weaponId) return resolveWeaponCategory(data.weaponId, catalog);
+  if (data.customWeapon) {
+    const category = catalog.weaponCategories.find(
+      (c) => c.key === data.customWeapon!.categoryId,
+    );
+    if (!category) return null;
+    return {
+      weaponLabel: data.customWeapon.name,
+      categoryId: category.key,
+      categoryLabel: category.label,
+      touchFormula: category.touchFormula,
+      damageFormula: category.damageFormula,
+    };
+  }
+  return null;
+}

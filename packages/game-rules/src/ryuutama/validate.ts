@@ -5,6 +5,19 @@ import type {
   RyuutamaCatalog,
 } from './types.ts';
 
+/**
+ * Catégorie sans choix d'arme précise (Story 25.1, `NO_ITEM_CHOICE_CATEGORY` côté web) — l'assistant
+ * n'affiche jamais la carte « Créer une arme libre » pour elle (auto-assignation directe de son
+ * unique `weaponItem`). Revue de code Story 25.2 : `validate()` doit refuser explicitement un
+ * `customWeapon.categoryId` égal à cette catégorie (atteignable seulement via un appel API direct,
+ * hors assistant), pour ne pas laisser une incohérence narrative passer la validation stricte.
+ */
+const NO_CUSTOM_WEAPON_CATEGORY = 'mains-nues';
+
+/** Limite alignée sur les champs de nom similaires du modèle (`InventoryItem`/`Contenant`/`Animal`,
+ *  tous `@MaxLength(200)` via DTO dédié — revue de code Story 25.2). */
+const CUSTOM_WEAPON_NAME_MAX_LENGTH = 200;
+
 export function validate(
   data: RyuutamaSheetData,
   mode: 'strict' | 'mj',
@@ -51,9 +64,47 @@ export function validate(
     }
   }
 
-  // Règle 4 : arme précise parmi celles seedées en base (Story 25.1 : catalogue weaponItem,
-  // remplace l'ancien choix direct de catégorie)
-  if (!data.weaponId || !validWeaponItems.includes(data.weaponId)) {
+  // Règle 4 : arme précise parmi celles seedées en base (Story 25.1 : catalogue weaponItem),
+  // OU arme libre (Story 25.2) — sibling exclusif : jamais les deux, jamais aucun des deux.
+  // `field: 'weaponId'` conservé sur toutes les branches (routage FIELD_TO_STEP_KEY inchangé).
+  if (data.weaponId && data.customWeapon) {
+    errors.push({
+      field: 'weaponId',
+      message:
+        'Une seule arme doit être renseignée : choisie dans le catalogue ou libre, jamais les deux',
+    });
+  } else if (data.weaponId) {
+    if (!validWeaponItems.includes(data.weaponId)) {
+      errors.push({
+        field: 'weaponId',
+        message: `Arme invalide. Armes acceptées : ${validWeaponItems.join(', ')}`,
+      });
+    }
+  } else if (data.customWeapon) {
+    const validWeaponCategories = catalog.validWeaponCategories ?? [];
+    const { name, categoryId } = data.customWeapon;
+    // `data.customWeapon` vient de `sheetData: Record<string, unknown>` (aucune contrainte de
+    // forme au niveau du DTO, cf. create-character.dto.ts) — un client pourrait envoyer n'importe
+    // quelle valeur JSON pour `name`/`categoryId`. Sans ces gardes de type, `name.trim()` lèverait
+    // une exception non interceptée (500) plutôt qu'une erreur de validation propre (400) si `name`
+    // n'est pas une chaîne (même piège que `knownRitualSpells`, Règle 7, corrigé en revue de code).
+    const isValidName =
+      typeof name === 'string' &&
+      !!name.trim() &&
+      name.length <= CUSTOM_WEAPON_NAME_MAX_LENGTH;
+    const isValidCategory =
+      typeof categoryId === 'string' &&
+      categoryId !== NO_CUSTOM_WEAPON_CATEGORY &&
+      validWeaponCategories.includes(categoryId);
+    if (!isValidName || !isValidCategory) {
+      errors.push({
+        field: 'weaponId',
+        message: `Arme libre invalide. Un nom (max ${CUSTOM_WEAPON_NAME_MAX_LENGTH} caractères) et une catégorie parmi : ${validWeaponCategories
+          .filter((c) => c !== NO_CUSTOM_WEAPON_CATEGORY)
+          .join(', ')} sont requis`,
+      });
+    }
+  } else {
     errors.push({
       field: 'weaponId',
       message: `Arme invalide. Armes acceptées : ${validWeaponItems.join(', ')}`,

@@ -37,7 +37,7 @@ import {
   getOtherCapabilities,
 } from './capability-label.util';
 import {
-  resolveWeaponCategory,
+  resolveWeapon,
   type ResolvedWeapon,
   type WeaponCategoryEntry,
   type WeaponItemEntry,
@@ -212,10 +212,14 @@ export class CharacterSheet implements OnInit {
     ),
   );
 
-  /** Arme précise + catégorie résolue (Story 25.1) — plus une simple catégorie stockée directement. */
+  /** Arme précise + catégorie résolue (Story 25.1), ou arme libre (Story 25.2, `customWeapon`,
+   *  priorité à `weaponId` si les deux sont transitoirement présents — édition MJ). */
   protected readonly weaponData = computed<ResolvedWeapon | null>(() => {
     const weaponId = this.sheetData()['weaponId'] as string | undefined;
-    if (!weaponId) return null;
+    const customWeapon = this.sheetData()['customWeapon'] as
+      | { name: string; categoryId: string }
+      | undefined;
+    if (!weaponId && !customWeapon) return null;
     const weaponItems: WeaponItemEntry[] = (this.content()?.['weaponItem'] ?? []).map((entry) => ({
       key: entry.key,
       ...(entry.data as WeaponItemContentData),
@@ -223,7 +227,7 @@ export class CharacterSheet implements OnInit {
     const weaponCategories: WeaponCategoryEntry[] = (this.content()?.['weaponCategory'] ?? []).map(
       (entry) => ({ key: entry.key, ...(entry.data as WeaponCategoryContentData) }),
     );
-    return resolveWeaponCategory(weaponId, { weaponItems, weaponCategories });
+    return resolveWeapon({ weaponId, customWeapon }, { weaponItems, weaponCategories });
   });
 
   /**

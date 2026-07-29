@@ -13,7 +13,7 @@ import {
 import type { CharacterDto } from '@master-jdr/shared';
 import {
   mapToPdfFields,
-  resolveWeaponCategory,
+  resolveWeapon,
   type RyuutamaSheetData,
   type RyuutamaPdfContent,
   type WeaponItemContentData,
@@ -398,16 +398,20 @@ export class RyuutamaPdfService {
 
     // Story 25.1 : la catégorie (et ses formules) se dérive désormais de `weaponId` à la lecture,
     // jamais stockée en double — résolue une seule fois ici, jamais recalculée par pdf-field-map.ts.
-    const resolvedWeapon = resolveWeaponCategory(sheetData.weaponId, {
-      weaponItems: (content['weaponItem'] ?? []).map((entry) => ({
-        key: entry.key,
-        ...(entry.data as WeaponItemContentData),
-      })),
-      weaponCategories: (content['weaponCategory'] ?? []).map((entry) => ({
-        key: entry.key,
-        ...(entry.data as WeaponCategoryContentData),
-      })),
-    });
+    // Story 25.2 : `resolveWeapon` couvre aussi l'arme libre (`customWeapon`), priorité à `weaponId`.
+    const resolvedWeapon = resolveWeapon(
+      { weaponId: sheetData.weaponId, customWeapon: sheetData.customWeapon },
+      {
+        weaponItems: (content['weaponItem'] ?? []).map((entry) => ({
+          key: entry.key,
+          ...(entry.data as WeaponItemContentData),
+        })),
+        weaponCategories: (content['weaponCategory'] ?? []).map((entry) => ({
+          key: entry.key,
+          ...(entry.data as WeaponCategoryContentData),
+        })),
+      },
+    );
 
     const levelUps = sheetData.levelUps ?? [];
     // Chaque montée de niveau accorde 1 ou 2 capacités (niveaux 4/6/10) — aplatir pour retrouver

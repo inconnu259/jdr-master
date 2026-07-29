@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveWeaponCategory } from '../ryuutama/resolve-weapon-category';
+import { resolveWeaponCategory, resolveWeapon } from '../ryuutama/resolve-weapon-category';
 import type { WeaponResolutionCatalog } from '../ryuutama/resolve-weapon-category';
 
 function catalog(): WeaponResolutionCatalog {
@@ -39,5 +39,46 @@ describe('resolveWeaponCategory', () => {
 
   it('categoryId de l’arme ne correspondant à aucune catégorie du catalogue → null (contenu incohérent)', () => {
     expect(resolveWeaponCategory('orpheline', catalog())).toBeNull();
+  });
+});
+
+describe('resolveWeapon (Story 25.2)', () => {
+  it('weaponId seul → résolu comme resolveWeaponCategory', () => {
+    const result = resolveWeapon({ weaponId: 'dague' }, catalog());
+    expect(result).toEqual(resolveWeaponCategory('dague', catalog()));
+  });
+
+  it('customWeapon seul → label = nom libre, formules = catégorie référencée', () => {
+    const result = resolveWeapon(
+      { customWeapon: { name: 'Fléau maison', categoryId: 'lance' } },
+      catalog(),
+    );
+    expect(result).toEqual({
+      weaponLabel: 'Fléau maison',
+      categoryId: 'lance',
+      categoryLabel: 'Lance',
+      touchFormula: 'VIG+AGI',
+      damageFormula: 'VIG+1',
+    });
+  });
+
+  it('weaponId ET customWeapon présents → priorité à weaponId', () => {
+    const result = resolveWeapon(
+      { weaponId: 'lance', customWeapon: { name: 'Fléau maison', categoryId: 'epee-courte' } },
+      catalog(),
+    );
+    expect(result?.weaponLabel).toBe('Lance');
+  });
+
+  it('ni weaponId ni customWeapon → null', () => {
+    expect(resolveWeapon({}, catalog())).toBeNull();
+  });
+
+  it('customWeapon.categoryId inconnu du catalogue → null', () => {
+    const result = resolveWeapon(
+      { customWeapon: { name: 'Fléau maison', categoryId: 'categorie-inexistante' } },
+      catalog(),
+    );
+    expect(result).toBeNull();
   });
 });

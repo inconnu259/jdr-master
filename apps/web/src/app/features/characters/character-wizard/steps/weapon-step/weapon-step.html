@@ -28,10 +28,23 @@
       @for (opt of itemOptions(); track opt.key) {
         <app-choice-card
           [option]="opt"
-          [selected]="weaponId() === opt.key"
+          [selected]="isItemSelected(opt.key)"
           (selectedOption)="selectItem($event)"
         />
       }
+    </div>
+  }
+
+  @if (showCustomInput()) {
+    <div class="weapon-step__custom-input">
+      <label for="customWeaponName">Nom de l'arme libre</label>
+      <input
+        id="customWeaponName"
+        type="text"
+        placeholder="Un fléau fait maison..."
+        [ngModel]="customWeaponName()"
+        (ngModelChange)="onCustomNameInput($event)"
+      />
     </div>
   }
 

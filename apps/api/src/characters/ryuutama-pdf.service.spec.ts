@@ -51,6 +51,48 @@ jest.mock('@master-jdr/game-rules', () => ({
       };
     },
   ),
+  resolveWeapon: jest.fn(
+    (
+      data: { weaponId?: string; customWeapon?: { name: string; categoryId: string } },
+      catalog: {
+        weaponItems: { key: string; label: string; categoryId: string }[];
+        weaponCategories: {
+          key: string;
+          label: string;
+          touchFormula: string;
+          damageFormula: string;
+        }[];
+      },
+    ) => {
+      if (data.weaponId) {
+        const item = catalog.weaponItems.find((w) => w.key === data.weaponId);
+        if (!item) return null;
+        const category = catalog.weaponCategories.find((c) => c.key === item.categoryId);
+        if (!category) return null;
+        return {
+          weaponLabel: item.label,
+          categoryId: category.key,
+          categoryLabel: category.label,
+          touchFormula: category.touchFormula,
+          damageFormula: category.damageFormula,
+        };
+      }
+      if (data.customWeapon) {
+        const category = catalog.weaponCategories.find(
+          (c) => c.key === data.customWeapon!.categoryId,
+        );
+        if (!category) return null;
+        return {
+          weaponLabel: data.customWeapon.name,
+          categoryId: category.key,
+          categoryLabel: category.label,
+          touchFormula: category.touchFormula,
+          damageFormula: category.damageFormula,
+        };
+      }
+      return null;
+    },
+  ),
 }));
 
 import { readFile } from 'node:fs/promises';
@@ -222,6 +264,32 @@ describe('RyuutamaPdfService', () => {
     await service.fillCharacterPdf(makeCharacter(), 'editable');
     await service.fillCharacterPdf(makeCharacter(), '2pages');
     expect(readFile).toHaveBeenCalledTimes(1);
+  });
+
+  it("résout une arme libre (customWeapon, Story 25.2) via resolveWeapon et transmet weaponLabel = nom libre / formules = catégorie référencée", async () => {
+    await service.fillCharacterPdf(
+      makeCharacter({
+        sheetData: {
+          classId: 'chasseur',
+          typeId: 'attaque',
+          weaponId: undefined,
+          customWeapon: { name: 'Fléau maison', categoryId: 'arc' },
+          attributes: { AGI: 4, ESP: 6, INT: 6, VIG: 8 },
+        },
+      }),
+      'editable',
+    );
+
+    expect(mapToPdfFields).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        weaponLabel: 'Fléau maison',
+        weaponTouchFormula: 'AGI+INT-2',
+        weaponDamageFormula: 'AGI',
+        weaponCategoryId: 'arc',
+      }),
+    );
   });
 
   it("résout ownerPseudo du CharacterDto et le transmet à mapToPdfFields (champ 'Joueur')", async () => {

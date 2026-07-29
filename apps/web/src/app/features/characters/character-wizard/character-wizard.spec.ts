@@ -364,6 +364,39 @@ describe('CharacterWizard', () => {
     expect(comp.canGoNext()).toBe(true);
   });
 
+  it("Story 25.2 : étape Arme favorite complète avec seulement customWeapon renseigné (arme libre)", async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    comp.currentStepKeyTracked.set(comp.steps()[3].key); // weaponId
+    fixture.detectChanges();
+    expect(comp.canGoNext()).toBe(false);
+
+    comp.onCustomWeaponChange({ name: 'Fléau maison', categoryId: 'arc' });
+    fixture.detectChanges();
+    expect(comp.canGoNext()).toBe(true);
+    expect(comp.sheetData().weaponId).toBeUndefined();
+  });
+
+  it('Story 25.2 : onWeaponIdChange efface customWeapon, onCustomWeaponChange efface weaponId (exclusivité mutuelle)', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+
+    comp.onCustomWeaponChange({ name: 'Fléau maison', categoryId: 'arc' });
+    fixture.detectChanges();
+    expect(comp.sheetData().customWeapon).toEqual({ name: 'Fléau maison', categoryId: 'arc' });
+
+    comp.onWeaponIdChange('arc-de-chasse');
+    fixture.detectChanges();
+    expect(comp.sheetData().weaponId).toBe('arc-de-chasse');
+    expect(comp.sheetData().customWeapon).toBeUndefined();
+
+    comp.onCustomWeaponChange({ name: 'Fléau maison', categoryId: 'arc' });
+    fixture.detectChanges();
+    expect(comp.sheetData().customWeapon).toEqual({ name: 'Fléau maison', categoryId: 'arc' });
+    expect(comp.sheetData().weaponId).toBeUndefined();
+  });
+
   it('changer de classe après Artisan efface la spécialité obsolète', async () => {
     const { fixture } = await createComponent();
     const comp = fixture.componentInstance as any;

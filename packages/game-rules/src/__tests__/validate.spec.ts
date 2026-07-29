@@ -42,6 +42,7 @@ function catalog(): RyuutamaCatalog {
       'trident',
     ],
     attributePatterns: [[4, 6, 6, 8]],
+    validWeaponCategories: ['arc', 'epee-courte', 'epee-longue', 'hache', 'lance', 'mains-nues'],
   };
 }
 
@@ -76,6 +77,113 @@ describe('validate (strict)', () => {
     expect(
       result.errors.some((e) => e.field === 'weaponId'),
     ).toBe(true);
+  });
+
+  describe('Règle 4 (Story 25.2) : arme libre (customWeapon), sibling exclusif de weaponId', () => {
+    it('customWeapon seul, name+categoryId valides → valid: true', () => {
+      const data: RyuutamaSheetData = {
+        ...validSheet(),
+        weaponId: undefined,
+        customWeapon: { name: 'Fléau maison', categoryId: 'lance' },
+      };
+      const result = validate(data, 'strict', catalog());
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    });
+
+    it('weaponId ET customWeapon tous les deux présents → valid: false, errors[].field = weaponId', () => {
+      const data: RyuutamaSheetData = {
+        ...validSheet(),
+        customWeapon: { name: 'Fléau maison', categoryId: 'lance' },
+      };
+      const result = validate(data, 'strict', catalog());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'weaponId')).toBe(true);
+    });
+
+    it('customWeapon.name vide/whitespace → valid: false', () => {
+      const data: RyuutamaSheetData = {
+        ...validSheet(),
+        weaponId: undefined,
+        customWeapon: { name: '   ', categoryId: 'lance' },
+      };
+      const result = validate(data, 'strict', catalog());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'weaponId')).toBe(true);
+    });
+
+    it('customWeapon.categoryId hors validWeaponCategories → valid: false', () => {
+      const data: RyuutamaSheetData = {
+        ...validSheet(),
+        weaponId: undefined,
+        customWeapon: { name: 'Fléau maison', categoryId: 'categorie-inexistante' },
+      };
+      const result = validate(data, 'strict', catalog());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'weaponId')).toBe(true);
+    });
+
+    it('revue de code (2026-07-29) : customWeapon.name non-string (client malveillant/buggé) → valid: false, ne plante pas', () => {
+      const data = {
+        ...validSheet(),
+        weaponId: undefined,
+        customWeapon: { name: 123, categoryId: 'lance' },
+      } as unknown as RyuutamaSheetData;
+      expect(() => validate(data, 'strict', catalog())).not.toThrow();
+      const result = validate(data, 'strict', catalog());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'weaponId')).toBe(true);
+    });
+
+    it('revue de code (2026-07-29) : customWeapon.categoryId non-string → valid: false, ne plante pas', () => {
+      const data = {
+        ...validSheet(),
+        weaponId: undefined,
+        customWeapon: { name: 'Fléau maison', categoryId: 42 },
+      } as unknown as RyuutamaSheetData;
+      expect(() => validate(data, 'strict', catalog())).not.toThrow();
+      const result = validate(data, 'strict', catalog());
+      expect(result.valid).toBe(false);
+    });
+
+    it('revue de code (2026-07-29) : customWeapon.name > 200 caractères → valid: false', () => {
+      const data: RyuutamaSheetData = {
+        ...validSheet(),
+        weaponId: undefined,
+        customWeapon: { name: 'x'.repeat(201), categoryId: 'lance' },
+      };
+      const result = validate(data, 'strict', catalog());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'weaponId')).toBe(true);
+    });
+
+    it('revue de code (2026-07-29) : customWeapon.name de 200 caractères pile → valid: true', () => {
+      const data: RyuutamaSheetData = {
+        ...validSheet(),
+        weaponId: undefined,
+        customWeapon: { name: 'x'.repeat(200), categoryId: 'lance' },
+      };
+      const result = validate(data, 'strict', catalog());
+      expect(result.valid).toBe(true);
+    });
+
+    it('revue de code (2026-07-29) : customWeapon.categoryId "mains-nues" → valid: false (jamais de choix libre pour cette catégorie)', () => {
+      const data: RyuutamaSheetData = {
+        ...validSheet(),
+        weaponId: undefined,
+        customWeapon: { name: 'Fléau maison', categoryId: 'mains-nues' },
+      };
+      const result = validate(data, 'strict', catalog());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'weaponId')).toBe(true);
+    });
+
+    it('ni weaponId ni customWeapon → valid: false (comportement existant conservé)', () => {
+      const data: RyuutamaSheetData = { ...validSheet(), weaponId: undefined };
+      const result = validate(data, 'strict', catalog());
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.field === 'weaponId')).toBe(true);
+    });
   });
 
   it('classId: "artisan" sans specialtyTypeId → valid: false, errors[0].field = specialtyTypeId', () => {

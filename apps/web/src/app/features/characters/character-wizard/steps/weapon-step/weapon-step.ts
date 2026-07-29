@@ -1,7 +1,8 @@
 import { Component, computed, effect, input, output, signal, untracked } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import type { ContentEntryDto } from '@master-jdr/shared';
 import {
-  resolveWeaponCategory,
+  resolveWeapon,
   type WeaponCategoryEntry,
   type WeaponItemEntry,
   type WeaponItemContentData,
@@ -14,14 +15,19 @@ import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.direct
 type WeaponCategoryData = WeaponCategoryContentData & { description: string };
 type WeaponItemData = WeaponItemContentData;
 
+type CustomWeapon = { name: string; categoryId: string };
+
 /** Catégorie sans arme précise à choisir : sélectionner la catégorie sélectionne directement
  * l'unique weaponItem qui lui est rattaché (aucune étape 2). */
 const NO_ITEM_CHOICE_CATEGORY = 'mains-nues';
 
+/** Clé de la carte « Créer une arme libre » (Story 25.2) — jamais une clé de catalogue réelle. */
+const CUSTOM_WEAPON_KEY = '__custom__';
+
 @Component({
   selector: 'app-weapon-step',
   standalone: true,
-  imports: [ChoiceCard, RadioGroupNavDirective],
+  imports: [ChoiceCard, RadioGroupNavDirective, FormsModule],
   templateUrl: './weapon-step.html',
   styleUrl: './weapon-step.scss',
 })
@@ -29,8 +35,15 @@ export class WeaponStep {
   readonly weaponItems = input.required<ContentEntryDto[]>();
   readonly weaponCategories = input.required<ContentEntryDto[]>();
   readonly weaponId = input<string | undefined>();
+  readonly customWeapon = input<CustomWeapon | undefined>();
 
   readonly weaponIdChange = output<string | null>();
+  readonly customWeaponChange = output<CustomWeapon | null>();
+
+  /** État UI de saisie de l'arme libre — le parent ne reçoit que `customWeaponChange`
+   *  déjà structuré `{ name, categoryId }`, jamais cet état intermédiaire. */
+  protected readonly showCustomInput = signal(false);
+  protected readonly customWeaponName = signal('');
 
   /** Catégorie choisie à l'étape 1 — `null` tant qu'aucune des catégories n'est sélectionnée. */
   protected readonly selectedCategoryKey = signal<string | null>(null);
@@ -57,14 +70,16 @@ export class WeaponStep {
     }),
   );
 
-  /** Armes précises de la catégorie sélectionnée — vide si aucune catégorie choisie ou si la
-   * catégorie n'a pas d'arme précise à choisir (Mains nues). */
+  /** Armes précises de la catégorie sélectionnée + carte « Créer une arme libre » en dernière
+   * position (Story 25.2) — vide si aucune catégorie choisie ou si la catégorie n'a pas d'arme
+   * précise à choisir (Mains nues, jamais d'arme libre non plus pour cette catégorie). */
   protected readonly itemOptions = computed<ChoiceCardOption[]>(() => {
     const categoryKey = this.selectedCategoryKey();
     if (!categoryKey || categoryKey === NO_ITEM_CHOICE_CATEGORY) return [];
-    return this.weaponItems()
+    const catalogItems = this.weaponItems()
       .filter((entry) => (entry.data as WeaponItemData).categoryId === categoryKey)
       .map((entry) => ({ key: entry.key, label: (entry.data as WeaponItemData).label }));
+    return [...catalogItems, { key: CUSTOM_WEAPON_KEY, label: 'Créer une arme libre' }];
   });
 
   protected readonly selectedCategoryData = computed<WeaponCategoryData | null>(() => {
@@ -72,31 +87,38 @@ export class WeaponStep {
     return entry ? (entry.data as WeaponCategoryData) : null;
   });
 
-  protected readonly resolvedWeapon = computed(() => {
-    const id = this.weaponId();
-    if (!id) return null;
-    return resolveWeaponCategory(id, {
-      weaponItems: this.weaponItemEntries(),
-      weaponCategories: this.weaponCategoryEntries(),
-    });
-  });
+  protected readonly resolvedWeapon = computed(() =>
+    resolveWeapon(
+      { weaponId: this.weaponId(), customWeapon: this.customWeapon() },
+      { weaponItems: this.weaponItemEntries(), weaponCategories: this.weaponCategoryEntries() },
+    ),
+  );
 
   private hasSyncedFromInput = false;
 
   constructor() {
-    // Resynchronise la catégorie sélectionnée depuis `weaponId()` (retour en arrière sur l'étape,
-    // composant recréé) : retrouve la catégorie de l'arme déjà choisie pour réafficher la bonne
-    // étape 2. Ne s'exécute qu'une fois par instance, comme AttributesStep (Story 24.1).
+    // Resynchronise la catégorie sélectionnée depuis `weaponId()`/`customWeapon()` (retour en
+    // arrière sur l'étape, composant recréé) : retrouve la catégorie de l'arme déjà choisie pour
+    // réafficher la bonne étape 2. Ne s'exécute qu'une fois par instance, comme AttributesStep
+    // (Story 24.1).
     effect(() => {
       const id = this.weaponId();
+      const custom = this.customWeapon();
       const items = this.weaponItemEntries();
       untracked(() => {
         if (this.hasSyncedFromInput) return;
         if (items.length === 0) return;
         this.hasSyncedFromInput = true;
-        if (!id) return;
-        const item = items.find((w) => w.key === id);
-        if (item) this.selectedCategoryKey.set(item.categoryId);
+        if (id) {
+          const item = items.find((w) => w.key === id);
+          if (item) this.selectedCategoryKey.set(item.categoryId);
+          return;
+        }
+        if (custom) {
+          this.selectedCategoryKey.set(custom.categoryId);
+          this.showCustomInput.set(true);
+          this.customWeaponName.set(custom.name);
+        }
       });
     });
   }
@@ -107,6 +129,9 @@ export class WeaponStep {
   protected selectCategory(categoryKey: string): void {
     if (this.selectedCategoryKey() === categoryKey) return;
     this.selectedCategoryKey.set(categoryKey);
+    this.showCustomInput.set(false);
+    this.customWeaponName.set('');
+    this.customWeaponChange.emit(null);
     if (categoryKey === NO_ITEM_CHOICE_CATEGORY) {
       const item = this.weaponItems().find(
         (entry) => (entry.data as WeaponItemData).categoryId === categoryKey,
@@ -117,7 +142,29 @@ export class WeaponStep {
     this.weaponIdChange.emit(null);
   }
 
+  /** `selected` d'une carte de la grille étape 2 — la carte custom l'est via `showCustomInput()`
+   *  (pas `weaponId()`, qui reste `undefined` tant que l'arme libre n'a pas de nom valide). */
+  protected isItemSelected(itemKey: string): boolean {
+    if (itemKey === CUSTOM_WEAPON_KEY) return this.showCustomInput();
+    return !this.showCustomInput() && this.weaponId() === itemKey;
+  }
+
   protected selectItem(itemKey: string): void {
+    if (itemKey === CUSTOM_WEAPON_KEY) {
+      this.showCustomInput.set(true);
+      this.weaponIdChange.emit(null);
+      return;
+    }
+    this.showCustomInput.set(false);
+    this.customWeaponName.set('');
+    this.customWeaponChange.emit(null);
     this.weaponIdChange.emit(itemKey);
+  }
+
+  protected onCustomNameInput(name: string): void {
+    this.customWeaponName.set(name);
+    const categoryId = this.selectedCategoryKey();
+    const trimmed = name.trim();
+    this.customWeaponChange.emit(trimmed && categoryId ? { name: trimmed, categoryId } : null);
   }
 }

@@ -75,9 +75,10 @@ describe('WeaponStep', () => {
       'Distance, mais difficiles à utiliser. Deux mains.',
     );
     const items = itemButtons(fixture);
-    expect(items.length).toBe(2);
+    expect(items.length).toBe(3);
     expect(items[0].textContent).toContain('Arc de chasse');
     expect(items[1].textContent).toContain('Arc court');
+    expect(items[2].textContent).toContain('Créer une arme libre');
   });
 
   it("étape 2 : choisir une arme précise émet weaponIdChange et affiche Toucher/Dégâts résolus par catégorie", async () => {
@@ -142,8 +143,9 @@ describe('WeaponStep', () => {
     await fixture.whenStable();
 
     const items = itemButtons(fixture);
-    expect(items.length).toBe(1);
+    expect(items.length).toBe(2);
     expect(items[0].textContent).toContain('Lance');
+    expect(items[1].textContent).toContain('Créer une arme libre');
   });
 
   it('aucune catégorie sélectionnée → aucune étape 2 ni détail affichés', async () => {
@@ -153,5 +155,106 @@ describe('WeaponStep', () => {
     expect(fixture.nativeElement.querySelectorAll('.weapon-step__grid').length).toBe(1);
     expect(fixture.nativeElement.querySelector('.weapon-step__detail')).toBeNull();
     expect(fixture.nativeElement.querySelector('.weapon-step__category-description')).toBeNull();
+  });
+
+  describe('arme libre (Story 25.2)', () => {
+    it('sélectionner "Créer une arme libre" affiche l\'input et efface weaponId', async () => {
+      TestBed.configureTestingModule({ imports: [WeaponStep] });
+      const fixture = TestBed.createComponent(WeaponStep);
+      fixture.componentRef.setInput('weaponItems', WEAPON_ITEMS);
+      fixture.componentRef.setInput('weaponCategories', WEAPON_CATEGORIES);
+      fixture.componentRef.setInput('weaponId', 'arc-de-chasse');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const emitted: (string | null)[] = [];
+      fixture.componentInstance.weaponIdChange.subscribe((k: string | null) => emitted.push(k));
+
+      itemButtons(fixture)[2].click(); // Créer une arme libre (catégorie déjà resynchronisée sur Arc)
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(emitted).toEqual([null]);
+      expect(fixture.nativeElement.querySelector('#customWeaponName')).not.toBeNull();
+    });
+
+    it('taper un nom émet customWeaponChange avec { name, categoryId } de la catégorie courante', async () => {
+      const fixture = setup();
+      await fixture.whenStable();
+
+      const emitted: ({ name: string; categoryId: string } | null)[] = [];
+      fixture.componentInstance.customWeaponChange.subscribe(
+        (c: { name: string; categoryId: string } | null) => emitted.push(c),
+      );
+
+      categoryButtons(fixture)[0].click(); // Arc
+      fixture.detectChanges();
+      itemButtons(fixture)[2].click(); // Créer une arme libre
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const input: HTMLInputElement = fixture.nativeElement.querySelector('#customWeaponName');
+      input.value = 'Fléau maison';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(emitted.at(-1)).toEqual({ name: 'Fléau maison', categoryId: 'arc' });
+    });
+
+    it('choisir ensuite une arme du catalogue efface le customWeapon (émission null)', async () => {
+      TestBed.configureTestingModule({ imports: [WeaponStep] });
+      const fixture = TestBed.createComponent(WeaponStep);
+      fixture.componentRef.setInput('weaponItems', WEAPON_ITEMS);
+      fixture.componentRef.setInput('weaponCategories', WEAPON_CATEGORIES);
+      fixture.componentRef.setInput('customWeapon', { name: 'Fléau maison', categoryId: 'arc' });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const emitted: ({ name: string; categoryId: string } | null)[] = [];
+      fixture.componentInstance.customWeaponChange.subscribe(
+        (c: { name: string; categoryId: string } | null) => emitted.push(c),
+      );
+
+      itemButtons(fixture)[0].click(); // Arc de chasse (arme du catalogue)
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(emitted).toEqual([null]);
+    });
+
+    it('changer de catégorie après avoir créé une arme libre réinitialise l’état custom', async () => {
+      const fixture = setup();
+      fixture.componentRef.setInput('customWeapon', { name: 'Fléau maison', categoryId: 'arc' });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const emitted: ({ name: string; categoryId: string } | null)[] = [];
+      fixture.componentInstance.customWeaponChange.subscribe(
+        (c: { name: string; categoryId: string } | null) => emitted.push(c),
+      );
+
+      categoryButtons(fixture)[1].click(); // Lance
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(emitted).toEqual([null]);
+      expect(fixture.nativeElement.querySelector('#customWeaponName')).toBeNull();
+    });
+
+    it('retour en arrière avec customWeapon déjà renseigné resynchronise (input pré-rempli, bonne catégorie)', async () => {
+      TestBed.configureTestingModule({ imports: [WeaponStep] });
+      const fixture = TestBed.createComponent(WeaponStep);
+      fixture.componentRef.setInput('weaponItems', WEAPON_ITEMS);
+      fixture.componentRef.setInput('weaponCategories', WEAPON_CATEGORIES);
+      fixture.componentRef.setInput('customWeapon', { name: 'Fléau maison', categoryId: 'lance' });
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const input: HTMLInputElement = fixture.nativeElement.querySelector('#customWeaponName');
+      expect(input.value).toBe('Fléau maison');
+      expect(fixture.nativeElement.textContent).toContain('Fléau maison');
+      expect(fixture.nativeElement.textContent).toContain('VIG+AGI'); // formules héritées de Lance
+    });
   });
 });

@@ -282,6 +282,46 @@ describe('CharacterService', () => {
     expect(prisma.character.create).not.toHaveBeenCalled();
   });
 
+  it('create() sheetData avec customWeapon (arme libre, Story 25.2) → prisma.character.create appelé (délègue l’exclusivité mutuelle à validate())', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+    (computeDerived as jest.Mock).mockReturnValue({});
+    const sheetData = {
+      ...validSheet(),
+      weaponId: undefined,
+      customWeapon: { name: 'Fléau maison', categoryId: 'arc' },
+    };
+    prisma.character.create.mockResolvedValue(makeCharacter({ sheetData }));
+
+    await service.create('p1', 'u1', { gameSystemId: 'ryuutama', sheetData });
+
+    expect(prisma.character.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ sheetData }) }),
+    );
+  });
+
+  it('create() sheetData avec weaponId ET customWeapon simultanés (Story 25.2, revue de code) → BadRequestException, prisma.character.create non appelé', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    (validate as jest.Mock).mockReturnValue({
+      valid: false,
+      errors: [
+        {
+          field: 'weaponId',
+          message: 'Une seule arme doit être renseignée : choisie dans le catalogue ou libre, jamais les deux',
+        },
+      ],
+    });
+    const sheetData = {
+      ...validSheet(),
+      customWeapon: { name: 'Fléau maison', categoryId: 'arc' },
+    };
+
+    await expect(
+      service.create('p1', 'u1', { gameSystemId: 'ryuutama', sheetData }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.character.create).not.toHaveBeenCalled();
+  });
+
   it('create() sheetData invalide → BadRequestException, prisma.character.create non appelé', async () => {
     parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
     (validate as jest.Mock).mockReturnValue({
@@ -422,6 +462,7 @@ describe('CharacterService', () => {
         validClasses: ['chasseur'],
         validTypes: ['attaque'],
         validWeaponItems: ['arc-de-chasse'],
+        validWeaponCategories: ['arc'],
         attributePatterns: [[4, 6, 6, 8]],
       }),
     );

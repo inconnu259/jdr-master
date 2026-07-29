@@ -17,4 +17,19 @@
     color: var(--mat-sys-on-surface-variant, #555);
     font-style: italic;
   }
+
+  &__custom-input {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+
+    input {
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--mat-sys-outline, #999);
+      background: var(--mat-sys-surface, #fff);
+      color: var(--mat-sys-on-surface, #1a1a1a);
+    }
+  }
 }

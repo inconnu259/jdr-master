@@ -252,6 +252,7 @@ export class CharacterService {
       validClasses: keysOf('class'),
       validTypes: keysOf('type'),
       validWeaponItems: keysOf('weaponItem'),
+      validWeaponCategories: keysOf('weaponCategory'),
       attributePatterns,
       requiredChoicesByClass,
       validSeasons: keysOf('season'),

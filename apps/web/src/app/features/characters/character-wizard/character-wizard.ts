@@ -266,7 +266,7 @@ export class CharacterWizard implements OnInit {
       case 'attributes':
         return !!data.attributes;
       case 'weaponId':
-        return !!data.weaponId;
+        return !!data.weaponId || !!(data.customWeapon?.name?.trim() && data.customWeapon?.categoryId);
       default:
         return true;
     }
@@ -380,7 +380,16 @@ export class CharacterWizard implements OnInit {
   }
 
   protected onWeaponIdChange(weaponId: string | null): void {
-    this.sheetData.update((d) => ({ ...d, weaponId: weaponId ?? undefined }));
+    this.sheetData.update((d) => ({ ...d, weaponId: weaponId ?? undefined, customWeapon: undefined }));
+  }
+
+  /** Arme libre (Story 25.2) — sibling exclusif de `weaponId` : la renseigner efface toujours
+   *  un `weaponId` précédemment choisi (défense en profondeur, `validate()` reste la source de
+   *  vérité côté serveur). */
+  protected onCustomWeaponChange(
+    customWeapon: { name: string; categoryId: string } | null,
+  ): void {
+    this.sheetData.update((d) => ({ ...d, customWeapon: customWeapon ?? undefined, weaponId: undefined }));
   }
 
   protected async onSubmit(): Promise<void> {

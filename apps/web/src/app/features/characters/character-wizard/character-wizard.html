@@ -86,7 +86,9 @@
               [weaponItems]="weaponItems()"
               [weaponCategories]="weaponCategories()"
               [weaponId]="sheetData().weaponId"
+              [customWeapon]="sheetData().customWeapon"
               (weaponIdChange)="onWeaponIdChange($event)"
+              (customWeaponChange)="onCustomWeaponChange($event)"
             />
           }
           @case ('fetiqueObject') {
