@@ -110,6 +110,11 @@ const CONTENT_TYPES: ContentTypeSeed[] = [
     label: 'Nécessaire de départ',
     file: 'equipment-packages.json',
   },
+  {
+    key: 'groupRole',
+    label: 'Rôle de groupe',
+    file: 'group-roles.json',
+  },
 ];
 
 @Injectable()
