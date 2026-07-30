@@ -206,6 +206,21 @@ export interface CreateAnnouncementDto {
   scenarioId?: string;
 }
 
+/** Rôle de groupe assigné à un personnage (Story 27.2) — `roleKey` référence le catalogue
+ *  `groupRole` (Story 27.1), jamais une FK stricte (même pattern que l'Homme Dragon). */
+export interface CharacterGroupRoleDto {
+  id: string;
+  characterId: string;
+  partieId: string;
+  roleKey: string;
+  assignedAt: string;
+}
+
+/** Payload d'assignation (POST /parties/:id/characters/:characterId/role). */
+export interface AssignGroupRoleDto {
+  roleKey: string;
+}
+
 // ─── Palier 2 : Calendrier de disponibilités ──────────────────────────────────
 
 /** Granularité d'un créneau de disponibilité. */

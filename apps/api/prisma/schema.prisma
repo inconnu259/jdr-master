@@ -57,16 +57,17 @@ model Partie {
   nextSessionSlot DaySlot? // Créneau confirmé
   reminderSentAt  DateTime? // null = rappel pas encore envoyé pour le créneau courant (Epic 5)
 
-  memberships       Membership[]
-  invitations       Invitation[]
-  inviteLinks       InviteLink[]
-  polls             SessionPoll[]
-  characters        Character[]
-  xpDistributions   XpDistribution[]
-  scenarios         Scenario[]
-  scenarioDocuments ScenarioDocument[]
-  announcements     Announcement[]
-  hommeDragons      HommeDragon[]
+  memberships         Membership[]
+  invitations         Invitation[]
+  inviteLinks         InviteLink[]
+  polls               SessionPoll[]
+  characters          Character[]
+  xpDistributions     XpDistribution[]
+  scenarios           Scenario[]
+  scenarioDocuments   ScenarioDocument[]
+  announcements       Announcement[]
+  hommeDragons        HommeDragon[]
+  characterGroupRoles CharacterGroupRole[]
 }
 
 enum InvitationStatus {
@@ -308,6 +309,7 @@ model Character {
   xpDistributionEntries XpDistributionEntry[]
   snapshots             CharacterSnapshot[]
   notes                 CharacterNote[]
+  groupRoles            CharacterGroupRole[]
 
   @@unique([userId, partieId, gameSystemId])
   @@index([partieId])
@@ -511,4 +513,22 @@ model Announcement {
   createdAt  DateTime  @default(now())
 
   @@index([partieId, createdAt])
+}
+
+/// Rôle de groupe assigné à un personnage (Epic 27, Story 27.2) — relationnel, jamais dans
+/// `Character.sheetData` (AD-5) : donnée stable, partagée à l'échelle de la Partie et interrogée
+/// (« ce rôle a-t-il déjà un titulaire ? »). `roleKey` référence une entrée `ContentEntry`
+/// (ContentType `groupRole`, Story 27.1) mais n'est jamais une FK stricte (même pattern que
+/// l'Homme Dragon, AD-4) — validé applicativement par `CharacterRolesService` à l'écriture.
+model CharacterGroupRole {
+  id          String    @id @default(uuid())
+  characterId String
+  character   Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  partieId    String
+  partie      Partie    @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  roleKey     String
+  assignedAt  DateTime  @default(now())
+
+  @@unique([partieId, roleKey])
+  @@unique([partieId, characterId])
 }
