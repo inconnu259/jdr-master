@@ -31,6 +31,11 @@
             >▲</span
           >
         }
+        @if (row.assignedRoleLabel && !row.hasPendingLevelUp) {
+          <span class="roster-strip__role-badge" [title]="row.assignedRoleLabel" aria-hidden="true">{{
+            row.assignedRoleLabel.charAt(0)
+          }}</span>
+        }
       </span>
       <span class="roster-strip__name">{{ row.displayName }}</span>
     </div>

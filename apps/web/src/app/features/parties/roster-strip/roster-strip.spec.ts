@@ -25,7 +25,7 @@ const CHARACTERS = [
 describe('RosterStrip', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  function setup(hasFreeSlot = true) {
+  function setup(hasFreeSlot = true, roleLabelFor: (c: unknown) => string | null = () => null) {
     TestBed.configureTestingModule({ imports: [RosterStrip] });
     const fixture = TestBed.createComponent(RosterStrip);
     fixture.componentRef.setInput('members', MEMBERS);
@@ -33,6 +33,7 @@ describe('RosterStrip', () => {
     fixture.componentRef.setInput('mjId', 'mj1');
     fixture.componentRef.setInput('hasFreeSlot', hasFreeSlot);
     fixture.componentRef.setInput('classLabelFor', () => 'Ménestrel');
+    fixture.componentRef.setInput('roleLabelFor', roleLabelFor);
     fixture.detectChanges();
     return fixture;
   }
@@ -120,6 +121,37 @@ describe('RosterStrip', () => {
 
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
     expect(playerItem.querySelector('.roster-strip__levelup-badge')).not.toBeNull();
+  });
+
+  it('personnage avec un rôle assigné et sans montée de niveau en attente → badge de rôle visible (Story 27.3)', () => {
+    const fixture = setup(true, () => 'Cartographe');
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    const badge = playerItem.querySelector('.roster-strip__role-badge');
+    expect(badge).not.toBeNull();
+    expect(badge?.getAttribute('title')).toBe('Cartographe');
+  });
+
+  it('personnage avec un rôle assigné ET une montée de niveau en attente → badge de rôle absent (Story 27.3, AC2)', () => {
+    const fixture = setup(true, () => 'Cartographe');
+    fixture.componentRef.setInput('characters', [
+      makeCharacterDto({
+        id: 'c1',
+        userId: 'u1',
+        xp: 150,
+        sheetData: { narrative: { name: 'Fenn' } },
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(playerItem.querySelector('.roster-strip__levelup-badge')).not.toBeNull();
+    expect(playerItem.querySelector('.roster-strip__role-badge')).toBeNull();
+  });
+
+  it('personnage sans rôle assigné → aucun badge de rôle (Story 27.3)', () => {
+    const fixture = setup();
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(playerItem.querySelector('.roster-strip__role-badge')).toBeNull();
   });
 
   it('la zone de tap de chaque pastille atteint au moins 44px malgré un avatar visuel de 26px', () => {

@@ -25,7 +25,11 @@ const CHARACTERS = [
 describe('RosterRail', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  function setup(hasFreeSlot = true, currentUserId = 'mj1') {
+  function setup(
+    hasFreeSlot = true,
+    currentUserId = 'mj1',
+    roleLabelFor: (c: unknown) => string | null = () => null,
+  ) {
     TestBed.configureTestingModule({ imports: [RosterRail] });
     const fixture = TestBed.createComponent(RosterRail);
     fixture.componentRef.setInput('members', MEMBERS);
@@ -34,6 +38,7 @@ describe('RosterRail', () => {
     fixture.componentRef.setInput('currentUserId', currentUserId);
     fixture.componentRef.setInput('hasFreeSlot', hasFreeSlot);
     fixture.componentRef.setInput('classLabelFor', () => 'Ménestrel');
+    fixture.componentRef.setInput('roleLabelFor', roleLabelFor);
     fixture.detectChanges();
     return fixture;
   }
@@ -161,6 +166,43 @@ describe('RosterRail', () => {
     const fixture = setup();
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
     expect(playerItem.querySelector('.roster-rail__levelup-badge')).toBeNull();
+  });
+
+  it('personnage avec un rôle assigné et sans montée de niveau en attente → badge de rôle visible, title = libellé exact (Story 27.3)', () => {
+    const fixture = setup(true, 'mj1', () => 'Cartographe');
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    const badge = playerItem.querySelector('.roster-rail__role-badge');
+    expect(badge).not.toBeNull();
+    expect(badge?.getAttribute('title')).toBe('Cartographe');
+  });
+
+  it('personnage avec un rôle assigné ET une montée de niveau en attente → badge de rôle absent, seul le badge de montée de niveau visible (Story 27.3, AC2)', () => {
+    const fixture = setup(true, 'mj1', () => 'Cartographe');
+    fixture.componentRef.setInput('characters', [
+      makeCharacterDto({
+        id: 'c1',
+        userId: 'u1',
+        xp: 150,
+        sheetData: { narrative: { name: 'Fenn' } },
+      }),
+    ]);
+    fixture.detectChanges();
+
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(playerItem.querySelector('.roster-rail__levelup-badge')).not.toBeNull();
+    expect(playerItem.querySelector('.roster-rail__role-badge')).toBeNull();
+  });
+
+  it('personnage sans rôle assigné → aucun badge de rôle (Story 27.3)', () => {
+    const fixture = setup();
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(playerItem.querySelector('.roster-rail__role-badge')).toBeNull();
+  });
+
+  it("aria-label inclut le rôle assigné quand présent et pas de montée de niveau en attente (Story 27.3)", () => {
+    const fixture = setup(true, 'mj1', () => 'Cartographe');
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(playerItem.getAttribute('aria-label')).toBe('Alice — Fenn (Ménestrel) — rôle : Cartographe');
   });
 
   it('joueur sans personnage sur sa propre ligne → clic émet createCharacter (pas selectCharacter)', () => {

@@ -26,6 +26,7 @@ import { map } from 'rxjs/operators';
 import type {
   AnnouncementDto,
   CharacterDto,
+  CharacterGroupRoleDto,
   DaySlot,
   GameSystemContentDto,
   InviteLinkDto,
@@ -64,6 +65,7 @@ import { ScenarioTimeline } from '../../scenarios/scenario-timeline/scenario-tim
 import { AnnouncementFormComponent } from '../../announcements/announcement-form/announcement-form';
 import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
 import { HommeDragonSheet } from '../../homme-dragon/homme-dragon-sheet/homme-dragon-sheet';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
@@ -106,6 +108,7 @@ export class PartieDetail implements OnInit {
   private readonly modeSvc = inject(ModeService);
   private readonly scenariosSvc = inject(ScenariosService);
   private readonly announcementsSvc = inject(AnnouncementsService);
+  private readonly characterRolesSvc = inject(CharacterRolesService);
   private readonly characterSvc = inject(CharacterService);
   private readonly dialog = inject(MatDialog);
   private readonly breakpointObserver = inject(BreakpointObserver);
@@ -134,6 +137,10 @@ export class PartieDetail implements OnInit {
   // consommateur (AD-6 — même principe que activePolls/ScenariosService.listAll()).
   protected readonly announcements = signal<AnnouncementDto[]>([]);
   private announcementsReqId = 0;
+  private characterRolesReqId = 0;
+  // Story 27.3 : liste des rôles de groupe assignés sur cette Partie, chargée une fois puis
+  // rafraîchie sur le signal temps réel (même principe que announcements/characters).
+  protected readonly characterRoles = signal<CharacterGroupRoleDto[]>([]);
   protected readonly campaignAnnouncements = computed(() =>
     this.announcements().filter((a) => a.scenarioId === null),
   );
@@ -227,6 +234,21 @@ export class PartieDetail implements OnInit {
   protected readonly classLabelFor = (character: CharacterDto): string =>
     this.classLabel(character);
 
+  /** Libellé du rôle de groupe assigné à ce personnage, ou null (Story 27.3) — réutilise
+   *  `findContentEntry`/`gameSystemContent` déjà en place pour `classLabelFor`, aucun nouveau fetch. */
+  protected readonly roleLabelFor = (character: CharacterDto): string | null => {
+    const role = this.characterRoles().find((r) => r.characterId === character.id);
+    if (!role) return null;
+    // Revue de code : .trim() — un libellé de catalogue mal saisi avec un espace de tête/fin ne
+    // doit jamais produire un badge visuellement vide (charAt(0) = espace) tout en restant "truthy".
+    const label = findContentEntry<{ label?: string }>(
+      this.gameSystemContent(),
+      'groupRole',
+      role.roleKey,
+    )?.label?.trim();
+    return label || null;
+  };
+
   constructor() {
     effect(() => {
       if (this.isMj()) void this.loadLinks();
@@ -317,6 +339,19 @@ export class PartieDetail implements OnInit {
       }
       untracked(() => void this.reloadAnnouncements());
     });
+
+    // Story 27.3 : un rôle de groupe assigné/retiré par le MJ n'apparaissait jamais dans le
+    // roster des autres membres déjà sur la page sans recharger — même garde firstRun que les
+    // autres effects temps réel de ce composant.
+    let firstRunCharacterRoles = true;
+    effect(() => {
+      this.characterRolesSvc.changed();
+      if (firstRunCharacterRoles) {
+        firstRunCharacterRoles = false;
+        return;
+      }
+      untracked(() => void this.reloadCharacterRoles());
+    });
   }
 
   /** Recharge `characters` seul (roster) — réutilisé par l'effet temps réel et par
@@ -394,6 +429,7 @@ export class PartieDetail implements OnInit {
     await this.loadActivePolls(id);
     this.announcements.set(await this.announcementsSvc.listAll(id).catch(() => []));
     this.characters.set(await this.characterSvc.listByPartie(id).catch(() => []));
+    this.characterRoles.set(await this.characterRolesSvc.listForPartie(id).catch(() => []));
     this.gameSystemContent.set(
       await this.characterSvc.getGameSystemContent(this.partie()!.gameSystemId).catch(() => null),
     );
@@ -541,6 +577,18 @@ export class PartieDetail implements OnInit {
     const reqId = ++this.announcementsReqId;
     const list = await this.announcementsSvc.listAll(p.id).catch(() => this.announcements());
     if (reqId === this.announcementsReqId) this.announcements.set(list);
+  }
+
+  /** Story 27.3 : recharge `characterRoles` seul — un échec réseau transitoire ne doit jamais
+   *  vider les badges déjà affichés (même discipline que `reloadCharacters()`). Revue de code :
+   *  garde d'ordre de requêtes (même pattern que `reloadAnnouncements()`) — deux événements
+   *  `changed()` rapprochés ne doivent jamais laisser une réponse périmée écraser un état plus frais. */
+  private async reloadCharacterRoles(): Promise<void> {
+    const p = this.partie();
+    if (!p) return;
+    const reqId = ++this.characterRolesReqId;
+    const list = await this.characterRolesSvc.listForPartie(p.id).catch(() => this.characterRoles());
+    if (reqId === this.characterRolesReqId) this.characterRoles.set(list);
   }
 
   /**

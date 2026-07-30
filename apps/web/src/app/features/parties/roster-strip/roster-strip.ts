@@ -23,6 +23,7 @@ export class RosterStrip {
   readonly mjId = input.required<string>();
   readonly hasFreeSlot = input.required<boolean>();
   readonly classLabelFor = input.required<(c: CharacterDto) => string>();
+  readonly roleLabelFor = input.required<(c: CharacterDto) => string | null>();
 
   readonly selectCharacter = output<{ characterId: string }>();
   readonly openInvitations = output<void>();
@@ -33,6 +34,7 @@ export class RosterStrip {
       this.characters(),
       this.mjId(),
       this.classLabelFor(),
+      this.roleLabelFor(),
       this.mjId(),
     ),
   );

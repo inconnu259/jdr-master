@@ -12,6 +12,7 @@
         [mjId]="p.mjId"
         [hasFreeSlot]="hasFreeSlot"
         [classLabelFor]="classLabelFor"
+        [roleLabelFor]="roleLabelFor"
         (selectCharacter)="onSelectRosterCharacter($event)"
         (openInvitations)="openInvitationsTab()"
       />
@@ -26,6 +27,7 @@
           [currentUserId]="auth.currentUser()?.id ?? ''"
           [hasFreeSlot]="isMj() && hasFreeSlot"
           [classLabelFor]="classLabelFor"
+          [roleLabelFor]="roleLabelFor"
           (selectCharacter)="onSelectRosterCharacter($event)"
           (createCharacter)="createCharacter(p)"
           (openInvitations)="openInvitationsTab()"

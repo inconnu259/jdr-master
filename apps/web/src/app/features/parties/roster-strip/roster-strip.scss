@@ -67,6 +67,24 @@
   border: 1px solid var(--mat-sys-surface, #fff);
 }
 
+// Story 27.3 : même emplacement que __levelup-badge (mutuellement exclusifs à l'affichage).
+.roster-strip__role-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--mat-sys-secondary, #625b71);
+  color: #fff;
+  font-size: 0.5rem;
+  line-height: 1;
+  border: 1px solid var(--mat-sys-surface, #fff);
+}
+
 .roster-strip__name {
   font-size: 0.75rem;
   font-weight: 600;

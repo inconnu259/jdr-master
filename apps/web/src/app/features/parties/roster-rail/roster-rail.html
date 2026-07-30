@@ -45,6 +45,11 @@
             >▲</span
           >
         }
+        @if (row.assignedRoleLabel && !row.hasPendingLevelUp) {
+          <span class="roster-rail__role-badge" [title]="row.assignedRoleLabel" aria-hidden="true">{{
+            row.assignedRoleLabel.charAt(0)
+          }}</span>
+        }
       </span>
       @if (expanded()) {
         <span class="roster-rail__label">

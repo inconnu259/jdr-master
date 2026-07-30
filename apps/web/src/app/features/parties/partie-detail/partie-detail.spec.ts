@@ -11,6 +11,7 @@ import { vi } from 'vitest';
 import type {
   AnnouncementDto,
   CharacterDto,
+  CharacterGroupRoleDto,
   InviteLinkDto,
   PartieDto,
   PartieMemberDto,
@@ -27,6 +28,7 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
+import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
 import { MatDialog } from '@angular/material/dialog';
 import { TONE_MAP } from '../../../core/theme/tones';
 
@@ -176,6 +178,7 @@ interface CreateFixtureOptions {
   characters?: CharacterDto[];
   links?: InviteLinkDto[];
   announcements?: AnnouncementDto[];
+  characterRoles?: CharacterGroupRoleDto[];
   noopAnimations?: boolean;
   desktop?: boolean;
 }
@@ -239,16 +242,25 @@ async function createFixture(
           changed: signal(0),
         },
       },
+      {
+        provide: CharacterRolesService,
+        useValue: {
+          listForPartie: vi.fn().mockResolvedValue(options.characterRoles ?? []),
+          // Story 27.3 : PartieDetail réagit désormais à ce signal (badges de rôle).
+          changed: signal(0),
+        },
+      },
       { provide: MatDialog, useValue: { open: vi.fn() } },
     ],
   }).compileComponents();
 
   const fixture = TestBed.createComponent(PartieDetail);
   fixture.detectChanges();
-  // ngOnInit enchaîne plusieurs await (partie, membres, poll actif) — whenStable() ne garantit pas
-  // toujours le drainage complet de chaînes de promesses simples (mocks) en environnement zoneless.
-  // On vide explicitement la file de microtasks à plusieurs reprises pour laisser chaque await se résoudre.
-  for (let i = 0; i < 10; i++) {
+  // ngOnInit enchaîne plusieurs await (partie, membres, poll actif, characterRoles depuis la Story
+  // 27.3...) — whenStable() ne garantit pas toujours le drainage complet de chaînes de promesses
+  // simples (mocks) en environnement zoneless. On vide explicitement la file de microtasks à
+  // plusieurs reprises pour laisser chaque await se résoudre.
+  for (let i = 0; i < 15; i++) {
     await Promise.resolve();
     fixture.detectChanges();
   }
@@ -527,6 +539,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
         { provide: ThemeToneService, useValue: makeToneService() },
         { provide: ScenariosService, useValue: makeScenariosService() },
         { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) } },
+        { provide: CharacterRolesService, useValue: { listForPartie: vi.fn().mockResolvedValue([]), changed: signal(0) } },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();
@@ -1203,6 +1216,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
             changed: signal(0),
           },
         },
+        { provide: CharacterRolesService, useValue: { listForPartie: vi.fn().mockResolvedValue([]), changed: signal(0) } },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();
@@ -1312,6 +1326,45 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
     expect(comp.characters()).toEqual([existing]);
   });
 
+  it('charge les rôles de groupe assignés via CharacterRolesService.listForPartie (Story 27.3, AC1)', async () => {
+    const partie = makePartie({ mjId: MJ_ID });
+    await createFixture(partie, MJ_ID);
+
+    const characterRolesSvc = TestBed.inject(CharacterRolesService) as unknown as {
+      listForPartie: ReturnType<typeof vi.fn>;
+    };
+    expect(characterRolesSvc.listForPartie).toHaveBeenCalledWith('party-1');
+  });
+
+  it('un CharacterRolesService.changed() (rôle assigné/retiré par le MJ) recharge characterRoles (Story 27.3, AC3)', async () => {
+    const initial = makePartie({ mjId: MJ_ID });
+    const { fixture } = await createFixture(initial, MJ_ID);
+    const characterRolesSvc = TestBed.inject(CharacterRolesService) as unknown as {
+      listForPartie: ReturnType<typeof vi.fn>;
+      changed: WritableSignal<number>;
+    };
+    const role: CharacterGroupRoleDto = {
+      id: 'role1',
+      characterId: 'c1',
+      partieId: 'party-1',
+      roleKey: 'cartographe',
+      assignedAt: '2026-01-01T00:00:00.000Z',
+    };
+    characterRolesSvc.listForPartie.mockResolvedValue([role]);
+    const callsBefore = characterRolesSvc.listForPartie.mock.calls.length;
+
+    characterRolesSvc.changed.set(1);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(characterRolesSvc.listForPartie.mock.calls.length).toBe(callsBefore + 1);
+    const comp = fixture.componentInstance as unknown as { characterRoles: () => unknown[] };
+    expect(comp.characterRoles()).toEqual([role]);
+  });
+
   it("garde firstRun : un CharacterService.changed() déjà non-nul au montage ne déclenche PAS de refetch redondant", async () => {
     const initial = makePartie({ mjId: MJ_ID });
     await TestBed.configureTestingModule({
@@ -1336,6 +1389,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         { provide: ThemeToneService, useValue: makeToneService() },
         { provide: ScenariosService, useValue: makeScenariosService() },
         { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) } },
+        { provide: CharacterRolesService, useValue: { listForPartie: vi.fn().mockResolvedValue([]), changed: signal(0) } },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();

@@ -107,6 +107,25 @@
   border: 1px solid var(--mat-sys-surface, #fff);
 }
 
+// Story 27.3 : même emplacement que __levelup-badge (mutuellement exclusifs à l'affichage,
+// jamais visibles simultanément — cf. buildRosterRows()/templates).
+.roster-rail__role-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--mat-sys-secondary, #625b71);
+  color: #fff;
+  font-size: 0.55rem;
+  line-height: 1;
+  border: 1px solid var(--mat-sys-surface, #fff);
+}
+
 .roster-rail__label {
   display: flex;
   flex-direction: column;

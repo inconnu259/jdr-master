@@ -10,6 +10,7 @@ import { InvitationsService } from '../invitations/invitations.service';
 import { OpenPollsService } from '../poll/open-polls.service';
 import { ModeService } from '../mode/mode.service';
 import { AvailabilityService } from '../availability/availability.service';
+import { CharacterRolesService } from '../character-roles/character-roles.service';
 import { RealtimeService, matchingHandlers, partieTopic, userTopic } from './realtime.service';
 
 class FakeEventSource {
@@ -71,6 +72,7 @@ describe('RealtimeService', () => {
   let openPollsSvc: { notifyChanged: ReturnType<typeof vi.fn> };
   let modeSvc: { notifyChanged: ReturnType<typeof vi.fn> };
   let availabilitySvc: { notifyChanged: ReturnType<typeof vi.fn> };
+  let characterRolesSvc: { notifyChanged: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     originalEventSource = (globalThis as any).EventSource;
@@ -97,6 +99,8 @@ describe('RealtimeService', () => {
     modeSvc = { notifyChanged: vi.fn() };
     // Bug fix (calendrier MJ jamais notifié) : AvailabilityService ajoutée au préfixe 'partie:'.
     availabilitySvc = { notifyChanged: vi.fn() };
+    // Story 27.3 : CharacterRolesService ajoutée au préfixe 'partie:'.
+    characterRolesSvc = { notifyChanged: vi.fn() };
     // RealtimeService injecte désormais PartiesService (Story 18.3, Task 4) — PartiesService
     // injecte lui-même HttpClient, jamais fourni par ce module de test isolé. Mock direct : ce
     // test ne porte pas sur les appels HTTP de PartiesService.
@@ -110,6 +114,7 @@ describe('RealtimeService', () => {
         { provide: OpenPollsService, useValue: openPollsSvc },
         { provide: ModeService, useValue: modeSvc },
         { provide: AvailabilityService, useValue: availabilitySvc },
+        { provide: CharacterRolesService, useValue: characterRolesSvc },
       ],
     });
     service = TestBed.inject(RealtimeService);
@@ -231,6 +236,14 @@ describe('RealtimeService', () => {
 
     expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
     expect(invitationsSvc.notifyChanged).not.toHaveBeenCalled();
+  });
+
+  it("'open' déclenche AUSSI notifyChanged() sur CharacterRolesService — préfixe 'partie:' (Story 27.3, AC3)", () => {
+    service.connect(partieTopic('p1'));
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(characterRolesSvc.notifyChanged).toHaveBeenCalledTimes(1);
   });
 
   it('disconnect() ferme la connexion EventSource sous-jacente (AC5)', () => {

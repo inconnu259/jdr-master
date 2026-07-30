@@ -25,6 +25,7 @@ export class RosterRail {
   readonly currentUserId = input.required<string>();
   readonly hasFreeSlot = input.required<boolean>();
   readonly classLabelFor = input.required<(c: CharacterDto) => string>();
+  readonly roleLabelFor = input.required<(c: CharacterDto) => string | null>();
 
   readonly selectCharacter = output<{ characterId: string }>();
   readonly createCharacter = output<void>();
@@ -38,6 +39,7 @@ export class RosterRail {
       this.characters(),
       this.mjId(),
       this.classLabelFor(),
+      this.roleLabelFor(),
       this.currentUserId(),
     ),
   );
