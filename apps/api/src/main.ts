@@ -49,8 +49,19 @@ async function bootstrap() {
   );
 
   // Le front (autre origine en dev) doit pouvoir envoyer le cookie → credentials: true.
+  // `WEB_ORIGIN` accepte une LISTE d'origines séparées par des virgules : en dev il faut autoriser
+  // simultanément `localhost:4200` (navigateur du poste) et l'IP LAN du poste (`192.168.x.x:4200`,
+  // utilisée depuis un vrai téléphone pour valider le rendu mobile du Palier 9).
+  //
+  // ⚠️ CHANGEMENT DE DEV À REVOIR AVANT LA MISE EN PRODUCTION (Palier 10) : en prod `WEB_ORIGIN`
+  // ne doit contenir QUE l'origine publique réelle — surtout aucune IP de réseau local.
+  // Voir docs/backlog.md § Palier 10.
+  const webOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:4200')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
   app.enableCors({
-    origin: process.env.WEB_ORIGIN ?? 'http://localhost:4200',
+    origin: webOrigins,
     credentials: true,
   });
 

@@ -3,11 +3,12 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import type { InvitationDto } from '@master-jdr/shared';
 import { InvitationsService } from './invitations.service';
+import { API_BASE } from '../api-base';
 
-// Ce service utilise `const API = 'http://localhost:3000';` en dur (pas `API_BASE` importé de
-// `../api-base`, incohérence pré-existante non corrigée par la Story 21.1) — reproduire cette
-// même chaîne littérale ici plutôt que d'importer `API_BASE`.
-const API = 'http://localhost:3000';
+// L'incohérence est corrigée : le service utilise désormais `API_BASE` (cf. `../api-base`), comme
+// tous les autres services. On importe donc la même source ici plutôt que de figer une URL, afin que
+// ce test reste valide quel que soit l'hôte depuis lequel l'app est servie.
+const API = API_BASE;
 
 const INVITATION: InvitationDto = {
   id: 'inv1',

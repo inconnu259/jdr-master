@@ -2,9 +2,13 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type { AuthUser } from '@master-jdr/shared';
+import { API_BASE } from '../api-base';
 
-// TODO (palier déploiement) : passer l'URL de l'API par la config d'environnement.
-const API = 'http://localhost:3000';
+// Source unique de l'URL d'API (`core/api-base.ts`) — l'URL était auparavant redéfinie en dur ici,
+// ce qui cassait tout accès depuis un autre appareil que le poste de dev (la requête partait vers le
+// `localhost` du téléphone). Le TODO « passer l'URL par la config d'environnement » reste ouvert et
+// est suivi dans docs/backlog.md § Palier 10.
+const API = API_BASE;
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {

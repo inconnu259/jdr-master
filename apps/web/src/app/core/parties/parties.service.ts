@@ -12,7 +12,9 @@ import type {
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
-const API = 'http://localhost:3000';
+// `API_BASE` (importé ci-dessus) était masqué par une redéfinition en dur — corrigé pour que l'app
+// reste fonctionnelle depuis un autre appareil que le poste de dev (cf. core/api-base.ts).
+const API = API_BASE;
 
 export interface PartiePayload {
   name: string;
