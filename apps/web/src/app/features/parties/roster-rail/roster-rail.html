@@ -25,7 +25,7 @@
     >
       <span class="roster-rail__avatar-wrap" [class.roster-rail__avatar-wrap--mj]="row.isMj">
         <app-character-avatar
-          [name]="row.displayName"
+          [name]="row.avatarLabel"
           [size]="38"
           [characterId]="row.character?.id ?? ''"
           [portraitUrl]="row.character?.portraitUrl ?? null"
@@ -54,7 +54,11 @@
       @if (expanded()) {
         <span class="roster-rail__label">
           <span class="roster-rail__name">
-            {{ !row.character && row.isSelf ? theme.tone()['character.create_cta'] : row.displayName }}
+            @if (!row.character && row.isSelf && !row.isMj) {
+              {{ theme.tone()['character.create_cta'] }}
+            } @else {
+              <app-identity-label [characterName]="row.characterLabel" [playerName]="row.playerLabel" />
+            }
           </span>
           @if (row.classLabel) {
             <span class="roster-rail__class">{{ row.classLabel }}</span>

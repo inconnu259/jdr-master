@@ -1,0 +1,34 @@
+.identity-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+}
+
+.identity-label--joint {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.identity-label__character {
+  font-style: italic;
+  color: var(--jdr-accent-1, var(--mat-sys-primary, inherit));
+}
+
+.identity-label__player {
+  font-style: normal;
+  font-size: 0.85em;
+  color: var(--jdr-text-muted, var(--mat-sys-on-surface-variant, #888));
+}
+
+.identity-label--single {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.identity-label__icon {
+  width: 1em;
+  height: 1em;
+  flex: none;
+}

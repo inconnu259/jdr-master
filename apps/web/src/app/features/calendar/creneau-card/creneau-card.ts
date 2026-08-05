@@ -1,6 +1,7 @@
 import { Component, computed, inject, input } from '@angular/core';
 import type { AvailableSlotDto, DaySlot, SlotStatus } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { IdentityLabel } from '../../../shared/identity/identity-label';
 
 const SLOT_LABELS: Record<string, string> = {
   MORNING: 'Matin',
@@ -17,6 +18,7 @@ const STATUS_ICONS: Record<SlotStatus, string> = {
 @Component({
   selector: 'app-creneau-card',
   standalone: true,
+  imports: [IdentityLabel],
   templateUrl: './creneau-card.html',
   styleUrl: './creneau-card.scss',
 })
@@ -50,7 +52,7 @@ export class CreneauCard {
     }).format(d);
   }
 
-  protected missingAlert(pseudo: string): string {
-    return this.theme.tone()['alert.missing_player'].replace('{name}', pseudo);
+  protected missingAlert(displayName: string): string {
+    return this.theme.tone()['alert.missing_player'].replace('{name}', displayName);
   }
 }

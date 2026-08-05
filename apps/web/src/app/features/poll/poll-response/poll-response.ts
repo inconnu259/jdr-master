@@ -129,7 +129,12 @@ export class PollResponseComponent {
           const answer = this.pendingAnswers().get(opt.id);
           if (!answer) return opt;
           const votes = opt.votes.filter((v) => v.userId !== currentUser.id);
-          votes.push({ userId: currentUser.id, pseudo: currentUser.pseudo, answer });
+          votes.push({
+            userId: currentUser.id,
+            pseudo: currentUser.pseudo,
+            displayName: currentUser.displayName,
+            answer,
+          });
           return { ...opt, votes };
         }),
       };

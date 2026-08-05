@@ -324,8 +324,8 @@ describe('PartieDetail — statut du vote', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   const members: PartieMemberDto[] = [
-    { userId: 'u1', pseudo: 'Alice', email: 'alice@test.com', joinedAt: '' },
-    { userId: 'u2', pseudo: 'Bob', email: 'bob@test.com', joinedAt: '' },
+    { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@test.com', joinedAt: '' },
+    { userId: 'u2', pseudo: 'Bob', displayName: 'Bobby', email: 'bob@test.com', joinedAt: '' },
   ];
 
   function makePoll(votesOnOpt: string[]): SessionPollDto {
@@ -342,7 +342,12 @@ describe('PartieDetail — statut du vote', () => {
           id: 'opt1',
           date: '2026-08-01T00:00:00.000Z',
           slot: 'MORNING',
-          votes: votesOnOpt.map((userId) => ({ userId, pseudo: userId, answer: 'YES' as const })),
+          votes: votesOnOpt.map((userId) => ({
+            userId,
+            pseudo: userId,
+            displayName: userId,
+            answer: 'YES' as const,
+          })),
         },
       ],
     };
@@ -459,8 +464,8 @@ describe('PartieDetail — roster (Story 6.1)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   const members: PartieMemberDto[] = [
-    { userId: MJ_ID, pseudo: 'Sylas', email: 'sylas@test.com', joinedAt: '' },
-    { userId: PLAYER_ID, pseudo: 'Alice', email: 'alice@test.com', joinedAt: '' },
+    { userId: MJ_ID, pseudo: 'Sylas', displayName: 'Sylas', email: 'sylas@test.com', joinedAt: '' },
+    { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@test.com', joinedAt: '' },
   ];
 
   it('desktop → affiche app-roster-rail, pas app-roster-strip', async () => {
@@ -628,8 +633,8 @@ describe('PartieDetail — invitations', () => {
 
   it('le MJ peut retirer un membre depuis la liste "Membres actuels" de l\'onglet Invitations', async () => {
     const members: PartieMemberDto[] = [
-      { userId: MJ_ID, pseudo: 'Sylas', email: 'sylas@test.com', joinedAt: '' },
-      { userId: PLAYER_ID, pseudo: 'Alice', email: 'alice@test.com', joinedAt: '' },
+      { userId: MJ_ID, pseudo: 'Sylas', displayName: 'Sylas', email: 'sylas@test.com', joinedAt: '' },
+      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@test.com', joinedAt: '' },
     ];
     const { fixture, el } = await createFixture(makePartie(), MJ_ID, {
       members,

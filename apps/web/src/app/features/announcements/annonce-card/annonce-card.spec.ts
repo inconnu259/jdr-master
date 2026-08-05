@@ -9,6 +9,8 @@ function makeAnnouncement(overrides: Partial<AnnouncementDto> = {}): Announcemen
     scenarioId: null,
     text: 'Une annonce importante',
     createdAt: '2026-07-15T00:00:00.000Z',
+    authorPseudo: 'le-mj',
+    authorDisplayName: 'Le Grand MJ',
     ...overrides,
   };
 }
@@ -30,6 +32,16 @@ describe('AnnonceCard', () => {
     );
 
     expect(fixture.nativeElement.textContent).toContain('Une annonce importante');
+  });
+
+  it("affiche le nom affiché de l'auteur (le MJ) via IdentityLabel", async () => {
+    const fixture = await createComponent(
+      makeAnnouncement({ authorDisplayName: 'Le Grand MJ' }),
+      'Toute la campagne',
+    );
+
+    expect(fixture.nativeElement.textContent).toContain('Le Grand MJ');
+    expect(fixture.nativeElement.querySelector('svg')).not.toBeNull();
   });
 
   it('AC4/AC5 : le libellé de portée est un texte visible dans le DOM, pas seulement un style', async () => {

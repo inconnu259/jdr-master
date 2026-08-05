@@ -453,7 +453,7 @@ describe('ScenarioReadDialog', () => {
       scenariosSvc.participate.mockResolvedValue({
         ...BASE,
         status: 'COURANT',
-        participants: [{ userId: 'viewer1', pseudo: 'Viewer' }],
+        participants: [{ userId: 'viewer1', pseudo: 'Viewer', displayName: 'Viewer' }],
       });
 
       await comp.participate();
@@ -498,7 +498,7 @@ describe('ScenarioReadDialog', () => {
       resolveCall!({
         ...BASE,
         status: 'COURANT',
-        participants: [{ userId: 'viewer1', pseudo: 'Viewer' }],
+        participants: [{ userId: 'viewer1', pseudo: 'Viewer', displayName: 'Viewer' }],
       });
       await first;
       await second;
@@ -593,7 +593,7 @@ describe('ScenarioReadDialog', () => {
         {
           ...BASE,
           status: 'COURANT',
-          participants: [{ userId: 'viewer1', pseudo: 'Viewer' }],
+          participants: [{ userId: 'viewer1', pseudo: 'Viewer', displayName: 'Viewer' }],
         },
         { partieKind: 'CAMPAGNE_EPISODIQUE', characters: [char], currentUserId: 'viewer1' },
       );
@@ -755,7 +755,7 @@ describe('ScenarioReadDialog', () => {
         {
           ...BASE,
           status: 'COURANT',
-          participants: [{ userId: 'viewer1', pseudo: 'Viewer' }],
+          participants: [{ userId: 'viewer1', pseudo: 'Viewer', displayName: 'Viewer' }],
         },
         {
           partieKind: 'CAMPAGNE_EPISODIQUE',

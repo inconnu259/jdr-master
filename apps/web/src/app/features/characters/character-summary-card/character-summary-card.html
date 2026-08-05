@@ -15,7 +15,9 @@
       @if (character().ownerIsMj) {
         <span class="character-summary-card__owner-badge">{{ theme.tone()['character.owner_badge_mj'] }}</span>
       } @else {
-        <span class="character-summary-card__owner-badge">{{ character().ownerPseudo }}</span>
+        <span class="character-summary-card__owner-badge">
+          <app-identity-label [playerName]="character().ownerDisplayName" />
+        </span>
       }
     }
     @if (hasPendingLevelUp()) {

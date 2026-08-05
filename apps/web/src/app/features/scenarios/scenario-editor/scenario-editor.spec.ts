@@ -562,7 +562,7 @@ describe('ScenarioEditor', () => {
         {
           ...SCENARIO,
           status: 'COURANT',
-          participants: [{ userId: 'u1', pseudo: 'Alice' }],
+          participants: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' }],
         },
         [alice],
       );
@@ -584,7 +584,7 @@ describe('ScenarioEditor', () => {
       const characterSvc = { listByPartie: vi.fn().mockRejectedValue(new Error('réseau')) };
       const scenariosSvc = {
         listAll: vi.fn().mockResolvedValue([
-          { ...SCENARIO, status: 'COURANT', participants: [{ userId: 'u1', pseudo: 'Alice' }] },
+          { ...SCENARIO, status: 'COURANT', participants: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' }] },
         ]),
         listDocuments: vi.fn().mockResolvedValue([]),
         update: vi.fn(),
@@ -619,7 +619,7 @@ describe('ScenarioEditor', () => {
       fixture.componentRef.setInput('scenario', {
         ...SCENARIO,
         status: 'COURANT',
-        participants: [{ userId: 'u1', pseudo: 'Alice' }],
+        participants: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' }],
       });
       fixture.detectChanges();
       for (let i = 0; i < 10; i++) {
@@ -641,7 +641,7 @@ describe('ScenarioEditor', () => {
         {
           ...SCENARIO,
           status: 'COURANT',
-          participants: [{ userId: 'no-character-user', pseudo: 'Bob' }],
+          participants: [{ userId: 'no-character-user', pseudo: 'Bob', displayName: 'Bobby' }],
         },
         [],
       );
@@ -656,7 +656,7 @@ describe('ScenarioEditor', () => {
         {
           ...SCENARIO,
           status: 'COURANT',
-          participants: [{ userId: 'u1', pseudo: 'Alice' }],
+          participants: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' }],
         },
         [alice],
       );
@@ -665,7 +665,7 @@ describe('ScenarioEditor', () => {
         ...SCENARIO,
         status: 'PASSE',
         closedAt: '2026-07-13T10:00:00.000Z',
-        participants: [{ userId: 'u1', pseudo: 'Alice' }],
+        participants: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' }],
       });
 
       await comp.close();

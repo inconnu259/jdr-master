@@ -67,6 +67,7 @@ import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
 import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
 import { HommeDragonSheet } from '../../homme-dragon/homme-dragon-sheet/homme-dragon-sheet';
+import { IdentityLabel } from '../../../shared/identity/identity-label';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
 const MJ_INVITATIONS_TAB_INDEX = 1;
@@ -95,6 +96,7 @@ const MJ_INVITATIONS_TAB_INDEX = 1;
     AnnouncementFormComponent,
     AnnonceCard,
     HommeDragonSheet,
+    IdentityLabel,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -487,7 +489,7 @@ export class PartieDetail implements OnInit {
     const p = this.partie();
     if (!p) return;
     const ref = this.dialog.open(ConfirmDialog, {
-      data: { message: `Retirer ${member.pseudo} de « ${p.name} » ?` },
+      data: { message: `Retirer ${member.displayName} de « ${p.name} » ?` },
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;
     await this.parties.removeMember(p.id, member.userId);

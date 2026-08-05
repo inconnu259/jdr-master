@@ -253,10 +253,48 @@ describe('PartiesService', () => {
     expect(prisma.partie.delete).not.toHaveBeenCalled();
   });
 
+  describe('listMembers', () => {
+    it("renvoie displayName pour chaque membre, et l'e-mail uniquement si le demandeur est le MJ", async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie); // mjId = 'mj1'
+      prisma.membership.findMany.mockResolvedValue([
+        {
+          joinedAt: new Date('2026-01-01'),
+          user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@b.c' },
+        },
+      ]);
+
+      const asMj = await service.listMembers('p1', 'mj1');
+      expect(asMj[0]).toMatchObject({
+        userId: 'u1',
+        pseudo: 'Alice',
+        displayName: 'Alice au pays',
+        email: 'alice@b.c',
+      });
+
+      prisma.membership.findUnique.mockResolvedValue({ userId: 'u1', partieId: 'p1' });
+      const asMember = await service.listMembers('p1', 'u1');
+      expect(asMember[0]).toMatchObject({
+        userId: 'u1',
+        pseudo: 'Alice',
+        displayName: 'Alice au pays',
+      });
+      expect(asMember[0].email).toBeUndefined();
+    });
+
+    it('lève ForbiddenException si ni MJ ni membre (aucune requête membership)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.membership.findUnique.mockResolvedValue(null);
+      await expect(service.listMembers('p1', 'stranger')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.membership.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getAvailableSlots', () => {
     const members = [
-      { userId: 'u1', user: { id: 'u1', pseudo: 'Alice' } },
-      { userId: 'u2', user: { id: 'u2', pseudo: 'Bob' } },
+      { userId: 'u1', user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' } },
+      { userId: 'u2', user: { id: 'u2', pseudo: 'Bob', displayName: 'Bob' } },
     ];
 
     beforeEach(() => {
@@ -422,6 +460,7 @@ describe('PartiesService', () => {
       expect(results[0].members[0]).toMatchObject({
         userId: 'u1',
         pseudo: 'Alice',
+        displayName: 'Alice au pays',
         status: 'UNKNOWN',
       });
     });

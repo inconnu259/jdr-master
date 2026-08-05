@@ -256,7 +256,7 @@ export class CharacterService {
       const owner = await this.users.findById(userId);
       // Le créateur est toujours le propriétaire ici — ownerIsMj et viewerIsMj coïncident.
       const isMj = partie.mjId === userId;
-      return toDto(character, owner?.pseudo ?? '', isMj, isMj);
+      return toDto(character, owner?.pseudo ?? '', owner?.displayName ?? '', isMj, isMj);
     } catch (e: any) {
       if (e?.code === 'P2002') {
         throw new ConflictException(
@@ -369,6 +369,7 @@ export class CharacterService {
     return toDto(
       character,
       owner?.pseudo ?? '',
+      owner?.displayName ?? '',
       mjId === character.userId,
       mjId === userId,
     );
@@ -391,15 +392,16 @@ export class CharacterService {
     const ownerIds = [...new Set(characters.map((c) => c.userId))];
     const owners = await this.prisma.user.findMany({
       where: { id: { in: ownerIds } },
-      select: { id: true, pseudo: true },
+      select: { id: true, pseudo: true, displayName: true },
     });
-    const pseudoById = new Map(owners.map((o) => [o.id, o.pseudo]));
+    const ownerById = new Map(owners.map((o) => [o.id, o]));
 
     const viewerIsMj = partie.mjId === userId;
     return characters.map((c) =>
       toDto(
         c,
-        pseudoById.get(c.userId) ?? '',
+        ownerById.get(c.userId)?.pseudo ?? '',
+        ownerById.get(c.userId)?.displayName ?? '',
         c.userId === partie.mjId,
         viewerIsMj,
       ),
@@ -488,7 +490,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   async removePortrait(id: string, userId: string): Promise<CharacterDto> {
@@ -513,7 +515,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -547,7 +549,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -770,7 +772,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -829,7 +831,7 @@ export class CharacterService {
     // parties.getOwned ci-dessus), à ne pas confondre avec owner.isMj (le personnage édité
     // appartient à un JOUEUR, pas au MJ appelant).
     const owner = await this.resolveOwnerInfo(updated.userId, updated.partieId);
-    return toDto(updated, owner.pseudo, owner.isMj, true);
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, true);
   }
 
   /**
@@ -950,7 +952,7 @@ export class CharacterService {
     const owner = await this.resolveOwnerInfo(updated.userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
     return {
-      character: toDto(updated, owner.pseudo, owner.isMj, true),
+      character: toDto(updated, owner.pseudo, owner.displayName, owner.isMj, true),
       warnings: result.errors.map((e) => e.message),
     };
   }
@@ -1311,7 +1313,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -1381,7 +1383,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -1527,11 +1529,11 @@ export class CharacterService {
     return notes.map(toNoteDto);
   }
 
-  /** Pseudo du propriétaire + s'il est le MJ de la partie — résolu en une seule paire de requêtes ciblées (`select` minimal, jamais le hash). */
+  /** Pseudo/nom affiché du propriétaire + s'il est le MJ de la partie — résolu en une seule paire de requêtes ciblées (`select` minimal, jamais le hash). */
   private async resolveOwnerInfo(
     ownerId: string,
     partieId: string,
-  ): Promise<{ pseudo: string; isMj: boolean }> {
+  ): Promise<{ pseudo: string; displayName: string; isMj: boolean }> {
     const [owner, partie] = await Promise.all([
       this.users.findById(ownerId),
       this.prisma.partie.findUnique({
@@ -1539,7 +1541,11 @@ export class CharacterService {
         select: { mjId: true },
       }),
     ]);
-    return { pseudo: owner?.pseudo ?? '', isMj: partie?.mjId === ownerId };
+    return {
+      pseudo: owner?.pseudo ?? '',
+      displayName: owner?.displayName ?? '',
+      isMj: partie?.mjId === ownerId,
+    };
   }
 
   private async getOwnCharacterOrThrow(id: string, userId: string) {
@@ -1581,6 +1587,7 @@ export class CharacterService {
 function toDto(
   character: any,
   ownerPseudo: string,
+  ownerDisplayName: string,
   ownerIsMj: boolean,
   viewerIsMj: boolean,
 ): CharacterDto {
@@ -1597,6 +1604,7 @@ function toDto(
     createdAt: character.createdAt.toISOString(),
     updatedAt: character.updatedAt.toISOString(),
     ownerPseudo,
+    ownerDisplayName,
     ownerIsMj,
     viewerIsMj,
     xp: character.xp ?? 0,

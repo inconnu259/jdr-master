@@ -8,6 +8,7 @@ import type { CharacterDto, CreateXpDistributionDto } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { characterName } from '../../../core/characters/character.util';
+import { IdentityLabel } from '../../../shared/identity/identity-label';
 import { RulesReminder } from './rules-reminder';
 
 /**
@@ -49,6 +50,7 @@ interface XpRow {
     MatInputModule,
     MatCheckboxModule,
     RulesReminder,
+    IdentityLabel,
   ],
   templateUrl: './xp-distribution-panel.html',
   styleUrl: './xp-distribution-panel.scss',

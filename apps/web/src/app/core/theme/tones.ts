@@ -181,6 +181,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'account.save_btn': 'Sceller',
     'account.saved': 'Le grimoire a retenu ce nom.',
     'account.error': "Le grimoire n'a pas pu retenir ce changement. Réessayez.",
+    /* — identité — */
+    'identity.character_label': 'Personnage',
+    'identity.player_label': 'Joueur',
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -352,6 +355,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'account.save_btn': 'Graver',
     'account.saved': 'Le carnet a retenu ce nom.',
     'account.error': "Le carnet n'a pas pu retenir ce changement. Réessaie.",
+    /* — identité — */
+    'identity.character_label': 'Personnage',
+    'identity.player_label': 'Joueur',
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -523,5 +529,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'account.save_btn': 'Riveter',
     'account.saved': 'L’établi a retenu ce nom.',
     'account.error': 'L’établi n’a pas pu retenir ce changement. Réessayez.',
+    /* — identité — */
+    'identity.character_label': 'Personnage',
+    'identity.player_label': 'Joueur',
   },
 };

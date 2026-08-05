@@ -10,8 +10,7 @@
   <ul class="creneau-card__members" aria-label="Membres">
     @for (member of slot().members; track member.userId) {
       <li class="creneau-card__member">
-        <span class="creneau-card__icon" aria-hidden="true">⚔</span>
-        <span class="creneau-card__pseudo">{{ member.pseudo }}</span>
+        <app-identity-label [playerName]="member.displayName" />
         <span class="creneau-card__status" [attr.aria-label]="member.status">
           {{ statusIcon(member.status) }}
         </span>
@@ -22,7 +21,7 @@
   @if (unknownMembers().length > 0) {
     <ul class="creneau-card__alerts" aria-label="Alertes disponibilité">
       @for (member of unknownMembers(); track member.userId) {
-        <li class="creneau-card__alert">{{ missingAlert(member.pseudo) }}</li>
+        <li class="creneau-card__alert">{{ missingAlert(member.displayName) }}</li>
       }
     </ul>
   }

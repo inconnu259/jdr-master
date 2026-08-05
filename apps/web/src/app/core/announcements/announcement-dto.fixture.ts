@@ -11,6 +11,8 @@ export function makeAnnouncementDto(overrides: Partial<AnnouncementDto> = {}): A
     scenarioId: null,
     text: 'Une annonce',
     createdAt: '2026-07-15T00:00:00.000Z',
+    authorPseudo: 'le-mj',
+    authorDisplayName: 'Le Grand MJ',
     ...overrides,
   };
 }

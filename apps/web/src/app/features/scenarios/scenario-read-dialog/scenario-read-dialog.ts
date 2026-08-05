@@ -19,6 +19,7 @@ import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-ba
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 import { SeanceList } from '../seance-list/seance-list';
 import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
+import { IdentityLabel } from '../../../shared/identity/identity-label';
 
 export interface ScenarioReadDialogData {
   scenario: ScenarioDto;
@@ -53,6 +54,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
     CharacterSummaryCard,
     SeanceList,
     AnnonceCard,
+    IdentityLabel,
   ],
   templateUrl: './scenario-read-dialog.html',
   styleUrl: './scenario-read-dialog.scss',

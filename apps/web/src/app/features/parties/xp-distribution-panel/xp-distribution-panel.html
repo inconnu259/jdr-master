@@ -24,7 +24,10 @@
     @for (pair of rowsWithCharacter(); track pair.character.id) {
       <li class="xp-panel__row">
         <mat-checkbox [checked]="pair.row.included" (change)="toggleIncluded(pair.character.id)">
-          {{ characterName(pair.character) }}
+          <app-identity-label
+            [characterName]="characterName(pair.character)"
+            [playerName]="pair.character.ownerDisplayName"
+          />
         </mat-checkbox>
         <span class="xp-panel__current-xp">{{ pair.character.xp }} XP actuel</span>
         <mat-form-field appearance="outline" class="xp-panel__amount">

@@ -10,13 +10,21 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 const alice: PartieMemberDto = {
   userId: 'u1',
   pseudo: 'Alice',
+  displayName: 'Alice au pays',
   email: 'alice@test.com',
   joinedAt: '',
 };
-const bob: PartieMemberDto = { userId: 'u2', pseudo: 'Bob', email: 'bob@test.com', joinedAt: '' };
+const bob: PartieMemberDto = {
+  userId: 'u2',
+  pseudo: 'Bob',
+  displayName: 'Bobby',
+  email: 'bob@test.com',
+  joinedAt: '',
+};
 const carol: PartieMemberDto = {
   userId: 'u3',
   pseudo: 'Carol',
+  displayName: 'Carol',
   email: 'carol@test.com',
   joinedAt: '',
 };
@@ -35,8 +43,8 @@ const fakePoll: SessionPollDto = {
       date: '2026-08-01T00:00:00.000Z',
       slot: 'MORNING',
       votes: [
-        { userId: 'u1', pseudo: 'Alice', answer: 'YES' },
-        { userId: 'u2', pseudo: 'Bob', answer: 'YES' },
+        { userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' },
+        { userId: 'u2', pseudo: 'Bob', displayName: 'Bob', answer: 'YES' },
       ],
     },
     {
@@ -44,8 +52,8 @@ const fakePoll: SessionPollDto = {
       date: '2026-08-08T00:00:00.000Z',
       slot: 'AFTERNOON',
       votes: [
-        { userId: 'u1', pseudo: 'Alice', answer: 'YES' },
-        { userId: 'u2', pseudo: 'Bob', answer: 'NO' },
+        { userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' },
+        { userId: 'u2', pseudo: 'Bob', displayName: 'Bob', answer: 'NO' },
       ],
     },
   ],
@@ -219,6 +227,7 @@ describe('PollStatusPanel', () => {
     const dana: PartieMemberDto = {
       userId: 'u4',
       pseudo: 'Dana',
+      displayName: 'Dana',
       email: 'dana@test.com',
       joinedAt: '',
     };
@@ -227,7 +236,7 @@ describe('PollStatusPanel', () => {
       options: [
         {
           ...fakePoll.options[0],
-          votes: [...fakePoll.options[0].votes, { userId: 'u4', pseudo: 'Dana', answer: 'YES' }],
+          votes: [...fakePoll.options[0].votes, { userId: 'u4', pseudo: 'Dana', displayName: 'Dana', answer: 'YES' }],
         },
         fakePoll.options[1],
       ],

@@ -445,14 +445,19 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.querySelector('.sheet__owner-badge')).toBeNull();
   });
 
-  it('MJ (non-propriétaire) consultant la fiche d’un joueur → pseudo du propriétaire affiché (AC2)', async () => {
+  it('MJ (non-propriétaire) consultant la fiche d’un joueur → nom affiché du propriétaire, via IdentityLabel (AC2)', async () => {
     // viewerIsMj résolu côté API (Story 6.5 revue de code) — explicite ici car ce test simule
     // un VRAI MJ, distinct d'un simple fellow player non-MJ (cf. test dédié plus bas).
     const asMj = { ...CHARACTER, viewerIsMj: true };
     const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
     const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
     const badge = fixture.nativeElement.querySelector('.sheet__owner-badge');
-    expect(badge?.textContent?.trim()).toBe('alice');
+    // Revue de code 28.2 : le badge affichait `ownerPseudo` en texte brut, hors IdentityLabel —
+    // la carte résumé du même personnage montrait déjà le nom affiché (AC4).
+    expect(badge?.querySelector('app-identity-label')).not.toBeNull();
+    expect(badge?.textContent?.trim()).toBe('Alice au pays');
+    // Un seul nom affiché → l'icône silhouette est obligatoire (AC3).
+    expect(badge?.querySelector('svg')).not.toBeNull();
   });
 
   it("fellow player (ni propriétaire, ni MJ) consultant la fiche d'un coéquipier → aucun badge affiché (corrige l'ancienne heuristique 'tout non-propriétaire = MJ', revue de code Story 6.5)", async () => {

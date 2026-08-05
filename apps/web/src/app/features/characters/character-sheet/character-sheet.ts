@@ -16,6 +16,7 @@ import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
 import { characterName, findContentEntry } from '../../../core/characters/character.util';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
+import { IdentityLabel } from '../../../shared/identity/identity-label';
 import { CharacterAvatar } from '../character-avatar/character-avatar';
 import { PortraitPanel } from '../portrait-panel/portrait-panel';
 import {
@@ -141,6 +142,7 @@ interface NarrativeFields {
     InventoryTab,
     NotesJournal,
     FieldEditPencil,
+    IdentityLabel,
   ],
   templateUrl: './character-sheet.html',
   styleUrl: './character-sheet.scss',

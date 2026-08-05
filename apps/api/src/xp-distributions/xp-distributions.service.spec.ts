@@ -100,8 +100,18 @@ describe('XpDistributionsService', () => {
         note: 'Bien joué',
         createdAt: new Date('2026-07-01T00:00:00.000Z'),
         entries: [
-          { characterId: 'c1', amount: 250, isBonus: false },
-          { characterId: 'c2', amount: 50, isBonus: true },
+          {
+            characterId: 'c1',
+            amount: 250,
+            isBonus: false,
+            character: { user: { pseudo: 'alice', displayName: 'Alice au pays' } },
+          },
+          {
+            characterId: 'c2',
+            amount: 50,
+            isBonus: true,
+            character: { user: { pseudo: 'bob', displayName: 'Bobby' } },
+          },
         ],
       });
 
@@ -120,6 +130,11 @@ describe('XpDistributionsService', () => {
             mjId: 'mj1',
             note: 'Bien joué',
           }),
+          include: {
+            entries: {
+              include: { character: { include: { user: { select: { pseudo: true, displayName: true } } } } },
+            },
+          },
         }),
       );
       expect(characters.applyXpDelta).toHaveBeenCalledWith('c1', 250);
@@ -127,6 +142,16 @@ describe('XpDistributionsService', () => {
       expect(characters.applyXpDelta).toHaveBeenCalledTimes(2);
       expect(result.id).toBe('d1');
       expect(result.entries).toHaveLength(2);
+      expect(result.entries[0]).toMatchObject({
+        characterId: 'c1',
+        ownerPseudo: 'alice',
+        ownerDisplayName: 'Alice au pays',
+      });
+      expect(result.entries[1]).toMatchObject({
+        characterId: 'c2',
+        ownerPseudo: 'bob',
+        ownerDisplayName: 'Bobby',
+      });
     });
 
     it('montant + bonus du même personnage agrégés en un seul appel applyXpDelta (évite un double e-mail level-up)', async () => {
@@ -140,8 +165,18 @@ describe('XpDistributionsService', () => {
         note: undefined,
         createdAt: new Date('2026-07-01T00:00:00.000Z'),
         entries: [
-          { characterId: 'c1', amount: 250, isBonus: false },
-          { characterId: 'c1', amount: 50, isBonus: true },
+          {
+            characterId: 'c1',
+            amount: 250,
+            isBonus: false,
+            character: { user: { pseudo: 'alice', displayName: 'Alice au pays' } },
+          },
+          {
+            characterId: 'c1',
+            amount: 50,
+            isBonus: true,
+            character: { user: { pseudo: 'alice', displayName: 'Alice au pays' } },
+          },
         ],
       });
 
@@ -168,8 +203,18 @@ describe('XpDistributionsService', () => {
         note: undefined,
         createdAt: new Date('2026-07-01T00:00:00.000Z'),
         entries: [
-          { characterId: 'c1', amount: 100, isBonus: false },
-          { characterId: 'c2', amount: 100, isBonus: false },
+          {
+            characterId: 'c1',
+            amount: 100,
+            isBonus: false,
+            character: { user: { pseudo: 'alice', displayName: 'Alice au pays' } },
+          },
+          {
+            characterId: 'c2',
+            amount: 100,
+            isBonus: false,
+            character: { user: { pseudo: 'bob', displayName: 'Bobby' } },
+          },
         ],
       });
       characters.applyXpDelta.mockRejectedValueOnce(
@@ -212,8 +257,40 @@ describe('XpDistributionsService', () => {
         expect.objectContaining({
           where: { partieId: 'p1' },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          include: {
+            entries: {
+              include: { character: { include: { user: { select: { pseudo: true, displayName: true } } } } },
+            },
+          },
         }),
       );
+    });
+
+    it('résout ownerPseudo/ownerDisplayName de chaque entrée depuis Character.userId → User', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.xpDistribution.findMany.mockResolvedValue([
+        {
+          id: 'd1',
+          partieId: 'p1',
+          note: undefined,
+          createdAt: new Date('2026-07-01T00:00:00.000Z'),
+          entries: [
+            {
+              characterId: 'c1',
+              amount: 100,
+              isBonus: false,
+              character: { user: { pseudo: 'alice', displayName: 'Alice au pays' } },
+            },
+          ],
+        },
+      ]);
+
+      const result = await service.listForPartie('p1', 'mj1');
+
+      expect(result[0].entries[0]).toMatchObject({
+        ownerPseudo: 'alice',
+        ownerDisplayName: 'Alice au pays',
+      });
     });
 
     it('skip/take fournis → transmis tels quels à Prisma (AC1)', async () => {

@@ -41,11 +41,11 @@ describe('UsersService', () => {
   });
 
   describe('searchByEmailOrPseudo', () => {
-    it('cherche par email OU pseudo sans jamais sélectionner le hash de mot de passe', async () => {
+    it('cherche par email OU pseudo sans jamais sélectionner le hash, l’e-mail ni le nom affiché (AD-2)', async () => {
       await service.searchByEmailOrPseudo('bob');
       expect(prisma.user.findMany).toHaveBeenCalledWith({
         where: { OR: [{ email: 'bob' }, { pseudo: 'bob' }] },
-        select: { id: true, pseudo: true, email: true },
+        select: { id: true, pseudo: true },
       });
     });
   });

@@ -1,11 +1,12 @@
 import { Component, input } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import type { AnnouncementDto } from '@master-jdr/shared';
+import { IdentityLabel } from '../../../shared/identity/identity-label';
 
 @Component({
   selector: 'app-annonce-card',
   standalone: true,
-  imports: [DatePipe],
+  imports: [DatePipe, IdentityLabel],
   templateUrl: './annonce-card.html',
   styleUrl: './annonce-card.scss',
 })

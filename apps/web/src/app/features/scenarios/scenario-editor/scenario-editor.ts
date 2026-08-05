@@ -31,6 +31,7 @@ import { CharacterSummaryCard } from '../../characters/character-summary-card/ch
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 import { SeanceList } from '../seance-list/seance-list';
 import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
+import { IdentityLabel } from '../../../shared/identity/identity-label';
 
 type ScenarioTextField = keyof UpdateScenarioDto;
 
@@ -57,6 +58,7 @@ function extractErrorMessage(err: unknown, fallback: string): string {
     CharacterSummaryCard,
     SeanceList,
     AnnonceCard,
+    IdentityLabel,
   ],
   templateUrl: './scenario-editor.html',
   styleUrl: './scenario-editor.scss',

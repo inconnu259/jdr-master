@@ -26,6 +26,9 @@ function makePrisma() {
       create: jest.fn(),
       findMany: jest.fn(),
     },
+    user: {
+      findUnique: jest.fn(),
+    },
   } as any;
 }
 
@@ -85,6 +88,10 @@ describe('AnnouncementsService', () => {
     it('pas de scenarioId → Announcement créée avec scenarioId: null (AC1)', async () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.announcement.create.mockResolvedValue(makeAnnouncement());
+      prisma.user.findUnique.mockResolvedValue({
+        pseudo: 'le-mj',
+        displayName: 'Le Grand MJ',
+      });
 
       const result = await service.create('p1', 'mj1', { text: 'Une annonce' });
 
@@ -93,12 +100,22 @@ describe('AnnouncementsService', () => {
       expect(prisma.announcement.create).toHaveBeenCalledWith({
         data: { partieId: 'p1', scenarioId: null, text: 'Une annonce' },
       });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 'mj1' },
+        select: { pseudo: true, displayName: true },
+      });
       expect(result.scenarioId).toBeNull();
+      expect(result.authorPseudo).toBe('le-mj');
+      expect(result.authorDisplayName).toBe('Le Grand MJ');
     });
 
     it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.announcement.create.mockResolvedValue(makeAnnouncement());
+      prisma.user.findUnique.mockResolvedValue({
+        pseudo: 'le-mj',
+        displayName: 'Le Grand MJ',
+      });
 
       await service.create('p1', 'mj1', { text: 'Une annonce' });
 
@@ -111,6 +128,10 @@ describe('AnnouncementsService', () => {
       prisma.announcement.create.mockResolvedValue(
         makeAnnouncement({ scenarioId: 's1' }),
       );
+      prisma.user.findUnique.mockResolvedValue({
+        pseudo: 'le-mj',
+        displayName: 'Le Grand MJ',
+      });
 
       const result = await service.create('p1', 'mj1', {
         text: 'Une annonce scopée',
@@ -147,6 +168,10 @@ describe('AnnouncementsService', () => {
       prisma.announcement.create.mockResolvedValue(
         makeAnnouncement({ scenarioId: 's-brouillon' }),
       );
+      prisma.user.findUnique.mockResolvedValue({
+        pseudo: 'le-mj',
+        displayName: 'Le Grand MJ',
+      });
 
       await expect(
         service.create('p1', 'mj1', { text: 'x', scenarioId: 's-brouillon' }),
@@ -168,14 +193,17 @@ describe('AnnouncementsService', () => {
   describe('findAll() (Story 9.2, AD-6/AD-9)', () => {
     it('liste les annonces de la Partie triées par createdAt desc, membre quelconque (AC1/AC2)', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1' });
+      const mj = { pseudo: 'le-mj', displayName: 'Le Grand MJ' };
       prisma.announcement.findMany.mockResolvedValue([
         makeAnnouncement({
           id: 'ann2',
           createdAt: new Date('2026-07-15T10:00:00.000Z'),
+          partie: { mj },
         }),
         makeAnnouncement({
           id: 'ann1',
           createdAt: new Date('2026-07-14T10:00:00.000Z'),
+          partie: { mj },
         }),
       ]);
 
@@ -185,14 +213,21 @@ describe('AnnouncementsService', () => {
       expect(prisma.announcement.findMany).toHaveBeenCalledWith({
         where: { partieId: 'p1' },
         orderBy: { createdAt: 'desc' },
+        include: { partie: { select: { mj: { select: { pseudo: true, displayName: true } } } } },
       });
       expect(result.map((a) => a.id)).toEqual(['ann2', 'ann1']);
+      expect(result[0].authorPseudo).toBe('le-mj');
+      expect(result[0].authorDisplayName).toBe('Le Grand MJ');
     });
 
     it('inclut une annonce scopée à un scénario BROUILLON/A_VENIR sans distinction (AC6, aucun filtrage serveur)', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1' });
       prisma.announcement.findMany.mockResolvedValue([
-        makeAnnouncement({ id: 'ann-brouillon', scenarioId: 's-brouillon' }),
+        makeAnnouncement({
+          id: 'ann-brouillon',
+          scenarioId: 's-brouillon',
+          partie: { mj: { pseudo: 'le-mj', displayName: 'Le Grand MJ' } },
+        }),
       ]);
 
       const result = await service.findAll('p1', 'u1');

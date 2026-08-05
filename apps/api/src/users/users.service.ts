@@ -23,12 +23,13 @@ export class UsersService {
 
   /**
    * Recherche par **email OU pseudo** en correspondance **exacte** (spec §4).
-   * Ne renvoie jamais le hash : juste de quoi inviter (id, pseudo, email).
+   * Ne renvoie que l'identifiant public (id, pseudo) — ni le hash, ni l'e-mail, ni le nom
+   * affiché (AD-2, seule exception à « pseudo et displayName toujours les deux »).
    */
   searchByEmailOrPseudo(q: string) {
     return this.prisma.user.findMany({
       where: { OR: [{ email: q }, { pseudo: q }] },
-      select: { id: true, pseudo: true, email: true },
+      select: { id: true, pseudo: true },
     });
   }
 

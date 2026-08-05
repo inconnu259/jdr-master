@@ -30,7 +30,7 @@
       <mat-icon>account_circle</mat-icon>
     </button>
     <mat-menu #menu="matMenu">
-      <div class="menu-user">{{ user()?.pseudo }}</div>
+      <div class="menu-user">{{ user()?.displayName }}</div>
       <a mat-menu-item routerLink="/parties/new">
         <mat-icon>add</mat-icon>
         <span>{{ theme.tone()['nav.create_game'] }}</span>

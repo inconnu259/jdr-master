@@ -6,7 +6,7 @@ import type { AvailableSlotDto } from '@master-jdr/shared';
 const SLOT: AvailableSlotDto = {
   date: '2026-07-04',
   slot: 'MORNING',
-  members: [{ userId: 'u1', pseudo: 'Alice', status: 'AVAILABLE' }],
+  members: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays', status: 'AVAILABLE' }],
 };
 
 describe('AvailableSlotsPanel', () => {

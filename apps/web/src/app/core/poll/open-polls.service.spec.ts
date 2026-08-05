@@ -144,7 +144,7 @@ describe('OpenPollsService', () => {
         id: 'opt-p1',
         date: '2026-08-01T00:00:00.000Z',
         slot: 'MORNING',
-        votes: [{ userId: 'u1', pseudo: 'Moi', answer: 'YES' }],
+        votes: [{ userId: 'u1', pseudo: 'Moi', displayName: 'Moi', answer: 'YES' }],
       },
     ]);
     const unansweredPoll = makePoll('p2'); // option par défaut sans vote
@@ -167,7 +167,7 @@ describe('OpenPollsService', () => {
           id: 'opt-a',
           date: '2026-08-01T00:00:00.000Z',
           slot: 'MORNING',
-          votes: [{ userId: 'u1', pseudo: 'Moi', answer: 'YES' }],
+          votes: [{ userId: 'u1', pseudo: 'Moi', displayName: 'Moi', answer: 'YES' }],
         },
       ]),
       id: 'poll-a',

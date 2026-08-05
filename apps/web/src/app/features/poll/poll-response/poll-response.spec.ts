@@ -22,7 +22,7 @@ const fakePoll: SessionPollDto = {
       id: 'opt2',
       date: '2026-08-08T00:00:00.000Z',
       slot: 'AFTERNOON',
-      votes: [{ userId: 'u1', pseudo: 'Alice', answer: 'YES' }],
+      votes: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' }],
     },
   ],
 };

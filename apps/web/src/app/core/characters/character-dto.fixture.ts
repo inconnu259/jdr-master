@@ -20,6 +20,7 @@ export function makeCharacterDto(overrides: Partial<CharacterDto> = {}): Charact
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ownerPseudo: 'alice',
+    ownerDisplayName: 'Alice au pays',
     ownerIsMj: false,
     viewerIsMj: false,
     xp: 0,

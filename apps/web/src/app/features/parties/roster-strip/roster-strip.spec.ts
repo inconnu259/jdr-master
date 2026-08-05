@@ -7,12 +7,14 @@ const MEMBERS: PartieMemberDto[] = [
   {
     userId: 'mj1',
     pseudo: 'Sylas',
+    displayName: 'Sylas',
     email: 'sylas@example.com',
     joinedAt: '2026-01-01T00:00:00.000Z',
   },
   {
     userId: 'u1',
     pseudo: 'Alice',
+    displayName: 'Alice au pays',
     email: 'alice@example.com',
     joinedAt: '2026-01-01T00:00:00.000Z',
   },
@@ -60,7 +62,7 @@ describe('RosterStrip', () => {
     const mjItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="mj1"]');
     expect(mjItem.getAttribute('aria-label')).toBe('Sylas — MJ');
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
-    expect(playerItem.getAttribute('aria-label')).toBe('Alice — Fenn (Ménestrel)');
+    expect(playerItem.getAttribute('aria-label')).toBe('Alice au pays — Fenn (Ménestrel)');
   });
 
   it('slot "+ Inviter" visible si hasFreeSlot=true', () => {

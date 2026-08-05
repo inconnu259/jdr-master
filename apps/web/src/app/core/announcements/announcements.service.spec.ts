@@ -33,6 +33,8 @@ describe('AnnouncementsService', () => {
       scenarioId: 's1',
       text: 'Une annonce',
       createdAt: '2026-07-15T00:00:00.000Z',
+      authorPseudo: 'le-mj',
+      authorDisplayName: 'Le Grand MJ',
     };
     req.flush(response);
 
@@ -53,6 +55,8 @@ describe('AnnouncementsService', () => {
         scenarioId: null,
         text: 'Une annonce',
         createdAt: '2026-07-15T00:00:00.000Z',
+        authorPseudo: 'le-mj',
+        authorDisplayName: 'Le Grand MJ',
       },
     ];
     req.flush(response);

@@ -13,8 +13,9 @@
           </div>
           <ul class="xp-history__entries">
             @for (entry of row.entries; track $index) {
-              <li>
-                {{ entry.label }} : {{ entry.amount }} XP
+              <li class="xp-history__entry">
+                <app-identity-label [characterName]="entry.characterLabel" [playerName]="entry.playerLabel" />
+                <span class="xp-history__amount">{{ entry.amount }} XP</span>
                 @if (entry.isBonus) {
                   <span class="xp-history__bonus-badge">bonus</span>
                 }

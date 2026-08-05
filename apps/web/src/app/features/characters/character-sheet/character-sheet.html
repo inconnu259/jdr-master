@@ -19,7 +19,9 @@
           @if (c.ownerIsMj) {
             <p class="sheet__owner-badge">{{ theme.tone()['character.owner_badge_mj'] }}</p>
           } @else {
-            <p class="sheet__owner-badge">{{ c.ownerPseudo }}</p>
+            <p class="sheet__owner-badge">
+              <app-identity-label [playerName]="c.ownerDisplayName" />
+            </p>
           }
         }
         @if (isOwner()) {

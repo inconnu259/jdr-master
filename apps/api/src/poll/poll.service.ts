@@ -16,7 +16,11 @@ import { CreatePollDto } from './dto/create-poll.dto';
 
 const POLL_INCLUDE = {
   options: {
-    include: { votes: { include: { user: { select: { pseudo: true } } } } },
+    include: {
+      votes: {
+        include: { user: { select: { pseudo: true, displayName: true } } },
+      },
+    },
   },
 } as const;
 
@@ -189,6 +193,7 @@ function toDto(poll: any): SessionPollDto {
       votes: (opt.votes ?? []).map((v: any) => ({
         userId: v.userId,
         pseudo: v.user.pseudo,
+        displayName: v.user.displayName,
         answer: v.answer,
       })),
     })),

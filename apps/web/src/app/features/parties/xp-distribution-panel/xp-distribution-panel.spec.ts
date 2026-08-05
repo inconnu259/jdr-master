@@ -41,6 +41,21 @@ async function createFixture(createXpDistribution = vi.fn().mockResolvedValue({}
 describe('XpDistributionPanel', () => {
   afterEach(() => TestBed.resetTestingModule());
 
+  // Revue de code 28.2 : l'affichage du nom du joueur à côté du personnage est le seul
+  // comportement neuf de ce panneau, et n'était couvert par aucune assertion.
+  it('chaque ligne affiche le personnage ET son joueur, via IdentityLabel (AC2/AC4)', async () => {
+    const { el } = await createFixture();
+
+    const label = el.querySelector('app-identity-label')!;
+    expect(label).not.toBeNull();
+    expect(label.querySelector('.identity-label__character')?.textContent?.trim()).toBe('Fenn');
+    expect(label.querySelector('.identity-label__player')?.textContent?.trim()).toBe(
+      'Alice au pays',
+    );
+    // Mode joint : la typographie seule porte la distinction, jamais une icône (EXPERIENCE §4.5).
+    expect(label.querySelector('svg')).toBeNull();
+  });
+
   it('calcul suggéré appliqué par défaut aux lignes non éditées manuellement', async () => {
     const { fixture, el } = await createFixture();
     const component = fixture.componentInstance;

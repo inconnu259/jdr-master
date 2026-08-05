@@ -103,7 +103,10 @@
       @if (participantsWithoutCharacter().length > 0) {
         <ul class="participants-pseudo">
           @for (p of participantsWithoutCharacter(); track p.userId) {
-            <li>{{ p.pseudo }} <span class="hint">(pas encore de personnage)</span></li>
+            <li>
+              <app-identity-label [playerName]="p.displayName" />
+              <span class="hint">(pas encore de personnage)</span>
+            </li>
           }
         </ul>
       }

@@ -53,7 +53,7 @@ export class XpDistributionsService {
           })),
         },
       },
-      include: { entries: true },
+      include: ENTRIES_WITH_OWNER_INCLUDE,
     });
 
     // Agrégé par personnage (montant commun + bonus fusionnés) — un seul appel `applyXpDelta` par
@@ -96,13 +96,22 @@ export class XpDistributionsService {
     const distributions = await this.prisma.xpDistribution.findMany({
       where: { partieId },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      include: { entries: true },
+      include: ENTRIES_WITH_OWNER_INCLUDE,
       skip: pagination?.skip,
       take: pagination?.take,
     });
     return distributions.map(toDto);
   }
 }
+
+/** Identité du propriétaire du personnage crédité — pas celle du MJ qui distribue (AD-2, Story 28.2). */
+const ENTRIES_WITH_OWNER_INCLUDE = {
+  entries: {
+    include: {
+      character: { include: { user: { select: { pseudo: true, displayName: true } } } },
+    },
+  },
+} as const;
 
 function toDto(distribution: any): XpDistributionDto {
   return {
@@ -114,6 +123,8 @@ function toDto(distribution: any): XpDistributionDto {
       characterId: e.characterId,
       amount: e.amount,
       isBonus: e.isBonus,
+      ownerPseudo: e.character.user.pseudo,
+      ownerDisplayName: e.character.user.displayName,
     })),
   };
 }

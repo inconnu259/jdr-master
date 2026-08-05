@@ -22,6 +22,7 @@ async function createFixture(openPollsCount: number) {
           currentUser: signal({
             id: 'u1',
             pseudo: 'Test',
+            displayName: 'Test',
             email: 'test@test.com',
             role: 'USER',
             createdAt: '',

@@ -6,7 +6,13 @@ export interface RosterRow {
   member: PartieMemberDto;
   isMj: boolean;
   character: CharacterDto | null;
-  displayName: string;
+  /** Libellé pour les initiales de l'avatar (nom du personnage s'il existe, sinon nom affiché du
+   *  joueur) — sans rapport avec `User.displayName` malgré le nom proche, cf. `playerLabel`. */
+  avatarLabel: string;
+  /** Nom du personnage pour `IdentityLabel`, `null` si aucun personnage (MJ ou slot vide). */
+  characterLabel: string | null;
+  /** Nom affiché du joueur pour `IdentityLabel` — toujours `member.displayName`. */
+  playerLabel: string;
   classLabel: string;
   ariaLabel: string;
   /** Le personnage a franchi un seuil de niveau pas encore traité par son propriétaire (cf. LevelUpBanner). */
@@ -61,10 +67,12 @@ export function buildRosterRows(
         member,
         isMj,
         character,
-        displayName: member.pseudo,
+        avatarLabel: member.displayName,
+        characterLabel: null,
+        playerLabel: member.displayName,
         classLabel: '',
         ariaLabel: withRoleSuffix(
-          withLevelUpSuffix(`${member.pseudo} — MJ`, pending),
+          withLevelUpSuffix(`${member.displayName} — MJ`, pending),
           assignedRoleLabel,
           pending,
         ),
@@ -78,11 +86,13 @@ export function buildRosterRows(
         member,
         isMj,
         character,
-        displayName: member.pseudo,
+        avatarLabel: member.displayName,
+        characterLabel: null,
+        playerLabel: member.displayName,
         classLabel: '',
         ariaLabel: isSelf
-          ? `${member.pseudo} — créer mon personnage`
-          : `${member.pseudo} — aucun personnage créé`,
+          ? `${member.displayName} — créer mon personnage`
+          : `${member.displayName} — aucun personnage créé`,
         hasPendingLevelUp: false,
         isSelf,
         assignedRoleLabel: null,
@@ -96,10 +106,12 @@ export function buildRosterRows(
       member,
       isMj,
       character,
-      displayName: name,
+      avatarLabel: name,
+      characterLabel: name,
+      playerLabel: member.displayName,
       classLabel,
       ariaLabel: withRoleSuffix(
-        withLevelUpSuffix(`${member.pseudo} — ${name} (${classLabel})`, pending),
+        withLevelUpSuffix(`${member.displayName} — ${name} (${classLabel})`, pending),
         assignedRoleLabel,
         pending,
       ),

@@ -44,8 +44,8 @@ describe('XpHistory', () => {
         note: 'Bien joué',
         createdAt: '2026-07-01T00:00:00.000Z',
         entries: [
-          { characterId: 'c1', amount: 250, isBonus: false },
-          { characterId: 'c1', amount: 50, isBonus: true },
+          { characterId: 'c1', amount: 250, isBonus: false, ownerPseudo: 'alice', ownerDisplayName: 'Alice au pays' },
+          { characterId: 'c1', amount: 50, isBonus: true, ownerPseudo: 'alice', ownerDisplayName: 'Alice au pays' },
         ],
       },
     ]);

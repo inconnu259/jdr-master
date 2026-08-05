@@ -7,8 +7,8 @@ import {
 } from './poll.util';
 
 const members: PartieMemberDto[] = [
-  { userId: 'u1', pseudo: 'Alice', email: 'alice@test.com', joinedAt: '' },
-  { userId: 'u2', pseudo: 'Bob', email: 'bob@test.com', joinedAt: '' },
+  { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@test.com', joinedAt: '' },
+  { userId: 'u2', pseudo: 'Bob', displayName: 'Bobby', email: 'bob@test.com', joinedAt: '' },
 ];
 
 function makePoll(options: SessionPollDto['options']): SessionPollDto {
@@ -32,8 +32,8 @@ describe('poll.util', () => {
         date: '2026-08-01T00:00:00.000Z',
         slot: 'MORNING',
         votes: [
-          { userId: 'u1', pseudo: 'Alice', answer: 'YES' },
-          { userId: 'u2', pseudo: 'Bob', answer: 'NO' },
+          { userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' },
+          { userId: 'u2', pseudo: 'Bob', displayName: 'Bob', answer: 'NO' },
         ],
       },
     ]);
@@ -54,15 +54,15 @@ describe('poll.util', () => {
         date: '2026-08-01T00:00:00.000Z',
         slot: 'MORNING',
         votes: [
-          { userId: 'u1', pseudo: 'Alice', answer: 'YES' },
-          { userId: 'u2', pseudo: 'Bob', answer: 'NO' },
+          { userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' },
+          { userId: 'u2', pseudo: 'Bob', displayName: 'Bob', answer: 'NO' },
         ],
       },
       {
         id: 'opt2',
         date: '2026-08-08T00:00:00.000Z',
         slot: 'AFTERNOON',
-        votes: [{ userId: 'u1', pseudo: 'Alice', answer: 'YES' }],
+        votes: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' }],
       },
     ]);
     expect(getMissingVoters(poll, members)).toEqual([members[1]]);
@@ -86,7 +86,7 @@ describe('poll.util', () => {
         id: 'opt1',
         date: '2026-08-01T00:00:00.000Z',
         slot: 'MORNING',
-        votes: [{ userId: 'u1', pseudo: 'Alice', answer: 'YES' }],
+        votes: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' }],
       },
     ]);
     expect(getRespondedCount(poll, members)).toBe(1);
@@ -97,7 +97,7 @@ describe('poll.util', () => {
       id: 'opt1',
       date: '2026-08-01T00:00:00.000Z',
       slot: 'MORNING' as const,
-      votes: [{ userId: 'u1', pseudo: 'Alice', answer: 'YES' as const }],
+      votes: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' as const }],
     };
     // Alice a voté sur opt1 → absente des manquants ; Bob n'a pas voté sur opt1 → présent
     expect(getMissingVotersForOption(opt1, members)).toEqual([members[1]]);
@@ -109,8 +109,8 @@ describe('poll.util', () => {
       date: '2026-08-01T00:00:00.000Z',
       slot: 'MORNING' as const,
       votes: [
-        { userId: 'u1', pseudo: 'Alice', answer: 'YES' as const },
-        { userId: 'u2', pseudo: 'Bob', answer: 'NO' as const },
+        { userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' as const },
+        { userId: 'u2', pseudo: 'Bob', displayName: 'Bob', answer: 'NO' as const },
       ],
     };
     expect(getMissingVotersForOption(opt1, members)).toEqual([]);
@@ -122,7 +122,7 @@ describe('poll.util', () => {
       id: 'opt1',
       date: '2026-08-01T00:00:00.000Z',
       slot: 'MORNING' as const,
-      votes: [{ userId: 'u1', pseudo: 'Alice', answer: 'YES' as const }],
+      votes: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' as const }],
     };
     expect(getMissingVotersForOption(opt1, members).map((m) => m.userId)).toEqual(['u2']);
   });
@@ -133,7 +133,7 @@ describe('poll.util', () => {
         id: 'opt1',
         date: '2026-08-01T00:00:00.000Z',
         slot: 'MORNING',
-        votes: [{ userId: 'u1', pseudo: 'Alice', answer: 'YES' }],
+        votes: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' }],
       },
       { id: 'opt2', date: '2026-08-08T00:00:00.000Z', slot: 'AFTERNOON', votes: [] },
     ]);
@@ -146,13 +146,13 @@ describe('poll.util', () => {
         id: 'opt1',
         date: '2026-08-01T00:00:00.000Z',
         slot: 'MORNING',
-        votes: [{ userId: 'u1', pseudo: 'Alice', answer: 'YES' }],
+        votes: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'YES' }],
       },
       {
         id: 'opt2',
         date: '2026-08-08T00:00:00.000Z',
         slot: 'AFTERNOON',
-        votes: [{ userId: 'u1', pseudo: 'Alice', answer: 'NO' }],
+        votes: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice', answer: 'NO' }],
       },
     ]);
     expect(hasUnansweredOptions(poll, 'u1')).toBe(false);

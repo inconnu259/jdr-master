@@ -266,12 +266,19 @@ export class ScenariosService {
 
     const participants = await this.prisma.scenarioParticipant.findMany({
       where: { scenarioId: { in: scenarioIds } },
-      include: { user: { select: { pseudo: true } } },
+      include: { user: { select: { pseudo: true, displayName: true } } },
     });
-    const byScenario = new Map<string, { userId: string; pseudo: string }[]>();
+    const byScenario = new Map<
+      string,
+      { userId: string; pseudo: string; displayName: string }[]
+    >();
     for (const p of participants) {
       const list = byScenario.get(p.scenarioId) ?? [];
-      list.push({ userId: p.userId, pseudo: p.user.pseudo });
+      list.push({
+        userId: p.userId,
+        pseudo: p.user.pseudo,
+        displayName: p.user.displayName,
+      });
       byScenario.set(p.scenarioId, list);
     }
     return Promise.all(
@@ -937,7 +944,7 @@ function toDocumentDto(document: any): ScenarioDocumentDto {
 function toDto(
   scenario: any,
   partieKind?: PartieKind,
-  participants?: { userId: string; pseudo: string }[],
+  participants?: { userId: string; pseudo: string; displayName: string }[],
   seances?: SeanceDto[],
   retrospectiveNotes?: CharacterNoteDto[],
 ): ScenarioDto {
@@ -963,12 +970,16 @@ function toDto(
 async function loadParticipants(
   prisma: PrismaService,
   scenarioId: string,
-): Promise<{ userId: string; pseudo: string }[]> {
+): Promise<{ userId: string; pseudo: string; displayName: string }[]> {
   const participants = await prisma.scenarioParticipant.findMany({
     where: { scenarioId },
-    include: { user: { select: { pseudo: true } } },
+    include: { user: { select: { pseudo: true, displayName: true } } },
   });
-  return participants.map((p) => ({ userId: p.userId, pseudo: p.user.pseudo }));
+  return participants.map((p) => ({
+    userId: p.userId,
+    pseudo: p.user.pseudo,
+    displayName: p.user.displayName,
+  }));
 }
 
 const SEANCE_INCLUDE = {

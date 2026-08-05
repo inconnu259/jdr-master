@@ -19,7 +19,7 @@
           <ul class="poll-status__voters" aria-label="Votants">
             @for (vote of opt.votes; track vote.userId) {
               <li class="poll-status__voter">
-                <span aria-hidden="true">⚔</span> {{ vote.pseudo }}
+                <app-identity-label [playerName]="vote.displayName" />
                 <span class="poll-status__answer">{{ ANSWER_ICONS[vote.answer] }} {{ ANSWER_LABELS[vote.answer] }}</span>
               </li>
             }
@@ -28,7 +28,7 @@
         @if (missingVotersForOption(opt).length > 0) {
           <ul class="poll-status__missing" aria-label="N'ont pas encore répondu pour cette date">
             @for (m of missingVotersForOption(opt); track m.userId) {
-              <li>{{ missingAlert(m.pseudo) }}</li>
+              <li>{{ missingAlert(m.displayName) }}</li>
             }
           </ul>
         }

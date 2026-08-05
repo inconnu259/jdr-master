@@ -12,7 +12,7 @@
         @if (!pv.valid) {
           <p class="error">{{ pv.reason ?? 'Lien invalide.' }}</p>
         } @else if (loggedIn()) {
-          <p>Tu es connecté en tant que <strong>{{ loggedIn()?.pseudo }}</strong>.</p>
+          <p>Tu es connecté en tant que <strong>{{ loggedIn()?.displayName }}</strong>.</p>
           @if (error()) {
             <p class="error">{{ error() }}</p>
           }

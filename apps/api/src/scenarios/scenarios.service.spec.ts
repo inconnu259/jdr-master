@@ -423,14 +423,16 @@ describe('ScenariosService', () => {
         closedAt: null,
       });
       prisma.scenarioParticipant.findMany.mockResolvedValue([
-        { scenarioId: 's1', userId: 'u1', user: { pseudo: 'Alice' } },
+        { scenarioId: 's1', userId: 'u1', user: { pseudo: 'Alice', displayName: 'Alice au pays' } },
       ]);
 
       const result = await service.update('s1', 'mj1', {
         title: 'Nouveau titre',
       });
 
-      expect(result.participants).toEqual([{ userId: 'u1', pseudo: 'Alice' }]);
+      expect(result.participants).toEqual([
+        { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' },
+      ]);
     });
 
     it('scénario PASSE → rejet, aucune écriture (AC5)', async () => {
@@ -950,19 +952,19 @@ describe('ScenariosService', () => {
         },
       ]);
       prisma.scenarioParticipant.findMany.mockResolvedValue([
-        { scenarioId: 's1', userId: 'u1', user: { pseudo: 'Alice' } },
-        { scenarioId: 's1', userId: 'u2', user: { pseudo: 'Bob' } },
+        { scenarioId: 's1', userId: 'u1', user: { pseudo: 'Alice', displayName: 'Alice au pays' } },
+        { scenarioId: 's1', userId: 'u2', user: { pseudo: 'Bob', displayName: 'Bobby' } },
       ]);
 
       const result = await service.findAllForPartie('p1', 'u1');
 
       expect(prisma.scenarioParticipant.findMany).toHaveBeenCalledWith({
         where: { scenarioId: { in: ['s1', 's2'] } },
-        include: { user: { select: { pseudo: true } } },
+        include: { user: { select: { pseudo: true, displayName: true } } },
       });
       expect(result.find((s) => s.id === 's1')?.participants).toEqual([
-        { userId: 'u1', pseudo: 'Alice' },
-        { userId: 'u2', pseudo: 'Bob' },
+        { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' },
+        { userId: 'u2', pseudo: 'Bob', displayName: 'Bobby' },
       ]);
       expect(result.find((s) => s.id === 's2')?.participants).toEqual([]);
     });
@@ -1090,7 +1092,7 @@ describe('ScenariosService', () => {
           makeScenario({ status: 'PASSE' }),
         ]);
         prisma.scenarioParticipant.findMany.mockResolvedValue([
-          { scenarioId: 's1', userId: 'u1', user: { pseudo: 'Alice' } },
+          { scenarioId: 's1', userId: 'u1', user: { pseudo: 'Alice', displayName: 'Alice au pays' } },
         ]);
         characters.findAllByPartie.mockResolvedValue([
           { id: 'char1', userId: 'u1' },
@@ -1225,7 +1227,7 @@ describe('ScenariosService', () => {
         {
           scenarioId: VALID_SCENARIO_ID,
           userId: 'u1',
-          user: { pseudo: 'Alice' },
+          user: { pseudo: 'Alice', displayName: 'Alice au pays' },
         },
       ]);
 
@@ -1239,7 +1241,9 @@ describe('ScenariosService', () => {
         create: { scenarioId: VALID_SCENARIO_ID, userId: 'u1' },
         update: {},
       });
-      expect(result.participants).toEqual([{ userId: 'u1', pseudo: 'Alice' }]);
+      expect(result.participants).toEqual([
+        { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' },
+      ]);
     });
 
     it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
@@ -1298,7 +1302,7 @@ describe('ScenariosService', () => {
         {
           scenarioId: VALID_SCENARIO_ID,
           userId: 'u1',
-          user: { pseudo: 'Alice' },
+          user: { pseudo: 'Alice', displayName: 'Alice au pays' },
         },
       ]);
 
@@ -1435,13 +1439,15 @@ describe('ScenariosService', () => {
         {
           scenarioId: VALID_SCENARIO_ID,
           userId: 'u1',
-          user: { pseudo: 'Alice' },
+          user: { pseudo: 'Alice', displayName: 'Alice au pays' },
         },
       ]);
 
       const result = await service.open(VALID_SCENARIO_ID, 'mj1');
 
-      expect(result.participants).toEqual([{ userId: 'u1', pseudo: 'Alice' }]);
+      expect(result.participants).toEqual([
+        { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' },
+      ]);
     });
 
     it.each(['A_VENIR', 'COURANT', 'PASSE'])(
@@ -1861,13 +1867,15 @@ describe('ScenariosService', () => {
         {
           scenarioId: VALID_SCENARIO_ID,
           userId: 'u1',
-          user: { pseudo: 'Alice' },
+          user: { pseudo: 'Alice', displayName: 'Alice au pays' },
         },
       ]);
 
       const result = await service.close(VALID_SCENARIO_ID, 'mj1');
 
-      expect(result.participants).toEqual([{ userId: 'u1', pseudo: 'Alice' }]);
+      expect(result.participants).toEqual([
+        { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' },
+      ]);
     });
 
     it.each(['BROUILLON', 'A_VENIR', 'PASSE'])(

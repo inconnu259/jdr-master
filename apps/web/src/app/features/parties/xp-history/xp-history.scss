@@ -33,6 +33,19 @@
   font-size: 0.9rem;
 }
 
+/* Le mode `joint` d'IdentityLabel empile le personnage et le joueur sur deux lignes : un texte
+   frère resterait aligné sur la baseline de la seconde, donc décroché du nom du personnage
+   (revue de code 28.2). La ligne devient une rangée flex centrée. */
+.xp-history__entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.xp-history__amount {
+  font-weight: 600;
+}
+
 .xp-history__bonus-badge {
   font-size: 0.75rem;
   color: var(--mat-sys-primary, #6750a4);

@@ -93,18 +93,24 @@ export class PartiesService {
     return partie;
   }
 
-  /** Liste des joueurs d'une partie (visible par le MJ ou un membre). */
+  /** Liste des joueurs d'une partie (visible par le MJ ou un membre). L'e-mail n'est renseigné
+   *  que si le demandeur est le MJ (AD-2) — un `InviteLink` acceptant un nombre d'usages
+   *  illimité, un membre n'est pas nécessairement quelqu'un que le MJ a choisi individuellement. */
   async listMembers(partieId: string, userId: string) {
-    await this.getViewable(partieId, userId);
+    const partie = await this.getViewable(partieId, userId);
+    const isMj = partie.mjId === userId;
     const memberships = await this.prisma.membership.findMany({
       where: { partieId },
       orderBy: { joinedAt: 'asc' },
-      include: { user: { select: { id: true, pseudo: true, email: true } } },
+      include: {
+        user: { select: { id: true, pseudo: true, displayName: true, email: true } },
+      },
     });
     return memberships.map((m) => ({
       userId: m.user.id,
       pseudo: m.user.pseudo,
-      email: m.user.email,
+      displayName: m.user.displayName,
+      email: isMj ? m.user.email : undefined,
       joinedAt: m.joinedAt,
     }));
   }
@@ -138,30 +144,38 @@ export class PartiesService {
     return { ok: true };
   }
 
-  /** Retourne MJ + membres (dédoublonnés) avec leur pseudo. */
+  /** Retourne MJ + membres (dédoublonnés) avec leur pseudo et leur nom affiché. */
   private async resolveParticipants(partieId: string, mjId: string) {
     const [mjUser, memberships] = await Promise.all([
       this.prisma.user.findUnique({
         where: { id: mjId },
-        select: { id: true, pseudo: true },
+        select: { id: true, pseudo: true, displayName: true },
       }),
       this.prisma.membership.findMany({
         where: { partieId },
-        include: { user: { select: { id: true, pseudo: true } } },
+        include: { user: { select: { id: true, pseudo: true, displayName: true } } },
       }),
     ]);
 
     const seen = new Set<string>();
-    const participants: { userId: string; pseudo: string }[] = [];
+    const participants: { userId: string; pseudo: string; displayName: string }[] = [];
 
     if (mjUser) {
       seen.add(mjUser.id);
-      participants.push({ userId: mjUser.id, pseudo: mjUser.pseudo });
+      participants.push({
+        userId: mjUser.id,
+        pseudo: mjUser.pseudo,
+        displayName: mjUser.displayName,
+      });
     }
     for (const m of memberships) {
       if (!seen.has(m.user.id)) {
         seen.add(m.user.id);
-        participants.push({ userId: m.user.id, pseudo: m.user.pseudo });
+        participants.push({
+          userId: m.user.id,
+          pseudo: m.user.pseudo,
+          displayName: m.user.displayName,
+        });
       }
     }
     return { participants, memberships };
@@ -214,6 +228,7 @@ export class PartiesService {
           const members = participants.map((p) => ({
             userId: p.userId,
             pseudo: p.pseudo,
+            displayName: p.displayName,
             status: this.availability.computeSlotStatus(
               declarationsMap.get(p.userId) ?? [],
               dateUtc,
@@ -240,6 +255,7 @@ export class PartiesService {
           const members = participants.map((p) => ({
             userId: p.userId,
             pseudo: p.pseudo,
+            displayName: p.displayName,
             status: this.availability.computeSlotStatus(
               declarationsMap.get(p.userId) ?? [],
               dateUtc,

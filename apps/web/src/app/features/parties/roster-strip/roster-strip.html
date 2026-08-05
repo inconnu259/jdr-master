@@ -14,7 +14,7 @@
     >
       <span class="roster-strip__avatar-wrap" [class.roster-strip__avatar-wrap--mj]="row.isMj">
         <app-character-avatar
-          [name]="row.displayName"
+          [name]="row.avatarLabel"
           [size]="26"
           [characterId]="row.character?.id ?? ''"
           [portraitUrl]="row.character?.portraitUrl ?? null"
@@ -37,7 +37,13 @@
           }}</span>
         }
       </span>
-      <span class="roster-strip__name">{{ row.displayName }}</span>
+      <span class="roster-strip__name">
+        @if (!row.character && row.isSelf && !row.isMj) {
+          {{ theme.tone()['character.create_cta'] }}
+        } @else {
+          <app-identity-label [characterName]="row.characterLabel" [playerName]="row.playerLabel" />
+        }
+      </span>
     </div>
   }
 

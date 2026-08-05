@@ -7,12 +7,14 @@ const MEMBERS: PartieMemberDto[] = [
   {
     userId: 'mj1',
     pseudo: 'Sylas',
+    displayName: 'Sylas',
     email: 'sylas@example.com',
     joinedAt: '2026-01-01T00:00:00.000Z',
   },
   {
     userId: 'u1',
     pseudo: 'Alice',
+    displayName: 'Alice au pays',
     email: 'alice@example.com',
     joinedAt: '2026-01-01T00:00:00.000Z',
   },
@@ -88,7 +90,7 @@ describe('RosterRail', () => {
     expect(mjItem.getAttribute('aria-label')).toBe('Sylas — MJ');
 
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
-    expect(playerItem.getAttribute('aria-label')).toBe('Alice — Fenn (Ménestrel)');
+    expect(playerItem.getAttribute('aria-label')).toBe('Alice au pays — Fenn (Ménestrel)');
   });
 
   it('un membre sans personnage encore créé a un aria-label explicite plutôt que vide', () => {
@@ -96,7 +98,7 @@ describe('RosterRail', () => {
     fixture.componentRef.setInput('characters', []);
     fixture.detectChanges();
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
-    expect(playerItem.getAttribute('aria-label')).toBe('Alice — aucun personnage créé');
+    expect(playerItem.getAttribute('aria-label')).toBe('Alice au pays — aucun personnage créé');
   });
 
   it('clic sur un membre ayant un personnage émet selectCharacter avec son characterId', () => {
@@ -202,7 +204,7 @@ describe('RosterRail', () => {
   it("aria-label inclut le rôle assigné quand présent et pas de montée de niveau en attente (Story 27.3)", () => {
     const fixture = setup(true, 'mj1', () => 'Cartographe');
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
-    expect(playerItem.getAttribute('aria-label')).toBe('Alice — Fenn (Ménestrel) — rôle : Cartographe');
+    expect(playerItem.getAttribute('aria-label')).toBe('Alice au pays — Fenn (Ménestrel) — rôle : Cartographe');
   });
 
   it('joueur sans personnage sur sa propre ligne → clic émet createCharacter (pas selectCharacter)', () => {

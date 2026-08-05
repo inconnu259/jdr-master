@@ -58,18 +58,20 @@ export interface PartieDto {
 /** Statut d'une invitation in-app. */
 export type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'REVOKED';
 
-/** Résultat de recherche d'utilisateur (GET /users/search) — jamais le hash. */
+/** Résultat de recherche d'utilisateur (GET /users/search) — jamais le hash, jamais l'e-mail,
+ *  jamais le nom affiché (AD-2 : seule exception à « pseudo et displayName toujours les deux »). */
 export interface UserSearchResultDto {
   id: string;
   pseudo: string;
-  email: string;
 }
 
 /** Un joueur d'une partie (GET /parties/:id/members). */
 export interface PartieMemberDto {
   userId: string;
   pseudo: string;
-  email: string;
+  displayName: string;
+  /** Renseigné uniquement lorsque le demandeur est le MJ de la partie (AD-2) — omis pour tout autre membre. */
+  email?: string;
   joinedAt: string;
 }
 
@@ -122,7 +124,7 @@ export interface ScenarioDto {
   /** Séances du scénario (Story 8.2) — toujours un tableau, potentiellement vide, quel que soit le kind. */
   seances: SeanceDto[];
   /** Participants (CAMPAGNE_EPISODIQUE uniquement, Story 8.1) — toujours undefined pour ONE_SHOT/CAMPAGNE_LINEAIRE (AD-4). */
-  participants?: { userId: string; pseudo: string }[];
+  participants?: { userId: string; pseudo: string; displayName: string }[];
   /** Notes de journal associées à la rétrospective (Story 8.6) — peuplé uniquement si `status === 'PASSE'`, sinon `undefined`. */
   retrospectiveNotes?: CharacterNoteDto[];
 }
@@ -205,6 +207,9 @@ export interface AnnouncementDto {
   scenarioId: string | null;
   text: string;
   createdAt: string;
+  /** Identité du MJ auteur — dérivée de `Partie.mjId`, jamais stockée sur l'annonce (AD-2, Story 28.2). */
+  authorPseudo: string;
+  authorDisplayName: string;
 }
 
 /** Payload de publication d'une annonce (POST /parties/:id/announcements). */
@@ -308,7 +313,7 @@ export interface UpdateAvailabilityDto {
 export interface AvailableSlotDto {
   date: string;
   slot: DaySlot;
-  members: { userId: string; pseudo: string; status: SlotStatus }[];
+  members: { userId: string; pseudo: string; displayName: string; status: SlotStatus }[];
 }
 
 /** Vue agrégée d'un créneau disponible pour un joueur non-MJ (sans identité des membres). */
@@ -345,6 +350,10 @@ export interface PollOptionDto {
 export interface PollVoteDto {
   userId: string;
   pseudo: string;
+  /** Nom affiché du votant (AD-2). Étendu par la revue de code de la story 28.2 : sans lui, la liste
+   *  des votants nommait le joueur par son pseudo pendant que la liste des manquants, juste en
+   *  dessous, le nommait par son nom affiché. */
+  displayName: string;
   answer: VoteAnswer;
 }
 
@@ -402,6 +411,8 @@ export interface CharacterDto {
   updatedAt: string;
   /** Pseudo du propriétaire (joueur ou MJ) — résolu côté serveur, jamais stocké. */
   ownerPseudo: string;
+  /** Nom affiché du propriétaire — résolu côté serveur, jamais stocké (AD-2, Story 28.2). */
+  ownerDisplayName: string;
   /** Le propriétaire de ce personnage est le MJ de la partie (distinct d'un personnage de joueur). */
   ownerIsMj: boolean;
   /**
@@ -430,6 +441,9 @@ export interface XpDistributionEntryDto {
   characterId: string;
   amount: number;
   isBonus: boolean;
+  /** Identité du propriétaire du personnage crédité — pas celle du MJ qui distribue (AD-2, Story 28.2). */
+  ownerPseudo: string;
+  ownerDisplayName: string;
 }
 
 /** Distribution d'XP faite par le MJ après une session, avec ses entrées par personnage. */

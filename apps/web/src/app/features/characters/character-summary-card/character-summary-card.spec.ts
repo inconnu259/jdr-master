@@ -70,7 +70,7 @@ describe('CharacterSummaryCard', () => {
     expect(fixture.nativeElement.querySelector('.character-summary-card__owner-badge')).toBeNull();
   });
 
-  it('showOwnerInfo=true + personnage de joueur → affiche le pseudo du propriétaire', async () => {
+  it('showOwnerInfo=true + personnage de joueur → affiche le nom affiché du propriétaire', async () => {
     TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
     const fixture = TestBed.createComponent(CharacterSummaryCard);
     fixture.componentRef.setInput('character', CHARACTER);
@@ -79,7 +79,7 @@ describe('CharacterSummaryCard', () => {
     await fixture.whenStable();
 
     const badge = fixture.nativeElement.querySelector('.character-summary-card__owner-badge');
-    expect(badge?.textContent?.trim()).toBe('alice');
+    expect(badge?.textContent?.trim()).toBe('Alice au pays');
   });
 
   it('showOwnerInfo=true + personnage du MJ → affiche le badge MJ thématisé, pas le pseudo', async () => {

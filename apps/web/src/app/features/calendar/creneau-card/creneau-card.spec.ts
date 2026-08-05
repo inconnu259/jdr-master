@@ -8,8 +8,8 @@ function makeSlot(overrides: Partial<AvailableSlotDto> = {}): AvailableSlotDto {
     date: '2026-07-04',
     slot: 'MORNING',
     members: [
-      { userId: 'u1', pseudo: 'Alice', status: 'AVAILABLE' },
-      { userId: 'u2', pseudo: 'Bob', status: 'AVAILABLE' },
+      { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays', status: 'AVAILABLE' },
+      { userId: 'u2', pseudo: 'Bob', displayName: 'Bobby', status: 'AVAILABLE' },
     ],
     ...overrides,
   };
@@ -40,26 +40,35 @@ describe('CreneauCard', () => {
     create(
       makeSlot({
         members: [
-          { userId: 'u1', pseudo: 'Alice', status: 'AVAILABLE' },
-          { userId: 'u2', pseudo: 'Bob', status: 'AVAILABLE' },
+          { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays', status: 'AVAILABLE' },
+          { userId: 'u2', pseudo: 'Bob', displayName: 'Bobby', status: 'AVAILABLE' },
         ],
       }),
     );
     expect(el.textContent).toContain('Guilde complète');
   });
 
-  it("affiche l'alerte avec pseudo interpolé pour chaque membre UNKNOWN", () => {
+  it("affiche l'alerte avec le nom affiché interpolé pour chaque membre UNKNOWN", () => {
     create(
       makeSlot({
         members: [
-          { userId: 'u1', pseudo: 'Alice', status: 'AVAILABLE' },
-          { userId: 'u2', pseudo: 'Bob', status: 'UNKNOWN' },
+          { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays', status: 'AVAILABLE' },
+          { userId: 'u2', pseudo: 'Bob', displayName: 'Bobby', status: 'UNKNOWN' },
         ],
       }),
     );
     expect(el.textContent).not.toContain('Guilde complète');
     const alertList = el.querySelector('.creneau-card__alerts');
     expect(alertList).toBeTruthy();
-    expect(alertList!.textContent).toContain('Bob');
+    expect(alertList!.textContent).toContain('Bobby');
+  });
+
+  it('chaque membre est rendu via IdentityLabel (icône silhouette + nom affiché, pas le pseudo)', () => {
+    create(makeSlot());
+    const members = el.querySelectorAll('.creneau-card__member');
+    expect(members.length).toBe(2);
+    expect(members[0].querySelector('svg')).not.toBeNull();
+    expect(members[0].textContent).toContain('Alice au pays');
+    expect(members[0].textContent).not.toContain('Bobby');
   });
 });

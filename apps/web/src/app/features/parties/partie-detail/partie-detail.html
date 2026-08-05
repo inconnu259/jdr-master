@@ -72,7 +72,7 @@
                 @if (showTroupe()) {
                   <mat-list>
                     @for (m of members(); track m.userId) {
-                      <mat-list-item>{{ m.pseudo }}</mat-list-item>
+                      <mat-list-item><app-identity-label [playerName]="m.displayName" /></mat-list-item>
                     }
                   </mat-list>
                 }
@@ -260,7 +260,7 @@
               } @else {
                 @for (m of otherMembers(); track m.userId) {
                   <div class="result-row">
-                    <span>{{ m.pseudo }}</span>
+                    <app-identity-label [playerName]="m.displayName" />
                     <button mat-button (click)="removeMember(m)">
                       <mat-icon>person_remove</mat-icon> {{ theme.tone()['partie.remove_member_btn'] }}
                     </button>
@@ -281,7 +281,7 @@
               </div>
               @for (u of results(); track u.id) {
                 <div class="result-row">
-                  <span>{{ u.pseudo }} <span class="muted">({{ u.email }})</span></span>
+                  <span>{{ u.pseudo }}</span>
                   <button mat-button (click)="invite(u)">
                     <mat-icon>person_add</mat-icon> {{ theme.tone()['partie.invite_btn'] }}
                   </button>

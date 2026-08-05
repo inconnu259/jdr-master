@@ -2,13 +2,14 @@ import { Component, computed, inject, input, output } from '@angular/core';
 import type { CharacterDto } from '@master-jdr/shared';
 import { characterName } from '../../../core/characters/character.util';
 import { CharacterAvatar } from '../character-avatar/character-avatar';
+import { IdentityLabel } from '../../../shared/identity/identity-label';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { pendingLevelsLocal } from '../character-sheet/level-thresholds';
 
 @Component({
   selector: 'app-character-summary-card',
   standalone: true,
-  imports: [CharacterAvatar],
+  imports: [CharacterAvatar, IdentityLabel],
   templateUrl: './character-summary-card.html',
   styleUrl: './character-summary-card.scss',
 })

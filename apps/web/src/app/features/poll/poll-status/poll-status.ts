@@ -11,6 +11,7 @@ import type {
 } from '@master-jdr/shared';
 import { getMissingVoters, getMissingVotersForOption } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { IdentityLabel } from '../../../shared/identity/identity-label';
 import { ConfirmDialog } from '../../parties/confirm-dialog/confirm-dialog';
 
 const SLOT_LABELS: Record<DaySlot, string> = {
@@ -35,7 +36,7 @@ const ANSWER_ICONS: Record<VoteAnswer, string> = {
 @Component({
   selector: 'app-poll-status',
   standalone: true,
-  imports: [MatButtonModule],
+  imports: [MatButtonModule, IdentityLabel],
   templateUrl: './poll-status.html',
   styleUrl: './poll-status.scss',
 })
@@ -89,8 +90,8 @@ export class PollStatusPanel {
     return getMissingVotersForOption(opt, this.members());
   }
 
-  protected missingAlert(pseudo: string): string {
-    return this.theme.tone()['alert.missing_player'].replace('{name}', pseudo);
+  protected missingAlert(displayName: string): string {
+    return this.theme.tone()['alert.missing_player'].replace('{name}', displayName);
   }
 
   protected async onChooseClick(opt: PollOptionDto): Promise<void> {
