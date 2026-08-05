@@ -66,6 +66,7 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
       data: {
         email: `mj-${suffix}@test.local`,
         pseudo: `mj-${suffix}`,
+        displayName: `mj-${suffix}`,
         passwordHash: 'x',
       },
     });
@@ -73,6 +74,7 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
       data: {
         email: `player-${suffix}@test.local`,
         pseudo: `player-${suffix}`,
+        displayName: `player-${suffix}`,
         passwordHash: 'x',
       },
     });

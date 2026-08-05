@@ -56,6 +56,7 @@ describe('seedAdmin', () => {
         email: 'a@b.c',
         pseudo: 'admin',
         passwordHash: 'HASHED',
+        displayName: 'admin',
         role: 'ADMIN',
       },
     });

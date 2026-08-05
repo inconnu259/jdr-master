@@ -18,6 +18,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'nav.mode_mj': 'Maître',
     'nav.logout': 'Fermer le grimoire',
     'nav.calendar': 'Mes disponibilités',
+    'nav.account': 'Mon grimoire personnel',
     /* — dashboard — */
     'dashboard.title_mj': 'Mes rituels',
     'dashboard.empty_mj': 'Nulle quête en cours. Forgez la première…',
@@ -172,6 +173,14 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.note_private_label': 'Entrée privée',
     'evolution.note_shared_label': 'Entrée partagée avec le groupe',
     'evolution.notes_error': "Le journal n'a pas pu être mis à jour. Réessayez.",
+    /* — compte — */
+    'account.title': 'Mon grimoire personnel',
+    'account.pseudo_label': 'Signe de reconnaissance',
+    'account.email_label': 'Sceau de correspondance',
+    'account.display_name_label': 'Nom affiché aux autres voyageurs',
+    'account.save_btn': 'Sceller',
+    'account.saved': 'Le grimoire a retenu ce nom.',
+    'account.error': "Le grimoire n'a pas pu retenir ce changement. Réessayez.",
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -183,6 +192,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'nav.mode_mj': 'Guide',
     'nav.logout': 'Quitter la forêt',
     'nav.calendar': 'Mes disponibilités',
+    'nav.account': 'Mon carnet de route',
     /* — dashboard — */
     'dashboard.title_mj': 'Mes clairières',
     'dashboard.empty_mj': 'Aucune clairière ouverte. Plantez le premier feu…',
@@ -334,6 +344,14 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.note_private_label': 'Entrée gardée pour toi',
     'evolution.note_shared_label': 'Entrée partagée avec le cercle',
     'evolution.notes_error': "Le carnet n'a pas pu être mis à jour. Réessaie.",
+    /* — compte — */
+    'account.title': 'Mon carnet de route',
+    'account.pseudo_label': 'Nom de sentier',
+    'account.email_label': 'Sifflet de rappel',
+    'account.display_name_label': 'Nom porté aux yeux du cercle',
+    'account.save_btn': 'Graver',
+    'account.saved': 'Le carnet a retenu ce nom.',
+    'account.error': "Le carnet n'a pas pu retenir ce changement. Réessaie.",
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -345,6 +363,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'nav.mode_mj': 'Ingénieur',
     'nav.logout': 'Couper la vapeur',
     'nav.calendar': 'Mes disponibilités',
+    'nav.account': 'Mon établi',
     /* — dashboard — */
     'dashboard.title_mj': 'Mes manufactures',
     'dashboard.empty_mj': 'Aucune manufacture active. Lancez la première…',
@@ -496,5 +515,13 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.note_private_label': 'Entrée confidentielle',
     'evolution.note_shared_label': 'Entrée diffusée à l’équipage',
     'evolution.notes_error': 'Le journal n’a pas pu être mis à jour. Réessayez.',
+    /* — compte — */
+    'account.title': 'Mon établi',
+    'account.pseudo_label': 'Matricule',
+    'account.email_label': 'Fréquence de contact',
+    'account.display_name_label': 'Nom affiché aux autres membres',
+    'account.save_btn': 'Riveter',
+    'account.saved': 'L’établi a retenu ce nom.',
+    'account.error': 'L’établi n’a pas pu retenir ce changement. Réessayez.',
   },
 };

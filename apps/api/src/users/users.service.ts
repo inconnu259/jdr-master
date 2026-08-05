@@ -35,7 +35,12 @@ export class UsersService {
   async create(data: { email: string; pseudo: string; password: string }) {
     const passwordHash = await argon2.hash(data.password);
     return this.prisma.user.create({
-      data: { email: data.email, pseudo: data.pseudo, passwordHash },
+      data: {
+        email: data.email,
+        pseudo: data.pseudo,
+        passwordHash,
+        displayName: data.pseudo,
+      },
     });
   }
 }

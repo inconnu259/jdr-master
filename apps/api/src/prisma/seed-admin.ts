@@ -34,6 +34,7 @@ export interface AdminUserUpsertClient {
         email: string;
         pseudo: string;
         passwordHash: string;
+        displayName: string;
         role: 'ADMIN';
       };
     }): Promise<unknown>;
@@ -56,6 +57,7 @@ export async function seedAdmin(
       email: config.email,
       pseudo: config.pseudo,
       passwordHash,
+      displayName: config.pseudo,
       role: 'ADMIN',
     },
   });

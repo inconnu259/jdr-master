@@ -64,7 +64,12 @@ export class AuthService {
       let joinedPartieId: string | undefined;
       const result = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
-          data: { email: dto.email, pseudo: dto.pseudo, passwordHash },
+          data: {
+            email: dto.email,
+            pseudo: dto.pseudo,
+            passwordHash,
+            displayName: dto.pseudo,
+          },
         });
         const link = await this.inviteLinks.consumeLink(tx, dto.token, user.id);
         joinedPartieId = link.partieId;

@@ -16,6 +16,7 @@ model User {
   id           String     @id @default(uuid())
   email        String     @unique
   pseudo       String     @unique
+  displayName  String // AD-1 — NOT NULL : migration (comptes existants) ET register() (nouveaux)
   passwordHash String
   role         GlobalRole @default(USER)
   createdAt    DateTime   @default(now())

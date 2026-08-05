@@ -1,0 +1,32 @@
+<mat-card class="account-card">
+  <mat-card-title>{{ theme.tone()['account.title'] }}</mat-card-title>
+  <form [formGroup]="form" (ngSubmit)="submit()">
+    <div class="readonly-field">
+      <span class="lbl">{{ theme.tone()['account.pseudo_label'] }}</span>
+      <span class="value">{{ pseudo }}</span>
+    </div>
+
+    <div class="readonly-field">
+      <span class="lbl">{{ theme.tone()['account.email_label'] }}</span>
+      <span class="value">{{ email }}</span>
+    </div>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ theme.tone()['account.display_name_label'] }}</mat-label>
+      <input matInput formControlName="displayName" />
+    </mat-form-field>
+
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+    @if (saved()) {
+      <p class="saved">{{ theme.tone()['account.saved'] }}</p>
+    }
+
+    <div class="actions">
+      <button mat-flat-button type="submit" [disabled]="saving() || form.invalid">
+        {{ theme.tone()['account.save_btn'] }}
+      </button>
+    </div>
+  </form>
+</mat-card>

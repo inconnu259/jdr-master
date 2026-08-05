@@ -62,7 +62,12 @@ describe('UsersService', () => {
 
       expect(argon2.hash).toHaveBeenCalledWith('plain-text');
       expect(prisma.user.create).toHaveBeenCalledWith({
-        data: { email: 'a@b.c', pseudo: 'alice', passwordHash: 'HASHED' },
+        data: {
+          email: 'a@b.c',
+          pseudo: 'alice',
+          passwordHash: 'HASHED',
+          displayName: 'alice',
+        },
       });
     });
   });

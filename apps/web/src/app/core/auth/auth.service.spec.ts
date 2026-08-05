@@ -13,6 +13,7 @@ describe('AuthService (front)', () => {
     id: 'u1',
     email: 'a@b.c',
     pseudo: 'alice',
+    displayName: 'alice',
     role: 'USER',
     createdAt: '2026-01-01T00:00:00.000Z',
   };

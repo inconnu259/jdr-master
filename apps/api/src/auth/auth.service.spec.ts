@@ -166,6 +166,23 @@ describe('AuthService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
+    it('renseigne displayName au pseudo à la création (AD-1, deuxième point d’écriture obligatoire)', async () => {
+      tx.user.create.mockResolvedValue(fakeUser);
+      await service.register({
+        email: 'a@b.c',
+        pseudo: 'alice',
+        password: 'password123',
+        token: 'tok',
+      });
+      expect(tx.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          email: 'a@b.c',
+          pseudo: 'alice',
+          displayName: 'alice',
+        }),
+      });
+    });
+
     it('lève ConflictException si email/pseudo déjà pris (P2002)', async () => {
       tx.user.create.mockRejectedValue({ code: 'P2002' });
       await expect(

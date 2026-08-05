@@ -22,6 +22,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ScenariosModule } from './scenarios/scenarios.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { CharacterRolesModule } from './character-roles/character-roles.module';
+import { AccountModule } from './account/account.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { CharacterRolesModule } from './character-roles/character-roles.module';
     ScenariosModule,
     AnnouncementsModule,
     CharacterRolesModule,
+    AccountModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

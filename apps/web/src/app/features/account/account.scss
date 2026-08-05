@@ -1,0 +1,35 @@
+.account-card {
+  max-width: 32rem;
+  margin: 1rem auto;
+}
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+mat-form-field {
+  width: 100%;
+}
+.readonly-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.lbl {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+.value {
+  font-size: 1rem;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.error {
+  color: var(--mat-sys-error, #b00020);
+}
+.saved {
+  color: var(--mat-sys-primary, #2e7d32);
+}

@@ -68,3 +68,18 @@ describe('Shell — badge de vote en attente dans la navigation', () => {
     expect(button.classList.contains('mat-badge-hidden')).toBe(true);
   });
 });
+
+describe('Shell — entrée de menu Compte', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('le menu utilisateur contient un lien vers /account', async () => {
+    const fixture = await createFixture(0);
+    const button = fixture.nativeElement.querySelector('button[aria-label="Menu utilisateur"]');
+    button.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const link = document.body.querySelector('a[routerLink="/account"]');
+    expect(link).not.toBeNull();
+  });
+});

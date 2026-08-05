@@ -8,8 +8,15 @@ export interface AuthUser {
   id: string;
   email: string;
   pseudo: string;
+  /** Nom affiché aux autres utilisateurs. Initialisé au pseudo, librement modifiable, sans contrainte d'unicité (AD-1). */
+  displayName: string;
   role: 'USER' | 'ADMIN';
   createdAt: string;
+}
+
+/** Corps de la requête PATCH /me/display-name. */
+export interface UpdateDisplayNameDto {
+  displayName: string;
 }
 
 /** Réponse de l'endpoint GET /health de l'API. */

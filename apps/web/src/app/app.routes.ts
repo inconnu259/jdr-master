@@ -10,6 +10,7 @@ import { PartieForm } from './features/parties/partie-form/partie-form';
 import { PartieDetail } from './features/parties/partie-detail/partie-detail';
 import { Join } from './features/join/join';
 import { CalendarView } from './features/calendar/calendar-view/calendar-view';
+import { Account } from './features/account/account';
 
 export const routes: Routes = [
   { path: 'login', component: Login },
@@ -23,6 +24,7 @@ export const routes: Routes = [
     canActivate: [authGuard],
     children: [
       { path: '', component: Dashboard },
+      { path: 'account', component: Account },
       { path: 'parties/new', component: PartieForm },
       { path: 'parties/:id', component: PartieDetail },
       { path: 'parties/:id/edit', component: PartieForm },

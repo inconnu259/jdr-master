@@ -100,7 +100,9 @@ function makeSheetData(
 
 async function createUser(email: string, pseudo: string) {
   const passwordHash = await argon2.hash(DEMO_PASSWORD);
-  return prisma.user.create({ data: { email, pseudo, passwordHash } });
+  return prisma.user.create({
+    data: { email, pseudo, passwordHash, displayName: pseudo },
+  });
 }
 
 async function createCharacter(
