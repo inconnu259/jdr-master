@@ -93,6 +93,21 @@ export class PartiesService {
     return partie;
   }
 
+  /** Récupère une partie visible par l'utilisateur (garde inchangée, cf. `getViewable`) enrichie
+   *  du pseudo/nom affiché du MJ (AD-2) — le MJ n'étant jamais un `Membership`, son identité
+   *  n'apparaît nulle part ailleurs dans `PartieDto`. Revue de code : `mj` gardé comme
+   *  `resolveParticipants()` plutôt qu'une assertion non-null — une ligne `User` orpheline ne doit
+   *  jamais transformer ce chemin de lecture principal en 500 (mjPseudo/mjDisplayName optionnels). */
+  async findOneDto(id: string, userId: string) {
+    const partie = await this.getViewable(id, userId);
+    const mj = await this.prisma.user.findUnique({
+      where: { id: partie.mjId },
+      select: { pseudo: true, displayName: true },
+    });
+    if (!mj) return partie;
+    return { ...partie, mjPseudo: mj.pseudo, mjDisplayName: mj.displayName };
+  }
+
   /** Liste des joueurs d'une partie (visible par le MJ ou un membre). L'e-mail n'est renseigné
    *  que si le demandeur est le MJ (AD-2) — un `InviteLink` acceptant un nombre d'usages
    *  illimité, un membre n'est pas nécessairement quelqu'un que le MJ a choisi individuellement. */

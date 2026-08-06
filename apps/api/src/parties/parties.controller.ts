@@ -40,7 +40,7 @@ export class PartiesController {
 
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.parties.getViewable(id, user.id);
+    return this.parties.findOneDto(id, user.id);
   }
 
   @Get(':id/members')

@@ -5,12 +5,19 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { Router } from '@angular/router';
 import { vi } from 'vitest';
-import type { AnnouncementDto, CharacterDto, PartieKind, ScenarioDto } from '@master-jdr/shared';
+import type {
+  AnnouncementDto,
+  CharacterDto,
+  PartieDto,
+  PartieKind,
+  ScenarioDto,
+} from '@master-jdr/shared';
 import { ScenarioReadDialog, type ScenarioReadDialogData } from './scenario-read-dialog';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { CharacterService } from '../../../core/characters/character.service';
+import { PartiesService } from '../../../core/parties/parties.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
 import { makeAnnouncementDto } from '../../../core/announcements/announcement-dto.fixture';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
@@ -29,6 +36,20 @@ const BASE: ScenarioDto = {
   seances: [],
 };
 
+const PARTIE: PartieDto = {
+  id: 'p1',
+  name: 'La Guilde',
+  kind: 'CAMPAGNE_EPISODIQUE',
+  gameSystemId: 'draconis',
+  description: null,
+  mjId: 'mj1',
+  mjPseudo: 'mj-pseudo',
+  mjDisplayName: 'MJ Nom',
+  createdAt: '',
+  nextSessionDate: null,
+  nextSessionSlot: null,
+};
+
 async function createComponent(
   scenario: ScenarioDto,
   {
@@ -39,6 +60,7 @@ async function createComponent(
     ownNotes = [] as unknown[],
     announcements = [] as AnnouncementDto[],
     initialChanged = null as { partieId: string } | null,
+    partie = PARTIE,
   }: {
     partieKind?: PartieKind;
     characters?: CharacterDto[];
@@ -47,6 +69,7 @@ async function createComponent(
     ownNotes?: unknown[];
     announcements?: AnnouncementDto[];
     initialChanged?: { partieId: string } | null;
+    partie?: PartieDto;
   } = {},
 ) {
   const dialogRef = { close: vi.fn() };
@@ -67,6 +90,7 @@ async function createComponent(
     toggleNoteShare: vi.fn(),
   };
   const announcementsSvc = { listAll: vi.fn().mockResolvedValue(announcements) };
+  const partiesSvc = { get: vi.fn().mockResolvedValue(partie) };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioReadDialog],
@@ -79,6 +103,7 @@ async function createComponent(
       { provide: PollService, useValue: pollSvc },
       { provide: Router, useValue: router },
       { provide: CharacterService, useValue: characterSvc },
+      { provide: PartiesService, useValue: partiesSvc },
       { provide: AnnouncementsService, useValue: announcementsSvc },
     ],
   }).compileComponents();
@@ -557,6 +582,7 @@ describe('ScenarioReadDialog', () => {
           { provide: AuthService, useValue: { currentUser: () => ({ id: 'viewer1' }) } },
           { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
           { provide: AnnouncementsService, useValue: { listAll: vi.fn().mockResolvedValue([]) } },
+          { provide: PartiesService, useValue: { get: vi.fn().mockResolvedValue(PARTIE) } },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(ScenarioReadDialog);
@@ -662,6 +688,7 @@ describe('ScenarioReadDialog', () => {
           { provide: ScenariosService, useValue: scenariosSvc },
           { provide: AuthService, useValue: { currentUser: () => ({ id: 'viewer1' }) } },
           { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
+          { provide: PartiesService, useValue: { get: vi.fn().mockResolvedValue(PARTIE) } },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(ScenarioReadDialog);
@@ -698,6 +725,7 @@ describe('ScenarioReadDialog', () => {
           { provide: AuthService, useValue: { currentUser: () => ({ id: 'viewer1' }) } },
           { provide: PollService, useValue: { chooseDate: vi.fn(), closePoll: vi.fn() } },
           { provide: AnnouncementsService, useValue: { listAll: vi.fn().mockResolvedValue([]) } },
+          { provide: PartiesService, useValue: { get: vi.fn().mockResolvedValue(PARTIE) } },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(ScenarioReadDialog);
@@ -720,6 +748,21 @@ describe('ScenarioReadDialog', () => {
       );
 
       expect(fixture.nativeElement.textContent).toContain('Annonce visible');
+    });
+
+    it("Revue de code (2026-08-06) : le badge « MJ » est toujours affiché sur l'auteur d'une annonce", async () => {
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'COURANT' },
+        {
+          announcements: [makeAnnouncementDto({ scenarioId: 's1', authorDisplayName: 'MJ Nom' })],
+        },
+      );
+
+      const badge = fixture.nativeElement.querySelector(
+        '.scenario-announcements .annonce-card__mj-badge',
+      );
+      expect(badge).toBeTruthy();
+      expect(badge!.textContent.trim()).toBe('MJ');
     });
 
     it("AC6 : jamais affichée quand le statut est A_VENIR/BROUILLON, même si la donnée est présente", async () => {

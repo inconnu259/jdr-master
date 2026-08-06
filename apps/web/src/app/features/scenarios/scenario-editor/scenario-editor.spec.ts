@@ -6,6 +6,7 @@ import { vi } from 'vitest';
 import type {
   AnnouncementDto,
   CharacterDto,
+  PartieDto,
   ScenarioDocumentDto,
   ScenarioDto,
 } from '@master-jdr/shared';
@@ -51,11 +52,26 @@ const LIBRARY_DOC: ScenarioDocumentDto = {
   createdAt: '2026-07-12T00:00:00.000Z',
 };
 
+const PARTIE: PartieDto = {
+  id: 'p1',
+  name: 'La Guilde',
+  kind: 'CAMPAGNE_EPISODIQUE',
+  gameSystemId: 'draconis',
+  description: null,
+  mjId: 'mj1',
+  mjPseudo: 'mj-pseudo',
+  mjDisplayName: 'MJ Nom',
+  createdAt: '',
+  nextSessionDate: null,
+  nextSessionSlot: null,
+};
+
 async function createComponent(
   scenario: ScenarioDto = SCENARIO,
   characters: CharacterDto[] = [],
   announcements: AnnouncementDto[] = [],
   initialChanged: { partieId: string } | null = null,
+  partie: PartieDto = PARTIE,
 ) {
   const scenariosSvc = {
     listAll: vi.fn().mockResolvedValue([scenario]),
@@ -71,7 +87,7 @@ async function createComponent(
     changed: signal<{ partieId: string } | null>(initialChanged),
   };
   const characterSvc = { listByPartie: vi.fn().mockResolvedValue(characters) };
-  const partiesSvc = { members: vi.fn().mockResolvedValue([]) };
+  const partiesSvc = { members: vi.fn().mockResolvedValue([]), get: vi.fn().mockResolvedValue(partie) };
   const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
   const announcementsSvc = { listAll: vi.fn().mockResolvedValue(announcements) };
   const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
@@ -650,6 +666,24 @@ describe('ScenarioEditor', () => {
       expect(fixture.nativeElement.textContent).toContain('pas encore de personnage');
     });
 
+    it('AC3 : deux participants sans personnage partageant le même displayName → pseudo affiché en complément', async () => {
+      const { fixture } = await createComponent(
+        {
+          ...SCENARIO,
+          status: 'COURANT',
+          participants: [
+            { userId: 'u1', pseudo: 'Alice', displayName: 'Même Nom' },
+            { userId: 'u2', pseudo: 'Bob', displayName: 'Même Nom' },
+          ],
+        },
+        [],
+      );
+      const pseudos = fixture.nativeElement.querySelectorAll('.identity-label__pseudo');
+      expect(pseudos).toHaveLength(2);
+      expect(pseudos[0].textContent.trim()).toBe('(Alice)');
+      expect(pseudos[1].textContent.trim()).toBe('(Bob)');
+    });
+
     it('reste peuplée après une action MJ (close()) grâce au DTO enrichi renvoyé par le backend', async () => {
       const alice = makeCharacterDto({ id: 'c1', userId: 'u1' });
       const { fixture, scenariosSvc } = await createComponent(
@@ -1039,6 +1073,23 @@ describe('ScenarioEditor', () => {
       const { fixture } = await createComponent(brouillon, [], announcements);
 
       expect(fixture.nativeElement.textContent).toContain('Annonce visible même en brouillon');
+    });
+
+    it("Revue de code (2026-08-06) : le badge « MJ » est toujours affiché sur l'auteur d'une annonce, même sans collision de nom", async () => {
+      const announcements = [
+        makeAnnouncementDto({ scenarioId: 's1', authorDisplayName: 'MJ Nom' }),
+      ];
+      const { fixture } = await createComponent(
+        { ...SCENARIO, status: 'COURANT' },
+        [],
+        announcements,
+      );
+
+      const badge = fixture.nativeElement.querySelector(
+        '.scenario-announcements .annonce-card__mj-badge',
+      );
+      expect(badge).toBeTruthy();
+      expect(badge!.textContent.trim()).toBe('MJ');
     });
   });
 

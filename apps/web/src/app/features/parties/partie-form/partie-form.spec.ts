@@ -15,6 +15,8 @@ const PARTIE: PartieDto = {
   gameSystemId: 'draconis',
   description: null,
   mjId: 'mj1',
+  mjPseudo: 'mj-pseudo',
+  mjDisplayName: 'MJ Nom',
   createdAt: '2026-07-01T00:00:00.000Z',
   nextSessionDate: null,
   nextSessionSlot: null,

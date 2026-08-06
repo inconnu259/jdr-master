@@ -50,6 +50,11 @@ export interface PartieDto {
   gameSystemId: string;
   description: string | null;
   mjId: string;
+  /** Renseigné uniquement par `GET /parties/:id` (`findOneDto`) — jamais par `GET /parties`
+   *  (`listForUser`, tableau de bord), qui reste volontairement hors du périmètre de l'homonymie
+   *  (Story 28.3, Task 1). Toujours vérifier avant usage plutôt que supposer présent. */
+  mjPseudo?: string;
+  mjDisplayName?: string;
   createdAt: string;
   nextSessionDate: string | null;
   nextSessionSlot: DaySlot | null;

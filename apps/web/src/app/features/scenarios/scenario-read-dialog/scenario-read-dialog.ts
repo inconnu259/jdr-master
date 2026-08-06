@@ -20,6 +20,7 @@ import { CharacterSummaryCard } from '../../characters/character-summary-card/ch
 import { SeanceList } from '../seance-list/seance-list';
 import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
+import { ambiguousUserIds } from '../../../shared/identity/identity-ambiguity.util';
 
 export interface ScenarioReadDialogData {
   scenario: ScenarioDto;
@@ -117,6 +118,15 @@ export class ScenarioReadDialog implements OnInit {
   protected readonly participantError = signal<string | null>(null);
   // AD-8 : signal `pending` local, même pattern que `SeanceList.pollActionPending`.
   protected readonly participatePending = signal(false);
+
+  /** AC3 : distingue les participants homonymes par leur pseudo. */
+  protected readonly ambiguousParticipants = computed(() =>
+    ambiguousUserIds(this.scenario().participants ?? []),
+  );
+
+  protected isParticipantAmbiguous(userId: string): boolean {
+    return this.ambiguousParticipants().has(userId);
+  }
 
   constructor() {
     // Story 19.2 (AC1) : réagit au signal générique ScenariosService.changed (RealtimeService,

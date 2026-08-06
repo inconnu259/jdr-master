@@ -2,6 +2,7 @@ import { Component, computed, inject, input } from '@angular/core';
 import type { AvailableSlotDto, DaySlot, SlotStatus } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
+import { ambiguousUserIds } from '../../../shared/identity/identity-ambiguity.util';
 
 const SLOT_LABELS: Record<string, string> = {
   MORNING: 'Matin',
@@ -33,6 +34,13 @@ export class CreneauCard {
   protected readonly unknownMembers = computed(() =>
     this.slot().members.filter((m) => m.status === 'UNKNOWN'),
   );
+
+  /** AC3 : distingue les membres homonymes par leur pseudo. */
+  protected readonly ambiguousMembers = computed(() => ambiguousUserIds(this.slot().members));
+
+  protected isAmbiguous(userId: string): boolean {
+    return this.ambiguousMembers().has(userId);
+  }
 
   protected slotLabel(slot: DaySlot): string {
     return SLOT_LABELS[slot] ?? slot;

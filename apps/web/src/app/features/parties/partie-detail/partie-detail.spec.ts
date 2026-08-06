@@ -121,6 +121,8 @@ function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
     gameSystemId: 'draconis',
     description: null,
     mjId: MJ_ID,
+    mjPseudo: 'mj-pseudo',
+    mjDisplayName: 'MJ Nom',
     createdAt: new Date().toISOString(),
     nextSessionDate: null,
     nextSessionSlot: null,
@@ -132,11 +134,12 @@ function makeToneService() {
   return { tone: signal(TONE_MAP['grimoire-emeraude']) };
 }
 
-function makeAuthService(userId: string) {
+function makeAuthService(userId: string, displayName = 'Test') {
   return {
     currentUser: signal({
       id: userId,
       pseudo: 'Test',
+      displayName,
       email: 'test@test.com',
       role: 'USER',
       createdAt: '',
@@ -181,6 +184,7 @@ interface CreateFixtureOptions {
   characterRoles?: CharacterGroupRoleDto[];
   noopAnimations?: boolean;
   desktop?: boolean;
+  displayName?: string;
 }
 
 async function createFixture(
@@ -196,7 +200,7 @@ async function createFixture(
       // les tests qui doivent naviguer entre onglets utilisent le mode noop pour un rendu synchrone.
       options.noopAnimations ? provideNoopAnimations() : provideAnimationsAsync(),
       { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => partie.id } } } },
-      { provide: AuthService, useValue: makeAuthService(currentUserId) },
+      { provide: AuthService, useValue: makeAuthService(currentUserId, options.displayName) },
       {
         provide: PartiesService,
         useValue: makePartiesService(partie, options.members ?? [], options.links ?? []),
@@ -1431,5 +1435,203 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
     fixture.detectChanges();
 
     expect(partiesSvc.members.mock.calls.length).toBe(callsBefore + 1);
+  });
+});
+
+// ─── Alerte d'homonymie (Story 28.3, AC1/AC2) ─────────────────────────────
+
+describe('PartieDetail — alerte d\'homonymie', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    sessionStorage.clear();
+  });
+
+  it('deux membres avec le même displayName → avertissement visible (AC1)', async () => {
+    const members: PartieMemberDto[] = [
+      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'a@test.com', joinedAt: '' },
+      { userId: 'other', pseudo: 'Bob', displayName: 'Même Nom', email: 'b@test.com', joinedAt: '' },
+    ];
+    const { el } = await createFixture(makePartie(), PLAYER_ID, {
+      members,
+      displayName: 'Même Nom',
+    });
+    expect(el.querySelector('.homonymy-warning')).toBeTruthy();
+  });
+
+  it("Revue de code : le bandeau porte role=alert et aria-live=polite (annoncé aux lecteurs d'écran)", async () => {
+    const members: PartieMemberDto[] = [
+      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'a@test.com', joinedAt: '' },
+      { userId: 'other', pseudo: 'Bob', displayName: 'Même Nom', email: 'b@test.com', joinedAt: '' },
+    ];
+    const { el } = await createFixture(makePartie(), PLAYER_ID, {
+      members,
+      displayName: 'Même Nom',
+    });
+    const banner = el.querySelector('.homonymy-warning');
+    expect(banner?.getAttribute('role')).toBe('alert');
+    expect(banner?.getAttribute('aria-live')).toBe('polite');
+  });
+
+  it('le displayName du joueur courant identique à celui du MJ (absent de members()) → avertissement visible (AC1)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, mjDisplayName: 'Même Nom' });
+    const members: PartieMemberDto[] = [
+      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'a@test.com', joinedAt: '' },
+    ];
+    const { el } = await createFixture(partie, PLAYER_ID, {
+      members,
+      displayName: 'Même Nom',
+    });
+    expect(el.querySelector('.homonymy-warning')).toBeTruthy();
+  });
+
+  it('aucun homonyme → aucun avertissement', async () => {
+    const members: PartieMemberDto[] = [
+      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Alice', email: 'a@test.com', joinedAt: '' },
+      { userId: 'other', pseudo: 'Bob', displayName: 'Bob', email: 'b@test.com', joinedAt: '' },
+    ];
+    const { el } = await createFixture(makePartie(), PLAYER_ID, {
+      members,
+      displayName: 'Alice',
+    });
+    expect(el.querySelector('.homonymy-warning')).toBeFalsy();
+  });
+
+  it('clic "Ignorer" → l\'avertissement disparaît et sessionStorage est écrit avec la bonne clé (AC2)', async () => {
+    const members: PartieMemberDto[] = [
+      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'a@test.com', joinedAt: '' },
+      { userId: 'other', pseudo: 'Bob', displayName: 'Même Nom', email: 'b@test.com', joinedAt: '' },
+    ];
+    const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
+      members,
+      displayName: 'Même Nom',
+    });
+    expect(el.querySelector('.homonymy-warning')).toBeTruthy();
+
+    const dismissBtn = Array.from(el.querySelectorAll('button')).find((b) =>
+      b.closest('.homonymy-warning'),
+    ) as HTMLButtonElement;
+    dismissBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('.homonymy-warning')).toBeFalsy();
+    expect(sessionStorage.getItem(`homonymy-dismissed:party-1:${PLAYER_ID}`)).toBe('1');
+  });
+
+  it('rechargement avec la clé déjà en sessionStorage → avertissement absent même si l\'homonymie existe (AC2)', async () => {
+    sessionStorage.setItem(`homonymy-dismissed:party-1:${PLAYER_ID}`, '1');
+    const members: PartieMemberDto[] = [
+      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'a@test.com', joinedAt: '' },
+      { userId: 'other', pseudo: 'Bob', displayName: 'Même Nom', email: 'b@test.com', joinedAt: '' },
+    ];
+    const { el } = await createFixture(makePartie(), PLAYER_ID, {
+      members,
+      displayName: 'Même Nom',
+    });
+    expect(el.querySelector('.homonymy-warning')).toBeFalsy();
+  });
+});
+
+// ─── Pseudo en complément dans les écrans sans personnage (Story 28.3, AC3) ────
+
+describe('PartieDetail — pseudo en complément (Troupe + gestion des membres)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('Troupe mobile : deux membres homonymes → pseudo affiché en complément pour chacun', async () => {
+    // Revue de code : le MJ n'est jamais un `Membership` (cf. Découverte story 28.3) — il
+    // n'apparaît donc jamais dans `members()`. Ce test doit utiliser deux joueurs réels, une
+    // fixture qui y placerait le MJ testerait un état que le backend ne peut pas produire.
+    const members: PartieMemberDto[] = [
+      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'alice@test.com', joinedAt: '' },
+      { userId: 'other-player', pseudo: 'Bob', displayName: 'Même Nom', email: 'bob@test.com', joinedAt: '' },
+    ];
+    const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
+      members,
+      desktop: false,
+      noopAnimations: true,
+    });
+
+    // Joueur mobile : "Détails" (index 0, où vit la Troupe) n'est pas l'onglet par défaut
+    // (defaultTabIndex sélectionne "Ma fiche") — navigation manuelle requise avant de dépliar la Troupe.
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    const detailsTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Détails');
+    detailsTab?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance as unknown as { showTroupe: WritableSignal<boolean> };
+    component.showTroupe.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const pseudos = el.querySelectorAll('.troupe-toggle .identity-label__pseudo');
+    expect(pseudos.length, el.querySelector('.troupe-toggle')?.outerHTML ?? 'NO SECTION').toBe(2);
+  });
+
+  it('gestion des membres (onglet Invitations) : membres homonymes → pseudo affiché', async () => {
+    // Revue de code : le MJ n'apparaît jamais dans `members()` — seuls des joueurs réels ici.
+    const members: PartieMemberDto[] = [
+      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'alice@test.com', joinedAt: '' },
+      { userId: 'p2', pseudo: 'Bob', displayName: 'Même Nom', email: 'bob@test.com', joinedAt: '' },
+    ];
+    const { fixture, el } = await createFixture(makePartie(), MJ_ID, {
+      members,
+      noopAnimations: true,
+    });
+
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    const invitationsTab = Array.from(tabLabels).find((t) =>
+      t.textContent?.includes('Invitations'),
+    );
+    invitationsTab?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const pseudos = el.querySelectorAll('.invite .identity-label__pseudo');
+    expect(pseudos.length).toBe(2);
+  });
+
+  it('aucune collision entre membres → aucun pseudo affiché', async () => {
+    // Revue de code : le MJ n'apparaît jamais dans `members()` — seuls des joueurs réels ici.
+    const members: PartieMemberDto[] = [
+      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@test.com', joinedAt: '' },
+      { userId: 'other-player', pseudo: 'Bob', displayName: 'Bob', email: 'bob@test.com', joinedAt: '' },
+    ];
+    const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
+      members,
+      desktop: false,
+      noopAnimations: true,
+    });
+
+    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
+    const detailsTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Détails');
+    detailsTab?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance as unknown as { showTroupe: WritableSignal<boolean> };
+    component.showTroupe.set(true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('.troupe-toggle')).toBeTruthy();
+    expect(el.querySelector('.troupe-toggle .identity-label__pseudo')).toBeNull();
+  });
+
+  it("Revue de code (2026-08-06) : le badge « MJ » est toujours affiché sur l'auteur d'une annonce campagne", async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const { el } = await createFixture(partie, PLAYER_ID, {
+      announcements: [makeAnnouncementDto({ scenarioId: null, authorDisplayName: 'MJ Nom' })],
+    });
+
+    const badge = el.querySelector('.announcements-feed .annonce-card__mj-badge');
+    expect(badge).toBeTruthy();
+    expect(badge!.textContent?.trim()).toBe('MJ');
   });
 });

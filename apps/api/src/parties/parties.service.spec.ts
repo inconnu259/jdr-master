@@ -187,6 +187,59 @@ describe('PartiesService', () => {
     );
   });
 
+  it('findOneDto : retourne mjPseudo/mjDisplayName pour le MJ (getViewable inchangée)', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.user.findUnique.mockResolvedValue({
+      pseudo: 'mj-pseudo',
+      displayName: 'MJ Nom',
+    });
+    const dto = await service.findOneDto('p1', 'mj1');
+    expect(dto).toEqual({
+      ...partie,
+      mjPseudo: 'mj-pseudo',
+      mjDisplayName: 'MJ Nom',
+    });
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'mj1' },
+      select: { pseudo: true, displayName: true },
+    });
+    expect(prisma.membership.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('findOneDto : retourne mjPseudo/mjDisplayName pour un joueur consultant la même partie', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.membership.findUnique.mockResolvedValue({
+      userId: 'u',
+      partieId: 'p1',
+    });
+    prisma.user.findUnique.mockResolvedValue({
+      pseudo: 'mj-pseudo',
+      displayName: 'MJ Nom',
+    });
+    const dto = await service.findOneDto('p1', 'u');
+    expect(dto).toEqual({
+      ...partie,
+      mjPseudo: 'mj-pseudo',
+      mjDisplayName: 'MJ Nom',
+    });
+  });
+
+  it('findOneDto : 403 si ni MJ ni membre (getViewable inchangée)', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.membership.findUnique.mockResolvedValue(null);
+    await expect(service.findOneDto('p1', 'u')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it("findOneDto : renvoie la partie sans mjPseudo/mjDisplayName si l'utilisateur MJ est introuvable (revue de code, pas de 500)", async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.user.findUnique.mockResolvedValue(null);
+    const dto = await service.findOneDto('p1', 'mj1');
+    expect(dto).toEqual(partie);
+    expect((dto as any).mjPseudo).toBeUndefined();
+  });
+
   it('removeMember : MJ uniquement, puis supprime le membership', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.membership.deleteMany.mockResolvedValue({ count: 1 });

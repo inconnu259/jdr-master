@@ -60,4 +60,12 @@ describe('AnnonceCard', () => {
     // plausible (jour/mois/année séparés par '/'), pas le format exact (dépend de la locale du runner).
     expect(fixture.nativeElement.textContent).toMatch(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
   });
+
+  it('Revue de code (2026-08-06) : le badge « MJ » est toujours affiché — l\'auteur d\'une annonce est toujours le MJ, identifiable sans recours au pseudo', async () => {
+    const fixture = await createComponent(makeAnnouncement(), 'Toute la campagne');
+
+    const badge = fixture.nativeElement.querySelector('.annonce-card__mj-badge');
+    expect(badge).toBeTruthy();
+    expect(badge!.textContent.trim()).toBe('MJ');
+  });
 });

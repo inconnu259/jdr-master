@@ -86,7 +86,10 @@
       <section class="scenario-announcements">
         <h3>Annonces</h3>
         @for (a of scenarioAnnouncements(); track a.id) {
-          <app-annonce-card [announcement]="a" [scopeLabel]="theme.tone()['announcement.scope_scenario_label']" />
+          <app-annonce-card
+            [announcement]="a"
+            [scopeLabel]="theme.tone()['announcement.scope_scenario_label']"
+          />
         }
       </section>
     }
@@ -104,7 +107,11 @@
         <ul class="participants-pseudo">
           @for (p of participantsWithoutCharacter(); track p.userId) {
             <li>
-              <app-identity-label [playerName]="p.displayName" />
+              <app-identity-label
+                [playerName]="p.displayName"
+                [pseudo]="p.pseudo"
+                [ambiguous]="isParticipantAmbiguous(p.userId)"
+              />
               <span class="hint">(pas encore de personnage)</span>
             </li>
           }

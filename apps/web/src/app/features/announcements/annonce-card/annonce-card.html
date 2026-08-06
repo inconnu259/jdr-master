@@ -2,7 +2,14 @@
   <!-- AC4/AC5 : le libellé de portée est un texte réel dans le DOM, jamais seulement une couleur
        d'accent CSS — lu par un lecteur d'écran au même titre que le reste du contenu. -->
   <span class="annonce-card__scope-label">{{ scopeLabel() }}</span>
-  <app-identity-label [playerName]="announcement().authorDisplayName" />
+  <span class="annonce-card__author">
+    <app-identity-label [playerName]="announcement().authorDisplayName" />
+    <!-- Revue de code (2026-08-06, décision utilisateur) : l'auteur d'une annonce est toujours le
+         MJ — l'identifier passe par un marqueur de rôle systématique (icône/typo), jamais par le
+         pseudo (qui ne dépend que d'une éventuelle collision de nom, un signal indirect et
+         non-garanti). Réutilise le badge déjà établi par RosterRail/RosterStrip. -->
+    <span class="annonce-card__mj-badge">{{ theme.tone()['roster.mj_badge'] }}</span>
+  </span>
   <p class="annonce-card__text">{{ announcement().text }}</p>
   <span class="annonce-card__date-label">{{ announcement().createdAt | date: 'short' }}</span>
 </article>

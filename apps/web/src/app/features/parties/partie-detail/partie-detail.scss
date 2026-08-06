@@ -17,6 +17,23 @@
   }
 }
 
+.homonymy-warning {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 1rem 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 0.5rem;
+  background: var(--mat-sys-surface-variant, #f0f0f0);
+  font-size: 0.9rem;
+
+  mat-icon {
+    flex-shrink: 0;
+  }
+}
+
 .characters-tab {
   &__grid {
     display: flex;

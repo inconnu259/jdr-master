@@ -71,4 +71,25 @@ describe('CreneauCard', () => {
     expect(members[0].textContent).toContain('Alice au pays');
     expect(members[0].textContent).not.toContain('Bobby');
   });
+
+  it('deux membres avec le même displayName → le pseudo de chacun est affiché en complément (AC3)', () => {
+    create(
+      makeSlot({
+        members: [
+          { userId: 'u1', pseudo: 'Alice', displayName: 'Même Nom', status: 'AVAILABLE' },
+          { userId: 'u2', pseudo: 'Bob', displayName: 'Même Nom', status: 'AVAILABLE' },
+        ],
+      }),
+    );
+    const members = el.querySelectorAll('.creneau-card__member');
+    expect(members[0].querySelector('.identity-label__pseudo')?.textContent?.trim()).toBe(
+      '(Alice)',
+    );
+    expect(members[1].querySelector('.identity-label__pseudo')?.textContent?.trim()).toBe('(Bob)');
+  });
+
+  it('aucune collision → aucun pseudo affiché (AC3)', () => {
+    create(makeSlot());
+    expect(el.querySelector('.identity-label__pseudo')).toBeNull();
+  });
 });

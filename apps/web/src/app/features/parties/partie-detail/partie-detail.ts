@@ -48,6 +48,7 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { characterName, findContentEntry } from '../../../core/characters/character.util';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
+import { ambiguousUserIds } from '../../../shared/identity/identity-ambiguity.util';
 import { ModeService } from '../../../core/mode/mode.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { getRespondedCount } from '../../../core/poll/poll.util';
@@ -189,6 +190,57 @@ export class PartieDetail implements OnInit {
     const mjId = this.partie()?.mjId;
     return this.members().filter((m) => m.userId !== mjId);
   });
+
+  /** AC3 : ambiguïté calculée sur `members()` en entier (pas `otherMembers()`) — détection
+   *  cohérente entre la Troupe mobile et la gestion des membres (deux vues du même roster). */
+  protected readonly ambiguousMembers = computed(() => ambiguousUserIds(this.members()));
+
+  protected isMemberAmbiguous(userId: string): boolean {
+    return this.ambiguousMembers().has(userId);
+  }
+
+  /** FR-4b/AC1 : l'utilisateur courant partage-t-il son nom affiché avec un autre membre — joueur
+   *  ou MJ (jamais un `Membership`, cf. Découverte story 28.3, comparé séparément via `partie().mjDisplayName`) ? */
+  protected readonly homonymousWith = computed(() => {
+    const me = this.auth.currentUser();
+    const p = this.partie();
+    if (!me) return false;
+    const displayName = me.displayName;
+    if (this.members().some((m) => m.userId !== me.id && m.displayName === displayName)) return true;
+    return !!p && p.mjId !== me.id && p.mjDisplayName === displayName;
+  });
+
+  /** Mémorisé en `sessionStorage` (pas de préférence compte persistée, AC2) — s'efface à la
+   *  fermeture de l'onglet, l'avertissement peut alors réapparaître dans une nouvelle session. */
+  protected readonly homonymyDismissed = signal(false);
+
+  private homonymyStorageKey(partieId: string, userId: string): string {
+    return `homonymy-dismissed:${partieId}:${userId}`;
+  }
+
+  /** Revue de code : `sessionStorage` peut lever (navigation privée Safari ancienne génération,
+   *  iframe sandboxée, politique de blocage du stockage) — ne doit jamais faire échouer le
+   *  chargement de la page ni l'action « Ignorer », juste dégrader silencieusement. */
+  private readHomonymyDismissed(partieId: string, userId: string): boolean {
+    try {
+      return !!sessionStorage.getItem(this.homonymyStorageKey(partieId, userId));
+    } catch {
+      return false;
+    }
+  }
+
+  protected dismissHomonymyWarning(): void {
+    const p = this.partie();
+    const me = this.auth.currentUser();
+    if (!p || !me) return;
+    try {
+      sessionStorage.setItem(this.homonymyStorageKey(p.id, me.id), '1');
+    } catch {
+      // Dégradation silencieuse : le bandeau reste ignoré pour ce rendu, mais réapparaîtra
+      // potentiellement à la prochaine navigation si le stockage reste inaccessible.
+    }
+    this.homonymyDismissed.set(true);
+  }
 
   /** Onglet "Ma fiche" (joueur mobile) sélectionné par défaut ; sinon "Détails" (index 0). */
   protected readonly defaultTabIndex = computed(() => (!this.isMj() && !this.isDesktop() ? 1 : 0));
@@ -427,6 +479,10 @@ export class PartieDetail implements OnInit {
     if (!id) return;
     this.showTroupe.set(false);
     this.partie.set(await this.parties.get(id));
+    const me = this.auth.currentUser();
+    if (me) {
+      this.homonymyDismissed.set(this.readHomonymyDismissed(id, me.id));
+    }
     await this.loadMembers();
     await this.loadActivePolls(id);
     this.announcements.set(await this.announcementsSvc.listAll(id).catch(() => []));

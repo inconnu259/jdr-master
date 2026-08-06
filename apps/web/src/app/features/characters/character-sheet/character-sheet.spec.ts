@@ -712,6 +712,16 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.querySelector('.level-up-banner')).toBeNull();
   });
 
+  it('Story 28.3 (AC4) : LevelUpBanner est positionné juste sous le nom du personnage (sheet__header-info), pas après le bloc d’en-tête complet', async () => {
+    const character = { ...CHARACTER, xp: 150 };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(character) });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'u1');
+
+    expect(
+      fixture.nativeElement.querySelector('.sheet__header-info .level-up-banner-live'),
+    ).not.toBeNull();
+  });
+
   it('propriétaire → section Historique visible', async () => {
     const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'u1');
     expect(fixture.nativeElement.querySelector('.sheet__history')).not.toBeNull();

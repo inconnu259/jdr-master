@@ -29,5 +29,8 @@
       />
     </svg>
     <span class="identity-label__name">{{ playerName() }}</span>
+    @if (ambiguous() && pseudo()) {
+      <span class="identity-label__pseudo">({{ pseudo() }})</span>
+    }
   </span>
 }

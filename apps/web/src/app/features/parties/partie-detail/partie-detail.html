@@ -5,6 +5,17 @@
       <mat-card-subtitle>{{ system(p.gameSystemId) }} · {{ kind(p.kind) }}</mat-card-subtitle>
     </mat-card-header>
 
+    @if (homonymousWith() && !homonymyDismissed()) {
+      <div class="homonymy-warning" role="alert" aria-live="polite">
+        <mat-icon aria-hidden="true">info</mat-icon>
+        <span>{{ theme.tone()['identity.homonymy_warning'] }}</span>
+        <a routerLink="/account">{{ theme.tone()['identity.homonymy_change_cta'] }}</a>
+        <button type="button" mat-button (click)="dismissHomonymyWarning()">
+          {{ theme.tone()['identity.homonymy_ignore_cta'] }}
+        </button>
+      </div>
+    }
+
     @if (!isDesktop() && isMj()) {
       <app-roster-strip
         [members]="members()"
@@ -72,7 +83,13 @@
                 @if (showTroupe()) {
                   <mat-list>
                     @for (m of members(); track m.userId) {
-                      <mat-list-item><app-identity-label [playerName]="m.displayName" /></mat-list-item>
+                      <mat-list-item>
+                        <app-identity-label
+                          [playerName]="m.displayName"
+                          [pseudo]="m.pseudo"
+                          [ambiguous]="isMemberAmbiguous(m.userId)"
+                        />
+                      </mat-list-item>
                     }
                   </mat-list>
                 }
@@ -260,7 +277,11 @@
               } @else {
                 @for (m of otherMembers(); track m.userId) {
                   <div class="result-row">
-                    <app-identity-label [playerName]="m.displayName" />
+                    <app-identity-label
+                      [playerName]="m.displayName"
+                      [pseudo]="m.pseudo"
+                      [ambiguous]="isMemberAmbiguous(m.userId)"
+                    />
                     <button mat-button (click)="removeMember(m)">
                       <mat-icon>person_remove</mat-icon> {{ theme.tone()['partie.remove_member_btn'] }}
                     </button>

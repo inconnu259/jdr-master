@@ -32,6 +32,7 @@ import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-ba
 import { SeanceList } from '../seance-list/seance-list';
 import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
+import { ambiguousUserIds } from '../../../shared/identity/identity-ambiguity.util';
 
 type ScenarioTextField = keyof UpdateScenarioDto;
 
@@ -134,6 +135,15 @@ export class ScenarioEditor implements OnInit {
     const characterUserIds = new Set(this.characters().map((c) => c.userId));
     return (this.scenario()?.participants ?? []).filter((p) => !characterUserIds.has(p.userId));
   });
+
+  /** AC3 : distingue les participants homonymes par leur pseudo. */
+  protected readonly ambiguousParticipants = computed(() =>
+    ambiguousUserIds(this.scenario()?.participants ?? []),
+  );
+
+  protected isParticipantAmbiguous(userId: string): boolean {
+    return this.ambiguousParticipants().has(userId);
+  }
 
   constructor() {
     effect(() => {

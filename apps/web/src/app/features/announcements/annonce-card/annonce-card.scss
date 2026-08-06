@@ -19,3 +19,19 @@
   color: var(--jdr-text-muted, #9a9aaa);
   font-size: 0.85em;
 }
+
+.annonce-card__author {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.annonce-card__mj-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--mat-sys-primary, #6750a4);
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 0 3px;
+  line-height: 1.4;
+}

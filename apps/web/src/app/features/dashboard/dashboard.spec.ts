@@ -21,6 +21,8 @@ function makeParty(id: string): PartieDto {
     gameSystemId: 'draconis',
     description: null,
     mjId: 'mj-1',
+    mjPseudo: 'mj-pseudo',
+    mjDisplayName: 'MJ Nom',
     createdAt: '',
     nextSessionDate: null,
     nextSessionSlot: null,

@@ -10,7 +10,11 @@
   <ul class="creneau-card__members" aria-label="Membres">
     @for (member of slot().members; track member.userId) {
       <li class="creneau-card__member">
-        <app-identity-label [playerName]="member.displayName" />
+        <app-identity-label
+          [playerName]="member.displayName"
+          [pseudo]="member.pseudo"
+          [ambiguous]="isAmbiguous(member.userId)"
+        />
         <span class="creneau-card__status" [attr.aria-label]="member.status">
           {{ statusIcon(member.status) }}
         </span>

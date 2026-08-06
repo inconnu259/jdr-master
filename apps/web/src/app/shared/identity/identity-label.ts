@@ -13,6 +13,10 @@ type IdentityLabelMode = 'joint' | 'single-character' | 'single-player' | 'empty
 export class IdentityLabel {
   readonly characterName = input<string | null>(null);
   readonly playerName = input<string | null>(null);
+  /** Pseudo affiché en complément du nom affiché en cas d'homonymie (AC3) — mode `single-player`
+   *  uniquement, ignoré silencieusement ailleurs (le nom du personnage lève déjà l'ambiguïté). */
+  readonly pseudo = input<string | null>(null);
+  readonly ambiguous = input<boolean>(false);
 
   protected readonly theme = inject(ThemeToneService);
 
@@ -31,6 +35,13 @@ export class IdentityLabel {
     if (this.mode() === 'single-character') {
       return `${this.theme.tone()['identity.character_label']} ${this.characterName()}`;
     }
-    return `${this.theme.tone()['identity.player_label']} ${this.playerName()}`;
+    const base = `${this.theme.tone()['identity.player_label']} ${this.playerName()}`;
+    // Revue de code : le pseudo de désambiguïsation (AC3) est un `<span>` visuel séparé — sans le
+    // reprendre ici, deux entrées homonymes ("Même Nom (Alice)" vs "(Bob)") sont annoncées de
+    // façon identique par un lecteur d'écran alors qu'elles sont distinguées visuellement.
+    if (this.ambiguous() && this.pseudo()) {
+      return `${base} (${this.pseudo()})`;
+    }
+    return base;
   });
 }

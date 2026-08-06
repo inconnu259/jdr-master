@@ -12,6 +12,9 @@
       />
       <div class="sheet__header-info">
         <h1 class="sheet__name">{{ name() }}</h1>
+        @if (isOwner()) {
+          <app-level-up-banner [character]="c" (levelUp)="openLevelUpWizard()" />
+        }
         <p class="sheet__meta">
           {{ classData()?.label }} · {{ typeData()?.label }} · Niveau {{ c.level }} · Ryuutama
         </p>
@@ -77,10 +80,6 @@
         }
       </div>
     </header>
-
-    @if (isOwner()) {
-      <app-level-up-banner [character]="c" (levelUp)="openLevelUpWizard()" />
-    }
 
     @if (exportError(); as error) {
       <p class="sheet__export-error">{{ error }}</p>

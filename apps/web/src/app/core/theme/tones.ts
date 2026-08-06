@@ -184,6 +184,10 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',
+    'identity.homonymy_warning':
+      'Un autre membre de cette partie porte le même nom affiché que vous.',
+    'identity.homonymy_change_cta': 'Changer mon nom affiché',
+    'identity.homonymy_ignore_cta': 'Ignorer',
   },
 
   /* ══════════════════════════════════════════════════════════ FORÊT ANCIENNE */
@@ -358,6 +362,10 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',
+    'identity.homonymy_warning':
+      'Un autre voyageur de cette expédition porte le même nom affiché que toi.',
+    'identity.homonymy_change_cta': 'Changer mon nom affiché',
+    'identity.homonymy_ignore_cta': 'Ignorer',
   },
 
   /* ════════════════════════════════════════════════════ MÉDIÉVAL STEAMPUNK */
@@ -532,5 +540,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',
+    'identity.homonymy_warning':
+      'Un autre membre de cette compagnie porte le même nom affiché que vous.',
+    'identity.homonymy_change_cta': 'Changer mon nom affiché',
+    'identity.homonymy_ignore_cta': 'Ignorer',
   },
 };

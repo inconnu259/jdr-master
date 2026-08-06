@@ -1,7 +1,8 @@
-import { Component, input } from '@angular/core';
+import { Component, inject, input } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import type { AnnouncementDto } from '@master-jdr/shared';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 @Component({
   selector: 'app-annonce-card',
@@ -11,6 +12,8 @@ import { IdentityLabel } from '../../../shared/identity/identity-label';
   styleUrl: './annonce-card.scss',
 })
 export class AnnonceCard {
+  protected readonly theme = inject(ThemeToneService);
+
   readonly announcement = input.required<AnnouncementDto>();
   // Story 9.2 : composant purement présentationnel — c'est l'appelant qui détermine le libellé de
   // portée (règles différentes selon le contexte : kind de la Partie pour une annonce campagne-wide,
