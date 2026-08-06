@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { AccountService } from '../../../core/account/account.service';
 import type { Theme } from '../../../core/theme/tones';
 
 @Component({
@@ -11,6 +12,7 @@ import type { Theme } from '../../../core/theme/tones';
 })
 export class ThemeSelector {
   protected readonly themeSvc = inject(ThemeToneService);
+  private readonly accountSvc = inject(AccountService);
 
   protected readonly gradients: Record<Theme, string> = {
     'grimoire-emeraude': 'linear-gradient(135deg, #1a0a30 20%, #9b6dff)',
@@ -26,5 +28,8 @@ export class ThemeSelector {
 
   protected selectTheme(theme: Theme): void {
     this.themeSvc.setTheme(theme);
+    // Fire-and-forget : le thème est déjà appliqué visuellement, un échec réseau isolé n'a pas
+    // besoin d'un message d'erreur dédié (la prochaine sélection ou connexion resynchronisera).
+    void this.accountSvc.setTheme(theme);
   }
 }

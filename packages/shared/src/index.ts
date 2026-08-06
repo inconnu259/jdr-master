@@ -3,6 +3,12 @@
  * Import type-only côté apps → effacé à la compilation, aucun coût runtime.
  */
 
+/** Thèmes disponibles — liste déclarée une seule fois (AD-13), la validation API s'y réfère
+ *  directement (`@IsIn(THEMES)`), jamais une seconde liste côté serveur. */
+export const THEMES = ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'] as const;
+
+export type Theme = (typeof THEMES)[number];
+
 /** Utilisateur authentifié (renvoyé par /auth/login, /auth/me). Jamais le hash. */
 export interface AuthUser {
   id: string;
@@ -12,6 +18,9 @@ export interface AuthUser {
   displayName: string;
   role: 'USER' | 'ADMIN';
   createdAt: string;
+  /** Thème choisi sur le compte. `null` = jamais choisi — le thème local est alors adopté une
+   *  seule fois et poussé vers le compte (AD-13). Toujours présent, jamais `undefined`. */
+  theme: Theme | null;
 }
 
 /** Corps de la requête PATCH /me/display-name. */

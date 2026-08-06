@@ -17,6 +17,7 @@ const user: AuthUser = {
   displayName: 'alice',
   role: 'USER',
   createdAt: '2026-01-01T00:00:00.000Z',
+  theme: 'grimoire-emeraude',
 };
 
 function run() {

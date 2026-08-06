@@ -11,7 +11,6 @@ import { AuthService } from '../../core/auth/auth.service';
 import { ModeService } from '../../core/mode/mode.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
-import { ThemeSelector } from './theme-selector/theme-selector';
 
 @Component({
   selector: 'app-shell',
@@ -24,7 +23,6 @@ import { ThemeSelector } from './theme-selector/theme-selector';
     MatMenuModule,
     MatButtonToggleModule,
     MatBadgeModule,
-    ThemeSelector,
     MatDivider,
   ],
   templateUrl: './shell.html',

@@ -1,5 +1,13 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import * as argon2 from 'argon2';
+
+// AuthService -> import RUNTIME (pas `import type`) de THEMES depuis @master-jdr/shared (ESM, non
+// transformé par ts-jest) — même piège déjà documenté pour GAME_SYSTEMS/@master-jdr/game-rules et
+// pour update-theme.dto.ts (Story 28.4, revue de code).
+jest.mock('@master-jdr/shared', () => ({
+  THEMES: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
+}));
+
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -181,6 +189,20 @@ describe('AuthService', () => {
           displayName: 'alice',
         }),
       });
+    });
+
+    it('tire un thème au hasard parmi THEMES à la création (revue de code Story 28.4)', async () => {
+      tx.user.create.mockResolvedValue(fakeUser);
+      await service.register({
+        email: 'a@b.c',
+        pseudo: 'alice',
+        password: 'password123',
+        token: 'tok',
+      });
+      const data = tx.user.create.mock.calls[0][0].data;
+      expect(['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk']).toContain(
+        data.theme,
+      );
     });
 
     it('lève ConflictException si email/pseudo déjà pris (P2002)', async () => {

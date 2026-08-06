@@ -34,6 +34,29 @@ describe('AccountService', () => {
       displayName: 'Nouveau nom',
       role: 'USER',
       createdAt: '2026-01-01T00:00:00.000Z',
+      theme: 'grimoire-emeraude',
+    };
+    req.flush(response);
+
+    await expect(promise).resolves.toEqual(response);
+  });
+
+  it('setTheme() appelle PATCH /me/theme avec withCredentials et renvoie l’utilisateur', async () => {
+    const promise = service.setTheme('foret-ancienne');
+
+    const req = http.expectOne(`${API_BASE}/me/theme`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ theme: 'foret-ancienne' });
+    expect(req.request.withCredentials).toBe(true);
+
+    const response: AuthUser = {
+      id: 'u1',
+      email: 'a@b.c',
+      pseudo: 'alice',
+      displayName: 'alice',
+      role: 'USER',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      theme: 'foret-ancienne',
     };
     req.flush(response);
 

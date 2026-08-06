@@ -12,6 +12,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../core/auth/auth.service';
 import { AccountService } from '../../core/account/account.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
+import { ThemeSelector } from './theme-selector/theme-selector';
 
 function notBlank(control: { value: string }): ValidationErrors | null {
   return control.value.trim().length > 0 ? null : { blank: true };
@@ -19,7 +20,14 @@ function notBlank(control: { value: string }): ValidationErrors | null {
 
 @Component({
   selector: 'app-account',
-  imports: [ReactiveFormsModule, MatCardModule, MatFormFieldModule, MatInputModule, MatButtonModule],
+  imports: [
+    ReactiveFormsModule,
+    MatCardModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatButtonModule,
+    ThemeSelector,
+  ],
   templateUrl: './account.html',
   styleUrl: './account.scss',
 })

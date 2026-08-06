@@ -7,6 +7,7 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'node:crypto';
+import { THEMES } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { InviteLinksService } from '../invitations/invite-links.service';
@@ -69,6 +70,11 @@ export class AuthService {
             pseudo: dto.pseudo,
             passwordHash,
             displayName: dto.pseudo,
+            // Un thème tiré au hasard plutôt qu'un `null`/défaut fixe — évite que tout nouveau
+            // compte démarre systématiquement sur le même thème (revue de code Story 28.4,
+            // demande utilisateur). N'affecte pas le push-once (AD-13) : celui-ci ne concerne que
+            // les comptes déjà existants avant cette story, jamais `null` après ce point.
+            theme: this.pickRandomTheme(),
           },
         });
         const link = await this.inviteLinks.consumeLink(tx, dto.token, user.id);
@@ -92,6 +98,11 @@ export class AuthService {
       }
       throw e;
     }
+  }
+
+  /** Tirage uniforme parmi les thèmes valides — utilisé uniquement à l'inscription. */
+  private pickRandomTheme(): (typeof THEMES)[number] {
+    return THEMES[Math.floor(Math.random() * THEMES.length)];
   }
 
   /**

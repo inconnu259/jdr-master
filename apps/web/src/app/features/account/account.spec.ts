@@ -15,6 +15,7 @@ function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
     displayName: 'alice',
     role: 'USER',
     createdAt: '2026-01-01T00:00:00.000Z',
+    theme: 'grimoire-emeraude',
     ...overrides,
   };
 }
@@ -30,12 +31,24 @@ function makeThemeService() {
       'account.saved': 'Le grimoire a retenu ce nom.',
       'account.error': "Le grimoire n'a pas pu retenir ce changement. Réessayez.",
     }),
+    // ThemeSelector (intégré à l'écran de compte, Story 28.4) a besoin de ces membres.
+    activeTheme: signal('grimoire-emeraude'),
+    themes: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
+    themeNames: {
+      'grimoire-emeraude': 'Grimoire Émeraude',
+      'foret-ancienne': 'Forêt Ancienne',
+      'medieval-steampunk': 'Médiéval Steampunk',
+    },
+    setTheme: vi.fn(),
   };
 }
 
 async function createFixture(
   currentUser = makeUser(),
-  accountSvc = { updateDisplayName: vi.fn() },
+  accountSvc: Record<string, ReturnType<typeof vi.fn>> = {
+    updateDisplayName: vi.fn(),
+    setTheme: vi.fn(),
+  },
 ) {
   const currentUserSignal = signal<AuthUser | null>(currentUser);
   await TestBed.configureTestingModule({

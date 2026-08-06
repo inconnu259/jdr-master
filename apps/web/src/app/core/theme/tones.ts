@@ -1,6 +1,9 @@
-export type Theme = 'grimoire-emeraude' | 'foret-ancienne' | 'medieval-steampunk';
-
-export const THEMES: Theme[] = ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'];
+// AD-13 : la liste des thèmes valides est déclarée une seule fois, dans @master-jdr/shared —
+// ré-exportée ici pour que les sites d'appel existants (import depuis ce fichier) continuent de
+// fonctionner sans modification.
+import type { Theme } from '@master-jdr/shared';
+export type { Theme } from '@master-jdr/shared';
+export { THEMES } from '@master-jdr/shared';
 
 export const THEME_NAMES: Record<Theme, string> = {
   'grimoire-emeraude': 'Grimoire Émeraude',

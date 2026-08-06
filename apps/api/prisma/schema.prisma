@@ -20,6 +20,7 @@ model User {
   passwordHash String
   role         GlobalRole @default(USER)
   createdAt    DateTime   @default(now())
+  theme        String? // AD-13 — null = jamais choisi, le thème local est alors adopté une fois
 
   mjOfParties              Partie[]                  @relation("PartieMJ")
   memberships              Membership[]

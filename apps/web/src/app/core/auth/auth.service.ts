@@ -2,7 +2,10 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type { AuthUser } from '@master-jdr/shared';
+import { THEMES } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
+import { AccountService } from '../account/account.service';
+import { ThemeToneService } from '../theme/theme-tone.service';
 
 // Source unique de l'URL d'API (`core/api-base.ts`) — l'URL était auparavant redéfinie en dur ici,
 // ce qui cassait tout accès depuis un autre appareil que le poste de dev (la requête partait vers le
@@ -13,6 +16,8 @@ const API = API_BASE;
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly accountSvc = inject(AccountService);
+  private readonly themeSvc = inject(ThemeToneService);
 
   /** Utilisateur courant (null = non connecté). */
   readonly currentUser = signal<AuthUser | null>(null);
@@ -32,6 +37,7 @@ export class AuthService {
         this.http.get<AuthUser>(`${API}/auth/me`, { withCredentials: true }),
       );
       this.currentUser.set(user);
+      await this.syncTheme(user);
     } catch {
       this.currentUser.set(null);
     } finally {
@@ -50,6 +56,38 @@ export class AuthService {
     );
     this.currentUser.set(user);
     this.initialized.set(true);
+    await this.syncTheme(user);
+  }
+
+  /**
+   * AD-13 : le compte est la seule source de vérité une fois connecté. `theme` non-`null` →
+   * `ThemeToneService` l'applique (seul point d'entrée, écrase `localStorage`). `theme` `null`
+   * (compte jamais configuré) → le thème local actuel est adopté une seule fois et poussé vers le
+   * compte, sans jamais rappeler `setTheme()` (déjà appliqué localement au démarrage, cf. `app.ts`).
+   */
+  private async syncTheme(user: AuthUser): Promise<void> {
+    if (user.theme !== null) {
+      // Revue de code : valider avant d'appliquer, comme le fait déjà `readStoredTheme()` pour
+      // `localStorage` — une valeur héritée/invalide en base (édition manuelle, migration future)
+      // ne doit jamais atteindre `ThemeToneService.setTheme()` telle quelle.
+      if ((THEMES as readonly string[]).includes(user.theme)) {
+        this.themeSvc.setTheme(user.theme);
+      }
+      return;
+    }
+    const themeAtPushTime = this.themeSvc.activeTheme();
+    try {
+      const pushed = await this.accountSvc.setTheme(themeAtPushTime);
+      // Revue de code : si le thème local a changé pendant que cette requête était en vol (ex.
+      // clic sur ThemeSelector juste après la connexion), ne pas écraser `currentUser` avec une
+      // réponse désormais périmée.
+      if (this.themeSvc.activeTheme() === themeAtPushTime) {
+        this.currentUser.set(pushed);
+      }
+    } catch {
+      // Non-critique — le thème reste appliqué localement, la synchronisation sera retentée à la
+      // prochaine connexion.
+    }
   }
 
   async register(email: string, pseudo: string, password: string, token: string): Promise<void> {

@@ -1,12 +1,20 @@
 import { ExecutionContext, INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+
+// AccountController -> update-theme.dto.ts -> import RUNTIME (pas `import type`) de THEMES depuis
+// @master-jdr/shared (ESM, non transformé par ts-jest) — même piège déjà documenté pour
+// GAME_SYSTEMS (realtime.module.spec.ts) et @master-jdr/game-rules (mémoire projet).
+jest.mock('@master-jdr/shared', () => ({
+  THEMES: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
+}));
+
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { AccountController } from './account.controller';
 import { AccountService } from './account.service';
 
 function makeAccountService() {
-  return { updateDisplayName: jest.fn() };
+  return { updateDisplayName: jest.fn(), updateTheme: jest.fn() };
 }
 
 describe('AccountController', () => {
@@ -38,6 +46,21 @@ describe('AccountController', () => {
       'Nouveau nom',
     );
     expect(result).toEqual({ id: 'u1', displayName: 'Nouveau nom' });
+  });
+
+  it("updateTheme() lit l'id depuis la session (req.user), jamais depuis le corps", async () => {
+    account.updateTheme.mockResolvedValue({
+      id: 'u1',
+      theme: 'foret-ancienne',
+    });
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.updateTheme(req, {
+      theme: 'foret-ancienne',
+    });
+
+    expect(account.updateTheme).toHaveBeenCalledWith('u1', 'foret-ancienne');
+    expect(result).toEqual({ id: 'u1', theme: 'foret-ancienne' });
   });
 
   describe('validation HTTP réelle (ValidationPipe global)', () => {
@@ -132,6 +155,41 @@ describe('AccountController', () => {
       expect(account.updateDisplayName).toHaveBeenCalledWith(
         'u1',
         'Nom valide',
+      );
+    });
+
+    it('theme hors de THEMES → 400, service jamais appelé', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/theme')
+        .send({ theme: 'theme-inexistant' })
+        .expect(400);
+      expect(account.updateTheme).not.toHaveBeenCalled();
+    });
+
+    it('id glissé dans le corps (même avec un theme valide) → 400 forbidNonWhitelisted, service jamais appelé', async () => {
+      account.updateTheme.mockResolvedValue({
+        id: 'u1',
+        theme: 'foret-ancienne',
+      });
+      await request(app.getHttpServer())
+        .patch('/me/theme')
+        .send({ theme: 'foret-ancienne', id: 'autre-utilisateur' })
+        .expect(400); // forbidNonWhitelisted : id glissé dans le corps
+      expect(account.updateTheme).not.toHaveBeenCalled();
+    });
+
+    it('theme valide sans champ superflu → 200', async () => {
+      account.updateTheme.mockResolvedValue({
+        id: 'u1',
+        theme: 'medieval-steampunk',
+      });
+      await request(app.getHttpServer())
+        .patch('/me/theme')
+        .send({ theme: 'medieval-steampunk' })
+        .expect(200);
+      expect(account.updateTheme).toHaveBeenCalledWith(
+        'u1',
+        'medieval-steampunk',
       );
     });
   });

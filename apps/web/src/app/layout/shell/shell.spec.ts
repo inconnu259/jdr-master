@@ -83,4 +83,14 @@ describe('Shell — entrée de menu Compte', () => {
     const link = document.body.querySelector('a[routerLink="/account"]');
     expect(link).not.toBeNull();
   });
+
+  it("AC6 : aucun sélecteur de thème dans le menu utilisateur — déplacé vers l'écran de compte", async () => {
+    const fixture = await createFixture(0);
+    const button = fixture.nativeElement.querySelector('button[aria-label="Menu utilisateur"]');
+    button.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(document.body.querySelector('app-theme-selector')).toBeNull();
+  });
 });
