@@ -5,6 +5,7 @@ import {
   ValidationErrors,
   Validators,
 } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -45,6 +46,14 @@ export class Account implements OnInit {
     displayName: ['', [Validators.required, Validators.maxLength(60), notBlank]],
   });
 
+  protected readonly passwordForm = this.fb.nonNullable.group({
+    currentPassword: ['', [Validators.required]],
+    newPassword: ['', [Validators.required, Validators.minLength(8)]],
+  });
+  protected readonly passwordSaving = signal(false);
+  protected readonly passwordError = signal<string | null>(null);
+  protected readonly passwordSaved = signal(false);
+
   protected get pseudo(): string {
     return this.auth.currentUser()?.pseudo ?? '';
   }
@@ -73,6 +82,27 @@ export class Account implements OnInit {
       this.error.set(this.theme.tone()['account.error']);
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  async submitPassword(): Promise<void> {
+    if (this.passwordForm.invalid) return;
+    this.passwordSaving.set(true);
+    this.passwordError.set(null);
+    this.passwordSaved.set(false);
+    try {
+      const { currentPassword, newPassword } = this.passwordForm.getRawValue();
+      await this.account.changePassword(currentPassword, newPassword);
+      this.passwordForm.reset();
+      this.passwordSaved.set(true);
+    } catch (err) {
+      this.passwordError.set(
+        err instanceof HttpErrorResponse && err.status === 401
+          ? this.theme.tone()['account.password_wrong_current']
+          : this.theme.tone()['account.password_error'],
+      );
+    } finally {
+      this.passwordSaving.set(false);
     }
   }
 }

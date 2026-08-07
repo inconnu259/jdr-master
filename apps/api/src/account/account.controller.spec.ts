@@ -10,6 +10,7 @@ jest.mock('@master-jdr/shared', () => ({
 }));
 
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
+import { AuthService } from '../auth/auth.service';
 import { AccountController } from './account.controller';
 import { AccountService } from './account.service';
 
@@ -17,15 +18,24 @@ function makeAccountService() {
   return { updateDisplayName: jest.fn(), updateTheme: jest.fn() };
 }
 
+function makeAuthService() {
+  return { changePassword: jest.fn() };
+}
+
 describe('AccountController', () => {
   let controller: AccountController;
   let account: ReturnType<typeof makeAccountService>;
+  let auth: ReturnType<typeof makeAuthService>;
 
   beforeEach(async () => {
     account = makeAccountService();
+    auth = makeAuthService();
     const module = await Test.createTestingModule({
       controllers: [AccountController],
-      providers: [{ provide: AccountService, useValue: account }],
+      providers: [
+        { provide: AccountService, useValue: account },
+        { provide: AuthService, useValue: auth },
+      ],
     }).compile();
     controller = module.get(AccountController);
   });
@@ -63,19 +73,41 @@ describe('AccountController', () => {
     expect(result).toEqual({ id: 'u1', theme: 'foret-ancienne' });
   });
 
+  it("changePassword() lit l'id et le sid depuis la session (req.user/req.sessionID), jamais depuis le corps", async () => {
+    auth.changePassword.mockResolvedValue({ ok: true });
+
+    const req = { user: { id: 'u1' }, sessionID: 'sess-1' } as any;
+    const result = await controller.changePassword(req, {
+      currentPassword: 'oldpw',
+      newPassword: 'newpassword123',
+    });
+
+    expect(auth.changePassword).toHaveBeenCalledWith(
+      'u1',
+      'oldpw',
+      'newpassword123',
+      'sess-1',
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
   describe('validation HTTP réelle (ValidationPipe global)', () => {
     let app: INestApplication;
 
     beforeEach(async () => {
       const module = await Test.createTestingModule({
         controllers: [AccountController],
-        providers: [{ provide: AccountService, useValue: account }],
+        providers: [
+          { provide: AccountService, useValue: account },
+          { provide: AuthService, useValue: auth },
+        ],
       })
         .overrideGuard(AuthenticatedGuard)
         .useValue({
           canActivate: (context: ExecutionContext) => {
             const req = context.switchToHttp().getRequest();
             req.user = { id: 'u1' };
+            req.sessionID = 'sess-1';
             return true;
           },
         })
@@ -190,6 +222,48 @@ describe('AccountController', () => {
       expect(account.updateTheme).toHaveBeenCalledWith(
         'u1',
         'medieval-steampunk',
+      );
+    });
+
+    it('newPassword < 8 caractères → 400, service jamais appelé', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/password')
+        .send({ currentPassword: 'oldpw', newPassword: 'short' })
+        .expect(400);
+      expect(auth.changePassword).not.toHaveBeenCalled();
+    });
+
+    it('currentPassword absent → 400, service jamais appelé', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/password')
+        .send({ newPassword: 'newpassword123' })
+        .expect(400);
+      expect(auth.changePassword).not.toHaveBeenCalled();
+    });
+
+    it('sid glissé dans le corps (même avec des mots de passe valides) → 400 forbidNonWhitelisted, service jamais appelé', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/password')
+        .send({
+          currentPassword: 'oldpw',
+          newPassword: 'newpassword123',
+          sid: 'autre-session',
+        })
+        .expect(400);
+      expect(auth.changePassword).not.toHaveBeenCalled();
+    });
+
+    it('mots de passe valides sans champ superflu → 200, sid de session transmis (jamais du corps)', async () => {
+      auth.changePassword.mockResolvedValue({ ok: true });
+      await request(app.getHttpServer())
+        .patch('/me/password')
+        .send({ currentPassword: 'oldpw', newPassword: 'newpassword123' })
+        .expect(200);
+      expect(auth.changePassword).toHaveBeenCalledWith(
+        'u1',
+        'oldpw',
+        'newpassword123',
+        'sess-1',
       );
     });
   });

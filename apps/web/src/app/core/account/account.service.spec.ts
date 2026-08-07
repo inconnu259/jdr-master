@@ -62,4 +62,20 @@ describe('AccountService', () => {
 
     await expect(promise).resolves.toEqual(response);
   });
+
+  it('changePassword() appelle PATCH /me/password avec withCredentials', async () => {
+    const promise = service.changePassword('oldpw', 'newpassword123');
+
+    const req = http.expectOne(`${API_BASE}/me/password`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({
+      currentPassword: 'oldpw',
+      newPassword: 'newpassword123',
+    });
+    expect(req.request.withCredentials).toBe(true);
+
+    req.flush({ ok: true });
+
+    await expect(promise).resolves.toEqual({ ok: true });
+  });
 });

@@ -28,4 +28,14 @@ export class AccountService {
       ),
     );
   }
+
+  changePassword(currentPassword: string, newPassword: string): Promise<{ ok: true }> {
+    return firstValueFrom(
+      this.http.patch<{ ok: true }>(
+        `${API_BASE}/me/password`,
+        { currentPassword, newPassword },
+        { withCredentials: true },
+      ),
+    );
+  }
 }

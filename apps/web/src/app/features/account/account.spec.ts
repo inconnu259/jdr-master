@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { vi } from 'vitest';
 import type { AuthUser } from '@master-jdr/shared';
 import { Account } from './account';
@@ -30,6 +31,13 @@ function makeThemeService() {
       'account.save_btn': 'Sceller',
       'account.saved': 'Le grimoire a retenu ce nom.',
       'account.error': "Le grimoire n'a pas pu retenir ce changement. Réessayez.",
+      'account.password_title': 'Changer de mot de passe',
+      'account.current_password_label': 'Mot de passe actuel',
+      'account.new_password_label': 'Nouveau mot de passe',
+      'account.password_save_btn': 'Changer',
+      'account.password_saved': 'Le mot de passe a été changé.',
+      'account.password_wrong_current': 'Mot de passe actuel incorrect.',
+      'account.password_error': "Le changement a échoué. Réessayez.",
     }),
     // ThemeSelector (intégré à l'écran de compte, Story 28.4) a besoin de ces membres.
     activeTheme: signal('grimoire-emeraude'),
@@ -48,6 +56,7 @@ async function createFixture(
   accountSvc: Record<string, ReturnType<typeof vi.fn>> = {
     updateDisplayName: vi.fn(),
     setTheme: vi.fn(),
+    changePassword: vi.fn(),
   },
 ) {
   const currentUserSignal = signal<AuthUser | null>(currentUser);
@@ -164,5 +173,104 @@ describe('Account', () => {
 
     expect(component.error()).toBeTruthy();
     expect(currentUserSignal()?.displayName).toBe('alice');
+  });
+});
+
+describe('Account — changement de mot de passe (Story 28.5)', () => {
+  it('soumission valide → AccountService.changePassword appelé, formulaire réinitialisé, succès affiché', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn().mockResolvedValue({ ok: true }),
+    };
+    const { fixture } = await createFixture(makeUser(), accountSvc);
+    const component = fixture.componentInstance as any;
+
+    component.passwordForm.setValue({
+      currentPassword: 'oldpw',
+      newPassword: 'newpassword123',
+    });
+    await component.submitPassword();
+
+    expect(accountSvc.changePassword).toHaveBeenCalledWith('oldpw', 'newpassword123');
+    expect(component.passwordForm.value.currentPassword).toBeFalsy();
+    expect(component.passwordForm.value.newPassword).toBeFalsy();
+    expect(component.passwordSaved()).toBe(true);
+  });
+
+  it('mot de passe courant incorrect (401) → message spécifique, formulaire non réinitialisé', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi
+        .fn()
+        .mockRejectedValue(new HttpErrorResponse({ status: 401 })),
+    };
+    const { fixture } = await createFixture(makeUser(), accountSvc);
+    const component = fixture.componentInstance as any;
+
+    component.passwordForm.setValue({
+      currentPassword: 'wrongpw',
+      newPassword: 'newpassword123',
+    });
+    await component.submitPassword();
+
+    expect(component.passwordError()).toBe('Mot de passe actuel incorrect.');
+    expect(component.passwordForm.value.currentPassword).toBe('wrongpw');
+  });
+
+  it('échec réseau/serveur (non 401) → message générique', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi
+        .fn()
+        .mockRejectedValue(new HttpErrorResponse({ status: 500 })),
+    };
+    const { fixture } = await createFixture(makeUser(), accountSvc);
+    const component = fixture.componentInstance as any;
+
+    component.passwordForm.setValue({
+      currentPassword: 'oldpw',
+      newPassword: 'newpassword123',
+    });
+    await component.submitPassword();
+
+    expect(component.passwordError()).toBe('Le changement a échoué. Réessayez.');
+  });
+
+  it('newPassword < 8 caractères → formulaire invalide, service jamais appelé', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn(),
+    };
+    const { fixture } = await createFixture(makeUser(), accountSvc);
+    const component = fixture.componentInstance as any;
+
+    component.passwordForm.setValue({ currentPassword: 'oldpw', newPassword: 'short' });
+    expect(component.passwordForm.invalid).toBe(true);
+    await component.submitPassword();
+
+    expect(accountSvc.changePassword).not.toHaveBeenCalled();
+  });
+
+  it('ne met jamais à jour AuthService.currentUser (rien dans AuthUser ne change)', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn().mockResolvedValue({ ok: true }),
+    };
+    const { fixture, currentUserSignal } = await createFixture(makeUser(), accountSvc);
+    const component = fixture.componentInstance as any;
+    const before = currentUserSignal();
+
+    component.passwordForm.setValue({
+      currentPassword: 'oldpw',
+      newPassword: 'newpassword123',
+    });
+    await component.submitPassword();
+
+    expect(currentUserSignal()).toBe(before);
   });
 });

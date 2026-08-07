@@ -31,4 +31,34 @@
   </form>
 
   <app-theme-selector />
+
+  <mat-card-title>{{ theme.tone()['account.password_title'] }}</mat-card-title>
+  <form [formGroup]="passwordForm" (ngSubmit)="submitPassword()">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ theme.tone()['account.current_password_label'] }}</mat-label>
+      <input matInput type="password" formControlName="currentPassword" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ theme.tone()['account.new_password_label'] }}</mat-label>
+      <input matInput type="password" formControlName="newPassword" />
+    </mat-form-field>
+
+    @if (passwordError()) {
+      <p class="error">{{ passwordError() }}</p>
+    }
+    @if (passwordSaved()) {
+      <p class="saved">{{ theme.tone()['account.password_saved'] }}</p>
+    }
+
+    <div class="actions">
+      <button
+        mat-flat-button
+        type="submit"
+        [disabled]="passwordSaving() || passwordForm.invalid"
+      >
+        {{ theme.tone()['account.password_save_btn'] }}
+      </button>
+    </div>
+  </form>
 </mat-card>

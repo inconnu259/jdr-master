@@ -39,6 +39,7 @@ describe('AuthService', () => {
       count: jest.Mock;
       deleteMany: jest.Mock;
     };
+    user: { findUnique: jest.Mock };
     userSession: { upsert: jest.Mock; deleteMany: jest.Mock };
   };
   let inviteLinks: { consumeLink: jest.Mock };
@@ -90,6 +91,7 @@ describe('AuthService', () => {
         count: jest.fn().mockResolvedValue(0),
         deleteMany: jest.fn(),
       },
+      user: { findUnique: jest.fn() },
       userSession: { upsert: jest.fn(), deleteMany: jest.fn() },
     };
     inviteLinks = {
@@ -438,6 +440,109 @@ describe('AuthService', () => {
         service.resetPassword('r1.secretvalue', 'newpassword123'),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(tx.user.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changePassword', () => {
+    const currentUser = {
+      id: 'u1',
+      email: 'a@b.c',
+      passwordHash: 'STORED_HASH',
+    };
+
+    it('mot de passe courant correct → hash mis à jour, autres sessions révoquées (exceptSid préservé), e-mail envoyé', async () => {
+      prisma.user.findUnique.mockResolvedValue(currentUser);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      (argon2.hash as jest.Mock).mockResolvedValue('NEW_HASH');
+      tx.userSession.findMany.mockResolvedValue([{ sid: 's2' }]);
+
+      const result = await service.changePassword(
+        'u1',
+        'currentpw',
+        'newpassword123',
+        's1',
+      );
+
+      expect(result).toEqual({ ok: true });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+      });
+      expect(argon2.verify).toHaveBeenCalledWith('STORED_HASH', 'currentpw');
+      expect(argon2.hash).toHaveBeenCalledWith('newpassword123');
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(tx.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: { passwordHash: 'NEW_HASH' },
+      });
+      expect(tx.userSession.findMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', sid: { not: 's1' } },
+        select: { sid: true },
+      });
+      expect(tx.session.deleteMany).toHaveBeenCalledWith({
+        where: { sid: { in: ['s2'] } },
+      });
+      expect(tx.userSession.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', sid: { not: 's1' } },
+      });
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'password-changed',
+        'a@b.c',
+        {},
+      );
+    });
+
+    it('mot de passe courant incorrect → UnauthorizedException, rien de modifié, transaction jamais ouverte, aucun e-mail', async () => {
+      prisma.user.findUnique.mockResolvedValue(currentUser);
+      (argon2.verify as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        service.changePassword('u1', 'wrongpw', 'newpassword123', 's1'),
+      ).rejects.toThrow('Mot de passe actuel incorrect');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(tx.user.update).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('hash stocké invalide/corrompu (argon2.verify lève) → traité comme incorrect, rien de modifié', async () => {
+      prisma.user.findUnique.mockResolvedValue(currentUser);
+      (argon2.verify as jest.Mock).mockRejectedValue(
+        new Error('pwhash must be a argon2 hash'),
+      );
+
+      await expect(
+        service.changePassword('u1', 'anything', 'newpassword123', 's1'),
+      ).rejects.toThrow('Mot de passe actuel incorrect');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('compte introuvable (findUnique → null) → NotFoundException, aucune vérification argon2', async () => {
+      const verifyCallsBefore = (argon2.verify as jest.Mock).mock.calls.length;
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.changePassword('gone', 'anything', 'newpassword123', 's1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect((argon2.verify as jest.Mock).mock.calls.length).toBe(
+        verifyCallsBefore,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('Revue de code : exceptSid vide (chaîne vide) → toujours traité comme « une session à exclure », jamais comme « tout révoquer »', async () => {
+      prisma.user.findUnique.mockResolvedValue(currentUser);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      (argon2.hash as jest.Mock).mockResolvedValue('NEW_HASH');
+      tx.userSession.findMany.mockResolvedValue([]);
+
+      await service.changePassword('u1', 'currentpw', 'newpassword123', '');
+
+      expect(tx.userSession.findMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', sid: { not: '' } },
+        select: { sid: true },
+      });
+      expect(tx.userSession.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', sid: { not: '' } },
+      });
     });
   });
 

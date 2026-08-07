@@ -3,8 +3,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'node:crypto';
 import { THEMES } from '@master-jdr/shared';
@@ -220,16 +222,9 @@ export class AuthService {
         data: { passwordHash },
       });
 
-      // Invalidation des sessions actives (AD-3, FR-11) : les deux tables (Session, gérée par
-      // connect-pg-simple, et UserSession, notre index inverse) doivent rester synchronisées —
-      // une session supprimée d'un côté sans l'autre serait soit un fantôme soit non révoquée.
-      const activeSessions = await tx.userSession.findMany({
-        where: { userId: record.userId },
-        select: { sid: true },
-      });
-      const sids = activeSessions.map((s) => s.sid);
-      await tx.session.deleteMany({ where: { sid: { in: sids } } });
-      await tx.userSession.deleteMany({ where: { userId: record.userId } });
+      // Invalidation des sessions actives (AD-3, FR-11) — toutes, sans exception (écart assumé
+      // avec changePassword(), qui préserve la session courante — Story 28.5).
+      await this.revokeSessions(tx, record.userId);
 
       return updated;
     });
@@ -238,6 +233,74 @@ export class AuthService {
     // base, un échec d'envoi ne doit jamais faire échouer le reset. EmailService.sendMail() ne
     // relance jamais (catch interne → { ok: false }), aucun try/catch supplémentaire nécessaire.
     await this.email.sendMail('password-changed', updatedUser.email, {});
+  }
+
+  /**
+   * Révoque les sessions actives d'un utilisateur (AD-3, FR-11) — partagée par resetPassword()
+   * (toutes les sessions, sans exception) et changePassword() (`exceptSid` préserve la session
+   * courante, Story 28.5). Toujours appelée depuis l'intérieur d'une transaction Prisma englobant
+   * aussi la mise à jour de `passwordHash` (atomicité).
+   *
+   * Les deux tables (`Session`, gérée par connect-pg-simple, et `UserSession`, notre index
+   * inverse) doivent rester synchronisées — une session supprimée d'un côté sans l'autre serait
+   * soit un fantôme soit non révoquée.
+   */
+  async revokeSessions(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    exceptSid?: string,
+  ): Promise<void> {
+    // Revue de code : test explicite de présence, pas de vérité (`exceptSid ? ...`) — une chaîne
+    // vide (en pratique jamais produite par express-session, mais pas garantie par le typage)
+    // basculerait silencieusement en « révoque tout », y compris la session courante.
+    const where = exceptSid !== undefined ? { userId, sid: { not: exceptSid } } : { userId };
+    const activeSessions = await tx.userSession.findMany({
+      where,
+      select: { sid: true },
+    });
+    const sids = activeSessions.map((s) => s.sid);
+    await tx.session.deleteMany({ where: { sid: { in: sids } } });
+    await tx.userSession.deleteMany({ where });
+  }
+
+  /**
+   * Changement de mot de passe en session (Story 28.5) — l'utilisateur est déjà authentifié et
+   * prouve la connaissance du mot de passe actuel ; contrairement à resetPassword(), seules les
+   * AUTRES sessions sont coupées (`exceptSid` = session courante, jamais lue depuis le corps de
+   * la requête — AccountController).
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    exceptSid: string,
+  ): Promise<{ ok: true }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Compte introuvable');
+    }
+
+    let valid: boolean;
+    try {
+      valid = await argon2.verify(user.passwordHash, currentPassword);
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      throw new UnauthorizedException('Mot de passe actuel incorrect');
+    }
+
+    const passwordHash = await argon2.hash(newPassword);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+      await this.revokeSessions(tx, userId, exceptSid);
+    });
+
+    // Hors transaction, best-effort — même patron que resetPassword().
+    await this.email.sendMail('password-changed', user.email, {});
+
+    return { ok: true };
   }
 
   /**
