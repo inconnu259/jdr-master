@@ -51,6 +51,19 @@ body {
    composants Material (fond, texte, boutons, champs, toolbar, cartes…).     */
 
 /* ── Thème Grimoire Émeraude ─────────────────────────────────────────────── */
+/* Invariant de palette de statut (Story 29.0, UX-DR1/UX-DR2) : dans un thème donné, les
+   quatre --jdr-status-* doivent être distinguables entre elles ET éloignées des deux accents
+   (--jdr-accent-1/--jdr-accent-2) de ce thème. Aucune ne dérive d'un accent. Le rouge n'est
+   réservé par aucune palette de statut — il reste disponible pour erreur/action destructive/
+   indisponibilité de créneau (--mat-sys-error, --color-unavailable). Un futur thème DOIT
+   respecter cet invariant en choisissant ses 4 valeurs, jamais en réutilisant --jdr-accent-*.
+
+   Recommandation pour la future StatusBadge (story ultérieure, hors périmètre de 29.0 — ce
+   composant n'existe pas encore, rien ci-dessous n'est un comportement actuel) :
+     badge plein (palier imminent)  → texte à prendre dans --jdr-bg (fond primaire du thème,
+                                       jamais blanc)
+     badge "done"                   → texte à prendre dans --jdr-text-muted, jamais dans
+                                       --jdr-status-done lui-même */
 .theme-grimoire-emeraude {
   color-scheme: dark;
 
@@ -65,6 +78,12 @@ body {
   --jdr-text-muted:   #9b8fb0;
   --jdr-gradient-cta: linear-gradient(135deg, #7ec8a4, #9b6dff);
   --color-available:  #7ec8a4;
+
+  /* Palette de statut (Story 29.0) — accents : #7ec8a4 sauge, #9b6dff lavande */
+  --jdr-status-todo:  #f0a030;   /* ambre chandelle — ça t'attend */
+  --jdr-status-live:  #3fd4ff;   /* cyan arcanique  — en cours */
+  --jdr-status-soon:  #ff7ad9;   /* rose de sort    — à venir */
+  --jdr-status-done:  #5a5a6a;   /* cendre          — terminé */
 
   /* Angular Material M3 system tokens — fond & texte */
   --mat-sys-background:               #09070f;
@@ -124,6 +143,13 @@ body {
   --jdr-gradient-cta: linear-gradient(135deg, #2ecc71, #f0c040);
   --color-available:  #2ecc71;
 
+  /* Palette de statut (Story 29.0) — accents : #2ecc71 vert, #f0c040 or.
+     Invariant complet : cf. commentaire au-dessus de .theme-grimoire-emeraude. */
+  --jdr-status-todo:  #ff8a3d;   /* orange d'automne */
+  --jdr-status-live:  #4fd6c1;   /* eau claire */
+  --jdr-status-soon:  #6f8fd8;   /* bleu brume */
+  --jdr-status-done:  #5f6b60;   /* lichen */
+
   --mat-sys-background:               #040905;
   --mat-sys-on-background:            #d4f0dc;
   --mat-sys-surface:                  #080f0a;
@@ -176,6 +202,15 @@ body {
   --jdr-text-muted:   #9a8060;
   --jdr-gradient-cta: linear-gradient(135deg, #cd7f32, #4a7c59);
   --color-available:  #4a7c59;
+
+  /* Palette de statut (Story 29.0) — accents : #cd7f32 cuivre, #4a7c59 bronze vert. status-live
+     initialement bleu vapeur #35b7c9 ; avec le bleu acier retenu pour status-soon, deux bleus
+     voisins (24° d'écart) devenaient confondables sur fond brun — vert-de-gris retenu à la place.
+     Invariant complet : cf. commentaire au-dessus de .theme-grimoire-emeraude. */
+  --jdr-status-todo:  #ffd21f;   /* jaune d'alerte */
+  --jdr-status-live:  #3fb894;   /* vert-de-gris — patine du cuivre oxydé */
+  --jdr-status-soon:  #6f9fd8;   /* bleu acier */
+  --jdr-status-done:  #6b6459;   /* fonte */
 
   --mat-sys-background:               #120b04;
   --mat-sys-on-background:            #f0e6d0;
