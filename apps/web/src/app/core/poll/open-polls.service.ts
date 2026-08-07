@@ -1,13 +1,13 @@
 import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import type { SessionPollDto } from '@master-jdr/shared';
 import { AuthService } from '../auth/auth.service';
-import { ModeService } from '../mode/mode.service';
+import { MyPartiesService } from '../my-parties/my-parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { hasUnansweredOptions } from './poll.util';
 
 @Injectable({ providedIn: 'root' })
 export class OpenPollsService {
-  private readonly modeSvc = inject(ModeService);
+  private readonly myPartiesSvc = inject(MyPartiesService);
   private readonly scenariosSvc = inject(ScenariosService);
   private readonly authSvc = inject(AuthService);
 
@@ -57,7 +57,7 @@ export class OpenPollsService {
   }
 
   private async refresh(): Promise<void> {
-    const parties = this.modeSvc.playerParties();
+    const parties = this.myPartiesSvc.playerParties();
     const partieIds = new Set(parties.map((p) => p.id));
     // Purge immédiate (synchrone, ne dépend d'aucune requête réseau) des entrées des Parties
     // quittées — avant même de relancer les fetch, pour ne jamais laisser une entrée orpheline

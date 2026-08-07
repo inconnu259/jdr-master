@@ -17,3 +17,15 @@
 .tile {
   cursor: pointer;
 }
+.role-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-left: 0.5rem;
+  font-size: 0.85em;
+}
+.role-icon {
+  font-size: 1rem;
+  width: 1rem;
+  height: 1rem;
+}

@@ -67,6 +67,9 @@ export interface PartieDto {
   createdAt: string;
   nextSessionDate: string | null;
   nextSessionSlot: DaySlot | null;
+  /** Rôle de l'appelant sur cette partie — calculé serveur (`mjId === userId`), jamais dérivé
+   *  côté client (Story 29.1, AD-15). Toujours présent, contrairement à `mjPseudo`/`mjDisplayName`. */
+  role: 'mj' | 'player';
 }
 
 /** Statut d'une invitation in-app. */

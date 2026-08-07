@@ -5,7 +5,7 @@ import { provideAnimationsAsync } from '@angular/platform-browser/animations/asy
 import { vi } from 'vitest';
 import { Shell } from './shell';
 import { AuthService } from '../../core/auth/auth.service';
-import { ModeService } from '../../core/mode/mode.service';
+import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { TONE_MAP } from '../../core/theme/tones';
@@ -31,11 +31,8 @@ async function createFixture(openPollsCount: number) {
         },
       },
       {
-        provide: ModeService,
+        provide: MyPartiesService,
         useValue: {
-          mode: signal('joueur'),
-          hasMjParties: signal(false),
-          setMode: vi.fn(),
           refreshMjParties: vi.fn().mockResolvedValue(undefined),
           refreshPlayerParties: vi.fn().mockResolvedValue(undefined),
         },
@@ -67,6 +64,25 @@ describe('Shell — badge de vote en attente dans la navigation', () => {
     expect((fixture.componentInstance as any).openPollsCount()).toBe(0);
     const button = fixture.nativeElement.querySelector('button[aria-label="Menu utilisateur"]');
     expect(button.classList.contains('mat-badge-hidden')).toBe(true);
+  });
+});
+
+describe('Shell — suppression du sélecteur de mode (Story 29.1, AC1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it("aucun mat-button-toggle-group n'existe plus dans la navigation", async () => {
+    const fixture = await createFixture(0);
+    expect(fixture.nativeElement.querySelector('mat-button-toggle-group')).toBeNull();
+  });
+
+  it('ngOnInit() charge toujours mjParties et playerParties', async () => {
+    await createFixture(0);
+    const myParties = TestBed.inject(MyPartiesService) as unknown as {
+      refreshMjParties: ReturnType<typeof vi.fn>;
+      refreshPlayerParties: ReturnType<typeof vi.fn>;
+    };
+    expect(myParties.refreshMjParties).toHaveBeenCalledTimes(1);
+    expect(myParties.refreshPlayerParties).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
+import type {
+  AggregatedSlotDto,
+  AvailableSlotDto,
+  PartieDto,
+} from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -15,6 +19,26 @@ import {
 import { CreatePartieDto } from './dto/create-partie.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
+/**
+ * Projection explicite (AD-15, Story 29.1) — énumère les champs renvoyés, jamais un objet Prisma
+ * propagé tel quel. `status`/`coverImageUrl` volontairement absents : `Partie.closedAt` n'existe
+ * pas encore dans le schéma (story 29.4), `coverImageUrl` non plus (story 29.10).
+ */
+function toPartieDto(partie: any, role: 'mj' | 'player'): PartieDto {
+  return {
+    id: partie.id,
+    name: partie.name,
+    kind: partie.kind,
+    gameSystemId: partie.gameSystemId,
+    description: partie.description,
+    mjId: partie.mjId,
+    createdAt: partie.createdAt,
+    nextSessionDate: partie.nextSessionDate,
+    nextSessionSlot: partie.nextSessionSlot,
+    role,
+  };
+}
+
 @Injectable()
 export class PartiesService {
   constructor(
@@ -23,7 +47,7 @@ export class PartiesService {
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
-  async create(mjId: string, dto: CreatePartieDto) {
+  async create(mjId: string, dto: CreatePartieDto): Promise<PartieDto> {
     return this.prisma.$transaction(async (tx) => {
       const partie = await tx.partie.create({
         data: {
@@ -51,26 +75,31 @@ export class PartiesService {
         await tx.seance.create({ data: { scenarioId: scenario.id } });
       }
 
-      return partie;
+      // Le créateur est toujours MJ de la partie qu'il crée (revue de code, AC6).
+      return toPartieDto(partie, 'mj');
     });
   }
 
   /**
    * `mj` = les parties que je maîtrise ; `player` = celles où je suis membre (via `Membership`).
    */
-  async listForUser(userId: string, role: 'mj' | 'player') {
+  async listForUser(
+    userId: string,
+    role: 'mj' | 'player',
+  ): Promise<PartieDto[]> {
     if (role === 'player') {
       const memberships = await this.prisma.membership.findMany({
         where: { userId },
         orderBy: { joinedAt: 'desc' },
         include: { partie: true },
       });
-      return memberships.map((m) => m.partie);
+      return memberships.map((m) => toPartieDto(m.partie, 'player'));
     }
-    return this.prisma.partie.findMany({
+    const parties = await this.prisma.partie.findMany({
       where: { mjId: userId },
       orderBy: { createdAt: 'desc' },
     });
+    return parties.map((p) => toPartieDto(p, 'mj'));
   }
 
   /** Récupère une partie en vérifiant que l'utilisateur en est le MJ (sinon 404 / 403). */
@@ -98,14 +127,16 @@ export class PartiesService {
    *  n'apparaît nulle part ailleurs dans `PartieDto`. Revue de code : `mj` gardé comme
    *  `resolveParticipants()` plutôt qu'une assertion non-null — une ligne `User` orpheline ne doit
    *  jamais transformer ce chemin de lecture principal en 500 (mjPseudo/mjDisplayName optionnels). */
-  async findOneDto(id: string, userId: string) {
+  async findOneDto(id: string, userId: string): Promise<PartieDto> {
     const partie = await this.getViewable(id, userId);
+    const role: 'mj' | 'player' = partie.mjId === userId ? 'mj' : 'player';
+    const dto = toPartieDto(partie, role);
     const mj = await this.prisma.user.findUnique({
       where: { id: partie.mjId },
       select: { pseudo: true, displayName: true },
     });
-    if (!mj) return partie;
-    return { ...partie, mjPseudo: mj.pseudo, mjDisplayName: mj.displayName };
+    if (!mj) return dto;
+    return { ...dto, mjPseudo: mj.pseudo, mjDisplayName: mj.displayName };
   }
 
   /** Liste des joueurs d'une partie (visible par le MJ ou un membre). L'e-mail n'est renseigné
@@ -143,14 +174,19 @@ export class PartiesService {
     return { ok: true };
   }
 
-  async update(id: string, userId: string, dto: UpdatePartieDto) {
+  async update(
+    id: string,
+    userId: string,
+    dto: UpdatePartieDto,
+  ): Promise<PartieDto> {
     await this.getOwned(id, userId);
     const updated = await this.prisma.partie.update({
       where: { id },
       data: { ...dto },
     });
     this.realtimeEvents.emit(partieTopic(id));
-    return updated;
+    // getOwned() a déjà garanti que l'appelant est le MJ (revue de code, AC6).
+    return toPartieDto(updated, 'mj');
   }
 
   async remove(id: string, userId: string) {

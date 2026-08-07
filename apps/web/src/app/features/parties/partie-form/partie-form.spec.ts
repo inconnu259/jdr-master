@@ -6,7 +6,7 @@ import { vi } from 'vitest';
 import type { PartieDto, PartieKind } from '@master-jdr/shared';
 import { PartieForm } from './partie-form';
 import { PartiesService } from '../../../core/parties/parties.service';
-import { ModeService } from '../../../core/mode/mode.service';
+import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 
 const PARTIE: PartieDto = {
   id: 'p1',
@@ -20,6 +20,7 @@ const PARTIE: PartieDto = {
   createdAt: '2026-07-01T00:00:00.000Z',
   nextSessionDate: null,
   nextSessionSlot: null,
+  role: 'mj',
 };
 
 async function createComponent(editId: string | null = null) {
@@ -28,7 +29,7 @@ async function createComponent(editId: string | null = null) {
     create: vi.fn().mockResolvedValue({ ...PARTIE, id: 'new-id' }),
     update: vi.fn().mockResolvedValue(PARTIE),
   };
-  const modeSvc = { refreshMjParties: vi.fn().mockResolvedValue(undefined), setMode: vi.fn() };
+  const myPartiesSvc = { refreshMjParties: vi.fn().mockResolvedValue(undefined) };
   const router = { navigate: vi.fn() };
 
   await TestBed.configureTestingModule({
@@ -36,7 +37,7 @@ async function createComponent(editId: string | null = null) {
     providers: [
       provideAnimationsAsync(),
       { provide: PartiesService, useValue: partiesSvc },
-      { provide: ModeService, useValue: modeSvc },
+      { provide: MyPartiesService, useValue: myPartiesSvc },
       { provide: Router, useValue: router },
       {
         provide: ActivatedRoute,
@@ -49,7 +50,7 @@ async function createComponent(editId: string | null = null) {
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, partiesSvc, modeSvc, router };
+  return { fixture, partiesSvc, myPartiesSvc, router };
 }
 
 describe('PartieForm', () => {
@@ -74,6 +75,14 @@ describe('PartieForm', () => {
       expect(partiesSvc.create).toHaveBeenCalledWith(expect.objectContaining({ kind }));
     },
   );
+
+  it('création : appelle refreshMjParties() après succès (Story 29.1, setMode disparu)', async () => {
+    const { fixture, myPartiesSvc } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    comp.form.patchValue({ name: 'Ma partie', gameSystemId: 'draconis', kind: 'ONE_SHOT' });
+    await comp.submit();
+    expect(myPartiesSvc.refreshMjParties).toHaveBeenCalledTimes(1);
+  });
 
   it('édition d’une Partie CAMPAGNE_EPISODIQUE : le formulaire pré-remplit kind sans le rabattre sur CAMPAGNE_LINEAIRE', async () => {
     const { fixture, partiesSvc } = await createComponent('p1');

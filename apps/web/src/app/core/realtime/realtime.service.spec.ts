@@ -8,7 +8,7 @@ import { CharacterService } from '../characters/character.service';
 import { HommeDragonService } from '../homme-dragon/homme-dragon.service';
 import { InvitationsService } from '../invitations/invitations.service';
 import { OpenPollsService } from '../poll/open-polls.service';
-import { ModeService } from '../mode/mode.service';
+import { MyPartiesService } from '../my-parties/my-parties.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { CharacterRolesService } from '../character-roles/character-roles.service';
 import { RealtimeService, matchingHandlers, partieTopic, userTopic } from './realtime.service';
@@ -70,7 +70,7 @@ describe('RealtimeService', () => {
   let hommeDragonSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
   let invitationsSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
   let openPollsSvc: { notifyChanged: ReturnType<typeof vi.fn> };
-  let modeSvc: { notifyChanged: ReturnType<typeof vi.fn> };
+  let myPartiesSvc: { notifyChanged: ReturnType<typeof vi.fn> };
   let availabilitySvc: { notifyChanged: ReturnType<typeof vi.fn> };
   let characterRolesSvc: { notifyChanged: ReturnType<typeof vi.fn> };
 
@@ -94,9 +94,10 @@ describe('RealtimeService', () => {
     // Story 22.1 : RealtimeService injecte désormais aussi OpenPollsService (sixième entrée,
     // préfixe 'partie:'). Mock direct.
     openPollsSvc = { notifyChanged: vi.fn() };
-    // Bug fix post-22.1 : ModeService rebranché sur le préfixe 'user:' (ne représente que
-    // l'appartenance, jamais déclenché par une mutation partie-scopée générique).
-    modeSvc = { notifyChanged: vi.fn() };
+    // Bug fix post-22.1 : ModeService (renommé MyPartiesService, Story 29.1) rebranché sur le
+    // préfixe 'user:' (ne représente que l'appartenance, jamais déclenché par une mutation
+    // partie-scopée générique).
+    myPartiesSvc = { notifyChanged: vi.fn() };
     // Bug fix (calendrier MJ jamais notifié) : AvailabilityService ajoutée au préfixe 'partie:'.
     availabilitySvc = { notifyChanged: vi.fn() };
     // Story 27.3 : CharacterRolesService ajoutée au préfixe 'partie:'.
@@ -112,7 +113,7 @@ describe('RealtimeService', () => {
         { provide: HommeDragonService, useValue: hommeDragonSvc },
         { provide: InvitationsService, useValue: invitationsSvc },
         { provide: OpenPollsService, useValue: openPollsSvc },
-        { provide: ModeService, useValue: modeSvc },
+        { provide: MyPartiesService, useValue: myPartiesSvc },
         { provide: AvailabilityService, useValue: availabilitySvc },
         { provide: CharacterRolesService, useValue: characterRolesSvc },
       ],
@@ -197,20 +198,20 @@ describe('RealtimeService', () => {
     expect(availabilitySvc.notifyChanged).toHaveBeenCalledTimes(1);
   });
 
-  it("un topic 'partie:' ne déclenche PAS notifyChanged() sur ModeService (bug fix : préfixe rebranché sur 'user:')", () => {
+  it("un topic 'partie:' ne déclenche PAS notifyChanged() sur MyPartiesService (bug fix : préfixe rebranché sur 'user:')", () => {
     service.connect(partieTopic('p1'));
 
     FakeEventSource.instances[0].emit('open');
 
-    expect(modeSvc.notifyChanged).not.toHaveBeenCalled();
+    expect(myPartiesSvc.notifyChanged).not.toHaveBeenCalled();
   });
 
-  it("'open' sur un topic 'user:' déclenche notifyChanged() sur ModeService (bug fix)", () => {
+  it("'open' sur un topic 'user:' déclenche notifyChanged() sur MyPartiesService (bug fix)", () => {
     service.connect(userTopic('u1'));
 
     FakeEventSource.instances[0].emit('open');
 
-    expect(modeSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(myPartiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
   });
 
   it("un topic 'user:' ne déclenche PAS notifyChanged() de PartiesService (préfixe non mappé)", () => {

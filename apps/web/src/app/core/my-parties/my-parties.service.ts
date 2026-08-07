@@ -2,27 +2,27 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import type { PartieDto } from '@master-jdr/shared';
 import { PartiesService } from '../parties/parties.service';
 
-type Mode = 'joueur' | 'mj';
-const KEY = 'master-jdr.mode';
-
 @Injectable({ providedIn: 'root' })
-export class ModeService {
+export class MyPartiesService {
   private readonly parties = inject(PartiesService);
 
-  readonly mode = signal<Mode>(this.readStoredMode());
-  /** Les parties que l'utilisateur maîtrise (source unique : pilote le toggle ET le dashboard MJ). */
+  /** Les parties que l'utilisateur maîtrise. */
   readonly mjParties = signal<PartieDto[]>([]);
-  /** Les parties où l'utilisateur est joueur (dashboard Joueur). */
+  /** Les parties où l'utilisateur est joueur. */
   readonly playerParties = signal<PartieDto[]>([]);
-  /** Le toggle MJ ne s'affiche que si on maîtrise au moins une partie. */
   readonly hasMjParties = computed(() => this.mjParties().length > 0);
+  /** Liste unifiée (Story 29.1, FR-7) — `role` est déjà porté par chaque `PartieDto` (projection
+   *  serveur, AD-15), simple concaténation, aucun tri ni regroupement (hors périmètre). */
+  readonly allParties = computed(() => [...this.mjParties(), ...this.playerParties()]);
 
   private mjSeq = 0;
   private playerSeq = 0;
 
-  setMode(m: Mode): void {
-    this.mode.set(m);
-    localStorage.setItem(KEY, m);
+  constructor() {
+    // Nettoyage (revue de code, Story 29.1) : l'ancien `ModeService.setMode()` écrivait cette clé,
+    // désormais orpheline — plus rien ne la lit, mais elle restait indéfiniment dans le
+    // localStorage des utilisateurs ayant déjà basculé de mode avant ce refactor.
+    if (typeof localStorage !== 'undefined') localStorage.removeItem('master-jdr.mode');
   }
 
   // Bug fix critique (production) : un vote créé sur N'IMPORTE QUELLE Partie déclenchait un
@@ -41,12 +41,7 @@ export class ModeService {
       // Échec transitoire : on garde le dernier état connu bon, pas de `.set([])`.
     }
     if (seq !== this.mjSeq) return; // réponse obsolète, une requête plus récente est en vol
-    if (list) {
-      this.mjParties.set(list);
-      // Si on n'est MJ de rien, on ne peut pas rester en mode MJ — évalué uniquement après un
-      // succès confirmé (jamais sur un échec, qui laisserait la liste précédente inchangée).
-      if (!this.hasMjParties() && this.mode() === 'mj') this.setMode('joueur');
-    }
+    if (list) this.mjParties.set(list);
   }
 
   async refreshPlayerParties(): Promise<void> {
@@ -61,18 +56,12 @@ export class ModeService {
     if (list) this.playerParties.set(list);
   }
 
-  /** Contrat public AD-4 (zéro argument) — RealtimeService l'appelle désormais sur un événement SSE
+  /** Contrat public AD-4 (zéro argument) — RealtimeService l'appelle sur un événement SSE
    *  user:{id} (bug fix : reculé depuis le préfixe générique 'partie:', cf. RealtimeService — la
    *  liste d'appartenance ne change jamais via une mutation partie-scopée générique comme un vote
-   *  ou un scénario). Pas d'effect() interne existant (contrairement à ce que suggère
-   *  ARCHITECTURE-SPINE.md AD-4 point 3, qui décrit en réalité l'effect() d'OpenPollsService) —
-   *  relance directement les deux méthodes de rafraîchissement publiques déjà existantes. */
+   *  ou un scénario). Relance directement les deux méthodes de rafraîchissement publiques. */
   notifyChanged(): void {
     void this.refreshMjParties();
     void this.refreshPlayerParties();
-  }
-
-  private readStoredMode(): Mode {
-    return localStorage.getItem(KEY) === 'mj' ? 'mj' : 'joueur';
   }
 }

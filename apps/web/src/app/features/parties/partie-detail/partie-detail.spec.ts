@@ -22,7 +22,7 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { makeAnnouncementDto } from '../../../core/announcements/announcement-dto.fixture';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 import { PartiesService } from '../../../core/parties/parties.service';
-import { ModeService } from '../../../core/mode/mode.service';
+import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { AvailabilityService } from '../../../core/availability/availability.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
@@ -126,6 +126,7 @@ function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
     createdAt: new Date().toISOString(),
     nextSessionDate: null,
     nextSessionSlot: null,
+    role: 'mj',
     ...overrides,
   };
 }
@@ -206,7 +207,7 @@ async function createFixture(
         useValue: makePartiesService(partie, options.members ?? [], options.links ?? []),
       },
       { provide: BreakpointObserver, useValue: makeBreakpointObserver(options.desktop ?? true) },
-      { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
+      { provide: MyPartiesService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
       { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
       {
         provide: CharacterService,
@@ -535,7 +536,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
         { provide: AuthService, useValue: makeAuthService(PLAYER_ID) },
         { provide: PartiesService, useValue: makePartiesService(makePartie(), members, []) },
         { provide: BreakpointObserver, useValue: dynamicBreakpointObserver },
-        { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
+        { provide: MyPartiesService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
       { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
           provide: CharacterService,
@@ -1202,7 +1203,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         { provide: AuthService, useValue: makeAuthService(MJ_ID) },
         { provide: PartiesService, useValue: partiesSvc },
         { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
-        { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
+        { provide: MyPartiesService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
       { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
           provide: CharacterService,
@@ -1385,7 +1386,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         { provide: AuthService, useValue: makeAuthService(MJ_ID) },
         { provide: PartiesService, useValue: makePartiesService(initial) },
         { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
-        { provide: ModeService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
+        { provide: MyPartiesService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
         { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
           provide: CharacterService,

@@ -56,6 +56,8 @@ describe('PartiesService', () => {
     description: null,
     mjId: 'mj1',
     createdAt: new Date(),
+    nextSessionDate: null,
+    nextSessionSlot: null,
   };
 
   beforeEach(() => {
@@ -113,6 +115,27 @@ describe('PartiesService', () => {
     });
   });
 
+  it("create renvoie une partie projetée avec role: 'mj' (revue de code, AC6) — le créateur est toujours MJ", async () => {
+    prisma.partie.create.mockResolvedValue(partie);
+    const dto = await service.create('mj1', {
+      name: 'La Nuit',
+      kind: 'ONE_SHOT',
+      gameSystemId: 'draconis',
+    });
+    expect(dto).toEqual({
+      id: partie.id,
+      name: partie.name,
+      kind: partie.kind,
+      gameSystemId: partie.gameSystemId,
+      description: partie.description,
+      mjId: partie.mjId,
+      createdAt: partie.createdAt,
+      nextSessionDate: null,
+      nextSessionSlot: null,
+      role: 'mj',
+    });
+  });
+
   it('create ONE_SHOT crée automatiquement son scénario unique BROUILLON dans la même transaction (AC3, Story 7.1)', async () => {
     prisma.partie.create.mockResolvedValue(partie);
     await service.create('mj1', {
@@ -153,14 +176,91 @@ describe('PartiesService', () => {
     expect(prisma.scenario.create).not.toHaveBeenCalled();
   });
 
-  it('listForUser(player) renvoie les parties des memberships', async () => {
+  it('listForUser(player) renvoie les parties des memberships, projetées avec role: player', async () => {
     prisma.membership.findMany.mockResolvedValue([{ partie }]);
-    expect(await service.listForUser('u', 'player')).toEqual([partie]);
+    expect(await service.listForUser('u', 'player')).toEqual([
+      {
+        id: partie.id,
+        name: partie.name,
+        kind: partie.kind,
+        gameSystemId: partie.gameSystemId,
+        description: partie.description,
+        mjId: partie.mjId,
+        createdAt: partie.createdAt,
+        nextSessionDate: null,
+        nextSessionSlot: null,
+        role: 'player',
+      },
+    ]);
     expect(prisma.membership.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { userId: 'u' },
         include: { partie: true },
       }),
+    );
+  });
+
+  it('listForUser(mj) renvoie les parties dont je suis MJ, projetées avec role: mj (revue de code)', async () => {
+    prisma.partie.findMany.mockResolvedValue([partie]);
+    expect(await service.listForUser('mj1', 'mj')).toEqual([
+      {
+        id: partie.id,
+        name: partie.name,
+        kind: partie.kind,
+        gameSystemId: partie.gameSystemId,
+        description: partie.description,
+        mjId: partie.mjId,
+        createdAt: partie.createdAt,
+        nextSessionDate: null,
+        nextSessionSlot: null,
+        role: 'mj',
+      },
+    ]);
+  });
+
+  it("toPartieDto() n'énumère que les champs du DTO — un champ Prisma non listé (ex. futur ajout de colonne) ne fuite jamais (revue de code, AC6)", async () => {
+    prisma.partie.findMany.mockResolvedValue([
+      { ...partie, sheetVisibility: { secret: true }, internalFlag: 'nope' },
+    ]);
+    const [dto] = await service.listForUser('mj1', 'mj');
+    expect(dto).not.toHaveProperty('sheetVisibility');
+    expect(dto).not.toHaveProperty('internalFlag');
+    expect(Object.keys(dto).sort()).toEqual(
+      [
+        'id',
+        'name',
+        'kind',
+        'gameSystemId',
+        'description',
+        'mjId',
+        'createdAt',
+        'nextSessionDate',
+        'nextSessionSlot',
+        'role',
+      ].sort(),
+    );
+  });
+
+  it("toPartieDto() n'énumère que les champs du DTO côté branche player aussi (revue de code, AC6)", async () => {
+    prisma.membership.findMany.mockResolvedValue([
+      { partie: { ...partie, sheetVisibility: { secret: true }, internalFlag: 'nope' } },
+    ]);
+    const [dto] = await service.listForUser('u', 'player');
+    expect(dto).not.toHaveProperty('sheetVisibility');
+    expect(dto).not.toHaveProperty('internalFlag');
+    expect(Object.keys(dto).sort()).toEqual(
+      [
+        'id',
+        'name',
+        'kind',
+        'gameSystemId',
+        'description',
+        'mjId',
+        'createdAt',
+        'nextSessionDate',
+        'nextSessionSlot',
+        'role',
+      ].sort(),
     );
   });
 
@@ -187,7 +287,7 @@ describe('PartiesService', () => {
     );
   });
 
-  it('findOneDto : retourne mjPseudo/mjDisplayName pour le MJ (getViewable inchangée)', async () => {
+  it('findOneDto : retourne mjPseudo/mjDisplayName et role: mj pour le MJ (getViewable inchangée)', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.user.findUnique.mockResolvedValue({
       pseudo: 'mj-pseudo',
@@ -195,7 +295,16 @@ describe('PartiesService', () => {
     });
     const dto = await service.findOneDto('p1', 'mj1');
     expect(dto).toEqual({
-      ...partie,
+      id: partie.id,
+      name: partie.name,
+      kind: partie.kind,
+      gameSystemId: partie.gameSystemId,
+      description: partie.description,
+      mjId: partie.mjId,
+      createdAt: partie.createdAt,
+      nextSessionDate: null,
+      nextSessionSlot: null,
+      role: 'mj',
       mjPseudo: 'mj-pseudo',
       mjDisplayName: 'MJ Nom',
     });
@@ -206,7 +315,7 @@ describe('PartiesService', () => {
     expect(prisma.membership.findUnique).not.toHaveBeenCalled();
   });
 
-  it('findOneDto : retourne mjPseudo/mjDisplayName pour un joueur consultant la même partie', async () => {
+  it('findOneDto : retourne mjPseudo/mjDisplayName et role: player pour un joueur consultant la même partie', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.membership.findUnique.mockResolvedValue({
       userId: 'u',
@@ -218,7 +327,16 @@ describe('PartiesService', () => {
     });
     const dto = await service.findOneDto('p1', 'u');
     expect(dto).toEqual({
-      ...partie,
+      id: partie.id,
+      name: partie.name,
+      kind: partie.kind,
+      gameSystemId: partie.gameSystemId,
+      description: partie.description,
+      mjId: partie.mjId,
+      createdAt: partie.createdAt,
+      nextSessionDate: null,
+      nextSessionSlot: null,
+      role: 'player',
       mjPseudo: 'mj-pseudo',
       mjDisplayName: 'MJ Nom',
     });
@@ -232,11 +350,22 @@ describe('PartiesService', () => {
     );
   });
 
-  it("findOneDto : renvoie la partie sans mjPseudo/mjDisplayName si l'utilisateur MJ est introuvable (revue de code, pas de 500)", async () => {
+  it("findOneDto : renvoie la partie projetée (avec role), sans mjPseudo/mjDisplayName, si l'utilisateur MJ est introuvable (revue de code, pas de 500)", async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.user.findUnique.mockResolvedValue(null);
     const dto = await service.findOneDto('p1', 'mj1');
-    expect(dto).toEqual(partie);
+    expect(dto).toEqual({
+      id: partie.id,
+      name: partie.name,
+      kind: partie.kind,
+      gameSystemId: partie.gameSystemId,
+      description: partie.description,
+      mjId: partie.mjId,
+      createdAt: partie.createdAt,
+      nextSessionDate: null,
+      nextSessionSlot: null,
+      role: 'mj',
+    });
     expect((dto as any).mjPseudo).toBeUndefined();
   });
 
@@ -289,6 +418,24 @@ describe('PartiesService', () => {
     prisma.partie.update.mockResolvedValue({ ...partie, name: 'Nouveau nom' });
     await service.update('p1', 'mj1', { name: 'Nouveau nom' });
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+  });
+
+  it("update() renvoie une partie projetée avec role: 'mj' (revue de code, AC6) — getOwned garantit que l'appelant est MJ", async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.partie.update.mockResolvedValue({ ...partie, name: 'Nouveau nom' });
+    const dto = await service.update('p1', 'mj1', { name: 'Nouveau nom' });
+    expect(dto).toEqual({
+      id: partie.id,
+      name: 'Nouveau nom',
+      kind: partie.kind,
+      gameSystemId: partie.gameSystemId,
+      description: partie.description,
+      mjId: partie.mjId,
+      createdAt: partie.createdAt,
+      nextSessionDate: null,
+      nextSessionSlot: null,
+      role: 'mj',
+    });
   });
 
   it('remove : vérifie la propriété puis supprime', async () => {

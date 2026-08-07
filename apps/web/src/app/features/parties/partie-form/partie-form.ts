@@ -10,7 +10,7 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { GAME_SYSTEMS } from '@master-jdr/shared';
 import type { PartieKind } from '@master-jdr/shared';
 import { PartiesService } from '../../../core/parties/parties.service';
-import { ModeService } from '../../../core/mode/mode.service';
+import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 type FormKind = PartieKind;
@@ -32,7 +32,7 @@ type FormKind = PartieKind;
 export class PartieForm implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly parties = inject(PartiesService);
-  private readonly modeSvc = inject(ModeService);
+  private readonly myPartiesSvc = inject(MyPartiesService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
@@ -78,8 +78,7 @@ export class PartieForm implements OnInit {
       const partie = id
         ? await this.parties.update(id, payload)
         : await this.parties.create(payload);
-      await this.modeSvc.refreshMjParties();
-      this.modeSvc.setMode('mj');
+      await this.myPartiesSvc.refreshMjParties();
       void this.router.navigate(['/parties', partie.id]);
     } catch {
       this.error.set("Impossible d'enregistrer la partie.");

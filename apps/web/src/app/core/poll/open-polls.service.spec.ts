@@ -5,7 +5,7 @@ import { vi } from 'vitest';
 import type { PartieDto, SessionPollDto } from '@master-jdr/shared';
 import { OpenPollsService } from './open-polls.service';
 import { AuthService } from '../auth/auth.service';
-import { ModeService } from '../mode/mode.service';
+import { MyPartiesService } from '../my-parties/my-parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
 
 function makeParty(id: string): PartieDto {
@@ -21,6 +21,7 @@ function makeParty(id: string): PartieDto {
     createdAt: '',
     nextSessionDate: null,
     nextSessionSlot: null,
+    role: 'player',
   };
 }
 
@@ -81,7 +82,7 @@ async function createHarness(
   await TestBed.configureTestingModule({
     imports: [TestHost],
     providers: [
-      { provide: ModeService, useValue: { playerParties: playerPartiesSignal } },
+      { provide: MyPartiesService, useValue: { playerParties: playerPartiesSignal } },
       { provide: ScenariosService, useValue: { listAll } },
       {
         provide: AuthService,

@@ -5,7 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import type { InviteLinkPreviewDto } from '@master-jdr/shared';
 import { AuthService } from '../../core/auth/auth.service';
 import { JoinService } from '../../core/join/join.service';
-import { ModeService } from '../../core/mode/mode.service';
+import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { gameSystemName } from '../../core/parties/parties.util';
 
 @Component({
@@ -19,7 +19,7 @@ export class Join implements OnInit {
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   private readonly joinSvc = inject(JoinService);
-  private readonly modeSvc = inject(ModeService);
+  private readonly myPartiesSvc = inject(MyPartiesService);
 
   protected readonly token = this.route.snapshot.paramMap.get('token') ?? '';
   protected readonly preview = signal<InviteLinkPreviewDto | null>(null);
@@ -41,7 +41,7 @@ export class Join implements OnInit {
     this.error.set(null);
     try {
       const { partieId } = await this.joinSvc.join(this.token);
-      await this.modeSvc.refreshPlayerParties();
+      await this.myPartiesSvc.refreshPlayerParties();
       void this.router.navigate(['/parties', partieId]);
     } catch {
       this.error.set('Impossible de rejoindre (lien invalide, expiré, ou déjà membre).');

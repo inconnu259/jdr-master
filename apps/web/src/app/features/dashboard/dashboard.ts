@@ -4,7 +4,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import type { InvitationDto } from '@master-jdr/shared';
-import { ModeService } from '../../core/mode/mode.service';
+import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { InvitationsService } from '../../core/invitations/invitations.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
@@ -19,7 +19,7 @@ import { gameSystemName, partieKindLabel } from '../../core/parties/parties.util
   styleUrl: './dashboard.scss',
 })
 export class Dashboard implements OnInit {
-  private readonly modeSvc = inject(ModeService);
+  private readonly myPartiesSvc = inject(MyPartiesService);
   private readonly invitations = inject(InvitationsService);
   private readonly openPollsSvc = inject(OpenPollsService);
   protected readonly theme = inject(ThemeToneService);
@@ -27,9 +27,8 @@ export class Dashboard implements OnInit {
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
 
-  protected readonly mode = this.modeSvc.mode;
-  protected readonly parties = this.modeSvc.mjParties;
-  protected readonly playerParties = this.modeSvc.playerParties;
+  protected readonly allParties = this.myPartiesSvc.allParties;
+  protected readonly hasMjParties = this.myPartiesSvc.hasMjParties;
   protected readonly received = signal<InvitationDto[]>([]);
   protected readonly openPolls = this.openPollsSvc.openPolls;
   protected readonly system = gameSystemName;
@@ -64,7 +63,7 @@ export class Dashboard implements OnInit {
   async accept(inv: InvitationDto): Promise<void> {
     await this.invitations.accept(inv.id);
     this.received.update((list) => list.filter((i) => i.id !== inv.id));
-    await this.modeSvc.refreshPlayerParties();
+    await this.myPartiesSvc.refreshPlayerParties();
   }
 
   async decline(inv: InvitationDto): Promise<void> {

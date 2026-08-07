@@ -64,6 +64,7 @@ const PARTIE: PartieDto = {
   createdAt: '',
   nextSessionDate: null,
   nextSessionSlot: null,
+  role: 'mj',
 };
 
 async function createComponent(

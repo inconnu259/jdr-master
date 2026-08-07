@@ -6,7 +6,7 @@ import { CharacterService } from '../characters/character.service';
 import { HommeDragonService } from '../homme-dragon/homme-dragon.service';
 import { InvitationsService } from '../invitations/invitations.service';
 import { OpenPollsService } from '../poll/open-polls.service';
-import { ModeService } from '../mode/mode.service';
+import { MyPartiesService } from '../my-parties/my-parties.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { AnnouncementsService } from '../announcements/announcements.service';
 import { CharacterRolesService } from '../character-roles/character-roles.service';
@@ -55,7 +55,7 @@ export class RealtimeService {
   private readonly hommeDragon = inject(HommeDragonService);
   private readonly invitations = inject(InvitationsService);
   private readonly openPolls = inject(OpenPollsService);
-  private readonly mode = inject(ModeService);
+  private readonly myParties = inject(MyPartiesService);
   private readonly availability = inject(AvailabilityService);
   private readonly announcements = inject(AnnouncementsService);
   private readonly characterRoles = inject(CharacterRolesService);
@@ -65,11 +65,12 @@ export class RealtimeService {
   // première entrée réelle (Story 18.3), étendue Story 19.1 (deuxième entrée), Story 20.1
   // (troisième entrée), Story 20.2 (quatrième entrée), Story 21.1 (cinquième entrée, PREMIÈRE
   // au préfixe 'user:') puis Story 22.1 (sixième entrée, 'partie:', OpenPollsService).
-  // Bug fix post-22.1 (production) : `ModeService` était câblé au préfixe générique 'partie:',
-  // se déclenchant sur absolument toute mutation (scénario, personnage, poll...) — combiné à
-  // l'absence de garde de concurrence dans ModeService, un vote créé pouvait vider silencieusement
-  // toute la liste de Parties du joueur. `ModeService` ne représente que l'appartenance
-  // (mjParties/playerParties), qui ne change jamais via une mutation partie-scopée générique —
+  // Bug fix post-22.1 (production) : `ModeService` (renommé `MyPartiesService`, Story 29.1) était
+  // câblé au préfixe générique 'partie:', se déclenchant sur absolument toute mutation (scénario,
+  // personnage, poll...) — combiné à l'absence de garde de concurrence, un vote créé pouvait vider
+  // silencieusement toute la liste de Parties du joueur. `MyPartiesService` ne représente que
+  // l'appartenance (mjParties/playerParties), qui ne change jamais via une mutation partie-scopée
+  // générique —
   // reculé sur le préfixe 'user:' (mêmes auto-actions déjà couvertes directement sans SSE,
   // cf. Dashboard.accept()/join.ts ; seul removeMember() émet désormais userTopic(removedUserId)).
   // `AvailabilityService` ajoutée au préfixe 'partie:' : une déclaration de dispo/indispo modifiée
@@ -86,7 +87,7 @@ export class RealtimeService {
     { prefix: 'partie:', notifyChanged: () => this.hommeDragon.notifyChanged() },
     { prefix: 'user:', notifyChanged: () => this.invitations.notifyChanged() },
     { prefix: 'partie:', notifyChanged: (topic) => this.openPolls.notifyChanged(topic) },
-    { prefix: 'user:', notifyChanged: () => this.mode.notifyChanged() },
+    { prefix: 'user:', notifyChanged: () => this.myParties.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.availability.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.announcements.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.characterRoles.notifyChanged() },

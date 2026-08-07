@@ -49,7 +49,7 @@ import { characterName, findContentEntry } from '../../../core/characters/charac
 import { PartiesService } from '../../../core/parties/parties.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { ambiguousUserIds } from '../../../shared/identity/identity-ambiguity.util';
-import { ModeService } from '../../../core/mode/mode.service';
+import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { getRespondedCount } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
@@ -108,7 +108,7 @@ export class PartieDetail implements OnInit {
   protected readonly auth = inject(AuthService);
   private readonly parties = inject(PartiesService);
   private readonly realtime = inject(RealtimeService);
-  private readonly modeSvc = inject(ModeService);
+  private readonly myPartiesSvc = inject(MyPartiesService);
   private readonly scenariosSvc = inject(ScenariosService);
   private readonly announcementsSvc = inject(AnnouncementsService);
   private readonly characterRolesSvc = inject(CharacterRolesService);
@@ -411,7 +411,7 @@ export class PartieDetail implements OnInit {
   /** Recharge `characters` seul (roster) — réutilisé par l'effet temps réel et par
    *  `onXpDistributed()` (extrait pour éviter la duplication de `listByPartie(...).catch(...)`).
    *  Bug fix (revue de code) : un échec réseau transitoire ne doit jamais vider le roster affiché —
-   *  même risque déjà corrigé pour `ModeService` (garder le dernier état connu bon). */
+   *  même risque déjà corrigé pour `MyPartiesService` (garder le dernier état connu bon). */
   private async reloadCharacters(): Promise<void> {
     const p = this.partie();
     if (!p) return;
@@ -579,7 +579,7 @@ export class PartieDetail implements OnInit {
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;
     await this.parties.remove(p.id);
-    await this.modeSvc.refreshMjParties();
+    await this.myPartiesSvc.refreshMjParties();
     void this.router.navigate(['/']);
   }
 

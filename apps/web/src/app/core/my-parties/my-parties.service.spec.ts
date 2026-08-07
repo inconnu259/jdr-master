@@ -1,15 +1,14 @@
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
-import { ModeService } from './mode.service';
+import { MyPartiesService } from './my-parties.service';
 import { PartiesService } from '../parties/parties.service';
 
-describe('ModeService', () => {
-  let service: ModeService;
+describe('MyPartiesService', () => {
+  let service: MyPartiesService;
   let mjResult: unknown[];
   let playerResult: unknown[];
 
   beforeEach(() => {
-    localStorage.clear();
     mjResult = [];
     playerResult = [];
     const partiesMock = {
@@ -18,21 +17,25 @@ describe('ModeService', () => {
     TestBed.configureTestingModule({
       providers: [{ provide: PartiesService, useValue: partiesMock }],
     });
-    service = TestBed.inject(ModeService);
+    service = TestBed.inject(MyPartiesService);
+  });
+
+  it("nettoie la clé localStorage orpheline 'master-jdr.mode' de l'ancien ModeService (revue de code)", () => {
+    localStorage.setItem('master-jdr.mode', 'mj');
+    TestBed.resetTestingModule();
+    const partiesMock = { list: vi.fn().mockResolvedValue([]) };
+    TestBed.configureTestingModule({
+      providers: [{ provide: PartiesService, useValue: partiesMock }],
+    });
+    TestBed.inject(MyPartiesService);
+
+    expect(localStorage.getItem('master-jdr.mode')).toBeNull();
   });
 
   it('hasMjParties devient true après refresh avec des parties', async () => {
     mjResult = [{ id: 'p1' }];
     await service.refreshMjParties();
     expect(service.hasMjParties()).toBe(true);
-  });
-
-  it('repasse en mode joueur si on ne maîtrise plus aucune partie', async () => {
-    service.setMode('mj');
-    mjResult = [];
-    await service.refreshMjParties();
-    expect(service.mode()).toBe('joueur');
-    expect(service.hasMjParties()).toBe(false);
   });
 
   it('notifyChanged() (Story 22.1, AC2/AC3) recharge à la fois mjParties et playerParties', async () => {
@@ -47,6 +50,31 @@ describe('ModeService', () => {
 
     expect(service.mjParties()).toEqual([{ id: 'p-mj' }]);
     expect(service.playerParties()).toEqual([{ id: 'p-player' }]);
+  });
+
+  describe('allParties (Story 29.1, AC1)', () => {
+    it('concatène mjParties et playerParties, role déjà porté par chaque PartieDto', async () => {
+      mjResult = [{ id: 'p-mj', role: 'mj' }];
+      playerResult = [{ id: 'p-player', role: 'player' }];
+
+      await service.refreshMjParties();
+      await service.refreshPlayerParties();
+
+      expect(service.allParties()).toEqual([
+        { id: 'p-mj', role: 'mj' },
+        { id: 'p-player', role: 'player' },
+      ]);
+    });
+
+    it('reflète un changement ultérieur de mjParties()/playerParties() (dérivé, pas figé)', async () => {
+      await service.refreshMjParties();
+      await service.refreshPlayerParties();
+      expect(service.allParties()).toEqual([]);
+
+      mjResult = [{ id: 'p-mj', role: 'mj' }];
+      await service.refreshMjParties();
+      expect(service.allParties()).toEqual([{ id: 'p-mj', role: 'mj' }]);
+    });
   });
 
   describe('bug fix critique : garde de concurrence + jamais de vidage sur échec transitoire', () => {
@@ -72,19 +100,6 @@ describe('ModeService', () => {
       await service.refreshPlayerParties();
 
       expect(service.playerParties()).toEqual([{ id: 'p-player' }]);
-    });
-
-    it("refreshMjParties() : un échec transitoire ne fait jamais basculer le mode 'mj' -> 'joueur'", async () => {
-      mjResult = [{ id: 'p-mj' }];
-      await service.refreshMjParties();
-      service.setMode('mj');
-
-      const partiesMock = TestBed.inject(PartiesService) as unknown as { list: ReturnType<typeof vi.fn> };
-      partiesMock.list.mockRejectedValueOnce(new Error('network down'));
-      await service.refreshMjParties();
-
-      expect(service.mode()).toBe('mj');
-      expect(service.mjParties()).toEqual([{ id: 'p-mj' }]);
     });
 
     it("refreshPlayerParties() : une réponse obsolète (résolue en désordre) n'écrase jamais un état plus frais", async () => {

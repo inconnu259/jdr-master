@@ -1,67 +1,61 @@
-@if (mode() === 'mj') {
-  <div class="head">
-    <h1>{{ theme.tone()['dashboard.title_mj'] }}</h1>
+<div class="head">
+  <h1>{{ theme.tone()['nav.my_games'] }}</h1>
+  @if (hasMjParties()) {
     <a mat-flat-button routerLink="/parties/new"><mat-icon>add</mat-icon> {{ theme.tone()['nav.create_game'] }}</a>
-  </div>
-  @if (parties().length === 0) {
-    <p class="empty">{{ theme.tone()['dashboard.empty_mj'] }}</p>
-  } @else {
-    <div class="grid">
-      @for (p of parties(); track p.id) {
-        <mat-card class="tile" [routerLink]="['/parties', p.id]">
-          <mat-card-header>
-            <mat-card-title>{{ p.name }}</mat-card-title>
-            <mat-card-subtitle>{{ system(p.gameSystemId) }} · {{ kind(p.kind) }}</mat-card-subtitle>
-          </mat-card-header>
-        </mat-card>
-      }
-    </div>
   }
-} @else {
-  @if (received().length > 0) {
-    <h1>{{ theme.tone()['dashboard.title_invitations'] }}</h1>
-    <div class="grid">
-      @for (inv of received(); track inv.id) {
-        <mat-card class="tile">
-          <mat-card-header>
-            <mat-card-title>{{ inv.partie.name }}</mat-card-title>
-            <mat-card-subtitle>
-              {{ system(inv.partie.gameSystemId) }} · invité par {{ inv.inviterPseudo }}
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-card-actions>
-            <button mat-flat-button (click)="accept(inv)"><mat-icon>check</mat-icon> Accepter</button>
-            <button mat-button (click)="decline(inv)"><mat-icon>close</mat-icon> Refuser</button>
-          </mat-card-actions>
-        </mat-card>
-      }
-    </div>
-  }
+</div>
 
-  <h1>{{ theme.tone()['dashboard.title_player'] }}</h1>
-  @if (playerParties().length === 0) {
-    <p class="empty">{{ theme.tone()['dashboard.empty_player'] }}</p>
-  } @else {
-    <div class="grid">
-      @for (p of playerParties(); track p.id) {
-        <mat-card class="tile" [routerLink]="['/parties', p.id]">
-          <mat-card-header>
-            <mat-card-title>{{ p.name }}</mat-card-title>
-            <mat-card-subtitle>{{ system(p.gameSystemId) }} · {{ kind(p.kind) }}</mat-card-subtitle>
-          </mat-card-header>
-          @if (openPolls().has(p.id)) {
-            <mat-card-content class="poll-badge">
-              <a
-                mat-stroked-button
-                [routerLink]="['/parties', p.id, 'guild-calendar']"
-                (click)="$event.stopPropagation()"
-              >
-                {{ theme.tone()['poll.vote_pending'] }}
-              </a>
-            </mat-card-content>
-          }
-        </mat-card>
-      }
-    </div>
-  }
+@if (received().length > 0) {
+  <h2>{{ theme.tone()['dashboard.title_invitations'] }}</h2>
+  <div class="grid">
+    @for (inv of received(); track inv.id) {
+      <mat-card class="tile">
+        <mat-card-header>
+          <mat-card-title>{{ inv.partie.name }}</mat-card-title>
+          <mat-card-subtitle>
+            {{ system(inv.partie.gameSystemId) }} · invité par {{ inv.inviterPseudo }}
+          </mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-actions>
+          <button mat-flat-button (click)="accept(inv)"><mat-icon>check</mat-icon> Accepter</button>
+          <button mat-button (click)="decline(inv)"><mat-icon>close</mat-icon> Refuser</button>
+        </mat-card-actions>
+      </mat-card>
+    }
+  </div>
+}
+
+@if (allParties().length === 0) {
+  <p class="empty">{{ theme.tone()['dashboard.empty'] }}</p>
+} @else {
+  <div class="grid">
+    @for (p of allParties(); track p.id) {
+      <mat-card class="tile" [routerLink]="['/parties', p.id]">
+        <mat-card-header>
+          <mat-card-title>{{ p.name }}</mat-card-title>
+          <mat-card-subtitle>
+            {{ system(p.gameSystemId) }} · {{ kind(p.kind) }}
+            <span
+              class="role-indicator"
+              [attr.aria-label]="theme.tone()['dashboard.role_prefix'] + ' ' + (p.role === 'mj' ? theme.tone()['dashboard.role_mj'] : theme.tone()['dashboard.role_player'])"
+            >
+              <mat-icon aria-hidden="true" class="role-icon">{{ p.role === 'mj' ? 'shield' : 'person' }}</mat-icon>
+              <span aria-hidden="true">{{ p.role === 'mj' ? theme.tone()['dashboard.role_mj'] : theme.tone()['dashboard.role_player'] }}</span>
+            </span>
+          </mat-card-subtitle>
+        </mat-card-header>
+        @if (p.role === 'player' && openPolls().has(p.id)) {
+          <mat-card-content class="poll-badge">
+            <a
+              mat-stroked-button
+              [routerLink]="['/parties', p.id, 'guild-calendar']"
+              (click)="$event.stopPropagation()"
+            >
+              {{ theme.tone()['poll.vote_pending'] }}
+            </a>
+          </mat-card-content>
+        }
+      </mat-card>
+    }
+  </div>
 }
