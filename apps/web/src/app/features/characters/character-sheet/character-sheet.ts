@@ -7,6 +7,7 @@ import {
   inject,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
@@ -155,6 +156,24 @@ export class CharacterSheet implements OnInit {
   protected readonly theme = inject(ThemeToneService);
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
+
+  // Requêtes par nom de ref plutôt que refs de template croisant les blocs `@if` (les pencils
+  // sont déclarés dans des blocs conditionnels distincts de ceux qui masquent l'affichage
+  // statique — viewChild() résout indépendamment de l'imbrication, contrairement à une variable
+  // de template référencée hors de son bloc de déclaration, revue de code).
+  protected readonly vigPencil = viewChild<FieldEditPencil>('vigPencil');
+  protected readonly agiPencil = viewChild<FieldEditPencil>('agiPencil');
+  protected readonly intPencil = viewChild<FieldEditPencil>('intPencil');
+  protected readonly espPencil = viewChild<FieldEditPencil>('espPencil');
+  protected readonly xpPencil = viewChild<FieldEditPencil>('xpPencil');
+  protected readonly weaponPencil = viewChild<FieldEditPencil>('weaponPencil');
+  protected readonly fetishPencil = viewChild<FieldEditPencil>('fetishPencil');
+  protected readonly sexPencil = viewChild<FieldEditPencil>('sexPencil');
+  protected readonly agePencil = viewChild<FieldEditPencil>('agePencil');
+  protected readonly physicalTraitsPencil = viewChild<FieldEditPencil>('physicalTraitsPencil');
+  protected readonly homeTownPencil = viewChild<FieldEditPencil>('homeTownPencil');
+  protected readonly motivationPencil = viewChild<FieldEditPencil>('motivationPencil');
+  protected readonly personalityPencil = viewChild<FieldEditPencil>('personalityPencil');
 
   protected readonly character = signal<CharacterDto | null>(null);
   protected readonly content = signal<GameSystemContentDto | null>(null);

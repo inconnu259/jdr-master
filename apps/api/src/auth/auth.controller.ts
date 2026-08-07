@@ -13,6 +13,8 @@ import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ConfirmEmailChangeDto } from './dto/confirm-email-change.dto';
+import { RollbackEmailChangeDto } from './dto/rollback-email-change.dto';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { AuthenticatedGuard } from './guards/authenticated.guard';
 
@@ -78,5 +80,17 @@ export class AuthController {
   @Post('reset-password')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.auth.resetPassword(dto.token, dto.newPassword);
+  }
+
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Post('confirm-email-change')
+  confirmEmailChange(@Body() dto: ConfirmEmailChangeDto) {
+    return this.auth.confirmEmailChange(dto.token);
+  }
+
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Post('rollback-email-change')
+  rollbackEmailChange(@Body() dto: RollbackEmailChangeDto) {
+    return this.auth.rollbackEmailChange(dto.token);
   }
 }

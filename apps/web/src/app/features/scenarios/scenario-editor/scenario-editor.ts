@@ -8,6 +8,7 @@ import {
   input,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatButtonModule } from '@angular/material/button';
@@ -74,6 +75,14 @@ export class ScenarioEditor implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly scenarioInput = input.required<ScenarioDto>({ alias: 'scenario' });
+
+  // Requêtes par nom de ref plutôt que refs de template croisant les blocs `@if` (les pencils
+  // sont déclarés dans des blocs conditionnels distincts de ceux qui masquent l'affichage
+  // statique — viewChild() résout indépendamment de l'imbrication, contrairement à une variable
+  // de template référencée hors de son bloc de déclaration, revue de code).
+  protected readonly titlePencil = viewChild<FieldEditPencil>('titlePencil');
+  protected readonly dureeHeuresPencil = viewChild<FieldEditPencil>('dureeHeuresPencil');
+  protected readonly dureeSeancesPencil = viewChild<FieldEditPencil>('dureeSeancesPencil');
 
   protected readonly scenario = signal<ScenarioDto | null>(null);
   protected readonly documents = signal<ScenarioDocumentDto[]>([]);

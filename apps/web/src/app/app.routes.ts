@@ -5,6 +5,8 @@ import { Login } from './features/auth/login/login';
 import { Register } from './features/auth/register/register';
 import { ForgotPassword } from './features/auth/forgot-password/forgot-password';
 import { ResetPassword } from './features/auth/reset-password/reset-password';
+import { ConfirmEmailChange } from './features/auth/confirm-email-change/confirm-email-change';
+import { RollbackEmailChange } from './features/auth/rollback-email-change/rollback-email-change';
 import { Dashboard } from './features/dashboard/dashboard';
 import { PartieForm } from './features/parties/partie-form/partie-form';
 import { PartieDetail } from './features/parties/partie-detail/partie-detail';
@@ -17,6 +19,8 @@ export const routes: Routes = [
   { path: 'register', component: Register },
   { path: 'forgot-password', component: ForgotPassword },
   { path: 'reset-password/:token', component: ResetPassword },
+  { path: 'confirm-email-change/:token', component: ConfirmEmailChange },
+  { path: 'rollback-email-change/:token', component: RollbackEmailChange },
   { path: 'join/:token', component: Join }, // hors zone authentifiée : un nouveau venu doit y accéder
   {
     path: '',

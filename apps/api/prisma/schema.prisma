@@ -13,29 +13,32 @@ enum GlobalRole {
 
 /// Compte utilisateur. La connexion se fait par `email` ; `pseudo` est public (recherche/affichage).
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
-  pseudo       String     @unique
-  displayName  String // AD-1 — NOT NULL : migration (comptes existants) ET register() (nouveaux)
-  passwordHash String
-  role         GlobalRole @default(USER)
-  createdAt    DateTime   @default(now())
-  theme        String? // AD-13 — null = jamais choisi, le thème local est alors adopté une fois
+  id                String     @id @default(uuid())
+  email             String     @unique
+  pseudo            String     @unique
+  displayName       String // AD-1 — NOT NULL : migration (comptes existants) ET register() (nouveaux)
+  passwordHash      String
+  role              GlobalRole @default(USER)
+  createdAt         DateTime   @default(now())
+  theme             String? // AD-13 — null = jamais choisi, le thème local est alors adopté une fois
+  mustResetPassword Boolean    @default(false) // Story 28.6 — posé par rollbackEmailChange(), remis à false par resetPassword()
 
-  mjOfParties              Partie[]                  @relation("PartieMJ")
-  memberships              Membership[]
-  invitesSent              Invitation[]              @relation("InvitationInviter")
-  invitesRecv              Invitation[]              @relation("InvitationInvitee")
-  inviteLinksCreated       InviteLink[]              @relation("InviteLinkCreator")
-  availabilityDeclarations AvailabilityDeclaration[]
-  pollVotes                PollVote[]
-  characters               Character[]
-  passwordResetTokens      PasswordResetToken[]
-  sessions                 UserSession[]
-  xpDistributionsGiven     XpDistribution[]          @relation("XpDistributionMj")
-  inscriptions             Inscription[]
-  scenarioParticipations   ScenarioParticipant[]
-  hommeDragons             HommeDragon[]
+  mjOfParties               Partie[]                   @relation("PartieMJ")
+  memberships               Membership[]
+  invitesSent               Invitation[]               @relation("InvitationInviter")
+  invitesRecv               Invitation[]               @relation("InvitationInvitee")
+  inviteLinksCreated        InviteLink[]               @relation("InviteLinkCreator")
+  availabilityDeclarations  AvailabilityDeclaration[]
+  pollVotes                 PollVote[]
+  characters                Character[]
+  passwordResetTokens       PasswordResetToken[]
+  sessions                  UserSession[]
+  xpDistributionsGiven      XpDistribution[]           @relation("XpDistributionMj")
+  inscriptions              Inscription[]
+  scenarioParticipations    ScenarioParticipant[]
+  hommeDragons              HommeDragon[]
+  emailChangeTokens         EmailChangeToken[]
+  emailChangeRollbackTokens EmailChangeRollbackToken[]
 }
 
 enum PartieKind {
@@ -130,6 +133,37 @@ model PasswordResetToken {
   id        String    @id @default(uuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// Jeton de confirmation de changement d'e-mail (Story 28.6). Usage unique, expire à +24h. La
+/// nouvelle adresse est stockée en clair sur le jeton (pas sensible), le secret jamais.
+model EmailChangeToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  newEmail  String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// Jeton de retour arrière après confirmation d'un changement d'e-mail (Story 28.6). Usage
+/// unique, expire à +1 mois — fenêtre volontairement large pour laisser le temps à un titulaire
+/// légitime de découvrir un changement effectué à son insu.
+model EmailChangeRollbackToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oldEmail  String
   tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?

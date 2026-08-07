@@ -15,12 +15,16 @@ describe('AuthController', () => {
   let auth: {
     recordSession: jest.Mock;
     forgetSession: jest.Mock;
+    confirmEmailChange: jest.Mock;
+    rollbackEmailChange: jest.Mock;
   };
 
   beforeEach(() => {
     auth = {
       recordSession: jest.fn().mockResolvedValue(undefined),
       forgetSession: jest.fn().mockResolvedValue(undefined),
+      confirmEmailChange: jest.fn(),
+      rollbackEmailChange: jest.fn(),
     };
     controller = new AuthController(auth as unknown as AuthService);
   });
@@ -86,6 +90,32 @@ describe('AuthController', () => {
       const result = await controller.logout(req);
 
       expect(callOrder).toEqual(['logout', 'session.destroy']);
+      expect(result).toEqual({ ok: true });
+    });
+  });
+
+  describe('confirmEmailChange', () => {
+    it('délègue à AuthService.confirmEmailChange avec le token du corps', async () => {
+      auth.confirmEmailChange.mockResolvedValue({ ok: true });
+
+      const result = await controller.confirmEmailChange({
+        token: 'tok1.secret',
+      });
+
+      expect(auth.confirmEmailChange).toHaveBeenCalledWith('tok1.secret');
+      expect(result).toEqual({ ok: true });
+    });
+  });
+
+  describe('rollbackEmailChange', () => {
+    it('délègue à AuthService.rollbackEmailChange avec le token du corps', async () => {
+      auth.rollbackEmailChange.mockResolvedValue({ ok: true });
+
+      const result = await controller.rollbackEmailChange({
+        token: 'rb1.secret',
+      });
+
+      expect(auth.rollbackEmailChange).toHaveBeenCalledWith('rb1.secret');
       expect(result).toEqual({ ok: true });
     });
   });

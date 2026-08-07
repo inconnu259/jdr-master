@@ -26,10 +26,12 @@ describe('AuthService', () => {
     Pick<UsersService, 'findByEmailOrPseudo' | 'findByEmail' | 'create'>
   >;
   let tx: {
-    user: { create: jest.Mock; update: jest.Mock };
+    user: { create: jest.Mock; update: jest.Mock; findUnique: jest.Mock };
     passwordResetToken: { updateMany: jest.Mock };
     userSession: { findMany: jest.Mock; deleteMany: jest.Mock };
     session: { deleteMany: jest.Mock };
+    emailChangeToken: { updateMany: jest.Mock };
+    emailChangeRollbackToken: { updateMany: jest.Mock; create: jest.Mock };
   };
   let prisma: {
     $transaction: jest.Mock;
@@ -41,6 +43,13 @@ describe('AuthService', () => {
     };
     user: { findUnique: jest.Mock };
     userSession: { upsert: jest.Mock; deleteMany: jest.Mock };
+    emailChangeToken: {
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      count: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    emailChangeRollbackToken: { findUnique: jest.Mock };
   };
   let inviteLinks: { consumeLink: jest.Mock };
   let email: { sendMail: jest.Mock };
@@ -72,6 +81,7 @@ describe('AuthService', () => {
           role: 'USER',
           createdAt: new Date(),
         }),
+        findUnique: jest.fn(),
       },
       passwordResetToken: {
         updateMany: jest.fn(),
@@ -81,6 +91,11 @@ describe('AuthService', () => {
         deleteMany: jest.fn(),
       },
       session: { deleteMany: jest.fn() },
+      emailChangeToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      emailChangeRollbackToken: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        create: jest.fn(),
+      },
     };
     // $transaction exécute le callback avec notre `tx` mocké.
     prisma = {
@@ -93,6 +108,13 @@ describe('AuthService', () => {
       },
       user: { findUnique: jest.fn() },
       userSession: { upsert: jest.fn(), deleteMany: jest.fn() },
+      emailChangeToken: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      emailChangeRollbackToken: { findUnique: jest.fn() },
     };
     inviteLinks = {
       consumeLink: jest.fn().mockResolvedValue({ partieId: 'p1' }),
@@ -331,7 +353,7 @@ describe('AuthService', () => {
       });
       expect(tx.user.update).toHaveBeenCalledWith({
         where: { id: 'u1' },
-        data: { passwordHash: 'NEW_HASH' },
+        data: { passwordHash: 'NEW_HASH', mustResetPassword: false },
       });
       expect(tx.userSession.findMany).toHaveBeenCalledWith({
         where: { userId: 'u1' },
@@ -543,6 +565,314 @@ describe('AuthService', () => {
       expect(tx.userSession.deleteMany).toHaveBeenCalledWith({
         where: { userId: 'u1', sid: { not: '' } },
       });
+    });
+  });
+
+  describe('requestEmailChange', () => {
+    const currentUser = {
+      id: 'u1',
+      email: 'old@b.c',
+      passwordHash: 'STORED_HASH',
+    };
+
+    beforeEach(() => {
+      prisma.user.findUnique.mockResolvedValue(currentUser);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      (argon2.hash as jest.Mock).mockResolvedValue('TOKEN_HASH');
+      users.findByEmail.mockResolvedValue(null);
+      prisma.emailChangeToken.create.mockResolvedValue({ id: 'tok1' });
+    });
+
+    it('mot de passe correct, adresse libre → invalide les anciens jetons, crée le nouveau, envoie les 2 e-mails', async () => {
+      const result = await service.requestEmailChange('u1', 'currentpw', 'new@b.c');
+
+      expect(result).toEqual({ ok: true });
+      expect(argon2.verify).toHaveBeenCalledWith('STORED_HASH', 'currentpw');
+      expect(users.findByEmail).toHaveBeenCalledWith('new@b.c');
+      expect(prisma.emailChangeToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', usedAt: null },
+        data: { usedAt: expect.any(Date) },
+      });
+      expect(prisma.emailChangeToken.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'u1',
+          newEmail: 'new@b.c',
+          tokenHash: 'TOKEN_HASH',
+          expiresAt: expect.any(Date),
+        },
+      });
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'email-change-confirm',
+        'new@b.c',
+        { link: expect.stringContaining('/confirm-email-change/tok1.') },
+      );
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'email-change-notice',
+        'old@b.c',
+        {},
+      );
+    });
+
+    it('mot de passe courant incorrect → UnauthorizedException, rien de créé, aucun e-mail', async () => {
+      (argon2.verify as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        service.requestEmailChange('u1', 'wrongpw', 'new@b.c'),
+      ).rejects.toThrow('Mot de passe actuel incorrect');
+      expect(prisma.emailChangeToken.create).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('nouvelle adresse identique à l’adresse actuelle → ConflictException, rien de créé', async () => {
+      await expect(
+        service.requestEmailChange('u1', 'currentpw', 'old@b.c'),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.emailChangeToken.create).not.toHaveBeenCalled();
+    });
+
+    it('nouvelle adresse déjà prise par un autre compte → ConflictException, rien de créé', async () => {
+      users.findByEmail.mockResolvedValue({ id: 'other' } as never);
+
+      await expect(
+        service.requestEmailChange('u1', 'currentpw', 'new@b.c'),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.emailChangeToken.create).not.toHaveBeenCalled();
+    });
+
+    it('limite de fréquence atteinte → { ok: true } silencieux, rien de créé, aucun e-mail', async () => {
+      prisma.emailChangeToken.count.mockResolvedValue(5);
+
+      const result = await service.requestEmailChange('u1', 'currentpw', 'new@b.c');
+
+      expect(result).toEqual({ ok: true });
+      expect(prisma.emailChangeToken.create).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('compte introuvable → NotFoundException', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.requestEmailChange('gone', 'currentpw', 'new@b.c'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('revue de code : adresse identique à la casse près (OLD@B.C vs old@b.c) → ConflictException, contournement de casse impossible', async () => {
+      await expect(
+        service.requestEmailChange('u1', 'currentpw', 'OLD@B.C'),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.emailChangeToken.create).not.toHaveBeenCalled();
+    });
+
+    it('revue de code : adresse normalisée (trim + minuscules) avant vérification d’unicité et stockage', async () => {
+      const result = await service.requestEmailChange('u1', 'currentpw', '  New@B.C  ');
+
+      expect(result).toEqual({ ok: true });
+      expect(users.findByEmail).toHaveBeenCalledWith('new@b.c');
+      expect(prisma.emailChangeToken.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'u1',
+          newEmail: 'new@b.c',
+          tokenHash: 'TOKEN_HASH',
+          expiresAt: expect.any(Date),
+        },
+      });
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'email-change-confirm',
+        'new@b.c',
+        { link: expect.stringContaining('/confirm-email-change/tok1.') },
+      );
+    });
+  });
+
+  describe('confirmEmailChange', () => {
+    const validRecord = {
+      id: 'tok1',
+      userId: 'u1',
+      newEmail: 'new@b.c',
+      tokenHash: 'STORED_HASH',
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    };
+    const currentUser = { id: 'u1', email: 'old@b.c', passwordHash: 'X' };
+
+    it('token valide → adresse remplacée, EmailChangeRollbackToken créé (oldEmail = adresse avant update), e-mail de rollback envoyé', async () => {
+      prisma.emailChangeToken.findUnique.mockResolvedValue(validRecord);
+      tx.user.findUnique.mockResolvedValue(currentUser);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      (argon2.hash as jest.Mock).mockResolvedValue('ROLLBACK_HASH');
+      tx.emailChangeToken.updateMany.mockResolvedValue({ count: 1 });
+      tx.emailChangeRollbackToken.create.mockResolvedValue({ id: 'rb1' });
+
+      const result = await service.confirmEmailChange('tok1.secretvalue');
+
+      expect(result).toEqual({ ok: true });
+      expect(argon2.verify).toHaveBeenCalledWith('STORED_HASH', 'secretvalue');
+      expect(tx.emailChangeToken.updateMany).toHaveBeenCalledWith({
+        where: { id: 'tok1', usedAt: null, expiresAt: { gt: expect.any(Date) } },
+        data: { usedAt: expect.any(Date) },
+      });
+      expect(tx.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: { email: 'new@b.c' },
+      });
+      expect(tx.emailChangeRollbackToken.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'u1',
+          oldEmail: 'old@b.c',
+          tokenHash: 'ROLLBACK_HASH',
+          expiresAt: expect.any(Date),
+        },
+      });
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'email-change-rollback-available',
+        'old@b.c',
+        { link: expect.stringContaining('/rollback-email-change/rb1.') },
+      );
+    });
+
+    it('token inconnu → NotFoundException, aucune écriture', async () => {
+      prisma.emailChangeToken.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.confirmEmailChange('unknown.secretvalue'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('token déjà utilisé → NotFoundException avant toute vérification du secret', async () => {
+      prisma.emailChangeToken.findUnique.mockResolvedValue({
+        ...validRecord,
+        usedAt: new Date(),
+      });
+
+      await expect(
+        service.confirmEmailChange('tok1.secretvalue'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('token expiré → NotFoundException', async () => {
+      prisma.emailChangeToken.findUnique.mockResolvedValue({
+        ...validRecord,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+
+      await expect(
+        service.confirmEmailChange('tok1.secretvalue'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('secret incorrect → NotFoundException, la réclamation atomique n’est jamais appelée', async () => {
+      prisma.emailChangeToken.findUnique.mockResolvedValue(validRecord);
+      (argon2.verify as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        service.confirmEmailChange('tok1.wrongsecret'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('adresse prise entre-temps par un autre compte (P2002) → ConflictException propre, pas de 500 brut', async () => {
+      prisma.emailChangeToken.findUnique.mockResolvedValue(validRecord);
+      tx.user.findUnique.mockResolvedValue(currentUser);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      tx.emailChangeToken.updateMany.mockResolvedValue({ count: 1 });
+      tx.user.update.mockRejectedValue({ code: 'P2002' });
+
+      await expect(
+        service.confirmEmailChange('tok1.secretvalue'),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('revue de code : compte supprimé entre la demande et la confirmation → NotFoundException, aucun e-mail', async () => {
+      prisma.emailChangeToken.findUnique.mockResolvedValue(validRecord);
+      tx.user.findUnique.mockResolvedValue(null);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      tx.emailChangeToken.updateMany.mockResolvedValue({ count: 1 });
+
+      await expect(
+        service.confirmEmailChange('tok1.secretvalue'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(tx.user.update).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('rollbackEmailChange', () => {
+    const validRollbackRecord = {
+      id: 'rb1',
+      userId: 'u1',
+      oldEmail: 'old@b.c',
+      tokenHash: 'STORED_HASH',
+      usedAt: null,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    };
+
+    it('token valide → adresse restaurée, mustResetPassword: true, toutes les sessions révoquées (sans exceptSid), e-mail envoyé', async () => {
+      prisma.emailChangeRollbackToken.findUnique.mockResolvedValue(validRollbackRecord);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      tx.emailChangeRollbackToken.updateMany.mockResolvedValue({ count: 1 });
+      tx.userSession.findMany.mockResolvedValue([{ sid: 's1' }]);
+
+      const result = await service.rollbackEmailChange('rb1.secretvalue');
+
+      expect(result).toEqual({ ok: true });
+      expect(tx.emailChangeRollbackToken.updateMany).toHaveBeenCalledWith({
+        where: { id: 'rb1', usedAt: null, expiresAt: { gt: expect.any(Date) } },
+        data: { usedAt: expect.any(Date) },
+      });
+      expect(tx.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: { email: 'old@b.c', mustResetPassword: true },
+      });
+      // revokeSessions() sans exceptSid → où porte uniquement sur userId (toutes les sessions).
+      expect(tx.userSession.findMany).toHaveBeenCalledWith({
+        where: { userId: 'u1' },
+        select: { sid: true },
+      });
+      expect(tx.userSession.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'u1' },
+      });
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'email-change-rolled-back',
+        'old@b.c',
+        expect.objectContaining({ link: expect.any(String) }),
+      );
+    });
+
+    it('token inconnu/expiré/déjà utilisé/secret invalide → NotFoundException, aucune écriture', async () => {
+      prisma.emailChangeRollbackToken.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.rollbackEmailChange('unknown.secretvalue'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('revue de code : compte supprimé entre l’émission du jeton de rollback et son usage (P2025) → NotFoundException, pas de 500 brut', async () => {
+      prisma.emailChangeRollbackToken.findUnique.mockResolvedValue(validRollbackRecord);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      tx.emailChangeRollbackToken.updateMany.mockResolvedValue({ count: 1 });
+      tx.user.update.mockRejectedValue({ code: 'P2025' });
+
+      await expect(
+        service.rollbackEmailChange('rb1.secretvalue'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('revue de code : oldEmail repris par un autre compte entre la confirmation et le rollback (P2002) → ConflictException propre, pas de 500 brut', async () => {
+      prisma.emailChangeRollbackToken.findUnique.mockResolvedValue(validRollbackRecord);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      tx.emailChangeRollbackToken.updateMany.mockResolvedValue({ count: 1 });
+      tx.user.update.mockRejectedValue({ code: 'P2002' });
+
+      await expect(
+        service.rollbackEmailChange('rb1.secretvalue'),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(email.sendMail).not.toHaveBeenCalled();
     });
   });
 

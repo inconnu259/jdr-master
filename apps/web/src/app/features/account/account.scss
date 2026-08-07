@@ -2,11 +2,11 @@
   max-width: 32rem;
   margin: 1rem auto;
 }
-form {
+.inline-edit-form {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  margin-top: 1rem;
+  margin-top: 0.5rem;
 }
 mat-form-field {
   width: 100%;
@@ -15,10 +15,16 @@ mat-form-field {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+  margin: 0.75rem 0;
 }
 .lbl {
   font-size: 0.8rem;
   color: var(--mat-sys-on-surface-variant, #666);
+}
+.value-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 .value {
   font-size: 1rem;
@@ -26,10 +32,36 @@ mat-form-field {
 .actions {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
+}
+.actions--start {
+  justify-content: flex-start;
 }
 .error {
   color: var(--mat-sys-error, #b00020);
 }
 .saved {
   color: var(--mat-sys-primary, #2e7d32);
+}
+
+// Même patron visuel que FieldEditPencil (character-sheet) — dupliqué ici car ce bouton pilote un
+// mini-formulaire à 2 champs (mot de passe + e-mail), hors du contrat à valeur unique du composant
+// partagé (revue de code, choix assumé pour rester une modification directe sans nouveau composant).
+.field-edit-pencil__button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mat-sys-on-surface-variant, #888);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    color: var(--jdr-accent-2, currentColor);
+    border-color: var(--jdr-accent-2, currentColor);
+  }
 }

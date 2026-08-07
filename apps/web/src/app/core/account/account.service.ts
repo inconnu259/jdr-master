@@ -38,4 +38,14 @@ export class AccountService {
       ),
     );
   }
+
+  requestEmailChange(currentPassword: string, newEmail: string): Promise<{ ok: true }> {
+    return firstValueFrom(
+      this.http.patch<{ ok: true }>(
+        `${API_BASE}/me/email`,
+        { currentPassword, newEmail },
+        { withCredentials: true },
+      ),
+    );
+  }
 }

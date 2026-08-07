@@ -26,16 +26,22 @@ export class FieldEditPencil {
 
   protected readonly datalistId = `field-edit-pencil-datalist-${nextDatalistId++}`;
 
-  protected readonly editing = signal(false);
+  private readonly _editing = signal(false);
+  /**
+   * Exposé en lecture seule (revue de code, frustration utilisateur) : l'appelant masque son
+   * propre affichage de la valeur pendant l'édition, pour ne plus jamais montrer le texte et le
+   * champ éditable côte à côte (deux représentations de la même valeur à la fois).
+   */
+  readonly editing = this._editing.asReadonly();
   protected readonly draft = signal<string | number>('');
 
   protected startEdit(): void {
     this.draft.set(this.value());
-    this.editing.set(true);
+    this._editing.set(true);
   }
 
   protected cancel(): void {
-    this.editing.set(false);
+    this._editing.set(false);
   }
 
   protected onInput(raw: string): void {
@@ -51,7 +57,7 @@ export class FieldEditPencil {
   protected submit(): void {
     const value = this.draft();
     if (typeof value === 'number' && Number.isNaN(value)) return;
-    this.editing.set(false);
+    this._editing.set(false);
     this.confirm.emit(value);
   }
 }

@@ -26,6 +26,13 @@ const RESET_TOKEN_INVALID_MESSAGE =
 const EMAIL_RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1h — fenêtre glissante de limitation par e-mail (FR-13)
 const EMAIL_RATE_LIMIT_MAX = 5; // même valeur que le throttle IP existant (5/60s), fenêtre différente
 
+const EMAIL_CHANGE_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // +24h, même TTL que le reset mdp (Story 28.6)
+const EMAIL_CHANGE_ROLLBACK_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // +1 mois (AC2, Story 28.6)
+const EMAIL_CHANGE_TOKEN_INVALID_MESSAGE =
+  'Lien invalide ou expiré. Merci de refaire une demande.';
+const EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE =
+  'Lien invalide ou expiré.';
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -219,7 +226,10 @@ export class AuthService {
 
       const updated = await tx.user.update({
         where: { id: record.userId },
-        data: { passwordHash },
+        // `mustResetPassword: false` (Story 28.6) — un compte bloqué par un rollback d'e-mail
+        // (AC3) redevient connectable dès qu'un reset mdp aboutit ; sans ce reset explicite, un
+        // reset via ce flux ne le lèverait jamais.
+        data: { passwordHash, mustResetPassword: false },
       });
 
       // Invalidation des sessions actives (AD-3, FR-11) — toutes, sans exception (écart assumé
@@ -299,6 +309,249 @@ export class AuthService {
 
     // Hors transaction, best-effort — même patron que resetPassword().
     await this.email.sendMail('password-changed', user.email, {});
+
+    return { ok: true };
+  }
+
+  /**
+   * Étape 1/3 du changement d'e-mail à double canal (Story 28.6, AC1) — authentifié, mot de passe
+   * courant requis. Ne modifie jamais l'adresse du compte : crée un jeton de confirmation envoyé à
+   * la NOUVELLE adresse, et un avis informatif envoyé à l'ANCIENNE. Écart assumé par rapport à
+   * requestPasswordReset() : les jetons de confirmation précédents, non utilisés, sont invalidés à
+   * chaque nouvelle demande — laisser vivre plusieurs jetons pointant vers des `newEmail`
+   * différents ferait courir le risque qu'un ancien lien encore valide fasse aboutir le compte à
+   * une adresse que l'utilisateur ne veut plus.
+   */
+  async requestEmailChange(
+    userId: string,
+    currentPassword: string,
+    newEmail: string,
+  ): Promise<{ ok: true }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('Compte introuvable');
+    }
+
+    let valid: boolean;
+    try {
+      valid = await argon2.verify(user.passwordHash, currentPassword);
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      throw new UnauthorizedException('Mot de passe actuel incorrect');
+    }
+
+    // Normalisé (même patron que invitations.service.ts) — sans quoi une casse différente
+    // (`New@B.C` vs `new@b.c`) contournerait les deux garde-fous ci-dessous (revue de code).
+    const normalizedNewEmail = newEmail.trim().toLowerCase();
+
+    if (normalizedNewEmail === user.email.toLowerCase()) {
+      throw new ConflictException('Cette adresse est déjà celle de votre compte.');
+    }
+
+    // Route authentifiée, mot de passe déjà prouvé : contrairement à register()/
+    // requestPasswordReset(), l'anti-énumération n'a pas la même valeur ici — message explicite.
+    const existing = await this.users.findByEmail(normalizedNewEmail);
+    if (existing) {
+      throw new ConflictException('Cette adresse est déjà utilisée par un autre compte.');
+    }
+
+    // Limitation par e-mail (même patron que requestPasswordReset()) — évite le spam des deux
+    // boîtes mail (nouvelle + ancienne) depuis une session compromise.
+    const recentCount = await this.prisma.emailChangeToken.count({
+      where: {
+        userId,
+        createdAt: { gt: new Date(Date.now() - EMAIL_RATE_LIMIT_WINDOW_MS) },
+      },
+    });
+    if (recentCount >= EMAIL_RATE_LIMIT_MAX) {
+      return { ok: true };
+    }
+
+    await this.prisma.emailChangeToken.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    const secret = randomBytes(32).toString('base64url');
+    const tokenHash = await argon2.hash(secret);
+    const created = await this.prisma.emailChangeToken.create({
+      data: {
+        userId,
+        newEmail: normalizedNewEmail,
+        tokenHash,
+        expiresAt: new Date(Date.now() + EMAIL_CHANGE_TOKEN_TTL_MS),
+      },
+    });
+
+    await this.email.sendMail('email-change-confirm', normalizedNewEmail, {
+      link: `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/confirm-email-change/${created.id}.${secret}`,
+    });
+    await this.email.sendMail('email-change-notice', user.email, {});
+
+    return { ok: true };
+  }
+
+  /**
+   * Étape 2/3 (Story 28.6, AC2, AC4) — le lien de confirmation, ouvert depuis la NOUVELLE adresse,
+   * remplace réellement l'adresse du compte et crée un jeton de retour arrière (valable 1 mois,
+   * envoyé à l'ANCIENNE adresse). Même patron token composite `id.secret` que resetPassword().
+   */
+  async confirmEmailChange(token: string): Promise<{ ok: true }> {
+    const separatorIndex = token.indexOf('.');
+    if (separatorIndex <= 0 || separatorIndex === token.length - 1) {
+      throw new NotFoundException(EMAIL_CHANGE_TOKEN_INVALID_MESSAGE);
+    }
+    const id = token.slice(0, separatorIndex);
+    const secret = token.slice(separatorIndex + 1);
+
+    const record = await this.prisma.emailChangeToken.findUnique({ where: { id } });
+    if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
+      throw new NotFoundException(EMAIL_CHANGE_TOKEN_INVALID_MESSAGE);
+    }
+
+    let valid: boolean;
+    try {
+      valid = await argon2.verify(record.tokenHash, secret);
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      throw new NotFoundException(EMAIL_CHANGE_TOKEN_INVALID_MESSAGE);
+    }
+
+    const rollbackSecret = randomBytes(32).toString('base64url');
+    const rollbackTokenHash = await argon2.hash(rollbackSecret);
+
+    let createdRollback: { id: string };
+    let oldEmail: string;
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const claim = await tx.emailChangeToken.updateMany({
+          where: { id, usedAt: null, expiresAt: { gt: new Date() } },
+          data: { usedAt: new Date() },
+        });
+        if (claim.count === 0) {
+          throw new NotFoundException(EMAIL_CHANGE_TOKEN_INVALID_MESSAGE);
+        }
+
+        const user = await tx.user.findUnique({ where: { id: record.userId } });
+        if (!user) {
+          throw new NotFoundException(EMAIL_CHANGE_TOKEN_INVALID_MESSAGE);
+        }
+        // Lue à l'intérieur de la transaction, juste avant l'update — ferme la fenêtre TOCTOU
+        // qu'une lecture précédant la transaction laisserait ouverte (revue de code).
+        const userOldEmail = user.email;
+
+        await tx.user.update({
+          where: { id: record.userId },
+          data: { email: record.newEmail },
+        });
+
+        const rollback = await tx.emailChangeRollbackToken.create({
+          data: {
+            userId: record.userId,
+            oldEmail: userOldEmail,
+            tokenHash: rollbackTokenHash,
+            expiresAt: new Date(Date.now() + EMAIL_CHANGE_ROLLBACK_TOKEN_TTL_MS),
+          },
+        });
+
+        return { rollback, oldEmail: userOldEmail };
+      });
+      createdRollback = result.rollback;
+      oldEmail = result.oldEmail;
+    } catch (e: unknown) {
+      // Adresse prise par un autre compte entre la demande et la confirmation (fenêtre jusqu'à
+      // 24h) — jamais un 500 brut.
+      const err = e as { code?: string };
+      if (err?.code === 'P2002') {
+        throw new ConflictException(
+          'Cette adresse est désormais utilisée par un autre compte, merci de refaire une demande.',
+        );
+      }
+      throw e;
+    }
+
+    // Hors transaction, best-effort — même patron que resetPassword()/changePassword().
+    await this.email.sendMail('email-change-rollback-available', oldEmail, {
+      link: `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/rollback-email-change/${createdRollback.id}.${rollbackSecret}`,
+    });
+
+    return { ok: true };
+  }
+
+  /**
+   * Étape 3/3, cas d'usurpation (Story 28.6, AC3, AC4) — le lien de retour arrière, ouvert depuis
+   * l'ANCIENNE adresse, restaure celle-ci, coupe TOUTES les sessions actives (réutilise
+   * revokeSessions() de la Story 28.5, sans `exceptSid` — appelé hors session, rien à préserver) et
+   * exige une réinitialisation du mot de passe avant toute reconnexion (`mustResetPassword`,
+   * appliqué dans LocalStrategy.validate()).
+   */
+  async rollbackEmailChange(token: string): Promise<{ ok: true }> {
+    const separatorIndex = token.indexOf('.');
+    if (separatorIndex <= 0 || separatorIndex === token.length - 1) {
+      throw new NotFoundException(EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE);
+    }
+    const id = token.slice(0, separatorIndex);
+    const secret = token.slice(separatorIndex + 1);
+
+    const record = await this.prisma.emailChangeRollbackToken.findUnique({
+      where: { id },
+    });
+    if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
+      throw new NotFoundException(EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE);
+    }
+
+    let valid: boolean;
+    try {
+      valid = await argon2.verify(record.tokenHash, secret);
+    } catch {
+      valid = false;
+    }
+    if (!valid) {
+      throw new NotFoundException(EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE);
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const claim = await tx.emailChangeRollbackToken.updateMany({
+          where: { id, usedAt: null, expiresAt: { gt: new Date() } },
+          data: { usedAt: new Date() },
+        });
+        if (claim.count === 0) {
+          throw new NotFoundException(EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE);
+        }
+
+        await tx.user.update({
+          where: { id: record.userId },
+          data: { email: record.oldEmail, mustResetPassword: true },
+        });
+
+        await this.revokeSessions(tx, record.userId);
+      });
+    } catch (e: unknown) {
+      const err = e as { code?: string };
+      // Compte supprimé entre l'émission du jeton de rollback et son usage — jamais un 500 brut
+      // (revue de code).
+      if (err?.code === 'P2025') {
+        throw new NotFoundException(EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE);
+      }
+      // oldEmail repris par un autre compte entre la confirmation et le rollback — même patron
+      // que confirmEmailChange() (revue de code).
+      if (err?.code === 'P2002') {
+        throw new ConflictException(
+          'Cette adresse est désormais utilisée par un autre compte, la restauration est impossible.',
+        );
+      }
+      throw e;
+    }
+
+    // Hors transaction, best-effort.
+    await this.email.sendMail('email-change-rolled-back', record.oldEmail, {
+      link: `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/forgot-password`,
+    });
 
     return { ok: true };
   }

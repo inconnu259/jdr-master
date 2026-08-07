@@ -120,4 +120,16 @@ export class AuthService {
       ),
     );
   }
+
+  async confirmEmailChange(token: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post(`${API}/auth/confirm-email-change`, { token }, { withCredentials: true }),
+    );
+  }
+
+  async rollbackEmailChange(token: string): Promise<void> {
+    await firstValueFrom(
+      this.http.post(`${API}/auth/rollback-email-change`, { token }, { withCredentials: true }),
+    );
+  }
 }

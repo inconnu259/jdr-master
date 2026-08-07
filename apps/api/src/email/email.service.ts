@@ -10,6 +10,10 @@ const SUBJECTS: Record<EmailTemplate, string> = {
   'password-reset': 'Réinitialisation de votre mot de passe',
   'password-changed': 'Votre mot de passe a été modifié',
   'level-up': 'Nouveau niveau disponible pour {{characterName}}',
+  'email-change-confirm': 'Confirmez votre nouvelle adresse e-mail',
+  'email-change-notice': "Un changement d'adresse e-mail a été demandé",
+  'email-change-rollback-available': 'Votre adresse e-mail a été modifiée',
+  'email-change-rolled-back': 'Votre adresse e-mail a été restaurée',
 };
 
 @Injectable()

@@ -1,64 +1,121 @@
 <mat-card class="account-card">
   <mat-card-title>{{ theme.tone()['account.title'] }}</mat-card-title>
-  <form [formGroup]="form" (ngSubmit)="submit()">
-    <div class="readonly-field">
-      <span class="lbl">{{ theme.tone()['account.pseudo_label'] }}</span>
-      <span class="value">{{ pseudo }}</span>
-    </div>
 
-    <div class="readonly-field">
-      <span class="lbl">{{ theme.tone()['account.email_label'] }}</span>
-      <span class="value">{{ email }}</span>
-    </div>
+  <div class="readonly-field">
+    <span class="lbl">{{ theme.tone()['account.pseudo_label'] }}</span>
+    <span class="value">{{ pseudo }}</span>
+  </div>
 
-    <mat-form-field appearance="outline">
-      <mat-label>{{ theme.tone()['account.display_name_label'] }}</mat-label>
-      <input matInput formControlName="displayName" />
-    </mat-form-field>
-
+  <div class="readonly-field">
+    <span class="lbl">{{ theme.tone()['account.display_name_label'] }}</span>
+    <span class="value-row">
+      @if (!displayNamePencil.editing()) {
+        <span class="value">{{ displayName }}</span>
+      }
+      <app-field-edit-pencil
+        #displayNamePencil
+        [label]="theme.tone()['account.display_name_label']"
+        [value]="displayName"
+        (confirm)="onDisplayNameConfirm($event)"
+      />
+    </span>
     @if (error()) {
       <p class="error">{{ error() }}</p>
     }
     @if (saved()) {
       <p class="saved">{{ theme.tone()['account.saved'] }}</p>
     }
+  </div>
 
-    <div class="actions">
-      <button mat-flat-button type="submit" [disabled]="saving() || form.invalid">
-        {{ theme.tone()['account.save_btn'] }}
-      </button>
-    </div>
-  </form>
+  <div class="readonly-field">
+    <span class="lbl">{{ theme.tone()['account.email_label'] }}</span>
+    @if (!editingEmail()) {
+      <span class="value-row">
+        <span class="value">{{ email }}</span>
+        <button
+          type="button"
+          class="field-edit-pencil__button"
+          [attr.aria-label]="'Modifier ' + theme.tone()['account.email_label']"
+          (click)="startEmailEdit()"
+        >
+          ✎
+        </button>
+      </span>
+    } @else {
+      <form [formGroup]="emailForm" (ngSubmit)="submitEmailChange()" class="inline-edit-form">
+        <mat-form-field appearance="outline">
+          <mat-label>{{ theme.tone()['account.current_password_for_email_label'] }}</mat-label>
+          <input matInput type="password" formControlName="currentPassword" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ theme.tone()['account.new_email_label'] }}</mat-label>
+          <input matInput type="email" formControlName="newEmail" />
+        </mat-form-field>
+
+        <div class="actions">
+          <button mat-button type="button" (click)="cancelEmailEdit()">
+            {{ theme.tone()['account.cancel_btn'] }}
+          </button>
+          <button
+            mat-flat-button
+            type="submit"
+            [disabled]="emailSaving() || emailForm.invalid"
+          >
+            {{ theme.tone()['account.email_change_save_btn'] }}
+          </button>
+        </div>
+      </form>
+    }
+    @if (emailError()) {
+      <p class="error">{{ emailError() }}</p>
+    }
+    @if (emailSaved()) {
+      <p class="saved">{{ theme.tone()['account.email_change_saved'] }}</p>
+    }
+  </div>
 
   <app-theme-selector />
 
-  <mat-card-title>{{ theme.tone()['account.password_title'] }}</mat-card-title>
-  <form [formGroup]="passwordForm" (ngSubmit)="submitPassword()">
-    <mat-form-field appearance="outline">
-      <mat-label>{{ theme.tone()['account.current_password_label'] }}</mat-label>
-      <input matInput type="password" formControlName="currentPassword" />
-    </mat-form-field>
+  <div class="readonly-field">
+    <span class="lbl">{{ theme.tone()['account.password_title'] }}</span>
+    @if (!editingPassword()) {
+      <div class="actions actions--start">
+        <button mat-stroked-button type="button" (click)="startPasswordEdit()">
+          {{ theme.tone()['account.password_save_btn'] }}
+        </button>
+      </div>
+    } @else {
+      <form [formGroup]="passwordForm" (ngSubmit)="submitPassword()" class="inline-edit-form">
+        <mat-form-field appearance="outline">
+          <mat-label>{{ theme.tone()['account.current_password_label'] }}</mat-label>
+          <input matInput type="password" formControlName="currentPassword" />
+        </mat-form-field>
 
-    <mat-form-field appearance="outline">
-      <mat-label>{{ theme.tone()['account.new_password_label'] }}</mat-label>
-      <input matInput type="password" formControlName="newPassword" />
-    </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>{{ theme.tone()['account.new_password_label'] }}</mat-label>
+          <input matInput type="password" formControlName="newPassword" />
+        </mat-form-field>
 
+        <div class="actions">
+          <button mat-button type="button" (click)="cancelPasswordEdit()">
+            {{ theme.tone()['account.cancel_btn'] }}
+          </button>
+          <button
+            mat-flat-button
+            type="submit"
+            [disabled]="passwordSaving() || passwordForm.invalid"
+          >
+            {{ theme.tone()['account.password_save_btn'] }}
+          </button>
+        </div>
+      </form>
+    }
     @if (passwordError()) {
       <p class="error">{{ passwordError() }}</p>
     }
     @if (passwordSaved()) {
       <p class="saved">{{ theme.tone()['account.password_saved'] }}</p>
     }
-
-    <div class="actions">
-      <button
-        mat-flat-button
-        type="submit"
-        [disabled]="passwordSaving() || passwordForm.invalid"
-      >
-        {{ theme.tone()['account.password_save_btn'] }}
-      </button>
-    </div>
-  </form>
+  </div>
 </mat-card>

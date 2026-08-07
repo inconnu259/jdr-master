@@ -78,4 +78,20 @@ describe('AccountService', () => {
 
     await expect(promise).resolves.toEqual({ ok: true });
   });
+
+  it('requestEmailChange() appelle PATCH /me/email avec withCredentials', async () => {
+    const promise = service.requestEmailChange('oldpw', 'new@example.com');
+
+    const req = http.expectOne(`${API_BASE}/me/email`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({
+      currentPassword: 'oldpw',
+      newEmail: 'new@example.com',
+    });
+    expect(req.request.withCredentials).toBe(true);
+
+    req.flush({ ok: true });
+
+    await expect(promise).resolves.toEqual({ ok: true });
+  });
 });

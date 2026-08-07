@@ -17,6 +17,14 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException();
     }
+    // Story 28.6, AC3 : un compte restauré par rollbackEmailChange() ne peut se reconnecter
+    // qu'après un reset de mot de passe (resetPassword() remet ce champ à false) — bloqué ici,
+    // avant toute création de session (req.login() n'est jamais atteint).
+    if (user.mustResetPassword) {
+      throw new UnauthorizedException(
+        'Une réinitialisation de mot de passe est requise avant de vous reconnecter.',
+      );
+    }
     return user; // attaché à req.user, puis sérialisé en session
   }
 }

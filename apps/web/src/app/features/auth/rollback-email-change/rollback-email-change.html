@@ -1,0 +1,30 @@
+<div class="auth-page">
+  <mat-card class="auth-card">
+    <mat-card-header><mat-card-title>Annuler le changement d'adresse e-mail</mat-card-title></mat-card-header>
+    <mat-card-content>
+      @if (!token()) {
+        <p class="error">Lien invalide.</p>
+      }
+      @if (restored()) {
+        <p class="saved">Votre ancienne adresse a été restaurée et toutes les sessions actives ont été coupées.</p>
+        <button mat-flat-button type="button" (click)="continueToPasswordReset()">
+          Continuer vers la réinitialisation du mot de passe
+        </button>
+      } @else {
+        <p>
+          Restaurer votre ancienne adresse coupera toutes les sessions actives et exigera une
+          réinitialisation de votre mot de passe avant toute reconnexion.
+        </p>
+        @if (error()) {
+          <p class="error">{{ error() }}</p>
+        }
+        <button mat-flat-button type="button" [disabled]="loading() || !token()" (click)="rollback()">
+          Restaurer mon ancienne adresse
+        </button>
+      }
+    </mat-card-content>
+    <mat-card-actions>
+      <a routerLink="/login">Retour à la connexion</a>
+    </mat-card-actions>
+  </mat-card>
+</div>

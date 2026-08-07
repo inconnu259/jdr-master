@@ -7,6 +7,7 @@ import { AccountService } from './account.service';
 import { UpdateDisplayNameDto } from './dto/update-display-name.dto';
 import { UpdateThemeDto } from './dto/update-theme.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { RequestEmailChangeDto } from './dto/request-email-change.dto';
 
 @UseGuards(AuthenticatedGuard)
 @Controller('me')
@@ -43,6 +44,16 @@ export class AccountController {
       dto.currentPassword,
       dto.newPassword,
       req.sessionID,
+    );
+  }
+
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Patch('email')
+  requestEmailChange(@Req() req: Request, @Body() dto: RequestEmailChangeDto) {
+    return this.auth.requestEmailChange(
+      (req.user as { id: string }).id,
+      dto.currentPassword,
+      dto.newEmail,
     );
   }
 }

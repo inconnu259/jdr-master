@@ -81,6 +81,26 @@ describe('AuthService (front)', () => {
     req.flush({});
     await p;
   });
+
+  it('confirmEmailChange envoie le token avec le cookie (withCredentials)', async () => {
+    const p = service.confirmEmailChange('tok1.secret');
+    const req = http.expectOne(`${API}/auth/confirm-email-change`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ token: 'tok1.secret' });
+    req.flush({ ok: true });
+    await p;
+  });
+
+  it('rollbackEmailChange envoie le token avec le cookie (withCredentials)', async () => {
+    const p = service.rollbackEmailChange('rb1.secret');
+    const req = http.expectOne(`${API}/auth/rollback-email-change`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ token: 'rb1.secret' });
+    req.flush({ ok: true });
+    await p;
+  });
 });
 
 // Decrit séparément (pas nichée dans le describe ci-dessus) : ThemeToneService lit `localStorage`

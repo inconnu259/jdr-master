@@ -19,7 +19,7 @@ function makeAccountService() {
 }
 
 function makeAuthService() {
-  return { changePassword: jest.fn() };
+  return { changePassword: jest.fn(), requestEmailChange: jest.fn() };
 }
 
 describe('AccountController', () => {
@@ -87,6 +87,23 @@ describe('AccountController', () => {
       'oldpw',
       'newpassword123',
       'sess-1',
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("requestEmailChange() lit l'id depuis la session (req.user), jamais depuis le corps", async () => {
+    auth.requestEmailChange.mockResolvedValue({ ok: true });
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.requestEmailChange(req, {
+      currentPassword: 'oldpw',
+      newEmail: 'new@b.c',
+    });
+
+    expect(auth.requestEmailChange).toHaveBeenCalledWith(
+      'u1',
+      'oldpw',
+      'new@b.c',
     );
     expect(result).toEqual({ ok: true });
   });
@@ -264,6 +281,43 @@ describe('AccountController', () => {
         'oldpw',
         'newpassword123',
         'sess-1',
+      );
+    });
+
+    it('newEmail invalide → 400, service jamais appelé', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/email')
+        .send({ currentPassword: 'oldpw', newEmail: 'pas-un-email' })
+        .expect(400);
+      expect(auth.requestEmailChange).not.toHaveBeenCalled();
+    });
+
+    it('currentPassword absent → 400, service jamais appelé', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/email')
+        .send({ newEmail: 'new@b.c' })
+        .expect(400);
+      expect(auth.requestEmailChange).not.toHaveBeenCalled();
+    });
+
+    it('id glissé dans le corps → 400 forbidNonWhitelisted, service jamais appelé', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/email')
+        .send({ currentPassword: 'oldpw', newEmail: 'new@b.c', id: 'autre-utilisateur' })
+        .expect(400);
+      expect(auth.requestEmailChange).not.toHaveBeenCalled();
+    });
+
+    it('requête valide → 200', async () => {
+      auth.requestEmailChange.mockResolvedValue({ ok: true });
+      await request(app.getHttpServer())
+        .patch('/me/email')
+        .send({ currentPassword: 'oldpw', newEmail: 'new@example.com' })
+        .expect(200);
+      expect(auth.requestEmailChange).toHaveBeenCalledWith(
+        'u1',
+        'oldpw',
+        'new@example.com',
       );
     });
   });

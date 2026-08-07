@@ -3,4 +3,8 @@ export type EmailTemplate =
   | 'session-reminder'
   | 'password-reset'
   | 'password-changed'
-  | 'level-up';
+  | 'level-up'
+  | 'email-change-confirm'
+  | 'email-change-notice'
+  | 'email-change-rollback-available'
+  | 'email-change-rolled-back';
