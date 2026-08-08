@@ -1,45 +1,57 @@
 <mat-toolbar color="primary">
-
-  <!-- Ligne 1 : logo + icône compte -->
   <mat-toolbar-row>
     <span class="logo" routerLink="/">master-jdr</span>
     <span class="spacer"></span>
-
-    <button
-      mat-icon-button
-      [matBadge]="openPollsCount()"
-      [matBadgeHidden]="openPollsCount() === 0"
-      matBadgeColor="warn"
-      matBadgeSize="small"
-      [matMenuTriggerFor]="menu"
-      aria-label="Menu utilisateur"
-    >
-      <mat-icon>account_circle</mat-icon>
-    </button>
-    <mat-menu #menu="matMenu">
-      <div class="menu-user">{{ user()?.displayName }}</div>
-      <a mat-menu-item routerLink="/parties/new">
-        <mat-icon>add</mat-icon>
-        <span>{{ theme.tone()['nav.create_game'] }}</span>
-      </a>
-      <a mat-menu-item routerLink="/account">
-        <mat-icon>person</mat-icon>
-        <span>{{ theme.tone()['nav.account'] }}</span>
-      </a>
-      <a mat-menu-item routerLink="/profile/calendar">
-        <mat-icon>calendar_month</mat-icon>
-        <span>{{ theme.tone()['nav.calendar'] }}</span>
-      </a>
-      <mat-divider />
-      <button mat-menu-item (click)="logout()">
-        <mat-icon>logout</mat-icon>
-        <span>{{ theme.tone()['nav.logout'] }}</span>
-      </button>
-    </mat-menu>
   </mat-toolbar-row>
-
-
 </mat-toolbar>
+
+<!-- Story 29.3 : barre à 4 destinations — mêmes liens, barre haute sur desktop / barre basse sur
+     mobile (bascule CSS, cf. shell.scss). L'entrée active porte aria-current="page" (posé par
+     ariaCurrentWhenActive) et une classe dédiée (poids de police) : jamais la couleur seule (AC3). -->
+<nav class="nav-bar" aria-label="Navigation principale">
+  <a
+    class="nav-bar__link"
+    routerLink="/"
+    routerLinkActive="nav-bar__link--active"
+    [routerLinkActiveOptions]="{ exact: true }"
+    ariaCurrentWhenActive="page"
+    [matBadge]="openPollsCount()"
+    [matBadgeHidden]="openPollsCount() === 0"
+    matBadgeColor="warn"
+    matBadgeSize="small"
+    [matBadgeDescription]="openPollsCount() + ' vote(s) en attente de réponse'"
+  >
+    <mat-icon aria-hidden="true">home</mat-icon>
+    <span>{{ theme.tone()['nav.my_games'] }}</span>
+  </a>
+  <a
+    class="nav-bar__link"
+    routerLink="/characters"
+    routerLinkActive="nav-bar__link--active"
+    ariaCurrentWhenActive="page"
+  >
+    <mat-icon aria-hidden="true">badge</mat-icon>
+    <span>{{ theme.tone()['nav.characters'] }}</span>
+  </a>
+  <a
+    class="nav-bar__link"
+    routerLink="/profile/calendar"
+    routerLinkActive="nav-bar__link--active"
+    ariaCurrentWhenActive="page"
+  >
+    <mat-icon aria-hidden="true">calendar_month</mat-icon>
+    <span>{{ theme.tone()['nav.calendar'] }}</span>
+  </a>
+  <a
+    class="nav-bar__link"
+    routerLink="/account"
+    routerLinkActive="nav-bar__link--active"
+    ariaCurrentWhenActive="page"
+  >
+    <mat-icon aria-hidden="true">person</mat-icon>
+    <span>{{ theme.tone()['nav.account'] }}</span>
+  </a>
+</nav>
 
 <main class="content">
   <router-outlet />

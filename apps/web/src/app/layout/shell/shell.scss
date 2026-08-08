@@ -1,3 +1,10 @@
+// Hauteur de la barre basse mobile (Story 29.3) — exposée en variable CSS pour que les écrans
+// avec leur propre barre d'actions fixe (ex. character-wizard) puissent s'y superposer sans se
+// faire recouvrir (les custom properties traversent l'encapsulation de vue Angular).
+:host {
+  --shell-nav-bar-height: 4rem;
+}
+
 .logo {
   font-weight: 700;
   cursor: pointer;
@@ -5,45 +12,82 @@
 .spacer {
   flex: 1 1 auto;
 }
-mat-button-toggle-group {
-  margin-right: 0.5rem;
-}
-.menu-user {
-  padding: 0.5rem 1rem;
-  font-weight: 600;
-  opacity: 0.7;
-}
 .content {
   padding: 1.5rem;
   max-width: 60rem;
   margin: 0 auto;
 }
 
-/* ── Toolbar responsive ──────────────────────────────────────────────────── */
+/* ── Barre de navigation à 4 destinations (Story 29.3) ──────────────────────
+   Un seul jeu de liens ; la bascule barre haute / barre basse se fait en CSS
+   selon la largeur, patron DetailSurface (un composant, deux mises en page). */
 
-// Ligne 2 (toggle mobile) : cachée par défaut
-.mode-row-mobile {
-  display: none !important;
-  justify-content: center;
-  height: 44px !important;
-  min-height: 44px !important;
-  padding-bottom: 4px !important;
+.nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  background: var(--mat-sys-surface-container, #f5f5f5);
+  border-bottom: 1px solid var(--mat-sys-outline-variant, #ddd);
 }
 
-@media (max-width: 599px) {
-  // Sur mobile : masquer le toggle de la ligne 1, montrer la ligne 2
-  .mode-toggle-desktop {
-    display: none !important;
+.nav-bar__link {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  min-height: 44px;
+  border-radius: 999px;
+  color: inherit;
+  text-decoration: none;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+// AC3 : l'entrée active ne repose jamais sur la seule couleur — poids de police doublé,
+// en plus de la teinte et de l'attribut aria-current="page" posé par ariaCurrentWhenActive.
+.nav-bar__link--active {
+  color: var(--jdr-accent-1, var(--mat-sys-primary));
+  font-weight: 700;
+}
+
+@media (max-width: 767px) {
+  // Sur mobile : barre basse fixe, icône au-dessus du libellé, répartie sur toute la largeur.
+  .nav-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    justify-content: space-around;
+    gap: 0;
+    padding: 0.25rem 0.25rem calc(0.25rem + env(safe-area-inset-bottom));
+    border-bottom: none;
+    border-top: 1px solid var(--mat-sys-outline-variant, #ddd);
   }
-  .mode-row-mobile {
-    display: flex !important;
+  .nav-bar__link {
+    flex: 1 1 0;
+    flex-direction: column;
+    min-width: 0; // requis pour que text-overflow fonctionne dans un enfant flex
+    gap: 0.15rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+
+    // Les libellés les plus longs (ex. « Mes pérégrinations ») ne doivent jamais déborder de leur
+    // colonne sur un téléphone étroit — tronqués plutôt que de chevaucher l'entrée voisine.
+    span {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+  // Le contenu principal ne doit pas se cacher derrière la barre basse fixe.
+  .content {
+    padding: 1rem 0.75rem calc(var(--shell-nav-bar-height, 4rem) + env(safe-area-inset-bottom));
   }
   // Réduire le logo pour économiser l'espace
   .logo {
     font-size: 0.9rem;
-  }
-  // Le contenu principal n'a pas besoin de padding latéral excessif
-  .content {
-    padding: 1rem 0.75rem;
   }
 }

@@ -97,6 +97,19 @@
     }
   }
 
+  // Story 29.3 : sous 768px, le Shell affiche sa propre barre basse fixe (4 destinations) —
+  // décaler la barre d'actions du wizard au-dessus pour éviter qu'elles ne se superposent, et
+  // agrandir d'autant le dégagement du contenu (les deux barres fixes s'empilent désormais).
+  @media (max-width: 767px) {
+    &__nav-bottom {
+      bottom: var(--shell-nav-bar-height, 4rem);
+    }
+
+    &__main {
+      padding-bottom: calc(5rem + var(--shell-nav-bar-height, 4rem));
+    }
+  }
+
   &__summary {
     padding: 1rem;
     background: var(--mat-sys-surface-container-high, #f0ebe3);

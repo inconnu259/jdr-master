@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { provideRouter, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { vi } from 'vitest';
 import type { AuthUser } from '@master-jdr/shared';
@@ -38,15 +39,16 @@ function makeThemeService() {
       'account.password_save_btn': 'Changer',
       'account.password_saved': 'Le mot de passe a été changé.',
       'account.password_wrong_current': 'Mot de passe actuel incorrect.',
-      'account.password_error': "Le changement a échoué. Réessayez.",
+      'account.password_error': 'Le changement a échoué. Réessayez.',
       'account.email_change_title': "Changer d'adresse e-mail",
       'account.current_password_for_email_label': 'Mot de passe actuel',
       'account.new_email_label': 'Nouvelle adresse e-mail',
       'account.email_change_save_btn': 'Envoyer la demande',
-      'account.email_change_saved': "Vérifiez votre nouvelle boîte mail pour confirmer.",
+      'account.email_change_saved': 'Vérifiez votre nouvelle boîte mail pour confirmer.',
       'account.email_change_wrong_current': 'Mot de passe actuel incorrect.',
       'account.email_change_taken': 'Cette adresse est déjà utilisée par un autre compte.',
-      'account.email_change_error': "La demande a échoué. Réessayez.",
+      'account.email_change_error': 'La demande a échoué. Réessayez.',
+      'nav.logout': 'Fermer le grimoire',
     }),
     // ThemeSelector (intégré à l'écran de compte, Story 28.4) a besoin de ces membres.
     activeTheme: signal('grimoire-emeraude'),
@@ -70,10 +72,12 @@ async function createFixture(
   },
 ) {
   const currentUserSignal = signal<AuthUser | null>(currentUser);
+  const authSvc = { currentUser: currentUserSignal, logout: vi.fn().mockResolvedValue(undefined) };
   await TestBed.configureTestingModule({
     imports: [Account],
     providers: [
-      { provide: AuthService, useValue: { currentUser: currentUserSignal } },
+      provideRouter([]),
+      { provide: AuthService, useValue: authSvc },
       { provide: AccountService, useValue: accountSvc },
       { provide: ThemeToneService, useValue: makeThemeService() },
     ],
@@ -87,18 +91,18 @@ async function createFixture(
   }
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, currentUserSignal, accountSvc };
+  return { fixture, currentUserSignal, accountSvc, authSvc };
 }
 
 describe('Account — nom affiché (crayon d’édition, revue de code)', () => {
   it('affiche le pseudo et le nom affiché en lecture seule (avec crayon)', async () => {
-    const { fixture } = await createFixture(makeUser({ pseudo: 'alice', displayName: 'Alice au pays' }));
+    const { fixture } = await createFixture(
+      makeUser({ pseudo: 'alice', displayName: 'Alice au pays' }),
+    );
     const component = fixture.componentInstance as any;
     expect(component.pseudo).toBe('alice');
     expect(component.displayName).toBe('Alice au pays');
-    expect(
-      fixture.nativeElement.querySelector('app-field-edit-pencil'),
-    ).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('app-field-edit-pencil')).not.toBeNull();
   });
 
   it('aucun champ ne permet de modifier le pseudo', async () => {
@@ -181,9 +185,7 @@ describe('Account — changement de mot de passe (page sobre, revue de code)', (
     const component = fixture.componentInstance as any;
 
     expect(component.editingPassword()).toBe(false);
-    expect(
-      fixture.nativeElement.querySelector('input[formControlName="newPassword"]'),
-    ).toBeNull();
+    expect(fixture.nativeElement.querySelector('input[formControlName="newPassword"]')).toBeNull();
   });
 
   it('startPasswordEdit() révèle les champs', async () => {
@@ -315,9 +317,7 @@ describe('Account — changement d’adresse e-mail (crayon d’édition, revue 
     const component = fixture.componentInstance as any;
 
     expect(component.editingEmail()).toBe(false);
-    expect(
-      fixture.nativeElement.querySelector('input[formControlName="newEmail"]'),
-    ).toBeNull();
+    expect(fixture.nativeElement.querySelector('input[formControlName="newEmail"]')).toBeNull();
   });
 
   it('startEmailEdit() révèle le mot de passe courant ET la nouvelle adresse ensemble', async () => {
@@ -331,9 +331,7 @@ describe('Account — changement d’adresse e-mail (crayon d’édition, revue 
     expect(
       fixture.nativeElement.querySelector('input[formControlName="currentPassword"]'),
     ).not.toBeNull();
-    expect(
-      fixture.nativeElement.querySelector('input[formControlName="newEmail"]'),
-    ).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('input[formControlName="newEmail"]')).not.toBeNull();
   });
 
   it('startEmailEdit() pré-remplit newEmail avec l’adresse courante, en place plutôt qu’à ressaisir (revue de code)', async () => {
@@ -480,5 +478,32 @@ describe('Account — changement d’adresse e-mail (crayon d’édition, revue 
     await component.submitEmailChange();
 
     expect(currentUserSignal()).toBe(before);
+  });
+});
+
+describe('Account — déconnexion (Story 29.3, foyer déplacé depuis le menu du Shell)', () => {
+  it('un bouton de déconnexion est rendu', async () => {
+    const { fixture } = await createFixture();
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
+    expect(buttons.some((b) => b.textContent?.includes('Fermer le grimoire'))).toBe(true);
+  });
+
+  it('clic sur le bouton de déconnexion appelle AuthService.logout() puis navigue vers /login', async () => {
+    const { fixture, authSvc } = await createFixture();
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('button'),
+    ) as HTMLButtonElement[];
+    const logoutButton = buttons.find((b) => b.textContent?.includes('Fermer le grimoire'));
+    logoutButton!.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(authSvc.logout).toHaveBeenCalledTimes(1);
+    expect(navigateSpy).toHaveBeenCalledWith(['/login']);
   });
 });

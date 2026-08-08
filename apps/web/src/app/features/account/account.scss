@@ -37,6 +37,11 @@ mat-form-field {
 .actions--start {
   justify-content: flex-start;
 }
+.logout-row {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--mat-sys-outline-variant, #ddd);
+}
 .error {
   color: var(--mat-sys-error, #b00020);
 }

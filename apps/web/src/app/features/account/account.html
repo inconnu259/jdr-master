@@ -118,4 +118,10 @@
       <p class="saved">{{ theme.tone()['account.password_saved'] }}</p>
     }
   </div>
+
+  <div class="actions actions--start logout-row">
+    <button mat-stroked-button type="button" (click)="logout()">
+      {{ theme.tone()['nav.logout'] }}
+    </button>
+  </div>
 </mat-card>

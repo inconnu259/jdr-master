@@ -1,5 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -31,6 +32,7 @@ export class Account {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
   private readonly account = inject(AccountService);
+  private readonly router = inject(Router);
 
   protected readonly theme = inject(ThemeToneService);
 
@@ -173,5 +175,13 @@ export class Account {
     if (status === 401) return this.theme.tone()['account.email_change_wrong_current'];
     if (status === 409) return this.theme.tone()['account.email_change_taken'];
     return this.theme.tone()['account.email_change_error'];
+  }
+
+  // Déplacé depuis Shell (Story 29.3) : le menu utilisateur qui portait la déconnexion disparaît
+  // au profit de la barre à 4 destinations, sans nouvel AC qui lui assigne un foyer — l'écran
+  // Compte, atteignable en un geste depuis la barre, en est le foyer naturel.
+  async logout(): Promise<void> {
+    await this.auth.logout();
+    void this.router.navigate(['/login']);
   }
 }
