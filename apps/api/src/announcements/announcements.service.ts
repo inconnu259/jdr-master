@@ -80,7 +80,11 @@ export class AnnouncementsService {
     const announcements = await this.prisma.announcement.findMany({
       where: { partieId },
       orderBy: { createdAt: 'desc' },
-      include: { partie: { select: { mj: { select: { pseudo: true, displayName: true } } } } },
+      include: {
+        partie: {
+          select: { mj: { select: { pseudo: true, displayName: true } } },
+        },
+      },
     });
     return announcements.map((a) => toDto(a, a.partie.mj));
   }

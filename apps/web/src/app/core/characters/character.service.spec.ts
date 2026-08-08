@@ -67,6 +67,16 @@ describe('CharacterService (front)', () => {
     expect(await p).toEqual([character]);
   });
 
+  it('listMine() (Story 29.2) → GET /me/characters avec withCredentials', async () => {
+    const mine = { ...character, partieName: 'La Forêt Noire' };
+    const p = service.listMine();
+    const req = http.expectOne(`${API}/me/characters`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush([mine]);
+    expect(await p).toEqual([mine]);
+  });
+
   it('get(id) → GET /characters/:id avec withCredentials', async () => {
     const p = service.get('c1');
     const req = http.expectOne(`${API}/characters/c1`);

@@ -14,6 +14,7 @@ import type {
   GameSystemContentDto,
   GameSystemDto,
   GameSystemSchemaDto,
+  MyCharacterDto,
   SetJournalAutoAssociateDto,
   SetNoteScenarioDto,
   SetSheetFieldResultDto,
@@ -89,6 +90,15 @@ export class CharacterService {
     ).finally(() => this.inFlightListByPartie.delete(partieId));
     this.inFlightListByPartie.set(partieId, request);
     return request;
+  }
+
+  /** Tous les personnages de l'utilisateur courant, toutes parties confondues (Story 29.2). Un seul
+   *  appelant (l'écran « mes personnages ») — pas de cache in-flight requis ici, contrairement à
+   *  `listByPartie`/`get`. */
+  listMine(): Promise<MyCharacterDto[]> {
+    return firstValueFrom(
+      this.http.get<MyCharacterDto[]>(`${API_BASE}/me/characters`, { withCredentials: true }),
+    );
   }
 
   get(id: string): Promise<CharacterDto> {

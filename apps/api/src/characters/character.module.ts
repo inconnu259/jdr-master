@@ -5,6 +5,7 @@ import { UsersModule } from '../users/users.module';
 import { EmailModule } from '../email/email.module';
 import { CharactersController } from './characters.controller';
 import { PartieCharactersController } from './partie-characters.controller';
+import { MyCharactersController } from './my-characters.controller';
 import { CharacterService } from './character.service';
 import { RyuutamaPdfService } from './ryuutama-pdf.service';
 import { EquipmentPdfService } from './equipment-pdf.service';
@@ -12,7 +13,11 @@ import { NotesPdfService } from './notes-pdf.service';
 
 @Module({
   imports: [PartiesModule, GameSystemModule, UsersModule, EmailModule],
-  controllers: [CharactersController, PartieCharactersController],
+  controllers: [
+    CharactersController,
+    PartieCharactersController,
+    MyCharactersController,
+  ],
   providers: [
     CharacterService,
     RyuutamaPdfService,

@@ -1,0 +1,21 @@
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.search-field {
+  width: 100%;
+  max-width: 24rem;
+  margin-top: 0.5rem;
+}
+.empty {
+  color: var(--mat-sys-on-surface-variant, #666);
+  margin-top: 1.5rem;
+}
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

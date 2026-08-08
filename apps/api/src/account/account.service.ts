@@ -17,7 +17,10 @@ export class AccountService {
     } catch (e) {
       // Session référant un compte supprimé entre-temps (cas normalement impossible en usage
       // courant) — jamais un 500 brut, même pattern que resolveScenarioOrThrow().
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2025'
+      ) {
         throw new NotFoundException('Compte introuvable');
       }
       throw e;
@@ -35,7 +38,10 @@ export class AccountService {
         data: { theme },
       });
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2025'
+      ) {
         throw new NotFoundException('Compte introuvable');
       }
       throw e;

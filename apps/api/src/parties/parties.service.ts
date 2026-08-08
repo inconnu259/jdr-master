@@ -149,7 +149,9 @@ export class PartiesService {
       where: { partieId },
       orderBy: { joinedAt: 'asc' },
       include: {
-        user: { select: { id: true, pseudo: true, displayName: true, email: true } },
+        user: {
+          select: { id: true, pseudo: true, displayName: true, email: true },
+        },
       },
     });
     return memberships.map((m) => ({
@@ -204,12 +206,18 @@ export class PartiesService {
       }),
       this.prisma.membership.findMany({
         where: { partieId },
-        include: { user: { select: { id: true, pseudo: true, displayName: true } } },
+        include: {
+          user: { select: { id: true, pseudo: true, displayName: true } },
+        },
       }),
     ]);
 
     const seen = new Set<string>();
-    const participants: { userId: string; pseudo: string; displayName: string }[] = [];
+    const participants: {
+      userId: string;
+      pseudo: string;
+      displayName: string;
+    }[] = [];
 
     if (mjUser) {
       seen.add(mjUser.id);

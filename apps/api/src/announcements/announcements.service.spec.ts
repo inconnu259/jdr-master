@@ -213,7 +213,11 @@ describe('AnnouncementsService', () => {
       expect(prisma.announcement.findMany).toHaveBeenCalledWith({
         where: { partieId: 'p1' },
         orderBy: { createdAt: 'desc' },
-        include: { partie: { select: { mj: { select: { pseudo: true, displayName: true } } } } },
+        include: {
+          partie: {
+            select: { mj: { select: { pseudo: true, displayName: true } } },
+          },
+        },
       });
       expect(result.map((a) => a.id)).toEqual(['ann2', 'ann1']);
       expect(result[0].authorPseudo).toBe('le-mj');

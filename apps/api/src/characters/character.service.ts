@@ -14,6 +14,7 @@ import type {
   CharacterDto,
   CharacterNoteDto,
   CharacterSnapshotDto,
+  MyCharacterDto,
   SetSheetFieldResultDto,
 } from '@master-jdr/shared';
 import {
@@ -190,17 +191,15 @@ export class CharacterService {
       !Array.isArray(sheetData.startingEquipment)
     ) {
       throw new BadRequestException(
-        "startingEquipment doit être un tableau de { key, quantity }",
+        'startingEquipment doit être un tableau de { key, quantity }',
       );
     }
     const equipmentCatalog = await this.buildEquipmentCatalog(dto.gameSystemId);
-    const {
-      individual,
-      contenants,
-      animaux,
-      totalPriceGold,
-      unresolvedKeys,
-    } = resolveStartingEquipment(sheetData.startingEquipment ?? [], equipmentCatalog);
+    const { individual, contenants, animaux, totalPriceGold, unresolvedKeys } =
+      resolveStartingEquipment(
+        sheetData.startingEquipment ?? [],
+        equipmentCatalog,
+      );
     if (unresolvedKeys.length > 0) {
       throw new BadRequestException(
         `Sélection d'équipement invalide. Clés inconnues : ${unresolvedKeys.join(', ')}`,
@@ -256,7 +255,13 @@ export class CharacterService {
       const owner = await this.users.findById(userId);
       // Le créateur est toujours le propriétaire ici — ownerIsMj et viewerIsMj coïncident.
       const isMj = partie.mjId === userId;
-      return toDto(character, owner?.pseudo ?? '', owner?.displayName ?? '', isMj, isMj);
+      return toDto(
+        character,
+        owner?.pseudo ?? '',
+        owner?.displayName ?? '',
+        isMj,
+        isMj,
+      );
     } catch (e: any) {
       if (e?.code === 'P2002') {
         throw new ConflictException(
@@ -289,7 +294,10 @@ export class CharacterService {
       .filter(isNumberArray)
       .map((values) => [...values].sort((a, b) => a - b));
 
-    const requiredChoicesByClass: Record<string, { key: string; kind: string }[]> = {};
+    const requiredChoicesByClass: Record<
+      string,
+      { key: string; kind: string }[]
+    > = {};
     for (const entry of content['class'] ?? []) {
       const requiredChoices = (
         entry.data as { requiredChoices?: { key: string; kind: string }[] }
@@ -426,6 +434,43 @@ export class CharacterService {
   }
 
   /**
+   * Tous les personnages de l'appelant, toutes Parties confondues (Story 29.2, `GET /me/characters`,
+   * D-10) — contrairement à `findByPartie` (scopé à UNE Partie), traverse plusieurs Parties pour un
+   * même utilisateur. L'appelant est le PROPRIÉTAIRE de chaque personnage retourné (jamais un autre
+   * viewer) : une seule résolution `users.findById` suffit, contrairement à `findByPartie` qui
+   * résout plusieurs propriétaires distincts. `ownerIsMj`/`viewerIsMj` varient en revanche par
+   * Partie (l'appelant peut être MJ d'une Partie et joueur d'une autre) — jamais un calcul global.
+   */
+  async findMine(userId: string): Promise<MyCharacterDto[]> {
+    const characters = await this.prisma.character.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (characters.length === 0) return [];
+
+    // Résolution en lot des Parties d'origine (pas de N+1), même patron que `findByPartie`.
+    // Requêtes indépendantes → Promise.all, même patron que resolveOwnerInfo() (même fichier).
+    const partieIds = [...new Set(characters.map((c) => c.partieId))];
+    const [parties, owner] = await Promise.all([
+      this.prisma.partie.findMany({
+        where: { id: { in: partieIds } },
+        select: { id: true, name: true, mjId: true },
+      }),
+      this.users.findById(userId),
+    ]);
+    const partieById = new Map(parties.map((p) => [p.id, p]));
+
+    return characters.map((c) => {
+      const partie = partieById.get(c.partieId);
+      const isMj = partie?.mjId === userId;
+      return {
+        ...toDto(c, owner?.pseudo ?? '', owner?.displayName ?? '', isMj, isMj),
+        partieName: partie?.name ?? '',
+      };
+    });
+  }
+
+  /**
    * Mutation du portrait : accès PROPRIÉTAIRE SEUL, contrairement à `findOne`
    * qui autorise aussi le MJ. Le MJ reste strictement en lecture seule sur les
    * personnages de ses joueurs (FR39) — aucune action d'édition à aucun palier.
@@ -490,7 +535,13 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(
+      updated,
+      owner.pseudo,
+      owner.displayName,
+      owner.isMj,
+      owner.isMj,
+    ); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   async removePortrait(id: string, userId: string): Promise<CharacterDto> {
@@ -515,7 +566,13 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(
+      updated,
+      owner.pseudo,
+      owner.displayName,
+      owner.isMj,
+      owner.isMj,
+    ); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -549,7 +606,13 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(
+      updated,
+      owner.pseudo,
+      owner.displayName,
+      owner.isMj,
+      owner.isMj,
+    ); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -772,7 +835,13 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(
+      updated,
+      owner.pseudo,
+      owner.displayName,
+      owner.isMj,
+      owner.isMj,
+    ); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -952,7 +1021,13 @@ export class CharacterService {
     const owner = await this.resolveOwnerInfo(updated.userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
     return {
-      character: toDto(updated, owner.pseudo, owner.displayName, owner.isMj, true),
+      character: toDto(
+        updated,
+        owner.pseudo,
+        owner.displayName,
+        owner.isMj,
+        true,
+      ),
       warnings: result.errors.map((e) => e.message),
     };
   }
@@ -1313,7 +1388,13 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(
+      updated,
+      owner.pseudo,
+      owner.displayName,
+      owner.isMj,
+      owner.isMj,
+    ); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -1383,7 +1464,13 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(
+      updated,
+      owner.pseudo,
+      owner.displayName,
+      owner.isMj,
+      owner.isMj,
+    ); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**

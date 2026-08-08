@@ -121,4 +121,28 @@ describe('CharacterSummaryCard', () => {
       fixture.nativeElement.querySelector('.character-summary-card__levelup-badge'),
     ).toBeNull();
   });
+
+  describe('partieName (Story 29.2, AC3)', () => {
+    it('partieName fourni → affiché', async () => {
+      TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
+      const fixture = TestBed.createComponent(CharacterSummaryCard);
+      fixture.componentRef.setInput('character', CHARACTER);
+      fixture.componentRef.setInput('partieName', 'La Forêt Noire');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const el = fixture.nativeElement.querySelector('.character-summary-card__partie');
+      expect(el?.textContent?.trim()).toBe('La Forêt Noire');
+    });
+
+    it('partieName absent (défaut null) → aucun élément rendu (comportement inchangé des sites existants)', async () => {
+      TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
+      const fixture = TestBed.createComponent(CharacterSummaryCard);
+      fixture.componentRef.setInput('character', CHARACTER);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(fixture.nativeElement.querySelector('.character-summary-card__partie')).toBeNull();
+    });
+  });
 });

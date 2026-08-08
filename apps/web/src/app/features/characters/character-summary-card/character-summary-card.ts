@@ -20,6 +20,9 @@ export class CharacterSummaryCard {
   readonly className = input<string>('');
   /** N'affiche le badge MJ/pseudo que si le **viewer** est le MJ — jamais pour un joueur (AC3). */
   readonly showOwnerInfo = input(false);
+  /** Nom de la Partie d'origine (Story 29.2, AC3) — optionnel, `null` par défaut : n'affecte aucun
+   *  des sites d'appel existants (roster, xp-history, partie-detail, scenario-editor…). */
+  readonly partieName = input<string | null>(null);
 
   readonly selected = output<void>();
 

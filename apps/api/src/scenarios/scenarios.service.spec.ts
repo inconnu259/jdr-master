@@ -423,7 +423,11 @@ describe('ScenariosService', () => {
         closedAt: null,
       });
       prisma.scenarioParticipant.findMany.mockResolvedValue([
-        { scenarioId: 's1', userId: 'u1', user: { pseudo: 'Alice', displayName: 'Alice au pays' } },
+        {
+          scenarioId: 's1',
+          userId: 'u1',
+          user: { pseudo: 'Alice', displayName: 'Alice au pays' },
+        },
       ]);
 
       const result = await service.update('s1', 'mj1', {
@@ -952,8 +956,16 @@ describe('ScenariosService', () => {
         },
       ]);
       prisma.scenarioParticipant.findMany.mockResolvedValue([
-        { scenarioId: 's1', userId: 'u1', user: { pseudo: 'Alice', displayName: 'Alice au pays' } },
-        { scenarioId: 's1', userId: 'u2', user: { pseudo: 'Bob', displayName: 'Bobby' } },
+        {
+          scenarioId: 's1',
+          userId: 'u1',
+          user: { pseudo: 'Alice', displayName: 'Alice au pays' },
+        },
+        {
+          scenarioId: 's1',
+          userId: 'u2',
+          user: { pseudo: 'Bob', displayName: 'Bobby' },
+        },
       ]);
 
       const result = await service.findAllForPartie('p1', 'u1');
@@ -1092,7 +1104,11 @@ describe('ScenariosService', () => {
           makeScenario({ status: 'PASSE' }),
         ]);
         prisma.scenarioParticipant.findMany.mockResolvedValue([
-          { scenarioId: 's1', userId: 'u1', user: { pseudo: 'Alice', displayName: 'Alice au pays' } },
+          {
+            scenarioId: 's1',
+            userId: 'u1',
+            user: { pseudo: 'Alice', displayName: 'Alice au pays' },
+          },
         ]);
         characters.findAllByPartie.mockResolvedValue([
           { id: 'char1', userId: 'u1' },

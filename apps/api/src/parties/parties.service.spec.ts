@@ -243,7 +243,13 @@ describe('PartiesService', () => {
 
   it("toPartieDto() n'énumère que les champs du DTO côté branche player aussi (revue de code, AC6)", async () => {
     prisma.membership.findMany.mockResolvedValue([
-      { partie: { ...partie, sheetVisibility: { secret: true }, internalFlag: 'nope' } },
+      {
+        partie: {
+          ...partie,
+          sheetVisibility: { secret: true },
+          internalFlag: 'nope',
+        },
+      },
     ]);
     const [dto] = await service.listForUser('u', 'player');
     expect(dto).not.toHaveProperty('sheetVisibility');
@@ -459,7 +465,12 @@ describe('PartiesService', () => {
       prisma.membership.findMany.mockResolvedValue([
         {
           joinedAt: new Date('2026-01-01'),
-          user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@b.c' },
+          user: {
+            id: 'u1',
+            pseudo: 'Alice',
+            displayName: 'Alice au pays',
+            email: 'alice@b.c',
+          },
         },
       ]);
 
@@ -471,7 +482,10 @@ describe('PartiesService', () => {
         email: 'alice@b.c',
       });
 
-      prisma.membership.findUnique.mockResolvedValue({ userId: 'u1', partieId: 'p1' });
+      prisma.membership.findUnique.mockResolvedValue({
+        userId: 'u1',
+        partieId: 'p1',
+      });
       const asMember = await service.listMembers('p1', 'u1');
       expect(asMember[0]).toMatchObject({
         userId: 'u1',
@@ -484,16 +498,19 @@ describe('PartiesService', () => {
     it('lève ForbiddenException si ni MJ ni membre (aucune requête membership)', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie);
       prisma.membership.findUnique.mockResolvedValue(null);
-      await expect(service.listMembers('p1', 'stranger')).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(
+        service.listMembers('p1', 'stranger'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.membership.findMany).not.toHaveBeenCalled();
     });
   });
 
   describe('getAvailableSlots', () => {
     const members = [
-      { userId: 'u1', user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' } },
+      {
+        userId: 'u1',
+        user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' },
+      },
       { userId: 'u2', user: { id: 'u2', pseudo: 'Bob', displayName: 'Bob' } },
     ];
 

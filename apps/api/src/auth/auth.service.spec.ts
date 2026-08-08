@@ -91,7 +91,9 @@ describe('AuthService', () => {
         deleteMany: jest.fn(),
       },
       session: { deleteMany: jest.fn() },
-      emailChangeToken: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      emailChangeToken: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       emailChangeRollbackToken: {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         create: jest.fn(),
@@ -224,9 +226,11 @@ describe('AuthService', () => {
         token: 'tok',
       });
       const data = tx.user.create.mock.calls[0][0].data;
-      expect(['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk']).toContain(
-        data.theme,
-      );
+      expect([
+        'grimoire-emeraude',
+        'foret-ancienne',
+        'medieval-steampunk',
+      ]).toContain(data.theme);
     });
 
     it('lève ConflictException si email/pseudo déjà pris (P2002)', async () => {
@@ -584,7 +588,11 @@ describe('AuthService', () => {
     });
 
     it('mot de passe correct, adresse libre → invalide les anciens jetons, crée le nouveau, envoie les 2 e-mails', async () => {
-      const result = await service.requestEmailChange('u1', 'currentpw', 'new@b.c');
+      const result = await service.requestEmailChange(
+        'u1',
+        'currentpw',
+        'new@b.c',
+      );
 
       expect(result).toEqual({ ok: true });
       expect(argon2.verify).toHaveBeenCalledWith('STORED_HASH', 'currentpw');
@@ -642,7 +650,11 @@ describe('AuthService', () => {
     it('limite de fréquence atteinte → { ok: true } silencieux, rien de créé, aucun e-mail', async () => {
       prisma.emailChangeToken.count.mockResolvedValue(5);
 
-      const result = await service.requestEmailChange('u1', 'currentpw', 'new@b.c');
+      const result = await service.requestEmailChange(
+        'u1',
+        'currentpw',
+        'new@b.c',
+      );
 
       expect(result).toEqual({ ok: true });
       expect(prisma.emailChangeToken.create).not.toHaveBeenCalled();
@@ -665,7 +677,11 @@ describe('AuthService', () => {
     });
 
     it('revue de code : adresse normalisée (trim + minuscules) avant vérification d’unicité et stockage', async () => {
-      const result = await service.requestEmailChange('u1', 'currentpw', '  New@B.C  ');
+      const result = await service.requestEmailChange(
+        'u1',
+        'currentpw',
+        '  New@B.C  ',
+      );
 
       expect(result).toEqual({ ok: true });
       expect(users.findByEmail).toHaveBeenCalledWith('new@b.c');
@@ -709,7 +725,11 @@ describe('AuthService', () => {
       expect(result).toEqual({ ok: true });
       expect(argon2.verify).toHaveBeenCalledWith('STORED_HASH', 'secretvalue');
       expect(tx.emailChangeToken.updateMany).toHaveBeenCalledWith({
-        where: { id: 'tok1', usedAt: null, expiresAt: { gt: expect.any(Date) } },
+        where: {
+          id: 'tok1',
+          usedAt: null,
+          expiresAt: { gt: expect.any(Date) },
+        },
         data: { usedAt: expect.any(Date) },
       });
       expect(tx.user.update).toHaveBeenCalledWith({
@@ -811,7 +831,9 @@ describe('AuthService', () => {
     };
 
     it('token valide → adresse restaurée, mustResetPassword: true, toutes les sessions révoquées (sans exceptSid), e-mail envoyé', async () => {
-      prisma.emailChangeRollbackToken.findUnique.mockResolvedValue(validRollbackRecord);
+      prisma.emailChangeRollbackToken.findUnique.mockResolvedValue(
+        validRollbackRecord,
+      );
       (argon2.verify as jest.Mock).mockResolvedValue(true);
       tx.emailChangeRollbackToken.updateMany.mockResolvedValue({ count: 1 });
       tx.userSession.findMany.mockResolvedValue([{ sid: 's1' }]);
@@ -852,7 +874,9 @@ describe('AuthService', () => {
     });
 
     it('revue de code : compte supprimé entre l’émission du jeton de rollback et son usage (P2025) → NotFoundException, pas de 500 brut', async () => {
-      prisma.emailChangeRollbackToken.findUnique.mockResolvedValue(validRollbackRecord);
+      prisma.emailChangeRollbackToken.findUnique.mockResolvedValue(
+        validRollbackRecord,
+      );
       (argon2.verify as jest.Mock).mockResolvedValue(true);
       tx.emailChangeRollbackToken.updateMany.mockResolvedValue({ count: 1 });
       tx.user.update.mockRejectedValue({ code: 'P2025' });
@@ -864,7 +888,9 @@ describe('AuthService', () => {
     });
 
     it('revue de code : oldEmail repris par un autre compte entre la confirmation et le rollback (P2002) → ConflictException propre, pas de 500 brut', async () => {
-      prisma.emailChangeRollbackToken.findUnique.mockResolvedValue(validRollbackRecord);
+      prisma.emailChangeRollbackToken.findUnique.mockResolvedValue(
+        validRollbackRecord,
+      );
       (argon2.verify as jest.Mock).mockResolvedValue(true);
       tx.emailChangeRollbackToken.updateMany.mockResolvedValue({ count: 1 });
       tx.user.update.mockRejectedValue({ code: 'P2002' });

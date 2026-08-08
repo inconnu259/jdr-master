@@ -104,7 +104,9 @@ describe('XpDistributionsService', () => {
             characterId: 'c1',
             amount: 250,
             isBonus: false,
-            character: { user: { pseudo: 'alice', displayName: 'Alice au pays' } },
+            character: {
+              user: { pseudo: 'alice', displayName: 'Alice au pays' },
+            },
           },
           {
             characterId: 'c2',
@@ -132,7 +134,13 @@ describe('XpDistributionsService', () => {
           }),
           include: {
             entries: {
-              include: { character: { include: { user: { select: { pseudo: true, displayName: true } } } } },
+              include: {
+                character: {
+                  include: {
+                    user: { select: { pseudo: true, displayName: true } },
+                  },
+                },
+              },
             },
           },
         }),
@@ -169,13 +177,17 @@ describe('XpDistributionsService', () => {
             characterId: 'c1',
             amount: 250,
             isBonus: false,
-            character: { user: { pseudo: 'alice', displayName: 'Alice au pays' } },
+            character: {
+              user: { pseudo: 'alice', displayName: 'Alice au pays' },
+            },
           },
           {
             characterId: 'c1',
             amount: 50,
             isBonus: true,
-            character: { user: { pseudo: 'alice', displayName: 'Alice au pays' } },
+            character: {
+              user: { pseudo: 'alice', displayName: 'Alice au pays' },
+            },
           },
         ],
       });
@@ -207,7 +219,9 @@ describe('XpDistributionsService', () => {
             characterId: 'c1',
             amount: 100,
             isBonus: false,
-            character: { user: { pseudo: 'alice', displayName: 'Alice au pays' } },
+            character: {
+              user: { pseudo: 'alice', displayName: 'Alice au pays' },
+            },
           },
           {
             characterId: 'c2',
@@ -259,7 +273,13 @@ describe('XpDistributionsService', () => {
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           include: {
             entries: {
-              include: { character: { include: { user: { select: { pseudo: true, displayName: true } } } } },
+              include: {
+                character: {
+                  include: {
+                    user: { select: { pseudo: true, displayName: true } },
+                  },
+                },
+              },
             },
           },
         }),
@@ -279,7 +299,9 @@ describe('XpDistributionsService', () => {
               characterId: 'c1',
               amount: 100,
               isBonus: false,
-              character: { user: { pseudo: 'alice', displayName: 'Alice au pays' } },
+              character: {
+                user: { pseudo: 'alice', displayName: 'Alice au pays' },
+              },
             },
           ],
         },

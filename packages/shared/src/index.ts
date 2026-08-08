@@ -453,6 +453,13 @@ export interface CharacterDto {
   level: number;
 }
 
+/** Personnage enrichi du nom de sa Partie d'origine — forme de réponse propre à `GET /me/characters`
+ *  (Story 29.2, D-10), jamais utilisée ailleurs : `CharacterDto` reste inchangé pour tous les autres
+ *  appelants. */
+export interface MyCharacterDto extends CharacterDto {
+  partieName: string;
+}
+
 /** Une ligne d'une distribution d'XP : le montant accordé à un personnage. */
 export interface XpDistributionEntryDto {
   characterId: string;

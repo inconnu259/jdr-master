@@ -108,7 +108,9 @@ export class XpDistributionsService {
 const ENTRIES_WITH_OWNER_INCLUDE = {
   entries: {
     include: {
-      character: { include: { user: { select: { pseudo: true, displayName: true } } } },
+      character: {
+        include: { user: { select: { pseudo: true, displayName: true } } },
+      },
     },
   },
 } as const;

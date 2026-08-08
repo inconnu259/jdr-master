@@ -54,7 +54,9 @@ export class CharacterRolesService {
     const partie = await this.parties.getOwned(partieId, mjId);
 
     const content = await this.gameSystems.getContent(partie.gameSystemId);
-    const validRoleKeys = (content['groupRole'] ?? []).map((entry) => entry.key);
+    const validRoleKeys = (content['groupRole'] ?? []).map(
+      (entry) => entry.key,
+    );
     if (validRoleKeys.length === 0) {
       throw new BadRequestException(
         "Aucun rôle de groupe n'est disponible pour ce système de jeu",

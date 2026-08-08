@@ -26,6 +26,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'dashboard.role_prefix': 'Rang :',
     'dashboard.role_mj': 'Maître',
     'dashboard.role_player': 'Héros',
+    /* — my-characters (Story 29.2) — */
+    'my_characters.title': 'Mes personnages',
+    'my_characters.empty': 'Nul personnage forgé. Créez-en un depuis une quête…',
+    'my_characters.no_match': 'Aucun personnage ne répond à cette recherche.',
+    'my_characters.search_label': 'Rechercher un personnage',
     /* — partie-form — */
     'partie.new_title': 'Nouvelle quête',
     'partie.edit_title': 'Retranscrire le parchemin',
@@ -221,6 +226,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'dashboard.role_prefix': 'Voie :',
     'dashboard.role_mj': 'Guide',
     'dashboard.role_player': 'Voyageur',
+    /* — my-characters (Story 29.2) — */
+    'my_characters.title': 'Mes compagnons de route',
+    'my_characters.empty': 'Aucun compagnon éveillé. Façonnez-en un depuis un sentier…',
+    'my_characters.no_match': 'Aucun compagnon ne répond à cette recherche.',
+    'my_characters.search_label': 'Rechercher un compagnon',
     /* — partie-form — */
     'partie.new_title': 'Nouveau sentier',
     'partie.edit_title': 'Rebattre le sentier',
@@ -413,6 +423,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'dashboard.role_prefix': 'Poste :',
     'dashboard.role_mj': 'Ingénieur',
     'dashboard.role_player': 'Mécanicien',
+    /* — my-characters (Story 29.2) — */
+    'my_characters.title': 'Mes automates',
+    'my_characters.empty': 'Aucun automate assemblé. Construisez-en un depuis une mission…',
+    'my_characters.no_match': 'Aucun automate ne répond à cette recherche.',
+    'my_characters.search_label': 'Rechercher un automate',
     /* — partie-form — */
     'partie.new_title': 'Nouvelle mission',
     'partie.edit_title': 'Recalibrer la mission',

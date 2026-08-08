@@ -1,0 +1,25 @@
+<div class="head">
+  <h1>{{ theme.tone()['my_characters.title'] }}</h1>
+</div>
+
+<mat-form-field appearance="outline" class="search-field">
+  <mat-label>{{ theme.tone()['my_characters.search_label'] }}</mat-label>
+  <mat-icon matPrefix aria-hidden="true">search</mat-icon>
+  <input matInput [ngModel]="query()" (ngModelChange)="query.set($event)" />
+</mat-form-field>
+
+@if (all().length === 0) {
+  <p class="empty">{{ theme.tone()['my_characters.empty'] }}</p>
+} @else if (filtered().length === 0) {
+  <p class="empty">{{ theme.tone()['my_characters.no_match'] }}</p>
+} @else {
+  <div class="list">
+    @for (c of filtered(); track c.id) {
+      <app-character-summary-card
+        [character]="c"
+        [partieName]="c.partieName"
+        (selected)="open(c)"
+      />
+    }
+  </div>
+}

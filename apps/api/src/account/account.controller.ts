@@ -18,10 +18,7 @@ export class AccountController {
   ) {}
 
   @Patch('display-name')
-  updateDisplayName(
-    @Req() req: Request,
-    @Body() dto: UpdateDisplayNameDto,
-  ) {
+  updateDisplayName(@Req() req: Request, @Body() dto: UpdateDisplayNameDto) {
     return this.account.updateDisplayName(
       (req.user as { id: string }).id,
       dto.displayName,
@@ -30,10 +27,7 @@ export class AccountController {
 
   @Patch('theme')
   updateTheme(@Req() req: Request, @Body() dto: UpdateThemeDto) {
-    return this.account.updateTheme(
-      (req.user as { id: string }).id,
-      dto.theme,
-    );
+    return this.account.updateTheme((req.user as { id: string }).id, dto.theme);
   }
 
   @Throttle({ default: { ttl: 60_000, limit: 5 } })

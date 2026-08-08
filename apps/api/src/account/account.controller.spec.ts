@@ -1,4 +1,8 @@
-import { ExecutionContext, INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  ExecutionContext,
+  INestApplication,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
@@ -51,10 +55,7 @@ describe('AccountController', () => {
       displayName: 'Nouveau nom',
     });
 
-    expect(account.updateDisplayName).toHaveBeenCalledWith(
-      'u1',
-      'Nouveau nom',
-    );
+    expect(account.updateDisplayName).toHaveBeenCalledWith('u1', 'Nouveau nom');
     expect(result).toEqual({ id: 'u1', displayName: 'Nouveau nom' });
   });
 
@@ -303,7 +304,11 @@ describe('AccountController', () => {
     it('id glissé dans le corps → 400 forbidNonWhitelisted, service jamais appelé', async () => {
       await request(app.getHttpServer())
         .patch('/me/email')
-        .send({ currentPassword: 'oldpw', newEmail: 'new@b.c', id: 'autre-utilisateur' })
+        .send({
+          currentPassword: 'oldpw',
+          newEmail: 'new@b.c',
+          id: 'autre-utilisateur',
+        })
         .expect(400);
       expect(auth.requestEmailChange).not.toHaveBeenCalled();
     });

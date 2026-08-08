@@ -26,7 +26,12 @@ export class CharacterRolesController {
     @CurrentUser() user: AuthUser,
     @Body() dto: AssignGroupRoleDto,
   ) {
-    return this.characterRoles.assign(partieId, user.id, characterId, dto.roleKey);
+    return this.characterRoles.assign(
+      partieId,
+      user.id,
+      characterId,
+      dto.roleKey,
+    );
   }
 
   @Delete('parties/:id/characters/:characterId/role')

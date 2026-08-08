@@ -40,7 +40,9 @@ jest.mock('@master-jdr/game-rules', () => ({
     ) => {
       const item = catalog.weaponItems.find((w) => w.key === weaponId);
       if (!item) return null;
-      const category = catalog.weaponCategories.find((c) => c.key === item.categoryId);
+      const category = catalog.weaponCategories.find(
+        (c) => c.key === item.categoryId,
+      );
       if (!category) return null;
       return {
         weaponLabel: item.label,
@@ -53,7 +55,10 @@ jest.mock('@master-jdr/game-rules', () => ({
   ),
   resolveWeapon: jest.fn(
     (
-      data: { weaponId?: string; customWeapon?: { name: string; categoryId: string } },
+      data: {
+        weaponId?: string;
+        customWeapon?: { name: string; categoryId: string };
+      },
       catalog: {
         weaponItems: { key: string; label: string; categoryId: string }[];
         weaponCategories: {
@@ -67,7 +72,9 @@ jest.mock('@master-jdr/game-rules', () => ({
       if (data.weaponId) {
         const item = catalog.weaponItems.find((w) => w.key === data.weaponId);
         if (!item) return null;
-        const category = catalog.weaponCategories.find((c) => c.key === item.categoryId);
+        const category = catalog.weaponCategories.find(
+          (c) => c.key === item.categoryId,
+        );
         if (!category) return null;
         return {
           weaponLabel: item.label,
@@ -176,7 +183,10 @@ function makeContentService() {
         },
       ],
       weaponItem: [
-        { key: 'arc-de-chasse', data: { label: 'Arc de chasse', categoryId: 'arc' } },
+        {
+          key: 'arc-de-chasse',
+          data: { label: 'Arc de chasse', categoryId: 'arc' },
+        },
       ],
       landscape: [{ key: 'foret', data: { label: 'Forêt' } }],
       immunityState: [{ key: 'blesse', data: { label: 'Blessé' } }],
@@ -266,7 +276,7 @@ describe('RyuutamaPdfService', () => {
     expect(readFile).toHaveBeenCalledTimes(1);
   });
 
-  it("résout une arme libre (customWeapon, Story 25.2) via resolveWeapon et transmet weaponLabel = nom libre / formules = catégorie référencée", async () => {
+  it('résout une arme libre (customWeapon, Story 25.2) via resolveWeapon et transmet weaponLabel = nom libre / formules = catégorie référencée', async () => {
     await service.fillCharacterPdf(
       makeCharacter({
         sheetData: {
@@ -305,7 +315,7 @@ describe('RyuutamaPdfService', () => {
     );
   });
 
-  it('résout l\'arme via resolveWeaponCategory et transmet weaponLabel/formules/categoryId à mapToPdfFields (Story 25.1)', async () => {
+  it("résout l'arme via resolveWeaponCategory et transmet weaponLabel/formules/categoryId à mapToPdfFields (Story 25.1)", async () => {
     await service.fillCharacterPdf(makeCharacter(), 'editable');
 
     expect(mapToPdfFields).toHaveBeenCalledWith(

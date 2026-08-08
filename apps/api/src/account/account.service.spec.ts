@@ -17,10 +17,7 @@ describe('AccountService', () => {
   beforeEach(async () => {
     prisma = makePrisma();
     const module = await Test.createTestingModule({
-      providers: [
-        AccountService,
-        { provide: PrismaService, useValue: prisma },
-      ],
+      providers: [AccountService, { provide: PrismaService, useValue: prisma }],
     }).compile();
     service = module.get(AccountService);
   });
@@ -132,9 +129,9 @@ describe('AccountService', () => {
       );
       prisma.user.update.mockRejectedValue(otherError);
 
-      await expect(
-        service.updateTheme('u1', 'grimoire-emeraude'),
-      ).rejects.toBe(otherError);
+      await expect(service.updateTheme('u1', 'grimoire-emeraude')).rejects.toBe(
+        otherError,
+      );
     });
   });
 });

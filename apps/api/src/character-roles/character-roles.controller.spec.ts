@@ -32,11 +32,21 @@ describe('CharacterRolesController', () => {
       assignedAt: '2026-01-01T00:00:00.000Z',
     });
 
-    const result = await controller.assign('p1', 'char1', { id: 'mj1' } as any, {
-      roleKey: 'cartographe',
-    });
+    const result = await controller.assign(
+      'p1',
+      'char1',
+      { id: 'mj1' } as any,
+      {
+        roleKey: 'cartographe',
+      },
+    );
 
-    expect(characterRoles.assign).toHaveBeenCalledWith('p1', 'mj1', 'char1', 'cartographe');
+    expect(characterRoles.assign).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+      'char1',
+      'cartographe',
+    );
     expect(result.roleKey).toBe('cartographe');
   });
 
@@ -49,7 +59,9 @@ describe('CharacterRolesController', () => {
   it('listForPartie() délègue à CharacterRolesService.listForPartie() avec partieId/user.id', async () => {
     characterRoles.listForPartie.mockResolvedValue([]);
 
-    const result = await controller.listForPartie('p1', { id: 'joueur1' } as any);
+    const result = await controller.listForPartie('p1', {
+      id: 'joueur1',
+    } as any);
 
     expect(characterRoles.listForPartie).toHaveBeenCalledWith('p1', 'joueur1');
     expect(result).toEqual([]);

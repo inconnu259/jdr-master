@@ -30,8 +30,7 @@ const EMAIL_CHANGE_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // +24h, même TTL que le
 const EMAIL_CHANGE_ROLLBACK_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // +1 mois (AC2, Story 28.6)
 const EMAIL_CHANGE_TOKEN_INVALID_MESSAGE =
   'Lien invalide ou expiré. Merci de refaire une demande.';
-const EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE =
-  'Lien invalide ou expiré.';
+const EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE = 'Lien invalide ou expiré.';
 
 @Injectable()
 export class AuthService {
@@ -263,7 +262,10 @@ export class AuthService {
     // Revue de code : test explicite de présence, pas de vérité (`exceptSid ? ...`) — une chaîne
     // vide (en pratique jamais produite par express-session, mais pas garantie par le typage)
     // basculerait silencieusement en « révoque tout », y compris la session courante.
-    const where = exceptSid !== undefined ? { userId, sid: { not: exceptSid } } : { userId };
+    const where =
+      exceptSid !== undefined
+        ? { userId, sid: { not: exceptSid } }
+        : { userId };
     const activeSessions = await tx.userSession.findMany({
       where,
       select: { sid: true },
@@ -347,14 +349,18 @@ export class AuthService {
     const normalizedNewEmail = newEmail.trim().toLowerCase();
 
     if (normalizedNewEmail === user.email.toLowerCase()) {
-      throw new ConflictException('Cette adresse est déjà celle de votre compte.');
+      throw new ConflictException(
+        'Cette adresse est déjà celle de votre compte.',
+      );
     }
 
     // Route authentifiée, mot de passe déjà prouvé : contrairement à register()/
     // requestPasswordReset(), l'anti-énumération n'a pas la même valeur ici — message explicite.
     const existing = await this.users.findByEmail(normalizedNewEmail);
     if (existing) {
-      throw new ConflictException('Cette adresse est déjà utilisée par un autre compte.');
+      throw new ConflictException(
+        'Cette adresse est déjà utilisée par un autre compte.',
+      );
     }
 
     // Limitation par e-mail (même patron que requestPasswordReset()) — évite le spam des deux
@@ -406,7 +412,9 @@ export class AuthService {
     const id = token.slice(0, separatorIndex);
     const secret = token.slice(separatorIndex + 1);
 
-    const record = await this.prisma.emailChangeToken.findUnique({ where: { id } });
+    const record = await this.prisma.emailChangeToken.findUnique({
+      where: { id },
+    });
     if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
       throw new NotFoundException(EMAIL_CHANGE_TOKEN_INVALID_MESSAGE);
     }
@@ -454,7 +462,9 @@ export class AuthService {
             userId: record.userId,
             oldEmail: userOldEmail,
             tokenHash: rollbackTokenHash,
-            expiresAt: new Date(Date.now() + EMAIL_CHANGE_ROLLBACK_TOKEN_TTL_MS),
+            expiresAt: new Date(
+              Date.now() + EMAIL_CHANGE_ROLLBACK_TOKEN_TTL_MS,
+            ),
           },
         });
 
@@ -521,7 +531,9 @@ export class AuthService {
           data: { usedAt: new Date() },
         });
         if (claim.count === 0) {
-          throw new NotFoundException(EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE);
+          throw new NotFoundException(
+            EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE,
+          );
         }
 
         await tx.user.update({
@@ -536,7 +548,9 @@ export class AuthService {
       // Compte supprimé entre l'émission du jeton de rollback et son usage — jamais un 500 brut
       // (revue de code).
       if (err?.code === 'P2025') {
-        throw new NotFoundException(EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE);
+        throw new NotFoundException(
+          EMAIL_CHANGE_ROLLBACK_TOKEN_INVALID_MESSAGE,
+        );
       }
       // oldEmail repris par un autre compte entre la confirmation et le rollback — même patron
       // que confirmEmailChange() (revue de code).

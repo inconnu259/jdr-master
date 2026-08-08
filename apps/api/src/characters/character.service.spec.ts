@@ -106,6 +106,7 @@ function makePrisma() {
     },
     partie: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
     },
     scenario: {
       findUnique: jest.fn(),
@@ -155,7 +156,15 @@ function makeGameSystemService() {
       weaponItem: [{ key: 'arc-de-chasse', data: { categoryId: 'arc' } }],
       attributePattern: [{ key: 'polyvalent', data: { values: [8, 4, 6, 6] } }],
       equipmentItem: [
-        { key: 'rations', data: { label: 'Rations', priceGold: 10, nature: 'individual', weight: 1 } },
+        {
+          key: 'rations',
+          data: {
+            label: 'Rations',
+            priceGold: 10,
+            nature: 'individual',
+            weight: 1,
+          },
+        },
       ],
     }),
   };
@@ -341,18 +350,31 @@ describe('CharacterService', () => {
 
       await service.create('p1', 'u1', {
         gameSystemId: 'ryuutama',
-        sheetData: { ...validSheet(), startingEquipment: [{ key: 'rations', quantity: 2 }] },
+        sheetData: {
+          ...validSheet(),
+          startingEquipment: [{ key: 'rations', quantity: 2 }],
+        },
       });
 
       expect(resolveStartingEquipment).toHaveBeenCalledWith(
         [{ key: 'rations', quantity: 2 }],
         expect.arrayContaining([
-          expect.objectContaining({ key: 'rations', priceGold: 10, nature: 'individual' }),
+          expect.objectContaining({
+            key: 'rations',
+            priceGold: 10,
+            nature: 'individual',
+          }),
         ]),
       );
       const created = prisma.character.create.mock.calls[0][0].data.sheetData;
       expect(created.equipment.individual).toEqual([
-        { name: 'Rations', weight: 1, price: '10 Po', id: 'fixed-uuid', addedBy: 'player' },
+        {
+          name: 'Rations',
+          weight: 1,
+          price: '10 Po',
+          id: 'fixed-uuid',
+          addedBy: 'player',
+        },
       ]);
       expect(created.startingEquipment).toBeUndefined();
     });
@@ -370,7 +392,10 @@ describe('CharacterService', () => {
       await expect(
         service.create('p1', 'u1', {
           gameSystemId: 'ryuutama',
-          sheetData: { ...validSheet(), startingEquipment: [{ key: 'monture-grande', quantity: 1 }] },
+          sheetData: {
+            ...validSheet(),
+            startingEquipment: [{ key: 'monture-grande', quantity: 1 }],
+          },
         }),
       ).rejects.toThrow(BadRequestException);
       expect(prisma.character.create).not.toHaveBeenCalled();
@@ -383,7 +408,10 @@ describe('CharacterService', () => {
       await expect(
         service.create('p1', 'u1', {
           gameSystemId: 'ryuutama',
-          sheetData: { ...validSheet(), startingEquipment: { key: 'rations', quantity: 1 } as any },
+          sheetData: {
+            ...validSheet(),
+            startingEquipment: { key: 'rations', quantity: 1 } as any,
+          },
         }),
       ).rejects.toThrow(BadRequestException);
       expect(prisma.character.create).not.toHaveBeenCalled();
@@ -402,7 +430,10 @@ describe('CharacterService', () => {
       await expect(
         service.create('p1', 'u1', {
           gameSystemId: 'ryuutama',
-          sheetData: { ...validSheet(), startingEquipment: [{ key: 'clef-inexistante', quantity: 1 }] },
+          sheetData: {
+            ...validSheet(),
+            startingEquipment: [{ key: 'clef-inexistante', quantity: 1 }],
+          },
         }),
       ).rejects.toThrow(BadRequestException);
       expect(prisma.character.create).not.toHaveBeenCalled();
@@ -434,7 +465,8 @@ describe('CharacterService', () => {
       errors: [
         {
           field: 'weaponId',
-          message: 'Une seule arme doit être renseignée : choisie dans le catalogue ou libre, jamais les deux',
+          message:
+            'Une seule arme doit être renseignée : choisie dans le catalogue ou libre, jamais les deux',
         },
       ],
     });
@@ -519,7 +551,11 @@ describe('CharacterService', () => {
 
   it('findOne() résout ownerPseudo, ownerDisplayName et ownerIsMj (propriétaire = joueur)', async () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
-    users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice', displayName: 'Alice au pays' });
+    users.findById.mockResolvedValue({
+      id: 'u1',
+      pseudo: 'alice',
+      displayName: 'Alice au pays',
+    });
     prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
 
     const result = await service.findOne('char1', 'u1');
@@ -533,7 +569,11 @@ describe('CharacterService', () => {
     prisma.character.findUnique.mockResolvedValue(
       makeCharacter({ userId: 'mj1' }),
     );
-    users.findById.mockResolvedValue({ id: 'mj1', pseudo: 'le-mj', displayName: 'Le Grand MJ' });
+    users.findById.mockResolvedValue({
+      id: 'mj1',
+      pseudo: 'le-mj',
+      displayName: 'Le Grand MJ',
+    });
     prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
 
     const result = await service.findOne('char1', 'mj1');
@@ -585,7 +625,10 @@ describe('CharacterService', () => {
     });
 
     expect(validate).toHaveBeenCalledWith(
-      { ...validSheet(), equipment: { individual: [], contenants: [], animaux: [] } },
+      {
+        ...validSheet(),
+        equipment: { individual: [], contenants: [], animaux: [] },
+      },
       'strict',
       expect.objectContaining({
         validClasses: ['chasseur'],
@@ -636,7 +679,10 @@ describe('CharacterService', () => {
     });
 
     expect(validate).toHaveBeenCalledWith(
-      { ...validSheet(), equipment: { individual: [], contenants: [], animaux: [] } },
+      {
+        ...validSheet(),
+        equipment: { individual: [], contenants: [], animaux: [] },
+      },
       'strict',
       expect.objectContaining({ attributePatterns: [[4, 6, 6, 8]] }),
     );
@@ -654,9 +700,15 @@ describe('CharacterService', () => {
         { key: 'ete', data: {} },
       ],
       spell: [
-        { key: 'benediction-main-rouge', data: { magicType: 'rituelle', tier: 'debutant' } },
+        {
+          key: 'benediction-main-rouge',
+          data: { magicType: 'rituelle', tier: 'debutant' },
+        },
         { key: 'foudre', data: { magicType: 'saison', tier: 'avance' } },
-        { key: 'ailes-de-libellule', data: { magicType: 'rituelle', tier: 'avance' } },
+        {
+          key: 'ailes-de-libellule',
+          data: { magicType: 'rituelle', tier: 'avance' },
+        },
       ],
     });
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
@@ -669,7 +721,10 @@ describe('CharacterService', () => {
     });
 
     expect(validate).toHaveBeenCalledWith(
-      { ...validSheet(), equipment: { individual: [], contenants: [], animaux: [] } },
+      {
+        ...validSheet(),
+        equipment: { individual: [], contenants: [], animaux: [] },
+      },
       'strict',
       expect.objectContaining({
         validSeasons: ['printemps', 'ete'],
@@ -683,7 +738,11 @@ describe('CharacterService', () => {
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
     (computeDerived as jest.Mock).mockReturnValue({});
     prisma.character.create.mockResolvedValue(makeCharacter({ userId: 'u1' }));
-    users.findById.mockResolvedValue({ id: 'u1', pseudo: 'bob', displayName: 'Bobby' });
+    users.findById.mockResolvedValue({
+      id: 'u1',
+      pseudo: 'bob',
+      displayName: 'Bobby',
+    });
 
     const result = await service.create('p1', 'u1', {
       gameSystemId: 'ryuutama',
@@ -768,6 +827,109 @@ describe('CharacterService', () => {
 
       expect(result[0].ownerPseudo).toBe('');
       expect(result[0].ownerDisplayName).toBe('');
+    });
+  });
+
+  describe('findMine() (Story 29.2, AC1/AC3)', () => {
+    it('toutes parties confondues → un seul appel user.findById, résolution en lot des noms de Partie', async () => {
+      users.findById.mockResolvedValue({
+        id: 'u1',
+        pseudo: 'alice',
+        displayName: 'Alice au pays',
+      });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
+        makeCharacter({ id: 'c2', userId: 'u1', partieId: 'p2' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p1', name: 'La Forêt Noire', mjId: 'mj-autre' },
+        { id: 'p2', name: 'Le Donjon Oublié', mjId: 'u1' },
+      ]);
+
+      const result = await service.findMine('u1');
+
+      expect(prisma.character.findMany).toHaveBeenCalledWith({
+        where: { userId: 'u1' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(prisma.partie.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.partie.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ['p1', 'p2'] } },
+        select: { id: true, name: true, mjId: true },
+      });
+      expect(users.findById).toHaveBeenCalledTimes(1);
+      expect(users.findById).toHaveBeenCalledWith('u1');
+      expect(result.map((c) => c.partieName)).toEqual([
+        'La Forêt Noire',
+        'Le Donjon Oublié',
+      ]);
+      expect(result.map((c) => c.ownerPseudo)).toEqual(['alice', 'alice']);
+      expect(result.map((c) => c.ownerDisplayName)).toEqual([
+        'Alice au pays',
+        'Alice au pays',
+      ]);
+    });
+
+    it('isMj varie par Partie (MJ ici, joueur là) — jamais un calcul global', async () => {
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p-mj' }),
+        makeCharacter({ id: 'c2', userId: 'u1', partieId: 'p-player' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p-mj', name: 'Ma partie', mjId: 'u1' },
+        { id: 'p-player', name: 'Partie d’un ami', mjId: 'mj-autre' },
+      ]);
+
+      const result = await service.findMine('u1');
+
+      expect(result.map((c) => c.ownerIsMj)).toEqual([true, false]);
+      expect(result.map((c) => c.viewerIsMj)).toEqual([true, false]);
+    });
+
+    it('aucun personnage → tableau vide, aucun appel partie.findMany ni user.findById', async () => {
+      prisma.character.findMany.mockResolvedValue([]);
+
+      const result = await service.findMine('u1');
+
+      expect(result).toEqual([]);
+      expect(prisma.partie.findMany).not.toHaveBeenCalled();
+      expect(users.findById).not.toHaveBeenCalled();
+    });
+
+    it('Partie orpheline (défensive) → partieName vide plutôt que de planter', async () => {
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p-disparue' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([]);
+
+      const result = await service.findMine('u1');
+
+      expect(result[0].partieName).toBe('');
+      expect(result[0].ownerIsMj).toBe(false);
+    });
+
+    it("pas de fuite d'un autre utilisateur — le mock filtre par userId comme le ferait Prisma, les personnages d'un autre appelant sont absents du résultat", async () => {
+      const allCharacters = [
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
+        makeCharacter({ id: 'c2', userId: 'u2', partieId: 'p2' }),
+      ];
+      prisma.character.findMany.mockImplementation(({ where }) =>
+        Promise.resolve(allCharacters.filter((c) => c.userId === where.userId)),
+      );
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
+      ]);
+      users.findById.mockResolvedValue({
+        id: 'u1',
+        pseudo: 'alice',
+        displayName: 'Alice au pays',
+      });
+
+      const result = await service.findMine('u1');
+
+      expect(result).toHaveLength(1);
+      expect(result.map((c) => c.id)).toEqual(['c1']);
+      expect(result.some((c) => c.id === 'c2')).toBe(false);
     });
   });
 
@@ -920,7 +1082,11 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
-      users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice', displayName: 'Alice au pays' });
+      users.findById.mockResolvedValue({
+        id: 'u1',
+        pseudo: 'alice',
+        displayName: 'Alice au pays',
+      });
       prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
 
       const result = await service.updatePortrait(
@@ -991,7 +1157,11 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(character);
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
-      users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice', displayName: 'Alice au pays' });
+      users.findById.mockResolvedValue({
+        id: 'u1',
+        pseudo: 'alice',
+        displayName: 'Alice au pays',
+      });
       prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
 
       const result = await service.removePortrait('char1', 'u1');
@@ -1080,7 +1250,11 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(character);
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
-      users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice', displayName: 'Alice au pays' });
+      users.findById.mockResolvedValue({
+        id: 'u1',
+        pseudo: 'alice',
+        displayName: 'Alice au pays',
+      });
       prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
 
       const result = await service.updatePdfPortraitCrop(
@@ -1417,7 +1591,11 @@ describe('CharacterService', () => {
         makeCharacter({ xp: 10 }),
       );
       (pendingLevels as jest.Mock).mockReturnValue([]);
-      users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice', displayName: 'Alice au pays' });
+      users.findById.mockResolvedValue({
+        id: 'u1',
+        pseudo: 'alice',
+        displayName: 'Alice au pays',
+      });
       prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
 
       const result = await service.setXp('char1', 'mj1', 10);

@@ -29,6 +29,15 @@ export const routes: Routes = [
     children: [
       { path: '', component: Dashboard },
       { path: 'account', component: Account },
+      {
+        // Story 29.2 : atteignable par URL directe uniquement — l'entrée de navigation est
+        // câblée par la story 29.3 (« navigation à quatre destinations »), séquencée après.
+        path: 'characters',
+        loadComponent: () =>
+          import('./features/characters/my-characters/my-characters').then(
+            (m) => m.MyCharacters,
+          ),
+      },
       { path: 'parties/new', component: PartieForm },
       { path: 'parties/:id', component: PartieDetail },
       { path: 'parties/:id/edit', component: PartieForm },
