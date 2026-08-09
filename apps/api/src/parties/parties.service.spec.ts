@@ -36,6 +36,8 @@ describe('PartiesService', () => {
     };
     scenario: {
       create: jest.Mock;
+      count: jest.Mock;
+      groupBy: jest.Mock;
     };
     seance: {
       create: jest.Mock;
@@ -79,6 +81,10 @@ describe('PartiesService', () => {
       },
       scenario: {
         create: jest.fn().mockResolvedValue({ id: 'scenario1' }),
+        // Défaut « sans scénario » (status: A_VENIR) — les tests de dérivation ci-dessous
+        // reconfigurent explicitement ces mocks quand ils veulent tester EN_COURS/TERMINEE.
+        count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
       seance: {
         create: jest.fn(),
@@ -133,7 +139,34 @@ describe('PartiesService', () => {
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
+      status: 'EN_COURS',
     });
+  });
+
+  it('create() ONE_SHOT ne fait aucun appel scenario.count/groupBy — hasScenario connu synchronement (Story 29.6)', async () => {
+    prisma.partie.create.mockResolvedValue(partie);
+    await service.create('mj1', {
+      name: 'La Nuit',
+      kind: 'ONE_SHOT',
+      gameSystemId: 'draconis',
+    });
+    expect(prisma.scenario.count).not.toHaveBeenCalled();
+    expect(prisma.scenario.groupBy).not.toHaveBeenCalled();
+  });
+
+  it('create CAMPAGNE_LINEAIRE renvoie status: A_VENIR (aucun scénario auto-créé, Story 29.6)', async () => {
+    prisma.partie.create.mockResolvedValue({
+      ...partie,
+      kind: 'CAMPAGNE_LINEAIRE',
+    });
+    const dto = await service.create('mj1', {
+      name: 'Les Chroniques',
+      kind: 'CAMPAGNE_LINEAIRE',
+      gameSystemId: 'draconis',
+    });
+    expect(dto.status).toBe('A_VENIR');
+    expect(prisma.scenario.count).not.toHaveBeenCalled();
+    expect(prisma.scenario.groupBy).not.toHaveBeenCalled();
   });
 
   it('create ONE_SHOT crée automatiquement son scénario unique BROUILLON dans la même transaction (AC3, Story 7.1)', async () => {
@@ -190,6 +223,7 @@ describe('PartiesService', () => {
         nextSessionDate: null,
         nextSessionSlot: null,
         role: 'player',
+        status: 'A_VENIR',
       },
     ]);
     expect(prisma.membership.findMany).toHaveBeenCalledWith(
@@ -214,8 +248,42 @@ describe('PartiesService', () => {
         nextSessionDate: null,
         nextSessionSlot: null,
         role: 'mj',
+        status: 'A_VENIR',
       },
     ]);
+  });
+
+  it('listForUser(mj) : status: EN_COURS quand scenario.groupBy renvoie un compte > 0 pour la partie (Story 29.6)', async () => {
+    prisma.partie.findMany.mockResolvedValue([partie]);
+    prisma.scenario.groupBy.mockResolvedValue([
+      { partieId: 'p1', _count: { _all: 2 } },
+    ]);
+    const [dto] = await service.listForUser('mj1', 'mj');
+    expect(dto.status).toBe('EN_COURS');
+  });
+
+  it('listForUser(mj) : status: TERMINEE quand closedAt est renseigné, quel que soit le nombre de scénarios (Story 29.6)', async () => {
+    prisma.partie.findMany.mockResolvedValue([
+      { ...partie, closedAt: new Date('2026-08-01T00:00:00.000Z') },
+    ]);
+    prisma.scenario.groupBy.mockResolvedValue([
+      { partieId: 'p1', _count: { _all: 3 } },
+    ]);
+    const [dto] = await service.listForUser('mj1', 'mj');
+    expect(dto.status).toBe('TERMINEE');
+  });
+
+  it('listForUser(mj) : scenario.groupBy appelé une seule fois pour N parties (pas de N+1, AD-3)', async () => {
+    const partieB = { ...partie, id: 'p2' };
+    prisma.partie.findMany.mockResolvedValue([partie, partieB]);
+    await service.listForUser('mj1', 'mj');
+    expect(prisma.scenario.groupBy).toHaveBeenCalledTimes(1);
+    expect(prisma.scenario.groupBy).toHaveBeenCalledWith({
+      by: ['partieId'],
+      where: { partieId: { in: ['p1', 'p2'] } },
+      _count: { _all: true },
+    });
+    expect(prisma.scenario.count).not.toHaveBeenCalled();
   });
 
   it("toPartieDto() n'énumère que les champs du DTO — un champ Prisma non listé (ex. futur ajout de colonne) ne fuite jamais (revue de code, AC6)", async () => {
@@ -237,6 +305,7 @@ describe('PartiesService', () => {
         'nextSessionDate',
         'nextSessionSlot',
         'role',
+        'status',
       ].sort(),
     );
   });
@@ -266,6 +335,7 @@ describe('PartiesService', () => {
         'nextSessionDate',
         'nextSessionSlot',
         'role',
+        'status',
       ].sort(),
     );
   });
@@ -311,6 +381,7 @@ describe('PartiesService', () => {
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
+      status: 'A_VENIR',
       mjPseudo: 'mj-pseudo',
       mjDisplayName: 'MJ Nom',
     });
@@ -343,9 +414,32 @@ describe('PartiesService', () => {
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'player',
+      status: 'A_VENIR',
       mjPseudo: 'mj-pseudo',
       mjDisplayName: 'MJ Nom',
     });
+  });
+
+  it('findOneDto : status: EN_COURS quand la partie a au moins un scénario (Story 29.6)', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.scenario.count.mockResolvedValue(1);
+    prisma.user.findUnique.mockResolvedValue(null);
+    const dto = await service.findOneDto('p1', 'mj1');
+    expect(dto.status).toBe('EN_COURS');
+    expect(prisma.scenario.count).toHaveBeenCalledWith({
+      where: { partieId: 'p1' },
+    });
+  });
+
+  it('findOneDto : status: TERMINEE quand closedAt est renseigné, même avec des scénarios (Story 29.6)', async () => {
+    prisma.partie.findUnique.mockResolvedValue({
+      ...partie,
+      closedAt: new Date('2026-08-01T00:00:00.000Z'),
+    });
+    prisma.scenario.count.mockResolvedValue(3);
+    prisma.user.findUnique.mockResolvedValue(null);
+    const dto = await service.findOneDto('p1', 'mj1');
+    expect(dto.status).toBe('TERMINEE');
   });
 
   it('findOneDto : 403 si ni MJ ni membre (getViewable inchangée)', async () => {
@@ -371,6 +465,7 @@ describe('PartiesService', () => {
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
+      status: 'A_VENIR',
     });
     expect((dto as any).mjPseudo).toBeUndefined();
   });
@@ -441,6 +536,130 @@ describe('PartiesService', () => {
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
+      status: 'A_VENIR',
+    });
+  });
+
+  describe('close/reopen (Story 29.6, AD-8/AD-14)', () => {
+    beforeEach(() => {
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj-pseudo',
+        displayName: 'MJ Nom',
+      });
+    });
+
+    it('close() : MJ uniquement (403 sinon, aucun update)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      await expect(service.close('p1', 'autre')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('close() : renseigne closedAt (AC1)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-09T00:00:00.000Z'),
+      });
+      await service.close('p1', 'mj1');
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { closedAt: expect.any(Date) },
+      });
+    });
+
+    it('close() : renvoie status: TERMINEE', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-09T00:00:00.000Z'),
+      });
+      const dto = await service.close('p1', 'mj1');
+      expect(dto.status).toBe('TERMINEE');
+    });
+
+    it('close() : émet partieTopic(id) et userTopic(userId) pour le MJ et chaque membre résolu (AD-14)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-09T00:00:00.000Z'),
+      });
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' } },
+        { user: { id: 'u2', pseudo: 'Bob', displayName: 'Bob' } },
+      ]);
+      await service.close('p1', 'mj1');
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u2'));
+    });
+
+    it('close() sur une partie CAMPAGNE sans aucun scénario : recalcule hasScenario plutôt que de le supposer (Story 29.6, Task 5)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.scenario.count.mockResolvedValue(0);
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        kind: 'CAMPAGNE_LINEAIRE',
+        closedAt: new Date('2026-08-09T00:00:00.000Z'),
+      });
+      const dto = await service.close('p1', 'mj1');
+      // closedAt prime toujours sur hasScenario dans toPartieDto() — TERMINEE quel que soit le
+      // nombre de scénarios (cf. tests de dérivation ci-dessus).
+      expect(dto.status).toBe('TERMINEE');
+    });
+
+    it('reopen() : MJ uniquement (403 sinon, aucun update)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      await expect(service.reopen('p1', 'autre')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('reopen() : efface closedAt (AC2)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      prisma.partie.update.mockResolvedValue({ ...partie, closedAt: null });
+      await service.reopen('p1', 'mj1');
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { closedAt: null },
+      });
+    });
+
+    it('reopen() : la partie redevient active — status: A_VENIR sans scénario, EN_COURS sinon (AC2)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      prisma.partie.update.mockResolvedValue({ ...partie, closedAt: null });
+      prisma.scenario.count.mockResolvedValue(0);
+      const dto = await service.reopen('p1', 'mj1');
+      expect(dto.status).toBe('A_VENIR');
+    });
+
+    it('reopen() : émet partieTopic(id) et userTopic(userId) pour le MJ et chaque membre résolu (AD-14)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      prisma.partie.update.mockResolvedValue({ ...partie, closedAt: null });
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' } },
+      ]);
+      await service.reopen('p1', 'mj1');
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
     });
   });
 

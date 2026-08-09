@@ -22,6 +22,7 @@ function makeParty(id: string): PartieDto {
     nextSessionDate: null,
     nextSessionSlot: null,
     role: 'player',
+    status: 'EN_COURS',
   };
 }
 

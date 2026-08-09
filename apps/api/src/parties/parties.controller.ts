@@ -90,6 +90,16 @@ export class PartiesController {
     return this.parties.update(id, user.id, dto);
   }
 
+  @Patch(':id/close')
+  close(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.parties.close(id, user.id);
+  }
+
+  @Patch(':id/reopen')
+  reopen(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.parties.reopen(id, user.id);
+  }
+
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.parties.remove(id, user.id);

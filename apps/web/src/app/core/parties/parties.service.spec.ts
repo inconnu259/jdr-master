@@ -22,6 +22,7 @@ describe('PartiesService (front)', () => {
     nextSessionDate: null,
     nextSessionSlot: null,
     role: 'mj',
+    status: 'EN_COURS',
   };
 
   beforeEach(() => {
@@ -59,6 +60,24 @@ describe('PartiesService (front)', () => {
     expect(req.request.method).toBe('DELETE');
     req.flush(null);
     await p;
+  });
+
+  it('close → PATCH /parties/:id/close avec withCredentials (Story 29.6)', async () => {
+    const p = service.close('p1');
+    const req = http.expectOne(`${API}/parties/p1/close`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush({ ...partie, status: 'TERMINEE' });
+    expect((await p).status).toBe('TERMINEE');
+  });
+
+  it('reopen → PATCH /parties/:id/reopen avec withCredentials (Story 29.6)', async () => {
+    const p = service.reopen('p1');
+    const req = http.expectOne(`${API}/parties/p1/reopen`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(partie);
+    expect(await p).toEqual(partie);
   });
 
   it('notifyChanged() incrémente changed() (Story 18.3, AD-4)', () => {

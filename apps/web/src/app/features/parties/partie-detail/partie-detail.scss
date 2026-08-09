@@ -56,6 +56,23 @@ mat-tab-group {
   }
 }
 
+// Story 29.6 (AC5) : signal secondaire non chromatique (icône + libellé) — jamais la couleur
+// seule, même principe que .homonymy-warning ci-dessus, teinté --jdr-status-done (Story 29.0).
+.closed-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 1rem 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--jdr-status-done, #5a5a6a);
+  color: var(--mat-sys-on-surface-variant, #666);
+  font-size: 0.9rem;
+
+  mat-icon {
+    flex-shrink: 0;
+  }
+}
+
 .characters-tab {
   &__grid {
     display: flex;

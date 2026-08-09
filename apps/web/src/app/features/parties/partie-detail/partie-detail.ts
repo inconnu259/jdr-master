@@ -590,6 +590,16 @@ export class PartieDetail implements OnInit {
     this.notice.set(this.theme.tone()['partie.notice_copy']);
   }
 
+  /** Réversible (AC2) — pas de `ConfirmDialog`, contrairement à `confirmDelete()` (irréversible).
+   *  Mise à jour directe du signal local, même immédiateté que `invite()`/`createLink()`. */
+  async closeGame(p: PartieDto): Promise<void> {
+    this.partie.set(await this.parties.close(p.id));
+  }
+
+  async reopenGame(p: PartieDto): Promise<void> {
+    this.partie.set(await this.parties.reopen(p.id));
+  }
+
   async confirmDelete(p: PartieDto): Promise<void> {
     const ref = this.dialog.open(ConfirmDialog, {
       data: { message: `Supprimer « ${p.name} » ? Cette action est irréversible.` },

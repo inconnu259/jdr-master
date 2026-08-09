@@ -65,6 +65,7 @@ const PARTIE: PartieDto = {
   nextSessionDate: null,
   nextSessionSlot: null,
   role: 'mj',
+  status: 'EN_COURS',
 };
 
 async function createComponent(

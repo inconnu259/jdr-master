@@ -5,6 +5,11 @@
          locale (onglets) suit directement le bandeau, avant l'avertissement d'homonymie et l'aperçu
          de troupe mobile, comme la maquette validée (mockups/key-partie-detail-navigation-contextuelle.html). -->
     <div class="detail-body">
+      @if (p.status === 'TERMINEE') {
+        <p class="closed-banner">
+          <mat-icon aria-hidden="true">flag</mat-icon> {{ theme.tone()['partie.status_closed_label'] }}
+        </p>
+      }
       @if (isDesktop()) {
         <app-roster-rail
           [members]="members()"
@@ -375,6 +380,15 @@
         <a mat-button [routerLink]="['/parties', p.id, 'edit']">
           <mat-icon>edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
         </a>
+        @if (p.status !== 'TERMINEE') {
+          <button mat-button (click)="closeGame(p)">
+            <mat-icon>flag</mat-icon> {{ theme.tone()['partie.close_btn'] }}
+          </button>
+        } @else {
+          <button mat-button (click)="reopenGame(p)">
+            <mat-icon>replay</mat-icon> {{ theme.tone()['partie.reopen_btn'] }}
+          </button>
+        }
         <button mat-button (click)="confirmDelete(p)">
           <mat-icon>delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
         </button>

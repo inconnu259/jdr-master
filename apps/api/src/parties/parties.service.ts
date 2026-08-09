@@ -2,12 +2,14 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type {
   AggregatedSlotDto,
   AvailableSlotDto,
   PartieDto,
+  PartieStatus,
 } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,10 +23,24 @@ import { UpdatePartieDto } from './dto/update-partie.dto';
 
 /**
  * Projection explicite (AD-15, Story 29.1) — énumère les champs renvoyés, jamais un objet Prisma
- * propagé tel quel. `status`/`coverImageUrl` volontairement absents : `Partie.closedAt` n'existe
- * pas encore dans le schéma (story 29.4), `coverImageUrl` non plus (story 29.10).
+ * propagé tel quel. `coverImageUrl` volontairement absent (story 29.10).
+ *
+ * `hasScenario` détermine `status` (AD-8) : `closedAt` renseigné prime toujours (`TERMINEE`),
+ * sinon la présence d'au moins un `Scenario` fait passer de `A_VENIR` à `EN_COURS`. Compter les
+ * `Scenario` suffit à détecter « sans aucun scénario ni séance » — `Seance.scenarioId` est une FK
+ * obligatoire (pas de séance orpheline) et tout scénario créé reçoit systématiquement au moins une
+ * séance (cf. `create()` ci-dessous, `ScenariosService.addSeance`).
  */
-function toPartieDto(partie: any, role: 'mj' | 'player'): PartieDto {
+function toPartieDto(
+  partie: any,
+  role: 'mj' | 'player',
+  hasScenario: boolean,
+): PartieDto {
+  const status: PartieStatus = partie.closedAt
+    ? 'TERMINEE'
+    : hasScenario
+      ? 'EN_COURS'
+      : 'A_VENIR';
   return {
     id: partie.id,
     name: partie.name,
@@ -36,11 +52,14 @@ function toPartieDto(partie: any, role: 'mj' | 'player'): PartieDto {
     nextSessionDate: partie.nextSessionDate,
     nextSessionSlot: partie.nextSessionSlot,
     role,
+    status,
   };
 }
 
 @Injectable()
 export class PartiesService {
+  private readonly logger = new Logger(PartiesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly availability: AvailabilityService,
@@ -76,8 +95,36 @@ export class PartiesService {
       }
 
       // Le créateur est toujours MJ de la partie qu'il crée (revue de code, AC6).
-      return toPartieDto(partie, 'mj');
+      // hasScenario connu synchronement : le scénario unique vient d'être créé dans cette même
+      // transaction pour ONE_SHOT (ci-dessus) ; CAMPAGNE_LINEAIRE/CAMPAGNE_EPISODIQUE n'en créent
+      // aucun — aucune requête `scenario.count()` nécessaire ici (Story 29.6).
+      return toPartieDto(partie, 'mj', dto.kind === 'ONE_SHOT');
     });
+  }
+
+  /** Lecture en lot (AD-3) : une seule requête groupée pour dériver `status` de tout le tableau
+   *  renvoyé — jamais un `scenario.count()` par partie dans une boucle (Story 29.6). */
+  private async hasScenarioByPartieId(
+    partieIds: string[],
+  ): Promise<Set<string>> {
+    if (partieIds.length === 0) return new Set();
+    const counts = await this.prisma.scenario.groupBy({
+      by: ['partieId'],
+      where: { partieId: { in: partieIds } },
+      _count: { _all: true },
+    });
+    // `groupBy` ne renvoie jamais de groupe à compte zéro pour un partieId sans scénario — chaque
+    // ligne retournée a donc nécessairement au moins un scénario, aucun filtre supplémentaire requis.
+    return new Set(counts.map((c) => c.partieId));
+  }
+
+  /** Variante mono-partie de `hasScenarioByPartieId` — la lecture en lot (AD-3) ne s'applique pas
+   *  quand une seule partie est concernée (`findOneDto`, `update`, `close`, `reopen`). */
+  private async hasScenario(partieId: string): Promise<boolean> {
+    const count = await this.prisma.scenario.count({
+      where: { partieId },
+    });
+    return count > 0;
   }
 
   /**
@@ -93,13 +140,21 @@ export class PartiesService {
         orderBy: { joinedAt: 'desc' },
         include: { partie: true },
       });
-      return memberships.map((m) => toPartieDto(m.partie, 'player'));
+      const hasScenarioIds = await this.hasScenarioByPartieId(
+        memberships.map((m) => m.partie.id),
+      );
+      return memberships.map((m) =>
+        toPartieDto(m.partie, 'player', hasScenarioIds.has(m.partie.id)),
+      );
     }
     const parties = await this.prisma.partie.findMany({
       where: { mjId: userId },
       orderBy: { createdAt: 'desc' },
     });
-    return parties.map((p) => toPartieDto(p, 'mj'));
+    const hasScenarioIds = await this.hasScenarioByPartieId(
+      parties.map((p) => p.id),
+    );
+    return parties.map((p) => toPartieDto(p, 'mj', hasScenarioIds.has(p.id)));
   }
 
   /** Récupère une partie en vérifiant que l'utilisateur en est le MJ (sinon 404 / 403). */
@@ -130,7 +185,8 @@ export class PartiesService {
   async findOneDto(id: string, userId: string): Promise<PartieDto> {
     const partie = await this.getViewable(id, userId);
     const role: 'mj' | 'player' = partie.mjId === userId ? 'mj' : 'player';
-    const dto = toPartieDto(partie, role);
+    const hasScenario = await this.hasScenario(id);
+    const dto = toPartieDto(partie, role, hasScenario);
     const mj = await this.prisma.user.findUnique({
       where: { id: partie.mjId },
       select: { pseudo: true, displayName: true },
@@ -187,14 +243,70 @@ export class PartiesService {
       data: { ...dto },
     });
     this.realtimeEvents.emit(partieTopic(id));
+    const hasScenario = await this.hasScenario(id);
     // getOwned() a déjà garanti que l'appelant est le MJ (revue de code, AC6).
-    return toPartieDto(updated, 'mj');
+    return toPartieDto(updated, 'mj', hasScenario);
+  }
+
+  /** Déclare la partie terminée (AD-8, Story 29.6) — MJ uniquement. Réversible via `reopen()`. */
+  async close(id: string, userId: string): Promise<PartieDto> {
+    const partie = await this.getOwned(id, userId);
+    const updated = await this.prisma.partie.update({
+      where: { id },
+      data: { closedAt: new Date() },
+    });
+    await this.emitPartieAndMembersSafe(id, partie.mjId);
+    // Le MJ peut clôturer une partie jamais commencée (aucun scénario) — hasScenario recalculé,
+    // jamais supposé, `closedAt` primant de toute façon sur le résultat dans toPartieDto().
+    const hasScenario = await this.hasScenario(id);
+    return toPartieDto(updated, 'mj', hasScenario);
+  }
+
+  /** Revient sur une clôture (AD-8, Story 29.6) — MJ uniquement. */
+  async reopen(id: string, userId: string): Promise<PartieDto> {
+    const partie = await this.getOwned(id, userId);
+    const updated = await this.prisma.partie.update({
+      where: { id },
+      data: { closedAt: null },
+    });
+    await this.emitPartieAndMembersSafe(id, partie.mjId);
+    const hasScenario = await this.hasScenario(id);
+    return toPartieDto(updated, 'mj', hasScenario);
   }
 
   async remove(id: string, userId: string) {
     await this.getOwned(id, userId);
     await this.prisma.partie.delete({ where: { id } });
     return { ok: true };
+  }
+
+  /** Double émission temps réel (AD-14) pour toute mutation partagée à l'échelle d'une Partie :
+   *  `partie:{id}` pour l'écran de détail déjà connecté, `user:{id}` pour chaque membre (MJ inclus)
+   *  afin que sa propre liste de parties (Dashboard) reflète le changement sans recharger. */
+  private async emitPartieAndMembers(
+    partieId: string,
+    mjId: string,
+  ): Promise<void> {
+    this.realtimeEvents.emit(partieTopic(partieId));
+    const { participants } = await this.resolveParticipants(partieId, mjId);
+    for (const p of participants) this.realtimeEvents.emit(userTopic(p.userId));
+  }
+
+  /** Variante de `emitPartieAndMembers` qui n'échoue jamais l'appelant (`close()`/`reopen()`) —
+   *  appelée après que la mutation DB a déjà été committée, une erreur ici ne doit jamais faire
+   *  croire au client que la clôture/réouverture a échoué alors qu'elle a bien eu lieu (revue de
+   *  code, Story 29.6). */
+  private async emitPartieAndMembersSafe(
+    partieId: string,
+    mjId: string,
+  ): Promise<void> {
+    try {
+      await this.emitPartieAndMembers(partieId, mjId);
+    } catch (err) {
+      this.logger.warn(
+        `Échec de l'émission temps réel après mutation de la partie ${partieId} : ${String(err)}`,
+      );
+    }
   }
 
   /** Retourne MJ + membres (dédoublonnés) avec leur pseudo et leur nom affiché. */

@@ -134,6 +134,7 @@ function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
     nextSessionDate: null,
     nextSessionSlot: null,
     role: 'mj',
+    status: 'EN_COURS',
     ...overrides,
   };
 }
@@ -175,6 +176,8 @@ function makePartiesService(
     createInviteLink: vi.fn(),
     revokeInviteLink: vi.fn(),
     remove: vi.fn(),
+    close: vi.fn().mockResolvedValue({ ...partie, status: 'TERMINEE' }),
+    reopen: vi.fn().mockResolvedValue({ ...partie, status: 'EN_COURS' }),
     listXpDistributions: vi.fn().mockResolvedValue([]),
     createXpDistribution: vi.fn(),
     changed,
@@ -1832,5 +1835,93 @@ describe('PartieDetail — bandeau contextuel (Story 29.4)', () => {
     const contextualNav = TestBed.inject(ContextualNavService);
     expect(contextualNav.title()).toBe('Les Cendres de Kavaan');
     expect(contextualNav.subtitle()).toBe('Draconis · One-shot');
+  });
+});
+
+// ─── Clôture explicite d'une partie (Story 29.6) ──────────────────────────
+
+describe('PartieDetail — clôture explicite (Story 29.6)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('le MJ voit le bouton "Clôturer" quand status !== TERMINEE, jamais "Rouvrir"', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const { el } = await createFixture(partie, MJ_ID);
+    const actions = el.querySelector('mat-card-actions');
+    expect(actions!.textContent).toContain('Clore le grimoire');
+    expect(actions!.textContent).not.toContain('Rouvrir le grimoire');
+  });
+
+  it('le MJ voit le bouton "Rouvrir" quand status === TERMINEE, jamais "Clôturer"', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'TERMINEE' });
+    const { el } = await createFixture(partie, MJ_ID);
+    const actions = el.querySelector('mat-card-actions');
+    expect(actions!.textContent).toContain('Rouvrir le grimoire');
+    expect(actions!.textContent).not.toContain('Clore le grimoire');
+  });
+
+  it('un joueur ne voit ni le bouton "Clôturer" ni "Rouvrir" (actions MJ-only)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+    const actions = el.querySelector('mat-card-actions');
+    expect(actions?.textContent ?? '').not.toContain('Clore le grimoire');
+    expect(actions?.textContent ?? '').not.toContain('Rouvrir le grimoire');
+  });
+
+  it('clic sur "Clôturer" appelle PartiesService.close et met à jour partie() avec la réponse', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const { fixture, el } = await createFixture(partie, MJ_ID);
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      close: ReturnType<typeof vi.fn>;
+    };
+
+    const buttons = Array.from(el.querySelectorAll('mat-card-actions button'));
+    const closeBtn = buttons.find((b) => b.textContent?.includes('Clore le grimoire')) as
+      | HTMLButtonElement
+      | undefined;
+    expect(closeBtn).toBeTruthy();
+    closeBtn!.click();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(parties.close).toHaveBeenCalledWith('party-1');
+    const component = fixture.componentInstance;
+    expect((component as unknown as { partie: () => { status: string } }).partie().status).toBe(
+      'TERMINEE',
+    );
+  });
+
+  it('clic sur "Rouvrir" appelle PartiesService.reopen et met à jour partie() avec la réponse', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'TERMINEE' });
+    const { fixture, el } = await createFixture(partie, MJ_ID);
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      reopen: ReturnType<typeof vi.fn>;
+    };
+
+    const buttons = Array.from(el.querySelectorAll('mat-card-actions button'));
+    const reopenBtn = buttons.find((b) => b.textContent?.includes('Rouvrir le grimoire')) as
+      | HTMLButtonElement
+      | undefined;
+    expect(reopenBtn).toBeTruthy();
+    reopenBtn!.click();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(parties.reopen).toHaveBeenCalledWith('party-1');
+    const component = fixture.componentInstance;
+    expect((component as unknown as { partie: () => { status: string } }).partie().status).toBe(
+      'EN_COURS',
+    );
+  });
+
+  it('le bandeau "partie terminée" est visible pour un joueur (pas seulement le MJ) quand status === TERMINEE', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'TERMINEE' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+    expect(el.querySelector('.closed-banner')).toBeTruthy();
+  });
+
+  it('le bandeau "partie terminée" est absent quand status !== TERMINEE', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const { el } = await createFixture(partie, MJ_ID);
+    expect(el.querySelector('.closed-banner')).toBeFalsy();
   });
 });

@@ -14,7 +14,11 @@ import { RealtimeService, userTopic } from '../../core/realtime/realtime.service
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 import { TONE_MAP } from '../../core/theme/tones';
 
-function makeParty(id: string, role: 'mj' | 'player' = 'player'): PartieDto {
+function makeParty(
+  id: string,
+  role: 'mj' | 'player' = 'player',
+  status: PartieDto['status'] = 'EN_COURS',
+): PartieDto {
   return {
     id,
     name: `Party ${id}`,
@@ -28,6 +32,7 @@ function makeParty(id: string, role: 'mj' | 'player' = 'player'): PartieDto {
     nextSessionDate: null,
     nextSessionSlot: null,
     role,
+    status,
   };
 }
 
@@ -295,6 +300,39 @@ describe('Dashboard — câblage temps réel (Story 21.1)', () => {
     await createFixture(new Map(), invitationsSvc);
 
     expect(invitationsSvc.listReceived.mock.calls.length).toBe(1);
+  });
+});
+
+describe('Dashboard — traitement « en retrait » des parties terminées (Story 29.6, AC5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('une partie TERMINEE porte la classe tile--closed et un libellé/icône non chromatique', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'TERMINEE')],
+      false,
+    );
+    const tile = fixture.nativeElement.querySelector('.tile');
+    expect(tile.classList.contains('tile--closed')).toBe(true);
+    const indicator = fixture.nativeElement.querySelector('.status-indicator');
+    expect(indicator).not.toBeNull();
+    expect(indicator.querySelector('mat-icon')).not.toBeNull();
+    expect(indicator.textContent).toContain(
+      TONE_MAP['grimoire-emeraude']['dashboard.status_closed_badge'],
+    );
+  });
+
+  it('une partie EN_COURS/A_VENIR ne porte ni la classe tile--closed ni le badge', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS'), makeParty('p2', 'player', 'A_VENIR')],
+      false,
+    );
+    const tiles = fixture.nativeElement.querySelectorAll('.tile');
+    tiles.forEach((tile: Element) => expect(tile.classList.contains('tile--closed')).toBe(false));
+    expect(fixture.nativeElement.querySelector('.status-indicator')).toBeNull();
   });
 });
 

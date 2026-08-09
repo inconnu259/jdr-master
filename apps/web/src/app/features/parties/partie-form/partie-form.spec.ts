@@ -21,6 +21,7 @@ const PARTIE: PartieDto = {
   nextSessionDate: null,
   nextSessionSlot: null,
   role: 'mj',
+  status: 'A_VENIR',
 };
 
 async function createComponent(editId: string | null = null) {

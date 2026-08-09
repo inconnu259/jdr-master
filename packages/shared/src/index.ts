@@ -51,6 +51,10 @@ export type GameSystemId = (typeof GAME_SYSTEMS)[number]['id'];
 /** Type d'une partie. En 1b l'UI n'expose que ONE_SHOT + CAMPAGNE_LINEAIRE (libellé « Campagne »). */
 export type PartieKind = 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE' | 'CAMPAGNE_EPISODIQUE';
 
+/** Statut d'une partie — dérivé côté serveur à partir de `Partie.closedAt` et de la présence de
+ *  scénarios (AD-8), jamais recalculé côté client (Story 29.6). */
+export type PartieStatus = 'A_VENIR' | 'EN_COURS' | 'TERMINEE';
+
 /** Une partie telle que renvoyée par l'API. */
 export interface PartieDto {
   id: string;
@@ -70,6 +74,8 @@ export interface PartieDto {
   /** Rôle de l'appelant sur cette partie — calculé serveur (`mjId === userId`), jamais dérivé
    *  côté client (Story 29.1, AD-15). Toujours présent, contrairement à `mjPseudo`/`mjDisplayName`. */
   role: 'mj' | 'player';
+  /** Toujours présent, calculé serveur (AD-8) — jamais dérivé côté client (Story 29.6). */
+  status: PartieStatus;
 }
 
 /** Statut d'une invitation in-app. */

@@ -53,14 +53,20 @@ function computeDerived(sheetData: RyuutamaSheetData) {
  * le script s'arrête sans rien modifier (cf. `main()`), pour éviter des doublons/erreurs de
  * contrainte unique sur une base partiellement peuplée.
  *
- * Couvre : 1 MJ + 3 joueurs, une Partie de chaque `PartieKind`, un personnage Ryuutama par joueur
- * et par Partie (dont un inventaire enrichi individual/contenants/animaux, Epic 14), des
- * scénarios à différents statuts (dont au moins un `PASSE` par Partie avec résumé de fin +
- * compte-rendu de séance), des entrées de journal (dont une associée manuellement et une éligible
- * à l'association automatique), une distribution d'XP avec une montée de niveau en attente
- * (Epic 6), une fiche Homme Dragon du MJ par Partie (Epic 10), des documents de scénario et de
- * bibliothèque de Partie (Story 7.2) et des annonces MJ à portée variable (Epic 9) — de quoi
- * explorer la quasi-totalité des fonctionnalités des Epics 6 à 10 sans ressaisie manuelle.
+ * Couvre : 1 MJ (mj-demo) + 3 joueurs (Alice/Bob/Chloe) + 1 compte mixte MJ **et** joueur (Diane —
+ * MJ de sa propre Partie, joueuse dans celle d'Alice/Bob/Chloe), une Partie de chaque `PartieKind`
+ * plus une 4e (Diane), un personnage Ryuutama par joueur et par Partie (dont un inventaire enrichi
+ * individual/contenants/animaux, Epic 14), des scénarios à différents statuts (dont au moins un
+ * `PASSE` par Partie avec résumé de fin + compte-rendu de séance), des entrées de journal (dont
+ * une associée manuellement et une éligible à l'association automatique), une distribution d'XP
+ * avec une montée de niveau en attente (Epic 6), une fiche Homme Dragon du MJ par Partie
+ * (Epic 10), des documents de scénario et de bibliothèque de Partie (Story 7.2), des annonces MJ
+ * à portée variable (Epic 9), une Partie explicitement clôturée (`Partie.closedAt`, Story 29.6) et
+ * des rôles de groupe assignés sur la Partie épisodique (`CharacterGroupRole`, Epic 27) — de quoi
+ * explorer la quasi-totalité des fonctionnalités des Epics 6 à 10, 27 et 29 sans ressaisie
+ * manuelle. Écart connu, non comblé ici (voir deferred-work.md) : Epics 23-26/28 (contenu
+ * Ryuutama enrichi, profils d'attributs, refonte d'arme, équipement de départ, compte/identité)
+ * n'ont pas de scénario de seed dédié.
  */
 
 const connectionString = process.env.DATABASE_URL;
@@ -140,8 +146,11 @@ async function main() {
   const alice = await createUser('alice@example.com', 'Alice');
   const bob = await createUser('bob@example.com', 'Bob');
   const chloe = await createUser('chloe@example.com', 'Chloe');
+  // Compte mixte MJ + joueur (Story 29.6, en profite pour exercer ce cas jusque-là absent du seed
+  // de démo) — MJ de sa propre Partie plus bas, et membre de la Partie CAMPAGNE_EPISODIQUE.
+  const diane = await createUser('diane@example.com', 'Diane');
 
-  // ─── Partie 1 : ONE_SHOT, déjà jouée (PASSE) ──────────────────────────────
+  // ─── Partie 1 : ONE_SHOT, déjà jouée (PASSE) — clôturée par le MJ (Story 29.6) ────
   console.log('→ Partie ONE_SHOT...');
   const oneShot = await prisma.partie.create({
     data: {
@@ -150,6 +159,9 @@ async function main() {
       gameSystemId: RYUUTAMA_ID,
       description: 'Un one-shot maritime : un navire échoué, des secrets à la dérive.',
       mjId: mj.id,
+      // Story 29.6 (AD-8) : one-shot rejouée et bouclée, le MJ l'a explicitement déclarée
+      // terminée — status: 'TERMINEE' dans PartieDto, seule Partie du seed dans cet état.
+      closedAt: new Date('2026-06-14T20:00:00.000Z'),
     },
   });
   await prisma.membership.createMany({
@@ -463,6 +475,8 @@ async function main() {
       { userId: alice.id, partieId: episodique.id },
       { userId: bob.id, partieId: episodique.id },
       { userId: chloe.id, partieId: episodique.id },
+      // Diane (Story 29.6) : joueuse ici, MJ de sa propre Partie plus bas — compte mixte.
+      { userId: diane.id, partieId: episodique.id },
     ],
   });
   const yuna = await createCharacter(
@@ -470,7 +484,7 @@ async function main() {
     episodique.id,
     makeSheetData('Yuna', 'chasseur', 'attaque', 'arc-de-chasse', 1),
   );
-  await createCharacter(
+  const theo = await createCharacter(
     bob.id,
     episodique.id,
     makeSheetData('Theo', 'artisan', 'technique', 'dague', 2, 'Forgeron'),
@@ -480,6 +494,24 @@ async function main() {
     episodique.id,
     makeSheetData('Sable', 'guerisseur', 'magie', 'arc-de-chasse', 0),
   );
+  // Diane (Story 29.6, compte mixte MJ + joueur) : sans ce personnage, sa vue joueur (fiche,
+  // inventaire, XP, « Mes personnages ») restait intestable via ce compte — revue de code 29.6.
+  const orla = await createCharacter(
+    diane.id,
+    episodique.id,
+    makeSheetData('Orla', 'chasseur', 'attaque', 'arc-de-chasse', 1),
+  );
+
+  // Rôles de groupe (Epic 27) — jusque-là absents du seed malgré le modèle et les 4 rôles de
+  // contenu (cartographe/chef/chroniqueur/intendant) déjà en place ; revue de code Story 29.6.
+  await prisma.characterGroupRole.createMany({
+    data: [
+      { characterId: yuna.id, partieId: episodique.id, roleKey: 'chef' },
+      { characterId: theo.id, partieId: episodique.id, roleKey: 'intendant' },
+      { characterId: sable.id, partieId: episodique.id, roleKey: 'chroniqueur' },
+      { characterId: orla.id, partieId: episodique.id, roleKey: 'cartographe' },
+    ],
+  });
 
   const bijou = await prisma.scenario.create({
     data: {
@@ -544,12 +576,29 @@ async function main() {
     data: { partieId: episodique.id, title: 'Le Secret du Phare', status: 'BROUILLON' },
   });
 
+  // ─── Partie 4 : CAMPAGNE_LINEAIRE MJ'd par Diane, jamais commencée ────────
+  // Story 29.6 : Diane est MJ ici et joueuse dans `episodique` ci-dessus — compte mixte MJ +
+  // joueur. Aucun scénario créé volontairement : status: 'A_VENIR' (« pas encore commencée »,
+  // AD-8) — troisième valeur de PartieStatus, absente du reste du seed sans cet ajout.
+  console.log('→ Partie CAMPAGNE_LINEAIRE (MJ : Diane)...');
+  const dianeCampagne = await prisma.partie.create({
+    data: {
+      name: 'Les Veilleurs du Pont',
+      kind: 'CAMPAGNE_LINEAIRE',
+      gameSystemId: RYUUTAMA_ID,
+      description: "Une garnison isolée surveille un pont que plus personne ne devrait franchir.",
+      mjId: diane.id,
+    },
+  });
+  await prisma.membership.create({ data: { userId: alice.id, partieId: dianeCampagne.id } });
+
   console.log('✓ Données de démo créées.');
   console.log(`  Comptes (mot de passe commun) : ${DEMO_PASSWORD}`);
-  console.log('    - mj-demo@example.com   (MJ des 3 parties)');
+  console.log('    - mj-demo@example.com   (MJ des 3 premières parties)');
   console.log('    - alice@example.com');
   console.log('    - bob@example.com');
   console.log('    - chloe@example.com');
+  console.log('    - diane@example.com     (MJ de "Les Veilleurs du Pont", joueuse ailleurs)');
 }
 
 main()

@@ -17,7 +17,14 @@
 .tile {
   cursor: pointer;
 }
-.role-indicator {
+// Story 29.6 (AC5) : « en retrait » — teinte --jdr-status-done (Story 29.0) en accent de bord,
+// doublée du signal non chromatique .status-indicator ci-dessous (jamais la couleur seule).
+.tile--closed {
+  border-left: 3px solid var(--jdr-status-done, #5a5a6a);
+  opacity: 0.8;
+}
+.role-indicator,
+.status-indicator {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;

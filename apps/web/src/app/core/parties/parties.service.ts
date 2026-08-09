@@ -83,6 +83,18 @@ export class PartiesService {
     );
   }
 
+  close(id: string): Promise<PartieDto> {
+    return firstValueFrom(
+      this.http.patch<PartieDto>(`${API}/parties/${id}/close`, {}, { withCredentials: true }),
+    );
+  }
+
+  reopen(id: string): Promise<PartieDto> {
+    return firstValueFrom(
+      this.http.patch<PartieDto>(`${API}/parties/${id}/reopen`, {}, { withCredentials: true }),
+    );
+  }
+
   // --- Membres & invitations (1c) ---
 
   searchUsers(q: string): Promise<UserSearchResultDto[]> {
