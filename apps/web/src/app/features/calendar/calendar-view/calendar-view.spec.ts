@@ -13,6 +13,8 @@ import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
+import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
+import { TONE_MAP } from '../../../core/theme/tones';
 
 interface CreateOptions {
   mode?: 'mj' | 'personal';
@@ -130,7 +132,16 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges(); // D5: second cycle pour les bindings asynchrones
-  return { fixture, pollSvc, availabilitySvc, snack, partiesSvc, scenariosSvc, realtimeSvc, location };
+  return {
+    fixture,
+    pollSvc,
+    availabilitySvc,
+    snack,
+    partiesSvc,
+    scenariosSvc,
+    realtimeSvc,
+    location,
+  };
 }
 
 describe('CalendarView — signal mode', () => {
@@ -170,9 +181,14 @@ describe('CalendarView — bouton retour (Story 8.8, AC6)', () => {
     expect(location.back).toHaveBeenCalledTimes(1);
   });
 
-  it('bouton "Retour" présent dans le DOM', async () => {
+  it('bouton "Retour" présent dans le DOM sur une route scopée à une Partie', async () => {
     const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
     expect(fixture.nativeElement.querySelector('.oracle-back-btn')).toBeTruthy();
+  });
+
+  it('bouton absent sur la destination globale Calendrier (aucun partieId, correction post-test 29.4)', async () => {
+    const { fixture } = await createCalendarView('personal');
+    expect(fixture.nativeElement.querySelector('.oracle-back-btn')).toBeNull();
   });
 });
 
@@ -329,7 +345,10 @@ describe('CalendarView — activePolls() (Story 8.8, AC7 : plusieurs votes actif
     const closedScenario = {
       ...ACTIVE_POLL_SCENARIO,
       seances: [
-        { ...ACTIVE_POLL_SCENARIO.seances[0], poll: { ...ACTIVE_POLL_SCENARIO.seances[0].poll, status: 'CLOSED' } },
+        {
+          ...ACTIVE_POLL_SCENARIO.seances[0],
+          poll: { ...ACTIVE_POLL_SCENARIO.seances[0].poll, status: 'CLOSED' },
+        },
       ],
     };
     const { fixture } = await createCalendarView({
@@ -362,9 +381,9 @@ describe('CalendarView — activePolls() (Story 8.8, AC7 : plusieurs votes actif
       partieId: 'partie-1',
       scenarios: [ACTIVE_POLL_SCENARIO, secondScenario],
     });
-    const labels = Array.from(
-      fixture.nativeElement.querySelectorAll('.poll-entry__label'),
-    ).map((el: any) => el.textContent.trim());
+    const labels = Array.from(fixture.nativeElement.querySelectorAll('.poll-entry__label')).map(
+      (el: any) => el.textContent.trim(),
+    );
     expect(labels).toEqual(['Chapitre 1', 'Chapitre 2']);
   });
 
@@ -372,7 +391,12 @@ describe('CalendarView — activePolls() (Story 8.8, AC7 : plusieurs votes actif
     const multiSeanceScenario = {
       ...ACTIVE_POLL_SCENARIO,
       seances: [
-        { id: 'seanceA', scenarioId: 's1', compteRendu: null, createdAt: '2026-07-10T00:00:00.000Z' },
+        {
+          id: 'seanceA',
+          scenarioId: 's1',
+          compteRendu: null,
+          createdAt: '2026-07-10T00:00:00.000Z',
+        },
         {
           id: 'seanceB',
           scenarioId: 's1',
@@ -450,7 +474,9 @@ describe('CalendarView — eligibleSeances()/startVoteFor() (Story 8.8, AC9)', (
 
     expect(comp.eligibleSeances()).toHaveLength(1);
     expect(comp.eligibleSeances()[0].seance.id).toBe('seanceX');
-    const option = fixture.nativeElement.querySelector('.new-vote-form__select option[value="seanceX"]');
+    const option = fixture.nativeElement.querySelector(
+      '.new-vote-form__select option[value="seanceX"]',
+    );
     expect(option.textContent.replace(/\s+/g, ' ').trim()).toBe('Chapitre 1 — Séance 1');
   });
 
@@ -730,8 +756,11 @@ describe('CalendarView — connexion temps réel (Story 19.1, AC3)', () => {
     expect(pollSvc.getHeatmap.mock.calls.length).toBe(heatmapCallsBefore + 1);
   });
 
-  it("garde firstRun : un AvailabilityService.changed() déjà non-nul au montage ne déclenche PAS de refetch redondant", async () => {
-    const availabilitySvc = { getMyDeclarations: vi.fn().mockResolvedValue([]), changed: signal(1) };
+  it('garde firstRun : un AvailabilityService.changed() déjà non-nul au montage ne déclenche PAS de refetch redondant', async () => {
+    const availabilitySvc = {
+      getMyDeclarations: vi.fn().mockResolvedValue([]),
+      changed: signal(1),
+    };
     const { pollSvc } = await createCalendarView({
       mode: 'mj',
       partieId: 'partie-1',
@@ -739,5 +768,14 @@ describe('CalendarView — connexion temps réel (Story 19.1, AC3)', () => {
     });
     expect(pollSvc.getAvailableSlots.mock.calls.length).toBe(1);
     expect(pollSvc.getHeatmap.mock.calls.length).toBe(1);
+  });
+});
+
+describe('CalendarView — bandeau contextuel (Story 29.4)', () => {
+  it("ngOnInit() renseigne ContextualNavService avec le titre de l'écran", async () => {
+    await createCalendarView('personal');
+
+    const contextualNav = TestBed.inject(ContextualNavService);
+    expect(contextualNav.title()).toBe(TONE_MAP['grimoire-emeraude']['nav.calendar']);
   });
 });

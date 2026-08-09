@@ -8,6 +8,7 @@ import { Account } from './account';
 import { AuthService } from '../../core/auth/auth.service';
 import { AccountService } from '../../core/account/account.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
+import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 
 function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
@@ -505,5 +506,14 @@ describe('Account — déconnexion (Story 29.3, foyer déplacé depuis le menu d
 
     expect(authSvc.logout).toHaveBeenCalledTimes(1);
     expect(navigateSpy).toHaveBeenCalledWith(['/login']);
+  });
+});
+
+describe('Account — bandeau contextuel (Story 29.4)', () => {
+  it("ngOnInit() renseigne ContextualNavService avec le titre de l'écran", async () => {
+    await createFixture();
+
+    const contextualNav = TestBed.inject(ContextualNavService);
+    expect(contextualNav.title()).toBe('Mon grimoire personnel');
   });
 });

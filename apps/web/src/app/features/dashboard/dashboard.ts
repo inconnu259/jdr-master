@@ -11,6 +11,7 @@ import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { RealtimeService, userTopic } from '../../core/realtime/realtime.service';
 import { gameSystemName, partieKindLabel } from '../../core/parties/parties.util';
+import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 
 @Component({
   selector: 'app-dashboard',
@@ -26,6 +27,7 @@ export class Dashboard implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly contextualNav = inject(ContextualNavService);
 
   protected readonly allParties = this.myPartiesSvc.allParties;
   protected readonly hasMjParties = this.myPartiesSvc.hasMjParties;
@@ -52,6 +54,7 @@ export class Dashboard implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    this.contextualNav.set({ title: this.theme.tone()['nav.my_games'] });
     const id = this.auth.currentUser()?.id;
     if (id) {
       this.realtime.connect(userTopic(id));

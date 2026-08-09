@@ -32,6 +32,7 @@ import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
 import { CalendarWeekView } from '../calendar-week-view/calendar-week-view';
@@ -89,6 +90,7 @@ export class CalendarView implements OnInit {
   private readonly location = inject(Location);
   private readonly snack = inject(MatSnackBar);
   protected readonly theme = inject(ThemeToneService);
+  private readonly contextualNav = inject(ContextualNavService);
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -210,6 +212,7 @@ export class CalendarView implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    this.contextualNav.set({ title: this.theme.tone()['nav.calendar'] });
     const id = this.route.snapshot.paramMap.get('id');
     const fromParam = this.route.snapshot.queryParamMap.get('from');
     const toParam = this.route.snapshot.queryParamMap.get('to');
@@ -242,6 +245,11 @@ export class CalendarView implements OnInit {
         this.loadHeatmap(id),
         this.loadScenarios(id),
       ]);
+      // Revue de code Story 29.4 : la navigation interne ci-dessus (mêmes route/composant,
+      // seuls les query params from/to changent) déclenche NavigationStart -> clear() sur
+      // ContextualNavService, qui vide le bandeau posé en tête de cette méthode — ngOnInit ne
+      // se relance pas (même instance). Repositionner le titre juste après.
+      this.contextualNav.set({ title: this.theme.tone()['nav.calendar'] });
       if (this.isMjMode()) {
         this.members.set(await this.partiesSvc.members(id).catch(() => []));
       }
@@ -421,6 +429,9 @@ export class CalendarView implements OnInit {
       queryParams: { from, to, weeks: null },
       queryParamsHandling: 'merge',
     });
+    // Revue de code Story 29.4 : même piège que ngOnInit — cette navigation interne vide le
+    // bandeau contextuel via NavigationStart -> clear(), à repositionner.
+    this.contextualNav.set({ title: this.theme.tone()['nav.calendar'] });
     await this.loadAvailableSlots(id, from, to);
   }
 

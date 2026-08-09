@@ -11,6 +11,7 @@ import { OpenPollsService } from '../../core/poll/open-polls.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { RealtimeService, userTopic } from '../../core/realtime/realtime.service';
+import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 import { TONE_MAP } from '../../core/theme/tones';
 
 function makeParty(id: string, role: 'mj' | 'player' = 'player'): PartieDto {
@@ -43,7 +44,9 @@ function makePoll(partieId: string): SessionPollDto {
   };
 }
 
-function makeInvitationsService(overrides: Partial<{ changed: ReturnType<typeof signal<number>> }> = {}) {
+function makeInvitationsService(
+  overrides: Partial<{ changed: ReturnType<typeof signal<number>> }> = {},
+) {
   return {
     listReceived: vi.fn().mockResolvedValue([]),
     accept: vi.fn(),
@@ -109,7 +112,7 @@ describe('Dashboard — liste unifiée (Story 29.1, AC1)', () => {
     expect(tiles.length).toBe(2);
   });
 
-  it("état vide : aucune carte, message affiché, quand allParties() est vide", async () => {
+  it('état vide : aucune carte, message affiché, quand allParties() est vide', async () => {
     const { fixture } = await createFixture(new Map(), undefined, [], false);
     expect(fixture.nativeElement.querySelector('.tile')).toBeNull();
     expect(fixture.nativeElement.querySelector('.empty')).not.toBeNull();
@@ -120,12 +123,7 @@ describe('Dashboard — indicateur de rôle non chromatique (Story 29.1, AC2)', 
   afterEach(() => TestBed.resetTestingModule());
 
   it('une carte de partie MJ affiche le libellé de rôle MJ (icône + texte)', async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p-mj', 'mj')],
-      true,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [makeParty('p-mj', 'mj')], true);
     const indicator = fixture.nativeElement.querySelector('.role-indicator');
     expect(indicator).not.toBeNull();
     expect(indicator.querySelector('mat-icon')).not.toBeNull();
@@ -145,18 +143,13 @@ describe('Dashboard — indicateur de rôle non chromatique (Story 29.1, AC2)', 
   });
 
   it("l'indicateur porte un aria-label explicite (jamais la couleur seule)", async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p-mj', 'mj')],
-      true,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [makeParty('p-mj', 'mj')], true);
     const indicator = fixture.nativeElement.querySelector('.role-indicator');
     expect(indicator.getAttribute('aria-label')).toBeTruthy();
   });
 });
 
-describe("Dashboard — CTA de création conditionnel (Story 29.1, AC3/AC4)", () => {
+describe('Dashboard — CTA de création conditionnel (Story 29.1, AC3/AC4)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('hasMjParties() vrai → le CTA de création est présent', async () => {
@@ -164,7 +157,7 @@ describe("Dashboard — CTA de création conditionnel (Story 29.1, AC3/AC4)", ()
     expect(fixture.nativeElement.querySelector('a[routerLink="/parties/new"]')).not.toBeNull();
   });
 
-  it("hasMjParties() faux → aucun CTA de création sur le dashboard (accès réservé au menu)", async () => {
+  it('hasMjParties() faux → aucun CTA de création sur le dashboard (accès réservé au menu)', async () => {
     const { fixture } = await createFixture(new Map(), undefined, [], false);
     expect(fixture.nativeElement.querySelector('a[routerLink="/parties/new"]')).toBeNull();
   });
@@ -302,5 +295,16 @@ describe('Dashboard — câblage temps réel (Story 21.1)', () => {
     await createFixture(new Map(), invitationsSvc);
 
     expect(invitationsSvc.listReceived.mock.calls.length).toBe(1);
+  });
+});
+
+describe('Dashboard — bandeau contextuel (Story 29.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it("ngOnInit() renseigne ContextualNavService avec le titre de l'écran", async () => {
+    await createFixture(new Map());
+
+    const contextualNav = TestBed.inject(ContextualNavService);
+    expect(contextualNav.title()).toBe(TONE_MAP['grimoire-emeraude']['nav.my_games']);
   });
 });

@@ -9,6 +9,7 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { TONE_MAP } from '../../../core/theme/tones';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
+import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 
 function makeMyCharacter(overrides: Partial<MyCharacterDto> = {}): MyCharacterDto {
   return {
@@ -68,7 +69,11 @@ describe('MyCharacters (Story 29.2)', () => {
 
   it('le nom du personnage (convention épic 28) et le nom de la Partie sont affichés (AC3)', async () => {
     const { fixture } = await createFixture([
-      makeMyCharacter({ id: 'c1', sheetData: { narrative: { name: 'Ombreflèche' } }, partieName: 'La Forêt Noire' }),
+      makeMyCharacter({
+        id: 'c1',
+        sheetData: { narrative: { name: 'Ombreflèche' } },
+        partieName: 'La Forêt Noire',
+      }),
     ]);
 
     const text = fixture.nativeElement.textContent;
@@ -111,14 +116,21 @@ describe('MyCharacters (Story 29.2)', () => {
   });
 
   it('clic sur une carte navigue vers /parties/:partieId/characters/:id', async () => {
-    const { fixture } = await createFixture([
-      makeMyCharacter({ id: 'c1', partieId: 'p1' }),
-    ]);
+    const { fixture } = await createFixture([makeMyCharacter({ id: 'c1', partieId: 'p1' })]);
     const router = TestBed.inject(Router);
     const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
     (fixture.nativeElement.querySelector('.character-summary-card') as HTMLButtonElement).click();
 
     expect(navigateSpy).toHaveBeenCalledWith(['/parties', 'p1', 'characters', 'c1']);
+  });
+});
+
+describe('MyCharacters — bandeau contextuel (Story 29.4)', () => {
+  it("ngOnInit() renseigne ContextualNavService avec le titre de l'écran", async () => {
+    await createFixture([]);
+
+    const contextualNav = TestBed.inject(ContextualNavService);
+    expect(contextualNav.title()).toBe(TONE_MAP['grimoire-emeraude']['my_characters.title']);
   });
 });

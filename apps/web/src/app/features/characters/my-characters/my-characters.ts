@@ -9,6 +9,7 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { characterName } from '../../../core/characters/character.util';
 import { CharacterSummaryCard } from '../character-summary-card/character-summary-card';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 
 @Component({
   selector: 'app-my-characters',
@@ -20,6 +21,7 @@ export class MyCharacters implements OnInit {
   private readonly characters = inject(CharacterService);
   private readonly router = inject(Router);
   protected readonly theme = inject(ThemeToneService);
+  private readonly contextualNav = inject(ContextualNavService);
 
   protected readonly all = signal<MyCharacterDto[]>([]);
   protected readonly query = signal('');
@@ -33,6 +35,7 @@ export class MyCharacters implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
+    this.contextualNav.set({ title: this.theme.tone()['my_characters.title'] });
     try {
       this.all.set(await this.characters.listMine());
     } catch {

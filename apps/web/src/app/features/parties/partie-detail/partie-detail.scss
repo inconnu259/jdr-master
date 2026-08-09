@@ -1,6 +1,9 @@
 .detail {
   max-width: 36rem;
-  margin: 1rem auto;
+  // Correction post-test 29.4 : marge verticale retirée (ne restait que le padding de .content
+  // du Shell, comme les autres écrans) — la sous-navigation locale doit suivre le bandeau
+  // contextuel sans espace supplémentaire, comme la maquette.
+  margin: 0 auto;
 
   @media (min-width: 1024px) {
     max-width: 72rem;
@@ -14,7 +17,26 @@
   mat-card-content {
     flex: 1;
     min-width: 0;
+    // Correction post-test 29.4 : Material ajoute un padding-top par défaut à mat-card-content,
+    // pensé pour suivre un mat-card-header — orphelin depuis son retrait (le titre/sous-titre
+    // vivent désormais dans le bandeau contextuel du Shell). Sans lui, la sous-navigation locale
+    // suit directement le bandeau, comme la maquette.
+    padding-top: 0;
   }
+}
+
+// Correction post-test 29.4 : rapproche la palette de la sous-navigation locale (onglets) de
+// celle du bandeau contextuel / de la barre globale (accent du thème actif) plutôt que la couleur
+// primary M3 par défaut. Simples surcharges de CSS custom properties, même patron que le reste de
+// l'app (jamais de mixin SCSS de theming par composant, cf. mat.tabs-overrides() non utilisé ici).
+mat-tab-group {
+  --mat-tab-header-active-label-text-color: var(--jdr-accent-1, var(--mat-sys-primary));
+  --mat-tab-header-active-hover-label-text-color: var(--jdr-accent-1, var(--mat-sys-primary));
+  --mat-tab-header-active-focus-label-text-color: var(--jdr-accent-1, var(--mat-sys-primary));
+  --mat-tab-header-inactive-label-text-color: var(--mat-sys-on-surface-variant, #666);
+  --mdc-tab-indicator-active-indicator-color: var(--jdr-accent-1, var(--mat-sys-primary));
+  --mat-tab-header-active-ripple-color: var(--jdr-accent-1, var(--mat-sys-primary));
+  --mat-tab-header-inactive-ripple-color: var(--mat-sys-on-surface-variant, #666);
 }
 
 .homonymy-warning {

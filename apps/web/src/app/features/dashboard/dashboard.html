@@ -1,9 +1,8 @@
-<div class="head">
-  <h1>{{ theme.tone()['nav.my_games'] }}</h1>
-  @if (hasMjParties()) {
+@if (hasMjParties()) {
+  <div class="head">
     <a mat-flat-button routerLink="/parties/new"><mat-icon>add</mat-icon> {{ theme.tone()['nav.create_game'] }}</a>
-  }
-</div>
+  </div>
+}
 
 @if (received().length > 0) {
   <h2>{{ theme.tone()['dashboard.title_invitations'] }}</h2>

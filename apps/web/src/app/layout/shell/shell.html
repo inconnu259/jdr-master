@@ -1,4 +1,7 @@
-<mat-toolbar color="primary">
+<!-- Revue de code Story 29.4 : masqué sur mobile UNIQUEMENT quand le bandeau contextuel prend le
+     relais (contextualNav.title() posé) — sinon les routes non câblées à ContextualNavService
+     (ex. formulaire de Partie, fiche personnage) se retrouveraient sans aucun en-tête sur mobile. -->
+<mat-toolbar color="primary" [class.hidden-mobile]="contextualNav.title()">
   <mat-toolbar-row>
     <span class="logo" routerLink="/">master-jdr</span>
     <span class="spacer"></span>
@@ -52,6 +55,22 @@
     <span>{{ theme.tone()['nav.account'] }}</span>
   </a>
 </nav>
+
+<!-- Story 29.4 : bandeau contextuel (titre + sous-titre optionnel), propre à l'écran courant.
+     Sur desktop le mat-toolbar (wordmark complet) reste seul responsable de la marque. Sur mobile
+     il est masqué (cf. shell.scss) et ce bandeau porte à la place un wordmark réduit — un seul
+     bandeau au lieu de deux empilés, cf. correction post-test de 29.4. -->
+@if (contextualNav.title(); as title) {
+  <div class="contextual-header">
+    <a class="wordmark-compact" routerLink="/">jdr</a>
+    <div class="titles">
+      <span class="t1" role="heading" aria-level="1">{{ title }}</span>
+      @if (contextualNav.subtitle(); as subtitle) {
+        <span class="t2">{{ subtitle }}</span>
+      }
+    </div>
+  </div>
+}
 
 <main class="content">
   <router-outlet />

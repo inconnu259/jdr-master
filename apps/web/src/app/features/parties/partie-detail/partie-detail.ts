@@ -53,6 +53,7 @@ import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { getRespondedCount } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
@@ -116,6 +117,7 @@ export class PartieDetail implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly breakpointObserver = inject(BreakpointObserver);
   protected readonly theme = inject(ThemeToneService);
+  private readonly contextualNav = inject(ContextualNavService);
   private readonly destroyRef = inject(DestroyRef);
 
   private static readonly DESKTOP_QUERY = '(min-width: 1024px)';
@@ -206,7 +208,8 @@ export class PartieDetail implements OnInit {
     const p = this.partie();
     if (!me) return false;
     const displayName = me.displayName;
-    if (this.members().some((m) => m.userId !== me.id && m.displayName === displayName)) return true;
+    if (this.members().some((m) => m.userId !== me.id && m.displayName === displayName))
+      return true;
     return !!p && p.mjId !== me.id && p.mjDisplayName === displayName;
   });
 
@@ -304,6 +307,20 @@ export class PartieDetail implements OnInit {
   };
 
   constructor() {
+    // Story 29.4 : bandeau contextuel — réactif (partie() se résout de façon asynchrone), pas un
+    // simple appel statique dans ngOnInit(). Correction post-test : le sous-titre porte le
+    // système de jeu et le type de partie (ex. « Ryuutama · Campagne épisodique ») — portait
+    // auparavant le rôle MJ, retiré du bandeau (déjà visible via les actions MJ-only de l'écran).
+    // Reprend le mat-card-header retiré de la carte (partie-detail.html) plutôt que de dupliquer.
+    effect(() => {
+      const p = this.partie();
+      if (!p) return;
+      this.contextualNav.set({
+        title: p.name,
+        subtitle: `${this.system(p.gameSystemId)} · ${this.kind(p.kind)}`,
+      });
+    });
+
     effect(() => {
       if (this.isMj()) void this.loadLinks();
     });
@@ -645,7 +662,9 @@ export class PartieDetail implements OnInit {
     const p = this.partie();
     if (!p) return;
     const reqId = ++this.characterRolesReqId;
-    const list = await this.characterRolesSvc.listForPartie(p.id).catch(() => this.characterRoles());
+    const list = await this.characterRolesSvc
+      .listForPartie(p.id)
+      .catch(() => this.characterRoles());
     if (reqId === this.characterRolesReqId) this.characterRoles.set(list);
   }
 
@@ -657,7 +676,8 @@ export class PartieDetail implements OnInit {
    */
   protected async downloadAsset(key: string, section: 'reference' | 'prep'): Promise<void> {
     const p = this.partie();
-    const downloading = section === 'reference' ? this.downloadingReferenceAsset : this.downloadingPrepAsset;
+    const downloading =
+      section === 'reference' ? this.downloadingReferenceAsset : this.downloadingPrepAsset;
     const error = section === 'reference' ? this.referenceAssetError : this.prepAssetError;
     if (!p || downloading()) return;
     error.set(null);

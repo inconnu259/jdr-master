@@ -6,6 +6,7 @@ import { MatBadgeModule } from '@angular/material/badge';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
+import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 
 @Component({
   selector: 'app-shell',
@@ -25,6 +26,7 @@ export class Shell implements OnInit {
   private readonly openPollsSvc = inject(OpenPollsService);
   // Injecter pour déclencher l'initialisation du thème (apply CSS class + localStorage) dès le Shell.
   protected readonly theme = inject(ThemeToneService);
+  protected readonly contextualNav = inject(ContextualNavService);
 
   protected readonly openPollsCount = this.openPollsSvc.count;
 

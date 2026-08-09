@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -9,6 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../core/auth/auth.service';
 import { AccountService } from '../../core/account/account.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
+import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 import { ThemeSelector } from './theme-selector/theme-selector';
 import { FieldEditPencil } from '../characters/character-sheet/field-edit-pencil/field-edit-pencil';
 
@@ -33,6 +34,7 @@ export class Account {
   private readonly auth = inject(AuthService);
   private readonly account = inject(AccountService);
   private readonly router = inject(Router);
+  private readonly contextualNav = inject(ContextualNavService);
 
   protected readonly theme = inject(ThemeToneService);
 
@@ -60,6 +62,15 @@ export class Account {
   protected readonly emailSaving = signal(false);
   protected readonly emailError = signal<string | null>(null);
   protected readonly emailSaved = signal(false);
+
+  constructor() {
+    // Revue de code Story 29.4 : effect() plutôt qu'un appel statique en ngOnInit — cet écran
+    // héberge le sélecteur de thème (ThemeSelector), un changement de thème sans navigation
+    // doit mettre à jour le titre du bandeau comme le reste de la page (déjà lié à theme.tone()).
+    effect(() => {
+      this.contextualNav.set({ title: this.theme.tone()['account.title'] });
+    });
+  }
 
   protected get pseudo(): string {
     return this.auth.currentUser()?.pseudo ?? '';

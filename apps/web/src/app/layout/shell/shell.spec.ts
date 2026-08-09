@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { provideRouter, Router } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
@@ -7,13 +7,17 @@ import { Shell } from './shell';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
+import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 import { TONE_MAP } from '../../core/theme/tones';
+
+@Component({ selector: 'app-test-blank', template: '' })
+class BlankComponent {}
 
 async function createFixture(openPollsCount: number) {
   await TestBed.configureTestingModule({
     imports: [Shell],
     providers: [
-      provideRouter([]),
+      provideRouter([{ path: 'parties/:id', component: BlankComponent }]),
       provideAnimationsAsync(),
       {
         provide: MyPartiesService,
@@ -135,5 +139,65 @@ describe('Shell — entrée active distinguée autrement que par la couleur (Sto
     for (const link of inactive) {
       expect(link.classList.contains('nav-bar__link--active')).toBe(false);
     }
+  });
+});
+
+describe('Shell — bandeau contextuel (Story 29.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('affiche le titre et le sous-titre quand ContextualNavService.set() a été appelé', async () => {
+    const fixture = await createFixture(0);
+    const contextualNav = TestBed.inject(ContextualNavService);
+
+    contextualNav.set({ title: 'Les Cendres de Kavaan', subtitle: 'Maître' });
+    fixture.detectChanges();
+
+    const t1 = fixture.nativeElement.querySelector('.contextual-header .t1');
+    const t2 = fixture.nativeElement.querySelector('.contextual-header .t2');
+    expect(t1?.textContent?.trim()).toBe('Les Cendres de Kavaan');
+    expect(t2?.textContent?.trim()).toBe('Maître');
+  });
+
+  it("n'affiche pas de sous-titre quand aucun n'a été fourni", async () => {
+    const fixture = await createFixture(0);
+    const contextualNav = TestBed.inject(ContextualNavService);
+
+    contextualNav.set({ title: 'Mes aventures' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.contextual-header .t1')?.textContent?.trim()).toBe(
+      'Mes aventures',
+    );
+    expect(fixture.nativeElement.querySelector('.contextual-header .t2')).toBeNull();
+  });
+
+  it('aucun bandeau ne s’affiche tant que title() est null (état par défaut)', async () => {
+    const fixture = await createFixture(0);
+    expect(fixture.nativeElement.querySelector('.contextual-header')).toBeNull();
+  });
+
+  it('AC3 (29.4) : sur un écran contextualisé, aucune entrée de la barre globale ne reste active', async () => {
+    const fixture = await createFixture(0);
+    await TestBed.inject(Router).navigate(['/']);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // Point de départ : "Parties" est actif sur '/'.
+    let active = Array.from(
+      fixture.nativeElement.querySelectorAll('nav.nav-bar a.nav-bar__link--active'),
+    );
+    expect(active.length).toBe(1);
+
+    await TestBed.inject(Router).navigate(['/parties', '1']);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    active = Array.from(
+      fixture.nativeElement.querySelectorAll('nav.nav-bar a.nav-bar__link--active'),
+    );
+    expect(active.length).toBe(0);
+    expect(fixture.nativeElement.querySelector('nav.nav-bar a[aria-current="page"]')).toBeNull();
   });
 });

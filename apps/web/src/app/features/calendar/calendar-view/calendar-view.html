@@ -1,7 +1,12 @@
 <div class="calendar-page" [class.calendar-page--mj]="isMjMode()">
-  <button class="oracle-back-btn" mat-stroked-button type="button" (click)="goBack()">
-    ← Retour
-  </button>
+  <!-- Correction post-test 29.4 : bouton retour utile seulement sur les routes scopées à une
+       Partie (non atteignables depuis la barre globale) — redondant sur /profile/calendar,
+       destination globale « Calendrier » déjà accessible en un geste. -->
+  @if (partieId()) {
+    <button class="oracle-back-btn" mat-stroked-button type="button" (click)="goBack()">
+      ← Retour
+    </button>
+  }
   <div class="calendar-main">
     @if (error()) {
       <p class="calendar-error" role="alert">{{ error() }}</p>
