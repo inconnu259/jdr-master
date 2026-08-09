@@ -106,7 +106,15 @@
       <app-portrait-panel [characterId]="c.id" [portraitUrl]="c.portraitUrl" [name]="name()" />
     }
 
-    <div class="sheet__body">
+    <!-- Story 29.5 : sous-navigation locale, même patron que PartieDetail (29.4) — mat-tab-group
+         piloté par selectedTabIndex()/onTabIndexChange() purement local, aucune route Angular
+         enfant (cf. story 29.5, Décision d'implémentation). -->
+    <mat-tab-group
+      [selectedIndex]="selectedTabIndex()"
+      (selectedIndexChange)="onTabIndexChange($event)"
+    >
+      <mat-tab [label]="theme.tone()['evolution.main_sheet_tab_label']">
+        <div class="sheet__body">
       <div class="sheet__column">
         <section class="sheet__card">
           <h2 class="sheet__card-title">
@@ -337,36 +345,6 @@
         </section>
 
         <section class="sheet__card">
-          <h2 class="sheet__card-title">Équipement</h2>
-          @if (fetiqueObject() || viewerIsMj()) {
-            <p class="sheet__fetish-box">
-              Objet fétiche :
-              @if (!fetishPencil()?.editing()) {
-                {{ fetiqueObject() }}
-              }
-              @if (viewerIsMj()) {
-                <app-field-edit-pencil
-                  #fetishPencil
-                  label="l'objet fétiche"
-                  [value]="fetiqueObject() ?? ''"
-                  (confirm)="submitFieldEdit('fetiqueObject', $event)"
-                />
-              }
-            </p>
-          }
-        </section>
-
-        <section class="sheet__card">
-          <h2 class="sheet__card-title">{{ theme.tone()['evolution.inventory_section_title'] }}</h2>
-          <app-inventory-tab
-            [character]="c"
-            [isOwner]="isOwner()"
-            [viewerIsMj]="viewerIsMj()"
-            (characterUpdated)="character.set($event)"
-          />
-        </section>
-
-        <section class="sheet__card">
           <h2 class="sheet__card-title">Notes narratives</h2>
           @if (narrative().sex || viewerIsMj() || isOwner()) {
             <div class="sheet__narrative-field">
@@ -448,19 +426,54 @@
           }
         </section>
       </div>
-    </div>
+        </div>
+      </mat-tab>
 
-    @if (isOwner() || viewerIsMj()) {
-      <section class="sheet__card sheet__history">
-        <h2 class="sheet__card-title">{{ theme.tone()['evolution.history_tab_label'] }}</h2>
-        <app-history-tab [characterId]="c.id" [content]="content()" />
-      </section>
-    }
+      <mat-tab [label]="theme.tone()['evolution.inventory_section_title']">
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">Équipement</h2>
+          @if (fetiqueObject() || viewerIsMj()) {
+            <p class="sheet__fetish-box">
+              Objet fétiche :
+              @if (!fetishPencil()?.editing()) {
+                {{ fetiqueObject() }}
+              }
+              @if (viewerIsMj()) {
+                <app-field-edit-pencil
+                  #fetishPencil
+                  label="l'objet fétiche"
+                  [value]="fetiqueObject() ?? ''"
+                  (confirm)="submitFieldEdit('fetiqueObject', $event)"
+                />
+              }
+            </p>
+          }
+        </section>
 
-    <section class="sheet__card">
-      <h2 class="sheet__card-title">{{ theme.tone()['evolution.notes_journal_title'] }}</h2>
-      <app-notes-journal [characterId]="c.id" [isOwner]="isOwner()" />
-    </section>
+        <section class="sheet__card">
+          <app-inventory-tab
+            [character]="c"
+            [isOwner]="isOwner()"
+            [viewerIsMj]="viewerIsMj()"
+            (characterUpdated)="character.set($event)"
+          />
+        </section>
+      </mat-tab>
+
+      <mat-tab [label]="theme.tone()['evolution.notes_journal_title']">
+        <section class="sheet__card">
+          <app-notes-journal [characterId]="c.id" [isOwner]="isOwner()" />
+        </section>
+      </mat-tab>
+
+      @if (hasHistoryTab()) {
+        <mat-tab [label]="theme.tone()['evolution.history_tab_label']">
+          <section class="sheet__card sheet__history">
+            <app-history-tab [characterId]="c.id" [content]="content()" />
+          </section>
+        </mat-tab>
+      }
+    </mat-tab-group>
   </article>
 } @else {
   <p class="sheet__loading">Chargement…</p>

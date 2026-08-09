@@ -1,8 +1,9 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, Subject } from 'rxjs';
 import { vi } from 'vitest';
 import type { AuthUser, CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
@@ -64,9 +65,7 @@ function defaultSvc() {
     exportEquipmentPdf: vi
       .fn()
       .mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
-    exportNotesPdf: vi
-      .fn()
-      .mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
+    exportNotesPdf: vi.fn().mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
     updatePortrait: vi.fn(),
     patchPdfPortraitCrop: vi.fn(),
     getHistory: vi.fn().mockResolvedValue([]),
@@ -104,6 +103,7 @@ async function createComponent(
   await TestBed.configureTestingModule({
     imports: [CharacterSheet],
     providers: [
+      provideNoopAnimations(),
       { provide: CharacterService, useValue: characterSvc },
       { provide: MatDialog, useValue: dialog },
       { provide: AuthService, useValue: auth },
@@ -128,6 +128,27 @@ async function createComponent(
   await fixture.whenStable();
   fixture.detectChanges();
   return { fixture, characterSvc, dialog, auth, realtimeSvc };
+}
+
+/**
+ * Story 29.5 : sélectionne un onglet de la sous-navigation locale (0=Fiche, 1=Équipement,
+ * 2=Journal, 3=Historique si présent) — le contenu d'un `mat-tab` n'est rendu dans le DOM qu'une
+ * fois activé (comportement natif de `mat-tab-group`, même contrainte que `partie-detail.spec.ts`).
+ */
+async function selectTab(fixture: ComponentFixture<CharacterSheet>, index: number): Promise<void> {
+  (
+    fixture.componentInstance as unknown as { onTabIndexChange: (i: number) => void }
+  ).onTabIndexChange(index);
+  fixture.detectChanges();
+  // mat-tab-group met à jour son en-tête immédiatement mais attache le contenu du mat-tab-body
+  // nouvellement actif sur un cycle de détection ultérieur (portail CDK) — un seul
+  // detectChanges()/whenStable() ne suffit pas toujours en environnement zoneless.
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+  await fixture.whenStable();
+  fixture.detectChanges();
 }
 
 describe('CharacterSheet', () => {
@@ -390,7 +411,7 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.textContent).toContain(comp.exportNotesError());
   });
 
-  it('les 4 boutons d\'export sont tous désactivés pendant un export notes en cours (garde étendue)', async () => {
+  it("les 4 boutons d'export sont tous désactivés pendant un export notes en cours (garde étendue)", async () => {
     let resolveExport: (blob: Blob) => void;
     const pending = new Promise<Blob>((resolve) => {
       resolveExport = resolve;
@@ -724,6 +745,9 @@ describe('CharacterSheet', () => {
 
   it('propriétaire → section Historique visible', async () => {
     const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'u1');
+    // Story 29.5 : Historique est désormais un onglet de la sous-navigation locale (index 3,
+    // hasHistoryTab() vrai pour le propriétaire) — son contenu n'est rendu qu'une fois sélectionné.
+    await selectTab(fixture, 3);
     expect(fixture.nativeElement.querySelector('.sheet__history')).not.toBeNull();
   });
 
@@ -731,6 +755,7 @@ describe('CharacterSheet', () => {
     const asMj = { ...CHARACTER, viewerIsMj: true };
     const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
     const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+    await selectTab(fixture, 3);
     expect(fixture.nativeElement.querySelector('.sheet__history')).not.toBeNull();
   });
 
@@ -945,11 +970,14 @@ describe('CharacterSheet', () => {
 
   it('section Inventaire visible pour le propriétaire', async () => {
     const { fixture } = await createComponent();
+    // Story 29.5 : Équipement est désormais l'onglet d'index 1 de la sous-navigation locale.
+    await selectTab(fixture, 1);
     expect(fixture.nativeElement.querySelector('app-inventory-tab')).not.toBeNull();
   });
 
   it('section Inventaire visible pour le MJ (lecture) — équipement individuel non dupliqué dans la carte Équipement (Story 14.2)', async () => {
     const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'mj-stranger');
+    await selectTab(fixture, 1);
     expect(fixture.nativeElement.querySelector('app-inventory-tab')).not.toBeNull();
     // "Nécessaire de voyage" (individual) ne doit jamais apparaître dans la carte "Équipement" —
     // seul l'objet fétiche y reste, la liste group/individual a été retirée (Story 14.2, AC5).
@@ -962,12 +990,15 @@ describe('CharacterSheet', () => {
 
   it('section Notes visible pour le propriétaire, isOwner=true transmis', async () => {
     const { fixture } = await createComponent();
+    // Story 29.5 : Journal est désormais l'onglet d'index 2 de la sous-navigation locale.
+    await selectTab(fixture, 2);
     const notesEl = fixture.nativeElement.querySelector('app-notes-journal');
     expect(notesEl).not.toBeNull();
   });
 
   it('section Notes visible pour le MJ (lecture)', async () => {
     const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'mj-stranger');
+    await selectTab(fixture, 2);
     expect(fixture.nativeElement.querySelector('app-notes-journal')).not.toBeNull();
   });
 
@@ -978,18 +1009,33 @@ describe('CharacterSheet', () => {
       null,
       'joueur-tiers',
     );
+    await selectTab(fixture, 2);
     expect(fixture.nativeElement.querySelector('app-notes-journal')).not.toBeNull();
   });
 
   describe('édition MJ (FieldEditPencil, Story 6.6)', () => {
-    it('viewerIsMj:true → pencils attributs (×4) + objet fétiche + XP + arme + 6 champs narratifs visibles', async () => {
+    it('viewerIsMj:true → pencils attributs (×4) + XP + arme + 6 champs narratifs visibles sur l’onglet Fiche', async () => {
       const asMj = { ...CHARACTER, viewerIsMj: true };
       const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
       const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
 
-      const pencils = fixture.nativeElement.querySelectorAll('.field-edit-pencil__button');
-      // 4 attributs + fétiche + XP + arme + 6 narratifs = 13 (l'inventaire est géré séparément par InventoryTab).
-      expect(pencils.length).toBe(13);
+      // Story 29.5 : les pencils MJ sont désormais répartis sur 2 onglets — 4 attributs + XP +
+      // arme + 6 narratifs = 12 sur l'onglet Fiche (index 0, actif par défaut), l'objet fétiche
+      // (1 pencil) est sur l'onglet Équipement (index 1) — vérifié séparément ci-dessous.
+      const pencilsOnFiche = fixture.nativeElement.querySelectorAll('.field-edit-pencil__button');
+      expect(pencilsOnFiche.length).toBe(12);
+    });
+
+    it('viewerIsMj:true → pencil objet fétiche visible sur l’onglet Équipement', async () => {
+      const asMj = { ...CHARACTER, viewerIsMj: true };
+      const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+
+      await selectTab(fixture, 1);
+      const pencilsOnEquipment = fixture.nativeElement.querySelectorAll(
+        '.field-edit-pencil__button',
+      );
+      expect(pencilsOnEquipment.length).toBe(1);
     });
 
     it('propriétaire (isOwner:true) → seuls les 6 pencils narratifs visibles (pas attributs/fétiche/XP/arme, MJ-only)', async () => {
@@ -1401,7 +1447,7 @@ describe('CharacterSheet', () => {
       };
     }
 
-    it('Fermier + talent emprunté (Métier d\'appoint) → nom du talent, effet, malus -1, classe d\'origine', async () => {
+    it("Fermier + talent emprunté (Métier d'appoint) → nom du talent, effet, malus -1, classe d'origine", async () => {
       const character = makeCharacterDto({
         sheetData: baseSheetData('fermier', {
           classChoices: { 'fermier-metier-appoint': 'guerisseur:soins' },
@@ -1636,6 +1682,53 @@ describe('CharacterSheet', () => {
       const { fixture } = await createComponent(characterSvc);
 
       expect(fixture.nativeElement.textContent).toContain('patron Équilibré');
+    });
+  });
+
+  describe('CharacterSheet — sous-navigation locale (Story 29.5)', () => {
+    it('propriétaire → 4 onglets (Fiche, Équipement, Journal, Historique)', async () => {
+      const { fixture } = await createComponent();
+      const labels = Array.from(
+        fixture.nativeElement.querySelectorAll('[role="tab"] .mdc-tab__text-label'),
+      ).map((el: any) => el.textContent.trim());
+      expect(labels).toEqual(['Fiche', 'Inventaire', 'Journal de notes', 'Historique']);
+    });
+
+    it("fellow player (ni propriétaire, ni MJ) → 3 onglets, l'onglet Historique est absent du DOM (pas seulement vide)", async () => {
+      const asFellowPlayer = { ...CHARACTER, viewerIsMj: false };
+      const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asFellowPlayer) });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'joueur-tiers');
+
+      const labels = Array.from(
+        fixture.nativeElement.querySelectorAll('[role="tab"] .mdc-tab__text-label'),
+      ).map((el: any) => el.textContent.trim());
+      expect(labels).toEqual(['Fiche', 'Inventaire', 'Journal de notes']);
+      expect(fixture.nativeElement.textContent).not.toContain('Historique');
+    });
+
+    it("changer d'onglet ne recharge pas la fiche ni ne perd le contexte courant (characterId, partieId)", async () => {
+      const characterSvc = makeCharacterService();
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'u1', 'p1');
+      const component = fixture.componentInstance as unknown as {
+        character: () => { id: string } | null;
+      };
+      const characterBefore = component.character();
+      const getCallsBefore = (characterSvc.get as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      await selectTab(fixture, 1);
+      await selectTab(fixture, 2);
+
+      expect(component.character()).toBe(characterBefore); // même référence, pas un rechargement
+      expect((characterSvc.get as ReturnType<typeof vi.fn>).mock.calls.length).toBe(getCallsBefore);
+    });
+
+    it("l'onglet actif est distingué autrement que par la seule couleur (soulignement Material natif, même principe qu'AC3 de la Story 29.3)", async () => {
+      const { fixture } = await createComponent();
+      await selectTab(fixture, 1);
+
+      const activeTab = fixture.nativeElement.querySelector('[role="tab"][aria-selected="true"]');
+      expect(activeTab).not.toBeNull();
+      expect(activeTab.querySelector('.mdc-tab-indicator')).not.toBeNull();
     });
   });
 });

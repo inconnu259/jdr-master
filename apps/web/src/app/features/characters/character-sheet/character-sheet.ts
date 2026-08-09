@@ -13,6 +13,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
+import { MatTabsModule } from '@angular/material/tabs';
 import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
 import { characterName, findContentEntry } from '../../../core/characters/character.util';
@@ -137,6 +138,7 @@ interface NarrativeFields {
   imports: [
     CharacterAvatar,
     MatButtonModule,
+    MatTabsModule,
     PortraitPanel,
     LevelUpBanner,
     HistoryTab,
@@ -217,6 +219,23 @@ export class CharacterSheet implements OnInit {
     () => !this.isOwner() && (this.character()?.viewerIsMj ?? false),
   );
 
+  /**
+   * Sous-navigation locale (Story 29.5) — même patron que `PartieDetail` (29.4) : `mat-tab-group`
+   * piloté par un `selectedIndex`/`(selectedIndexChange)` purement local, aucune route Angular
+   * enfant, aucun état persisté dans l'URL (cf. story 29.5, Décision d'implémentation).
+   */
+  protected readonly hasHistoryTab = computed(() => this.isOwner() || this.viewerIsMj());
+  // Reset l'onglet manuel si l'ensemble d'onglets change de forme (apparition/disparition de
+  // l'onglet Historique) — même garde que PartieDetail.tabSetKey (29.4), évite un selectedIndex
+  // qui pointerait sur un onglet qui n'existe plus.
+  protected readonly tabSetKey = computed(() => `${this.hasHistoryTab()}`);
+  protected readonly manualTabIndex = signal<number | null>(null);
+  protected readonly selectedTabIndex = computed(() => this.manualTabIndex() ?? 0);
+
+  protected onTabIndexChange(index: number): void {
+    this.manualTabIndex.set(index);
+  }
+
   protected readonly classData = computed<ClassData | null>(() =>
     findContentEntry<ClassData>(
       this.content(),
@@ -266,7 +285,9 @@ export class CharacterSheet implements OnInit {
     const ritualSpells = spellKeys
       .map((key) => {
         const data = findContentEntry<SpellData>(this.content(), 'spell', key);
-        return data ? { key, name: data.name, description: data.description, peCost: data.peCost } : null;
+        return data
+          ? { key, name: data.name, description: data.description, peCost: data.peCost }
+          : null;
       })
       .filter((s): s is MagicDisplay['ritualSpells'][number] => s !== null);
 
@@ -475,6 +496,11 @@ export class CharacterSheet implements OnInit {
         return;
       }
       untracked(() => void this.refreshCharacter());
+    });
+
+    effect(() => {
+      this.tabSetKey();
+      untracked(() => this.manualTabIndex.set(null));
     });
   }
 

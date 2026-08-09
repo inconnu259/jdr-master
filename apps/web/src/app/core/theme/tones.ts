@@ -154,6 +154,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.levelup_legendary_journey_text':
       'Un voyage légendaire vous attend — aucun choix supplémentaire à faire.',
     'evolution.levelup_confirm_cta': 'Valider ce niveau',
+    /* — sous-navigation locale de la fiche (Story 29.5) — */
+    'evolution.main_sheet_tab_label': 'Fiche',
     'evolution.history_tab_label': 'Historique',
     'evolution.history_empty': 'Aucun instantané pour le moment.',
     'evolution.mj_edit_trace': 'modifié par le MJ',
@@ -354,6 +356,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.levelup_legendary_journey_text':
       'Un chemin légendaire s’ouvre — rien de plus à choisir.',
     'evolution.levelup_confirm_cta': 'Graver cet échelon',
+    /* — sous-navigation locale de la fiche (Story 29.5) — */
+    'evolution.main_sheet_tab_label': 'Feuille',
     'evolution.history_tab_label': 'Mémoire du cercle',
     'evolution.history_empty': 'Aucun souvenir gravé pour le moment.',
     'evolution.mj_edit_trace': 'modifié par le MJ',
@@ -551,6 +555,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.levelup_legendary_journey_text':
       'Une trajectoire légendaire est engagée — aucun réglage supplémentaire requis.',
     'evolution.levelup_confirm_cta': 'Valider le calibrage',
+    /* — sous-navigation locale de la fiche (Story 29.5) — */
+    'evolution.main_sheet_tab_label': 'Fiche technique',
     'evolution.history_tab_label': 'Journal de bord',
     'evolution.history_empty': 'Aucune entrée consignée pour le moment.',
     'evolution.mj_edit_trace': 'recalibré par le MJ',
