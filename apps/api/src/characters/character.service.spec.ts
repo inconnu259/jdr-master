@@ -128,6 +128,7 @@ function makePartiesService() {
   return {
     getOwned: jest.fn(),
     getViewable: jest.fn(),
+    notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -300,6 +301,23 @@ describe('CharacterService', () => {
     });
 
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+  });
+
+  it('create() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal PERSONNAGE_A_CREER)', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+    (computeDerived as jest.Mock).mockReturnValue({});
+    prisma.character.create.mockResolvedValue(makeCharacter());
+
+    await service.create('p1', 'u1', {
+      gameSystemId: 'ryuutama',
+      sheetData: validSheet(),
+    });
+
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+    );
   });
 
   it('create() gameSystemId non supporté → BadRequestException, validate/computeDerived non appelés', async () => {

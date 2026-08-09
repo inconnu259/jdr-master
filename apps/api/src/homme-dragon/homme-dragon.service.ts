@@ -70,6 +70,9 @@ export class HommeDragonService {
         },
       });
       this.realtimeEvents.emit(partieTopic(partieId));
+      // HOMME_DRAGON_A_CREER (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
+      // remplacement — getOwned() garantit que userId est déjà le MJ.
+      await this.parties.notifyPartieSignalsChanged(partieId, userId);
       return this.buildDto(hommeDragon, partieId, userId);
     } catch (e: any) {
       if (e?.code === 'P2002') {

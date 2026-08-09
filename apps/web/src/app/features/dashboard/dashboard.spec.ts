@@ -3,11 +3,12 @@ import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
-import type { AuthUser, PartieDto, SessionPollDto } from '@master-jdr/shared';
+import type { AuthUser, PartieDto, PartySignalsDto, SessionPollDto } from '@master-jdr/shared';
 import { Dashboard } from './dashboard';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { InvitationsService } from '../../core/invitations/invitations.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
+import { PartySignalsService } from '../../core/parties/party-signals.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { RealtimeService, userTopic } from '../../core/realtime/realtime.service';
@@ -67,6 +68,7 @@ async function createFixture(
   invitationsSvc = makeInvitationsService(),
   allParties: PartieDto[] = [makeParty('p1', 'player'), makeParty('p2', 'player')],
   hasMjParties = false,
+  partySignals = new Map<string, PartySignalsDto>(),
 ) {
   // Story 21.1 (Task 4) : Dashboard ouvre désormais sa propre connexion RealtimeService — mock
   // direct, jsdom n'implémente pas EventSource.
@@ -86,6 +88,7 @@ async function createFixture(
       },
       { provide: InvitationsService, useValue: invitationsSvc },
       { provide: OpenPollsService, useValue: { openPolls: signal(openPolls) } },
+      { provide: PartySignalsService, useValue: { signals: signal(partySignals) } },
       { provide: ThemeToneService, useValue: { tone: signal(TONE_MAP['grimoire-emeraude']) } },
       { provide: AuthService, useValue: { currentUser: signal({ id: 'u1' } as AuthUser) } },
       { provide: RealtimeService, useValue: realtimeSvc },
@@ -323,7 +326,7 @@ describe('Dashboard — traitement « en retrait » des parties terminées (Stor
     );
   });
 
-  it('une partie EN_COURS/A_VENIR ne porte ni la classe tile--closed ni le badge', async () => {
+  it('une partie EN_COURS/A_VENIR ne porte ni la classe tile--closed ni le badge « terminée »', async () => {
     const { fixture } = await createFixture(
       new Map(),
       undefined,
@@ -332,7 +335,14 @@ describe('Dashboard — traitement « en retrait » des parties terminées (Stor
     );
     const tiles = fixture.nativeElement.querySelectorAll('.tile');
     tiles.forEach((tile: Element) => expect(tile.classList.contains('tile--closed')).toBe(false));
-    expect(fixture.nativeElement.querySelector('.status-indicator')).toBeNull();
+    // Ces tuiles portent tout de même leur propre .status-indicator (AC9/P-1, revue de code) —
+    // seul le libellé « terminée » (dashboard.status_closed_badge) doit être absent.
+    const indicators = fixture.nativeElement.querySelectorAll('.status-indicator');
+    indicators.forEach((indicator: Element) =>
+      expect(indicator.textContent).not.toContain(
+        TONE_MAP['grimoire-emeraude']['dashboard.status_closed_badge'],
+      ),
+    );
   });
 });
 
@@ -344,5 +354,290 @@ describe('Dashboard — bandeau contextuel (Story 29.4)', () => {
 
     const contextualNav = TestBed.inject(ContextualNavService);
     expect(contextualNav.title()).toBe(TONE_MAP['grimoire-emeraude']['nav.my_games']);
+  });
+});
+
+describe('Dashboard — badges de signal (Story 29.7, AC3/AC9)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('une partie avec 3 signaux → 2 badges visibles + compteur "+1"', async () => {
+    const signals = new Map([
+      [
+        'p1',
+        {
+          role: 'player' as const,
+          status: 'EN_COURS' as const,
+          signals: [
+            'PERSONNAGE_A_CREER',
+            'VOTE_EN_COURS_SANS_REPONSE',
+            'PROCHAINE_SEANCE_CONNUE',
+          ] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      signals as any,
+    );
+    const badges = fixture.nativeElement.querySelectorAll('.signal-badge:not(.signal-badge--more)');
+    expect(badges.length).toBe(2);
+    const more = fixture.nativeElement.querySelector('.signal-badge--more');
+    expect(more).not.toBeNull();
+    expect(more.textContent).toContain('+1');
+  });
+
+  it('un badge de signal porte toujours une icône ET un libellé (jamais la couleur seule)', async () => {
+    const signals = new Map([
+      [
+        'p1',
+        {
+          role: 'mj' as const,
+          status: 'EN_COURS' as const,
+          signals: ['AUCUN_MEMBRE_INVITE'] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'mj', 'EN_COURS')],
+      true,
+      signals as any,
+    );
+    const badge = fixture.nativeElement.querySelector('.signal-badge');
+    expect(badge).not.toBeNull();
+    expect(badge.querySelector('mat-icon')).not.toBeNull();
+    expect(badge.textContent.trim().length).toBeGreaterThan(0);
+  });
+
+  it('aucun signal → aucun badge affiché', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      new Map(),
+    );
+    expect(fixture.nativeElement.querySelector('.signal-badge')).toBeNull();
+  });
+
+  it('PROCHAINE_SEANCE_CONNUE affiche la date réelle (nextSessionDate/nextSessionSlot), pas un libellé générique (bug fix, revue utilisateur)', async () => {
+    const party = {
+      ...makeParty('p1', 'player', 'EN_COURS'),
+      nextSessionDate: '2026-08-12T00:00:00.000Z',
+      nextSessionSlot: 'EVENING' as const,
+    };
+    const signals = new Map([
+      [
+        'p1',
+        {
+          role: 'player' as const,
+          status: 'EN_COURS' as const,
+          signals: ['PROCHAINE_SEANCE_CONNUE'] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(new Map(), undefined, [party], false, signals as any);
+    const badge = fixture.nativeElement.querySelector('.signal-badge');
+    expect(badge.textContent).toContain('12 août');
+    expect(badge.textContent).toContain('Soirée');
+  });
+
+  it('PARTIE_TERMINEE n’est jamais rendu en badge (doublon avec .status-indicator, revue de code)', async () => {
+    const signals = new Map([
+      [
+        'p1',
+        {
+          role: 'player' as const,
+          status: 'TERMINEE' as const,
+          signals: ['PARTIE_TERMINEE', 'RAPPORT_FIN_MANQUANT'] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'TERMINEE')],
+      false,
+      signals as any,
+    );
+    const badges = fixture.nativeElement.querySelectorAll('.signal-badge:not(.signal-badge--more)');
+    expect(badges.length).toBe(1);
+    expect(badges[0].textContent).not.toContain(
+      TONE_MAP['grimoire-emeraude']['partie.signal_partie_terminee'],
+    );
+    // .status-indicator porte déjà l'information « terminée » — pas de doublon.
+    expect(fixture.nativeElement.querySelector('.status-indicator')).not.toBeNull();
+  });
+
+  it('un badge informatif (PROCHAINE_SEANCE_CONNUE) porte une teinte distincte des badges actionnables (revue de code)', async () => {
+    const signals = new Map([
+      [
+        'p1',
+        {
+          role: 'player' as const,
+          status: 'EN_COURS' as const,
+          signals: ['PERSONNAGE_A_CREER', 'PROCHAINE_SEANCE_CONNUE'] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      signals as any,
+    );
+    const badges = fixture.nativeElement.querySelectorAll('.signal-badge:not(.signal-badge--more)');
+    expect(badges.length).toBe(2);
+    const actionable = Array.from(badges as unknown as Element[]).find(
+      (b) => !b.classList.contains('signal-badge--soon'),
+    );
+    const informational = Array.from(badges as unknown as Element[]).find((b) =>
+      b.classList.contains('signal-badge--soon'),
+    );
+    expect(actionable).not.toBeUndefined();
+    expect(informational).not.toBeUndefined();
+    expect(informational!.textContent).toContain('Prochaine séance connue');
+  });
+});
+
+describe('Dashboard — teinte des cartes selon le statut (bug fix, revue utilisateur : StateRail, DESIGN.md §7.2)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('une partie EN_COURS sans signal actionnable porte la classe tile--live', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      new Map(),
+    );
+    const tile = fixture.nativeElement.querySelector('.tile');
+    expect(tile.classList.contains('tile--live')).toBe(true);
+  });
+
+  it('une partie A_VENIR sans signal actionnable porte la classe tile--soon', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'A_VENIR')],
+      false,
+      new Map(),
+    );
+    const tile = fixture.nativeElement.querySelector('.tile');
+    expect(tile.classList.contains('tile--soon')).toBe(true);
+  });
+
+  it('une partie avec un signal actionnable porte tile--awaiting, jamais tile--live/tile--soon', async () => {
+    const signals = new Map([
+      [
+        'p1',
+        {
+          role: 'mj' as const,
+          status: 'EN_COURS' as const,
+          signals: ['AUCUN_MEMBRE_INVITE'] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'mj', 'EN_COURS')],
+      true,
+      signals as any,
+    );
+    const tile = fixture.nativeElement.querySelector('.tile');
+    expect(tile.classList.contains('tile--awaiting')).toBe(true);
+    expect(tile.classList.contains('tile--live')).toBe(false);
+  });
+
+  it('une partie EN_COURS sans aucun signal affiche quand même un libellé non chromatique (AC9/P-1, revue de code)', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      new Map(),
+    );
+    const tile = fixture.nativeElement.querySelector('.tile');
+    expect(tile.classList.contains('tile--live')).toBe(true);
+    const indicator = tile.querySelector('.status-indicator');
+    expect(indicator).not.toBeNull();
+    expect(indicator.querySelector('mat-icon')).not.toBeNull();
+    expect(indicator.textContent).toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_ongoing']);
+  });
+
+  it('une partie A_VENIR sans aucun signal affiche quand même un libellé non chromatique (AC9/P-1, revue de code)', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'A_VENIR')],
+      false,
+      new Map(),
+    );
+    const tile = fixture.nativeElement.querySelector('.tile');
+    expect(tile.classList.contains('tile--soon')).toBe(true);
+    const indicator = tile.querySelector('.status-indicator');
+    expect(indicator).not.toBeNull();
+    expect(indicator.textContent).toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_upcoming']);
+  });
+});
+
+describe('Dashboard — quatre intertitres (Story 29.7, AC10)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('regroupe les parties en ce qui t’attend / en cours / à venir / terminées', async () => {
+    const signals = new Map([
+      [
+        'p-awaiting',
+        {
+          role: 'mj' as const,
+          status: 'EN_COURS' as const,
+          signals: ['AUCUN_MEMBRE_INVITE'] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [
+        makeParty('p-awaiting', 'mj', 'EN_COURS'),
+        makeParty('p-ongoing', 'player', 'EN_COURS'),
+        makeParty('p-upcoming', 'player', 'A_VENIR'),
+        makeParty('p-finished', 'player', 'TERMINEE'),
+      ],
+      true,
+      signals as any,
+    );
+    const headings: string[] = [];
+    fixture.nativeElement
+      .querySelectorAll('h2')
+      .forEach((h: Element) => headings.push(h.textContent ?? ''));
+    expect(headings).toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_awaiting']);
+    expect(headings).toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_ongoing']);
+    expect(headings).toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_upcoming']);
+    expect(headings).toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_finished']);
+    expect(fixture.nativeElement.querySelectorAll('.tile').length).toBe(4);
+  });
+
+  it('une section vide ne rend aucun intertitre', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      new Map(),
+    );
+    const headings: string[] = [];
+    fixture.nativeElement
+      .querySelectorAll('h2')
+      .forEach((h: Element) => headings.push(h.textContent ?? ''));
+    expect(headings).not.toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_awaiting']);
+    expect(headings).not.toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_upcoming']);
+    expect(headings).not.toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_finished']);
   });
 });

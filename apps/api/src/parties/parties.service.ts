@@ -229,6 +229,11 @@ export class PartiesService {
     // le joueur retiré ne voyait jamais sa propre liste de Parties se mettre à jour.
     this.realtimeEvents.emit(partieTopic(partieId));
     this.realtimeEvents.emit(userTopic(targetUserId));
+    // AUCUN_MEMBRE_INVITE (Story 29.7, AD-14) : retirer le dernier membre fait réapparaître ce
+    // signal pour le MJ — getOwned() garantit que userId est déjà le MJ. `partieTopic` déjà émis
+    // ci-dessus : `emitMembersOnlySafe` (pas `emitPartieAndMembersSafe`) pour ne pas le réémettre
+    // (revue de code, Story 29.7 — double émission SSE trouvée sur tous les points d'appel).
+    await this.emitMembersOnlySafe(partieId, userId);
     return { ok: true };
   }
 
@@ -307,6 +312,43 @@ export class PartiesService {
         `Échec de l'émission temps réel après mutation de la partie ${partieId} : ${String(err)}`,
       );
     }
+  }
+
+  /** Variante d'`emitPartieAndMembers` qui n'émet PAS `partieTopic` — réservée aux appelants qui
+   *  l'ont déjà émis eux-mêmes (revue de code, Story 29.7 : `emitPartieAndMembersSafe` d'origine
+   *  causait une double émission `partie:{id}` sur chaque point d'appel de
+   *  `notifyPartieSignalsChanged`, qui a tous déjà leur propre `realtimeEvents.emit(partieTopic(...))`
+   *  juste avant). */
+  private async emitMembersOnly(partieId: string, mjId: string): Promise<void> {
+    const { participants } = await this.resolveParticipants(partieId, mjId);
+    for (const p of participants) this.realtimeEvents.emit(userTopic(p.userId));
+  }
+
+  /** Variante sans échec d'`emitMembersOnly` — même garde que `emitPartieAndMembersSafe`. */
+  private async emitMembersOnlySafe(
+    partieId: string,
+    mjId: string,
+  ): Promise<void> {
+    try {
+      await this.emitMembersOnly(partieId, mjId);
+    } catch (err) {
+      this.logger.warn(
+        `Échec de l'émission temps réel (membres) après mutation de la partie ${partieId} : ${String(err)}`,
+      );
+    }
+  }
+
+  /** Point d'entrée public (Story 29.7, AD-14/AD-3) — réutilisé par les services propriétaires des
+   *  mutations qui affectent un signal de FR-12 (`CharacterService`, `HommeDragonService`,
+   *  `ScenariosService`, `PollService`, `InvitationsService`, `InviteLinksService`, tous injectent
+   *  déjà `PartiesService`). Ces appelants émettent **déjà** `partieTopic` eux-mêmes juste avant
+   *  d'appeler cette méthode — elle n'émet donc que `userTopic` par membre (`emitMembersOnlySafe`),
+   *  jamais `emitPartieAndMembersSafe` qui réémettrait `partieTopic` une seconde fois. */
+  async notifyPartieSignalsChanged(
+    partieId: string,
+    mjId: string,
+  ): Promise<void> {
+    await this.emitMembersOnlySafe(partieId, mjId);
   }
 
   /** Retourne MJ + membres (dédoublonnés) avec leur pseudo et leur nom affiché. */

@@ -78,6 +78,29 @@ export interface PartieDto {
   status: PartieStatus;
 }
 
+/** Code de signal d'état d'une partie (FR-12, AD-3) — union fermée, jamais un booléen libre ni
+ *  une chaîne construite à la volée côté client (Story 29.7). */
+export type PartySignalCode =
+  | 'PERSONNAGE_A_CREER'
+  | 'VOTE_EN_COURS_SANS_REPONSE'
+  | 'COMPTE_RENDU_NON_REDIGE'
+  | 'HOMME_DRAGON_A_CREER'
+  | 'AUCUN_MEMBRE_INVITE'
+  | 'AUCUN_SCENARIO_EN_COURS'
+  | 'AUCUNE_DATE_NI_VOTE'
+  | 'RAPPORT_FIN_MANQUANT'
+  | 'PROCHAINE_SEANCE_CONNUE'
+  | 'PARTIE_TERMINEE';
+
+/** Réponse de `GET /me/party-signals` — une entrée par partie de l'utilisateur, jamais une entrée
+ *  absente (`signals: []` si aucun signal actif). `role`/`status` sont dupliqués depuis `PartieDto`
+ *  volontairement (AD-3) : l'écran de liste n'a besoin d'aucun autre appel. */
+export interface PartySignalsDto {
+  role: 'mj' | 'player';
+  status: PartieStatus;
+  signals: PartySignalCode[];
+}
+
 /** Statut d'une invitation in-app. */
 export type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'REVOKED';
 

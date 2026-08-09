@@ -106,6 +106,10 @@ export class InvitationsService {
     // sessions/onglets déjà ouverts (miroir de removeMember(), qui émet déjà userTopic(targetUserId)
     // pour le membre retiré).
     this.realtimeEvents.emit(userTopic(userId));
+    // AUCUN_MEMBRE_INVITE (Story 29.7, AD-14) : le MJ (toujours `inv.inviterId`, cf. invite() ci-
+    // dessus) doit voir ce signal se lever quand quelqu'un rejoint. En plus des émissions ci-dessus,
+    // jamais en remplacement.
+    await this.parties.notifyPartieSignalsChanged(inv.partieId, inv.inviterId);
     return { ok: true, partieId: inv.partieId };
   }
 

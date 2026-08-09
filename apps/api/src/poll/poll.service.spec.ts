@@ -40,6 +40,7 @@ function makePartiesService() {
   return {
     getOwned: jest.fn(),
     getViewable: jest.fn(),
+    notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -123,6 +124,17 @@ describe('PollService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
+  it('create() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal AUCUNE_DATE_NI_VOTE)', async () => {
+    prisma.sessionPoll.create.mockResolvedValue(makePoll());
+    await service.create('p1', 'mj1', {
+      options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
+    });
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+    );
+  });
+
   it('create() avec deux options (date,slot) identiques → BadRequestException', async () => {
     await expect(
       service.create('p1', 'mj1', {
@@ -179,6 +191,28 @@ describe('PollService', () => {
       answer: 'YES',
     });
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+  });
+
+  it('castVote() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
+    prisma.pollOption.findUnique.mockResolvedValue({
+      id: 'opt1',
+      pollId: 'poll1',
+    });
+    prisma.pollVote.upsert.mockResolvedValue({});
+    await service.castVote('p1', 'poll1', 'u1', {
+      optionId: 'opt1',
+      answer: 'YES',
+    });
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+    );
   });
 
   it('choose() par non-MJ → ForbiddenException', async () => {
@@ -239,6 +273,29 @@ describe('PollService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
+  it('choose() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14)', async () => {
+    const d = new Date('2026-08-01T00:00:00.000Z');
+    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
+    prisma.pollOption.findUnique.mockResolvedValue({
+      id: 'opt1',
+      pollId: 'poll1',
+      date: d,
+      slot: 'MORNING',
+    });
+    prisma.sessionPoll.update.mockResolvedValue({});
+    prisma.partie.update.mockResolvedValue({});
+    await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+    );
+  });
+
   it('choose() sur le même créneau déjà actif → ne remet PAS reminderSentAt à null', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
     parties.getOwned.mockResolvedValue({
@@ -292,6 +349,21 @@ describe('PollService', () => {
     prisma.sessionPoll.update.mockResolvedValue({});
     await service.close('p1', 'poll1', 'mj1');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+  });
+
+  it('close() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14)', async () => {
+    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    prisma.sessionPoll.findUnique.mockResolvedValue({
+      id: 'poll1',
+      partieId: 'p1',
+      status: 'OPEN',
+    });
+    prisma.sessionPoll.update.mockResolvedValue({});
+    await service.close('p1', 'poll1', 'mj1');
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+    );
   });
 
   it('close() sur un poll déjà CLOSED → BadRequestException', async () => {

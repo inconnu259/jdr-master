@@ -252,6 +252,9 @@ export class CharacterService {
       // sinon une exception ici laisserait la mutation committée sans jamais diffuser l'événement
       // (revue de code Story 18.1).
       this.realtimeEvents.emit(partieTopic(partieId));
+      // PERSONNAGE_A_CREER (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
+      // remplacement — atteint le canal personnel de chaque membre pour rafraîchir ses signaux.
+      await this.parties.notifyPartieSignalsChanged(partieId, partie.mjId);
       const owner = await this.users.findById(userId);
       // Le créateur est toujours le propriétaire ici — ownerIsMj et viewerIsMj coïncident.
       const isMj = partie.mjId === userId;

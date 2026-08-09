@@ -495,6 +495,19 @@ describe('PartiesService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
   });
 
+  it('removeMember : notifie aussi le MJ via userTopic (Story 29.7, AD-14, signal AUCUN_MEMBRE_INVITE réapparaissant si dernier membre retiré)', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.membership.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'mj1',
+      pseudo: 'mj-pseudo',
+      displayName: 'MJ Nom',
+    });
+    prisma.membership.findMany.mockResolvedValue([]);
+    await service.removeMember('p1', 'mj1', 'u');
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+  });
+
   it('getOwned : 404 si introuvable', async () => {
     prisma.partie.findUnique.mockResolvedValue(null);
     await expect(service.getOwned('p1', 'mj1')).rejects.toBeInstanceOf(
@@ -660,6 +673,30 @@ describe('PartiesService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
       expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
       expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+    });
+  });
+
+  describe('notifyPartieSignalsChanged (Story 29.7, AD-14)', () => {
+    it("émet userTopic(userId) pour le MJ et chaque membre résolu, MAIS PAS partieTopic (déjà émis par l'appelant — revue de code, double émission corrigée)", async () => {
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' } },
+      ]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj-pseudo',
+        displayName: 'MJ Nom',
+      });
+      await service.notifyPartieSignalsChanged('p1', 'mj1');
+      expect(realtimeEvents.emit).not.toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+    });
+
+    it("n'échoue jamais l'appelant si l'émission lève une exception (même garde que close()/reopen())", async () => {
+      prisma.membership.findMany.mockRejectedValue(new Error('boom'));
+      await expect(
+        service.notifyPartieSignalsChanged('p1', 'mj1'),
+      ).resolves.toBeUndefined();
     });
   });
 

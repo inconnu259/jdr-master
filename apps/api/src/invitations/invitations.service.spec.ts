@@ -28,7 +28,7 @@ describe('InvitationsService', () => {
     };
     $transaction: jest.Mock;
   };
-  let parties: { getOwned: jest.Mock };
+  let parties: { getOwned: jest.Mock; notifyPartieSignalsChanged: jest.Mock };
   let inviteLinks: { findOrCreateForEmail: jest.Mock };
   let email: { sendMail: jest.Mock };
   let realtimeEvents: { emit: jest.Mock };
@@ -51,6 +51,7 @@ describe('InvitationsService', () => {
         mjId: 'mj1',
         name: 'La Forêt Ancienne',
       }),
+      notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
     };
     inviteLinks = {
       findOrCreateForEmail: jest.fn().mockResolvedValue({ token: 'tok123' }),
@@ -171,6 +172,21 @@ describe('InvitationsService', () => {
     });
     await service.accept('inv1', 'u');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
+  });
+
+  it('accept : notifie aussi PartiesService.notifyPartieSignalsChanged pour le MJ (inviterId) — Story 29.7, AD-14, signal AUCUN_MEMBRE_INVITE', async () => {
+    prisma.invitation.findUnique.mockResolvedValue({
+      id: 'inv1',
+      inviteeUserId: 'u',
+      inviterId: 'mj1',
+      partieId: 'p1',
+      status: 'PENDING',
+    });
+    await service.accept('inv1', 'u');
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+    );
   });
 
   it('revoke : 403 si ni inviteur ni MJ', async () => {

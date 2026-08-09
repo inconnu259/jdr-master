@@ -70,6 +70,9 @@ export class PollService {
       });
     });
     this.realtimeEvents.emit(partieTopic(partieId));
+    // AUCUNE_DATE_NI_VOTE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
+    // remplacement — getOwned() garantit que userId est déjà le MJ.
+    await this.parties.notifyPartieSignalsChanged(partieId, userId);
     return toDto(poll);
   }
 
@@ -91,7 +94,7 @@ export class PollService {
     userId: string,
     dto: CastVoteDto,
   ): Promise<void> {
-    await this.parties.getViewable(partieId, userId);
+    const partie = await this.parties.getViewable(partieId, userId);
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -115,6 +118,9 @@ export class PollService {
       },
     });
     this.realtimeEvents.emit(partieTopic(partieId));
+    // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
+    // remplacement.
+    await this.parties.notifyPartieSignalsChanged(partieId, partie.mjId);
   }
 
   async choose(
@@ -158,6 +164,9 @@ export class PollService {
       },
     });
     this.realtimeEvents.emit(partieTopic(partieId));
+    // AUCUNE_DATE_NI_VOTE/PROCHAINE_SEANCE_CONNUE (Story 29.7, AD-14) : en plus de partieTopic
+    // ci-dessus, jamais en remplacement — getOwned() garantit que userId est déjà le MJ.
+    await this.parties.notifyPartieSignalsChanged(partieId, userId);
   }
 
   async close(partieId: string, pollId: string, userId: string): Promise<void> {
@@ -174,6 +183,9 @@ export class PollService {
       data: { status: 'CLOSED' },
     });
     this.realtimeEvents.emit(partieTopic(partieId));
+    // VOTE_EN_COURS_SANS_REPONSE/AUCUNE_DATE_NI_VOTE (Story 29.7, AD-14) : en plus de partieTopic
+    // ci-dessus, jamais en remplacement — getOwned() garantit que userId est déjà le MJ.
+    await this.parties.notifyPartieSignalsChanged(partieId, userId);
   }
 }
 

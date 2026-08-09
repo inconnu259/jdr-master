@@ -367,6 +367,8 @@ export class ScenariosService {
         return tx.scenario.findUniqueOrThrow({ where: { id: scenarioId } });
       });
       this.realtimeEvents.emit(partieTopic(partie.id));
+      // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : en plus de partieTopic, jamais en remplacement.
+      await this.parties.notifyPartieSignalsChanged(partie.id, mjId);
       return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
     }
 
@@ -383,6 +385,9 @@ export class ScenariosService {
       where: { id: scenarioId },
     });
     this.realtimeEvents.emit(partieTopic(partie.id));
+    // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
+    // remplacement.
+    await this.parties.notifyPartieSignalsChanged(partie.id, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -415,6 +420,9 @@ export class ScenariosService {
       where: { id: scenarioId },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : la partie perd son scénario COURANT — en plus
+    // de partieTopic ci-dessus, jamais en remplacement.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -857,6 +865,9 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // COMPTE_RENDU_NON_REDIGE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
+    // remplacement.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -887,6 +898,9 @@ export class ScenariosService {
     });
 
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // RAPPORT_FIN_MANQUANT (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
+    // remplacement.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 

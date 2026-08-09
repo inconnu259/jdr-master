@@ -27,40 +27,106 @@
 @if (allParties().length === 0) {
   <p class="empty">{{ theme.tone()['dashboard.empty'] }}</p>
 } @else {
-  <div class="grid">
-    @for (p of allParties(); track p.id) {
-      <mat-card class="tile" [class.tile--closed]="p.status === 'TERMINEE'" [routerLink]="['/parties', p.id]">
-        <mat-card-header>
-          <mat-card-title>{{ p.name }}</mat-card-title>
-          <mat-card-subtitle>
-            {{ system(p.gameSystemId) }} · {{ kind(p.kind) }}
-            <span
-              class="role-indicator"
-              [attr.aria-label]="theme.tone()['dashboard.role_prefix'] + ' ' + (p.role === 'mj' ? theme.tone()['dashboard.role_mj'] : theme.tone()['dashboard.role_player'])"
-            >
-              <mat-icon aria-hidden="true" class="role-icon">{{ p.role === 'mj' ? 'shield' : 'person' }}</mat-icon>
-              <span aria-hidden="true">{{ p.role === 'mj' ? theme.tone()['dashboard.role_mj'] : theme.tone()['dashboard.role_player'] }}</span>
-            </span>
-            @if (p.status === 'TERMINEE') {
-              <span class="status-indicator" [attr.aria-label]="theme.tone()['dashboard.status_closed_badge']">
-                <mat-icon aria-hidden="true" class="role-icon">flag</mat-icon>
-                <span aria-hidden="true">{{ theme.tone()['dashboard.status_closed_badge'] }}</span>
-              </span>
-            }
-          </mat-card-subtitle>
-        </mat-card-header>
-        @if (p.role === 'player' && openPolls().has(p.id)) {
-          <mat-card-content class="poll-badge">
-            <a
-              mat-stroked-button
-              [routerLink]="['/parties', p.id, 'guild-calendar']"
-              (click)="$event.stopPropagation()"
-            >
-              {{ theme.tone()['poll.vote_pending'] }}
-            </a>
-          </mat-card-content>
-        }
-      </mat-card>
-    }
-  </div>
+  <!-- Quatre intertitres (Story 29.7, AC10) : ce qui t'attend / en cours / à venir / terminées. -->
+  @if (awaitingTiles().length > 0) {
+    <h2>{{ theme.tone()['dashboard.section_awaiting'] }}</h2>
+    <div class="grid">
+      @for (t of awaitingTiles(); track t.partie.id) {
+        <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
+      }
+    </div>
+  }
+  @if (ongoingTiles().length > 0) {
+    <h2>{{ theme.tone()['dashboard.section_ongoing'] }}</h2>
+    <div class="grid">
+      @for (t of ongoingTiles(); track t.partie.id) {
+        <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
+      }
+    </div>
+  }
+  @if (upcomingTiles().length > 0) {
+    <h2>{{ theme.tone()['dashboard.section_upcoming'] }}</h2>
+    <div class="grid">
+      @for (t of upcomingTiles(); track t.partie.id) {
+        <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
+      }
+    </div>
+  }
+  @if (finishedTiles().length > 0) {
+    <h2>{{ theme.tone()['dashboard.section_finished'] }}</h2>
+    <div class="grid">
+      @for (t of finishedTiles(); track t.partie.id) {
+        <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
+      }
+    </div>
+  }
 }
+
+<!-- Carte d'une partie (Tasks 6/7) — un seul patron partagé par les quatre sections ci-dessus. -->
+<ng-template #tile let-t>
+  <mat-card
+    class="tile"
+    [class.tile--closed]="t.partie.status === 'TERMINEE'"
+    [class.tile--awaiting]="t.tint === 'todo'"
+    [class.tile--live]="t.tint === 'live'"
+    [class.tile--soon]="t.tint === 'soon'"
+    [routerLink]="['/parties', t.partie.id]"
+  >
+    <mat-card-header>
+      <mat-card-title>{{ t.partie.name }}</mat-card-title>
+      <mat-card-subtitle>
+        {{ system(t.partie.gameSystemId) }} · {{ kind(t.partie.kind) }}
+        <span
+          class="role-indicator"
+          [attr.aria-label]="theme.tone()['dashboard.role_prefix'] + ' ' + (t.partie.role === 'mj' ? theme.tone()['dashboard.role_mj'] : theme.tone()['dashboard.role_player'])"
+        >
+          <mat-icon aria-hidden="true" class="role-icon">{{ t.partie.role === 'mj' ? 'shield' : 'person' }}</mat-icon>
+          <span aria-hidden="true">{{ t.partie.role === 'mj' ? theme.tone()['dashboard.role_mj'] : theme.tone()['dashboard.role_player'] }}</span>
+        </span>
+        @if (t.partie.status === 'TERMINEE') {
+          <span class="status-indicator" [attr.aria-label]="theme.tone()['dashboard.status_closed_badge']">
+            <mat-icon aria-hidden="true" class="role-icon">flag</mat-icon>
+            <span aria-hidden="true">{{ theme.tone()['dashboard.status_closed_badge'] }}</span>
+          </span>
+        }
+        @if ((t.tint === 'live' || t.tint === 'soon') && t.visibleSignals.length === 0) {
+          <!-- AC9/P-1 : sans badge visible, la teinte de bord (couleur seule) doit être doublée
+               d'un signal non chromatique — icône + libellé, même patron que .status-indicator. -->
+          <span class="status-indicator" [attr.aria-label]="tintLabel(t.tint)">
+            <mat-icon aria-hidden="true" class="role-icon">{{ tintIcon(t.tint) }}</mat-icon>
+            <span aria-hidden="true">{{ tintLabel(t.tint) }}</span>
+          </span>
+        }
+      </mat-card-subtitle>
+    </mat-card-header>
+    @if (t.visibleSignals.length > 0) {
+      <!-- Badges de signal (AC3, AC9) : au plus deux, icône + libellé (jamais la couleur seule). -->
+      <mat-card-content class="signal-badges">
+        @for (code of t.visibleSignals; track code) {
+          <span
+            class="signal-badge"
+            [class.signal-badge--dominant]="code === t.dominant"
+            [class.signal-badge--soon]="badgeTone(code) === 'soon'"
+          >
+            <mat-icon aria-hidden="true">flag</mat-icon>
+            <span>{{ badgeLabel(code, t.partie) }}</span>
+          </span>
+        }
+        @if (t.moreCount > 0) {
+          <span class="signal-badge signal-badge--more">{{ moreLabel(t.moreCount) }}</span>
+        }
+      </mat-card-content>
+    }
+    @if (t.partie.role === 'player' && openPolls().has(t.partie.id)) {
+      <mat-card-content class="poll-badge">
+        <a
+          mat-stroked-button
+          [routerLink]="['/parties', t.partie.id, 'guild-calendar']"
+          (click)="$event.stopPropagation()"
+        >
+          {{ theme.tone()['poll.vote_pending'] }}
+        </a>
+      </mat-card-content>
+    }
+  </mat-card>
+</ng-template>
