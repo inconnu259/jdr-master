@@ -23,6 +23,7 @@ describe('PartiesService (front)', () => {
     nextSessionSlot: null,
     role: 'mj',
     status: 'EN_COURS',
+    isFavorite: false,
   };
 
   beforeEach(() => {

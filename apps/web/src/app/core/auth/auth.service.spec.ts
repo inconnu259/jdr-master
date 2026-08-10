@@ -20,6 +20,8 @@ describe('AuthService (front)', () => {
     // Non-null : les tests existants empruntent la branche « applique, pas de requête réseau » de
     // syncTheme() — les cas theme: null (push-once) sont testés séparément avec leur propre fixture.
     theme: 'grimoire-emeraude',
+    hideFinishedParties: false,
+    partiesSort: 'urgence',
   };
 
   beforeEach(() => {
@@ -116,6 +118,8 @@ describe('AuthService (front) — synchronisation du thème (AC1, AC2, AC4)', ()
     role: 'USER',
     createdAt: '2026-01-01T00:00:00.000Z',
     theme: 'grimoire-emeraude',
+    hideFinishedParties: false,
+    partiesSort: 'urgence',
   };
 
   afterEach(() => {

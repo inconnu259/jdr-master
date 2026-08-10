@@ -9,6 +9,12 @@ export const THEMES = ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampun
 
 export type Theme = (typeof THEMES)[number];
 
+/** Critères de tri de la liste des parties (FR-10, AD-1, Story 29.8) — union fermée, validée
+ *  côté serveur via `@IsIn(PARTIE_SORTS)`, jamais une chaîne libre. */
+export const PARTIE_SORTS = ['urgence', 'date', 'nom', 'type', 'statut'] as const;
+
+export type PartieSort = (typeof PARTIE_SORTS)[number];
+
 /** Utilisateur authentifié (renvoyé par /auth/login, /auth/me). Jamais le hash. */
 export interface AuthUser {
   id: string;
@@ -21,6 +27,11 @@ export interface AuthUser {
   /** Thème choisi sur le compte. `null` = jamais choisi — le thème local est alors adopté une
    *  seule fois et poussé vers le compte (AD-13). Toujours présent, jamais `undefined`. */
   theme: Theme | null;
+  /** Préférence « masquer les parties terminées » (FR-3, AD-1, Story 29.8) — appliquée côté front
+   *  à la liste déjà chargée, jamais par un filtre serveur. */
+  hideFinishedParties: boolean;
+  /** Critère de tri mémorisé de la liste des parties (FR-10, AD-1, Story 29.8). */
+  partiesSort: PartieSort;
 }
 
 /** Corps de la requête PATCH /me/display-name. */
@@ -76,6 +87,8 @@ export interface PartieDto {
   role: 'mj' | 'player';
   /** Toujours présent, calculé serveur (AD-8) — jamais dérivé côté client (Story 29.6). */
   status: PartieStatus;
+  /** Toujours présent, calculé serveur (Story 29.8) — jamais dérivé côté client. */
+  isFavorite: boolean;
 }
 
 /** Code de signal d'état d'une partie (FR-12, AD-3) — union fermée, jamais un booléen libre ni

@@ -11,6 +11,7 @@ import request from 'supertest';
 // GAME_SYSTEMS (realtime.module.spec.ts) et @master-jdr/game-rules (mémoire projet).
 jest.mock('@master-jdr/shared', () => ({
   THEMES: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
+  PARTIE_SORTS: ['urgence', 'date', 'nom', 'type', 'statut'],
 }));
 
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
@@ -19,7 +20,13 @@ import { AccountController } from './account.controller';
 import { AccountService } from './account.service';
 
 function makeAccountService() {
-  return { updateDisplayName: jest.fn(), updateTheme: jest.fn() };
+  return {
+    updateDisplayName: jest.fn(),
+    updateTheme: jest.fn(),
+    updatePreferences: jest.fn(),
+    addFavorite: jest.fn(),
+    removeFavorite: jest.fn(),
+  };
 }
 
 function makeAuthService() {
@@ -106,6 +113,43 @@ describe('AccountController', () => {
       'oldpw',
       'new@b.c',
     );
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("updatePreferences() lit l'id depuis la session (req.user), jamais depuis le corps", async () => {
+    account.updatePreferences.mockResolvedValue({
+      id: 'u1',
+      partiesSort: 'date',
+    });
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.updatePreferences(req, {
+      partiesSort: 'date',
+    });
+
+    expect(account.updatePreferences).toHaveBeenCalledWith('u1', {
+      partiesSort: 'date',
+    });
+    expect(result).toEqual({ id: 'u1', partiesSort: 'date' });
+  });
+
+  it("addFavorite() lit l'id depuis la session et le partieId depuis l'URL", async () => {
+    account.addFavorite.mockResolvedValue({ ok: true });
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.addFavorite(req, 'p1');
+
+    expect(account.addFavorite).toHaveBeenCalledWith('u1', 'p1');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("removeFavorite() lit l'id depuis la session et le partieId depuis l'URL", async () => {
+    account.removeFavorite.mockResolvedValue({ ok: true });
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.removeFavorite(req, 'p1');
+
+    expect(account.removeFavorite).toHaveBeenCalledWith('u1', 'p1');
     expect(result).toEqual({ ok: true });
   });
 
@@ -324,6 +368,57 @@ describe('AccountController', () => {
         'oldpw',
         'new@example.com',
       );
+    });
+
+    it('partiesSort hors union fermée → 400, service jamais appelé (AC4, Story 29.8)', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ partiesSort: 'favori' })
+        .expect(400);
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
+    it('hideFinishedParties non booléen → 400, service jamais appelé', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ hideFinishedParties: 'oui' })
+        .expect(400);
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
+    it('patch partiel (un seul champ fourni) → 200', async () => {
+      account.updatePreferences.mockResolvedValue({
+        id: 'u1',
+        partiesSort: 'nom',
+      });
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ partiesSort: 'nom' })
+        .expect(200);
+      expect(account.updatePreferences).toHaveBeenCalledWith('u1', {
+        partiesSort: 'nom',
+      });
+    });
+
+    it('corps vide (aucun champ) → 200, patch vide transmis', async () => {
+      account.updatePreferences.mockResolvedValue({ id: 'u1' });
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({})
+        .expect(200);
+      expect(account.updatePreferences).toHaveBeenCalledWith('u1', {});
+    });
+
+    it('PUT /me/favorites/:partieId → 200', async () => {
+      account.addFavorite.mockResolvedValue({ ok: true });
+      await request(app.getHttpServer()).put('/me/favorites/p1').expect(200);
+      expect(account.addFavorite).toHaveBeenCalledWith('u1', 'p1');
+    });
+
+    it('DELETE /me/favorites/:partieId → 200', async () => {
+      account.removeFavorite.mockResolvedValue({ ok: true });
+      await request(app.getHttpServer()).delete('/me/favorites/p1').expect(200);
+      expect(account.removeFavorite).toHaveBeenCalledWith('u1', 'p1');
     });
   });
 });

@@ -9,11 +9,20 @@ import {
   untracked,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import type { DaySlot, InvitationDto, PartieDto, PartySignalCode } from '@master-jdr/shared';
+import type {
+  DaySlot,
+  InvitationDto,
+  PartieDto,
+  PartieSort,
+  PartieStatus,
+  PartySignalCode,
+} from '@master-jdr/shared';
+import { PARTIE_SORTS } from '@master-jdr/shared';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { InvitationsService } from '../../core/invitations/invitations.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
@@ -23,8 +32,10 @@ import {
   dominantSignal,
   sortByPriority,
 } from '../../core/parties/party-signal-priority';
+import { pinFavorites, sortParties } from '../../core/parties/party-sort';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { AuthService } from '../../core/auth/auth.service';
+import { AccountService } from '../../core/account/account.service';
 import { RealtimeService, userTopic } from '../../core/realtime/realtime.service';
 import { gameSystemName, partieKindLabel } from '../../core/parties/parties.util';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
@@ -65,7 +76,14 @@ export interface PartieTileVm {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [RouterLink, MatCardModule, MatButtonModule, MatIconModule, NgTemplateOutlet],
+  imports: [
+    RouterLink,
+    FormsModule,
+    MatCardModule,
+    MatButtonModule,
+    MatIconModule,
+    NgTemplateOutlet,
+  ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
@@ -76,6 +94,7 @@ export class Dashboard implements OnInit {
   private readonly partySignalsSvc = inject(PartySignalsService);
   protected readonly theme = inject(ThemeToneService);
   private readonly auth = inject(AuthService);
+  private readonly account = inject(AccountService);
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly contextualNav = inject(ContextualNavService);
@@ -87,11 +106,63 @@ export class Dashboard implements OnInit {
   protected readonly system = gameSystemName;
   protected readonly kind = partieKindLabel;
 
-  /** Une entrée par partie affichée (Tasks 6/7) — pure fonction de `allParties()` +
-   *  `PartySignalsService.signals()`, aucun recalcul de `role`/`status` (AC4). */
+  /** Critères de filtre (AC2/AC5) — purement transitoires (écran), jamais mémorisés sur le compte
+   *  (EXPERIENCE.md §4.2 : seul le tri par défaut vit dans les préférences). */
+  protected readonly roleFilter = signal<'all' | 'mj' | 'player'>('all');
+  protected readonly statusFilter = signal<'all' | PartieStatus>('all');
+  /** Révélation temporaire des parties terminées (AC6, « restent accessibles à la demande ») —
+   *  n'écrit jamais la préférence `hideFinishedParties`, contrairement à la case à cocher. */
+  protected readonly showFinishedOverride = signal(false);
+
+  /** Barre de contrôles repliée par défaut (retour utilisateur, cf. DESIGN.md §7.7
+   *  « révélation par icône ») — sur mobile, une barre déjà dépliée mangerait l'espace des
+   *  cartes. Masquage au défilement + pastille de résumé (les 2 autres comportements du même
+   *  paragraphe) restent hors périmètre, réservés à la Story 29.9. */
+  protected readonly controlsExpanded = signal(false);
+
+  protected readonly sortOptions = PARTIE_SORTS;
+  /** Critère de tri effectif — lu depuis le compte, défaut 'urgence' si non connecté (garde). */
+  protected readonly partiesSort = computed<PartieSort>(
+    () => this.auth.currentUser()?.partiesSort ?? 'urgence',
+  );
+  protected readonly hideFinishedParties = computed(
+    () => this.auth.currentUser()?.hideFinishedParties ?? false,
+  );
+  /** Bouton de révélation (AC6) : visible seulement si le masquage est actif, pas déjà levé, et
+   *  qu'il existe au moins une partie terminée à révéler **sous le filtre de rôle actif** — jamais
+   *  un bouton dont le clic ne changerait rien (Review Findings : ignorer `roleFilter()` affichait
+   *  le bouton même quand les seules parties terminées appartenaient au rôle filtré). */
+  protected readonly hasHiddenFinished = computed(() => {
+    if (!this.hideFinishedParties() || this.showFinishedOverride() || this.statusFilter() !== 'all')
+      return false;
+    const role = this.roleFilter();
+    return this.allParties().some(
+      (p) => p.status === 'TERMINEE' && (role === 'all' || p.role === role),
+    );
+  });
+
+  /** Filtres rôle/statut + masquage des terminées (AC2, AC5, AC6) — appliqués côté front à la
+   *  liste déjà chargée, jamais par un appel serveur supplémentaire. Le masquage ne s'applique
+   *  que si le filtre statut est 'all' : filtrer explicitement sur « Terminées » est déjà une
+   *  façon d'y accéder « à la demande », cohérente avec le bouton de révélation. */
+  private readonly filteredParties = computed<PartieDto[]>(() => {
+    const role = this.roleFilter();
+    const status = this.statusFilter();
+    const hideFinished =
+      this.hideFinishedParties() && !this.showFinishedOverride() && status === 'all';
+    return this.allParties().filter((p) => {
+      if (role !== 'all' && p.role !== role) return false;
+      if (status !== 'all' && p.status !== status) return false;
+      if (hideFinished && p.status === 'TERMINEE') return false;
+      return true;
+    });
+  });
+
+  /** Une entrée par partie affichée (Tasks 6/7), désormais calculée sur `filteredParties()`
+   *  (Story 29.8) plutôt que `allParties()` — badges/teinte/priorité inchangés (AC4). */
   private readonly tiles = computed<PartieTileVm[]>(() => {
     const signalsMap = this.partySignalsSvc.signals();
-    return this.allParties().map((partie) => {
+    return this.filteredParties().map((partie) => {
       const signals = signalsMap.get(partie.id)?.signals ?? [];
       // PARTIE_TERMINEE est exclu des badges affichés (revue utilisateur post-29.7) : redondant
       // avec .status-indicator, déjà affiché à côté du titre pour toute partie TERMINEE.
@@ -129,30 +200,54 @@ export class Dashboard implements OnInit {
     return signals.some((s) => !NON_ACTIONABLE_SIGNALS.includes(s));
   }
 
+  /** Tri + favoris en tête (Story 29.8, AC1/AC3), appliqué une seule fois sur `tiles()` — jamais
+   *  redondant avec les intertitres, qui filtrent ensuite ce même tableau déjà ordonné. Favoris
+   *  toujours en tête au sein de n'importe quel sous-groupe : `pinFavorites()` est une partition
+   *  stable sur tout le tableau, donc l'ordre relatif favori-avant-non-favori survit à un filtre
+   *  ultérieur (Dev Notes : « appliquée après le tri, avant le découpage en intertitres »). */
+  private readonly orderedTiles = computed<PartieTileVm[]>(() => {
+    const ts = this.tiles();
+    const byPartieId = new Map<string, PartieTileVm>(ts.map((t) => [t.partie.id, t]));
+    const sortedParties = pinFavorites(
+      sortParties(
+        ts.map((t) => t.partie),
+        this.partiesSort(),
+        this.partySignalsSvc.signals(),
+      ),
+    );
+    return sortedParties.map((p) => byPartieId.get(p.id)!);
+  });
+
   /** Quatre intertitres (AC10) — décision d'implémentation (aucune AC ne tranche l'ordre exact
    *  entre « a un signal d'action » et le statut EN_COURS/A_VENIR) : une partie non terminée avec
    *  au moins un signal actionnable va dans « ce qui t'attend », quel que soit son statut ;
    *  sinon elle se range par statut. Une partie TERMINEE va toujours dans « terminées », même si
    *  elle porte un signal de fin actionnable (compte-rendu/rapport manquant) — cohérent avec AC5
-   *  (une partie terminée ne porte plus de signal *d'action*, seulement des signaux de fin). */
+   *  (une partie terminée ne porte plus de signal *d'action*, seulement des signaux de fin).
+   *  N'existent que pour le tri 'urgence' (Story 29.8, décision documentée en Dev Notes/Completion
+   *  Notes) : tout autre critère bascule sur `flatTiles`, une liste plate unique. */
   protected readonly awaitingTiles = computed(() =>
-    this.tiles().filter(
+    this.orderedTiles().filter(
       (t) => t.partie.status !== 'TERMINEE' && Dashboard.hasActionableSignal(t.signals),
     ),
   );
   protected readonly ongoingTiles = computed(() =>
-    this.tiles().filter(
+    this.orderedTiles().filter(
       (t) => t.partie.status === 'EN_COURS' && !Dashboard.hasActionableSignal(t.signals),
     ),
   );
   protected readonly upcomingTiles = computed(() =>
-    this.tiles().filter(
+    this.orderedTiles().filter(
       (t) => t.partie.status === 'A_VENIR' && !Dashboard.hasActionableSignal(t.signals),
     ),
   );
   protected readonly finishedTiles = computed(() =>
-    this.tiles().filter((t) => t.partie.status === 'TERMINEE'),
+    this.orderedTiles().filter((t) => t.partie.status === 'TERMINEE'),
   );
+  /** Liste plate (Story 29.8) utilisée à la place des 4 intertitres dès que le tri s'écarte de
+   *  'urgence' — trier par nom/date/type/statut à l'intérieur de 4 groupes n'aurait pas de sens
+   *  pour un utilisateur qui veut un ordre global (Dev Notes, décision documentée). */
+  protected readonly flatTiles = this.orderedTiles;
 
   /** Libellé de thème d'un code de signal — clé `partie.signal_<code>` en minuscule. */
   protected signalLabel(code: PartySignalCode): string {
@@ -211,6 +306,18 @@ export class Dashboard implements OnInit {
     return this.theme.tone()['dashboard.section_upcoming'];
   }
 
+  /** Libellé de thème d'un critère de tri (Story 29.8) — clé `dashboard.sort_<critère>`. */
+  protected sortLabel(sort: PartieSort): string {
+    return this.theme.tone()[`dashboard.sort_${sort}`] ?? sort;
+  }
+
+  /** Libellé non chromatique de l'étoile de favori (jamais l'icône/la couleur seule, AC1). */
+  protected favoriteAriaLabel(isFavorite: boolean): string {
+    return isFavorite
+      ? this.theme.tone()['dashboard.favorite_remove_aria']
+      : this.theme.tone()['dashboard.favorite_add_aria'];
+  }
+
   constructor() {
     // Story 21.1 (AC2) : réagit au signal générique InvitationsService.changed (RealtimeService).
     // PIÈGE (même classe que Story 20.1/20.2, mais SANS le piège de timing associé) : Dashboard a
@@ -254,6 +361,63 @@ export class Dashboard implements OnInit {
       this.received.set(await this.invitations.listReceived());
     } catch {
       this.received.set([]);
+    }
+  }
+
+  /** Mémorisation du critère de tri (AC3) — appliqué immédiatement côté client (déjà reflété par
+   *  `partiesSort()`, lu depuis `auth.currentUser()`), l'appel réseau est fire-and-forget (même
+   *  patron que `theme-selector.ts` : un échec isolé n'empêche pas le tri de s'appliquer).
+   *  Review Findings : un échec serveur restaure l'ancienne valeur locale plutôt que de laisser
+   *  l'UI mentir sur ce qui est réellement persisté. */
+  protected onSortChange(sort: PartieSort): void {
+    const previous = this.auth.currentUser();
+    if (previous) this.auth.currentUser.set({ ...previous, partiesSort: sort });
+    this.account.updatePreferences({ partiesSort: sort }).catch(() => {
+      if (previous) this.auth.currentUser.set(previous);
+    });
+  }
+
+  /** Préférence « masquer les parties terminées » (AC6) — même patron fire-and-forget que le tri,
+   *  même rollback en cas d'échec (Review Findings). */
+  protected onHideFinishedChange(hide: boolean): void {
+    const previous = this.auth.currentUser();
+    if (previous) this.auth.currentUser.set({ ...previous, hideFinishedParties: hide });
+    this.account.updatePreferences({ hideFinishedParties: hide }).catch(() => {
+      if (previous) this.auth.currentUser.set(previous);
+    });
+    // Un nouveau réglage repart sans révélation temporaire active (évite l'incohérence « masquage
+    // activé mais case déjà levée par un clic précédent »).
+    this.showFinishedOverride.set(false);
+  }
+
+  /** Garde anti-double-clic (Review Findings) — un `partieId` déjà en vol ignore les clics
+   *  suivants tant que la requête + le rechargement n'ont pas abouti. */
+  private readonly pendingFavorites = signal<ReadonlySet<string>>(new Set());
+
+  /** Vrai si un clic sur l'étoile de cette partie est déjà en cours de traitement. */
+  protected isFavoritePending(partieId: string): boolean {
+    return this.pendingFavorites().has(partieId);
+  }
+
+  /** Favori (AC1) — rechargement ciblé selon le rôle de CETTE partie, jamais les deux listes
+   *  (même patron que `accept()`/`decline()`, qui ne rechargent que ce qui a pu changer). */
+  protected async toggleFavorite(partie: PartieDto): Promise<void> {
+    if (this.pendingFavorites().has(partie.id)) return;
+    this.pendingFavorites.update((s) => new Set(s).add(partie.id));
+    try {
+      if (partie.isFavorite) {
+        await this.account.removeFavorite(partie.id);
+      } else {
+        await this.account.addFavorite(partie.id);
+      }
+      if (partie.role === 'mj') await this.myPartiesSvc.refreshMjParties();
+      else await this.myPartiesSvc.refreshPlayerParties();
+    } finally {
+      this.pendingFavorites.update((s) => {
+        const next = new Set(s);
+        next.delete(partie.id);
+        return next;
+      });
     }
   }
 }

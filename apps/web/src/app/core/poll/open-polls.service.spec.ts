@@ -23,6 +23,7 @@ function makeParty(id: string): PartieDto {
     nextSessionSlot: null,
     role: 'player',
     status: 'EN_COURS',
+    isFavorite: false,
   };
 }
 

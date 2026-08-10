@@ -42,6 +42,10 @@ describe('PartiesService', () => {
     seance: {
       create: jest.Mock;
     };
+    partieFavorite: {
+      findUnique: jest.Mock;
+      findMany: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
   let avail: {
@@ -88,6 +92,12 @@ describe('PartiesService', () => {
       },
       seance: {
         create: jest.fn(),
+      },
+      // Défaut « aucun favori » — les tests dédiés au favori (Story 29.8) reconfigurent
+      // explicitement ces mocks.
+      partieFavorite: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
     // $transaction exécute le callback avec le même mock en guise de `tx`
@@ -140,6 +150,7 @@ describe('PartiesService', () => {
       nextSessionSlot: null,
       role: 'mj',
       status: 'EN_COURS',
+      isFavorite: false,
     });
   });
 
@@ -224,6 +235,7 @@ describe('PartiesService', () => {
         nextSessionSlot: null,
         role: 'player',
         status: 'A_VENIR',
+        isFavorite: false,
       },
     ]);
     expect(prisma.membership.findMany).toHaveBeenCalledWith(
@@ -249,6 +261,7 @@ describe('PartiesService', () => {
         nextSessionSlot: null,
         role: 'mj',
         status: 'A_VENIR',
+        isFavorite: false,
       },
     ]);
   });
@@ -286,6 +299,85 @@ describe('PartiesService', () => {
     expect(prisma.scenario.count).not.toHaveBeenCalled();
   });
 
+  describe('isFavorite (Story 29.8)', () => {
+    it('listForUser(mj) : une partie favorite porte isFavorite: true, une autre isFavorite: false', async () => {
+      const partieB = { ...partie, id: 'p2' };
+      prisma.partie.findMany.mockResolvedValue([partie, partieB]);
+      prisma.partieFavorite.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+      const [dtoA, dtoB] = await service.listForUser('mj1', 'mj');
+      expect(dtoA.isFavorite).toBe(true);
+      expect(dtoB.isFavorite).toBe(false);
+    });
+
+    it('listForUser(mj) : partieFavorite.findMany appelé une seule fois pour N parties (pas de N+1, AD-3)', async () => {
+      const partieB = { ...partie, id: 'p2' };
+      prisma.partie.findMany.mockResolvedValue([partie, partieB]);
+      await service.listForUser('mj1', 'mj');
+      expect(prisma.partieFavorite.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.partieFavorite.findMany).toHaveBeenCalledWith({
+        where: { userId: 'mj1', partieId: { in: ['p1', 'p2'] } },
+        select: { partieId: true },
+      });
+    });
+
+    it('listForUser(player) : une partie favorite porte isFavorite: true', async () => {
+      prisma.membership.findMany.mockResolvedValue([{ partie }]);
+      prisma.partieFavorite.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+      const [dto] = await service.listForUser('u', 'player');
+      expect(dto.isFavorite).toBe(true);
+    });
+
+    it('create() : isFavorite: false, aucune requête partieFavorite émise', async () => {
+      prisma.partie.create.mockResolvedValue(partie);
+      const dto = await service.create('mj1', {
+        name: 'La Nuit',
+        kind: 'ONE_SHOT',
+        gameSystemId: 'draconis',
+      });
+      expect(dto.isFavorite).toBe(false);
+      expect(prisma.partieFavorite.findUnique).not.toHaveBeenCalled();
+      expect(prisma.partieFavorite.findMany).not.toHaveBeenCalled();
+    });
+
+    it('findOneDto() : isFavorite toujours présent (true si favori)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.partieFavorite.findUnique.mockResolvedValue({
+        id: 'f1',
+        userId: 'mj1',
+        partieId: 'p1',
+      });
+      const dto = await service.findOneDto('p1', 'mj1');
+      expect(dto.isFavorite).toBe(true);
+      expect(prisma.partieFavorite.findUnique).toHaveBeenCalledWith({
+        where: { userId_partieId: { userId: 'mj1', partieId: 'p1' } },
+      });
+    });
+
+    it('update()/close()/reopen() : isFavorite toujours présent dans le DTO retourné', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue(partie);
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.partieFavorite.findUnique.mockResolvedValue({
+        id: 'f1',
+        userId: 'mj1',
+        partieId: 'p1',
+      });
+
+      const updated = await service.update('p1', 'mj1', {
+        name: 'Nouveau nom',
+      });
+      expect(updated.isFavorite).toBe(true);
+
+      const closed = await service.close('p1', 'mj1');
+      expect(closed.isFavorite).toBe(true);
+
+      const reopened = await service.reopen('p1', 'mj1');
+      expect(reopened.isFavorite).toBe(true);
+    });
+  });
+
   it("toPartieDto() n'énumère que les champs du DTO — un champ Prisma non listé (ex. futur ajout de colonne) ne fuite jamais (revue de code, AC6)", async () => {
     prisma.partie.findMany.mockResolvedValue([
       { ...partie, sheetVisibility: { secret: true }, internalFlag: 'nope' },
@@ -306,6 +398,7 @@ describe('PartiesService', () => {
         'nextSessionSlot',
         'role',
         'status',
+        'isFavorite',
       ].sort(),
     );
   });
@@ -336,6 +429,7 @@ describe('PartiesService', () => {
         'nextSessionSlot',
         'role',
         'status',
+        'isFavorite',
       ].sort(),
     );
   });
@@ -384,6 +478,7 @@ describe('PartiesService', () => {
       status: 'A_VENIR',
       mjPseudo: 'mj-pseudo',
       mjDisplayName: 'MJ Nom',
+      isFavorite: false,
     });
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: 'mj1' },
@@ -417,6 +512,7 @@ describe('PartiesService', () => {
       status: 'A_VENIR',
       mjPseudo: 'mj-pseudo',
       mjDisplayName: 'MJ Nom',
+      isFavorite: false,
     });
   });
 
@@ -466,6 +562,7 @@ describe('PartiesService', () => {
       nextSessionSlot: null,
       role: 'mj',
       status: 'A_VENIR',
+      isFavorite: false,
     });
     expect((dto as any).mjPseudo).toBeUndefined();
   });
@@ -550,6 +647,7 @@ describe('PartiesService', () => {
       nextSessionSlot: null,
       role: 'mj',
       status: 'A_VENIR',
+      isFavorite: false,
     });
   });
 

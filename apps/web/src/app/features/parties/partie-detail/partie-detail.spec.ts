@@ -135,6 +135,7 @@ function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
     nextSessionSlot: null,
     role: 'mj',
     status: 'EN_COURS',
+    isFavorite: false,
     ...overrides,
   };
 }

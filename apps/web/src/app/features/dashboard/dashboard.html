@@ -24,9 +24,82 @@
   </div>
 }
 
+@if (allParties().length > 0) {
+  <!-- Barre de contrôles (Story 29.8) : filtres rôle/statut (AC2/AC5) et tri (AC3/AC4), câblés
+       directement ici — pas de composant ListControlBar partagé, réservé à la Story 29.9.
+       Repliée par défaut derrière une icône (DESIGN.md §7.7, « révélation par icône ») : sur
+       mobile la barre ne doit pas manger l'espace des cartes tant qu'on ne l'a pas demandée.
+       Masquage au défilement et pastille de résumé (les deux autres comportements du même
+       paragraphe) restent hors périmètre, réservés à la Story 29.9. -->
+  <div class="controls-bar" [class.controls-bar--expanded]="controlsExpanded()">
+    <button
+      type="button"
+      mat-icon-button
+      class="controls-bar__toggle"
+      [attr.aria-expanded]="controlsExpanded()"
+      [attr.aria-label]="theme.tone()['dashboard.controls_toggle_aria']"
+      (click)="controlsExpanded.set(!controlsExpanded())"
+    >
+      <mat-icon aria-hidden="true">tune</mat-icon>
+    </button>
+
+    <div class="controls-bar__fields">
+      <label class="controls-bar__field">
+        <span class="controls-bar__label">{{ theme.tone()['dashboard.filter_role_label'] }}</span>
+        <select [ngModel]="roleFilter()" (ngModelChange)="roleFilter.set($event)">
+          <option value="all">{{ theme.tone()['dashboard.filter_role_all'] }}</option>
+          <option value="mj">{{ theme.tone()['dashboard.role_mj'] }}</option>
+          <option value="player">{{ theme.tone()['dashboard.role_player'] }}</option>
+        </select>
+      </label>
+
+      <label class="controls-bar__field">
+        <span class="controls-bar__label">{{ theme.tone()['dashboard.filter_status_label'] }}</span>
+        <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+          <option value="all">{{ theme.tone()['dashboard.filter_status_all'] }}</option>
+          <option value="A_VENIR">{{ theme.tone()['dashboard.section_upcoming'] }}</option>
+          <option value="EN_COURS">{{ theme.tone()['dashboard.section_ongoing'] }}</option>
+          <option value="TERMINEE">{{ theme.tone()['dashboard.section_finished'] }}</option>
+        </select>
+      </label>
+
+      <label class="controls-bar__field">
+        <span class="controls-bar__label">{{ theme.tone()['dashboard.sort_label'] }}</span>
+        <select [ngModel]="partiesSort()" (ngModelChange)="onSortChange($event)">
+          @for (sort of sortOptions; track sort) {
+            <option [value]="sort">{{ sortLabel(sort) }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="controls-bar__field controls-bar__field--checkbox">
+        <input
+          type="checkbox"
+          [ngModel]="hideFinishedParties()"
+          (ngModelChange)="onHideFinishedChange($event)"
+        />
+        <span>{{ theme.tone()['dashboard.hide_finished_label'] }}</span>
+      </label>
+    </div>
+
+    @if (hasHiddenFinished()) {
+      <button
+        type="button"
+        mat-button
+        class="controls-bar__reveal"
+        (click)="showFinishedOverride.set(true)"
+      >
+        {{ theme.tone()['dashboard.show_finished_btn'] }}
+      </button>
+    }
+  </div>
+}
+
 @if (allParties().length === 0) {
   <p class="empty">{{ theme.tone()['dashboard.empty'] }}</p>
-} @else {
+} @else if (flatTiles().length === 0) {
+  <p class="empty">{{ theme.tone()['dashboard.empty_filtered'] }}</p>
+} @else if (partiesSort() === 'urgence') {
   <!-- Quatre intertitres (Story 29.7, AC10) : ce qui t'attend / en cours / à venir / terminées. -->
   @if (awaitingTiles().length > 0) {
     <h2>{{ theme.tone()['dashboard.section_awaiting'] }}</h2>
@@ -60,6 +133,14 @@
       }
     </div>
   }
+} @else {
+  <!-- Liste plate (Story 29.8) : tout critère de tri autre que 'urgence' remplace les 4
+       intertitres — favoris toujours en tête (pinFavorites(), appliqué dans orderedTiles()). -->
+  <div class="grid">
+    @for (t of flatTiles(); track t.partie.id) {
+      <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
+    }
+  </div>
 }
 
 <!-- Carte d'une partie (Tasks 6/7) — un seul patron partagé par les quatre sections ci-dessus. -->
@@ -73,7 +154,19 @@
     [routerLink]="['/parties', t.partie.id]"
   >
     <mat-card-header>
-      <mat-card-title>{{ t.partie.name }}</mat-card-title>
+      <mat-card-title>
+        {{ t.partie.name }}
+        <button
+          type="button"
+          class="favorite-btn"
+          [class.favorite-btn--active]="t.partie.isFavorite"
+          [disabled]="isFavoritePending(t.partie.id)"
+          [attr.aria-label]="favoriteAriaLabel(t.partie.isFavorite)"
+          (click)="$event.stopPropagation(); toggleFavorite(t.partie)"
+        >
+          <mat-icon aria-hidden="true">{{ t.partie.isFavorite ? 'star' : 'star_border' }}</mat-icon>
+        </button>
+      </mat-card-title>
       <mat-card-subtitle>
         {{ system(t.partie.gameSystemId) }} · {{ kind(t.partie.kind) }}
         <span

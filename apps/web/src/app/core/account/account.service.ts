@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { AuthUser, Theme } from '@master-jdr/shared';
+import type { AuthUser, PartieSort, Theme } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
 @Injectable({ providedIn: 'root' })
@@ -46,6 +46,36 @@ export class AccountService {
         { currentPassword, newEmail },
         { withCredentials: true },
       ),
+    );
+  }
+
+  /** Patch partiel (Story 29.8) — `partiesSort`/`hideFinishedParties` mémorisés sur le compte. */
+  updatePreferences(prefs: {
+    partiesSort?: PartieSort;
+    hideFinishedParties?: boolean;
+  }): Promise<AuthUser> {
+    return firstValueFrom(
+      this.http.patch<AuthUser>(`${API_BASE}/me/preferences`, prefs, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  addFavorite(partieId: string): Promise<{ ok: true }> {
+    return firstValueFrom(
+      this.http.put<{ ok: true }>(
+        `${API_BASE}/me/favorites/${partieId}`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  removeFavorite(partieId: string): Promise<{ ok: true }> {
+    return firstValueFrom(
+      this.http.delete<{ ok: true }>(`${API_BASE}/me/favorites/${partieId}`, {
+        withCredentials: true,
+      }),
     );
   }
 }

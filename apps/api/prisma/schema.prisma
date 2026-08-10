@@ -22,6 +22,8 @@ model User {
   createdAt         DateTime   @default(now())
   theme             String? // AD-13 — null = jamais choisi, le thème local est alors adopté une fois
   mustResetPassword Boolean    @default(false) // Story 28.6 — posé par rollbackEmailChange(), remis à false par resetPassword()
+  partiesSort         String  @default("urgence") // AD-1 — union fermée dans @master-jdr/shared (Story 29.8)
+  hideFinishedParties Boolean @default(false) // AD-1 — préférence d'affichage, appliquée côté front (Story 29.8)
 
   mjOfParties               Partie[]                   @relation("PartieMJ")
   memberships               Membership[]
@@ -39,6 +41,7 @@ model User {
   hommeDragons              HommeDragon[]
   emailChangeTokens         EmailChangeToken[]
   emailChangeRollbackTokens EmailChangeRollbackToken[]
+  favorites                 PartieFavorite[]
 }
 
 enum PartieKind {
@@ -74,6 +77,20 @@ model Partie {
   announcements       Announcement[]
   hommeDragons        HommeDragon[]
   characterGroupRoles CharacterGroupRole[]
+  favorites           PartieFavorite[]
+}
+
+/// Une partie marquée favorite par un utilisateur (Story 29.8) — état multi-valué, donc relationnel
+/// (AD-1/P6-AD-1), jamais un booléen sur `Partie` qui appartiendrait alors à tout le monde.
+model PartieFavorite {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partieId  String
+  partie    Partie   @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, partieId])
 }
 
 enum InvitationStatus {

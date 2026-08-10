@@ -91,3 +91,57 @@
   background: color-mix(in srgb, var(--jdr-status-soon, #ff7ad9) 20%, transparent);
   border-color: var(--jdr-status-soon, #ff7ad9);
 }
+
+// Barre de contrôles (Story 29.8) : filtres rôle/statut, tri, masquage des terminées.
+// Repliée par défaut (retour utilisateur) : .controls-bar__fields ne prend aucune place tant
+// que .controls-bar--expanded n'est pas posée par le bouton .controls-bar__toggle.
+.controls-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.25rem 0;
+}
+.controls-bar__fields {
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+.controls-bar--expanded .controls-bar__fields {
+  display: flex;
+}
+.controls-bar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.85em;
+}
+.controls-bar__field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+.controls-bar__label {
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+// Étoile de favori (AC1) — icône + aria-label toujours ensemble, jamais la couleur seule.
+.favorite-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.1rem;
+  vertical-align: middle;
+  color: var(--mat-sys-on-surface-variant, #666);
+
+  mat-icon {
+    font-size: 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+}
+.favorite-btn--active {
+  color: var(--jdr-status-soon, #ff7ad9);
+}

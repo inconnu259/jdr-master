@@ -35,6 +35,8 @@ describe('AccountService', () => {
       role: 'USER',
       createdAt: '2026-01-01T00:00:00.000Z',
       theme: 'grimoire-emeraude',
+      hideFinishedParties: false,
+      partiesSort: 'urgence',
     };
     req.flush(response);
 
@@ -57,6 +59,8 @@ describe('AccountService', () => {
       role: 'USER',
       createdAt: '2026-01-01T00:00:00.000Z',
       theme: 'foret-ancienne',
+      hideFinishedParties: false,
+      partiesSort: 'urgence',
     };
     req.flush(response);
 
@@ -74,6 +78,52 @@ describe('AccountService', () => {
     });
     expect(req.request.withCredentials).toBe(true);
 
+    req.flush({ ok: true });
+
+    await expect(promise).resolves.toEqual({ ok: true });
+  });
+
+  it('updatePreferences() appelle PATCH /me/preferences avec withCredentials et renvoie l’utilisateur (Story 29.8)', async () => {
+    const promise = service.updatePreferences({ partiesSort: 'date' });
+
+    const req = http.expectOne(`${API_BASE}/me/preferences`);
+    expect(req.request.method).toBe('PATCH');
+    expect(req.request.body).toEqual({ partiesSort: 'date' });
+    expect(req.request.withCredentials).toBe(true);
+
+    const response: AuthUser = {
+      id: 'u1',
+      email: 'a@b.c',
+      pseudo: 'alice',
+      displayName: 'alice',
+      role: 'USER',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      theme: 'grimoire-emeraude',
+      hideFinishedParties: false,
+      partiesSort: 'date',
+    };
+    req.flush(response);
+
+    await expect(promise).resolves.toEqual(response);
+  });
+
+  it('addFavorite() appelle PUT /me/favorites/:partieId avec withCredentials (Story 29.8)', async () => {
+    const promise = service.addFavorite('p1');
+
+    const req = http.expectOne(`${API_BASE}/me/favorites/p1`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush({ ok: true });
+
+    await expect(promise).resolves.toEqual({ ok: true });
+  });
+
+  it('removeFavorite() appelle DELETE /me/favorites/:partieId avec withCredentials (Story 29.8)', async () => {
+    const promise = service.removeFavorite('p1');
+
+    const req = http.expectOne(`${API_BASE}/me/favorites/p1`);
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.withCredentials).toBe(true);
     req.flush({ ok: true });
 
     await expect(promise).resolves.toEqual({ ok: true });

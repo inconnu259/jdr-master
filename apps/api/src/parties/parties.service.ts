@@ -35,6 +35,7 @@ function toPartieDto(
   partie: any,
   role: 'mj' | 'player',
   hasScenario: boolean,
+  isFavorite: boolean,
 ): PartieDto {
   const status: PartieStatus = partie.closedAt
     ? 'TERMINEE'
@@ -53,6 +54,7 @@ function toPartieDto(
     nextSessionSlot: partie.nextSessionSlot,
     role,
     status,
+    isFavorite,
   };
 }
 
@@ -98,7 +100,9 @@ export class PartiesService {
       // hasScenario connu synchronement : le scénario unique vient d'être créé dans cette même
       // transaction pour ONE_SHOT (ci-dessus) ; CAMPAGNE_LINEAIRE/CAMPAGNE_EPISODIQUE n'en créent
       // aucun — aucune requête `scenario.count()` nécessaire ici (Story 29.6).
-      return toPartieDto(partie, 'mj', dto.kind === 'ONE_SHOT');
+      // isFavorite toujours false ici : une partie tout juste créée n'est jamais favorite,
+      // aucune requête `partieFavorite` nécessaire (Story 29.8).
+      return toPartieDto(partie, 'mj', dto.kind === 'ONE_SHOT', false);
     });
   }
 
@@ -127,6 +131,29 @@ export class PartiesService {
     return count > 0;
   }
 
+  /** Lecture en lot (même discipline qu'AD-3/`hasScenarioByPartieId`, Story 29.8) : une seule
+   *  requête groupée pour dériver `isFavorite` de tout le tableau renvoyé par `listForUser()`. */
+  private async favoritePartieIds(
+    userId: string,
+    partieIds: string[],
+  ): Promise<Set<string>> {
+    if (partieIds.length === 0) return new Set();
+    const favorites = await this.prisma.partieFavorite.findMany({
+      where: { userId, partieId: { in: partieIds } },
+      select: { partieId: true },
+    });
+    return new Set(favorites.map((f) => f.partieId));
+  }
+
+  /** Variante mono-partie de `favoritePartieIds` — même logique que `hasScenario()` vs
+   *  `hasScenarioByPartieId()` (`findOneDto`, `update`, `close`, `reopen`). */
+  private async isFavorite(userId: string, partieId: string): Promise<boolean> {
+    const favorite = await this.prisma.partieFavorite.findUnique({
+      where: { userId_partieId: { userId, partieId } },
+    });
+    return favorite !== null;
+  }
+
   /**
    * `mj` = les parties que je maîtrise ; `player` = celles où je suis membre (via `Membership`).
    */
@@ -140,21 +167,32 @@ export class PartiesService {
         orderBy: { joinedAt: 'desc' },
         include: { partie: true },
       });
-      const hasScenarioIds = await this.hasScenarioByPartieId(
-        memberships.map((m) => m.partie.id),
-      );
+      const partieIds = memberships.map((m) => m.partie.id);
+      const [hasScenarioIds, favoriteIds] = await Promise.all([
+        this.hasScenarioByPartieId(partieIds),
+        this.favoritePartieIds(userId, partieIds),
+      ]);
       return memberships.map((m) =>
-        toPartieDto(m.partie, 'player', hasScenarioIds.has(m.partie.id)),
+        toPartieDto(
+          m.partie,
+          'player',
+          hasScenarioIds.has(m.partie.id),
+          favoriteIds.has(m.partie.id),
+        ),
       );
     }
     const parties = await this.prisma.partie.findMany({
       where: { mjId: userId },
       orderBy: { createdAt: 'desc' },
     });
-    const hasScenarioIds = await this.hasScenarioByPartieId(
-      parties.map((p) => p.id),
+    const partieIds = parties.map((p) => p.id);
+    const [hasScenarioIds, favoriteIds] = await Promise.all([
+      this.hasScenarioByPartieId(partieIds),
+      this.favoritePartieIds(userId, partieIds),
+    ]);
+    return parties.map((p) =>
+      toPartieDto(p, 'mj', hasScenarioIds.has(p.id), favoriteIds.has(p.id)),
     );
-    return parties.map((p) => toPartieDto(p, 'mj', hasScenarioIds.has(p.id)));
   }
 
   /** Récupère une partie en vérifiant que l'utilisateur en est le MJ (sinon 404 / 403). */
@@ -185,8 +223,11 @@ export class PartiesService {
   async findOneDto(id: string, userId: string): Promise<PartieDto> {
     const partie = await this.getViewable(id, userId);
     const role: 'mj' | 'player' = partie.mjId === userId ? 'mj' : 'player';
-    const hasScenario = await this.hasScenario(id);
-    const dto = toPartieDto(partie, role, hasScenario);
+    const [hasScenario, favorite] = await Promise.all([
+      this.hasScenario(id),
+      this.isFavorite(userId, id),
+    ]);
+    const dto = toPartieDto(partie, role, hasScenario, favorite);
     const mj = await this.prisma.user.findUnique({
       where: { id: partie.mjId },
       select: { pseudo: true, displayName: true },
@@ -248,9 +289,12 @@ export class PartiesService {
       data: { ...dto },
     });
     this.realtimeEvents.emit(partieTopic(id));
-    const hasScenario = await this.hasScenario(id);
+    const [hasScenario, favorite] = await Promise.all([
+      this.hasScenario(id),
+      this.isFavorite(userId, id),
+    ]);
     // getOwned() a déjà garanti que l'appelant est le MJ (revue de code, AC6).
-    return toPartieDto(updated, 'mj', hasScenario);
+    return toPartieDto(updated, 'mj', hasScenario, favorite);
   }
 
   /** Déclare la partie terminée (AD-8, Story 29.6) — MJ uniquement. Réversible via `reopen()`. */
@@ -263,8 +307,11 @@ export class PartiesService {
     await this.emitPartieAndMembersSafe(id, partie.mjId);
     // Le MJ peut clôturer une partie jamais commencée (aucun scénario) — hasScenario recalculé,
     // jamais supposé, `closedAt` primant de toute façon sur le résultat dans toPartieDto().
-    const hasScenario = await this.hasScenario(id);
-    return toPartieDto(updated, 'mj', hasScenario);
+    const [hasScenario, favorite] = await Promise.all([
+      this.hasScenario(id),
+      this.isFavorite(userId, id),
+    ]);
+    return toPartieDto(updated, 'mj', hasScenario, favorite);
   }
 
   /** Revient sur une clôture (AD-8, Story 29.6) — MJ uniquement. */
@@ -275,8 +322,11 @@ export class PartiesService {
       data: { closedAt: null },
     });
     await this.emitPartieAndMembersSafe(id, partie.mjId);
-    const hasScenario = await this.hasScenario(id);
-    return toPartieDto(updated, 'mj', hasScenario);
+    const [hasScenario, favorite] = await Promise.all([
+      this.hasScenario(id),
+      this.isFavorite(userId, id),
+    ]);
+    return toPartieDto(updated, 'mj', hasScenario, favorite);
   }
 
   async remove(id: string, userId: string) {
