@@ -18,7 +18,11 @@ import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { InvitationsService } from '../../core/invitations/invitations.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
 import { PartySignalsService } from '../../core/parties/party-signals.service';
-import { dominantSignal, sortByPriority } from '../../core/parties/party-signal-priority';
+import {
+  dominantCategory,
+  dominantSignal,
+  sortByPriority,
+} from '../../core/parties/party-signal-priority';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { RealtimeService, userTopic } from '../../core/realtime/realtime.service';
@@ -95,14 +99,21 @@ export class Dashboard implements OnInit {
       const sorted = sortByPriority(displaySignals);
       const visibleSignals = sorted.slice(0, MAX_VISIBLE_BADGES);
       const moreCount = Math.max(0, sorted.length - MAX_VISIBLE_BADGES);
+      // AC8 : ordre de priorité de teinte « bloque le démarrage » > « échéance »/« en retard ».
+      // La palette de statut (--jdr-status-*, Story 29.0) est un invariant à 4 teintes ; faute
+      // d'une 5e teinte dédiée (décision UX non tranchée, cf. Review Findings), « échéance » et
+      // « en retard » partagent la teinte `soon`, distincte de `todo` réservée au blocage.
+      const category = dominantCategory(displaySignals);
       const tint: TileTint =
         partie.status === 'TERMINEE'
           ? 'done'
-          : Dashboard.hasActionableSignal(signals)
+          : category === 'blocking'
             ? 'todo'
-            : partie.status === 'EN_COURS'
-              ? 'live'
-              : 'soon';
+            : category === 'deadline' || category === 'overdue'
+              ? 'soon'
+              : partie.status === 'EN_COURS'
+                ? 'live'
+                : 'soon';
       return {
         partie,
         signals,

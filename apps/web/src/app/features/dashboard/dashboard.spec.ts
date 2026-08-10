@@ -568,7 +568,9 @@ describe('Dashboard — teinte des cartes selon le statut (bug fix, revue utilis
     const indicator = tile.querySelector('.status-indicator');
     expect(indicator).not.toBeNull();
     expect(indicator.querySelector('mat-icon')).not.toBeNull();
-    expect(indicator.textContent).toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_ongoing']);
+    expect(indicator.textContent).toContain(
+      TONE_MAP['grimoire-emeraude']['dashboard.section_ongoing'],
+    );
   });
 
   it('une partie A_VENIR sans aucun signal affiche quand même un libellé non chromatique (AC9/P-1, revue de code)', async () => {
@@ -583,7 +585,32 @@ describe('Dashboard — teinte des cartes selon le statut (bug fix, revue utilis
     expect(tile.classList.contains('tile--soon')).toBe(true);
     const indicator = tile.querySelector('.status-indicator');
     expect(indicator).not.toBeNull();
-    expect(indicator.textContent).toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_upcoming']);
+    expect(indicator.textContent).toContain(
+      TONE_MAP['grimoire-emeraude']['dashboard.section_upcoming'],
+    );
+  });
+
+  it('un signal « en retard » (RAPPORT_FIN_MANQUANT) porte tile--soon, jamais tile--awaiting (AC8, revue de code)', async () => {
+    const signals = new Map([
+      [
+        'p1',
+        {
+          role: 'mj' as const,
+          status: 'EN_COURS' as const,
+          signals: ['RAPPORT_FIN_MANQUANT'] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'mj', 'EN_COURS')],
+      true,
+      signals as any,
+    );
+    const tile = fixture.nativeElement.querySelector('.tile');
+    expect(tile.classList.contains('tile--soon')).toBe(true);
+    expect(tile.classList.contains('tile--awaiting')).toBe(false);
   });
 });
 

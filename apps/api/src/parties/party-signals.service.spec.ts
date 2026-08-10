@@ -290,6 +290,26 @@ describe('PartySignalsService', () => {
     );
   });
 
+  it('PARTIE_TERMINEE (joueur) : garde explicite MJ-only — même si les requêtes groupées incluaient à tort une partie joueur, aucun signal de fin ne fuite (revue de code)', async () => {
+    // Simule le scénario que la garde protège : les requêtes groupées renvoient p1 comme si elle
+    // était dans le lot (elles sont normalement filtrées sur mjPartieIds) alors que l'utilisateur
+    // n'a que le rôle player sur cette partie.
+    parties.listForUser.mockImplementation((_u: string, role: string) =>
+      Promise.resolve(
+        role === 'player'
+          ? [makePartie({ id: 'p1', role: 'player', status: 'TERMINEE' })]
+          : [],
+      ),
+    );
+    prisma.scenario.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+    prisma.seance.findMany.mockResolvedValue([
+      { scenario: { partieId: 'p1' } },
+    ]);
+
+    const map = await service.getSignals('u1');
+    expect(map['p1'].signals).toEqual(['PARTIE_TERMINEE']);
+  });
+
   it("scoping par rôle : un signal MJ n'apparaît jamais sur une partie où le rôle est player, et inversement", async () => {
     parties.listForUser.mockImplementation((_u: string, role: string) =>
       Promise.resolve(

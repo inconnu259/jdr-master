@@ -1,5 +1,5 @@
 import type { PartySignalCode } from '@master-jdr/shared';
-import { dominantSignal, sortByPriority } from './party-signal-priority';
+import { dominantCategory, dominantSignal, sortByPriority } from './party-signal-priority';
 
 describe('dominantSignal (Story 29.7, AC8)', () => {
   it('aucun signal → null', () => {
@@ -54,5 +54,33 @@ describe('sortByPriority (Story 29.7, AC3)', () => {
     const copy = [...original];
     sortByPriority(original);
     expect(original).toEqual(copy);
+  });
+});
+
+describe('dominantCategory (Story 29.7, AC8, revue de code)', () => {
+  it('aucun signal → null', () => {
+    expect(dominantCategory([])).toBeNull();
+  });
+
+  it("un signal qui bloque le démarrage → 'blocking'", () => {
+    expect(dominantCategory(['AUCUN_MEMBRE_INVITE'])).toBe('blocking');
+  });
+
+  it("un signal à échéance → 'deadline'", () => {
+    expect(dominantCategory(['VOTE_EN_COURS_SANS_REPONSE'])).toBe('deadline');
+  });
+
+  it("un signal en retard → 'overdue'", () => {
+    expect(dominantCategory(['RAPPORT_FIN_MANQUANT'])).toBe('overdue');
+  });
+
+  it('un blocage prime sur une échéance concurrente (même ordre que dominantSignal)', () => {
+    expect(dominantCategory(['VOTE_EN_COURS_SANS_REPONSE', 'AUCUN_MEMBRE_INVITE'])).toBe(
+      'blocking',
+    );
+  });
+
+  it("PROCHAINE_SEANCE_CONNUE seul → 'informative'", () => {
+    expect(dominantCategory(['PROCHAINE_SEANCE_CONNUE'])).toBe('informative');
   });
 });

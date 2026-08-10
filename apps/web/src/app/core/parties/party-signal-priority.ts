@@ -34,6 +34,30 @@ export function dominantSignal(signals: readonly PartySignalCode[]): PartySignal
   return null;
 }
 
+/** Les trois catégories de priorité de l'AC8 (« bloque le démarrage » / « a une échéance » /
+ *  « en retard »), plus `informative` pour `PROCHAINE_SEANCE_CONNUE` (jamais une alerte).
+ *  `PARTIE_TERMINEE` est hors catégorie (géré séparément par le statut, jamais via ce type). */
+export type SignalCategory = 'blocking' | 'deadline' | 'overdue' | 'informative';
+
+const SIGNAL_CATEGORIES: Partial<Record<PartySignalCode, SignalCategory>> = {
+  AUCUN_MEMBRE_INVITE: 'blocking',
+  PERSONNAGE_A_CREER: 'blocking',
+  HOMME_DRAGON_A_CREER: 'blocking',
+  AUCUN_SCENARIO_EN_COURS: 'blocking',
+  AUCUNE_DATE_NI_VOTE: 'blocking',
+  VOTE_EN_COURS_SANS_REPONSE: 'deadline',
+  RAPPORT_FIN_MANQUANT: 'overdue',
+  COMPTE_RENDU_NON_REDIGE: 'overdue',
+  PROCHAINE_SEANCE_CONNUE: 'informative',
+};
+
+/** Catégorie AC8 du signal dominant d'une partie, ou `null` si aucun signal actif ou si le
+ *  dominant est `PARTIE_TERMINEE` (géré hors de ce type par le statut de la partie). */
+export function dominantCategory(signals: readonly PartySignalCode[]): SignalCategory | null {
+  const dominant = dominantSignal(signals);
+  return dominant ? (SIGNAL_CATEGORIES[dominant] ?? null) : null;
+}
+
 /** Trie une liste de signaux du plus au moins prioritaire — utilisé pour choisir quels badges
  *  restent visibles quand il y en a plus de deux (AC3, `dominantSignal()` en tête). */
 export function sortByPriority(signals: readonly PartySignalCode[]): PartySignalCode[] {

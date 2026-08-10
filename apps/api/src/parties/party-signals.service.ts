@@ -123,11 +123,14 @@ export class PartySignalsService {
       const signals: PartySignalCode[] = [];
 
       // AC5 : une partie clôturée ne porte jamais un signal d'action, seuls les signaux de fin
-      // subsistent — appliqué en premier, avant toute autre dérivation.
+      // subsistent — appliqué en premier, avant toute autre dérivation. Les deux signaux de fin
+      // sont MJ-only (garde explicite, revue de code) : `partiesMissingCompteRendu`/
+      // `partiesMissingResume` ne sont dérivés que sur `mjPartieIds`, mais le rester même si ces
+      // requêtes étaient un jour élargies à `allPartieIds`.
       if (partie.status === 'TERMINEE') {
-        if (partiesMissingCompteRendu.has(partie.id))
+        if (role === 'mj' && partiesMissingCompteRendu.has(partie.id))
           signals.push('COMPTE_RENDU_NON_REDIGE');
-        if (partiesMissingResume.has(partie.id))
+        if (role === 'mj' && partiesMissingResume.has(partie.id))
           signals.push('RAPPORT_FIN_MANQUANT');
         signals.push('PARTIE_TERMINEE');
         return signals;
