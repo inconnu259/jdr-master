@@ -28,6 +28,7 @@ import {
   ListControlBar,
   type ListControlBarSortOption,
 } from '../../shared/list-control-bar/list-control-bar';
+import { PartyBanner } from '../../shared/party-banner/party-banner';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { InvitationsService } from '../../core/invitations/invitations.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
@@ -89,6 +90,7 @@ export interface PartieTileVm {
     MatIconModule,
     NgTemplateOutlet,
     ListControlBar,
+    PartyBanner,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',

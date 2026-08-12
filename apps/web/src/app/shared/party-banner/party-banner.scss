@@ -1,0 +1,124 @@
+// Bannière générative (Story 29.10). Aucune animation ici : elle appartient à la Story 29.11.
+// DESIGN.md §8 règle 2 impose qu'au repos la composition soit COMPLÈTE et lisible — c'est le cas :
+// tous les éléments tirés sont rendus et positionnés, ils ne bougent simplement pas encore.
+// 29.11 n'aura que des `@keyframes` à ajouter sur `transform`/`opacity`.
+
+:host {
+  display: block;
+  // Fond et lueur de la bannière, déclinés par thème. La composition ne connaît jamais de
+  // couleur littérale : elle désigne des rôles, le thème actif les résout.
+  --jdr-banner-base: var(--jdr-bg, #0d0a14);
+  --jdr-banner-glow: color-mix(in srgb, var(--jdr-accent-2, #9b6dff) 34%, var(--jdr-surface, #1a1428));
+}
+
+// Dimensions des trois rendus (DESIGN.md §4 et §7.3).
+:host(.party-banner-host--large) {
+  // 78-124 px autorisés ; 88 px = la hauteur déjà réservée par la Story 29.9, donc aucune
+  // régression de densité (~2 tuiles par écran mobile).
+  height: 88px;
+}
+:host(.party-banner-host--medium),
+:host(.party-banner-host--compact) {
+  flex: none;
+}
+:host(.party-banner-host--medium) {
+  width: 44px;
+  height: 44px;
+}
+:host(.party-banner-host--compact) {
+  width: 28px;
+  height: 28px;
+}
+
+.party-banner {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+:host(.party-banner-host--large) .party-banner {
+  border-radius: 8px 8px 0 0;
+}
+:host(.party-banner-host--medium) .party-banner {
+  border-radius: 8px;
+}
+
+// ── Mode liste : vignette atténuée + monogramme ───────────────────────────────
+// « Atténuée » est littéral : la vignette ne doit pas concurrencer la pastille d'état ni le nom,
+// qui portent l'information. Elle sert de repère colorié, rien de plus.
+.party-banner--compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, currentColor 40%, transparent),
+    color-mix(in srgb, currentColor 12%, transparent)
+  );
+}
+
+.party-banner__monogram {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--mat-sys-on-surface, #e8e0f0);
+}
+
+// ── Teintes : les deux accents du thème actif ─────────────────────────────────
+// Classes plutôt que styles calculés — un `[style.color]` construit par concaténation passe par
+// le sanitizer Angular et se fait silencieusement amputer.
+.tint-1 {
+  color: var(--jdr-accent-1, #7ec8a4);
+}
+.tint-2 {
+  color: var(--jdr-accent-2, #9b6dff);
+}
+
+// ── Grimoire Émeraude ─────────────────────────────────────────────────────────
+.party-banner__halo {
+  opacity: 0.34;
+}
+.party-banner__star {
+  fill: var(--jdr-text, #e8e0f0);
+  opacity: 0.5;
+}
+.party-banner__comet-tail {
+  opacity: 0.55;
+}
+.party-banner__comet-head {
+  fill: var(--jdr-text, #e8e0f0);
+}
+
+// ── Forêt Ancienne ────────────────────────────────────────────────────────────
+.party-banner__leaf,
+.party-banner__mote {
+  opacity: 0.8;
+}
+
+// ── Atelier Cuivré (clé `medieval-steampunk`) ─────────────────────────────────
+.party-banner__grid {
+  opacity: 0.22;
+}
+.party-banner__gear-shape {
+  opacity: 0.7;
+}
+.party-banner__rivet {
+  opacity: 0.85;
+}
+.party-banner__steam {
+  fill: var(--jdr-text, #e8dcc8);
+  opacity: 0.16;
+}
+.party-banner__gauge-face {
+  fill: var(--jdr-surface, #1a1008);
+}
+.party-banner__gauge-needle {
+  stroke: var(--jdr-status-todo, #f0a030);
+  stroke-width: 2;
+  stroke-linecap: round;
+}

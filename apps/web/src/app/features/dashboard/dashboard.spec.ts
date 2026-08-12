@@ -3,7 +3,13 @@ import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
-import type { AuthUser, PartieDto, PartySignalsDto, SessionPollDto } from '@master-jdr/shared';
+import type {
+  AuthUser,
+  PartieDto,
+  PartySignalsDto,
+  SessionPollDto,
+  Theme,
+} from '@master-jdr/shared';
 import { Dashboard } from './dashboard';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { InvitationsService } from '../../core/invitations/invitations.service';
@@ -120,7 +126,15 @@ async function createFixture(
       { provide: InvitationsService, useValue: invitationsSvc },
       { provide: OpenPollsService, useValue: { openPolls: signal(openPolls) } },
       { provide: PartySignalsService, useValue: { signals: signal(partySignals) } },
-      { provide: ThemeToneService, useValue: { tone: signal(TONE_MAP['grimoire-emeraude']) } },
+      {
+        provide: ThemeToneService,
+        // `activeTheme` est requis depuis la Story 29.10 : `PartyBanner` le lit pour choisir le
+        // style de la composition. Un mock qui ne porterait que `tone` casserait tout l'écran.
+        useValue: {
+          tone: signal(TONE_MAP['grimoire-emeraude']),
+          activeTheme: signal<Theme>('grimoire-emeraude'),
+        },
+      },
       { provide: AuthService, useValue: authSvc },
       { provide: AccountService, useValue: accountSvc },
       { provide: RealtimeService, useValue: realtimeSvc },
@@ -895,6 +909,111 @@ describe('Dashboard — mode liste : gabarit ligne (Story 29.9, AC1)', () => {
     await fixture.whenStable();
 
     expect(accountSvc.addFavorite).toHaveBeenCalledWith('p1');
+  });
+});
+
+// AD-19 : les trois modes rendent leur bannière via le MÊME composant. `Dashboard` ne fait que
+// lui passer le mode courant — il ne connaît ni la graine, ni les dimensions, ni le monogramme.
+describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/AC4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const PARTIES = [makeParty('p1', 'player', 'EN_COURS'), makeParty('p2', 'mj', 'A_VENIR')];
+
+  it('mode grand → une bannière par tuile, en mode "large"', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, PARTIES, true, new Map(), {
+      partiesViewMode: 'large',
+    });
+
+    const banners = fixture.nativeElement.querySelectorAll('app-party-banner');
+    expect(banners.length).toBe(2);
+    for (const banner of banners) {
+      expect(banner.classList.contains('party-banner-host--large')).toBe(true);
+    }
+  });
+
+  it('mode moyen → une vignette carrée par tuile, dans l’en-tête', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, PARTIES, true, new Map(), {
+      partiesViewMode: 'medium',
+    });
+
+    const banners = fixture.nativeElement.querySelectorAll('app-party-banner');
+    expect(banners.length).toBe(2);
+    for (const banner of banners) {
+      expect(banner.classList.contains('party-banner-host--medium')).toBe(true);
+      expect(banner.closest('.tile__head')).not.toBeNull();
+    }
+  });
+
+  it('mode liste → une vignette par ligne, entre la pastille d’état et le texte', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, PARTIES, true, new Map(), {
+      partiesViewMode: 'compact',
+    });
+
+    const banners = fixture.nativeElement.querySelectorAll('app-party-banner');
+    expect(banners.length).toBe(2);
+
+    const row = fixture.nativeElement.querySelector('.row');
+    const children = Array.from(row.children) as Element[];
+    const dotIndex = children.findIndex((el) => el.classList.contains('row__dot'));
+    const bannerIndex = children.findIndex((el) => el.tagName.toLowerCase() === 'app-party-banner');
+    const textIndex = children.findIndex((el) => el.classList.contains('row__txt'));
+    expect(dotIndex).toBeLessThan(bannerIndex);
+    expect(bannerIndex).toBeLessThan(textIndex);
+  });
+
+  it('le monogramme rendu en mode liste vient du nom de la partie', async () => {
+    const partie = { ...makeParty('p1', 'player', 'EN_COURS'), name: 'Les Cendres de Kavaan' };
+    const { fixture } = await createFixture(new Map(), undefined, [partie], false, new Map(), {
+      partiesViewMode: 'compact',
+    });
+
+    expect(fixture.nativeElement.querySelector('.party-banner__monogram').textContent.trim()).toBe(
+      'CK',
+    );
+  });
+
+  it('deux parties différentes → deux compositions différentes ; la même partie → la même', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, PARTIES, true, new Map(), {
+      partiesViewMode: 'large',
+    });
+
+    const svgs = Array.from(
+      fixture.nativeElement.querySelectorAll('app-party-banner svg'),
+    ) as SVGElement[];
+    // Les identifiants de défs sont scopés par instance : on les neutralise, ils DOIVENT différer.
+    const strip = (svg: SVGElement) => svg.innerHTML.replace(/pb\d+/g, 'pbX');
+    expect(strip(svgs[0])).not.toBe(strip(svgs[1]));
+  });
+
+  it('non-régression 29.9 : le placeholder de bannière a disparu, la ligne garde ses éléments', async () => {
+    const { fixture } = await createFixture(new Map(), undefined, PARTIES, true, new Map(), {
+      partiesViewMode: 'compact',
+    });
+
+    // Le pseudo-élément `.grid--large .tile::before` n'est plus la bannière : plus aucune `.tile`
+    // en mode liste, et les éléments de ligne de la Story 29.9 sont intacts.
+    expect(fixture.nativeElement.querySelector('.tile')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.row__dot')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.row__sub')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.row .favorite-btn')).not.toBeNull();
+  });
+
+  it('les cartes d’invitation reçue ne portent aucune bannière', async () => {
+    const invitationsSvc = makeInvitationsService();
+    invitationsSvc.listReceived = vi.fn().mockResolvedValue([
+      {
+        id: 'inv1',
+        inviterPseudo: 'mj',
+        partie: { id: 'px', name: 'Invitée', gameSystemId: 'draconis' },
+      },
+    ]);
+    const { fixture } = await createFixture(new Map(), invitationsSvc, [], false, new Map(), {
+      partiesViewMode: 'large',
+    });
+
+    const invitationCard = fixture.nativeElement.querySelector('mat-card.tile');
+    expect(invitationCard).not.toBeNull();
+    expect(invitationCard.querySelector('app-party-banner')).toBeNull();
   });
 });
 

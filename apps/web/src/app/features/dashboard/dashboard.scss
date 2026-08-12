@@ -23,20 +23,6 @@
   grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
   gap: 1.25rem;
 }
-// Emplacement de la bannière générative (Story 29.10) réservé dès maintenant : c'est lui qui donne
-// au mode grand sa hauteur cible (~2 par écran mobile, DESIGN.md §4 : bannière 78-124 px). En
-// attendant 29.10, il porte un lavis de la teinte d'état de la carte — même vocabulaire que la
-// bande verticale, aucune information nouvelle. 29.10 remplace le fond, pas la boîte.
-.grid--large .tile::before {
-  content: '';
-  display: block;
-  height: 88px;
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--tile-tint, var(--mat-sys-outline-variant, #ccc)) 45%, transparent),
-    transparent
-  );
-}
 .grid--large .tile mat-card-header {
   padding: 1.1rem 1.25rem 0;
 }
@@ -59,9 +45,8 @@
 }
 
 // ── Mode liste (AC1) : une ligne par partie, pleine largeur, cadre unique ────────────────────
-// Gabarit repris de la direction B de la maquette `directions-liste-parties.html` (pastille +
-// texte + compteur). La vignette atténuée/monogramme qui s'insère entre la pastille et le nom
-// appartient à la Story 29.10 — l'emplacement est simplement vide pour l'instant.
+// Gabarit repris de la direction B de la maquette `directions-liste-parties.html` : pastille
+// d'état, vignette atténuée + monogramme (Story 29.10), texte, compteur unique.
 .grid--compact {
   display: flex;
   flex-direction: column;
@@ -109,6 +94,11 @@
 .row__dot--closed {
   background: var(--jdr-status-done, #5a5a6a);
 }
+// Vignette atténuée + monogramme (Story 29.10) — s'intercale entre la pastille d'état et le
+// texte, sans faire grandir la ligne : 28 px est plus bas que la hauteur de deux lignes de texte.
+.row__vignette {
+  flex: none;
+}
 .row__txt {
   flex: 1;
   min-width: 0;
@@ -144,14 +134,25 @@
 }
 .tile {
   cursor: pointer;
+  overflow: hidden; // la bannière du mode grand doit épouser les coins arrondis de la carte
+}
+// En-tête de tuile : la vignette 44 px du mode moyen se pose à gauche du titre (Story 29.10).
+// En mode grand, ce conteneur n'a qu'un enfant et se comporte comme avant.
+.tile__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+.tile__head mat-card-header {
+  flex: 1;
+  min-width: 0;
+}
+.tile__vignette {
+  margin: 1rem 0 0 1rem;
 }
 // Story 29.6 (AC5) : « en retrait » — teinte --jdr-status-done (Story 29.0) en accent de bord,
 // doublée du signal non chromatique .status-indicator ci-dessous (jamais la couleur seule).
-// `--tile-tint` : la même teinte que la bande verticale, réexposée en variable pour que
-// l'emplacement de bannière du mode grand (`.grid--large .tile::before`) la reprenne sans
-// dupliquer la table des 4 statuts.
 .tile--closed {
-  --tile-tint: var(--jdr-status-done, #5a5a6a);
   border-left: 3px solid var(--jdr-status-done, #5a5a6a);
   opacity: 0.8;
 }
@@ -173,7 +174,6 @@
 // action — même principe que .tile--closed (bord + opacité), jamais la couleur seule (doublée
 // des badges .signal-badge ci-dessous, qui portent toujours une icône + un libellé).
 .tile--awaiting {
-  --tile-tint: var(--jdr-status-todo, #f0a030);
   border-left: 3px solid var(--jdr-status-todo, #f0a030);
 }
 
@@ -181,11 +181,9 @@
 // sur toute carte, quel que soit son statut — .tile--live/.tile--soon manquaient, seuls
 // .tile--awaiting/.tile--closed avaient été câblés initialement.
 .tile--live {
-  --tile-tint: var(--jdr-status-live, #3fd4ff);
   border-left: 3px solid var(--jdr-status-live, #3fd4ff);
 }
 .tile--soon {
-  --tile-tint: var(--jdr-status-soon, #ff7ad9);
   border-left: 3px solid var(--jdr-status-soon, #ff7ad9);
 }
 

@@ -128,8 +128,9 @@
 <!-- Carte d'une partie (Tasks 6/7) — un seul patron partagé par les quatre sections ci-dessus.
      Le mode liste a son PROPRE rendu (DESIGN.md §4.1 + §7.7 « ne pas » : ce n'est pas une carte
      rétrécie mais une ligne), d'où la bascule de gabarit ci-dessous plutôt qu'un simple jeu de
-     classes CSS. Emplacement de la vignette atténuée + monogramme laissé libre : il appartient à
-     la Story 29.10 (« le mode liste une vignette atténuée surmontée du monogramme »). -->
+     classes CSS. Les trois modes rendent leur bannière via le MÊME composant `PartyBanner`
+     (Story 29.10, AD-19) — c'est lui, et lui seul, qui sait ce que « grand », « moyen » et
+     « liste » veulent dire ; `Dashboard` ne fait que lui passer le mode courant. -->
 <ng-template #tile let-t>
   @if (partiesViewMode() === 'compact') {
     <div
@@ -148,6 +149,12 @@
         [class.row__dot--closed]="t.tint === 'done'"
         aria-hidden="true"
       ></span>
+      <app-party-banner
+        class="row__vignette"
+        [partieId]="t.partie.id"
+        [partieName]="t.partie.name"
+        mode="compact"
+      />
       <span class="row__txt">
         <span class="row__name">{{ t.partie.name }}</span>
         <span class="row__sub">{{ rowSummary(t) }}</span>
@@ -178,7 +185,23 @@
     [class.tile--soon]="t.tint === 'soon'"
     [routerLink]="['/parties', t.partie.id]"
   >
-    <mat-card-header>
+    @if (partiesViewMode() === 'large') {
+      <!-- Bannière pleine largeur, en tête de carte (DESIGN.md §7.3). Elle remplace le
+           pseudo-élément que la Story 29.9 avait réservé à cet emplacement. -->
+      <app-party-banner [partieId]="t.partie.id" [partieName]="t.partie.name" mode="large" />
+    }
+    <div class="tile__head">
+      @if (partiesViewMode() === 'medium') {
+        <!-- Vignette carrée 44 px : la MÊME composition que ci-dessus, recadrée au centre par le
+             composant. `Dashboard` ne connaît pas cette différence. -->
+        <app-party-banner
+          class="tile__vignette"
+          [partieId]="t.partie.id"
+          [partieName]="t.partie.name"
+          mode="medium"
+        />
+      }
+      <mat-card-header>
       <mat-card-title>
         {{ t.partie.name }}
         <button
@@ -216,7 +239,8 @@
           </span>
         }
       </mat-card-subtitle>
-    </mat-card-header>
+      </mat-card-header>
+    </div>
     @if (t.visibleSignals.length > 0) {
       <!-- Badges de signal (AC3, AC9) : au plus deux, icône + libellé (jamais la couleur seule). -->
       <mat-card-content class="signal-badges">

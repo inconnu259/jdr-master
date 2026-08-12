@@ -1,0 +1,217 @@
+@if (mode() === 'compact') {
+  <!-- Mode liste : rendu PROPRE, jamais la composition réduite (DESIGN.md §7.3/§9). À 28 px, ce
+       qui distingue deux parties n'est ni le motif ni la composition, mais le monogramme et la
+       dominante colorée — c'est donc tout ce qu'on rend, et c'est aussi ce qui rend une liste de
+       douze bannières tenable. -->
+  <span class="party-banner party-banner--compact" [class]="tintClass(params().dominant)" aria-hidden="true">
+    <span class="party-banner__monogram">{{ monogram() }}</span>
+  </span>
+} @else {
+  <!-- Modes grand et moyen : LA MÊME composition, deux cadrages. `slice` recadre au centre pour
+       le carré 44 px (§7.3 « la composition recadrée au centre »), ce qui garantit qu'un seul
+       rendu sert les deux modes — AC3. -->
+  <svg
+    class="party-banner"
+    [attr.viewBox]="viewBox"
+    preserveAspectRatio="xMidYMid slice"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <defs>
+      <radialGradient
+        [attr.id]="backgroundId"
+        cx="50%"
+        cy="50%"
+        r="75%"
+        [attr.fx]="params().backgroundFocus.x + '%'"
+        [attr.fy]="params().backgroundFocus.y + '%'"
+      >
+        <stop offset="0%" [attr.stop-color]="'var(--jdr-banner-glow)'" />
+        <stop offset="100%" [attr.stop-color]="'var(--jdr-banner-base)'" />
+      </radialGradient>
+
+      @if (steampunk()) {
+        <!-- Grille de plan technique : CONSTANTE du thème, jamais un élément tiré — toute
+             bannière Atelier Cuivré la porte (DESIGN.md §7.3, corrigé par iteration-7). -->
+        <pattern
+          [attr.id]="gridId"
+          width="13"
+          height="13"
+          patternUnits="userSpaceOnUse"
+        >
+          <path d="M 13 0 L 0 0 0 13" fill="none" stroke="currentColor" stroke-width="0.5" />
+        </pattern>
+
+        <!-- Techniques de rouage B / C / E. La technique D est rejetée (DESIGN.md §7.3) : ne pas
+             l'ajouter. Géométries reprises de mockups/iteration-6-regles-de-generation.html. -->
+        <g [attr.id]="gearId('B')">
+          <g fill="currentColor">
+            @for (a of [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]; track a) {
+              <rect x="46" y="2" width="8" height="14" rx="1.5" [attr.transform]="'rotate(' + a + ' 50 50)'" />
+            }
+          </g>
+          <circle cx="50" cy="50" r="36" fill="none" stroke="currentColor" stroke-width="7" />
+          <circle cx="50" cy="50" r="12" fill="none" stroke="currentColor" stroke-width="5" />
+        </g>
+        <g [attr.id]="gearId('C')">
+          <g fill="currentColor">
+            @for (a of [0, 36, 72, 108, 144, 180, 216, 252, 288, 324]; track a) {
+              <polygon points="45,4 55,4 53.5,17 46.5,17" [attr.transform]="'rotate(' + a + ' 50 50)'" />
+            }
+          </g>
+          <circle cx="50" cy="50" r="34" fill="none" stroke="currentColor" stroke-width="4" />
+          <g stroke="currentColor" stroke-width="4">
+            <line x1="50" y1="22" x2="50" y2="78" />
+            <line x1="22" y1="50" x2="78" y2="50" />
+          </g>
+          <circle cx="50" cy="50" r="10" fill="none" stroke="currentColor" stroke-width="4" />
+        </g>
+        <g [attr.id]="gearId('E')">
+          <path
+            fill="currentColor"
+            fill-rule="evenodd"
+            d="M 44,4 L 56,4 L 59,17 A 38,38 0 0,1 69,21 L 81,13 L 89,21 L 81,33 A 38,38 0 0,1 85,43 L 98,46 L 98,58 L 85,61 A 38,38 0 0,1 81,71 L 89,83 L 81,91 L 69,83 A 38,38 0 0,1 59,87 L 56,100 L 44,100 L 41,87 A 38,38 0 0,1 31,83 L 19,91 L 11,83 L 19,71 A 38,38 0 0,1 15,61 L 2,58 L 2,46 L 15,43 A 38,38 0 0,1 19,33 L 11,21 L 19,13 L 31,21 A 38,38 0 0,1 41,17 Z M 50,33 A 17,17 0 1,0 50,67 A 17,17 0 1,0 50,33 Z"
+          />
+        </g>
+      }
+    </defs>
+
+    <rect
+      class="party-banner__background"
+      x="0"
+      y="0"
+      [attr.width]="viewBoxWidth"
+      [attr.height]="viewBoxHeight"
+      [attr.fill]="backgroundFill()"
+    />
+
+    <!-- ─── Grimoire Émeraude : ciel et comètes ─── -->
+    @if (emeraude(); as p) {
+      <circle
+        class="party-banner__halo"
+        [class]="tintClass(p.halo.tint)"
+        [attr.cx]="p.halo.x"
+        [attr.cy]="p.halo.y"
+        [attr.r]="p.halo.size / 2"
+        fill="currentColor"
+      />
+      @for (star of p.stars; track $index) {
+        <circle
+          class="party-banner__star"
+          [attr.cx]="star.x"
+          [attr.cy]="star.y"
+          [attr.r]="star.radius"
+        />
+      }
+      @for (comet of p.comets; track $index) {
+        <g class="party-banner__comet" [attr.transform]="cometTransform(comet)">
+          <!-- Queue et tête dans le MÊME repère pivoté : la tête est posée au bout de la queue
+               par construction, quel que soit θ. Ne jamais les séparer. -->
+          <rect
+            class="party-banner__comet-tail"
+            [class]="tintClass(comet.tint)"
+            x="0"
+            [attr.y]="-comet.headSize / 6"
+            [attr.width]="comet.length"
+            [attr.height]="comet.headSize / 3"
+            [attr.rx]="comet.headSize / 6"
+            fill="currentColor"
+          />
+          <circle
+            class="party-banner__comet-head"
+            [attr.cx]="comet.length"
+            cy="0"
+            [attr.r]="comet.headSize / 2"
+          />
+        </g>
+      }
+    }
+
+    <!-- ─── Forêt Ancienne : clairière ─── -->
+    @if (foret(); as p) {
+      @for (halo of p.halos; track $index) {
+        <circle
+          class="party-banner__halo"
+          [class]="tintClass(halo.tint)"
+          [attr.cx]="halo.x"
+          [attr.cy]="halo.y"
+          [attr.r]="halo.size / 2"
+          fill="currentColor"
+        />
+      }
+      @for (mobile of p.mobiles; track $index) {
+        @if (p.mobileKind === 'leaves') {
+          <rect
+            class="party-banner__leaf"
+            [class]="tintClass(mobile.tint)"
+            [attr.x]="mobile.x"
+            [attr.y]="viewBoxHeight / 2 - mobile.size / 2"
+            [attr.width]="mobile.size"
+            [attr.height]="mobile.size"
+            [attr.rx]="mobile.size / 2.6"
+            fill="currentColor"
+          />
+        } @else {
+          <circle
+            class="party-banner__mote"
+            [class]="tintClass(mobile.tint)"
+            [attr.cx]="mobile.x"
+            [attr.cy]="viewBoxHeight / 2"
+            [attr.r]="mobile.size / 2"
+            fill="currentColor"
+          />
+        }
+      }
+    }
+
+    <!-- ─── Atelier Cuivré (clé `medieval-steampunk`, cf. Story 35.1) : planche d'atelier ─── -->
+    @if (steampunk(); as p) {
+      <rect
+        class="party-banner__grid tint-1"
+        x="0"
+        y="0"
+        [attr.width]="viewBoxWidth"
+        [attr.height]="viewBoxHeight"
+        [attr.fill]="gridFill()"
+      />
+      @for (gear of p.gears; track $index) {
+        <g class="party-banner__gear" [attr.transform]="gearTransform(gear)">
+          <use class="party-banner__gear-shape" [class]="tintClass(gear.tint)" [attr.href]="gearHref(gear.technique)" />
+        </g>
+      }
+      @for (rivet of p.rivets; track $index) {
+        <circle class="party-banner__rivet tint-1" [attr.cx]="rivet.x" [attr.cy]="rivet.y" r="2" fill="currentColor" />
+      }
+      @if (p.steam) {
+        <circle class="party-banner__steam" [attr.cx]="p.gauge.corner === 'left' ? viewBoxWidth - 26 : 26" [attr.cy]="viewBoxHeight - 14" r="7" />
+        <circle class="party-banner__steam" [attr.cx]="p.gauge.corner === 'left' ? viewBoxWidth - 16 : 36" [attr.cy]="viewBoxHeight - 24" r="5" />
+      }
+      <!-- Manomètre : toujours présent, dessiné EN DERNIER pour rester au-dessus. Sa zone
+           d'exclusion (cercle + 8 px) est garantie côté dérivation, pas ici. -->
+      <g class="party-banner__gauge tint-1" [attr.transform]="'translate(' + p.gauge.x + ' ' + p.gauge.y + ')'">
+        <circle
+          [attr.cx]="p.gauge.size / 2"
+          [attr.cy]="p.gauge.size / 2"
+          [attr.r]="p.gauge.size / 2"
+          class="party-banner__gauge-face"
+        />
+        <circle
+          [attr.cx]="p.gauge.size / 2"
+          [attr.cy]="p.gauge.size / 2"
+          [attr.r]="p.gauge.size / 2 - 1.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3"
+        />
+        <line
+          class="party-banner__gauge-needle"
+          [attr.x1]="p.gauge.size / 2"
+          [attr.y1]="p.gauge.size / 2"
+          [attr.x2]="p.gauge.size / 2 - p.gauge.size / 3.4"
+          [attr.y2]="p.gauge.size / 2 - p.gauge.size / 4"
+        />
+        <circle [attr.cx]="p.gauge.size / 2" [attr.cy]="p.gauge.size / 2" r="2.5" fill="currentColor" />
+      </g>
+    }
+  </svg>
+}
