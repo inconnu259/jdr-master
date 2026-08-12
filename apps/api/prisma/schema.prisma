@@ -68,6 +68,7 @@ model Partie {
   nextSessionSlot DaySlot? // Créneau confirmé
   reminderSentAt  DateTime? // null = rappel pas encore envoyé pour le créneau courant (Epic 5)
   closedAt        DateTime? // AD-8 — seul état persisté ; "en cours"/"pas encore commencée" dérivés à la lecture (Story 29.6)
+  coverImageUrl   String? // Story 29.12, AD-19 — null = bannière générée. Seule donnée persistée (jamais dimensions/checksum/horodatage, qui seraient du dérivé)
 
   memberships         Membership[]
   invitations         Invitation[]

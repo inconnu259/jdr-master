@@ -83,6 +83,23 @@ export class PartiesService {
     );
   }
 
+  /** Dépose l'image de couverture (Story 29.12, AC1) — recadrage centré automatique côté serveur,
+   *  aucune donnée de recadrage à transmettre (contrairement au portrait de personnage). */
+  setCoverImage(id: string, file: File): Promise<PartieDto> {
+    const form = new FormData();
+    form.append('file', file);
+    return firstValueFrom(
+      this.http.put<PartieDto>(`${API}/parties/${id}/cover`, form, { withCredentials: true }),
+    );
+  }
+
+  /** Retire l'image de couverture (AC3) — la bannière générée reprend sa place. */
+  removeCoverImage(id: string): Promise<PartieDto> {
+    return firstValueFrom(
+      this.http.delete<PartieDto>(`${API}/parties/${id}/cover`, { withCredentials: true }),
+    );
+  }
+
   close(id: string): Promise<PartieDto> {
     return firstValueFrom(
       this.http.patch<PartieDto>(`${API}/parties/${id}/close`, {}, { withCredentials: true }),

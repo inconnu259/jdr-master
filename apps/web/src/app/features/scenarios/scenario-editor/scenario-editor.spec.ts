@@ -67,6 +67,7 @@ const PARTIE: PartieDto = {
   role: 'mj',
   status: 'EN_COURS',
   isFavorite: false,
+  coverImageVersion: null,
 };
 
 async function createComponent(

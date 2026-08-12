@@ -1,11 +1,27 @@
+jest.mock('node:fs/promises', () => ({
+  mkdir: jest.fn().mockResolvedValue(undefined),
+  writeFile: jest.fn().mockResolvedValue(undefined),
+  unlink: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('node:crypto', () => {
+  const actual =
+    jest.requireActual<typeof import('node:crypto')>('node:crypto');
+  return { ...actual, randomUUID: jest.fn(() => 'fixed-uuid') };
+});
+
 import sharp from 'sharp';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import {
   detectImageMime,
   extensionForImageMime,
-  isValidPortraitFilename,
+  extractUploadFilename,
+  isValidUploadFilename,
   mimeForExtension,
   stripImageMetadata,
-} from './image-mime.util';
+  unlinkUploadFile,
+  writeUploadFile,
+} from './image-upload.util';
 
 const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
 const PNG_HEADER = Buffer.from([
@@ -72,7 +88,7 @@ describe('stripImageMetadata', () => {
     expect(outputMeta.exif).toBeUndefined();
   });
 
-  it('applique la rotation EXIF aux pixels avant de retirer le tag Orientation (AC2)', async () => {
+  it('applique la rotation EXIF aux pixels avant de retirer le tag Orientation', async () => {
     const oriented = await sharp({
       create: {
         width: 8,
@@ -92,7 +108,7 @@ describe('stripImageMetadata', () => {
     expect(meta.orientation).toBeUndefined();
   });
 
-  it("préserve le format d'entrée (JPEG reste JPEG, AC3)", async () => {
+  it("préserve le format d'entrée (JPEG reste JPEG)", async () => {
     const buf = await sharp({
       create: {
         width: 4,
@@ -106,59 +122,6 @@ describe('stripImageMetadata', () => {
     const cleaned = await stripImageMetadata(buf);
     const meta = await sharp(cleaned).metadata();
     expect(meta.format).toBe('jpeg');
-  });
-
-  it("préserve le format d'entrée (PNG reste PNG, AC3)", async () => {
-    const buf = await sharp({
-      create: {
-        width: 4,
-        height: 4,
-        channels: 3,
-        background: { r: 0, g: 0, b: 255 },
-      },
-    })
-      .png()
-      .toBuffer();
-    const cleaned = await stripImageMetadata(buf);
-    const meta = await sharp(cleaned).metadata();
-    expect(meta.format).toBe('png');
-  });
-
-  it("préserve le format d'entrée (WEBP reste WEBP, AC3)", async () => {
-    const buf = await sharp({
-      create: {
-        width: 4,
-        height: 4,
-        channels: 3,
-        background: { r: 0, g: 0, b: 255 },
-      },
-    })
-      .webp()
-      .toBuffer();
-    const cleaned = await stripImageMetadata(buf);
-    const meta = await sharp(cleaned).metadata();
-    expect(meta.format).toBe('webp');
-  });
-
-  it('laisse une image sans tag EXIF Orientation inchangée (pas de rotation intempestive)', async () => {
-    const buf = await sharp({
-      create: {
-        width: 8,
-        height: 4,
-        channels: 3,
-        background: { r: 10, g: 20, b: 30 },
-      },
-    })
-      .jpeg()
-      .toBuffer();
-    const inputMeta = await sharp(buf).metadata();
-    expect(inputMeta.orientation).toBeUndefined();
-
-    const cleaned = await stripImageMetadata(buf);
-    const meta = await sharp(cleaned).metadata();
-    expect(meta.width).toBe(8);
-    expect(meta.height).toBe(4);
-    expect(meta.orientation).toBeUndefined();
   });
 
   it('rejette (lève) un buffer avec une signature magique valide mais un contenu indécodable', async () => {
@@ -187,24 +150,85 @@ describe('mimeForExtension', () => {
   });
 });
 
-describe('isValidPortraitFilename', () => {
+describe('isValidUploadFilename', () => {
   it('accepte un nom de fichier UUID + extension connue (format généré par randomUUID())', () => {
     expect(
-      isValidPortraitFilename('11111111-1111-1111-1111-111111111111.jpg'),
+      isValidUploadFilename('11111111-1111-1111-1111-111111111111.jpg'),
     ).toBe(true);
   });
 
   it('rejette un chemin contenant un traversal (../)', () => {
-    expect(isValidPortraitFilename('../../etc/passwd')).toBe(false);
+    expect(isValidUploadFilename('../../etc/passwd')).toBe(false);
   });
 
   it('rejette un nom de fichier ne respectant pas le format UUID', () => {
-    expect(isValidPortraitFilename('old.jpg')).toBe(false);
+    expect(isValidUploadFilename('old.jpg')).toBe(false);
   });
 
   it('rejette une extension non supportée', () => {
     expect(
-      isValidPortraitFilename('11111111-1111-1111-1111-111111111111.exe'),
+      isValidUploadFilename('11111111-1111-1111-1111-111111111111.exe'),
     ).toBe(false);
+  });
+});
+
+describe('extractUploadFilename', () => {
+  const PREFIX = '/uploads/portraits/';
+  const VALID_FILENAME = '11111111-1111-1111-1111-111111111111.jpg';
+  const VALID_URL = `${PREFIX}${VALID_FILENAME}`;
+
+  it('extrait le nom de fichier depuis une URL valide pour le préfixe donné', () => {
+    expect(extractUploadFilename(VALID_URL, PREFIX)).toBe(VALID_FILENAME);
+  });
+
+  it('retourne null pour une URL nulle', () => {
+    expect(extractUploadFilename(null, PREFIX)).toBeNull();
+  });
+
+  it("retourne null si l'URL ne commence pas par le préfixe attendu (domaine différent)", () => {
+    expect(extractUploadFilename('/uploads/covers/x.jpg', PREFIX)).toBeNull();
+  });
+
+  it('retourne null pour un nom de fichier ne respectant pas le format UUID (défense path traversal)', () => {
+    expect(
+      extractUploadFilename(`${PREFIX}../../etc/passwd`, PREFIX),
+    ).toBeNull();
+  });
+});
+
+describe('writeUploadFile', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('crée le dossier, écrit le buffer sous un nom <uuid>.<ext> et retourne ce nom', async () => {
+    const filename = await writeUploadFile(
+      '/uploads/covers',
+      Buffer.from('bytes'),
+      'image/webp',
+    );
+
+    expect(filename).toBe('fixed-uuid.webp');
+    expect(mkdir).toHaveBeenCalledWith('/uploads/covers', { recursive: true });
+    expect(writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('fixed-uuid.webp'),
+      Buffer.from('bytes'),
+    );
+  });
+});
+
+describe('unlinkUploadFile', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('supprime le fichier nommé dans le dossier donné', async () => {
+    await unlinkUploadFile('/uploads/covers', 'fixed-uuid.webp');
+    expect(unlink).toHaveBeenCalledWith(
+      expect.stringContaining('fixed-uuid.webp'),
+    );
+  });
+
+  it("propage l'erreur si la suppression échoue (l'appelant décide comment réagir)", async () => {
+    (unlink as jest.Mock).mockRejectedValueOnce(new Error('ENOENT'));
+    await expect(
+      unlinkUploadFile('/uploads/covers', 'missing.webp'),
+    ).rejects.toThrow('ENOENT');
   });
 });

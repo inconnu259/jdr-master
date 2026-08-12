@@ -27,6 +27,7 @@ function makeParty(
   role: 'mj' | 'player' = 'player',
   status: PartieDto['status'] = 'EN_COURS',
   isFavorite = false,
+  coverImageVersion: string | null = null,
 ): PartieDto {
   return {
     id,
@@ -43,6 +44,7 @@ function makeParty(
     role,
     status,
     isFavorite,
+    coverImageVersion,
   };
 }
 
@@ -983,6 +985,19 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
     // Les identifiants de défs sont scopés par instance : on les neutralise, ils DOIVENT différer.
     const strip = (svg: SVGElement) => svg.innerHTML.replace(/pb\d+/g, 'pbX');
     expect(strip(svgs[0])).not.toBe(strip(svgs[1]));
+  });
+
+  it('Story 29.12 : coverImageVersion est transmis à app-party-banner, qui rend l’image plutôt que la composition', async () => {
+    const withCover = {
+      ...makeParty('p1', 'player', 'EN_COURS'),
+      coverImageVersion: '99999999-9999-9999-9999-999999999999',
+    };
+    const { fixture } = await createFixture(new Map(), undefined, [withCover], false, new Map(), {
+      partiesViewMode: 'large',
+    });
+
+    expect(fixture.nativeElement.querySelector('app-party-banner img.party-banner')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('app-party-banner svg.party-banner')).toBeNull();
   });
 
   it('non-régression 29.9 : le placeholder de bannière a disparu, la ligne garde ses éléments', async () => {

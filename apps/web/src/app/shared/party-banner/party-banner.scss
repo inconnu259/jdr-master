@@ -44,6 +44,9 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
+  // Sans effet sur le <svg> généré (qui recadre via `preserveAspectRatio`) — s'applique à l'<img>
+  // de couverture (Story 29.12), qui partage cette même classe pour hériter du dimensionnement.
+  object-fit: cover;
 }
 
 :host(.party-banner-host--large) .party-banner {
@@ -51,6 +54,9 @@
 }
 :host(.party-banner-host--medium) .party-banner {
   border-radius: 8px;
+}
+:host(.party-banner-host--compact) .party-banner {
+  border-radius: 6px;
 }
 
 // ── Mode liste : vignette atténuée + monogramme ───────────────────────────────

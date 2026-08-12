@@ -45,8 +45,13 @@ jest.mock('node:crypto', () => {
 // sans effet de bord), seule stripImageMetadata est mockée. Un vrai sharp() sur JPEG_BUFFER
 // (signature magique seule, non décodable) ferait échouer tous les tests updatePortrait()
 // existants — cf. Story 16.2 Dev Notes.
-jest.mock('./image-mime.util', () => ({
-  ...jest.requireActual('./image-mime.util'),
+//
+// Story 29.12 (AD-17) : chemin mis à jour vers l'utilitaire extrait (`common/image-upload.util`),
+// après suppression de `./image-mime.util`. C'est CE mock qui devenait inopérant sans bruit si le
+// chemin n'était pas répercuté (AC7) — cf. le test dédié « le mock mocke encore » ci-dessous, qui
+// échouerait si `jest.mock` ci-dessous ne s'appliquait plus à rien.
+jest.mock('../common/image-upload.util', () => ({
+  ...jest.requireActual('../common/image-upload.util'),
   stripImageMetadata: jest.fn(),
 }));
 
@@ -58,7 +63,7 @@ import {
   resolveStartingEquipment,
 } from '@master-jdr/game-rules';
 import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises';
-import { stripImageMetadata } from './image-mime.util';
+import { stripImageMetadata } from '../common/image-upload.util';
 import { CharacterService } from './character.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
@@ -1123,6 +1128,25 @@ describe('CharacterService', () => {
         expect.stringContaining('fixed-uuid.jpg'),
         cleaned,
       );
+    });
+
+    it('AC7 : le jest.mock de stripImageMetadata cible bien le module courant, pas un chemin périmé (garde contre le refactor AD-17)', async () => {
+      // Si `jest.mock('../common/image-upload.util', ...)` ne ciblait plus le module réellement
+      // importé par `character.service.ts` (chemin périmé après un déplacement), stripImageMetadata
+      // serait la VRAIE fonction sharp() au moment de l'appel — appelée sur JPEG_BUFFER (signature
+      // magique seule, non décodable), elle rejetterait (cf. test suivant), et l'assertion
+      // `writeFile` ci-dessous ne serait jamais atteinte. La valeur mockée est délibérément
+      // impossible à produire par un vrai sharp() sur ce buffer, pour qu'aucune coïncidence ne
+      // puisse faire passer ce test si le mock devenait inopérant sans bruit (AC7).
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+      const marker = Buffer.from('valeur-impossible-a-produire-par-un-vrai-sharp-sur-ce-buffer');
+      (stripImageMetadata as jest.Mock).mockResolvedValue(marker);
+
+      await service.updatePortrait('char1', 'u1', makeMulterFile(), null);
+
+      expect(writeFile).toHaveBeenCalledWith(expect.any(String), marker);
     });
 
     it('signature magique valide mais image indécodable par sharp → BadRequestException, aucune écriture disque (Story 16.2 AC3)', async () => {

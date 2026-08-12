@@ -153,6 +153,7 @@
         class="row__vignette"
         [partieId]="t.partie.id"
         [partieName]="t.partie.name"
+        [coverImageVersion]="t.partie.coverImageVersion"
         mode="compact"
       />
       <span class="row__txt">
@@ -188,7 +189,12 @@
     @if (partiesViewMode() === 'large') {
       <!-- Bannière pleine largeur, en tête de carte (DESIGN.md §7.3). Elle remplace le
            pseudo-élément que la Story 29.9 avait réservé à cet emplacement. -->
-      <app-party-banner [partieId]="t.partie.id" [partieName]="t.partie.name" mode="large" />
+      <app-party-banner
+        [partieId]="t.partie.id"
+        [partieName]="t.partie.name"
+        [coverImageVersion]="t.partie.coverImageVersion"
+        mode="large"
+      />
     }
     <div class="tile__head">
       @if (partiesViewMode() === 'medium') {
@@ -198,6 +204,7 @@
           class="tile__vignette"
           [partieId]="t.partie.id"
           [partieName]="t.partie.name"
+          [coverImageVersion]="t.partie.coverImageVersion"
           mode="medium"
         />
       }

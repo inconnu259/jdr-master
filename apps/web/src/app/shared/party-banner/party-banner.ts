@@ -1,5 +1,6 @@
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import type { ListViewMode } from '@master-jdr/shared';
+import { API_BASE } from '../../core/api-base';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import {
   BANNER_VIEWBOX_HEIGHT,
@@ -66,6 +67,37 @@ export class PartyBanner {
    *  change pas sa composition (AC2 de la Story 29.10). */
   readonly partieName = input.required<string>();
   readonly mode = input.required<ListViewMode>();
+  /** Jeton de version de la couverture (Story 29.12, AD-19) — `null` = pas d'image, la bannière
+   *  générée s'affiche. Non-null : l'image l'emporte dans les trois modes, **sans rendre la
+   *  composition du tout** (AC2 seconde clause — une composition rendue puis masquée laisserait
+   *  ses animations tourner sous l'image). */
+  readonly coverImageVersion = input<string | null>(null);
+
+  /** Repli si le fichier a disparu du disque (base/disque désynchronisés) — CAP-20 : aucune
+   *  partie n'est jamais nue. Réinitialisé à chaque changement de couverture (nouvelle image
+   *  déposée, ou instance réutilisée pour une autre partie dans une liste virtualisée). */
+  protected readonly coverImageFailed = signal(false);
+
+  constructor() {
+    effect(() => {
+      this.coverImageVersion(); // dépendance : tout changement de version retente le chargement
+      untracked(() => this.coverImageFailed.set(false));
+    });
+  }
+
+  protected readonly showCoverImage = computed(
+    () => this.coverImageVersion() !== null && !this.coverImageFailed(),
+  );
+
+  protected readonly coverImageSrc = computed(() => {
+    const version = this.coverImageVersion();
+    if (version === null) return '';
+    return `${API_BASE}/parties/${this.partieId()}/cover?mode=${this.mode()}&v=${version}`;
+  });
+
+  protected onCoverImageError(): void {
+    this.coverImageFailed.set(true);
+  }
 
   protected readonly viewBoxWidth = BANNER_VIEWBOX_WIDTH;
   protected readonly viewBoxHeight = BANNER_VIEWBOX_HEIGHT;

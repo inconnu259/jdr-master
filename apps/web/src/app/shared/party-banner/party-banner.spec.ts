@@ -21,6 +21,7 @@ async function render(
   mode: 'large' | 'medium' | 'compact',
   themeSvc = makeThemeService(),
   name = PARTIE_NAME,
+  coverImageVersion: string | null = null,
 ) {
   await TestBed.configureTestingModule({
     imports: [PartyBanner],
@@ -30,6 +31,7 @@ async function render(
   fixture.componentRef.setInput('partieId', PARTIE_ID);
   fixture.componentRef.setInput('partieName', name);
   fixture.componentRef.setInput('mode', mode);
+  fixture.componentRef.setInput('coverImageVersion', coverImageVersion);
   fixture.detectChanges();
   await fixture.whenStable();
   return { fixture, themeSvc };
@@ -94,6 +96,72 @@ describe('PartyBanner — les trois rendus (Story 29.10, AC4)', () => {
       expect(root.getAttribute('aria-label')).toBeNull();
       TestBed.resetTestingModule();
     }
+  });
+});
+
+describe('PartyBanner — image de couverture (Story 29.12, AC2/AC3)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const COVER_VERSION = '99999999-9999-9999-9999-999999999999';
+
+  it('avec couverture → un <img> est rendu, aucune composition SVG, dans les trois modes', async () => {
+    for (const mode of ['large', 'medium', 'compact'] as const) {
+      const { fixture } = await render(mode, makeThemeService(), PARTIE_NAME, COVER_VERSION);
+      const img = fixture.nativeElement.querySelector('img.party-banner');
+      expect(img).not.toBeNull();
+      expect(fixture.nativeElement.querySelector('svg.party-banner')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.party-banner__monogram')).toBeNull();
+      TestBed.resetTestingModule();
+    }
+  });
+
+  it('sans couverture → composition générée inchangée (non-régression Stories 29.10/29.11)', async () => {
+    const { fixture } = await render('large', makeThemeService(), PARTIE_NAME, null);
+    expect(fixture.nativeElement.querySelector('img.party-banner')).toBeNull();
+    expect(fixture.nativeElement.querySelector('svg.party-banner')).not.toBeNull();
+  });
+
+  it('la source de l’image porte le mode courant et le jeton de version', async () => {
+    const { fixture } = await render('medium', makeThemeService(), PARTIE_NAME, COVER_VERSION);
+    const img = fixture.nativeElement.querySelector('img.party-banner') as HTMLImageElement;
+    expect(img.src).toContain(`/parties/${PARTIE_ID}/cover`);
+    expect(img.src).toContain('mode=medium');
+    expect(img.src).toContain(`v=${COVER_VERSION}`);
+  });
+
+  it('échec de chargement de l’image → repli sur la bannière générée, jamais une image cassée (CAP-20)', async () => {
+    const { fixture } = await render('large', makeThemeService(), PARTIE_NAME, COVER_VERSION);
+    expect(fixture.nativeElement.querySelector('img.party-banner')).not.toBeNull();
+
+    const img = fixture.nativeElement.querySelector('img.party-banner') as HTMLImageElement;
+    img.dispatchEvent(new Event('error'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('img.party-banner')).toBeNull();
+    expect(fixture.nativeElement.querySelector('svg.party-banner')).not.toBeNull();
+  });
+
+  it('un nouveau jeton de version (remplacement de l’image) retente le chargement après un échec précédent', async () => {
+    const { fixture } = await render('large', makeThemeService(), PARTIE_NAME, COVER_VERSION);
+    const img = fixture.nativeElement.querySelector('img.party-banner') as HTMLImageElement;
+    img.dispatchEvent(new Event('error'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('img.party-banner')).toBeNull();
+
+    fixture.componentRef.setInput('coverImageVersion', '88888888-8888-8888-8888-888888888888');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('img.party-banner')).not.toBeNull();
+  });
+
+  it('décoratif : aria-hidden="true", alt="" sur l’image de couverture', async () => {
+    const { fixture } = await render('large', makeThemeService(), PARTIE_NAME, COVER_VERSION);
+    const img = fixture.nativeElement.querySelector('img.party-banner') as HTMLImageElement;
+    expect(img.getAttribute('aria-hidden')).toBe('true');
+    expect(img.getAttribute('alt')).toBe('');
   });
 });
 

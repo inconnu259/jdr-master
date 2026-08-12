@@ -24,6 +24,7 @@ describe('PartiesService (front)', () => {
     role: 'mj',
     status: 'EN_COURS',
     isFavorite: false,
+    coverImageVersion: null,
   };
 
   beforeEach(() => {

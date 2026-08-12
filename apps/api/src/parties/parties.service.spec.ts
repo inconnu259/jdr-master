@@ -1,3 +1,44 @@
+jest.mock('node:fs/promises', () => ({
+  mkdir: jest.fn().mockResolvedValue(undefined),
+  writeFile: jest.fn().mockResolvedValue(undefined),
+  unlink: jest.fn().mockResolvedValue(undefined),
+  readFile: jest.fn().mockResolvedValue(Buffer.from('fake-cover-bytes')),
+}));
+
+// Doit être un UUID valide (pas une étiquette lisible) : `extractUploadFilename()` (appelé par
+// `coverImageVersion()` en lecture) valide la forme du nom de fichier par regex — une valeur
+// mockée hors-format ferait échouer silencieusement l'extraction et casserait les assertions sur
+// `dto.coverImageVersion` de façon trompeuse (défense en profondeur qui se retournerait contre le
+// test).
+jest.mock('node:crypto', () => {
+  const actual =
+    jest.requireActual<typeof import('node:crypto')>('node:crypto');
+  return { ...actual, randomUUID: jest.fn(() => '99999999-9999-9999-9999-999999999999') };
+});
+
+// Mock partiel, même patron que character.service.spec.ts : detectImageMime/mimeForExtension/etc.
+// restent réels (fonctions pures), seule stripImageMetadata est mockée (passthrough) pour éviter
+// qu'un vrai sharp() sur un buffer de test (signature magique seule) échoue.
+jest.mock('../common/image-upload.util', () => ({
+  ...jest.requireActual('../common/image-upload.util'),
+  stripImageMetadata: jest.fn((buf: Buffer) => Promise.resolve(buf)),
+}));
+
+// `sharp` mocké pour le redimensionnement des dérivées (Task 5) — seule la chaîne
+// resize()/webp()/toBuffer() est exercée par PartiesService, jamais autoOrient() (qui vit dans
+// stripImageMetadata, lui-même mocké en passthrough ci-dessus).
+const sharpResizeCalls: unknown[] = [];
+jest.mock('sharp', () => {
+  const chain: any = {};
+  chain.resize = jest.fn((opts: unknown) => {
+    sharpResizeCalls.push(opts);
+    return chain;
+  });
+  chain.webp = jest.fn(() => chain);
+  chain.toBuffer = jest.fn().mockResolvedValue(Buffer.from('resized-webp-bytes'));
+  return jest.fn(() => chain);
+});
+
 import {
   BadRequestException,
   ForbiddenException,
@@ -5,6 +46,7 @@ import {
 } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +64,7 @@ describe('PartiesService', () => {
     partie: {
       create: jest.Mock;
       findUnique: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
       findMany: jest.Mock;
       update: jest.Mock;
       delete: jest.Mock;
@@ -67,10 +110,15 @@ describe('PartiesService', () => {
   };
 
   beforeEach(() => {
+    // Les mocks de `node:fs/promises`/`sharp` sont au niveau module (jest.mock ci-dessus) : sans
+    // ce reset, l'historique d'appels (writeFile/unlink) fuiterait d'un test à l'autre, faussant
+    // les assertions `toHaveBeenCalledTimes`/`not.toHaveBeenCalled` des tests de couverture.
+    jest.clearAllMocks();
     const p: any = {
       partie: {
         create: jest.fn(),
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
@@ -151,6 +199,7 @@ describe('PartiesService', () => {
       role: 'mj',
       status: 'EN_COURS',
       isFavorite: false,
+      coverImageVersion: null,
     });
   });
 
@@ -236,6 +285,7 @@ describe('PartiesService', () => {
         role: 'player',
         status: 'A_VENIR',
         isFavorite: false,
+        coverImageVersion: null,
       },
     ]);
     expect(prisma.membership.findMany).toHaveBeenCalledWith(
@@ -262,6 +312,7 @@ describe('PartiesService', () => {
         role: 'mj',
         status: 'A_VENIR',
         isFavorite: false,
+        coverImageVersion: null,
       },
     ]);
   });
@@ -399,6 +450,7 @@ describe('PartiesService', () => {
         'role',
         'status',
         'isFavorite',
+        'coverImageVersion',
       ].sort(),
     );
   });
@@ -430,8 +482,271 @@ describe('PartiesService', () => {
         'role',
         'status',
         'isFavorite',
+        'coverImageVersion',
       ].sort(),
     );
+  });
+
+  describe('coverImageVersion (Story 29.12, AD-19)', () => {
+    it('sans couverture (coverImageUrl null) → coverImageVersion null', async () => {
+      prisma.partie.findMany.mockResolvedValue([{ ...partie, coverImageUrl: null }]);
+      const [dto] = await service.listForUser('mj1', 'mj');
+      expect(dto.coverImageVersion).toBeNull();
+    });
+
+    it('avec une couverture valide → coverImageVersion est le stem UUID, sans extension ni préfixe', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        {
+          ...partie,
+          coverImageUrl:
+            '/uploads/covers/11111111-1111-1111-1111-111111111111.webp',
+        },
+      ]);
+      const [dto] = await service.listForUser('mj1', 'mj');
+      expect(dto.coverImageVersion).toBe('11111111-1111-1111-1111-111111111111');
+    });
+
+    it('coverImageUrl corrompu (mauvais préfixe ou format invalide) → coverImageVersion null, jamais une exception', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        { ...partie, coverImageUrl: '/uploads/portraits/x.jpg' },
+      ]);
+      const [dto] = await service.listForUser('mj1', 'mj');
+      expect(dto.coverImageVersion).toBeNull();
+    });
+  });
+
+  describe('setCoverImage/removeCoverImage/getCoverFile (Story 29.12, Task 10)', () => {
+    function makeCoverFile(buffer = Buffer.from([0xff, 0xd8, 0xff, 0xe0])) {
+      return {
+        buffer,
+        originalname: 'cover.jpg',
+        mimetype: 'image/jpeg',
+        size: buffer.length,
+      } as Express.Multer.File;
+    }
+
+    beforeEach(() => {
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj-pseudo',
+        displayName: 'MJ Nom',
+      });
+    });
+
+    it('AC1 : dépôt → coverImageUrl renseigné en DB, les 3 dérivées écrites sur disque', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        coverImageUrl: '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+      });
+      prisma.partie.findUniqueOrThrow.mockResolvedValue({
+        ...partie,
+        coverImageUrl: '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+      });
+
+      const dto = await service.setCoverImage('p1', 'mj1', makeCoverFile());
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { coverImageUrl: '/uploads/covers/99999999-9999-9999-9999-999999999999.webp' },
+      });
+      expect(writeFile).toHaveBeenCalledTimes(3);
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('99999999-9999-9999-9999-999999999999-large.webp'),
+        expect.any(Buffer),
+      );
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('99999999-9999-9999-9999-999999999999-medium.webp'),
+        expect.any(Buffer),
+      );
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('99999999-9999-9999-9999-999999999999-compact.webp'),
+        expect.any(Buffer),
+      );
+      expect(dto.coverImageVersion).toBe('99999999-9999-9999-9999-999999999999');
+    });
+
+    it('AC9 : chaque dérivée est redimensionnée pour son mode — dimensions distinctes par mode, jamais une largeur unique', async () => {
+      sharpResizeCalls.length = 0;
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue(partie);
+      prisma.partie.findUniqueOrThrow.mockResolvedValue(partie);
+
+      await service.setCoverImage('p1', 'mj1', makeCoverFile());
+
+      expect(sharpResizeCalls).toContainEqual(
+        expect.objectContaining({ width: 640, height: 248, fit: 'cover' }),
+      );
+      expect(sharpResizeCalls).toContainEqual(
+        expect.objectContaining({ width: 88, height: 88, fit: 'cover' }),
+      );
+      expect(sharpResizeCalls).toContainEqual(
+        expect.objectContaining({ width: 56, height: 56, fit: 'cover' }),
+      );
+    });
+
+    it('AC4 : joueur non-MJ → ForbiddenException, aucune écriture disque', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+      await expect(
+        service.setCoverImage('p1', 'autre', makeCoverFile()),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('fichier non-image (octets magiques invalides) → BadRequestException, aucune écriture disque', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      await expect(
+        service.setCoverImage(
+          'p1',
+          'mj1',
+          makeCoverFile(Buffer.from('not an image')),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(writeFile).not.toHaveBeenCalled();
+    });
+
+    it('remplacement → les 3 dérivées de l’ancienne couverture sont supprimées, pas laissées orphelines', async () => {
+      const OLD_STEM = '22222222-2222-2222-2222-222222222222';
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        coverImageUrl: `/uploads/covers/${OLD_STEM}.webp`,
+      });
+      prisma.partie.update.mockResolvedValue(partie);
+      prisma.partie.findUniqueOrThrow.mockResolvedValue(partie);
+
+      await service.setCoverImage('p1', 'mj1', makeCoverFile());
+
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(`${OLD_STEM}-large.webp`),
+      );
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(`${OLD_STEM}-medium.webp`),
+      );
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(`${OLD_STEM}-compact.webp`),
+      );
+    });
+
+    it('échec DB après écriture disque → les dérivées fraîchement écrites sont nettoyées, erreur propagée', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.setCoverImage('p1', 'mj1', makeCoverFile()),
+      ).rejects.toThrow('db down');
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining('99999999-9999-9999-9999-999999999999-large.webp'),
+      );
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining('99999999-9999-9999-9999-999999999999-medium.webp'),
+      );
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining('99999999-9999-9999-9999-999999999999-compact.webp'),
+      );
+    });
+
+    it('dépôt émet un événement temps réel scopé sur la Partie et ses membres (AD-14)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue(partie);
+      prisma.partie.findUniqueOrThrow.mockResolvedValue(partie);
+
+      await service.setCoverImage('p1', 'mj1', makeCoverFile());
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+    });
+
+    it('AC3 : retrait → coverImageUrl remis à null, les 3 dérivées supprimées', async () => {
+      const STEM = '33333333-3333-3333-3333-333333333333';
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        coverImageUrl: `/uploads/covers/${STEM}.webp`,
+      });
+      prisma.partie.update.mockResolvedValue({ ...partie, coverImageUrl: null });
+      prisma.partie.findUniqueOrThrow.mockResolvedValue({
+        ...partie,
+        coverImageUrl: null,
+      });
+
+      const dto = await service.removeCoverImage('p1', 'mj1');
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { coverImageUrl: null },
+      });
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(`${STEM}-large.webp`),
+      );
+      expect(dto.coverImageVersion).toBeNull();
+    });
+
+    it('AC4 : retrait par un joueur non-MJ → ForbiddenException, aucune écriture', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      await expect(
+        service.removeCoverImage('p1', 'autre'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('retrait émet un événement temps réel scopé sur la Partie et ses membres (AD-14)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue(partie);
+      prisma.partie.findUniqueOrThrow.mockResolvedValue(partie);
+
+      await service.removeCoverImage('p1', 'mj1');
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+    });
+
+    it('getCoverFile : lit la dérivée du mode demandé et renvoie le jeton de version', async () => {
+      const STEM = '44444444-4444-4444-4444-444444444444';
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        coverImageUrl: `/uploads/covers/${STEM}.webp`,
+      });
+      (readFile as jest.Mock).mockResolvedValue(Buffer.from('derivative-bytes'));
+
+      const result = await service.getCoverFile('p1', 'mj1', 'medium');
+
+      expect(readFile).toHaveBeenCalledWith(
+        expect.stringContaining(`${STEM}-medium.webp`),
+      );
+      expect(result).toEqual({
+        buffer: Buffer.from('derivative-bytes'),
+        mime: 'image/webp',
+        version: STEM,
+      });
+    });
+
+    it('getCoverFile : aucune couverture (coverImageUrl null) → null, jamais un accès disque', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, coverImageUrl: null });
+      const result = await service.getCoverFile('p1', 'mj1', 'large');
+      expect(result).toBeNull();
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('getCoverFile : coverImageUrl renseigné mais fichier absent du disque → null, jamais une exception (CAP-20)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        coverImageUrl: '/uploads/covers/55555555-5555-5555-5555-555555555555.webp',
+      });
+      (readFile as jest.Mock).mockRejectedValue(new Error('ENOENT'));
+
+      await expect(
+        service.getCoverFile('p1', 'mj1', 'large'),
+      ).resolves.toBeNull();
+    });
+
+    it('getCoverFile : non-membre et non-MJ → ForbiddenException (getViewable)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+      prisma.membership.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getCoverFile('p1', 'etranger', 'large'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
   });
 
   it('getViewable : renvoie la partie au MJ sans vérifier les memberships', async () => {
@@ -479,6 +794,7 @@ describe('PartiesService', () => {
       mjPseudo: 'mj-pseudo',
       mjDisplayName: 'MJ Nom',
       isFavorite: false,
+      coverImageVersion: null,
     });
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: 'mj1' },
@@ -513,6 +829,7 @@ describe('PartiesService', () => {
       mjPseudo: 'mj-pseudo',
       mjDisplayName: 'MJ Nom',
       isFavorite: false,
+      coverImageVersion: null,
     });
   });
 
@@ -563,6 +880,7 @@ describe('PartiesService', () => {
       role: 'mj',
       status: 'A_VENIR',
       isFavorite: false,
+      coverImageVersion: null,
     });
     expect((dto as any).mjPseudo).toBeUndefined();
   });
@@ -648,6 +966,7 @@ describe('PartiesService', () => {
       role: 'mj',
       status: 'A_VENIR',
       isFavorite: false,
+      coverImageVersion: null,
     });
   });
 

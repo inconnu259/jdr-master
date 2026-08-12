@@ -232,7 +232,8 @@ describe('RyuutamaPdfService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     // `readFile` sert à la fois le template PDF (mis en cache) et la lecture d'un éventuel
-    // portrait (`portrait-storage.util.ts`) — distingue les deux par le chemin demandé.
+    // portrait (`readPortraitFile`, `character.service.ts` depuis Story 29.12) — distingue les
+    // deux par le chemin demandé.
     (readFile as jest.Mock).mockImplementation((path: string) => {
       if (String(path).includes('portraits')) {
         return Promise.reject(new Error('ENOENT'));

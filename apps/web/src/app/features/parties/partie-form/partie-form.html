@@ -1,5 +1,40 @@
 <mat-card class="form-card">
   <mat-card-title>{{ editId() ? theme.tone()['partie.edit_title'] : theme.tone()['partie.new_title'] }}</mat-card-title>
+
+  @if (editId()) {
+    <!-- Image de couverture (Story 29.12, AC1/AC3) — indépendante du formulaire réactif : se
+         dépose/retire immédiatement, pas seulement à l'enregistrement du reste. Réservée à
+         l'édition : une partie tout juste créée n'a pas encore d'identifiant à cibler. -->
+    <section class="cover-section">
+      <app-party-banner
+        class="cover-preview"
+        [partieId]="editId()!"
+        [partieName]="partieName()"
+        [coverImageVersion]="coverImageVersion()"
+        mode="medium"
+      />
+      <div class="cover-actions">
+        <label class="cover-upload-label">
+          {{ coverImageVersion() ? 'Changer l’image de couverture' : 'Ajouter une image de couverture' }}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            [disabled]="coverSaving()"
+            (change)="onCoverFileSelected($event)"
+          />
+        </label>
+        @if (coverImageVersion()) {
+          <button mat-button type="button" [disabled]="coverSaving()" (click)="removeCoverImage()">
+            Retirer l’image
+          </button>
+        }
+      </div>
+      @if (coverError()) {
+        <p class="error">{{ coverError() }}</p>
+      }
+    </section>
+  }
+
   <form [formGroup]="form" (ngSubmit)="submit()">
     <mat-form-field appearance="outline">
       <mat-label>Nom</mat-label>

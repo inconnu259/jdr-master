@@ -1,4 +1,17 @@
-@if (mode() === 'compact') {
+@if (showCoverImage()) {
+  <!-- Image de couverture (Story 29.12, AD-19) : l'emporte dans les trois modes, jamais la
+       composition générée en dessous (AC2 seconde clause — l'animation du thème n'accompagne
+       jamais une image téléversée). Décoratif comme le reste du composant : le nom de la partie
+       est déjà affiché à côté. Repli sur la bannière générée si le fichier a disparu du disque
+       (CAP-20, `onCoverImageError()`). -->
+  <img
+    class="party-banner"
+    [src]="coverImageSrc()"
+    alt=""
+    aria-hidden="true"
+    (error)="onCoverImageError()"
+  />
+} @else if (mode() === 'compact') {
   <!-- Mode liste : rendu PROPRE, jamais la composition réduite (DESIGN.md §7.3/§9). À 28 px, ce
        qui distingue deux parties n'est ni le motif ni la composition, mais le monogramme et la
        dominante colorée — c'est donc tout ce qu'on rend, et c'est aussi ce qui rend une liste de

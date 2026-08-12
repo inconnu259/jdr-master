@@ -27,7 +27,7 @@ import {
   MIN_PORTRAIT_OFFSET,
   MIN_PORTRAIT_SCALE,
 } from './dto/portrait-crop-data.dto';
-import { readPortraitFile } from './portrait-storage.util';
+import { readPortraitFile } from './character.service';
 
 const PDF_TEMPLATE_PATH = join(
   process.cwd(),

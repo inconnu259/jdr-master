@@ -24,6 +24,7 @@ function makeParty(id: string): PartieDto {
     role: 'player',
     status: 'EN_COURS',
     isFavorite: false,
+    coverImageVersion: null,
   };
 }
 

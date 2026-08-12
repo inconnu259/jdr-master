@@ -15,6 +15,7 @@ function makeParty(overrides: Partial<PartieDto> = {}): PartieDto {
     role: 'mj',
     status: 'A_VENIR',
     isFavorite: false,
+    coverImageVersion: null,
     ...overrides,
   };
 }

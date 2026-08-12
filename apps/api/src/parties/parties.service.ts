@@ -5,9 +5,14 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import sharp from 'sharp';
 import type {
   AggregatedSlotDto,
   AvailableSlotDto,
+  ListViewMode,
   PartieDto,
   PartieStatus,
 } from '@master-jdr/shared';
@@ -18,12 +23,60 @@ import {
   partieTopic,
   userTopic,
 } from '../realtime/realtime-events.service';
+import {
+  detectImageMime,
+  extractUploadFilename,
+  stripImageMetadata,
+  unlinkUploadFile,
+  type DetectedImageMime,
+} from '../common/image-upload.util';
+import { UPLOADS_ROOT } from '../common/uploads-root';
 import { CreatePartieDto } from './dto/create-partie.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
+/** Dossier/préfixe du domaine couverture (Story 29.12, AD-17) — paramétrise l'utilitaire d'upload
+ *  commun, même patron que `PORTRAITS_DIR`/`PORTRAITS_URL_PREFIX` (`character.service.ts`). */
+export const COVERS_DIR = join(UPLOADS_ROOT, 'covers');
+export const COVERS_URL_PREFIX = '/uploads/covers/';
+
+const INVALID_COVER_IMAGE_MESSAGE =
+  "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
+
+/**
+ * Dimensions cibles des dérivées (Story 29.12, AC9) — alignées sur le rendu réel de `PartyBanner`
+ * (Stories 29.10/29.11 : grand 320×124, moyen 44×44, liste 28×28), doublées pour rester nettes sur
+ * les écrans à forte densité. Fixées côté serveur, jamais un `dpr` ni une largeur venus du client
+ * (vecteur de déni de service par redimensionnement).
+ */
+const COVER_DIMENSIONS: Record<
+  ListViewMode,
+  { width: number; height: number }
+> = {
+  large: { width: 640, height: 248 },
+  medium: { width: 88, height: 88 },
+  compact: { width: 56, height: 56 },
+};
+
+/** Dérivées pré-générées au dépôt, jamais redimensionnées à la volée (coût CPU × 12 tuiles × chaque
+ *  chargement de liste, cf. Décisions de la story). Toutes converties en WebP — allège nettement
+ *  par rapport à la conservation du format d'entrée, ce qui sert directement AC9. */
+const COVER_DERIVATIVE_MIME: DetectedImageMime = 'image/webp';
+const COVER_DERIVATIVE_EXT = '.webp';
+
+/**
+ * Jeton de version dérivé de `Partie.coverImageUrl` (Story 29.12, AD-19) — le stem UUID du fichier
+ * déposé, sans extension. `null` si aucune couverture. Jamais le chemin de stockage exposé côté
+ * client : seule sa présence/son changement comptent (indicateur + cache-busting).
+ */
+export function coverImageVersion(coverImageUrl: string | null): string | null {
+  const filename = extractUploadFilename(coverImageUrl, COVERS_URL_PREFIX);
+  if (!filename) return null;
+  return filename.slice(0, filename.lastIndexOf('.'));
+}
+
 /**
  * Projection explicite (AD-15, Story 29.1) — énumère les champs renvoyés, jamais un objet Prisma
- * propagé tel quel. `coverImageUrl` volontairement absent (story 29.10).
+ * propagé tel quel.
  *
  * `hasScenario` détermine `status` (AD-8) : `closedAt` renseigné prime toujours (`TERMINEE`),
  * sinon la présence d'au moins un `Scenario` fait passer de `A_VENIR` à `EN_COURS`. Compter les
@@ -55,6 +108,7 @@ function toPartieDto(
     role,
     status,
     isFavorite,
+    coverImageVersion: coverImageVersion(partie.coverImageUrl ?? null),
   };
 }
 
@@ -333,6 +387,202 @@ export class PartiesService {
     await this.getOwned(id, userId);
     await this.prisma.partie.delete({ where: { id } });
     return { ok: true };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Image de couverture (Story 29.12, AD-17/AD-19) — MJ seul en écriture (getOwned), lecture
+  // ouverte à tout membre (getViewable). Patron repris de `character.service.ts:updatePortrait()`
+  // pour la validation/le nettoyage/le nettoyage du fichier orphelin, étendu pour écrire trois
+  // dérivées pré-générées (AC9) plutôt qu'un fichier unique.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Noms des 3 fichiers dérivés partageant le même `stem` UUID (`<stem>-<mode>.webp`). */
+  private coverDerivativeFilenames(stem: string): Record<ListViewMode, string> {
+    return {
+      large: `${stem}-large${COVER_DERIVATIVE_EXT}`,
+      medium: `${stem}-medium${COVER_DERIVATIVE_EXT}`,
+      compact: `${stem}-compact${COVER_DERIVATIVE_EXT}`,
+    };
+  }
+
+  /** Extrait le `stem` (UUID sans extension) du `coverImageUrl` stocké — c'est une identité
+   *  logique, jamais un chemin littéral sur disque (aucun fichier n'existe réellement à ce nom
+   *  exact, seules les 3 dérivées `<stem>-<mode>.webp` existent). Alias de `coverImageVersion()`
+   *  (Review Findings : deux implémentations indépendantes de la même règle d'extraction
+   *  divergeraient silencieusement si le format d'URL changeait un jour). */
+  private coverStem(coverImageUrl: string): string | null {
+    return coverImageVersion(coverImageUrl);
+  }
+
+  private async deleteCoverFiles(coverImageUrl: string): Promise<void> {
+    const stem = this.coverStem(coverImageUrl);
+    if (!stem) {
+      this.logger.warn(
+        `coverImageUrl inattendu, suppression ignorée : ${coverImageUrl}`,
+      );
+      return;
+    }
+    const filenames = Object.values(this.coverDerivativeFilenames(stem));
+    await Promise.all(
+      filenames.map((filename) =>
+        unlinkUploadFile(COVERS_DIR, filename).catch((e) => {
+          this.logger.warn(
+            `Échec de suppression de la couverture ${filename}`,
+            e as Error,
+          );
+        }),
+      ),
+    );
+  }
+
+  /**
+   * Dépose une image de couverture (AC1, AC4, AC6, AC9) — MJ seul (`getOwned`). Détection MIME →
+   * nettoyage EXIF → 3 dérivées redimensionnées pré-générées → écriture DB, avec nettoyage des
+   * fichiers orphelins si une étape échoue après coup (patron `character.service.ts`). Au
+   * remplacement d'une image existante, l'ancienne est supprimée (les 3 dérivées).
+   */
+  async setCoverImage(
+    id: string,
+    userId: string,
+    file: Express.Multer.File,
+  ): Promise<PartieDto> {
+    const partie = await this.getOwned(id, userId);
+
+    const mime = detectImageMime(file.buffer);
+    if (!mime) {
+      throw new BadRequestException(INVALID_COVER_IMAGE_MESSAGE);
+    }
+    let cleanedBuffer: Buffer;
+    try {
+      cleanedBuffer = await stripImageMetadata(file.buffer);
+    } catch (err) {
+      this.logger.warn(
+        `Échec du nettoyage EXIF (sharp) sur une couverture uploadée : ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw new BadRequestException(INVALID_COVER_IMAGE_MESSAGE);
+    }
+
+    const stem = randomUUID();
+    const filenames = this.coverDerivativeFilenames(stem);
+    const written: string[] = [];
+    try {
+      await mkdir(COVERS_DIR, { recursive: true });
+      for (const mode of Object.keys(COVER_DIMENSIONS) as ListViewMode[]) {
+        const { width, height } = COVER_DIMENSIONS[mode];
+        // Rapports très différents entre le mode grand (≈2,6/1) et moyen/liste (1/1) : recadrage
+        // au centre plutôt que déformation (Décisions de la story).
+        const resized = await sharp(cleanedBuffer)
+          .resize({ width, height, fit: 'cover', position: 'centre' })
+          .webp()
+          .toBuffer();
+        await writeFile(join(COVERS_DIR, filenames[mode]), resized);
+        written.push(filenames[mode]);
+      }
+    } catch (err) {
+      await Promise.all(
+        written.map((f) =>
+          unlinkUploadFile(COVERS_DIR, f).catch(() => undefined),
+        ),
+      );
+      this.logger.warn(
+        `Échec de génération des dérivées de couverture : ${err instanceof Error ? err.message : String(err)}`,
+      );
+      throw new BadRequestException(INVALID_COVER_IMAGE_MESSAGE);
+    }
+
+    const newCoverImageUrl = `${COVERS_URL_PREFIX}${stem}${COVER_DERIVATIVE_EXT}`;
+    try {
+      await this.prisma.partie.update({
+        where: { id },
+        data: { coverImageUrl: newCoverImageUrl },
+      });
+    } catch (e) {
+      // Les nouveaux fichiers ne sont référencés nulle part : DB en échec, nettoyage immédiat
+      // plutôt que de laisser des fichiers orphelins sur disque (patron portrait).
+      await Promise.all(
+        written.map((f) =>
+          unlinkUploadFile(COVERS_DIR, f).catch(() => undefined),
+        ),
+      );
+      throw e;
+    }
+
+    if (partie.coverImageUrl) {
+      await this.deleteCoverFiles(partie.coverImageUrl);
+    }
+
+    // AD-14 : les autres membres continuent de voir l'ancienne identité visuelle jusqu'à un
+    // rechargement complet sans cette émission — `emitPartieAndMembersSafe` n'a pas encore été
+    // appelée pour cette mutation (contrairement à `close()`/`reopen()`), donc `partieTopic` n'a
+    // pas déjà été émis ailleurs.
+    await this.emitPartieAndMembersSafe(id, partie.mjId);
+
+    const [hasScenario, favorite] = await Promise.all([
+      this.hasScenario(id),
+      this.isFavorite(userId, id),
+    ]);
+    const updated = await this.prisma.partie.findUniqueOrThrow({
+      where: { id },
+    });
+    return toPartieDto(updated, 'mj', hasScenario, favorite);
+  }
+
+  /** Retire l'image de couverture (AC3, AC4) — MJ seul. La bannière générée reprend sa place. */
+  async removeCoverImage(id: string, userId: string): Promise<PartieDto> {
+    const partie = await this.getOwned(id, userId);
+
+    await this.prisma.partie.update({
+      where: { id },
+      data: { coverImageUrl: null },
+    });
+
+    if (partie.coverImageUrl) {
+      await this.deleteCoverFiles(partie.coverImageUrl);
+    }
+
+    await this.emitPartieAndMembersSafe(id, partie.mjId);
+
+    const [hasScenario, favorite] = await Promise.all([
+      this.hasScenario(id),
+      this.isFavorite(userId, id),
+    ]);
+    const updated = await this.prisma.partie.findUniqueOrThrow({
+      where: { id },
+    });
+    return toPartieDto(updated, 'mj', hasScenario, favorite);
+  }
+
+  /**
+   * Lecture d'une dérivée de couverture (AC8, AC9) — mêmes règles d'accès que `findOneDto`
+   * (`getViewable`, MJ ou membre), contrairement aux mutations (MJ seul). Retourne `null` si la
+   * partie n'a pas de couverture, ou si le fichier référencé a disparu du disque (base et disque
+   * désynchronisés) — **jamais une exception** : CAP-20 impose qu'aucune partie ne soit jamais
+   * nue, c'est au contrôleur/au front de retomber sur la bannière générée, pas à cette méthode de
+   * faire échouer la requête.
+   */
+  async getCoverFile(
+    id: string,
+    userId: string,
+    mode: ListViewMode,
+  ): Promise<{
+    buffer: Buffer;
+    mime: DetectedImageMime;
+    version: string;
+  } | null> {
+    const partie = await this.getViewable(id, userId);
+    if (!partie.coverImageUrl) return null;
+
+    const stem = this.coverStem(partie.coverImageUrl);
+    if (!stem) return null;
+
+    try {
+      const buffer = await readFile(
+        join(COVERS_DIR, this.coverDerivativeFilenames(stem)[mode]),
+      );
+      return { buffer, mime: COVER_DERIVATIVE_MIME, version: stem };
+    } catch {
+      return null;
+    }
   }
 
   /** Double émission temps réel (AD-14) pour toute mutation partagée à l'échelle d'une Partie :

@@ -110,6 +110,13 @@ export interface PartieDto {
   status: PartieStatus;
   /** Toujours présent, calculé serveur (Story 29.8) — jamais dérivé côté client. */
   isFavorite: boolean;
+  /** Jeton de version de la couverture (Story 29.12, AD-19) — dérivé de `Partie.coverImageUrl`,
+   *  change à chaque dépôt. Sert à la fois d'indicateur de présence (`null` = pas d'image, la
+   *  bannière générée s'applique) et de paramètre de cache-busting pour
+   *  `GET /parties/:id/cover` : jamais le chemin de stockage lui-même, qui n'apporte rien côté
+   *  client (l'URL se construit depuis l'`id` de la partie, même patron que
+   *  `CharacterAvatar.absolutePortraitUrl`). */
+  coverImageVersion: string | null;
 }
 
 /** Code de signal d'état d'une partie (FR-12, AD-3) — union fermée, jamais un booléen libre ni
