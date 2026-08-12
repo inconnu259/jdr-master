@@ -1,0 +1,449 @@
+// Compte à rebours de séance (Story 29.11, DESIGN.md §7.4).
+//
+// DEUX NATURES, à ne jamais confondre :
+//  · la PROGRESSION est une position statique, posée par des `transform` calculés côté composant
+//    à partir des jours restants. Elle ne boucle pas.
+//  · l'AMBIANCE boucle dans le temps (scintillement, pulsation, oscillation) et ne porte aucune
+//    information. Elle est intégralement coupée par `prefers-reduced-motion`.
+//
+// AC6 : aucune `@keyframes` de ce fichier n'anime autre chose que `transform` et `opacity`. Les
+// `@keyframes grow`/`fill`/`approach`/`budmove` de la maquette animent `width`, `left` et
+// `box-shadow` — elles ne sont PAS reprises. Un test de garde le vérifie.
+
+:host {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.countdown {
+  display: inline-flex;
+  align-items: center;
+  width: 88px;
+  height: 20px;
+}
+
+// ── Forêt Ancienne : la liane ────────────────────────────────────────────────
+.countdown__vine,
+.countdown__orbit {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+// Voie commune aux deux motifs : elle s'arrête avant l'élément d'arrivée (cercle-objectif ou
+// étoile), pour que la barre, sa tête et les éléments qui la jalonnent partagent un seul repère.
+// Sans elle, la tête de comète et le bourgeon dépassaient leur propre barre.
+.countdown__lane {
+  position: absolute;
+  left: 0;
+  right: 16px;
+  top: 50%;
+  height: 0;
+}
+
+.countdown__stem {
+  position: absolute;
+  left: 0;
+  top: -1.5px;
+  width: 100%;
+  height: 3px;
+  border-radius: 2px;
+  // `transform-origin: left` : la tige pousse depuis la base, elle ne s'étire pas par le milieu.
+  transform-origin: left center;
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    var(--jdr-accent-1, #2ecc71),
+    color-mix(in srgb, var(--jdr-accent-1, #2ecc71) 60%, #fff)
+  );
+}
+// Sève qui monte : le mouvement INTERNE sans lequel une barre avançant d'un septième par jour
+// paraît figée. Même principe que le motif rayé de la conduite Atelier Cuivré.
+.countdown__stem-flow {
+  position: absolute;
+  inset: 0;
+  width: 300%;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 6px,
+    color-mix(in srgb, #fff 45%, transparent) 6px 10px
+  );
+}
+
+.countdown__leaf {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  top: -8px;
+  // Éteinte tant que la tige ne l'a pas atteinte. La transition n'est pas une boucle : elle ne
+  // joue qu'au changement de valeur, c'est-à-dire au passage d'un jour.
+  opacity: 0;
+  transform: scale(0.4);
+  transition:
+    opacity 0.4s ease-out,
+    transform 0.4s ease-out;
+  transition-delay: var(--cd-delay, 0s);
+}
+.countdown__leaf--down {
+  top: 2px;
+}
+.countdown__leaf--lit {
+  opacity: 1;
+  transform: scale(1);
+}
+// La lame porte la forme ET le balancement. Le parent porte l'allumage : deux `transform` sur le
+// même élément se seraient écrasés.
+.countdown__leaf-blade {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 0 70% 0 70%;
+  background: var(--jdr-accent-1, #2ecc71);
+  transform-origin: 0% 100%;
+}
+
+.countdown__bud {
+  position: absolute;
+  top: -4.5px;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--jdr-accent-2, #f0c040), #b8860b);
+}
+.countdown__goal {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border: 1.5px dashed color-mix(in srgb, var(--jdr-accent-2, #f0c040) 55%, transparent);
+  border-radius: 50%;
+}
+
+// ── Atelier Cuivré : manomètre et conduite ───────────────────────────────────
+.countdown__press-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.countdown__gauge {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #3b2a12, var(--jdr-surface, #1a1008));
+  border: 1.5px solid var(--jdr-accent-1, #cd7f32);
+}
+.countdown__gauge-red {
+  position: absolute;
+  inset: 1px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 200deg,
+    transparent 0 62%,
+    color-mix(in srgb, var(--jdr-status-todo, #ffd21f) 55%, transparent) 62% 80%,
+    transparent 80%
+  );
+}
+.countdown__gauge-dial {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--jdr-text, #e8dcc8) 25%, transparent);
+}
+.countdown__needle-pivot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  // La rotation posée ici est la PROGRESSION (angle calculé depuis les jours restants).
+  // L'oscillation d'ambiance vit sur l'enfant, pour ne pas l'écraser.
+  transform-origin: center;
+}
+.countdown__needle {
+  position: absolute;
+  left: -0.75px;
+  bottom: 0;
+  width: 1.5px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--jdr-status-todo, #f0a030);
+  transform-origin: 50% 100%;
+}
+.countdown__hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  margin: -1.5px 0 0 -1.5px;
+  border-radius: 50%;
+  background: var(--jdr-accent-1, #cd7f32);
+}
+.countdown__pipe {
+  position: relative;
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--jdr-text, #e8dcc8) 8%, transparent);
+  overflow: hidden;
+}
+.countdown__pipe-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  transform-origin: left center;
+  overflow: hidden;
+  background: var(--jdr-accent-1, #cd7f32);
+}
+.countdown__pipe-stripes {
+  position: absolute;
+  inset: 0;
+  // Deux fois plus large que son conteneur : le motif peut défiler d'une période entière sans
+  // jamais découvrir de vide.
+  width: 200%;
+  background: repeating-linear-gradient(
+    70deg,
+    color-mix(in srgb, #000 22%, transparent) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+// ── Grimoire Émeraude : la comète approche ───────────────────────────────────
+.countdown__orbit {
+  border-radius: 5px;
+  overflow: hidden;
+  background: radial-gradient(
+    120% 150% at 84% 10%,
+    color-mix(in srgb, var(--jdr-accent-2, #9b6dff) 22%, var(--jdr-surface, #1a1428)),
+    transparent
+  );
+}
+.countdown__tiny {
+  position: absolute;
+  width: 1.5px;
+  height: 1.5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--jdr-text, #e8e8f0) 45%, transparent);
+}
+.countdown__star {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff, var(--jdr-accent-2, #9b6dff) 60%, transparent 78%);
+}
+// LA QUEUE EST LA BARRE (retour utilisateur) : elle s'étire depuis le bord gauche au lieu de
+// traverser le cadre. Un trajet de sept jours ne se lit pas ; une longueur, si.
+.countdown__tail {
+  position: absolute;
+  left: 0;
+  top: -2.5px;
+  width: 100%;
+  height: 5px;
+  border-radius: 99px;
+  transform-origin: left center;
+  overflow: hidden;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--jdr-accent-2, #9b6dff) 55%, transparent) 45%,
+    var(--jdr-accent-1, #7ec8a4)
+  );
+}
+// Matière qui file vers la tête — le pendant du motif rayé de la conduite.
+.countdown__tail-flow {
+  position: absolute;
+  inset: 0;
+  width: 300%;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 8px,
+    color-mix(in srgb, #fff 40%, transparent) 8px 11px
+  );
+}
+.countdown__head {
+  position: absolute;
+  top: -3.5px;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff, var(--jdr-accent-1, #7ec8a4) 52%, transparent 76%);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// AMBIANCE (retour utilisateur, 2026-08-12) — `transform`/`opacity` uniquement
+// ═════════════════════════════════════════════════════════════════════════════
+
+// L'amplitude est une propriété personnalisée : une seule `@keyframes` sert le repos et la zone
+// rouge. Les propriétés personnalisées ne s'interpolent pas, mais elles sont bien LUES à chaque
+// palier — ce qui suffit ici, l'amplitude n'étant utilisée qu'aux paliers.
+@keyframes cd-needle-jitter {
+  0%,
+  100% {
+    transform: rotate(calc(var(--cd-jitter, 1.5deg) * -1));
+  }
+  50% {
+    transform: rotate(var(--cd-jitter, 1.5deg));
+  }
+}
+@keyframes cd-stripes-scroll {
+  to {
+    transform: translateX(-8px);
+  }
+}
+// Flux interne d'une barre. Le motif fait trois fois la largeur de son conteneur et se décale
+// d'exactement une période : la boucle est invisible, et rien ne découvre jamais de vide.
+@keyframes cd-flow {
+  to {
+    transform: translateX(-10px);
+  }
+}
+@keyframes cd-flow-tail {
+  to {
+    transform: translateX(-11px);
+  }
+}
+// Balancement d'une feuille — l'équivalent végétal de l'oscillation de l'aiguille : c'est lui qui
+// fait qu'un motif immobile cesse de paraître mort.
+@keyframes cd-leaf-sway {
+  0%,
+  100% {
+    transform: rotate(calc(var(--cd-sway, 7deg) * -1));
+  }
+  50% {
+    transform: rotate(var(--cd-sway, 7deg));
+  }
+}
+@keyframes cd-bud-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+}
+@keyframes cd-goal-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+@keyframes cd-head-pulse {
+  0%,
+  100% {
+    transform: scale(0.92);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+@keyframes cd-star-breathe {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+// L'aiguille oscille doucement… et nettement plus une fois en zone rouge. Elle DOUBLE une
+// information déjà portée par le badge, le libellé et sa propre position — elle n'en est jamais
+// le seul porteur (DESIGN.md §8 règle 2).
+.countdown__needle {
+  animation: cd-needle-jitter 2.8s ease-in-out infinite;
+}
+// Zone rouge : trois fois l'amplitude de repos, et deux fois plus vite.
+.countdown__gauge--red .countdown__needle {
+  --cd-jitter: 4.5deg;
+  animation-duration: 0.9s;
+}
+.countdown__pipe-stripes {
+  animation: cd-stripes-scroll 1.6s linear infinite;
+}
+
+// ── Forêt : la barre coule, les feuilles se balancent, le bourgeon respire ────
+.countdown__stem-flow {
+  animation: cd-flow 2.2s linear infinite;
+}
+// Décalages et amplitudes dérivés de l'index (`--cd-delay`, posé par le composant) : sans quoi
+// les cinq feuilles battraient comme un métronome.
+.countdown__leaf-blade {
+  animation: cd-leaf-sway 2.6s ease-in-out infinite;
+  animation-delay: var(--cd-delay, 0s);
+}
+.countdown__leaf--down .countdown__leaf-blade {
+  --cd-sway: -9deg;
+  animation-duration: 3.1s;
+}
+.countdown__bud {
+  animation: cd-bud-pulse 2.8s ease-in-out infinite;
+}
+// À l'approche, le bourgeon s'anime davantage et le cercle-objectif s'allume — le pendant
+// végétal de la zone rouge du manomètre. Comme elle, cela DOUBLE une information déjà portée par
+// le badge et par la position du bourgeon, sans jamais en être le seul porteur.
+.countdown__bud--near {
+  animation-duration: 1.1s;
+}
+.countdown__goal {
+  opacity: 0.55;
+}
+.countdown__goal--near {
+  animation: cd-goal-breathe 1.6s ease-in-out infinite;
+}
+
+// ── Grimoire : la queue coule vers la tête, qui palpite ──────────────────────
+.countdown__tail-flow {
+  animation: cd-flow-tail 1.9s linear infinite;
+}
+.countdown__head {
+  animation: cd-head-pulse 2.4s ease-in-out infinite;
+}
+.countdown__star {
+  animation: cd-star-breathe 3.6s ease-in-out infinite;
+}
+.countdown__star--near {
+  animation-duration: 1.4s;
+}
+
+// AC3 : coupe tout. Rien n'est restauré — au repos, les feuilles restent allumées selon la
+// progression, l'aiguille reste à sa position, la conduite reste remplie à sa longueur. Rien ne
+// manque, parce que rien de tout cela ne dépendait de l'animation.
+@media (prefers-reduced-motion: reduce) {
+  .countdown__needle,
+  .countdown__pipe-stripes,
+  .countdown__stem-flow,
+  .countdown__leaf-blade,
+  .countdown__bud,
+  .countdown__goal--near,
+  .countdown__tail-flow,
+  .countdown__head,
+  .countdown__star {
+    animation: none;
+  }
+  .countdown__leaf {
+    transition: none;
+  }
+}

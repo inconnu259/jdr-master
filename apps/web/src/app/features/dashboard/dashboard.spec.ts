@@ -1017,6 +1017,142 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
   });
 });
 
+// DESIGN.md §7.4 : le compte à rebours DOUBLE le badge de séance, et n'apparaît que sur UN SEUL
+// élément à la fois — la prochaine séance.
+//
+// Trois conditions cumulatives, toutes issues d'un contrat resserré en revue :
+//  · mode GRAND uniquement — `.signal-badges` est partagé avec le mode moyen, où AC2 interdit
+//    toute animation, et le compte à rebours en porte ;
+//  · le badge `PROCHAINE_SEANCE_CONNUE` doit être RÉELLEMENT visible — `visibleSignals` est
+//    plafonné à deux, et sans cette garde le compte à rebours deviendrait le seul porteur de
+//    l'information, ce qu'AC5 interdit ;
+//  · la séance la plus proche à venir, et elle seule.
+describe('Dashboard — compte à rebours de séance (Story 29.11, AC4/AC5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function inDays(days: number): string {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString();
+  }
+
+  function partyWithSession(id: string, days: number | null): PartieDto {
+    return {
+      ...makeParty(id, 'player', 'EN_COURS'),
+      nextSessionDate: days === null ? null : inDays(days),
+    };
+  }
+
+  /** Signaux portant le badge de séance — condition nécessaire à l'affichage du compte à rebours. */
+  function sessionSignals(...ids: string[]) {
+    return new Map(
+      ids.map((id) => [
+        id,
+        {
+          role: 'player' as const,
+          status: 'EN_COURS' as const,
+          signals: ['PROCHAINE_SEANCE_CONNUE'] as const,
+        },
+      ]),
+    );
+  }
+
+  async function renderLarge(parties: PartieDto[], signalled: string[]) {
+    return createFixture(
+      new Map(),
+      undefined,
+      parties,
+      false,
+      sessionSignals(...signalled) as any,
+      { partiesViewMode: 'large' },
+    );
+  }
+
+  it('séance dans trois jours, badge visible, mode grand → compte à rebours rendu', async () => {
+    const { fixture } = await renderLarge([partyWithSession('p1', 3)], ['p1']);
+    expect(fixture.nativeElement.querySelector('app-party-countdown')).not.toBeNull();
+  });
+
+  it('séance dans dix jours → aucun compte à rebours (au-delà de la fenêtre de sept jours)', async () => {
+    const { fixture } = await renderLarge([partyWithSession('p1', 10)], ['p1']);
+    expect(fixture.nativeElement.querySelector('app-party-countdown')).toBeNull();
+  });
+
+  it('aucune date → aucun compte à rebours, aucune erreur', async () => {
+    const { fixture } = await renderLarge([partyWithSession('p1', null)], ['p1']);
+    expect(fixture.nativeElement.querySelector('app-party-countdown')).toBeNull();
+  });
+
+  it('AC5 : sans badge de séance visible, aucun compte à rebours — il ne peut rien doubler', async () => {
+    // Même partie, même date : seul le badge manque. Sans cette garde, le compte à rebours serait
+    // le seul porteur de l'information de séance.
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [partyWithSession('p1', 3)],
+      false,
+      new Map(),
+      { partiesViewMode: 'large' },
+    );
+    expect(fixture.nativeElement.querySelector('app-party-countdown')).toBeNull();
+  });
+
+  it('AC2 : aucun compte à rebours en mode moyen ni en mode liste — il porte de l’animation', async () => {
+    for (const mode of ['medium', 'compact'] as const) {
+      const { fixture } = await createFixture(
+        new Map(),
+        undefined,
+        [partyWithSession('p1', 3)],
+        false,
+        sessionSignals('p1') as any,
+        { partiesViewMode: mode },
+      );
+      expect(fixture.nativeElement.querySelector('app-party-countdown')).toBeNull();
+      TestBed.resetTestingModule();
+    }
+  });
+
+  it('trois parties éligibles → UN SEUL compte à rebours, celui de la séance la plus proche', async () => {
+    const { fixture } = await renderLarge(
+      [partyWithSession('loin', 6), partyWithSession('proche', 1), partyWithSession('milieu', 4)],
+      ['loin', 'proche', 'milieu'],
+    );
+
+    const countdowns = fixture.nativeElement.querySelectorAll('app-party-countdown');
+    expect(countdowns.length).toBe(1);
+    expect(countdowns[0].closest('mat-card').textContent).toContain('Party proche');
+  });
+
+  it('une séance PASSÉE ne confisque pas le compte à rebours de la vraie prochaine', async () => {
+    // `nextSessionDate` n'est jamais purgé après coup (item différé, revue 29.7) : sans garde, une
+    // date passée gagnerait toujours la comparaison sur l'horodatage le plus ancien.
+    const { fixture } = await renderLarge(
+      [partyWithSession('passee', -3), partyWithSession('avenir', 2)],
+      ['passee', 'avenir'],
+    );
+
+    const countdowns = fixture.nativeElement.querySelectorAll('app-party-countdown');
+    expect(countdowns.length).toBe(1);
+    expect(countdowns[0].closest('mat-card').textContent).toContain('Party avenir');
+  });
+
+  it('AC5 : le badge de séance reste rendu à côté, libellé inchangé', async () => {
+    const { fixture } = await renderLarge([partyWithSession('p1', 2)], ['p1']);
+
+    expect(fixture.nativeElement.querySelector('app-party-countdown')).not.toBeNull();
+    const badge = fixture.nativeElement.querySelector('.signal-badge');
+    expect(badge).not.toBeNull();
+    expect(badge.textContent.trim().length).toBeGreaterThan(0);
+  });
+
+  it('le compte à rebours est décoratif : aucun texte ajouté à la carte', async () => {
+    const { fixture } = await renderLarge([partyWithSession('p1', 2)], ['p1']);
+    const countdown = fixture.nativeElement.querySelector('app-party-countdown');
+    expect(countdown.textContent.trim()).toBe('');
+    expect(countdown.querySelector('[aria-hidden="true"]')).not.toBeNull();
+  });
+});
+
 describe('Dashboard — tri (Story 29.8, AC3/AC4)', () => {
   afterEach(() => TestBed.resetTestingModule());
 

@@ -241,6 +241,7 @@
       </mat-card-subtitle>
       </mat-card-header>
     </div>
+    @let countdown = countdownFor(t.partie);
     @if (t.visibleSignals.length > 0) {
       <!-- Badges de signal (AC3, AC9) : au plus deux, icône + libellé (jamais la couleur seule). -->
       <mat-card-content class="signal-badges">
@@ -256,6 +257,17 @@
         }
         @if (t.moreCount > 0) {
           <span class="signal-badge signal-badge--more">{{ moreLabel(t.moreCount) }}</span>
+        }
+        @if (countdown !== null && partiesViewMode() === 'large' && t.visibleSignals.includes('PROCHAINE_SEANCE_CONNUE')) {
+          <!-- Compte à rebours (Story 29.11, AC5) : il DOUBLE le badge de séance ci-dessus, il ne
+               le remplace pas et n'en change pas le libellé — donc jamais rendu si ce badge n'est
+               pas visible (Review Findings : `visibleSignals` est plafonné à deux et peut exclure
+               PROCHAINE_SEANCE_CONNUE, sans quoi le compte à rebours deviendrait le seul porteur de
+               l'information). Décoratif, `aria-hidden`, aucun texte. Un seul par écran (DESIGN.md
+               §7.4), la séance la plus proche — cf. `countdownPartieId()`. Mode grand uniquement
+               (AC2, Review Findings : ce bloc `.signal-badges` est partagé avec le mode moyen) ;
+               absent du mode liste, qui n'a la place que d'un compteur. -->
+          <app-party-countdown [progress]="countdown" />
         }
       </mat-card-content>
     }

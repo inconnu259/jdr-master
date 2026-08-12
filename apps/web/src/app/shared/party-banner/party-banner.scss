@@ -1,7 +1,14 @@
-// Bannière générative (Story 29.10). Aucune animation ici : elle appartient à la Story 29.11.
-// DESIGN.md §8 règle 2 impose qu'au repos la composition soit COMPLÈTE et lisible — c'est le cas :
-// tous les éléments tirés sont rendus et positionnés, ils ne bougent simplement pas encore.
-// 29.11 n'aura que des `@keyframes` à ajouter sur `transform`/`opacity`.
+// Bannière générative (Stories 29.10 et 29.11).
+//
+// PORTÉE DE L'ANIMATION (AC2) : toutes les règles d'animation sont scopées sous
+// `:host(.party-banner-host--large)`. Les modes moyen et liste n'animent rien, SANS que le
+// balisage diffère — c'est ce qui préserve l'égalité stricte des compositions grand/moyen,
+// verrouillée par un test qui les compare caractère par caractère (Story 29.10, AC3).
+//
+// AC6 : aucune de ces `@keyframes` n'anime autre chose que `transform` et `opacity`. Un test de
+// garde (`party-banner-motion.spec.ts`) lit ce fichier et le vérifie — il empêche notamment la
+// reprise des `@keyframes` de `palettes-3-pistes-et-rebours-animes.html`, qui animent `width`,
+// `left` et `box-shadow`.
 
 :host {
   display: block;
@@ -13,9 +20,11 @@
 
 // Dimensions des trois rendus (DESIGN.md §4 et §7.3).
 :host(.party-banner-host--large) {
-  // 78-124 px autorisés ; 88 px = la hauteur déjà réservée par la Story 29.9, donc aucune
-  // régression de densité (~2 tuiles par écran mobile).
-  height: 88px;
+  // 78-124 px autorisés par DESIGN.md §4. 124 px retenu (Story 29.11, Task 0a) : c'est la hauteur
+  // de la zone `.cov` des maquettes, celle pour laquelle toutes les bornes de tirage ont été
+  // dessinées. Avec 88 px et un `viewBox` de 160×88, chaque élément était rendu à ~2× sa taille
+  // relative — rouages saturants, halos débordant en demi-cercles, manomètre trop grand.
+  height: 124px;
 }
 :host(.party-banner-host--medium),
 :host(.party-banner-host--compact) {
@@ -79,28 +88,18 @@
   color: var(--jdr-accent-2, #9b6dff);
 }
 
-// ── Grimoire Émeraude ─────────────────────────────────────────────────────────
-.party-banner__halo {
-  opacity: 0.34;
-}
+// ── Atténuation (Story 29.11, Task 0b) ───────────────────────────────────────
+// Les halos, queues, têtes et volutes sont peints avec des DÉGRADÉS dont l'opacité tombe à zéro
+// au bord (cf. `<defs>` du template) : ils n'ont donc plus besoin d'opacité globale ici, qui
+// écraserait le fondu. Seuls les éléments restés nets en gardent une.
 .party-banner__star {
   fill: var(--jdr-text, #e8e0f0);
   opacity: 0.5;
 }
-.party-banner__comet-tail {
-  opacity: 0.55;
-}
-.party-banner__comet-head {
-  fill: var(--jdr-text, #e8e0f0);
-}
-
-// ── Forêt Ancienne ────────────────────────────────────────────────────────────
 .party-banner__leaf,
 .party-banner__mote {
   opacity: 0.8;
 }
-
-// ── Atelier Cuivré (clé `medieval-steampunk`) ─────────────────────────────────
 .party-banner__grid {
   opacity: 0.22;
 }
@@ -110,10 +109,6 @@
 .party-banner__rivet {
   opacity: 0.85;
 }
-.party-banner__steam {
-  fill: var(--jdr-text, #e8dcc8);
-  opacity: 0.16;
-}
 .party-banner__gauge-face {
   fill: var(--jdr-surface, #1a1008);
 }
@@ -121,4 +116,175 @@
   stroke: var(--jdr-status-todo, #f0a030);
   stroke-width: 2;
   stroke-linecap: round;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Animations (Story 29.11) — mode grand UNIQUEMENT (AC2)
+// ═════════════════════════════════════════════════════════════════════════════
+// Toutes reprises de `mockups/iteration-6-regles-de-generation.html`, déjà conformes à l'AC6.
+// Les durées et décalages viennent des paramètres tirés par la Story 29.10, transmis par le
+// composant en propriétés personnalisées — deux parties ne bougent jamais à l'identique.
+
+@keyframes pb-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pb-spin-reverse {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+@keyframes pb-twinkle {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+@keyframes pb-glowpulse {
+  0%,
+  100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+// Vol de comète : `translateX` LOCAL dans le repère déjà pivoté de θ. C'est toute la règle du
+// paramètre unique de DESIGN.md §8 — la trajectoire ne peut pas se désaccorder de l'orientation,
+// il n'y a qu'une seule valeur.
+@keyframes pb-fly {
+  0% {
+    transform: translateX(calc(var(--pb-travel, 200px) * -0.5));
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  76% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(var(--pb-travel, 200px));
+    opacity: 0;
+  }
+}
+@keyframes pb-drift {
+  0% {
+    transform: translate(0, 0) scale(0.85);
+    opacity: 0;
+  }
+  14% {
+    opacity: 0.9;
+  }
+  82% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate(var(--pb-drift, 10px), -96px) scale(1.2);
+    opacity: 0;
+  }
+}
+@keyframes pb-fall {
+  0% {
+    transform: translate(0, -16px) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(var(--pb-drift, 22px), 118px) rotate(240deg);
+    opacity: 0;
+  }
+}
+@keyframes pb-puff {
+  0% {
+    transform: translate(0, 0) scale(0.6);
+    opacity: 0;
+  }
+  22% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(12px, -42px) scale(1.7);
+    opacity: 0;
+  }
+}
+@keyframes pb-needle {
+  0%,
+  100% {
+    transform: rotate(-40deg);
+  }
+  44% {
+    transform: rotate(28deg);
+  }
+  60% {
+    transform: rotate(15deg);
+  }
+}
+
+:host(.party-banner-host--large) {
+  .party-banner__gear-spin {
+    animation: pb-spin var(--pb-speed, 15s) linear infinite;
+  }
+  .party-banner__gear-spin--reverse {
+    animation-name: pb-spin-reverse;
+  }
+  .party-banner__star {
+    animation: pb-twinkle 3.4s ease-in-out infinite;
+    animation-delay: var(--pb-delay, 0s);
+  }
+  .party-banner__halo {
+    animation: pb-glowpulse 6s ease-in-out infinite;
+    animation-delay: var(--pb-delay, 0s);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .party-banner__comet-fly {
+    animation: pb-fly var(--pb-speed, 7s) ease-in-out infinite;
+  }
+  .party-banner__mote {
+    animation: pb-drift 8.5s linear infinite;
+    animation-delay: var(--pb-delay, 0s);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .party-banner__leaf {
+    animation: pb-fall 9.5s linear infinite;
+    animation-delay: var(--pb-delay, 0s);
+  }
+  .party-banner__steam {
+    animation: pb-puff 5s ease-out infinite;
+    animation-delay: var(--pb-delay, 0s);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .party-banner__gauge-needle-pivot {
+    animation: pb-needle 5.5s ease-in-out infinite;
+  }
+}
+
+// AC3 : une seule requête, elle coupe tout. RIEN n'est restauré ni repositionné — la composition
+// au repos est déjà complète depuis la Story 29.10, c'est précisément pour cela qu'elle a été
+// construite ainsi. Si une animation partait d'un état invisible et exigeait une règle de
+// « rattrapage » ici, ce serait l'animation qu'il faudrait corriger, pas ce bloc.
+@media (prefers-reduced-motion: reduce) {
+  :host(.party-banner-host--large) {
+    .party-banner__gear-spin,
+    .party-banner__star,
+    .party-banner__halo,
+    .party-banner__comet-fly,
+    .party-banner__mote,
+    .party-banner__leaf,
+    .party-banner__steam,
+    .party-banner__gauge-needle-pivot {
+      animation: none;
+    }
+  }
 }

@@ -25,9 +25,17 @@ import type { Theme } from '@master-jdr/shared';
 
 /** Espace de dessin normalisé de toute composition. Le cadrage par mode se fait en SVG
  *  (`preserveAspectRatio="xMidYMid slice"`), jamais en redessinant : c'est ce qui garantit
- *  qu'une seule composition sert les modes grand et moyen (AC3/AC4). */
-export const BANNER_VIEWBOX_WIDTH = 160;
-export const BANNER_VIEWBOX_HEIGHT = 88;
+ *  qu'une seule composition sert les modes grand et moyen (AC3/AC4).
+ *
+ *  **320 × 124, et ce n'est pas arbitraire** (Story 29.11, Task 0a) : c'est la taille réelle de
+ *  la zone `.cov` des maquettes (`iteration-6`/`iteration-7`), dont TOUTES les bornes de tirage
+ *  ci-dessous sont issues. La Story 29.10 avait fixé 160 × 88 tout en recopiant ces bornes —
+ *  chaque élément était donc rendu à environ le double de sa taille relative (rouages saturant
+ *  le cadre, halos débordant en demi-cercles, manomètre occupant la moitié de la hauteur).
+ *  Si ces constantes changent un jour, les bornes doivent changer avec elles, ou l'écart se
+ *  reproduira à l'identique. */
+export const BANNER_VIEWBOX_WIDTH = 320;
+export const BANNER_VIEWBOX_HEIGHT = 124;
 
 /** Les deux accents du thème actif. Le fichier ne connaît jamais de couleur littérale : il
  *  désigne un rôle, la feuille de style résout `--jdr-accent-1`/`--jdr-accent-2`. C'est ce qui
@@ -198,6 +206,12 @@ export type ForestMobileKind = 'leaves' | 'motes';
 export interface ForestMobileParams {
   size: number;
   x: number;
+  /** Position verticale, tirée (Story 29.11, Task 0c). La Story 29.10 plaçait tous les mobiles
+   *  sur la même ligne (`viewBoxHeight / 2`) : quatre feuilles alignées au cordeau, mécanique et
+   *  faux. Une clairière n'a pas d'horizon. */
+  y: number;
+  /** Inclinaison propre, en degrés — une feuille tombe rarement à plat. */
+  rotation: number;
   /** Dérive latérale, en unités de l'espace de dessin. */
   driftX: number;
   tint: BannerTint;
@@ -296,8 +310,8 @@ export function rectsIntersect(a: BannerRect, b: BannerRect): boolean {
  * toujours le haut du canvas (`gauge.y` constant à 8px, marge 8px ⇒ `zone.y = 0`), donc un
  * repoussement vers le bas laisse au mieux ~26-30 px de marge avant le bord inférieur (88 px) —
  * insuffisant pour un rouage de grande taille (jusqu'à 84 px), qui déborderait alors du canvas.
- * Le repoussement horizontal reste dans les limites du canvas (160 px de large, contre 58-62 px
- * de large pour la zone) quelle que soit la taille de l'élément repoussé.
+ * Le repoussement horizontal reste dans les limites du canvas (`BANNER_VIEWBOX_WIDTH` = 320 px,
+ * contre 58-62 px de large pour la zone) quelle que soit la taille de l'élément repoussé.
  */
 function pushOutOfZone(box: BannerRect, zone: BannerRect, corner: 'left' | 'right'): BannerRect {
   if (!rectsIntersect(box, zone)) return box;
@@ -317,7 +331,8 @@ const GEAR_TECHNIQUES: readonly GearTechnique[] = ['B', 'C', 'E'];
 export const BANNER_BOUNDS = {
   emeraude: {
     comets: { min: 1, max: 3 },
-    stars: { min: 4, max: 9 },
+    stars: { min: 8, max: 16 },
+    haloSize: { min: 76, max: 120 },
     cometLength: { min: 42, max: 96 },
     cometHead: { min: 11, max: 22 },
     cometAngle: { min: -24, max: 34 },
@@ -327,7 +342,7 @@ export const BANNER_BOUNDS = {
     haloSize: { min: 56, max: 130 },
     haloDelay: { min: 0, max: 4 },
     mobiles: { min: 2, max: 5 },
-    mobileSize: { min: 3, max: 11 },
+    mobileSize: { min: 4, max: 12 },
     mobileDrift: { min: -26, max: 26 },
     mobileDelay: { min: 0, max: 6 },
   },
@@ -337,6 +352,8 @@ export const BANNER_BOUNDS = {
     /** Écart minimal entre deux rouages consécutifs — c'est lui qui rend la décroissance
      *  **strictement** monotone par construction, jamais par vérification a posteriori. */
     gearSizeStep: 4,
+    /** Plancher du PREMIER rouage de la chaîne — le plus grand. */
+    gearSizeFirstMin: 60,
     gaugeSize: { min: 42, max: 46 },
     rivets: { min: 0, max: 3 },
   },
@@ -345,7 +362,7 @@ export const BANNER_BOUNDS = {
 function drawEmeraude(rng: () => number, base: BannerBase): EmeraudeBanner {
   const b = BANNER_BOUNDS.emeraude;
   const halo: HaloParams = {
-    size: pickInt(rng, 56, 96),
+    size: pickInt(rng, b.haloSize.min, b.haloSize.max),
     x: pickInt(rng, 8, BANNER_VIEWBOX_WIDTH - 40),
     y: pickInt(rng, -20, BANNER_VIEWBOX_HEIGHT - 30),
     tint: pickOne(rng, TINTS),
@@ -369,7 +386,7 @@ function drawEmeraude(rng: () => number, base: BannerBase): EmeraudeBanner {
     const length = pickInt(rng, b.cometLength.min, b.cometLength.max);
     comets.push({
       angle: Math.round(pickFloat(rng, b.cometAngle.min, b.cometAngle.max)),
-      x: pickInt(rng, 0, 40),
+      x: pickInt(rng, 0, Math.round(BANNER_VIEWBOX_WIDTH * 0.25)),
       // Réparties sur la hauteur pour que deux comètes ne se superposent pas.
       y: Math.round(((i + 1) * BANNER_VIEWBOX_HEIGHT) / (cometCount + 1) + pickFloat(rng, -8, 8)),
       length,
@@ -403,6 +420,8 @@ function drawForet(rng: () => number, base: BannerBase): ForetBanner {
     mobiles.push({
       size: pickInt(rng, b.mobileSize.min, b.mobileSize.max),
       x: pickInt(rng, 8, BANNER_VIEWBOX_WIDTH - 8),
+      y: pickInt(rng, 10, BANNER_VIEWBOX_HEIGHT - 10),
+      rotation: Math.round(pickFloat(rng, -60, 60)),
       driftX: Math.round(pickFloat(rng, b.mobileDrift.min, b.mobileDrift.max)),
       tint: pickOne(rng, TINTS),
       delaySeconds: pickFloat(rng, b.mobileDelay.min, b.mobileDelay.max),
@@ -430,7 +449,7 @@ function drawSteampunk(rng: () => number, base: BannerBase): SteampunkBanner {
   // [plancher réservé, précédent − pas]. Le plancher réserve `pas` unités par rouage restant, ce
   // qui rend l'intervalle toujours non vide — on ne vérifie donc jamais la décroissance après
   // coup, elle est impossible à violer.
-  const sizes: number[] = [pickInt(rng, 60, b.gearSize.max)];
+  const sizes: number[] = [pickInt(rng, b.gearSizeFirstMin, b.gearSize.max)];
   for (let i = 1; i < gearCount; i++) {
     const floorForRest = b.gearSize.min + (gearCount - 1 - i) * b.gearSizeStep;
     const upper = sizes[i - 1] - b.gearSizeStep;

@@ -29,6 +29,8 @@ import {
   type ListControlBarSortOption,
 } from '../../shared/list-control-bar/list-control-bar';
 import { PartyBanner } from '../../shared/party-banner/party-banner';
+import { PartyCountdown } from '../../shared/party-countdown/party-countdown';
+import { countdownProgress } from '../../core/parties/party-countdown.util';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { InvitationsService } from '../../core/invitations/invitations.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
@@ -91,6 +93,7 @@ export interface PartieTileVm {
     NgTemplateOutlet,
     ListControlBar,
     PartyBanner,
+    PartyCountdown,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -330,6 +333,44 @@ export class Dashboard implements OnInit {
     if (tint === 'done') return this.theme.tone()['dashboard.status_closed_badge'];
     if (tint === 'live') return this.theme.tone()['dashboard.section_ongoing'];
     return this.theme.tone()['dashboard.section_upcoming'];
+  }
+
+  /** Instant de référence du compte à rebours (Story 29.11), figé au montage.
+   *  **Une seule source pour tout l'écran** : un `new Date()` par tuile pourrait placer deux
+   *  tuiles de part et d'autre d'une frontière de jour et leur donner des progressions
+   *  incohérentes. Figé plutôt que réactif : un compte à rebours qui « avance » en cours de
+   *  session serait imperceptible (sept jours) et coûterait un timer permanent. */
+  private readonly countdownNow = signal(new Date());
+
+  /** L'unique partie portant un compte à rebours (DESIGN.md §7.4 : « il n'apparaît que sur un
+   *  seul élément à la fois : la prochaine séance »). La séance la plus proche parmi celles à
+   *  moins de sept jours — sans cette règle, une liste entière afficherait des comptes à rebours,
+   *  et l'élément cesserait de désigner *la* prochaine séance. */
+  protected readonly countdownPartieId = computed<string | null>(() => {
+    const now = this.countdownNow();
+    let bestId: string | null = null;
+    let bestDate = Number.POSITIVE_INFINITY;
+    for (const partie of this.filteredParties()) {
+      if (countdownProgress(partie.nextSessionDate, now) === null) continue;
+      const time = new Date(partie.nextSessionDate!).getTime();
+      // countdownProgress() borne une séance déjà passée à 1 (jamais null) — sans cette garde, une
+      // date passée non purgée (nextSessionDate n'est jamais effacé après coup, item différé connu
+      // depuis la revue 29.7) gagnerait toujours la comparaison sur un horodatage plus ancien que
+      // toute vraie prochaine séance, et confisquerait le compte à rebours indéfiniment.
+      if (time < now.getTime()) continue;
+      if (time < bestDate) {
+        bestDate = time;
+        bestId = partie.id;
+      }
+    }
+    return bestId;
+  });
+
+  /** Progression à afficher pour CETTE partie, ou `null` si elle ne porte pas le compte à
+   *  rebours de l'écran. */
+  protected countdownFor(partie: PartieDto): number | null {
+    if (partie.id !== this.countdownPartieId()) return null;
+    return countdownProgress(partie.nextSessionDate, this.countdownNow());
   }
 
   /** Sous-ligne du mode liste (AC1, DESIGN.md §4.1) — « Rôle · libellé du signal dominant ».

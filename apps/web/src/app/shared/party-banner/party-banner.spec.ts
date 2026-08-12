@@ -50,7 +50,9 @@ describe('PartyBanner — les trois rendus (Story 29.10, AC4)', () => {
     const { fixture } = await render('large');
     const svg = fixture.nativeElement.querySelector('svg.party-banner');
     expect(svg).not.toBeNull();
-    expect(svg.getAttribute('viewBox')).toBe('0 0 160 88');
+    // 320 × 124 depuis la Story 29.11 (Task 0a) : la taille réelle de la zone `.cov` des
+    // maquettes, celle pour laquelle toutes les bornes de tirage ont été dessinées.
+    expect(svg.getAttribute('viewBox')).toBe('0 0 320 124');
     expect(fixture.nativeElement.querySelector('.party-banner__monogram')).toBeNull();
     expect(fixture.nativeElement.classList.contains('party-banner-host--large')).toBe(true);
   });
@@ -180,10 +182,15 @@ describe('PartyBanner — composition par thème (Story 29.10, AC6)', () => {
       expect(comet.getAttribute('transform')).toMatch(
         /^translate\([-\d. ]+\) rotate\(-?[\d.]+\) scale\(-?1 1\)$/,
       );
+      // La queue est un tracé effilé depuis la Story 29.11 (Task 0b) : elle part TOUJOURS de
+      // l'origine du repère (`M 0 0`) et s'élargit jusqu'à la tête, dont l'abscisse vaut la
+      // longueur de la queue. Le lien tête/queue reste structurel, seule la forme a changé.
       const tail = comet.querySelector('.party-banner__comet-tail');
       const head = comet.querySelector('.party-banner__comet-head');
-      expect(tail.getAttribute('x')).toBe('0');
-      expect(head.getAttribute('cx')).toBe(tail.getAttribute('width'));
+      const path = tail.getAttribute('d');
+      expect(path.startsWith('M 0 0 ')).toBe(true);
+      const tailEnd = path.split('L ')[1].split(' ')[0];
+      expect(head.getAttribute('cx')).toBe(tailEnd);
     }
   });
 
@@ -214,5 +221,107 @@ describe('PartyBanner — composition par thème (Story 29.10, AC6)', () => {
     expect((nodes[nodes.length - 1] as Element).classList.contains('party-banner__gauge')).toBe(
       true,
     );
+  });
+});
+
+// AC1/AC2/AC3 : la portée de l'animation est portée par la classe d'hôte, jamais par le balisage.
+// jsdom ne calcule aucune animation : ces tests vérifient donc ce qui est VÉRIFIABLE — que les
+// paramètres tirés arrivent bien au CSS, et que le DOM ne dépend pas du mode ni de la réduction
+// des animations. Le mouvement lui-même relève de la vérification visuelle.
+describe('PartyBanner — portée de l’animation (Story 29.11, AC1, AC2, AC3)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('mode grand → les paramètres tirés sont transmis au CSS en propriétés personnalisées, avec leur unité', async () => {
+    const { fixture } = await render('large', makeThemeService('grimoire-emeraude'));
+    const fly = fixture.nativeElement.querySelector('.party-banner__comet-fly') as SVGElement;
+
+    const speed = fly.style.getPropertyValue('--pb-speed');
+    expect(speed).toMatch(/^[\d.]+s$/);
+    const params = bannerParams(PARTIE_ID, 'grimoire-emeraude');
+    if (params.theme === 'grimoire-emeraude') {
+      expect(speed).toBe(`${params.comets[0].speedSeconds.toFixed(2)}s`);
+    }
+    expect(fly.style.getPropertyValue('--pb-travel')).toMatch(/^\d+px$/);
+  });
+
+  it('les rouages reçoivent leur vitesse tirée et leur sens dérivé', async () => {
+    const { fixture } = await render('large', makeThemeService('medieval-steampunk'));
+    const spins = Array.from(
+      fixture.nativeElement.querySelectorAll('.party-banner__gear-spin'),
+    ) as SVGElement[];
+    expect(spins.length).toBeGreaterThanOrEqual(2);
+
+    for (const spin of spins) {
+      expect(spin.style.getPropertyValue('--pb-speed')).toMatch(/^[\d.]+s$/);
+    }
+    // Sens alternés : deux rouages engrenés ne tournent jamais dans le même sens.
+    for (let i = 1; i < spins.length; i++) {
+      const previous = spins[i - 1].classList.contains('party-banner__gear-spin--reverse');
+      const current = spins[i].classList.contains('party-banner__gear-spin--reverse');
+      expect(current).not.toBe(previous);
+    }
+  });
+
+  it('AC2 : le balisage est IDENTIQUE en grand et en moyen — seule la classe d’hôte change', async () => {
+    const large = await render('large');
+    const largeComposition = composition(large.fixture);
+    expect(large.fixture.nativeElement.classList.contains('party-banner-host--large')).toBe(true);
+    TestBed.resetTestingModule();
+
+    const medium = await render('medium');
+    expect(medium.fixture.nativeElement.classList.contains('party-banner-host--large')).toBe(false);
+    // Si ce test casse, c'est que l'animation a été portée par le template plutôt que par le CSS :
+    // la composition aurait alors été dupliquée, ce que la Story 29.10 interdit (AC3).
+    expect(composition(medium.fixture)).toBe(largeComposition);
+  });
+
+  it('AC2 : le mode liste ne rend aucune composition, donc rien à animer', async () => {
+    const { fixture } = await render('compact');
+    expect(fixture.nativeElement.querySelector('svg.party-banner')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.party-banner__comet-fly')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.party-banner__gear-spin')).toBeNull();
+  });
+
+  it('AC3 : le placement statique n’est jamais porté par la propriété que l’animation occupe (comète)', async () => {
+    // Piège structurel : un élément ne porte qu'une seule propriété `transform`. Le placement vit
+    // sur le `<g>` externe, l'animation sur un `<g>` interne — sinon l'animation effacerait le
+    // placement et la composition partirait au repos dans un coin.
+    const { fixture } = await render('large', makeThemeService('grimoire-emeraude'));
+    const comet = fixture.nativeElement.querySelector('.party-banner__comet') as SVGElement;
+    const fly = comet.querySelector('.party-banner__comet-fly') as SVGElement;
+    expect(comet.getAttribute('transform')).toBeTruthy();
+    expect(fly.getAttribute('transform')).toBeNull();
+  });
+
+  it('AC3 : même invariant sur l’aiguille du manomètre (Review Findings — piège réellement rencontré)', async () => {
+    const { fixture } = await render('large', makeThemeService('medieval-steampunk'));
+    const pivot = fixture.nativeElement.querySelector(
+      '.party-banner__gauge-needle-pivot',
+    ) as SVGElement;
+    const placement = pivot.parentElement as unknown as SVGElement;
+    expect(placement.getAttribute('transform')).toBeTruthy();
+    expect(pivot.getAttribute('transform')).toBeNull();
+  });
+
+  it('AC3 : même invariant sur la feuille de la Forêt, quand le tirage en produit (Review Findings — piège réellement rencontré)', async () => {
+    const params = bannerParams(PARTIE_ID, 'foret-ancienne');
+    if (params.theme !== 'foret-ancienne' || params.mobileKind !== 'leaves') return;
+    const { fixture } = await render('large', makeThemeService('foret-ancienne'));
+    const leaf = fixture.nativeElement.querySelector('.party-banner__leaf') as SVGElement;
+    const placement = leaf.parentElement as unknown as SVGElement;
+    expect(placement.getAttribute('transform')).toBeTruthy();
+    expect(leaf.getAttribute('transform')).toBeNull();
+  });
+
+  it('AC3 : la composition au repos est complète — rien n’est ajouté ni retiré par l’animation', async () => {
+    const { fixture } = await render('large', makeThemeService('foret-ancienne'));
+    const params = bannerParams(PARTIE_ID, 'foret-ancienne');
+    if (params.theme !== 'foret-ancienne') throw new Error('thème inattendu');
+
+    const rendered =
+      fixture.nativeElement.querySelectorAll('.party-banner__leaf').length +
+      fixture.nativeElement.querySelectorAll('.party-banner__mote').length;
+    expect(rendered).toBe(params.mobiles.length);
+    expect(fixture.nativeElement.querySelectorAll('.party-banner__halo').length).toBe(2);
   });
 });
