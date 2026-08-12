@@ -1,19 +1,34 @@
-<mat-form-field appearance="outline" class="search-field">
-  <mat-label>{{ theme.tone()['my_characters.search_label'] }}</mat-label>
-  <mat-icon matPrefix aria-hidden="true">search</mat-icon>
-  <input matInput [ngModel]="query()" (ngModelChange)="query.set($event)" />
-</mat-form-field>
+<app-list-control-bar
+  [viewMode]="charactersViewMode()"
+  [sortOptions]="sortOptionsForBar()"
+  [sortValue]="charactersSort()"
+  [searchQuery]="query()"
+  [searchLabel]="theme.tone()['my_characters.search_label']"
+  [hasDeviatedFromDefault]="hasDeviatedFromDefault"
+  (viewModeChange)="onViewModeChange($event)"
+  (sortChange)="onSortChange($any($event))"
+  (searchQueryChange)="query.set($event)"
+/>
 
 @if (all().length === 0) {
   <p class="empty">{{ theme.tone()['my_characters.empty'] }}</p>
 } @else if (filtered().length === 0) {
   <p class="empty">{{ theme.tone()['my_characters.no_match'] }}</p>
 } @else {
-  <div class="list">
+  <!-- `showStats` : le mode grand est le seul à porter les stats dérivées (PV/PE/Initiative/
+       Encombrement) — c'est ce qui le distingue réellement du mode moyen, qu'aucune spec ne
+       différenciait (EXPERIENCE.md:107 impose seulement de transposer la grammaire des parties). -->
+  <div class="list" [class]="gridDensityClass()">
     @for (c of filtered(); track c.id) {
       <app-character-summary-card
         [character]="c"
         [partieName]="c.partieName"
+        [density]="charactersViewMode()"
+        [className]="c.classLabel ?? ''"
+        [typeLabel]="c.typeLabel"
+        [groupRoleLabel]="c.groupRoleLabel"
+        [showMjMarker]="true"
+        [showStats]="charactersViewMode() === 'large'"
         (selected)="open(c)"
       />
     }

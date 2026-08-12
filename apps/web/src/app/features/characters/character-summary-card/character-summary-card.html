@@ -1,38 +1,71 @@
 <button type="button" class="character-summary-card" (click)="onClick()">
-  <app-character-avatar
-    [name]="name()"
-    [size]="44"
-    [characterId]="character().id"
-    [portraitUrl]="character().portraitUrl"
-    [cropData]="$any(character().portraitCropData)"
-  />
+  <span class="character-summary-card__avatar">
+    <app-character-avatar
+      [name]="name()"
+      [size]="avatarSize()"
+      [characterId]="character().id"
+      [portraitUrl]="character().portraitUrl"
+      [cropData]="$any(character().portraitCropData)"
+    />
+    @if (hasPendingLevelUp()) {
+      <!-- Retour utilisateur (Story 29.9) : bulle apposée sur le cercle, patron déjà établi par
+           `RosterStrip`/`RosterRail` (Story 27.3) — le même signal était jusqu'ici rendu de deux
+           façons différentes selon l'écran. `role="img"` + `aria-label` (et non `aria-hidden`,
+           comme le roster) : le libellé texte visible disparaissant, il doit rester annoncé. -->
+      <span
+        class="character-summary-card__levelup-badge"
+        role="img"
+        [title]="theme.tone()['roster.levelup_badge']"
+        [attr.aria-label]="theme.tone()['roster.levelup_badge']"
+        >▲</span
+      >
+    }
+  </span>
   <div class="character-summary-card__info">
-    <span class="character-summary-card__name">{{ name() }}</span>
-    @if (className()) {
-      <span class="character-summary-card__class">{{ className() }}</span>
-    }
-    @if (partieName()) {
-      <span class="character-summary-card__partie">{{ partieName() }}</span>
-    }
-    @if (showOwnerInfo()) {
-      @if (character().ownerIsMj) {
-        <span class="character-summary-card__owner-badge">{{ theme.tone()['character.owner_badge_mj'] }}</span>
-      } @else {
-        <span class="character-summary-card__owner-badge">
-          <app-identity-label [playerName]="character().ownerDisplayName" />
-        </span>
+    <span class="character-summary-card__name">
+      {{ name() }}
+      <span class="character-summary-card__level">{{ levelLabel() }}</span>
+    </span>
+    @if (density() === 'compact') {
+      <!-- Mode liste (DESIGN.md §4.1) : une seule sous-ligne, jamais une pile de spans qui
+           écraserait le nom. Classe et Partie sont les deux repères que l'utilisateur a
+           explicitement demandé de conserver en liste compacte. -->
+      @if (compactSubtitle()) {
+        <span class="character-summary-card__compact-sub">{{ compactSubtitle() }}</span>
+      }
+    } @else {
+      @if (className()) {
+        <span class="character-summary-card__class">{{ className() }}</span>
+      }
+      @if (typeLabel()) {
+        <span class="character-summary-card__type">{{ typeLabel() }}</span>
+      }
+      @if (partieName()) {
+        <span class="character-summary-card__partie">{{ partieName() }}</span>
+      }
+      @if (groupRoleLabel()) {
+        <span class="character-summary-card__group-role">{{ groupRoleLabel() }}</span>
+      }
+      @if (showOwnerInfo()) {
+        @if (character().ownerIsMj) {
+          <span class="character-summary-card__owner-badge">{{ theme.tone()['character.owner_badge_mj'] }}</span>
+        } @else {
+          <span class="character-summary-card__owner-badge">
+            <app-identity-label [playerName]="character().ownerDisplayName" />
+          </span>
+        }
+      }
+      @if (showMjMarker() && character().ownerIsMj) {
+        <span class="character-summary-card__mj-marker">{{ theme.tone()['character.owner_badge_mj'] }}</span>
       }
     }
-    @if (hasPendingLevelUp()) {
-      <span class="character-summary-card__levelup-badge">
-        {{ theme.tone()['roster.levelup_badge'] }}
-      </span>
-    }
   </div>
-  <div class="character-summary-card__badges">
-    <span class="stat-pill">PV {{ character().derived.PV }}</span>
-    <span class="stat-pill">PE {{ character().derived.PE }}</span>
-    <span class="stat-pill">Initiative {{ character().derived.Initiative }}</span>
-    <span class="stat-pill">Encombrement max {{ character().derived.Encombrement }}</span>
-  </div>
+  @if (showStats()) {
+    <div class="character-summary-card__badges">
+      <span class="stat-pill">PV {{ character().derived.PV }}</span>
+      <span class="stat-pill">PE {{ character().derived.PE }}</span>
+      <span class="stat-pill">Initiative {{ character().derived.Initiative }}</span>
+      <span class="stat-pill">Encombrement max {{ character().derived.Encombrement }}</span>
+    </div>
+  }
 </button>

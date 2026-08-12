@@ -37,6 +37,9 @@ describe('AccountService', () => {
       theme: 'grimoire-emeraude',
       hideFinishedParties: false,
       partiesSort: 'urgence',
+      partiesViewMode: 'medium',
+      charactersViewMode: 'medium',
+      charactersSort: 'partie',
     };
     req.flush(response);
 
@@ -61,6 +64,9 @@ describe('AccountService', () => {
       theme: 'foret-ancienne',
       hideFinishedParties: false,
       partiesSort: 'urgence',
+      partiesViewMode: 'medium',
+      charactersViewMode: 'medium',
+      charactersSort: 'partie',
     };
     req.flush(response);
 
@@ -101,6 +107,9 @@ describe('AccountService', () => {
       theme: 'grimoire-emeraude',
       hideFinishedParties: false,
       partiesSort: 'date',
+      partiesViewMode: 'medium',
+      charactersViewMode: 'medium',
+      charactersSort: 'partie',
     };
     req.flush(response);
 

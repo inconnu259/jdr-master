@@ -77,6 +77,9 @@ function makeAuthUser(overrides: Partial<AuthUser> = {}): AuthUser {
     theme: 'grimoire-emeraude',
     hideFinishedParties: false,
     partiesSort: 'urgence',
+    partiesViewMode: 'medium',
+    charactersViewMode: 'medium',
+    charactersSort: 'partie',
     ...overrides,
   };
 }
@@ -743,26 +746,155 @@ describe('Dashboard — filtres rôle/statut (Story 29.8, AC2/AC5)', () => {
   });
 });
 
-describe('Dashboard — repli de la barre de contrôles (retour utilisateur, DESIGN.md §7.7)', () => {
+// Repli/révélation par icône (comportement générique) : couvert par `list-control-bar.spec.ts`
+// (Story 29.9) — plus dupliqué ici. Ce fichier ne vérifie que le câblage `Dashboard` ↔
+// `ListControlBar` (cf. describe ci-dessous).
+describe('Dashboard — câblage vers ListControlBar (Story 29.9)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('repliée par défaut : les champs ne sont pas affichés (classe --expanded absente)', async () => {
+  it('les filtres rôle/statut/masquage sont bien projetés dans ListControlBar', async () => {
     const { fixture } = await createFixture(new Map());
-    const bar = fixture.nativeElement.querySelector('.controls-bar');
-    expect(bar.classList.contains('controls-bar--expanded')).toBe(false);
+    const bar = fixture.nativeElement.querySelector('app-list-control-bar');
+    expect(bar.querySelectorAll('select').length).toBeGreaterThanOrEqual(2);
+    expect(bar.querySelector('input[type="checkbox"]')).not.toBeNull();
   });
 
-  it('clic sur le bouton de repli déplie la barre (aria-expanded reflète l’état)', async () => {
-    const { fixture } = await createFixture(new Map());
-    const toggle = fixture.nativeElement.querySelector('.controls-bar__toggle');
-    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  it("bascule de mode d'affichage appelle AccountService.updatePreferences({ partiesViewMode }) et change la classe CSS de la grille", async () => {
+    const { fixture, accountSvc } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'A_VENIR'),
+    ]);
+    accountSvc.updatePreferences.mockResolvedValue({});
 
-    toggle.click();
+    const modeButtons: NodeListOf<HTMLButtonElement> =
+      fixture.nativeElement.querySelectorAll('.list-control-bar__mode');
+    modeButtons[2].click(); // 'compact'
     fixture.detectChanges();
+    await fixture.whenStable();
 
-    const bar = fixture.nativeElement.querySelector('.controls-bar');
-    expect(bar.classList.contains('controls-bar--expanded')).toBe(true);
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(accountSvc.updatePreferences).toHaveBeenCalledWith({ partiesViewMode: 'compact' });
+    expect(fixture.nativeElement.querySelector('.grid--compact')).not.toBeNull();
+  });
+});
+
+// DESIGN.md §4.1 + §7.7 « ne pas » : le mode liste a son PROPRE rendu — une ligne, pas une carte
+// rétrécie. C'est l'écart avec la maquette (direction B de `directions-liste-parties.html`) relevé
+// après la première implémentation de 29.9, qui ne faisait varier que la densité de la carte.
+describe('Dashboard — mode liste : gabarit ligne (Story 29.9, AC1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('mode compact → des lignes .row, aucune carte .tile', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      new Map(),
+      { partiesViewMode: 'compact' },
+    );
+
+    expect(fixture.nativeElement.querySelectorAll('.row').length).toBe(1);
+    expect(fixture.nativeElement.querySelector('.tile')).toBeNull();
+  });
+
+  it('mode moyen → des cartes .tile, aucune ligne .row', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      new Map(),
+      { partiesViewMode: 'medium' },
+    );
+
+    expect(fixture.nativeElement.querySelector('.tile')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('.row')).toBeNull();
+  });
+
+  it('la pastille n’est jamais seule : la sous-ligne porte rôle + libellé du signal dominant (P-1)', async () => {
+    const signals = new Map([
+      [
+        'p1',
+        {
+          role: 'player' as const,
+          status: 'EN_COURS' as const,
+          signals: ['PERSONNAGE_A_CREER'] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      signals as any,
+      { partiesViewMode: 'compact' },
+    );
+
+    const tone = TONE_MAP['grimoire-emeraude'];
+    const sub = fixture.nativeElement.querySelector('.row__sub');
+    expect(sub.textContent).toContain(tone['dashboard.role_player']);
+    expect(sub.textContent).toContain(tone['partie.signal_personnage_a_creer']);
+  });
+
+  it('sans aucun signal, la sous-ligne retombe sur le libellé de teinte — jamais vide', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      new Map(),
+      { partiesViewMode: 'compact' },
+    );
+
+    const sub = fixture.nativeElement.querySelector('.row__sub');
+    expect(sub.textContent).toContain(TONE_MAP['grimoire-emeraude']['dashboard.section_ongoing']);
+  });
+
+  it('un seul compteur (§4.1 bis), jamais les badges détaillés, et il porte un aria-label', async () => {
+    const signals = new Map([
+      [
+        'p1',
+        {
+          role: 'player' as const,
+          status: 'EN_COURS' as const,
+          signals: [
+            'PERSONNAGE_A_CREER',
+            'VOTE_EN_COURS_SANS_REPONSE',
+            'AUCUN_SCENARIO_EN_COURS',
+          ] as const,
+        },
+      ],
+    ]);
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      signals as any,
+      { partiesViewMode: 'compact' },
+    );
+
+    const counts = fixture.nativeElement.querySelectorAll('.row__count');
+    expect(counts.length).toBe(1);
+    expect(counts[0].textContent.trim()).toBe('3');
+    expect(counts[0].getAttribute('aria-label')).toContain('3');
+    expect(fixture.nativeElement.querySelector('.signal-badge')).toBeNull();
+  });
+
+  it('l’étoile de favori reste actionnable en mode liste', async () => {
+    const { fixture, accountSvc } = await createFixture(
+      new Map(),
+      undefined,
+      [makeParty('p1', 'player', 'EN_COURS')],
+      false,
+      new Map(),
+      { partiesViewMode: 'compact' },
+    );
+
+    fixture.nativeElement.querySelector('.row .favorite-btn').click();
+    await fixture.whenStable();
+
+    expect(accountSvc.addFavorite).toHaveBeenCalledWith('p1');
   });
 });
 

@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { AuthUser, PartieSort, Theme } from '@master-jdr/shared';
+import type { AuthUser, CharacterSort, ListViewMode, PartieSort, Theme } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
 @Injectable({ providedIn: 'root' })
@@ -21,11 +21,7 @@ export class AccountService {
   /** N'applique jamais le thème (AD-13) — lit/écrit uniquement la préférence côté compte. */
   setTheme(theme: Theme): Promise<AuthUser> {
     return firstValueFrom(
-      this.http.patch<AuthUser>(
-        `${API_BASE}/me/theme`,
-        { theme },
-        { withCredentials: true },
-      ),
+      this.http.patch<AuthUser>(`${API_BASE}/me/theme`, { theme }, { withCredentials: true }),
     );
   }
 
@@ -49,10 +45,13 @@ export class AccountService {
     );
   }
 
-  /** Patch partiel (Story 29.8) — `partiesSort`/`hideFinishedParties` mémorisés sur le compte. */
+  /** Patch partiel (Story 29.8, étendu Story 29.9) — préférences mémorisées sur le compte. */
   updatePreferences(prefs: {
     partiesSort?: PartieSort;
     hideFinishedParties?: boolean;
+    partiesViewMode?: ListViewMode;
+    charactersViewMode?: ListViewMode;
+    charactersSort?: CharacterSort;
   }): Promise<AuthUser> {
     return firstValueFrom(
       this.http.patch<AuthUser>(`${API_BASE}/me/preferences`, prefs, {

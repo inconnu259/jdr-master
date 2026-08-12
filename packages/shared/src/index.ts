@@ -15,6 +15,21 @@ export const PARTIE_SORTS = ['urgence', 'date', 'nom', 'type', 'statut'] as cons
 
 export type PartieSort = (typeof PARTIE_SORTS)[number];
 
+/** Modes de densité d'affichage des listes (FR-45, AD-1, Story 29.9) — union fermée **partagée**
+ *  entre la liste des parties et la vue « mes personnages » (CAP-18 : « une seule grammaire »),
+ *  chacune gardant sa propre valeur mémorisée (`partiesViewMode`/`charactersViewMode`). Littéral
+ *  `"medium"` (pas `'moyen'`) : doit rester synchronisé avec le défaut Prisma du Structural Seed. */
+export const LIST_VIEW_MODES = ['large', 'medium', 'compact'] as const;
+
+export type ListViewMode = (typeof LIST_VIEW_MODES)[number];
+
+/** Critères de tri de la vue « mes personnages » (FR-45, AD-1, Story 29.9) — union fermée
+ *  distincte de `PARTIE_SORTS` (AD-1 : « niveau, partie, nom pour les personnages »), pas de
+ *  vocabulaire partagé au-delà de `'nom'`, présent dans les deux unions. */
+export const CHARACTER_SORTS = ['niveau', 'partie', 'nom'] as const;
+
+export type CharacterSort = (typeof CHARACTER_SORTS)[number];
+
 /** Utilisateur authentifié (renvoyé par /auth/login, /auth/me). Jamais le hash. */
 export interface AuthUser {
   id: string;
@@ -32,6 +47,12 @@ export interface AuthUser {
   hideFinishedParties: boolean;
   /** Critère de tri mémorisé de la liste des parties (FR-10, AD-1, Story 29.8). */
   partiesSort: PartieSort;
+  /** Mode d'affichage mémorisé de la liste des parties (FR-45, AD-1, Story 29.9). */
+  partiesViewMode: ListViewMode;
+  /** Mode d'affichage mémorisé de la vue « mes personnages » (FR-45, AD-1, Story 29.9). */
+  charactersViewMode: ListViewMode;
+  /** Critère de tri mémorisé de la vue « mes personnages » (FR-45, AD-1, Story 29.9). */
+  charactersSort: CharacterSort;
 }
 
 /** Corps de la requête PATCH /me/display-name. */
@@ -500,6 +521,14 @@ export interface CharacterDto {
  *  appelants. */
 export interface MyCharacterDto extends CharacterDto {
   partieName: string;
+  /** Libellé de classe résolu côté serveur (Story 29.9, contenu de jeu du système du personnage) —
+   *  `null` si `sheetData.classId` est absent ou ne référence aucune entrée du catalogue. */
+  classLabel: string | null;
+  /** Libellé de type résolu côté serveur, même patron que `classLabel`. */
+  typeLabel: string | null;
+  /** Libellé du rôle de groupe assigné à ce personnage sur sa Partie (Story 27.2), résolu côté
+   *  serveur — `null` si aucun rôle n'est assigné. */
+  groupRoleLabel: string | null;
 }
 
 /** Une ligne d'une distribution d'XP : le montant accordé à un personnage. */

@@ -22,6 +22,9 @@ describe('AuthService (front)', () => {
     theme: 'grimoire-emeraude',
     hideFinishedParties: false,
     partiesSort: 'urgence',
+    partiesViewMode: 'medium',
+    charactersViewMode: 'medium',
+    charactersSort: 'partie',
   };
 
   beforeEach(() => {
@@ -120,6 +123,9 @@ describe('AuthService (front) — synchronisation du thème (AC1, AC2, AC4)', ()
     theme: 'grimoire-emeraude',
     hideFinishedParties: false,
     partiesSort: 'urgence',
+    partiesViewMode: 'medium',
+    charactersViewMode: 'medium',
+    charactersSort: 'partie',
   };
 
   afterEach(() => {

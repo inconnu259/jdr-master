@@ -108,6 +108,9 @@ function makePrisma() {
       findUnique: jest.fn(),
       findMany: jest.fn(),
     },
+    characterGroupRole: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     scenario: {
       findUnique: jest.fn(),
     },
@@ -948,6 +951,84 @@ describe('CharacterService', () => {
       expect(result).toHaveLength(1);
       expect(result.map((c) => c.id)).toEqual(['c1']);
       expect(result.some((c) => c.id === 'c2')).toBe(false);
+    });
+
+    it('classLabel/typeLabel résolus depuis le contenu de jeu (Story 29.9)', async () => {
+      gameSystems.getContent.mockResolvedValue({
+        class: [{ key: 'chasseur', data: { label: 'Chasseur' } }],
+        type: [{ key: 'attaque', data: { label: 'Attaque' } }],
+      });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
+      ]);
+
+      const result = await service.findMine('u1');
+
+      expect(gameSystems.getContent).toHaveBeenCalledWith('ryuutama');
+      expect(result[0].classLabel).toBe('Chasseur');
+      expect(result[0].typeLabel).toBe('Attaque');
+    });
+
+    it('classId/typeId absent du catalogue (défensif) → classLabel/typeLabel null, jamais une chaîne vide trompeuse', async () => {
+      gameSystems.getContent.mockResolvedValue({ class: [], type: [] });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
+      ]);
+
+      const result = await service.findMine('u1');
+
+      expect(result[0].classLabel).toBeNull();
+      expect(result[0].typeLabel).toBeNull();
+    });
+
+    it('groupRoleLabel résolu depuis CharacterGroupRole + contenu groupRole, null si aucun rôle assigné', async () => {
+      gameSystems.getContent.mockResolvedValue({
+        class: [{ key: 'chasseur', data: { label: 'Chasseur' } }],
+        type: [{ key: 'attaque', data: { label: 'Attaque' } }],
+        groupRole: [{ key: 'chef', data: { label: 'Chef' } }],
+      });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
+        makeCharacter({ id: 'c2', userId: 'u1', partieId: 'p1' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
+      ]);
+      prisma.characterGroupRole.findMany.mockResolvedValue([
+        { characterId: 'c1', roleKey: 'chef' },
+      ]);
+
+      const result = await service.findMine('u1');
+
+      expect(prisma.characterGroupRole.findMany).toHaveBeenCalledWith({
+        where: { characterId: { in: ['c1', 'c2'] } },
+        select: { characterId: true, roleKey: true },
+      });
+      expect(result.find((c) => c.id === 'c1')?.groupRoleLabel).toBe('Chef');
+      expect(result.find((c) => c.id === 'c2')?.groupRoleLabel).toBeNull();
+    });
+
+    it('personnages de systèmes de jeu distincts → un seul getContent() par système, jamais par personnage', async () => {
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1', gameSystemId: 'ryuutama' }),
+        makeCharacter({ id: 'c2', userId: 'u1', partieId: 'p1', gameSystemId: 'ryuutama' }),
+        makeCharacter({ id: 'c3', userId: 'u1', partieId: 'p1', gameSystemId: 'homme-dragon' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
+      ]);
+
+      await service.findMine('u1');
+
+      expect(gameSystems.getContent).toHaveBeenCalledTimes(2);
+      expect(gameSystems.getContent).toHaveBeenCalledWith('ryuutama');
+      expect(gameSystems.getContent).toHaveBeenCalledWith('homme-dragon');
     });
   });
 

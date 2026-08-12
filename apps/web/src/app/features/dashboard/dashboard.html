@@ -25,74 +25,56 @@
 }
 
 @if (allParties().length > 0) {
-  <!-- Barre de contrôles (Story 29.8) : filtres rôle/statut (AC2/AC5) et tri (AC3/AC4), câblés
-       directement ici — pas de composant ListControlBar partagé, réservé à la Story 29.9.
-       Repliée par défaut derrière une icône (DESIGN.md §7.7, « révélation par icône ») : sur
-       mobile la barre ne doit pas manger l'espace des cartes tant qu'on ne l'a pas demandée.
-       Masquage au défilement et pastille de résumé (les deux autres comportements du même
-       paragraphe) restent hors périmètre, réservés à la Story 29.9. -->
-  <div class="controls-bar" [class.controls-bar--expanded]="controlsExpanded()">
-    <button
-      type="button"
-      mat-icon-button
-      class="controls-bar__toggle"
-      [attr.aria-expanded]="controlsExpanded()"
-      [attr.aria-label]="theme.tone()['dashboard.controls_toggle_aria']"
-      (click)="controlsExpanded.set(!controlsExpanded())"
-    >
-      <mat-icon aria-hidden="true">tune</mat-icon>
+  <!-- Barre de contrôles (Story 29.9) : filtres rôle/statut projetés (`extraFilters`, propres aux
+       parties), tri/mode/recherche portés par `ListControlBar` (composant partagé avec
+       `MyCharacters`). Toute la logique (tri, favoris, masquage des terminées) reste dans
+       `Dashboard` — le composant ne fait que présenter (Story 29.8, inchangé). -->
+  <app-list-control-bar
+    [viewMode]="partiesViewMode()"
+    [sortOptions]="sortOptionsForBar()"
+    [sortValue]="partiesSort()"
+    [searchQuery]="searchQuery()"
+    [searchLabel]="theme.tone()['dashboard.search_label']"
+    [hasDeviatedFromDefault]="hasDeviatedFromDefault()"
+    (viewModeChange)="onViewModeChange($event)"
+    (sortChange)="onSortChange($any($event))"
+    (searchQueryChange)="searchQuery.set($event)"
+    (resetRequested)="onResetRequested()"
+  >
+    <label extraFilters class="controls-bar__field">
+      <span class="controls-bar__label">{{ theme.tone()['dashboard.filter_role_label'] }}</span>
+      <select [ngModel]="roleFilter()" (ngModelChange)="roleFilter.set($event)">
+        <option value="all">{{ theme.tone()['dashboard.filter_role_all'] }}</option>
+        <option value="mj">{{ theme.tone()['dashboard.role_mj'] }}</option>
+        <option value="player">{{ theme.tone()['dashboard.role_player'] }}</option>
+      </select>
+    </label>
+
+    <label extraFilters class="controls-bar__field">
+      <span class="controls-bar__label">{{ theme.tone()['dashboard.filter_status_label'] }}</span>
+      <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
+        <option value="all">{{ theme.tone()['dashboard.filter_status_all'] }}</option>
+        <option value="A_VENIR">{{ theme.tone()['dashboard.section_upcoming'] }}</option>
+        <option value="EN_COURS">{{ theme.tone()['dashboard.section_ongoing'] }}</option>
+        <option value="TERMINEE">{{ theme.tone()['dashboard.section_finished'] }}</option>
+      </select>
+    </label>
+
+    <label extraFilters class="controls-bar__field controls-bar__field--checkbox">
+      <input
+        type="checkbox"
+        [ngModel]="hideFinishedParties()"
+        (ngModelChange)="onHideFinishedChange($event)"
+      />
+      <span>{{ theme.tone()['dashboard.hide_finished_label'] }}</span>
+    </label>
+  </app-list-control-bar>
+
+  @if (hasHiddenFinished()) {
+    <button type="button" mat-button class="controls-bar__reveal" (click)="showFinishedOverride.set(true)">
+      {{ theme.tone()['dashboard.show_finished_btn'] }}
     </button>
-
-    <div class="controls-bar__fields">
-      <label class="controls-bar__field">
-        <span class="controls-bar__label">{{ theme.tone()['dashboard.filter_role_label'] }}</span>
-        <select [ngModel]="roleFilter()" (ngModelChange)="roleFilter.set($event)">
-          <option value="all">{{ theme.tone()['dashboard.filter_role_all'] }}</option>
-          <option value="mj">{{ theme.tone()['dashboard.role_mj'] }}</option>
-          <option value="player">{{ theme.tone()['dashboard.role_player'] }}</option>
-        </select>
-      </label>
-
-      <label class="controls-bar__field">
-        <span class="controls-bar__label">{{ theme.tone()['dashboard.filter_status_label'] }}</span>
-        <select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)">
-          <option value="all">{{ theme.tone()['dashboard.filter_status_all'] }}</option>
-          <option value="A_VENIR">{{ theme.tone()['dashboard.section_upcoming'] }}</option>
-          <option value="EN_COURS">{{ theme.tone()['dashboard.section_ongoing'] }}</option>
-          <option value="TERMINEE">{{ theme.tone()['dashboard.section_finished'] }}</option>
-        </select>
-      </label>
-
-      <label class="controls-bar__field">
-        <span class="controls-bar__label">{{ theme.tone()['dashboard.sort_label'] }}</span>
-        <select [ngModel]="partiesSort()" (ngModelChange)="onSortChange($event)">
-          @for (sort of sortOptions; track sort) {
-            <option [value]="sort">{{ sortLabel(sort) }}</option>
-          }
-        </select>
-      </label>
-
-      <label class="controls-bar__field controls-bar__field--checkbox">
-        <input
-          type="checkbox"
-          [ngModel]="hideFinishedParties()"
-          (ngModelChange)="onHideFinishedChange($event)"
-        />
-        <span>{{ theme.tone()['dashboard.hide_finished_label'] }}</span>
-      </label>
-    </div>
-
-    @if (hasHiddenFinished()) {
-      <button
-        type="button"
-        mat-button
-        class="controls-bar__reveal"
-        (click)="showFinishedOverride.set(true)"
-      >
-        {{ theme.tone()['dashboard.show_finished_btn'] }}
-      </button>
-    }
-  </div>
+  }
 }
 
 @if (allParties().length === 0) {
@@ -103,7 +85,7 @@
   <!-- Quatre intertitres (Story 29.7, AC10) : ce qui t'attend / en cours / à venir / terminées. -->
   @if (awaitingTiles().length > 0) {
     <h2>{{ theme.tone()['dashboard.section_awaiting'] }}</h2>
-    <div class="grid">
+    <div class="grid" [class]="gridDensityClass()">
       @for (t of awaitingTiles(); track t.partie.id) {
         <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
       }
@@ -111,7 +93,7 @@
   }
   @if (ongoingTiles().length > 0) {
     <h2>{{ theme.tone()['dashboard.section_ongoing'] }}</h2>
-    <div class="grid">
+    <div class="grid" [class]="gridDensityClass()">
       @for (t of ongoingTiles(); track t.partie.id) {
         <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
       }
@@ -119,7 +101,7 @@
   }
   @if (upcomingTiles().length > 0) {
     <h2>{{ theme.tone()['dashboard.section_upcoming'] }}</h2>
-    <div class="grid">
+    <div class="grid" [class]="gridDensityClass()">
       @for (t of upcomingTiles(); track t.partie.id) {
         <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
       }
@@ -127,7 +109,7 @@
   }
   @if (finishedTiles().length > 0) {
     <h2>{{ theme.tone()['dashboard.section_finished'] }}</h2>
-    <div class="grid">
+    <div class="grid" [class]="gridDensityClass()">
       @for (t of finishedTiles(); track t.partie.id) {
         <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
       }
@@ -136,15 +118,58 @@
 } @else {
   <!-- Liste plate (Story 29.8) : tout critère de tri autre que 'urgence' remplace les 4
        intertitres — favoris toujours en tête (pinFavorites(), appliqué dans orderedTiles()). -->
-  <div class="grid">
+  <div class="grid" [class]="gridDensityClass()">
     @for (t of flatTiles(); track t.partie.id) {
       <ng-container [ngTemplateOutlet]="tile" [ngTemplateOutletContext]="{ $implicit: t }" />
     }
   </div>
 }
 
-<!-- Carte d'une partie (Tasks 6/7) — un seul patron partagé par les quatre sections ci-dessus. -->
+<!-- Carte d'une partie (Tasks 6/7) — un seul patron partagé par les quatre sections ci-dessus.
+     Le mode liste a son PROPRE rendu (DESIGN.md §4.1 + §7.7 « ne pas » : ce n'est pas une carte
+     rétrécie mais une ligne), d'où la bascule de gabarit ci-dessous plutôt qu'un simple jeu de
+     classes CSS. Emplacement de la vignette atténuée + monogramme laissé libre : il appartient à
+     la Story 29.10 (« le mode liste une vignette atténuée surmontée du monogramme »). -->
 <ng-template #tile let-t>
+  @if (partiesViewMode() === 'compact') {
+    <div
+      class="row"
+      [class.row--closed]="t.partie.status === 'TERMINEE'"
+      [routerLink]="['/parties', t.partie.id]"
+    >
+      <!-- Pastille d'état : équivalent exact de la bande verticale des modes moyen/grand
+           (DESIGN.md §7.2). Purement décorative — c'est `.row__sub` qui porte l'état en toutes
+           lettres, comme l'exige §4.1 (« la pastille n'est jamais seule ») et P-1. -->
+      <span
+        class="row__dot"
+        [class.row__dot--awaiting]="t.tint === 'todo'"
+        [class.row__dot--live]="t.tint === 'live'"
+        [class.row__dot--soon]="t.tint === 'soon'"
+        [class.row__dot--closed]="t.tint === 'done'"
+        aria-hidden="true"
+      ></span>
+      <span class="row__txt">
+        <span class="row__name">{{ t.partie.name }}</span>
+        <span class="row__sub">{{ rowSummary(t) }}</span>
+      </span>
+      @if (rowCount(t) > 0) {
+        <!-- §4.1 bis : « En mode liste, un seul compteur » — jamais les badges détaillés. -->
+        <span class="row__count" [attr.aria-label]="rowCountAriaLabel(rowCount(t))">{{
+          rowCount(t)
+        }}</span>
+      }
+      <button
+        type="button"
+        class="favorite-btn"
+        [class.favorite-btn--active]="t.partie.isFavorite"
+        [disabled]="isFavoritePending(t.partie.id)"
+        [attr.aria-label]="favoriteAriaLabel(t.partie.isFavorite)"
+        (click)="$event.stopPropagation(); toggleFavorite(t.partie)"
+      >
+        <mat-icon aria-hidden="true">{{ t.partie.isFavorite ? 'star' : 'star_border' }}</mat-icon>
+      </button>
+    </div>
+  } @else {
   <mat-card
     class="tile"
     [class.tile--closed]="t.partie.status === 'TERMINEE'"
@@ -222,4 +247,5 @@
       </mat-card-content>
     }
   </mat-card>
+  }
 </ng-template>

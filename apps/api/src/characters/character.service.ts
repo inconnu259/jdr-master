@@ -76,6 +76,21 @@ const CONTENT_KEY_BY_CAPABILITY: Record<string, string> = {
   'dragon-protection': 'season',
 };
 
+/** Résout le libellé d'une entrée de contenu (Story 29.9, `findMine()`) — même patron que
+ *  `ryuutama-pdf.service.ts` (`content['class']?.find(...)`), généralisé pour `class`/`type`/
+ *  `groupRole`. `null` dès que la clé demandée est absente/non renseignée ou introuvable dans le
+ *  catalogue — jamais une chaîne vide qui laisserait croire à un libellé réellement vide. */
+function resolveContentLabel(
+  content: Record<string, { key: string; data: unknown }[]> | undefined,
+  typeKey: string,
+  entryKey: string | undefined,
+): string | null {
+  if (!entryKey) return null;
+  const entry = content?.[typeKey]?.find((e) => e.key === entryKey);
+  const data = entry?.data as { label?: string } | undefined;
+  return data?.label ?? null;
+}
+
 const INVALID_PORTRAIT_IMAGE_MESSAGE =
   "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
 
@@ -453,22 +468,48 @@ export class CharacterService {
 
     // Résolution en lot des Parties d'origine (pas de N+1), même patron que `findByPartie`.
     // Requêtes indépendantes → Promise.all, même patron que resolveOwnerInfo() (même fichier).
+    // Story 29.9 : classe/type/rôle de groupe résolus ici aussi (AC « info pertinente pour cette
+    // vue » — retour utilisateur), pas côté client : `MyCharacters` peut lister des personnages de
+    // plusieurs Parties/systèmes de jeu, `GameSystemService.getContent()` est déjà mis en cache
+    // côté serveur (un seul appel réseau par système distinct, jamais par personnage).
     const partieIds = [...new Set(characters.map((c) => c.partieId))];
-    const [parties, owner] = await Promise.all([
+    const characterIds = characters.map((c) => c.id);
+    const gameSystemIds = [...new Set(characters.map((c) => c.gameSystemId))];
+    const [parties, owner, groupRoles, contentEntries] = await Promise.all([
       this.prisma.partie.findMany({
         where: { id: { in: partieIds } },
         select: { id: true, name: true, mjId: true },
       }),
       this.users.findById(userId),
+      this.prisma.characterGroupRole.findMany({
+        where: { characterId: { in: characterIds } },
+        select: { characterId: true, roleKey: true },
+      }),
+      Promise.all(
+        gameSystemIds.map(
+          async (id) => [id, await this.gameSystems.getContent(id)] as const,
+        ),
+      ),
     ]);
     const partieById = new Map(parties.map((p) => [p.id, p]));
+    const roleKeyByCharacterId = new Map(groupRoles.map((r) => [r.characterId, r.roleKey]));
+    const contentByGameSystemId = new Map(contentEntries);
 
     return characters.map((c) => {
       const partie = partieById.get(c.partieId);
       const isMj = partie?.mjId === userId;
+      const content = contentByGameSystemId.get(c.gameSystemId);
+      const sheetData = c.sheetData as { classId?: string; typeId?: string };
       return {
         ...toDto(c, owner?.pseudo ?? '', owner?.displayName ?? '', isMj, isMj),
         partieName: partie?.name ?? '',
+        classLabel: resolveContentLabel(content, 'class', sheetData?.classId),
+        typeLabel: resolveContentLabel(content, 'type', sheetData?.typeId),
+        groupRoleLabel: resolveContentLabel(
+          content,
+          'groupRole',
+          roleKeyByCharacterId.get(c.id),
+        ),
       };
     });
   }

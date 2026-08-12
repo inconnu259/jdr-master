@@ -20,6 +20,9 @@ const user: AuthUser = {
   theme: 'grimoire-emeraude',
   hideFinishedParties: false,
   partiesSort: 'urgence',
+  partiesViewMode: 'medium',
+  charactersViewMode: 'medium',
+  charactersSort: 'partie',
 };
 
 function run() {

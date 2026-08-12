@@ -21,6 +21,9 @@ function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
     theme: 'grimoire-emeraude',
     hideFinishedParties: false,
     partiesSort: 'urgence',
+    partiesViewMode: 'medium',
+    charactersViewMode: 'medium',
+    charactersSort: 'partie',
     ...overrides,
   };
 }

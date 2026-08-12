@@ -15,6 +15,14 @@
     border-color: var(--mat-sys-primary, #9b6dff);
   }
 
+  // Conteneur de positionnement de la bulle de montée de niveau (Story 29.9) — `flex: none` pour
+  // que l'avatar ne se comprime jamais quand le nom est long.
+  &__avatar {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+  }
+
   &__info {
     display: flex;
     flex-direction: column;
@@ -26,12 +34,31 @@
     font-weight: 600;
   }
 
-  &__class {
+  &__level {
+    margin-left: 0.4rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--mat-sys-on-surface-variant, #555);
+  }
+
+  &__class,
+  &__type,
+  &__group-role {
     font-size: 0.85rem;
     color: var(--mat-sys-on-surface-variant, #555);
   }
 
-  &__owner-badge {
+  &__group-role {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    background: var(--mat-sys-tertiary-container, #e8def8);
+    color: var(--mat-sys-on-tertiary-container, #2a1a4a);
+    align-self: flex-start;
+  }
+
+  &__owner-badge,
+  &__mj-marker {
     font-size: 0.75rem;
     color: var(--mat-sys-on-surface-variant, #555);
     font-style: italic;
@@ -42,15 +69,34 @@
     color: var(--mat-sys-on-surface-variant, #555);
   }
 
+  // Sous-ligne unique du mode liste — tronquée plutôt qu'enroulée : une ligne par personnage est
+  // ce qui fait la densité (~12 par écran mobile, DESIGN.md §4.1).
+  &__compact-sub {
+    font-size: 0.75rem;
+    color: var(--mat-sys-on-surface-variant, #555);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  // Bulle de montée de niveau (Story 29.9, retour utilisateur) — dimensions et position reprises
+  // telles quelles de `.roster-strip__levelup-badge` (Story 27.3) : un seul rendu de ce signal dans
+  // toute l'application, au lieu d'une pastille texte ici et d'une bulle là.
   &__levelup-badge {
-    align-self: flex-start;
-    margin-top: 0.15rem;
-    padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: #fff;
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
     background: var(--jdr-gradient-cta, var(--mat-sys-primary, #6750a4));
+    color: #fff;
+    font-size: 0.5rem;
+    line-height: 1;
+    border: 1px solid var(--mat-sys-surface, #fff);
   }
 
   &__badges {
@@ -59,6 +105,72 @@
     gap: 0.25rem;
     justify-content: flex-end;
   }
+}
+
+// Densité d'affichage (Story 29.9, AC1) — `medium` (styles ci-dessus) reste le gabarit par
+// défaut, inchangé pour tout site d'appel qui ne câble pas `density`. La taille de l'avatar
+// (cf. `avatarSize()`) est déjà pilotée côté TS ; seuls le texte/l'espacement varient ici.
+//
+// Grand vs moyen (aucune spec ne les différenciait — EXPERIENCE.md:107 impose seulement de
+// transposer la grammaire de la liste des parties) : le mode grand est celui qui affiche les
+// stats dérivées (PV/PE/Initiative/Encombrement), câblées par `MyCharacters` via `showStats`.
+// Elles passent sous le nom en colonne, ce qui donne au mode sa hauteur réelle (~2 par écran
+// mobile, DESIGN.md §4) au lieu d'une simple différence de police.
+:host(.character-summary-card--large) .character-summary-card {
+  align-items: flex-start;
+  padding: 1.1rem 1.25rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+:host(.character-summary-card--large) .character-summary-card__name {
+  font-size: 1.15rem;
+}
+:host(.character-summary-card--large) .character-summary-card__level {
+  font-size: 0.85rem;
+}
+:host(.character-summary-card--large) .character-summary-card__class,
+:host(.character-summary-card--large) .character-summary-card__type {
+  font-size: 0.95rem;
+}
+:host(.character-summary-card--large) .character-summary-card__badges {
+  // Sur toute la largeur, sous l'avatar et le bloc d'infos — jamais serrées à droite du nom.
+  flex-basis: 100%;
+  justify-content: flex-start;
+  gap: 0.4rem;
+}
+:host(.character-summary-card--large) .character-summary-card__levelup-badge {
+  // Proportionnée au cercle de 64 px, sinon la bulle disparaît visuellement.
+  width: 20px;
+  height: 20px;
+  font-size: 0.7rem;
+  top: -5px;
+  right: -5px;
+}
+
+// Mode liste (AC1, ~12 par écran) : une ligne stricte — nom + niveau, et la seule sous-ligne
+// `__compact-sub` (« Classe · Partie », demandée explicitement). Type, rôle de groupe et repères
+// de propriété ne sont pas rendus du tout en compact (cf. template), il n'y a donc rien à masquer.
+:host(.character-summary-card--compact) .character-summary-card {
+  padding: 0.3rem 0.6rem;
+  gap: 0.5rem;
+  // La liste dessine le cadre et les séparateurs (`my-characters.scss`, `.list--compact`) : une
+  // bordure par carte les doublerait. Le survol reste signalé par le fond, pas par la bordure.
+  border: none;
+  border-radius: 0;
+  background: transparent;
+
+  &:hover {
+    background: var(--mat-sys-surface-container-high, rgba(0, 0, 0, 0.04));
+  }
+}
+:host(.character-summary-card--compact) .character-summary-card__name {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:host(.character-summary-card--compact) .character-summary-card__level {
+  font-size: 0.7rem;
 }
 
 .stat-pill {

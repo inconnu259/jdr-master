@@ -1,0 +1,91 @@
+// Barre de contrôles partagée (Story 29.9) — reprend le patron de `.controls-bar` (Story 29.8,
+// dashboard.scss), désormais mutualisé entre `Dashboard` et `MyCharacters`.
+.list-control-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.25rem 0;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+// Masquage au défilement (AC5) — jamais un simple `display: none` : la barre doit pouvoir
+// réapparaître avec une transition, pas un saut brutal.
+.list-control-bar--hidden {
+  transform: translateY(-0.75rem);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.list-control-bar__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.list-control-bar__fields {
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+}
+.list-control-bar--expanded .list-control-bar__fields {
+  display: flex;
+}
+
+.list-control-bar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.85em;
+}
+.list-control-bar__label {
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+.list-control-bar__search {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 1.5rem;
+  padding: 0.2rem 0.75rem;
+
+  input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    color: inherit;
+  }
+
+  mat-icon {
+    font-size: 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+}
+
+// Recherche permanente sur desktop (AC7), repliée derrière l'icône de révélation sur mobile —
+// `.list-control-bar__search--mobile` n'est rendue que dans `.list-control-bar__fields`, déjà
+// masqué tant que la barre n'est pas dépliée.
+.list-control-bar__search--mobile {
+  width: 100%;
+}
+
+.list-control-bar__modes {
+  display: flex;
+  gap: 0.15rem;
+}
+.list-control-bar__mode--active {
+  color: var(--mat-sys-primary, currentColor);
+}
+
+// Pastille de résumé (AC6) — toujours icône + libellé, jamais la couleur seule (P-1).
+.list-control-bar__reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.85em;
+}

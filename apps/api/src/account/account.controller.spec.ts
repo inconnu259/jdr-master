@@ -12,6 +12,8 @@ import request from 'supertest';
 jest.mock('@master-jdr/shared', () => ({
   THEMES: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
   PARTIE_SORTS: ['urgence', 'date', 'nom', 'type', 'statut'],
+  LIST_VIEW_MODES: ['large', 'medium', 'compact'],
+  CHARACTER_SORTS: ['niveau', 'partie', 'nom'],
 }));
 
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
@@ -407,6 +409,46 @@ describe('AccountController', () => {
         .send({})
         .expect(200);
       expect(account.updatePreferences).toHaveBeenCalledWith('u1', {});
+    });
+
+    it('partiesViewMode hors union fermée → 400, service jamais appelé (AC4, Story 29.9)', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ partiesViewMode: 'geant' })
+        .expect(400);
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
+    it('charactersViewMode hors union fermée → 400, service jamais appelé (AC4, Story 29.9)', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ charactersViewMode: 'geant' })
+        .expect(400);
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
+    it('charactersSort hors union fermée → 400, service jamais appelé (AC4, Story 29.9)', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ charactersSort: 'urgence' }) // vocabulaire des parties, disjoint de celui des personnages
+        .expect(400);
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
+    it('patch combinant les 6 champs de préférence en un seul appel → 200, tous transmis (Story 29.9)', async () => {
+      account.updatePreferences.mockResolvedValue({ id: 'u1' });
+      const body = {
+        partiesSort: 'date',
+        hideFinishedParties: true,
+        partiesViewMode: 'compact',
+        charactersViewMode: 'large',
+        charactersSort: 'niveau',
+      };
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send(body)
+        .expect(200);
+      expect(account.updatePreferences).toHaveBeenCalledWith('u1', body);
     });
 
     it('PUT /me/favorites/:partieId → 200', async () => {

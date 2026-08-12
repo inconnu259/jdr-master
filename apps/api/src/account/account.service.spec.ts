@@ -188,6 +188,56 @@ describe('AccountService', () => {
         service.updatePreferences('deleted-user', { partiesSort: 'nom' }),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
+
+    it('ne met à jour que les champs fournis (patch partiel) — les 3 champs de la Story 29.9 isolément', async () => {
+      prisma.user.update.mockResolvedValue({
+        id: 'u1',
+        partiesViewMode: 'compact',
+      });
+      await service.updatePreferences('u1', { partiesViewMode: 'compact' });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: { partiesViewMode: 'compact' },
+      });
+
+      prisma.user.update.mockResolvedValue({
+        id: 'u1',
+        charactersViewMode: 'large',
+      });
+      await service.updatePreferences('u1', { charactersViewMode: 'large' });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: { charactersViewMode: 'large' },
+      });
+
+      prisma.user.update.mockResolvedValue({
+        id: 'u1',
+        charactersSort: 'niveau',
+      });
+      await service.updatePreferences('u1', { charactersSort: 'niveau' });
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: { charactersSort: 'niveau' },
+      });
+    });
+
+    it('patch combinant les 6 champs de préférence en un seul appel (Story 29.9)', async () => {
+      const body = {
+        partiesSort: 'date' as const,
+        hideFinishedParties: true,
+        partiesViewMode: 'compact' as const,
+        charactersViewMode: 'large' as const,
+        charactersSort: 'niveau' as const,
+      };
+      prisma.user.update.mockResolvedValue({ id: 'u1', ...body });
+
+      await service.updatePreferences('u1', body);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'u1' },
+        data: body,
+      });
+    });
   });
 
   describe('addFavorite() (Story 29.8)', () => {

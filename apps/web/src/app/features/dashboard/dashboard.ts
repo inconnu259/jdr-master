@@ -17,12 +17,17 @@ import { MatIconModule } from '@angular/material/icon';
 import type {
   DaySlot,
   InvitationDto,
+  ListViewMode,
   PartieDto,
   PartieSort,
   PartieStatus,
   PartySignalCode,
 } from '@master-jdr/shared';
 import { PARTIE_SORTS } from '@master-jdr/shared';
+import {
+  ListControlBar,
+  type ListControlBarSortOption,
+} from '../../shared/list-control-bar/list-control-bar';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { InvitationsService } from '../../core/invitations/invitations.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
@@ -83,6 +88,7 @@ export interface PartieTileVm {
     MatButtonModule,
     MatIconModule,
     NgTemplateOutlet,
+    ListControlBar,
   ],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
@@ -114,11 +120,10 @@ export class Dashboard implements OnInit {
    *  n'écrit jamais la préférence `hideFinishedParties`, contrairement à la case à cocher. */
   protected readonly showFinishedOverride = signal(false);
 
-  /** Barre de contrôles repliée par défaut (retour utilisateur, cf. DESIGN.md §7.7
-   *  « révélation par icône ») — sur mobile, une barre déjà dépliée mangerait l'espace des
-   *  cartes. Masquage au défilement + pastille de résumé (les 2 autres comportements du même
-   *  paragraphe) restent hors périmètre, réservés à la Story 29.9. */
-  protected readonly controlsExpanded = signal(false);
+  /** Recherche par nom (Story 29.9) — purement transitoire (écran), même statut que
+   *  `roleFilter`/`statusFilter` : jamais mémorisée, jamais comptée dans `hasDeviatedFromDefault`
+   *  (une saisie de consultation, pas un réglage — même décision que `MyCharacters`). */
+  protected readonly searchQuery = signal('');
 
   protected readonly sortOptions = PARTIE_SORTS;
   /** Critère de tri effectif — lu depuis le compte, défaut 'urgence' si non connecté (garde). */
@@ -128,6 +133,23 @@ export class Dashboard implements OnInit {
   protected readonly hideFinishedParties = computed(
     () => this.auth.currentUser()?.hideFinishedParties ?? false,
   );
+  /** Mode d'affichage effectif (Story 29.9, AC1/AC4) — même patron que `partiesSort`. */
+  protected readonly partiesViewMode = computed<ListViewMode>(
+    () => this.auth.currentUser()?.partiesViewMode ?? 'medium',
+  );
+  /** Options de tri résolues pour `ListControlBar` — le composant partagé reste agnostique du
+   *  thème, `Dashboard` résout déjà les libellés via `sortLabel()`. */
+  protected readonly sortOptionsForBar = computed<ListControlBarSortOption[]>(() =>
+    this.sortOptions.map((sort) => ({ value: sort, label: this.sortLabel(sort) })),
+  );
+  /** Seuls les filtres rôle/statut « dévient » d'un défaut (AC6) — `partiesSort`/`partiesViewMode`/
+   *  `hideFinishedParties` se persistent immédiatement à chaque changement (patron fire-and-forget
+   *  déjà établi) et ne peuvent donc jamais s'écarter d'eux-mêmes après coup (Dev Notes). */
+  protected readonly hasDeviatedFromDefault = computed(
+    () => this.roleFilter() !== 'all' || this.statusFilter() !== 'all',
+  );
+  /** Densité d'affichage (AC1) — une seule classe CSS pilotant toutes les grilles de la page. */
+  protected readonly gridDensityClass = computed(() => `grid--${this.partiesViewMode()}`);
   /** Bouton de révélation (AC6) : visible seulement si le masquage est actif, pas déjà levé, et
    *  qu'il existe au moins une partie terminée à révéler **sous le filtre de rôle actif** — jamais
    *  un bouton dont le clic ne changerait rien (Review Findings : ignorer `roleFilter()` affichait
@@ -148,12 +170,14 @@ export class Dashboard implements OnInit {
   private readonly filteredParties = computed<PartieDto[]>(() => {
     const role = this.roleFilter();
     const status = this.statusFilter();
+    const query = this.searchQuery().trim().toLowerCase();
     const hideFinished =
       this.hideFinishedParties() && !this.showFinishedOverride() && status === 'all';
     return this.allParties().filter((p) => {
       if (role !== 'all' && p.role !== role) return false;
       if (status !== 'all' && p.status !== status) return false;
       if (hideFinished && p.status === 'TERMINEE') return false;
+      if (query && !p.name.toLowerCase().includes(query)) return false;
       return true;
     });
   });
@@ -306,6 +330,31 @@ export class Dashboard implements OnInit {
     return this.theme.tone()['dashboard.section_upcoming'];
   }
 
+  /** Sous-ligne du mode liste (AC1, DESIGN.md §4.1) — « Rôle · libellé du signal dominant ».
+   *
+   *  §4.1 est explicite : « En mode liste, la pastille n'est jamais seule » — elle est doublée du
+   *  libellé du signal dominant. Sans signal, on retombe sur le libellé de teinte (« En cours »,
+   *  « À venir », « Terminée »), jamais sur rien : c'est cette ligne qui satisfait P-1 en mode
+   *  liste, là où les modes moyen/grand s'appuient sur les badges et `.status-indicator`.
+   *  Le rôle y est repris parce que `.role-indicator` n'est pas rendu dans ce gabarit. */
+  protected rowSummary(t: PartieTileVm): string {
+    const tone = this.theme.tone();
+    const role = t.partie.role === 'mj' ? tone['dashboard.role_mj'] : tone['dashboard.role_player'];
+    const detail = t.dominant ? this.badgeLabel(t.dominant, t.partie) : this.tintLabel(t.tint);
+    return `${role} · ${detail}`;
+  }
+
+  /** Compteur unique du mode liste (§4.1 bis : « En mode liste, un seul compteur ») — le total des
+   *  signaux affichables, pas les deux badges + « +N » des modes moyen/grand. */
+  protected rowCount(t: PartieTileVm): number {
+    return t.visibleSignals.length + t.moreCount;
+  }
+
+  /** Libellé accessible du compteur — le nombre nu ne dit pas de quoi il parle. */
+  protected rowCountAriaLabel(n: number): string {
+    return this.theme.tone()['dashboard.row_signal_count_aria'].replace('{n}', String(n));
+  }
+
   /** Libellé de thème d'un critère de tri (Story 29.8) — clé `dashboard.sort_<critère>`. */
   protected sortLabel(sort: PartieSort): string {
     return this.theme.tone()[`dashboard.sort_${sort}`] ?? sort;
@@ -388,6 +437,23 @@ export class Dashboard implements OnInit {
     // Un nouveau réglage repart sans révélation temporaire active (évite l'incohérence « masquage
     // activé mais case déjà levée par un clic précédent »).
     this.showFinishedOverride.set(false);
+  }
+
+  /** Mode d'affichage (Story 29.9, AC1/AC3) — même patron fire-and-forget + rollback que
+   *  `onSortChange()`/`onHideFinishedChange()` (Review Findings Story 29.8, à ne pas régresser). */
+  protected onViewModeChange(mode: ListViewMode): void {
+    const previous = this.auth.currentUser();
+    if (previous) this.auth.currentUser.set({ ...previous, partiesViewMode: mode });
+    this.account.updatePreferences({ partiesViewMode: mode }).catch(() => {
+      if (previous) this.auth.currentUser.set(previous);
+    });
+  }
+
+  /** Rétablit les filtres transitoires (Story 29.9, AC6) — seuls réglages comptés dans
+   *  `hasDeviatedFromDefault()`, jamais mémorisés côté compte. */
+  protected onResetRequested(): void {
+    this.roleFilter.set('all');
+    this.statusFilter.set('all');
   }
 
   /** Garde anti-double-clic (Review Findings) — un `partieId` déjà en vol ignore les clics
