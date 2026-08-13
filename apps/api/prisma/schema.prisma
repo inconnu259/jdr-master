@@ -45,6 +45,7 @@ model User {
   emailChangeTokens         EmailChangeToken[]
   emailChangeRollbackTokens EmailChangeRollbackToken[]
   favorites                 PartieFavorite[]
+  announcementReads         AnnouncementRead[]
 }
 
 enum PartieKind {
@@ -569,8 +570,24 @@ model Announcement {
   scenario   Scenario? @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
   text       String
   createdAt  DateTime  @default(now())
+  reads      AnnouncementRead[]
 
   @@index([partieId, createdAt])
+}
+
+/// État « vue » d'une annonce par un utilisateur (Story 29.13, AD-1) — relationnel, jamais un
+/// timestamp scalaire sur `User` : un scalaire ne pourrait pas distinguer « vue dans la Partie A »
+/// de « pas vue dans la Partie B », ce qu'AC3 exige explicitement (état par appareil éliminé,
+/// mémorisé sur le compte).
+model AnnouncementRead {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@unique([userId, announcementId])
 }
 
 /// Rôle de groupe assigné à un personnage (Epic 27, Story 27.2) — relationnel, jamais dans

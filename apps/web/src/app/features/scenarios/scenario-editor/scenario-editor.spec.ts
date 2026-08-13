@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
 import type {
@@ -16,6 +17,7 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { makeAnnouncementDto } from '../../../core/announcements/announcement-dto.fixture';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
@@ -76,6 +78,9 @@ async function createComponent(
   announcements: AnnouncementDto[] = [],
   initialChanged: { partieId: string } | null = null,
   partie: PartieDto = PARTIE,
+  unseenAnnouncementIds: string[] = [],
+  markAnnouncementRead: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined),
+  announcementIdQueryParam: string | null = null,
 ) {
   const scenariosSvc = {
     listAll: vi.fn().mockResolvedValue([scenario]),
@@ -95,17 +100,29 @@ async function createComponent(
   const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
   const announcementsSvc = { listAll: vi.fn().mockResolvedValue(announcements) };
   const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
+  const unseenAnnouncementsSvc = {
+    unseenAnnouncements: signal(announcements.filter((a) => unseenAnnouncementIds.includes(a.id))),
+    markRead: markAnnouncementRead,
+  };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioEditor],
     providers: [
+      provideRouter([]),
       provideAnimationsAsync(),
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: CharacterService, useValue: characterSvc },
       { provide: PartiesService, useValue: partiesSvc },
       { provide: PollService, useValue: pollSvc },
       { provide: AnnouncementsService, useValue: announcementsSvc },
+      { provide: UnseenAnnouncementsService, useValue: unseenAnnouncementsSvc },
       { provide: RealtimeService, useValue: realtimeSvc },
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          snapshot: { queryParamMap: { get: () => announcementIdQueryParam } },
+        },
+      },
     ],
   }).compileComponents();
 
@@ -120,6 +137,106 @@ async function createComponent(
   fixture.detectChanges();
   return { fixture, scenariosSvc, characterSvc, announcementsSvc, realtimeSvc };
 }
+
+describe('ScenarioEditor — marquage « vue » des annonces scopées sur clic explicite (Story 29.13, révision)', () => {
+  it("une annonce non vue affichée n'appelle jamais markRead() tant qu'elle n'est pas cliquée", async () => {
+    const announcements = [makeAnnouncementDto({ id: 'ann-scenario', scenarioId: SCENARIO.id })];
+    const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+
+    await createComponent(
+      SCENARIO,
+      [],
+      announcements,
+      null,
+      PARTIE,
+      ['ann-scenario'],
+      markAnnouncementRead,
+    );
+
+    expect(markAnnouncementRead).not.toHaveBeenCalled();
+  });
+
+  it('un clic sur une annonce non vue déclenche markRead() avec le bon id', async () => {
+    const announcements = [makeAnnouncementDto({ id: 'ann-scenario', scenarioId: SCENARIO.id })];
+    const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+
+    const { fixture } = await createComponent(
+      SCENARIO,
+      [],
+      announcements,
+      null,
+      PARTIE,
+      ['ann-scenario'],
+      markAnnouncementRead,
+    );
+
+    fixture.nativeElement
+      .querySelector('app-annonce-card article')
+      ?.dispatchEvent(new Event('click'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(markAnnouncementRead).toHaveBeenCalledWith('ann-scenario');
+  });
+
+  it('un clic sur une annonce déjà vue ne déclenche aucun appel', async () => {
+    const announcements = [makeAnnouncementDto({ id: 'ann-deja-vue', scenarioId: SCENARIO.id })];
+    const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+
+    const { fixture } = await createComponent(
+      SCENARIO,
+      [],
+      announcements,
+      null,
+      PARTIE,
+      [],
+      markAnnouncementRead,
+    );
+
+    fixture.nativeElement
+      .querySelector('app-annonce-card article')
+      ?.dispatchEvent(new Event('click'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(markAnnouncementRead).not.toHaveBeenCalled();
+  });
+});
+
+describe('ScenarioEditor — arrivée depuis le bandeau du Shell (Story 29.13, révision du 2026-08-13)', () => {
+  it("fait défiler jusqu'à l'AnnonceCard visée quand announcementId est présent dans l'URL", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const announcements = [makeAnnouncementDto({ id: 'ann-cible', scenarioId: SCENARIO.id })];
+
+    const { fixture } = await createComponent(
+      SCENARIO,
+      [],
+      announcements,
+      null,
+      PARTIE,
+      ['ann-cible'],
+      vi.fn().mockResolvedValue(undefined),
+      'ann-cible',
+    );
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+
+    const target = fixture.nativeElement.querySelector('#announcement-ann-cible');
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(target?.classList.contains('annonce-card--highlight')).toBe(true);
+  });
+
+  it("n'interfère pas quand aucun announcementId n'est présent dans l'URL", async () => {
+    const scrollSpy = vi.fn();
+    Element.prototype.scrollIntoView = scrollSpy;
+    const announcements = [makeAnnouncementDto({ id: 'ann-x', scenarioId: SCENARIO.id })];
+
+    await createComponent(SCENARIO, [], announcements, null, PARTIE, ['ann-x']);
+
+    expect(scrollSpy).not.toHaveBeenCalled();
+  });
+});
 
 describe('ScenarioEditor', () => {
   it('charge les documents et les répartit en 2 listes (scénario / bibliothèque)', async () => {
@@ -625,6 +742,7 @@ describe('ScenarioEditor', () => {
       await TestBed.configureTestingModule({
         imports: [ScenarioEditor],
         providers: [
+          provideRouter([]),
           provideAnimationsAsync(),
           { provide: ScenariosService, useValue: scenariosSvc },
           { provide: CharacterService, useValue: characterSvc },
@@ -995,6 +1113,7 @@ describe('ScenarioEditor', () => {
       await TestBed.configureTestingModule({
         imports: [ScenarioEditor],
         providers: [
+          provideRouter([]),
           provideAnimationsAsync(),
           { provide: ScenariosService, useValue: scenariosSvc },
           { provide: CharacterService, useValue: { listByPartie: vi.fn().mockResolvedValue([]) } },
@@ -1032,6 +1151,7 @@ describe('ScenarioEditor', () => {
       await TestBed.configureTestingModule({
         imports: [ScenarioEditor],
         providers: [
+          provideRouter([]),
           provideAnimationsAsync(),
           { provide: ScenariosService, useValue: scenariosSvc },
           { provide: CharacterService, useValue: { listByPartie: vi.fn().mockResolvedValue([]) } },

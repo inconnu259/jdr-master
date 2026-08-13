@@ -35,3 +35,56 @@
   padding: 0 3px;
   line-height: 1.4;
 }
+
+// Story 29.13 : cliquable uniquement quand non vue (cf. [attr.role]/[attr.tabindex] posés
+// conditionnellement dans le template), jamais la seule couleur comme signal (AC4/AC5).
+.annonce-card--unseen {
+  cursor: pointer;
+  border-color: var(--jdr-accent-2, #a68cf0);
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary, #6750a4);
+    outline-offset: 2px;
+  }
+}
+
+.annonce-card__unseen-label {
+  display: inline-block;
+  color: var(--mat-sys-primary, #6750a4);
+  font-size: 0.75em;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+// Story 29.13 (révision) : cible du défilement automatique depuis le bandeau du Shell — pulsation
+// brève purement visuelle (l'arrivée elle-même suffit à situer l'utilisateur, ceci attire l'œil).
+// DESIGN.md §8 : uniquement transform/opacity (jamais box-shadow, repeint la page), coupé sans
+// exception par prefers-reduced-motion.
+.annonce-card--highlight {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 10px;
+    border: 3px solid var(--mat-sys-primary, #6750a4);
+    opacity: 1;
+    pointer-events: none;
+    animation: annonce-card-highlight-fade 2s ease-out forwards;
+  }
+}
+
+@keyframes annonce-card-highlight-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .annonce-card--highlight::after {
+    animation: none;
+    opacity: 0;
+  }
+}

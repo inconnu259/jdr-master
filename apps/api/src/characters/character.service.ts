@@ -529,7 +529,9 @@ export class CharacterService {
       ),
     ]);
     const partieById = new Map(parties.map((p) => [p.id, p]));
-    const roleKeyByCharacterId = new Map(groupRoles.map((r) => [r.characterId, r.roleKey]));
+    const roleKeyByCharacterId = new Map(
+      groupRoles.map((r) => [r.characterId, r.roleKey]),
+    );
     const contentByGameSystemId = new Map(contentEntries);
 
     return characters.map((c) => {

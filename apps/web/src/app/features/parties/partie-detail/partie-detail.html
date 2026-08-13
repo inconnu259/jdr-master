@@ -114,7 +114,12 @@
             @if (campaignAnnouncements().length > 0) {
               <section class="announcements-feed">
                 @for (a of campaignAnnouncements(); track a.id) {
-                  <app-annonce-card [announcement]="a" [scopeLabel]="campaignScopeLabel()" />
+                  <app-annonce-card
+                    [announcement]="a"
+                    [scopeLabel]="campaignScopeLabel()"
+                    [unseen]="unseenAnnouncementIds().has(a.id)"
+                    (opened)="markAnnouncementOpened(a.id)"
+                  />
                 }
               </section>
             }

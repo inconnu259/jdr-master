@@ -27,6 +27,7 @@ import { AvailabilityService } from '../../../core/availability/availability.ser
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
 import { MatDialog } from '@angular/material/dialog';
@@ -194,10 +195,13 @@ interface CreateFixtureOptions {
   characters?: CharacterDto[];
   links?: InviteLinkDto[];
   announcements?: AnnouncementDto[];
+  unseenAnnouncementIds?: string[];
+  markAnnouncementRead?: ReturnType<typeof vi.fn>;
   characterRoles?: CharacterGroupRoleDto[];
   noopAnimations?: boolean;
   desktop?: boolean;
   displayName?: string;
+  announcementIdQueryParam?: string;
 }
 
 async function createFixture(
@@ -212,7 +216,15 @@ async function createFixture(
       // MatTabGroup anime le changement d'onglet via le Web Animations API, non fiable en jsdom —
       // les tests qui doivent naviguer entre onglets utilisent le mode noop pour un rendu synchrone.
       options.noopAnimations ? provideNoopAnimations() : provideAnimationsAsync(),
-      { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => partie.id } } } },
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          snapshot: {
+            paramMap: { get: () => partie.id },
+            queryParamMap: { get: () => options.announcementIdQueryParam ?? null },
+          },
+        },
+      },
       { provide: AuthService, useValue: makeAuthService(currentUserId, options.displayName) },
       {
         provide: PartiesService,
@@ -250,6 +262,17 @@ async function createFixture(
           listAll: vi.fn().mockResolvedValue(options.announcements ?? []),
           // Bug fix (temps réel) : PartieDetail réagit désormais à ce signal (annonces).
           changed: signal(0),
+        },
+      },
+      {
+        provide: UnseenAnnouncementsService,
+        useValue: {
+          unseenAnnouncements: signal(
+            (options.announcements ?? []).filter((a) =>
+              (options.unseenAnnouncementIds ?? []).includes(a.id),
+            ),
+          ),
+          markRead: options.markAnnouncementRead ?? vi.fn().mockResolvedValue(undefined),
         },
       },
       {
@@ -559,7 +582,15 @@ describe('PartieDetail — roster (Story 6.1)', () => {
       providers: [
         provideRouter([]),
         provideNoopAnimations(),
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'party-1' } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              paramMap: { get: () => 'party-1' },
+              queryParamMap: { get: () => null },
+            },
+          },
+        },
         { provide: AuthService, useValue: makeAuthService(PLAYER_ID) },
         { provide: PartiesService, useValue: makePartiesService(makePartie(), members, []) },
         { provide: BreakpointObserver, useValue: dynamicBreakpointObserver },
@@ -961,6 +992,115 @@ describe('PartieDetail — consultation des annonces « toute la campagne » (St
   });
 });
 
+describe('PartieDetail — marquage « vue » des annonces de campagne sur clic explicite (Story 29.13, révision)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it("une annonce non vue affichée n'appelle jamais markRead() tant qu'elle n'est pas cliquée", async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [makeAnnouncementDto({ id: 'ann-non-vue', text: 'Non vue' })];
+    const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+
+    await createFixture(partie, MJ_ID, {
+      announcements,
+      unseenAnnouncementIds: ['ann-non-vue'],
+      markAnnouncementRead,
+    });
+
+    expect(markAnnouncementRead).not.toHaveBeenCalled();
+  });
+
+  it('un clic sur une annonce non vue déclenche markRead() avec le bon id', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [makeAnnouncementDto({ id: 'ann-non-vue', text: 'Non vue' })];
+    const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+
+    const { fixture, el } = await createFixture(partie, MJ_ID, {
+      announcements,
+      unseenAnnouncementIds: ['ann-non-vue'],
+      markAnnouncementRead,
+    });
+
+    el.querySelector('app-annonce-card article')?.dispatchEvent(new Event('click'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(markAnnouncementRead).toHaveBeenCalledWith('ann-non-vue');
+  });
+
+  it('un clic sur une annonce déjà vue (absente des non-vues) ne déclenche aucun appel', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [makeAnnouncementDto({ id: 'ann-deja-vue', text: 'Déjà vue' })];
+    const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+
+    const { fixture, el } = await createFixture(partie, MJ_ID, {
+      announcements,
+      unseenAnnouncementIds: [],
+      markAnnouncementRead,
+    });
+
+    el.querySelector('app-annonce-card article')?.dispatchEvent(new Event('click'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(markAnnouncementRead).not.toHaveBeenCalled();
+  });
+});
+
+describe('PartieDetail — arrivée depuis le bandeau du Shell (Story 29.13, révision du 2026-08-13)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('force l\'onglet "Détails" même quand un autre onglet serait sélectionné par défaut (joueur mobile)', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [makeAnnouncementDto({ id: 'ann-cible', scenarioId: null })];
+
+    const { fixture } = await createFixture(partie, 'player-1', {
+      announcements,
+      unseenAnnouncementIds: ['ann-cible'],
+      announcementIdQueryParam: 'ann-cible',
+      desktop: false, // sans forçage, un joueur mobile atterrit sur "Ma fiche" (index 1)
+      noopAnimations: true,
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect((fixture.componentInstance as any).selectedTabIndex()).toBe(0);
+  });
+
+  it("fait défiler jusqu'à l'AnnonceCard visée et la met en évidence", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [makeAnnouncementDto({ id: 'ann-cible', scenarioId: null })];
+
+    const { fixture, el } = await createFixture(partie, MJ_ID, {
+      announcements,
+      unseenAnnouncementIds: ['ann-cible'],
+      announcementIdQueryParam: 'ann-cible',
+      noopAnimations: true,
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    // scrollToAnnouncement() retente via requestAnimationFrame jusqu'à trouver l'élément.
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+
+    const target = el.querySelector('#announcement-ann-cible');
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(target?.classList.contains('annonce-card--highlight')).toBe(true);
+  });
+
+  it("n'interfère pas quand aucun announcementId n'est présent dans l'URL", async () => {
+    const scrollSpy = vi.fn();
+    Element.prototype.scrollIntoView = scrollSpy;
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+
+    await createFixture(partie, MJ_ID, { noopAnimations: true });
+
+    expect(scrollSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
@@ -1252,7 +1392,12 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         provideAnimationsAsync(),
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: { get: () => initial.id } } },
+          useValue: {
+            snapshot: {
+              paramMap: { get: () => initial.id },
+              queryParamMap: { get: () => null },
+            },
+          },
         },
         { provide: AuthService, useValue: makeAuthService(MJ_ID) },
         { provide: PartiesService, useValue: partiesSvc },
@@ -1449,7 +1594,12 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         provideAnimationsAsync(),
         {
           provide: ActivatedRoute,
-          useValue: { snapshot: { paramMap: { get: () => initial.id } } },
+          useValue: {
+            snapshot: {
+              paramMap: { get: () => initial.id },
+              queryParamMap: { get: () => null },
+            },
+          },
         },
         { provide: AuthService, useValue: makeAuthService(MJ_ID) },
         { provide: PartiesService, useValue: makePartiesService(initial) },

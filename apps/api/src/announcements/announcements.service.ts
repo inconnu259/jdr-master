@@ -9,7 +9,9 @@ import {
 } from '../realtime/realtime-events.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 
-function toDto(
+/** Exporté pour réutilisation par `AccountService.getUnseenAnnouncements()` (Story 29.13, AD-17 :
+ *  extraction, jamais duplication). */
+export function toDto(
   announcement: any,
   mj: { pseudo: string; displayName: string },
 ): AnnouncementDto {

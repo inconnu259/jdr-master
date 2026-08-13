@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Param,
   Patch,
   Put,
@@ -55,6 +56,22 @@ export class AccountController {
     return this.account.removeFavorite(
       (req.user as { id: string }).id,
       partieId,
+    );
+  }
+
+  @Get('unseen-announcements')
+  getUnseenAnnouncements(@Req() req: Request) {
+    return this.account.getUnseenAnnouncements((req.user as { id: string }).id);
+  }
+
+  @Put('announcements-read/:announcementId')
+  markAnnouncementRead(
+    @Req() req: Request,
+    @Param('announcementId') announcementId: string,
+  ) {
+    return this.account.markAnnouncementRead(
+      (req.user as { id: string }).id,
+      announcementId,
     );
   }
 

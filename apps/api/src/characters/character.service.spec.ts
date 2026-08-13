@@ -1021,9 +1021,24 @@ describe('CharacterService', () => {
 
     it('personnages de systèmes de jeu distincts → un seul getContent() par système, jamais par personnage', async () => {
       prisma.character.findMany.mockResolvedValue([
-        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1', gameSystemId: 'ryuutama' }),
-        makeCharacter({ id: 'c2', userId: 'u1', partieId: 'p1', gameSystemId: 'ryuutama' }),
-        makeCharacter({ id: 'c3', userId: 'u1', partieId: 'p1', gameSystemId: 'homme-dragon' }),
+        makeCharacter({
+          id: 'c1',
+          userId: 'u1',
+          partieId: 'p1',
+          gameSystemId: 'ryuutama',
+        }),
+        makeCharacter({
+          id: 'c2',
+          userId: 'u1',
+          partieId: 'p1',
+          gameSystemId: 'ryuutama',
+        }),
+        makeCharacter({
+          id: 'c3',
+          userId: 'u1',
+          partieId: 'p1',
+          gameSystemId: 'homme-dragon',
+        }),
       ]);
       prisma.partie.findMany.mockResolvedValue([
         { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
@@ -1141,7 +1156,9 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
-      const marker = Buffer.from('valeur-impossible-a-produire-par-un-vrai-sharp-sur-ce-buffer');
+      const marker = Buffer.from(
+        'valeur-impossible-a-produire-par-un-vrai-sharp-sur-ce-buffer',
+      );
       (stripImageMetadata as jest.Mock).mockResolvedValue(marker);
 
       await service.updatePortrait('char1', 'u1', makeMulterFile(), null);

@@ -1,6 +1,17 @@
 import { NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Test } from '@nestjs/testing';
+
+// AccountService importe toDto() depuis AnnouncementsService (Story 29.13, AD-17) qui importe
+// transitivement CharacterService -> @master-jdr/game-rules (ESM, non transformé par ts-jest) —
+// même mock que announcements.service.spec.ts pour éviter "Unexpected token export".
+jest.mock('@master-jdr/game-rules', () => ({
+  validate: jest.fn(),
+  computeDerived: jest.fn(),
+  pendingLevels: jest.fn(),
+  LEVEL_TABLE: [],
+}));
+
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountService } from './account.service';
 
@@ -8,6 +19,8 @@ function makePrisma() {
   return {
     user: { update: jest.fn() },
     partieFavorite: { create: jest.fn(), deleteMany: jest.fn() },
+    announcement: { findMany: jest.fn() },
+    announcementRead: { create: jest.fn() },
   };
 }
 
@@ -314,6 +327,145 @@ describe('AccountService', () => {
       await expect(service.removeFavorite('u1', 'p1')).resolves.toEqual({
         ok: true,
       });
+    });
+  });
+
+  describe('getUnseenAnnouncements() (Story 29.13)', () => {
+    it('effectue un unique appel findMany batché (AD-3, jamais de fan-out par partie)', async () => {
+      prisma.announcement.findMany.mockResolvedValue([]);
+
+      await service.getUnseenAnnouncements('u1');
+
+      expect(prisma.announcement.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.announcement.findMany).toHaveBeenCalledWith({
+        where: {
+          partie: {
+            OR: [{ mjId: 'u1' }, { memberships: { some: { userId: 'u1' } } }],
+          },
+          reads: { none: { userId: 'u1' } },
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          partie: {
+            select: { mj: { select: { pseudo: true, displayName: true } } },
+          },
+        },
+      });
+    });
+
+    it('mappe les annonces trouvées vers AnnouncementDto (auteur dérivé du MJ de la partie)', async () => {
+      prisma.announcement.findMany.mockResolvedValue([
+        {
+          id: 'a1',
+          partieId: 'p1',
+          scenarioId: null,
+          text: 'Bienvenue',
+          createdAt: new Date('2026-08-01T00:00:00.000Z'),
+          partie: { mj: { pseudo: 'mj1', displayName: 'Le Meneur' } },
+        },
+      ]);
+
+      const result = await service.getUnseenAnnouncements('u1');
+
+      expect(result).toEqual([
+        {
+          id: 'a1',
+          partieId: 'p1',
+          scenarioId: null,
+          text: 'Bienvenue',
+          createdAt: '2026-08-01T00:00:00.000Z',
+          authorPseudo: 'mj1',
+          authorDisplayName: 'Le Meneur',
+        },
+      ]);
+    });
+
+    it('aucune annonce non vue → tableau vide', async () => {
+      prisma.announcement.findMany.mockResolvedValue([]);
+
+      await expect(service.getUnseenAnnouncements('u1')).resolves.toEqual([]);
+    });
+
+    it("AC3 (multi-appareil) : une annonce disparaît de la liste après markAnnouncementRead(), l'état vivant en base par userId", async () => {
+      const announcement = {
+        id: 'a1',
+        partieId: 'p1',
+        scenarioId: null,
+        text: 'Bienvenue',
+        createdAt: new Date('2026-08-01T00:00:00.000Z'),
+        partie: { mj: { pseudo: 'mj1', displayName: 'Le Meneur' } },
+      };
+      // Premier appareil : l'annonce est encore non-lue.
+      prisma.announcement.findMany.mockResolvedValueOnce([announcement]);
+      const first = await service.getUnseenAnnouncements('u1');
+      expect(first).toHaveLength(1);
+
+      prisma.announcementRead.create.mockResolvedValue({
+        id: 'r1',
+        userId: 'u1',
+        announcementId: 'a1',
+      });
+      await service.markAnnouncementRead('u1', 'a1');
+
+      // Second appareil : la requête reflète désormais reads:{none} exclu par le mock, donc vide.
+      prisma.announcement.findMany.mockResolvedValueOnce([]);
+      const second = await service.getUnseenAnnouncements('u1');
+      expect(second).toHaveLength(0);
+    });
+  });
+
+  describe('markAnnouncementRead() (Story 29.13)', () => {
+    it('crée la ligne AnnouncementRead', async () => {
+      prisma.announcementRead.create.mockResolvedValue({
+        id: 'r1',
+        userId: 'u1',
+        announcementId: 'a1',
+      });
+
+      const result = await service.markAnnouncementRead('u1', 'a1');
+
+      expect(prisma.announcementRead.create).toHaveBeenCalledWith({
+        data: { userId: 'u1', announcementId: 'a1' },
+      });
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('déjà marquée lue (P2002) → aucune erreur, idempotent', async () => {
+      prisma.announcementRead.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed.', {
+          code: 'P2002',
+          clientVersion: '7.8.0',
+        }),
+      );
+
+      await expect(service.markAnnouncementRead('u1', 'a1')).resolves.toEqual({
+        ok: true,
+      });
+    });
+
+    it('announcementId inexistant (P2003, FK invalide) → NotFoundException', async () => {
+      prisma.announcementRead.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          'Foreign key constraint failed.',
+          { code: 'P2003', clientVersion: '7.8.0' },
+        ),
+      );
+
+      await expect(
+        service.markAnnouncementRead('u1', 'inconnue'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('erreur Prisma non P2002/P2003 → propagée telle quelle', async () => {
+      const otherError = new Prisma.PrismaClientKnownRequestError('boom', {
+        code: 'P2025',
+        clientVersion: '7.8.0',
+      });
+      prisma.announcementRead.create.mockRejectedValue(otherError);
+
+      await expect(service.markAnnouncementRead('u1', 'a1')).rejects.toBe(
+        otherError,
+      );
     });
   });
 });

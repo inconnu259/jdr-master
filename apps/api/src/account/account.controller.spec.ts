@@ -16,6 +16,15 @@ jest.mock('@master-jdr/shared', () => ({
   CHARACTER_SORTS: ['niveau', 'partie', 'nom'],
 }));
 
+// AccountController -> AccountService -> toDto() (AnnouncementsService, Story 29.13, AD-17) ->
+// transitivement CharacterService -> @master-jdr/game-rules (ESM, non transformé par ts-jest).
+jest.mock('@master-jdr/game-rules', () => ({
+  validate: jest.fn(),
+  computeDerived: jest.fn(),
+  pendingLevels: jest.fn(),
+  LEVEL_TABLE: [],
+}));
+
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { AuthService } from '../auth/auth.service';
 import { AccountController } from './account.controller';
@@ -28,6 +37,8 @@ function makeAccountService() {
     updatePreferences: jest.fn(),
     addFavorite: jest.fn(),
     removeFavorite: jest.fn(),
+    getUnseenAnnouncements: jest.fn(),
+    markAnnouncementRead: jest.fn(),
   };
 }
 
@@ -152,6 +163,26 @@ describe('AccountController', () => {
     const result = await controller.removeFavorite(req, 'p1');
 
     expect(account.removeFavorite).toHaveBeenCalledWith('u1', 'p1');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("getUnseenAnnouncements() lit l'id depuis la session (req.user) (Story 29.13)", async () => {
+    account.getUnseenAnnouncements.mockResolvedValue([]);
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.getUnseenAnnouncements(req);
+
+    expect(account.getUnseenAnnouncements).toHaveBeenCalledWith('u1');
+    expect(result).toEqual([]);
+  });
+
+  it("markAnnouncementRead() lit l'id depuis la session et l'announcementId depuis l'URL (Story 29.13)", async () => {
+    account.markAnnouncementRead.mockResolvedValue({ ok: true });
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.markAnnouncementRead(req, 'a1');
+
+    expect(account.markAnnouncementRead).toHaveBeenCalledWith('u1', 'a1');
     expect(result).toEqual({ ok: true });
   });
 
@@ -461,6 +492,22 @@ describe('AccountController', () => {
       account.removeFavorite.mockResolvedValue({ ok: true });
       await request(app.getHttpServer()).delete('/me/favorites/p1').expect(200);
       expect(account.removeFavorite).toHaveBeenCalledWith('u1', 'p1');
+    });
+
+    it('GET /me/unseen-announcements → 200 (Story 29.13)', async () => {
+      account.getUnseenAnnouncements.mockResolvedValue([]);
+      await request(app.getHttpServer())
+        .get('/me/unseen-announcements')
+        .expect(200);
+      expect(account.getUnseenAnnouncements).toHaveBeenCalledWith('u1');
+    });
+
+    it('PUT /me/announcements-read/:announcementId → 200, corps vide accepté (Story 29.13)', async () => {
+      account.markAnnouncementRead.mockResolvedValue({ ok: true });
+      await request(app.getHttpServer())
+        .put('/me/announcements-read/a1')
+        .expect(200);
+      expect(account.markAnnouncementRead).toHaveBeenCalledWith('u1', 'a1');
     });
   });
 });

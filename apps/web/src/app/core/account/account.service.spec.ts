@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideHttpClient } from '@angular/common/http';
-import type { AuthUser } from '@master-jdr/shared';
+import type { AnnouncementDto, AuthUser } from '@master-jdr/shared';
 import { AccountService } from './account.service';
 import { API_BASE } from '../api-base';
 
@@ -149,6 +149,40 @@ describe('AccountService', () => {
     });
     expect(req.request.withCredentials).toBe(true);
 
+    req.flush({ ok: true });
+
+    await expect(promise).resolves.toEqual({ ok: true });
+  });
+
+  it('getUnseenAnnouncements() appelle GET /me/unseen-announcements avec withCredentials (Story 29.13)', async () => {
+    const promise = service.getUnseenAnnouncements();
+
+    const req = http.expectOne(`${API_BASE}/me/unseen-announcements`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.withCredentials).toBe(true);
+
+    const response: AnnouncementDto[] = [
+      {
+        id: 'a1',
+        partieId: 'p1',
+        scenarioId: null,
+        text: 'Bienvenue',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        authorPseudo: 'mj1',
+        authorDisplayName: 'Le Meneur',
+      },
+    ];
+    req.flush(response);
+
+    await expect(promise).resolves.toEqual(response);
+  });
+
+  it('markAnnouncementRead() appelle PUT /me/announcements-read/:announcementId avec withCredentials (Story 29.13)', async () => {
+    const promise = service.markAnnouncementRead('a1');
+
+    const req = http.expectOne(`${API_BASE}/me/announcements-read/a1`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.withCredentials).toBe(true);
     req.flush({ ok: true });
 
     await expect(promise).resolves.toEqual({ ok: true });

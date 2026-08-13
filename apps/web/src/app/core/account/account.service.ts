@@ -1,7 +1,14 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { AuthUser, CharacterSort, ListViewMode, PartieSort, Theme } from '@master-jdr/shared';
+import type {
+  AnnouncementDto,
+  AuthUser,
+  CharacterSort,
+  ListViewMode,
+  PartieSort,
+  Theme,
+} from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
 @Injectable({ providedIn: 'root' })
@@ -75,6 +82,24 @@ export class AccountService {
       this.http.delete<{ ok: true }>(`${API_BASE}/me/favorites/${partieId}`, {
         withCredentials: true,
       }),
+    );
+  }
+
+  getUnseenAnnouncements(): Promise<AnnouncementDto[]> {
+    return firstValueFrom(
+      this.http.get<AnnouncementDto[]>(`${API_BASE}/me/unseen-announcements`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  markAnnouncementRead(announcementId: string): Promise<{ ok: true }> {
+    return firstValueFrom(
+      this.http.put<{ ok: true }>(
+        `${API_BASE}/me/announcements-read/${announcementId}`,
+        {},
+        { withCredentials: true },
+      ),
     );
   }
 }

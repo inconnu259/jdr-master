@@ -3,9 +3,11 @@ import { Component, signal } from '@angular/core';
 import { provideRouter, Router } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
+import type { AnnouncementDto, PartieDto } from '@master-jdr/shared';
 import { Shell } from './shell';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { OpenPollsService } from '../../core/poll/open-polls.service';
+import { UnseenAnnouncementsService } from '../../core/announcements/unseen-announcements.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 import { TONE_MAP } from '../../core/theme/tones';
@@ -13,7 +15,47 @@ import { TONE_MAP } from '../../core/theme/tones';
 @Component({ selector: 'app-test-blank', template: '' })
 class BlankComponent {}
 
-async function createFixture(openPollsCount: number) {
+function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
+  return {
+    id: 'p1',
+    name: 'La Forêt Noire',
+    kind: 'CAMPAGNE_LINEAIRE',
+    gameSystemId: 'ryuutama',
+    description: null,
+    mjId: 'mj1',
+    createdAt: '',
+    nextSessionDate: null,
+    nextSessionSlot: null,
+    role: 'player',
+    status: 'EN_COURS',
+    isFavorite: false,
+    coverImageVersion: null,
+    ...overrides,
+  };
+}
+
+function makeAnnouncement(overrides: Partial<AnnouncementDto> = {}): AnnouncementDto {
+  return {
+    id: 'ann1',
+    partieId: 'p1',
+    scenarioId: null,
+    text: 'Une annonce importante',
+    createdAt: '2026-08-01T00:00:00.000Z',
+    authorPseudo: 'le-mj',
+    authorDisplayName: 'Le Grand MJ',
+    ...overrides,
+  };
+}
+
+async function createFixture(
+  openPollsCount: number,
+  unseenAnnouncementsCount = 0,
+  opts: {
+    unseenAnnouncements?: AnnouncementDto[];
+    parties?: PartieDto[];
+    markRead?: ReturnType<typeof vi.fn>;
+  } = {},
+) {
   await TestBed.configureTestingModule({
     imports: [Shell],
     providers: [
@@ -24,9 +66,18 @@ async function createFixture(openPollsCount: number) {
         useValue: {
           refreshMjParties: vi.fn().mockResolvedValue(undefined),
           refreshPlayerParties: vi.fn().mockResolvedValue(undefined),
+          allParties: signal(opts.parties ?? []),
         },
       },
       { provide: OpenPollsService, useValue: { count: signal(openPollsCount) } },
+      {
+        provide: UnseenAnnouncementsService,
+        useValue: {
+          count: signal(unseenAnnouncementsCount),
+          unseenAnnouncements: signal(opts.unseenAnnouncements ?? []),
+          markRead: opts.markRead ?? vi.fn().mockResolvedValue(undefined),
+        },
+      },
       { provide: ThemeToneService, useValue: { tone: signal(TONE_MAP['grimoire-emeraude']) } },
     ],
   }).compileComponents();
@@ -84,6 +135,96 @@ describe('Shell — badge de vote en attente sur la destination Parties (Story 2
     expect((fixture.componentInstance as any).openPollsCount()).toBe(0);
     const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
     expect(partiesLink.classList.contains('mat-badge-hidden')).toBe(true);
+  });
+});
+
+describe('Shell — badge combiné annonces non vues + votes en attente (Story 29.13)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('additionne polls en attente et annonces non vues dans le même badge', async () => {
+    const fixture = await createFixture(2, 3);
+    const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
+    expect(partiesLink.classList.contains('mat-badge-hidden')).toBe(false);
+    const content = partiesLink.querySelector('.mat-badge-content');
+    expect(content?.textContent?.trim()).toBe('5');
+  });
+
+  it('affiche le badge dès qu’il y a des annonces non vues, même sans poll en attente', async () => {
+    const fixture = await createFixture(0, 1);
+    const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
+    expect(partiesLink.classList.contains('mat-badge-hidden')).toBe(false);
+    const content = partiesLink.querySelector('.mat-badge-content');
+    expect(content?.textContent?.trim()).toBe('1');
+  });
+
+  it('la description accessible mentionne les annonces non vues, jamais la couleur seule', async () => {
+    const fixture = await createFixture(0, 2);
+    const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
+    expect(partiesLink.getAttribute('aria-description') ?? partiesLink.textContent).toBeTruthy();
+    expect((fixture.componentInstance as any).homeBadgeDescription()).toContain(
+      '2 annonce(s) non lue(s)',
+    );
+  });
+
+  it('masque le badge quand aucun poll ni aucune annonce non vue', async () => {
+    const fixture = await createFixture(0, 0);
+    const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
+    expect(partiesLink.classList.contains('mat-badge-hidden')).toBe(true);
+  });
+});
+
+describe('Shell — bandeau « push » d’annonce non vue (Story 29.13, révision du 2026-08-13)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it("aucun bandeau tant qu'il n'y a aucune annonce non vue", async () => {
+    const fixture = await createFixture(0, 0);
+    expect(fixture.nativeElement.querySelector('.announcement-banner')).toBeNull();
+  });
+
+  it("aucun bandeau tant que le nom de la Partie n'est pas résolu (course de chargement)", async () => {
+    const fixture = await createFixture(0, 1, {
+      unseenAnnouncements: [makeAnnouncement()],
+      parties: [], // MyPartiesService pas encore chargé
+    });
+    expect(fixture.nativeElement.querySelector('.announcement-banner')).toBeNull();
+  });
+
+  it('affiche la Partie et le texte intégral de l’annonce la plus récente', async () => {
+    const fixture = await createFixture(0, 1, {
+      unseenAnnouncements: [makeAnnouncement({ text: 'Rendez-vous samedi soir !' })],
+      parties: [makePartie({ id: 'p1', name: 'La Forêt Noire' })],
+    });
+
+    const banner = fixture.nativeElement.querySelector('.announcement-banner');
+    expect(banner?.textContent).toContain('La Forêt Noire');
+    expect(banner?.textContent).toContain('Rendez-vous samedi soir !');
+  });
+
+  it('un clic sur le bandeau (hors bouton fermer) mène vers la Partie concernée', async () => {
+    const fixture = await createFixture(0, 1, {
+      unseenAnnouncements: [makeAnnouncement({ partieId: 'p1' })],
+      parties: [makePartie({ id: 'p1', name: 'La Forêt Noire' })],
+    });
+
+    const link = fixture.nativeElement.querySelector('.announcement-banner__link');
+    expect(link.getAttribute('href')).toContain('/parties/p1');
+  });
+
+  it('fermer le bandeau appelle markRead() avec le bon id, jamais au simple affichage', async () => {
+    const markRead = vi.fn().mockResolvedValue(undefined);
+    const fixture = await createFixture(0, 1, {
+      unseenAnnouncements: [makeAnnouncement({ id: 'ann-x' })],
+      parties: [makePartie({ id: 'p1', name: 'La Forêt Noire' })],
+      markRead,
+    });
+
+    expect(markRead).not.toHaveBeenCalled();
+
+    fixture.nativeElement.querySelector('.announcement-banner__close').click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(markRead).toHaveBeenCalledWith('ann-x');
   });
 });
 

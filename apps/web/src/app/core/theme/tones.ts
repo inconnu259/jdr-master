@@ -158,6 +158,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'announcement.publish_cta': 'Proclamer une annonce',
     'announcement.text_placeholder': 'Rédiger une annonce...',
     'announcement.published_notice': 'Annonce proclamée.',
+    'announcement.unseen_label': 'Non lue — cliquez pour marquer comme lue',
     /* — personnages (Palier P3) — */
     'character.create_cta': 'Créer un voyageur',
     'character.tab_label': 'Personnages',
@@ -413,6 +414,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'announcement.publish_cta': 'Lancer un appel dans la forêt',
     'announcement.text_placeholder': 'Composer un appel...',
     'announcement.published_notice': "L'appel résonne dans la forêt.",
+    'announcement.unseen_label': 'Non entendu — cliquez pour marquer comme entendu',
     /* — personnages (Palier P3) — */
     'character.create_cta': 'Éveiller un compagnon de route',
     'character.tab_label': 'Personnages',
@@ -663,6 +665,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'announcement.publish_cta': 'Diffuser une transmission',
     'announcement.text_placeholder': 'Rédiger une transmission...',
     'announcement.published_notice': 'Transmission diffusée.',
+    'announcement.unseen_label': 'Non lue — cliquez pour accuser réception',
     /* — personnages (Palier P3) — */
     'character.create_cta': 'Assembler un automate-voyageur',
     'character.tab_label': 'Personnages',

@@ -8,6 +8,33 @@
   </mat-toolbar-row>
 </mat-toolbar>
 
+<!-- Story 29.13 (révision) : bandeau « push », une annonce non vue à la fois — distinct du badge
+     nav (Parties), visible même hors de la Partie concernée. -->
+@if (banner(); as b) {
+  <div class="announcement-banner" role="status">
+    <a
+      class="announcement-banner__link"
+      [routerLink]="
+        b.announcement.scenarioId
+          ? ['/parties', b.announcement.partieId, 'scenarios', b.announcement.scenarioId]
+          : ['/parties', b.announcement.partieId]
+      "
+      [queryParams]="{ announcementId: b.announcement.id }"
+    >
+      <span class="announcement-banner__partie">{{ b.partieName }}</span>
+      <span class="announcement-banner__text">{{ b.announcement.text }}</span>
+    </a>
+    <button
+      class="announcement-banner__close"
+      type="button"
+      [attr.aria-label]="'Fermer la notification de ' + b.partieName"
+      (click)="dismissBanner(b.announcement.id)"
+    >
+      <mat-icon aria-hidden="true">close</mat-icon>
+    </button>
+  </div>
+}
+
 <!-- Story 29.3 : barre à 4 destinations — mêmes liens, barre haute sur desktop / barre basse sur
      mobile (bascule CSS, cf. shell.scss). L'entrée active porte aria-current="page" (posé par
      ariaCurrentWhenActive) et une classe dédiée (poids de police) : jamais la couleur seule (AC3). -->
@@ -18,11 +45,11 @@
     routerLinkActive="nav-bar__link--active"
     [routerLinkActiveOptions]="{ exact: true }"
     ariaCurrentWhenActive="page"
-    [matBadge]="openPollsCount()"
-    [matBadgeHidden]="openPollsCount() === 0"
+    [matBadge]="homeBadgeCount()"
+    [matBadgeHidden]="homeBadgeCount() === 0"
     matBadgeColor="warn"
     matBadgeSize="small"
-    [matBadgeDescription]="openPollsCount() + ' vote(s) en attente de réponse'"
+    [matBadgeDescription]="homeBadgeDescription()"
   >
     <mat-icon aria-hidden="true">home</mat-icon>
     <span>{{ theme.tone()['nav.my_games'] }}</span>

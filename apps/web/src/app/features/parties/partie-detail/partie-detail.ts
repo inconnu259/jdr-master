@@ -67,6 +67,8 @@ import { ScenarioTimeline } from '../../scenarios/scenario-timeline/scenario-tim
 import { AnnouncementFormComponent } from '../../announcements/announcement-form/announcement-form';
 import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
+import { scrollToAnnouncement } from '../../../core/announcements/scroll-to-announcement.util';
 import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
 import { HommeDragonSheet } from '../../homme-dragon/homme-dragon-sheet/homme-dragon-sheet';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
@@ -112,6 +114,7 @@ export class PartieDetail implements OnInit {
   private readonly myPartiesSvc = inject(MyPartiesService);
   private readonly scenariosSvc = inject(ScenariosService);
   private readonly announcementsSvc = inject(AnnouncementsService);
+  private readonly unseenAnnouncementsSvc = inject(UnseenAnnouncementsService);
   private readonly characterRolesSvc = inject(CharacterRolesService);
   private readonly characterSvc = inject(CharacterService);
   private readonly dialog = inject(MatDialog);
@@ -141,6 +144,9 @@ export class PartieDetail implements OnInit {
   // Story 9.2 : liste complète (campagne + scopée) chargée une fois, filtrée côté client par
   // consommateur (AD-6 — même principe que activePolls/ScenariosService.listAll()).
   protected readonly announcements = signal<AnnouncementDto[]>([]);
+  // Story 29.13 (révision) : id transmis en query param par le bandeau du Shell — consommé une
+  // seule fois dès que l'annonce apparaît dans campaignAnnouncements() (cf. effect() au constructeur).
+  private pendingScrollAnnouncementId = this.route.snapshot.queryParamMap.get('announcementId');
   private announcementsReqId = 0;
   private characterRolesReqId = 0;
   // Story 27.3 : liste des rôles de groupe assignés sur cette Partie, chargée une fois puis
@@ -153,6 +159,11 @@ export class PartieDetail implements OnInit {
     this.partie()?.kind === 'ONE_SHOT'
       ? this.theme.tone()['announcement.scope_oneshot_label']
       : this.theme.tone()['announcement.scope_campaign_label'],
+  );
+  // Story 29.13 (révision) : le marquage « vue » se déclenche sur un clic explicite de l'utilisateur
+  // sur AnnonceCard (opened()), plus au simple affichage.
+  protected readonly unseenAnnouncementIds = computed(
+    () => new Set(this.unseenAnnouncementsSvc.unseenAnnouncements().map((a) => a.id)),
   );
   protected readonly gameSystemContent = signal<GameSystemContentDto | null>(null);
   protected readonly search = signal('');
@@ -423,6 +434,28 @@ export class PartieDetail implements OnInit {
       }
       untracked(() => void this.reloadCharacterRoles());
     });
+
+    // Story 29.13 (révision du 2026-08-13, retour utilisateur) : clic sur le bandeau du Shell —
+    // force l'onglet "Détails" (0, où vivent les annonces de campagne) puis défile jusqu'à
+    // l'annonce visée dès qu'elle apparaît dans campaignAnnouncements(). Après `tabSetKey()`
+    // (qui remet `manualTabIndex` à `null` à chaque changement MJ/desktop) pour ne pas être écrasé.
+    effect(() => {
+      const id = this.pendingScrollAnnouncementId;
+      if (!id) return;
+      const found = this.campaignAnnouncements().some((a) => a.id === id);
+      if (!found) return;
+      untracked(() => {
+        this.pendingScrollAnnouncementId = null;
+        this.manualTabIndex.set(0);
+        scrollToAnnouncement(id);
+      });
+    });
+  }
+
+  /** Story 29.13 (révision) : « j'ouvre l'annonce » = clic explicite sur AnnonceCard, plus le
+   *  simple affichage (qui refermait la notification avant que l'utilisateur n'ait pu la voir). */
+  protected markAnnouncementOpened(announcementId: string): void {
+    void this.unseenAnnouncementsSvc.markRead(announcementId);
   }
 
   /** Recharge `characters` seul (roster) — réutilisé par l'effet temps réel et par

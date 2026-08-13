@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { vi } from 'vitest';
 import type { ScenarioDto } from '@master-jdr/shared';
@@ -43,6 +44,7 @@ async function createComponent(
   await TestBed.configureTestingModule({
     imports: [ScenarioOneShotTab],
     providers: [
+      provideRouter([]),
       provideAnimationsAsync(),
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: RealtimeService, useValue: realtimeSvc },

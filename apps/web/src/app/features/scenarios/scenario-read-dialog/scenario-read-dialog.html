@@ -89,6 +89,8 @@
           <app-annonce-card
             [announcement]="a"
             [scopeLabel]="theme.tone()['announcement.scope_scenario_label']"
+            [unseen]="unseenAnnouncementIds().has(a.id)"
+            (opened)="markAnnouncementOpened(a.id)"
           />
         }
       </section>

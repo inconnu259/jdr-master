@@ -13,7 +13,10 @@ jest.mock('node:fs/promises', () => ({
 jest.mock('node:crypto', () => {
   const actual =
     jest.requireActual<typeof import('node:crypto')>('node:crypto');
-  return { ...actual, randomUUID: jest.fn(() => '99999999-9999-9999-9999-999999999999') };
+  return {
+    ...actual,
+    randomUUID: jest.fn(() => '99999999-9999-9999-9999-999999999999'),
+  };
 });
 
 // Mock partiel, même patron que character.service.spec.ts : detectImageMime/mimeForExtension/etc.
@@ -35,7 +38,9 @@ jest.mock('sharp', () => {
     return chain;
   });
   chain.webp = jest.fn(() => chain);
-  chain.toBuffer = jest.fn().mockResolvedValue(Buffer.from('resized-webp-bytes'));
+  chain.toBuffer = jest
+    .fn()
+    .mockResolvedValue(Buffer.from('resized-webp-bytes'));
   return jest.fn(() => chain);
 });
 
@@ -489,7 +494,9 @@ describe('PartiesService', () => {
 
   describe('coverImageVersion (Story 29.12, AD-19)', () => {
     it('sans couverture (coverImageUrl null) → coverImageVersion null', async () => {
-      prisma.partie.findMany.mockResolvedValue([{ ...partie, coverImageUrl: null }]);
+      prisma.partie.findMany.mockResolvedValue([
+        { ...partie, coverImageUrl: null },
+      ]);
       const [dto] = await service.listForUser('mj1', 'mj');
       expect(dto.coverImageVersion).toBeNull();
     });
@@ -503,7 +510,9 @@ describe('PartiesService', () => {
         },
       ]);
       const [dto] = await service.listForUser('mj1', 'mj');
-      expect(dto.coverImageVersion).toBe('11111111-1111-1111-1111-111111111111');
+      expect(dto.coverImageVersion).toBe(
+        '11111111-1111-1111-1111-111111111111',
+      );
     });
 
     it('coverImageUrl corrompu (mauvais préfixe ou format invalide) → coverImageVersion null, jamais une exception', async () => {
@@ -538,33 +547,46 @@ describe('PartiesService', () => {
       prisma.partie.findUnique.mockResolvedValue(partie);
       prisma.partie.update.mockResolvedValue({
         ...partie,
-        coverImageUrl: '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+        coverImageUrl:
+          '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
       });
       prisma.partie.findUniqueOrThrow.mockResolvedValue({
         ...partie,
-        coverImageUrl: '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+        coverImageUrl:
+          '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
       });
 
       const dto = await service.setCoverImage('p1', 'mj1', makeCoverFile());
 
       expect(prisma.partie.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
-        data: { coverImageUrl: '/uploads/covers/99999999-9999-9999-9999-999999999999.webp' },
+        data: {
+          coverImageUrl:
+            '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+        },
       });
       expect(writeFile).toHaveBeenCalledTimes(3);
       expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('99999999-9999-9999-9999-999999999999-large.webp'),
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-large.webp',
+        ),
         expect.any(Buffer),
       );
       expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('99999999-9999-9999-9999-999999999999-medium.webp'),
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-medium.webp',
+        ),
         expect.any(Buffer),
       );
       expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('99999999-9999-9999-9999-999999999999-compact.webp'),
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-compact.webp',
+        ),
         expect.any(Buffer),
       );
-      expect(dto.coverImageVersion).toBe('99999999-9999-9999-9999-999999999999');
+      expect(dto.coverImageVersion).toBe(
+        '99999999-9999-9999-9999-999999999999',
+      );
     });
 
     it('AC9 : chaque dérivée est redimensionnée pour son mode — dimensions distinctes par mode, jamais une largeur unique', async () => {
@@ -637,13 +659,19 @@ describe('PartiesService', () => {
         service.setCoverImage('p1', 'mj1', makeCoverFile()),
       ).rejects.toThrow('db down');
       expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining('99999999-9999-9999-9999-999999999999-large.webp'),
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-large.webp',
+        ),
       );
       expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining('99999999-9999-9999-9999-999999999999-medium.webp'),
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-medium.webp',
+        ),
       );
       expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining('99999999-9999-9999-9999-999999999999-compact.webp'),
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-compact.webp',
+        ),
       );
     });
 
@@ -664,7 +692,10 @@ describe('PartiesService', () => {
         ...partie,
         coverImageUrl: `/uploads/covers/${STEM}.webp`,
       });
-      prisma.partie.update.mockResolvedValue({ ...partie, coverImageUrl: null });
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        coverImageUrl: null,
+      });
       prisma.partie.findUniqueOrThrow.mockResolvedValue({
         ...partie,
         coverImageUrl: null,
@@ -707,7 +738,9 @@ describe('PartiesService', () => {
         ...partie,
         coverImageUrl: `/uploads/covers/${STEM}.webp`,
       });
-      (readFile as jest.Mock).mockResolvedValue(Buffer.from('derivative-bytes'));
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from('derivative-bytes'),
+      );
 
       const result = await service.getCoverFile('p1', 'mj1', 'medium');
 
@@ -722,7 +755,10 @@ describe('PartiesService', () => {
     });
 
     it('getCoverFile : aucune couverture (coverImageUrl null) → null, jamais un accès disque', async () => {
-      prisma.partie.findUnique.mockResolvedValue({ ...partie, coverImageUrl: null });
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        coverImageUrl: null,
+      });
       const result = await service.getCoverFile('p1', 'mj1', 'large');
       expect(result).toBeNull();
       expect(readFile).not.toHaveBeenCalled();
@@ -731,7 +767,8 @@ describe('PartiesService', () => {
     it('getCoverFile : coverImageUrl renseigné mais fichier absent du disque → null, jamais une exception (CAP-20)', async () => {
       prisma.partie.findUnique.mockResolvedValue({
         ...partie,
-        coverImageUrl: '/uploads/covers/55555555-5555-5555-5555-555555555555.webp',
+        coverImageUrl:
+          '/uploads/covers/55555555-5555-5555-5555-555555555555.webp',
       });
       (readFile as jest.Mock).mockRejectedValue(new Error('ENOENT'));
 
