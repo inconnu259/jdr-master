@@ -86,6 +86,12 @@ describe('PartiesService', () => {
       create: jest.Mock;
       count: jest.Mock;
       groupBy: jest.Mock;
+      findUnique: jest.Mock;
+      findMany: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    scenarioParticipant: {
+      createMany: jest.Mock;
     };
     seance: {
       create: jest.Mock;
@@ -142,6 +148,12 @@ describe('PartiesService', () => {
         // reconfigurent explicitement ces mocks quand ils veulent tester EN_COURS/TERMINEE.
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      scenarioParticipant: {
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       seance: {
         create: jest.fn(),
@@ -1511,6 +1523,345 @@ describe('PartiesService', () => {
         await expect(
           service.getAvailableSlots('p1', 'mj1', 8, '2024-01-01', '2025-12-31'),
         ).rejects.toBeInstanceOf(BadRequestException);
+      });
+    });
+  });
+
+  describe('convertKind (Story 29.14 — garde de conversion de type)', () => {
+    // La VRAIE matrice de `@master-jdr/shared` est exercée ici : les verdicts ne sont jamais
+    // simulés, ils sont produits par l'état que ces tests posent dans les mocks Prisma. La table
+    // de vérité elle-même (les 6 transitions × leurs états limites) est couverte séparément par
+    // `apps/web/src/app/core/parties/partie-kind-transition.spec.ts`.
+    const campagne = { ...partie, kind: 'CAMPAGNE_LINEAIRE', closedAt: null };
+    const episodique = {
+      ...partie,
+      kind: 'CAMPAGNE_EPISODIQUE',
+      closedAt: null,
+    };
+
+    /** Pose le nombre de scénarios total et le nombre de COURANT vus par la conversion.
+     *  Distingue les deux appels par leur clause `where`, plutôt que par leur ordre. */
+    function setScenarioCounts(total: number, courant: number): void {
+      prisma.scenario.count.mockImplementation((args: any) =>
+        Promise.resolve(args?.where?.status === 'COURANT' ? courant : total),
+      );
+    }
+
+    /** Vrai si AUCUNE écriture n'a eu lieu, sur aucune des quatre tables concernées (AC10). */
+    function expectNoWrites(): void {
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+      expect(prisma.scenario.create).not.toHaveBeenCalled();
+      expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
+      expect(prisma.scenarioParticipant.createMany).not.toHaveBeenCalled();
+      expect(prisma.seance.create).not.toHaveBeenCalled();
+    }
+
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(campagne);
+      prisma.partie.update.mockResolvedValue({
+        ...campagne,
+        kind: 'ONE_SHOT',
+      });
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj-pseudo',
+        displayName: 'MJ Nom',
+      });
+      setScenarioCounts(1, 0);
+    });
+
+    it('MJ uniquement : 403 pour un non-MJ, et aucune écriture', async () => {
+      await expect(
+        service.convertKind('p1', 'autre', { kind: 'ONE_SHOT' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expectNoWrites();
+    });
+
+    it('Cas 1 — ONE_SHOT → CAMPAGNE_LINEAIRE : autorisée sans condition', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, closedAt: null });
+
+      await service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_LINEAIRE' });
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { kind: 'CAMPAGNE_LINEAIRE' },
+      });
+    });
+
+    it('AC10 — refus (3 scénarios → ONE_SHOT) : BadRequest levée AVANT toute écriture', async () => {
+      setScenarioCounts(3, 0);
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expectNoWrites();
+    });
+
+    it('AC6 — le message de refus nomme la cause réelle et le nombre en jeu', async () => {
+      setScenarioCounts(3, 0);
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).rejects.toThrow(/3/);
+    });
+
+    it('Règle C — partie clôturée : refus avec un message distinct invitant à rouvrir', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...campagne,
+        closedAt: new Date(),
+      });
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).rejects.toThrow(/rouvr/i);
+      expectNoWrites();
+    });
+
+    it('Règle C — la clôture prime sur un refus qui serait sinon dû au nombre de scénarios', async () => {
+      setScenarioCounts(5, 0);
+      prisma.partie.findUnique.mockResolvedValue({
+        ...campagne,
+        closedAt: new Date(),
+      });
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).rejects.toThrow(/rouvr/i);
+    });
+
+    it('Cas 3 à 1 scénario : autorisée, écrit le kind et rien d’autre', async () => {
+      await service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { kind: 'ONE_SHOT' },
+      });
+      expect(prisma.scenario.create).not.toHaveBeenCalled();
+      expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
+      expect(prisma.scenarioParticipant.createMany).not.toHaveBeenCalled();
+    });
+
+    it('AC7 — cas 3 à 0 scénario : crée un scénario BROUILLON titré du nom de la partie, ET sa séance', async () => {
+      setScenarioCounts(0, 0);
+      prisma.scenario.create.mockResolvedValue({ id: 'sc-neuf' });
+
+      await service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
+
+      expect(prisma.scenario.create).toHaveBeenCalledWith({
+        data: { partieId: 'p1', title: campagne.name, status: 'BROUILLON' },
+      });
+      expect(prisma.seance.create).toHaveBeenCalledWith({
+        data: { scenarioId: 'sc-neuf' },
+      });
+    });
+
+    it('AC8 — cas 4 : inscrit chaque membre à chaque scénario existant', async () => {
+      prisma.scenario.findMany.mockResolvedValue([{ id: 's1' }, { id: 's2' }]);
+      prisma.membership.findMany.mockResolvedValue([
+        { userId: 'u1' },
+        { userId: 'u2' },
+      ]);
+
+      await service.convertKind('p1', 'mj1', {
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+
+      const call = prisma.scenarioParticipant.createMany.mock.calls[0][0];
+      expect(call.data).toEqual(
+        expect.arrayContaining([
+          { scenarioId: 's1', userId: 'u1' },
+          { scenarioId: 's1', userId: 'u2' },
+          { scenarioId: 's2', userId: 'u1' },
+          { scenarioId: 's2', userId: 'u2' },
+        ]),
+      );
+      expect(call.data).toHaveLength(4);
+    });
+
+    it('AC8 — le semis est idempotent : skipDuplicates, rejouer ne crée aucun doublon', async () => {
+      prisma.scenario.findMany.mockResolvedValue([{ id: 's1' }]);
+      prisma.membership.findMany.mockResolvedValue([{ userId: 'u1' }]);
+
+      await service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_EPISODIQUE' });
+
+      expect(prisma.scenarioParticipant.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skipDuplicates: true }),
+      );
+    });
+
+    it('semis sans aucun membre : aucun appel createMany à vide', async () => {
+      prisma.scenario.findMany.mockResolvedValue([{ id: 's1' }]);
+      prisma.membership.findMany.mockResolvedValue([]);
+
+      await service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_EPISODIQUE' });
+
+      expect(prisma.scenarioParticipant.createMany).not.toHaveBeenCalled();
+    });
+
+    it('AC9 — effet DEMOTE_EXTRA_COURANTS : rétrograde en A_VENIR tous les COURANT sauf celui désigné', async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 'sc-garde',
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+
+      await service.convertKind('p1', 'mj1', {
+        kind: 'CAMPAGNE_LINEAIRE',
+        courantScenarioId: 'sc-garde',
+      });
+
+      expect(prisma.scenario.updateMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1', status: 'COURANT', id: { not: 'sc-garde' } },
+        data: { status: 'A_VENIR' },
+      });
+    });
+
+    it('AC9 — la rétrogradation ne touche ni séances, ni votes, ni dates (Règle A)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 'sc-garde',
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+
+      await service.convertKind('p1', 'mj1', {
+        kind: 'CAMPAGNE_LINEAIRE',
+        courantScenarioId: 'sc-garde',
+      });
+
+      // Seul `status` est écrit : aucune suppression de séance, aucun champ de date touché.
+      expect(prisma.scenario.updateMany.mock.calls[0][0].data).toEqual({
+        status: 'A_VENIR',
+      });
+      expect(prisma.seance.create).not.toHaveBeenCalled();
+    });
+
+    it('requiresCourantChoice sans courantScenarioId : BadRequest, aucune écriture', async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_LINEAIRE' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expectNoWrites();
+    });
+
+    it("courantScenarioId d'une AUTRE partie : BadRequest, aucune écriture", async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 'sc-ailleurs',
+        partieId: 'p-autre',
+        status: 'COURANT',
+      });
+
+      await expect(
+        service.convertKind('p1', 'mj1', {
+          kind: 'CAMPAGNE_LINEAIRE',
+          courantScenarioId: 'sc-ailleurs',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expectNoWrites();
+    });
+
+    it('courantScenarioId qui n’est pas COURANT : BadRequest, aucune écriture', async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 'sc-brouillon',
+        partieId: 'p1',
+        status: 'BROUILLON',
+      });
+
+      await expect(
+        service.convertKind('p1', 'mj1', {
+          kind: 'CAMPAGNE_LINEAIRE',
+          courantScenarioId: 'sc-brouillon',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expectNoWrites();
+    });
+
+    it('courantScenarioId introuvable : BadRequest, aucune écriture', async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+      prisma.scenario.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.convertKind('p1', 'mj1', {
+          kind: 'CAMPAGNE_LINEAIRE',
+          courantScenarioId: 'sc-fantome',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expectNoWrites();
+    });
+
+    it('AD-14 — émet partieTopic et userTopic pour le MJ et chaque membre après un succès', async () => {
+      // `resolveParticipants()` lit les memberships avec `include: { user }` — forme différente du
+      // `select: { userId }` utilisé par le semis de participants.
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'u1-pseudo', displayName: 'U1' } },
+      ]);
+
+      await service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+    });
+
+    it("une émission qui échoue ne transforme pas un commit réussi en 500 (patron close()/reopen())", async () => {
+      prisma.membership.findMany.mockRejectedValue(new Error('boom'));
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).resolves.toMatchObject({ id: 'p1' });
+    });
+
+    it("renvoie un PartieDto projeté avec role: 'mj' (AD-15)", async () => {
+      const dto = await service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
+      expect(dto).toMatchObject({ id: 'p1', role: 'mj', kind: 'ONE_SHOT' });
+    });
+  });
+
+  describe('update() — verrou contre le changement de type silencieux (Story 29.14, Task 4)', () => {
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+    });
+
+    it('un kind DIFFÉRENT est rejeté, sans écriture — la conversion a sa propre route', async () => {
+      await expect(
+        service.update('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('un kind IDENTIQUE reste accepté — le formulaire renvoie toujours les quatre champs', async () => {
+      await expect(
+        service.update('p1', 'mj1', {
+          name: 'Nouveau nom',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      ).resolves.toBeDefined();
+      expect(prisma.partie.update).toHaveBeenCalled();
+    });
+
+    it('sans kind du tout : enregistrement normal', async () => {
+      await service.update('p1', 'mj1', { name: 'Nouveau nom' });
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom' },
       });
     });
   });

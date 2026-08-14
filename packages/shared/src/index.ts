@@ -87,6 +87,117 @@ export type PartieKind = 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE' | 'CAMPAGNE_EPISODIQUE
  *  scénarios (AD-8), jamais recalculé côté client (Story 29.6). */
 export type PartieStatus = 'A_VENIR' | 'EN_COURS' | 'TERMINEE';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Conversion du type d'une partie (Story 29.14)
+//
+// POINT DE DÉRIVATION UNIQUE de la matrice de conversion. Le serveur (garde de
+// `PartiesService.convertKind()`) et le formulaire d'édition consomment tous deux
+// `checkPartieKindTransition()` — il n'existe pas deux tables de règles, qui
+// divergeraient (Règle B de la story, esprit d'AD-17).
+//
+// Le `kind` gouverne des invariants dans quatre services :
+//   - ONE_SHOT              : exactement un scénario, créé avec la partie (AD-7)
+//   - CAMPAGNE_LINEAIRE     : au plus un scénario COURANT à la fois (AD-10)
+//   - CAMPAGNE_EPISODIQUE   : participation individuelle + inscriptions à capacité
+// Jusqu'à cette story, `update()` écrivait `kind` sans aucune vérification.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** État de la partie au moment où une conversion est évaluée. Lu par le serveur dans la
+ *  transaction ; reconstitué côté client depuis la liste des scénarios de la partie. */
+export interface PartieKindTransitionState {
+  scenarioCount: number;
+  /** Nombre de scénarios au statut `COURANT`. */
+  courantCount: number;
+  /** `Partie.closedAt !== null`. */
+  isClosed: boolean;
+}
+
+/** Motifs de refus — union fermée. Le serveur renvoie un code, jamais une phrase : le libellé
+ *  est thématisable côté client, et un code se teste sans dépendre d'une formulation. */
+export type PartieKindTransitionRefusal =
+  /** Règle C : une partie clôturée se rouvre avant d'être convertie. */
+  | 'PARTIE_CLOSED'
+  /** Cas 3 et 5 : un one-shot n'a qu'un scénario (AD-7), on ne sait pas lequel garder. */
+  | 'TOO_MANY_SCENARIOS_FOR_ONE_SHOT';
+
+/** Effets à appliquer dans la transaction de conversion, en plus de l'écriture du `kind`. */
+export type PartieKindTransitionEffect =
+  /** Cas 3 et 5 à zéro scénario : en créer un (+ sa séance), comme le fait `PartiesService.create()`
+   *  pour un ONE_SHOT. Sans cela la partie serait définitivement coincée sans scénario —
+   *  `ScenariosService.create()` refuse d'en créer un sur un ONE_SHOT. */
+  | 'CREATE_SCENARIO'
+  /** Cas 2 et 4 : inscrire les membres actuels comme participants de chaque scénario existant.
+   *  Ce n'est pas une invention : hors épisodique, le code tient déjà pour vrai que « tous les
+   *  membres actuels sont réputés participer » (`homme-dragon.service.ts`). Sans ce semis, la
+   *  conversion viderait les notes de rétrospective et ferait refuser les associations de journal. */
+  | 'SEED_PARTICIPANTS'
+  /** Cas 6 avec plusieurs COURANT : rétrograder en `A_VENIR` tous ceux que le MJ n'a pas retenus.
+   *  Séances, votes et dates sont conservés (Règle A — rien n'est jamais effacé). */
+  | 'DEMOTE_EXTRA_COURANTS';
+
+export type PartieKindTransitionVerdict =
+  | { allowed: false; refusal: PartieKindTransitionRefusal }
+  | {
+      allowed: true;
+      effects: PartieKindTransitionEffect[];
+      /** Vrai quand `DEMOTE_EXTRA_COURANTS` s'applique : le MJ doit désigner le scénario qui reste
+       *  Courant. Le serveur exige alors `courantScenarioId`. */
+      requiresCourantChoice: boolean;
+    };
+
+/**
+ * Évalue une conversion de type de partie. Fonction **pure** : aucune dépendance à Prisma,
+ * Nest ou Angular, testable isolément.
+ *
+ * Une transition identité (`from === to`) est toujours autorisée et sans effet — le formulaire
+ * renvoie systématiquement `kind`, y compris inchangé.
+ */
+export function checkPartieKindTransition(
+  from: PartieKind,
+  to: PartieKind,
+  state: PartieKindTransitionState,
+): PartieKindTransitionVerdict {
+  if (from === to) {
+    return { allowed: true, effects: [], requiresCourantChoice: false };
+  }
+
+  // Règle C — évaluée avant tout le reste : une partie clôturée ne se convertit pas.
+  if (state.isClosed) {
+    return { allowed: false, refusal: 'PARTIE_CLOSED' };
+  }
+
+  const effects: PartieKindTransitionEffect[] = [];
+
+  if (to === 'ONE_SHOT') {
+    // Cas 3 et 5. À deux scénarios ou plus, aucune règle ne dit lequel survivrait : refus.
+    if (state.scenarioCount >= 2) {
+      return { allowed: false, refusal: 'TOO_MANY_SCENARIOS_FOR_ONE_SHOT' };
+    }
+    if (state.scenarioCount === 0) {
+      effects.push('CREATE_SCENARIO');
+    }
+    return { allowed: true, effects, requiresCourantChoice: false };
+  }
+
+  if (to === 'CAMPAGNE_EPISODIQUE') {
+    // Cas 2 et 4 — toujours autorisés, la réparation rend la conversion non destructive.
+    return {
+      allowed: true,
+      effects: ['SEED_PARTICIPANTS'],
+      requiresCourantChoice: false,
+    };
+  }
+
+  // to === 'CAMPAGNE_LINEAIRE' — cas 1 et 6.
+  // Le verrou « un seul COURANT » d'AD-10 ne s'applique qu'aux nouveaux passages en COURANT ; il
+  // ne répare pas l'existant. Sans rétrogradation, l'invariant naîtrait déjà violé.
+  const requiresCourantChoice = state.courantCount >= 2;
+  if (requiresCourantChoice) {
+    effects.push('DEMOTE_EXTRA_COURANTS');
+  }
+  return { allowed: true, effects, requiresCourantChoice };
+}
+
 /** Une partie telle que renvoyée par l'API. */
 export interface PartieDto {
   id: string;

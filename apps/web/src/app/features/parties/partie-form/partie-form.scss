@@ -1,25 +1,71 @@
 .form-card {
   max-width: 32rem;
-  margin: 1rem auto;
+  // Marge basse réservant la barre de navigation globale : sans elle, les actions du formulaire
+  // passent sous la barre basse sur mobile. Variable partagée posée par la Story 29.3 (collision
+  // character-wizard/Shell) — jamais une seconde variable locale.
+  margin: 1rem auto calc(var(--shell-nav-bar-height, 4rem) + 1rem);
 }
+
 form {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   margin-top: 1rem;
 }
+
 mat-form-field {
   width: 100%;
 }
+
 .lbl {
   font-size: 0.8rem;
   color: var(--mat-sys-on-surface-variant, #666);
 }
+
+.section-title {
+  font-size: 1rem;
+  margin: 0 0 0.25rem;
+}
+
+.section-help {
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+  margin: 0 0 0.75rem;
+}
+
+// Le fieldset porte la sémantique du groupe (legend + radiogroup) sans son cadre par défaut.
+.kind-field {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+// Vertical : « Campagne épisodique » ne tient pas sur une ligne étroite, et un groupe horizontal
+// tronquait le libellé sur mobile (AC1).
+.kind-toggle {
+  width: 100%;
+}
+
+.kind-toggle .mat-button-toggle {
+  text-align: left;
+}
+
+.kind-reason {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+  margin: 0;
+}
+
 .actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
+  flex-wrap: wrap;
 }
+
 .error {
   color: var(--mat-sys-error, #b00020);
 }
@@ -29,19 +75,52 @@ mat-form-field {
   align-items: center;
   gap: 1rem;
   margin-top: 1rem;
+  flex-wrap: wrap;
 }
+
 .cover-preview {
   flex-shrink: 0;
   border-radius: 8px;
   overflow: hidden;
 }
+
+.cover-preview--file {
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+}
+
 .cover-actions {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.25rem;
 }
+
 .cover-upload-label {
   font-size: 0.85rem;
   cursor: pointer;
+}
+
+.cover-progress {
+  margin-top: 0.5rem;
+}
+
+.cover-status {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+  margin: 0.25rem 0 0;
+}
+
+.courant-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.courant-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
 }

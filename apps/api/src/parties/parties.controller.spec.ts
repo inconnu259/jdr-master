@@ -29,6 +29,7 @@ function makePartiesService() {
     getHeatmap: jest.fn(),
     removeMember: jest.fn(),
     update: jest.fn(),
+    convertKind: jest.fn(),
     close: jest.fn(),
     reopen: jest.fn(),
     remove: jest.fn(),
@@ -95,6 +96,24 @@ describe('PartiesController', () => {
     const dto = { name: 'Nouveau nom' };
     await controller.update(user, 'p1', dto);
     expect(parties.update).toHaveBeenCalledWith('p1', 'mj1', dto);
+  });
+
+  it('convertKind() route id/user/dto vers PartiesService.convertKind (Story 29.14)', async () => {
+    await controller.convertKind(user, 'p1', { kind: 'ONE_SHOT' });
+    expect(parties.convertKind).toHaveBeenCalledWith('p1', 'mj1', {
+      kind: 'ONE_SHOT',
+    });
+  });
+
+  it('convertKind() transmet courantScenarioId quand il est fourni', async () => {
+    await controller.convertKind(user, 'p1', {
+      kind: 'CAMPAGNE_LINEAIRE',
+      courantScenarioId: 'sc-garde',
+    });
+    expect(parties.convertKind).toHaveBeenCalledWith('p1', 'mj1', {
+      kind: 'CAMPAGNE_LINEAIRE',
+      courantScenarioId: 'sc-garde',
+    });
   });
 
   it('close() route id/user vers PartiesService.close', async () => {

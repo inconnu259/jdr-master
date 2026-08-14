@@ -72,6 +72,35 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.new_title': 'Nouvelle quête',
     'partie.edit_title': 'Retranscrire le parchemin',
     'partie.save_btn': 'Inscrire',
+    'partie.cancel_btn': 'Refermer',
+    'partie.name_label': 'Nom du grimoire',
+    'partie.system_label': 'Système de jeu',
+    'partie.kind_label': 'Nature de la quête',
+    'partie.description_label': 'Préambule (facultatif)',
+    'partie.kind_ONE_SHOT': 'Quête unique',
+    'partie.kind_CAMPAGNE_LINEAIRE': 'Chronique',
+    'partie.kind_CAMPAGNE_EPISODIQUE': 'Chronique épisodique',
+    'partie.kind_refusal_closed': 'Ce grimoire est clos. Rouvrez-le avant d’en changer la nature.',
+    'partie.kind_refusal_too_many_scenarios':
+      'Ce grimoire compte {count} scénarios ; une quête unique n’en porte qu’un.',
+    'partie.courant_choice_title': 'Quel scénario reste en cours ?',
+    'partie.courant_choice_help':
+      'Une chronique ne suit qu’un scénario à la fois. Les autres repasseront « à venir » — leurs séances et leurs dates sont conservées.',
+    'partie.courant_choice_confirm': 'Sceller ce choix',
+    'partie.cover_add': 'Enluminer ce grimoire',
+    'partie.cover_change': 'Changer l’enluminure',
+    'partie.cover_remove': 'Retirer l’enluminure',
+    'partie.cover_uploading': 'L’enluminure se fixe sur le parchemin…',
+    'partie.cover_upload_error': 'L’enluminure n’a pu être fixée. Réessayez.',
+    'partie.cover_remove_error': 'L’enluminure n’a pu être retirée. Réessayez.',
+    'partie.cover_reject_type':
+      'Seules les images JPEG, PNG et WEBP peuvent enluminer un grimoire.',
+    'partie.cover_reject_size': 'Cette image dépasse 5 Mo : choisissez-en une plus légère.',
+    'partie.save_error': 'Ce grimoire n’a pu être inscrit. Réessayez.',
+    'partie.created_but_cover_failed':
+      'Le grimoire est bien inscrit, mais son enluminure n’a pu être fixée. Vous pouvez la redéposer ici.',
+    'partie.fields_saved_but_convert_failed':
+      'Les autres modifications sont enregistrées, mais la nature du grimoire n’a pu être changée. Réessayez.',
     /* — partie-detail — */
     'partie.scheduling_title': 'Prochaine séance',
     'partie.no_session': "Aucune séance convoquée. Consultez l'oracle des créneaux.",
@@ -327,6 +356,35 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.new_title': 'Nouveau sentier',
     'partie.edit_title': 'Rebattre le sentier',
     'partie.save_btn': 'Planter',
+    'partie.cancel_btn': 'Rebrousser chemin',
+    'partie.name_label': 'Nom du sentier',
+    'partie.system_label': 'Système de jeu',
+    'partie.kind_label': 'Nature du sentier',
+    'partie.description_label': 'Premiers pas (facultatif)',
+    'partie.kind_ONE_SHOT': 'Sentier court',
+    'partie.kind_CAMPAGNE_LINEAIRE': 'Longue marche',
+    'partie.kind_CAMPAGNE_EPISODIQUE': 'Longue marche par étapes',
+    'partie.kind_refusal_closed':
+      'Ce sentier est refermé. Rouvrez-le avant d’en changer la nature.',
+    'partie.kind_refusal_too_many_scenarios':
+      'Ce sentier compte {count} étapes ; un sentier court n’en a qu’une.',
+    'partie.courant_choice_title': 'Quelle étape reste en cours ?',
+    'partie.courant_choice_help':
+      'Une longue marche ne suit qu’une étape à la fois. Les autres redeviendront « à venir » — leurs séances et leurs dates sont conservées.',
+    'partie.courant_choice_confirm': 'Prendre ce chemin',
+    'partie.cover_add': 'Donner un visage au sentier',
+    'partie.cover_change': 'Changer l’image',
+    'partie.cover_remove': 'Retirer l’image',
+    'partie.cover_uploading': 'L’image prend racine…',
+    'partie.cover_upload_error': 'L’image n’a pu prendre racine. Réessayez.',
+    'partie.cover_remove_error': 'L’image n’a pu être retirée. Réessayez.',
+    'partie.cover_reject_type': 'Seules les images JPEG, PNG et WEBP peuvent être plantées ici.',
+    'partie.cover_reject_size': 'Cette image dépasse 5 Mo : choisissez-en une plus légère.',
+    'partie.save_error': 'Ce sentier n’a pu être tracé. Réessayez.',
+    'partie.created_but_cover_failed':
+      'Le sentier est bien tracé, mais son image n’a pu prendre racine. Vous pouvez la redéposer ici.',
+    'partie.fields_saved_but_convert_failed':
+      'Les autres changements sont enregistrés, mais la nature du sentier n’a pu être changée. Réessayez.',
     /* — partie-detail — */
     'partie.scheduling_title': 'Prochaine clairière',
     'partie.no_session': "Aucune clairière réservée. L'écureuil cherche encore.",
@@ -579,6 +637,35 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.new_title': 'Nouvelle mission',
     'partie.edit_title': 'Recalibrer la mission',
     'partie.save_btn': 'Valider',
+    'partie.cancel_btn': 'Annuler',
+    'partie.name_label': 'Nom de la mission',
+    'partie.system_label': 'Système de jeu',
+    'partie.kind_label': 'Régime de la mission',
+    'partie.description_label': 'Note de service (facultatif)',
+    'partie.kind_ONE_SHOT': 'Mission unique',
+    'partie.kind_CAMPAGNE_LINEAIRE': 'Programme',
+    'partie.kind_CAMPAGNE_EPISODIQUE': 'Programme à cycles',
+    'partie.kind_refusal_closed':
+      'Cette mission est close. Rouvrez-la avant d’en changer le régime.',
+    'partie.kind_refusal_too_many_scenarios':
+      'Cette mission compte {count} opérations ; une mission unique n’en a qu’une.',
+    'partie.courant_choice_title': 'Quelle opération reste en cours ?',
+    'partie.courant_choice_help':
+      'Un programme n’exécute qu’une opération à la fois. Les autres repasseront « à venir » — leurs séances et leurs dates sont conservées.',
+    'partie.courant_choice_confirm': 'Verrouiller ce réglage',
+    'partie.cover_add': 'Ajouter une plaque d’identification',
+    'partie.cover_change': 'Changer la plaque',
+    'partie.cover_remove': 'Retirer la plaque',
+    'partie.cover_uploading': 'Gravure de la plaque en cours…',
+    'partie.cover_upload_error': 'La plaque n’a pu être gravée. Réessayez.',
+    'partie.cover_remove_error': 'La plaque n’a pu être retirée. Réessayez.',
+    'partie.cover_reject_type': 'Seuls les formats JPEG, PNG et WEBP sont admis.',
+    'partie.cover_reject_size': 'Ce fichier dépasse 5 Mo : réduisez-le avant dépôt.',
+    'partie.save_error': 'Cette mission n’a pu être enregistrée. Réessayez.',
+    'partie.created_but_cover_failed':
+      'La mission est bien enregistrée, mais sa plaque n’a pu être gravée. Vous pouvez la redéposer ici.',
+    'partie.fields_saved_but_convert_failed':
+      'Les autres modifications sont enregistrées, mais le régime de la mission n’a pu être changé. Réessayez.',
     /* — partie-detail — */
     'partie.scheduling_title': 'Prochaine mission',
     'partie.no_session': "Aucune mission planifiée. Interrogez l'automate.",

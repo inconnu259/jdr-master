@@ -14,8 +14,13 @@ import type {
   AvailableSlotDto,
   ListViewMode,
   PartieDto,
+  PartieKindTransitionRefusal,
   PartieStatus,
 } from '@master-jdr/shared';
+// Seul import RUNTIME de `@master-jdr/shared` dans ce service : la matrice de conversion (Story
+// 29.14), partagée avec le formulaire d'édition. Impose `jest.mock('@master-jdr/shared')` dans les
+// specs de ce service — le paquet est ESM, que le runner Jest de l'API ne sait pas charger.
+import { checkPartieKindTransition } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -31,8 +36,32 @@ import {
   type DetectedImageMime,
 } from '../common/image-upload.util';
 import { UPLOADS_ROOT } from '../common/uploads-root';
+import { ConvertPartieKindDto } from './dto/convert-partie-kind.dto';
 import { CreatePartieDto } from './dto/create-partie.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
+
+/** Traduit un code de refus de conversion (union fermée) en message destiné au MJ.
+ *  NFR-4 : le message nomme la cause réelle et le nombre en jeu — jamais un texte générique. */
+function refusalMessage(
+  refusal: PartieKindTransitionRefusal,
+  scenarioCount: number,
+): string {
+  switch (refusal) {
+    case 'PARTIE_CLOSED':
+      return 'Cette partie est clôturée : rouvrez-la avant de changer son type';
+    case 'TOO_MANY_SCENARIOS_FOR_ONE_SHOT':
+      return `Cette partie compte ${scenarioCount} scénarios ; un one-shot n'en a qu'un`;
+    default: {
+      // Revue de code : `apps/api/tsconfig.json` n'active pas `noImplicitReturns` — sans cette
+      // garde, un futur membre ajouté à `PartieKindTransitionRefusal` sans mettre à jour ce
+      // `switch` retournerait silencieusement `undefined` au lieu d'échouer bruyamment.
+      const exhaustive: never = refusal;
+      throw new Error(
+        `Motif de refus de conversion non géré : ${String(exhaustive)}`,
+      );
+    }
+  }
+}
 
 /** Dossier/préfixe du domaine couverture (Story 29.12, AD-17) — paramétrise l'utilitaire d'upload
  *  commun, même patron que `PORTRAITS_DIR`/`PORTRAITS_URL_PREFIX` (`character.service.ts`). */
@@ -337,7 +366,20 @@ export class PartiesService {
     userId: string,
     dto: UpdatePartieDto,
   ): Promise<PartieDto> {
-    await this.getOwned(id, userId);
+    const partie = await this.getOwned(id, userId);
+
+    // Story 29.14 : jusqu'ici `data: { ...dto }` écrivait `kind` sans aucune vérification, alors que
+    // le type gouverne des invariants dans quatre services. Changer de type est une OPÉRATION à
+    // effets (création de scénario, semis de participants, rétrogradation de statuts) portant son
+    // propre paramètre — elle passe par `convertKind()`, jamais par cette édition de champs.
+    // Un `kind` IDENTIQUE reste accepté : le formulaire renvoie toujours les quatre champs, et le
+    // rejeter casserait l'enregistrement d'un simple changement de nom.
+    if (dto.kind !== undefined && dto.kind !== partie.kind) {
+      throw new BadRequestException(
+        'Le type de partie ne se change pas par cette route — utiliser la conversion dédiée',
+      );
+    }
+
     const updated = await this.prisma.partie.update({
       where: { id },
       data: { ...dto },
@@ -348,6 +390,166 @@ export class PartiesService {
       this.isFavorite(userId, id),
     ]);
     // getOwned() a déjà garanti que l'appelant est le MJ (revue de code, AC6).
+    return toPartieDto(updated, 'mj', hasScenario, favorite);
+  }
+
+  /**
+   * Convertit le type d'une partie (Story 29.14) — MJ uniquement.
+   *
+   * Tout se joue dans une seule transaction : lecture de l'état, évaluation par la matrice
+   * partagée, puis — et seulement si le verdict est favorable — écriture du `kind` et de ses
+   * effets. Un refus lève AVANT toute écriture (AC10) : évaluer après avoir écrit laisserait une
+   * partie convertie suivie d'une exception, le pire des deux mondes.
+   *
+   * La matrice vit dans `@master-jdr/shared` et non ici : le formulaire d'édition la consomme
+   * aussi, pour désactiver les types inatteignables. Deux tables de règles divergeraient.
+   */
+  async convertKind(
+    id: string,
+    userId: string,
+    dto: ConvertPartieKindDto,
+  ): Promise<PartieDto> {
+    const partie = await this.getOwned(id, userId);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const [scenarioCount, courantCount] = await Promise.all([
+        tx.scenario.count({ where: { partieId: id } }),
+        tx.scenario.count({ where: { partieId: id, status: 'COURANT' } }),
+      ]);
+
+      const verdict = checkPartieKindTransition(partie.kind, dto.kind, {
+        scenarioCount,
+        courantCount,
+        isClosed: partie.closedAt !== null,
+      });
+
+      if (!verdict.allowed) {
+        throw new BadRequestException(
+          refusalMessage(verdict.refusal, scenarioCount),
+        );
+      }
+
+      // Le scénario qui reste Courant est validé avant toute écriture, lui aussi : il doit exister,
+      // appartenir à CETTE partie (isolation) et être réellement COURANT.
+      let keptCourantId: string | null = null;
+      if (verdict.requiresCourantChoice) {
+        if (!dto.courantScenarioId) {
+          throw new BadRequestException(
+            'Cette partie a plusieurs scénarios Courant : désignez celui qui doit le rester',
+          );
+        }
+        const kept = await tx.scenario.findUnique({
+          where: { id: dto.courantScenarioId },
+        });
+        if (!kept || kept.partieId !== id) {
+          throw new BadRequestException(
+            "Ce scénario n'appartient pas à cette partie",
+          );
+        }
+        if (kept.status !== 'COURANT') {
+          throw new BadRequestException(
+            'Le scénario désigné pour rester Courant ne l’est pas',
+          );
+        }
+        keptCourantId = kept.id;
+      }
+
+      const written = await tx.partie.update({
+        where: { id },
+        data: { kind: dto.kind },
+      });
+
+      for (const effect of verdict.effects) {
+        // Revue de code : `switch` exhaustif plutôt qu'une chaîne de `if` — un futur membre ajouté
+        // à `PartieKindTransitionEffect` sans mettre à jour cette boucle échoue bruyamment (`default`
+        // ci-dessous) au lieu d'être silencieusement ignoré.
+        switch (effect) {
+          case 'CREATE_SCENARIO': {
+            // Même geste que `create()` pour un ONE_SHOT (AD-7) : un scénario BROUILLON titré du nom
+            // de la partie, plus la séance sans laquelle il n'a aucune date à planifier. Sans cela la
+            // partie resterait sans scénario pour toujours — `ScenariosService.create()` refuse d'en
+            // créer un sur un ONE_SHOT, et il n'existe aucun autre chemin.
+            const scenario = await tx.scenario.create({
+              data: { partieId: id, title: partie.name, status: 'BROUILLON' },
+            });
+            await tx.seance.create({ data: { scenarioId: scenario.id } });
+            break;
+          }
+
+          case 'SEED_PARTICIPANTS': {
+            // Hors épisodique, le code tient déjà pour vrai que tous les membres participent
+            // (`homme-dragon.service.ts`). On l'explicite, sans quoi la conversion viderait les notes
+            // de rétrospective et ferait refuser les associations de journal.
+            // `skipDuplicates` rend le semis idempotent, comme l'upsert de `participate()`.
+            const [scenarios, memberships] = await Promise.all([
+              tx.scenario.findMany({
+                where: { partieId: id },
+                select: { id: true },
+              }),
+              tx.membership.findMany({
+                where: { partieId: id },
+                select: { userId: true },
+              }),
+            ]);
+            const rows = scenarios.flatMap((s) =>
+              memberships.map((m) => ({ scenarioId: s.id, userId: m.userId })),
+            );
+            if (rows.length > 0) {
+              await tx.scenarioParticipant.createMany({
+                data: rows,
+                skipDuplicates: true,
+              });
+            }
+            break;
+          }
+
+          case 'DEMOTE_EXTRA_COURANTS': {
+            // Revue de code : `keptCourantId` remplace une assertion non-null par une garde
+            // explicite — `requiresCourantChoice` (donc cet effet) n'est posé par la matrice que
+            // lorsque `keptCourantId` a été validé plus haut, mais un futur refactor qui romprait ce
+            // lien lèverait ici au lieu de rétrograder silencieusement TOUS les scénarios Courant
+            // (`{ not: null }` matcherait tout).
+            if (!keptCourantId) {
+              throw new Error(
+                'DEMOTE_EXTRA_COURANTS appliqué sans scénario Courant désigné — invariant rompu',
+              );
+            }
+            // Règle A — rien n'est effacé : seul `status` change. Séances, votes et dates des
+            // scénarios rétrogradés restent intacts, et un scénario A_VENIR peut parfaitement porter
+            // une séance datée (seul PASSE fige, cf. `addSeance`/`createSeancePoll`).
+            await tx.scenario.updateMany({
+              where: {
+                partieId: id,
+                status: 'COURANT',
+                id: { not: keptCourantId },
+              },
+              data: { status: 'A_VENIR' },
+            });
+            break;
+          }
+
+          default: {
+            const exhaustive: never = effect;
+            throw new Error(
+              `Effet de conversion non géré : ${String(exhaustive)}`,
+            );
+          }
+        }
+      }
+
+      return written;
+    });
+
+    // AD-14 : la conversion change des statuts de scénario, donc des signaux. Émission tolérante
+    // aux pannes (patron `close()`/`reopen()`, Story 29.6) — un commit réussi ne doit jamais se
+    // transformer en 500 parce qu'une notification a échoué.
+    await this.emitPartieAndMembersSafe(id, partie.mjId);
+
+    const [hasScenario, favorite] = await Promise.all([
+      this.hasScenario(id),
+      this.isFavorite(userId, id),
+    ]);
+    // getOwned() a déjà garanti que l'appelant est le MJ.
     return toPartieDto(updated, 'mj', hasScenario, favorite);
   }
 

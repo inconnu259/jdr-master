@@ -77,6 +77,20 @@ export class PartiesService {
     );
   }
 
+  /** Conversion du type d'une partie (Story 29.14) — route dédiée : `update()` rejette désormais
+   *  tout changement de `kind`, la conversion étant une opération à effets (création de scénario,
+   *  semis de participants, rétrogradation de statuts) et non une édition de champ.
+   *  `courantScenarioId` n'est attendu que quand la matrice signale `requiresCourantChoice`. */
+  convertKind(id: string, kind: PartieKind, courantScenarioId?: string): Promise<PartieDto> {
+    return firstValueFrom(
+      this.http.patch<PartieDto>(
+        `${API}/parties/${id}/kind`,
+        courantScenarioId ? { kind, courantScenarioId } : { kind },
+        { withCredentials: true },
+      ),
+    );
+  }
+
   remove(id: string): Promise<void> {
     return firstValueFrom(
       this.http.delete<void>(`${API}/parties/${id}`, { withCredentials: true }),
