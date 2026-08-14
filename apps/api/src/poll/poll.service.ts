@@ -123,6 +123,42 @@ export class PollService {
     await this.parties.notifyPartieSignalsChanged(partieId, partie.mjId);
   }
 
+  /** Retire la réponse de l'appelant sur une option (Story 30.1, AD-10) — supprime la ligne
+   *  `PollVote`, jamais une réponse vide : « n'a pas répondu » est déjà représenté par l'absence
+   *  de ligne. `userId` vient uniquement de `@CurrentUser()` (jamais de l'URL/du corps), donc le
+   *  `where` du `deleteMany` ne peut jamais cibler que la réponse de l'appelant — l'isolation
+   *  entre membres est structurelle, pas une vérification ajoutée. `deleteMany` (jamais `delete`
+   *  avec la clé composite) rend le retrait idempotent : rejouer un retrait, ou retirer une
+   *  réponse jamais posée, ne lève jamais (même garantie que `removeFavorite()`). */
+  async withdrawVote(
+    partieId: string,
+    pollId: string,
+    optionId: string,
+    userId: string,
+  ): Promise<void> {
+    const partie = await this.parties.getViewable(partieId, userId);
+    const poll = await this.prisma.sessionPoll.findUnique({
+      where: { id: pollId },
+    });
+    if (!poll || poll.partieId !== partieId || poll.status !== 'OPEN') {
+      throw new BadRequestException('Poll introuvable ou fermé');
+    }
+    const option = await this.prisma.pollOption.findUnique({
+      where: { id: optionId },
+    });
+    if (!option || option.pollId !== pollId) {
+      throw new BadRequestException('Option introuvable dans ce poll');
+    }
+    await this.prisma.pollVote.deleteMany({
+      where: { optionId, userId },
+    });
+    this.realtimeEvents.emit(partieTopic(partieId));
+    // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : un retrait peut faire réapparaître ce
+    // signal pour ce membre — même raisonnement que castVote(), en plus de partieTopic ci-dessus,
+    // jamais en remplacement.
+    await this.parties.notifyPartieSignalsChanged(partieId, partie.mjId);
+  }
+
   async choose(
     partieId: string,
     pollId: string,

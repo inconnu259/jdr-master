@@ -23,6 +23,7 @@ function makePrisma() {
     },
     pollVote: {
       upsert: jest.fn(),
+      deleteMany: jest.fn(),
     },
     pollOption: {
       findUnique: jest.fn(),
@@ -213,6 +214,99 @@ describe('PollService', () => {
       'p1',
       'mj1',
     );
+  });
+
+  describe('withdrawVote() (Story 30.1, AD-10)', () => {
+    beforeEach(() => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        id: 'poll1',
+        partieId: 'p1',
+        status: 'OPEN',
+      });
+      prisma.pollOption.findUnique.mockResolvedValue({
+        id: 'opt1',
+        pollId: 'poll1',
+      });
+      prisma.pollVote.deleteMany.mockResolvedValue({ count: 1 });
+    });
+
+    it("AC1 — supprime la ligne PollVote de l'appelant sur l'option visée (deleteMany, jamais delete)", async () => {
+      await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
+      expect(prisma.pollVote.deleteMany).toHaveBeenCalledWith({
+        where: { optionId: 'opt1', userId: 'u1' },
+      });
+    });
+
+    it('AC3 — deux retraits par deux utilisateurs différents ne ciblent jamais le userId de l’autre', async () => {
+      await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
+      await service.withdrawVote('p1', 'poll1', 'opt1', 'u2');
+      const calls = prisma.pollVote.deleteMany.mock.calls;
+      expect(calls[0][0].where).toEqual({ optionId: 'opt1', userId: 'u1' });
+      expect(calls[1][0].where).toEqual({ optionId: 'opt1', userId: 'u2' });
+    });
+
+    it('AC4 — un poll à plusieurs options : le retrait ne cible que l’option visée', async () => {
+      await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
+      expect(prisma.pollVote.deleteMany).toHaveBeenCalledWith({
+        where: { optionId: 'opt1', userId: 'u1' },
+      });
+      expect(prisma.pollVote.deleteMany).not.toHaveBeenCalledWith({
+        where: { optionId: 'opt2', userId: 'u1' },
+      });
+    });
+
+    it('idempotent — un second retrait consécutif ne lève jamais (deleteMany tolère 0 ligne)', async () => {
+      prisma.pollVote.deleteMany.mockResolvedValue({ count: 0 });
+      await expect(
+        service.withdrawVote('p1', 'poll1', 'opt1', 'u1'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('retrait sans avoir jamais voté (aucune ligne à supprimer) → résout normalement', async () => {
+      prisma.pollVote.deleteMany.mockResolvedValue({ count: 0 });
+      await expect(
+        service.withdrawVote('p1', 'poll1', 'opt1', 'u1'),
+      ).resolves.toBeUndefined();
+    });
+
+    it('sur un poll CLOSED → BadRequestException, aucune suppression', async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        id: 'poll1',
+        partieId: 'p1',
+        status: 'CLOSED',
+      });
+      await expect(
+        service.withdrawVote('p1', 'poll1', 'opt1', 'u1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.pollVote.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("option inexistante ou n'appartenant pas à ce poll → BadRequestException", async () => {
+      prisma.pollOption.findUnique.mockResolvedValue(null);
+      await expect(
+        service.withdrawVote('p1', 'poll1', 'opt-inconnu', 'u1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.pollVote.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('AC5 — n’appelle jamais sessionPoll.update (indépendant de close())', async () => {
+      await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
+      expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+    });
+
+    it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
+      await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
+      await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+        'p1',
+        'mj1',
+      );
+    });
   });
 
   it('choose() par non-MJ → ForbiddenException', async () => {

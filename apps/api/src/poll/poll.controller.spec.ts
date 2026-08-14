@@ -19,6 +19,7 @@ function makePollService() {
   return {
     findOpen: jest.fn(),
     castVote: jest.fn(),
+    withdrawVote: jest.fn(),
     choose: jest.fn(),
     close: jest.fn(),
   };
@@ -96,6 +97,16 @@ describe('PollController', () => {
       optionId: 'opt1',
       answer: 'YES',
     });
+  });
+
+  it('withdrawVote() route vers PollService.withdrawVote() (Story 30.1)', async () => {
+    await controller.withdrawVote('p1', 'poll1', 'opt1', user);
+    expect(poll.withdrawVote).toHaveBeenCalledWith(
+      'p1',
+      'poll1',
+      'opt1',
+      'mj1',
+    );
   });
 
   it('close() route vers PollService.close()', async () => {

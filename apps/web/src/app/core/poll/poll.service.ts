@@ -73,4 +73,14 @@ export class PollService {
       }),
     );
   }
+
+  /** Retire ma réponse sur une option (Story 30.1, AD-10) — supprime la ligne côté serveur,
+   *  jamais une réponse vide. */
+  withdrawVote(partieId: string, pollId: string, optionId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(`${API_BASE}/parties/${partieId}/poll/${pollId}/vote/${optionId}`, {
+        withCredentials: true,
+      }),
+    );
+  }
 }

@@ -44,6 +44,16 @@ export class PollResponseComponent {
   protected readonly failedOptionIds = signal<Set<string>>(new Set());
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
+  /** Options dont le retrait est en cours (Story 30.1) — désactive le bouton concerné, même
+   *  garde anti-double-clic que `coverSaving()` ailleurs dans le projet. */
+  protected readonly withdrawingOptionIds = signal<Set<string>>(new Set());
+  /** Revue de code (Story 30.1) : distinct de `pendingAnswers`, qui contient aussi bien une
+   *  réponse déjà enregistrée côté serveur qu'une sélection locale pas encore confirmée (ou en
+   *  échec). Le bouton de retrait ne doit apparaître QUE pour une réponse réellement persistée
+   *  (AC1 : « j'ai répondu ») — sans cette distinction, cliquer « Retirer » sur une sélection
+   *  jamais envoyée efface silencieusement un choix local sans qu'il y ait quoi que ce soit à
+   *  retirer côté serveur. */
+  protected readonly confirmedOptionIds = signal<Set<string>>(new Set());
 
   readonly SLOT_LABELS = SLOT_LABELS;
   readonly VOTE_OPTIONS: VoteAnswer[] = ['YES', 'NO', 'MAYBE'];
@@ -63,11 +73,16 @@ export class PollResponseComponent {
       if (!userId) return;
       const poll = untracked(() => this.poll());
       const map = new Map<string, VoteAnswer>();
+      const confirmed = new Set<string>();
       for (const opt of poll.options) {
         const myVote = opt.votes.find((v) => v.userId === userId);
-        if (myVote) map.set(opt.id, myVote.answer);
+        if (myVote) {
+          map.set(opt.id, myVote.answer);
+          confirmed.add(opt.id);
+        }
       }
       this.pendingAnswers.set(map);
+      this.confirmedOptionIds.set(confirmed);
     });
   }
 
@@ -98,7 +113,12 @@ export class PollResponseComponent {
     this.error.set(null);
     this.failedOptionIds.set(new Set());
 
-    const entries = [...this.pendingAnswers()];
+    // Revue de code (Story 30.1) : une option dont le retrait est encore en vol est exclue de ce
+    // lot — voter dessus pendant que la suppression serveur n'a pas encore résolu risquerait de
+    // faire arriver les deux requêtes dans le désordre (le retrait pourrait effacer le vote qui
+    // vient juste d'être posé). Les autres options du lot ne sont pas bloquées.
+    const withdrawing = this.withdrawingOptionIds();
+    const entries = [...this.pendingAnswers()].filter(([optionId]) => !withdrawing.has(optionId));
     const results = await Promise.allSettled(
       entries.map(([optionId, answer]) =>
         this.pollSvc.castVote(this.partieId(), this.poll().id, {
@@ -113,6 +133,15 @@ export class PollResponseComponent {
       if (result.status === 'rejected') failed.add(entries[i][0]);
     });
     this.failedOptionIds.set(failed);
+
+    const succeeded = entries.filter(([optionId]) => !failed.has(optionId)).map(([id]) => id);
+    if (succeeded.length > 0) {
+      this.confirmedOptionIds.update((s) => {
+        const next = new Set(s);
+        for (const id of succeeded) next.add(id);
+        return next;
+      });
+    }
 
     // Story 8.8 (revue de code) : mise à jour locale optimiste du poll précis plutôt qu'un refetch
     // via getCurrentPoll() — celui-ci suppose « un seul poll par Partie » (findFirst arbitraire),
@@ -150,5 +179,53 @@ export class PollResponseComponent {
       );
     }
     this.saving.set(false);
+  }
+
+  /** Retrait immédiat (Story 30.1, AD-10) — décision : action immédiate au clic, comme
+   *  `removeFavorite()`/`removeCoverImage()` ailleurs dans le projet, plutôt qu'intégrée au lot
+   *  différé `onConfirm()`. `pendingAnswers` n'a pas d'état « à effacer » représentable sans
+   *  sentinelle, et mélanger POST (vote) et DELETE (retrait) dans le même `Promise.allSettled`
+   *  compliquerait `onConfirm()` sans bénéfice — le retrait est une action indépendante. */
+  protected async withdraw(optionId: string): Promise<void> {
+    if (this.isClosed() || this.saving() || this.withdrawingOptionIds().has(optionId)) return;
+    this.withdrawingOptionIds.update((s) => new Set(s).add(optionId));
+    this.error.set(null);
+    try {
+      await this.pollSvc.withdrawVote(this.partieId(), this.poll().id, optionId);
+    } catch {
+      this.error.set(this.theme.tone()['poll.withdraw_error']);
+      return;
+    } finally {
+      this.withdrawingOptionIds.update((s) => {
+        const next = new Set(s);
+        next.delete(optionId);
+        return next;
+      });
+    }
+
+    const m = new Map(this.pendingAnswers());
+    m.delete(optionId);
+    this.pendingAnswers.set(m);
+    this.confirmedOptionIds.update((s) => {
+      const next = new Set(s);
+      next.delete(optionId);
+      return next;
+    });
+
+    const currentUser = this.authSvc.currentUser();
+    if (currentUser) {
+      const poll = this.poll();
+      const updatedPoll: SessionPollDto = {
+        ...poll,
+        options: poll.options.map((opt) =>
+          opt.id === optionId
+            ? { ...opt, votes: opt.votes.filter((v) => v.userId !== currentUser.id) }
+            : opt,
+        ),
+      };
+      this.responded.emit(updatedPoll);
+    }
+
+    this.snack.open(this.theme.tone()['success.vote_withdrawn'], undefined, { duration: 3000 });
   }
 }

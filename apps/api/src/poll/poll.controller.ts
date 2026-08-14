@@ -57,6 +57,19 @@ export class PollController {
     return this.poll.castVote(partieId, pollId, user.id, dto);
   }
 
+  // Story 30.1 (AD-10) : route distincte de `DELETE :pollId` ci-dessous (close()) — celle-ci
+  // supprime la ligne PollVote de l'appelant, celle-là ferme le poll sans rien supprimer. Ne
+  // jamais fusionner ni réutiliser l'une pour l'autre (AC5).
+  @Delete(':pollId/vote/:optionId')
+  withdrawVote(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @Param('pollId', ParseUUIDPipe) pollId: string,
+    @Param('optionId', ParseUUIDPipe) optionId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.poll.withdrawVote(partieId, pollId, optionId, user.id);
+  }
+
   @Patch(':pollId/choose')
   async choose(
     @Param('id', ParseUUIDPipe) partieId: string,
