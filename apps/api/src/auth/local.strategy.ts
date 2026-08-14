@@ -2,6 +2,7 @@ import { Strategy } from 'passport-local';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { toAuthUser } from '../users/to-auth-user.util';
 
 // Stratégie Passport "local" : identifiant (email OU pseudo) + mot de passe.
 // `usernameField: 'identifier'` indique à passport-local de lire le champ `identifier`
@@ -25,6 +26,7 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
         'Une réinitialisation de mot de passe est requise avant de vous reconnecter.',
       );
     }
-    return user; // attaché à req.user, puis sérialisé en session
+    // attaché à req.user, puis sérialisé en session — forme AuthUser (Story 30.4).
+    return toAuthUser(user);
   }
 }

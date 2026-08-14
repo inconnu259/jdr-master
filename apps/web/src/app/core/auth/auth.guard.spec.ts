@@ -23,6 +23,7 @@ const user: AuthUser = {
   partiesViewMode: 'medium',
   charactersViewMode: 'medium',
   charactersSort: 'partie',
+  defaultCalendarLayers: [],
 };
 
 function run() {

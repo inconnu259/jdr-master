@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { AnnouncementDto, Theme } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { toDto as toAnnouncementDto } from '../announcements/announcements.service';
+import { toAuthUser } from '../users/to-auth-user.util';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 
 @Injectable()
@@ -15,6 +16,7 @@ export class AccountService {
       user = await this.prisma.user.update({
         where: { id: userId },
         data: { displayName },
+        include: { calendarLayers: true },
       });
     } catch (e) {
       // Session référant un compte supprimé entre-temps (cas normalement impossible en usage
@@ -27,8 +29,7 @@ export class AccountService {
       }
       throw e;
     }
-    const { passwordHash, ...safe } = user;
-    return safe;
+    return toAuthUser(user);
   }
 
   /** N'applique jamais le thème (AD-13) — lit/écrit uniquement la colonne. */
@@ -38,6 +39,7 @@ export class AccountService {
       user = await this.prisma.user.update({
         where: { id: userId },
         data: { theme },
+        include: { calendarLayers: true },
       });
     } catch (e) {
       if (
@@ -48,30 +50,53 @@ export class AccountService {
       }
       throw e;
     }
-    const { passwordHash, ...safe } = user;
-    return safe;
+    return toAuthUser(user);
   }
 
   /** Patch partiel (Story 29.8) — seuls les champs fournis sont mis à jour, même route accueillera
-   *  partiesViewMode/charactersSort/charactersViewMode (29.9) sans changer de forme. */
+   *  partiesViewMode/charactersSort/charactersViewMode (29.9) sans changer de forme.
+   *  `defaultCalendarLayers` (Story 30.4) n'est PAS une colonne scalaire : un lot fourni (même
+   *  vide, distinct d'absent) remplace atomiquement les lignes `UserCalendarLayer` existantes et
+   *  pose `calendarLayersSetAt`, dans une transaction unique avec le reste des scalaires. */
   async updatePreferences(userId: string, dto: UpdatePreferencesDto) {
+    const { defaultCalendarLayers, ...scalarDto } = dto;
     let user;
     try {
-      user = await this.prisma.user.update({
-        where: { id: userId },
-        data: { ...dto },
-      });
+      if (defaultCalendarLayers !== undefined) {
+        const uniqueKeys = [...new Set(defaultCalendarLayers)];
+        const [, , updated] = await this.prisma.$transaction([
+          this.prisma.userCalendarLayer.deleteMany({ where: { userId } }),
+          this.prisma.userCalendarLayer.createMany({
+            data: uniqueKeys.map((layerKey) => ({ userId, layerKey })),
+          }),
+          this.prisma.user.update({
+            where: { id: userId },
+            data: { ...scalarDto, calendarLayersSetAt: new Date() },
+            include: { calendarLayers: true },
+          }),
+        ]);
+        user = updated;
+      } else {
+        user = await this.prisma.user.update({
+          where: { id: userId },
+          data: { ...scalarDto },
+          include: { calendarLayers: true },
+        });
+      }
     } catch (e) {
+      // Revue de code : compte supprimé entre l'authentification et cet appel — dans la branche
+      // `defaultCalendarLayers`, `userCalendarLayer.createMany()` peut échouer AVANT `user.update()`
+      // avec une violation de contrainte FK (P2003) plutôt que P2025 ; les deux doivent aboutir au
+      // même 404 propre, jamais un 500 brut.
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2025'
+        (e.code === 'P2025' || e.code === 'P2003')
       ) {
         throw new NotFoundException('Compte introuvable');
       }
       throw e;
     }
-    const { passwordHash, ...safe } = user;
-    return safe;
+    return toAuthUser(user);
   }
 
   /** Idempotent (sémantique PUT) : un favori déjà posé n'est jamais une erreur (P2002 absorbé).

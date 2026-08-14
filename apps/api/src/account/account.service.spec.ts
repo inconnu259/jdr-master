@@ -15,12 +15,22 @@ jest.mock('@master-jdr/game-rules', () => ({
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountService } from './account.service';
 
+// Champs requis par toAuthUser() (Story 30.4) — fusionnés dans chaque mock de retour
+// `prisma.user.update()` qui ne les fournit pas déjà explicitement.
+const AUTH_USER_BASE_FIELDS = {
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  calendarLayersSetAt: null,
+  calendarLayers: [],
+};
+
 function makePrisma() {
   return {
     user: { update: jest.fn() },
+    userCalendarLayer: { deleteMany: jest.fn(), createMany: jest.fn() },
     partieFavorite: { create: jest.fn(), deleteMany: jest.fn() },
     announcement: { findMany: jest.fn() },
     announcementRead: { create: jest.fn() },
+    $transaction: jest.fn(),
   };
 }
 
@@ -46,6 +56,8 @@ describe('AccountService', () => {
         passwordHash: 'HASH',
         role: 'USER',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        calendarLayersSetAt: null,
+        calendarLayers: [],
       });
 
       const result = await service.updateDisplayName('u1', 'Alice au pays');
@@ -53,6 +65,7 @@ describe('AccountService', () => {
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'u1' },
         data: { displayName: 'Alice au pays' },
+        include: { calendarLayers: true },
       });
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ id: 'u1', displayName: 'Alice au pays' });
@@ -67,6 +80,8 @@ describe('AccountService', () => {
         passwordHash: 'HASH2',
         role: 'USER',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        calendarLayersSetAt: null,
+        calendarLayers: [],
       });
 
       const result = await service.updateDisplayName('u2', 'Alice au pays');
@@ -111,6 +126,8 @@ describe('AccountService', () => {
         role: 'USER',
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         theme: 'foret-ancienne',
+        calendarLayersSetAt: null,
+        calendarLayers: [],
       });
 
       const result = await service.updateTheme('u1', 'foret-ancienne');
@@ -118,6 +135,7 @@ describe('AccountService', () => {
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'u1' },
         data: { theme: 'foret-ancienne' },
+        include: { calendarLayers: true },
       });
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ id: 'u1', theme: 'foret-ancienne' });
@@ -161,6 +179,8 @@ describe('AccountService', () => {
         createdAt: new Date('2026-01-01T00:00:00.000Z'),
         partiesSort: 'date',
         hideFinishedParties: false,
+        calendarLayersSetAt: null,
+        calendarLayers: [],
       });
 
       const result = await service.updatePreferences('u1', {
@@ -170,6 +190,7 @@ describe('AccountService', () => {
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'u1' },
         data: { partiesSort: 'date' },
+        include: { calendarLayers: true },
       });
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ partiesSort: 'date' });
@@ -177,6 +198,7 @@ describe('AccountService', () => {
 
     it('ne met à jour que les champs fournis (patch partiel) — hideFinishedParties seul', async () => {
       prisma.user.update.mockResolvedValue({
+        ...AUTH_USER_BASE_FIELDS,
         id: 'u1',
         hideFinishedParties: true,
       });
@@ -186,6 +208,7 @@ describe('AccountService', () => {
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'u1' },
         data: { hideFinishedParties: true },
+        include: { calendarLayers: true },
       });
     });
 
@@ -204,6 +227,7 @@ describe('AccountService', () => {
 
     it('ne met à jour que les champs fournis (patch partiel) — les 3 champs de la Story 29.9 isolément', async () => {
       prisma.user.update.mockResolvedValue({
+        ...AUTH_USER_BASE_FIELDS,
         id: 'u1',
         partiesViewMode: 'compact',
       });
@@ -211,9 +235,11 @@ describe('AccountService', () => {
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'u1' },
         data: { partiesViewMode: 'compact' },
+        include: { calendarLayers: true },
       });
 
       prisma.user.update.mockResolvedValue({
+        ...AUTH_USER_BASE_FIELDS,
         id: 'u1',
         charactersViewMode: 'large',
       });
@@ -221,9 +247,11 @@ describe('AccountService', () => {
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'u1' },
         data: { charactersViewMode: 'large' },
+        include: { calendarLayers: true },
       });
 
       prisma.user.update.mockResolvedValue({
+        ...AUTH_USER_BASE_FIELDS,
         id: 'u1',
         charactersSort: 'niveau',
       });
@@ -231,6 +259,7 @@ describe('AccountService', () => {
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'u1' },
         data: { charactersSort: 'niveau' },
+        include: { calendarLayers: true },
       });
     });
 
@@ -242,13 +271,122 @@ describe('AccountService', () => {
         charactersViewMode: 'large' as const,
         charactersSort: 'niveau' as const,
       };
-      prisma.user.update.mockResolvedValue({ id: 'u1', ...body });
+      prisma.user.update.mockResolvedValue({
+        ...AUTH_USER_BASE_FIELDS,
+        id: 'u1',
+        ...body,
+      });
 
       await service.updatePreferences('u1', body);
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'u1' },
         data: body,
+        include: { calendarLayers: true },
+      });
+    });
+
+    describe('defaultCalendarLayers (Story 30.4, AD-16)', () => {
+      it('lot fourni → remplacement atomique via $transaction (delete puis create) et calendarLayersSetAt posé', async () => {
+        prisma.$transaction.mockResolvedValue([
+          {},
+          {},
+          {
+            ...AUTH_USER_BASE_FIELDS,
+            id: 'u1',
+            calendarLayersSetAt: new Date('2026-02-01T00:00:00.000Z'),
+            calendarLayers: [
+              { id: 'l1', userId: 'u1', layerKey: 'mes-seances' },
+            ],
+          },
+        ]);
+
+        const result = await service.updatePreferences('u1', {
+          defaultCalendarLayers: ['mes-seances'],
+        });
+
+        expect(prisma.userCalendarLayer.deleteMany).toHaveBeenCalledWith({
+          where: { userId: 'u1' },
+        });
+        expect(prisma.userCalendarLayer.createMany).toHaveBeenCalledWith({
+          data: [{ userId: 'u1', layerKey: 'mes-seances' }],
+        });
+        expect(prisma.user.update).toHaveBeenCalledWith({
+          where: { id: 'u1' },
+          data: { calendarLayersSetAt: expect.any(Date) },
+          include: { calendarLayers: true },
+        });
+        expect(result.defaultCalendarLayers).toEqual(['mes-seances']);
+      });
+
+      it('lot vide → aucune ligne créée mais calendarLayersSetAt posé quand même (AC3 — tout éteint, distinct d’absent)', async () => {
+        prisma.$transaction.mockResolvedValue([
+          {},
+          {},
+          {
+            ...AUTH_USER_BASE_FIELDS,
+            id: 'u1',
+            calendarLayersSetAt: new Date('2026-02-01T00:00:00.000Z'),
+            calendarLayers: [],
+          },
+        ]);
+
+        const result = await service.updatePreferences('u1', {
+          defaultCalendarLayers: [],
+        });
+
+        expect(prisma.userCalendarLayer.createMany).toHaveBeenCalledWith({
+          data: [],
+        });
+        expect(result.defaultCalendarLayers).toEqual([]);
+      });
+
+      it('doublons dans le lot → dédupliqués avant écriture (AC9)', async () => {
+        prisma.$transaction.mockResolvedValue([
+          {},
+          {},
+          {
+            ...AUTH_USER_BASE_FIELDS,
+            id: 'u1',
+            calendarLayersSetAt: new Date('2026-02-01T00:00:00.000Z'),
+            calendarLayers: [
+              { id: 'l1', userId: 'u1', layerKey: 'mes-seances' },
+            ],
+          },
+        ]);
+
+        await service.updatePreferences('u1', {
+          defaultCalendarLayers: ['mes-seances', 'mes-seances'],
+        });
+
+        expect(prisma.userCalendarLayer.createMany).toHaveBeenCalledWith({
+          data: [{ userId: 'u1', layerKey: 'mes-seances' }],
+        });
+      });
+
+      it('combiné à un scalaire dans le même patch → les deux appliqués dans la même transaction', async () => {
+        prisma.$transaction.mockResolvedValue([
+          {},
+          {},
+          {
+            ...AUTH_USER_BASE_FIELDS,
+            id: 'u1',
+            partiesSort: 'date',
+            calendarLayersSetAt: new Date('2026-02-01T00:00:00.000Z'),
+            calendarLayers: [],
+          },
+        ]);
+
+        await service.updatePreferences('u1', {
+          partiesSort: 'date',
+          defaultCalendarLayers: [],
+        });
+
+        expect(prisma.user.update).toHaveBeenCalledWith({
+          where: { id: 'u1' },
+          data: { partiesSort: 'date', calendarLayersSetAt: expect.any(Date) },
+          include: { calendarLayers: true },
+        });
       });
     });
   });

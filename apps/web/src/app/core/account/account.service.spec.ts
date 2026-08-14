@@ -40,6 +40,7 @@ describe('AccountService', () => {
       partiesViewMode: 'medium',
       charactersViewMode: 'medium',
       charactersSort: 'partie',
+      defaultCalendarLayers: [],
     };
     req.flush(response);
 
@@ -67,6 +68,7 @@ describe('AccountService', () => {
       partiesViewMode: 'medium',
       charactersViewMode: 'medium',
       charactersSort: 'partie',
+      defaultCalendarLayers: [],
     };
     req.flush(response);
 
@@ -110,6 +112,37 @@ describe('AccountService', () => {
       partiesViewMode: 'medium',
       charactersViewMode: 'medium',
       charactersSort: 'partie',
+      defaultCalendarLayers: [],
+    };
+    req.flush(response);
+
+    await expect(promise).resolves.toEqual(response);
+  });
+
+  it('updatePreferences() transmet defaultCalendarLayers tel quel (Story 30.4, Task 5)', async () => {
+    const promise = service.updatePreferences({
+      defaultCalendarLayers: ['mes-seances', 'votes-en-cours'],
+    });
+
+    const req = http.expectOne(`${API_BASE}/me/preferences`);
+    expect(req.request.body).toEqual({
+      defaultCalendarLayers: ['mes-seances', 'votes-en-cours'],
+    });
+
+    const response: AuthUser = {
+      id: 'u1',
+      email: 'a@b.c',
+      pseudo: 'alice',
+      displayName: 'alice',
+      role: 'USER',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      theme: 'grimoire-emeraude',
+      hideFinishedParties: false,
+      partiesSort: 'urgence',
+      partiesViewMode: 'medium',
+      charactersViewMode: 'medium',
+      charactersSort: 'partie',
+      defaultCalendarLayers: ['mes-seances', 'votes-en-cours'],
     };
     req.flush(response);
 

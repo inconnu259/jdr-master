@@ -24,6 +24,14 @@ function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
     partiesViewMode: 'medium',
     charactersViewMode: 'medium',
     charactersSort: 'partie',
+    defaultCalendarLayers: [
+      'mes-indisponibilites',
+      'mes-disponibilites',
+      'mes-seances',
+      'votes-en-cours',
+      'inscriptions-ouvertes',
+      'disponibilite-groupe',
+    ],
     ...overrides,
   };
 }
@@ -54,6 +62,13 @@ function makeThemeService() {
       'account.email_change_wrong_current': 'Mot de passe actuel incorrect.',
       'account.email_change_taken': 'Cette adresse est déjà utilisée par un autre compte.',
       'account.email_change_error': 'La demande a échoué. Réessayez.',
+      'account.calendar_layers_title': 'Ce que révèle mon calendrier',
+      'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
+      'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
+      'account.calendar_layer.mes-seances': 'Mes séances confirmées',
+      'account.calendar_layer.votes-en-cours': 'Les votes en cours',
+      'account.calendar_layer.inscriptions-ouvertes': 'Les inscriptions ouvertes',
+      'account.calendar_layer.disponibilite-groupe': 'La disponibilité du groupe',
       'nav.logout': 'Fermer le grimoire',
     }),
     // ThemeSelector (intégré à l'écran de compte, Story 28.4) a besoin de ces membres.
@@ -75,6 +90,7 @@ async function createFixture(
     setTheme: vi.fn(),
     changePassword: vi.fn(),
     requestEmailChange: vi.fn(),
+    updatePreferences: vi.fn(),
   },
 ) {
   const currentUserSignal = signal<AuthUser | null>(currentUser);
@@ -484,6 +500,125 @@ describe('Account — changement d’adresse e-mail (crayon d’édition, revue 
     await component.submitEmailChange();
 
     expect(currentUserSignal()).toBe(before);
+  });
+});
+
+describe('Account — jeu de couches du calendrier par défaut (Story 30.4, Task 6)', () => {
+  it('coche une couche → appelle updatePreferences avec le tableau attendu et met à jour currentUser optimistiquement', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn(),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi.fn().mockResolvedValue(undefined),
+    };
+    const { fixture, currentUserSignal } = await createFixture(
+      makeUser({ defaultCalendarLayers: ['mes-seances'] }),
+      accountSvc,
+    );
+    const component = fixture.componentInstance as any;
+
+    component.onLayerToggle('votes-en-cours', true);
+    fixture.detectChanges();
+
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual(['mes-seances', 'votes-en-cours']);
+    expect(accountSvc.updatePreferences).toHaveBeenCalledWith({
+      defaultCalendarLayers: ['mes-seances', 'votes-en-cours'],
+    });
+  });
+
+  it('décoche une couche → retirée du tableau envoyé', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn(),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi.fn().mockResolvedValue(undefined),
+    };
+    const { fixture, currentUserSignal } = await createFixture(
+      makeUser({ defaultCalendarLayers: ['mes-seances', 'votes-en-cours'] }),
+      accountSvc,
+    );
+    const component = fixture.componentInstance as any;
+
+    component.onLayerToggle('mes-seances', false);
+    fixture.detectChanges();
+
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual(['votes-en-cours']);
+    expect(accountSvc.updatePreferences).toHaveBeenCalledWith({
+      defaultCalendarLayers: ['votes-en-cours'],
+    });
+  });
+
+  it('échec réseau → restaure la valeur locale précédente (rollback, même patron que Dashboard.onHideFinishedChange())', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn(),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi.fn().mockRejectedValue(new Error('network')),
+    };
+    const { fixture, currentUserSignal } = await createFixture(
+      makeUser({ defaultCalendarLayers: ['mes-seances'] }),
+      accountSvc,
+    );
+    const component = fixture.componentInstance as any;
+
+    component.onLayerToggle('votes-en-cours', true);
+    fixture.detectChanges();
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual(['mes-seances', 'votes-en-cours']);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual(['mes-seances']);
+  });
+
+  it("revue de code : rollback d'une requête échouée n'écrase pas une bascule plus récente déjà réussie", async () => {
+    let rejectFirst!: (e: unknown) => void;
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn(),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((_, reject) => (rejectFirst = reject)))
+        .mockResolvedValueOnce(undefined),
+    };
+    const { fixture, currentUserSignal } = await createFixture(
+      makeUser({ defaultCalendarLayers: ['mes-seances'] }),
+      accountSvc,
+    );
+    const component = fixture.componentInstance as any;
+
+    component.onLayerToggle('votes-en-cours', true);
+    fixture.detectChanges();
+    component.onLayerToggle('inscriptions-ouvertes', true);
+    fixture.detectChanges();
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual([
+      'mes-seances',
+      'votes-en-cours',
+      'inscriptions-ouvertes',
+    ]);
+
+    rejectFirst(new Error('network'));
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual([
+      'mes-seances',
+      'votes-en-cours',
+      'inscriptions-ouvertes',
+    ]);
+  });
+
+  it('rend une case à cocher par couche, cochée selon defaultCalendarLayers courant', async () => {
+    const { fixture } = await createFixture(makeUser({ defaultCalendarLayers: ['mes-seances'] }));
+    const checkboxes = fixture.nativeElement.querySelectorAll('mat-checkbox');
+    expect(checkboxes.length).toBe(6);
   });
 });
 

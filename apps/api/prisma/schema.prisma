@@ -27,6 +27,7 @@ model User {
   partiesViewMode     String  @default("medium") // AD-1 — une paire PAR LISTE, jamais partagée (Story 29.9)
   charactersViewMode  String  @default("medium") // AD-1 (Story 29.9)
   charactersSort      String  @default("partie") // AD-1 — vocabulaire disjoint de celui des parties (Story 29.9)
+  calendarLayersSetAt DateTime? // AD-16 — null = jamais réglé, le jeu par défaut s'applique (Story 30.4)
 
   mjOfParties               Partie[]                   @relation("PartieMJ")
   memberships               Membership[]
@@ -46,6 +47,7 @@ model User {
   emailChangeRollbackTokens EmailChangeRollbackToken[]
   favorites                 PartieFavorite[]
   announcementReads         AnnouncementRead[]
+  calendarLayers            UserCalendarLayer[]
 }
 
 enum PartieKind {
@@ -96,6 +98,21 @@ model PartieFavorite {
   createdAt DateTime @default(now())
 
   @@unique([userId, partieId])
+}
+
+/// Une couche de calendrier active pour un utilisateur (Story 30.4) — état multi-valué, donc
+/// relationnel (AD-16, application directe d'AD-1 au cas ensemble-de-valeurs) : une ligne par
+/// couche ACTIVE, l'absence de ligne vaut couche éteinte. `layerKey` est une union fermée
+/// déclarée dans `@master-jdr/shared` (`CalendarLayerKey`), validée à l'écriture, jamais une
+/// chaîne libre. `User.calendarLayersSetAt` distingue « jamais réglé » (le défaut s'applique) de
+/// « réglé, y compris à vide ».
+model UserCalendarLayer {
+  id       String @id @default(uuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  layerKey String
+
+  @@unique([userId, layerKey])
 }
 
 enum InvitationStatus {

@@ -6,16 +6,6 @@ import {
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-// AccountController -> update-theme.dto.ts -> import RUNTIME (pas `import type`) de THEMES depuis
-// @master-jdr/shared (ESM, non transformé par ts-jest) — même piège déjà documenté pour
-// GAME_SYSTEMS (realtime.module.spec.ts) et @master-jdr/game-rules (mémoire projet).
-jest.mock('@master-jdr/shared', () => ({
-  THEMES: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
-  PARTIE_SORTS: ['urgence', 'date', 'nom', 'type', 'statut'],
-  LIST_VIEW_MODES: ['large', 'medium', 'compact'],
-  CHARACTER_SORTS: ['niveau', 'partie', 'nom'],
-}));
-
 // AccountController -> AccountService -> toDto() (AnnouncementsService, Story 29.13, AD-17) ->
 // transitivement CharacterService -> @master-jdr/game-rules (ESM, non transformé par ts-jest).
 jest.mock('@master-jdr/game-rules', () => ({

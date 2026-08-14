@@ -6,6 +6,8 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { CALENDAR_LAYER_KEYS, type CalendarLayerKey } from '@master-jdr/shared';
 import { AuthService } from '../../core/auth/auth.service';
 import { AccountService } from '../../core/account/account.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
@@ -23,6 +25,7 @@ const DISPLAY_NAME_MAX_LENGTH = 60;
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
+    MatCheckboxModule,
     ThemeSelector,
     FieldEditPencil,
   ],
@@ -37,6 +40,11 @@ export class Account {
   private readonly contextualNav = inject(ContextualNavService);
 
   protected readonly theme = inject(ThemeToneService);
+
+  // Story 30.4 (AC1, AC4, Task 6) : jeu de couches actives par défaut, préférence de compte
+  // (cross-appareil) — pas les bascules temporaires de la session, qui appartiennent à la Story
+  // 30.6. Aucune bascule construite sur les écrans de calendrier eux-mêmes (encadré n°1 de la story).
+  protected readonly calendarLayerKeys = CALENDAR_LAYER_KEYS;
 
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -104,6 +112,28 @@ export class Account {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  protected isLayerActive(key: CalendarLayerKey): boolean {
+    return this.auth.currentUser()?.defaultCalendarLayers?.includes(key) ?? false;
+  }
+
+  /** Même patron optimiste-avec-rollback que `Dashboard.onHideFinishedChange()` (Story 30.4,
+   *  Task 6) : mise à jour locale avant la requête, restauration en cas d'échec réseau.
+   *  Revue de code : le rollback ne s'applique que si `next` est toujours la valeur affichée —
+   *  sans cette garde, une bascule rapide sur une AUTRE couche avant que cette requête n'échoue
+   *  écraserait silencieusement ce second changement, pourtant bien persisté côté serveur. */
+  protected onLayerToggle(key: CalendarLayerKey, active: boolean): void {
+    const previous = this.auth.currentUser();
+    if (!previous) return;
+    const current = previous.defaultCalendarLayers ?? [];
+    const next = active ? [...current, key] : current.filter((k) => k !== key);
+    this.auth.currentUser.set({ ...previous, defaultCalendarLayers: next });
+    this.account.updatePreferences({ defaultCalendarLayers: next }).catch(() => {
+      if (this.auth.currentUser()?.defaultCalendarLayers === next) {
+        this.auth.currentUser.set(previous);
+      }
+    });
   }
 
   protected startPasswordEdit(): void {

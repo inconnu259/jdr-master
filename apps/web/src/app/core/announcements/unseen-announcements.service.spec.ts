@@ -32,6 +32,7 @@ function makeUser(id: string): AuthUser {
     partiesViewMode: 'medium',
     charactersViewMode: 'medium',
     charactersSort: 'partie',
+    defaultCalendarLayers: [],
   };
 }
 

@@ -76,6 +76,20 @@
   <app-theme-selector />
 
   <div class="readonly-field">
+    <span class="lbl">{{ theme.tone()['account.calendar_layers_title'] }}</span>
+    <div class="calendar-layers">
+      @for (key of calendarLayerKeys; track key) {
+        <mat-checkbox
+          [checked]="isLayerActive(key)"
+          (change)="onLayerToggle(key, $event.checked)"
+        >
+          {{ theme.tone()['account.calendar_layer.' + key] }}
+        </mat-checkbox>
+      }
+    </div>
+  </div>
+
+  <div class="readonly-field">
     <span class="lbl">{{ theme.tone()['account.password_title'] }}</span>
     @if (!editingPassword()) {
       <div class="actions actions--start">

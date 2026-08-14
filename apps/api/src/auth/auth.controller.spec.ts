@@ -3,10 +3,6 @@ import type { Request } from 'express';
 // AuthController -> AuthService -> import RUNTIME (pas `import type`) de THEMES depuis
 // @master-jdr/shared (ESM, non transformé par ts-jest) — même piège déjà documenté pour
 // GAME_SYSTEMS/@master-jdr/game-rules (Story 28.4, revue de code).
-jest.mock('@master-jdr/shared', () => ({
-  THEMES: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
-}));
-
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 

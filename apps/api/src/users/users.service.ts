@@ -10,15 +10,27 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
-  /** Connexion par **email OU pseudo** (au choix de l'utilisateur, cf. Story login). */
+  /** Connexion par **email OU pseudo** (au choix de l'utilisateur, cf. Story login). Seul appelant :
+   *  `AuthService.validateUser()` — inclut `calendarLayers` pour `toAuthUser()` (Story 30.4). */
   findByEmailOrPseudo(identifier: string) {
     return this.prisma.user.findFirst({
       where: { OR: [{ email: identifier }, { pseudo: identifier }] },
+      include: { calendarLayers: true },
     });
   }
 
   findById(id: string) {
     return this.prisma.user.findUnique({ where: { id } });
+  }
+
+  /** Dédiée à `SessionSerializer.deserializeUser()` (`GET /auth/me`, Story 30.4) — `findById()`
+   *  reste sans la relation `calendarLayers` : elle est appelée ailleurs (`character.service.ts`)
+   *  pour des besoins sans rapport, une jointure systématique y serait un coût inutile. */
+  findByIdWithCalendarLayers(id: string) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { calendarLayers: true },
+    });
   }
 
   /**

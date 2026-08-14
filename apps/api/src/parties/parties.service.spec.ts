@@ -1814,7 +1814,7 @@ describe('PartiesService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
     });
 
-    it("une émission qui échoue ne transforme pas un commit réussi en 500 (patron close()/reopen())", async () => {
+    it('une émission qui échoue ne transforme pas un commit réussi en 500 (patron close()/reopen())', async () => {
       prisma.membership.findMany.mockRejectedValue(new Error('boom'));
 
       await expect(

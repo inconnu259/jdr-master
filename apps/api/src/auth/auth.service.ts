@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto';
 import { THEMES } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
+import { toAuthUser } from '../users/to-auth-user.util';
 import { InviteLinksService } from '../invitations/invite-links.service';
 import { EmailService } from '../email/email.service';
 import {
@@ -61,7 +62,12 @@ export class AuthService {
     }
     if (!ok) return null;
 
-    const { passwordHash, ...safe } = user;
+    // `mustResetPassword` doit rester lisible par `LocalStrategy` (garde AC3, Story 28.6), donc
+    // pas de conversion `toAuthUser()` complète ici — mais `passwordHash` n'a lui aucune raison de
+    // survivre au-delà de cette vérification (Story 30.4) : on le retire dès maintenant, la
+    // conversion vers `AuthUser` intervient dans `LocalStrategy`, après la garde.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- extrait pour l'exclure de `safe`
+    const { passwordHash: _passwordHash, ...safe } = user;
     return safe;
   }
 
@@ -87,8 +93,8 @@ export class AuthService {
         });
         const link = await this.inviteLinks.consumeLink(tx, dto.token, user.id);
         joinedPartieId = link.partieId;
-        const { passwordHash: _hash, ...safe } = user;
-        return safe;
+        // Compte tout juste créé : aucune UserCalendarLayer ne peut encore exister (Story 30.4).
+        return toAuthUser({ ...user, calendarLayers: [] });
       });
       // Bug fix : le MJ/les autres membres ne voyaient jamais apparaître le nouveau membre sans
       // recharger — émis après résolution complète de la transaction, jamais dans son callback.

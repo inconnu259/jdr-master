@@ -25,6 +25,7 @@ describe('AuthService (front)', () => {
     partiesViewMode: 'medium',
     charactersViewMode: 'medium',
     charactersSort: 'partie',
+    defaultCalendarLayers: [],
   };
 
   beforeEach(() => {
@@ -126,6 +127,7 @@ describe('AuthService (front) — synchronisation du thème (AC1, AC2, AC4)', ()
     partiesViewMode: 'medium',
     charactersViewMode: 'medium',
     charactersSort: 'partie',
+    defaultCalendarLayers: [],
   };
 
   afterEach(() => {

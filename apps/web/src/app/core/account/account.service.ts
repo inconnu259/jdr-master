@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import type {
   AnnouncementDto,
   AuthUser,
+  CalendarLayerKey,
   CharacterSort,
   ListViewMode,
   PartieSort,
@@ -59,6 +60,7 @@ export class AccountService {
     partiesViewMode?: ListViewMode;
     charactersViewMode?: ListViewMode;
     charactersSort?: CharacterSort;
+    defaultCalendarLayers?: CalendarLayerKey[];
   }): Promise<AuthUser> {
     return firstValueFrom(
       this.http.patch<AuthUser>(`${API_BASE}/me/preferences`, prefs, {

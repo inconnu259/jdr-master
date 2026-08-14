@@ -30,6 +30,25 @@ export const CHARACTER_SORTS = ['niveau', 'partie', 'nom'] as const;
 
 export type CharacterSort = (typeof CHARACTER_SORTS)[number];
 
+/** Couches d'affichage du calendrier (FR-46, AD-16, Story 30.4) — union fermée, validée côté
+ *  serveur via `@IsIn(CALENDAR_LAYER_KEYS, { each: true })`, jamais une chaîne libre. La couche
+ *  `disponibilite-groupe` n'a de sens que dans le calendrier d'une partie — c'est la **lecture**
+ *  qui l'ignore hors contexte (Story 30.6), pas le stockage/le défaut qui la refuse (AD-16). */
+export const CALENDAR_LAYER_KEYS = [
+  'mes-indisponibilites',
+  'mes-disponibilites',
+  'mes-seances',
+  'votes-en-cours',
+  'inscriptions-ouvertes',
+  'disponibilite-groupe',
+] as const;
+
+export type CalendarLayerKey = (typeof CALENDAR_LAYER_KEYS)[number];
+
+/** Jeu de couches actives par défaut pour un compte qui n'a jamais réglé cette préférence
+ *  (`calendarLayersSetAt === null`, AD-16) — toutes actives, y compris `disponibilite-groupe`. */
+export const DEFAULT_CALENDAR_LAYER_KEYS: CalendarLayerKey[] = [...CALENDAR_LAYER_KEYS];
+
 /** Utilisateur authentifié (renvoyé par /auth/login, /auth/me). Jamais le hash. */
 export interface AuthUser {
   id: string;
@@ -53,6 +72,12 @@ export interface AuthUser {
   charactersViewMode: ListViewMode;
   /** Critère de tri mémorisé de la vue « mes personnages » (FR-45, AD-1, Story 29.9). */
   charactersSort: CharacterSort;
+  /** Couches actives du calendrier (FR-46, AD-16, Story 30.4) — toujours résolu côté serveur,
+   *  jamais `undefined` : si le compte n'a jamais réglé cette préférence, porte
+   *  `DEFAULT_CALENDAR_LAYER_KEYS` ; si réglé (y compris à vide), porte exactement ce qui a été
+   *  enregistré. Contrairement à `theme`, aucun sentinel `null` n'est exposé au client — la
+   *  distinction « jamais réglé » / « tout éteint » est résolue en interne (AD-16). */
+  defaultCalendarLayers: CalendarLayerKey[];
 }
 
 /** Corps de la requête PATCH /me/display-name. */

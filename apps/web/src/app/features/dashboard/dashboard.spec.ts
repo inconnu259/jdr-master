@@ -88,6 +88,7 @@ function makeAuthUser(overrides: Partial<AuthUser> = {}): AuthUser {
     partiesViewMode: 'medium',
     charactersViewMode: 'medium',
     charactersSort: 'partie',
+    defaultCalendarLayers: [],
     ...overrides,
   };
 }

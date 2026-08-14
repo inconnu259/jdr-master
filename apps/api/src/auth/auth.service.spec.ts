@@ -4,10 +4,6 @@ import * as argon2 from 'argon2';
 // AuthService -> import RUNTIME (pas `import type`) de THEMES depuis @master-jdr/shared (ESM, non
 // transformé par ts-jest) — même piège déjà documenté pour GAME_SYSTEMS/@master-jdr/game-rules et
 // pour update-theme.dto.ts (Story 28.4, revue de code).
-jest.mock('@master-jdr/shared', () => ({
-  THEMES: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
-}));
-
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -59,9 +55,19 @@ describe('AuthService', () => {
     id: 'u1',
     email: 'a@b.c',
     pseudo: 'alice',
+    displayName: 'alice',
     passwordHash: 'HASH',
     role: 'USER' as const,
     createdAt: new Date(),
+    theme: null,
+    mustResetPassword: false,
+    partiesSort: 'urgence',
+    hideFinishedParties: false,
+    partiesViewMode: 'medium',
+    charactersViewMode: 'medium',
+    charactersSort: 'partie',
+    calendarLayersSetAt: null,
+    calendarLayers: [],
   };
 
   beforeEach(() => {
@@ -187,6 +193,18 @@ describe('AuthService', () => {
       expect(inviteLinks.consumeLink).toHaveBeenCalledWith(tx, 'tok', 'u1');
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ pseudo: 'alice' });
+    });
+
+    it('AC8 (Story 30.4) : defaultCalendarLayers jamais undefined — compte tout juste créé, jeu par défaut appliqué', async () => {
+      tx.user.create.mockResolvedValue(fakeUser);
+      const result = await service.register({
+        email: 'a@b.c',
+        pseudo: 'alice',
+        password: 'password123',
+        token: 'tok',
+      });
+      expect(result.defaultCalendarLayers).toBeDefined();
+      expect(result.defaultCalendarLayers.length).toBeGreaterThan(0);
     });
 
     it('bug fix : émet un événement temps réel scopé sur la Partie rejointe, après la transaction', async () => {

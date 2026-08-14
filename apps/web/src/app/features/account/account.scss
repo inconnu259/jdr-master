@@ -48,6 +48,10 @@ mat-form-field {
 .saved {
   color: var(--mat-sys-primary, #2e7d32);
 }
+.calendar-layers {
+  display: flex;
+  flex-direction: column;
+}
 
 // Même patron visuel que FieldEditPencil (character-sheet) — dupliqué ici car ce bouton pilote un
 // mini-formulaire à 2 champs (mot de passe + e-mail), hors du contrat à valeur unique du composant
