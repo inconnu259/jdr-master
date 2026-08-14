@@ -29,26 +29,38 @@
       <mat-spinner diameter="40" />
     </div>
   } @else {
-    <div class="calendar-grid">
+    <div
+      class="calendar-grid"
+      tabindex="-1"
+      (pointermove)="onGridPointerMove($event)"
+      (pointerup)="onGridPointerUp($event)"
+      (pointercancel)="onGridPointerUp($event)"
+      (contextmenu)="isGestureActive() && $event.preventDefault()"
+      (keydown.escape)="onSelectionCancelled()"
+    >
       @for (week of weeks(); track $index) {
         @for (cell of week; track cell.date.getTime()) {
           <div
             class="day-cell"
+            [attr.data-cell-date]="cell.date.getTime()"
             [class.other-month]="!cell.isCurrentMonth"
             [class.today]="cell.isToday"
             [class.past]="cell.isPast"
+            [class.selected]="isDaySelected(cell)"
             [attr.aria-hidden]="!cell.isCurrentMonth ? 'true' : null"
             [attr.aria-label]="cell.isCurrentMonth ? (cell.date.getDate() + (cell.isToday ? ' (aujourd\'hui)' : '')) : null"
             [attr.aria-disabled]="cell.isCurrentMonth && cell.isPast ? 'true' : null"
             [attr.role]="!cell.isCurrentMonth ? 'presentation' : (cell.isPast ? 'presentation' : 'button')"
             [attr.tabindex]="!cell.isCurrentMonth ? null : (cell.isPast ? null : 0)"
             [attr.aria-describedby]="cell.isCurrentMonth && !cell.isPast ? 'month-cell-instructions' : null"
-            (click)="onCellClick(cell.date, 'FULL_DAY')"
-            (keyup.enter)="onCellClick(cell.date, 'FULL_DAY')"
+            (pointerdown)="onCellPointerDown($event, cell)"
+            (keyup.enter)="onCellEnterKey(cell)"
             (keyup.space)="onCellClick(cell.date, 'FULL_DAY')"
             (keyup.1)="onCellClick(cell.date, 'MORNING')"
             (keyup.2)="onCellClick(cell.date, 'AFTERNOON')"
             (keyup.3)="onCellClick(cell.date, 'EVENING')"
+            (keydown.shift.arrowright)="$event.preventDefault(); onShiftArrow(cell, 1)"
+            (keydown.shift.arrowleft)="$event.preventDefault(); onShiftArrow(cell, -1)"
           >
             <span class="day-number" aria-hidden="true">{{ cell.date.getDate() }}</span>
             @if (heatmapByDate().get(dateKey(cell.date)); as gs) {
@@ -59,8 +71,13 @@
               Équivalent clavier : touches 1/2/3 sur la cellule parente (déjà focusable, cf. keyup.1/2/3 et
               aria-describedby ci-dessus) plutôt qu'un tabindex par segment, qui créerait 3 arrêts de
               tabulation par cellule (126 sur la grille 6×7) et dégraderait la navigation clavier.
+              pointerdown : ne bulle pas vers la case (sinon un tap sur un segment rejouerait aussi
+              un tap FULL_DAY) mais démarre quand même le même geste, marqué fromSegment, pour
+              qu'un appui maintenu + glissement parti d'un segment puisse quand même armer une
+              sélection de journée (Story 30.3 — sinon la sélection ne s'arme jamais si le doigt
+              touche la bande des segments, qui occupe une bonne partie de la case sur mobile).
             -->
-            <div class="segments">
+            <div class="segments" (pointerdown)="$event.stopPropagation(); onSegmentPointerDown($event, cell)">
               <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (touche 1) -->
               <span
                 class="segment"
@@ -93,5 +110,14 @@
         }
       }
     </div>
+    @if (selectedDays().length > 0) {
+      <app-selection-bar
+        [count]="selectedDays().length"
+        [rangeLabel]="selectionRangeLabel()"
+        (markAvailable)="onSelectionCommit('AVAILABLE')"
+        (markUnavailable)="onSelectionCommit('UNAVAILABLE')"
+        (cancelled)="onSelectionCancelled()"
+      />
+    }
   }
 </div>

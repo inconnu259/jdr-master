@@ -1,7 +1,8 @@
 import '@angular/compiler';
-import { describe, expect, it } from 'vitest';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AvailabilityDeclarationDto } from '@master-jdr/shared';
-import { buildWeek, getWeekStart } from './calendar-week-view';
+import { CalendarWeekView, buildWeek, getWeekStart } from './calendar-week-view';
 
 describe('getWeekStart', () => {
   it('returns Monday for a Wednesday', () => {
@@ -140,5 +141,214 @@ describe('buildWeek - findWeekDecl avec endDate (AC1)', () => {
     const cells = buildWeek(weekStart, [decl], null);
     const wednesday = cells[2]; // index 2 = mercredi
     expect(wednesday.afternoon.declLabel).not.toBeNull();
+  });
+});
+
+// ─── Sélection par glissement (Story 30.3) ────────────────────────────────────
+
+describe('CalendarWeekView — sélection par glissement', () => {
+  let fixture: ComponentFixture<CalendarWeekView>;
+  let el: HTMLElement;
+
+  // Semaine future pour éviter que les cellules soient marquées isPast.
+  const futureStart = new Date();
+  futureStart.setDate(futureStart.getDate() + 14);
+
+  function create(): void {
+    fixture = TestBed.createComponent(CalendarWeekView);
+    fixture.componentRef.setInput('startDate', futureStart);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+
+  // Les 7 cellules d'une ligne partagent le même sélecteur data-cell-slot ; on les récupère toutes
+  // puis on indexe par jour (ordre du DOM == ordre des jours de buildWeek).
+  function slotCells(slot: 'MORNING' | 'AFTERNOON' | 'EVENING'): HTMLElement[] {
+    return Array.from(el.querySelectorAll(`.slot-cell[data-cell-slot="${slot}"]`));
+  }
+
+  function pointerEvent(type: string, x: number, y: number, pointerType = 'mouse'): PointerEvent {
+    return new PointerEvent(type, { clientX: x, clientY: y, pointerType, bubbles: true });
+  }
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ imports: [CalendarWeekView] });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('tap sans déplacement (pointerdown + pointerup sur la même cellule) ouvre toujours le panneau (AC3, AC9)', () => {
+    create();
+    const spy = vi.fn();
+    fixture.componentInstance.slotSelected.subscribe(spy);
+    const cell = slotCells('EVENING')[0];
+    cell.dispatchEvent(pointerEvent('pointerdown', 10, 10));
+    const grid = el.querySelector('.week-grid') as HTMLElement;
+    grid.dispatchEvent(pointerEvent('pointerup', 10, 10));
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('glissement souris sur plusieurs cellules → sélectionne la plage, aucun tap émis', () => {
+    create();
+    const tapSpy = vi.fn();
+    fixture.componentInstance.slotSelected.subscribe(tapSpy);
+    const cells = slotCells('EVENING');
+    const grid = el.querySelector('.week-grid') as HTMLElement;
+
+    cells[1].dispatchEvent(pointerEvent('pointerdown', 0, 0));
+    // Stub elementFromPoint : jsdom ne calcule pas de géométrie réelle.
+    const target3 = cells[3];
+    document.elementFromPoint = vi.fn().mockReturnValue(target3);
+    grid.dispatchEvent(pointerEvent('pointermove', 50, 0));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(3);
+    expect(tapSpy).not.toHaveBeenCalled();
+
+    grid.dispatchEvent(pointerEvent('pointerup', 50, 0));
+    // La sélection reste affichée après relâchement (barre visible) tant qu'aucune action n'est prise.
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(3);
+  });
+
+  it('glissement tactile avant expiration du délai d’appui maintenu → aucune sélection (AC4)', () => {
+    vi.useFakeTimers();
+    create();
+    const cells = slotCells('MORNING');
+    const grid = el.querySelector('.week-grid') as HTMLElement;
+
+    cells[0].dispatchEvent(pointerEvent('pointerdown', 0, 0, 'touch'));
+    // Déplacement significatif avant l'expiration du délai → traité comme un défilement natif.
+    grid.dispatchEvent(pointerEvent('pointermove', 0, 100, 'touch'));
+    vi.advanceTimersByTime(1000);
+
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(0);
+  });
+
+  it('appui maintenu tactile jusqu’à expiration du délai → arme la sélection (AC4)', () => {
+    vi.useFakeTimers();
+    create();
+    const cells = slotCells('MORNING');
+
+    cells[0].dispatchEvent(pointerEvent('pointerdown', 0, 0, 'touch'));
+    vi.advanceTimersByTime(500);
+
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(1);
+  });
+
+  it('Échap efface la sélection sans émettre de lot', () => {
+    create();
+    const batchSpy = vi.fn();
+    fixture.componentInstance.batchDeclareRequested.subscribe(batchSpy);
+    const cells = slotCells('EVENING');
+    const grid = el.querySelector('.week-grid') as HTMLElement;
+
+    cells[1].dispatchEvent(pointerEvent('pointerdown', 0, 0));
+    document.elementFromPoint = vi.fn().mockReturnValue(cells[3]);
+    grid.dispatchEvent(pointerEvent('pointermove', 50, 0));
+    fixture.detectChanges();
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(3);
+
+    grid.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(0);
+    expect(batchSpy).not.toHaveBeenCalled();
+  });
+
+  it('validation via la barre de sélection émet batchDeclareRequested avec le kind attendu', () => {
+    create();
+    const batchSpy = vi.fn();
+    fixture.componentInstance.batchDeclareRequested.subscribe(batchSpy);
+    const cells = slotCells('EVENING');
+    const grid = el.querySelector('.week-grid') as HTMLElement;
+
+    cells[1].dispatchEvent(pointerEvent('pointerdown', 0, 0));
+    document.elementFromPoint = vi.fn().mockReturnValue(cells[2]);
+    grid.dispatchEvent(pointerEvent('pointermove', 50, 0));
+    fixture.detectChanges();
+    grid.dispatchEvent(pointerEvent('pointerup', 50, 0));
+    fixture.detectChanges();
+
+    const unavailableBtn = Array.from(el.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Indisponible',
+    )!;
+    unavailableBtn.click();
+
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    const payload = batchSpy.mock.calls[0][0];
+    expect(payload.kind).toBe('UNAVAILABLE');
+    expect(payload.cells).toHaveLength(2);
+    // La sélection est effacée dès la validation (avant même la réponse de l'API, gérée par le parent).
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(0);
+  });
+
+  it('Maj+flèche droite étend la sélection depuis une cellule (AC5)', () => {
+    create();
+    const cells = slotCells('EVENING');
+    const shiftRight = new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      shiftKey: true,
+      bubbles: true,
+    });
+
+    cells[1].dispatchEvent(shiftRight);
+    fixture.detectChanges();
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(2);
+
+    cells[1].dispatchEvent(shiftRight);
+    fixture.detectChanges();
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(3);
+  });
+
+  it('Maj+flèche gauche étend la sélection vers la gauche (AC5)', () => {
+    create();
+    const cells = slotCells('MORNING');
+    const shiftLeft = new KeyboardEvent('keydown', {
+      key: 'ArrowLeft',
+      shiftKey: true,
+      bubbles: true,
+    });
+
+    cells[3].dispatchEvent(shiftLeft);
+    cells[3].dispatchEvent(shiftLeft);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(3);
+  });
+
+  it('Entrée valide la sélection clavier avec Indisponible par défaut (AC5)', () => {
+    create();
+    const batchSpy = vi.fn();
+    fixture.componentInstance.batchDeclareRequested.subscribe(batchSpy);
+    const cells = slotCells('AFTERNOON');
+    const shiftRight = new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      shiftKey: true,
+      bubbles: true,
+    });
+
+    cells[0].dispatchEvent(shiftRight);
+    cells[0].dispatchEvent(shiftRight);
+    fixture.detectChanges();
+    cells[0].dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    const payload = batchSpy.mock.calls[0][0];
+    expect(payload.kind).toBe('UNAVAILABLE');
+    expect(payload.cells).toHaveLength(3);
+  });
+
+  it('Entrée sans sélection active ouvre le panneau normalement (tap inchangé)', () => {
+    create();
+    const spy = vi.fn();
+    fixture.componentInstance.slotSelected.subscribe(spy);
+    const cell = slotCells('EVENING')[0];
+
+    cell.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

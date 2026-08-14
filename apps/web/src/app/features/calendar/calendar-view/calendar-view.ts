@@ -18,6 +18,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivatedRoute, Router } from '@angular/router';
 import type {
   AggregatedSlotDto,
+  AvailKind,
   AvailabilityDeclarationDto,
   AvailableSlotDto,
   CreateAvailabilityDto,
@@ -27,7 +28,10 @@ import type {
   SeanceDto,
   SessionPollDto,
 } from '@master-jdr/shared';
-import { AvailabilityService } from '../../../core/availability/availability.service';
+import {
+  AvailabilityService,
+  ConflictError,
+} from '../../../core/availability/availability.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
@@ -37,6 +41,7 @@ import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.se
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
 import { CalendarWeekView } from '../calendar-week-view/calendar-week-view';
 import { ConstraintPanel } from '../constraint-panel/constraint-panel';
+import { type SelectedCell, buildBatchItems } from '../selection.utils';
 import { AvailableSlotsPanel } from '../available-slots/available-slots';
 import { PollCreationComponent } from '../../poll/poll-creation/poll-creation';
 import { PollStatusPanel } from '../../poll/poll-status/poll-status';
@@ -289,6 +294,39 @@ export class CalendarView implements OnInit {
     this.selectedExisting.set(this.findMatchingDeclaration(event.date, event.slot));
     this.pendingDto.set(null);
     this.panelOpen.set(true);
+  }
+
+  // Story 30.3 : la sélection est déjà effacée côté vue enfant au moment de l'émission (succès ET
+  // échec traités identiquement côté affichage) — un seul appel à createDeclarationBatch(), jamais
+  // de boucle (AC1, AC7). La route groupée n'offre pas overwrite/keep (AD-21) : sur 409, on informe
+  // et on s'arrête là, aucun dialogue de résolution.
+  protected async onBatchDeclareRequested(event: {
+    cells: SelectedCell[];
+    kind: AvailKind;
+  }): Promise<void> {
+    const items = buildBatchItems(event.cells, event.kind);
+    try {
+      await this.availabilitySvc.createDeclarationBatch(items);
+      await this.loadDeclarations();
+      await this.refreshMjPanels();
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        // AC7 : l'erreur nomme le(s) créneau(x) fautif(s) — un conflit interne au lot en nomme
+        // toujours deux (Story 30.2), ne pas se limiter au premier.
+        const labels = err.conflicts.map((c) => c.startDate ?? c.dayOfWeek).join(', ');
+        this.snack.open(
+          labels
+            ? `Conflit détecté sur le lot (${labels}). Rien n'a été enregistré.`
+            : "Conflit détecté dans le lot. Rien n'a été enregistré.",
+          undefined,
+          { duration: 5000 },
+        );
+        return;
+      }
+      this.snack.open('Impossible d’enregistrer ces disponibilités. Réessayez.', undefined, {
+        duration: 5000,
+      });
+    }
   }
 
   protected onViewChange(value: string): void {

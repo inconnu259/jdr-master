@@ -3,6 +3,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type {
+  AvailKind,
   AvailabilityDeclarationDto,
   CreateAvailabilityDto,
   DaySlot,
@@ -10,6 +11,14 @@ import type {
 } from '@master-jdr/shared';
 import { computeDisplayStatus } from '../../../core/availability/compute-display-status';
 import { SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
+import { SelectionBar } from '../selection-bar/selection-bar';
+import {
+  LONG_PRESS_MS,
+  MOVE_THRESHOLD_PX,
+  type GesturePointerType,
+  type SelectedCell,
+  weekRangeCells,
+} from '../selection.utils';
 
 interface SlotData {
   status: SlotStatus;
@@ -140,10 +149,20 @@ export function buildWeek(
   });
 }
 
+interface PointerDownInfo {
+  cell: WeekCell;
+  slot: DaySlot;
+  pointerId: number;
+  pointerType: GesturePointerType;
+  startX: number;
+  startY: number;
+  longPressTimer: ReturnType<typeof setTimeout> | null;
+}
+
 @Component({
   selector: 'app-calendar-week-view',
   standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule],
+  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, SelectionBar],
   templateUrl: './calendar-week-view.html',
   styleUrl: './calendar-week-view.scss',
 })
@@ -155,6 +174,9 @@ export class CalendarWeekView {
 
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();
+  /** Story 30.3 : lot construit par un glissement (souris/tactile) ou une validation clavier —
+   *  CalendarView construit les items et appelle createDeclarationBatch(), jamais cette vue. */
+  readonly batchDeclareRequested = output<{ cells: SelectedCell[]; kind: AvailKind }>();
 
   protected readonly displayWeekStart = signal<Date>(getWeekStart(new Date()));
 
@@ -198,6 +220,33 @@ export class CalendarWeekView {
     { key: 'afternoon', label: 'Après-midi', slot: 'AFTERNOON' },
     { key: 'evening', label: 'Soirée', slot: 'EVENING' },
   ];
+
+  // ─── Sélection par glissement (Story 30.3) ─────────────────────────────────
+  private pointerDown: PointerDownInfo | null = null;
+  protected readonly dragArmed = signal(false);
+  protected readonly selectionAnchor = signal<SelectedCell | null>(null);
+  protected readonly selectionCurrent = signal<SelectedCell | null>(null);
+
+  protected readonly selectedCells = computed<SelectedCell[]>(() => {
+    const anchor = this.selectionAnchor();
+    const current = this.selectionCurrent();
+    if (!anchor || !current) return [];
+    return weekRangeCells(anchor, current, this.cells());
+  });
+
+  private readonly selectedKeys = computed(() => {
+    return new Set(this.selectedCells().map((c) => `${c.date.getTime()}|${c.slot}`));
+  });
+
+  protected readonly selectionRangeLabel = computed<string | null>(() => {
+    const cells = this.selectedCells();
+    if (cells.length === 0) return null;
+    const fmt = (d: Date) =>
+      new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric' }).format(d);
+    const slotLabel = this.SLOT_ROWS.find((r) => r.slot === cells[0].slot)?.label ?? '';
+    if (cells.length === 1) return `${fmt(cells[0].date)}, ${slotLabel}`;
+    return `${fmt(cells[0].date)} → ${fmt(cells[cells.length - 1].date)}, ${slotLabel}`;
+  });
 
   constructor() {
     effect(() => {
@@ -252,5 +301,142 @@ export class CalendarWeekView {
       month: 'long',
     }).format(cell.date);
     return `${slotName}, ${fullDate} : ${labels[status]}`;
+  }
+
+  protected isCellSelected(cell: WeekCell, slot: DaySlot): boolean {
+    return this.selectedKeys().has(`${cell.date.getTime()}|${slot}`);
+  }
+
+  /** true pendant qu'un pointeur est actuellement enfoncé sur la grille — utilisé pour ne bloquer
+   *  le menu contextuel natif (clic droit) que pendant un geste, pas en permanence. */
+  protected isGestureActive(): boolean {
+    return this.pointerDown !== null;
+  }
+
+  // ─── Geste souris/tactile ───────────────────────────────────────────────
+  protected onCellPointerDown(event: PointerEvent, cell: WeekCell, slot: DaySlot): void {
+    if (cell.isPast) return;
+    // Seul le bouton principal peut amorcer un geste (clic droit/milieu = menu contextuel/autre).
+    if (event.button !== 0) return;
+    // Un geste est déjà en cours pour un autre pointeur (deuxième doigt, paume) : on l'ignore
+    // plutôt que de remplacer silencieusement l'état du premier.
+    if (this.pointerDown && this.pointerDown.pointerId !== event.pointerId) return;
+    this.clearPointerState();
+    this.dragArmed.set(false);
+    this.pointerDown = {
+      cell,
+      slot,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType as GesturePointerType,
+      startX: event.clientX,
+      startY: event.clientY,
+      longPressTimer:
+        event.pointerType === 'touch'
+          ? setTimeout(() => this.armDrag(cell, slot), LONG_PRESS_MS)
+          : null,
+    };
+  }
+
+  protected onGridPointerMove(event: PointerEvent): void {
+    const down = this.pointerDown;
+    if (!down || down.pointerId !== event.pointerId) return;
+    const dx = event.clientX - down.startX;
+    const dy = event.clientY - down.startY;
+    const moved = Math.hypot(dx, dy) > MOVE_THRESHOLD_PX;
+
+    if (!this.dragArmed()) {
+      if (down.pointerType === 'touch') {
+        // Appui maintenu requis (AC4) : un déplacement avant l'expiration du délai laisse le
+        // défilement natif se produire, on n'appelle pas preventDefault().
+        if (moved) {
+          this.cancelLongPressTimer();
+          this.pointerDown = null;
+        }
+        return;
+      }
+      if (!moved) return;
+      this.armDrag(down.cell, down.slot);
+    }
+
+    event.preventDefault();
+    const target = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>('[data-cell-date]');
+    if (!target) return;
+    const dateMs = Number(target.dataset['cellDate']);
+    const cellMatch = this.cells().find((c) => c.date.getTime() === dateMs);
+    if (!cellMatch || cellMatch.isPast) return;
+    const anchor = this.selectionAnchor();
+    if (!anchor) return;
+    this.selectionCurrent.set({ date: cellMatch.date, slot: anchor.slot });
+  }
+
+  protected onGridPointerUp(event: PointerEvent): void {
+    const down = this.pointerDown;
+    if (!down || down.pointerId !== event.pointerId) return;
+    const wasArmed = this.dragArmed();
+    this.cancelLongPressTimer();
+    this.pointerDown = null;
+    if (!wasArmed) {
+      // Relâché sans déplacement ni appui maintenu écoulé → tap normal (AC3, AC9).
+      if (down) this.onCellClick(down.cell.date, down.slot);
+      return;
+    }
+    this.dragArmed.set(false);
+    // La sélection reste affichée (anchor/current conservés) — la barre reste visible
+    // jusqu'à validation ou annulation par l'utilisateur.
+  }
+
+  private armDrag(cell: WeekCell, slot: DaySlot): void {
+    this.dragArmed.set(true);
+    this.selectionAnchor.set({ date: cell.date, slot });
+    this.selectionCurrent.set({ date: cell.date, slot });
+  }
+
+  private cancelLongPressTimer(): void {
+    if (this.pointerDown?.longPressTimer) clearTimeout(this.pointerDown.longPressTimer);
+  }
+
+  private clearPointerState(): void {
+    this.cancelLongPressTimer();
+    this.pointerDown = null;
+  }
+
+  // ─── Clavier ─────────────────────────────────────────────────────────────
+  protected onCellEnterKey(cell: WeekCell, slot: DaySlot): void {
+    if (this.selectionAnchor()) {
+      // Aucune touche unique ne peut exprimer disponible/indisponible : Indisponible par défaut
+      // (Story 30.3, Task 4 — cohérent avec le cas d'usage nommé par la story : « une semaine
+      // d'absence »).
+      this.onSelectionCommit('UNAVAILABLE');
+      return;
+    }
+    this.onCellClick(cell.date, slot);
+  }
+
+  protected onShiftArrow(cell: WeekCell, slot: DaySlot, direction: -1 | 1): void {
+    if (cell.isPast) return;
+    const anchor = this.selectionAnchor() ?? { date: cell.date, slot };
+    if (!this.selectionAnchor()) this.selectionAnchor.set(anchor);
+    const cellsArr = this.cells();
+    const currentSel = this.selectionCurrent() ?? anchor;
+    const idx = cellsArr.findIndex((c) => c.date.getTime() === currentSel.date.getTime());
+    const nextIdx = Math.min(Math.max(idx + direction, 0), cellsArr.length - 1);
+    const nextCell = cellsArr[nextIdx];
+    if (nextCell.isPast) return;
+    this.selectionCurrent.set({ date: nextCell.date, slot: anchor.slot });
+  }
+
+  protected onSelectionCancelled(): void {
+    this.selectionAnchor.set(null);
+    this.selectionCurrent.set(null);
+  }
+
+  protected onSelectionCommit(kind: AvailKind): void {
+    const cells = this.selectedCells();
+    if (cells.length === 0) return;
+    this.batchDeclareRequested.emit({ cells, kind });
+    this.selectionAnchor.set(null);
+    this.selectionCurrent.set(null);
   }
 }

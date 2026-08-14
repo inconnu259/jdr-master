@@ -1,0 +1,16 @@
+<div class="selection-bar" role="toolbar" aria-label="Actions sur la sélection">
+  <b class="selection-bar__count" aria-live="polite">
+    {{ count() }} {{ count() > 1 ? 'créneaux' : 'créneau' }}
+  </b>
+  @if (rangeLabel()) {
+    <span class="selection-bar__range">{{ rangeLabel() }}</span>
+  }
+  <span class="selection-bar__spacer"></span>
+  <button mat-stroked-button color="warn" type="button" (click)="markUnavailable.emit()">
+    Indisponible
+  </button>
+  <button mat-stroked-button color="primary" type="button" (click)="markAvailable.emit()">
+    Disponible
+  </button>
+  <button mat-button type="button" (click)="cancelled.emit()">Annuler</button>
+</div>

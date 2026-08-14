@@ -1,0 +1,24 @@
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--mat-sys-primary);
+  border-radius: 10px;
+  background: var(--mat-sys-surface-container);
+}
+
+.selection-bar__count {
+  font-size: 0.9rem;
+}
+
+.selection-bar__range {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.selection-bar__spacer {
+  flex: 1;
+}

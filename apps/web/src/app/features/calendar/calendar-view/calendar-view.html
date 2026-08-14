@@ -27,6 +27,7 @@
         [heatmap]="heatmap()"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onMonthDateChange($event)"
+        (batchDeclareRequested)="onBatchDeclareRequested($event)"
       />
     } @else {
       <app-calendar-week-view
@@ -36,6 +37,7 @@
         [startDate]="sharedDate()"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onWeekDateChange($event)"
+        (batchDeclareRequested)="onBatchDeclareRequested($event)"
       />
     }
 

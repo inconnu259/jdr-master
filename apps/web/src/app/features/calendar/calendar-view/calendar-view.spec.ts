@@ -8,7 +8,10 @@ import { Location } from '@angular/common';
 import { vi } from 'vitest';
 import { CalendarView } from './calendar-view';
 import { ActivatedRoute } from '@angular/router';
-import { AvailabilityService } from '../../../core/availability/availability.service';
+import {
+  AvailabilityService,
+  ConflictError,
+} from '../../../core/availability/availability.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
@@ -34,7 +37,11 @@ function makeActivatedRoute(partieId?: string, queryParams: Record<string, strin
 }
 
 function makeAvailabilityService() {
-  return { getMyDeclarations: vi.fn().mockResolvedValue([]), changed: signal(0) };
+  return {
+    getMyDeclarations: vi.fn().mockResolvedValue([]),
+    createDeclarationBatch: vi.fn().mockResolvedValue({ created: [] }),
+    changed: signal(0),
+  };
 }
 
 function makePollService() {
@@ -759,6 +766,7 @@ describe('CalendarView — connexion temps réel (Story 19.1, AC3)', () => {
   it('garde firstRun : un AvailabilityService.changed() déjà non-nul au montage ne déclenche PAS de refetch redondant', async () => {
     const availabilitySvc = {
       getMyDeclarations: vi.fn().mockResolvedValue([]),
+      createDeclarationBatch: vi.fn().mockResolvedValue({ created: [] }),
       changed: signal(1),
     };
     const { pollSvc } = await createCalendarView({
@@ -777,5 +785,96 @@ describe('CalendarView — bandeau contextuel (Story 29.4)', () => {
 
     const contextualNav = TestBed.inject(ContextualNavService);
     expect(contextualNav.title()).toBe(TONE_MAP['grimoire-emeraude']['nav.calendar']);
+  });
+});
+
+// ─── Câblage de la sélection par glissement (Story 30.3) ─────────────────────
+
+describe('CalendarView — onBatchDeclareRequested (Story 30.3)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const CELLS = [
+    { date: new Date('2026-08-10'), slot: 'EVENING' as const },
+    { date: new Date('2026-08-11'), slot: 'EVENING' as const },
+  ];
+
+  it('un seul appel à createDeclarationBatch, jamais une boucle (AC1, AC7)', async () => {
+    const { fixture, availabilitySvc } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
+
+    expect(availabilitySvc.createDeclarationBatch).toHaveBeenCalledTimes(1);
+    const items = availabilitySvc.createDeclarationBatch.mock.calls[0][0];
+    expect(items).toHaveLength(2);
+    expect(items.every((i: { recurKind: string }) => i.recurKind === 'PUNCTUAL')).toBe(true);
+  });
+
+  it('succès → recharge les déclarations', async () => {
+    const { fixture, availabilitySvc } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+    availabilitySvc.getMyDeclarations.mockClear();
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'AVAILABLE' });
+
+    expect(availabilitySvc.getMyDeclarations).toHaveBeenCalledTimes(1);
+  });
+
+  it('409 (ConflictError) → aucune exception non gérée, message affiché, aucune régression du flux', async () => {
+    const availabilitySvc = makeAvailabilityService();
+    availabilitySvc.createDeclarationBatch = vi.fn().mockRejectedValue(
+      new ConflictError([
+        {
+          id: '',
+          kind: 'AVAILABLE',
+          slot: 'EVENING',
+          recurKind: 'PUNCTUAL',
+          startDate: '2026-08-11',
+          endDate: '2026-08-11',
+          dayOfWeek: null,
+        },
+      ]),
+    );
+    const { fixture, snack } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
+
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.mock.calls[0][0]).toContain('2026-08-11');
+  });
+
+  it('409 avec plusieurs conflits (conflit interne au lot) → le message nomme les deux créneaux (AC7)', async () => {
+    const availabilitySvc = makeAvailabilityService();
+    availabilitySvc.createDeclarationBatch = vi.fn().mockRejectedValue(
+      new ConflictError([
+        {
+          id: 'batch-item-0',
+          kind: 'AVAILABLE',
+          slot: 'EVENING',
+          recurKind: 'PUNCTUAL',
+          startDate: '2026-08-10',
+          endDate: '2026-08-10',
+          dayOfWeek: null,
+        },
+        {
+          id: 'batch-item-1',
+          kind: 'UNAVAILABLE',
+          slot: 'EVENING',
+          recurKind: 'PUNCTUAL',
+          startDate: '2026-08-11',
+          endDate: '2026-08-11',
+          dayOfWeek: null,
+        },
+      ]),
+    );
+    const { fixture, snack } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
+
+    expect(snack.open).toHaveBeenCalledTimes(1);
+    expect(snack.open.mock.calls[0][0]).toContain('2026-08-10');
+    expect(snack.open.mock.calls[0][0]).toContain('2026-08-11');
   });
 });

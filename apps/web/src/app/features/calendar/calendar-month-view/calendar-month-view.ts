@@ -4,12 +4,21 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type {
   AggregatedSlotDto,
+  AvailKind,
   AvailabilityDeclarationDto,
   CreateAvailabilityDto,
   DaySlot,
   SlotStatus,
 } from '@master-jdr/shared';
 import { computeDisplayStatus } from '../../../core/availability/compute-display-status';
+import { SelectionBar } from '../selection-bar/selection-bar';
+import {
+  LONG_PRESS_MS,
+  MOVE_THRESHOLD_PX,
+  type GesturePointerType,
+  type SelectedCell,
+  monthRangeDays,
+} from '../selection.utils';
 
 export interface SlotSelectedEvent {
   date: Date;
@@ -116,10 +125,24 @@ function entryGuildStatus(e: AggregatedSlotDto): GuildStatus {
   return 'UNKNOWN';
 }
 
+interface PointerDownInfo {
+  cell: DayCell;
+  pointerId: number;
+  pointerType: GesturePointerType;
+  startX: number;
+  startY: number;
+  longPressTimer: ReturnType<typeof setTimeout> | null;
+  /** true si le pointerdown est parti d'un segment matin/après-midi/soir plutôt que du fond de
+   *  la case — dans ce cas, un relâchement rapide ne doit pas rejouer un tap FULL_DAY (le
+   *  segment gère déjà son propre tap via son (click)), seul un armement (glissement) doit être
+   *  possible depuis là. */
+  fromSegment: boolean;
+}
+
 @Component({
   selector: 'app-calendar-month-view',
   standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule],
+  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, SelectionBar],
   templateUrl: './calendar-month-view.html',
   styleUrl: './calendar-month-view.scss',
 })
@@ -132,6 +155,9 @@ export class CalendarMonthView {
 
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();
+  /** Story 30.3 : lot construit par un glissement (souris/tactile) ou une validation clavier —
+   *  CalendarView construit les items et appelle createDeclarationBatch(), jamais cette vue. */
+  readonly batchDeclareRequested = output<{ cells: SelectedCell[]; kind: AvailKind }>();
 
   protected readonly displayDate = signal(new Date());
 
@@ -147,6 +173,8 @@ export class CalendarMonthView {
   protected readonly weeks = computed(() =>
     buildMonth(this.displayDate(), this.declarations(), this.pendingDecl()),
   );
+
+  private readonly allCells = computed(() => this.weeks().flat());
 
   protected readonly heatmapByDate = computed((): Map<string, GuildStatus> => {
     const map = new Map<string, GuildStatus>();
@@ -172,6 +200,32 @@ export class CalendarMonthView {
     const d = this.displayDate();
     const now = new Date();
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  });
+
+  // ─── Sélection par glissement (Story 30.3) ─────────────────────────────────
+  private pointerDown: PointerDownInfo | null = null;
+  protected readonly dragArmed = signal(false);
+  protected readonly selectionAnchor = signal<Date | null>(null);
+  protected readonly selectionCurrent = signal<Date | null>(null);
+
+  protected readonly selectedDays = computed<Date[]>(() => {
+    const anchor = this.selectionAnchor();
+    const current = this.selectionCurrent();
+    if (!anchor || !current) return [];
+    return monthRangeDays(anchor, current);
+  });
+
+  private readonly selectedKeys = computed(
+    () => new Set(this.selectedDays().map((d) => d.getTime())),
+  );
+
+  protected readonly selectionRangeLabel = computed<string | null>(() => {
+    const days = this.selectedDays();
+    if (days.length === 0) return null;
+    const fmt = (d: Date) =>
+      new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' }).format(d);
+    if (days.length === 1) return fmt(days[0]);
+    return `${fmt(days[0])} → ${fmt(days[days.length - 1])}`;
   });
 
   constructor() {
@@ -231,5 +285,147 @@ export class CalendarMonthView {
       UNKNOWN: 'inconnu',
     };
     return `${slotName} : ${labels[status]}`;
+  }
+
+  protected isDaySelected(cell: DayCell): boolean {
+    return this.selectedKeys().has(cell.date.getTime());
+  }
+
+  /** true pendant qu'un pointeur est actuellement enfoncé sur la grille — utilisé pour ne bloquer
+   *  le menu contextuel natif (clic droit) que pendant un geste, pas en permanence. */
+  protected isGestureActive(): boolean {
+    return this.pointerDown !== null;
+  }
+
+  // ─── Geste souris/tactile ───────────────────────────────────────────────
+  protected onCellPointerDown(event: PointerEvent, cell: DayCell, fromSegment = false): void {
+    if (cell.isPast || !cell.isCurrentMonth) return;
+    // Seul le bouton principal peut amorcer un geste (clic droit/milieu = menu contextuel/autre).
+    if (event.button !== 0) return;
+    // Un geste est déjà en cours pour un autre pointeur (deuxième doigt, paume) : on l'ignore
+    // plutôt que de remplacer silencieusement l'état du premier.
+    if (this.pointerDown && this.pointerDown.pointerId !== event.pointerId) return;
+    this.clearPointerState();
+    this.dragArmed.set(false);
+    this.pointerDown = {
+      cell,
+      pointerId: event.pointerId,
+      pointerType: event.pointerType as GesturePointerType,
+      startX: event.clientX,
+      startY: event.clientY,
+      longPressTimer:
+        event.pointerType === 'touch' ? setTimeout(() => this.armDrag(cell), LONG_PRESS_MS) : null,
+      fromSegment,
+    };
+  }
+
+  /** Un pointerdown parti d'un segment ne doit pas bulle vers la case (sinon un tap sur le
+   *  segment rejouerait aussi un tap FULL_DAY, cf. test de non-régression) — on démarre donc
+   *  manuellement le même état de geste que sur la case elle-même, marqué fromSegment. */
+  protected onSegmentPointerDown(event: PointerEvent, cell: DayCell): void {
+    this.onCellPointerDown(event, cell, true);
+  }
+
+  protected onGridPointerMove(event: PointerEvent): void {
+    const down = this.pointerDown;
+    if (!down || down.pointerId !== event.pointerId) return;
+    const dx = event.clientX - down.startX;
+    const dy = event.clientY - down.startY;
+    const moved = Math.hypot(dx, dy) > MOVE_THRESHOLD_PX;
+
+    if (!this.dragArmed()) {
+      if (down.pointerType === 'touch') {
+        // Appui maintenu requis (AC4) : un déplacement avant l'expiration du délai laisse le
+        // défilement natif se produire, on n'appelle pas preventDefault().
+        if (moved) {
+          this.cancelLongPressTimer();
+          this.pointerDown = null;
+        }
+        return;
+      }
+      if (!moved) return;
+      this.armDrag(down.cell);
+    }
+
+    event.preventDefault();
+    const target = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>('[data-cell-date]');
+    if (!target) return;
+    const dateMs = Number(target.dataset['cellDate']);
+    const cellMatch = this.allCells().find((c) => c.date.getTime() === dateMs);
+    if (!cellMatch || cellMatch.isPast || !cellMatch.isCurrentMonth) return;
+    this.selectionCurrent.set(cellMatch.date);
+  }
+
+  protected onGridPointerUp(event: PointerEvent): void {
+    const down = this.pointerDown;
+    if (!down || down.pointerId !== event.pointerId) return;
+    const wasArmed = this.dragArmed();
+    this.cancelLongPressTimer();
+    this.pointerDown = null;
+    if (!wasArmed) {
+      // Relâché sans déplacement ni appui maintenu écoulé → tap normal (AC3, AC9).
+      // Un pointerdown parti d'un segment ne rejoue pas de tap FULL_DAY : le segment gère déjà
+      // son propre tap via son (click), qui n'est pas passé par ce mécanisme.
+      if (down && !down.fromSegment) this.onCellClick(down.cell.date, 'FULL_DAY');
+      return;
+    }
+    this.dragArmed.set(false);
+    // La sélection reste affichée (anchor/current conservés) — la barre reste visible
+    // jusqu'à validation ou annulation par l'utilisateur.
+  }
+
+  private armDrag(cell: DayCell): void {
+    this.dragArmed.set(true);
+    this.selectionAnchor.set(cell.date);
+    this.selectionCurrent.set(cell.date);
+  }
+
+  private cancelLongPressTimer(): void {
+    if (this.pointerDown?.longPressTimer) clearTimeout(this.pointerDown.longPressTimer);
+  }
+
+  private clearPointerState(): void {
+    this.cancelLongPressTimer();
+    this.pointerDown = null;
+  }
+
+  // ─── Clavier ─────────────────────────────────────────────────────────────
+  protected onCellEnterKey(cell: DayCell): void {
+    if (this.selectionAnchor()) {
+      // Aucune touche unique ne peut exprimer disponible/indisponible : Indisponible par défaut
+      // (Story 30.3, Task 4 — cohérent avec le cas d'usage nommé par la story : « une semaine
+      // d'absence »).
+      this.onSelectionCommit('UNAVAILABLE');
+      return;
+    }
+    this.onCellClick(cell.date, 'FULL_DAY');
+  }
+
+  protected onShiftArrow(cell: DayCell, direction: -1 | 1): void {
+    if (cell.isPast) return;
+    const anchor = this.selectionAnchor() ?? cell.date;
+    if (!this.selectionAnchor()) this.selectionAnchor.set(anchor);
+    const currentSel = this.selectionCurrent() ?? anchor;
+    const next = new Date(currentSel);
+    next.setDate(next.getDate() + direction);
+    const nextCell = this.allCells().find((c) => c.date.getTime() === next.getTime());
+    if (!nextCell || nextCell.isPast || !nextCell.isCurrentMonth) return;
+    this.selectionCurrent.set(next);
+  }
+
+  protected onSelectionCancelled(): void {
+    this.selectionAnchor.set(null);
+    this.selectionCurrent.set(null);
+  }
+
+  protected onSelectionCommit(kind: AvailKind): void {
+    const days = this.selectedDays();
+    if (days.length === 0) return;
+    const cells: SelectedCell[] = days.map((date) => ({ date, slot: 'FULL_DAY' }));
+    this.batchDeclareRequested.emit({ cells, kind });
+    this.selectionAnchor.set(null);
+    this.selectionCurrent.set(null);
   }
 }

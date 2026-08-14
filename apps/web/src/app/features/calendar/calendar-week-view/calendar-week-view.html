@@ -16,7 +16,16 @@
   @if (loading()) {
     <div class="loading-overlay"><mat-spinner diameter="40" /></div>
   } @else {
-    <div class="week-grid" role="grid">
+    <div
+      class="week-grid"
+      role="grid"
+      tabindex="-1"
+      (pointermove)="onGridPointerMove($event)"
+      (pointerup)="onGridPointerUp($event)"
+      (pointercancel)="onGridPointerUp($event)"
+      (contextmenu)="isGestureActive() && $event.preventDefault()"
+      (keydown.escape)="onSelectionCancelled()"
+    >
       <div class="grid-cell header-corner"></div>
       @for (cell of cells(); track cell.date.getTime()) {
         <div class="grid-cell col-header" [class.today]="cell.isToday">
@@ -29,18 +38,23 @@
         @for (cell of cells(); track cell.date.getTime()) {
           <div
             class="grid-cell slot-cell"
+            [attr.data-cell-date]="cell.date.getTime()"
+            [attr.data-cell-slot]="row.slot"
             [attr.data-status]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status)"
             [class.past]="cell.isPast"
             [class.today-col]="cell.isToday"
             [class.preview]="getSlotData(cell, row.key).preview !== null"
             [class.unknown]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status) === 'UNKNOWN'"
+            [class.selected]="isCellSelected(cell, row.slot)"
             [attr.role]="cell.isPast ? 'presentation' : 'button'"
             [attr.tabindex]="cell.isPast ? null : 0"
             [attr.aria-label]="cell.isPast ? null : cellAriaLabel(cell, getSlotData(cell, row.key), row.label)"
-            (click)="onCellClick(cell.date, row.slot)"
-            (keyup.enter)="onCellClick(cell.date, row.slot)"
+            (pointerdown)="onCellPointerDown($event, cell, row.slot)"
+            (keyup.enter)="onCellEnterKey(cell, row.slot)"
             (keydown.space)="$event.preventDefault()"
             (keyup.space)="onCellClick(cell.date, row.slot)"
+            (keydown.shift.arrowright)="$event.preventDefault(); onShiftArrow(cell, row.slot, 1)"
+            (keydown.shift.arrowleft)="$event.preventDefault(); onShiftArrow(cell, row.slot, -1)"
           >
             @if (getSlotData(cell, row.key).declLabel) {
               <span class="decl-label">{{ getSlotData(cell, row.key).declLabel }}</span>
@@ -49,5 +63,14 @@
         }
       }
     </div>
+    @if (selectedCells().length > 0) {
+      <app-selection-bar
+        [count]="selectedCells().length"
+        [rangeLabel]="selectionRangeLabel()"
+        (markAvailable)="onSelectionCommit('AVAILABLE')"
+        (markUnavailable)="onSelectionCommit('UNAVAILABLE')"
+        (cancelled)="onSelectionCancelled()"
+      />
+    }
   }
 </div>

@@ -63,6 +63,11 @@
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 2px;
+  /* Story 30.3 : empêche la sélection de texte native (desktop) et le menu contextuel/callout
+     natif (appui long mobile) de voler le geste de glissement avant que le JS ne le détecte. */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* ── Cellule jour ──────────────────────────────────────────────────────────── */
@@ -78,6 +83,12 @@
   overflow: hidden;
   cursor: pointer;
   transition: background 0.1s;
+  /* Story 30.3 : contrairement à la vue semaine, le glissement peut être vertical (enjambement
+     de semaine) autant qu'horizontal — aucun axe ne peut être laissé au défilement natif sans
+     risquer d'annuler l'appui maintenu tactile en cours. Compromis assumé : un défilement de page
+     amorcé pile sur une case du mois ne fonctionne plus nativement (fonctionne toujours depuis les
+     en-têtes/la navigation, en dehors de la grille). */
+  touch-action: none;
 
   &:hover {
     background: var(--mat-sys-surface-container-high);
@@ -96,6 +107,11 @@
     opacity: 0.3;
     cursor: default;
     pointer-events: none;
+  }
+
+  &.selected {
+    background: color-mix(in srgb, var(--mat-sys-primary) 35%, transparent);
+    box-shadow: inset 0 0 0 2px var(--mat-sys-primary);
   }
 }
 
