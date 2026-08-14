@@ -621,6 +621,154 @@ describe('AvailabilityService.create — conflict detection', () => {
   });
 });
 
+// ─── createBatch — écriture groupée (Story 30.2) ─────────────────────────────
+
+describe('AvailabilityService.createBatch', () => {
+  let service: AvailabilityService;
+  let mockCreate: jest.Mock;
+  let mockFindMany: jest.Mock;
+  let mockPrisma: {
+    $transaction: jest.Mock;
+    availabilityDeclaration: { findMany: jest.Mock };
+  };
+  let mockMembershipFindMany: jest.Mock;
+  let mockPartieFindMany: jest.Mock;
+
+  const item = (
+    overrides: Partial<{
+      kind: 'UNAVAILABLE' | 'AVAILABLE';
+      recurKind: 'RECURRING' | 'PUNCTUAL';
+      dayOfWeek: number | null;
+      slot: DaySlot;
+      startDate: string | null;
+      endDate: string | null;
+      expiresAt: string;
+    }> = {},
+  ) => ({
+    kind: 'AVAILABLE' as const,
+    recurKind: 'RECURRING' as const,
+    dayOfWeek: 3,
+    slot: 'EVENING' as DaySlot,
+    expiresAt: FUTURE.toISOString(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    const mocks = makeMockPrisma();
+    service = new AvailabilityService(
+      mocks.mockPrisma as unknown as PrismaService,
+      makeMockRealtimeEvents(),
+    );
+    mockCreate = mocks.mockCreate;
+    mockFindMany = mocks.mockFindMany;
+    mockPrisma = mocks.mockPrisma;
+    mockMembershipFindMany = mocks.mockMembershipFindMany;
+    mockPartieFindMany = mocks.mockPartieFindMany;
+    mockFindMany.mockResolvedValue([]);
+  });
+
+  it('lot valide de N créneaux → N créations, 1 seule $transaction, 1 seul emitForUser', async () => {
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }]);
+    mockPartieFindMany.mockResolvedValue([]);
+
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING' }),
+      item({ dayOfWeek: 2, slot: 'AFTERNOON' }),
+      item({ dayOfWeek: 3, slot: 'EVENING' }),
+    ];
+    const result = await service.createBatch(USER_ID, items);
+
+    expect(result.created).toHaveLength(3);
+    expect(mockCreate).toHaveBeenCalledTimes(3);
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC6 : un lot de N créneaux ne provoque qu’une seule lecture findMany', async () => {
+    const items = [
+      item({ dayOfWeek: 1 }),
+      item({ dayOfWeek: 2 }),
+      item({ dayOfWeek: 3 }),
+      item({ dayOfWeek: 4 }),
+    ];
+    await service.createBatch(USER_ID, items);
+    expect(mockFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('conflit externe sur un seul créneau → 409, aucune création, message nommant le créneau', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        kind: 'UNAVAILABLE',
+        recurKind: 'RECURRING',
+        dayOfWeek: 3,
+        slot: 'EVENING',
+      }),
+    ]);
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING' }),
+      item({ dayOfWeek: 3, slot: 'EVENING' }), // conflit ici, index 1
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [expect.objectContaining({ batchIndex: 1 })],
+      },
+    });
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('conflit interne au lot (FULL_DAY vs MORNING, kinds opposés, même jour) → 409, aucune création', async () => {
+    const items = [
+      item({ dayOfWeek: 3, slot: 'FULL_DAY', kind: 'UNAVAILABLE' }),
+      item({ dayOfWeek: 3, slot: 'MORNING', kind: 'AVAILABLE' }),
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [
+          expect.objectContaining({ batchIndex: 0 }),
+          expect.objectContaining({ batchIndex: 1 }),
+        ],
+      },
+    });
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('expiresAt passé sur un élément → rejet du lot entier', async () => {
+    const items = [
+      item(),
+      item({ expiresAt: new Date('2020-01-01').toISOString() }),
+    ];
+    await expect(service.createBatch(USER_ID, items)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('lot vide (appel direct hors DTO) → rejeté par une garde défensive du service', async () => {
+    await expect(service.createBatch(USER_ID, [])).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockFindMany).not.toHaveBeenCalled();
+  });
+
+  it('conflit interne au lot : les deux entrées ont des id synthétiques distincts', async () => {
+    const items = [
+      item({ dayOfWeek: 3, slot: 'FULL_DAY', kind: 'UNAVAILABLE' }),
+      item({ dayOfWeek: 3, slot: 'MORNING', kind: 'AVAILABLE' }),
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [
+          expect.objectContaining({ id: 'batch-item-0' }),
+          expect.objectContaining({ id: 'batch-item-1' }),
+        ],
+      },
+    });
+  });
+});
+
 // ─── Émission temps réel (bug fix : calendrier MJ jamais notifié) ────────────
 
 describe('AvailabilityService — émission temps réel', () => {
@@ -684,6 +832,25 @@ describe('AvailabilityService — émission temps réel', () => {
   it('create() sans aucune Partie associée → aucune émission', async () => {
     await service.create(USER_ID, baseDto);
     expect(mockEmit).not.toHaveBeenCalled();
+  });
+
+  it('createBatch() n’émet partieTopic qu’une seule fois, quelle que soit la taille du lot (AC7)', async () => {
+    mockMembershipFindMany.mockResolvedValue([
+      { partieId: 'p1' },
+      { partieId: 'p2' },
+    ]);
+    mockPartieFindMany.mockResolvedValue([]);
+
+    const items = [
+      { ...baseDto, dayOfWeek: 1, slot: 'MORNING' as DaySlot },
+      { ...baseDto, dayOfWeek: 2, slot: 'AFTERNOON' as DaySlot },
+      { ...baseDto, dayOfWeek: 3, slot: 'EVENING' as DaySlot },
+    ];
+    await service.createBatch(USER_ID, items);
+
+    expect(mockEmit).toHaveBeenCalledTimes(2);
+    expect(mockEmit).toHaveBeenCalledWith('partie:p1');
+    expect(mockEmit).toHaveBeenCalledWith('partie:p2');
   });
 
   it('update() émet partieTopic après la résolution complète de l’écriture', async () => {

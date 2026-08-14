@@ -6,6 +6,8 @@ import type {
   AvailabilityDeclarationDto,
   AvailKind,
   ConflictInfo,
+  CreateAvailabilityBatchItem,
+  CreateAvailabilityBatchResult,
   CreateAvailabilityDto,
   CreateAvailabilityResult,
   DaySlot,
@@ -67,6 +69,30 @@ export class AvailabilityService {
     return firstValueFrom(
       this.http
         .post<CreateAvailabilityResult>(`${API}/availability`, dto, { withCredentials: true })
+        .pipe(
+          catchError((err: HttpErrorResponse) => {
+            if (err.status === 409 && Array.isArray(err.error?.conflicts)) {
+              return throwError(() => new ConflictError(err.error.conflicts as ConflictInfo[]));
+            }
+            return throwError(() => err);
+          }),
+        ),
+    );
+  }
+
+  // Un seul POST portant tout le lot — jamais une boucle sur createDeclaration() (AC1).
+  // Ne remplace pas createDeclaration() : la route groupée n'offre pas overwrite/keep,
+  // ConstraintPanel continue de passer par la route unitaire (AC8, Story 30.2).
+  createDeclarationBatch(
+    items: CreateAvailabilityBatchItem[],
+  ): Promise<CreateAvailabilityBatchResult> {
+    return firstValueFrom(
+      this.http
+        .post<CreateAvailabilityBatchResult>(
+          `${API}/availability/batch`,
+          { items },
+          { withCredentials: true },
+        )
         .pipe(
           catchError((err: HttpErrorResponse) => {
             if (err.status === 409 && Array.isArray(err.error?.conflicts)) {

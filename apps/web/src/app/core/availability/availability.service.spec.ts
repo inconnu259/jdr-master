@@ -74,6 +74,66 @@ describe('AvailabilityService (front)', () => {
     await expect(p).resolves.toBeNull();
   });
 
+  it('createDeclarationBatch(items) → un seul POST /availability/batch avec withCredentials', async () => {
+    const items = [
+      {
+        kind: 'UNAVAILABLE' as const,
+        recurKind: 'RECURRING' as const,
+        dayOfWeek: 1,
+        slot: 'MORNING' as const,
+        expiresAt: '2027-01-01T00:00:00.000Z',
+      },
+      {
+        kind: 'UNAVAILABLE' as const,
+        recurKind: 'RECURRING' as const,
+        dayOfWeek: 2,
+        slot: 'AFTERNOON' as const,
+        expiresAt: '2027-01-01T00:00:00.000Z',
+      },
+    ];
+    const p = service.createDeclarationBatch(items);
+    const req = http.expectOne(`${API_BASE}/availability/batch`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.withCredentials).toBe(true);
+    expect(req.request.body).toEqual({ items });
+    req.flush({ created: [DECLARATION, DECLARATION] });
+    await expect(p).resolves.toEqual({ created: [DECLARATION, DECLARATION] });
+  });
+
+  it('createDeclarationBatch(items) → 409 devient une ConflictError portant les conflits du lot', async () => {
+    const items = [
+      {
+        kind: 'UNAVAILABLE' as const,
+        recurKind: 'RECURRING' as const,
+        dayOfWeek: 1,
+        slot: 'MORNING' as const,
+        expiresAt: '2027-01-01T00:00:00.000Z',
+      },
+    ];
+    const p = service.createDeclarationBatch(items);
+    const req = http.expectOne(`${API_BASE}/availability/batch`);
+    req.flush(
+      {
+        conflicts: [
+          {
+            id: '',
+            kind: 'AVAILABLE',
+            slot: 'MORNING',
+            recurKind: 'RECURRING',
+            startDate: null,
+            endDate: null,
+            dayOfWeek: 1,
+            batchIndex: 0,
+          },
+        ],
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    await expect(p).rejects.toMatchObject({
+      conflicts: [expect.objectContaining({ batchIndex: 0 })],
+    });
+  });
+
   it('splitOccurrence(id, body) → POST /availability/:id/split avec withCredentials', async () => {
     const p = service.splitOccurrence('decl1', { occurrence: '2026-07-01', action: 'delete' });
     const req = http.expectOne(`${API_BASE}/availability/decl1/split`);

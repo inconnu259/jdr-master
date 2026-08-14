@@ -8,7 +8,9 @@ import {
 import type {
   AvailKind,
   ConflictInfo,
+  CreateAvailabilityBatchItem,
   DaySlot,
+  RecurKind,
   SlotStatus,
 } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -155,11 +157,157 @@ export class AvailabilityService {
       },
     });
 
-    return active.filter((existing) => {
-      if (existing.kind === dto.kind) return false;
-      if (!this.slotsConflict(existing.slot, dto.slot)) return false;
-      return this.dateRangesConflict(existing, dto);
+    return active.filter((existing) => this.conflictPredicate(existing, dto));
+  }
+
+  /** Prédicat pur de conflit (kind opposé + slot + dates chevauchants), extrait pour
+   *  être appliqué en mémoire à un jeu de déclarations lu une seule fois (Story 30.2,
+   *  route groupée) sans dupliquer la logique de findConflictsForCreate (AC6). */
+  private conflictPredicate(
+    existing: {
+      kind: AvailKind;
+      slot: DaySlot;
+      recurKind: RecurKind;
+      dayOfWeek: number | null;
+      startDate: Date | null;
+      endDate: Date | null;
+      expiresAt: Date;
+    },
+    dto: CreateAvailabilityDto,
+  ): boolean {
+    if (existing.kind === dto.kind) return false;
+    if (!this.slotsConflict(existing.slot, dto.slot)) return false;
+    return this.dateRangesConflict(existing, dto);
+  }
+
+  /** Représente un élément de lot sous la forme Date attendue par conflictPredicate/
+   *  dateRangesConflict côté "existing" (les items de lot portent des dates en string). */
+  private batchItemAsExisting(item: CreateAvailabilityBatchItem) {
+    return {
+      kind: item.kind,
+      slot: item.slot,
+      recurKind: item.recurKind,
+      dayOfWeek: item.dayOfWeek ?? null,
+      startDate: item.startDate
+        ? new Date(item.startDate + 'T00:00:00Z')
+        : null,
+      endDate: item.endDate ? new Date(item.endDate + 'T00:00:00Z') : null,
+      expiresAt: new Date(item.expiresAt),
+    };
+  }
+
+  /** Un item de lot n'a pas d'id persisté ; on synthétise un id unique par index pour
+   *  qu'un client qui indexerait/dédoublonnerait par `id` ne fusionne pas deux entrées
+   *  distinctes d'un même conflit interne (voir revue de code Story 30.2). */
+  private batchItemToConflictInfo(
+    item: CreateAvailabilityBatchItem,
+    index: number,
+  ): ConflictInfo {
+    return {
+      id: `batch-item-${index}`,
+      kind: item.kind,
+      slot: item.slot,
+      recurKind: item.recurKind,
+      startDate: item.startDate ?? null,
+      endDate: item.endDate ?? null,
+      dayOfWeek: item.dayOfWeek ?? null,
+    };
+  }
+
+  /** Cherche la première paire d'éléments du lot qui se contredisent entre eux (AC5).
+   *  Aucune fonction existante ne les voit : le prédicat compare une création à des
+   *  lignes persistées, pas à un autre élément du même lot. */
+  private findInternalConflict(
+    items: CreateAvailabilityBatchItem[],
+  ): [number, number] | null {
+    for (let i = 0; i < items.length; i++) {
+      const existingShape = this.batchItemAsExisting(items[i]);
+      for (let j = i + 1; j < items.length; j++) {
+        if (this.conflictPredicate(existingShape, items[j])) {
+          return [i, j];
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Écriture groupée : une seule lecture des déclarations actives, conflits externes
+   *  puis internes détectés avant toute écriture, puis une unique $transaction pour
+   *  toutes les créations. Aucune résolution overwrite/keep — un conflit fait échouer
+   *  tout le lot (AD-21). Voir story 30.2, encadré n°2 : create() n'est pas le modèle
+   *  d'atomicité à suivre, il n'ouvre pas de transaction sur son chemin principal. */
+  async createBatch(
+    userId: string,
+    items: CreateAvailabilityBatchItem[],
+  ): Promise<{ created: object[] }> {
+    if (items.length === 0) {
+      throw new BadRequestException('Le lot ne peut pas être vide');
+    }
+
+    const now = new Date();
+    items.forEach((item, index) => {
+      if (new Date(item.expiresAt) <= now) {
+        throw new BadRequestException(
+          `expiresAt doit être une date dans le futur (élément ${index})`,
+        );
+      }
     });
+
+    const active = await this.prisma.availabilityDeclaration.findMany({
+      where: { userId, expiresAt: { gt: now } },
+    });
+
+    for (let index = 0; index < items.length; index++) {
+      const externalConflict = active.find((existing) =>
+        this.conflictPredicate(existing, items[index]),
+      );
+      if (externalConflict) {
+        throw new ConflictException({
+          conflicts: [
+            { ...this.toConflictInfo(externalConflict), batchIndex: index },
+          ],
+        });
+      }
+    }
+
+    const internalConflict = this.findInternalConflict(items);
+    if (internalConflict) {
+      const [i, j] = internalConflict;
+      throw new ConflictException({
+        conflicts: [
+          { ...this.batchItemToConflictInfo(items[i], i), batchIndex: i },
+          { ...this.batchItemToConflictInfo(items[j], j), batchIndex: j },
+        ],
+      });
+    }
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const results: object[] = [];
+      for (const item of items) {
+        results.push(
+          await tx.availabilityDeclaration.create({
+            data: {
+              userId,
+              kind: item.kind,
+              recurKind: item.recurKind,
+              dayOfWeek: item.dayOfWeek ?? null,
+              slot: item.slot,
+              startDate: item.startDate
+                ? new Date(item.startDate + 'T00:00:00Z')
+                : null,
+              endDate: item.endDate
+                ? new Date(item.endDate + 'T00:00:00Z')
+                : null,
+              expiresAt: new Date(item.expiresAt),
+            },
+          }),
+        );
+      }
+      return results;
+    });
+
+    await this.emitForUser(userId);
+    return { created };
   }
 
   /** Crée la déclaration en faisant des "trous" autour des conflits existants.

@@ -496,6 +496,36 @@ export interface CreateAvailabilityResult {
   created: AvailabilityDeclarationDto[];
 }
 
+/** Élément d'un lot d'écriture groupée (POST /availability/batch) : forme de
+ *  CreateAvailabilityDto sans replacingId ni conflictResolution — ces deux champs
+ *  n'ont aucun sens dans un lot (Story 30.2, AD-21 : le lot échoue en tout-ou-rien,
+ *  il n'offre aucune résolution de conflit). */
+export interface CreateAvailabilityBatchItem {
+  kind: AvailKind;
+  recurKind: RecurKind;
+  dayOfWeek?: number | null;
+  slot: DaySlot;
+  startDate?: string | null;
+  endDate?: string | null;
+  expiresAt: string;
+}
+
+/** Payload de POST /availability/batch. */
+export interface CreateAvailabilityBatchDto {
+  items: CreateAvailabilityBatchItem[];
+}
+
+/** Conflit détecté dans un lot : ConflictInfo enrichi de l'index de l'élément fautif. */
+export interface BatchConflictInfo extends ConflictInfo {
+  /** Index (0-based) de l'élément du lot en conflit avec cette déclaration. */
+  batchIndex: number;
+}
+
+/** Résultat d'un POST /availability/batch réussi. */
+export interface CreateAvailabilityBatchResult {
+  created: AvailabilityDeclarationDto[];
+}
+
 /** Payload partiel pour la mise à jour d'une déclaration. */
 export interface UpdateAvailabilityDto {
   kind?: AvailKind;
