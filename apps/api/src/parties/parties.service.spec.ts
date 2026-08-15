@@ -104,6 +104,7 @@ describe('PartiesService', () => {
   };
   let avail: {
     getActiveDeclarations: jest.Mock;
+    getActiveDeclarationsWithSeances: jest.Mock;
     computeSlotStatus: jest.Mock;
   };
   let realtimeEvents: { emit: jest.Mock };
@@ -170,6 +171,9 @@ describe('PartiesService', () => {
     prisma = p;
     avail = {
       getActiveDeclarations: jest.fn().mockResolvedValue(new Map()),
+      // getAvailableSlots/getHeatmap appellent cette variante (AD-9, Story 30.5) — le mock reflète
+      // getActiveDeclarations par défaut ; les tests AD-9 dédiés reconfigurent explicitement.
+      getActiveDeclarationsWithSeances: jest.fn().mockResolvedValue(new Map()),
       computeSlotStatus: jest.fn().mockReturnValue('UNKNOWN'),
     };
     realtimeEvents = { emit: jest.fn() };
@@ -1239,7 +1243,7 @@ describe('PartiesService', () => {
     beforeEach(() => {
       prisma.partie.findUnique.mockResolvedValue(partie); // mjId = 'mj1'
       prisma.membership.findMany.mockResolvedValue(members);
-      avail.getActiveDeclarations.mockResolvedValue(
+      avail.getActiveDeclarationsWithSeances.mockResolvedValue(
         new Map([
           ['u1', []],
           ['u2', []],
@@ -1250,8 +1254,11 @@ describe('PartiesService', () => {
 
     it('appelle getActiveDeclarations une seule fois pour N membres (pas de N+1)', async () => {
       await service.getAvailableSlots('p1', 'mj1', 1);
-      expect(avail.getActiveDeclarations).toHaveBeenCalledTimes(1);
-      expect(avail.getActiveDeclarations).toHaveBeenCalledWith(['u1', 'u2']);
+      expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledTimes(1);
+      expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledWith([
+        'u1',
+        'u2',
+      ]);
     });
 
     it('les créneaux avec membres non-MJ UNAVAILABLE sont classés en priorité 3 (fins de liste)', async () => {
@@ -1295,10 +1302,14 @@ describe('PartiesService', () => {
       prisma.membership.findMany.mockResolvedValue([
         { userId: 'u1', user: { id: 'u1', pseudo: 'Alice' } },
       ]);
-      avail.getActiveDeclarations.mockResolvedValue(new Map([['u1', []]]));
+      avail.getActiveDeclarationsWithSeances.mockResolvedValue(
+        new Map([['u1', []]]),
+      );
 
       await service.getAvailableSlots('p1', 'mj1', 1);
-      expect(avail.getActiveDeclarations).toHaveBeenCalledWith(['u1']);
+      expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledWith([
+        'u1',
+      ]);
     });
 
     it('renvoie au plus 20 créneaux (limite de résultats)', async () => {
@@ -1355,7 +1366,7 @@ describe('PartiesService', () => {
         prisma.partie.findUnique.mockResolvedValue(partie);
         prisma.user.findUnique.mockResolvedValue(mjUser);
         prisma.membership.findMany.mockResolvedValue([memberU1]);
-        avail.getActiveDeclarations.mockResolvedValue(
+        avail.getActiveDeclarationsWithSeances.mockResolvedValue(
           new Map([
             ['mj1', []],
             ['u1', []],
@@ -1410,7 +1421,7 @@ describe('PartiesService', () => {
         ...members,
         { userId: 'player1', user: { id: 'player1', pseudo: 'Charlie' } },
       ]);
-      avail.getActiveDeclarations.mockResolvedValue(
+      avail.getActiveDeclarationsWithSeances.mockResolvedValue(
         new Map([
           ['u1', []],
           ['u2', []],
@@ -1442,7 +1453,7 @@ describe('PartiesService', () => {
       beforeEach(() => {
         prisma.partie.findUnique.mockResolvedValue(partie);
         prisma.membership.findMany.mockResolvedValue(members);
-        avail.getActiveDeclarations.mockResolvedValue(
+        avail.getActiveDeclarationsWithSeances.mockResolvedValue(
           new Map([
             ['u1', []],
             ['u2', []],
@@ -1491,7 +1502,7 @@ describe('PartiesService', () => {
           'mj1',
           1,
         )) as AvailableSlotDto[];
-        expect(avail.getActiveDeclarations).toHaveBeenCalledTimes(1);
+        expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledTimes(1);
         expect(results.length).toBeGreaterThanOrEqual(0);
       });
 
@@ -1524,6 +1535,110 @@ describe('PartiesService', () => {
           service.getAvailableSlots('p1', 'mj1', 8, '2024-01-01', '2025-12-31'),
         ).rejects.toBeInstanceOf(BadRequestException);
       });
+    });
+  });
+
+  describe('getAvailableSlots — AD-9 end-to-end (Story 30.5)', () => {
+    // Câblage réel PartiesService + AvailabilityService (pas de mock sur avail) : vérifie que la
+    // production appelle bien getActiveDeclarationsWithSeances et que la dérivation traverse
+    // effectivement jusqu'aux deux vues (AC3, AC6), sans identité de la Partie tierce (AC3).
+    const partieA = {
+      id: 'A',
+      name: 'Partie A',
+      kind: 'ONE_SHOT',
+      gameSystemId: 'draconis',
+      description: null,
+      mjId: 'mjA',
+      createdAt: new Date(),
+      nextSessionDate: null,
+      nextSessionSlot: null,
+    };
+
+    it("un membre occupé par une séance datée d'une autre Partie (B) apparaît UNAVAILABLE dans le calendrier de A, pour la vue MJ ET la vue joueur, sans qu'aucun champ ne nomme la Partie B", async () => {
+      const p: any = {
+        partie: {
+          findUnique: jest.fn().mockResolvedValue(partieA),
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'B',
+              kind: 'ONE_SHOT',
+              mjId: 'mjB',
+              memberships: [{ userId: 'u1' }],
+            },
+          ]),
+        },
+        membership: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              userId: 'u1',
+              user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice' },
+            },
+          ]),
+        },
+        user: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ id: 'mjA', pseudo: 'MJ', displayName: 'MJ' }),
+        },
+        availabilityDeclaration: { findMany: jest.fn().mockResolvedValue([]) },
+        seance: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'seanceB1',
+              poll: {
+                chosenDate: new Date('2026-09-20T00:00:00Z'),
+                chosenSlot: 'EVENING',
+              },
+              dateValidee: null,
+              inscriptions: [],
+              scenario: { partieId: 'B' },
+            },
+          ]),
+        },
+      };
+      const realAvailability = new AvailabilityService(p, {
+        emit: jest.fn(),
+      } as unknown as RealtimeEventsService);
+      const svc = new PartiesService(p, realAvailability, {
+        emit: jest.fn(),
+      } as unknown as RealtimeEventsService);
+
+      const mjResults = (await svc.getAvailableSlots(
+        'A',
+        'mjA',
+        8,
+        '2026-09-20',
+        '2026-09-20',
+      )) as AvailableSlotDto[];
+      const eveningMj = mjResults.find((r) => r.slot === 'EVENING')!;
+      expect(eveningMj.members.find((m) => m.userId === 'u1')!.status).toBe(
+        'UNAVAILABLE',
+      );
+      const mjSerialized = JSON.stringify(mjResults);
+      expect(mjSerialized).not.toContain('mjB');
+      expect(mjSerialized).not.toContain('partieB');
+
+      const playerResults = (await svc.getAvailableSlots(
+        'A',
+        'u1',
+        8,
+        '2026-09-20',
+        '2026-09-20',
+      )) as AggregatedSlotDto[];
+      const eveningPlayer = playerResults.find((r) => r.slot === 'EVENING')!;
+      expect(eveningPlayer.unavailable).toBeGreaterThanOrEqual(1);
+
+      // AC6 : getHeatmap (pas seulement la branche non-MJ de getAvailableSlots) doit s'accorder
+      // avec la vue MJ sur le même créneau, sans nommer la Partie B non plus.
+      const heatmap = await svc.getHeatmap(
+        'A',
+        'u1',
+        '2026-09-20',
+        '2026-09-20',
+      );
+      const eveningHeatmap = heatmap.find((r) => r.slot === 'EVENING')!;
+      expect(eveningHeatmap.unavailable).toBeGreaterThanOrEqual(1);
+      expect(JSON.stringify(heatmap)).not.toContain('mjB');
     });
   });
 

@@ -90,6 +90,13 @@ function makeMockPrisma() {
     async () => [] as { partieId: string }[],
   );
   const mockPartieFindMany = jest.fn(async () => [] as { id: string }[]);
+  // AD-9 (Story 30.5) — getSeanceDerivedUnavailability() lit aussi partie.findMany (forme enrichie
+  // kind/mjId/memberships) et seance.findMany : vide par défaut, sans effet sur les tests existants.
+  const mockSeanceFindMany = jest.fn(() => Promise.resolve([] as object[]));
+  // GET /me/calendar (AD-18, Story 30.5) — couche `votes-en-cours` : vide par défaut.
+  const mockSessionPollFindMany = jest.fn(() =>
+    Promise.resolve([] as object[]),
+  );
 
   const tx: MockTxClient = {
     availabilityDeclaration: { create: mockCreate, update: mockUpdate },
@@ -103,6 +110,8 @@ function makeMockPrisma() {
     },
     membership: { findMany: mockMembershipFindMany },
     partie: { findMany: mockPartieFindMany },
+    seance: { findMany: mockSeanceFindMany },
+    sessionPoll: { findMany: mockSessionPollFindMany },
     $transaction: jest.fn(async (fn: (tx: MockTxClient) => Promise<unknown>) =>
       fn(tx),
     ),
@@ -116,6 +125,8 @@ function makeMockPrisma() {
     mockFindMany,
     mockMembershipFindMany,
     mockPartieFindMany,
+    mockSeanceFindMany,
+    mockSessionPollFindMany,
   };
 }
 
@@ -1073,5 +1084,640 @@ describe('AvailabilityService.computeSlotStatus', () => {
     expect(service.computeSlotStatus(decls, outRange, 'MORNING', NOW)).toBe(
       'UNKNOWN',
     );
+  });
+});
+
+// ─── getActiveDeclarationsWithSeances / AD-9 (Story 30.5) ──────────────────────
+
+describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5)', () => {
+  let service: AvailabilityService;
+  let mockPartieFindMany: jest.Mock;
+  let mockSeanceFindMany: jest.Mock;
+  let mockDeclFindMany: jest.Mock;
+
+  beforeEach(() => {
+    const mocks = makeMockPrisma();
+    mockPartieFindMany = mocks.mockPartieFindMany;
+    mockSeanceFindMany = mocks.mockSeanceFindMany;
+    mockDeclFindMany = mocks.mockFindMany;
+    mockDeclFindMany.mockResolvedValue([]);
+    service = new AvailabilityService(
+      mocks.mockPrisma as unknown as PrismaService,
+      makeMockRealtimeEvents(),
+    );
+  });
+
+  it('renvoie un tableau vide par utilisateur quand aucune Partie n’est trouvée', async () => {
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(map.get('u1')).toEqual([]);
+  });
+
+  it('injecte une indisponibilité UNAVAILABLE synthétique pour un membre occupé par une séance datée d’une autre Partie (ONE_SHOT)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: {
+          chosenDate: new Date('2026-09-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    const entries = map.get('u1')!;
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      kind: 'UNAVAILABLE',
+      recurKind: 'PUNCTUAL',
+      dayOfWeek: null,
+      slot: 'EVENING',
+    });
+    expect(entries[0].startDate?.toISOString().substring(0, 10)).toBe(
+      '2026-09-10',
+    );
+    expect(entries[0].endDate?.toISOString().substring(0, 10)).toBe(
+      '2026-09-10',
+    );
+  });
+
+  it('utilise dateValidee et FULL_DAY quand aucun poll n’est lié (AC5)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'CAMPAGNE_LINEAIRE',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: null,
+        dateValidee: new Date('2026-09-11T00:00:00Z'),
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(map.get('u1')![0].slot).toBe('FULL_DAY');
+  });
+
+  it('utilise FULL_DAY quand le poll lié n’a pas encore de chosenSlot (AC5)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: {
+          chosenDate: new Date('2026-09-16T00:00:00Z'),
+          chosenSlot: null,
+        },
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(map.get('u1')![0].slot).toBe('FULL_DAY');
+  });
+
+  it('CAMPAGNE_EPISODIQUE : seul un utilisateur inscrit à la séance est marqué occupé, pas tous les membres', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'CAMPAGNE_EPISODIQUE',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }, { userId: 'u2' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: null,
+        dateValidee: new Date('2026-09-12T00:00:00Z'),
+        inscriptions: [{ userId: 'u1' }],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1', 'u2']);
+    expect(map.get('u1')).toHaveLength(1);
+    expect(map.get('u2')).toHaveLength(0);
+  });
+
+  it('le MJ est toujours occupé par les séances de ses propres parties, y compris CAMPAGNE_EPISODIQUE sans y être inscrit', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'CAMPAGNE_EPISODIQUE',
+        mjId: 'mjB',
+        memberships: [],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: null,
+        dateValidee: new Date('2026-09-13T00:00:00Z'),
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['mjB']);
+    expect(map.get('mjB')).toHaveLength(1);
+  });
+
+  it('n’injecte rien pour une séance non datée (aucun poll.chosenDate ni dateValidee)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: null,
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(map.get('u1')).toEqual([]);
+  });
+
+  it('fusionne les entrées synthétiques avec les déclarations réelles existantes, sans les remplacer', async () => {
+    const realDecl: DeclarationLike & { userId: string } = {
+      userId: 'u1',
+      kind: 'AVAILABLE',
+      recurKind: 'RECURRING',
+      dayOfWeek: 1,
+      slot: 'MORNING',
+      startDate: null,
+      endDate: null,
+      expiresAt: FUTURE,
+    };
+    mockDeclFindMany.mockResolvedValue([realDecl]);
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: {
+          chosenDate: new Date('2026-09-14T00:00:00Z'),
+          chosenSlot: 'AFTERNOON',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(map.get('u1')).toHaveLength(2);
+  });
+
+  it('la sortie ne porte jamais d’identité de partie/scénario — seulement les champs DeclarationLike (non-fuite structurelle, AC3)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: {
+          chosenDate: new Date('2026-09-15T00:00:00Z'),
+          chosenSlot: 'MORNING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(Object.keys(map.get('u1')![0]).sort()).toEqual(
+      [
+        'dayOfWeek',
+        'endDate',
+        'expiresAt',
+        'kind',
+        'recurKind',
+        'slot',
+        'startDate',
+      ].sort(),
+    );
+  });
+
+  it('une seule requête partie.findMany et une seule seance.findMany, quel que soit le nombre d’utilisateurs (pas de N+1)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([]);
+
+    await service.getActiveDeclarationsWithSeances(['u1', 'u2', 'u3']);
+    expect(mockPartieFindMany).toHaveBeenCalledTimes(1);
+    expect(mockSeanceFindMany).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── getMyCalendar / GET /me/calendar (AD-18, Story 30.5) ──────────────────────
+
+describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
+  let service: AvailabilityService;
+  let mockPartieFindMany: jest.Mock;
+  let mockSeanceFindMany: jest.Mock;
+  let mockSessionPollFindMany: jest.Mock;
+  let mockDeclFindMany: jest.Mock;
+
+  const myPartie = {
+    id: 'A',
+    name: 'Ma Partie',
+    kind: 'ONE_SHOT',
+    mjId: 'me',
+  };
+
+  beforeEach(() => {
+    const mocks = makeMockPrisma();
+    mockPartieFindMany = mocks.mockPartieFindMany;
+    mockSeanceFindMany = mocks.mockSeanceFindMany;
+    mockSessionPollFindMany = mocks.mockSessionPollFindMany;
+    mockDeclFindMany = mocks.mockFindMany;
+    mockDeclFindMany.mockResolvedValue([]);
+    mockPartieFindMany.mockResolvedValue([myPartie]);
+    service = new AvailabilityService(
+      mocks.mockPrisma as unknown as PrismaService,
+      makeMockRealtimeEvents(),
+    );
+  });
+
+  it('renvoie les 5 couches, chacune un tableau vide par défaut (AC1, AC2)', async () => {
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result).toEqual({
+      'mes-indisponibilites': [],
+      'mes-disponibilites': [],
+      'mes-seances': [],
+      'votes-en-cours': [],
+      'inscriptions-ouvertes': [],
+    });
+  });
+
+  it("ne renvoie jamais la clé 'disponibilite-groupe' (AC2, encadré n°2)", async () => {
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(
+      Object.prototype.hasOwnProperty.call(result, 'disponibilite-groupe'),
+    ).toBe(false);
+  });
+
+  it('lève BadRequestException si from > to', async () => {
+    await expect(
+      service.getMyCalendar('me', '2026-10-31', '2026-10-01'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('lève BadRequestException si la plage dépasse 366 jours', async () => {
+    await expect(
+      service.getMyCalendar('me', '2024-01-01', '2025-12-31'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('mes séances portent explicitement mon identité de partie/scénario (AC4)', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'MORNING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Donjon Oublié' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['mes-seances']).toEqual([
+      {
+        seanceId: 'seance1',
+        partieId: 'A',
+        partieName: 'Ma Partie',
+        scenarioId: 'scenario1',
+        scenarioTitle: 'Le Donjon Oublié',
+        date: '2026-10-10',
+        slot: 'MORNING',
+      },
+    ]);
+  });
+
+  it('créneau sans chosenSlot sur le poll rattaché → FULL_DAY (AC5)', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: null,
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Donjon Oublié' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['mes-seances'][0].slot).toBe('FULL_DAY');
+  });
+
+  it('dateValidee sans poll lié → date lue, slot FULL_DAY (AC5)', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: null,
+        dateValidee: new Date('2026-10-11T00:00:00Z'),
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Donjon Oublié' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['mes-seances'][0]).toMatchObject({
+      date: '2026-10-11',
+      slot: 'FULL_DAY',
+    });
+  });
+
+  it("une séance d'une partie dont je ne suis ni MJ ni membre n'apparaît dans aucune couche (AC7)", async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seanceEtrangere',
+        scenarioId: 'scenarioX',
+        poll: null,
+        dateValidee: new Date('2026-10-15T00:00:00Z'),
+        inscriptions: [],
+        inscriptionMin: 1,
+        inscriptionMax: 4,
+        // Partie 'Z' absente de myParties (mocké à [myPartie] seulement) — simule une ligne
+        // renvoyée par erreur (défense en profondeur, la requête réelle la filtrerait déjà).
+        scenario: { partieId: 'Z', title: 'Ne devrait jamais apparaître' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['mes-seances']).toEqual([]);
+    expect(result['inscriptions-ouvertes']).toEqual([]);
+  });
+
+  it('couche votes-en-cours : sondage OPEN avec une option dans la plage, identité de partie incluse', async () => {
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        options: [
+          { date: new Date('2026-10-20T00:00:00Z'), slot: 'EVENING' },
+          { date: new Date('2026-11-05T00:00:00Z'), slot: 'MORNING' },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['votes-en-cours']).toEqual([
+      {
+        pollId: 'poll1',
+        partieId: 'A',
+        partieName: 'Ma Partie',
+        options: [
+          { date: '2026-10-20', slot: 'EVENING' },
+          { date: '2026-11-05', slot: 'MORNING' },
+        ],
+      },
+    ]);
+  });
+
+  it('couche votes-en-cours : sondage sans aucune option dans la plage est exclu', async () => {
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        options: [{ date: new Date('2026-11-05T00:00:00Z'), slot: 'MORNING' }],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['votes-en-cours']).toEqual([]);
+  });
+
+  it('couche inscriptions-ouvertes : séance CAMPAGNE_EPISODIQUE sans date validée et à capacité définie, non filtrée par plage', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', mjId: 'me' },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: null,
+        dateValidee: null,
+        inscriptions: [{ userId: 'me' }, { userId: 'other' }],
+        inscriptionMin: 2,
+        inscriptionMax: 5,
+        scenario: { partieId: 'A', title: 'Enquête épisodique' },
+      },
+    ]);
+
+    // Plage totalement hors du "futur" — n'a aucun effet, cette couche n'est pas filtrée par plage.
+    const result = await service.getMyCalendar(
+      'me',
+      '2020-01-01',
+      '2020-01-02',
+    );
+    expect(result['inscriptions-ouvertes']).toEqual([
+      {
+        seanceId: 'seance1',
+        partieId: 'A',
+        partieName: 'Ma Partie',
+        scenarioTitle: 'Enquête épisodique',
+        inscriptionMin: 2,
+        inscriptionMax: 5,
+        inscritsCount: 2,
+        jeSuisInscrit: true,
+      },
+    ]);
+  });
+
+  it('couche inscriptions-ouvertes : une séance dont la date est déjà validée est exclue (roster figé)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', mjId: 'me' },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: null,
+        dateValidee: new Date('2026-10-05T00:00:00Z'),
+        inscriptions: [],
+        inscriptionMin: 2,
+        inscriptionMax: 5,
+        scenario: { partieId: 'A', title: 'Enquête épisodique' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['inscriptions-ouvertes']).toEqual([]);
+  });
+
+  it('couche inscriptions-ouvertes : une séance sans capacité définie (inscriptionMax null) est exclue', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', mjId: 'me' },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: null,
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Enquête épisodique' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['inscriptions-ouvertes']).toEqual([]);
+  });
+
+  it('mes-indisponibilites/mes-disponibilites : déclarations réelles réparties par kind et filtrées par plage', async () => {
+    mockDeclFindMany.mockResolvedValue([
+      {
+        id: 'd1',
+        userId: 'me',
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: new Date('2026-10-15T00:00:00Z'),
+        endDate: new Date('2026-10-15T00:00:00Z'),
+        expiresAt: new Date('2026-10-16T00:00:00Z'),
+        createdAt: new Date('2026-09-01T00:00:00Z'),
+      },
+      {
+        id: 'd2',
+        userId: 'me',
+        kind: 'AVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'MORNING',
+        startDate: new Date('2026-12-01T00:00:00Z'), // hors plage [10-01, 10-31]
+        endDate: new Date('2026-12-01T00:00:00Z'),
+        expiresAt: new Date('2026-12-02T00:00:00Z'),
+        createdAt: new Date('2026-09-01T00:00:00Z'),
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['mes-indisponibilites']).toHaveLength(1);
+    expect(result['mes-indisponibilites'][0].id).toBe('d1');
+    expect(result['mes-disponibilites']).toEqual([]); // d2 est hors plage
+  });
+
+  it('aucune itération par partie : une seule requête pour chaque table, quel que soit le nombre de mes parties (AC1)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      myPartie,
+      { id: 'B', name: 'Autre partie', kind: 'ONE_SHOT', mjId: 'me' },
+    ]);
+
+    await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+    expect(mockSeanceFindMany).toHaveBeenCalledTimes(1);
+    expect(mockSessionPollFindMany).toHaveBeenCalledTimes(1);
   });
 });

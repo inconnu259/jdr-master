@@ -918,8 +918,11 @@ export class PartiesService {
     if (!isMj && !isMember) throw new ForbiddenException();
 
     const participantIds = participants.map((p) => p.userId);
+    // getActiveDeclarationsWithSeances (pas getActiveDeclarations) : injecte l'indisponibilité
+    // dérivée des séances datées d'AUTRES parties des membres (AD-9, Story 30.5) — source unique
+    // partagée par getAvailableSlots (vue MJ) et getHeatmap (vue joueur), AC6.
     const declarationsMap =
-      await this.availability.getActiveDeclarations(participantIds);
+      await this.availability.getActiveDeclarationsWithSeances(participantIds);
 
     if (!!from !== !!to) {
       throw new BadRequestException(
@@ -1056,8 +1059,11 @@ export class PartiesService {
     if (!isMj && !isMember) throw new ForbiddenException();
 
     const participantIds = participants.map((p) => p.userId);
+    // getActiveDeclarationsWithSeances (pas getActiveDeclarations) : injecte l'indisponibilité
+    // dérivée des séances datées d'AUTRES parties des membres (AD-9, Story 30.5) — source unique
+    // partagée par getAvailableSlots (vue MJ) et getHeatmap (vue joueur), AC6.
     const declarationsMap =
-      await this.availability.getActiveDeclarations(participantIds);
+      await this.availability.getActiveDeclarationsWithSeances(participantIds);
 
     const SLOTS = ['MORNING', 'AFTERNOON', 'EVENING'] as const;
     const fromMs = new Date(from + 'T00:00:00Z').getTime();

@@ -579,6 +579,54 @@ export interface AggregatedSlotDto {
   total: number;
 }
 
+/** Séance datée d'une de mes parties (couche `mes-seances`, `GET /me/calendar`, AD-18, Story 30.5).
+ *  Identité de partie/scénario incluse : ce sont mes propres parties, la notion de partie tierce
+ *  n'existe pas dans le calendrier personnel (AD-9, AC4 Story 30.5). */
+export interface MyCalendarSeanceEntry {
+  seanceId: string;
+  partieId: string;
+  partieName: string;
+  scenarioId: string;
+  scenarioTitle: string;
+  date: string;
+  slot: DaySlot;
+}
+
+/** Vote de date en cours sur une de mes parties (couche `votes-en-cours`, `GET /me/calendar`,
+ *  Story 30.5). Une entrée par sondage, pas par option — le client éclate par option si besoin. */
+export interface MyCalendarPollEntry {
+  pollId: string;
+  partieId: string;
+  partieName: string;
+  options: { date: string; slot: DaySlot }[];
+}
+
+/** Séance à inscription ouverte d'une de mes parties CAMPAGNE_EPISODIQUE (couche
+ *  `inscriptions-ouvertes`, `GET /me/calendar`, Story 30.5, D-13). Non filtrée par plage de dates :
+ *  une séance en attente d'inscriptions n'a pas encore de date propre. */
+export interface MyCalendarOpenInscriptionEntry {
+  seanceId: string;
+  partieId: string;
+  partieName: string;
+  scenarioTitle: string;
+  inscriptionMin: number;
+  inscriptionMax: number;
+  inscritsCount: number;
+  jeSuisInscrit: boolean;
+}
+
+/** Réponse de `GET /me/calendar` (AD-18, Story 30.5) : un seul appel pour toute la plage,
+ *  indexé par couche. `disponibilite-groupe` n'y figure jamais (AD-16) — elle n'a de sens que
+ *  dans le calendrier d'une partie, pas dans le calendrier personnel. Une couche sans contenu
+ *  porte un tableau vide, jamais une clé absente. */
+export interface MeCalendarDto {
+  'mes-indisponibilites': AvailabilityDeclarationDto[];
+  'mes-disponibilites': AvailabilityDeclarationDto[];
+  'mes-seances': MyCalendarSeanceEntry[];
+  'votes-en-cours': MyCalendarPollEntry[];
+  'inscriptions-ouvertes': MyCalendarOpenInscriptionEntry[];
+}
+
 /** Vote de date (SessionPoll). */
 export interface SessionPollDto {
   id: string;

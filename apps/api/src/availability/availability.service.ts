@@ -6,10 +6,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type {
+  AvailabilityDeclarationDto,
   AvailKind,
   ConflictInfo,
   CreateAvailabilityBatchItem,
   DaySlot,
+  MeCalendarDto,
+  MyCalendarOpenInscriptionEntry,
+  MyCalendarPollEntry,
+  MyCalendarSeanceEntry,
   RecurKind,
   SlotStatus,
 } from '@master-jdr/shared';
@@ -616,6 +621,396 @@ export class AvailabilityService {
       map.get(d.userId)?.push(d);
     }
     return map;
+  }
+
+  /**
+   * Même chose que `getActiveDeclarations`, augmentée des indisponibilités dérivées des séances
+   * datées de CHACUNE des parties (toutes, pas seulement celle consultée) des utilisateurs demandés
+   * (AD-9). Seul point d'entrée utilisé par `PartiesService.getAvailableSlots`/`getHeatmap` — les
+   * deux vues (MJ et joueur) partagent ainsi la même source de vérité (AC6, Story 30.5).
+   * `getActiveDeclarations` reste inchangée : elle ne renvoie que des déclarations réelles.
+   */
+  async getActiveDeclarationsWithSeances(
+    userIds: string[],
+  ): Promise<Map<string, DeclarationLike[]>> {
+    const map = await this.getActiveDeclarations(userIds);
+    if (userIds.length === 0) return map;
+
+    const derived = await this.getSeanceDerivedUnavailability(userIds);
+    for (const [userId, entries] of derived) {
+      if (entries.length === 0) continue;
+      map.set(userId, [...(map.get(userId) ?? []), ...entries]);
+    }
+    return map;
+  }
+
+  /**
+   * Résout, pour chaque utilisateur demandé, les créneaux occupés par une séance datée de
+   * N'IMPORTE LAQUELLE de ses parties (MJ ou membre) — pas seulement celle consultée par
+   * l'appelant. C'est la traduction structurelle d'AD-9 : la sortie est un `DeclarationLike`
+   * synthétique (`UNAVAILABLE`, `PUNCTUAL`), jamais une identité de partie/scénario — la non-fuite
+   * cross-partie découle directement de cette forme, aucun filtrage supplémentaire n'est requis.
+   *
+   * Participant d'une séance datée : ONE_SHOT/CAMPAGNE_LINEAIRE → tous les membres + le MJ (aucune
+   * présence individuelle dans ces kinds) ; CAMPAGNE_EPISODIQUE → le MJ + les seuls utilisateurs
+   * inscrits (`Inscription`) à CETTE séance — un joueur non inscrit n'est engagé sur rien.
+   *
+   * Deux requêtes Prisma au total, jamais une par utilisateur ni par partie (pas de N+1).
+   */
+  private async getSeanceDerivedUnavailability(
+    userIds: string[],
+  ): Promise<Map<string, DeclarationLike[]>> {
+    const map = new Map<string, DeclarationLike[]>();
+    for (const userId of userIds) map.set(userId, []);
+
+    const parties = await this.prisma.partie.findMany({
+      where: {
+        OR: [
+          { mjId: { in: userIds } },
+          { memberships: { some: { userId: { in: userIds } } } },
+        ],
+      },
+      select: {
+        id: true,
+        kind: true,
+        mjId: true,
+        memberships: { select: { userId: true } },
+      },
+    });
+    if (parties.length === 0) return map;
+
+    const partieIds = parties.map((p) => p.id);
+    const partieById = new Map(parties.map((p) => [p.id, p]));
+    const seances = await this.prisma.seance.findMany({
+      where: { scenario: { partieId: { in: partieIds } } },
+      include: {
+        poll: true,
+        inscriptions: { select: { userId: true } },
+        scenario: { select: { partieId: true } },
+      },
+    });
+
+    const requested = new Set(userIds);
+
+    for (const seance of seances) {
+      const date = seance.poll?.chosenDate ?? seance.dateValidee;
+      if (!date) continue;
+      const slot = seance.poll?.chosenSlot ?? 'FULL_DAY';
+
+      const partie = partieById.get(seance.scenario.partieId);
+      if (!partie) continue; // partie hors du périmètre résolu ci-dessus
+
+      const participantIds =
+        partie.kind === 'CAMPAGNE_EPISODIQUE'
+          ? new Set([partie.mjId, ...seance.inscriptions.map((i) => i.userId)])
+          : new Set([partie.mjId, ...partie.memberships.map((m) => m.userId)]);
+
+      const dayUtc = new Date(
+        Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+      );
+      const entry: DeclarationLike = {
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: slot,
+        startDate: dayUtc,
+        endDate: dayUtc,
+        expiresAt: new Date(dayUtc.getTime() + 86_399_999),
+      };
+
+      for (const userId of participantIds) {
+        // Copie par entrée : chaque utilisateur reçoit son propre objet, jamais une référence
+        // partagée avec les autres participants de la même séance.
+        if (requested.has(userId)) map.get(userId)!.push({ ...entry });
+      }
+    }
+
+    return map;
+  }
+
+  // ─── Calendrier personnel (GET /me/calendar, AD-18, Story 30.5) ────────────
+
+  private static readonly ME_CALENDAR_MAX_RANGE_DAYS = 366;
+
+  /**
+   * Endpoint unique du calendrier personnel (AD-18) : un seul appel pour toute la plage `[from,
+   * to]`, indexé par couche. `disponibilite-groupe` n'y figure JAMAIS (AD-16, AC5 Story 30.4) —
+   * elle n'a de sens que dans le calendrier d'une partie. Toutes les lectures sont groupées par
+   * `partieId: { in: [...] }`, jamais une itération par partie (AC1).
+   */
+  async getMyCalendar(
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<MeCalendarDto> {
+    const fromMs = this.parseDateOnly(from, false);
+    const toMs = this.parseDateOnly(to, true);
+    if (fromMs > toMs) {
+      throw new BadRequestException('from must be before or equal to to');
+    }
+    if (
+      toMs - fromMs >
+      AvailabilityService.ME_CALENDAR_MAX_RANGE_DAYS * 86_400_000
+    ) {
+      throw new BadRequestException(
+        `Date range cannot exceed ${AvailabilityService.ME_CALENDAR_MAX_RANGE_DAYS} days`,
+      );
+    }
+
+    const myParties = await this.prisma.partie.findMany({
+      where: { OR: [{ mjId: userId }, { memberships: { some: { userId } } }] },
+      select: { id: true, name: true, kind: true, mjId: true },
+    });
+    const partieIds = myParties.map((p) => p.id);
+    const partieById = new Map(myParties.map((p) => [p.id, p]));
+
+    const [declarations, seances, polls] = await Promise.all([
+      this.prisma.availabilityDeclaration.findMany({
+        where: { userId, expiresAt: { gt: new Date() } },
+      }),
+      partieIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.seance.findMany({
+            where: { scenario: { partieId: { in: partieIds } } },
+            include: {
+              poll: true,
+              inscriptions: { select: { userId: true } },
+              scenario: { select: { partieId: true, title: true } },
+            },
+          }),
+      partieIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.sessionPoll.findMany({
+            where: { partieId: { in: partieIds }, status: 'OPEN' },
+            include: { options: true },
+          }),
+    ]);
+
+    return {
+      'mes-indisponibilites': declarations
+        .filter(
+          (d) =>
+            d.kind === 'UNAVAILABLE' &&
+            this.declarationOverlapsRange(d, fromMs, toMs),
+        )
+        .map((d) => this.toAvailabilityDeclarationDto(d)),
+      'mes-disponibilites': declarations
+        .filter(
+          (d) =>
+            d.kind === 'AVAILABLE' &&
+            this.declarationOverlapsRange(d, fromMs, toMs),
+        )
+        .map((d) => this.toAvailabilityDeclarationDto(d)),
+      'mes-seances': this.buildMySeancesLayer(
+        seances,
+        partieById,
+        userId,
+        fromMs,
+        toMs,
+      ),
+      'votes-en-cours': this.buildOpenPollsLayer(
+        polls,
+        partieById,
+        fromMs,
+        toMs,
+      ),
+      // Non filtrée par [from, to] (décision documentée, Story 30.5 Dev Notes) : une séance en
+      // attente d'inscriptions n'a pas encore de date propre à comparer.
+      'inscriptions-ouvertes': this.buildOpenInscriptionsLayer(
+        seances,
+        partieById,
+        userId,
+      ),
+    };
+  }
+
+  /** Parse une borne `YYYY-MM-DD` en timestamp UTC, début ou fin de journée. Rejette les dates
+   *  calendairement invalides (ex. `2026-02-30`) que `Date` accepterait sinon en les décalant
+   *  silencieusement au mois suivant. */
+  private parseDateOnly(value: string, endOfDay: boolean): number {
+    const iso = `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`;
+    const ms = new Date(iso).getTime();
+    if (
+      Number.isNaN(ms) ||
+      new Date(ms).toISOString().substring(0, 10) !== value
+    ) {
+      throw new BadRequestException(`Invalid date: ${value}`);
+    }
+    return ms;
+  }
+
+  /** PUNCTUAL : chevauchement direct des bornes. RECURRING : bornée par expiresAt à défaut
+   *  d'endDate — même convention que `dateRangesConflict`/`isInCoveredPeriod`, ET au moins une
+   *  date de la fenêtre d'intersection tombe sur `dayOfWeek` (sinon une règle "tous les lundis"
+   *  serait incluse pour une plage qui ne couvre aucun lundi). */
+  private declarationOverlapsRange(
+    d: {
+      recurKind: string;
+      dayOfWeek: number | null;
+      startDate: Date | null;
+      endDate: Date | null;
+      expiresAt: Date;
+    },
+    fromMs: number,
+    toMs: number,
+  ): boolean {
+    if (d.recurKind === 'PUNCTUAL') {
+      if (!d.startDate || !d.endDate) return false;
+      return d.startDate.getTime() <= toMs && d.endDate.getTime() >= fromMs;
+    }
+    const effStart = Math.max((d.startDate ?? new Date(0)).getTime(), fromMs);
+    const effEnd = Math.min((d.endDate ?? d.expiresAt).getTime(), toMs);
+    if (effStart > effEnd || d.dayOfWeek == null) return false;
+    for (let t = effStart; t <= effEnd; t += 86_400_000) {
+      if (new Date(t).getUTCDay() === d.dayOfWeek) return true;
+    }
+    return false;
+  }
+
+  private toAvailabilityDeclarationDto(d: {
+    id: string;
+    userId: string;
+    kind: string;
+    recurKind: string;
+    dayOfWeek: number | null;
+    slot: string;
+    startDate: Date | null;
+    endDate: Date | null;
+    expiresAt: Date;
+    createdAt: Date;
+  }): AvailabilityDeclarationDto {
+    return {
+      id: d.id,
+      userId: d.userId,
+      kind: d.kind as AvailKind,
+      recurKind: d.recurKind as RecurKind,
+      dayOfWeek: d.dayOfWeek,
+      slot: d.slot as DaySlot,
+      startDate: d.startDate?.toISOString().substring(0, 10) ?? null,
+      endDate: d.endDate?.toISOString().substring(0, 10) ?? null,
+      expiresAt: d.expiresAt.toISOString(),
+      createdAt: d.createdAt.toISOString(),
+    };
+  }
+
+  /** Mes séances datées, toutes mes parties confondues — identité de partie/scénario incluse,
+   *  ce sont mes propres parties (AC4 : la notion de partie tierce n'existe pas ici). Pour une
+   *  partie CAMPAGNE_EPISODIQUE, une séance n'est « mienne » que si j'y suis inscrit (ou MJ) —
+   *  même règle « participant » qu'`getSeanceDerivedUnavailability` (AD-9), sinon un membre non
+   *  inscrit verrait une séance à laquelle il ne participe pas listée comme sienne. */
+  private buildMySeancesLayer(
+    seances: Array<{
+      id: string;
+      scenarioId: string;
+      poll: { chosenDate: Date | null; chosenSlot: string | null } | null;
+      dateValidee: Date | null;
+      inscriptions: { userId: string }[];
+      scenario: { partieId: string; title: string };
+    }>,
+    partieById: Map<
+      string,
+      { id: string; name: string; kind: string; mjId: string }
+    >,
+    userId: string,
+    fromMs: number,
+    toMs: number,
+  ): MyCalendarSeanceEntry[] {
+    const entries: MyCalendarSeanceEntry[] = [];
+    for (const s of seances) {
+      const date = s.poll?.chosenDate ?? s.dateValidee;
+      if (!date) continue;
+      if (date.getTime() < fromMs || date.getTime() > toMs) continue;
+      const partie = partieById.get(s.scenario.partieId);
+      if (!partie) continue;
+      if (
+        partie.kind === 'CAMPAGNE_EPISODIQUE' &&
+        partie.mjId !== userId &&
+        !s.inscriptions.some((i) => i.userId === userId)
+      ) {
+        continue;
+      }
+      entries.push({
+        seanceId: s.id,
+        partieId: partie.id,
+        partieName: partie.name,
+        scenarioId: s.scenarioId,
+        scenarioTitle: s.scenario.title,
+        date: date.toISOString().substring(0, 10),
+        // AC5 : lu sur le sondage rattaché s'il existe, FULL_DAY à défaut — jamais une supposition
+        // locale à l'appelant.
+        slot: (s.poll?.chosenSlot ?? 'FULL_DAY') as DaySlot,
+      });
+    }
+    return entries;
+  }
+
+  /** Sondages de date ouverts sur mes parties, dont au moins une option tombe dans la plage. */
+  private buildOpenPollsLayer(
+    polls: Array<{
+      id: string;
+      partieId: string;
+      options: { date: Date; slot: string }[];
+    }>,
+    partieById: Map<string, { id: string; name: string }>,
+    fromMs: number,
+    toMs: number,
+  ): MyCalendarPollEntry[] {
+    const entries: MyCalendarPollEntry[] = [];
+    for (const poll of polls) {
+      const inRange = poll.options.some(
+        (o) => o.date.getTime() >= fromMs && o.date.getTime() <= toMs,
+      );
+      if (!inRange) continue;
+      const partie = partieById.get(poll.partieId);
+      if (!partie) continue;
+      entries.push({
+        pollId: poll.id,
+        partieId: partie.id,
+        partieName: partie.name,
+        options: poll.options.map((o) => ({
+          date: o.date.toISOString().substring(0, 10),
+          slot: o.slot as DaySlot,
+        })),
+      });
+    }
+    return entries;
+  }
+
+  /** Séances à inscription ouverte de mes parties CAMPAGNE_EPISODIQUE — jamais filtrée par plage
+   *  (D-13, Story 30.5 Dev Notes) : une séance en attente d'inscriptions n'a pas encore de date. */
+  private buildOpenInscriptionsLayer(
+    seances: Array<{
+      id: string;
+      poll: { chosenDate: Date | null } | null;
+      dateValidee: Date | null;
+      inscriptionMin: number | null;
+      inscriptionMax: number | null;
+      inscriptions: { userId: string }[];
+      scenario: { partieId: string; title: string };
+    }>,
+    partieById: Map<string, { id: string; name: string; kind: string }>,
+    userId: string,
+  ): MyCalendarOpenInscriptionEntry[] {
+    const entries: MyCalendarOpenInscriptionEntry[] = [];
+    for (const s of seances) {
+      if (s.inscriptionMax == null) continue;
+      // Date validée (via poll ou dateValidee) fige le roster (ScenariosService.inscrire()) —
+      // l'inscription n'est alors plus "ouverte".
+      if (s.poll?.chosenDate ?? s.dateValidee) continue;
+      const partie = partieById.get(s.scenario.partieId);
+      if (!partie || partie.kind !== 'CAMPAGNE_EPISODIQUE') continue;
+      entries.push({
+        seanceId: s.id,
+        partieId: partie.id,
+        partieName: partie.name,
+        scenarioTitle: s.scenario.title,
+        inscriptionMin: s.inscriptionMin ?? 0,
+        inscriptionMax: s.inscriptionMax,
+        inscritsCount: s.inscriptions.length,
+        jeSuisInscrit: s.inscriptions.some((i) => i.userId === userId),
+      });
+    }
+    return entries;
   }
 
   /**
