@@ -1,0 +1,30 @@
+.layer-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.layer-chip {
+  border: 1px solid var(--mat-sys-outline, #999);
+  border-radius: 999px;
+  background: transparent;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  &--active {
+    background: var(--mat-sys-secondary-container, #cce);
+    font-weight: 600;
+  }
+}
+
+.layer-toggle__reset {
+  border: none;
+  background: none;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--mat-sys-error, #b00020);
+}

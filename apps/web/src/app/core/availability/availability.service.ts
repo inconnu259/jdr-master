@@ -11,6 +11,7 @@ import type {
   CreateAvailabilityDto,
   CreateAvailabilityResult,
   DaySlot,
+  MeCalendarDto,
   UpdateAvailabilityDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
@@ -124,6 +125,18 @@ export class AvailabilityService {
   splitOccurrence(id: string, body: SplitOccurrenceBody): Promise<SplitOccurrenceResult> {
     return firstValueFrom(
       this.http.post<SplitOccurrenceResult>(`${API}/availability/${id}/split`, body, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  // Story 30.6, AC8/AC10 : un seul appel pour les 5 couches personnelles (Story 30.5, AD-18) —
+  // appelé uniquement en contexte personnel (`profile/calendar`), jamais depuis un contexte de
+  // partie (AC9), rappelé à chaque changement de plage affichée.
+  getMyCalendar(from: string, to: string): Promise<MeCalendarDto> {
+    return firstValueFrom(
+      this.http.get<MeCalendarDto>(`${API}/me/calendar`, {
+        params: { from, to },
         withCredentials: true,
       }),
     );

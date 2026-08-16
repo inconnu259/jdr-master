@@ -1,9 +1,7 @@
 import {
   Component,
   DestroyRef,
-  ElementRef,
   OnInit,
-  ViewChild,
   computed,
   effect,
   inject,
@@ -21,17 +19,21 @@ import type {
   AvailKind,
   AvailabilityDeclarationDto,
   AvailableSlotDto,
+  CalendarLayerKey,
   CreateAvailabilityDto,
   DaySlot,
+  MeCalendarDto,
   PartieMemberDto,
   ScenarioDto,
   SeanceDto,
   SessionPollDto,
 } from '@master-jdr/shared';
+import { CALENDAR_LAYER_KEYS, DEFAULT_CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
 import {
   AvailabilityService,
   ConflictError,
 } from '../../../core/availability/availability.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
@@ -39,7 +41,9 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
-import { CalendarWeekView } from '../calendar-week-view/calendar-week-view';
+import { CalendarWeekView, getWeekStart } from '../calendar-week-view/calendar-week-view';
+import { CalendarAgendaView, type AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
+import { CalendarLayerToggle } from '../calendar-layer-toggle/calendar-layer-toggle';
 import { ConstraintPanel } from '../constraint-panel/constraint-panel';
 import { type SelectedCell, buildBatchItems } from '../selection.utils';
 import { AvailableSlotsPanel } from '../available-slots/available-slots';
@@ -70,6 +74,8 @@ export interface EligibleSeanceEntry {
   imports: [
     CalendarMonthView,
     CalendarWeekView,
+    CalendarAgendaView,
+    CalendarLayerToggle,
     ConstraintPanel,
     MatButtonToggleModule,
     MatButtonModule,
@@ -84,9 +90,8 @@ export interface EligibleSeanceEntry {
 export class CalendarView implements OnInit {
   readonly mode = input<'personal' | 'mj'>('personal');
 
-  @ViewChild('slotsPanel') private readonly slotsPanel?: ElementRef<HTMLElement>;
-
   private readonly availabilitySvc = inject(AvailabilityService);
+  private readonly authSvc = inject(AuthService);
   private readonly partiesSvc = inject(PartiesService);
   private readonly pollSvc = inject(PollService);
   private readonly scenariosSvc = inject(ScenariosService);
@@ -103,8 +108,62 @@ export class CalendarView implements OnInit {
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
 
-  protected readonly view = signal<'month' | 'week'>('month');
+  protected readonly view = signal<'month' | 'week' | 'agenda'>('month');
   protected readonly sharedDate = signal<Date>(new Date());
+
+  // ─── Couches du calendrier (Story 30.6, AC1/AC3/AC4/AC7, encadré n°2) ──────
+  // Signal purement local, jamais persisté par la bascule elle-même — seul l'écran Compte (Story
+  // 30.4) écrit `defaultCalendarLayers`. Initialisé au montage depuis le défaut du compte.
+  protected readonly activeLayers = signal<CalendarLayerKey[]>([]);
+  // Contenu de GET /me/calendar (contexte personnel uniquement, AC8/AC9) — jamais peuplé en
+  // contexte de partie.
+  protected readonly meCalendar = signal<MeCalendarDto | null>(null);
+  protected readonly meCalendarLoading = signal(false);
+
+  /** 5 couches hors contexte de partie (disponibilite-groupe absente, AD-16/AC8), 6 en contexte
+   *  de partie. */
+  protected readonly availableLayerKeys = computed<CalendarLayerKey[]>(() =>
+    this.partieId()
+      ? [...CALENDAR_LAYER_KEYS]
+      : CALENDAR_LAYER_KEYS.filter((k) => k !== 'disponibilite-groupe'),
+  );
+
+  private defaultLayersForContext(partieContext: boolean): CalendarLayerKey[] {
+    const base = this.authSvc.currentUser()?.defaultCalendarLayers ?? DEFAULT_CALENDAR_LAYER_KEYS;
+    return partieContext ? base : base.filter((k) => k !== 'disponibilite-groupe');
+  }
+
+  protected toggleLayer(key: CalendarLayerKey): void {
+    this.activeLayers.update((keys) =>
+      keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key],
+    );
+  }
+
+  protected isLayerActive(key: CalendarLayerKey): boolean {
+    return this.activeLayers().includes(key);
+  }
+
+  /** AC4/AC7 : comparaison d'ensemble complète (ajouts ET retraits), pas seulement les couches
+   *  ajoutées — un retrait doit rester détecté (encadré n°2). */
+  protected readonly isOverridden = computed(() => {
+    const current = this.activeLayers();
+    const def = this.defaultLayersForContext(!!this.partieId());
+    if (current.length !== def.length) return true;
+    const defSet = new Set(def);
+    return current.some((k) => !defSet.has(k));
+  });
+
+  /** Aucun appel réseau : réaffecte l'état local depuis le défaut du compte (encadré n°2). */
+  protected resetToDefault(): void {
+    this.activeLayers.set(this.defaultLayersForContext(!!this.partieId()));
+  }
+
+  protected readonly visibleDeclarations = computed<AvailabilityDeclarationDto[]>(() => {
+    const active = this.activeLayers();
+    const showAvail = active.includes('mes-disponibilites');
+    const showUnavail = active.includes('mes-indisponibilites');
+    return this.declarations().filter((d) => (d.kind === 'AVAILABLE' ? showAvail : showUnavail));
+  });
 
   protected readonly panelOpen = signal(false);
   protected readonly selectedDate = signal<Date>(new Date());
@@ -154,6 +213,153 @@ export class CalendarView implements OnInit {
       });
     }
     return entries;
+  });
+
+  // Story 30.6, AC4/AC2 : séances de mes parties dont l'inscription est ouverte — dérivation
+  // séparée de `eligibleSeances()` (qui sert un besoin différent, MJ-only : lancer un vote).
+  // Même règle que `buildOpenInscriptionsLayer` côté serveur (Story 30.5) : `inscription.max`
+  // défini, aucune date validée (ni poll.chosenDate ni inscription.dateValidee).
+  private openInscriptionSeances(): { scenario: ScenarioDto; seance: SeanceDto }[] {
+    const out: { scenario: ScenarioDto; seance: SeanceDto }[] = [];
+    for (const scenario of this.scenarios()) {
+      for (const seance of scenario.seances) {
+        if (seance.inscription?.max == null) continue;
+        const validated = seance.poll?.chosenDate ?? seance.inscription?.dateValidee;
+        if (validated) continue;
+        out.push({ scenario, seance });
+      }
+    }
+    return out;
+  }
+
+  // Story 30.6, Task 6/AC2 : liste chronologique unique fusionnant les couches actives — deux
+  // chemins de source distincts selon le contexte (encadré n°1) :
+  // - Contexte de partie (`partieId()` renseigné) : dérivée des signaux déjà chargés par cette
+  //   page (`scenarios`, `activePolls`, `availableSlots`/`heatmap`), aucun appel réseau de plus
+  //   (AC9).
+  // - Contexte personnel (`partieId()` absent) : dérivée de `meCalendar()` (Story 30.5, AC8), qui
+  //   porte déjà `mes-seances`/`votes-en-cours`/`inscriptions-ouvertes` filtrées par plage.
+  protected readonly agendaEntries = computed<AgendaEntry[]>(() => {
+    const active = new Set(this.activeLayers());
+    const entries: AgendaEntry[] = [];
+
+    if (this.partieId()) {
+      if (active.has('mes-seances')) {
+        for (const scenario of this.scenarios()) {
+          for (const seance of scenario.seances) {
+            const date = seance.poll?.chosenDate ?? seance.inscription?.dateValidee;
+            if (!date) continue;
+            entries.push({
+              key: `seance-${seance.id}`,
+              type: 'mes-seances',
+              date: date.substring(0, 10),
+              label: scenario.title,
+              detail: seance.poll?.chosenSlot ?? undefined,
+            });
+          }
+        }
+      }
+      if (active.has('votes-en-cours')) {
+        for (const entry of this.activePolls()) {
+          const firstOption = [...entry.poll.options].sort((a, b) =>
+            a.date.localeCompare(b.date),
+          )[0];
+          entries.push({
+            key: `poll-${entry.poll.id}`,
+            type: 'votes-en-cours',
+            date: firstOption ? firstOption.date.substring(0, 10) : '',
+            label: entry.scenario.title,
+            detail: `${entry.poll.options.length} option(s) proposée(s)`,
+          });
+        }
+      }
+      if (active.has('inscriptions-ouvertes')) {
+        for (const { scenario, seance } of this.openInscriptionSeances()) {
+          entries.push({
+            key: `inscription-${seance.id}`,
+            type: 'inscriptions-ouvertes',
+            date: '',
+            label: scenario.title,
+            detail: `${seance.inscription!.inscrits.length}/${seance.inscription!.max} inscrits`,
+          });
+        }
+      }
+      if (active.has('disponibilite-groupe')) {
+        for (const slot of this.heatmap()) {
+          if (slot.available === 0 && slot.unavailable === 0) continue;
+          entries.push({
+            key: `groupe-${slot.date}-${slot.slot}`,
+            type: 'disponibilite-groupe',
+            date: slot.date,
+            label: `${slot.slot} — ${slot.available}/${slot.total} disponibles`,
+            detail: slot.unavailable > 0 ? `${slot.unavailable} indisponible(s)` : undefined,
+          });
+        }
+      }
+    } else {
+      const mc = this.meCalendar();
+      if (mc) {
+        if (active.has('mes-seances')) {
+          for (const s of mc['mes-seances']) {
+            entries.push({
+              key: `seance-${s.seanceId}`,
+              type: 'mes-seances',
+              date: s.date,
+              label: `${s.partieName} — ${s.scenarioTitle}`,
+              detail: s.slot,
+            });
+          }
+        }
+        if (active.has('votes-en-cours')) {
+          for (const p of mc['votes-en-cours']) {
+            const firstOption = [...p.options].sort((a, b) => a.date.localeCompare(b.date))[0];
+            entries.push({
+              key: `poll-${p.pollId}`,
+              type: 'votes-en-cours',
+              date: firstOption ? firstOption.date : '',
+              label: p.partieName,
+              detail: `${p.options.length} option(s) proposée(s)`,
+            });
+          }
+        }
+        if (active.has('inscriptions-ouvertes')) {
+          for (const i of mc['inscriptions-ouvertes']) {
+            entries.push({
+              key: `inscription-${i.seanceId}`,
+              type: 'inscriptions-ouvertes',
+              date: '',
+              label: `${i.partieName} — ${i.scenarioTitle}`,
+              detail: `${i.inscritsCount}/${i.inscriptionMax} inscrits`,
+            });
+          }
+        }
+      }
+    }
+
+    if (active.has('mes-disponibilites') || active.has('mes-indisponibilites')) {
+      for (const d of this.visibleDeclarations()) {
+        entries.push({
+          key: `decl-${d.id}`,
+          type: d.kind === 'AVAILABLE' ? 'mes-disponibilites' : 'mes-indisponibilites',
+          date: d.startDate ?? '',
+          label: d.recurKind === 'RECURRING' ? 'Récurrent' : 'Ponctuel',
+          detail: d.slot,
+        });
+      }
+    }
+
+    return entries;
+  });
+
+  // Story 30.6, revue de code (AC1) : marqueur Mois/Semaine pour la couche `mes-seances` — dérivé
+  // d'agendaEntries() pour ne jamais dupliquer la logique de source (AD-17). `inscriptions-ouvertes`
+  // n'a structurellement pas de date (aucune séance validée), reste Agenda-only.
+  protected readonly seanceMarkerDates = computed<Set<string>>(() => {
+    const dates = new Set<string>();
+    for (const entry of this.agendaEntries()) {
+      if (entry.type === 'mes-seances' && entry.date) dates.add(entry.date);
+    }
+    return dates;
   });
 
   protected readonly pollPanelOpen = signal(false);
@@ -234,6 +440,11 @@ export class CalendarView implements OnInit {
       this.pollPanelOpen.set(true);
     }
 
+    // Story 30.6, Task 1 : état des couches actives, initialisé depuis le défaut du compte —
+    // jamais persisté par la bascule elle-même (encadré n°2). `disponibilite-groupe` retirée hors
+    // contexte de partie (AC8).
+    this.activeLayers.set(this.defaultLayersForContext(!!id));
+
     if (id) {
       this.partieId.set(id);
       this.realtime.connect(partieTopic(id));
@@ -259,7 +470,12 @@ export class CalendarView implements OnInit {
         this.members.set(await this.partiesSvc.members(id).catch(() => []));
       }
     } else {
-      await this.loadDeclarations();
+      // Story 30.6, AC8/AC9 : contexte personnel — un seul appel GET /me/calendar pour les 5
+      // couches temporelles, jamais depuis un contexte de partie.
+      await Promise.all([
+        this.loadDeclarations(),
+        this.loadMeCalendarForRange(this.fromDateStr(), this.toDateStr()),
+      ]);
     }
   }
 
@@ -330,17 +546,34 @@ export class CalendarView implements OnInit {
   }
 
   protected onViewChange(value: string): void {
-    this.view.set(value as 'month' | 'week');
+    this.view.set(value as 'month' | 'week' | 'agenda');
   }
 
   protected async onMonthDateChange(d: Date): Promise<void> {
     this.sharedDate.set(d);
     const id = this.partieId();
-    if (id) await this.loadHeatmap(id, d);
+    if (id) {
+      await this.loadHeatmap(id, d);
+    } else {
+      // Story 30.6, AC10 : la plage affichée du calendrier personnel change — GET /me/calendar
+      // est rappelé avec la nouvelle plage, jamais un cache silencieusement périmé.
+      const { from, to } = CalendarView.monthGridRange(d);
+      await this.loadMeCalendarForRange(from, to);
+    }
   }
 
-  protected onWeekDateChange(d: Date): void {
+  protected async onWeekDateChange(d: Date): Promise<void> {
     this.sharedDate.set(d);
+    if (!this.partieId()) {
+      const weekStart = getWeekStart(d);
+      const weekEnd = new Date(
+        Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 6),
+      );
+      await this.loadMeCalendarForRange(
+        CalendarView.toIsoDate(weekStart),
+        CalendarView.toIsoDate(weekEnd),
+      );
+    }
   }
 
   protected onFormChanged(dto: CreateAvailabilityDto | null): void {
@@ -440,10 +673,6 @@ export class CalendarView implements OnInit {
     ]);
   }
 
-  protected scrollToSlots(): void {
-    this.slotsPanel?.nativeElement.scrollIntoView({ behavior: 'smooth' });
-  }
-
   protected onFromChange(event: Event): void {
     this.fromDateStr.set((event.target as HTMLInputElement).value);
   }
@@ -483,9 +712,15 @@ export class CalendarView implements OnInit {
     }
   }
 
-  private async loadHeatmap(id: string, centerDate: Date = new Date()): Promise<void> {
-    // Calcule exactement la grille du mois affiché (même logique que buildMonth : 6×7 = 42 jours)
-    // centerDate est un Date UTC-midnight (émis par displayDateChange) → utiliser getUTC*
+  private static toIsoDate(d: Date): string {
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  /** Calcule exactement la grille du mois affiché (même logique que buildMonth : 6×7 = 42 jours) —
+   *  `centerDate` est un Date UTC-midnight (émis par displayDateChange) → utiliser getUTC*.
+   *  Story 30.6 : extrait de `loadHeatmap` (comportement inchangé) pour être réutilisé par
+   *  `onMonthDateChange` en contexte personnel (AC10). */
+  private static monthGridRange(centerDate: Date): { from: string; to: string } {
     const year = centerDate.getUTCFullYear();
     const month = centerDate.getUTCMonth();
     const firstOfMonth = new Date(Date.UTC(year, month, 1));
@@ -495,10 +730,13 @@ export class CalendarView implements OnInit {
     const gridEnd = new Date(
       Date.UTC(gridStart.getUTCFullYear(), gridStart.getUTCMonth(), gridStart.getUTCDate() + 41),
     );
-    const toIso = (d: Date) =>
-      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    return { from: CalendarView.toIsoDate(gridStart), to: CalendarView.toIsoDate(gridEnd) };
+  }
+
+  private async loadHeatmap(id: string, centerDate: Date = new Date()): Promise<void> {
+    const { from, to } = CalendarView.monthGridRange(centerDate);
     try {
-      this.heatmap.set(await this.pollSvc.getHeatmap(id, toIso(gridStart), toIso(gridEnd)));
+      this.heatmap.set(await this.pollSvc.getHeatmap(id, from, to));
     } catch {
       // non-bloquant — le heatmap est un overlay facultatif
     }
@@ -512,6 +750,35 @@ export class CalendarView implements OnInit {
       this.slotsError.set('Impossible de charger les créneaux.');
     } finally {
       this.slotsLoading.set(false);
+    }
+  }
+
+  // Story 30.6, AC8/AC9/AC10 : un seul appel pour les couches temporelles du calendrier
+  // personnel — jamais appelée en contexte de partie.
+  // Revue de code : identifiant de requête incrémental — une navigation rapide (mois/semaine
+  // suivant·e) peut déclencher plusieurs appels getMyCalendar() qui ne résolvent pas dans l'ordre ;
+  // seule la réponse de la dernière requête émise est appliquée.
+  private meCalendarReqId = 0;
+
+  private async loadMeCalendarForRange(from: string, to: string): Promise<void> {
+    this.fromDateStr.set(from);
+    this.toDateStr.set(to);
+    this.meCalendarLoading.set(true);
+    const reqId = ++this.meCalendarReqId;
+    try {
+      const result = await this.availabilitySvc.getMyCalendar(from, to);
+      if (reqId !== this.meCalendarReqId) return;
+      this.meCalendar.set(result);
+      this.error.set(null);
+    } catch {
+      if (reqId !== this.meCalendarReqId) return;
+      // Revue de code (AC10) : ne jamais laisser la plage précédente affichée comme si elle
+      // était à jour — signaler l'échec et vider les couches temporelles plutôt que de les
+      // laisser silencieusement périmées.
+      this.meCalendar.set(null);
+      this.error.set('Impossible de charger le calendrier pour cette période.');
+    } finally {
+      if (reqId === this.meCalendarReqId) this.meCalendarLoading.set(false);
     }
   }
 

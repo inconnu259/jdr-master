@@ -1,0 +1,22 @@
+<div class="agenda-view">
+  @if (loading()) {
+    <mat-progress-spinner mode="indeterminate" diameter="32" />
+  } @else if (sortedEntries().length === 0) {
+    <p class="agenda-view__empty">Rien à afficher pour la période et les couches actives.</p>
+  } @else {
+    <ul class="agenda-list">
+      @for (entry of sortedEntries(); track entry.key) {
+        <li class="agenda-entry" [class]="'agenda-entry--' + entry.type">
+          <span class="agenda-entry__badge">{{ typeLabel(entry.type) }}</span>
+          @if (entry.date) {
+            <span class="agenda-entry__date">{{ entry.date }}</span>
+          }
+          <span class="agenda-entry__label">{{ entry.label }}</span>
+          @if (entry.detail) {
+            <span class="agenda-entry__detail">{{ entry.detail }}</span>
+          }
+        </li>
+      }
+    </ul>
+  }
+</div>

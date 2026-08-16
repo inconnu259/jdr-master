@@ -151,17 +151,7 @@
   min-width: 280px;
 }
 
-.see-slots-btn {
-  display: none;
-  margin-top: 16px;
-}
-
 @media (max-width: 767px) {
-  .see-slots-btn {
-    display: block;
-    width: 100%;
-  }
-
   .mj-results-panel {
     margin-top: 24px;
   }

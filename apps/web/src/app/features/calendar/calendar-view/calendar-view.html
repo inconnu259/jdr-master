@@ -11,50 +11,55 @@
     @if (error()) {
       <p class="calendar-error" role="alert">{{ error() }}</p>
     }
+    <app-calendar-layer-toggle
+      [keys]="availableLayerKeys()"
+      [active]="activeLayers()"
+      [overridden]="isOverridden()"
+      (layerToggled)="toggleLayer($event)"
+      (resetRequested)="resetToDefault()"
+    />
+
     <div class="view-toggle">
       <mat-button-toggle-group [value]="view()" (change)="onViewChange($event.value)" aria-label="Vue du calendrier">
         <mat-button-toggle value="month">Vue mois</mat-button-toggle>
         <mat-button-toggle value="week">Vue semaine</mat-button-toggle>
+        <mat-button-toggle value="agenda">Vue agenda</mat-button-toggle>
       </mat-button-toggle-group>
     </div>
 
     @if (view() === 'month') {
       <app-calendar-month-view
-        [declarations]="declarations()"
+        [declarations]="visibleDeclarations()"
         [loading]="loading()"
         [pendingDto]="pendingDto()"
         [initialDate]="sharedDate()"
-        [heatmap]="heatmap()"
+        [heatmap]="isLayerActive('disponibilite-groupe') ? heatmap() : []"
+        [seanceDates]="seanceMarkerDates()"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onMonthDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"
       />
-    } @else {
+    } @else if (view() === 'week') {
       <app-calendar-week-view
-        [declarations]="declarations()"
+        [declarations]="visibleDeclarations()"
         [loading]="loading()"
         [pendingDto]="pendingDto()"
         [startDate]="sharedDate()"
+        [seanceDates]="seanceMarkerDates()"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onWeekDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"
       />
-    }
-
-    @if (isMjMode()) {
-      <button class="see-slots-btn" mat-stroked-button (click)="scrollToSlots()">
-        Voir les créneaux calculés
-      </button>
-    }
-    @if (!isMjMode() && partieId()) {
-      <button class="see-slots-btn" mat-stroked-button (click)="scrollToSlots()">
-        Voir les créneaux de la guilde
-      </button>
+    } @else {
+      <app-calendar-agenda-view
+        [entries]="agendaEntries()"
+        [loading]="loading() || meCalendarLoading()"
+      />
     }
   </div>
 
   @if (isMjMode()) {
-    <div class="mj-results-panel" #slotsPanel>
+    <div class="mj-results-panel">
       <!-- Story 8.8, AC9 : sélecteur de séance pour lancer un vote directement depuis l'Oracle —
            n'affiche que les séances éligibles (scénario non clôturé, aucun vote déjà lié, aucune
            date déjà validée) ; étiquette toujours scénario ET séance, sans ambiguïté. -->
@@ -83,39 +88,45 @@
         </div>
       }
 
-      <div class="poll-section">
-        <!-- Story 8.7, AC1 (corrigé en revue) : plus de vote sans séance — se lance depuis
-             « Lancer le vote » sur la fiche du scénario (SeanceList) ou le sélecteur ci-dessus.
-             Story 8.8, AC7 : plusieurs votes actifs peuvent coexister (un par Séance), chacun
-             étiqueté par son scénario/séance — remplace l'ancien panneau à un seul poll. -->
-        @if (activePolls().length === 0) {
-          <p class="hint">Aucun vote de date en cours.</p>
-        }
-        @for (entry of activePolls(); track entry.poll.id) {
-          <div class="poll-entry">
-            <p class="poll-entry__label">
-              {{ entry.scenario.title }}
-              @if (entry.scenario.seances.length > 1) {
-                — Séance {{ entry.seanceIndex }}
-              }
-            </p>
-            <app-poll-status
-              [poll]="entry.poll"
-              [members]="members()"
-              [busy]="pollActionPending()"
-              (chosen)="onChooseDate(entry.poll.id, $event)"
-            />
-            <button
-              mat-stroked-button
-              color="warn"
-              [disabled]="pollActionPending()"
-              (click)="onClosePoll(entry.poll.id)"
-            >
-              {{ theme.tone()['cta.cancel_poll'] }}
-            </button>
-          </div>
-        }
-      </div>
+      <!-- Story 30.6, AC6 : couche « votes-en-cours », sans coût réseau supplémentaire (dérivée
+           d'activePolls, déjà chargé) — masquée quand la couche est désactivée, et masquée en vue
+           Agenda (revue de code) où agendaEntries() affiche déjà ces mêmes votes chronologiquement,
+           pour éviter le doublon. -->
+      @if (isLayerActive('votes-en-cours') && view() !== 'agenda') {
+        <div class="poll-section">
+          <!-- Story 8.7, AC1 (corrigé en revue) : plus de vote sans séance — se lance depuis
+               « Lancer le vote » sur la fiche du scénario (SeanceList) ou le sélecteur ci-dessus.
+               Story 8.8, AC7 : plusieurs votes actifs peuvent coexister (un par Séance), chacun
+               étiqueté par son scénario/séance — remplace l'ancien panneau à un seul poll. -->
+          @if (activePolls().length === 0) {
+            <p class="hint">Aucun vote de date en cours.</p>
+          }
+          @for (entry of activePolls(); track entry.poll.id) {
+            <div class="poll-entry">
+              <p class="poll-entry__label">
+                {{ entry.scenario.title }}
+                @if (entry.scenario.seances.length > 1) {
+                  — Séance {{ entry.seanceIndex }}
+                }
+              </p>
+              <app-poll-status
+                [poll]="entry.poll"
+                [members]="members()"
+                [busy]="pollActionPending()"
+                (chosen)="onChooseDate(entry.poll.id, $event)"
+              />
+              <button
+                mat-stroked-button
+                color="warn"
+                [disabled]="pollActionPending()"
+                (click)="onClosePoll(entry.poll.id)"
+              >
+                {{ theme.tone()['cta.cancel_poll'] }}
+              </button>
+            </div>
+          }
+        </div>
+      }
 
       <div class="date-range-form">
         <label class="date-range-label">
@@ -138,32 +149,42 @@
         </label>
         <button mat-stroked-button (click)="onSearch()">Rechercher</button>
       </div>
-      <app-available-slots
-        [slots]="availableSlots()"
-        [loading]="slotsLoading()"
-        [error]="slotsError()"
-      />
+      <!-- Story 30.6, AC5 : contenu de l'ancien panneau « voir les créneaux calculés », devenu la
+           couche disponibilite-groupe — plus de bouton de défilement dédié, visible seulement
+           quand la couche est active. Masquée en vue Agenda (revue de code) — agendaEntries()
+           affiche déjà ces mêmes créneaux chronologiquement, pour éviter le doublon. -->
+      @if (isLayerActive('disponibilite-groupe') && view() !== 'agenda') {
+        <app-available-slots
+          [slots]="availableSlots()"
+          [loading]="slotsLoading()"
+          [error]="slotsError()"
+        />
+      }
     </div>
   }
 
   @if (!isMjMode() && partieId()) {
-    <div class="guild-slots-panel" #slotsPanel>
+    <div class="guild-slots-panel">
       <!-- Story 8.8, AC8 : même refonte multi-votes côté joueur — un app-poll-response par vote
-           actif, étiqueté par scénario/séance comme côté MJ. -->
-      @for (entry of activePolls(); track entry.poll.id) {
-        <div class="poll-entry">
-          <p class="poll-entry__label">
-            {{ entry.scenario.title }}
-            @if (entry.scenario.seances.length > 1) {
-              — Séance {{ entry.seanceIndex }}
-            }
-          </p>
-          <app-poll-response
-            [partieId]="partieId()!"
-            [poll]="entry.poll"
-            (responded)="onPollResponded($event)"
-          />
-        </div>
+           actif, étiqueté par scénario/séance comme côté MJ. Story 30.6, AC6 : couche
+           « votes-en-cours » — masquée en vue Agenda (revue de code, doublon avec
+           agendaEntries()). -->
+      @if (isLayerActive('votes-en-cours') && view() !== 'agenda') {
+        @for (entry of activePolls(); track entry.poll.id) {
+          <div class="poll-entry">
+            <p class="poll-entry__label">
+              {{ entry.scenario.title }}
+              @if (entry.scenario.seances.length > 1) {
+                — Séance {{ entry.seanceIndex }}
+              }
+            </p>
+            <app-poll-response
+              [partieId]="partieId()!"
+              [poll]="entry.poll"
+              (responded)="onPollResponded($event)"
+            />
+          </div>
+        }
       }
       <div class="date-range-form">
         <label class="date-range-label">
@@ -186,11 +207,15 @@
         </label>
         <button mat-stroked-button (click)="onSearch()">Rechercher</button>
       </div>
-      <app-available-slots
-        [slots]="availableSlots()"
-        [loading]="slotsLoading()"
-        [error]="slotsError()"
-      />
+      <!-- Story 30.6, AC5 : couche disponibilite-groupe côté joueur — masquée en vue Agenda
+           (revue de code, doublon avec agendaEntries()). -->
+      @if (isLayerActive('disponibilite-groupe') && view() !== 'agenda') {
+        <app-available-slots
+          [slots]="availableSlots()"
+          [loading]="slotsLoading()"
+          [error]="slotsError()"
+        />
+      }
     </div>
   }
 </div>

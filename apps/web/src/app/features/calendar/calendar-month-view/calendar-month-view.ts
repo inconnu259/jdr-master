@@ -152,6 +152,10 @@ export class CalendarMonthView {
   readonly pendingDto = input<CreateAvailabilityDto | null>(null);
   readonly initialDate = input<Date | null>(null);
   readonly heatmap = input<AggregatedSlotDto[]>([]);
+  /** Story 30.6, revue de code (AC1) : dates (yyyy-mm-dd) portant au moins une séance à venir de
+   *  la couche `mes-seances` — inscriptions-ouvertes n'a structurellement pas de date (aucune
+   *  séance validée) donc reste Agenda-only. */
+  readonly seanceDates = input<Set<string>>(new Set());
 
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();

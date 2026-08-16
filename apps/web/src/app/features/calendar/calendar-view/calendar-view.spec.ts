@@ -8,10 +8,12 @@ import { Location } from '@angular/common';
 import { vi } from 'vitest';
 import { CalendarView } from './calendar-view';
 import { ActivatedRoute } from '@angular/router';
+import type { AuthUser } from '@master-jdr/shared';
 import {
   AvailabilityService,
   ConflictError,
 } from '../../../core/availability/availability.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
@@ -25,6 +27,7 @@ interface CreateOptions {
   queryParams?: Record<string, string>;
   scenarios?: any[];
   availabilitySvc?: ReturnType<typeof makeAvailabilityService>;
+  authSvc?: ReturnType<typeof makeAuthService>;
 }
 
 function makeActivatedRoute(partieId?: string, queryParams: Record<string, string> = {}) {
@@ -40,7 +43,24 @@ function makeAvailabilityService() {
   return {
     getMyDeclarations: vi.fn().mockResolvedValue([]),
     createDeclarationBatch: vi.fn().mockResolvedValue({ created: [] }),
+    getMyCalendar: vi.fn().mockResolvedValue({
+      'mes-indisponibilites': [],
+      'mes-disponibilites': [],
+      'mes-seances': [],
+      'votes-en-cours': [],
+      'inscriptions-ouvertes': [],
+    }),
     changed: signal(0),
+  };
+}
+
+// Story 30.6 : AuthService mocké — seul `currentUser` (source de `defaultCalendarLayers`,
+// encadré n°2) est lu par CalendarView.
+function makeAuthService(defaultCalendarLayers?: AuthUser['defaultCalendarLayers']) {
+  return {
+    currentUser: signal<Partial<AuthUser> | null>(
+      defaultCalendarLayers ? { defaultCalendarLayers } : null,
+    ),
   };
 }
 
@@ -108,6 +128,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   const opts: CreateOptions = typeof options === 'string' ? { mode: options } : (options ?? {});
 
   const availabilitySvc = opts.availabilitySvc ?? makeAvailabilityService();
+  const authSvc = opts.authSvc ?? makeAuthService();
   const pollSvc = makePollService();
   const snack = makeSnackBar();
   const partiesSvc = makePartiesService();
@@ -121,6 +142,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
       provideAnimationsAsync(),
       { provide: ActivatedRoute, useValue: makeActivatedRoute(opts.partieId, opts.queryParams) },
       { provide: AvailabilityService, useValue: availabilitySvc },
+      { provide: AuthService, useValue: authSvc },
       { provide: PartiesService, useValue: partiesSvc },
       { provide: PollService, useValue: pollSvc },
       { provide: MatSnackBar, useValue: snack },
@@ -143,6 +165,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
     fixture,
     pollSvc,
     availabilitySvc,
+    authSvc,
     snack,
     partiesSvc,
     scenariosSvc,
@@ -767,6 +790,13 @@ describe('CalendarView — connexion temps réel (Story 19.1, AC3)', () => {
     const availabilitySvc = {
       getMyDeclarations: vi.fn().mockResolvedValue([]),
       createDeclarationBatch: vi.fn().mockResolvedValue({ created: [] }),
+      getMyCalendar: vi.fn().mockResolvedValue({
+        'mes-indisponibilites': [],
+        'mes-disponibilites': [],
+        'mes-seances': [],
+        'votes-en-cours': [],
+        'inscriptions-ouvertes': [],
+      }),
       changed: signal(1),
     };
     const { pollSvc } = await createCalendarView({
@@ -876,5 +906,200 @@ describe('CalendarView — onBatchDeclareRequested (Story 30.3)', () => {
     expect(snack.open).toHaveBeenCalledTimes(1);
     expect(snack.open.mock.calls[0][0]).toContain('2026-08-10');
     expect(snack.open.mock.calls[0][0]).toContain('2026-08-11');
+  });
+});
+
+// ─── Couches du calendrier — état et bandeau (Story 30.6, AC3/AC4/AC7, encadré n°2) ───────────
+
+describe('CalendarView — couches actives (Story 30.6)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('montage en contexte personnel : 5 couches actives (disponibilite-groupe absente, AC8)', async () => {
+    const authSvc = makeAuthService([
+      'mes-indisponibilites',
+      'mes-disponibilites',
+      'mes-seances',
+      'votes-en-cours',
+      'inscriptions-ouvertes',
+      'disponibilite-groupe',
+    ]);
+    const { fixture } = await createCalendarView({ mode: 'personal', authSvc });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.activeLayers()).toEqual([
+      'mes-indisponibilites',
+      'mes-disponibilites',
+      'mes-seances',
+      'votes-en-cours',
+      'inscriptions-ouvertes',
+    ]);
+  });
+
+  it('montage en contexte de partie : 6 couches actives (disponibilite-groupe incluse, AC9)', async () => {
+    const authSvc = makeAuthService([
+      'mes-indisponibilites',
+      'mes-disponibilites',
+      'mes-seances',
+      'votes-en-cours',
+      'inscriptions-ouvertes',
+      'disponibilite-groupe',
+    ]);
+    const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1', authSvc });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.activeLayers()).toHaveLength(6);
+    expect(comp.activeLayers()).toContain('disponibilite-groupe');
+  });
+
+  it('toggleLayer() retire une couche par défaut → isOverridden() true (AC4, retrait pas seulement ajout)', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+    const comp = fixture.componentInstance as any;
+    expect(comp.isOverridden()).toBe(false);
+
+    comp.toggleLayer('mes-indisponibilites');
+
+    expect(comp.activeLayers()).not.toContain('mes-indisponibilites');
+    expect(comp.isOverridden()).toBe(true);
+  });
+
+  it('toggleLayer() ajoute une couche absente du défaut → isOverridden() true', async () => {
+    const authSvc = makeAuthService(['mes-disponibilites']);
+    const { fixture } = await createCalendarView({ mode: 'personal', authSvc });
+    const comp = fixture.componentInstance as any;
+    expect(comp.isOverridden()).toBe(false);
+
+    comp.toggleLayer('mes-indisponibilites');
+
+    expect(comp.isOverridden()).toBe(true);
+  });
+
+  it('resetToDefault() réaffecte le défaut du compte, aucun appel HTTP émis (AC3, encadré n°2)', async () => {
+    const availabilitySvc = makeAvailabilityService();
+    const { fixture } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+    comp.toggleLayer('mes-indisponibilites');
+    expect(comp.isOverridden()).toBe(true);
+    const callsBefore = availabilitySvc.getMyCalendar.mock.calls.length;
+
+    comp.resetToDefault();
+
+    expect(comp.isOverridden()).toBe(false);
+    expect(availabilitySvc.getMyCalendar.mock.calls.length).toBe(callsBefore);
+  });
+
+  it('une bascule de visite ne modifie jamais le défaut — un remontage (nouvelle navigation) rétablit le défaut (AC3)', async () => {
+    const authSvc = makeAuthService(['mes-disponibilites', 'mes-indisponibilites']);
+    const { fixture } = await createCalendarView({ mode: 'personal', authSvc });
+    const comp = fixture.componentInstance as any;
+    comp.toggleLayer('mes-indisponibilites');
+    expect(comp.activeLayers()).toEqual(['mes-disponibilites']);
+
+    // Remontage simulé (nouvelle instance du composant, même défaut de compte) — jamais
+    // persisté par la bascule précédente : aucun appel PATCH n'existe même dans ce composant.
+    fixture.destroy();
+    TestBed.resetTestingModule();
+    const second = await createCalendarView({ mode: 'personal', authSvc });
+    const comp2 = second.fixture.componentInstance as any;
+
+    expect(comp2.activeLayers()).toEqual(['mes-disponibilites', 'mes-indisponibilites']);
+  });
+});
+
+// ─── Source des couches — deux chemins distincts (Story 30.6, AC6/AC8/AC9, encadré n°1) ───────
+
+describe('CalendarView — source des couches (Story 30.6)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('contexte personnel : GET /me/calendar appelé une seule fois au montage', async () => {
+    const availabilitySvc = makeAvailabilityService();
+    await createCalendarView({ mode: 'personal', availabilitySvc });
+
+    expect(availabilitySvc.getMyCalendar).toHaveBeenCalledTimes(1);
+  });
+
+  it('contexte de partie : GET /me/calendar jamais appelé (AC9)', async () => {
+    const availabilitySvc = makeAvailabilityService();
+    await createCalendarView({ mode: 'mj', partieId: 'partie-1', availabilitySvc });
+
+    expect(availabilitySvc.getMyCalendar).not.toHaveBeenCalled();
+  });
+
+  it('contexte de partie : votes-en-cours dérivé d’activePolls, aucune requête HTTP de plus en bascule (AC6)', async () => {
+    const { fixture, pollSvc, scenariosSvc, availabilitySvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [ACTIVE_POLL_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+    const slotsCalls = pollSvc.getAvailableSlots.mock.calls.length;
+    const heatmapCalls = pollSvc.getHeatmap.mock.calls.length;
+    const listAllCalls = scenariosSvc.listAll.mock.calls.length;
+    const meCalendarCalls = availabilitySvc.getMyCalendar.mock.calls.length;
+
+    comp.toggleLayer('votes-en-cours');
+
+    expect(comp.agendaEntries().some((e: any) => e.type === 'votes-en-cours')).toBe(false);
+    expect(pollSvc.getAvailableSlots.mock.calls.length).toBe(slotsCalls);
+    expect(pollSvc.getHeatmap.mock.calls.length).toBe(heatmapCalls);
+    expect(scenariosSvc.listAll.mock.calls.length).toBe(listAllCalls);
+    expect(availabilitySvc.getMyCalendar.mock.calls.length).toBe(meCalendarCalls);
+  });
+});
+
+// ─── Vue Agenda (Story 30.6, AC1/AC2) ─────────────────────────────────────────────────────────
+
+describe('CalendarView — vue Agenda (Story 30.6)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('troisième option "Vue agenda" présente dans le sélecteur (AC1)', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const toggles = Array.from(fixture.nativeElement.querySelectorAll('mat-button-toggle')).map(
+      (el: any) => el.textContent.trim(),
+    );
+    expect(toggles).toContain('Vue agenda');
+  });
+
+  it('bascule vers la vue agenda affiche app-calendar-agenda-view', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    comp.onViewChange('agenda');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('app-calendar-agenda-view')).toBeTruthy();
+  });
+
+  it('une couche désactivée n’apporte plus ses entrées à agendaEntries()', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'personal',
+      availabilitySvc: (() => {
+        const svc = makeAvailabilityService();
+        svc.getMyCalendar.mockResolvedValue({
+          'mes-indisponibilites': [],
+          'mes-disponibilites': [],
+          'mes-seances': [
+            {
+              seanceId: 'sX',
+              partieId: 'pX',
+              partieName: 'Partie X',
+              scenarioId: 'scX',
+              scenarioTitle: 'Chapitre X',
+              date: '2026-09-01',
+              slot: 'EVENING',
+            },
+          ],
+          'votes-en-cours': [],
+          'inscriptions-ouvertes': [],
+        });
+        return svc;
+      })(),
+    });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.agendaEntries().some((e: any) => e.type === 'mes-seances')).toBe(true);
+
+    comp.toggleLayer('mes-seances');
+
+    expect(comp.agendaEntries().some((e: any) => e.type === 'mes-seances')).toBe(false);
   });
 });

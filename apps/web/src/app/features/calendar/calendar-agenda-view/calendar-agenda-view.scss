@@ -1,0 +1,42 @@
+.agenda-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.agenda-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--mat-sys-outline-variant, #ddd);
+  border-radius: 8px;
+}
+
+.agenda-entry__badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.agenda-entry__date {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.agenda-entry__label {
+  flex: 1;
+}
+
+.agenda-entry__detail {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.agenda-view__empty {
+  opacity: 0.7;
+}

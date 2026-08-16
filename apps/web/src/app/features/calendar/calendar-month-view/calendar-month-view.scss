@@ -147,6 +147,15 @@
   &[data-guild-status='BLOCKED']       { background: var(--color-unavailable); opacity: 0.4; }
 }
 
+/* ── Point séance à venir (couche mes-seances) ─────────────────────────────── */
+.seance-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--mat-sys-secondary, #625b71);
+}
+
 /* ── 3 segments de statut ──────────────────────────────────────────────────── */
 .segments {
   display: flex;

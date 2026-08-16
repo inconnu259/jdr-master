@@ -66,6 +66,9 @@
             @if (heatmapByDate().get(dateKey(cell.date)); as gs) {
               <span class="guild-dot" [attr.data-guild-status]="gs" aria-hidden="true"></span>
             }
+            @if (seanceDates().has(dateKey(cell.date))) {
+              <span class="seance-dot" aria-hidden="true" title="Séance à venir"></span>
+            }
             <!--
               Ces 3 segments sont cliquables à la souris pour une sélection granulaire (matin/après-midi/soir).
               Équivalent clavier : touches 1/2/3 sur la cellule parente (déjà focusable, cf. keyup.1/2/3 et

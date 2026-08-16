@@ -1,0 +1,24 @@
+<div class="layer-toggle" role="group" aria-label="Couches affichées du calendrier">
+  @for (key of keys(); track key) {
+    <button
+      type="button"
+      class="layer-chip"
+      [class.layer-chip--active]="isActive(key)"
+      [attr.aria-pressed]="isActive(key)"
+      (click)="layerToggled.emit(key)"
+    >
+      {{ theme.tone()['account.calendar_layer.' + key] }}
+    </button>
+  }
+  <div aria-live="polite">
+    @if (overridden()) {
+      <button
+        type="button"
+        class="layer-toggle__reset"
+        (click)="resetRequested.emit()"
+      >
+        {{ theme.tone()['cta.restore_default_layers'] }}
+      </button>
+    }
+  </div>
+</div>

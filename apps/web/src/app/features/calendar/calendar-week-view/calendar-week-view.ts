@@ -171,6 +171,10 @@ export class CalendarWeekView {
   readonly loading = input(false);
   readonly pendingDto = input<CreateAvailabilityDto | null>(null);
   readonly startDate = input<Date>(new Date());
+  /** Story 30.6, revue de code (AC1) : dates (yyyy-mm-dd) portant au moins une séance à venir de
+   *  la couche `mes-seances` — inscriptions-ouvertes n'a structurellement pas de date donc reste
+   *  Agenda-only. */
+  readonly seanceDates = input<Set<string>>(new Set());
 
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();
@@ -286,6 +290,10 @@ export class CalendarWeekView {
 
   protected getSlotData(cell: WeekCell, key: 'morning' | 'afternoon' | 'evening'): SlotData {
     return cell[key];
+  }
+
+  protected dateKey(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   }
 
   protected cellAriaLabel(cell: WeekCell, slotData: SlotData, slotName: string): string {

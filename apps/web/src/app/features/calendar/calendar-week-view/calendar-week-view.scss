@@ -66,6 +66,16 @@
   }
 }
 
+/* ── Point séance à venir (couche mes-seances) ─────────────────────────────── */
+.seance-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  margin-left: 3px;
+  background: var(--mat-sys-secondary, #625b71);
+}
+
 /* ── Labels de lignes (Matin / Après-midi / Soirée) ─────────────────────── */
 .row-label {
   font-size: 0.6rem;

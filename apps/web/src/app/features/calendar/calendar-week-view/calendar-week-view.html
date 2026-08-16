@@ -30,6 +30,9 @@
       @for (cell of cells(); track cell.date.getTime()) {
         <div class="grid-cell col-header" [class.today]="cell.isToday">
           {{ cell.label }}
+          @if (seanceDates().has(dateKey(cell.date))) {
+            <span class="seance-dot" aria-hidden="true" title="Séance à venir"></span>
+          }
         </div>
       }
 
