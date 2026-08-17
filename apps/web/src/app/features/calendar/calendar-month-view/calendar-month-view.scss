@@ -60,6 +60,20 @@
 
 /* ── Grille ────────────────────────────────────────────────────────────────── */
 .calendar-grid {
+  /* Story 36.2 — le seuil de densité de la bande porte sur la LARGEUR DE CASE (DESIGN §7.9 :
+     ≥ 100 px → bande de 20 px avec texte ; < 100 px → 13 px, forme seule), pas sur celle de
+     l'écran. Une media query approximerait mal : en contexte de partie, le panneau latéral
+     prend 40 % de la largeur, donc à 768 px les cases n'y font que ~63 px et le texte
+     s'afficherait dans des bandes trop étroites. Le container query mesure ce qui compte.
+     Seuil : 7 cases de 100 px + 6 gouttières de 2 px (gap ci-dessous) = 712 px de grille.
+     Revue de code : la valeur précédente (724 px) supposait une gouttière de 4 px alors que
+     `gap` vaut 2px — corrigé pour matcher le seuil réel de 100 px de largeur de case. */
+  container-type: inline-size;
+  container-name: month-grid;
+  /* Story 36.2 : toutes les rangées à la même hauteur. Sans cela, une rangée contenant une case
+     à trois bandes est plus haute qu'une rangée de cases fusionnées (mesuré : 106 px contre
+     94 px), et la grille ondule d'une semaine à l'autre. */
+  grid-auto-rows: minmax(0, 1fr);
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 2px;
@@ -74,11 +88,13 @@
 .day-cell {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* Story 36.2 : `stretch` et non `center` — sans cela les bandes ne peuvent PAS faire toute la
+     largeur de la case, ce que l'AC1 exige. Le numéro du jour se recentre lui-même. */
+  align-items: stretch;
   gap: 2px;
-  padding: 4px 2px;
+  padding: 2px 3px;
   border-radius: 6px;
-  min-height: 52px;
+  min-height: 58px;
   min-width: 0;
   overflow: hidden;
   cursor: pointer;
@@ -117,6 +133,8 @@
 
 /* ── Numéro du jour ─────────────────────────────────────────────────────────── */
 .day-number {
+  align-self: center;
+  flex: 0 0 auto;
   width: 24px;
   height: 24px;
   flex-shrink: 0;
@@ -134,87 +152,118 @@
   color: var(--mat-sys-on-primary);
 }
 
-/* ── Point guilde (heatmap) ────────────────────────────────────────────────── */
-.guild-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex-shrink: 0;
-
-  &[data-guild-status='ALL_AVAILABLE'] { background: var(--color-available); }
-  &[data-guild-status='MIXED']         { background: var(--mat-sys-tertiary, #7d5260); opacity: 0.8; }
-  &[data-guild-status='UNKNOWN']       { background: var(--color-unknown); opacity: 0.6; }
-  &[data-guild-status='BLOCKED']       { background: var(--color-unavailable); opacity: 0.4; }
-}
-
-/* ── Point séance à venir (couche mes-seances) ─────────────────────────────── */
-.seance-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--mat-sys-secondary, #625b71);
-}
-
-/* ── 3 segments de statut ──────────────────────────────────────────────────── */
-.segments {
+/* ── Les trois bandes (Story 36.2) ─────────────────────────────────────────── */
+/* Un seul rang occupe chaque bande (préséance FR-49). Le fond ne porte JAMAIS seul
+   l'information : chaque rang au-dessus de « mes disponibilités » ajoute une FORME —
+   filet pour une séance, liseré pour un vote, trame pour l'absence de réponse (P-1). */
+.bands {
   display: flex;
+  flex: 1;
+  flex-direction: column;
   gap: 2px;
-  width: 100%;
-  justify-content: center;
+  min-width: 0;
 }
 
-.segment {
-  /* Zone de clic élargie via padding vertical — zone visuelle réduite via height sur ::before */
-  position: relative;
-  width: calc(33% - 2px);
-  height: 14px;            /* zone cliquable */
-  flex-shrink: 0;
-  cursor: pointer;
+.band {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-height: 13px;
+  min-width: 0;
+  padding: 0 2px;
   border-radius: 3px;
+  overflow: hidden;
+  /* Le fond par défaut d'une bande sans rang : discret, jamais vide visuellement. */
+  background: color-mix(in srgb, var(--color-unknown) 12%, transparent);
 
-  /* La barre colorée est un pseudo-élément centré */
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 3px 0;           /* 3px de marge top/bottom = barre de 8px visible */
-    border-radius: 2px;
-    background: transparent;
-    transition: background 0.15s, opacity 0.15s;
+  /* ── Rang 4 : mes disponibilités ─────────────────────────────────────────── */
+  /* `--color-available` et non `--jdr-accent-1` : l'équivalence n'est vraie qu'en
+     Grimoire Émeraude. En Atelier Cuivré, accent-1 est un bronze sans rapport. */
+  &[data-winner='available'] {
+    background: color-mix(in srgb, var(--color-available) 32%, transparent);
   }
 
-  &[data-status='AVAILABLE']::before {
-    background: var(--color-available);
+  /* ── Rang 3 : mes indisponibilités ───────────────────────────────────────── */
+  &[data-winner='unavailable'] {
+    background: color-mix(in srgb, var(--color-unavailable) 32%, transparent);
   }
 
-  &[data-status='UNAVAILABLE']::before {
-    background: var(--color-unavailable);
-  }
-
-  &[data-status='UNKNOWN']::before {
+  /* ── Hors rang : personne ne s'est prononcé — la TRAME porte l'information ── */
+  &[data-winner='none'] {
     background: repeating-linear-gradient(
-      90deg,
-      var(--color-unknown) 0,
-      var(--color-unknown) 2px,
-      transparent 2px,
-      transparent 4px
+      45deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--color-unknown) 42%, transparent) 3px 6px
     );
   }
 
-  /* Preview : opacité réduite + animation pulse */
-  &.preview::before {
-    animation: segmentPulse 1.2s ease-in-out infinite alternate;
+  /* ── Rang 2 : vote en cours — LISERÉ gauche 3 px ─────────────────────────── */
+  /* ⚠️ Écart assumé au contrat d'UI, qui dessine un filet identique à celui de la
+     séance. Deux formes identiques ne laisseraient que la teinte pour distinguer
+     séance et vote, ce que P-1 interdit. Voir encadré n°3 de la story 36.2. */
+  &[data-winner='vote'] {
+    background: color-mix(in srgb, var(--jdr-status-todo, #f0a030) 24%, transparent);
+    border-left: 3px solid var(--jdr-status-todo, #f0a030);
+    padding-left: 0;
   }
 
-  &:hover::before {
-    filter: brightness(1.15);
+  /* ── Rang 1 : séance confirmée — FILET intérieur ─────────────────────────── */
+  &[data-winner='seance'] {
+    background: color-mix(in srgb, var(--jdr-status-soon, #ff7ad9) 28%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--jdr-status-soon, #ff7ad9) 75%, transparent);
+  }
+
+  /* Aperçu live pendant l'édition (ConstraintPanel) — repris de l'ancien segment. */
+  &.preview {
+    animation: bandPulse 1.2s ease-in-out infinite alternate;
+  }
+
+  &--uniform {
+    flex: 1;
   }
 }
 
-@keyframes segmentPulse {
-  from { opacity: 0.4; }
-  to   { opacity: 0.85; }
+/* Le titre de la séance ou le libellé du vote, tronqué à l'ellipse et jamais reformaté.
+   Il disparaît sous le seuil de densité (voir plus bas) : la forme survit, le texte cède. */
+.band__label {
+  /* AC8 — sous le seuil, la bande perd son texte et conserve sa structure. */
+  display: none;
+  flex: 1;
+  min-width: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--jdr-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+/* Story 36.2, AC5/AC8 — au-dessus du seuil, la bande grandit et porte son texte. */
+@container month-grid (min-width: 712px) {
+  .band {
+    min-height: 20px;
+    padding: 0 4px;
+  }
+
+  .band[data-winner='vote'] {
+    padding-left: 0;
+  }
+
+  .band__label {
+    display: block;
+  }
+}
+
+@keyframes bandPulse {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
 
 /* ── Loading ───────────────────────────────────────────────────────────────── */
 .loading-overlay {
@@ -230,8 +279,8 @@
   }
 
   .day-cell {
-    min-height: 80px;
-    padding: 8px 4px;
+    min-height: 86px;
+    padding: 4px 5px;
     gap: 4px;
     border-radius: 8px;
   }
@@ -242,13 +291,6 @@
     font-size: 0.92rem;
   }
 
-  .segment {
-    height: 18px;
-
-    &::before {
-      inset: 4px 0;   /* barre visible de 10px */
-    }
-  }
 
   .month-title {
     font-size: 1.2rem;

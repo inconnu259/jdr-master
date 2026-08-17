@@ -1279,6 +1279,49 @@ describe('CalendarView — rail : AC5, zéro appel réseau supplémentaire', () 
   });
 });
 
+describe('CalendarView — bandes du Mois : AC13, zéro appel réseau', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('basculer une couche ne déclenche aucun appel — les bandes se redérivent localement', async () => {
+    const { fixture, availabilitySvc, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [ACTIVE_POLL_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+
+    const heatmapCalls = pollSvc.getHeatmap.mock.calls.length;
+    const slotsCalls = pollSvc.getAvailableSlots.mock.calls.length;
+    const declCalls = availabilitySvc.getMyDeclarations.mock.calls.length;
+
+    comp.toggleLayer('mes-seances');
+    comp.toggleLayer('votes-en-cours');
+    fixture.detectChanges();
+
+    expect(pollSvc.getHeatmap.mock.calls.length).toBe(heatmapCalls);
+    expect(pollSvc.getAvailableSlots.mock.calls.length).toBe(slotsCalls);
+    expect(availabilitySvc.getMyDeclarations.mock.calls.length).toBe(declCalls);
+    expect(availabilitySvc.getMyCalendar).not.toHaveBeenCalled();
+  });
+
+  it('transmet à la vue Mois les entrées NON filtrées par couche (FR-50)', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [ACTIVE_POLL_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+
+    const before = comp.calendarEntries().length;
+    comp.toggleLayer('votes-en-cours');
+
+    // agendaEntries() perd les votes, calendarEntries() les conserve : c'est ce qui permet à la
+    // case de garder son rang et son indisponibilité quand la couche est éteinte.
+    expect(comp.agendaEntries().some((e: any) => e.type === 'votes-en-cours')).toBe(false);
+    expect(comp.calendarEntries().length).toBe(before);
+  });
+});
+
 describe('CalendarView — rail : AC6, la couche gouverne le texte', () => {
   afterEach(() => TestBed.resetTestingModule());
 

@@ -63,52 +63,62 @@
             (keydown.shift.arrowleft)="$event.preventDefault(); onShiftArrow(cell, -1)"
           >
             <span class="day-number" aria-hidden="true">{{ cell.date.getDate() }}</span>
-            @if (heatmapByDate().get(dateKey(cell.date)); as gs) {
-              <span class="guild-dot" [attr.data-guild-status]="gs" aria-hidden="true"></span>
-            }
-            @if (seanceDates().has(dateKey(cell.date))) {
-              <span class="seance-dot" aria-hidden="true" title="Séance à venir"></span>
-            }
             <!--
-              Ces 3 segments sont cliquables à la souris pour une sélection granulaire (matin/après-midi/soir).
-              Équivalent clavier : touches 1/2/3 sur la cellule parente (déjà focusable, cf. keyup.1/2/3 et
-              aria-describedby ci-dessus) plutôt qu'un tabindex par segment, qui créerait 3 arrêts de
+              Story 36.2 — trois bandes horizontales pleine largeur : matin en haut, après-midi au
+              milieu, soir en bas. La POSITION VERTICALE porte le créneau, sans icône ni libellé
+              (AC1). Un seul rang occupe chaque bande, arbitré bande par bande (AC2).
+
+              Les bandes sont cliquables à la souris pour une sélection granulaire. Équivalent
+              clavier : touches 1/2/3 sur la cellule parente (déjà focusable, cf. keyup.1/2/3 et
+              aria-describedby ci-dessus) plutôt qu'un tabindex par bande, qui créerait 3 arrêts de
               tabulation par cellule (126 sur la grille 6×7) et dégraderait la navigation clavier.
-              pointerdown : ne bulle pas vers la case (sinon un tap sur un segment rejouerait aussi
-              un tap FULL_DAY) mais démarre quand même le même geste, marqué fromSegment, pour
-              qu'un appui maintenu + glissement parti d'un segment puisse quand même armer une
+              pointerdown : ne bulle pas vers la case (sinon un tap sur une bande rejouerait aussi
+              un tap FULL_DAY) mais démarre quand même le même geste, marqué fromBand, pour
+              qu'un appui maintenu + glissement parti d'une bande puisse quand même armer une
               sélection de journée (Story 30.3 — sinon la sélection ne s'arme jamais si le doigt
-              touche la bande des segments, qui occupe une bonne partie de la case sur mobile).
+              touche les bandes, qui occupent l'essentiel de la case).
             -->
-            <div class="segments" (pointerdown)="$event.stopPropagation(); onSegmentPointerDown($event, cell)">
-              <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (touche 1) -->
-              <span
-                class="segment"
-                [attr.data-status]="cell.morningPreview !== null ? cell.morningPreview : cell.morning"
-                [class.preview]="cell.morningPreview !== null"
-                [attr.aria-label]="slotAriaLabel('Matin', cell.morningPreview !== null ? cell.morningPreview : cell.morning)"
-                role="img"
-                (click)="$event.stopPropagation(); onCellClick(cell.date, 'MORNING')"
-              ></span>
-              <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (touche 2) -->
-              <span
-                class="segment"
-                [attr.data-status]="cell.afternoonPreview !== null ? cell.afternoonPreview : cell.afternoon"
-                [class.preview]="cell.afternoonPreview !== null"
-                [attr.aria-label]="slotAriaLabel('Après-midi', cell.afternoonPreview !== null ? cell.afternoonPreview : cell.afternoon)"
-                role="img"
-                (click)="$event.stopPropagation(); onCellClick(cell.date, 'AFTERNOON')"
-              ></span>
-              <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (touche 3) -->
-              <span
-                class="segment"
-                [attr.data-status]="cell.eveningPreview !== null ? cell.eveningPreview : cell.evening"
-                [class.preview]="cell.eveningPreview !== null"
-                [attr.aria-label]="slotAriaLabel('Soirée', cell.eveningPreview !== null ? cell.eveningPreview : cell.evening)"
-                role="img"
-                (click)="$event.stopPropagation(); onCellClick(cell.date, 'EVENING')"
-              ></span>
-            </div>
+            @if (cell.uniform) {
+              <!-- AC4 : trois créneaux au même rang, aucun événement — une seule bande. La cible
+                   de créneau disparaît avec elle : le tap vaut la journée entière. -->
+              <div
+                class="bands"
+                (pointerdown)="$event.stopPropagation(); onBandPointerDown($event, cell)"
+              >
+                <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (Espace) -->
+                <span
+                  class="band band--uniform"
+                  [attr.data-winner]="cell.bands[0].winner"
+                  [attr.data-status]="cell.bands[0].preview !== null ? cell.bands[0].preview : cell.bands[0].status"
+                  [class.preview]="cell.bands[0].preview !== null"
+                  [attr.aria-label]="uniformAriaLabel(cell)"
+                  role="img"
+                  (click)="$event.stopPropagation(); onCellClick(cell.date, 'FULL_DAY')"
+                ></span>
+              </div>
+            } @else {
+              <div
+                class="bands"
+                (pointerdown)="$event.stopPropagation(); onBandPointerDown($event, cell)"
+              >
+                @for (band of cell.bands; track band.slot) {
+                  <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (touches 1/2/3) -->
+                  <span
+                    class="band"
+                    [attr.data-winner]="band.winner"
+                    [attr.data-status]="band.preview !== null ? band.preview : band.status"
+                    [class.preview]="band.preview !== null"
+                    [attr.aria-label]="bandAriaLabel(band)"
+                    role="img"
+                    (click)="$event.stopPropagation(); onCellClick(cell.date, band.slot)"
+                  >
+                    @if (band.text) {
+                      <span class="band__label">{{ band.text }}</span>
+                    }
+                  </span>
+                }
+              </div>
+            }
           </div>
         }
       }

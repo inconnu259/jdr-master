@@ -3,7 +3,10 @@ import type { AvailabilityDeclarationDto, CalendarLayerKey } from '@master-jdr/s
 import type { AgendaEntry } from './calendar-agenda-view/calendar-agenda-view';
 import {
   RAIL_SLOTS,
+  SLOT_PRECEDENCE,
+  bandsAreUniform,
   buildDayDetail,
+  buildMonthDetails,
   dateKeyToUtcMidnight,
   nextMeaningfulDate,
   toDateKey,
@@ -164,6 +167,25 @@ describe('buildDayDetail — AC6 : la couche gouverne le texte, jamais l’indis
     );
     expect(buildDayDetail('2026-08-20', [poll], sansVotes, [], NOW).slots[0].pollLabel).toBeNull();
   });
+
+  it('revue de code (2026-08-18) : le rang « vote » retombe sur le statut déclaré quand la couche « votes-en-cours » est éteinte', () => {
+    const poll: AgendaEntry = {
+      key: 'poll-1',
+      type: 'votes-en-cours',
+      date: '2026-08-20',
+      label: 'Les Cendres d’Ashal',
+      slot: 'MORNING',
+    };
+    const sansVotes = ALL_LAYERS.filter((l) => l !== 'votes-en-cours');
+
+    expect(buildDayDetail('2026-08-20', [poll], ALL_LAYERS, [], NOW).slots[0].winner).toBe('vote');
+    // Couche éteinte, aucune déclaration : retombe sur « none », pas « vote ».
+    expect(buildDayDetail('2026-08-20', [poll], sansVotes, [], NOW).slots[0].winner).toBe('none');
+    // Couche éteinte, avec une disponibilité déclarée : retombe sur « available ».
+    expect(buildDayDetail('2026-08-20', [poll], sansVotes, [decl()], NOW).slots[0].winner).toBe(
+      'available',
+    );
+  });
 });
 
 describe('buildDayDetail — doublon sur le même jour/créneau', () => {
@@ -299,5 +321,185 @@ describe('RAIL_SLOTS', () => {
   it('porte les trois créneaux et leurs abréviations', () => {
     expect(RAIL_SLOTS).toHaveLength(3);
     expect(RAIL_SLOTS.map((r) => r.shortLabel)).toEqual(['Matin', 'Après-m.', 'Soir']);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Story 36.2 — la préséance dans un créneau
+// ─────────────────────────────────────────────────────────────────────────────
+
+function pollEntry(over: Partial<AgendaEntry> = {}): AgendaEntry {
+  return {
+    key: 'poll-p1',
+    type: 'votes-en-cours',
+    date: '2026-08-20',
+    label: 'Les Cendres d’Ashal',
+    slot: 'EVENING',
+    ...over,
+  };
+}
+
+describe('SLOT_PRECEDENCE — l’ordre est écrit une fois', () => {
+  it('porte les quatre rangs, dans l’ordre de FR-49', () => {
+    expect([...SLOT_PRECEDENCE]).toEqual(['seance', 'vote', 'unavailable', 'available']);
+  });
+
+  it('n’inclut pas « non déclaré » — ce n’est pas un rang', () => {
+    expect(SLOT_PRECEDENCE).not.toContain('none');
+  });
+
+  it('n’inclut pas la disponibilité du groupe — sortie de la préséance (FR-53)', () => {
+    expect(SLOT_PRECEDENCE.some((r) => String(r).includes('groupe'))).toBe(false);
+  });
+});
+
+describe('buildDayDetail — le rang gagnant', () => {
+  it('une séance gagne sur tout le reste', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [seanceEntry(), pollEntry()],
+      ALL_LAYERS,
+      [decl()],
+      NOW,
+    );
+
+    expect(detail.slots[2].winner).toBe('seance');
+  });
+
+  it('un vote gagne sur une déclaration', () => {
+    const detail = buildDayDetail('2026-08-20', [pollEntry()], ALL_LAYERS, [decl()], NOW);
+
+    expect(detail.slots[2].winner).toBe('vote');
+  });
+
+  it('une indisponibilité gagne sur rien', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [],
+      ALL_LAYERS,
+      [decl({ kind: 'UNAVAILABLE' })],
+      NOW,
+    );
+
+    expect(detail.slots.map((s) => s.winner)).toEqual([
+      'unavailable',
+      'unavailable',
+      'unavailable',
+    ]);
+  });
+
+  it('une disponibilité déclarée donne « available »', () => {
+    const detail = buildDayDetail('2026-08-20', [], ALL_LAYERS, [decl()], NOW);
+
+    expect(detail.slots.every((s) => s.winner === 'available')).toBe(true);
+  });
+
+  it('un créneau sans rien donne « none »', () => {
+    const detail = buildDayDetail('2026-08-20', [], ALL_LAYERS, [], NOW);
+
+    expect(detail.slots.every((s) => s.winner === 'none')).toBe(true);
+  });
+
+  it('l’arbitrage est BANDE PAR BANDE, jamais à la journée (AC2)', () => {
+    const detail = buildDayDetail('2026-08-20', [seanceEntry()], ALL_LAYERS, [decl()], NOW);
+
+    expect(detail.slots.map((s) => s.winner)).toEqual(['available', 'available', 'seance']);
+  });
+
+  it('une séance sans créneau (FULL_DAY) occupe les trois bandes (AC11 / AD-9)', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [seanceEntry({ slot: 'FULL_DAY' })],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+
+    expect(detail.slots.every((s) => s.winner === 'seance')).toBe(true);
+  });
+
+  it('la couche éteinte retire le TEXTE mais pas le rang ni l’indisponibilité (AC6)', () => {
+    const sansSeances = ALL_LAYERS.filter((l) => l !== 'mes-seances');
+    const detail = buildDayDetail('2026-08-20', [seanceEntry()], sansSeances, [], NOW);
+
+    expect(detail.slots[2].winner).toBe('seance');
+    expect(detail.slots[2].seanceLabel).toBeNull();
+    expect(detail.slots[2].status).toBe('UNAVAILABLE');
+  });
+});
+
+describe('bandsAreUniform — la fusion des trois bandes (AC4)', () => {
+  it('fusionne un jour entièrement disponible', () => {
+    expect(bandsAreUniform(buildDayDetail('2026-08-20', [], ALL_LAYERS, [decl()], NOW))).toBe(true);
+  });
+
+  it('fusionne un jour entièrement vierge', () => {
+    expect(bandsAreUniform(buildDayDetail('2026-08-20', [], ALL_LAYERS, [], NOW))).toBe(true);
+  });
+
+  it('ne fusionne pas quand un créneau diffère', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [],
+      ALL_LAYERS,
+      [decl({ slot: 'MORNING', kind: 'UNAVAILABLE' })],
+      NOW,
+    );
+
+    expect(bandsAreUniform(detail)).toBe(false);
+  });
+
+  it('ne fusionne JAMAIS quand un événement est posé, même sur les trois créneaux', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [seanceEntry({ slot: 'FULL_DAY' })],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+
+    expect(detail.slots.every((s) => s.winner === 'seance')).toBe(true);
+    expect(bandsAreUniform(detail)).toBe(false);
+  });
+
+  it('ne fusionne pas un jour couvert par un vote sur les trois créneaux', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [pollEntry({ slot: 'FULL_DAY' })],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+
+    expect(bandsAreUniform(detail)).toBe(false);
+  });
+});
+
+describe('buildMonthDetails — la projection du mois', () => {
+  it('rend une entrée par jour demandé', () => {
+    const keys = ['2026-08-19', '2026-08-20', '2026-08-21'];
+    const map = buildMonthDetails(keys, [seanceEntry()], ALL_LAYERS, [], NOW);
+
+    expect([...map.keys()]).toEqual(keys);
+    expect(map.get('2026-08-20')!.slots[2].winner).toBe('seance');
+    expect(map.get('2026-08-19')!.isEmpty).toBe(true);
+  });
+
+  it('produit exactement le même détail que buildDayDetail pour un jour donné', () => {
+    const direct = buildDayDetail('2026-08-20', [seanceEntry()], ALL_LAYERS, [decl()], NOW);
+    const viaMonth = buildMonthDetails(['2026-08-20'], [seanceEntry()], ALL_LAYERS, [decl()], NOW);
+
+    expect(viaMonth.get('2026-08-20')).toEqual(direct);
+  });
+
+  it('supporte une grille de 42 jours', () => {
+    const keys = Array.from(
+      { length: 42 },
+      (_, i) => `2026-08-${String((i % 28) + 1).padStart(2, '0')}`,
+    );
+    const map = buildMonthDetails(keys, [], ALL_LAYERS, [], NOW);
+
+    expect(map.size).toBeGreaterThan(0);
+    for (const detail of map.values()) expect(detail.slots).toHaveLength(3);
   });
 });

@@ -34,10 +34,41 @@ export interface RailTarget {
   scenarioId: string;
 }
 
+/**
+ * Story 36.2 — la préséance dans un créneau (FR-49).
+ *
+ * Le rang qui occupe la bande. QUATRE rangs concourent ; `'none'` n'en est pas un — c'est ce
+ * qui reste quand rien ne gagne (« non déclaré »).
+ *
+ * La **disponibilité du groupe n'y figure pas** : elle est sortie de la préséance le 2026-08-17
+ * (FR-53) et passe sur un canal séparé, livré par la story 36.8. Ne pas l'y réintroduire.
+ */
+export type SlotWinner = 'seance' | 'vote' | 'unavailable' | 'available' | 'none';
+
+/** L'ordre, écrit une fois. Séance confirmée > vote en cours > mes indisponibilités > mes
+ *  disponibilités. Patron repris de `core/parties/party-signal-priority.ts` : un ordre exporté,
+ *  une résolution pure, une spec dédiée. */
+export const SLOT_PRECEDENCE: readonly Exclude<SlotWinner, 'none'>[] = [
+  'seance',
+  'vote',
+  'unavailable',
+  'available',
+] as const;
+
+/** Les rangs qui portent un ÉVÉNEMENT — par opposition à un simple état de disponibilité.
+ *  Un jour n'est « uniforme » (bandes fusionnables) que si aucun de ceux-là n'est posé. */
+const EVENT_WINNERS: ReadonlySet<SlotWinner> = new Set<SlotWinner>(['seance', 'vote']);
+
 export interface DaySlotDetail {
   slot: RailSlot;
   label: string;
   shortLabel: string;
+  /** Story 36.2 — le rang qui occupe le créneau. Le fond, la forme et le texte de la bande en
+   *  dépendent. Une séance dont la couche `mes-seances` est éteinte reste `'seance'`, seul son
+   *  libellé disparaît (FR-50, AC6). Le vote, en revanche, N'EST PAS indépendant de sa couche :
+   *  `votes-en-cours` éteinte fait retomber le rang sur le statut déclaré (décision utilisateur,
+   *  revue de code du 2026-08-18) — un vote n'engage rien tant qu'il n'a pas produit de séance. */
+  winner: SlotWinner;
   /** État de disponibilité du créneau. Une séance confirmée le force à `UNAVAILABLE`, quel que
    *  soit l'état de la couche « mes séances » (AC6 / FR-50). */
   status: SlotStatus;
@@ -129,6 +160,22 @@ export function buildDayDetail(
       ? 'UNAVAILABLE'
       : computeDisplayStatus(utcDate, slot, declarations, now);
 
+    // Story 36.2 — la préséance, résolue dans l'ordre de SLOT_PRECEDENCE. Le vote entre ici
+    // comme un RANG, et non plus seulement comme un libellé annexe.
+    // Revue de code (décision utilisateur, 2026-08-18) : contrairement à la séance (AC6, le rang
+    // persiste couche éteinte), le rang « vote » est GOUVERNÉ par la couche `votes-en-cours` — la
+    // retirer fait retomber le créneau sur le statut déclaré, comme si le vote n'existait pas.
+    const voteActive = poll != null && active.has('votes-en-cours');
+    const winner: SlotWinner = seance
+      ? 'seance'
+      : voteActive
+        ? 'vote'
+        : status === 'UNAVAILABLE'
+          ? 'unavailable'
+          : status === 'AVAILABLE'
+            ? 'available'
+            : 'none';
+
     const seanceNamed = seance != null && active.has('mes-seances');
     // AC11 : navigable seulement si la séance est nommée (pas d'affordance sur une ligne muette)
     // ET si l'entrée porte de quoi naviguer. AC7 : une indisponibilité dérivée d'une séance d'une
@@ -142,6 +189,7 @@ export function buildDayDetail(
       slot,
       label,
       shortLabel,
+      winner,
       status,
       seanceLabel: seanceNamed
         ? seance!.label + (seanceMatches.length > 1 ? ' (+1 autre)' : '')
@@ -159,6 +207,42 @@ export function buildDayDetail(
   );
 
   return { date: dateKey, slots, isEmpty };
+}
+
+/**
+ * Story 36.2, AC4 — un jour est « uniforme » quand ses trois créneaux portent le même rang **et**
+ * qu'aucun événement n'y est posé. Ses trois bandes fusionnent alors en une seule : il n'y a rien
+ * à distinguer, et c'est ce qui empêche la grille de devenir bariolée.
+ *
+ * Écrite volontairement comme un prédicat SUR LE DÉTAIL SEUL, sans autre dépendance : la story
+ * 36.8 devra y ajouter sa propre condition (la couche « disponibilité du groupe » allumée impose
+ * trois bandes, une jauge par créneau) — elle le fera au point d'appel, sans toucher à celle-ci.
+ */
+export function bandsAreUniform(detail: DayDetail): boolean {
+  const [first, ...rest] = detail.slots;
+  if (!first || EVENT_WINNERS.has(first.winner)) return false;
+  return rest.every((s) => s.winner === first.winner);
+}
+
+/**
+ * Story 36.2 — la projection d'un mois entier, construite AU-DESSUS de `buildDayDetail()`.
+ *
+ * Ne réimplémente rien : la préséance, la couverture `FULL_DAY` et la règle « la couche gouverne
+ * le texte » vivent dans `buildDayDetail()` et nulle part ailleurs. Aucune donnée n'est chargée
+ * ici — tout vient de signaux déjà en mémoire (AC13).
+ */
+export function buildMonthDetails(
+  dateKeys: readonly string[],
+  entries: AgendaEntry[],
+  activeLayers: readonly CalendarLayerKey[],
+  declarations: AvailabilityDeclarationDto[],
+  now: Date = new Date(),
+): Map<string, DayDetail> {
+  const out = new Map<string, DayDetail>();
+  for (const key of dateKeys) {
+    out.set(key, buildDayDetail(key, entries, activeLayers, declarations, now));
+  }
+  return out;
 }
 
 /**

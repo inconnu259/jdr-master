@@ -373,6 +373,12 @@ export class CalendarView implements OnInit {
     return this.allCalendarEntries().filter((e) => active.has(e.type));
   });
 
+  /** Story 36.2 — les entrées **non filtrées** transmises à la vue Mois, qui arbitre la préséance
+   *  bande par bande. Volontairement distinct d'`agendaEntries()` : la case doit continuer de
+   *  rendre un créneau indisponible quand la couche « mes séances » est éteinte (FR-50), ce
+   *  qu'une liste déjà filtrée rendrait impossible. */
+  protected readonly calendarEntries = computed<AgendaEntry[]>(() => this.allCalendarEntries());
+
   // ─── Rail de détail (Story 36.1) ──────────────────────────────────────────
   // Signaux DÉDIÉS, distincts de `selectedDate`/`selectedSlot` : ces derniers appartiennent au
   // ConstraintPanel et sont liés à `panelOpen`/`closePanel()`. Les réutiliser viderait le rail à

@@ -3,15 +3,22 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type {
-  AggregatedSlotDto,
   AvailKind,
   AvailabilityDeclarationDto,
+  CalendarLayerKey,
   CreateAvailabilityDto,
   DaySlot,
   SlotStatus,
 } from '@master-jdr/shared';
-import { computeDisplayStatus } from '../../../core/availability/compute-display-status';
 import { SelectionBar } from '../selection-bar/selection-bar';
+import type { AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
+import {
+  type RailSlot,
+  type SlotWinner,
+  bandsAreUniform,
+  buildMonthDetails,
+  toDateKey,
+} from '../day-detail.utils';
 import {
   LONG_PRESS_MS,
   MOVE_THRESHOLD_PX,
@@ -25,20 +32,34 @@ export interface SlotSelectedEvent {
   slot: DaySlot;
 }
 
+/**
+ * Story 36.2 — une bande de la case du Mois. Une par créneau, pleine largeur, dans l'ordre
+ * matin → après-midi → soir : **la position verticale porte le créneau**, sans icône ni libellé
+ * (AC1). Le contenu est entièrement dérivé de `buildDayDetail()` : la préséance n'est écrite
+ * qu'à un seul endroit.
+ */
+export interface DayBand {
+  slot: RailSlot;
+  label: string;
+  winner: SlotWinner;
+  status: SlotStatus;
+  /** Titre de séance ou libellé de vote, **déjà gouverné par les couches** — `null` quand la
+   *  couche est éteinte, sans que le rang ni l'indisponibilité en soient affectés (AC6/FR-50). */
+  text: string | null;
+  /** Aperçu live pendant l'édition dans `ConstraintPanel` — `null` si identique au réel. */
+  preview: SlotStatus | null;
+}
+
 interface DayCell {
   date: Date;
   isCurrentMonth: boolean;
   isToday: boolean;
   isPast: boolean;
-  morning: SlotStatus;
-  afternoon: SlotStatus;
-  evening: SlotStatus;
-  morningPreview: SlotStatus | null;
-  afternoonPreview: SlotStatus | null;
-  eveningPreview: SlotStatus | null;
+  bands: DayBand[];
+  /** AC4 — les trois créneaux portent le même rang et aucun événement : une seule bande est
+   *  rendue, occupant la hauteur. C'est ce qui empêche la grille de devenir bariolée. */
+  uniform: boolean;
 }
-
-type QuerySlot = 'MORNING' | 'AFTERNOON' | 'EVENING';
 
 function toFakeDecl(dto: CreateAvailabilityDto): AvailabilityDeclarationDto {
   return {
@@ -57,6 +78,8 @@ function toFakeDecl(dto: CreateAvailabilityDto): AvailabilityDeclarationDto {
 
 export function buildMonth(
   display: Date,
+  entries: AgendaEntry[],
+  activeLayers: readonly CalendarLayerKey[],
   decls: AvailabilityDeclarationDto[],
   pendingDecl: AvailabilityDeclarationDto | null,
 ): DayCell[][] {
@@ -73,56 +96,61 @@ export function buildMonth(
 
   const declsWithPending = pendingDecl ? [...decls, pendingDecl] : decls;
 
-  const weeks: DayCell[][] = [];
+  // Revue de code — Task 2 : une seule projection par mois, pas 42×2 appels individuels à
+  // `buildDayDetail()`. Les 42 jours de la grille sont d'abord énumérés pour construire leurs
+  // clés, puis projetés en un seul passage par `buildMonthDetails()` (au-dessus de
+  // `buildDayDetail()` — la préséance n'est toujours écrite qu'à un seul endroit).
+  const cellDates: Date[] = [];
   let dayOffset = 1 - startOffset;
+  for (let i = 0; i < 42; i++) {
+    cellDates.push(new Date(year, month, dayOffset));
+    dayOffset++;
+  }
+  const dateKeys = cellDates.map(toDateKey);
 
+  const details = buildMonthDetails(dateKeys, entries, activeLayers, decls);
+  const previewDetails = pendingDecl
+    ? buildMonthDetails(dateKeys, entries, activeLayers, declsWithPending)
+    : null;
+
+  const weeks: DayCell[][] = [];
   for (let w = 0; w < 6; w++) {
     const week: DayCell[] = [];
     for (let d = 0; d < 7; d++) {
-      const cellLocal = new Date(year, month, dayOffset);
-      const utcCell = new Date(
-        Date.UTC(cellLocal.getFullYear(), cellLocal.getMonth(), cellLocal.getDate()),
-      );
+      const cellLocal = cellDates[w * 7 + d];
+      const key = dateKeys[w * 7 + d];
       const cellMidnight = new Date(cellLocal);
       cellMidnight.setHours(0, 0, 0, 0);
 
-      const morning = computeDisplayStatus(utcCell, 'MORNING', decls);
-      const afternoon = computeDisplayStatus(utcCell, 'AFTERNOON', decls);
-      const evening = computeDisplayStatus(utcCell, 'EVENING', decls);
-
-      const computePreview = (slot: QuerySlot, real: SlotStatus): SlotStatus | null => {
-        if (!pendingDecl) return null;
-        const preview = computeDisplayStatus(utcCell, slot, declsWithPending);
-        return preview !== real ? preview : null;
-      };
+      const detail = details.get(key)!;
+      const previewDetail = previewDetails?.get(key) ?? null;
 
       week.push({
         date: cellLocal,
         isCurrentMonth: cellLocal.getMonth() === month,
         isToday: cellMidnight.getTime() === todayTime,
         isPast: cellMidnight.getTime() < todayTime,
-        morning,
-        afternoon,
-        evening,
-        morningPreview: computePreview('MORNING', morning),
-        afternoonPreview: computePreview('AFTERNOON', afternoon),
-        eveningPreview: computePreview('EVENING', evening),
+        bands: detail.slots.map((s, i): DayBand => {
+          const previewStatus = previewDetail?.slots[i].status ?? null;
+          return {
+            slot: s.slot,
+            label: s.label,
+            winner: s.winner,
+            status: s.status,
+            // Revue de code : le texte doit suivre le RANG GAGNANT, pas être choisi par
+            // nullish-coalescing — sinon une séance dont la couche est éteinte peut afficher le
+            // titre d'un vote qui couvre le même créneau, alors que la bande est stylée séance.
+            text: s.winner === 'seance' ? s.seanceLabel : s.winner === 'vote' ? s.pollLabel : null,
+            preview: previewStatus !== null && previewStatus !== s.status ? previewStatus : null,
+          };
+        }),
+        uniform: bandsAreUniform(previewDetail ?? detail),
       });
-      dayOffset++;
     }
     weeks.push(week);
   }
 
   return weeks;
-}
-
-type GuildStatus = 'ALL_AVAILABLE' | 'MIXED' | 'UNKNOWN' | 'BLOCKED';
-
-function entryGuildStatus(e: AggregatedSlotDto): GuildStatus {
-  if (e.unavailable > 0) return 'BLOCKED';
-  if (e.available === e.total && e.total > 0) return 'ALL_AVAILABLE';
-  if (e.available > 0) return 'MIXED';
-  return 'UNKNOWN';
 }
 
 interface PointerDownInfo {
@@ -132,11 +160,12 @@ interface PointerDownInfo {
   startX: number;
   startY: number;
   longPressTimer: ReturnType<typeof setTimeout> | null;
-  /** true si le pointerdown est parti d'un segment matin/après-midi/soir plutôt que du fond de
-   *  la case — dans ce cas, un relâchement rapide ne doit pas rejouer un tap FULL_DAY (le
-   *  segment gère déjà son propre tap via son (click)), seul un armement (glissement) doit être
-   *  possible depuis là. */
-  fromSegment: boolean;
+  /** true si le pointerdown est parti d'une bande matin/après-midi/soir plutôt que du fond de
+   *  la case — dans ce cas, un relâchement rapide ne doit pas rejouer un tap FULL_DAY (la bande
+   *  gère déjà son propre tap via son (click)), seul un armement (glissement) doit être
+   *  possible depuis là. Story 36.2 : les bandes remplacent les segments, le mécanisme est
+   *  conservé à l'identique. */
+  fromBand: boolean;
 }
 
 @Component({
@@ -151,11 +180,12 @@ export class CalendarMonthView {
   readonly loading = input(false);
   readonly pendingDto = input<CreateAvailabilityDto | null>(null);
   readonly initialDate = input<Date | null>(null);
-  readonly heatmap = input<AggregatedSlotDto[]>([]);
-  /** Story 30.6, revue de code (AC1) : dates (yyyy-mm-dd) portant au moins une séance à venir de
-   *  la couche `mes-seances` — inscriptions-ouvertes n'a structurellement pas de date (aucune
-   *  séance validée) donc reste Agenda-only. */
-  readonly seanceDates = input<Set<string>>(new Set());
+  /** Story 36.2 — entrées du calendrier **non filtrées par couche** (`allCalendarEntries()`).
+   *  Remplacent les anciens inputs `heatmap` et `seanceDates`, qui n'alimentaient que les deux
+   *  pastilles retirées par cette story. */
+  readonly entries = input<AgendaEntry[]>([]);
+  /** Couches actives : gouvernent le TEXTE des bandes, jamais leur rang ni l'indisponibilité. */
+  readonly activeLayers = input<readonly CalendarLayerKey[]>([]);
 
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();
@@ -175,28 +205,16 @@ export class CalendarMonthView {
   });
 
   protected readonly weeks = computed(() =>
-    buildMonth(this.displayDate(), this.declarations(), this.pendingDecl()),
+    buildMonth(
+      this.displayDate(),
+      this.entries(),
+      this.activeLayers(),
+      this.declarations(),
+      this.pendingDecl(),
+    ),
   );
 
   private readonly allCells = computed(() => this.weeks().flat());
-
-  protected readonly heatmapByDate = computed((): Map<string, GuildStatus> => {
-    const map = new Map<string, GuildStatus>();
-    const rank: Record<GuildStatus, number> = {
-      ALL_AVAILABLE: 0,
-      MIXED: 1,
-      UNKNOWN: 2,
-      BLOCKED: 3,
-    };
-    for (const entry of this.heatmap()) {
-      const status = entryGuildStatus(entry);
-      const current = map.get(entry.date);
-      if (current === undefined || rank[status] < rank[current]) {
-        map.set(entry.date, status);
-      }
-    }
-    return map;
-  });
 
   protected readonly DAY_NAMES = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
@@ -278,17 +296,25 @@ export class CalendarMonthView {
     this.slotSelected.emit({ date, slot });
   }
 
-  protected dateKey(date: Date): string {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  }
-
-  protected slotAriaLabel(slotName: string, status: SlotStatus): string {
+  /** Story 36.2, AC12 — le nom accessible d'une bande dit son créneau ET son état EN TOUTES
+   *  LETTRES : un lecteur d'écran ne voit ni fond, ni filet, ni trame. Quand un événement est
+   *  posé et nommé, c'est son titre qui fait l'état (« Soir : Le Convoi du Nord ») ; quand la
+   *  couche est éteinte, on retombe sur l'état de disponibilité, qui lui demeure (AC6). */
+  protected bandAriaLabel(band: DayBand): string {
+    if (band.text) return `${band.label} : ${band.text}`;
     const labels: Record<SlotStatus, string> = {
       AVAILABLE: 'disponible',
       UNAVAILABLE: 'indisponible',
-      UNKNOWN: 'inconnu',
+      UNKNOWN: 'non déclaré',
     };
-    return `${slotName} : ${labels[status]}`;
+    return `${band.label} : ${labels[band.status]}`;
+  }
+
+  /** AC4 — le nom accessible d'une case fusionnée : un seul état, annoncé une fois, pour la
+   *  JOURNÉE entière — jamais « Matin », qui ne serait vrai que par accident d'indexation
+   *  (revue de code, décision utilisateur 2026-08-18). */
+  protected uniformAriaLabel(cell: DayCell): string {
+    return this.bandAriaLabel({ ...cell.bands[0], label: 'Journée' });
   }
 
   protected isDaySelected(cell: DayCell): boolean {
@@ -302,7 +328,7 @@ export class CalendarMonthView {
   }
 
   // ─── Geste souris/tactile ───────────────────────────────────────────────
-  protected onCellPointerDown(event: PointerEvent, cell: DayCell, fromSegment = false): void {
+  protected onCellPointerDown(event: PointerEvent, cell: DayCell, fromBand = false): void {
     if (cell.isPast || !cell.isCurrentMonth) return;
     // Seul le bouton principal peut amorcer un geste (clic droit/milieu = menu contextuel/autre).
     if (event.button !== 0) return;
@@ -319,14 +345,14 @@ export class CalendarMonthView {
       startY: event.clientY,
       longPressTimer:
         event.pointerType === 'touch' ? setTimeout(() => this.armDrag(cell), LONG_PRESS_MS) : null,
-      fromSegment,
+      fromBand,
     };
   }
 
-  /** Un pointerdown parti d'un segment ne doit pas bulle vers la case (sinon un tap sur le
-   *  segment rejouerait aussi un tap FULL_DAY, cf. test de non-régression) — on démarre donc
-   *  manuellement le même état de geste que sur la case elle-même, marqué fromSegment. */
-  protected onSegmentPointerDown(event: PointerEvent, cell: DayCell): void {
+  /** Un pointerdown parti d'une bande ne doit pas buller vers la case (sinon un tap sur la
+   *  bande rejouerait aussi un tap FULL_DAY, cf. test de non-régression) — on démarre donc
+   *  manuellement le même état de geste que sur la case elle-même, marqué fromBand. */
+  protected onBandPointerDown(event: PointerEvent, cell: DayCell): void {
     this.onCellPointerDown(event, cell, true);
   }
 
@@ -370,9 +396,9 @@ export class CalendarMonthView {
     this.pointerDown = null;
     if (!wasArmed) {
       // Relâché sans déplacement ni appui maintenu écoulé → tap normal (AC3, AC9).
-      // Un pointerdown parti d'un segment ne rejoue pas de tap FULL_DAY : le segment gère déjà
+      // Un pointerdown parti d'une bande ne rejoue pas de tap FULL_DAY : la bande gère déjà
       // son propre tap via son (click), qui n'est pas passé par ce mécanisme.
-      if (down && !down.fromSegment) this.onCellClick(down.cell.date, 'FULL_DAY');
+      if (down && !down.fromBand) this.onCellClick(down.cell.date, 'FULL_DAY');
       return;
     }
     this.dragArmed.set(false);

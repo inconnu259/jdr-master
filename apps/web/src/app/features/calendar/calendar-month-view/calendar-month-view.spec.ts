@@ -6,7 +6,7 @@ import { CalendarMonthView, buildMonth } from './calendar-month-view';
 
 describe('buildMonth', () => {
   it('returns 6 weeks of 7 days', () => {
-    const result = buildMonth(new Date(2026, 5, 1), [], null);
+    const result = buildMonth(new Date(2026, 5, 1), [], [], [], null);
     expect(result).toHaveLength(6);
     result.forEach((week) => expect(week).toHaveLength(7));
   });
@@ -14,7 +14,7 @@ describe('buildMonth', () => {
   it('marks today as isToday in the current month view', () => {
     const today = new Date();
     const display = new Date(today.getFullYear(), today.getMonth(), 1);
-    const weeks = buildMonth(display, [], null);
+    const weeks = buildMonth(display, [], [], [], null);
     const allCells = weeks.flat();
 
     const todayMidnight = new Date(today);
@@ -38,7 +38,7 @@ describe('buildMonth', () => {
     const lastMonth = new Date();
     lastMonth.setMonth(lastMonth.getMonth() - 1);
     const display = new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 1);
-    const weeks = buildMonth(display, [], null);
+    const weeks = buildMonth(display, [], [], [], null);
     const currentMonthCells = weeks.flat().filter((c) => c.isCurrentMonth);
     expect(currentMonthCells.every((c) => !c.isToday)).toBe(true);
   });
@@ -47,7 +47,7 @@ describe('buildMonth', () => {
     // Juin 2026 : le 1er est un lundi, donc pas de cellules d'autres mois avant.
     // Juillet 2026 : le 1er est un mercredi, donc on a lundi et mardi du mois précédent.
     const display = new Date(2026, 6, 1); // juillet 2026
-    const weeks = buildMonth(display, [], null);
+    const weeks = buildMonth(display, [], [], [], null);
     const firstWeek = weeks[0];
     // Les 2 premières cellules sont en juin
     expect(firstWeek[0].isCurrentMonth).toBe(false); // lun 29 juin
@@ -57,7 +57,7 @@ describe('buildMonth', () => {
 
   it('marks all current-month cells as isCurrentMonth = true', () => {
     const display = new Date(2026, 5, 1); // juin 2026
-    const weeks = buildMonth(display, [], null);
+    const weeks = buildMonth(display, [], [], [], null);
     const currentMonthCells = weeks.flat().filter((c) => c.isCurrentMonth);
     expect(currentMonthCells).toHaveLength(30); // juin a 30 jours
   });
@@ -113,7 +113,7 @@ describe('CalendarMonthView — navigation UTC-midnight (Q8)', () => {
   });
 });
 
-describe('CalendarMonthView — accessibilité clavier des segments (touches 1/2/3)', () => {
+describe('CalendarMonthView — accessibilité clavier des bandes (touches 1/2/3)', () => {
   async function createMonthView() {
     await TestBed.configureTestingModule({
       imports: [CalendarMonthView],
@@ -126,7 +126,7 @@ describe('CalendarMonthView — accessibilité clavier des segments (touches 1/2
 
   afterEach(() => TestBed.resetTestingModule());
 
-  it("touche '1' sur la cellule du jour → sélectionne le créneau MORNING (équivalent clavier du segment matin)", async () => {
+  it("touche '1' sur la cellule du jour → sélectionne le créneau MORNING (équivalent clavier de la bande matin)", async () => {
     const fixture = await createMonthView();
     const emitted: { date: Date; slot: string }[] = [];
     fixture.componentInstance.slotSelected.subscribe((e) => emitted.push(e));
@@ -245,32 +245,32 @@ describe('CalendarMonthView — sélection par glissement', () => {
     expect(tapSpy).not.toHaveBeenCalled();
   });
 
-  it('un tap rapide (sans glissement) sur un segment ne rejoue pas un tap FULL_DAY en double', async () => {
+  // Story 36.2 : les bandes remplacent les segments comme cible de pointeur. Ces deux tests
+  // protègent le mécanisme `fromBand` (ex-`fromSegment`) — ils sont transposés, pas supprimés.
+  it('un tap rapide (sans glissement) sur une bande ne rejoue pas un tap FULL_DAY en double', async () => {
     fixture = await createMonthView();
     el = fixture.nativeElement;
     const tapSpy = vi.fn();
     fixture.componentInstance.slotSelected.subscribe(tapSpy);
-    const segment = el.querySelector(
-      '.day-cell:not(.other-month):not(.past) .segment',
-    ) as HTMLElement;
+    const band = el.querySelector('.day-cell:not(.other-month):not(.past) .band') as HTMLElement;
     const grid = el.querySelector('.calendar-grid') as HTMLElement;
-    segment.dispatchEvent(pointerEvent('pointerdown', 0, 0));
+    band.dispatchEvent(pointerEvent('pointerdown', 0, 0));
     grid.dispatchEvent(pointerEvent('pointerup', 0, 0));
 
-    // Le segment gère son propre tap via (click), simulé indépendamment ici : on vérifie
+    // La bande gère son propre tap via (click), simulé indépendamment ici : on vérifie
     // uniquement que notre mécanisme de geste (pointerdown/up) n'émet pas lui-même de FULL_DAY.
     expect(tapSpy).not.toHaveBeenCalled();
     expect(fixture.componentInstance['selectedDays']()).toHaveLength(0);
   });
 
-  it('un glissement parti d’un segment arme quand même une sélection de journée (le bug corrigé)', async () => {
+  it('un glissement parti d’une bande arme quand même une sélection de journée (le bug corrigé)', async () => {
     fixture = await createMonthView();
     el = fixture.nativeElement;
     const cells = dayCells();
-    const segment = cells[0].querySelector('.segment') as HTMLElement;
+    const band = cells[0].querySelector('.band') as HTMLElement;
     const grid = el.querySelector('.calendar-grid') as HTMLElement;
 
-    segment.dispatchEvent(pointerEvent('pointerdown', 0, 0));
+    band.dispatchEvent(pointerEvent('pointerdown', 0, 0));
     document.elementFromPoint = vi.fn().mockReturnValue(cells[2]);
     grid.dispatchEvent(pointerEvent('pointermove', 50, 0));
     fixture.detectChanges();
@@ -415,5 +415,217 @@ describe('CalendarMonthView — sélection par glissement', () => {
     // Aucune extension possible depuis ce jour (limite du mois) : l'ancre est posée mais la
     // cellule courante n'avance jamais vers le mois suivant, la sélection reste vide.
     expect(fixture.componentInstance['selectedDays']()).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Story 36.2 — la case à trois bandes et la préséance
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('CalendarMonthView — les trois bandes', () => {
+  let fixture: any;
+  let el: HTMLElement;
+
+  const ALL_LAYERS = [
+    'mes-indisponibilites',
+    'mes-disponibilites',
+    'mes-seances',
+    'votes-en-cours',
+    'inscriptions-ouvertes',
+    'disponibilite-groupe',
+  ] as any[];
+
+  function seance(date: string, slot: string | undefined = 'EVENING') {
+    return {
+      key: 'seance-s1',
+      type: 'mes-seances',
+      date,
+      label: 'Le Convoi du Nord',
+      slot,
+      partieId: 'p1',
+      scenarioId: 'sc1',
+      seanceId: 's1',
+    } as any;
+  }
+
+  function vote(date: string, slot = 'MORNING') {
+    return { key: 'poll-p1', type: 'votes-en-cours', date, label: 'Ashal', slot } as any;
+  }
+
+  function decl(over: Record<string, unknown> = {}) {
+    return {
+      id: 'd1',
+      userId: 'u1',
+      kind: 'AVAILABLE',
+      recurKind: 'PUNCTUAL',
+      dayOfWeek: null,
+      slot: 'FULL_DAY',
+      startDate: '2026-08-20T00:00:00.000Z',
+      endDate: '2026-08-20T00:00:00.000Z',
+      expiresAt: '2099-12-31T00:00:00.000Z',
+      createdAt: '2026-08-01T00:00:00.000Z',
+      ...over,
+    } as any;
+  }
+
+  async function createWith(inputs: Record<string, unknown> = {}) {
+    await TestBed.configureTestingModule({
+      imports: [CalendarMonthView],
+      providers: [provideAnimationsAsync()],
+    }).compileComponents();
+    const f = TestBed.createComponent(CalendarMonthView);
+    f.componentRef.setInput('activeLayers', ALL_LAYERS);
+    f.componentRef.setInput('initialDate', new Date(2026, 7, 15));
+    for (const [k, v] of Object.entries(inputs)) f.componentRef.setInput(k, v);
+    f.detectChanges();
+    fixture = f;
+    el = f.nativeElement;
+    return f;
+  }
+
+  /** La case du jour donné (août 2026 affiché). */
+  function cellOf(day: number): HTMLElement {
+    const target = new Date(2026, 7, day).getTime();
+    return el.querySelector(`.day-cell[data-cell-date="${target}"]`) as HTMLElement;
+  }
+
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('rend trois bandes pour un jour dont les créneaux diffèrent (AC1)', async () => {
+    await createWith({ entries: [seance('2026-08-20')], declarations: [decl()] });
+
+    expect(cellOf(20).querySelectorAll('.band')).toHaveLength(3);
+  });
+
+  it('arbitre bande par bande, jamais à la journée (AC2)', async () => {
+    await createWith({ entries: [seance('2026-08-20')], declarations: [decl()] });
+
+    const winners = Array.from(cellOf(20).querySelectorAll('.band')).map((b) =>
+      b.getAttribute('data-winner'),
+    );
+    expect(winners).toEqual(['available', 'available', 'seance']);
+  });
+
+  it('la séance gagne sur le vote sur un même créneau (AC2)', async () => {
+    await createWith({ entries: [seance('2026-08-20'), vote('2026-08-20', 'EVENING')] });
+
+    const winners = Array.from(cellOf(20).querySelectorAll('.band')).map((b) =>
+      b.getAttribute('data-winner'),
+    );
+    expect(winners[2]).toBe('seance');
+  });
+
+  it('un vote gagne sur une déclaration (AC2)', async () => {
+    await createWith({ entries: [vote('2026-08-20', 'MORNING')], declarations: [decl()] });
+
+    const winners = Array.from(cellOf(20).querySelectorAll('.band')).map((b) =>
+      b.getAttribute('data-winner'),
+    );
+    expect(winners[0]).toBe('vote');
+  });
+
+  it('une séance sans créneau occupe les trois bandes (AC11 / AD-9)', async () => {
+    // Entrée construite sans propriété `slot` du tout — c'est le cas réel d'une séance dont la
+    // date est validée sans vote rattaché : `chosenSlot` est absent et vaut FULL_DAY.
+    const sansCreneau = { ...seance('2026-08-20') };
+    delete (sansCreneau as Record<string, unknown>)['slot'];
+    await createWith({ entries: [sansCreneau] });
+
+    const winners = Array.from(cellOf(20).querySelectorAll('.band')).map((b) =>
+      b.getAttribute('data-winner'),
+    );
+    expect(winners).toEqual(['seance', 'seance', 'seance']);
+  });
+
+  it('fusionne les trois bandes sur un jour uniforme sans événement (AC4)', async () => {
+    await createWith({ declarations: [decl()] });
+
+    const bands = cellOf(20).querySelectorAll('.band');
+    expect(bands).toHaveLength(1);
+    expect(bands[0].classList.contains('band--uniform')).toBe(true);
+  });
+
+  it('ne fusionne pas quand un événement est posé, même sur les trois créneaux (AC4)', async () => {
+    await createWith({ entries: [seance('2026-08-20', 'FULL_DAY')] });
+
+    expect(cellOf(20).querySelectorAll('.band')).toHaveLength(3);
+  });
+
+  it('écrit le titre de la séance dans sa bande (AC5)', async () => {
+    await createWith({ entries: [seance('2026-08-20')] });
+
+    expect(cellOf(20).querySelector('.band__label')?.textContent?.trim()).toBe('Le Convoi du Nord');
+  });
+
+  it('éteindre la couche « mes séances » retire le texte mais garde le rang (AC6)', async () => {
+    await createWith({
+      entries: [seance('2026-08-20')],
+      activeLayers: ALL_LAYERS.filter((l) => l !== 'mes-seances'),
+    });
+
+    const bands = cellOf(20).querySelectorAll('.band');
+    expect(bands[2].getAttribute('data-winner')).toBe('seance');
+    expect(cellOf(20).querySelector('.band__label')).toBeNull();
+  });
+
+  it('revue de code (2026-08-18) : couche « mes séances » éteinte ne laisse pas fuiter le libellé d’un vote qui couvre le même créneau', async () => {
+    await createWith({
+      entries: [seance('2026-08-20'), vote('2026-08-20', 'EVENING')],
+      activeLayers: ALL_LAYERS.filter((l) => l !== 'mes-seances'),
+    });
+
+    const bands = cellOf(20).querySelectorAll('.band');
+    // La séance gagne toujours le rang (AC6) mais son texte disparaît — la bande ne doit pas
+    // afficher le titre du vote à la place, alors qu'elle reste stylée « seance ».
+    expect(bands[2].getAttribute('data-winner')).toBe('seance');
+    expect(cellOf(20).querySelector('.band__label')).toBeNull();
+  });
+
+  it('retire l’ancienne signalétique — pastilles et réglette de segments (AC7)', async () => {
+    await createWith({ entries: [seance('2026-08-20')], declarations: [decl()] });
+
+    expect(el.querySelector('.guild-dot')).toBeNull();
+    expect(el.querySelector('.seance-dot')).toBeNull();
+    expect(el.querySelector('.segment')).toBeNull();
+    expect(el.querySelector('.segments')).toBeNull();
+  });
+
+  it('nomme chaque bande avec son créneau et son état en toutes lettres (AC12)', async () => {
+    await createWith({ entries: [seance('2026-08-20')], declarations: [decl()] });
+
+    const labels = Array.from(cellOf(20).querySelectorAll('.band')).map((b) =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels[0]).toBe('Matin : disponible');
+    expect(labels[2]).toBe('Soir : Le Convoi du Nord');
+  });
+
+  it('garde un seul arrêt de tabulation par case — 42 sur la grille, pas 126 (AC12)', async () => {
+    await createWith({ entries: [seance('2026-08-20')] });
+
+    expect(el.querySelectorAll('.band[tabindex]')).toHaveLength(0);
+    expect(el.querySelectorAll('.day-cell[tabindex="0"]').length).toBeLessThanOrEqual(42);
+  });
+
+  it('un tap sur une bande émet le créneau correspondant (AC9)', async () => {
+    await createWith({ entries: [seance('2026-08-20')] });
+    const emitted: any[] = [];
+    fixture.componentInstance.slotSelected.subscribe((e: any) => emitted.push(e));
+
+    (cellOf(20).querySelectorAll('.band')[1] as HTMLElement).click();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].slot).toBe('AFTERNOON');
+  });
+
+  it('un tap sur une case fusionnée vaut la journée entière (AC4)', async () => {
+    await createWith({ declarations: [decl()] });
+    const emitted: any[] = [];
+    fixture.componentInstance.slotSelected.subscribe((e: any) => emitted.push(e));
+
+    (cellOf(20).querySelector('.band') as HTMLElement).click();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].slot).toBe('FULL_DAY');
   });
 });
