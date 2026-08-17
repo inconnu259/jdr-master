@@ -56,6 +56,18 @@
         [loading]="loading() || meCalendarLoading()"
       />
     }
+
+    <!-- Story 36.1 — rail de détail : permanent sous la grille, aux deux vues et à toutes les
+         largeurs. Aucun geste ne l'ouvre ni ne le ferme (AC1). Absent de la vue Agenda, qui est
+         elle-même une liste détaillée. -->
+    @if (view() !== 'agenda') {
+      <app-calendar-detail-rail
+        [detail]="railDetail()"
+        [touchedSlot]="railSlot()"
+        [loading]="loading() || meCalendarLoading()"
+        (scenarioActivated)="onScenarioActivated($event)"
+      />
+    }
   </div>
 
   @if (isMjMode()) {

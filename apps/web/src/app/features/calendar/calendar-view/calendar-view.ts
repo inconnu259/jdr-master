@@ -43,6 +43,13 @@ import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.se
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
 import { CalendarWeekView, getWeekStart } from '../calendar-week-view/calendar-week-view';
 import { CalendarAgendaView, type AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
+import { CalendarDetailRail } from '../calendar-detail-rail/calendar-detail-rail';
+import {
+  type RailTarget,
+  buildDayDetail,
+  nextMeaningfulDate,
+  toDateKey,
+} from '../day-detail.utils';
 import { CalendarLayerToggle } from '../calendar-layer-toggle/calendar-layer-toggle';
 import { ConstraintPanel } from '../constraint-panel/constraint-panel';
 import { type SelectedCell, buildBatchItems } from '../selection.utils';
@@ -75,6 +82,7 @@ export interface EligibleSeanceEntry {
     CalendarMonthView,
     CalendarWeekView,
     CalendarAgendaView,
+    CalendarDetailRail,
     CalendarLayerToggle,
     ConstraintPanel,
     MatButtonToggleModule,
@@ -239,117 +247,159 @@ export class CalendarView implements OnInit {
   //   (AC9).
   // - Contexte personnel (`partieId()` absent) : dérivée de `meCalendar()` (Story 30.5, AC8), qui
   //   porte déjà `mes-seances`/`votes-en-cours`/`inscriptions-ouvertes` filtrées par plage.
-  protected readonly agendaEntries = computed<AgendaEntry[]>(() => {
-    const active = new Set(this.activeLayers());
+  //
+  // Story 36.1, encadré n°2 : la dérivation est faite UNE SEULE FOIS, sans filtrage par couche.
+  // Deux consommateurs en dépendent, avec des besoins opposés :
+  //  - la vue Agenda ne veut que les couches actives (`agendaEntries()`, ci-dessous) ;
+  //  - le rail de détail a besoin des entrées NON filtrées, parce qu'une séance dont la couche
+  //    est éteinte doit continuer de rendre son créneau indisponible (FR-50 / AC6). Filtrer ici
+  //    ferait disparaître l'indisponibilité en même temps que le titre.
+  // Le filtrage par couche vit donc en aval, et seulement sur ce qui est NOMMÉ.
+  private readonly allCalendarEntries = computed<AgendaEntry[]>(() => {
     const entries: AgendaEntry[] = [];
+    const pid = this.partieId();
 
-    if (this.partieId()) {
-      if (active.has('mes-seances')) {
-        for (const scenario of this.scenarios()) {
-          for (const seance of scenario.seances) {
-            const date = seance.poll?.chosenDate ?? seance.inscription?.dateValidee;
-            if (!date) continue;
-            entries.push({
-              key: `seance-${seance.id}`,
-              type: 'mes-seances',
-              date: date.substring(0, 10),
-              label: scenario.title,
-              detail: seance.poll?.chosenSlot ?? undefined,
-            });
-          }
-        }
-      }
-      if (active.has('votes-en-cours')) {
-        for (const entry of this.activePolls()) {
-          const firstOption = [...entry.poll.options].sort((a, b) =>
-            a.date.localeCompare(b.date),
-          )[0];
+    if (pid) {
+      for (const scenario of this.scenarios()) {
+        for (const seance of scenario.seances) {
+          const date = seance.poll?.chosenDate ?? seance.inscription?.dateValidee;
+          if (!date) continue;
           entries.push({
-            key: `poll-${entry.poll.id}`,
-            type: 'votes-en-cours',
-            date: firstOption ? firstOption.date.substring(0, 10) : '',
-            label: entry.scenario.title,
-            detail: `${entry.poll.options.length} option(s) proposée(s)`,
-          });
-        }
-      }
-      if (active.has('inscriptions-ouvertes')) {
-        for (const { scenario, seance } of this.openInscriptionSeances()) {
-          entries.push({
-            key: `inscription-${seance.id}`,
-            type: 'inscriptions-ouvertes',
-            date: '',
+            key: `seance-${seance.id}`,
+            type: 'mes-seances',
+            date: date.substring(0, 10),
             label: scenario.title,
-            detail: `${seance.inscription!.inscrits.length}/${seance.inscription!.max} inscrits`,
+            detail: seance.poll?.chosenSlot ?? undefined,
+            slot: seance.poll?.chosenSlot ?? 'FULL_DAY',
+            // AC7 : en contexte de partie, `scenarios()` ne contient QUE les scénarios de cette
+            // partie — une séance d'une autre partie n'arrive jamais ici, et n'est donc ni
+            // nommée ni navigable. Elle n'existe que sous forme d'indisponibilité anonyme,
+            // dérivée côté serveur (AD-9).
+            partieId: pid,
+            scenarioId: scenario.id,
+            seanceId: seance.id,
           });
         }
       }
-      if (active.has('disponibilite-groupe')) {
-        for (const slot of this.heatmap()) {
-          if (slot.available === 0 && slot.unavailable === 0) continue;
-          entries.push({
-            key: `groupe-${slot.date}-${slot.slot}`,
-            type: 'disponibilite-groupe',
-            date: slot.date,
-            label: `${slot.slot} — ${slot.available}/${slot.total} disponibles`,
-            detail: slot.unavailable > 0 ? `${slot.unavailable} indisponible(s)` : undefined,
-          });
-        }
+      for (const entry of this.activePolls()) {
+        const firstOption = [...entry.poll.options].sort((a, b) => a.date.localeCompare(b.date))[0];
+        entries.push({
+          key: `poll-${entry.poll.id}`,
+          type: 'votes-en-cours',
+          date: firstOption ? firstOption.date.substring(0, 10) : '',
+          label: entry.scenario.title,
+          detail: `${entry.poll.options.length} option(s) proposée(s)`,
+          slot: firstOption?.slot,
+        });
+      }
+      for (const { scenario, seance } of this.openInscriptionSeances()) {
+        entries.push({
+          key: `inscription-${seance.id}`,
+          type: 'inscriptions-ouvertes',
+          date: '',
+          label: scenario.title,
+          detail: `${seance.inscription!.inscrits.length}/${seance.inscription!.max} inscrits`,
+        });
+      }
+      for (const slot of this.heatmap()) {
+        if (slot.available === 0 && slot.unavailable === 0) continue;
+        entries.push({
+          key: `groupe-${slot.date}-${slot.slot}`,
+          type: 'disponibilite-groupe',
+          date: slot.date,
+          label: `${slot.slot} — ${slot.available}/${slot.total} disponibles`,
+          detail: slot.unavailable > 0 ? `${slot.unavailable} indisponible(s)` : undefined,
+          slot: slot.slot,
+        });
       }
     } else {
       const mc = this.meCalendar();
       if (mc) {
-        if (active.has('mes-seances')) {
-          for (const s of mc['mes-seances']) {
-            entries.push({
-              key: `seance-${s.seanceId}`,
-              type: 'mes-seances',
-              date: s.date,
-              label: `${s.partieName} — ${s.scenarioTitle}`,
-              detail: s.slot,
-            });
-          }
+        for (const s of mc['mes-seances']) {
+          entries.push({
+            key: `seance-${s.seanceId}`,
+            type: 'mes-seances',
+            date: s.date,
+            label: `${s.partieName} — ${s.scenarioTitle}`,
+            detail: s.slot,
+            slot: s.slot,
+            partieId: s.partieId,
+            scenarioId: s.scenarioId,
+            seanceId: s.seanceId,
+          });
         }
-        if (active.has('votes-en-cours')) {
-          for (const p of mc['votes-en-cours']) {
-            const firstOption = [...p.options].sort((a, b) => a.date.localeCompare(b.date))[0];
-            entries.push({
-              key: `poll-${p.pollId}`,
-              type: 'votes-en-cours',
-              date: firstOption ? firstOption.date : '',
-              label: p.partieName,
-              detail: `${p.options.length} option(s) proposée(s)`,
-            });
-          }
+        for (const p of mc['votes-en-cours']) {
+          const firstOption = [...p.options].sort((a, b) => a.date.localeCompare(b.date))[0];
+          entries.push({
+            key: `poll-${p.pollId}`,
+            type: 'votes-en-cours',
+            date: firstOption ? firstOption.date : '',
+            label: p.partieName,
+            detail: `${p.options.length} option(s) proposée(s)`,
+            slot: firstOption?.slot,
+          });
         }
-        if (active.has('inscriptions-ouvertes')) {
-          for (const i of mc['inscriptions-ouvertes']) {
-            entries.push({
-              key: `inscription-${i.seanceId}`,
-              type: 'inscriptions-ouvertes',
-              date: '',
-              label: `${i.partieName} — ${i.scenarioTitle}`,
-              detail: `${i.inscritsCount}/${i.inscriptionMax} inscrits`,
-            });
-          }
+        for (const i of mc['inscriptions-ouvertes']) {
+          entries.push({
+            key: `inscription-${i.seanceId}`,
+            type: 'inscriptions-ouvertes',
+            date: '',
+            label: `${i.partieName} — ${i.scenarioTitle}`,
+            detail: `${i.inscritsCount}/${i.inscriptionMax} inscrits`,
+          });
         }
       }
     }
 
-    if (active.has('mes-disponibilites') || active.has('mes-indisponibilites')) {
-      for (const d of this.visibleDeclarations()) {
-        entries.push({
-          key: `decl-${d.id}`,
-          type: d.kind === 'AVAILABLE' ? 'mes-disponibilites' : 'mes-indisponibilites',
-          date: d.startDate ?? '',
-          label: d.recurKind === 'RECURRING' ? 'Récurrent' : 'Ponctuel',
-          detail: d.slot,
-        });
-      }
+    for (const d of this.declarations()) {
+      entries.push({
+        key: `decl-${d.id}`,
+        type: d.kind === 'AVAILABLE' ? 'mes-disponibilites' : 'mes-indisponibilites',
+        date: d.startDate ?? '',
+        label: d.recurKind === 'RECURRING' ? 'Récurrent' : 'Ponctuel',
+        detail: d.slot,
+        slot: d.slot,
+      });
     }
 
     return entries;
   });
+
+  // Story 30.6, Task 6/AC2 : liste chronologique unique fusionnant les couches ACTIVES.
+  // Le filtre par type est exactement équivalent à l'ancien gating bloc par bloc, y compris pour
+  // les déclarations (dont `visibleDeclarations()` applique le même mapping kind → couche).
+  protected readonly agendaEntries = computed<AgendaEntry[]>(() => {
+    const active = new Set(this.activeLayers());
+    return this.allCalendarEntries().filter((e) => active.has(e.type));
+  });
+
+  // ─── Rail de détail (Story 36.1) ──────────────────────────────────────────
+  // Signaux DÉDIÉS, distincts de `selectedDate`/`selectedSlot` : ces derniers appartiennent au
+  // ConstraintPanel et sont liés à `panelOpen`/`closePanel()`. Les réutiliser viderait le rail à
+  // chaque fermeture du panneau (encadré n°1, piège n°1).
+  protected readonly railDate = signal<Date | null>(null);
+  protected readonly railSlot = signal<DaySlot | null>(null);
+
+  /** AC3 — au repos, le prochain jour portant quelque chose ; à défaut, aujourd'hui (jamais un
+   *  rail blanc). Dérivé de la liste COMPLÈTE (`allCalendarEntries()`), pas des couches actives :
+   *  le rail suit, il ne se commande pas — désactiver une couche ne doit pas le faire sauter vers
+   *  un autre jour. */
+  private readonly railDateKey = computed<string>(() => {
+    const touched = this.railDate();
+    if (touched) return toDateKey(touched);
+    const todayKey = toDateKey(new Date());
+    return nextMeaningfulDate(this.allCalendarEntries(), todayKey) ?? todayKey;
+  });
+
+  /** AC5 — purement dérivé des signaux déjà chargés : aucun appel réseau n'part d'ici. */
+  protected readonly railDetail = computed(() =>
+    buildDayDetail(
+      this.railDateKey(),
+      this.allCalendarEntries(),
+      this.activeLayers(),
+      this.visibleDeclarations(),
+    ),
+  );
 
   // Story 30.6, revue de code (AC1) : marqueur Mois/Semaine pour la couche `mes-seances` — dérivé
   // d'agendaEntries() pour ne jamais dupliquer la logique de source (AD-17). `inscriptions-ouvertes`
@@ -505,11 +555,24 @@ export class CalendarView implements OnInit {
   protected noop(): void {}
 
   protected onSlotSelected(event: SlotSelectedEvent): void {
+    // Story 36.1, AC2 : le rail suit tout toucher de case, « quelle que soit la raison du
+    // toucher ». Il s'ajoute au comportement existant — le panneau s'ouvre exactement comme
+    // avant (AC9), et rien n'est retiré de ce handler.
+    this.railDate.set(event.date);
+    this.railSlot.set(event.slot);
+
     this.selectedDate.set(event.date);
     this.selectedSlot.set(event.slot);
     this.selectedExisting.set(this.findMatchingDeclaration(event.date, event.slot));
     this.pendingDto.set(null);
     this.panelOpen.set(true);
+  }
+
+  /** Story 36.1, AC11 — activer une ligne du rail ouvre LE SCÉNARIO qui porte la séance. Aucun
+   *  écran de séance n'existe dans l'application : une séance n'a d'existence qu'à l'intérieur de
+   *  son scénario, qui porte le contexte utile (chronologie, autres séances, compte rendu). */
+  protected async onScenarioActivated(target: RailTarget): Promise<void> {
+    await this.router.navigate(['/parties', target.partieId, 'scenarios', target.scenarioId]);
   }
 
   // Story 30.3 : la sélection est déjà effacée côté vue enfant au moment de l'émission (succès ET

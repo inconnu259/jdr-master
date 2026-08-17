@@ -7,7 +7,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { Location } from '@angular/common';
 import { vi } from 'vitest';
 import { CalendarView } from './calendar-view';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import type { AuthUser } from '@master-jdr/shared';
 import {
   AvailabilityService,
@@ -1101,5 +1101,244 @@ describe('CalendarView — vue Agenda (Story 30.6)', () => {
     comp.toggleLayer('mes-seances');
 
     expect(comp.agendaEntries().some((e: any) => e.type === 'mes-seances')).toBe(false);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Story 36.1 — Le rail de détail
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Calendrier personnel portant une séance datée, pour exercer le rail hors contexte de partie. */
+function makeAvailabilityServiceWithSeance(date = '2026-09-01', slot = 'EVENING') {
+  const svc = makeAvailabilityService();
+  svc.getMyCalendar.mockResolvedValue({
+    'mes-indisponibilites': [],
+    'mes-disponibilites': [],
+    'mes-seances': [
+      {
+        seanceId: 'sX',
+        partieId: 'pX',
+        partieName: 'Partie X',
+        scenarioId: 'scX',
+        scenarioTitle: 'Chapitre X',
+        date,
+        slot,
+      },
+    ],
+    'votes-en-cours': [],
+    'inscriptions-ouvertes': [],
+  });
+  return svc;
+}
+
+describe('CalendarView — rail : présence permanente (AC1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('rend le rail en vue mois', async () => {
+    const { fixture } = await createCalendarView('personal');
+
+    expect(fixture.nativeElement.querySelector('app-calendar-detail-rail')).toBeTruthy();
+  });
+
+  it('rend le rail en vue semaine', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    comp.onViewChange('week');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('app-calendar-detail-rail')).toBeTruthy();
+  });
+
+  it('ne rend pas le rail en vue agenda — celle-ci est déjà une liste détaillée', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    comp.onViewChange('agenda');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('app-calendar-detail-rail')).toBeNull();
+  });
+
+  it('n’expose aucun geste d’ouverture ou de fermeture du rail', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.railOpen).toBeUndefined();
+    expect(comp.toggleRail).toBeUndefined();
+  });
+});
+
+describe('CalendarView — rail : il suit le toucher (AC2)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('un toucher peuple le rail ET ouvre toujours le panneau de déclaration (AC9)', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    comp.onSlotSelected({ date: new Date(2026, 8, 1), slot: 'EVENING' });
+    fixture.detectChanges();
+
+    expect(comp.railSlot()).toBe('EVENING');
+    expect(comp.railDetail().date).toBe('2026-09-01');
+    // Non-régression : le comportement historique du handler est intact.
+    expect(comp.panelOpen()).toBe(true);
+    expect(comp.selectedSlot()).toBe('EVENING');
+  });
+
+  it('n’utilise PAS les signaux du panneau — fermer le panneau ne vide pas le rail', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    comp.onSlotSelected({ date: new Date(2026, 8, 1), slot: 'EVENING' });
+    comp.closePanel();
+    fixture.detectChanges();
+
+    expect(comp.panelOpen()).toBe(false);
+    expect(comp.railDetail().date).toBe('2026-09-01');
+  });
+
+  it('le détail porte toujours trois créneaux', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    comp.onSlotSelected({ date: new Date(2026, 8, 1), slot: 'FULL_DAY' });
+
+    expect(comp.railDetail().slots.map((s: any) => s.slot)).toEqual([
+      'MORNING',
+      'AFTERNOON',
+      'EVENING',
+    ]);
+  });
+});
+
+describe('CalendarView — rail : état de repos (AC3/AC4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('montre le prochain jour porteur quand aucune case n’a été touchée', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'personal',
+      availabilitySvc: makeAvailabilityServiceWithSeance('2026-09-01'),
+    });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.railDate()).toBeNull();
+    expect(comp.railDetail().date).toBe('2026-09-01');
+    expect(comp.railDetail().slots[2].seanceLabel).toBe('Partie X — Chapitre X');
+  });
+
+  it('retombe sur aujourd’hui quand rien n’est porteur, plutôt qu’un rail blanc', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    const todayKey = new Date().toLocaleDateString('sv-SE');
+    expect(comp.railDetail().date).toBe(todayKey);
+    expect(comp.railDetail().isEmpty).toBe(true);
+  });
+});
+
+describe('CalendarView — rail : AC5, zéro appel réseau supplémentaire', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('un toucher n’émet aucun appel de plus (contexte personnel)', async () => {
+    const { fixture, availabilitySvc, pollSvc } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    const calendarCalls = availabilitySvc.getMyCalendar.mock.calls.length;
+    const declCalls = availabilitySvc.getMyDeclarations.mock.calls.length;
+
+    comp.onSlotSelected({ date: new Date(2026, 8, 1), slot: 'MORNING' });
+    comp.railDetail();
+    fixture.detectChanges();
+
+    expect(availabilitySvc.getMyCalendar.mock.calls.length).toBe(calendarCalls);
+    expect(availabilitySvc.getMyDeclarations.mock.calls.length).toBe(declCalls);
+    expect(pollSvc.getHeatmap).not.toHaveBeenCalled();
+    expect(pollSvc.getAvailableSlots).not.toHaveBeenCalled();
+  });
+
+  it('un toucher n’émet aucun appel de plus (contexte de partie)', async () => {
+    const { fixture, availabilitySvc, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [ACTIVE_POLL_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+
+    const heatmapCalls = pollSvc.getHeatmap.mock.calls.length;
+    const slotsCalls = pollSvc.getAvailableSlots.mock.calls.length;
+
+    comp.onSlotSelected({ date: new Date(2026, 8, 1), slot: 'MORNING' });
+    comp.railDetail();
+    fixture.detectChanges();
+
+    expect(pollSvc.getHeatmap.mock.calls.length).toBe(heatmapCalls);
+    expect(pollSvc.getAvailableSlots.mock.calls.length).toBe(slotsCalls);
+    // Le calendrier personnel n'est JAMAIS appelé depuis un contexte de partie (AD-18).
+    expect(availabilitySvc.getMyCalendar).not.toHaveBeenCalled();
+  });
+});
+
+describe('CalendarView — rail : AC6, la couche gouverne le texte', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('éteindre « mes séances » retire le titre mais garde l’indisponibilité', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'personal',
+      availabilitySvc: makeAvailabilityServiceWithSeance('2026-09-01'),
+    });
+    const comp = fixture.componentInstance as any;
+
+    comp.onSlotSelected({ date: new Date(2026, 8, 1), slot: 'EVENING' });
+    expect(comp.railDetail().slots[2].seanceLabel).toBe('Partie X — Chapitre X');
+    expect(comp.railDetail().slots[2].status).toBe('UNAVAILABLE');
+
+    comp.toggleLayer('mes-seances');
+
+    expect(comp.railDetail().slots[2].seanceLabel).toBeNull();
+    expect(comp.railDetail().slots[2].status).toBe('UNAVAILABLE');
+  });
+});
+
+describe('CalendarView — rail : AC11, activer une ligne ouvre le scénario', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('navigue vers l’écran du scénario, jamais vers un écran de séance', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'personal',
+      availabilitySvc: makeAvailabilityServiceWithSeance('2026-09-01'),
+    });
+    const comp = fixture.componentInstance as any;
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    await comp.onScenarioActivated({ partieId: 'pX', scenarioId: 'scX' });
+
+    expect(navigate).toHaveBeenCalledWith(['/parties', 'pX', 'scenarios', 'scX']);
+  });
+
+  it('expose une cible navigable sur la séance du calendrier personnel', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'personal',
+      availabilitySvc: makeAvailabilityServiceWithSeance('2026-09-01'),
+    });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.railDetail().slots[2].seanceTarget).toEqual({
+      partieId: 'pX',
+      scenarioId: 'scX',
+    });
+  });
+
+  it('les entrées de séance d’un contexte de partie ne nomment que CETTE partie (AC7)', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [ACTIVE_POLL_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+
+    const seances = comp.agendaEntries().filter((e: any) => e.type === 'mes-seances');
+    for (const s of seances) expect(s.partieId).toBe('partie-1');
   });
 });

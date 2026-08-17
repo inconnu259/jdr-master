@@ -1,5 +1,6 @@
 import { Component, computed, input } from '@angular/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import type { DaySlot } from '@master-jdr/shared';
 
 /** Type d'entrée affichée dans la vue Agenda (Story 30.6, AC2) — un par couche pertinente. Chaque
  *  entrée reste identifiable comme telle (badge de type), jamais une liste indifférenciée. */
@@ -22,6 +23,17 @@ export interface AgendaEntry {
   date: string;
   label: string;
   detail?: string;
+  /** Story 36.1, Task 2 : créneau TYPÉ de l'entrée. `detail` porte déjà cette information sous
+   *  forme de texte libre destiné à l'affichage ; le rail de détail a besoin d'une valeur
+   *  exploitable pour ranger l'entrée dans la bonne ligne. `undefined` = créneau inconnu, traité
+   *  comme `FULL_DAY` en lecture (même convention que `compute-display-status.ts`). */
+  slot?: DaySlot;
+  /** Story 36.1, Task 4 bis : identifiants de navigation. Renseignés uniquement pour les entrées
+   *  ouvrables — aujourd'hui les séances, dont on ouvre le SCÉNARIO qui les porte (aucun écran de
+   *  séance n'existe). Absents pour toute entrée non ouvrable. */
+  partieId?: string;
+  scenarioId?: string;
+  seanceId?: string;
 }
 
 const TYPE_LABELS: Record<AgendaEntryType, string> = {

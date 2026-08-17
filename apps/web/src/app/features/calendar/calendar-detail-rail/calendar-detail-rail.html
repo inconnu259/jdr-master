@@ -1,0 +1,59 @@
+<!-- Story 36.1 — rail de détail. Région live : il se repeuple sans action explicite de
+     consultation (AC10), et n'ouvre ni ne ferme rien, donc aucune règle de piège de focus. -->
+<div
+  class="rail"
+  [class.rail--loading]="loading()"
+  role="region"
+  aria-label="Détail du jour"
+  aria-live="polite"
+>
+  @if (detail(); as d) {
+    <div class="dl">{{ dayLabel() }}</div>
+
+    <!-- Les TROIS créneaux, toujours — y compris les vides, qui disent leur état (AC2/AC4). -->
+    @for (s of d.slots; track s.slot) {
+      <div class="it" [class.it--touched]="isTouched(s)">
+        <span class="w">
+          @switch (s.slot) {
+            @case ('MORNING') {
+              <svg class="ic" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v3M5.6 9.6l2 2M18.4 9.6l-2 2M3 18h18M7 18a5 5 0 0 1 10 0" />
+              </svg>
+            }
+            @case ('AFTERNOON') {
+              <svg class="ic" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="4.2" />
+                <path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
+              </svg>
+            }
+            @case ('EVENING') {
+              <svg class="ic" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z" />
+              </svg>
+            }
+          }
+          <span class="w-label">{{ s.label }}</span>
+          <span class="w-label-short">{{ s.shortLabel }}</span>
+        </span>
+
+        @if (s.seanceTarget) {
+          <!-- AC11 : seule une ligne portant une séance nommée est activable, et c'est un vrai
+               bouton — focalisable et atteignable au clavier sans code supplémentaire. -->
+          <button type="button" class="v v--action" [attr.aria-label]="openLabel(s)" (click)="onActivate(s)">
+            <b>{{ s.seanceLabel }}</b>
+          </button>
+        } @else if (s.seanceLabel) {
+          <span class="v"><b>{{ s.seanceLabel }}</b></span>
+        } @else if (s.pollLabel) {
+          <span class="v"><b>{{ s.pollLabel }}</b><span class="m"> · vote de date</span></span>
+        } @else {
+          <!-- Jamais la couleur seule : l'état est écrit en toutes lettres (AC8). -->
+          <span class="v" [attr.data-status]="s.status">{{ statusLabel(s.status) }}</span>
+        }
+      </div>
+    }
+  } @else {
+    <div class="dl">Détail du jour</div>
+    <div class="it"><span class="v empty">Aucun jour à détailler</span></div>
+  }
+</div>

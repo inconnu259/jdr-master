@@ -1,0 +1,156 @@
+/* Story 36.1 — rail de détail.
+   Valeurs reprises du contrat d'UI (mockups/contrat-ui-calendrier.html, CSS `.rail`).
+   Aucun slug de thème n'est ciblé : tout passe par les tokens, pour rester neutre au renommage
+   `medieval-steampunk` → `atelier-cuivre` prévu à l'épic 35. */
+
+.rail {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--mat-sys-surface-container);
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 10px;
+
+  &--loading {
+    opacity: 0.6;
+  }
+}
+
+.dl {
+  margin-bottom: 5px;
+  font-size: 11px;
+  color: var(--jdr-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.it {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 0;
+  border-top: 1px solid var(--mat-sys-outline-variant, #ccc);
+
+  &:first-child {
+    border-top: 0;
+  }
+
+  /* Créneau effectivement touché : mis en avant par le POIDS, pas par la seule couleur. */
+  &--touched .v {
+    font-weight: 600;
+  }
+}
+
+.w {
+  display: flex;
+  flex: 0 0 78px;
+  width: 78px;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--jdr-text-muted);
+}
+
+.ic {
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--jdr-text-muted);
+}
+
+/* Le libellé long est le défaut ; l'abrégé ne sort que sous le seuil (voir plus bas). */
+.w-label-short {
+  display: none;
+}
+
+.v {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--jdr-text);
+
+  b {
+    font-weight: 600;
+  }
+
+  /* Accessoires (lieu, heure, note) — repliés en premier quand la place manque. */
+  .m {
+    font-size: 11px;
+    color: var(--jdr-text-muted);
+  }
+
+  &[data-status='AVAILABLE'] {
+    color: var(--color-available);
+  }
+
+  &[data-status='UNAVAILABLE'] {
+    color: var(--color-unavailable);
+  }
+
+  &[data-status='UNKNOWN'] {
+    color: var(--jdr-text-muted);
+  }
+
+  &.empty {
+    color: var(--jdr-text-muted);
+    font-style: italic;
+  }
+}
+
+/* Ligne activable (AC11). Le bouton se fond dans la ligne : c'est la ligne qui est cliquable,
+   pas un contrôle rapporté. Survol et focus se voient sans reposer sur la couleur seule. */
+.v--action {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+
+  b {
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--jdr-text) 40%, transparent);
+    text-underline-offset: 2px;
+  }
+
+  &:hover b {
+    text-decoration-color: var(--jdr-text);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--jdr-accent-1);
+    outline-offset: 2px;
+  }
+}
+
+/* Densité étroite : le libellé de créneau s'abrège et les accessoires se replient.
+   Les TROIS lignes restent — aucune largeur n'en retire une (invariant de la story). */
+@media (max-width: 767px) {
+  .w {
+    flex: 0 0 62px;
+    width: 62px;
+    font-size: 10px;
+  }
+
+  .w-label {
+    display: none;
+  }
+
+  .w-label-short {
+    display: inline;
+  }
+
+  .v {
+    font-size: 11.5px;
+
+    .m {
+      display: none;
+    }
+  }
+}
