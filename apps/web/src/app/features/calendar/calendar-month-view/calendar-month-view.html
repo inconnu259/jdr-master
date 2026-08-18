@@ -20,8 +20,9 @@
   </div>
 
   <p id="month-cell-instructions" class="visually-hidden">
-    Entrée ou Espace : sélectionner la journée complète. Touches 1, 2, 3 : sélectionner respectivement
-    le matin, l'après-midi ou le soir.
+    Espace : sélectionner la journée entière. Touches 1, 2, 3 : sélectionner respectivement le
+    matin, l'après-midi ou le soir. Maj plus flèches : étendre la sélection. Entrée : valider la
+    sélection avec ce qu'affiche la barre. Échap : annuler.
   </p>
 
   @if (loading()) {
@@ -47,6 +48,7 @@
             [class.today]="cell.isToday"
             [class.past]="cell.isPast"
             [class.selected]="isDaySelected(cell)"
+            [class.current]="isCurrentDay(cell)"
             [attr.aria-hidden]="!cell.isCurrentMonth ? 'true' : null"
             [attr.aria-label]="cell.isCurrentMonth ? (cell.date.getDate() + (cell.isToday ? ' (aujourd\'hui)' : '')) : null"
             [attr.aria-disabled]="cell.isCurrentMonth && cell.isPast ? 'true' : null"
@@ -54,11 +56,12 @@
             [attr.tabindex]="!cell.isCurrentMonth ? null : (cell.isPast ? null : 0)"
             [attr.aria-describedby]="cell.isCurrentMonth && !cell.isPast ? 'month-cell-instructions' : null"
             (pointerdown)="onCellPointerDown($event, cell)"
-            (keyup.enter)="onCellEnterKey(cell)"
-            (keyup.space)="onCellClick(cell.date, 'FULL_DAY')"
-            (keyup.1)="onCellClick(cell.date, 'MORNING')"
-            (keyup.2)="onCellClick(cell.date, 'AFTERNOON')"
-            (keyup.3)="onCellClick(cell.date, 'EVENING')"
+            (keyup.enter)="onCellEnterKey()"
+            (keydown.space)="$event.preventDefault()"
+            (keyup.space)="onCellKeySelect(cell, 'FULL_DAY')"
+            (keyup.1)="onCellKeySelect(cell, 'MORNING')"
+            (keyup.2)="onCellKeySelect(cell, 'AFTERNOON')"
+            (keyup.3)="onCellKeySelect(cell, 'EVENING')"
             (keydown.shift.arrowright)="$event.preventDefault(); onShiftArrow(cell, 1)"
             (keydown.shift.arrowleft)="$event.preventDefault(); onShiftArrow(cell, -1)"
           >
@@ -72,35 +75,42 @@
               clavier : touches 1/2/3 sur la cellule parente (déjà focusable, cf. keyup.1/2/3 et
               aria-describedby ci-dessus) plutôt qu'un tabindex par bande, qui créerait 3 arrêts de
               tabulation par cellule (126 sur la grille 6×7) et dégraderait la navigation clavier.
-              pointerdown : ne bulle pas vers la case (sinon un tap sur une bande rejouerait aussi
-              un tap FULL_DAY) mais démarre quand même le même geste, marqué fromBand, pour
-              qu'un appui maintenu + glissement parti d'une bande puisse quand même armer une
-              sélection de journée (Story 30.3 — sinon la sélection ne s'arme jamais si le doigt
-              touche les bandes, qui occupent l'essentiel de la case).
+              pointerdown : posé sur CHAQUE bande depuis la story 36.3 (et non plus sur leur
+              conteneur), parce que le geste doit connaître le créneau d'origine — c'est lui qui
+              initialise la portée de la barre. Il ne bulle pas vers la case (sinon un tap sur une
+              bande rejouerait aussi un tap FULL_DAY) mais démarre quand même le même geste, marqué
+              fromBand, pour qu'un appui maintenu + glissement parti d'une bande puisse armer une
+              sélection (Story 30.3 — sinon la sélection ne s'arme jamais si le doigt touche les
+              bandes, qui occupent l'essentiel de la case).
+
+              Story 36.3, AC1 : le tap n'ouvre plus le panneau de déclaration, il arme une
+              sélection d'un créneau. Le panneau se rejoint par « Autre… » dans la barre.
             -->
             @if (cell.uniform) {
-              <!-- AC4 : trois créneaux au même rang, aucun événement — une seule bande. La cible
-                   de créneau disparaît avec elle : le tap vaut la journée entière. -->
-              <div
-                class="bands"
-                (pointerdown)="$event.stopPropagation(); onBandPointerDown($event, cell)"
-              >
+              <!-- AC4 (36.2) : trois créneaux au même rang, aucun événement — une seule bande. La
+                   cible de créneau disparaît avec elle : le tap vaut la journée entière
+                   (collision 8 de la spine d'interactions).
+
+                   Story 36.3 : la bande fusionnée porte les TROIS créneaux — elle reste donc
+                   marquée quelle que soit la portée, sans quoi choisir « Soir » sur un jour
+                   uniforme n'afficherait plus rien (défaut constaté à l'écran, invisible aux
+                   tests). -->
+              <div class="bands">
                 <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (Espace) -->
                 <span
                   class="band band--uniform"
                   [attr.data-winner]="cell.bands[0].winner"
                   [attr.data-status]="cell.bands[0].preview !== null ? cell.bands[0].preview : cell.bands[0].status"
                   [class.preview]="cell.bands[0].preview !== null"
+                  [class.band--selected]="isDaySelected(cell)"
                   [attr.aria-label]="uniformAriaLabel(cell)"
                   role="img"
+                  (pointerdown)="$event.stopPropagation(); onBandPointerDown($event, cell, 'FULL_DAY')"
                   (click)="$event.stopPropagation(); onCellClick(cell.date, 'FULL_DAY')"
                 ></span>
               </div>
             } @else {
-              <div
-                class="bands"
-                (pointerdown)="$event.stopPropagation(); onBandPointerDown($event, cell)"
-              >
+              <div class="bands">
                 @for (band of cell.bands; track band.slot) {
                   <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events -- équivalent clavier fourni par la cellule parente (touches 1/2/3) -->
                   <span
@@ -108,8 +118,10 @@
                     [attr.data-winner]="band.winner"
                     [attr.data-status]="band.preview !== null ? band.preview : band.status"
                     [class.preview]="band.preview !== null"
+                    [class.band--selected]="isBandSelected(cell, band.slot)"
                     [attr.aria-label]="bandAriaLabel(band)"
                     role="img"
+                    (pointerdown)="$event.stopPropagation(); onBandPointerDown($event, cell, band.slot)"
                     (click)="$event.stopPropagation(); onCellClick(cell.date, band.slot)"
                   >
                     @if (band.text) {
@@ -127,9 +139,15 @@
       <app-selection-bar
         [count]="selectedDays().length"
         [rangeLabel]="selectionRangeLabel()"
+        [scope]="scope()"
+        [armedKind]="armedKind()"
+        (scopeChange)="onScopeChange($event)"
+        (armedKindChange)="onArmedKindChange($event)"
         (markAvailable)="onSelectionCommit('AVAILABLE')"
         (markUnavailable)="onSelectionCommit('UNAVAILABLE')"
+        (otherRequested)="onOtherRequested()"
         (cancelled)="onSelectionCancelled()"
+        (keydown.escape)="onSelectionCancelled()"
       />
     }
   }

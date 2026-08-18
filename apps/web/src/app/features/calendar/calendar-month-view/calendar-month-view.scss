@@ -125,9 +125,26 @@
     pointer-events: none;
   }
 
+  /* Story 36.3 — la case marque le JOUR retenu par la plage ; c'est la bande qui marque le
+     CRÉNEAU que la portée désigne. Le fond de la case est donc allégé par rapport à la story
+     30.3 : à 35 % il noyait les trois bandes et rendait la portée illisible. */
+  /* ⚠️ Story 36.3 — MÊME traitement qu'en vue Semaine (`calendar-week-view.scss`, bloc jumeau) :
+     les deux grilles doivent se lire pareil. Toute retouche ici est à reporter là-bas.
+     L'anneau est en `--mat-sys-on-surface` et non en primaire : celle-ci est un vert, qui se
+     confondait avec le fond d'une cellule « disponible ». Une couleur de contraste tient sur les
+     quatre fonds possibles. */
   &.selected {
-    background: color-mix(in srgb, var(--mat-sys-primary) 35%, transparent);
-    box-shadow: inset 0 0 0 2px var(--mat-sys-primary);
+    background: color-mix(in srgb, var(--mat-sys-primary) 22%, transparent);
+    box-shadow: inset 0 0 0 3px var(--mat-sys-on-surface);
+  }
+
+  /* Story 36.3, AC16 — la date courante : la dernière case cliquée. Repère DÉLIBÉRÉMENT plus discret que
+     `.selected` : un liseré fin et neutre, pas l'anneau primaire de la sélection. Les deux ne
+     disent pas la même chose — l'un « je lis ce jour », l'autre « ce jour partira à l'écriture »
+     — et ils peuvent coexister sur la même case, auquel cas la sélection l'emporte. */
+  &.current:not(.selected) {
+    outline: 2px dashed var(--mat-sys-on-surface-variant);
+    outline-offset: -2px;
   }
 }
 
@@ -222,6 +239,16 @@
     flex: 1;
   }
 }
+
+/* Story 36.3, AC2/AC3 — la bande que la PORTÉE désigne. Marquée par un anneau (une forme) en
+   plus d'un fond : la sélection ne se lit jamais à la seule couleur (P-1). Déclarée après les
+   règles de rang pour l'emporter sur leur fond, sans toucher à leur filet / liseré / trame. */
+.band--selected {
+  box-shadow:
+    inset 0 0 0 2px var(--mat-sys-primary),
+    inset 0 0 0 100px color-mix(in srgb, var(--mat-sys-primary) 22%, transparent);
+}
+
 
 /* Le titre de la séance ou le libellé du vote, tronqué à l'ellipse et jamais reformaté.
    Il disparaît sous le seuil de densité (voir plus bas) : la forme survit, le texte cède. */

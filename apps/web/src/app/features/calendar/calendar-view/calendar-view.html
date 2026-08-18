@@ -38,6 +38,7 @@
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onMonthDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"
+        (declarationPanelRequested)="onDeclarationPanelRequested($event)"
       />
     } @else if (view() === 'week') {
       <app-calendar-week-view
@@ -49,6 +50,7 @@
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onWeekDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"
+        (declarationPanelRequested)="onDeclarationPanelRequested($event)"
       />
     } @else {
       <app-calendar-agenda-view

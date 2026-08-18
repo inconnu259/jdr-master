@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AvailabilityDeclarationDto } from '@master-jdr/shared';
 import { CalendarWeekView, buildWeek, getWeekStart } from './calendar-week-view';
+import { LONG_PRESS_MS } from '../selection.utils';
 
 describe('getWeekStart', () => {
   it('returns Monday for a Wednesday', () => {
@@ -180,7 +181,9 @@ describe('CalendarWeekView — sélection par glissement', () => {
     vi.useRealTimers();
   });
 
-  it('tap sans déplacement (pointerdown + pointerup sur la même cellule) ouvre toujours le panneau (AC3, AC9)', () => {
+  // ⚠️ Story 36.3, AC15 — un tap COURT est un geste de lecture : le rail suit (AC2 de 36.1) et
+  // rien ne s'ouvre. Ni le panneau (AC1), ni la barre.
+  it('AC15 — un tap court ne fait que peupler le rail : aucune barre, aucune sélection', () => {
     create();
     const spy = vi.fn();
     fixture.componentInstance.slotSelected.subscribe(spy);
@@ -188,7 +191,55 @@ describe('CalendarWeekView — sélection par glissement', () => {
     cell.dispatchEvent(pointerEvent('pointerdown', 10, 10));
     const grid = el.querySelector('.week-grid') as HTMLElement;
     grid.dispatchEvent(pointerEvent('pointerup', 10, 10));
+    fixture.detectChanges();
+
     expect(spy).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(0);
+    expect(el.querySelector('app-selection-bar')).toBeNull();
+  });
+
+  it('AC15 — un appui maintenu à la SOURIS arme la sélection et affiche la barre', () => {
+    vi.useFakeTimers();
+    create();
+    const cell = slotCells('EVENING')[0];
+
+    cell.dispatchEvent(pointerEvent('pointerdown', 10, 10));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(1);
+    expect(fixture.componentInstance['scope']()).toBe('EVENING');
+    expect(el.querySelector('app-selection-bar')).not.toBeNull();
+  });
+
+  it('AC18 — en mode modification, le clic bascule N’IMPORTE QUELLE ligne, pas seulement celle de l’ancre', () => {
+    vi.useFakeTimers();
+    create();
+    const grid = el.querySelector('.week-grid') as HTMLElement;
+    const tap = (cell: HTMLElement) => {
+      cell.dispatchEvent(pointerEvent('pointerdown', 10, 10));
+      grid.dispatchEvent(pointerEvent('pointerup', 10, 10));
+      fixture.detectChanges();
+    };
+
+    // Sélection armée sur la ligne « Soirée ».
+    slotCells('EVENING')[0].dispatchEvent(pointerEvent('pointerdown', 10, 10));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    grid.dispatchEvent(pointerEvent('pointerup', 10, 10));
+    fixture.detectChanges();
+
+    // Un matin d'un autre jour rejoint la sélection : la contrainte de ligne droite est celle
+    // du GLISSEMENT, pas du clic.
+    tap(slotCells('MORNING')[2]);
+    const cells = fixture.componentInstance['selectedCells']();
+    expect(cells).toHaveLength(2);
+    expect(cells.map((c: { slot: string }) => c.slot).sort()).toEqual(['EVENING', 'MORNING']);
+    // Créneaux divergents → plus aucune portée commune.
+    expect(fixture.componentInstance['scope']()).toBeNull();
+
+    // Et le même clic l'en retire.
+    tap(slotCells('MORNING')[2]);
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(1);
   });
 
   it('glissement souris sur plusieurs cellules → sélectionne la plage, aucun tap émis', () => {
@@ -319,7 +370,8 @@ describe('CalendarWeekView — sélection par glissement', () => {
     expect(fixture.componentInstance['selectedCells']()).toHaveLength(3);
   });
 
-  it('Entrée valide la sélection clavier avec Indisponible par défaut (AC5)', () => {
+  // ⚠️ Story 36.3, AC6 — remplace « Entrée valide avec Indisponible d'office » (story 30.3).
+  it('AC6 — Entrée valide la sélection avec l’intention armée par la barre', () => {
     create();
     const batchSpy = vi.fn();
     fixture.componentInstance.batchDeclareRequested.subscribe(batchSpy);
@@ -336,19 +388,90 @@ describe('CalendarWeekView — sélection par glissement', () => {
     cells[0].dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
 
     expect(batchSpy).toHaveBeenCalledTimes(1);
-    const payload = batchSpy.mock.calls[0][0];
-    expect(payload.kind).toBe('UNAVAILABLE');
-    expect(payload.cells).toHaveLength(3);
+    expect(batchSpy.mock.calls[0][0].kind).toBe('UNAVAILABLE');
+    expect(batchSpy.mock.calls[0][0].cells).toHaveLength(3);
+
+    cells[0].dispatchEvent(shiftRight);
+    fixture.detectChanges();
+    fixture.componentInstance['onArmedKindChange']('AVAILABLE');
+    fixture.detectChanges();
+    cells[0].dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+
+    expect(batchSpy).toHaveBeenCalledTimes(2);
+    expect(batchSpy.mock.calls[1][0].kind).toBe('AVAILABLE');
   });
 
-  it('Entrée sans sélection active ouvre le panneau normalement (tap inchangé)', () => {
+  // ⚠️ Story 36.3, AC7 — remplace « Entrée sans sélection ouvre le panneau ».
+  it('AC7 — Entrée sans sélection armée ne fait rien', () => {
     create();
-    const spy = vi.fn();
-    fixture.componentInstance.slotSelected.subscribe(spy);
+    const slotSpy = vi.fn();
+    const batchSpy = vi.fn();
+    fixture.componentInstance.slotSelected.subscribe(slotSpy);
+    fixture.componentInstance.batchDeclareRequested.subscribe(batchSpy);
     const cell = slotCells('EVENING')[0];
 
     cell.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(slotSpy).not.toHaveBeenCalled();
+    expect(batchSpy).not.toHaveBeenCalled();
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(0);
+  });
+
+  it('AC3 — la portée gouverne le créneau écrit, pour toute la sélection', () => {
+    create();
+    const batchSpy = vi.fn();
+    fixture.componentInstance.batchDeclareRequested.subscribe(batchSpy);
+    const cells = slotCells('AFTERNOON');
+    const shiftRight = new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      shiftKey: true,
+      bubbles: true,
+    });
+    cells[0].dispatchEvent(shiftRight);
+    fixture.detectChanges();
+
+    fixture.componentInstance['onScopeChange']('EVENING');
+    fixture.detectChanges();
+    fixture.componentInstance['onSelectionCommit']('AVAILABLE');
+
+    const payload = batchSpy.mock.calls[0][0];
+    expect(payload.cells).toHaveLength(2);
+    expect(payload.cells.every((c: { slot: string }) => c.slot === 'EVENING')).toBe(true);
+  });
+
+  it('AC2 — la portée « journée » marque les trois lignes des jours retenus', () => {
+    vi.useFakeTimers();
+    create();
+    const cell = slotCells('EVENING')[0];
+    cell.dispatchEvent(pointerEvent('pointerdown', 10, 10));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    fixture.detectChanges();
+    expect(el.querySelectorAll('.slot-cell.selected')).toHaveLength(1);
+
+    fixture.componentInstance['onScopeChange']('FULL_DAY');
+    fixture.detectChanges();
+    expect(el.querySelectorAll('.slot-cell.selected')).toHaveLength(3);
+  });
+
+  it('AC4 — « Autre… » émet declarationPanelRequested sur l’ancre, à la portée courante', () => {
+    vi.useFakeTimers();
+    create();
+    const spy = vi.fn();
+    fixture.componentInstance.declarationPanelRequested.subscribe(spy);
+    const cell = slotCells('EVENING')[0];
+    cell.dispatchEvent(pointerEvent('pointerdown', 10, 10));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    fixture.detectChanges();
+
+    const otherBtn = Array.from(el.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Autre…',
+    )!;
+    otherBtn.click();
+    fixture.detectChanges();
 
     expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0].slot).toBe('EVENING');
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(0);
   });
 });

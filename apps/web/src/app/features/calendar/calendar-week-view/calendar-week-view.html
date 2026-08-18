@@ -49,13 +49,14 @@
             [class.preview]="getSlotData(cell, row.key).preview !== null"
             [class.unknown]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status) === 'UNKNOWN'"
             [class.selected]="isCellSelected(cell, row.slot)"
+            [class.current]="isCurrentCell(cell, row.slot)"
             [attr.role]="cell.isPast ? 'presentation' : 'button'"
             [attr.tabindex]="cell.isPast ? null : 0"
             [attr.aria-label]="cell.isPast ? null : cellAriaLabel(cell, getSlotData(cell, row.key), row.label)"
             (pointerdown)="onCellPointerDown($event, cell, row.slot)"
-            (keyup.enter)="onCellEnterKey(cell, row.slot)"
+            (keyup.enter)="onCellEnterKey()"
             (keydown.space)="$event.preventDefault()"
-            (keyup.space)="onCellClick(cell.date, row.slot)"
+            (keyup.space)="onCellKeySelect(cell, row.slot)"
             (keydown.shift.arrowright)="$event.preventDefault(); onShiftArrow(cell, row.slot, 1)"
             (keydown.shift.arrowleft)="$event.preventDefault(); onShiftArrow(cell, row.slot, -1)"
           >
@@ -70,9 +71,15 @@
       <app-selection-bar
         [count]="selectedCells().length"
         [rangeLabel]="selectionRangeLabel()"
+        [scope]="scope()"
+        [armedKind]="armedKind()"
+        (scopeChange)="onScopeChange($event)"
+        (armedKindChange)="onArmedKindChange($event)"
         (markAvailable)="onSelectionCommit('AVAILABLE')"
         (markUnavailable)="onSelectionCommit('UNAVAILABLE')"
+        (otherRequested)="onOtherRequested()"
         (cancelled)="onSelectionCancelled()"
+        (keydown.escape)="onSelectionCancelled()"
       />
     }
   }

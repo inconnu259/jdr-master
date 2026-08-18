@@ -181,6 +181,10 @@ export class CalendarWeekView {
   /** Story 30.3 : lot construit par un glissement (souris/tactile) ou une validation clavier —
    *  CalendarView construit les items et appelle createDeclarationBatch(), jamais cette vue. */
   readonly batchDeclareRequested = output<{ cells: SelectedCell[]; kind: AvailKind }>();
+  /** Story 36.3, AC4 — « Autre… » de la barre. Depuis cette story, c'est le **seul** chemin vers
+   *  `ConstraintPanel`, donc vers la contrainte récurrente (story 1.7), la modification, la
+   *  suppression et la découpe. Le tap n'ouvre plus le panneau. */
+  readonly declarationPanelRequested = output<SlotSelectedEvent>();
 
   protected readonly displayWeekStart = signal<Date>(getWeekStart(new Date()));
 
@@ -227,29 +231,98 @@ export class CalendarWeekView {
 
   // ─── Sélection par glissement (Story 30.3) ─────────────────────────────────
   private pointerDown: PointerDownInfo | null = null;
+  /** Un geste armé se termine par un `click` que le navigateur émet spontanément : il doit être
+   *  avalé, sans quoi il rebasculerait la cellule qui vient d'être sélectionnée. */
+  private suppressNextClick = false;
   protected readonly dragArmed = signal(false);
   protected readonly selectionAnchor = signal<SelectedCell | null>(null);
   protected readonly selectionCurrent = signal<SelectedCell | null>(null);
 
-  protected readonly selectedCells = computed<SelectedCell[]>(() => {
-    const anchor = this.selectionAnchor();
-    const current = this.selectionCurrent();
-    if (!anchor || !current) return [];
-    return weekRangeCells(anchor, current, this.cells());
+  /** Portée courante (AC2) : **dérivée** de la sélection, non plus imposée à elle. Elle vaut le
+   *  créneau commun quand tous les créneaux retenus s'accordent, `null` dès qu'ils divergent —
+   *  ce que l'AC18 rend possible, la bascule se faisant cellule par cellule. */
+  protected readonly scope = computed<DaySlot | null>(() => {
+    const cells = this.selectedCells();
+    if (cells.length === 0) return null;
+    const first = cells[0].slot;
+    return cells.every((c) => c.slot === first) ? first : null;
+  });
+  /** Ce que `Entrée` valide (AC6). Défaut `UNAVAILABLE`, désormais affiché par la barre. */
+  protected readonly armedKind = signal<AvailKind>('UNAVAILABLE');
+  /** AC16 — la cellule courante : la dernière cliquée. Un tap court ne déclare rien, mais il
+   *  désigne — le rail en montre le détail, et la cellule doit le dire aussi. */
+  protected readonly currentCell = signal<SelectedCell | null>(null);
+
+  /** ⚠️ Story 36.3, AC17/AC18 — la sélection est un **ENSEMBLE DE CRÉNEAUX**, identique en vue
+   *  Mois. Le glissement reste contraint à la ligne de l'ancre — c'est un geste continu sur une
+   *  grille où la ligne EST le créneau — mais **le clic ne l'est pas** : en mode modification il
+   *  ajoute ou retire n'importe quelle cellule, matin, après-midi ou soir confondus. */
+  protected readonly selectedCells = signal<SelectedCell[]>([]);
+
+  private static cellKey(cell: SelectedCell): string {
+    return `${cell.date.getTime()}|${cell.slot}`;
+  }
+
+  private readonly selectedKeys = computed(
+    () => new Set(this.selectedCells().map(CalendarWeekView.cellKey)),
+  );
+
+  /** Les jours touchés, dédoublonnés — sert au libellé de plage. */
+  private readonly selectedDays = computed<Date[]>(() => {
+    const seen = new Map<number, Date>();
+    for (const c of this.selectedCells()) seen.set(c.date.getTime(), c.date);
+    return [...seen.values()].sort((a, b) => a.getTime() - b.getTime());
   });
 
-  private readonly selectedKeys = computed(() => {
-    return new Set(this.selectedCells().map((c) => `${c.date.getTime()}|${c.slot}`));
-  });
+  /** Écrit la plage ancre → cible, sur la ligne de l'ancre. Un glissement **remplace**. */
+  private setRange(current: SelectedCell): void {
+    const anchor = this.selectionAnchor();
+    if (!anchor) return;
+    this.selectionCurrent.set(current);
+    this.selectedCells.set(weekRangeCells(anchor, current, this.cells()));
+  }
+
+  /** AC17/AC18 — bascule **un créneau**. Retirer le dernier **quitte le mode modification**. */
+  private toggleCell(date: Date, slot: DaySlot): void {
+    const key = CalendarWeekView.cellKey({ date, slot });
+    const cells = this.selectedCells();
+    const without = cells.filter((c) => CalendarWeekView.cellKey(c) !== key);
+    if (without.length !== cells.length) {
+      this.selectedCells.set(without);
+      if (without.length === 0) {
+        this.selectionAnchor.set(null);
+        this.selectionCurrent.set(null);
+      }
+      return;
+    }
+    this.selectedCells.set(
+      [...cells, { date, slot }].sort((a, b) => a.date.getTime() - b.date.getTime()),
+    );
+    this.selectionAnchor.set({ date, slot });
+    this.selectionCurrent.set({ date, slot });
+  }
+
+  /** AC2 — la portée s'applique à **toute** la sélection : elle réécrit le créneau de chaque jour
+   *  retenu. C'est une ACTION, pas un filtre — un clic peut ensuite affiner cellule par cellule. */
+  protected onScopeChange(slot: DaySlot): void {
+    this.selectedCells.set(this.selectedDays().map((date) => ({ date, slot })));
+  }
 
   protected readonly selectionRangeLabel = computed<string | null>(() => {
     const cells = this.selectedCells();
     if (cells.length === 0) return null;
     const fmt = (d: Date) =>
       new Intl.DateTimeFormat('fr-FR', { weekday: 'short', day: 'numeric' }).format(d);
-    const slotLabel = this.SLOT_ROWS.find((r) => r.slot === cells[0].slot)?.label ?? '';
-    if (cells.length === 1) return `${fmt(cells[0].date)}, ${slotLabel}`;
-    return `${fmt(cells[0].date)} → ${fmt(cells[cells.length - 1].date)}, ${slotLabel}`;
+    const scope = this.scope();
+    const slotLabel =
+      scope === null
+        ? 'créneaux variés'
+        : scope === 'FULL_DAY'
+          ? 'journée'
+          : (this.SLOT_ROWS.find((r) => r.slot === scope)?.label ?? '');
+    const days = this.selectedDays();
+    if (days.length === 1) return `${fmt(days[0])}, ${slotLabel}`;
+    return `${fmt(days[0])} → ${fmt(days[days.length - 1])}, ${slotLabel}`;
   });
 
   constructor() {
@@ -285,7 +358,36 @@ export class CalendarWeekView {
     const cellUtcMidnight = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
     const todayUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
     if (cellUtcMidnight < todayUtcMidnight) return;
+    // ⚠️ Story 36.3, AC15 — un tap court est un geste de LECTURE : il désigne le créneau, le rail
+    // suit (AC2 de 36.1), et rien d'autre ne s'ouvre. La barre appartient à l'appui maintenu et
+    // au glissement.
     this.slotSelected.emit({ date, slot });
+    this.currentCell.set({ date, slot });
+    // Un geste armé se termine par un `click` spontané du navigateur : l'avaler, sinon il
+    // rebasculerait la cellule qu'on vient de sélectionner (même garde qu'en vue Mois).
+    if (this.suppressNextClick) {
+      this.suppressNextClick = false;
+      return;
+    }
+    // AC17/AC18 — une fois la barre ouverte, le même clic BASCULE le créneau touché, quelle que
+    // soit sa ligne : la contrainte de ligne droite est celle du GLISSEMENT, pas du clic.
+    if (this.selectedCells().length > 0) this.toggleCell(date, slot);
+  }
+
+  /** Sélection d'une seule cellule, armée au clavier (AC7, AC15). La portée part du créneau visé
+   *  — la ligne de la grille Semaine EST un créneau. */
+  private armSelection(date: Date, slot: DaySlot): void {
+    this.selectionAnchor.set({ date, slot });
+    this.selectionCurrent.set({ date, slot });
+    this.selectedCells.set([{ date, slot }]);
+  }
+
+  /** Équivalent clavier de l'appui maintenu (AC15) : une frappe délibérée sur `Espace` **est**
+   *  l'intention de déclarer, elle arme donc directement. Le rail suit aussi. */
+  protected onCellKeySelect(cell: WeekCell, slot: DaySlot): void {
+    if (cell.isPast) return;
+    this.slotSelected.emit({ date: cell.date, slot });
+    this.armSelection(cell.date, slot);
   }
 
   protected getSlotData(cell: WeekCell, key: 'morning' | 'afternoon' | 'evening'): SlotData {
@@ -311,8 +413,20 @@ export class CalendarWeekView {
     return `${slotName}, ${fullDate} : ${labels[status]}`;
   }
 
+  /** AC2/AC3 — le marquage suit la **portée** : passer la portée à « journée » doit allumer les
+   *  trois lignes des jours retenus, passer au « soir » ne doit allumer que celle-là. */
   protected isCellSelected(cell: WeekCell, slot: DaySlot): boolean {
-    return this.selectedKeys().has(`${cell.date.getTime()}|${slot}`);
+    const keys = this.selectedKeys();
+    const time = cell.date.getTime();
+    return keys.has(`${time}|${slot}`) || keys.has(`${time}|FULL_DAY`);
+  }
+
+  /** Story 36.3, AC16 — la cellule courante : la dernière cliquée, celle dont le rail montre le
+   *  détail. Distinct de `.selected`, qui dit « ce créneau partira à l'écriture ». */
+  protected isCurrentCell(cell: WeekCell, slot: DaySlot): boolean {
+    const current = this.currentCell();
+    if (current === null) return false;
+    return current.date.getTime() === cell.date.getTime() && current.slot === slot;
   }
 
   /** true pendant qu'un pointeur est actuellement enfoncé sur la grille — utilisé pour ne bloquer
@@ -330,6 +444,7 @@ export class CalendarWeekView {
     // plutôt que de remplacer silencieusement l'état du premier.
     if (this.pointerDown && this.pointerDown.pointerId !== event.pointerId) return;
     this.clearPointerState();
+    this.suppressNextClick = false;
     this.dragArmed.set(false);
     this.pointerDown = {
       cell,
@@ -338,10 +453,9 @@ export class CalendarWeekView {
       pointerType: event.pointerType as GesturePointerType,
       startX: event.clientX,
       startY: event.clientY,
-      longPressTimer:
-        event.pointerType === 'touch'
-          ? setTimeout(() => this.armDrag(cell, slot), LONG_PRESS_MS)
-          : null,
+      // ⚠️ Story 36.3, AC15 — l'appui maintenu arme la barre **pour tous les pointeurs**, souris
+      // comprise : c'est lui qui sépare lire (tap court) de déclarer (appui long).
+      longPressTimer: setTimeout(() => this.armDrag(cell, slot), LONG_PRESS_MS),
     };
   }
 
@@ -376,7 +490,7 @@ export class CalendarWeekView {
     if (!cellMatch || cellMatch.isPast) return;
     const anchor = this.selectionAnchor();
     if (!anchor) return;
-    this.selectionCurrent.set({ date: cellMatch.date, slot: anchor.slot });
+    this.setRange({ date: cellMatch.date, slot: anchor.slot });
   }
 
   protected onGridPointerUp(event: PointerEvent): void {
@@ -391,14 +505,18 @@ export class CalendarWeekView {
       return;
     }
     this.dragArmed.set(false);
+    // Le geste a armé : le `click` qui suit ce `pointerup` ne doit pas être pris pour une bascule.
+    this.suppressNextClick = true;
     // La sélection reste affichée (anchor/current conservés) — la barre reste visible
     // jusqu'à validation ou annulation par l'utilisateur.
   }
 
   private armDrag(cell: WeekCell, slot: DaySlot): void {
+    // Le glissement souris peut armer avant l'échéance de l'appui maintenu : sans cette
+    // annulation, le minuteur rejouerait armDrag() et ramènerait l'ancre à la cellule de départ.
+    this.cancelLongPressTimer();
     this.dragArmed.set(true);
-    this.selectionAnchor.set({ date: cell.date, slot });
-    this.selectionCurrent.set({ date: cell.date, slot });
+    this.armSelection(cell.date, slot);
   }
 
   private cancelLongPressTimer(): void {
@@ -411,15 +529,13 @@ export class CalendarWeekView {
   }
 
   // ─── Clavier ─────────────────────────────────────────────────────────────
-  protected onCellEnterKey(cell: WeekCell, slot: DaySlot): void {
-    if (this.selectionAnchor()) {
-      // Aucune touche unique ne peut exprimer disponible/indisponible : Indisponible par défaut
-      // (Story 30.3, Task 4 — cohérent avec le cas d'usage nommé par la story : « une semaine
-      // d'absence »).
-      this.onSelectionCommit('UNAVAILABLE');
-      return;
-    }
-    this.onCellClick(cell.date, slot);
+  /** Story 36.3, AC6/AC7 — `Entrée` est **réservée à la validation**, et valide ce que la barre
+   *  affiche (`armedKind`) au lieu de « indisponible » d'office. Hors sélection, elle ne fait
+   *  plus rien : `Espace` garde la sélection.
+   *  [Source: EXPERIENCE.md §6 bis — encadré de dette, ses deux points] */
+  protected onCellEnterKey(): void {
+    if (!this.selectionAnchor()) return;
+    this.onSelectionCommit(this.armedKind());
   }
 
   protected onShiftArrow(cell: WeekCell, slot: DaySlot, direction: -1 | 1): void {
@@ -432,19 +548,36 @@ export class CalendarWeekView {
     const nextIdx = Math.min(Math.max(idx + direction, 0), cellsArr.length - 1);
     const nextCell = cellsArr[nextIdx];
     if (nextCell.isPast) return;
-    this.selectionCurrent.set({ date: nextCell.date, slot: anchor.slot });
+    this.setRange({ date: nextCell.date, slot: anchor.slot });
   }
 
   protected onSelectionCancelled(): void {
     this.selectionAnchor.set(null);
     this.selectionCurrent.set(null);
+    this.selectedCells.set([]);
+    this.armedKind.set('UNAVAILABLE');
+  }
+
+  protected onArmedKindChange(kind: AvailKind): void {
+    this.armedKind.set(kind);
+  }
+
+  /** AC4 — « Autre… » remet l'intention au panneau, avec la cellule d'ancrage et la portée
+   *  courante, puis rend la main : la sélection a désigné la cible, le panneau gouverne la
+   *  suite (récurrence, plage, suppression, découpe). */
+  protected onOtherRequested(): void {
+    // Le premier créneau RETENU, pas l'ancre : un changement de portée réécrit la sélection
+    // sans toucher à l'ancre, qui porterait alors un créneau périmé.
+    const target = this.selectedCells()[0] ?? this.selectionAnchor();
+    if (!target) return;
+    this.declarationPanelRequested.emit({ date: target.date, slot: target.slot });
+    this.onSelectionCancelled();
   }
 
   protected onSelectionCommit(kind: AvailKind): void {
     const cells = this.selectedCells();
     if (cells.length === 0) return;
     this.batchDeclareRequested.emit({ cells, kind });
-    this.selectionAnchor.set(null);
-    this.selectionCurrent.set(null);
+    this.onSelectionCancelled();
   }
 }

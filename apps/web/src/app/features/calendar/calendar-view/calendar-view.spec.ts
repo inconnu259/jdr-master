@@ -1172,7 +1172,10 @@ describe('CalendarView — rail : présence permanente (AC1)', () => {
 describe('CalendarView — rail : il suit le toucher (AC2)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('un toucher peuple le rail ET ouvre toujours le panneau de déclaration (AC9)', async () => {
+  // ⚠️ Story 36.3, AC1/AC11 — ce test portait la garantie « le toucher ouvre TOUJOURS le
+  // panneau » (AC9 de 36.1). Elle est levée : le toucher arme une sélection, et le panneau se
+  // rejoint par « Autre… ». Ce qui reste dû, c'est que le rail suive — AC2 de 36.1.
+  it('AC11 — un toucher peuple le rail et n’ouvre PLUS le panneau de déclaration', async () => {
     const { fixture } = await createCalendarView('personal');
     const comp = fixture.componentInstance as any;
 
@@ -1181,9 +1184,23 @@ describe('CalendarView — rail : il suit le toucher (AC2)', () => {
 
     expect(comp.railSlot()).toBe('EVENING');
     expect(comp.railDetail().date).toBe('2026-09-01');
-    // Non-régression : le comportement historique du handler est intact.
+    expect(comp.panelOpen()).toBe(false);
+  });
+
+  it('AC4/AC10 — « Autre… » ouvre le panneau, avec la déclaration existante s’il y en a une', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const comp = fixture.componentInstance as any;
+
+    comp.onDeclarationPanelRequested({ date: new Date(2026, 8, 1), slot: 'EVENING' });
+    fixture.detectChanges();
+
     expect(comp.panelOpen()).toBe(true);
     expect(comp.selectedSlot()).toBe('EVENING');
+    // `selectedExisting` est renseigné par le même chemin qu'avant (findMatchingDeclaration) —
+    // sans lui, la suppression et la découpe d'une récurrente deviendraient inatteignables.
+    expect(comp.selectedExisting()).toBeDefined();
+    // Le rail suit aussi ce chemin (AC11).
+    expect(comp.railDetail().date).toBe('2026-09-01');
   });
 
   it('n’utilise PAS les signaux du panneau — fermer le panneau ne vide pas le rail', async () => {

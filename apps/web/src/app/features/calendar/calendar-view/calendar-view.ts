@@ -560,10 +560,30 @@ export class CalendarView implements OnInit {
    *  sélection courante. Même pattern que SeanceList.onCapacityFormInput(). */
   protected noop(): void {}
 
+  /**
+   * Story 36.1, AC2 : le rail suit tout toucher de case, « quelle que soit la raison du toucher ».
+   *
+   * ⚠️ Story 36.3, AC1 — ce handler est **amputé, pas supprimé**. Il n'ouvre plus le panneau de
+   * déclaration : le toucher arme désormais une sélection dans la vue enfant, et le panneau se
+   * rejoint par « Autre… » (`onDeclarationPanelRequested`). C'est le renversement demandé par
+   * FR-57 : « la sélection est le geste, le panneau est le chemin avancé ». Les quatre lignes de
+   * préparation du panneau ont migré telles quelles dans le handler ci-dessous.
+   */
   protected onSlotSelected(event: SlotSelectedEvent): void {
-    // Story 36.1, AC2 : le rail suit tout toucher de case, « quelle que soit la raison du
-    // toucher ». Il s'ajoute au comportement existant — le panneau s'ouvre exactement comme
-    // avant (AC9), et rien n'est retiré de ce handler.
+    this.railDate.set(event.date);
+    this.railSlot.set(event.slot);
+  }
+
+  /**
+   * Story 36.3, AC4/AC10 — « Autre… » de la barre de sélection. **Seul chemin** vers
+   * `ConstraintPanel` depuis cette story, donc seul chemin vers la contrainte récurrente
+   * (story 1.7), la modification, la suppression et la découpe d'une récurrente.
+   *
+   * `selectedExisting` est indispensable : sans lui le panneau s'ouvrirait en création alors
+   * qu'une déclaration couvre déjà la cellule, et la suppression comme la découpe deviendraient
+   * inatteignables.
+   */
+  protected onDeclarationPanelRequested(event: SlotSelectedEvent): void {
     this.railDate.set(event.date);
     this.railSlot.set(event.slot);
 
@@ -599,10 +619,13 @@ export class CalendarView implements OnInit {
         // AC7 : l'erreur nomme le(s) créneau(x) fautif(s) — un conflit interne au lot en nomme
         // toujours deux (Story 30.2), ne pas se limiter au premier.
         const labels = err.conflicts.map((c) => c.startDate ?? c.dayOfWeek).join(', ');
+        // Story 36.3 — le message nomme « Autre… » comme issue : depuis que le tap unitaire passe
+        // par la route groupée (tout-ou-rien, AD-21), c'est le seul chemin qui sait écraser et
+        // découper, jusqu'à ce que la story 36.4 apporte la résolution de conflits (D-18).
         this.snack.open(
           labels
-            ? `Conflit détecté sur le lot (${labels}). Rien n'a été enregistré.`
-            : "Conflit détecté dans le lot. Rien n'a été enregistré.",
+            ? `Conflit détecté sur le lot (${labels}). Rien n'a été enregistré — passez par « Autre… » pour modifier une déclaration existante.`
+            : "Conflit détecté dans le lot. Rien n'a été enregistré — passez par « Autre… » pour modifier une déclaration existante.",
           undefined,
           { duration: 5000 },
         );

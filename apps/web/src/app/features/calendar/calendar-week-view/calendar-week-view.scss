@@ -141,9 +141,24 @@
     animation: slotPulse 1.2s ease-in-out infinite alternate;
   }
 
+  /* ⚠️ Story 36.3 — MÊME traitement qu'en vue Mois (`calendar-month-view.scss`, bloc jumeau) :
+     les deux grilles doivent se lire pareil. Toute retouche ici est à reporter là-bas.
+
+     L'anneau est en `--mat-sys-on-surface`, pas en `--mat-sys-primary` : la teinte primaire est
+     un vert, et sur une cellule « disponible » — verte elle aussi — la sélection devenait
+     indiscernable (défaut constaté à l'écran en vue Semaine). Une couleur de contraste tient
+     sur les quatre fonds possibles : disponible, indisponible, trame, séance. */
   &.selected {
-    background: color-mix(in srgb, var(--mat-sys-primary) 35%, transparent);
-    box-shadow: inset 0 0 0 2px var(--mat-sys-primary);
+    background: color-mix(in srgb, var(--mat-sys-primary) 22%, transparent);
+    box-shadow: inset 0 0 0 3px var(--mat-sys-on-surface);
+  }
+
+  /* Story 36.3, AC16 — la cellule courante : la dernière cliquée. Distinguée de `.selected` par
+     la FORME (tirets contre plein) autant que par l'épaisseur, jamais par la seule couleur —
+     et la sélection l'emporte quand les deux portent sur la même cellule. */
+  &.current:not(.selected) {
+    outline: 2px dashed var(--mat-sys-on-surface-variant);
+    outline-offset: -2px;
   }
 }
 

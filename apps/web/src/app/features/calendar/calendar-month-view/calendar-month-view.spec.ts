@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CalendarMonthView, buildMonth } from './calendar-month-view';
+import { LONG_PRESS_MS } from '../selection.utils';
 
 describe('buildMonth', () => {
   it('returns 6 weeks of 7 days', () => {
@@ -216,7 +217,9 @@ describe('CalendarMonthView — sélection par glissement', () => {
     TestBed.resetTestingModule();
   });
 
-  it('tap sans déplacement ouvre toujours le panneau (AC3, AC9)', async () => {
+  // ⚠️ Story 36.3, AC15 — un tap COURT est un geste de lecture : le rail suit (AC2 de 36.1) et
+  // rien ne s'ouvre. Ni le panneau (AC1), ni la barre.
+  it('AC15 — un tap court ne fait que peupler le rail : aucune barre, aucune sélection', async () => {
     fixture = await createMonthView();
     el = fixture.nativeElement;
     const spy = vi.fn();
@@ -225,7 +228,42 @@ describe('CalendarMonthView — sélection par glissement', () => {
     cell.dispatchEvent(pointerEvent('pointerdown', 10, 10));
     const grid = el.querySelector('.calendar-grid') as HTMLElement;
     grid.dispatchEvent(pointerEvent('pointerup', 10, 10));
+    fixture.detectChanges();
+
     expect(spy).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(0);
+    expect(el.querySelector('app-selection-bar')).toBeNull();
+  });
+
+  it('AC15 — un appui maintenu à la SOURIS arme la sélection et affiche la barre', async () => {
+    fixture = await createMonthView();
+    el = fixture.nativeElement;
+    const cell = dayCells()[0];
+
+    cell.dispatchEvent(pointerEvent('pointerdown', 10, 10));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(1);
+    expect(el.querySelector('app-selection-bar')).not.toBeNull();
+  });
+
+  it('AC15 — la barre survit au relâchement de l’appui maintenu, CLIC DU NAVIGATEUR COMPRIS', async () => {
+    fixture = await createMonthView();
+    el = fixture.nativeElement;
+    const cell = dayCells()[0];
+    const grid = el.querySelector('.calendar-grid') as HTMLElement;
+
+    cell.dispatchEvent(pointerEvent('pointerdown', 10, 10));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    grid.dispatchEvent(pointerEvent('pointerup', 10, 10));
+    // Le navigateur émet un `click` derrière tout `pointerup` sans déplacement. Sans garde, il
+    // rebasculait la case et l'appui maintenu ressortait aussitôt du mode modification.
+    (cell.querySelector('.band') as HTMLElement).click();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(1);
+    expect(el.querySelector('app-selection-bar')).not.toBeNull();
   });
 
   it('glissement souris sur plusieurs jours → sélectionne la plage à la journée entière (AC2)', async () => {
@@ -345,7 +383,9 @@ describe('CalendarMonthView — sélection par glissement', () => {
     expect(fixture.componentInstance['selectedDays']()).toHaveLength(3);
   });
 
-  it('Entrée valide la sélection clavier avec Indisponible par défaut (AC5)', async () => {
+  // ⚠️ Story 36.3, AC6 — remplace « Entrée valide avec Indisponible d'office » (story 30.3).
+  // `Entrée` valide désormais CE QUE LA BARRE AFFICHE, dans les deux sens.
+  it('AC6 — Entrée valide la sélection avec l’intention armée par la barre', async () => {
     fixture = await createMonthView();
     el = fixture.nativeElement;
     const batchSpy = vi.fn();
@@ -361,22 +401,150 @@ describe('CalendarMonthView — sélection par glissement', () => {
     fixture.detectChanges();
     cells[0].dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
 
+    // Par défaut la barre affiche « Indisponible » — le résultat observable ne change pas
+    // pour qui ne touche à rien.
     expect(batchSpy).toHaveBeenCalledTimes(1);
-    const payload = batchSpy.mock.calls[0][0];
-    expect(payload.kind).toBe('UNAVAILABLE');
-    expect(payload.cells).toHaveLength(2);
+    expect(batchSpy.mock.calls[0][0].kind).toBe('UNAVAILABLE');
+    expect(batchSpy.mock.calls[0][0].cells).toHaveLength(2);
+
+    // Mais la barre fait foi : armer « Disponible » change ce que valide `Entrée`.
+    cells[0].dispatchEvent(shiftRight);
+    fixture.detectChanges();
+    fixture.componentInstance['onArmedKindChange']('AVAILABLE');
+    fixture.detectChanges();
+    cells[0].dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+
+    expect(batchSpy).toHaveBeenCalledTimes(2);
+    expect(batchSpy.mock.calls[1][0].kind).toBe('AVAILABLE');
   });
 
-  it('Entrée sans sélection active ouvre le panneau normalement (tap inchangé)', async () => {
+  // ⚠️ Story 36.3, AC7 — remplace « Entrée sans sélection ouvre le panneau ». Second point de
+  // l'encadré de dette : `Espace` garde la journée, `Entrée` est réservée à la validation.
+  it('AC7 — Entrée sans sélection armée ne fait rien', async () => {
     fixture = await createMonthView();
     el = fixture.nativeElement;
-    const spy = vi.fn();
-    fixture.componentInstance.slotSelected.subscribe(spy);
+    const slotSpy = vi.fn();
+    const batchSpy = vi.fn();
+    fixture.componentInstance.slotSelected.subscribe(slotSpy);
+    fixture.componentInstance.batchDeclareRequested.subscribe(batchSpy);
     const cell = dayCells()[0];
 
     cell.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(slotSpy).not.toHaveBeenCalled();
+    expect(batchSpy).not.toHaveBeenCalled();
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(0);
+  });
+
+  it('AC7 — Espace sélectionne la journée entière', async () => {
+    fixture = await createMonthView();
+    el = fixture.nativeElement;
+    const cell = dayCells()[0];
+
+    cell.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(1);
+    expect(fixture.componentInstance['scope']()).toBe('FULL_DAY');
+  });
+
+  it('AC3 — la portée gouverne le créneau écrit, pour toute la sélection', async () => {
+    fixture = await createMonthView();
+    el = fixture.nativeElement;
+    const batchSpy = vi.fn();
+    fixture.componentInstance.batchDeclareRequested.subscribe(batchSpy);
+    const cells = dayCells();
+    const grid = el.querySelector('.calendar-grid') as HTMLElement;
+
+    cells[0].dispatchEvent(pointerEvent('pointerdown', 0, 0));
+    document.elementFromPoint = vi.fn().mockReturnValue(cells[2]);
+    grid.dispatchEvent(pointerEvent('pointermove', 50, 0));
+    fixture.detectChanges();
+    grid.dispatchEvent(pointerEvent('pointerup', 50, 0));
+    fixture.detectChanges();
+
+    fixture.componentInstance['onScopeChange']('EVENING');
+    fixture.detectChanges();
+    fixture.componentInstance['onSelectionCommit']('UNAVAILABLE');
+
+    const payload = batchSpy.mock.calls[0][0];
+    expect(payload.cells).toHaveLength(3);
+    expect(payload.cells.every((c: { slot: string }) => c.slot === 'EVENING')).toBe(true);
+  });
+
+  it('AC4 — « Autre… » émet declarationPanelRequested sur l’ancre, à la portée courante', async () => {
+    fixture = await createMonthView();
+    el = fixture.nativeElement;
+    const spy = vi.fn();
+    fixture.componentInstance.declarationPanelRequested.subscribe(spy);
+    const cell = dayCells()[0];
+    cell.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+    fixture.detectChanges();
+    fixture.componentInstance['onScopeChange']('MORNING');
+    fixture.detectChanges();
+
+    const otherBtn = Array.from(el.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Autre…',
+    )!;
+    otherBtn.click();
+    fixture.detectChanges();
 
     expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0][0].slot).toBe('MORNING');
+    // La sélection a remis son intention au panneau : elle ne survit pas.
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(0);
+  });
+
+  it('AC5 — un glissement souris à dominante verticale n’arme rien (il défile)', async () => {
+    fixture = await createMonthView();
+    el = fixture.nativeElement;
+    const cells = dayCells();
+    const grid = el.querySelector('.calendar-grid') as HTMLElement;
+
+    cells[0].dispatchEvent(pointerEvent('pointerdown', 0, 0));
+    document.elementFromPoint = vi.fn().mockReturnValue(cells[2]);
+    grid.dispatchEvent(pointerEvent('pointermove', 5, 60));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(0);
+  });
+
+  it('AC5 — une fois armée, la sélection s’étend même verticalement (pas de test d’axe)', async () => {
+    fixture = await createMonthView();
+    el = fixture.nativeElement;
+    const cells = dayCells();
+    const grid = el.querySelector('.calendar-grid') as HTMLElement;
+
+    cells[0].dispatchEvent(pointerEvent('pointerdown', 0, 0));
+    document.elementFromPoint = vi.fn().mockReturnValue(cells[1]);
+    grid.dispatchEvent(pointerEvent('pointermove', 50, 0)); // arme (horizontal)
+    fixture.detectChanges();
+    document.elementFromPoint = vi.fn().mockReturnValue(cells[8]);
+    grid.dispatchEvent(pointerEvent('pointermove', 55, 90)); // enjambe une ligne de semaine
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(9);
+  });
+
+  it('AC9 — un double-clic ne déclenche aucune action propre et n’enregistre rien', async () => {
+    fixture = await createMonthView();
+    el = fixture.nativeElement;
+    const batchSpy = vi.fn();
+    fixture.componentInstance.batchDeclareRequested.subscribe(batchSpy);
+    const cell = dayCells()[0];
+    const grid = el.querySelector('.calendar-grid') as HTMLElement;
+
+    for (let i = 0; i < 2; i++) {
+      cell.dispatchEvent(pointerEvent('pointerdown', 10, 10));
+      grid.dispatchEvent(pointerEvent('pointerup', 10, 10));
+    }
+    cell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    fixture.detectChanges();
+
+    // Deux taps courts successifs restent deux lectures : aucune barre, aucune écriture (AC15).
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(0);
+    expect(batchSpy).not.toHaveBeenCalled();
   });
 
   it('le glissement ne s’étend pas sur un jour hors du mois affiché (review finding)', async () => {
@@ -489,7 +657,30 @@ describe('CalendarMonthView — les trois bandes', () => {
     return el.querySelector(`.day-cell[data-cell-date="${target}"]`) as HTMLElement;
   }
 
-  afterEach(() => TestBed.resetTestingModule());
+  /** Story 36.3, AC15 : arme la barre par un APPUI MAINTENU sur la bande visée — un tap court
+   *  ne fait plus que peupler le rail. */
+  function longPress(band: Element): void {
+    band.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        clientX: 5,
+        clientY: 5,
+        pointerType: 'mouse',
+        bubbles: true,
+      }),
+    );
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    fixture.detectChanges();
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 10));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
 
   it('rend trois bandes pour un jour dont les créneaux diffèrent (AC1)', async () => {
     await createWith({ entries: [seance('2026-08-20')], declarations: [decl()] });
@@ -627,5 +818,117 @@ describe('CalendarMonthView — les trois bandes', () => {
 
     expect(emitted).toHaveLength(1);
     expect(emitted[0].slot).toBe('FULL_DAY');
+  });
+
+  // ─── Story 36.3 — la sélection au créneau, et la portée ────────────────────
+
+  it('AC15 — un appui maintenu sur une bande sélectionne CE créneau et y initialise la portée', async () => {
+    await createWith({ entries: [seance('2026-08-20')] });
+
+    longPress(cellOf(20).querySelectorAll('.band')[2]);
+
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(1);
+    expect(fixture.componentInstance['scope']()).toBe('EVENING');
+    expect(fixture.componentInstance['selectedCells']()[0].slot).toBe('EVENING');
+  });
+
+  it('AC16 — un clic rend la date courante, et une seule à la fois', async () => {
+    await createWith({ entries: [seance('2026-08-20')] });
+
+    (cellOf(20).querySelectorAll('.band')[2] as HTMLElement).click();
+    fixture.detectChanges();
+    expect(cellOf(20).classList.contains('current')).toBe(true);
+    expect(cellOf(19).classList.contains('current')).toBe(false);
+
+    (cellOf(19).querySelectorAll('.band')[0] as HTMLElement).click();
+    fixture.detectChanges();
+    expect(cellOf(19).classList.contains('current')).toBe(true);
+    expect(cellOf(20).classList.contains('current')).toBe(false);
+  });
+
+  it('AC17 — en mode modification, un clic ajoute puis retire un jour, et le dernier retrait sort du mode', async () => {
+    await createWith({ entries: [seance('2026-08-20')] });
+
+    longPress(cellOf(20).querySelectorAll('.band')[2]);
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(1);
+
+    // Un autre jour rejoint la sélection.
+    (cellOf(24).querySelectorAll('.band')[0] as HTMLElement).click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(2);
+
+    // Le même jour recliqué en sort.
+    (cellOf(24).querySelectorAll('.band')[0] as HTMLElement).click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(1);
+
+    // Retirer le dernier quitte le mode modification : la barre disparaît d'elle-même.
+    (cellOf(20).querySelectorAll('.band')[2] as HTMLElement).click();
+    fixture.detectChanges();
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(0);
+    expect(el.querySelector('app-selection-bar')).toBeNull();
+  });
+
+  it('AC17 — la sélection par bascule n’a pas besoin d’être contiguë', async () => {
+    await createWith({ entries: [seance('2026-08-20')] });
+
+    longPress(cellOf(20).querySelectorAll('.band')[2]);
+    (cellOf(26).querySelectorAll('.band')[0] as HTMLElement).click();
+    fixture.detectChanges();
+
+    const days = fixture.componentInstance['selectedDays']();
+    expect(days.map((d: Date) => d.getDate())).toEqual([20, 26]);
+  });
+
+  it('AC15 — un tap court sur une bande n’arme rien : il désigne le créneau pour le rail', async () => {
+    await createWith({ entries: [seance('2026-08-20')] });
+    const emitted: any[] = [];
+    fixture.componentInstance.slotSelected.subscribe((e: any) => emitted.push(e));
+
+    (cellOf(20).querySelectorAll('.band')[2] as HTMLElement).click();
+    fixture.detectChanges();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].slot).toBe('EVENING');
+    expect(fixture.componentInstance['selectedDays']()).toHaveLength(0);
+  });
+
+  it('AC2 — le marquage des bandes suit la portée, jamais le créneau d’origine', async () => {
+    await createWith({ entries: [seance('2026-08-20')] });
+    const cell = cellOf(20);
+
+    longPress(cell.querySelectorAll('.band')[0]);
+    expect(cell.querySelectorAll('.band--selected')).toHaveLength(1);
+
+    fixture.componentInstance['onScopeChange']('FULL_DAY');
+    fixture.detectChanges();
+    expect(cell.querySelectorAll('.band--selected')).toHaveLength(3);
+
+    fixture.componentInstance['onScopeChange']('EVENING');
+    fixture.detectChanges();
+    const marked = cell.querySelectorAll('.band--selected');
+    expect(marked).toHaveLength(1);
+    expect(marked[0]).toBe(cell.querySelectorAll('.band')[2]);
+  });
+
+  it('AC4 — une case fusionnée arme la journée entière comme portée (collision 8)', async () => {
+    await createWith({ declarations: [decl()] });
+
+    longPress(cellOf(20).querySelector('.band')!);
+
+    expect(fixture.componentInstance['scope']()).toBe('FULL_DAY');
+    expect(cellOf(20).querySelectorAll('.band--selected')).toHaveLength(1);
+  });
+
+  // Défaut trouvé à l'écran, qu'aucun test ne voyait : la bande fusionnée porte les TROIS
+  // créneaux, elle doit donc rester marquée quelle que soit la portée retenue.
+  it('AC2 — la bande fusionnée reste marquée quelle que soit la portée', async () => {
+    await createWith({ declarations: [decl()] });
+
+    longPress(cellOf(20).querySelector('.band')!);
+    fixture.componentInstance['onScopeChange']('EVENING');
+    fixture.detectChanges();
+
+    expect(cellOf(20).querySelectorAll('.band--selected')).toHaveLength(1);
   });
 });
