@@ -992,6 +992,10 @@ export class AvailabilityService {
       dateValidee: Date | null;
       inscriptions: { userId: string }[];
       scenario: { partieId: string; title: string };
+      // Story 36.5 — déjà chargés par le findMany (aucun `select` de scalaires), donc gratuits.
+      heureRdv?: string | null;
+      lieu?: string | null;
+      notePratique?: string | null;
     }>,
     partieById: Map<
       string,
@@ -1025,6 +1029,11 @@ export class AvailabilityService {
         // AC5 : lu sur le sondage rattaché s'il existe, FULL_DAY à défaut — jamais une supposition
         // locale à l'appelant.
         slot: (s.poll?.chosenSlot ?? 'FULL_DAY') as DaySlot,
+        // Story 36.5 — transmis tels quels. `heureRdv` reste une CHAÎNE : rien ici ne la parse
+        // ni ne la compare, et elle n'entre pas dans le calcul de statut de créneau (AD-9).
+        heureRdv: s.heureRdv ?? null,
+        lieu: s.lieu ?? null,
+        notePratique: s.notePratique ?? null,
       });
     }
     return entries;

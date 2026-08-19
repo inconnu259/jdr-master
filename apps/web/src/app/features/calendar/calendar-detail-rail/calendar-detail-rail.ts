@@ -6,6 +6,7 @@ import {
   type RailSlot,
   type RailTarget,
   dateKeyToUtcMidnight,
+  composeSeanceInfo,
 } from '../day-detail.utils';
 
 const STATUS_LABELS: Record<SlotStatus, string> = {
@@ -70,10 +71,21 @@ export class CalendarDetailRail {
     return STATUS_LABELS[status];
   }
 
+  /** Story 36.5 — la composition passe par le point unique de `day-detail.utils` (AC10). Le rail
+   *  demande le niveau COMPLET : c'est la surface la plus riche de l'écran, et depuis la story
+   *  36.2 c'est la seule qui porte l'information en largeur téléphone (AC11). */
+  protected seanceInfo(slot: DaySlotDetail): string {
+    return composeSeanceInfo(slot, 'full');
+  }
+
   /** Nom accessible de la ligne activable : il annonce le SCÉNARIO, pas la séance — la promesse
-   *  faite au lecteur d'écran doit correspondre à l'endroit où il atterrit. */
+   *  faite au lecteur d'écran doit correspondre à l'endroit où il atterrit. `aria-label` écrasant
+   *  tout contenu visuel, les informations pratiques doivent y être repliées (AC13). */
   protected openLabel(slot: DaySlotDetail): string {
-    return `Ouvrir le scénario ${slot.seanceLabel}`;
+    const info = this.seanceInfo(slot);
+    return info
+      ? `Ouvrir le scénario ${slot.seanceLabel} — ${info}`
+      : `Ouvrir le scénario ${slot.seanceLabel}`;
   }
 
   protected onActivate(slot: DaySlotDetail): void {

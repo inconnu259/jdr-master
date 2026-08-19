@@ -533,6 +533,14 @@ model Seance {
   inscriptionMax Int?
   dateValidee    DateTime?
   compteRendu    String?
+  /// Informations pratiques (Story 36.5, dérogation D-15 amendée le 2026-08-19).
+  /// heureRdv est une ÉTIQUETTE, jamais un instant : String "HH:MM" que rien ne parse,
+  /// ne compare ni ne trie. JAMAIS un DateTime ni un type time — une colonne typée
+  /// « heure » ferait entrer une seconde granularité temporelle dans un modèle qui
+  /// raisonne en créneau de journée (addendum §5.7, garde n°1).
+  heureRdv       String?
+  lieu           String?
+  notePratique   String?
   createdAt      DateTime     @default(now())
 
   inscriptions Inscription[]

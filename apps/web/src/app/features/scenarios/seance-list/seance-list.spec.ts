@@ -24,6 +24,9 @@ const SEANCE_NO_POLL: SeanceDto = {
   id: 'seance1',
   scenarioId: 's1',
   compteRendu: null,
+  heureRdv: null,
+  lieu: null,
+  notePratique: null,
   createdAt: '2026-07-13T00:00:00.000Z',
 };
 
@@ -67,6 +70,7 @@ async function createComponent(
     inscrire: vi.fn(),
     desinscrire: vi.fn(),
     setCompteRendu: vi.fn(),
+    setInfosPratiques: vi.fn(),
     // Story 19.1 (Task 4) : SeanceList réagit désormais à ce signal (effect() du constructeur).
     changed: signal<{ partieId: string } | null>(null),
   };
@@ -811,6 +815,130 @@ describe('SeanceList', () => {
       expect(confirmSpy).toHaveBeenCalledWith(
         'Cette séance a une date validée. La supprimer quand même ? Cette action est définitive.',
       );
+    });
+  });
+
+  describe('Informations pratiques (Story 36.5, D-15 amendée)', () => {
+    const SEANCE_AVEC_INFOS: SeanceDto = {
+      ...SEANCE_NO_POLL,
+      heureRdv: '20:30',
+      lieu: 'chez Marc',
+      notePratique: 'pensez aux dés',
+    };
+
+    it('AC1 : le MJ voit les trois contrôles, dont un sélecteur d’heure natif', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL] },
+        { isMj: true },
+      );
+      const el = fixture.nativeElement as HTMLElement;
+
+      const inputs = el.querySelectorAll('.infos-pratiques__field input');
+      expect(inputs).toHaveLength(3);
+      expect(el.querySelector<HTMLInputElement>('input[type="time"]')).not.toBeNull();
+    });
+
+    it('AC1 : les contrôles sont pré-remplis avec les valeurs existantes', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_AVEC_INFOS] },
+        { isMj: true },
+      );
+      const el = fixture.nativeElement as HTMLElement;
+
+      const values = [
+        ...el.querySelectorAll<HTMLInputElement>('.infos-pratiques__field input'),
+      ].map((i) => i.value);
+      expect(values).toEqual(['20:30', 'chez Marc', 'pensez aux dés']);
+    });
+
+    it('AC5 : un joueur ne voit AUCUN champ de saisie', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_AVEC_INFOS] },
+        { isMj: false },
+      );
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('.infos-pratiques__fields')).toBeNull();
+      expect(el.querySelector('.seance-row__infos-pratiques-text')?.textContent).toContain(
+        'chez Marc',
+      );
+    });
+
+    it('AC4 : une séance sans informations pratiques n’affiche RIEN au joueur', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL] },
+        { isMj: false },
+      );
+      const el = fixture.nativeElement as HTMLElement;
+
+      // Aucun état incitatif ici, contrairement au compte-rendu — divergence volontaire.
+      expect(el.querySelector('.seance-row__infos-pratiques-text')).toBeNull();
+    });
+
+    it('AC4 : une séance n’ayant QU’UN lieu l’affiche seul, sans séparateur orphelin', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [{ ...SEANCE_NO_POLL, lieu: 'en visio' }] },
+        { isMj: false },
+      );
+      const el = fixture.nativeElement as HTMLElement;
+
+      expect(el.querySelector('.seance-row__infos-pratiques-text')?.textContent?.trim()).toBe(
+        'en visio',
+      );
+    });
+
+    it('AC1 : enregistrer appelle le service avec les trois valeurs et émet seanceLinked', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_AVEC_INFOS] },
+        { isMj: true },
+      );
+      const updated = { ...SCENARIO, seances: [SEANCE_AVEC_INFOS] };
+      scenariosSvc.setInfosPratiques.mockResolvedValue(updated);
+      const emitted: unknown[] = [];
+      fixture.componentInstance.seanceLinked.subscribe((v: unknown) => emitted.push(v));
+
+      const el = fixture.nativeElement as HTMLElement;
+      const buttons = [...el.querySelectorAll<HTMLButtonElement>('button')];
+      buttons.find((b) => b.textContent?.includes('informations pratiques'))!.click();
+      await fixture.whenStable();
+
+      expect(scenariosSvc.setInfosPratiques).toHaveBeenCalledWith(SEANCE_NO_POLL.id, {
+        heureRdv: '20:30',
+        lieu: 'chez Marc',
+        notePratique: 'pensez aux dés',
+      });
+      expect(emitted).toHaveLength(1);
+    });
+
+    it('un champ vidé part à null, jamais à la chaîne vide', async () => {
+      const { fixture, scenariosSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_NO_POLL] },
+        { isMj: true },
+      );
+      scenariosSvc.setInfosPratiques.mockResolvedValue({ ...SCENARIO, seances: [] });
+
+      const el = fixture.nativeElement as HTMLElement;
+      const buttons = [...el.querySelectorAll<HTMLButtonElement>('button')];
+      buttons.find((b) => b.textContent?.includes('informations pratiques'))!.click();
+      await fixture.whenStable();
+
+      expect(scenariosSvc.setInfosPratiques).toHaveBeenCalledWith(SEANCE_NO_POLL.id, {
+        heureRdv: null,
+        lieu: null,
+        notePratique: null,
+      });
+    });
+
+    it('AC9 : une valeur contenant du balisage est affichée LITTÉRALEMENT', async () => {
+      const { fixture } = await createComponent(
+        { ...SCENARIO, seances: [{ ...SEANCE_NO_POLL, lieu: '<img src=x onerror=alert(1)>' }] },
+        { isMj: false },
+      );
+      const el = fixture.nativeElement as HTMLElement;
+      const node = el.querySelector('.seance-row__infos-pratiques-text')!;
+
+      expect(node.textContent).toContain('<img src=x onerror=alert(1)>');
+      expect(node.querySelector('img')).toBeNull();
     });
   });
 

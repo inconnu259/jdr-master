@@ -1,6 +1,7 @@
 import { Component, computed, input } from '@angular/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type { DaySlot } from '@master-jdr/shared';
+import { composeSeanceInfo } from '../day-detail.utils';
 
 /** Type d'entrée affichée dans la vue Agenda (Story 30.6, AC2) — un par couche pertinente. Chaque
  *  entrée reste identifiable comme telle (badge de type), jamais une liste indifférenciée. */
@@ -34,6 +35,14 @@ export interface AgendaEntry {
   partieId?: string;
   scenarioId?: string;
   seanceId?: string;
+  /** Story 36.5 — informations pratiques d'une séance, gardées SEPAREES jusqu'à l'affichage :
+   *  c'est ce qui permet d'en lâcher une quand la place manque (AC3). Une chaîne pré-composée
+   *  rendrait l'ordre de repli impossible à appliquer en aval.
+   *  ⚠️ Ne jamais les verser dans `detail`, qui porte déjà trois usages distincts.
+   *  `seanceHeure` est une ETIQUETTE `"HH:MM"` : rien ne la parse, ne la compare ni ne la trie. */
+  seanceHeure?: string | null;
+  seanceLieu?: string | null;
+  seanceNote?: string | null;
 }
 
 const TYPE_LABELS: Record<AgendaEntryType, string> = {
@@ -68,6 +77,19 @@ export class CalendarAgendaView {
       (a, b) => a.date.localeCompare(b.date) || a.label.localeCompare(b.label),
     ),
   );
+
+  /** Story 36.5 — même composition que le rail et la bande (AC10). L'agenda est une liste : il
+   *  a la place, donc niveau complet. */
+  protected seanceInfo(entry: AgendaEntry): string {
+    return composeSeanceInfo(
+      {
+        seanceHeure: entry.seanceHeure ?? null,
+        seanceLieu: entry.seanceLieu ?? null,
+        seanceNote: entry.seanceNote ?? null,
+      },
+      'full',
+    );
+  }
 
   protected typeLabel(type: AgendaEntryType): string {
     return TYPE_LABELS[type];

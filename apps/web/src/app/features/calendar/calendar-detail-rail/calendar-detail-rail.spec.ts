@@ -200,3 +200,80 @@ describe('CalendarDetailRail — état sans détail', () => {
     expect(fixture.nativeElement.textContent).toContain('Aucun jour à détailler');
   });
 });
+
+// ─── Informations pratiques (Story 36.5, D-15 amendée) ───────────────────────
+
+describe('CalendarDetailRail — informations pratiques', () => {
+  const withInfos = (over: Partial<AgendaEntry>): AgendaEntry => ({ ...SEANCE, ...over });
+
+  it('AC3 : les trois informations sont composées et rendues', async () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [
+        withInfos({
+          seanceHeure: '20:30',
+          seanceLieu: 'chez Marc',
+          seanceNote: 'pensez aux dés',
+        }),
+      ],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+    const fixture = await createRail(detail);
+
+    expect(fixture.nativeElement.textContent).toContain('20:30 · chez Marc · pensez aux dés');
+  });
+
+  it('AC4 : aucune information → aucun nœud accessoire n’est rendu', async () => {
+    const detail = buildDayDetail('2026-08-20', [SEANCE], ALL_LAYERS, [], NOW);
+    const fixture = await createRail(detail);
+
+    expect(fixture.nativeElement.querySelector('.v .m')).toBeNull();
+  });
+
+  it('AC4 : un seul champ → affiché seul, sans séparateur orphelin', async () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [withInfos({ label: 'Les Cendres d’Ashal', seanceLieu: 'en visio' })],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+    const fixture = await createRail(detail);
+
+    expect(fixture.nativeElement.querySelector('.v .m').textContent.trim()).toBe('en visio');
+  });
+
+  it('AC8 : couche « mes séances » éteinte → les informations disparaissent avec le titre', async () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [withInfos({ seanceHeure: '20:30', seanceLieu: 'chez Marc' })],
+      ALL_LAYERS.filter((l) => l !== 'mes-seances'),
+      [],
+      NOW,
+    );
+    const fixture = await createRail(detail);
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).not.toContain('chez Marc');
+    expect(text).not.toContain('20:30');
+    // …mais le créneau reste indisponible (FR-50).
+    expect(text).toContain('Indisponible');
+  });
+
+  it('AC9 : du balisage est rendu LITTÉRALEMENT, jamais interprété', async () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [withInfos({ seanceLieu: '<b>gras</b>' })],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+    const fixture = await createRail(detail);
+
+    const node = fixture.nativeElement.querySelector('.v .m');
+    expect(node.textContent).toContain('<b>gras</b>');
+    expect(node.querySelector('b')).toBeNull();
+  });
+});

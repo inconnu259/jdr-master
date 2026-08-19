@@ -1,3 +1,4 @@
+import { afterEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { CalendarAgendaView, type AgendaEntry } from './calendar-agenda-view';
 
@@ -67,5 +68,62 @@ describe('CalendarAgendaView', () => {
     const entries = fixture.nativeElement.querySelectorAll('.agenda-entry');
     expect(entries[0].querySelector('.agenda-entry__label').textContent).toBe('Partie Y');
     expect(entries[0].querySelector('.agenda-entry__date')).toBeNull();
+  });
+});
+
+// ─── Informations pratiques (Story 36.5) ─────────────────────────────────────
+
+describe('CalendarAgendaView — informations pratiques', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC3 : les trois informations sont rendues, au niveau complet', async () => {
+    const fixture = await createAgenda([
+      {
+        key: 'seance-s1',
+        type: 'mes-seances',
+        date: '2026-08-20',
+        label: 'Le Convoi du Nord',
+        seanceHeure: '20:30',
+        seanceLieu: 'chez Marc',
+        seanceNote: 'pensez aux dés',
+      },
+    ]);
+
+    expect(fixture.nativeElement.querySelector('.agenda-entry__infos')?.textContent?.trim()).toBe(
+      '20:30 · chez Marc · pensez aux dés',
+    );
+  });
+
+  it('AC4 : sans informations, aucun nœud n’est rendu', async () => {
+    const fixture = await createAgenda([
+      {
+        key: 'seance-s1',
+        type: 'mes-seances',
+        date: '2026-08-20',
+        label: 'Le Convoi du Nord',
+      },
+    ]);
+
+    expect(fixture.nativeElement.querySelector('.agenda-entry__infos')).toBeNull();
+  });
+
+  it('`detail` n’est jamais écrasé par les informations pratiques', async () => {
+    const fixture = await createAgenda([
+      {
+        key: 'seance-s1',
+        type: 'mes-seances',
+        date: '2026-08-20',
+        label: 'Le Convoi du Nord',
+        detail: 'EVENING',
+        seanceLieu: 'chez Marc',
+      },
+    ]);
+
+    expect(fixture.nativeElement.querySelector('.agenda-entry__detail')?.textContent?.trim()).toBe(
+      'EVENING',
+    );
+    expect(fixture.nativeElement.querySelector('.agenda-entry__infos')?.textContent?.trim()).toBe(
+      'chez Marc',
+    );
   });
 });

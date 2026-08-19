@@ -654,6 +654,9 @@ describe('ScenarioReadDialog', () => {
               id: 'seance1',
               scenarioId: 's1',
               compteRendu: null,
+              heureRdv: null,
+              lieu: null,
+              notePratique: null,
               createdAt: '2026-07-12T00:00:00.000Z',
               poll: {
                 id: 'poll1',

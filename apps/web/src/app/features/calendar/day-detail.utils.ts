@@ -76,6 +76,13 @@ export interface DaySlotDetail {
   seanceLabel: string | null;
   /** Renseignée uniquement quand la séance est nommée ET navigable (AC11). */
   seanceTarget: RailTarget | null;
+  /** Story 36.5 — informations pratiques. Elles suivent le TITRE, jamais l'indisponibilité :
+   *  couche `mes-seances` éteinte ⇒ les trois passent à `null` en même temps que `seanceLabel`,
+   *  et le créneau reste `UNAVAILABLE` (FR-50). Séparées jusqu'au rendu pour que l'ordre de
+   *  repli reste applicable (AC3). */
+  seanceHeure: string | null;
+  seanceLieu: string | null;
+  seanceNote: string | null;
   /** Libellé du vote en cours sur ce créneau, ou `null`. */
   pollLabel: string | null;
 }
@@ -197,6 +204,11 @@ export function buildDayDetail(
         ? seance!.label + (seanceMatches.length > 1 ? ' (+1 autre)' : '')
         : null,
       seanceTarget: target,
+      // Même gouvernance que seanceLabel : `seanceNamed`, jamais un `??` opportuniste — la
+      // story 36.2 a déjà corrigé une fuite de texte inter-rangs de cette forme.
+      seanceHeure: seanceNamed ? (seance!.seanceHeure ?? null) : null,
+      seanceLieu: seanceNamed ? (seance!.seanceLieu ?? null) : null,
+      seanceNote: seanceNamed ? (seance!.seanceNote ?? null) : null,
       pollLabel:
         poll && active.has('votes-en-cours')
           ? poll.label + (pollMatches.length > 1 ? ' (+1 autre)' : '')
@@ -220,6 +232,38 @@ export function buildDayDetail(
  * 36.8 devra y ajouter sa propre condition (la couche « disponibilité du groupe » allumée impose
  * trois bandes, une jauge par créneau) — elle le fera au point d'appel, sans toucher à celle-ci.
  */
+/** Niveau de densité offert à `composeSeanceInfo()`. Un niveau plutôt qu'un budget en
+ *  caractères : c'est ce que les surfaces savent réellement dire d'elles-mêmes (une bande de
+ *  20 px, un rail large, une ligne d'agenda), et ça se teste sans arithmétique. */
+export type InfoDensity = 'full' | 'compact' | 'minimal';
+
+/** Les trois informations pratiques d'une séance, telles que portées par `DaySlotDetail`. */
+export interface SeanceInfoParts {
+  seanceHeure: string | null;
+  seanceLieu: string | null;
+  seanceNote: string | null;
+}
+
+/**
+ * Compose les informations pratiques d'une séance en UNE chaîne d'affichage (Story 36.5, AC3).
+ *
+ * C'est le point unique exigé par l'AC10 : le rail, la bande de la case et l'agenda passent tous
+ * par ici. Personne ne recompose de son côté, sans quoi l'ordre de repli divergerait entre trois
+ * surfaces — exactement le genre d'incohérence que la doctrine du projet combat.
+ *
+ * **Ordre de repli** — quand la place manque, la NOTE cède la première, puis le lieu ; l'heure
+ * tient le plus longtemps. C'est ce qui justifie que les trois champs soient séparés en base.
+ *
+ * ⚠️ Aucune valeur n'est reformatée : `seanceHeure` est reprise telle quelle (AC2). Une valeur
+ * vide ou blanche est traitée comme absente, pour ne jamais produire de séparateur orphelin (AC4).
+ */
+export function composeSeanceInfo(parts: SeanceInfoParts, density: InfoDensity = 'full'): string {
+  const ordered = [parts.seanceHeure, parts.seanceLieu, parts.seanceNote];
+  const present = ordered.map((v) => v?.trim() ?? '').filter((v) => v.length > 0);
+  const budget = density === 'full' ? 3 : density === 'compact' ? 2 : 1;
+  return present.slice(0, budget).join(' · ');
+}
+
 export function bandsAreUniform(detail: DayDetail): boolean {
   const [first, ...rest] = detail.slots;
   if (!first || EVENT_WINNERS.has(first.winner)) return false;

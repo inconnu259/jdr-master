@@ -77,10 +77,17 @@
     font-weight: 600;
   }
 
-  /* Accessoires (lieu, heure, note) — repliés en premier quand la place manque. */
+  /* Accessoires (lieu, heure, note). Story 36.5 : ils portent désormais une VRAIE information
+     (les informations pratiques d'une séance), pas un ornement — d'où la troncature explicite,
+     que le rail n'avait pas. */
   .m {
+    display: block;
+    min-width: 0;
     font-size: 11px;
     color: var(--jdr-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   &[data-status='AVAILABLE'] {
@@ -149,8 +156,17 @@
   .v {
     font-size: 11.5px;
 
+    /* ⚠️ Story 36.5, AC11 — ÉCART ASSUMÉ vs DESIGN.md:373, qui range les accessoires parmi ce
+       qui est « replié en premier quand la place manque ». Cette règle a été écrite quand
+       l'accessoire était un ornement. Depuis la story 36.2 la bande de la case perd tout texte
+       sous 712 px de grille : si le rail masquait le sien sous 768 px, les informations
+       pratiques seraient invisibles PARTOUT sur téléphone — ce que l'AC10 de la story 36.2
+       interdit (« la vue mois sur téléphone ne dit à aucun moment moins qu'avant »).
+       Elles restent donc, sur leur propre ligne, en corps réduit. À répercuter par bmad-ux. */
     .m {
-      display: none;
+      display: block;
+      font-size: 10.5px;
     }
   }
 }
+

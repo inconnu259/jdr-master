@@ -1642,6 +1642,59 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     expect(map.get('u1')).toHaveLength(2);
   });
 
+  // ─── AC7 (Story 36.5) — la non-fuite, désormais testée avec une charge utile nommante ──
+  // deferred-work.md:9 notait qu'aucun test ne construisait le cas « créneau UNAVAILABLE dérivé
+  // d'une séance d'une AUTRE partie, sans nom ni id exposé ». La story 36.5 ajoute la donnée la
+  // plus indiscrète de l'application (« chez Marc, 20 h 30 ») : la lacune se referme ici.
+  it('AC7 : une séance d’une autre partie portant des informations pratiques ne les fait JAMAIS fuiter', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: {
+          chosenDate: new Date('2026-09-15T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+        // La séance porte tout ce qu'il ne faut pas laisser passer.
+        heureRdv: '20:30',
+        lieu: 'chez Marc',
+        notePratique: 'pensez aux dés',
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    const derived = map.get('u1')![0];
+
+    // L'entrée dérivée reste un STATUT DE CRÉNEAU : rien de nommant n'y transite.
+    expect(Object.keys(derived).sort()).toEqual(
+      [
+        'dayOfWeek',
+        'endDate',
+        'expiresAt',
+        'kind',
+        'recurKind',
+        'slot',
+        'startDate',
+      ].sort(),
+    );
+    // Ceinture et bretelles : aucune des trois valeurs, où que ce soit dans l'objet sérialisé.
+    const serialized = JSON.stringify(derived);
+    expect(serialized).not.toContain('20:30');
+    expect(serialized).not.toContain('chez Marc');
+    expect(serialized).not.toContain('pensez aux dés');
+    expect(serialized).not.toContain('partieB');
+  });
+
   it('la sortie ne porte jamais d’identité de partie/scénario — seulement les champs DeclarationLike (non-fuite structurelle, AC3)', async () => {
     mockPartieFindMany.mockResolvedValue([
       {
@@ -1794,8 +1847,139 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         scenarioTitle: 'Le Donjon Oublié',
         date: '2026-10-10',
         slot: 'MORNING',
+        // Story 36.5 : toujours présents, à null quand la séance n'en porte pas — le client
+        // n'a jamais à distinguer « clé absente » de « valeur vide ».
+        heureRdv: null,
+        lieu: null,
+        notePratique: null,
       },
     ]);
+  });
+
+  // ─── Informations pratiques (Story 36.5, D-15 amendée) ────────────────────
+
+  it('AC6 : les informations pratiques transitent par GET /me/calendar', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        heureRdv: '20:30',
+        lieu: 'chez Marc',
+        notePratique: 'pensez aux dés',
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    expect(result['mes-seances'][0]).toMatchObject({
+      heureRdv: '20:30',
+      lieu: 'chez Marc',
+      notePratique: 'pensez aux dés',
+    });
+  });
+
+  it('AC6 : aucun appel supplémentaire n’est émis pour les informations pratiques', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        heureRdv: '20:30',
+        lieu: 'chez Marc',
+        notePratique: null,
+      },
+    ]);
+
+    await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+
+    // Les scalaires de Seance sont déjà chargés : une seule lecture, comme avant la story.
+    expect(mockSeanceFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC4 : une séance n’ayant QU’UN lieu expose les deux autres champs à null', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Les Cendres d’Ashal' },
+        heureRdv: null,
+        lieu: 'en visio',
+        notePratique: null,
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    expect(result['mes-seances'][0]).toMatchObject({
+      heureRdv: null,
+      lieu: 'en visio',
+      notePratique: null,
+    });
+  });
+
+  it('AC2 : heureRdv ressort telle quelle, jamais convertie en date', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        heureRdv: '20:30',
+        lieu: null,
+        notePratique: null,
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    const entry = result['mes-seances'][0];
+    expect(typeof entry.heureRdv).toBe('string');
+    expect(entry.heureRdv).toBe('20:30');
+    expect(entry.heureRdv).not.toBeInstanceOf(Date);
   });
 
   it('créneau sans chosenSlot sur le poll rattaché → FULL_DAY (AC5)', async () => {

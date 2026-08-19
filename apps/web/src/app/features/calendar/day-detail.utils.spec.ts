@@ -6,6 +6,7 @@ import {
   SLOT_PRECEDENCE,
   bandsAreUniform,
   buildDayDetail,
+  composeSeanceInfo,
   buildMonthDetails,
   dateKeyToUtcMidnight,
   nextMeaningfulDate,
@@ -501,5 +502,156 @@ describe('buildMonthDetails — la projection du mois', () => {
 
     expect(map.size).toBeGreaterThan(0);
     for (const detail of map.values()) expect(detail.slots).toHaveLength(3);
+  });
+});
+
+// ─── Informations pratiques (Story 36.5, D-15 amendée) ───────────────────────
+
+describe('buildDayDetail — les informations pratiques', () => {
+  it('AC3 : les trois champs sont portés par le créneau qui gagne', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [
+        seanceEntry({
+          seanceHeure: '20:30',
+          seanceLieu: 'chez Marc',
+          seanceNote: 'pensez aux dés',
+        }),
+      ],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+
+    const soir = detail.slots[2];
+    expect(soir.seanceHeure).toBe('20:30');
+    expect(soir.seanceLieu).toBe('chez Marc');
+    expect(soir.seanceNote).toBe('pensez aux dés');
+  });
+
+  it('AC8 : couche « mes séances » éteinte → les trois disparaissent AVEC le titre', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [
+        seanceEntry({
+          seanceHeure: '20:30',
+          seanceLieu: 'chez Marc',
+          seanceNote: 'pensez aux dés',
+        }),
+      ],
+      ALL_LAYERS.filter((l) => l !== 'mes-seances'),
+      [],
+      NOW,
+    );
+
+    const soir = detail.slots[2];
+    expect(soir.seanceLabel).toBeNull();
+    expect(soir.seanceHeure).toBeNull();
+    expect(soir.seanceLieu).toBeNull();
+    expect(soir.seanceNote).toBeNull();
+    // …mais l'indisponibilité qui en découle demeure (FR-50).
+    expect(soir.status).toBe('UNAVAILABLE');
+  });
+
+  it('AC4 : une séance sans informations pratiques les expose à null', () => {
+    const detail = buildDayDetail('2026-08-20', [seanceEntry()], ALL_LAYERS, [], NOW);
+
+    const soir = detail.slots[2];
+    expect(soir.seanceLabel).toBe('Le Convoi du Nord');
+    expect(soir.seanceHeure).toBeNull();
+    expect(soir.seanceLieu).toBeNull();
+    expect(soir.seanceNote).toBeNull();
+  });
+
+  it('AC4 : une séance n’ayant QU’UN lieu ne renseigne que celui-ci', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [seanceEntry({ label: 'Les Cendres d’Ashal', seanceLieu: 'en visio' })],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+
+    const soir = detail.slots[2];
+    expect(soir.seanceLieu).toBe('en visio');
+    expect(soir.seanceHeure).toBeNull();
+    expect(soir.seanceNote).toBeNull();
+  });
+
+  it('un vote gagnant ne porte aucune information pratique (elles appartiennent à la séance)', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [
+        {
+          key: 'poll-1',
+          type: 'votes-en-cours',
+          date: '2026-08-20',
+          label: 'Vote de date',
+          slot: 'EVENING',
+        },
+      ],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+
+    const soir = detail.slots[2];
+    expect(soir.winner).toBe('vote');
+    expect(soir.seanceHeure).toBeNull();
+    expect(soir.seanceLieu).toBeNull();
+    expect(soir.seanceNote).toBeNull();
+  });
+});
+
+describe('composeSeanceInfo — l’ordre de repli (AC3)', () => {
+  const full = {
+    seanceHeure: '20:30',
+    seanceLieu: 'chez Marc',
+    seanceNote: 'pensez aux dés',
+  };
+
+  it('niveau « full » : les trois, dans l’ordre heure · lieu · note', () => {
+    expect(composeSeanceInfo(full, 'full')).toBe('20:30 · chez Marc · pensez aux dés');
+  });
+
+  it('niveau « compact » : la NOTE cède la première', () => {
+    expect(composeSeanceInfo(full, 'compact')).toBe('20:30 · chez Marc');
+  });
+
+  it('niveau « minimal » : puis le lieu — l’heure tient le plus longtemps', () => {
+    expect(composeSeanceInfo(full, 'minimal')).toBe('20:30');
+  });
+
+  it('AC4 : aucun champ → chaîne vide, jamais un séparateur orphelin', () => {
+    expect(
+      composeSeanceInfo({ seanceHeure: null, seanceLieu: null, seanceNote: null }, 'full'),
+    ).toBe('');
+  });
+
+  it('AC4 : un seul champ → pas de séparateur', () => {
+    expect(
+      composeSeanceInfo({ seanceHeure: null, seanceLieu: 'en visio', seanceNote: null }, 'full'),
+    ).toBe('en visio');
+  });
+
+  it('AC4 : un trou au milieu ne laisse pas de double séparateur', () => {
+    expect(
+      composeSeanceInfo(
+        { seanceHeure: '20:30', seanceLieu: null, seanceNote: 'pensez aux dés' },
+        'full',
+      ),
+    ).toBe('20:30 · pensez aux dés');
+  });
+
+  it('les valeurs vides ou blanches sont traitées comme absentes', () => {
+    expect(
+      composeSeanceInfo({ seanceHeure: '', seanceLieu: '   ', seanceNote: 'dés' }, 'full'),
+    ).toBe('dés');
+  });
+
+  it('AC2 : l’heure est reprise TELLE QUELLE, jamais reformatée', () => {
+    expect(
+      composeSeanceInfo({ seanceHeure: '09:05', seanceLieu: null, seanceNote: null }, 'full'),
+    ).toBe('09:05');
   });
 });

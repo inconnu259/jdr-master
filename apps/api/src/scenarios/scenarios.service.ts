@@ -871,6 +871,48 @@ export class ScenariosService {
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
+  /** Informations pratiques d'une séance (Story 36.5, dérogation D-15 amendée le 2026-08-19).
+   *  Même forme que setCompteRendu : champ neutre de Seance, jamais restreint par kind ni par un
+   *  statut (Seance n'en a aucun), écriture MJ-only via getOwned.
+   *
+   *  🚨 Les trois valeurs sont écrites TELLES QUELLES. `heureRdv` n'est ni parsée, ni convertie,
+   *  ni comparée : c'est une étiquette `"HH:MM"`, dont la forme a été garantie par le DTO. La
+   *  chaîne de disponibilité continue de raisonner en créneau de journée (addendum §5.7).
+   *  `null` vide le champ — c'est le seul moyen de le faire, et il doit rester possible. */
+  async setInfosPratiques(
+    seanceId: string,
+    mjId: string,
+    dto: SetInfosPratiquesPayload,
+  ): Promise<ScenarioDto> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: seanceId },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    const scenario = await resolveScenarioOrThrow(
+      this.prisma,
+      seance.scenarioId,
+    );
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    // Un seul update pour les trois champs : ils sont saisis ensemble.
+    await this.prisma.seance.update({
+      where: { id: seanceId },
+      data: {
+        heureRdv: dto.heureRdv,
+        lieu: dto.lieu,
+        notePratique: dto.notePratique,
+      },
+    });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenario.id },
+    });
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Pas de notifyPartieSignalsChanged ici : contrairement au compte-rendu, l'absence
+    // d'informations pratiques n'est PAS un manquement et ne porte aucun signal (AC4).
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+  }
+
   // AD-1/AD-9 : résumé de fin = champ de Scenario, écriture MJ-only (getOwned). Garde de statut
   // inversée par rapport à update() (scenarios.service.ts:76-80) : celle-ci rejette tant que le
   // scénario n'est pas encore PASSE, update() rejette une fois PASSE — les deux se complètent.
@@ -1035,6 +1077,14 @@ function toSessionPollDto(poll: any): SessionPollDto {
   };
 }
 
+/** Forme du payload accepté par setInfosPratiques (Story 36.5). Miroir de `SetInfosPratiquesDto`
+ *  côté shared ; les trois champs sont saisis ensemble et `null` vide le champ. */
+export interface SetInfosPratiquesPayload {
+  heureRdv: string | null;
+  lieu: string | null;
+  notePratique: string | null;
+}
+
 function toSeanceDto(seance: any): SeanceDto {
   return {
     id: seance.id,
@@ -1055,6 +1105,11 @@ function toSeanceDto(seance: any): SeanceDto {
           }
         : undefined,
     compteRendu: seance.compteRendu,
+    // Story 36.5 — rendus tels quels. `heureRdv` reste une CHAÎNE : aucun new Date(), aucun
+    // formatage, aucun tri. Le client l'affiche, il ne la calcule pas.
+    heureRdv: seance.heureRdv ?? null,
+    lieu: seance.lieu ?? null,
+    notePratique: seance.notePratique ?? null,
     createdAt: seance.createdAt.toISOString(),
   };
 }

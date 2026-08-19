@@ -127,6 +127,12 @@
                     @if (band.text) {
                       <span class="band__label">{{ band.text }}</span>
                     }
+                    <!-- Story 36.5 — informations pratiques. Interpolation seule : « rendu tel
+                         quel » veut dire NON REFORMATÉ, pas non échappé (AC9). Aucun nœud n'est
+                         émis quand il n'y en a pas (AC4). -->
+                    @if (band.info) {
+                      <span class="band__sub">{{ band.info }}</span>
+                    }
                   </span>
                 }
               </div>

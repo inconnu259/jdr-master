@@ -266,6 +266,24 @@
   text-overflow: ellipsis;
 }
 
+/* Story 36.5 — les informations pratiques, sur le patron `.sub` du contrat d'UI : plus petites
+   et atténuées, elles accompagnent le titre sans lui disputer la place. Seuil PROPRE, plus haut
+   que celui du titre — voir le bloc de container query plus bas. */
+.band__sub {
+  display: none;
+  /* Ne rétrécit JAMAIS : l'heure est atomique, « 2… » ne vaut rien tandis qu'un titre amputé de
+     quatre lettres reste lisible. C'est donc le titre qui prend l'ellipse. */
+  flex: 0 0 auto;
+  margin-left: 5px;
+  font-size: 9.5px;
+  font-weight: 400;
+  line-height: 1.15;
+  color: var(--jdr-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Story 36.2, AC5/AC8 — au-dessus du seuil, la bande grandit et porte son texte. */
 @container month-grid (min-width: 712px) {
   .band {
@@ -278,6 +296,20 @@
   }
 
   .band__label {
+    display: block;
+    /* Le titre garde la priorité : c'est l'accessoire qui se comprime en premier. */
+    flex: 1 1 auto;
+  }
+}
+
+/* Story 36.5 — l'accessoire suit le seuil du titre, mais il n'y porte QUE L'HEURE.
+   Trouvé à la vérification visuelle : la grille est plafonnée à ~896 px, soit ~115 px de case,
+   et elle ne grandit PAS avec la fenêtre. « 20:30 · chez Marc » s'y réduisait à « 20… » — du
+   bruit qui volait de la place au titre. L'heure seule tient, et c'est la plus actionnable des
+   trois : c'est exactement ce que l'ordre de repli sert à exprimer (AC3). Le lieu et la note
+   sont portés par le rail, à toutes les largeurs (AC11). */
+@container month-grid (min-width: 712px) {
+  .band__sub {
     display: block;
   }
 }

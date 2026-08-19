@@ -17,6 +17,7 @@ import {
   type SlotWinner,
   bandsAreUniform,
   buildMonthDetails,
+  composeSeanceInfo,
   toDateKey,
 } from '../day-detail.utils';
 import {
@@ -46,6 +47,10 @@ export interface DayBand {
   /** Titre de séance ou libellé de vote, **déjà gouverné par les couches** — `null` quand la
    *  couche est éteinte, sans que le rang ni l'indisponibilité en soient affectés (AC6/FR-50). */
   text: string | null;
+  /** Story 36.5 — informations pratiques composées, `''` quand il n'y en a aucune. La bande est
+   *  de loin la surface la plus étroite (~115 px, la grille étant plafonnée) : elle demande le
+   *  niveau `minimal`, c'est-à-dire l'HEURE SEULE. Le lieu et la note sont portés par le rail. */
+  info: string;
   /** Aperçu live pendant l'édition dans `ConstraintPanel` — `null` si identique au réel. */
   preview: SlotStatus | null;
 }
@@ -141,6 +146,9 @@ export function buildMonth(
             // nullish-coalescing — sinon une séance dont la couche est éteinte peut afficher le
             // titre d'un vote qui couvre le même créneau, alors que la bande est stylée séance.
             text: s.winner === 'seance' ? s.seanceLabel : s.winner === 'vote' ? s.pollLabel : null,
+            // Même règle que `text` : porté par le rang GAGNANT, et seulement par une séance —
+            // un vote n'a pas d'informations pratiques.
+            info: s.winner === 'seance' ? composeSeanceInfo(s, 'minimal') : '',
             preview: previewStatus !== null && previewStatus !== s.status ? previewStatus : null,
           };
         }),
@@ -420,7 +428,13 @@ export class CalendarMonthView {
    *  posé et nommé, c'est son titre qui fait l'état (« Soir : Le Convoi du Nord ») ; quand la
    *  couche est éteinte, on retombe sur l'état de disponibilité, qui lui demeure (AC6). */
   protected bandAriaLabel(band: DayBand): string {
-    if (band.text) return `${band.label} : ${band.text}`;
+    // Story 36.5, AC13 : les informations pratiques sont ANNONCÉES, pas seulement affichées —
+    // et à l'oreille elles ne sont jamais tronquées, contrairement à l'ellipse visuelle.
+    if (band.text) {
+      return band.info
+        ? `${band.label} : ${band.text} — ${band.info}`
+        : `${band.label} : ${band.text}`;
+    }
     const labels: Record<SlotStatus, string> = {
       AVAILABLE: 'disponible',
       UNAVAILABLE: 'indisponible',

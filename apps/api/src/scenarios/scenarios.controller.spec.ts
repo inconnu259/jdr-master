@@ -35,6 +35,7 @@ function makeScenariosService() {
     inscrire: jest.fn(),
     desinscrire: jest.fn(),
     setCompteRendu: jest.fn(),
+    setInfosPratiques: jest.fn(),
     setResumeFin: jest.fn(),
     uploadDocument: jest.fn(),
     listDocuments: jest.fn(),
@@ -175,6 +176,20 @@ describe('ScenariosController', () => {
       'seance1',
       'mj1',
       'texte',
+    );
+  });
+
+  it('setInfosPratiques() route seanceId/user/dto vers ScenariosService.setInfosPratiques (Story 36.5)', async () => {
+    const dto = {
+      heureRdv: '20:30',
+      lieu: 'chez Marc',
+      notePratique: 'pensez aux dés',
+    };
+    await controller.setInfosPratiques('seance1', user, dto);
+    expect(scenarios.setInfosPratiques).toHaveBeenCalledWith(
+      'seance1',
+      'mj1',
+      dto,
     );
   });
 

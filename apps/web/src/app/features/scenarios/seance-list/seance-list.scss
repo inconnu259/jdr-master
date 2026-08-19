@@ -56,3 +56,55 @@
   color: var(--mat-sys-on-surface-variant, #666);
   font-style: italic;
 }
+
+/* Story 36.5 — informations pratiques. Trois champs courts, alignés sur une ligne quand la
+   place le permet ; le champ « À savoir » prend le reste. Aucun état incitatif côté joueur :
+   quand il n'y a rien, le bloc ne rend rien (AC4). */
+.seance-row__infos-pratiques {
+  margin-top: 0.5rem;
+}
+
+.infos-pratiques__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.infos-pratiques__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+
+  &--wide {
+    flex: 1 1 12rem;
+  }
+
+  input {
+    min-width: 0;
+    padding: 0.3rem 0.4rem;
+    font: inherit;
+    font-size: 0.85rem;
+    color: var(--jdr-text);
+    background: transparent;
+    border: 1px solid var(--mat-sys-outline-variant, #ccc);
+    border-radius: 0.3rem;
+  }
+}
+
+.infos-pratiques__label {
+  font-size: 0.72rem;
+  color: var(--jdr-text-muted);
+}
+
+.infos-pratiques__warning {
+  font-size: 0.72rem;
+  color: var(--color-mixed, #b45309);
+}
+
+.seance-row__infos-pratiques-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--jdr-text-muted);
+}

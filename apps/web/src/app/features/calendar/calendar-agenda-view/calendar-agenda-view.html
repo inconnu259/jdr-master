@@ -15,6 +15,11 @@
           @if (entry.detail) {
             <span class="agenda-entry__detail">{{ entry.detail }}</span>
           }
+          <!-- Story 36.5 — champ PROPRE, jamais versé dans `detail` qui porte déjà trois usages.
+               L'agenda a de la place : niveau complet. Interpolation seule (AC9). -->
+          @if (seanceInfo(entry)) {
+            <span class="agenda-entry__infos">{{ seanceInfo(entry) }}</span>
+          }
         </li>
       }
     </ul>

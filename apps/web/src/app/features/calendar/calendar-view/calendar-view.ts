@@ -306,6 +306,10 @@ export class CalendarView implements OnInit {
             partieId: pid,
             scenarioId: scenario.id,
             seanceId: seance.id,
+            // Story 36.5 — gratuits ici : le SeanceDto complet est déjà chargé.
+            seanceHeure: seance.heureRdv,
+            seanceLieu: seance.lieu,
+            seanceNote: seance.notePratique,
           });
         }
       }
@@ -354,6 +358,12 @@ export class CalendarView implements OnInit {
             partieId: s.partieId,
             scenarioId: s.scenarioId,
             seanceId: s.seanceId,
+            // Story 36.5, AC6 — le second chemin d'alimentation. Sans ces trois lignes ET
+            // l'enrichissement de MyCalendarSeanceEntry côté serveur, les informations pratiques
+            // marcheraient en contexte de partie et manqueraient sur profile/calendar.
+            seanceHeure: s.heureRdv,
+            seanceLieu: s.lieu,
+            seanceNote: s.notePratique,
           });
         }
         for (const p of mc['votes-en-cours']) {

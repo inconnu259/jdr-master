@@ -2154,7 +2154,14 @@ describe('ScenariosService', () => {
           id: 'seance-1',
           scenarioId: VALID_SCENARIO_ID,
           poll: undefined,
+          inscription: undefined,
           compteRendu: null,
+          // Story 36.5 : les trois champs d'informations pratiques figurent désormais dans
+          // SeanceDto. Une séance qui n'en porte aucun les expose à null — jamais absents,
+          // pour que le client n'ait pas à distinguer « absent » de « vide ».
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
           createdAt: '2026-07-13T00:00:00.000Z',
         },
       ]);
@@ -3848,6 +3855,140 @@ describe('ScenariosService', () => {
         service.setCompteRendu(SEANCE_ID, 'stranger', 'texte'),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── setInfosPratiques (Story 36.5, D-15 amendée) ────────────────────────
+  describe('setInfosPratiques()', () => {
+    const SEANCE_ID = '33333333-3333-4333-a333-333333333333';
+
+    function mockScenario(overrides: Record<string, unknown> = {}) {
+      return {
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Scénario',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+        seances: [],
+        ...overrides,
+      };
+    }
+
+    const PAYLOAD = {
+      heureRdv: '20:30',
+      lieu: 'chez Marc',
+      notePratique: 'pensez aux dés',
+    };
+
+    function arrange(kind = 'CAMPAGNE_LINEAIRE') {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind });
+    }
+
+    it.each(['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as const)(
+      '%s : les trois champs enregistrés, aucune restriction de kind (AC1)',
+      async (kind) => {
+        arrange(kind);
+
+        await service.setInfosPratiques(SEANCE_ID, 'mj1', PAYLOAD);
+
+        expect(prisma.seance.update).toHaveBeenCalledWith({
+          where: { id: SEANCE_ID },
+          data: PAYLOAD,
+        });
+      },
+    );
+
+    it('AC1 : les trois champs sont écrits en UNE seule mise à jour', async () => {
+      arrange();
+
+      await service.setInfosPratiques(SEANCE_ID, 'mj1', PAYLOAD);
+
+      expect(prisma.seance.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('AC4 : null est accepté et VIDE le champ', async () => {
+      arrange();
+
+      await service.setInfosPratiques(SEANCE_ID, 'mj1', {
+        heureRdv: null,
+        lieu: null,
+        notePratique: null,
+      });
+
+      expect(prisma.seance.update).toHaveBeenCalledWith({
+        where: { id: SEANCE_ID },
+        data: { heureRdv: null, lieu: null, notePratique: null },
+      });
+    });
+
+    it('AC4 : un seul champ renseigné, les deux autres vidés', async () => {
+      arrange();
+
+      await service.setInfosPratiques(SEANCE_ID, 'mj1', {
+        heureRdv: null,
+        lieu: 'en visio',
+        notePratique: null,
+      });
+
+      expect(prisma.seance.update).toHaveBeenCalledWith({
+        where: { id: SEANCE_ID },
+        data: { heureRdv: null, lieu: 'en visio', notePratique: null },
+      });
+    });
+
+    it('AC5 : non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.setInfosPratiques(SEANCE_ID, 'stranger', PAYLOAD),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('séance introuvable → 404, aucune écriture', async () => {
+      prisma.seance.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.setInfosPratiques('inconnue', 'mj1', PAYLOAD),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('émet un événement temps réel sur la partie', async () => {
+      arrange();
+
+      await service.setInfosPratiques(SEANCE_ID, 'mj1', PAYLOAD);
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith('partie:p1');
+    });
+
+    // AC2 — la garde n°2 rendue exécutable : heureRdv n'est jamais interprétée.
+    it('AC2 : heureRdv est transmise telle quelle, sans être convertie en date', async () => {
+      arrange();
+
+      await service.setInfosPratiques(SEANCE_ID, 'mj1', PAYLOAD);
+
+      const written = (
+        prisma.seance.update.mock.calls[0] as [{ data: { heureRdv: unknown } }]
+      )[0].data;
+      expect(typeof written.heureRdv).toBe('string');
+      expect(written.heureRdv).toBe('20:30');
+      expect(written.heureRdv).not.toBeInstanceOf(Date);
     });
   });
 

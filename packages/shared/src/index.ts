@@ -360,6 +360,13 @@ export interface SeanceDto {
   /** Inscription à capacité limitée (CAMPAGNE_EPISODIQUE uniquement, Story 8.3) — peuplé seulement si `inscriptionMax` est défini sur la Seance (AD-4 : jamais en même temps que `poll`). */
   inscription?: SeanceInscriptionDto;
   compteRendu: string | null;
+  /** Informations pratiques (Story 36.5, D-15 amendée le 2026-08-19) — trois champs
+   *  facultatifs, séparés pour qu'on puisse en lâcher un quand la place manque.
+   *  `heureRdv` est une ÉTIQUETTE `"HH:MM"`, jamais un instant : rien ne la parse, ne la
+   *  compare ni ne la trie, et la chaîne de disponibilité reste au créneau de journée. */
+  heureRdv: string | null;
+  lieu: string | null;
+  notePratique: string | null;
   createdAt: string;
 }
 
@@ -374,6 +381,16 @@ export interface SeanceInscriptionDto {
 /** Payload de rédaction du compte-rendu d'une Seance (PATCH /scenarios/seances/:id/compte-rendu). */
 export interface SetCompteRenduDto {
   compteRendu: string;
+}
+
+/** Payload des informations pratiques d'une Seance (PATCH /scenarios/seances/:id/infos-pratiques,
+ *  Story 36.5). Un seul payload pour les trois champs : le MJ les saisit ensemble, et une écriture
+ *  partielle compliquerait la remise à vide. `null` VIDE le champ — le distinguer de `undefined`
+ *  n'aurait pas de sens ici, les trois étant toujours envoyés ensemble. */
+export interface SetInfosPratiquesDto {
+  heureRdv: string | null;
+  lieu: string | null;
+  notePratique: string | null;
 }
 
 /** Payload de définition de la capacité d'une Seance (PATCH /scenarios/seances/:id/capacite). */
@@ -609,6 +626,13 @@ export interface MyCalendarSeanceEntry {
   scenarioTitle: string;
   date: string;
   slot: DaySlot;
+  /** Informations pratiques (Story 36.5). Elles doivent transiter par CE chemin aussi : sans
+   *  cela le calendrier personnel ne les verrait jamais, le contexte de partie étant le seul à
+   *  disposer du `SeanceDto` complet. Aucun appel supplémentaire — les scalaires de `Seance`
+   *  sont déjà chargés par le `findMany` de `getMyCalendar`. */
+  heureRdv: string | null;
+  lieu: string | null;
+  notePratique: string | null;
 }
 
 /** Vote de date en cours sur une de mes parties (couche `votes-en-cours`, `GET /me/calendar`,

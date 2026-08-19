@@ -603,7 +603,11 @@ describe('CalendarMonthView — les trois bandes', () => {
     'disponibilite-groupe',
   ] as any[];
 
-  function seance(date: string, slot: string | undefined = 'EVENING') {
+  function seance(
+    date: string,
+    slot: string | undefined = 'EVENING',
+    infos: Record<string, unknown> = {},
+  ) {
     return {
       key: 'seance-s1',
       type: 'mes-seances',
@@ -613,6 +617,7 @@ describe('CalendarMonthView — les trois bandes', () => {
       partieId: 'p1',
       scenarioId: 'sc1',
       seanceId: 's1',
+      ...infos,
     } as any;
   }
 
@@ -746,6 +751,59 @@ describe('CalendarMonthView — les trois bandes', () => {
     await createWith({ entries: [seance('2026-08-20')] });
 
     expect(cellOf(20).querySelector('.band__label')?.textContent?.trim()).toBe('Le Convoi du Nord');
+  });
+
+  // ─── Informations pratiques (Story 36.5) ───────────────────────────────
+  it('AC3 : la bande ne porte que l’HEURE — l’ordre de repli lâche le reste', async () => {
+    await createWith({
+      entries: [
+        seance('2026-08-20', 'EVENING', {
+          seanceHeure: '20:30',
+          seanceLieu: 'chez Marc',
+          seanceNote: 'pensez aux dés',
+        }),
+      ],
+    });
+
+    // La grille est plafonnée à ~115 px de case : seule l'heure y tient, et c'est la plus
+    // actionnable des trois. Le lieu et la note sont portés par le rail (AC3/AC11).
+    expect(cellOf(20).querySelector('.band__sub')?.textContent?.trim()).toBe('20:30');
+  });
+
+  it('AC4 : sans informations pratiques, aucun nœud accessoire n’est rendu', async () => {
+    await createWith({ entries: [seance('2026-08-20')] });
+
+    expect(cellOf(20).querySelector('.band__sub')).toBeNull();
+  });
+
+  it('AC8 : couche éteinte → les informations disparaissent avec le titre', async () => {
+    await createWith({
+      entries: [seance('2026-08-20', 'EVENING', { seanceHeure: '20:30' })],
+      activeLayers: ALL_LAYERS.filter((l) => l !== 'mes-seances'),
+    });
+
+    expect(cellOf(20).querySelector('.band__sub')).toBeNull();
+  });
+
+  it('AC13 : les informations figurent dans le nom accessible de la bande', async () => {
+    await createWith({
+      entries: [seance('2026-08-20', 'EVENING', { seanceHeure: '20:30', seanceLieu: 'chez Marc' })],
+    });
+
+    const bands = cellOf(20).querySelectorAll('.band');
+    expect(bands[2].getAttribute('aria-label')).toBe('Soir : Le Convoi du Nord — 20:30');
+  });
+
+  it('AC9 : du balisage est rendu littéralement dans la bande', async () => {
+    // Le DTO interdit ce contenu côté serveur (heureRdv est validée au format HH:MM) ; ce test
+    // vérifie la seconde barrière — le CHEMIN DE RENDU échappe, quoi qu'on lui donne.
+    await createWith({
+      entries: [seance('2026-08-20', 'EVENING', { seanceHeure: '<b>gras</b>' })],
+    });
+
+    const node = cellOf(20).querySelector('.band__sub')!;
+    expect(node.textContent).toContain('<b>gras</b>');
+    expect(node.querySelector('b')).toBeNull();
   });
 
   it('éteindre la couche « mes séances » retire le texte mais garde le rang (AC6)', async () => {

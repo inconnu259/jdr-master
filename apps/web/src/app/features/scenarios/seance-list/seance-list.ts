@@ -11,9 +11,15 @@ import type {
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { PollService } from '../../../core/poll/poll.service';
+import { composeSeanceInfo } from '../../calendar/day-detail.utils';
 import { PollStatusPanel } from '../../poll/poll-status/poll-status';
 import { PollResponseComponent } from '../../poll/poll-response/poll-response';
 import { FillIndicator } from '../fill-indicator/fill-indicator';
+
+/** Même forme que côté serveur (`set-infos-pratiques.dto.ts`) : sert uniquement à détecter une
+ *  valeur stockée hors app (écriture directe en base) que le widget natif `type="time"` rendrait
+ *  vide sans le signaler — jamais à revalider une saisie qui passe par ce composant. */
+const HEURE_HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
@@ -70,6 +76,58 @@ export class SeanceList {
       }
       untracked(() => void this.refreshScenario());
     });
+
+    // Story 36.5 (revue de code) : un rechargement externe (SSE sans rapport, poll d'un autre
+    // joueur…) ne doit pas écraser une saisie MJ en cours dans les champs d'informations
+    // pratiques — même patron de brouillon que ScenarioEditor.applyScenario() : seule une valeur
+    // serveur EFFECTIVEMENT différente de la précédente remplace le brouillon local.
+    effect(() => {
+      const s = this.scenario();
+      untracked(() => this.syncInfosDrafts(s));
+    });
+  }
+
+  private previousScenarioSeances: readonly SeanceDto[] | null = null;
+  protected readonly infosDrafts = signal<
+    Record<string, { heureRdv: string; lieu: string; notePratique: string }>
+  >({});
+
+  private syncInfosDrafts(s: ScenarioDto): void {
+    const previous = this.previousScenarioSeances;
+    this.previousScenarioSeances = s.seances;
+    const next = { ...this.infosDrafts() };
+    let touched = false;
+    for (const seance of s.seances) {
+      const prevSeance = previous?.find((p) => p.id === seance.id);
+      const serverChanged =
+        !prevSeance ||
+        (prevSeance.heureRdv ?? '') !== (seance.heureRdv ?? '') ||
+        (prevSeance.lieu ?? '') !== (seance.lieu ?? '') ||
+        (prevSeance.notePratique ?? '') !== (seance.notePratique ?? '');
+      if (serverChanged || !next[seance.id]) {
+        next[seance.id] = {
+          heureRdv: seance.heureRdv ?? '',
+          lieu: seance.lieu ?? '',
+          notePratique: seance.notePratique ?? '',
+        };
+        touched = true;
+      }
+    }
+    if (touched) this.infosDrafts.set(next);
+  }
+
+  /** Valeur à afficher dans un champ d'informations pratiques : le brouillon local, jamais
+   *  directement `seance.champ` (cf. `syncInfosDrafts`, garde anti-écrasement). */
+  protected infoDraft(seanceId: string, field: 'heureRdv' | 'lieu' | 'notePratique'): string {
+    return this.infosDrafts()[seanceId]?.[field] ?? '';
+  }
+
+  /** Non-null uniquement si `heureRdv` est renseignée mais ne respecte pas `HH:MM` — le widget
+   *  natif `type="time"` l'afficherait vide sans distinction avec « jamais renseignée », et
+   *  enregistrer sans y toucher effacerait silencieusement la valeur stockée. */
+  protected malformedHeureRdv(seance: SeanceDto): string | null {
+    const v = seance.heureRdv;
+    return v && !HEURE_HH_MM.test(v) ? v : null;
   }
 
   protected readonly pollActionPending = signal(false);
@@ -227,6 +285,43 @@ export class SeanceList {
   }
 
   // AC1 : aucune restriction de kind — s'applique aux branches linéaire ET épisodique.
+  /** Story 36.5 — les trois champs partent ensemble. Une valeur vide devient `null` : c'est ce
+   *  qui distingue « effacé » de « jamais rempli », et c'est le seul moyen de vider un champ. */
+  protected async onSetInfosPratiques(
+    seanceId: string,
+    heureRdv: string,
+    lieu: string,
+    notePratique: string,
+  ): Promise<void> {
+    if (this.pollActionPending()) return;
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      const updated = await this.scenarios.setInfosPratiques(seanceId, {
+        heureRdv: heureRdv.trim() || null,
+        lieu: lieu.trim() || null,
+        notePratique: notePratique.trim() || null,
+      });
+      this.seanceLinked.emit(updated);
+    } catch {
+      this.error.set('Impossible d’enregistrer les informations pratiques. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
+  /** Lecture côté joueur — même composition que le calendrier (AC10), niveau complet. */
+  protected seanceInfos(seance: SeanceDto): string {
+    return composeSeanceInfo(
+      {
+        seanceHeure: seance.heureRdv,
+        seanceLieu: seance.lieu,
+        seanceNote: seance.notePratique,
+      },
+      'full',
+    );
+  }
+
   protected async onSetCompteRendu(seanceId: string, compteRendu: string): Promise<void> {
     if (this.pollActionPending()) return;
     this.pollActionPending.set(true);

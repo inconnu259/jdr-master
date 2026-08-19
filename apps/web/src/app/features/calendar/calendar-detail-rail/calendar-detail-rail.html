@@ -41,9 +41,19 @@
                bouton — focalisable et atteignable au clavier sans code supplémentaire. -->
           <button type="button" class="v v--action" [attr.aria-label]="openLabel(s)" (click)="onActivate(s)">
             <b>{{ s.seanceLabel }}</b>
+            <!-- Story 36.5 — le rail est la surface la plus riche : il demande le niveau
+                 complet, contrairement à la bande. Interpolation seule (AC9). -->
+            @if (seanceInfo(s)) {
+              <span class="m">{{ seanceInfo(s) }}</span>
+            }
           </button>
         } @else if (s.seanceLabel) {
-          <span class="v"><b>{{ s.seanceLabel }}</b></span>
+          <span class="v">
+            <b>{{ s.seanceLabel }}</b>
+            @if (seanceInfo(s)) {
+              <span class="m">{{ seanceInfo(s) }}</span>
+            }
+          </span>
         } @else if (s.pollLabel) {
           <span class="v"><b>{{ s.pollLabel }}</b><span class="m"> · vote de date</span></span>
         } @else {
