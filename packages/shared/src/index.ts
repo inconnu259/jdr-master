@@ -514,6 +514,10 @@ export interface ConflictInfo {
   startDate: string | null;
   endDate: string | null;
   dayOfWeek: number | null;
+  /** Conflit INTERNE au lot (entre deux items du même lot, `id` synthétique
+   *  `batch-item-{index}`) : irrésoluble, aucun choix de résolution n'y a de sens (AC14).
+   *  Absent/`false` = conflit avec une déclaration persistée, résoluble. Story 36.4. */
+  internal?: boolean;
 }
 
 /** Résultat d'un POST /availability (avec ou sans résolution de conflit). */
@@ -522,9 +526,16 @@ export interface CreateAvailabilityResult {
 }
 
 /** Élément d'un lot d'écriture groupée (POST /availability/batch) : forme de
- *  CreateAvailabilityDto sans replacingId ni conflictResolution — ces deux champs
- *  n'ont aucun sens dans un lot (Story 30.2, AD-21 : le lot échoue en tout-ou-rien,
- *  il n'offre aucune résolution de conflit). */
+ *  CreateAvailabilityDto sans replacingId — cet identifiant n'a de sens que depuis le
+ *  panneau, qui remplace une déclaration précise.
+ *
+ *  `conflictResolution` est en revanche porté PAR ITEM depuis la Story 36.4 (dérogation
+ *  D-18) : la route groupée n'échoue plus en bloc sur conflit, elle absorbe l'écrasement
+ *  et la découpe. C'est un renversement assumé de l'AC2 de la Story 30.2 et de la phrase
+ *  3 d'AD-21 — les phrases 1 (un seul appel) et 2 (écriture transactionnelle tout-ou-rien)
+ *  restent vraies. La résolution est par item, et non globale au lot, parce que le
+ *  parcours « Au cas par cas » décide créneau par créneau : un seul contrat couvre donc
+ *  les trois issues (Remplacer / Conserver / Au cas par cas). */
 export interface CreateAvailabilityBatchItem {
   kind: AvailKind;
   recurKind: RecurKind;
@@ -533,6 +544,10 @@ export interface CreateAvailabilityBatchItem {
   startDate?: string | null;
   endDate?: string | null;
   expiresAt: string;
+  /** Résolution choisie pour CE créneau après détection de conflit (Story 36.4, D-18).
+   *  Absente = aucune résolution : un conflit sur cet item fait échouer le lot avec un 409
+   *  qui énumère TOUS les conflits, ce que le dialogue de résolution consomme. */
+  conflictResolution?: 'overwrite' | 'keep';
 }
 
 /** Payload de POST /availability/batch. */
@@ -540,15 +555,19 @@ export interface CreateAvailabilityBatchDto {
   items: CreateAvailabilityBatchItem[];
 }
 
+/** Résultat de POST /availability/batch. ⚠️ `created.length` n'égale PAS forcément
+ *  `items.length` et son ordre ne correspond PAS positionnellement à `items` : un item
+ *  résolu `keep` peut produire 0 à N pièces (découpe « à trous » autour des conflits
+ *  conservés), quand tout autre item en produit exactement une. Ne jamais indexer
+ *  `created[i]` en supposant qu'il correspond à `items[i]` (Story 36.4). */
+export interface CreateAvailabilityBatchResult {
+  created: AvailabilityDeclarationDto[];
+}
+
 /** Conflit détecté dans un lot : ConflictInfo enrichi de l'index de l'élément fautif. */
 export interface BatchConflictInfo extends ConflictInfo {
   /** Index (0-based) de l'élément du lot en conflit avec cette déclaration. */
   batchIndex: number;
-}
-
-/** Résultat d'un POST /availability/batch réussi. */
-export interface CreateAvailabilityBatchResult {
-  created: AvailabilityDeclarationDto[];
 }
 
 /** Payload partiel pour la mise à jour d'une déclaration. */

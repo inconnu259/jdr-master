@@ -13,6 +13,8 @@ import { Location } from '@angular/common';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import type {
   AggregatedSlotDto,
@@ -20,6 +22,7 @@ import type {
   AvailabilityDeclarationDto,
   AvailableSlotDto,
   CalendarLayerKey,
+  CreateAvailabilityBatchItem,
   CreateAvailabilityDto,
   DaySlot,
   MeCalendarDto,
@@ -47,11 +50,17 @@ import { CalendarDetailRail } from '../calendar-detail-rail/calendar-detail-rail
 import {
   type RailTarget,
   buildDayDetail,
+  entryCoversSlot,
   nextMeaningfulDate,
   toDateKey,
 } from '../day-detail.utils';
 import { CalendarLayerToggle } from '../calendar-layer-toggle/calendar-layer-toggle';
 import { ConstraintPanel } from '../constraint-panel/constraint-panel';
+import {
+  ConflictDialog,
+  type ConflictDialogData,
+  type ConflictResolutionByIndex,
+} from '../conflict-dialog/conflict-dialog';
 import { type SelectedCell, buildBatchItems } from '../selection.utils';
 import { AvailableSlotsPanel } from '../available-slots/available-slots';
 import { PollCreationComponent } from '../../poll/poll-creation/poll-creation';
@@ -67,6 +76,21 @@ export interface ActivePollEntry {
   seanceIndex: number;
   poll: SessionPollDto;
 }
+
+/** Libellés des créneaux, pour NOMMER un créneau en conflit (Story 36.4, AC2) — le dialogue
+ *  nomme, il ne compte pas. */
+const SLOT_LABELS: Record<DaySlot, string> = {
+  MORNING: 'Matin',
+  AFTERNOON: 'Après-midi',
+  EVENING: 'Soir',
+  FULL_DAY: 'Journée',
+};
+
+const CALENDAR_CELL_DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'long',
+});
 
 /** Story 8.8, AC9 : une séance sans vote encore lancé, éligible pour le sélecteur de l'Oracle. */
 export interface EligibleSeanceEntry {
@@ -107,6 +131,7 @@ export class CalendarView implements OnInit {
   private readonly router = inject(Router);
   private readonly location = inject(Location);
   private readonly snack = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
   protected readonly theme = inject(ThemeToneService);
   private readonly contextualNav = inject(ContextualNavService);
   private readonly realtime = inject(RealtimeService);
@@ -172,6 +197,9 @@ export class CalendarView implements OnInit {
     const showUnavail = active.includes('mes-indisponibilites');
     return this.declarations().filter((d) => (d.kind === 'AVAILABLE' ? showAvail : showUnavail));
   });
+
+  /** Garde anti-double-ouverture du dialogue de résolution (Story 36.4). */
+  private readonly conflictDialogOpen = signal(false);
 
   protected readonly panelOpen = signal(false);
   protected readonly selectedDate = signal<Date>(new Date());
@@ -601,10 +629,14 @@ export class CalendarView implements OnInit {
     await this.router.navigate(['/parties', target.partieId, 'scenarios', target.scenarioId]);
   }
 
-  // Story 30.3 : la sélection est déjà effacée côté vue enfant au moment de l'émission (succès ET
-  // échec traités identiquement côté affichage) — un seul appel à createDeclarationBatch(), jamais
-  // de boucle (AC1, AC7). La route groupée n'offre pas overwrite/keep (AD-21) : sur 409, on informe
-  // et on s'arrête là, aucun dialogue de résolution.
+  /** Story 36.4, D-18 — un conflit ne fait plus échouer le geste : il OUVRE une résolution.
+   *
+   *  Les deux vues effacent leur sélection AVANT de connaître le résultat (`onSelectionCommit`) :
+   *  `event.cells` est donc la seule chose qui survive au 409, et c'est elle qui permet à la fois
+   *  de NOMMER les créneaux (AC2) et de rejouer le lot résolu (AC12). On la retient ici.
+   *
+   *  Un geste produit au plus DEUX appels : le premier, puis le lot résolu. « Au cas par cas »
+   *  n'en ajoute aucun — c'est un parcours interne au dialogue (AC10). */
   protected async onBatchDeclareRequested(event: {
     cells: SelectedCell[];
     kind: AvailKind;
@@ -616,25 +648,138 @@ export class CalendarView implements OnInit {
       await this.refreshMjPanels();
     } catch (err) {
       if (err instanceof ConflictError) {
-        // AC7 : l'erreur nomme le(s) créneau(x) fautif(s) — un conflit interne au lot en nomme
-        // toujours deux (Story 30.2), ne pas se limiter au premier.
-        const labels = err.conflicts.map((c) => c.startDate ?? c.dayOfWeek).join(', ');
-        // Story 36.3 — le message nomme « Autre… » comme issue : depuis que le tap unitaire passe
-        // par la route groupée (tout-ou-rien, AD-21), c'est le seul chemin qui sait écraser et
-        // découper, jusqu'à ce que la story 36.4 apporte la résolution de conflits (D-18).
-        this.snack.open(
-          labels
-            ? `Conflit détecté sur le lot (${labels}). Rien n'a été enregistré — passez par « Autre… » pour modifier une déclaration existante.`
-            : "Conflit détecté dans le lot. Rien n'a été enregistré — passez par « Autre… » pour modifier une déclaration existante.",
-          undefined,
-          { duration: 5000 },
-        );
+        await this.resolveBatchConflicts(err, event.cells, event.kind, items);
         return;
       }
       this.snack.open('Impossible d’enregistrer ces disponibilités. Réessayez.', undefined, {
         duration: 5000,
       });
     }
+  }
+
+  private async resolveBatchConflicts(
+    err: ConflictError,
+    cells: SelectedCell[],
+    kind: AvailKind,
+    items: CreateAvailabilityBatchItem[],
+  ): Promise<void> {
+    // AC14 : un conflit INTERNE au lot reste irrésoluble — aucun des deux créneaux n'est
+    // « l'existant », « Remplacer » n'y aurait aucun sens. Le serveur le signe via `internal`
+    // (Story 36.4 — remplace le sondage par préfixe d'id de la Story 30.2, revue de code).
+    const resolvable = err.conflicts.filter((c) => typeof c.batchIndex === 'number' && !c.internal);
+    if (resolvable.length === 0) {
+      const labels = err.conflicts.map((c) => c.startDate ?? c.dayOfWeek).join(', ');
+      this.snack.open(
+        labels
+          ? `Ces créneaux se contredisent entre eux (${labels}). Rien n'a été enregistré.`
+          : "Ces créneaux se contredisent entre eux. Rien n'a été enregistré.",
+        undefined,
+        { duration: 5000 },
+      );
+      return;
+    }
+
+    // Garde anti-double-ouverture (patron `dialogPending()` de PollStatusPanel) : posée avant
+    // tout await, sans quoi deux gestes rapprochés ouvriraient deux dialogues concurrents. Le
+    // second geste est notifié plutôt que silencieusement perdu (revue de code Story 36.4).
+    if (this.conflictDialogOpen()) {
+      this.snack.open(
+        'Une résolution de conflit est déjà en cours. Terminez-la avant de recommencer.',
+        undefined,
+        { duration: 5000 },
+      );
+      return;
+    }
+    this.conflictDialogOpen.set(true);
+    try {
+      const conflictedIndexes = new Set(resolvable.map((c) => c.batchIndex as number));
+      const kindLabel = kind === 'AVAILABLE' ? 'disponible' : 'indisponible';
+      const seanceExceptions = this.seanceCoveredCells(cells, conflictedIndexes);
+      const data: ConflictDialogData = {
+        kindLabel,
+        intentLabel: this.describeSelection(cells),
+        conflicts: resolvable.map((c) => ({
+          batchIndex: c.batchIndex as number,
+          label: this.describeCell(cells[c.batchIndex as number]),
+        })),
+        // Les cellules d'exception séance ne sont ni en conflit ni « libres » : le compteur
+        // « Les N autres passent en… » ne doit pas les recompter (AC2/AC11, revue de code).
+        freeCount: cells.length - conflictedIndexes.size - seanceExceptions.length,
+        seanceExceptions,
+      };
+
+      const ref = this.dialog.open(ConflictDialog, { data });
+      const resolution = (await firstValueFrom(
+        ref.afterClosed(),
+      )) as ConflictResolutionByIndex | null;
+      if (!resolution) return;
+
+      // Un seul appel portant TOUT le lot, chaque créneau en conflit muni de sa décision.
+      const resolved = items.map((item, index) =>
+        resolution[index] ? { ...item, conflictResolution: resolution[index] } : item,
+      );
+      try {
+        await this.availabilitySvc.createDeclarationBatch(resolved);
+      } catch (resubmitErr) {
+        // Une résolution peut elle-même échouer sur un nouveau 409 (conflit interne révélé
+        // seulement après résolution de l'externe, ou collision de course) : on ne l'avale pas
+        // dans le message générique, on relance la résolution avec les conflits à jour
+        // (revue de code Story 36.4).
+        if (resubmitErr instanceof ConflictError) {
+          this.conflictDialogOpen.set(false);
+          await this.resolveBatchConflicts(resubmitErr, cells, kind, resolved);
+          return;
+        }
+        throw resubmitErr;
+      }
+      await this.loadDeclarations();
+      await this.refreshMjPanels();
+    } catch {
+      this.snack.open('Impossible d’enregistrer ces disponibilités. Réessayez.', undefined, {
+        duration: 5000,
+      });
+    } finally {
+      this.conflictDialogOpen.set(false);
+    }
+  }
+
+  /** Créneaux de la sélection couverts par une séance et qui ne sont PAS en conflit : ce sont
+   *  eux que le dialogue signale en exception (AC11). Ils ne peuvent structurellement pas
+   *  figurer dans `conflicts` — l'indisponibilité dérivée d'une séance n'est jamais persistée
+   *  (AD-9), il n'y a rien à écraser. Dérivé d'`allCalendarEntries()`, déjà en mémoire pour les
+   *  deux contextes : aucun appel réseau supplémentaire. */
+  private seanceCoveredCells(cells: SelectedCell[], conflicted: Set<number>): string[] {
+    const seances = this.allCalendarEntries().filter((e) => e.type === 'mes-seances');
+    if (seances.length === 0) return [];
+    const labels: string[] = [];
+    cells.forEach((cell, index) => {
+      if (conflicted.has(index)) return;
+      const key = toDateKey(cell.date);
+      const covered = seances.some((e) => e.date === key && entryCoversSlot(e.slot, cell.slot));
+      if (covered) labels.push(this.describeCell(cell));
+    });
+    return labels;
+  }
+
+  /** ⚠️ Le créneau est OMIS quand il vaut la journée entière. Vérifié à l'écran : « jeu. 20 août ·
+   *  Journée · ven. 21 août · Journée · … » emploie le même séparateur entre la date et le créneau
+   *  qu'entre deux créneaux, si bien qu'on ne distingue plus les items de la liste. Le contrat d'UI
+   *  écrit d'ailleurs « Mar 4 · Ven 7 · Dim 9 », sans créneau. Il reste nommé dès qu'il porte une
+   *  information (Matin / Après-midi / Soir). */
+  private describeCell(cell: SelectedCell | undefined): string {
+    if (!cell) return 'Créneau inconnu';
+    const date = CALENDAR_CELL_DATE_FORMAT.format(cell.date);
+    return cell.slot === 'FULL_DAY' ? date : `${date} · ${SLOT_LABELS[cell.slot]}`;
+  }
+
+  /** Rappelle l'intention du geste sous le titre du dialogue — « du 3 au 9 août, le soir ». */
+  private describeSelection(cells: SelectedCell[]): string {
+    if (cells.length === 0) return 'sur aucun créneau';
+    if (cells.length === 1) return `le ${this.describeCell(cells[0])}`;
+    const sorted = [...cells].sort((a, b) => a.date.getTime() - b.date.getTime());
+    const from = CALENDAR_CELL_DATE_FORMAT.format(sorted[0].date);
+    const to = CALENDAR_CELL_DATE_FORMAT.format(sorted[sorted.length - 1].date);
+    return `sur ${cells.length} créneaux, du ${from} au ${to}`;
   }
 
   protected onViewChange(value: string): void {

@@ -72,7 +72,11 @@ function makeRecurring(
 }
 
 type MockTxClient = {
-  availabilityDeclaration: { create: jest.Mock; update: jest.Mock };
+  availabilityDeclaration: {
+    create: jest.Mock;
+    update: jest.Mock;
+    updateMany: jest.Mock;
+  };
 };
 
 function makeMockPrisma() {
@@ -98,8 +102,15 @@ function makeMockPrisma() {
     Promise.resolve([] as object[]),
   );
 
+  // Story 36.4 : la résolution « Remplacer » expire les déclarations en conflit À L'INTÉRIEUR de
+  // la transaction du lot (create() le fait hors transaction — ce n'est pas le modèle à suivre).
+  // Le client transactionnel doit donc exposer updateMany, ce qui n'était pas le cas avant.
   const tx: MockTxClient = {
-    availabilityDeclaration: { create: mockCreate, update: mockUpdate },
+    availabilityDeclaration: {
+      create: mockCreate,
+      update: mockUpdate,
+      updateMany: mockUpdateMany,
+    },
   };
   const mockPrisma = {
     availabilityDeclaration: {
@@ -634,10 +645,22 @@ describe('AvailabilityService.create — conflict detection', () => {
 
 // ─── createBatch — écriture groupée (Story 30.2) ─────────────────────────────
 
+/** La clause `where` du updateMany groupé du lot. `mock.calls` étant typé `any`, on caste le
+ *  tuple d'appel une fois ici plutôt qu'à chaque assertion (no-unsafe-member-access). */
+function updateManyWhere(mock: jest.Mock): {
+  id: { in: string[] };
+  userId: string;
+} {
+  return (
+    mock.mock.calls[0] as [{ where: { id: { in: string[] }; userId: string } }]
+  )[0].where;
+}
+
 describe('AvailabilityService.createBatch', () => {
   let service: AvailabilityService;
   let mockCreate: jest.Mock;
   let mockFindMany: jest.Mock;
+  let mockUpdateMany: jest.Mock;
   let mockPrisma: {
     $transaction: jest.Mock;
     availabilityDeclaration: { findMany: jest.Mock };
@@ -654,6 +677,7 @@ describe('AvailabilityService.createBatch', () => {
       startDate: string | null;
       endDate: string | null;
       expiresAt: string;
+      conflictResolution: 'overwrite' | 'keep';
     }> = {},
   ) => ({
     kind: 'AVAILABLE' as const,
@@ -672,6 +696,7 @@ describe('AvailabilityService.createBatch', () => {
     );
     mockCreate = mocks.mockCreate;
     mockFindMany = mocks.mockFindMany;
+    mockUpdateMany = mocks.mockUpdateMany;
     mockPrisma = mocks.mockPrisma;
     mockMembershipFindMany = mocks.mockMembershipFindMany;
     mockPartieFindMany = mocks.mockPartieFindMany;
@@ -705,7 +730,11 @@ describe('AvailabilityService.createBatch', () => {
     expect(mockFindMany).toHaveBeenCalledTimes(1);
   });
 
-  it('conflit externe sur un seul créneau → 409, aucune création, message nommant le créneau', async () => {
+  // ⚠️ Story 36.4 — ce test CHANGE DE VÉRITÉ (il ne disparaît pas). Le lot sans résolution
+  // échoue toujours et n'écrit toujours rien, mais le 409 doit désormais ÉNUMÉRER TOUS les
+  // conflits : le dialogue de résolution les NOMME (AC2), il ne peut pas le faire à partir
+  // d'une seule entrée.
+  it('conflit externe sans résolution → 409, aucune création, le créneau fautif nommé', async () => {
     mockFindMany.mockResolvedValue([
       makePrismaDecl({
         kind: 'UNAVAILABLE',
@@ -725,6 +754,312 @@ describe('AvailabilityService.createBatch', () => {
       },
     });
     expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('AC9 : plusieurs créneaux en conflit → le 409 les énumère TOUS, dans l’ordre du lot', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        id: 'ex-lundi',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 1,
+        slot: 'MORNING',
+      }),
+      makePrismaDecl({
+        id: 'ex-mercredi',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 3,
+        slot: 'EVENING',
+      }),
+    ]);
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING' }), // conflit, index 0
+      item({ dayOfWeek: 2, slot: 'AFTERNOON' }), // sans conflit
+      item({ dayOfWeek: 3, slot: 'EVENING' }), // conflit, index 2
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [
+          expect.objectContaining({ batchIndex: 0, id: 'ex-lundi' }),
+          expect.objectContaining({ batchIndex: 2, id: 'ex-mercredi' }),
+        ],
+      },
+    });
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('AC9 : un créneau en conflit avec DEUX déclarations → les deux couples sont énumérés', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({ id: 'ex-a', kind: 'UNAVAILABLE', dayOfWeek: 3 }),
+      makePrismaDecl({
+        id: 'ex-b',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 3,
+        slot: 'FULL_DAY',
+      }),
+    ]);
+    const items = [item({ dayOfWeek: 3, slot: 'EVENING' })];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [
+          expect.objectContaining({ batchIndex: 0, id: 'ex-a' }),
+          expect.objectContaining({ batchIndex: 0, id: 'ex-b' }),
+        ],
+      },
+    });
+  });
+
+  it('AC4/AC8 : résolution « overwrite » → conflits expirés ET item créé, dans UNE seule transaction', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({ id: 'ex-1', kind: 'UNAVAILABLE', dayOfWeek: 3 }),
+    ]);
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING' }),
+      item({ dayOfWeek: 3, slot: 'EVENING', conflictResolution: 'overwrite' }),
+    ];
+
+    const result = await service.createBatch(USER_ID, items);
+
+    expect(result.created).toHaveLength(2);
+    expect(mockUpdateMany).toHaveBeenCalledTimes(1);
+    expect(updateManyWhere(mockUpdateMany)).toEqual({
+      id: { in: ['ex-1'] },
+      userId: USER_ID,
+    });
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC16 : « overwrite » borne toujours l’expiration à l’utilisateur de la session', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({ id: 'ex-1', kind: 'UNAVAILABLE', dayOfWeek: 3 }),
+    ]);
+    await service.createBatch(USER_ID, [
+      item({ dayOfWeek: 3, slot: 'EVENING', conflictResolution: 'overwrite' }),
+    ]);
+
+    expect(updateManyWhere(mockUpdateMany).userId).toBe(USER_ID);
+  });
+
+  it('AC8 : plusieurs « overwrite » dans le même lot → UN SEUL updateMany groupé', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        id: 'ex-1',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 1,
+        slot: 'MORNING',
+      }),
+      makePrismaDecl({
+        id: 'ex-2',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 3,
+        slot: 'EVENING',
+      }),
+    ]);
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING', conflictResolution: 'overwrite' }),
+      item({ dayOfWeek: 3, slot: 'EVENING', conflictResolution: 'overwrite' }),
+    ];
+
+    await service.createBatch(USER_ID, items);
+
+    expect(mockUpdateMany).toHaveBeenCalledTimes(1);
+    expect(updateManyWhere(mockUpdateMany).id.in).toEqual(
+      expect.arrayContaining(['ex-1', 'ex-2']),
+    );
+  });
+
+  it('AC6 : résolution « keep » → la découpe s’applique dans le lot, sans expirer l’existant', async () => {
+    // Existant PONCTUEL le 8 juillet ; l'item couvre le 6 → 10 : la découpe doit produire
+    // deux morceaux (6-7 et 9-10) autour du trou, exactement comme le chemin unitaire.
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        id: 'ex-trou',
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: new Date('2026-07-08T00:00:00Z'),
+        endDate: new Date('2026-07-08T00:00:00Z'),
+      }),
+    ]);
+    const items = [
+      item({
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: '2026-07-06',
+        endDate: '2026-07-10',
+        conflictResolution: 'keep',
+      }),
+    ];
+
+    const result = await service.createBatch(USER_ID, items);
+
+    expect(result.created).toHaveLength(2);
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC3 : résolutions MIXTES dans un même lot → chaque décision ne porte que sur son créneau', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        id: 'ex-1',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 1,
+        slot: 'MORNING',
+      }),
+      makePrismaDecl({
+        id: 'ex-2',
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: new Date('2026-07-08T00:00:00Z'),
+        endDate: new Date('2026-07-08T00:00:00Z'),
+      }),
+    ]);
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING', conflictResolution: 'overwrite' }),
+      item({
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: '2026-07-06',
+        endDate: '2026-07-10',
+        conflictResolution: 'keep',
+      }),
+    ];
+
+    await service.createBatch(USER_ID, items);
+
+    // Seul le conflit du créneau « overwrite » est expiré ; celui du créneau « keep » survit.
+    expect(updateManyWhere(mockUpdateMany).id.in).toEqual(['ex-1']);
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC10/AC12 : un créneau déjà déclaré peut être redéclaré en un seul appel résolu', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({ id: 'ex-1', kind: 'UNAVAILABLE', dayOfWeek: 3 }),
+    ]);
+    const result = await service.createBatch(USER_ID, [
+      item({ dayOfWeek: 3, slot: 'EVENING', conflictResolution: 'overwrite' }),
+    ]);
+
+    expect(result.created).toHaveLength(1);
+    expect(mockFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC14 : un conflit INTERNE reste non résoluble, même si les items portent une résolution', async () => {
+    const items = [
+      item({
+        dayOfWeek: 3,
+        slot: 'FULL_DAY',
+        kind: 'UNAVAILABLE',
+        conflictResolution: 'overwrite',
+      }),
+      item({
+        dayOfWeek: 3,
+        slot: 'MORNING',
+        kind: 'AVAILABLE',
+        conflictResolution: 'overwrite',
+      }),
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('un conflit INTERNE porte `internal: true` sur ses deux entrées (revue de code)', async () => {
+    const items = [
+      item({
+        dayOfWeek: 3,
+        slot: 'FULL_DAY',
+        kind: 'UNAVAILABLE',
+        conflictResolution: 'overwrite',
+      }),
+      item({
+        dayOfWeek: 3,
+        slot: 'MORNING',
+        kind: 'AVAILABLE',
+        conflictResolution: 'overwrite',
+      }),
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [
+          expect.objectContaining({ internal: true }),
+          expect.objectContaining({ internal: true }),
+        ],
+      },
+    });
+  });
+
+  it('un conflit EXTERNE ne porte jamais `internal: true` (revue de code)', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({ id: 'ex-1', kind: 'UNAVAILABLE', dayOfWeek: 3 }),
+    ]);
+    const items = [item({ dayOfWeek: 3, slot: 'EVENING' })];
+
+    try {
+      await service.createBatch(USER_ID, items);
+      throw new Error('expected createBatch to reject');
+    } catch (err) {
+      const conflicts = (
+        err as { response: { conflicts: Array<{ internal?: boolean }> } }
+      ).response.conflicts;
+      expect(conflicts[0].internal).toBeFalsy();
+    }
+  });
+
+  // Revue de code Story 36.4 : dans le même lot, un item `overwrite` et un item `keep`
+  // ciblent la MÊME déclaration persistée. Décision retenue : `overwrite` prime — la
+  // déclaration sera expirée au commit, le `keep` ne doit donc PAS creuser de trou à son sujet.
+  it('« overwrite » prime sur « keep » quand deux items du lot recouvrent la MÊME déclaration persistée', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        id: 'ex-partagee',
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'FULL_DAY',
+        startDate: new Date('2026-07-08T00:00:00Z'),
+        endDate: new Date('2026-07-08T00:00:00Z'),
+      }),
+    ]);
+    const items = [
+      // Item A : recouvre uniquement le 8 juillet, choisit « overwrite ».
+      item({
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'MORNING',
+        startDate: '2026-07-08',
+        endDate: '2026-07-08',
+        conflictResolution: 'overwrite',
+      }),
+      // Item B : recouvre une plage plus large incluant le 8 juillet, choisit « keep ».
+      item({
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'FULL_DAY',
+        startDate: '2026-07-06',
+        endDate: '2026-07-10',
+        conflictResolution: 'keep',
+      }),
+    ];
+
+    const result = await service.createBatch(USER_ID, items);
+
+    // La déclaration partagée est expirée (overwrite gagne)...
+    expect(updateManyWhere(mockUpdateMany).id.in).toEqual(['ex-partagee']);
+    // ...et l'item « keep » n'a PAS creusé de trou à son sujet : 1 pièce pour l'item A +
+    // 1 SEULE pièce continue pour l'item B (sans la correction, B produirait 2 pièces
+    // séparées par un trou injustifié autour du 8 juillet → 3 au total).
+    expect(result.created).toHaveLength(2);
   });
 
   it('conflit interne au lot (FULL_DAY vs MORNING, kinds opposés, même jour) → 409, aucune création', async () => {

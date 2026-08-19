@@ -96,10 +96,12 @@ export interface DayDetail {
  *  plus — elle décrit un créneau, elle n'y ajoute rien à faire. */
 const MEANINGFUL_TYPES = new Set(['mes-seances', 'votes-en-cours', 'inscriptions-ouvertes']);
 
-/** `FULL_DAY` (ou un créneau absent) couvre les trois créneaux — même convention de lecture que
- *  `compute-display-status.ts` et `calendar-week-view.ts`. */
-function entryCoversSlot(entrySlot: DaySlot | undefined, slot: RailSlot): boolean {
-  if (entrySlot == null || entrySlot === 'FULL_DAY') return true;
+/** `FULL_DAY` (ou un créneau absent), côté entrée COMME côté cible, couvre les trois créneaux —
+ *  même convention de lecture que `compute-display-status.ts` et `calendar-week-view.ts`. Le
+ *  second paramètre accepte `DaySlot` (pas seulement `RailSlot`) pour être réutilisable avec une
+ *  cellule sélectionnée en Journée entière (Story 36.4, revue de code). */
+export function entryCoversSlot(entrySlot: DaySlot | undefined, slot: DaySlot): boolean {
+  if (entrySlot == null || entrySlot === 'FULL_DAY' || slot === 'FULL_DAY') return true;
   return entrySlot === slot;
 }
 

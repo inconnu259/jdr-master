@@ -77,3 +77,31 @@ describe('CreateAvailabilityBatchDto', () => {
     expect(errors.some((e) => e.property === 'items')).toBe(true);
   });
 });
+
+// ─── conflictResolution (Story 36.4, D-18) ───────────────────────────────────
+
+describe('CreateAvailabilityBatchDto — conflictResolution (Story 36.4)', () => {
+  it('item sans conflictResolution → valide (absence = aucune résolution demandée)', async () => {
+    const dto = plainToInstance(CreateAvailabilityBatchDto, {
+      items: [validItem],
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it.each(['overwrite', 'keep'])(
+    'conflictResolution « %s » → valide',
+    async (resolution) => {
+      const dto = plainToInstance(CreateAvailabilityBatchDto, {
+        items: [{ ...validItem, conflictResolution: resolution }],
+      });
+      expect(await validate(dto)).toHaveLength(0);
+    },
+  );
+
+  it('AC16 : une valeur hors union fermée est refusée (jamais une chaîne libre)', async () => {
+    const dto = plainToInstance(CreateAvailabilityBatchDto, {
+      items: [{ ...validItem, conflictResolution: 'delete-everything' }],
+    });
+    expect(await validate(dto)).not.toHaveLength(0);
+  });
+});

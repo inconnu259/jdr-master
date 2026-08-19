@@ -18,8 +18,14 @@ import { API_BASE } from '../api-base';
 
 export { ConflictInfo };
 
+/** Un conflit rendu par le serveur. `batchIndex` n'est renseigné que par la route groupée
+ *  (`BatchConflictInfo`) : c'est la SEULE clé qui relie un conflit à la cellule sélectionnée
+ *  qui l'a provoqué — les dates portées par ConflictInfo sont celles de la déclaration
+ *  EXISTANTE (nulles pour une récurrente), pas celles du créneau soumis (Story 36.4). */
+export type ConflictEntry = ConflictInfo & { batchIndex?: number };
+
 export class ConflictError extends Error {
-  constructor(public readonly conflicts: ConflictInfo[]) {
+  constructor(public readonly conflicts: ConflictEntry[]) {
     super('Conflicting declarations detected');
     Object.setPrototypeOf(this, ConflictError.prototype);
   }
@@ -82,8 +88,10 @@ export class AvailabilityService {
   }
 
   // Un seul POST portant tout le lot — jamais une boucle sur createDeclaration() (AC1).
-  // Ne remplace pas createDeclaration() : la route groupée n'offre pas overwrite/keep,
-  // ConstraintPanel continue de passer par la route unitaire (AC8, Story 30.2).
+  // Depuis la Story 36.4 (D-18), chaque item peut porter sa propre `conflictResolution` : la
+  // route groupée n'échoue plus en bloc, elle absorbe l'écrasement et la découpe. Elle ne
+  // remplace pas pour autant createDeclaration() — ConstraintPanel reste sur la route unitaire,
+  // seul chemin de la contrainte récurrente et de la découpe d'occurrence.
   createDeclarationBatch(
     items: CreateAvailabilityBatchItem[],
   ): Promise<CreateAvailabilityBatchResult> {
@@ -97,7 +105,7 @@ export class AvailabilityService {
         .pipe(
           catchError((err: HttpErrorResponse) => {
             if (err.status === 409 && Array.isArray(err.error?.conflicts)) {
-              return throwError(() => new ConflictError(err.error.conflicts as ConflictInfo[]));
+              return throwError(() => new ConflictError(err.error.conflicts as ConflictEntry[]));
             }
             return throwError(() => err);
           }),

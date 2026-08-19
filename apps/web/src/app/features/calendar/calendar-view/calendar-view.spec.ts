@@ -4,6 +4,8 @@ import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { of } from 'rxjs';
 import { Location } from '@angular/common';
 import { vi } from 'vitest';
 import { CalendarView } from './calendar-view';
@@ -73,6 +75,20 @@ function makePollService() {
   };
 }
 
+/** Story 36.4 : le dialogue de résolution est ouvert par CalendarView. Par défaut il est ANNULÉ
+ *  (résultat null) — un test qui veut une résolution règle `dialog.__result`. */
+function makeMatDialog() {
+  const dialog = {
+    __result: null as unknown,
+    open: vi.fn((component: unknown, config?: { data?: any }) => ({
+      component,
+      config,
+      afterClosed: () => of(dialog.__result),
+    })),
+  };
+  return dialog;
+}
+
 function makeSnackBar() {
   return { open: vi.fn() };
 }
@@ -131,6 +147,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   const authSvc = opts.authSvc ?? makeAuthService();
   const pollSvc = makePollService();
   const snack = makeSnackBar();
+  const dialog = makeMatDialog();
   const partiesSvc = makePartiesService();
   const scenariosSvc = makeScenariosService(opts.scenarios ?? []);
   const realtimeSvc = makeRealtimeService();
@@ -146,6 +163,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
       { provide: PartiesService, useValue: partiesSvc },
       { provide: PollService, useValue: pollSvc },
       { provide: MatSnackBar, useValue: snack },
+      { provide: MatDialog, useValue: dialog },
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: RealtimeService, useValue: realtimeSvc },
     ],
@@ -167,6 +185,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
     availabilitySvc,
     authSvc,
     snack,
+    dialog,
     partiesSvc,
     scenariosSvc,
     realtimeSvc,
@@ -850,62 +869,219 @@ describe('CalendarView — onBatchDeclareRequested (Story 30.3)', () => {
     expect(availabilitySvc.getMyDeclarations).toHaveBeenCalledTimes(1);
   });
 
-  it('409 (ConflictError) → aucune exception non gérée, message affiché, aucune régression du flux', async () => {
-    const availabilitySvc = makeAvailabilityService();
-    availabilitySvc.createDeclarationBatch = vi.fn().mockRejectedValue(
-      new ConflictError([
-        {
-          id: '',
-          kind: 'AVAILABLE',
-          slot: 'EVENING',
-          recurKind: 'PUNCTUAL',
-          startDate: '2026-08-11',
-          endDate: '2026-08-11',
-          dayOfWeek: null,
-        },
-      ]),
-    );
-    const { fixture, snack } = await createCalendarView({ mode: 'personal', availabilitySvc });
+  // ⚠️ Story 36.4 — ces deux tests CHANGENT DE VÉRITÉ (ils ne disparaissent pas). Le 409 ne se
+  // solde plus par une snackbar d'échec en bloc : il OUVRE le dialogue de résolution (D-18).
+
+  function conflict(startDate: string, batchIndex: number) {
+    return {
+      id: 'ex-' + batchIndex,
+      kind: 'AVAILABLE' as const,
+      slot: 'EVENING' as const,
+      recurKind: 'PUNCTUAL' as const,
+      startDate,
+      endDate: startDate,
+      dayOfWeek: null,
+      batchIndex,
+    };
+  }
+
+  function rejectingBatch(conflicts: ReturnType<typeof conflict>[]) {
+    const svc = makeAvailabilityService();
+    let call = 0;
+    svc.createDeclarationBatch = vi.fn(() => {
+      call += 1;
+      // 1er appel : le serveur refuse et énumère les conflits. 2e appel (résolu) : succès.
+      return call === 1
+        ? Promise.reject(new ConflictError(conflicts))
+        : Promise.resolve({ created: [] });
+    });
+    return svc;
+  }
+
+  it('AC1 : 409 → le dialogue de résolution s’ouvre, aucune snackbar d’échec en bloc', async () => {
+    const availabilitySvc = rejectingBatch([conflict('2026-08-11', 1)]);
+    const { fixture, snack, dialog } = await createCalendarView({
+      mode: 'personal',
+      availabilitySvc,
+    });
     const comp = fixture.componentInstance as any;
 
     await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
 
-    expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.calls[0][0]).toContain('2026-08-11');
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(snack.open).not.toHaveBeenCalled();
   });
 
-  it('409 avec plusieurs conflits (conflit interne au lot) → le message nomme les deux créneaux (AC7)', async () => {
-    const availabilitySvc = makeAvailabilityService();
-    availabilitySvc.createDeclarationBatch = vi.fn().mockRejectedValue(
-      new ConflictError([
-        {
-          id: 'batch-item-0',
-          kind: 'AVAILABLE',
-          slot: 'EVENING',
-          recurKind: 'PUNCTUAL',
-          startDate: '2026-08-10',
-          endDate: '2026-08-10',
-          dayOfWeek: null,
-        },
-        {
-          id: 'batch-item-1',
-          kind: 'UNAVAILABLE',
-          slot: 'EVENING',
-          recurKind: 'PUNCTUAL',
-          startDate: '2026-08-11',
-          endDate: '2026-08-11',
-          dayOfWeek: null,
-        },
-      ]),
-    );
-    const { fixture, snack } = await createCalendarView({ mode: 'personal', availabilitySvc });
+  it('AC2 : le dialogue reçoit les créneaux NOMMÉS, pas un simple décompte', async () => {
+    const availabilitySvc = rejectingBatch([conflict('2026-08-10', 0), conflict('2026-08-11', 1)]);
+    const { fixture, dialog } = await createCalendarView({ mode: 'personal', availabilitySvc });
     const comp = fixture.componentInstance as any;
 
     await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
 
+    const data = dialog.open.mock.calls[0][1]!.data;
+    const labels = data.conflicts.map((c: { label: string }) => c.label);
+    expect(labels).toHaveLength(2);
+    expect(labels[0]).toContain('10');
+    expect(labels[1]).toContain('11');
+    expect(data.conflicts.map((c: { batchIndex: number }) => c.batchIndex)).toEqual([0, 1]);
+  });
+
+  it('AC2 : un créneau « Journée » est nommé par sa seule date — sinon le séparateur devient ambigu', async () => {
+    const availabilitySvc = rejectingBatch([conflict('2026-08-11', 0)]);
+    const { fixture, dialog } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({
+      cells: [{ date: new Date('2026-08-10'), slot: 'FULL_DAY' as const }],
+      kind: 'UNAVAILABLE',
+    });
+
+    const label = dialog.open.mock.calls[0][1]!.data.conflicts[0].label as string;
+    expect(label).not.toContain('Journée');
+    expect(label).toContain('10');
+  });
+
+  it('AC2 : un créneau partiel garde son nom de créneau', async () => {
+    const availabilitySvc = rejectingBatch([conflict('2026-08-11', 0)]);
+    const { fixture, dialog } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({
+      cells: [{ date: new Date('2026-08-10'), slot: 'EVENING' as const }],
+      kind: 'UNAVAILABLE',
+    });
+
+    expect(dialog.open.mock.calls[0][1]!.data.conflicts[0].label).toContain('Soir');
+  });
+
+  it('AC12 : la sélection est RETENUE — la résolution rejoue le lot complet en un seul appel', async () => {
+    const availabilitySvc = rejectingBatch([conflict('2026-08-11', 1)]);
+    const { fixture, dialog } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    dialog.__result = { 1: 'overwrite' };
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
+
+    expect(availabilitySvc.createDeclarationBatch).toHaveBeenCalledTimes(2);
+    const items = availabilitySvc.createDeclarationBatch.mock.calls[1][0];
+    expect(items).toHaveLength(2);
+    expect(items[0].conflictResolution).toBeUndefined();
+    expect(items[1].conflictResolution).toBe('overwrite');
+  });
+
+  it('AC10 : annuler le dialogue → aucun second appel, rien n’est enregistré', async () => {
+    const availabilitySvc = rejectingBatch([conflict('2026-08-11', 1)]);
+    const { fixture, dialog } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    dialog.__result = null;
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
+
+    expect(availabilitySvc.createDeclarationBatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC10 : un geste résolu ne produit jamais plus de DEUX appels, quel que soit le nombre de conflits', async () => {
+    const availabilitySvc = rejectingBatch([conflict('2026-08-10', 0), conflict('2026-08-11', 1)]);
+    const { fixture, dialog } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    dialog.__result = { 0: 'keep', 1: 'overwrite' };
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
+
+    expect(availabilitySvc.createDeclarationBatch).toHaveBeenCalledTimes(2);
+    const items = availabilitySvc.createDeclarationBatch.mock.calls[1][0];
+    expect(items[0].conflictResolution).toBe('keep');
+    expect(items[1].conflictResolution).toBe('overwrite');
+  });
+
+  it('AC14 : un conflit INTERNE (sans batchIndex exploitable) garde le message d’échec en bloc', async () => {
+    const availabilitySvc = makeAvailabilityService();
+    availabilitySvc.createDeclarationBatch = vi.fn().mockRejectedValue(
+      new ConflictError([
+        { ...conflict('2026-08-10', 0), id: 'batch-item-0', internal: true },
+        { ...conflict('2026-08-11', 1), id: 'batch-item-1', internal: true },
+      ]),
+    );
+    const { fixture, snack, dialog } = await createCalendarView({
+      mode: 'personal',
+      availabilitySvc,
+    });
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
+
+    expect(dialog.open).not.toHaveBeenCalled();
     expect(snack.open).toHaveBeenCalledTimes(1);
-    expect(snack.open.mock.calls[0][0]).toContain('2026-08-10');
-    expect(snack.open.mock.calls[0][0]).toContain('2026-08-11');
+  });
+
+  it('AC11 : une cellule couverte par une séance figure en exception, et jamais en conflit', async () => {
+    const availabilitySvc = rejectingBatch([conflict('2026-08-11', 1)]);
+    availabilitySvc.getMyCalendar = vi.fn().mockResolvedValue({
+      'mes-indisponibilites': [],
+      'mes-disponibilites': [],
+      'mes-seances': [
+        {
+          seanceId: 's1',
+          partieId: 'p1',
+          partieName: 'Partie',
+          scenarioId: 'sc1',
+          scenarioTitle: 'Le Convoi',
+          date: '2026-08-10',
+          slot: 'EVENING',
+        },
+      ],
+      'votes-en-cours': [],
+      'inscriptions-ouvertes': [],
+    });
+    const { fixture, dialog } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'AVAILABLE' });
+
+    const data = dialog.open.mock.calls[0][1]!.data;
+    expect(data.seanceExceptions).toHaveLength(1);
+    expect(data.seanceExceptions[0]).toContain('10');
+    expect(data.conflicts.map((c: { batchIndex: number }) => c.batchIndex)).not.toContain(0);
+  });
+
+  it('AC11 : sans séance recouverte, aucune exception n’est transmise au dialogue', async () => {
+    const availabilitySvc = rejectingBatch([conflict('2026-08-11', 1)]);
+    const { fixture, dialog } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
+
+    expect(dialog.open.mock.calls[0][1]!.data.seanceExceptions).toEqual([]);
+  });
+
+  it('AC11 : construire l’exception n’émet AUCUN appel réseau supplémentaire', async () => {
+    const availabilitySvc = rejectingBatch([conflict('2026-08-11', 1)]);
+    const { fixture, dialog } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    availabilitySvc.getMyCalendar.mockClear();
+    dialog.__result = null;
+    const comp = fixture.componentInstance as any;
+
+    await comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' });
+
+    expect(availabilitySvc.getMyCalendar).not.toHaveBeenCalled();
+  });
+
+  it('une garde empêche d’ouvrir deux dialogues de conflit à la fois', async () => {
+    // Rejet SYSTÉMATIQUE : sans garde, les deux gestes ouvriraient chacun leur dialogue.
+    const availabilitySvc = makeAvailabilityService();
+    availabilitySvc.createDeclarationBatch = vi
+      .fn()
+      .mockRejectedValue(new ConflictError([conflict('2026-08-11', 1)]));
+    const { fixture, dialog } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+
+    await Promise.all([
+      comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' }),
+      comp.onBatchDeclareRequested({ cells: CELLS, kind: 'UNAVAILABLE' }),
+    ]);
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -36,6 +36,25 @@ export interface SplitResult {
   deleted: string[];
 }
 
+/** Ligne persistée retenue comme conflit : forme minimale suffisante pour la découpe et pour
+ *  toConflictInfo(), sans dépendance à @prisma/client (Story 36.4). */
+export interface ConflictRow extends DeclarationLike {
+  id: string;
+}
+
+/** `data` d'une création de déclaration, calculée mais pas encore écrite — ce que rend
+ *  buildHolePieces() pour que l'appelant l'écrive dans la transaction de son choix. */
+export interface AvailabilityCreateData {
+  userId: string;
+  kind: AvailKind;
+  recurKind: RecurKind;
+  dayOfWeek: number | null;
+  slot: DaySlot;
+  startDate: Date | null;
+  endDate: Date | null;
+  expiresAt: Date;
+}
+
 /** Forme minimale d'une déclaration suffisante pour computeSlotStatus (pas de dépendance à @prisma/client). */
 export interface DeclarationLike {
   kind: 'UNAVAILABLE' | 'AVAILABLE';
@@ -216,6 +235,7 @@ export class AvailabilityService {
       startDate: item.startDate ?? null,
       endDate: item.endDate ?? null,
       dayOfWeek: item.dayOfWeek ?? null,
+      internal: true,
     };
   }
 
@@ -236,11 +256,28 @@ export class AvailabilityService {
     return null;
   }
 
-  /** Écriture groupée : une seule lecture des déclarations actives, conflits externes
-   *  puis internes détectés avant toute écriture, puis une unique $transaction pour
-   *  toutes les créations. Aucune résolution overwrite/keep — un conflit fait échouer
-   *  tout le lot (AD-21). Voir story 30.2, encadré n°2 : create() n'est pas le modèle
-   *  d'atomicité à suivre, il n'ouvre pas de transaction sur son chemin principal. */
+  /** Écriture groupée : une seule lecture des déclarations actives (AC7), conflits externes
+   *  puis internes détectés avant toute écriture, puis une unique $transaction pour toutes
+   *  les écritures (AC8) et une unique émission temps réel.
+   *
+   *  Story 36.4 / dérogation D-18 — RENVERSEMENT ASSUMÉ de l'AC2 de la story 30.2 et de la
+   *  phrase 3 d'AD-21 : un conflit avec une déclaration PERSISTÉE ne fait plus échouer le
+   *  lot dès lors que l'item porte une `conflictResolution`. Sans résolution, le lot échoue
+   *  toujours — mais le 409 énumère désormais TOUS les conflits (AC9), faute de quoi le
+   *  dialogue ne pourrait pas les NOMMER (AC2).
+   *
+   *  Deux invariants NON renversés :
+   *  - un conflit INTERNE au lot reste irrésoluble (AC14) : aucun des deux items n'est
+   *    « l'existant », « Remplacer » n'y a aucun sens ;
+   *  - create() n'est toujours PAS le modèle d'atomicité (story 30.2, encadré n°2) : il
+   *    expire les conflits HORS transaction. Ici l'expiration est dans la transaction.
+   *
+   *  ⚠️ `created` n'a PAS de correspondance positionnelle garantie avec `items` : un item
+   *  résolu `keep` peut produire 0 à N pièces (découpe), quand tout autre item en produit
+   *  exactement une. Aucun consommateur actuel n'indexe `created[i]` en le supposant aligné
+   *  sur `items[i]` — le client retrouve les créneaux via `batchIndex` sur le 409, pas via ce
+   *  retour de succès (revue de code Story 36.4). Voir `CreateAvailabilityBatchResult`
+   *  (`packages/shared`). */
   async createBatch(
     userId: string,
     items: CreateAvailabilityBatchItem[],
@@ -262,17 +299,27 @@ export class AvailabilityService {
       where: { userId, expiresAt: { gt: now } },
     });
 
-    for (let index = 0; index < items.length; index++) {
-      const externalConflict = active.find((existing) =>
-        this.conflictPredicate(existing, items[index]),
-      );
-      if (externalConflict) {
-        throw new ConflictException({
-          conflicts: [
-            { ...this.toConflictInfo(externalConflict), batchIndex: index },
-          ],
+    // Un seul parcours : on résout les conflits de chaque item à partir de l'unique lecture
+    // ci-dessus (AC7 — jamais un findMany par item, ce serait le fan-out que le palier combat).
+    const conflictsByIndex = items.map((item) =>
+      active.filter((existing) => this.conflictPredicate(existing, item)),
+    );
+
+    // AC9 : on COLLECTE au lieu de s'arrêter au premier. Le dialogue nomme les créneaux, il
+    // ne peut pas le faire à partir d'une seule entrée. L'ordre suit celui du lot, le client
+    // s'en servant (via batchIndex) pour retrouver la cellule sélectionnée correspondante.
+    const unresolved: Array<ConflictInfo & { batchIndex: number }> = [];
+    conflictsByIndex.forEach((conflicts, index) => {
+      if (items[index].conflictResolution) return;
+      for (const conflict of conflicts) {
+        unresolved.push({
+          ...this.toConflictInfo(conflict),
+          batchIndex: index,
         });
       }
+    });
+    if (unresolved.length > 0) {
+      throw new ConflictException({ conflicts: unresolved });
     }
 
     const internalConflict = this.findInternalConflict(items);
@@ -286,27 +333,65 @@ export class AvailabilityService {
       });
     }
 
+    // Tout se calcule AVANT d'ouvrir la transaction, pour la garder aussi courte que possible :
+    // elle reste séquentielle et le lot va jusqu'à 42 items, dont chacun peut produire
+    // plusieurs pièces de découpe (timeout par défaut de $transaction : 5 s).
+    //
+    // Deux passes : `toExpire` doit être connu en ENTIER avant de calculer les pièces « à
+    // trous » des items `keep`. Sans ça, un item `keep` recouvrant la MÊME déclaration
+    // persistée qu'un item `overwrite` du même lot creuserait un trou autour d'une ligne qui
+    // n'existera plus au commit (revue de code Story 36.4 — l'`overwrite` prime).
+    const toExpire: string[] = [];
+    items.forEach((item, index) => {
+      if (item.conflictResolution === 'overwrite') {
+        // Remplacer : n'expire que MES déclarations persistées. Une indisponibilité dérivée
+        // d'une séance n'est jamais lue ici (AD-9, jamais persistée), elle survit donc
+        // structurellement — il n'y a rien à coder pour cela (AC4/AC5).
+        toExpire.push(...conflictsByIndex[index].map((c) => c.id));
+      }
+    });
+    const expiredIds = new Set(toExpire);
+
+    const toCreate: AvailabilityCreateData[] = [];
+    items.forEach((item, index) => {
+      const conflicts = conflictsByIndex[index];
+      if (item.conflictResolution === 'keep' && conflicts.length > 0) {
+        // Conserver : l'existant gagne, le créneau est créé « à trous » autour de lui — la
+        // découpe de la story 1.7, appliquée dans le lot par la MÊME fonction (AC6).
+        // On exclut les conflits déjà voués à l'expiration par un AUTRE item `overwrite` du
+        // lot : ils n'existeront plus au commit, un trou à leur sujet serait injustifié.
+        const stillActive = conflicts.filter((c) => !expiredIds.has(c.id));
+        toCreate.push(...this.buildHolePieces(userId, item, stillActive));
+        return;
+      }
+      // `overwrite` : l'expiration a déjà été collectée dans la première passe ci-dessus.
+      toCreate.push({
+        userId,
+        kind: item.kind,
+        recurKind: item.recurKind,
+        dayOfWeek: item.dayOfWeek ?? null,
+        slot: item.slot,
+        startDate: item.startDate
+          ? new Date(item.startDate + 'T00:00:00Z')
+          : null,
+        endDate: item.endDate ? new Date(item.endDate + 'T00:00:00Z') : null,
+        expiresAt: new Date(item.expiresAt),
+      });
+    });
+
     const created = await this.prisma.$transaction(async (tx) => {
+      // Expirations d'abord, créations ensuite — et UN SEUL updateMany pour tout le lot,
+      // jamais un par item. `userId` borne l'écriture à l'appelant : les identifiants
+      // viennent déjà d'une lecture scopée, la clause est une seconde barrière (AC16).
+      if (toExpire.length > 0) {
+        await tx.availabilityDeclaration.updateMany({
+          where: { id: { in: toExpire }, userId },
+          data: { expiresAt: new Date() },
+        });
+      }
       const results: object[] = [];
-      for (const item of items) {
-        results.push(
-          await tx.availabilityDeclaration.create({
-            data: {
-              userId,
-              kind: item.kind,
-              recurKind: item.recurKind,
-              dayOfWeek: item.dayOfWeek ?? null,
-              slot: item.slot,
-              startDate: item.startDate
-                ? new Date(item.startDate + 'T00:00:00Z')
-                : null,
-              endDate: item.endDate
-                ? new Date(item.endDate + 'T00:00:00Z')
-                : null,
-              expiresAt: new Date(item.expiresAt),
-            },
-          }),
-        );
+      for (const data of toCreate) {
+        results.push(await tx.availabilityDeclaration.create({ data }));
       }
       return results;
     });
@@ -315,16 +400,37 @@ export class AvailabilityService {
     return { created };
   }
 
-  /** Crée la déclaration en faisant des "trous" autour des conflits existants.
-   *  Pour RECURRING : découpe en pièces entre les conflits.
-   *  Pour PUNCTUAL : idem, avec un pas de 1 jour. */
+  /** Crée la déclaration en faisant des "trous" autour des conflits existants — chemin
+   *  unitaire (POST /availability, résolution `keep`). Ouvre sa propre transaction.
+   *
+   *  Story 36.4 : le CALCUL des pièces est extrait dans buildHolePieces() pour que la route
+   *  groupée puisse écrire les mêmes pièces dans SA transaction, sans imbriquer une seconde
+   *  $transaction et sans dupliquer la logique de découpe (AC6). */
   private async createWithHoles(
     userId: string,
     dto: CreateAvailabilityDto,
-    conflicts: Awaited<
-      ReturnType<typeof this.prisma.availabilityDeclaration.findMany>
-    >,
+    conflicts: ConflictRow[],
   ): Promise<object[]> {
+    const pieces = this.buildHolePieces(userId, dto, conflicts);
+    return this.prisma.$transaction(async (tx) => {
+      const results: object[] = [];
+      for (const data of pieces) {
+        results.push(await tx.availabilityDeclaration.create({ data }));
+      }
+      return results;
+    });
+  }
+
+  /** Calcul PUR des déclarations à créer « avec des trous » autour des conflits existants
+   *  (résolution `keep` / Conserver). N'écrit rien, ne lit rien : rend les `data` prêts à
+   *  être créés, que l'appelant écrit dans la transaction de son choix.
+   *  Pour RECURRING : découpe en pièces entre les conflits (pas de 7 jours).
+   *  Pour PUNCTUAL : idem, avec un pas de 1 jour. */
+  private buildHolePieces(
+    userId: string,
+    dto: CreateAvailabilityDto,
+    conflicts: ConflictRow[],
+  ): AvailabilityCreateData[] {
     const MS_1D = 24 * 60 * 60 * 1000;
     const MS_7D = 7 * MS_1D;
 
@@ -358,26 +464,16 @@ export class AvailabilityService {
         pieces.push({ startDate: currentStart, endDate: null });
       }
 
-      return this.prisma.$transaction(async (tx) => {
-        const results: object[] = [];
-        for (const piece of pieces) {
-          results.push(
-            await tx.availabilityDeclaration.create({
-              data: {
-                userId,
-                kind: dto.kind,
-                recurKind: 'RECURRING' as const,
-                dayOfWeek: dto.dayOfWeek!,
-                slot: dto.slot,
-                startDate: piece.startDate,
-                endDate: piece.endDate,
-                expiresAt: dtoExpires,
-              },
-            }),
-          );
-        }
-        return results;
-      });
+      return pieces.map((piece) => ({
+        userId,
+        kind: dto.kind,
+        recurKind: 'RECURRING' as const,
+        dayOfWeek: dto.dayOfWeek!,
+        slot: dto.slot,
+        startDate: piece.startDate,
+        endDate: piece.endDate,
+        expiresAt: dtoExpires,
+      }));
     }
 
     // PUNCTUAL : collecte tous les jours "trous" dans [dto.startDate, dto.endDate]
@@ -428,26 +524,16 @@ export class AvailabilityService {
     }
     if (cur <= dtoEnd) pieces2.push({ startDate: cur, endDate: dtoEnd });
 
-    return this.prisma.$transaction(async (tx) => {
-      const results: object[] = [];
-      for (const p of pieces2) {
-        results.push(
-          await tx.availabilityDeclaration.create({
-            data: {
-              userId,
-              kind: dto.kind,
-              recurKind: 'PUNCTUAL' as const,
-              dayOfWeek: null,
-              slot: dto.slot,
-              startDate: p.startDate,
-              endDate: p.endDate,
-              expiresAt: new Date(p.endDate.getTime() + 86_399_999),
-            },
-          }),
-        );
-      }
-      return results;
-    });
+    return pieces2.map((p) => ({
+      userId,
+      kind: dto.kind,
+      recurKind: 'PUNCTUAL' as const,
+      dayOfWeek: null,
+      slot: dto.slot,
+      startDate: p.startDate,
+      endDate: p.endDate,
+      expiresAt: new Date(p.endDate.getTime() + 86_399_999),
+    }));
   }
 
   private toConflictInfo(d: {
