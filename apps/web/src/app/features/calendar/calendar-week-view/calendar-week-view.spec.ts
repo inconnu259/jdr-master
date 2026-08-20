@@ -1,7 +1,8 @@
 import '@angular/compiler';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AvailabilityDeclarationDto } from '@master-jdr/shared';
+import type { AvailabilityDeclarationDto, CalendarLayerKey } from '@master-jdr/shared';
+import type { AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
 import { CalendarWeekView, buildWeek, getWeekStart } from './calendar-week-view';
 import { LONG_PRESS_MS } from '../selection.utils';
 
@@ -473,5 +474,182 @@ describe('CalendarWeekView — sélection par glissement', () => {
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy.mock.calls[0][0].slot).toBe('EVENING');
     expect(fixture.componentInstance['selectedCells']()).toHaveLength(0);
+  });
+});
+
+// ─── Story 36.13 — la grille Semaine à densité variable ───────────────────────
+
+describe('CalendarWeekView — densité variable (Story 36.13)', () => {
+  let fixture: ComponentFixture<CalendarWeekView>;
+  let el: HTMLElement;
+
+  // Semaine future : évite `isPast`, qui retire le rôle bouton et l'aria-label des cellules.
+  const futureStart = new Date();
+  futureStart.setDate(futureStart.getDate() + 14);
+  const weekStart = getWeekStart(
+    new Date(Date.UTC(futureStart.getFullYear(), futureStart.getMonth(), futureStart.getDate())),
+  );
+
+  /** Le jour de la colonne `i`, dans la convention `YYYY-MM-DD` locale des entrées. */
+  function dayKey(i: number): string {
+    const d = new Date(
+      weekStart.getUTCFullYear(),
+      weekStart.getUTCMonth(),
+      weekStart.getUTCDate() + i,
+    );
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function seanceEntry(dayIndex: number, over: Partial<AgendaEntry> = {}): AgendaEntry {
+    return {
+      key: `seance-${dayIndex}`,
+      type: 'mes-seances',
+      date: dayKey(dayIndex),
+      label: 'Le Convoi du Nord',
+      slot: 'EVENING',
+      partieId: 'p1',
+      scenarioId: 's1',
+      ...over,
+    };
+  }
+
+  function voteEntry(dayIndex: number): AgendaEntry {
+    return {
+      key: `poll-${dayIndex}`,
+      type: 'votes-en-cours',
+      date: dayKey(dayIndex),
+      label: 'Les Cendres d Ashal',
+      slot: 'MORNING',
+      partieId: 'p1',
+    };
+  }
+
+  function create(entries: AgendaEntry[] = [], activeLayers: CalendarLayerKey[] = []): void {
+    fixture = TestBed.createComponent(CalendarWeekView);
+    fixture.componentRef.setInput('startDate', futureStart);
+    fixture.componentRef.setInput('entries', entries);
+    fixture.componentRef.setInput('activeLayers', activeLayers);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+
+  function cellAt(slot: 'MORNING' | 'AFTERNOON' | 'EVENING', dayIndex: number): HTMLElement {
+    return Array.from(el.querySelectorAll<HTMLElement>(`.slot-cell[data-cell-slot="${slot}"]`))[
+      dayIndex
+    ];
+  }
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ imports: [CalendarWeekView] });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  // AC1 — sept colonnes, à toutes les largeurs. La densité étant purement CSS, la structure est
+  // la même dans les deux cas : c'est précisément ce que cet AC garantit.
+  it('AC1 — conserve sept colonnes et rend trois lignes de sept cellules', () => {
+    create();
+    expect(el.querySelectorAll('.col-header')).toHaveLength(7);
+    for (const slot of ['MORNING', 'AFTERNOON', 'EVENING'] as const) {
+      expect(el.querySelectorAll(`.slot-cell[data-cell-slot="${slot}"]`)).toHaveLength(7);
+    }
+  });
+
+  // AC1 + AC2 — la gouttière porte une icône par créneau, et chacune est nommée. L'icône y
+  // REMPLACE le mot (contrairement au rail, où elle l'accompagne et reste aria-hidden).
+  it('AC1/AC2 — la gouttière porte trois icônes de créneau, chacune avec un libellé accessible', () => {
+    create();
+    const icons = Array.from(el.querySelectorAll('.row-label .slot-icon'));
+    expect(icons).toHaveLength(3);
+    expect(icons.map((i) => i.getAttribute('aria-label'))).toEqual([
+      'Matin',
+      'Après-midi',
+      'Soirée',
+    ]);
+    expect(icons.some((i) => i.getAttribute('aria-hidden') === 'true')).toBe(false);
+  });
+
+  // AC6 — la case du Mois n'en porte pas : la position y dit déjà le créneau. Vérifié ici par
+  // l'absence de toute icône hors gouttière dans cette vue (le Mois a sa propre spec, intacte).
+  it('AC6 — aucune icône de créneau hors de la gouttière', () => {
+    create([seanceEntry(3)], ['mes-seances']);
+    expect(el.querySelectorAll('.slot-cell .slot-icon')).toHaveLength(0);
+  });
+
+  // AC3/AC4 — le titre est TOUJOURS dans le DOM ; seul le CSS décide de ce qui se voit. jsdom
+  // n'évalue pas les container queries : l'assertion porte donc sur la présence, jamais sur la
+  // visibilité effective — d'où la vérification visuelle exigée par la story.
+  it('AC3/AC4 — la cellule portant une séance rend son titre', () => {
+    create([seanceEntry(3)], ['mes-seances']);
+    expect(cellAt('EVENING', 3).querySelector('.ev-title')?.textContent?.trim()).toBe(
+      'Le Convoi du Nord',
+    );
+    expect(cellAt('EVENING', 0).querySelector('.ev-title')).toBeNull();
+  });
+
+  // AC4 — les informations pratiques sont rendues, et composées par le POINT UNIQUE
+  // `composeSeanceInfo` au niveau `compact` (deux champs : l'heure puis le lieu, la note cède).
+  it('AC4/AC7 — la cellule rend les informations pratiques au niveau compact', () => {
+    create(
+      [
+        seanceEntry(3, {
+          seanceHeure: '20:30',
+          seanceLieu: 'chez Marc',
+          seanceNote: 'apporter les dés',
+        }),
+      ],
+      ['mes-seances'],
+    );
+    expect(cellAt('EVENING', 3).querySelector('.ev-info')?.textContent?.trim()).toBe(
+      '20:30 · chez Marc',
+    );
+  });
+
+  // AC10 — un vote est un événement comme un autre : il est nommé. Sa PISTE relève de la 36.6.
+  it('AC10 — la cellule nomme un vote en cours', () => {
+    create([voteEntry(2)], ['votes-en-cours']);
+    expect(cellAt('MORNING', 2).querySelector('.ev-title')?.textContent?.trim()).toBe(
+      'Les Cendres d Ashal',
+    );
+  });
+
+  // AC11 — la couche gouverne le TEXTE ; l'indisponibilité dérivée d'une séance DEMEURE (FR-50).
+  it('AC11 — couche eteinte : le titre disparait, l indisponibilite demeure', () => {
+    create([seanceEntry(3)], []);
+    const cell = cellAt('EVENING', 3);
+    expect(cell.querySelector('.ev-title')).toBeNull();
+    expect(cell.getAttribute('data-status')).toBe('UNAVAILABLE');
+  });
+
+  // AC11 — le rang « vote », lui, EST gouverné par sa couche (décision du 2026-08-18) : couche
+  // éteinte, le créneau retombe sur son statut déclaré et ne nomme rien.
+  it('AC11 — couche de votes eteinte : le vote n est pas nomme', () => {
+    create([voteEntry(2)], []);
+    expect(cellAt('MORNING', 2).querySelector('.ev-title')).toBeNull();
+  });
+
+  // AC12 — ce que le CSS tronque visuellement n'est JAMAIS tronqué dans le nom accessible.
+  it('AC12 — le nom accessible porte le titre complet et les informations pratiques', () => {
+    create([seanceEntry(3, { seanceHeure: '20:30', seanceLieu: 'chez Marc' })], ['mes-seances']);
+    const label = cellAt('EVENING', 3).getAttribute('aria-label')!;
+    expect(label).toContain('Le Convoi du Nord');
+    expect(label).toContain('20:30 · chez Marc');
+    expect(label).toContain('indisponible');
+  });
+
+  // 🚨 AC9 — LE CONTRAT DOM DU GLISSEMENT. `elementFromPoint` est stubbé partout ailleurs : si un
+  // nœud ajouté sortait de la cellule, les 15 tests de glissement resteraient VERTS et le geste
+  // serait cassé en production. Ce test-ci est le seul garde-fou, et il n'utilise aucun stub.
+  it('AC9 — tout noeud ajoute reste un descendant porteur de data-cell-date', () => {
+    create([seanceEntry(3, { seanceHeure: '20:30', seanceLieu: 'chez Marc' })], ['mes-seances']);
+    const cell = cellAt('EVENING', 3);
+    const title = cell.querySelector('.ev-title')!;
+    const info = cell.querySelector('.ev-info')!;
+    expect(title.closest('[data-cell-date]')).toBe(cell);
+    expect(info.closest('[data-cell-date]')).toBe(cell);
   });
 });

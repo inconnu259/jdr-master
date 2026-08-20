@@ -5,11 +5,20 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type {
   AvailKind,
   AvailabilityDeclarationDto,
+  CalendarLayerKey,
   CreateAvailabilityDto,
   DaySlot,
   SlotStatus,
 } from '@master-jdr/shared';
 import { computeDisplayStatus } from '../../../core/availability/compute-display-status';
+import type { AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
+import {
+  buildMonthDetails,
+  composeSeanceInfo,
+  toDateKey,
+  type DayDetail,
+  type DaySlotDetail,
+} from '../day-detail.utils';
 import { SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
 import { SelectionBar } from '../selection-bar/selection-bar';
 import {
@@ -24,6 +33,22 @@ interface SlotData {
   status: SlotStatus;
   preview: SlotStatus | null;
   declLabel: string | null;
+  /**
+   * Story 36.13 — ce que le créneau PORTE, projeté par `buildDayDetail()` (AC7).
+   *
+   * ⚠️ Le partage des rôles est délibéré et c'est le point le plus subtil de la story. `detail`
+   * porte le contenu textuel (titre, informations pratiques, nom accessible) **et** le statut,
+   * parce qu'il est le seul à connaître les séances — `computeDisplayStatus` ne lit que les
+   * déclarations. `preview` (revue de code) est désormais dérivé du MÊME point unique, avec la
+   * déclaration en attente ajoutée à l'entrée : ni le Mois ni la Semaine ne doivent pouvoir
+   * afficher « disponible » par-dessus une séance confirmée pendant une saisie (FR-50), même en
+   * aperçu — patron identique à `calendar-month-view.ts` (`previewDetails`/`previewStatus`).
+   *
+   * Optionnel à dessein : `buildWeek()` le renseigne toujours, mais `WeekCell` est aussi construit
+   * par des fixtures hors de cette vue (`selection.utils.spec.ts`), qui n'ont que faire du contenu
+   * affiché. Le rendre requis les casserait sans rien garantir de plus au runtime.
+   */
+  detail?: DaySlotDetail | null;
 }
 
 export interface WeekCell {
@@ -99,15 +124,31 @@ function toFakeDecl(dto: CreateAvailabilityDto): AvailabilityDeclarationDto {
   };
 }
 
+/**
+ * Story 36.13 — les sept clés `YYYY-MM-DD` de la semaine, dans l'ordre des colonnes.
+ *
+ * Extraite pour que la projection des détails (`buildMonthDetails`) porte EXACTEMENT sur les jours
+ * que `buildWeek()` rend : deux boucles de dates qui divergeraient d'un fuseau décaleraient
+ * silencieusement les titres d'une colonne.
+ */
+export function weekDateKeys(weekStart: Date): string[] {
+  return Array.from({ length: 7 }, (_, i) =>
+    toDateKey(
+      new Date(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + i),
+    ),
+  );
+}
+
 export function buildWeek(
   weekStart: Date,
   decls: AvailabilityDeclarationDto[],
   pendingDecl: AvailabilityDeclarationDto | null,
+  details?: Map<string, DayDetail>,
+  previewDetails?: Map<string, DayDetail> | null,
 ): WeekCell[] {
   const now = new Date();
   // Minuit UTC d'aujourd'hui — cohérent avec l'alignement UTC des semaines.
   const todayUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const declsWithPending = pendingDecl ? [...decls, pendingDecl] : decls;
 
   return Array.from({ length: 7 }, (_, i) => {
     const utcCell = new Date(
@@ -119,19 +160,40 @@ export function buildWeek(
       utcCell.getUTCMonth(),
       utcCell.getUTCDate(),
     );
+    const cellKey = toDateKey(cellLocal);
 
     const computeSlot = (slot: 'MORNING' | 'AFTERNOON' | 'EVENING'): SlotData => {
       const status = computeDisplayStatus(utcCell, slot, decls);
+      const matchingDecl = findWeekDecl(decls, utcCell, slot, now);
+      const dayDetail = details?.get(cellKey) ?? null;
+      const detail = dayDetail?.slots.find((s) => s.slot === slot) ?? null;
+      // Story 36.13, AC11 / FR-50 — quand un détail existe, c'est LUI qui dit le statut : il
+      // applique la règle « une séance confirmée rend le créneau indisponible, quelle que soit
+      // la couche », que `computeDisplayStatus` ignore (il ne connaît que les déclarations).
+      // Sans cela la Semaine contredirait le Mois et le rail sur le même jour — précisément ce
+      // que `buildDayDetail()` existe pour empêcher. Hors séance, les deux valeurs coïncident,
+      // le détail étant calculé sur les mêmes déclarations.
+      const finalStatus = detail ? detail.status : status;
+
+      // Revue de code (36.13) — même défaut que celui déjà corrigé pour `status` : `preview`
+      // dérivait de `computeDisplayStatus`, aveugle aux séances, et pouvait afficher « disponible »
+      // par-dessus une case verrouillée par une séance pendant une saisie. `previewDetails` est
+      // construit par le MÊME point unique (`buildDayDetail`, via la déclaration en attente
+      // ajoutée aux déclarations), donc `previewStatus` hérite de la même force de séance —
+      // patron identique à `calendar-month-view.ts`.
       let preview: SlotStatus | null = null;
       if (pendingDecl) {
-        const withPending = computeDisplayStatus(utcCell, slot, declsWithPending);
-        if (withPending !== status) preview = withPending;
+        const previewDayDetail = previewDetails?.get(cellKey) ?? null;
+        const previewSlotDetail = previewDayDetail?.slots.find((s) => s.slot === slot) ?? null;
+        const previewStatus = previewSlotDetail ? previewSlotDetail.status : finalStatus;
+        if (previewStatus !== finalStatus) preview = previewStatus;
       }
-      const matchingDecl = findWeekDecl(decls, utcCell, slot, now);
+
       return {
-        status,
+        status: finalStatus,
         preview,
         declLabel: matchingDecl ? formatDeclLabel(matchingDecl) : null,
+        detail,
       };
     };
 
@@ -175,6 +237,12 @@ export class CalendarWeekView {
    *  la couche `mes-seances` — inscriptions-ouvertes n'a structurellement pas de date donc reste
    *  Agenda-only. */
   readonly seanceDates = input<Set<string>>(new Set());
+  /** Story 36.13 — entrées du calendrier **non filtrées par couche** (`allCalendarEntries()`),
+   *  exactement l'input que reçoit déjà la vue Mois. Les passer déjà filtrées ferait disparaître
+   *  l'indisponibilité d'une séance en même temps que son titre, ce que FR-50 interdit (AC11). */
+  readonly entries = input<AgendaEntry[]>([]);
+  /** Couches actives : gouvernent ce qui est NOMMÉ dans la cellule, jamais l'indisponibilité. */
+  readonly activeLayers = input<readonly CalendarLayerKey[]>([]);
 
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();
@@ -193,8 +261,41 @@ export class CalendarWeekView {
     return dto ? toFakeDecl(dto) : null;
   });
 
+  /** Story 36.13, AC7 — UNE seule projection par semaine rendue, au-dessus de `buildDayDetail()`.
+   *  Ni la préséance, ni la couverture `FULL_DAY`, ni la règle « la couche gouverne le texte » ne
+   *  sont réécrites ici : elles vivent dans `day-detail.utils.ts` et nulle part ailleurs. */
+  private readonly weekDetails = computed<Map<string, DayDetail>>(() =>
+    buildMonthDetails(
+      weekDateKeys(this.displayWeekStart()),
+      this.entries(),
+      this.activeLayers(),
+      this.declarations(),
+    ),
+  );
+
+  /** Revue de code (36.13) — même patron que `calendar-month-view.ts` (`previewDetails`) :
+   *  une seconde projection, avec la déclaration en attente ajoutée, pour que `preview` hérite
+   *  lui aussi de la force de séance de `buildDayDetail()` (FR-50). Calculée seulement quand une
+   *  saisie est en cours — pas de second passage au repos. */
+  private readonly weekPreviewDetails = computed<Map<string, DayDetail> | null>(() => {
+    const pending = this.pendingDecl();
+    if (!pending) return null;
+    return buildMonthDetails(
+      weekDateKeys(this.displayWeekStart()),
+      this.entries(),
+      this.activeLayers(),
+      [...this.declarations(), pending],
+    );
+  });
+
   protected readonly cells = computed(() =>
-    buildWeek(this.displayWeekStart(), this.declarations(), this.pendingDecl()),
+    buildWeek(
+      this.displayWeekStart(),
+      this.declarations(),
+      this.pendingDecl(),
+      this.weekDetails(),
+      this.weekPreviewDetails(),
+    ),
   );
 
   protected readonly weekLabel = computed(() => {
@@ -394,8 +495,31 @@ export class CalendarWeekView {
     return cell[key];
   }
 
+  /** Story 36.13 — le doublon local a été retiré au profit du point unique de `day-detail.utils`,
+   *  qui portait déjà exactement la même convention. */
   protected dateKey(date: Date): string {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    return toDateKey(date);
+  }
+
+  /**
+   * Story 36.13, AC3/AC4/AC10 — ce que la cellule NOMME, gouverné par le RANG GAGNANT.
+   *
+   * Même règle qu'en vue Mois (`calendar-month-view.ts`) : le texte suit `winner`, jamais un `??`
+   * opportuniste entre `seanceLabel` et `pollLabel` — la story 36.2 a déjà corrigé une fuite de
+   * texte inter-rangs de cette forme.
+   */
+  protected eventTitle(slotData: SlotData): string | null {
+    const d = slotData.detail;
+    if (!d) return null;
+    return d.winner === 'seance' ? d.seanceLabel : d.winner === 'vote' ? d.pollLabel : null;
+  }
+
+  /** AC4/AC7 — les informations pratiques, composées par le POINT UNIQUE. Niveau `compact` : la
+   *  cellule large tient deux champs (heure puis lieu), la note cède la première. */
+  protected eventInfo(slotData: SlotData): string {
+    const d = slotData.detail;
+    if (!d || d.winner !== 'seance') return '';
+    return composeSeanceInfo(d, 'compact');
   }
 
   protected cellAriaLabel(cell: WeekCell, slotData: SlotData, slotName: string): string {
@@ -410,7 +534,16 @@ export class CalendarWeekView {
       day: 'numeric',
       month: 'long',
     }).format(cell.date);
-    return `${slotName}, ${fullDate} : ${labels[status]}`;
+    // AC12 — ce que le CSS tronque visuellement n'est JAMAIS tronqué ici. Les informations
+    // pratiques sont annoncées au niveau `full`, pas au niveau `compact` de la cellule : c'est le
+    // défaut exact relevé en revue de code de la story 36.5 sur le rail (`openLabel()`).
+    const title = this.eventTitle(slotData);
+    const d = slotData.detail;
+    const info = d && d.winner === 'seance' ? composeSeanceInfo(d, 'full') : '';
+    const parts = [`${slotName}, ${fullDate} : ${labels[status]}`];
+    if (title) parts.push(title);
+    if (info) parts.push(info);
+    return parts.join(' — ');
   }
 
   /** AC2/AC3 — le marquage suit la **portée** : passer la portée à « journée » doit allumer les

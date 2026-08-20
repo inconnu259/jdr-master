@@ -31,8 +31,17 @@
 /* ── Grille semaine ──────────────────────────────────────────────────────────── */
 .week-grid {
   display: grid;
-  grid-template-columns: auto repeat(7, minmax(0, 1fr));
+  /* Story 36.13 — gouttière FIXE (24 px, 30 px au-delà du seuil desktop). L'`auto` d'origine
+     suivait la largeur du texte « Après-midi » ; ce texte est remplacé par une icône, et laisser
+     `auto` ferait varier la gouttière avec le dessin. Valeurs du contrat d'UI. */
+  grid-template-columns: 24px repeat(7, minmax(0, 1fr));
   gap: 2px;
+  /* Story 36.13, Q-24 close — le seuil de densité porte sur la largeur de la GRILLE, pas de la
+     fenêtre : en contexte de partie un panneau latéral prend ~40 % de la largeur, et une media
+     query dirait « large » pendant que les cellules seraient écrasées. Même raisonnement, et même
+     mécanisme, que la vue Mois (`calendar-month-view.scss`). */
+  container-type: inline-size;
+  container-name: week-grid;
   /* Story 30.3 : empêche la sélection de texte native (desktop) et le menu contextuel/callout
      natif (appui long mobile) de voler le geste de glissement avant que le JS ne le détecte. */
   user-select: none;
@@ -82,20 +91,41 @@
   font-weight: 600;
   color: var(--mat-sys-on-surface-variant);
   white-space: nowrap;
-  padding: 0 6px;
+  padding: 0 2px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: center;
+}
+
+/* ── Icône de créneau (Story 36.13, DESIGN.md §7.10) ──────────────────────── */
+/* Mêmes réglages de trait que le rail — un seul dessin par objet dans le projet. */
+.slot-icon {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--mat-sys-on-surface-variant);
 }
 
 /* ── Cellule de slot ─────────────────────────────────────────────────────── */
 .slot-cell {
-  min-height: 44px;
+  /* Revue de code — Task 3 (contrat-ui-calendrier.html:151-163) donne 38 px sous le seuil, pas
+     les 44 px précédemment conservés ici sans justification. */
+  min-height: 38px;
   cursor: pointer;
   border-radius: 4px;
   transition: background 0.1s;
+  /* Story 36.13 — la cellule empile désormais jusqu'à trois choses : le titre de l'événement, ses
+     informations pratiques, et le label de déclaration existant. L'événement passe EN PREMIER :
+     c'est ce que la case doit dire d'abord ; l'état déclaré reste dessous, inchangé. */
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
+  gap: 1px;
   padding: 4px;
   /* Story 30.3 : le glissement de sélection est toujours horizontal (une seule ligne de créneau).
      pan-y laisse le navigateur gérer nativement le défilement vertical de la page sans délai
@@ -167,13 +197,79 @@
   to   { opacity: 0.9; }
 }
 
+/* ── Contenu d'événement de la cellule (Story 36.13) ─────────────────────── */
+/* ⚠️ AC9 — `pointer-events: none` sur les deux : le pointeur doit TOUJOURS atterrir sur
+   `.slot-cell`, seule porteuse de `data-cell-date`. Un nœud qui capterait le pointeur casserait
+   le glissement en production sans qu'aucun test ne le voie (`elementFromPoint` y est stubbé). */
+.ev-title,
+.ev-info {
+  pointer-events: none;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ev-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--mat-sys-on-surface);
+}
+
+/* ⚠️ Story 36.13 — les informations pratiques sont le PREMIER repli : sous le seuil, la cellule
+   ne garde que le titre (tronqué), et le rail porte le texte complet à toutes les largeurs. */
+.ev-info {
+  display: none;
+  font-size: 0.6rem;
+  line-height: 1.25;
+  color: var(--mat-sys-on-surface-variant);
+}
+
 /* ── Label de contrainte ─────────────────────────────────────────────────── */
 .decl-label {
   font-size: 0.6rem;
   line-height: 1.2;
   color: var(--mat-sys-on-surface);
   opacity: 0.8;
-  word-break: break-word;
+  /* ⚠️ Story 36.13, trouvé À L'ŒIL et pas par les tests — `word-break: break-word` faisait partir
+     « Indispo · Ponctuel » sur TROIS lignes dans une colonne de ~43 px et faisait exploser la
+     hauteur de la cellule, alors que le titre d'événement s'ellipsait proprement à côté. Le défaut
+     pré-existait ; la règle de densité posée par cette story le rend intenable. Même traitement
+     que le reste de la cellule : une ligne, l'ellipse, la forme survit et le texte cède. */
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+/* Sous le seuil, une cellule qui porte un événement ne montre QUE lui : empiler « Chro… » et
+   « Ind… » dans 43 px n'informe personne. L'état reste dit par la couleur du fond, et le rail
+   porte le détail complet. Au-dessus du seuil, les deux cohabitent (règle levée par le
+   `@container` ci-dessous — revue de code : cette règle DOIT rester déclarée avant le bloc
+   `@container`, sans quoi elle gagne la cascade à spécificité égale et `.decl-label` ne
+   réapparaît jamais, quelle que soit la largeur). */
+.slot-cell.has-event .decl-label {
+  display: none;
+}
+
+@container week-grid (min-width: 500px) {
+  .slot-cell {
+    min-height: 56px;
+  }
+
+  .ev-title {
+    font-size: 0.7rem;
+  }
+
+  .ev-info {
+    display: block;
+  }
+
+  .slot-cell.has-event .decl-label {
+    display: block;
+  }
 }
 
 /* ── Loading ─────────────────────────────────────────────────────────────── */
@@ -184,9 +280,14 @@
 }
 
 /* ── Desktop (≥ 768 px) ──────────────────────────────────────────────────── */
+/* ⚠️ Story 36.13 — CE BLOC N'EST PAS LE SEUIL DE DENSITÉ. Il règle le confort d'affichage
+   (gouttière, gouttières inter-cellules, corps de texte) sur grand écran. Ce qui décide de ce que
+   la cellule DIT est le container query `week-grid` à 500 px, plus haut. Deux mécanismes, deux
+   rôles : ne pas les fusionner. */
 @media (min-width: 768px) {
   .week-grid {
     gap: 4px;
+    grid-template-columns: 30px repeat(7, minmax(0, 1fr));
   }
 
   .slot-cell {

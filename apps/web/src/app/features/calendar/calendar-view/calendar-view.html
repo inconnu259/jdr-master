@@ -47,6 +47,8 @@
         [pendingDto]="pendingDto()"
         [startDate]="sharedDate()"
         [seanceDates]="seanceMarkerDates()"
+        [entries]="calendarEntries()"
+        [activeLayers]="activeLayers()"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onWeekDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"

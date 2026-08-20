@@ -37,7 +37,30 @@
       }
 
       @for (row of SLOT_ROWS; track row.key) {
-        <div class="grid-cell row-label">{{ row.label }}</div>
+        <!-- Story 36.13, AC1/AC2 — l'icône REMPLACE le mot dans la gouttière : elle porte donc un
+             aria-label explicite, contrairement au rail où elle accompagne le mot et reste
+             aria-hidden (DESIGN.md §7.10). Le SVG est celui du rail, à l'identique — un seul
+             dessin par objet. -->
+        <div class="grid-cell row-label">
+          @switch (row.slot) {
+            @case ('MORNING') {
+              <svg class="slot-icon" viewBox="0 0 24 24" role="img" [attr.aria-label]="row.label">
+                <path d="M12 5v3M5.6 9.6l2 2M18.4 9.6l-2 2M3 18h18M7 18a5 5 0 0 1 10 0" />
+              </svg>
+            }
+            @case ('AFTERNOON') {
+              <svg class="slot-icon" viewBox="0 0 24 24" role="img" [attr.aria-label]="row.label">
+                <circle cx="12" cy="12" r="4.2" />
+                <path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
+              </svg>
+            }
+            @case ('EVENING') {
+              <svg class="slot-icon" viewBox="0 0 24 24" role="img" [attr.aria-label]="row.label">
+                <path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z" />
+              </svg>
+            }
+          }
+        </div>
         @for (cell of cells(); track cell.date.getTime()) {
           <div
             class="grid-cell slot-cell"
@@ -50,6 +73,7 @@
             [class.unknown]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status) === 'UNKNOWN'"
             [class.selected]="isCellSelected(cell, row.slot)"
             [class.current]="isCurrentCell(cell, row.slot)"
+            [class.has-event]="!!eventTitle(getSlotData(cell, row.key))"
             [attr.role]="cell.isPast ? 'presentation' : 'button'"
             [attr.tabindex]="cell.isPast ? null : 0"
             [attr.aria-label]="cell.isPast ? null : cellAriaLabel(cell, getSlotData(cell, row.key), row.label)"
@@ -60,6 +84,17 @@
             (keydown.shift.arrowright)="$event.preventDefault(); onShiftArrow(cell, row.slot, 1)"
             (keydown.shift.arrowleft)="$event.preventDefault(); onShiftArrow(cell, row.slot, -1)"
           >
+            <!-- Story 36.13, AC3/AC4/AC5 — le contenu est TOUJOURS émis, aux deux densités ; seul
+                 le CSS (container query `week-grid`) décide de ce qui se voit. Aucun @if de
+                 largeur, donc aucune vue supplémentaire instanciée à la bascule.
+                 AC9 — ces nœuds restent des descendants de .slot-cell, qui porte data-cell-date :
+                 le hit-test du glissement (elementFromPoint + closest) continue de les remonter. -->
+            @if (eventTitle(getSlotData(cell, row.key)); as title) {
+              <span class="ev-title">{{ title }}</span>
+            }
+            @if (eventInfo(getSlotData(cell, row.key)); as info) {
+              <span class="ev-info">{{ info }}</span>
+            }
             @if (getSlotData(cell, row.key).declLabel) {
               <span class="decl-label">{{ getSlotData(cell, row.key).declLabel }}</span>
             }
