@@ -101,6 +101,12 @@ function makeMockPrisma() {
   const mockSessionPollFindMany = jest.fn(() =>
     Promise.resolve([] as object[]),
   );
+  // Story 36.6 — effectif de la troupe pour la couche `votes-en-cours` (AC9). Une SEULE requête
+  // groupée pour toutes mes parties (AD-3), jamais un count par partie. Vide par défaut : une
+  // partie absente de l'agrégat a 0 Membership, donc un effectif de 1 (le MJ).
+  const mockMembershipGroupBy = jest.fn(() =>
+    Promise.resolve([] as { partieId: string; _count: number }[]),
+  );
 
   // Story 36.4 : la résolution « Remplacer » expire les déclarations en conflit À L'INTÉRIEUR de
   // la transaction du lot (create() le fait hors transaction — ce n'est pas le modèle à suivre).
@@ -119,7 +125,10 @@ function makeMockPrisma() {
       create: mockCreate,
       updateMany: mockUpdateMany,
     },
-    membership: { findMany: mockMembershipFindMany },
+    membership: {
+      findMany: mockMembershipFindMany,
+      groupBy: mockMembershipGroupBy,
+    },
     partie: { findMany: mockPartieFindMany },
     seance: { findMany: mockSeanceFindMany },
     sessionPoll: { findMany: mockSessionPollFindMany },
@@ -135,6 +144,7 @@ function makeMockPrisma() {
     mockFindUnique,
     mockFindMany,
     mockMembershipFindMany,
+    mockMembershipGroupBy,
     mockPartieFindMany,
     mockSeanceFindMany,
     mockSessionPollFindMany,
@@ -1755,6 +1765,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
   let mockPartieFindMany: jest.Mock;
   let mockSeanceFindMany: jest.Mock;
   let mockSessionPollFindMany: jest.Mock;
+  let mockMembershipGroupBy: jest.Mock;
   let mockDeclFindMany: jest.Mock;
 
   const myPartie = {
@@ -1769,6 +1780,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockPartieFindMany = mocks.mockPartieFindMany;
     mockSeanceFindMany = mocks.mockSeanceFindMany;
     mockSessionPollFindMany = mocks.mockSessionPollFindMany;
+    mockMembershipGroupBy = mocks.mockMembershipGroupBy;
     mockDeclFindMany = mocks.mockFindMany;
     mockDeclFindMany.mockResolvedValue([]);
     mockPartieFindMany.mockResolvedValue([myPartie]);
@@ -2057,14 +2069,29 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     expect(result['inscriptions-ouvertes']).toEqual([]);
   });
 
-  it('couche votes-en-cours : sondage OPEN avec une option dans la plage, identité de partie incluse', async () => {
+  it('couche votes-en-cours : sondage OPEN avec une option dans la plage, identité de partie incluse, agrégats et ma réponse (Story 36.6)', async () => {
+    mockMembershipGroupBy.mockResolvedValue([{ partieId: 'A', _count: 3 }]);
     mockSessionPollFindMany.mockResolvedValue([
       {
         id: 'poll1',
         partieId: 'A',
         options: [
-          { date: new Date('2026-10-20T00:00:00Z'), slot: 'EVENING' },
-          { date: new Date('2026-11-05T00:00:00Z'), slot: 'MORNING' },
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [
+              { userId: 'me', answer: 'YES' },
+              { userId: 'u2', answer: 'YES' },
+              { userId: 'u3', answer: 'MAYBE' },
+            ],
+          },
+          {
+            id: 'o2',
+            date: new Date('2026-11-05T00:00:00Z'),
+            slot: 'MORNING',
+            votes: [{ userId: 'u2', answer: 'NO' }],
+          },
         ],
       },
     ]);
@@ -2079,12 +2106,135 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         pollId: 'poll1',
         partieId: 'A',
         partieName: 'Ma Partie',
+        // AC9 — MJ + 3 Membership. Même effectif que `AggregatedSlotDto.total`.
+        membersCount: 4,
         options: [
-          { date: '2026-10-20', slot: 'EVENING' },
-          { date: '2026-11-05', slot: 'MORNING' },
+          {
+            optionId: 'o1',
+            date: '2026-10-20',
+            slot: 'EVENING',
+            yes: 2,
+            maybe: 1,
+            no: 0,
+            myAnswer: 'YES',
+          },
+          {
+            optionId: 'o2',
+            date: '2026-11-05',
+            slot: 'MORNING',
+            yes: 0,
+            maybe: 0,
+            no: 1,
+            myAnswer: null,
+          },
         ],
       },
     ]);
+  });
+
+  it('AC11 — aucune identité de votant tiers ne transite : ni userId, ni pseudo, ni displayName (AD-9/AD-2)', async () => {
+    mockMembershipGroupBy.mockResolvedValue([{ partieId: 'A', _count: 3 }]);
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [
+              { userId: 'me', answer: 'YES' },
+              { userId: 'secret-user', answer: 'NO' },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    const serialized = JSON.stringify(result['votes-en-cours']);
+    expect(serialized).not.toContain('secret-user');
+    expect(serialized).not.toContain('pseudo');
+    expect(serialized).not.toContain('displayName');
+    // Ma propre réponse, elle, est bien là — la seule information nominative autorisée.
+    expect(result['votes-en-cours'][0].options[0].myAnswer).toBe('YES');
+  });
+
+  it("AC11 — l'include des votes ne demande JAMAIS la relation user", async () => {
+    await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+    const calls = mockSessionPollFindMany.mock.calls as Array<
+      [{ include: unknown }]
+    >;
+    // Assertion structurelle plutôt qu'une recherche de sous-chaîne (revue de code du 36.6) :
+    // un `not.toContain('user')` ne détecterait pas une relation ajoutée sous une autre clé
+    // (`voter`, `author`, casse différente). Ici, la forme exacte de l'`include` est vérifiée —
+    // `votes: true` et rien de plus, jamais un `include: { user: … }` niché dessous.
+    expect(calls[0][0].include).toEqual({
+      options: { include: { votes: true } },
+    });
+  });
+
+  it("AC9 — une partie absente de l'agrégat de Membership a un effectif de 1 : le MJ, qui vote", async () => {
+    mockMembershipGroupBy.mockResolvedValue([]);
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['votes-en-cours'][0].membersCount).toBe(1);
+  });
+
+  it('une option sans aucune réponse porte trois compteurs à zéro et myAnswer null (jamais undefined)', async () => {
+    mockMembershipGroupBy.mockResolvedValue([{ partieId: 'A', _count: 3 }]);
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['votes-en-cours'][0].options[0]).toEqual({
+      optionId: 'o1',
+      date: '2026-10-20',
+      slot: 'EVENING',
+      yes: 0,
+      maybe: 0,
+      no: 0,
+      myAnswer: null,
+    });
   });
 
   it('couche votes-en-cours : sondage sans aucune option dans la plage est exclu', async () => {
@@ -2092,7 +2242,14 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'poll1',
         partieId: 'A',
-        options: [{ date: new Date('2026-11-05T00:00:00Z'), slot: 'MORNING' }],
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-11-05T00:00:00Z'),
+            slot: 'MORNING',
+            votes: [],
+          },
+        ],
       },
     ]);
 
@@ -2238,5 +2395,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(mockSeanceFindMany).toHaveBeenCalledTimes(1);
     expect(mockSessionPollFindMany).toHaveBeenCalledTimes(1);
+    // Story 36.6, AC12 — l'effectif de la troupe est lui aussi obtenu par UNE seule requête
+    // groupée, jamais un membership.count par partie (AD-3). Garde renforcée, jamais affaiblie.
+    expect(mockMembershipGroupBy).toHaveBeenCalledTimes(1);
   });
 });

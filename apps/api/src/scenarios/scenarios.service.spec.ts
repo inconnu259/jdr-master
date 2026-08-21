@@ -95,6 +95,11 @@ function makePrisma() {
     inscription: {
       deleteMany: jest.fn(),
     },
+    // Story 36.6 — effectif de la troupe (SessionPollDto.membersCount). 0 Membership par défaut,
+    // soit un effectif de 1 (le MJ) : aucun effet sur les tests existants.
+    membership: {
+      count: jest.fn().mockResolvedValue(0),
+    },
     partie: {
       findUniqueOrThrow: jest.fn().mockResolvedValue({
         id: 'p1',
@@ -917,6 +922,58 @@ describe('ScenariosService', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({ id: 's1', status: 'BROUILLON' });
+    });
+
+    it("Story 36.6 (AC7/AC9/AC10) — le SessionPollDto d'une séance porte l'effectif MJ + membres, compté UNE seule fois pour tout l'appel", async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.membership.count.mockResolvedValue(3);
+      prisma.scenario.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          partieId: 'p1',
+          title: 'Les Cendres',
+          description: null,
+          status: 'EN_COURS',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01'),
+          closedAt: null,
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 'se1',
+          scenarioId: 's1',
+          createdAt: new Date('2026-07-01'),
+          dateValidee: null,
+          inscriptionMin: null,
+          inscriptionMax: null,
+          inscriptions: [],
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
+          poll: {
+            id: 'poll1',
+            partieId: 'p1',
+            status: 'OPEN',
+            scenarioRef: null,
+            expiresAt: null,
+            chosenDate: null,
+            chosenSlot: null,
+            options: [],
+          },
+        },
+      ]);
+
+      const result = await service.findAllForPartie('p1', 'u1');
+
+      expect(result[0].seances[0].poll?.membersCount).toBe(4);
+      // AD-3 : jamais un comptage par séance ni par sondage — un seul pour l'appel entier.
+      expect(prisma.membership.count).toHaveBeenCalledTimes(1);
+      expect(prisma.membership.count).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+      });
     });
 
     it('non-membre → 403 propagé par getViewable, aucune lecture', async () => {

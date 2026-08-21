@@ -31,6 +31,12 @@ function makePrisma() {
     partie: {
       update: jest.fn(),
     },
+    // Story 36.6 — effectif de la troupe porté par SessionPollDto.membersCount. 0 Membership par
+    // défaut, ce qui donne un effectif de 1 (le MJ) : sans effet sur les tests existants, qui
+    // n'assertent pas sur la forme du DTO.
+    membership: {
+      count: jest.fn().mockResolvedValue(0),
+    },
   };
   // $transaction exécute le callback avec le même mock en guise de `tx`
   prisma.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(prisma));
@@ -134,6 +140,41 @@ describe('PollService', () => {
       'p1',
       'mj1',
     );
+  });
+
+  describe('membersCount — effectif de la troupe (Story 36.6, AC7/AC9)', () => {
+    it('create() → renvoie un membersCount = MJ + Membership', async () => {
+      prisma.membership.count.mockResolvedValue(3);
+      prisma.sessionPoll.create.mockResolvedValue(makePoll());
+      const dto = await service.create('p1', 'mj1', {
+        options: [opt('2026-08-01', 'MORNING')],
+      });
+      expect(dto.membersCount).toBe(4);
+      expect(prisma.membership.count).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+      });
+    });
+
+    it('findOpen() → renvoie le même effectif que create()', async () => {
+      prisma.membership.count.mockResolvedValue(3);
+      prisma.sessionPoll.findFirst.mockResolvedValue(makePoll());
+      const dto = await service.findOpen('p1', 'u1');
+      expect(dto?.membersCount).toBe(4);
+    });
+
+    it('une partie sans aucun membre a un effectif de 1 — le MJ, qui vote (castVote garde par getViewable)', async () => {
+      prisma.membership.count.mockResolvedValue(0);
+      prisma.sessionPoll.findFirst.mockResolvedValue(makePoll());
+      const dto = await service.findOpen('p1', 'mj1');
+      expect(dto?.membersCount).toBe(1);
+    });
+
+    it('findOpen() sans poll ouvert → aucun comptage inutile', async () => {
+      prisma.sessionPoll.findFirst.mockResolvedValue(null);
+      const dto = await service.findOpen('p1', 'u1');
+      expect(dto).toBeNull();
+      expect(prisma.membership.count).not.toHaveBeenCalled();
+    });
   });
 
   it('create() avec deux options (date,slot) identiques → BadRequestException', async () => {

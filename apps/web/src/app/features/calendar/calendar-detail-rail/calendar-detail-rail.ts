@@ -8,6 +8,7 @@ import {
   dateKeyToUtcMidnight,
   composeSeanceInfo,
 } from '../day-detail.utils';
+import { PollTrack } from '../poll-track/poll-track';
 
 const STATUS_LABELS: Record<SlotStatus, string> = {
   AVAILABLE: 'Disponible',
@@ -40,7 +41,7 @@ const DAY_FORMAT = new Intl.DateTimeFormat('fr-FR', {
 @Component({
   selector: 'app-calendar-detail-rail',
   standalone: true,
-  imports: [],
+  imports: [PollTrack],
   templateUrl: './calendar-detail-rail.html',
   styleUrl: './calendar-detail-rail.scss',
 })

@@ -313,16 +313,42 @@ export class CalendarView implements OnInit {
           });
         }
       }
+      // Story 36.6, AC8 — UNE entrée par OPTION, jamais une par sondage. Avant cette story, un
+      // vote proposant vendredi ET samedi ne marquait que le vendredi : l'entrée unique portait
+      // la date de la PREMIÈRE option, et tous les autres créneaux proposés restaient muets en
+      // Mois, en Semaine et au rail. C'est ce que corrige l'éclatement ci-dessous.
+      //
+      // AD-20 : les compteurs et ma réponse se dérivent ici, côté client, de `PollOptionDto.votes`
+      // — cet écran détient déjà la charge utile complète. Aucun appel réseau n'en part.
+      const myId = this.authSvc.currentUser()?.id;
       for (const entry of this.activePolls()) {
-        const firstOption = [...entry.poll.options].sort((a, b) => a.date.localeCompare(b.date))[0];
-        entries.push({
-          key: `poll-${entry.poll.id}`,
-          type: 'votes-en-cours',
-          date: firstOption ? firstOption.date.substring(0, 10) : '',
-          label: entry.scenario.title,
-          detail: `${entry.poll.options.length} option(s) proposée(s)`,
-          slot: firstOption?.slot,
-        });
+        for (const option of entry.poll.options) {
+          const mine = option.votes.find((v) => v.userId === myId);
+          entries.push({
+            key: `poll-${entry.poll.id}-${option.id}`,
+            type: 'votes-en-cours',
+            date: option.date.substring(0, 10),
+            label: entry.scenario.title,
+            // Story 36.6 — le CRÉNEAU, comme pour une séance. Le « N option(s) proposée(s) »
+            // d'avant décrivait le SONDAGE ; répété sur chacune de ses options éclatées, il
+            // devenait un bruit trompeur (constaté à l'œil dans l'Agenda). Ce que la ligne doit
+            // dire, c'est le créneau qu'elle propose — traduit, comme SLOT_LABELS le fait déjà
+            // pour les séances (revue de code du 36.6 : le code brut fuitait ici).
+            detail: SLOT_LABELS[option.slot],
+            slot: option.slot,
+            vote: {
+              pollId: entry.poll.id,
+              optionId: option.id,
+              yes: option.votes.filter((v) => v.answer === 'YES').length,
+              maybe: option.votes.filter((v) => v.answer === 'MAYBE').length,
+              no: option.votes.filter((v) => v.answer === 'NO').length,
+              // Le dénominateur vient du serveur (`membersCount`) et JAMAIS de `members()`, qui
+              // n'est chargé qu'en mode MJ : un joueur n'a aucun effectif en mémoire.
+              total: entry.poll.membersCount,
+              myAnswer: mine ? mine.answer : null,
+            },
+          });
+        }
       }
       for (const { scenario, seance } of this.openInscriptionSeances()) {
         entries.push({
@@ -366,16 +392,42 @@ export class CalendarView implements OnInit {
             seanceNote: s.notePratique,
           });
         }
+        // Story 36.6, AC8/AC6 — même éclatement par option qu'en contexte de partie, mais les
+        // agrégats sont ici SERVIS (D-17) : le calendrier personnel n'a pas la charge utile des
+        // votants, et ne doit pas l'avoir (AD-9). L'appel unique existant les porte désormais ;
+        // aucun appel supplémentaire n'est émis.
         for (const p of mc['votes-en-cours']) {
-          const firstOption = [...p.options].sort((a, b) => a.date.localeCompare(b.date))[0];
-          entries.push({
-            key: `poll-${p.pollId}`,
-            type: 'votes-en-cours',
-            date: firstOption ? firstOption.date : '',
-            label: p.partieName,
-            detail: `${p.options.length} option(s) proposée(s)`,
-            slot: firstOption?.slot,
-          });
+          // 🚨 Dégradation honnête, trouvée à la vérification visuelle : pendant un déploiement,
+          // un client neuf peut interroger une API qui ne sert pas encore les agrégats. Sans
+          // cette garde, le rail affichait « NaN / undefined ». On préfère NE PAS rendre de piste
+          // plutôt qu'en rendre une vide, qui affirmerait faussement « personne n'a répondu ».
+          const servedAggregates = typeof p.membersCount === 'number';
+          for (const option of p.options) {
+            entries.push({
+              // `date`/`slot` sont toujours servis, même par une API dégradée (pré-36.6) —
+              // contrairement à `optionId`, absent de cette forme. Une clé bâtie sur `optionId`
+              // collisionnerait alors entre toutes les options d'un même vote (revue de code du
+              // 36.6).
+              key: `poll-${p.pollId}-${option.date}-${option.slot}`,
+              type: 'votes-en-cours',
+              date: option.date,
+              label: p.partieName,
+              // Idem contexte de partie (cf. commentaire ci-dessus, ligne ~332).
+              detail: SLOT_LABELS[option.slot],
+              slot: option.slot,
+              vote: !servedAggregates
+                ? undefined
+                : {
+                    pollId: p.pollId,
+                    optionId: option.optionId,
+                    yes: option.yes,
+                    maybe: option.maybe,
+                    no: option.no,
+                    total: p.membersCount,
+                    myAnswer: option.myAnswer,
+                  },
+            });
+          }
         }
         for (const i of mc['inscriptions-ouvertes']) {
           entries.push({

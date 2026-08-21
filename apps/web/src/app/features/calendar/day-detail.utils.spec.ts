@@ -169,6 +169,90 @@ describe('buildDayDetail — AC6 : la couche gouverne le texte, jamais l’indis
     expect(buildDayDetail('2026-08-20', [poll], sansVotes, [], NOW).slots[0].pollLabel).toBeNull();
   });
 
+  it('Story 36.6 — la participation du vote est portée par le créneau, gouvernée par la MÊME couche que le libellé', () => {
+    const poll: AgendaEntry = {
+      key: 'poll-1-o1',
+      type: 'votes-en-cours',
+      date: '2026-08-20',
+      label: 'Les Cendres d’Ashal',
+      slot: 'MORNING',
+      vote: {
+        pollId: 'poll-1',
+        optionId: 'o1',
+        yes: 2,
+        maybe: 1,
+        no: 0,
+        total: 4,
+        myAnswer: 'YES',
+      },
+    };
+    const sansVotes = ALL_LAYERS.filter((l) => l !== 'votes-en-cours');
+
+    expect(buildDayDetail('2026-08-20', [poll], ALL_LAYERS, [], NOW).slots[0].pollVote).toEqual({
+      pollId: 'poll-1',
+      optionId: 'o1',
+      yes: 2,
+      maybe: 1,
+      no: 0,
+      total: 4,
+      myAnswer: 'YES',
+    });
+    // Couche éteinte : la piste disparaît exactement comme le libellé.
+    expect(buildDayDetail('2026-08-20', [poll], sansVotes, [], NOW).slots[0].pollVote).toBeNull();
+  });
+
+  it('Story 36.6 — deux options du même vote sur deux créneaux : chaque créneau porte SA participation', () => {
+    const matin: AgendaEntry = {
+      key: 'poll-1-o1',
+      type: 'votes-en-cours',
+      date: '2026-08-20',
+      label: 'Les Cendres d’Ashal',
+      slot: 'MORNING',
+      vote: { pollId: 'p', optionId: 'o1', yes: 4, maybe: 0, no: 0, total: 4, myAnswer: 'YES' },
+    };
+    const soir: AgendaEntry = {
+      ...matin,
+      key: 'poll-1-o2',
+      slot: 'EVENING',
+      vote: { pollId: 'p', optionId: 'o2', yes: 1, maybe: 0, no: 0, total: 4, myAnswer: null },
+    };
+
+    const detail = buildDayDetail('2026-08-20', [matin, soir], ALL_LAYERS, [], NOW);
+
+    expect(detail.slots[0].pollVote?.optionId).toBe('o1');
+    expect(detail.slots[0].pollVote?.yes).toBe(4);
+    expect(detail.slots[2].pollVote?.optionId).toBe('o2');
+    expect(detail.slots[2].pollVote?.yes).toBe(1);
+  });
+
+  it('Story 36.6 — un vote sans participation renseignée laisse pollVote à null, jamais undefined', () => {
+    const poll: AgendaEntry = {
+      key: 'poll-1',
+      type: 'votes-en-cours',
+      date: '2026-08-20',
+      label: 'Les Cendres d’Ashal',
+      slot: 'MORNING',
+    };
+
+    expect(buildDayDetail('2026-08-20', [poll], ALL_LAYERS, [], NOW).slots[0].pollVote).toBeNull();
+  });
+
+  it('Story 36.6 — une SÉANCE gagnante n’emporte jamais la participation d’un vote concurrent (encadré n°8)', () => {
+    const poll: AgendaEntry = {
+      key: 'poll-1-o1',
+      type: 'votes-en-cours',
+      date: '2026-08-20',
+      label: 'Vote concurrent',
+      slot: 'EVENING',
+      vote: { pollId: 'p', optionId: 'o1', yes: 3, maybe: 0, no: 0, total: 4, myAnswer: null },
+    };
+
+    const detail = buildDayDetail('2026-08-20', [seanceEntry(), poll], ALL_LAYERS, [], NOW);
+
+    // Le rang gagnant est la séance : c'est elle que la bande dit, et aucune piste ne s'y pose.
+    expect(detail.slots[2].winner).toBe('seance');
+  });
+
   it('revue de code (2026-08-18) : le rang « vote » retombe sur le statut déclaré quand la couche « votes-en-cours » est éteinte', () => {
     const poll: AgendaEntry = {
       key: 'poll-1',

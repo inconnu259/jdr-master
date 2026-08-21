@@ -221,10 +221,13 @@ interface PointerDownInfo {
   longPressTimer: ReturnType<typeof setTimeout> | null;
 }
 
+import { PollTrack } from '../poll-track/poll-track';
+import { type VoteParticipation, participationAriaLabel } from '../poll-track.utils';
+
 @Component({
   selector: 'app-calendar-week-view',
   standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, SelectionBar],
+  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, SelectionBar, PollTrack],
   templateUrl: './calendar-week-view.html',
   styleUrl: './calendar-week-view.scss',
 })
@@ -522,6 +525,26 @@ export class CalendarWeekView {
     return composeSeanceInfo(d, 'compact');
   }
 
+  /**
+   * Story 36.6, AC13 — le RANG que porte la cellule, exposé au CSS.
+   *
+   * Même convention que la case du Mois (`[attr.data-winner]` sur `.band`) : jamais un second
+   * schéma de classes pour dire la même chose. C'est ce qui permet à la cellule de **se
+   * signaler** — liseré de vote, filet de séance — au lieu de se contenter de se nommer, ce que
+   * la doctrine P-1 exige (une information ne repose jamais sur le seul texte).
+   */
+  protected cellWinner(slotData: SlotData): string | null {
+    return slotData.detail?.winner ?? null;
+  }
+
+  /** Story 36.6 — la participation, portée par le rang GAGNANT comme le titre. Un créneau dont
+   *  la séance l'emporte ne montre pas la piste d'un vote concurrent (encadré n°8). */
+  protected eventVote(slotData: SlotData): VoteParticipation | null {
+    const d = slotData.detail;
+    if (!d || d.winner !== 'vote') return null;
+    return d.pollVote;
+  }
+
   protected cellAriaLabel(cell: WeekCell, slotData: SlotData, slotName: string): string {
     const labels: Record<SlotStatus, string> = {
       AVAILABLE: 'disponible',
@@ -543,6 +566,10 @@ export class CalendarWeekView {
     const parts = [`${slotName}, ${fullDate} : ${labels[status]}`];
     if (title) parts.push(title);
     if (info) parts.push(info);
+    // Story 36.6, AC14 — la piste code par la PROPORTION : elle n'existe pour un lecteur d'écran
+    // que si le nom accessible la dit. Même garde `winner` que `eventInfo()`.
+    const participation = this.eventVote(slotData);
+    if (participation) parts.push(participationAriaLabel(participation));
     return parts.join(' — ');
   }
 

@@ -134,6 +134,8 @@ const ACTIVE_POLL_SCENARIO = {
         expiresAt: null,
         chosenDate: null,
         chosenSlot: null,
+        // Story 36.6 — effectif de la troupe (MJ + membres).
+        membersCount: 4,
         options: [],
       },
     },
@@ -1219,6 +1221,193 @@ describe('CalendarView — source des couches (Story 30.6)', () => {
     expect(pollSvc.getHeatmap.mock.calls.length).toBe(heatmapCalls);
     expect(scenariosSvc.listAll.mock.calls.length).toBe(listAllCalls);
     expect(availabilitySvc.getMyCalendar.mock.calls.length).toBe(meCalendarCalls);
+  });
+});
+
+// ─── Piste de participation — une entrée par OPTION (Story 36.6, AC8) ─────────────────────────
+
+const TWO_OPTION_POLL_SCENARIO = {
+  ...ACTIVE_POLL_SCENARIO,
+  seances: [
+    {
+      ...ACTIVE_POLL_SCENARIO.seances[0],
+      poll: {
+        ...ACTIVE_POLL_SCENARIO.seances[0].poll,
+        membersCount: 4,
+        options: [
+          {
+            id: 'o1',
+            date: '2026-08-28T00:00:00.000Z',
+            slot: 'EVENING',
+            votes: [
+              { userId: 'me', pseudo: 'Moi', displayName: 'Moi', answer: 'YES' },
+              { userId: 'u2', pseudo: 'Bob', displayName: 'Bob', answer: 'YES' },
+              { userId: 'u3', pseudo: 'Cyd', displayName: 'Cyd', answer: 'MAYBE' },
+            ],
+          },
+          {
+            id: 'o2',
+            date: '2026-08-29T00:00:00.000Z',
+            slot: 'EVENING',
+            votes: [{ userId: 'u2', pseudo: 'Bob', displayName: 'Bob', answer: 'NO' }],
+          },
+        ],
+      },
+    },
+  ],
+};
+
+describe('CalendarView — une piste par créneau proposé (Story 36.6)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC8 — contexte de partie : un vote à deux options produit DEUX entrées, sur DEUX dates', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+
+    const votes = comp.calendarEntries().filter((e: any) => e.type === 'votes-en-cours');
+    expect(votes).toHaveLength(2);
+    expect(votes.map((e: any) => e.date).sort()).toEqual(['2026-08-28', '2026-08-29']);
+  });
+
+  it('AC8 — les clés restent distinctes entre deux options du même vote', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+
+    const keys = comp
+      .calendarEntries()
+      .filter((e: any) => e.type === 'votes-en-cours')
+      .map((e: any) => e.key);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  it('AC7 — les compteurs et ma réponse sont dérivés de la charge utile déjà chargée (AD-20), aucun appel de plus', async () => {
+    const authSvc = { currentUser: signal<Partial<AuthUser> | null>({ id: 'me' }) };
+    const { fixture, pollSvc, scenariosSvc, availabilitySvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+      authSvc,
+    });
+    const comp = fixture.componentInstance as any;
+
+    const first = comp
+      .calendarEntries()
+      .find((e: any) => e.type === 'votes-en-cours' && e.date === '2026-08-28');
+    expect(first.vote).toEqual({
+      pollId: 'poll1',
+      optionId: 'o1',
+      yes: 2,
+      maybe: 1,
+      no: 0,
+      total: 4,
+      myAnswer: 'YES',
+    });
+    // Aucun appel réseau n'a été émis pour obtenir cela : la charge utile était déjà là.
+    expect(availabilitySvc.getMyCalendar).not.toHaveBeenCalled();
+    expect(pollSvc.getAvailableSlots).toHaveBeenCalledTimes(1);
+    expect(scenariosSvc.listAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("une option sur laquelle je n'ai pas voté porte myAnswer null", async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+
+    const second = comp
+      .calendarEntries()
+      .find((e: any) => e.type === 'votes-en-cours' && e.date === '2026-08-29');
+    expect(second.vote.myAnswer).toBeNull();
+    expect(second.vote.no).toBe(1);
+  });
+
+  it('🚨 dégradation : une API qui ne sert pas encore les agrégats ne produit NI piste NI « NaN / undefined »', async () => {
+    const availabilitySvc = makeAvailabilityService();
+    // Forme ANTÉRIEURE à la story 36.6 — ce que renvoie une API en retard pendant un déploiement.
+    availabilitySvc.getMyCalendar.mockResolvedValue({
+      'mes-indisponibilites': [],
+      'mes-disponibilites': [],
+      'mes-seances': [],
+      'votes-en-cours': [
+        {
+          pollId: 'poll9',
+          partieId: 'partie-9',
+          partieName: 'Les Cendres',
+          options: [{ date: '2026-08-28', slot: 'EVENING' }],
+        },
+      ],
+      'inscriptions-ouvertes': [],
+    });
+    const { fixture } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+
+    const votes = comp.calendarEntries().filter((e: any) => e.type === 'votes-en-cours');
+    expect(votes).toHaveLength(1);
+    // L'entrée existe (le vote est toujours signalé), mais SANS participation : aucune piste.
+    expect(votes[0].vote).toBeUndefined();
+  });
+
+  it('AC6/AC8 — contexte personnel : les agrégats servis par GET /me/calendar sont repris tels quels, une entrée par option', async () => {
+    const availabilitySvc = makeAvailabilityService();
+    availabilitySvc.getMyCalendar.mockResolvedValue({
+      'mes-indisponibilites': [],
+      'mes-disponibilites': [],
+      'mes-seances': [],
+      'votes-en-cours': [
+        {
+          pollId: 'poll9',
+          partieId: 'partie-9',
+          partieName: 'Les Cendres',
+          membersCount: 4,
+          options: [
+            {
+              optionId: 'o1',
+              date: '2026-08-28',
+              slot: 'EVENING',
+              yes: 2,
+              maybe: 1,
+              no: 0,
+              myAnswer: 'YES',
+            },
+            {
+              optionId: 'o2',
+              date: '2026-08-29',
+              slot: 'EVENING',
+              yes: 0,
+              maybe: 0,
+              no: 1,
+              myAnswer: null,
+            },
+          ],
+        },
+      ],
+      'inscriptions-ouvertes': [],
+    });
+    const { fixture } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+
+    const votes = comp.calendarEntries().filter((e: any) => e.type === 'votes-en-cours');
+    expect(votes).toHaveLength(2);
+    expect(votes[0].vote).toEqual({
+      pollId: 'poll9',
+      optionId: 'o1',
+      yes: 2,
+      maybe: 1,
+      no: 0,
+      total: 4,
+      myAnswer: 'YES',
+    });
+    expect(availabilitySvc.getMyCalendar).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -635,13 +635,40 @@ export interface MyCalendarSeanceEntry {
   notePratique: string | null;
 }
 
+/** Une option d'un vote en cours, telle que la voit le calendrier PERSONNEL (Story 36.6, D-17).
+ *
+ *  ⚠️ Contrairement à `PollOptionDto` (contexte de partie, AD-20 : la charge utile porte l'identité
+ *  de tous les votants), cette forme est **strictement anonyme** : des compteurs, et ma seule
+ *  réponse. Le calendrier personnel agrège des parties entre lesquelles rien ne doit transiter
+ *  (AD-9/AD-2) — n'y ajouter jamais un `userId`, un `pseudo` ni un `displayName`. */
+export interface MyCalendarPollOption {
+  /** Story 36.6 — sans lui, ni ma réponse ni un agrégat ne sont adressables, et le sélecteur de
+   *  réponse (story 36.7) ne pourrait pas voter depuis le calendrier personnel. */
+  optionId: string;
+  date: string;
+  slot: DaySlot;
+  yes: number;
+  maybe: number;
+  no: number;
+  /** `null` = je n'ai pas répondu. Jamais `undefined` : « pas de réponse » a une seule
+   *  représentation, comme l'absence de ligne `PollVote` côté base (AD-10). */
+  myAnswer: VoteAnswer | null;
+}
+
 /** Vote de date en cours sur une de mes parties (couche `votes-en-cours`, `GET /me/calendar`,
- *  Story 30.5). Une entrée par sondage, pas par option — le client éclate par option si besoin. */
+ *  Story 30.5). Une entrée par sondage, pas par option — le client éclate par option. Depuis la
+ *  Story 36.6, porte aussi l'effectif de la troupe (`membersCount`) et, par option, les agrégats
+ *  de réponses et ma réponse (`MyCalendarPollOption`) — l'appel unique existant suffit désormais
+ *  à alimenter la piste de participation, sans appel réseau supplémentaire (AD-20). */
 export interface MyCalendarPollEntry {
   pollId: string;
   partieId: string;
   partieName: string;
-  options: { date: string; slot: DaySlot }[];
+  /** Story 36.6 — effectif de la troupe : **le MJ + ses membres** (`participantCount()`), le
+   *  dénominateur de la piste de participation. Même nombre que `SessionPollDto.membersCount`
+   *  et que `AggregatedSlotDto.total`. Agrégat anonyme : aucune identité ne s'en déduit. */
+  membersCount: number;
+  options: MyCalendarPollOption[];
 }
 
 /** Séance à inscription ouverte d'une de mes parties CAMPAGNE_EPISODIQUE (couche
@@ -679,6 +706,17 @@ export interface SessionPollDto {
   expiresAt: string | null;
   chosenDate: string | null;
   chosenSlot: DaySlot | null;
+  /** Story 36.6 — effectif de la troupe : **le MJ + ses membres** (`participantCount()`), le même
+   *  nombre que `AggregatedSlotDto.total`. C'est le DÉNOMINATEUR de la piste de participation.
+   *
+   *  Il vit ici et non dans `PollOptionDto` pour deux raisons. (1) C'est une propriété de la
+   *  partie, pas de l'option. (2) 🚨 Les deux `toSessionPollDto` (`poll.service.ts`,
+   *  `scenarios.service.ts`) typent leur entrée en `any`, donc `options: (…).map(…)` produit un
+   *  `any[]` que TypeScript ne vérifie **pas** : un champ ajouté à l'intérieur des options
+   *  manquerait silencieusement. À la racine du littéral, le compilateur l'attrape.
+   *
+   *  Requis, jamais optionnel : un effectif absent rendrait une piste au dénominateur indéfini. */
+  membersCount: number;
   options: PollOptionDto[];
 }
 

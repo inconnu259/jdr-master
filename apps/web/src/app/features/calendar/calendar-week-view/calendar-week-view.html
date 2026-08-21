@@ -67,6 +67,7 @@
             [attr.data-cell-date]="cell.date.getTime()"
             [attr.data-cell-slot]="row.slot"
             [attr.data-status]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status)"
+            [attr.data-winner]="cellWinner(getSlotData(cell, row.key))"
             [class.past]="cell.isPast"
             [class.today-col]="cell.isToday"
             [class.preview]="getSlotData(cell, row.key).preview !== null"
@@ -97,6 +98,13 @@
             }
             @if (getSlotData(cell, row.key).declLabel) {
               <span class="decl-label">{{ getSlotData(cell, row.key).declLabel }}</span>
+            }
+            <!-- Story 36.6 — la piste de participation, et son compteur « 3 / 4 » que la cellule
+                 de Semaine a la place de porter (AC4). Descendante de `.slot-cell` et en
+                 `pointer-events: none`, comme tout ce que cette cellule contient : le glissement
+                 doit continuer de remonter à la case (AC9, encadré n°3 de la story 36.13). -->
+            @if (eventVote(getSlotData(cell, row.key)); as vote) {
+              <app-poll-track class="ev-track in-week track-sm" [vote]="vote" />
             }
           </div>
         }

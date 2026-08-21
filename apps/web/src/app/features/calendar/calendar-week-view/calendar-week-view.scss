@@ -254,6 +254,30 @@
   display: none;
 }
 
+/* ── Story 36.6 — le rang de la cellule, et sa piste de participation ─────── */
+
+/* AC13 — la cellule SE SIGNALE, elle ne se contente pas de se nommer. Reprise du contrat d'UI
+   (`contrat-ui-calendrier.html:156-159`) : un liseré pour le vote, un filet pour la séance. La
+   case du Mois faisait déjà ce travail (story 36.2) ; la Semaine ne l'avait jamais eu. Le
+   `data-winner` est la MÊME convention que la bande — jamais un second schéma de classes. */
+.slot-cell[data-winner='seance'] {
+  background: color-mix(in srgb, var(--jdr-status-soon) 28%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--jdr-status-soon) 75%, transparent);
+}
+
+.slot-cell[data-winner='vote'] {
+  background: color-mix(in srgb, var(--jdr-status-todo) 24%, transparent);
+  box-shadow: inset 3px 0 0 0 color-mix(in srgb, var(--jdr-status-todo) 90%, transparent);
+}
+
+/* La piste. Sous le seuil, la version courte et SANS compteur : 43 px de large ne laissent la
+   place ni au « 3 / 4 » ni à « tu as dit oui ». Au-dessus, la piste longue et son compteur
+   (AC4). Aucune logique de largeur en TypeScript : tout est dans le DOM, le CSS décide. */
+.ev-track {
+  pointer-events: none;
+  max-width: 100%;
+}
+
 @container week-grid (min-width: 500px) {
   .slot-cell {
     min-height: 56px;
@@ -270,6 +294,11 @@
   .slot-cell.has-event .decl-label {
     display: block;
   }
+
+  /* ⚠️ La bascule du compteur et de ma réponse vit dans `poll-track.scss`
+     (`@container week-grid` + `:host(.in-week)`), PAS ici : ces nœuds appartiennent au composant
+     de piste, qu'un sélecteur écrit dans cette feuille ne peut pas atteindre (encapsulation de
+     vue). Le même seuil de 500 px y est rejoué — le conteneur `week-grid` reste un ancêtre. */
 }
 
 /* ── Loading ─────────────────────────────────────────────────────────────── */

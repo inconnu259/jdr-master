@@ -2,6 +2,8 @@ import { Component, computed, input } from '@angular/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type { DaySlot } from '@master-jdr/shared';
 import { composeSeanceInfo } from '../day-detail.utils';
+import type { VoteParticipation } from '../poll-track.utils';
+import { PollTrack } from '../poll-track/poll-track';
 
 /** Type d'entrée affichée dans la vue Agenda (Story 30.6, AC2) — un par couche pertinente. Chaque
  *  entrée reste identifiable comme telle (badge de type), jamais une liste indifférenciée. */
@@ -43,6 +45,15 @@ export interface AgendaEntry {
   seanceHeure?: string | null;
   seanceLieu?: string | null;
   seanceNote?: string | null;
+  /** Story 36.6 — la participation à l'option de vote portée par cette entrée.
+   *
+   *  ⚠️ **Depuis cette story, une entrée `votes-en-cours` représente UNE OPTION, pas un sondage.**
+   *  Un vote proposant deux créneaux produit deux entrées, à deux dates — sans quoi seul le
+   *  premier créneau serait marqué dans la grille (défaut pré-existant, encadré n°1 de la story).
+   *
+   *  Sous-objet plutôt que sept champs plats : `AgendaEntry` est déjà chargé, et la story 36.7 en
+   *  ajoutera. Renseigné pour les seules entrées `votes-en-cours`. */
+  vote?: VoteParticipation;
 }
 
 const TYPE_LABELS: Record<AgendaEntryType, string> = {
@@ -61,7 +72,7 @@ const TYPE_LABELS: Record<AgendaEntryType, string> = {
 @Component({
   selector: 'app-calendar-agenda-view',
   standalone: true,
-  imports: [MatProgressSpinnerModule],
+  imports: [MatProgressSpinnerModule, PollTrack],
   templateUrl: './calendar-agenda-view.html',
   styleUrl: './calendar-agenda-view.scss',
 })

@@ -284,8 +284,29 @@
   text-overflow: ellipsis;
 }
 
+/* Story 36.6 — la piste de participation d'un vote.
+
+   Elle est ABSENTE de la case étroite (AC4 : « le compteur est abandonné en vue mois étroite »,
+   et la planche n'y rend même pas la piste — `contrat-ui-calendrier.html:795`, branche mobile).
+   Le rail, lui, la porte à toutes les largeurs : rien n'est perdu, c'est le principe de la table
+   de densité. Même mécanisme que le titre : le nœud est toujours dans le DOM, le CSS décide. */
+.band__track {
+  display: none;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+/* AC4 — le compteur « 3 / 4 » ne paraît JAMAIS dans la case du Mois. ⚠️ La règle vit dans
+   `poll-track.scss` (`:host(.in-month)`), PAS ici : `.cnt` appartient au composant de piste et
+   l'encapsulation de vue rend un sélecteur écrit ici sans effet — défaut trouvé à l'œil. La bande
+   pose la classe d'hôte `in-month`, le composant en tire les conséquences. */
+
 /* Story 36.2, AC5/AC8 — au-dessus du seuil, la bande grandit et porte son texte. */
 @container month-grid (min-width: 712px) {
+  .band__track {
+    display: inline-flex;
+  }
+
   .band {
     min-height: 20px;
     padding: 0 4px;

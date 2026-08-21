@@ -42,6 +42,24 @@ async function createRail(detail: DayDetail | null, touchedSlot: string | null =
   return fixture;
 }
 
+/** Story 36.6 — une option de vote sur le créneau du matin, avec sa participation. */
+const VOTE: AgendaEntry = {
+  key: 'poll-p1-o1',
+  type: 'votes-en-cours',
+  date: '2026-08-20',
+  label: 'Les Cendres d’Ashal',
+  slot: 'MORNING',
+  vote: {
+    pollId: 'p1',
+    optionId: 'o1',
+    yes: 2,
+    maybe: 1,
+    no: 0,
+    total: 4,
+    myAnswer: 'YES',
+  },
+};
+
 afterEach(() => TestBed.resetTestingModule());
 
 describe('CalendarDetailRail — structure', () => {
@@ -275,5 +293,47 @@ describe('CalendarDetailRail — informations pratiques', () => {
     const node = fixture.nativeElement.querySelector('.v .m');
     expect(node.textContent).toContain('<b>gras</b>');
     expect(node.querySelector('b')).toBeNull();
+  });
+});
+
+describe('CalendarDetailRail — piste de participation (Story 36.6)', () => {
+  it('AC1 — la ligne d’un vote porte sa piste', async () => {
+    const detail = buildDayDetail('2026-08-20', [VOTE], ALL_LAYERS, [], NOW);
+    const fixture = await createRail(detail);
+
+    const matin = fixture.nativeElement.querySelectorAll('.it')[0] as HTMLElement;
+    expect(matin.querySelector('app-poll-track')).toBeTruthy();
+  });
+
+  it('AC4 — le rail porte le compteur « 3 / 4 » à TOUTES les largeurs', async () => {
+    const detail = buildDayDetail('2026-08-20', [VOTE], ALL_LAYERS, [], NOW);
+    const fixture = await createRail(detail);
+
+    const matin = fixture.nativeElement.querySelectorAll('.it')[0] as HTMLElement;
+    expect(matin.querySelector('.cnt')?.textContent?.trim()).toBe('3 / 4');
+  });
+
+  it('AC5 — ma réponse y est rappelée en toutes lettres', async () => {
+    const detail = buildDayDetail('2026-08-20', [VOTE], ALL_LAYERS, [], NOW);
+    const fixture = await createRail(detail);
+
+    expect(fixture.nativeElement.textContent).toContain('tu as dit oui');
+  });
+
+  it('couche de votes éteinte : la piste disparaît avec le libellé', async () => {
+    const sansVotes = ALL_LAYERS.filter((l) => l !== 'votes-en-cours');
+    const detail = buildDayDetail('2026-08-20', [VOTE], sansVotes, [], NOW);
+    const fixture = await createRail(detail);
+
+    expect(fixture.nativeElement.querySelector('app-poll-track')).toBeNull();
+  });
+
+  it('encadré n°8 — une séance gagnante ne porte pas la piste d’un vote concurrent', async () => {
+    const concurrent: AgendaEntry = { ...VOTE, slot: 'EVENING' };
+    const detail = buildDayDetail('2026-08-20', [SEANCE, concurrent], ALL_LAYERS, [], NOW);
+    const fixture = await createRail(detail);
+
+    const soir = fixture.nativeElement.querySelectorAll('.it')[2] as HTMLElement;
+    expect(soir.querySelector('app-poll-track')).toBeNull();
   });
 });

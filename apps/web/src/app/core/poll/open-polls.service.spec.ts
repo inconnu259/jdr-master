@@ -43,6 +43,8 @@ function makePoll(
     expiresAt: null,
     chosenDate: null,
     chosenSlot: null,
+    // Story 36.6 — effectif de la troupe (MJ + membres).
+    membersCount: 4,
     options,
   };
 }

@@ -20,6 +20,12 @@
           @if (seanceInfo(entry)) {
             <span class="agenda-entry__infos">{{ seanceInfo(entry) }}</span>
           }
+          <!-- Story 36.6 — depuis cette story, une entrée `votes-en-cours` est UNE OPTION : la
+               liste montre donc un créneau proposé par ligne, chacun avec sa piste, son compteur
+               et ma réponse. L'Agenda a la place : rien n'y est replié (AC4, AC5). -->
+          @if (entry.vote; as vote) {
+            <app-poll-track class="agenda-entry__track track-sm" [vote]="vote" />
+          }
         </li>
       }
     </ul>

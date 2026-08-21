@@ -513,7 +513,7 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
     };
   }
 
-  function voteEntry(dayIndex: number): AgendaEntry {
+  function voteEntry(dayIndex: number, over: Partial<AgendaEntry> = {}): AgendaEntry {
     return {
       key: `poll-${dayIndex}`,
       type: 'votes-en-cours',
@@ -521,8 +521,20 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
       label: 'Les Cendres d Ashal',
       slot: 'MORNING',
       partieId: 'p1',
+      ...over,
     };
   }
+
+  /** Story 36.6 — la participation portée par une option de vote. */
+  const PARTICIPATION = {
+    pollId: 'p',
+    optionId: 'o1',
+    yes: 2,
+    maybe: 1,
+    no: 0,
+    total: 4,
+    myAnswer: 'YES' as const,
+  };
 
   function create(entries: AgendaEntry[] = [], activeLayers: CalendarLayerKey[] = []): void {
     fixture = TestBed.createComponent(CalendarWeekView);
@@ -639,6 +651,59 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
     expect(label).toContain('Le Convoi du Nord');
     expect(label).toContain('20:30 · chez Marc');
     expect(label).toContain('indisponible');
+  });
+
+  // ─── Story 36.6 — la piste de participation ────────────────────────────────────────────────
+
+  it('Story 36.6, AC1 — une cellule portant un vote rend sa piste de participation', () => {
+    create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);
+    expect(cellAt('MORNING', 2).querySelector('app-poll-track')).toBeTruthy();
+  });
+
+  it('Story 36.6, AC4 — la cellule de Semaine porte le compteur « 3 / 4 », révélé par le seuil de densité', () => {
+    create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);
+    const cell = cellAt('MORNING', 2);
+    expect(cell.querySelector('.cnt')?.textContent?.trim()).toBe('3 / 4');
+    // La bascule passe par une classe d'HÔTE lue depuis `poll-track.scss` — une règle écrite dans
+    // `calendar-week-view.scss` n'atteindrait pas `.cnt` (encapsulation de vue).
+    expect(cell.querySelector('app-poll-track')!.classList.contains('in-week')).toBe(true);
+  });
+
+  it('Story 36.6 — couche de votes éteinte : la piste disparaît avec le titre', () => {
+    create([voteEntry(2, { vote: PARTICIPATION })], []);
+    expect(cellAt('MORNING', 2).querySelector('app-poll-track')).toBeNull();
+  });
+
+  it('Story 36.6, encadré n°8 — une séance gagnante ne porte pas la piste du vote concurrent', () => {
+    create(
+      [seanceEntry(3), voteEntry(3, { slot: 'EVENING', vote: PARTICIPATION })],
+      ['mes-seances', 'votes-en-cours'],
+    );
+    const cell = cellAt('EVENING', 3);
+    expect(cell.getAttribute('data-winner')).toBe('seance');
+    expect(cell.querySelector('app-poll-track')).toBeNull();
+  });
+
+  it('Story 36.6, AC13 — la cellule SE SIGNALE : data-winner porte le rang, pas seulement le texte', () => {
+    create([seanceEntry(3)], ['mes-seances']);
+    expect(cellAt('EVENING', 3).getAttribute('data-winner')).toBe('seance');
+
+    create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);
+    expect(cellAt('MORNING', 2).getAttribute('data-winner')).toBe('vote');
+  });
+
+  it('Story 36.6, AC14 — le nom accessible de la cellule dit la participation et ma réponse', () => {
+    create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);
+    const label = cellAt('MORNING', 2).getAttribute('aria-label')!;
+    expect(label).toContain('3 réponses sur 4');
+    expect(label).toContain('tu as dit oui');
+  });
+
+  it('🚨 Story 36.6, AC9 — le nœud de piste reste un descendant porteur de data-cell-date', () => {
+    create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);
+    const cell = cellAt('MORNING', 2);
+    const track = cell.querySelector('app-poll-track')!;
+    expect(track.closest('[data-cell-date]')).toBe(cell);
   });
 
   // 🚨 AC9 — LE CONTRAT DOM DU GLISSEMENT. `elementFromPoint` est stubbé partout ailleurs : si un

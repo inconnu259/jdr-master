@@ -17,6 +17,7 @@ import type {
 } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { countParticipants } from '../parties/participant-count.util';
 import { CharacterService } from '../characters/character.service';
 import { PollService } from '../poll/poll.service';
 import {
@@ -222,6 +223,7 @@ export class ScenariosService {
     const seancesByScenario = await loadSeancesBatch(
       this.prisma,
       scenarios.map((s) => s.id),
+      await countParticipants(this.prisma, partieId),
     );
     return scenarios.map((s) =>
       toDto(s, partie.kind, undefined, seancesByScenario.get(s.id) ?? []),
@@ -245,7 +247,11 @@ export class ScenariosService {
       take: pagination?.take,
     });
     const scenarioIds = scenarios.map((s) => s.id);
-    const seancesByScenario = await loadSeancesBatch(this.prisma, scenarioIds);
+    const seancesByScenario = await loadSeancesBatch(
+      this.prisma,
+      scenarioIds,
+      await countParticipants(this.prisma, partieId),
+    );
 
     if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
       return Promise.all(
@@ -1055,7 +1061,9 @@ const SEANCE_INCLUDE = {
   },
 } as const;
 
-function toSessionPollDto(poll: any): SessionPollDto {
+/** Story 36.6 — `membersCount` arrive en paramètre : c'est une propriété de la PARTIE, calculée
+ *  UNE fois par appel par `countParticipants()` (jamais une par séance ni par sondage, AD-3). */
+function toSessionPollDto(poll: any, membersCount: number): SessionPollDto {
   return {
     id: poll.id,
     partieId: poll.partieId,
@@ -1064,6 +1072,7 @@ function toSessionPollDto(poll: any): SessionPollDto {
     expiresAt: poll.expiresAt?.toISOString() ?? null,
     chosenDate: poll.chosenDate?.toISOString() ?? null,
     chosenSlot: poll.chosenSlot,
+    membersCount,
     options: (poll.options ?? []).map((opt: any) => ({
       id: opt.id,
       date: opt.date.toISOString(),
@@ -1085,11 +1094,11 @@ export interface SetInfosPratiquesPayload {
   notePratique: string | null;
 }
 
-function toSeanceDto(seance: any): SeanceDto {
+function toSeanceDto(seance: any, membersCount: number): SeanceDto {
   return {
     id: seance.id,
     scenarioId: seance.scenarioId,
-    poll: seance.poll ? toSessionPollDto(seance.poll) : undefined,
+    poll: seance.poll ? toSessionPollDto(seance.poll, membersCount) : undefined,
     inscription:
       seance.inscriptionMax != null
         ? {
@@ -1140,6 +1149,7 @@ async function resolveScenarioOrThrow(
 async function loadSeancesBatch(
   prisma: PrismaService,
   scenarioIds: string[],
+  membersCount: number,
 ): Promise<Map<string, SeanceDto[]>> {
   const seances = await prisma.seance.findMany({
     where: { scenarioId: { in: scenarioIds } },
@@ -1149,7 +1159,7 @@ async function loadSeancesBatch(
   const byScenario = new Map<string, SeanceDto[]>();
   for (const s of seances) {
     const list = byScenario.get(s.scenarioId) ?? [];
-    list.push(toSeanceDto(s));
+    list.push(toSeanceDto(s, membersCount));
     byScenario.set(s.scenarioId, list);
   }
   return byScenario;
@@ -1158,8 +1168,9 @@ async function loadSeancesBatch(
 async function loadSeances(
   prisma: PrismaService,
   scenarioId: string,
+  membersCount: number,
 ): Promise<SeanceDto[]> {
-  const byScenario = await loadSeancesBatch(prisma, [scenarioId]);
+  const byScenario = await loadSeancesBatch(prisma, [scenarioId], membersCount);
   return byScenario.get(scenarioId) ?? [];
 }
 
@@ -1173,7 +1184,11 @@ async function toEnrichedDto(
   scenario: any,
   partieKind: PartieKind,
 ): Promise<ScenarioDto> {
-  const seances = await loadSeances(prisma, scenario.id);
+  // Story 36.6 — l'effectif est dérivé de `scenario.partieId`, déjà chargé, plutôt que threadé
+  // depuis les 18 points d'appel : un paramètre de plus sur chacun n'aurait rien garanti de plus
+  // et aurait multiplié les occasions de l'oublier. Un seul comptage par appel.
+  const membersCount = await countParticipants(prisma, scenario.partieId);
+  const seances = await loadSeances(prisma, scenario.id, membersCount);
   if (partieKind !== 'CAMPAGNE_EPISODIQUE') {
     const retrospectiveNotes = await loadRetrospectiveNotes(
       prisma,

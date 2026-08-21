@@ -6,6 +6,7 @@ import type {
 } from '@master-jdr/shared';
 import { computeDisplayStatus } from '../../core/availability/compute-display-status';
 import type { AgendaEntry } from './calendar-agenda-view/calendar-agenda-view';
+import type { VoteParticipation } from './poll-track.utils';
 
 /**
  * Story 36.1 — modèle du rail de détail.
@@ -85,6 +86,13 @@ export interface DaySlotDetail {
   seanceNote: string | null;
   /** Libellé du vote en cours sur ce créneau, ou `null`. */
   pollLabel: string | null;
+  /** Story 36.6 — la participation à l'option de vote qui couvre ce créneau, ou `null`.
+   *
+   *  **Gouvernée exactement comme `pollLabel`** : la couche `votes-en-cours` éteinte la fait
+   *  disparaître, sans quoi la piste survivrait à son propre libellé. Les surfaces la rendent
+   *  seulement quand le rang gagnant est `'vote'` — le texte suit le rang, la piste aussi
+   *  (une séance confirmée qui l'emporte n'affiche pas la piste d'un vote concurrent). */
+  pollVote: VoteParticipation | null;
 }
 
 export interface DayDetail {
@@ -213,6 +221,10 @@ export function buildDayDetail(
         poll && active.has('votes-en-cours')
           ? poll.label + (pollMatches.length > 1 ? ' (+1 autre)' : '')
           : null,
+      // Story 36.6 — même gouvernance que `pollLabel`, à la lettre : la couche éteinte retire la
+      // piste en même temps que le texte. `?? null` et jamais `undefined` — une seule
+      // représentation de « rien à afficher ».
+      pollVote: poll && active.has('votes-en-cours') ? (poll.vote ?? null) : null,
     };
   });
 

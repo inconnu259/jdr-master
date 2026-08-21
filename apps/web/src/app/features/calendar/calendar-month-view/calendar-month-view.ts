@@ -51,6 +51,10 @@ export interface DayBand {
    *  de loin la surface la plus étroite (~115 px, la grille étant plafonnée) : elle demande le
    *  niveau `minimal`, c'est-à-dire l'HEURE SEULE. Le lieu et la note sont portés par le rail. */
   info: string;
+  /** Story 36.6 — la participation à l'option de vote, portée par le rang GAGNANT comme `text`
+   *  et `info`. `null` dès que le rang n'est pas « vote » : une séance confirmée qui l'emporte
+   *  n'affiche jamais la piste d'un vote concurrent (encadré n°8 de la story). */
+  vote: VoteParticipation | null;
   /** Aperçu live pendant l'édition dans `ConstraintPanel` — `null` si identique au réel. */
   preview: SlotStatus | null;
 }
@@ -149,6 +153,9 @@ export function buildMonth(
             // Même règle que `text` : porté par le rang GAGNANT, et seulement par une séance —
             // un vote n'a pas d'informations pratiques.
             info: s.winner === 'seance' ? composeSeanceInfo(s, 'minimal') : '',
+            // Story 36.6 — même règle que `text` et `info` : la piste suit le rang GAGNANT.
+            // `s.pollVote` est déjà gouverné par la couche `votes-en-cours` (buildDayDetail).
+            vote: s.winner === 'vote' ? s.pollVote : null,
             preview: previewStatus !== null && previewStatus !== s.status ? previewStatus : null,
           };
         }),
@@ -179,10 +186,13 @@ interface PointerDownInfo {
   fromBand: boolean;
 }
 
+import { PollTrack } from '../poll-track/poll-track';
+import { type VoteParticipation, participationAriaLabel } from '../poll-track.utils';
+
 @Component({
   selector: 'app-calendar-month-view',
   standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, SelectionBar],
+  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, SelectionBar, PollTrack],
   templateUrl: './calendar-month-view.html',
   styleUrl: './calendar-month-view.scss',
 })
@@ -431,9 +441,13 @@ export class CalendarMonthView {
     // Story 36.5, AC13 : les informations pratiques sont ANNONCÉES, pas seulement affichées —
     // et à l'oreille elles ne sont jamais tronquées, contrairement à l'ellipse visuelle.
     if (band.text) {
-      return band.info
-        ? `${band.label} : ${band.text} — ${band.info}`
-        : `${band.label} : ${band.text}`;
+      // Story 36.6, AC14 — la piste code par la PROPORTION : sans ce texte, elle n'existe pas
+      // pour un lecteur d'écran. Elle s'ajoute au titre du vote, elle ne le remplace pas.
+      const participation = band.vote ? participationAriaLabel(band.vote) : '';
+      const parts = [`${band.label} : ${band.text}`];
+      if (band.info) parts.push(band.info);
+      if (participation) parts.push(participation);
+      return parts.join(' — ');
     }
     const labels: Record<SlotStatus, string> = {
       AVAILABLE: 'disponible',

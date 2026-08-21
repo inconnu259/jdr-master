@@ -621,8 +621,16 @@ describe('CalendarMonthView — les trois bandes', () => {
     } as any;
   }
 
-  function vote(date: string, slot = 'MORNING') {
-    return { key: 'poll-p1', type: 'votes-en-cours', date, label: 'Ashal', slot } as any;
+  function vote(date: string, slot = 'MORNING', participation?: Record<string, unknown>) {
+    return {
+      key: 'poll-p1-o1',
+      type: 'votes-en-cours',
+      date,
+      label: 'Ashal',
+      slot,
+      // Story 36.6 — la participation portée par l'option (absente = piste non rendue).
+      vote: participation,
+    } as any;
   }
 
   function decl(over: Record<string, unknown> = {}) {
@@ -685,6 +693,118 @@ describe('CalendarMonthView — les trois bandes', () => {
   afterEach(() => {
     vi.useRealTimers();
     TestBed.resetTestingModule();
+  });
+
+  it('Story 36.6, AC1 — une bande dont le rang gagnant est « vote » porte la piste de participation', async () => {
+    await createWith({
+      entries: [
+        vote('2026-08-20', 'MORNING', {
+          pollId: 'p',
+          optionId: 'o1',
+          yes: 2,
+          maybe: 1,
+          no: 0,
+          total: 4,
+          myAnswer: 'YES',
+        }),
+      ],
+    });
+
+    const band = cellOf(20).querySelectorAll('.band')[0];
+    expect(band.getAttribute('data-winner')).toBe('vote');
+    expect(band.querySelector('app-poll-track')).toBeTruthy();
+  });
+
+  it('Story 36.6, AC4 — la case du Mois ne porte JAMAIS le compteur « 3 / 4 »', async () => {
+    await createWith({
+      entries: [
+        vote('2026-08-20', 'MORNING', {
+          pollId: 'p',
+          optionId: 'o1',
+          yes: 2,
+          maybe: 1,
+          no: 0,
+          total: 4,
+          myAnswer: null,
+        }),
+      ],
+    });
+
+    // 🚨 Le masquage passe par une CLASSE D'HÔTE lue par `poll-track.scss`, et non par une règle
+    // écrite dans `calendar-month-view.scss` : l'encapsulation de vue empêcherait celle-ci
+    // d'atteindre `.cnt`, qui appartient au composant de piste. Défaut trouvé à l'œil, jamais par
+    // un test — ce test verrouille désormais le mécanisme qui marche.
+    const track = cellOf(20).querySelectorAll('.band')[0].querySelector('app-poll-track')!;
+    expect(track.classList.contains('in-month')).toBe(true);
+  });
+
+  it('Story 36.6 — un vote sans participation ne rend aucune piste', async () => {
+    await createWith({ entries: [vote('2026-08-20', 'MORNING')] });
+
+    const band = cellOf(20).querySelectorAll('.band')[0];
+    expect(band.getAttribute('data-winner')).toBe('vote');
+    expect(band.querySelector('app-poll-track')).toBeNull();
+  });
+
+  it('Story 36.6 — couche « votes-en-cours » éteinte : la piste disparaît avec le libellé', async () => {
+    await createWith({
+      entries: [
+        vote('2026-08-20', 'MORNING', {
+          pollId: 'p',
+          optionId: 'o1',
+          yes: 2,
+          maybe: 0,
+          no: 0,
+          total: 4,
+          myAnswer: null,
+        }),
+      ],
+      activeLayers: ALL_LAYERS.filter((l) => l !== 'votes-en-cours'),
+    });
+
+    const band = cellOf(20).querySelectorAll('.band')[0];
+    expect(band.querySelector('app-poll-track')).toBeNull();
+  });
+
+  it('Story 36.6, encadré n°8 — une séance gagnante ne porte pas la piste du vote concurrent', async () => {
+    await createWith({
+      entries: [
+        seance('2026-08-20', 'EVENING'),
+        vote('2026-08-20', 'EVENING', {
+          pollId: 'p',
+          optionId: 'o1',
+          yes: 3,
+          maybe: 0,
+          no: 0,
+          total: 4,
+          myAnswer: null,
+        }),
+      ],
+    });
+
+    const soir = cellOf(20).querySelectorAll('.band')[2];
+    expect(soir.getAttribute('data-winner')).toBe('seance');
+    expect(soir.querySelector('app-poll-track')).toBeNull();
+  });
+
+  it('Story 36.6, AC14 — le nom accessible de la bande dit la participation', async () => {
+    await createWith({
+      entries: [
+        vote('2026-08-20', 'MORNING', {
+          pollId: 'p',
+          optionId: 'o1',
+          yes: 2,
+          maybe: 1,
+          no: 0,
+          total: 4,
+          myAnswer: 'YES',
+        }),
+      ],
+    });
+
+    const label = cellOf(20).querySelectorAll('.band')[0].getAttribute('aria-label') ?? '';
+    expect(label).toContain('3 réponses sur 4');
+    expect(label).toContain('tu as dit oui');
   });
 
   it('rend trois bandes pour un jour dont les créneaux diffèrent (AC1)', async () => {

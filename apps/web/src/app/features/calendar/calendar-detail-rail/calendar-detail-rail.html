@@ -55,7 +55,15 @@
             }
           </span>
         } @else if (s.pollLabel) {
-          <span class="v"><b>{{ s.pollLabel }}</b><span class="m"> · vote de date</span></span>
+          <span class="v">
+            <b>{{ s.pollLabel }}</b><span class="m"> · vote de date</span>
+            <!-- Story 36.6 — le rail est la surface la plus riche : il porte la piste, son
+                 compteur ET ma réponse en toutes lettres, à TOUTES les largeurs (AC4, AC5). Il
+                 reste ainsi le recours quand la case du Mois abandonne le compteur. -->
+            @if (s.pollVote) {
+              <app-poll-track class="rail-track track-lg" [vote]="s.pollVote" />
+            }
+          </span>
         } @else {
           <!-- Jamais la couleur seule : l'état est écrit en toutes lettres (AC8). -->
           <span class="v" [attr.data-status]="s.status">{{ statusLabel(s.status) }}</span>

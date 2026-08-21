@@ -127,3 +127,46 @@ describe('CalendarAgendaView — informations pratiques', () => {
     );
   });
 });
+
+describe('CalendarAgendaView — piste de participation (Story 36.6)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const VOTED: AgendaEntry = {
+    ...VOTE,
+    key: 'poll-1-o1',
+    vote: {
+      pollId: 'poll-1',
+      optionId: 'o1',
+      yes: 2,
+      maybe: 1,
+      no: 0,
+      total: 4,
+      myAnswer: 'YES',
+    },
+  };
+
+  it('AC1 — une entrée de vote porte sa piste', async () => {
+    const fixture = await createAgenda([VOTED]);
+    expect(fixture.nativeElement.querySelector('app-poll-track')).toBeTruthy();
+  });
+
+  it('AC4 — l’Agenda a la place : le compteur « 3 / 4 » y figure', async () => {
+    const fixture = await createAgenda([VOTED]);
+    expect(fixture.nativeElement.querySelector('.cnt')?.textContent?.trim()).toBe('3 / 4');
+  });
+
+  it('AC5 — ma réponse y est écrite en toutes lettres', async () => {
+    const fixture = await createAgenda([VOTED]);
+    expect(fixture.nativeElement.textContent).toContain('tu as dit oui');
+  });
+
+  it('une entrée de vote sans participation ne rend aucune piste', async () => {
+    const fixture = await createAgenda([VOTE]);
+    expect(fixture.nativeElement.querySelector('app-poll-track')).toBeNull();
+  });
+
+  it('une séance ne porte jamais de piste', async () => {
+    const fixture = await createAgenda([SEANCE]);
+    expect(fixture.nativeElement.querySelector('app-poll-track')).toBeNull();
+  });
+});

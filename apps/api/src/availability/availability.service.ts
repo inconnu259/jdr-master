@@ -17,7 +17,9 @@ import type {
   MyCalendarSeanceEntry,
   RecurKind,
   SlotStatus,
+  VoteAnswer,
 } from '@master-jdr/shared';
+import { participantCount } from '../parties/participant-count.util';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   RealtimeEventsService,
@@ -850,7 +852,7 @@ export class AvailabilityService {
     const partieIds = myParties.map((p) => p.id);
     const partieById = new Map(myParties.map((p) => [p.id, p]));
 
-    const [declarations, seances, polls] = await Promise.all([
+    const [declarations, seances, polls, membershipCounts] = await Promise.all([
       this.prisma.availabilityDeclaration.findMany({
         where: { userId, expiresAt: { gt: new Date() } },
       }),
@@ -868,9 +870,32 @@ export class AvailabilityService {
         ? Promise.resolve([])
         : this.prisma.sessionPoll.findMany({
             where: { partieId: { in: partieIds }, status: 'OPEN' },
-            include: { options: true },
+            // Story 36.6 — `votes: true` et RIEN de plus. 🚨 Ne jamais y ajouter
+            // `include: { user: … }` : le calendrier personnel agrège des parties entre
+            // lesquelles aucune identité ne doit transiter (AD-9/AD-2). Les compteurs et ma
+            // seule réponse se déduisent de `userId` + `answer`, qui ne sortent jamais d'ici.
+            include: { options: { include: { votes: true } } },
+          }),
+      // Story 36.6 — l'effectif de chaque partie, en UNE requête groupée pour toutes mes parties
+      // (AD-3). Jamais un `membership.count` par partie : c'est exactement le fan-out que la
+      // garde anti-N+1 de la spec interdit.
+      partieIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.membership.groupBy({
+            by: ['partieId'],
+            where: { partieId: { in: partieIds } },
+            _count: true,
           }),
     ]);
+
+    // Le MJ n'a jamais de ligne `Membership` : une partie absente de l'agrégat a 0 membre, donc
+    // un effectif de 1. `participantCount()` est le point unique de cette formule.
+    const membershipCountByPartie = new Map<string, number>(
+      (membershipCounts as { partieId: string; _count: number }[]).map((m) => [
+        m.partieId,
+        m._count,
+      ]),
+    );
 
     return {
       'mes-indisponibilites': declarations
@@ -899,6 +924,8 @@ export class AvailabilityService {
         partieById,
         fromMs,
         toMs,
+        userId,
+        membershipCountByPartie,
       ),
       // Non filtrée par [from, to] (décision documentée, Story 30.5 Dev Notes) : une séance en
       // attente d'inscriptions n'a pas encore de date propre à comparer.
@@ -1039,16 +1066,35 @@ export class AvailabilityService {
     return entries;
   }
 
-  /** Sondages de date ouverts sur mes parties, dont au moins une option tombe dans la plage. */
+  /**
+   * Sondages de date ouverts sur mes parties, dont au moins une option tombe dans la plage.
+   *
+   * Story 36.6 — chaque option porte désormais son `optionId`, les trois compteurs de réponses et
+   * **ma seule** réponse ; l'entrée porte l'effectif de la troupe (le dénominateur de la piste).
+   *
+   * ⚠️ **Le filtre de plage reste au niveau du SONDAGE, et toutes ses options sont renvoyées**
+   * (comportement d'origine, délibérément conservé). Filtrer option par option aurait retiré de
+   * la charge utile des créneaux que le client sait déjà ne pas rendre — la grille ne dessine que
+   * les jours qu'elle affiche — mais aurait rendu `nextMeaningfulDate()` (le rail, story 36.1)
+   * aveugle à une option juste au-delà de la fenêtre chargée, qui est précisément ce qu'il
+   * cherche : le prochain jour porteur.
+   */
   private buildOpenPollsLayer(
     polls: Array<{
       id: string;
       partieId: string;
-      options: { date: Date; slot: string }[];
+      options: {
+        id: string;
+        date: Date;
+        slot: string;
+        votes?: { userId: string; answer: string }[];
+      }[];
     }>,
     partieById: Map<string, { id: string; name: string }>,
     fromMs: number,
     toMs: number,
+    userId: string,
+    membershipCountByPartie: Map<string, number>,
   ): MyCalendarPollEntry[] {
     const entries: MyCalendarPollEntry[] = [];
     for (const poll of polls) {
@@ -1062,10 +1108,23 @@ export class AvailabilityService {
         pollId: poll.id,
         partieId: partie.id,
         partieName: partie.name,
-        options: poll.options.map((o) => ({
-          date: o.date.toISOString().substring(0, 10),
-          slot: o.slot as DaySlot,
-        })),
+        membersCount: participantCount(
+          membershipCountByPartie.get(partie.id) ?? 0,
+        ),
+        options: poll.options.map((o) => {
+          const votes = o.votes ?? [];
+          const mine = votes.find((v) => v.userId === userId);
+          return {
+            optionId: o.id,
+            date: o.date.toISOString().substring(0, 10),
+            slot: o.slot as DaySlot,
+            yes: votes.filter((v) => v.answer === 'YES').length,
+            maybe: votes.filter((v) => v.answer === 'MAYBE').length,
+            no: votes.filter((v) => v.answer === 'NO').length,
+            // `null`, jamais `undefined` : une seule représentation de « n'a pas répondu ».
+            myAnswer: mine ? (mine.answer as VoteAnswer) : null,
+          };
+        }),
       });
     }
     return entries;

@@ -613,6 +613,8 @@ describe('ScenarioTimeline', () => {
               expiresAt: null,
               chosenDate: '2026-08-15T00:00:00.000Z',
               chosenSlot: 'AFTERNOON',
+              // Story 36.6 — effectif de la troupe (MJ + membres).
+              membersCount: 4,
               options: [],
             },
           },

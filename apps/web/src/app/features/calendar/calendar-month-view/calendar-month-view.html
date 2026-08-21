@@ -133,6 +133,13 @@
                     @if (band.info) {
                       <span class="band__sub">{{ band.info }}</span>
                     }
+                    <!-- Story 36.6 — la piste de participation. Toujours émise quand le rang
+                         gagnant est un vote ; c'est le `@container month-grid` qui décide de la
+                         montrer (AC4 : jamais de compteur ici, jamais de piste en case étroite).
+                         Aucune logique de largeur en TypeScript. -->
+                    @if (band.vote) {
+                      <app-poll-track class="band__track in-month" [vote]="band.vote" />
+                    }
                   </span>
                 }
               </div>

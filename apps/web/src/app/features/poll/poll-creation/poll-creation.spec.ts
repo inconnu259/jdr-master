@@ -33,6 +33,7 @@ function makeScenariosService() {
             expiresAt: null,
             chosenDate: null,
             chosenSlot: null,
+            membersCount: 4,
             options: [],
           },
         },

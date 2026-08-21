@@ -17,6 +17,8 @@ const POLL: SessionPollDto = {
   expiresAt: null,
   chosenDate: null,
   chosenSlot: null,
+  // Story 36.6 — effectif de la troupe (MJ + membres).
+  membersCount: 4,
   options: [],
 };
 
@@ -196,6 +198,8 @@ describe('SeanceList', () => {
         status: 'CLOSED',
         chosenDate: '2026-08-01T00:00:00.000Z',
         chosenSlot: 'EVENING',
+        // Story 36.6 — effectif de la troupe (MJ + membres).
+        membersCount: 4,
       };
       const fresh = { ...SCENARIO, seances: [{ ...SEANCE_WITH_POLL, poll: closedPoll }] };
       scenariosSvc.listAll.mockResolvedValue([fresh]);
@@ -236,6 +240,8 @@ describe('SeanceList', () => {
         status: 'CLOSED',
         chosenDate: '2026-08-01T00:00:00.000Z',
         chosenSlot: 'EVENING',
+        // Story 36.6 — effectif de la troupe (MJ + membres).
+        membersCount: 4,
       },
     };
     const CLOSED_NO_DATE: SeanceDto = {
@@ -378,6 +384,8 @@ describe('SeanceList', () => {
         status: 'CLOSED',
         chosenDate: '2026-08-15T00:00:00.000Z',
         chosenSlot: 'AFTERNOON',
+        // Story 36.6 — effectif de la troupe (MJ + membres).
+        membersCount: 4,
       },
     };
     const SEANCE_CLOSED_NO_DATE: SeanceDto = {
@@ -800,6 +808,8 @@ describe('SeanceList', () => {
           expiresAt: null,
           chosenDate: '2026-08-15T00:00:00.000Z',
           chosenSlot: 'AFTERNOON',
+          // Story 36.6 — effectif de la troupe (MJ + membres).
+          membersCount: 4,
           options: [],
         },
       };

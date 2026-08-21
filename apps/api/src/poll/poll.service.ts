@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import type { SessionPollDto } from '@master-jdr/shared';
 import { PartiesService } from '../parties/parties.service';
+import { countParticipants } from '../parties/participant-count.util';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   RealtimeEventsService,
@@ -73,7 +74,7 @@ export class PollService {
     // AUCUNE_DATE_NI_VOTE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement — getOwned() garantit que userId est déjà le MJ.
     await this.parties.notifyPartieSignalsChanged(partieId, userId);
-    return toDto(poll);
+    return toDto(poll, await countParticipants(this.prisma, partieId));
   }
 
   async findOpen(
@@ -85,7 +86,9 @@ export class PollService {
       where: { partieId, status: 'OPEN' },
       include: POLL_INCLUDE,
     });
-    return poll ? toDto(poll) : null;
+    return poll
+      ? toDto(poll, await countParticipants(this.prisma, partieId))
+      : null;
   }
 
   async castVote(
@@ -225,7 +228,9 @@ export class PollService {
   }
 }
 
-function toDto(poll: any): SessionPollDto {
+/** Story 36.6 — `membersCount` est passé en paramètre (jamais dérivé de `poll`) : c'est une
+ *  propriété de la PARTIE, et le point unique qui la calcule est `countParticipants()`. */
+function toDto(poll: any, membersCount: number): SessionPollDto {
   return {
     id: poll.id,
     partieId: poll.partieId,
@@ -234,6 +239,7 @@ function toDto(poll: any): SessionPollDto {
     expiresAt: poll.expiresAt?.toISOString() ?? null,
     chosenDate: poll.chosenDate?.toISOString() ?? null,
     chosenSlot: poll.chosenSlot,
+    membersCount,
     options: (poll.options ?? []).map((opt: any) => ({
       id: opt.id,
       date: opt.date.toISOString(),

@@ -16,6 +16,8 @@ const fakePoll: SessionPollDto = {
   expiresAt: null,
   chosenDate: null,
   chosenSlot: null,
+  // Story 36.6 — effectif de la troupe (MJ + membres).
+  membersCount: 4,
   options: [
     { id: 'opt1', date: '2026-08-01T00:00:00.000Z', slot: 'MORNING', votes: [] },
     {
