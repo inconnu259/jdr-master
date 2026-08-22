@@ -170,3 +170,79 @@
   }
 }
 
+
+/* ── Story 36.8 — la lecture longue du canal de groupe ──────────────────────
+
+   Elle vient APRÈS la valeur du créneau, sur la même ligne : le rail dit d'abord ce que porte le
+   créneau (« Disponible », un titre de séance, un vote), puis où en est le groupe. Les deux
+   cohabitent — c'est le canal séparé, jusque dans le rail.
+
+   ⚠️ Aucun `cursor: pointer`, aucun état de survol : ce n'est pas une cible. Les seules lignes
+   activables du rail restent la séance (36.1) et le vote (36.7). */
+.grp {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  min-width: 0;
+  font-size: 10.5px;
+  color: var(--jdr-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Un membre nommé et son statut. La couleur DOUBLE le mot, elle ne le remplace jamais (P-1) :
+   « ALICE disponible » se lit sans distinguer les teintes. Revue de code du 36.8 : le nom
+   lui-même est désormais colorisé par statut (lien visuel avec les pastilles des autres
+   surfaces) — un gain de lisibilité en un coup d'œil, et surtout ce qui reste visible sous le
+   seuil téléphone une fois le mot entier cédé. */
+.grp__m {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+
+  b {
+    font-weight: 600;
+    color: var(--jdr-text);
+  }
+
+  &[data-status='AVAILABLE'] b,
+  &[data-status='AVAILABLE'] .grp__s,
+  &[data-status='AVAILABLE'] .grp__g {
+    color: var(--color-available);
+  }
+
+  &[data-status='UNAVAILABLE'] b,
+  &[data-status='UNAVAILABLE'] .grp__s,
+  &[data-status='UNAVAILABLE'] .grp__g {
+    color: var(--color-unavailable);
+  }
+
+  &[data-status='UNKNOWN'] b,
+  &[data-status='UNKNOWN'] .grp__s,
+  &[data-status='UNKNOWN'] .grp__g {
+    color: var(--jdr-text-muted);
+  }
+}
+
+/* Le glyphe court (D/I/?) : caché tant que le mot entier tient, c'est lui qui prend le relais
+   en dessous. */
+.grp__g {
+  display: none;
+}
+
+/* Sous le seuil téléphone, le mot entier cède avant le nom : le rail y porte déjà le titre de
+   séance et les informations pratiques, qui sont l'information de première nécessité (AC11 de
+   la 36.2). Revue de code du 36.8 : contrairement à la version précédente, RIEN n'est perdu à
+   l'œil ici — le nom colorisé et le glyphe court prennent le relais du mot, P-1 reste respecté
+   (jamais la seule couleur) même sous ce seuil. */
+@media (max-width: 500px) {
+  .grp__m .grp__s {
+    display: none;
+  }
+
+  .grp__g {
+    display: inline;
+  }
+}

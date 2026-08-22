@@ -385,3 +385,107 @@ describe('CalendarDetailRail — le chemin CLAVIER vers le sélecteur de répons
     expect(fixture.nativeElement.textContent).toContain('vote de date');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Story 36.8 — la lecture longue du canal de groupe (AC7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('CalendarDetailRail — la disponibilité du groupe (Story 36.8)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const MEMBERS = [
+    { userId: 'mj1', pseudo: 'mj', displayName: 'Le MJ', status: 'AVAILABLE' as const },
+    { userId: 'u1', pseudo: 'alice', displayName: 'Alice', status: 'UNAVAILABLE' as const },
+    { userId: 'u2', pseudo: 'bob', displayName: 'Bob', status: 'UNKNOWN' as const },
+  ];
+
+  function groupEntry(members: typeof MEMBERS | null, slot = 'EVENING'): AgendaEntry {
+    return {
+      key: `groupe-${slot}`,
+      type: 'disponibilite-groupe',
+      date: '2026-08-20',
+      label: 'Soir — 1/3 disponibles',
+      slot: slot as AgendaEntry['slot'],
+      group: { available: 1, unavailable: 1, unknown: 1, total: 3, members },
+    };
+  }
+
+  function detailWith(entries: AgendaEntry[], layers: CalendarLayerKey[] = ALL_LAYERS): DayDetail {
+    return buildDayDetail('2026-08-20', entries, layers, [], NOW);
+  }
+
+  it('AC7 — NOMME les membres et leur statut quand le serveur en sert (MJ)', async () => {
+    const fixture = await createRail(detailWith([groupEntry(MEMBERS)]));
+    const el = fixture.nativeElement as HTMLElement;
+
+    const names = [...el.querySelectorAll('.grp__m')].map((n) => n.textContent!.trim());
+    expect(names.some((n) => n.includes('Le MJ') && n.includes('disponible'))).toBe(true);
+    expect(names.some((n) => n.includes('Alice') && n.includes('indisponible'))).toBe(true);
+    expect(names.some((n) => n.includes('Bob') && n.includes('sans réponse'))).toBe(true);
+  });
+
+  it('🚨 AC3/AC7 — un JOUEUR ne voit AUCUN nom : le serveur ne lui en sert pas', async () => {
+    const fixture = await createRail(detailWith([groupEntry(null)]));
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('.grp__m')).toBeNull();
+    expect(el.textContent).not.toContain('Alice');
+    // Il voit la même donnée, sous la forme anonyme : la jauge et son compteur.
+    expect(el.querySelector('app-group-gauge')).not.toBeNull();
+    expect(el.querySelector('.cnt')!.textContent!.trim()).toBe('1 / 3');
+  });
+
+  it('AC7 — le rail NOMME même au-delà de six membres : c’est la lecture longue', async () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({
+      userId: `u${i}`,
+      pseudo: `p${i}`,
+      displayName: `Membre ${i}`,
+      status: 'AVAILABLE' as const,
+    }));
+    const fixture = await createRail(detailWith([groupEntry(many)]));
+
+    expect((fixture.nativeElement as HTMLElement).querySelectorAll('.grp__m')).toHaveLength(8);
+  });
+
+  it('🚨 AC2 — la lecture longue s’AJOUTE à la valeur du créneau, elle ne la remplace pas', async () => {
+    const fixture = await createRail(detailWith([SEANCE, groupEntry(MEMBERS)]));
+    const el = fixture.nativeElement as HTMLElement;
+
+    const evening = [...el.querySelectorAll('.it')][2];
+    // Le rail continue de dire la séance (AC11 de la 36.1)…
+    expect(evening.textContent).toContain('Le Convoi du Nord');
+    // …ET où en est le groupe.
+    expect(evening.querySelector('.grp')).not.toBeNull();
+  });
+
+  it('AC7 — le canal n’est PAS un bouton : le groupe n’ouvre rien', async () => {
+    const fixture = await createRail(detailWith([groupEntry(MEMBERS)]));
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('.grp')!.tagName).not.toBe('BUTTON');
+    expect(el.querySelector('.grp button')).toBeNull();
+    expect(el.querySelector('.grp')!.getAttribute('tabindex')).toBeNull();
+  });
+
+  it('AC15 — le conteneur porte un nom accessible complet, ses enfants sont aria-hidden', async () => {
+    const fixture = await createRail(detailWith([groupEntry(MEMBERS)]));
+    const grp = (fixture.nativeElement as HTMLElement).querySelector('.grp')!;
+
+    expect(grp.getAttribute('role')).toBe('img');
+    const label = grp.getAttribute('aria-label')!;
+    expect(label).toContain('1 sur 3 disponible');
+    expect(label).toContain('Le MJ disponible');
+    expect(grp.querySelector('.grp__m')!.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('AC10 — couche éteinte : aucune lecture longue du groupe', async () => {
+    const fixture = await createRail(
+      detailWith(
+        [groupEntry(MEMBERS)],
+        ALL_LAYERS.filter((k) => k !== 'disponibilite-groupe'),
+      ),
+    );
+
+    expect((fixture.nativeElement as HTMLElement).querySelector('.grp')).toBeNull();
+  });
+});

@@ -13,6 +13,7 @@ import type {
 import { SelectionBar } from '../selection-bar/selection-bar';
 import type { AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
 import {
+  type DayDetail,
   type RailSlot,
   type SlotWinner,
   bandsAreUniform,
@@ -21,12 +22,26 @@ import {
   toDateKey,
 } from '../day-detail.utils';
 import {
+  type GroupAvailability,
+  groupAriaLabel,
+  showsMemberPastilles,
+} from '../group-availability.utils';
+import {
   LONG_PRESS_MS,
   MOVE_THRESHOLD_PX,
   type GesturePointerType,
   type SelectedCell,
   monthRangeDays,
 } from '../selection.utils';
+
+/** Story 36.8, AC11 — vrai dès qu'un créneau du jour porte le canal « disponibilité du groupe ».
+ *
+ *  Écrit ici, au point d'appel de `bandsAreUniform()`, et non dans `day-detail.utils` : ce
+ *  dernier reste un prédicat sur le détail SEUL, sans dépendance à la couche (c'est ce que son
+ *  commentaire demande explicitement à cette story). */
+function hasGroupChannel(detail: DayDetail): boolean {
+  return detail.slots.some((s) => s.group !== null);
+}
 
 export interface SlotSelectedEvent {
   date: Date;
@@ -55,6 +70,14 @@ export interface DayBand {
    *  et `info`. `null` dès que le rang n'est pas « vote » : une séance confirmée qui l'emporte
    *  n'affiche jamais la piste d'un vote concurrent (encadré n°8 de la story). */
   vote: VoteParticipation | null;
+  /** Story 36.8 — la disponibilité du groupe sur ce créneau, sur un **canal séparé** (FR-53).
+   *
+   *  🚨 **Contrairement à `text`, `info` et `vote` juste au-dessus, ce champ NE SUIT PAS le rang
+   *  gagnant.** Il est copié tel quel depuis `DaySlotDetail`, séance et vote compris : le fond de
+   *  la bande dit *ma* situation, la jauge dit celle du groupe, et les deux cohabitent (AC2). Le
+   *  conditionner au `winner` — le geste le plus naturel en lisant les trois lignes voisines — le
+   *  rendrait invisible exactement dans les cas qui justifient la couche. */
+  group: GroupAvailability | null;
   /** Aperçu live pendant l'édition dans `ConstraintPanel` — `null` si identique au réel. */
   preview: SlotStatus | null;
 }
@@ -156,10 +179,18 @@ export function buildMonth(
             // Story 36.6 — même règle que `text` et `info` : la piste suit le rang GAGNANT.
             // `s.pollVote` est déjà gouverné par la couche `votes-en-cours` (buildDayDetail).
             vote: s.winner === 'vote' ? s.pollVote : null,
+            // Story 36.8 — 🚨 AUCUNE condition de rang ici, et c'est délibéré (cf. `DayBand.group`).
+            group: s.group,
             preview: previewStatus !== null && previewStatus !== s.status ? previewStatus : null,
           };
         }),
-        uniform: bandsAreUniform(previewDetail ?? detail),
+        // Story 36.8, AC11 — la couche « disponibilité du groupe » allumée INTERDIT la fusion.
+        // Une bande fusionnée porterait UNE marque pour TROIS créneaux dont les disponibilités
+        // diffèrent : un mensonge à l'écran. `bandsAreUniform()` reste un prédicat sur le détail
+        // seul (son commentaire le dit : « elle le fera au point d'appel, sans toucher à
+        // celle-ci ») — la condition vit donc ici. La planche contractuelle l'écrit de même :
+        // `if (uni(day) && !g && !mjm)`.
+        uniform: bandsAreUniform(previewDetail ?? detail) && !hasGroupChannel(detail),
       });
     }
     weeks.push(week);
@@ -186,6 +217,7 @@ interface PointerDownInfo {
   fromBand: boolean;
 }
 
+import { GroupGauge } from '../group-gauge/group-gauge';
 import { PollTrack } from '../poll-track/poll-track';
 import {
   type VoteOptionActivatedEvent,
@@ -196,7 +228,14 @@ import {
 @Component({
   selector: 'app-calendar-month-view',
   standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, SelectionBar, PollTrack],
+  imports: [
+    MatButtonModule,
+    MatIconModule,
+    MatProgressSpinnerModule,
+    SelectionBar,
+    PollTrack,
+    GroupGauge,
+  ],
   templateUrl: './calendar-month-view.html',
   styleUrl: './calendar-month-view.scss',
 })
@@ -483,6 +522,12 @@ export class CalendarMonthView {
    *  posé et nommé, c'est son titre qui fait l'état (« Soir : Le Convoi du Nord ») ; quand la
    *  couche est éteinte, on retombe sur l'état de disponibilité, qui lui demeure (AC6). */
   protected bandAriaLabel(band: DayBand): string {
+    // Story 36.8, AC15 — 🚨 `.band` porte `role="img"` et un `aria-label` : celui-ci ÉCRASE le
+    // contenu, y compris le `role="img"`/`aria-label` propre à `<app-group-gauge>` qu'elle
+    // contient désormais. Sans ce repli, le canal serait purement visuel dans la case du Mois —
+    // exactement la régression que la revue de la 36.7 a corrigée pour la piste dans le rail.
+    const groupe = band.group ? groupAriaLabel(band.group) : '';
+
     // Story 36.5, AC13 : les informations pratiques sont ANNONCÉES, pas seulement affichées —
     // et à l'oreille elles ne sont jamais tronquées, contrairement à l'ellipse visuelle.
     if (band.text) {
@@ -492,6 +537,7 @@ export class CalendarMonthView {
       const parts = [`${band.label} : ${band.text}`];
       if (band.info) parts.push(band.info);
       if (participation) parts.push(participation);
+      if (groupe) parts.push(groupe);
       return parts.join(' — ');
     }
     const labels: Record<SlotStatus, string> = {
@@ -499,7 +545,16 @@ export class CalendarMonthView {
       UNAVAILABLE: 'indisponible',
       UNKNOWN: 'non déclaré',
     };
-    return `${band.label} : ${labels[band.status]}`;
+    const base = `${band.label} : ${labels[band.status]}`;
+    return groupe ? `${base} — ${groupe}` : base;
+  }
+
+  /** Story 36.8 — vrai quand la bande rend la JAUGE (et non des pastilles). Seule la jauge est
+   *  absolue, au bord droit : elle seule impose les 11 px de marge que le contrat prescrit
+   *  (`contrat-ui-calendrier.html:106`). Les pastilles sont en flux et se placent d'elles-mêmes ;
+   *  leur réserver la même marge amputerait le titre pour rien. */
+  protected bandHasGauge(band: DayBand): boolean {
+    return band.group !== null && !showsMemberPastilles(band.group);
   }
 
   /** AC4 — le nom accessible d'une case fusionnée : un seul état, annoncé une fois, pour la

@@ -113,6 +113,10 @@
 
 /* ── Cellule de slot ─────────────────────────────────────────────────────── */
 .slot-cell {
+  /* Story 36.8 — la jauge du groupe est `position: absolute; right: 2px` (contrat d'UI) : sans
+     ce `position: relative`, elle s'ancrerait sur la grille au lieu de la cellule. Même
+     changement que `.band` en vue Mois, et pour la même raison. */
+  position: relative;
   /* Revue de code — Task 3 (contrat-ui-calendrier.html:151-163) donne 38 px sous le seuil, pas
      les 44 px précédemment conservés ici sans justification. */
   min-height: 38px;
@@ -274,6 +278,16 @@
    place ni au « 3 / 4 » ni à « tu as dit oui ». Au-dessus, la piste longue et son compteur
    (AC4). Aucune logique de largeur en TypeScript : tout est dans le DOM, le CSS décide. */
 .ev-track {
+  pointer-events: none;
+  max-width: 100%;
+}
+
+/* Story 36.8 — le canal de groupe. La cellule est en colonne : le canal s'y range comme les
+   autres accessoires, en flux, jamais en absolu (la jauge absolue du contrat vise la BANDE du
+   Mois, pas cette cellule, qui a la place de porter la forme ET son compteur).
+   `pointer-events: none` comme tout le contenu de `.slot-cell` : le glissement doit remonter à
+   la case (AC12). */
+.ev-group {
   pointer-events: none;
   max-width: 100%;
 }

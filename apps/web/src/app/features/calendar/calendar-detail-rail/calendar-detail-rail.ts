@@ -9,6 +9,14 @@ import {
   dateKeyToLocalMidnight,
   composeSeanceInfo,
 } from '../day-detail.utils';
+import { GroupGauge } from '../group-gauge/group-gauge';
+import {
+  type GroupAvailability,
+  type GroupMember,
+  groupAriaLabel,
+  memberStatusGlyph,
+  memberStatusWord,
+} from '../group-availability.utils';
 import { PollTrack } from '../poll-track/poll-track';
 import { participationAriaLabel, type VoteOptionActivatedEvent } from '../poll-track.utils';
 
@@ -43,7 +51,7 @@ const DAY_FORMAT = new Intl.DateTimeFormat('fr-FR', {
 @Component({
   selector: 'app-calendar-detail-rail',
   standalone: true,
-  imports: [PollTrack],
+  imports: [PollTrack, GroupGauge],
   templateUrl: './calendar-detail-rail.html',
   styleUrl: './calendar-detail-rail.scss',
 })
@@ -118,6 +126,45 @@ export class CalendarDetailRail {
     return detail
       ? `Répondre au vote — ${slot.label.toLowerCase()} — ${detail}`
       : `Répondre au vote — ${slot.label.toLowerCase()}`;
+  }
+
+  /**
+   * Story 36.8, AC7 — les membres à NOMMER dans le rail, ou `null` pour retomber sur la jauge.
+   *
+   * 🚨 **Volontairement distinct de `showsMemberPastilles()`**, qui gouverne les grilles. Là-bas,
+   * le seuil de six existe parce qu'une bande de 115 px ne tient pas davantage de pastilles ; ici,
+   * le rail est la **lecture longue** — il nomme la troupe quelle que soit sa taille, et c'est
+   * même le repli explicite prévu au-delà de six (« on retombe sur la jauge **et le rail donne
+   * les noms** », `iteration-groupe-participation-filtres.html:266`).
+   *
+   * ⚠️ La seule condition reste la **présence de la donnée** : le serveur ne sert d'identités
+   * qu'au MJ (garde `isMj` de `getHeatmap`). Un joueur reçoit donc `null` ici, et voit la jauge et
+   * son compteur — conformément à l'AC3 (« aucune identité n'est exposée ») et à la table des
+   * rôles d'`EXPERIENCE.md:102`. Jamais de test sur un mode de route.
+   */
+  protected groupMembers(group: GroupAvailability): GroupMember[] | null {
+    const members = group.members;
+    return members !== null && members.length > 0 ? members : null;
+  }
+
+  /** Le nom accessible de la lecture longue. Le conteneur porte `role="img"` et ce libellé, ses
+   *  enfants sont `aria-hidden` : sinon chaque nom serait annoncé deux fois. */
+  protected groupLabel(group: GroupAvailability): string {
+    return groupAriaLabel(group);
+  }
+
+  /** Le statut d'un membre en toutes lettres — jamais la couleur seule (P-1). Point unique du
+   *  vocabulaire, partagé avec le nom accessible : les deux ne peuvent pas diverger. */
+  protected statusWord(member: GroupMember): string {
+    return memberStatusWord(member);
+  }
+
+  /** La version courte, pour la largeur où le mot entier céderait (revue de code du 36.8) : sous
+   *  500 px, le rail affichait le nom sans AUCUN statut, ni mot ni couleur. Le nom est désormais
+   *  colorisé par statut et ce glyphe le double — jamais la couleur seule (P-1), même sous le
+   *  seuil téléphone. */
+  protected statusGlyph(member: GroupMember): string {
+    return memberStatusGlyph(member);
   }
 
   /** Story 36.7 — la ligne de vote signale son option ; c'est `CalendarView` qui ouvre le

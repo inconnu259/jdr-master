@@ -2009,3 +2009,161 @@ describe('CalendarView — le sélecteur de réponse de vote (Story 36.7)', () =
     await tick(fixture);
   });
 });
+
+// ─── Disponibilité du groupe, canal séparé (Story 36.8) ──────────────────────────────────────
+describe('CalendarView — la disponibilité du groupe (Story 36.8)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  /** Zoneless : pas de zone.js, donc `whenStable()` seul ne suffit pas pour un enchaînement
+   *  asynchrone — la boucle de ticks établie du projet (36.6 / 36.7). */
+  async function tick(fixture: any) {
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+  }
+
+  /** Deux créneaux du même jour : l'un où le groupe s'est prononcé, l'autre où PERSONNE n'a rien
+   *  dit — c'est ce second cas que l'ancien `continue` faisait disparaître avant d'atteindre la
+   *  grille, et c'est l'un des deux vides de l'AC6. */
+  const HEATMAP = [
+    {
+      date: '2026-09-01',
+      slot: 'MORNING',
+      available: 2,
+      unavailable: 1,
+      unknown: 1,
+      total: 4,
+    },
+    {
+      date: '2026-09-01',
+      slot: 'EVENING',
+      available: 0,
+      unavailable: 0,
+      unknown: 4,
+      total: 4,
+    },
+  ];
+
+  async function withHeatmap(heatmap: unknown[]) {
+    const ctx = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    ctx.pollSvc.getHeatmap.mockResolvedValue(heatmap);
+    // Un changement de mois relit la plage : c'est le chemin de rechargement déjà en place.
+    await (ctx.fixture.componentInstance as any).onMonthDateChange(new Date(Date.UTC(2026, 8, 1)));
+    await tick(ctx.fixture);
+    return ctx;
+  }
+
+  it('porte une charge utile STRUCTURÉE sur les entrées de la couche, pas seulement du texte', async () => {
+    const { fixture } = await withHeatmap(HEATMAP);
+    const comp = fixture.componentInstance as any;
+
+    const morning = comp
+      .calendarEntries()
+      .find((e: any) => e.type === 'disponibilite-groupe' && e.slot === 'MORNING');
+    expect(morning.group).toEqual({
+      available: 2,
+      unavailable: 1,
+      unknown: 1,
+      total: 4,
+      members: null,
+    });
+  });
+
+  it('reporte les identités servies au MJ, et `null` quand le serveur n’en sert aucune (AC3/AC4)', async () => {
+    const members = [
+      { userId: 'mj1', pseudo: 'mj', displayName: 'Le MJ', status: 'AVAILABLE' },
+      { userId: 'u1', pseudo: 'alice', displayName: 'Alice', status: 'UNAVAILABLE' },
+    ];
+    const { fixture } = await withHeatmap([{ ...HEATMAP[0], members }]);
+    const comp = fixture.componentInstance as any;
+
+    const entry = comp.calendarEntries().find((e: any) => e.type === 'disponibilite-groupe');
+    // Reporté TEL QUEL : l'ordre vient du serveur et n'est jamais retrié côté front — c'est lui
+    // qui fait que la position identifie la personne (AC4).
+    expect(entry.group.members).toEqual(members);
+  });
+
+  it('🚨 le créneau où PERSONNE ne s’est prononcé atteint la GRILLE (AC6)', async () => {
+    const { fixture } = await withHeatmap(HEATMAP);
+    const comp = fixture.componentInstance as any;
+
+    const evening = comp
+      .calendarEntries()
+      .find((e: any) => e.type === 'disponibilite-groupe' && e.slot === 'EVENING');
+    expect(evening).toBeDefined();
+    expect(evening.group).toEqual({
+      available: 0,
+      unavailable: 0,
+      unknown: 4,
+      total: 4,
+      members: null,
+    });
+  });
+
+  it('…mais PAS la liste Agenda : le filtre est à l’affichage, jamais à la source', async () => {
+    const { fixture } = await withHeatmap(HEATMAP);
+    const comp = fixture.componentInstance as any;
+
+    const slots = comp
+      .agendaEntries()
+      .filter((e: any) => e.type === 'disponibilite-groupe')
+      .map((e: any) => e.slot);
+    expect(slots).toEqual(['MORNING']);
+  });
+
+  it('la couche éteinte retire la lecture longue de l’Agenda sans toucher à la grille (AC10)', async () => {
+    const { fixture } = await withHeatmap(HEATMAP);
+    const comp = fixture.componentInstance as any;
+
+    comp.toggleLayer('disponibilite-groupe');
+    fixture.detectChanges();
+
+    expect(comp.agendaEntries().some((e: any) => e.type === 'disponibilite-groupe')).toBe(false);
+    // Les entrées restent transmises à la grille — c'est `buildDayDetail()` qui les ignore quand
+    // la couche est éteinte, exactement comme pour `mes-seances` (FR-50).
+    expect(comp.calendarEntries().some((e: any) => e.type === 'disponibilite-groupe')).toBe(true);
+    expect(comp.railDetail().slots.every((s: any) => s.group === null)).toBe(true);
+  });
+
+  it('le rail expose le canal SOUS une séance et sous un vote (AC2)', async () => {
+    const { fixture } = await withHeatmap(HEATMAP);
+    const comp = fixture.componentInstance as any;
+
+    comp.onSlotSelected({ date: new Date(2026, 8, 1), slot: 'MORNING' });
+    fixture.detectChanges();
+
+    const morning = comp.railDetail().slots.find((s: any) => s.slot === 'MORNING');
+    expect(morning.group).not.toBeNull();
+  });
+
+  it('AC13 — naviguer de semaine RECHARGE la plage en contexte de partie', async () => {
+    const { fixture, pollSvc } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const comp = fixture.componentInstance as any;
+    const before = pollSvc.getHeatmap.mock.calls.length;
+
+    await comp.onWeekDateChange(new Date(Date.UTC(2026, 9, 12)));
+    await tick(fixture);
+
+    expect(pollSvc.getHeatmap.mock.calls.length).toBe(before + 1);
+    // La plage est celle de la grille du mois de `d`, jamais une seconde plage inventée : elle
+    // couvre la semaine demandée et reste sous le plafond serveur de 45 jours.
+    const [, from, to] = pollSvc.getHeatmap.mock.calls.at(-1)!;
+    expect(from <= '2026-10-12').toBe(true);
+    expect(to >= '2026-10-18').toBe(true);
+  });
+
+  it('AC8 — la couche reste ABSENTE du calendrier personnel, et rien ne l’y appelle', async () => {
+    const { fixture, pollSvc } = await createCalendarView({ mode: 'personal' });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.activeLayers()).not.toContain('disponibilite-groupe');
+    expect(comp.availableLayerKeys()).not.toContain('disponibilite-groupe');
+    expect(comp.calendarEntries().some((e: any) => e.type === 'disponibilite-groupe')).toBe(false);
+    expect(pollSvc.getHeatmap).not.toHaveBeenCalled();
+
+    await comp.onWeekDateChange(new Date(Date.UTC(2026, 9, 12)));
+    await tick(fixture);
+    expect(pollSvc.getHeatmap).not.toHaveBeenCalled();
+  });
+});

@@ -802,4 +802,86 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
     expect(title.closest('[data-cell-date]')).toBe(cell);
     expect(info.closest('[data-cell-date]')).toBe(cell);
   });
+
+  // ── Story 36.8 — la disponibilité du groupe sur un canal séparé ────────────────────────────
+
+  function groupEntry(dayIndex: number, over: Partial<AgendaEntry> = {}): AgendaEntry {
+    return {
+      key: `groupe-${dayIndex}`,
+      type: 'disponibilite-groupe',
+      date: dayKey(dayIndex),
+      label: 'Matin — 2/4 disponibles',
+      slot: 'MORNING',
+      group: { available: 2, unavailable: 1, unknown: 1, total: 4, members: null },
+      ...over,
+    };
+  }
+
+  const GROUP_MEMBERS = [
+    { userId: 'mj1', pseudo: 'mj', displayName: 'Le MJ', status: 'AVAILABLE' as const },
+    { userId: 'u1', pseudo: 'alice', displayName: 'Alice', status: 'UNAVAILABLE' as const },
+  ];
+
+  it('Story 36.8, AC1 — la cellule porte le canal sans que son rang change', () => {
+    create([groupEntry(2)], ['disponibilite-groupe']);
+    const cell = cellAt('MORNING', 2);
+
+    expect(cell.querySelector('app-group-gauge')).toBeTruthy();
+    expect(cell.getAttribute('data-winner')).toBe('none');
+  });
+
+  it('🚨 Story 36.8, AC2 — le canal SURVIT sous une séance et sous un vote', () => {
+    create(
+      [seanceEntry(3), groupEntry(3, { slot: 'EVENING', key: 'groupe-3-ev' })],
+      ['mes-seances', 'disponibilite-groupe'],
+    );
+    const withSeance = cellAt('EVENING', 3);
+    expect(withSeance.getAttribute('data-winner')).toBe('seance');
+    expect(withSeance.querySelector('app-group-gauge')).toBeTruthy();
+
+    create(
+      [voteEntry(2, { vote: PARTICIPATION }), groupEntry(2)],
+      ['votes-en-cours', 'disponibilite-groupe'],
+    );
+    const withVote = cellAt('MORNING', 2);
+    expect(withVote.getAttribute('data-winner')).toBe('vote');
+    expect(withVote.querySelector('app-group-gauge')).toBeTruthy();
+  });
+
+  it('Story 36.8, AC4 — les identités servies produisent une pastille par membre', () => {
+    create(
+      [groupEntry(2, { group: { ...groupEntry(2).group!, members: GROUP_MEMBERS } })],
+      ['disponibilite-groupe'],
+    );
+
+    const pastilles = [...cellAt('MORNING', 2).querySelectorAll('.members .p')];
+    expect(pastilles.map((p) => p.className)).toEqual(['p p--yes', 'p p--no']);
+  });
+
+  it('Story 36.8, AC10 — couche éteinte : aucun canal rendu', () => {
+    create([groupEntry(2)], ['mes-seances']);
+    expect(cellAt('MORNING', 2).querySelector('app-group-gauge')).toBeNull();
+  });
+
+  it('Story 36.8, AC15 — le nom accessible de la cellule dit le groupe', () => {
+    create([groupEntry(2)], ['disponibilite-groupe']);
+    expect(cellAt('MORNING', 2).getAttribute('aria-label')).toContain('2 sur 4 disponibles');
+  });
+
+  it('🚨 Story 36.8, AC12 — le noeud du canal reste un descendant porteur de data-cell-date', () => {
+    create([groupEntry(2)], ['disponibilite-groupe']);
+    const cell = cellAt('MORNING', 2);
+    const gauge = cell.querySelector('app-group-gauge')!;
+    expect(gauge.closest('[data-cell-date]')).toBe(cell);
+  });
+
+  it('Story 36.8 — le tap sur une cellule à canal reste une LECTURE : rien ne s’ouvre', () => {
+    create([groupEntry(2)], ['disponibilite-groupe']);
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    tap(cellAt('MORNING', 2));
+
+    expect(emitted).toEqual([]);
+  });
 });

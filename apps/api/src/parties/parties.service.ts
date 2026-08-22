@@ -862,6 +862,15 @@ export class PartiesService {
       }),
       this.prisma.membership.findMany({
         where: { partieId },
+        // Story 36.8 — ORDRE FIXE DE LA TROUPE. La couche « disponibilité du groupe » rend une
+        // pastille par membre et fait porter l'identité par la POSITION (FR-53) : sans clé de
+        // tri, deux requêtes successives pouvaient permuter deux personnes, et la promesse
+        // « la position identifie la personne » devenait fausse par intermittence. Même clé que
+        // `listMembers()`, qui l'a depuis toujours — les deux listes s'accordent désormais.
+        // Revue de code : `userId` en départage — deux membres invités dans le même lot peuvent
+        // partager le même `joinedAt`, ce qui rendrait `joinedAt` seul insuffisant pour garantir
+        // un ordre stable d'une requête à l'autre.
+        orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
         include: {
           user: { select: { id: true, pseudo: true, displayName: true } },
         },
@@ -1092,6 +1101,24 @@ export class PartiesService {
           unavailable: statuses.filter((s) => s === 'UNAVAILABLE').length,
           unknown: statuses.filter((s) => s === 'UNKNOWN').length,
           total: participants.length,
+          // Story 36.8 (FR-53) — le détail nominatif, POUR LE SEUL MJ. Les statuts par membre
+          // sont déjà calculés juste au-dessus : jusqu'ici on les agrégeait et on jetait les
+          // identités. Aucune requête nouvelle n'est émise ici.
+          //
+          // 🚨 La garde est `isMj`, celle qui existe déjà en tête de méthode — ne pas la
+          // dupliquer, ne pas la déplacer. Le spread conditionnel OMET la clé pour un joueur ;
+          // un `members: isMj ? … : []` exposerait la forme de la donnée, et un `: undefined`
+          // laisserait la clé dans l'objet. L'absence ne dit rien, c'est ce qu'on veut.
+          ...(isMj
+            ? {
+                members: participants.map((p, i) => ({
+                  userId: p.userId,
+                  pseudo: p.pseudo,
+                  displayName: p.displayName,
+                  status: statuses[i],
+                })),
+              }
+            : {}),
         });
       }
     }

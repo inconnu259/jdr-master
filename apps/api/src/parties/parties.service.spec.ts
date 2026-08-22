@@ -1642,6 +1642,115 @@ describe('PartiesService', () => {
     });
   });
 
+  describe('getHeatmap — disponibilité du groupe nominative (Story 36.8)', () => {
+    /** Pose une partie à trois participants : le MJ `mj1` plus deux membres, chacun avec un
+     *  statut distinct sur le créneau du matin. Les statuts sont dérivés du `userId` pour que
+     *  l'assertion puisse vérifier l'APPARIEMENT identité ↔ statut, et pas seulement la présence
+     *  d'une liste (AC4 : « la position identifie la personne, la couleur son statut »). */
+    function setupTroupe(): void {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.membership.findMany.mockResolvedValue([
+        {
+          userId: 'u1',
+          user: { id: 'u1', pseudo: 'alice', displayName: 'Alice' },
+        },
+        { userId: 'u2', user: { id: 'u2', pseudo: 'bob', displayName: 'Bob' } },
+      ]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj',
+        displayName: 'Le MJ',
+      });
+      avail.getActiveDeclarationsWithSeances.mockResolvedValue(
+        new Map([
+          ['mj1', []],
+          ['u1', []],
+          ['u2', []],
+        ]),
+      );
+      const byUser: Record<string, string> = {
+        mj1: 'AVAILABLE',
+        u1: 'UNAVAILABLE',
+        u2: 'UNKNOWN',
+      };
+      // `computeSlotStatus(decls, date, slot)` ne reçoit pas l'utilisateur : on l'identifie par
+      // le tableau de déclarations, dont l'identité de référence est celle posée dans la Map
+      // ci-dessus. Le mock rejoue donc l'ordre d'appel de `participants.map(...)`.
+      let call = 0;
+      const order = ['mj1', 'u1', 'u2'];
+      avail.computeSlotStatus.mockImplementation(
+        () => byUser[order[call++ % order.length]],
+      );
+    }
+
+    it('sert `members` au MJ, dans l’ordre fixe de la troupe, statut apparié à l’identité (AC4)', async () => {
+      setupTroupe();
+
+      const heatmap = await service.getHeatmap(
+        'p1',
+        'mj1',
+        '2026-09-01',
+        '2026-09-01',
+      );
+
+      const morning = heatmap.find((r) => r.slot === 'MORNING')!;
+      expect(morning.members).toEqual([
+        {
+          userId: 'mj1',
+          pseudo: 'mj',
+          displayName: 'Le MJ',
+          status: 'AVAILABLE',
+        },
+        {
+          userId: 'u1',
+          pseudo: 'alice',
+          displayName: 'Alice',
+          status: 'UNAVAILABLE',
+        },
+        { userId: 'u2', pseudo: 'bob', displayName: 'Bob', status: 'UNKNOWN' },
+      ]);
+      // Les agrégats restent servis à l'identique : le champ s'AJOUTE, il ne remplace rien.
+      expect(morning.total).toBe(3);
+      expect(morning.available).toBe(1);
+    });
+
+    it("n'expose AUCUNE identité à un joueur — la clé est ABSENTE, jamais un tableau vide (AC14)", async () => {
+      setupTroupe();
+
+      const heatmap = await service.getHeatmap(
+        'p1',
+        'u1',
+        '2026-09-01',
+        '2026-09-01',
+      );
+
+      const morning = heatmap.find((r) => r.slot === 'MORNING')!;
+      // `hasOwnProperty` et non `toBeUndefined()` : un `members: undefined` explicite passerait
+      // la seconde assertion tout en sérialisant la clé dans certaines configurations.
+      expect(Object.prototype.hasOwnProperty.call(morning, 'members')).toBe(
+        false,
+      );
+      const serialized = JSON.stringify(heatmap);
+      expect(serialized).not.toContain('alice');
+      expect(serialized).not.toContain('Alice');
+      expect(serialized).not.toContain('u2');
+    });
+
+    it("ordonne les membres par date d'adhésion — sans quoi « la position identifie la personne » est faux (AC4)", async () => {
+      setupTroupe();
+
+      await service.getHeatmap('p1', 'mj1', '2026-09-01', '2026-09-01');
+
+      // Revue de code : `userId` en départage — `joinedAt` seul ne garantit pas un ordre stable
+      // si deux membres partagent le même timestamp (invitation groupée).
+      expect(prisma.membership.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
+        }),
+      );
+    });
+  });
+
   describe('convertKind (Story 29.14 — garde de conversion de type)', () => {
     // La VRAIE matrice de `@master-jdr/shared` est exercée ici : les verdicts ne sont jamais
     // simulés, ils sont produits par l'état que ces tests posent dans les mocks Prisma. La table

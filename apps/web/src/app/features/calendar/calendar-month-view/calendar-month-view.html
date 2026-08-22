@@ -136,6 +136,7 @@
                     [attr.data-status]="band.preview !== null ? band.preview : band.status"
                     [class.preview]="band.preview !== null"
                     [class.band--selected]="isBandSelected(cell, band.slot)"
+                    [class.band--gauge]="bandHasGauge(band)"
                     [attr.aria-label]="bandAriaLabel(band)"
                     role="img"
                     (pointerdown)="
@@ -158,6 +159,16 @@
                          Aucune logique de largeur en TypeScript. -->
                     @if (band.vote) {
                       <app-poll-track class="band__track in-month" [vote]="band.vote" />
+                    }
+                    <!-- Story 36.8 — le CANAL SÉPARÉ. 🚨 Émis sans AUCUNE condition de rang :
+                         il survit sous une séance et sous un vote (AC2), et c'est tout l'intérêt
+                         de la séparation. Descendant de `.band`, qui porte `data-cell-date` et
+                         qui est désormais `position: relative` pour l'ancrer ; en
+                         `pointer-events: none` comme la piste, sinon le glissement casse (AC12).
+                         La marge droite n'est réservée que pour la JAUGE : les pastilles sont
+                         en flux et se placent d'elles-mêmes. -->
+                    @if (band.group) {
+                      <app-group-gauge class="in-month" [group]="band.group" />
                     }
                   </span>
                 }

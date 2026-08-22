@@ -225,6 +225,8 @@ interface PointerDownInfo {
   longPressTimer: ReturnType<typeof setTimeout> | null;
 }
 
+import { GroupGauge } from '../group-gauge/group-gauge';
+import { type GroupAvailability, groupAriaLabel } from '../group-availability.utils';
 import { PollTrack } from '../poll-track/poll-track';
 import {
   type VoteOptionActivatedEvent,
@@ -235,7 +237,14 @@ import {
 @Component({
   selector: 'app-calendar-week-view',
   standalone: true,
-  imports: [MatButtonModule, MatIconModule, MatProgressSpinnerModule, SelectionBar, PollTrack],
+  imports: [
+    MatButtonModule,
+    MatIconModule,
+    MatProgressSpinnerModule,
+    SelectionBar,
+    PollTrack,
+    GroupGauge,
+  ],
   templateUrl: './calendar-week-view.html',
   styleUrl: './calendar-week-view.scss',
 })
@@ -577,6 +586,19 @@ export class CalendarWeekView {
     return d.pollVote;
   }
 
+  /**
+   * Story 36.8 — la disponibilité du groupe, sur un **canal séparé** (FR-53).
+   *
+   * 🚨 **Aucune garde `winner` ici**, contrairement à `eventTitle()`, `eventInfo()` et
+   * `eventVote()` juste au-dessus. Le fond de la cellule dit *ma* situation, ce canal dit celle
+   * du groupe : il reste visible **sous** une séance comme sous un vote (AC2). Copier la garde
+   * des trois voisins — le geste le plus naturel en lisant ce bloc — rendrait la couche invisible
+   * exactement dans les cas qui la justifient.
+   */
+  protected eventGroup(slotData: SlotData): GroupAvailability | null {
+    return slotData.detail?.group ?? null;
+  }
+
   protected cellAriaLabel(cell: WeekCell, slotData: SlotData, slotName: string): string {
     const labels: Record<SlotStatus, string> = {
       AVAILABLE: 'disponible',
@@ -602,6 +624,12 @@ export class CalendarWeekView {
     // que si le nom accessible la dit. Même garde `winner` que `eventInfo()`.
     const participation = this.eventVote(slotData);
     if (participation) parts.push(participationAriaLabel(participation));
+    // Story 36.8, AC15 — 🚨 `.slot-cell` porte son propre `aria-label`, qui ÉCRASE le nom
+    // accessible de `<app-group-gauge>` qu'elle contient désormais. Sans ce repli, le canal
+    // serait purement visuel en vue Semaine — même régression que celle corrigée en revue de la
+    // 36.7 pour la piste dans le rail.
+    const groupe = this.eventGroup(slotData);
+    if (groupe) parts.push(groupAriaLabel(groupe));
     return parts.join(' — ');
   }
 

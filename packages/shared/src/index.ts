@@ -598,11 +598,24 @@ export interface UpdateAvailabilityDto {
   expiresAt?: string;
 }
 
+/** Statut d'un membre de la troupe sur un créneau donné, avec son identité.
+ *
+ *  Forme UNIQUE, partagée par `AvailableSlotDto.members` et par le `members` que
+ *  `GET /parties/:id/heatmap` sert **au seul MJ** (Story 36.8). Deux définitions voisines
+ *  divergeraient à la première évolution — c'est exactement le défaut à deux dénominateurs que
+ *  `participantCount()` a corrigé côté effectif. */
+export interface SlotMemberDto {
+  userId: string;
+  pseudo: string;
+  displayName: string;
+  status: SlotStatus;
+}
+
 /** Créneau calculé disponible pour une partie (retourné par GET /parties/:id/available-slots). */
 export interface AvailableSlotDto {
   date: string;
   slot: DaySlot;
-  members: { userId: string; pseudo: string; displayName: string; status: SlotStatus }[];
+  members: SlotMemberDto[];
 }
 
 /** Vue agrégée d'un créneau disponible pour un joueur non-MJ (sans identité des membres). */
@@ -613,6 +626,17 @@ export interface AggregatedSlotDto {
   unavailable: number;
   unknown: number;
   total: number;
+  /** Story 36.8 (FR-53) — le détail nominatif du créneau, servi **au seul MJ**, pour la couche
+   *  « disponibilité du groupe » : une pastille par membre, la POSITION identifiant la personne.
+   *
+   *  🚨 **Absent, jamais `[]`, pour un joueur.** Un tableau vide laisserait déduire qu'une liste
+   *  existe ailleurs ; l'omission ne dit rien. Même discipline que `listMembers()`, qui met
+   *  `email: undefined` et non `null` pour un non-MJ.
+   *
+   *  Optionnel par nécessité (les appelants existants ne le connaissent pas), et c'est la seule
+   *  raison : côté front, la projection qui en dérive est **requise** (`| null`), pour que le
+   *  compilateur attrape toute surface qui l'oublierait. */
+  members?: SlotMemberDto[];
 }
 
 /** Séance datée d'une de mes parties (couche `mes-seances`, `GET /me/calendar`, AD-18, Story 30.5).

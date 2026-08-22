@@ -64,7 +64,7 @@ import {
   type ConflictResolutionByIndex,
 } from '../conflict-dialog/conflict-dialog';
 import { type SelectedCell, buildBatchItems } from '../selection.utils';
-import { AvailableSlotsPanel } from '../available-slots/available-slots';
+import { AvailableSlotsPanel, isNamedSlot } from '../available-slots/available-slots';
 import { VoteAnswerPicker } from '../vote-answer-picker/vote-answer-picker';
 import type { VoteOptionActivatedEvent, VoteParticipation } from '../poll-track.utils';
 import { PollCreationComponent } from '../../poll/poll-creation/poll-creation';
@@ -380,8 +380,13 @@ export class CalendarView implements OnInit {
           detail: `${seance.inscription!.inscrits.length}/${seance.inscription!.max} inscrits`,
         });
       }
+      // Story 36.8 — ⚠️ le `continue` qui sautait les créneaux « aucun disponible ET aucun avis »
+      // a été RETIRÉ : c'est précisément l'un des DEUX VIDES que l'AC6 demande de distinguer
+      // (jauge vide « personne ne s'est prononcé » vs jauge rouge pleine « tout le monde est
+      // bloqué »). Tant qu'il filtrait ici, la grille ne pouvait structurellement pas montrer le
+      // premier. La liste Agenda, elle, continue de ne rien afficher pour ces créneaux — mais le
+      // filtre est désormais À L'AFFICHAGE (`agendaEntries()`), jamais à la source.
       for (const slot of this.heatmap()) {
-        if (slot.available === 0 && slot.unavailable === 0) continue;
         entries.push({
           key: `groupe-${slot.date}-${slot.slot}`,
           type: 'disponibilite-groupe',
@@ -389,6 +394,16 @@ export class CalendarView implements OnInit {
           label: `${slot.slot} — ${slot.available}/${slot.total} disponibles`,
           detail: slot.unavailable > 0 ? `${slot.unavailable} indisponible(s)` : undefined,
           slot: slot.slot,
+          // La charge utile STRUCTURÉE que la grille et le rail consomment (le `label` ci-dessus
+          // reste le texte de l'Agenda). `members` vient du serveur et n'existe que pour le MJ :
+          // `?? null` — jamais `undefined`, une seule représentation de « aucune identité ».
+          group: {
+            available: slot.available,
+            unavailable: slot.unavailable,
+            unknown: slot.unknown,
+            total: slot.total,
+            members: slot.members ?? null,
+          },
         });
       }
     } else {
@@ -486,7 +501,18 @@ export class CalendarView implements OnInit {
   // les déclarations (dont `visibleDeclarations()` applique le même mapping kind → couche).
   protected readonly agendaEntries = computed<AgendaEntry[]>(() => {
     const active = new Set(this.activeLayers());
-    return this.allCalendarEntries().filter((e) => active.has(e.type));
+    return this.allCalendarEntries().filter(
+      (e) =>
+        active.has(e.type) &&
+        // Story 36.8 — un créneau dont personne n'a rien dit n'a rien à faire dans une LISTE : il
+        // n'y ajouterait qu'une ligne « 0/4 disponibles » par créneau et par jour. Il doit en
+        // revanche atteindre la GRILLE, où sa jauge vide porte une information (AC6). Le filtre
+        // vit donc ici, à l'affichage, et non plus à la source (`allCalendarEntries`).
+        (e.type !== 'disponibilite-groupe' ||
+          e.group == null ||
+          e.group.available > 0 ||
+          e.group.unavailable > 0),
+    );
   });
 
   /** Story 36.2 — les entrées **non filtrées** transmises à la vue Mois, qui arbitre la préséance
@@ -559,7 +585,10 @@ export class CalendarView implements OnInit {
   protected readonly PICKER_POSITIONS = PICKER_POSITIONS;
 
   protected readonly mjSlots = computed(() =>
-    this.availableSlots().filter((s): s is AvailableSlotDto => 'members' in s),
+    // Story 36.8 — `'members' in s` ne discrimine plus : `AggregatedSlotDto` porte désormais un
+    // `members?` optionnel (couche « disponibilité du groupe », MJ seul). Le discriminant est
+    // maintenant l'ABSENCE d'agrégats, écrite une fois dans `available-slots.ts`.
+    this.availableSlots().filter(isNamedSlot),
   );
 
   private static todayIso(): string {
@@ -916,16 +945,31 @@ export class CalendarView implements OnInit {
     // Story 36.7 — même motif que `onMonthDateChange`.
     this.closePicker();
     this.sharedDate.set(d);
-    if (!this.partieId()) {
-      const weekStart = getWeekStart(d);
-      const weekEnd = new Date(
-        Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 6),
-      );
-      await this.loadMeCalendarForRange(
-        CalendarView.toIsoDate(weekStart),
-        CalendarView.toIsoDate(weekEnd),
-      );
+    const partieId = this.partieId();
+    if (partieId) {
+      // Story 36.8, AC13 — 🚨 jusqu'ici, naviguer de semaine en contexte de partie ne rechargeait
+      // RIEN : c'était sans conséquence visible tant que la couche « disponibilité du groupe »
+      // n'était pas dessinée dans la grille. Depuis cette story, deux semaines d'avance suffisent
+      // à la faire disparaître sans que l'écran le dise, alors que la spine la veut « dans toutes
+      // les vues de grille ».
+      //
+      // `monthGridRange(d)` — la MÊME plage que `onMonthDateChange`, jamais une seconde inventée :
+      // elle couvre largement la semaine de `d` (42 jours autour de son mois) et reste sous le
+      // plafond serveur de 45 jours. Effet de bord accepté : deux navigations de semaine dans le
+      // même mois rechargent la même plage, pour une requête déjà bornée.
+      await this.loadHeatmap(partieId, d);
+      return;
     }
+    // Story 30.6, AC10 : contexte personnel — la plage affichée change, `GET /me/calendar` est
+    // rappelé avec elle, jamais un cache silencieusement périmé.
+    const weekStart = getWeekStart(d);
+    const weekEnd = new Date(
+      Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 6),
+    );
+    await this.loadMeCalendarForRange(
+      CalendarView.toIsoDate(weekStart),
+      CalendarView.toIsoDate(weekEnd),
+    );
   }
 
   protected onFormChanged(dto: CreateAvailabilityDto | null): void {
@@ -1185,12 +1229,25 @@ export class CalendarView implements OnInit {
     return { from: CalendarView.toIsoDate(gridStart), to: CalendarView.toIsoDate(gridEnd) };
   }
 
+  // Revue de code : identifiant de requête incrémental, même patron que `meCalendarReqId` —
+  // une navigation rapide (mois/semaine suivant·e) peut déclencher plusieurs appels
+  // `getHeatmap()` qui ne résolvent pas dans l'ordre ; seule la réponse de la dernière requête
+  // émise est appliquée.
+  private heatmapReqId = 0;
+
   private async loadHeatmap(id: string, centerDate: Date = new Date()): Promise<void> {
     const { from, to } = CalendarView.monthGridRange(centerDate);
+    const reqId = ++this.heatmapReqId;
     try {
-      this.heatmap.set(await this.pollSvc.getHeatmap(id, from, to));
+      const result = await this.pollSvc.getHeatmap(id, from, to);
+      if (reqId !== this.heatmapReqId) return;
+      this.heatmap.set(result);
     } catch {
-      // non-bloquant — le heatmap est un overlay facultatif
+      if (reqId !== this.heatmapReqId) return;
+      // non-bloquant — le heatmap est un overlay facultatif, mais un échec ne doit pas laisser
+      // une couche périmée à l'écran : un canal vide (AC10) est moins trompeur qu'une jauge qui
+      // ne reflète plus la réalité.
+      this.heatmap.set([]);
     }
   }
 

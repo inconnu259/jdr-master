@@ -36,6 +36,13 @@
               <app-poll-track class="agenda-entry__track track-sm" [vote]="vote" />
             </button>
           }
+          <!-- Story 36.8 — la disponibilité du groupe. L'Agenda avait déjà le texte
+               (« Soir — 2/4 disponibles ») ; il gagne la FORME, la même que les grilles et le
+               rail, pour que les quatre surfaces disent la même chose de la même façon. Ce n'est
+               pas un bouton : le groupe n'ouvre rien. -->
+          @if (entry.group; as group) {
+            <app-group-gauge class="agenda-entry__group in-agenda" [group]="group" />
+          }
         </li>
       }
     </ul>

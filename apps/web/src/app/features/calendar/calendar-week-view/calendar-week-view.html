@@ -106,6 +106,13 @@
             @if (eventVote(getSlotData(cell, row.key)); as vote) {
               <app-poll-track class="ev-track in-week track-sm" [vote]="vote" />
             }
+            <!-- Story 36.8 — le CANAL SÉPARÉ. 🚨 Aucune garde de rang : il survit sous une
+                 séance et sous un vote (AC2). Descendante de `.slot-cell` (qui porte
+                 `data-cell-date`) et en `pointer-events: none`, comme tout ce que cette cellule
+                 contient : le glissement doit continuer de remonter à la case (AC12). -->
+            @if (eventGroup(getSlotData(cell, row.key)); as group) {
+              <app-group-gauge class="ev-group in-week" [group]="group" />
+            }
           </div>
         }
       }

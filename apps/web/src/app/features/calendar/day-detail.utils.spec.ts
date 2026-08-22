@@ -768,3 +768,109 @@ describe('composeSeanceInfo — l’ordre de repli (AC3)', () => {
     ).toBe('09:05');
   });
 });
+
+describe('buildDayDetail — la disponibilité du groupe, canal séparé (Story 36.8)', () => {
+  function groupEntry(over: Partial<AgendaEntry> = {}): AgendaEntry {
+    return {
+      key: 'groupe-2026-08-20-EVENING',
+      type: 'disponibilite-groupe',
+      date: '2026-08-20',
+      label: 'Soir — 2/4 disponibles',
+      slot: 'EVENING',
+      group: { available: 2, unavailable: 1, unknown: 1, total: 4, members: null },
+      ...over,
+    };
+  }
+
+  it('projette le canal sur le créneau que l’entrée couvre (AC1)', () => {
+    const detail = buildDayDetail('2026-08-20', [groupEntry()], ALL_LAYERS, [], NOW);
+
+    const evening = detail.slots.find((s) => s.slot === 'EVENING')!;
+    expect(evening.group).toEqual({
+      available: 2,
+      unavailable: 1,
+      unknown: 1,
+      total: 4,
+      members: null,
+    });
+    // Les autres créneaux ne l'héritent pas : l'entrée nomme son créneau.
+    expect(detail.slots.find((s) => s.slot === 'MORNING')!.group).toBeNull();
+  });
+
+  it('SURVIT à une séance ET à un vote sur le même créneau — c’est tout l’intérêt du canal (AC2)', () => {
+    const withSeance = buildDayDetail(
+      '2026-08-20',
+      [seanceEntry(), groupEntry()],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+    const eveningSeance = withSeance.slots.find((s) => s.slot === 'EVENING')!;
+    expect(eveningSeance.winner).toBe('seance');
+    expect(eveningSeance.group).not.toBeNull();
+
+    const withVote = buildDayDetail(
+      '2026-08-20',
+      [
+        {
+          key: 'poll-1',
+          type: 'votes-en-cours',
+          date: '2026-08-20',
+          label: 'Vote',
+          slot: 'EVENING',
+        },
+        groupEntry(),
+      ],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+    const eveningVote = withVote.slots.find((s) => s.slot === 'EVENING')!;
+    expect(eveningVote.winner).toBe('vote');
+    expect(eveningVote.group).not.toBeNull();
+  });
+
+  it('n’entre JAMAIS dans la préséance — le rang reste celui du statut déclaré (AC1)', () => {
+    const detail = buildDayDetail('2026-08-20', [groupEntry()], ALL_LAYERS, [], NOW);
+
+    // Aucune déclaration, aucun objet posé : sans le canal le créneau serait 'none', et il l'est.
+    expect(detail.slots.find((s) => s.slot === 'EVENING')!.winner).toBe('none');
+    expect(SLOT_PRECEDENCE).not.toContain('groupe');
+  });
+
+  it('disparaît quand la couche est éteinte (AC10)', () => {
+    const layers = ALL_LAYERS.filter((k) => k !== 'disponibilite-groupe');
+    const detail = buildDayDetail('2026-08-20', [groupEntry()], layers, [], NOW);
+
+    expect(detail.slots.every((s) => s.group === null)).toBe(true);
+  });
+
+  it('FULL_DAY couvre les trois créneaux, comme partout ailleurs', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [groupEntry({ slot: 'FULL_DAY' })],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+
+    expect(detail.slots.every((s) => s.group !== null)).toBe(true);
+  });
+
+  it('une entrée sans charge utile structurée ne pose rien — jamais un canal vide inventé', () => {
+    const detail = buildDayDetail(
+      '2026-08-20',
+      [groupEntry({ group: undefined })],
+      ALL_LAYERS,
+      [],
+      NOW,
+    );
+
+    expect(detail.slots.find((s) => s.slot === 'EVENING')!.group).toBeNull();
+  });
+
+  it('ne rend pas un jour « porteur » : le groupe DÉCRIT un créneau, il n’y ajoute rien à faire', () => {
+    const detail = buildDayDetail('2026-08-20', [groupEntry()], ALL_LAYERS, [], NOW);
+    expect(detail.isEmpty).toBe(true);
+  });
+});

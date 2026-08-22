@@ -1,0 +1,139 @@
+/* Story 36.8 — la disponibilité du groupe, canal séparé. Reprise AU PIXEL du contrat d'UI
+   (`contrat-ui-calendrier.html:101-111`) et de `DESIGN.md` §7.9 bis. */
+
+:host {
+  display: contents;
+
+  /* 🚨 Le pointeur doit TOUJOURS atterrir sur la bande / la cellule qui porte `data-cell-date`,
+     jamais sur ce canal : sans cela la sélection par glissement casse, et aucun test ne le
+     verrait (le hit-test est stubbé en jsdom — story 36.13, encadré n°3). */
+  pointer-events: none;
+}
+
+/* ── La jauge : 5 px au bord droit, remplie PAR LE BAS ─────────────────────── */
+.gg-gauge {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  bottom: 2px;
+  width: 5px;
+  border-radius: 2px;
+  background: rgba(127, 140, 141, 0.45);
+  overflow: hidden;
+  display: flex;
+  /* `column-reverse` : le remplissage part du BAS, comme un niveau — c'est ce qui en fait une
+     jauge et non une barre de progression (DESIGN.md §7.9 bis). */
+  flex-direction: column-reverse;
+  pointer-events: none;
+}
+
+.gg-gauge .fill {
+  display: block;
+  width: 100%;
+  background: var(--color-available);
+}
+
+/* AC6 — « tout le monde est bloqué ». Pleine, et ROUGE. À ne pas confondre avec la jauge vide
+   (personne de disponible et personne ne s'est prononcé), qui a la même hauteur remplie : zéro.
+   Les deux vides ne se ressemblent pas, et c'est un AC. */
+.gg-gauge--blocked .fill {
+  background: var(--color-unavailable);
+}
+
+/* ── Les pastilles : une par membre, EN FLUX, ordre fixe de la troupe ───────── */
+.members {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  padding-right: 1px;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.members .p {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: block;
+}
+
+.members .p--yes {
+  background: var(--color-available);
+}
+
+.members .p--no {
+  background: var(--color-unavailable);
+}
+
+.members .p--unknown {
+  background: rgba(127, 140, 141, 0.8);
+}
+
+/* ── La doublure textuelle ─────────────────────────────────────────────────── */
+.cnt {
+  font-size: 9.5px;
+  color: var(--jdr-text-muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── Densité par surface ────────────────────────────────────────────────────
+
+   🚨 Ces règles DOIVENT vivre ici, pas chez la surface appelante. `.cnt` appartient à ce
+   composant : l'encapsulation de vue d'Angular empêche un sélecteur écrit dans
+   `calendar-month-view.scss` de l'atteindre. Le défaut a été trouvé À L'ŒIL pendant la 36.6, la
+   règle du parent n'ayant simplement aucun effet.
+
+   La surface pose une classe d'HÔTE ; les `@container` fonctionnent depuis ici, le conteneur
+   nommé étant un ancêtre — la frontière de composant ne l'interrompt pas. */
+
+/* Case du Mois — jamais de compteur : la bande fait ~115 px et la grille est plafonnée (fait
+   mesuré par la 36.5, réaffirmé par la 36.6). La forme suffit, le rail porte les nombres. */
+:host(.in-month) .cnt {
+  display: none;
+}
+
+/* Cellule de Semaine — sous le seuil, la forme seule ; au-dessus, le compteur double la forme.
+   Même seuil que la piste de participation (`week-grid` à 500 px), pour que les deux canaux
+   d'une même cellule apparaissent et disparaissent ensemble. */
+:host(.in-week) .cnt {
+  display: none;
+}
+
+@container week-grid (min-width: 500px) {
+  :host(.in-week) .cnt {
+    display: inline;
+    margin-left: 4px;
+  }
+}
+
+/* En vue Semaine, les pastilles se rangent à GAUCHE comme les autres accessoires de la cellule
+   (qui est une colonne), et non collées au bord droit : `margin-left: auto` n'a de sens que dans
+   la bande horizontale du Mois. */
+:host(.in-week) .members {
+  margin-left: 0;
+}
+
+/* Rail et Agenda — la lecture longue : le compteur y est toujours visible, et la jauge y est en
+   FLUX (ces surfaces sont des lignes de texte, pas des cases à border), donc rendue comme une
+   courte barre verticale à côté des mots. */
+:host(.in-rail),
+:host(.in-agenda) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+:host(.in-rail) .gg-gauge,
+:host(.in-agenda) .gg-gauge {
+  position: static;
+  width: 5px;
+  height: 14px;
+  flex: 0 0 5px;
+}
+
+:host(.in-rail) .members,
+:host(.in-agenda) .members {
+  margin-left: 0;
+}

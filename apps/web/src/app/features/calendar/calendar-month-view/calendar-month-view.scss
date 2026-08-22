@@ -190,6 +190,11 @@
   padding: 0 2px;
   border-radius: 3px;
   overflow: hidden;
+  /* Story 36.8 — 🚨 SEUL changement structurel de la bande. La jauge du groupe est
+     `position: absolute; right: 2px` (`contrat-ui-calendrier.html:102`) : sans ce
+     `position: relative`, elle s'ancrerait sur la case, voire sur la grille. Défaut visible à
+     l'œil, invisible aux tests. `overflow: hidden` était déjà là — la jauge n'en déborde pas. */
+  position: relative;
   /* Le fond par défaut d'une bande sans rang : discret, jamais vide visuellement. */
   background: color-mix(in srgb, var(--color-unknown) 12%, transparent);
 
@@ -237,6 +242,15 @@
 
   &--uniform {
     flex: 1;
+  }
+
+  /* Story 36.8 — la bande réserve 11 px à droite QUAND ELLE PORTE UNE JAUGE
+     (`contrat-ui-calendrier.html:106`) : la jauge est absolue, elle recouvrirait sinon la fin du
+     titre. Les PASTILLES, elles, sont en flux et n'ont pas besoin de cette réserve — leur
+     donner la même marge amputerait le titre pour rien. AC10 : la classe suit strictement
+     `band.group`, donc couche éteinte ⇒ aucune marge résiduelle sur toute la grille. */
+  &--gauge {
+    padding-right: 11px;
   }
 }
 

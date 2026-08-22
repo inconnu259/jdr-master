@@ -86,6 +86,33 @@
           <!-- Jamais la couleur seule : l'état est écrit en toutes lettres (AC8). -->
           <span class="v" [attr.data-status]="s.status">{{ statusLabel(s.status) }}</span>
         }
+
+        <!-- Story 36.8, AC7 — LA LECTURE LONGUE du canal de groupe.
+
+             Elle s'AJOUTE à la valeur ci-dessus, elle ne la remplace jamais : le rail continue de
+             dire « Disponible » / « Rien de prévu » (AC8 de la 36.1), et il dit en plus où en est
+             le groupe — y compris quand une séance ou un vote occupe le créneau (AC2).
+
+             ⚠️ Ce n'est PAS un bouton : le groupe n'ouvre rien. Les lignes activables restent la
+             séance (36.1) et le vote (36.7) ; une affordance qui ne mène nulle part est un piège.
+
+             ⚠️ Noms pour le MJ, compteurs anonymes pour un joueur — et c'est LA DONNÉE qui en
+             décide, pas un drapeau de rôle : le serveur ne sert d'identités qu'au MJ. -->
+        @if (s.group; as g) {
+          @if (groupMembers(g); as members) {
+            <span class="grp" [attr.aria-label]="groupLabel(g)" role="img">
+              @for (m of members; track m.userId) {
+                <span class="grp__m" [attr.data-status]="m.status" aria-hidden="true">
+                  <b>{{ m.displayName }}</b>
+                  <span class="grp__s">{{ statusWord(m) }}</span>
+                  <span class="grp__g">{{ statusGlyph(m) }}</span>
+                </span>
+              }
+            </span>
+          } @else {
+            <app-group-gauge class="grp grp--gauge in-rail" [group]="g" />
+          }
+        }
       </div>
     }
   } @else {

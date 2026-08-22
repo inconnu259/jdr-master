@@ -1207,3 +1207,196 @@ describe('CalendarMonthView — les trois bandes', () => {
     expect(cellOf(20).querySelectorAll('.band--selected')).toHaveLength(1);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Story 36.8 — la disponibilité du groupe sur un canal séparé
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('CalendarMonthView — le canal de groupe (Story 36.8)', () => {
+  let el: HTMLElement;
+
+  const GROUP_LAYERS = [
+    'mes-indisponibilites',
+    'mes-disponibilites',
+    'mes-seances',
+    'votes-en-cours',
+    'inscriptions-ouvertes',
+    'disponibilite-groupe',
+  ] as any[];
+
+  const MEMBERS = [
+    { userId: 'mj1', pseudo: 'mj', displayName: 'Le MJ', status: 'AVAILABLE' },
+    { userId: 'u1', pseudo: 'alice', displayName: 'Alice', status: 'UNAVAILABLE' },
+    { userId: 'u2', pseudo: 'bob', displayName: 'Bob', status: 'UNKNOWN' },
+  ];
+
+  function groupEntry(day: number, slot = 'EVENING', over: Record<string, unknown> = {}) {
+    return {
+      key: `groupe-2026-08-${String(day).padStart(2, '0')}-${slot}`,
+      type: 'disponibilite-groupe',
+      date: `2026-08-${String(day).padStart(2, '0')}`,
+      label: `${slot} — 2/4 disponibles`,
+      slot,
+      group: { available: 2, unavailable: 1, unknown: 1, total: 4, members: null, ...over },
+    } as any;
+  }
+
+  function seanceEntry(day: number, slot = 'EVENING') {
+    return {
+      key: 'seance-s1',
+      type: 'mes-seances',
+      date: `2026-08-${String(day).padStart(2, '0')}`,
+      label: 'Le Convoi du Nord',
+      slot,
+      partieId: 'p1',
+      scenarioId: 'sc1',
+      seanceId: 's1',
+    } as any;
+  }
+
+  function voteEntry(day: number, slot = 'EVENING') {
+    return {
+      key: 'poll-p1-o1',
+      type: 'votes-en-cours',
+      date: `2026-08-${String(day).padStart(2, '0')}`,
+      label: 'Ashal',
+      slot,
+      vote: {
+        partieId: 'p1',
+        pollId: 'p1',
+        optionId: 'o1',
+        yes: 2,
+        maybe: 1,
+        no: 0,
+        total: 4,
+        myAnswer: 'YES',
+      },
+    } as any;
+  }
+
+  async function createWith(entries: any[], layers: any[] = GROUP_LAYERS) {
+    await TestBed.configureTestingModule({
+      imports: [CalendarMonthView],
+      providers: [provideAnimationsAsync()],
+    }).compileComponents();
+    const f = TestBed.createComponent(CalendarMonthView);
+    f.componentRef.setInput('activeLayers', layers);
+    f.componentRef.setInput('initialDate', new Date(2026, 7, 15));
+    f.componentRef.setInput('entries', entries);
+    f.detectChanges();
+    el = f.nativeElement;
+    return f;
+  }
+
+  function cellOf(day: number): HTMLElement {
+    const target = new Date(2026, 7, day).getTime();
+    return el.querySelector(`.day-cell[data-cell-date="${target}"]`) as HTMLElement;
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 10));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('AC1 — la bande porte le canal, sur un noeud DISTINCT de son fond', async () => {
+    await createWith([groupEntry(20)]);
+
+    const evening = [...cellOf(20).querySelectorAll('.band')][2];
+    expect(evening.querySelector('app-group-gauge')).not.toBeNull();
+    // Le fond de la bande n'a pas bougé : le groupe n'entre pas dans la préséance.
+    expect(evening.getAttribute('data-winner')).toBe('none');
+  });
+
+  it('🚨 AC2 — le canal SURVIT sous une séance ET sous un vote', async () => {
+    await createWith([groupEntry(20), seanceEntry(20)]);
+    const withSeance = [...cellOf(20).querySelectorAll('.band')][2];
+    expect(withSeance.getAttribute('data-winner')).toBe('seance');
+    expect(withSeance.querySelector('app-group-gauge')).not.toBeNull();
+
+    TestBed.resetTestingModule();
+    await createWith([groupEntry(21), voteEntry(21)]);
+    const withVote = [...cellOf(21).querySelectorAll('.band')][2];
+    expect(withVote.getAttribute('data-winner')).toBe('vote');
+    expect(withVote.querySelector('app-group-gauge')).not.toBeNull();
+  });
+
+  it('AC4 — les identités servies produisent une pastille par membre, dans l ordre recu', async () => {
+    await createWith([groupEntry(20, 'EVENING', { members: MEMBERS })]);
+
+    const pastilles = [...cellOf(20).querySelectorAll('.band app-group-gauge .members .p')];
+    expect(pastilles).toHaveLength(3);
+    expect(pastilles.map((p) => p.className)).toEqual(['p p--yes', 'p p--no', 'p p--unknown']);
+  });
+
+  it('AC3 — sans identité servie, la bande rend une jauge et AUCUN nom', async () => {
+    await createWith([groupEntry(20)]);
+
+    const band = [...cellOf(20).querySelectorAll('.band')][2];
+    expect(band.querySelector('app-group-gauge .gg-gauge')).not.toBeNull();
+    expect(band.querySelector('.members')).toBeNull();
+    expect(band.textContent).not.toContain('Alice');
+  });
+
+  it('🚨 AC11 — la couche allumée INTERDIT la fusion des bandes', async () => {
+    await createWith([groupEntry(20, 'FULL_DAY')]);
+
+    const cell = cellOf(20);
+    expect(cell.querySelectorAll('.band')).toHaveLength(3);
+    expect(cell.querySelector('.band--uniform')).toBeNull();
+    // Chacune porte SA marque : c'est tout le motif de l'interdiction.
+    expect(cell.querySelectorAll('.band app-group-gauge')).toHaveLength(3);
+  });
+
+  it('AC10 — couche éteinte : aucun canal, aucune marge réservée, et la fusion revient', async () => {
+    await createWith(
+      [groupEntry(20, 'FULL_DAY')],
+      GROUP_LAYERS.filter((k) => k !== 'disponibilite-groupe'),
+    );
+
+    const cell = cellOf(20);
+    expect(cell.querySelectorAll('app-group-gauge')).toHaveLength(0);
+    expect(cell.querySelectorAll('.band--gauge')).toHaveLength(0);
+    expect(cell.querySelector('.band--uniform')).not.toBeNull();
+  });
+
+  it('la marge de 11 px est réservée pour la JAUGE, jamais pour les pastilles', async () => {
+    await createWith([groupEntry(20)]);
+    expect([...cellOf(20).querySelectorAll('.band')][2].classList.contains('band--gauge')).toBe(
+      true,
+    );
+
+    TestBed.resetTestingModule();
+    await createWith([groupEntry(21, 'EVENING', { members: MEMBERS })]);
+    expect([...cellOf(21).querySelectorAll('.band')][2].classList.contains('band--gauge')).toBe(
+      false,
+    );
+  });
+
+  it('AC15 — le nom accessible de la bande dit le groupe (son aria-label écrase ses enfants)', async () => {
+    await createWith([groupEntry(20)]);
+    const label = [...cellOf(20).querySelectorAll('.band')][2].getAttribute('aria-label')!;
+    expect(label).toContain('2 sur 4 disponibles');
+
+    TestBed.resetTestingModule();
+    await createWith([groupEntry(21), seanceEntry(21)]);
+    const withSeance = [...cellOf(21).querySelectorAll('.band')][2].getAttribute('aria-label')!;
+    // Il s'AJOUTE au titre de la séance, il ne le remplace pas.
+    expect(withSeance).toContain('Le Convoi du Nord');
+    expect(withSeance).toContain('2 sur 4 disponibles');
+  });
+
+  // 🚨 AC12 — LE CONTRAT DOM DU GLISSEMENT, sans aucun stub. `elementFromPoint` est stubbé dans
+  // tous les tests de geste : si ce noeud sortait de la bande, ils resteraient VERTS et le
+  // glissement serait cassé en production. Ce test est le seul garde-fou du canal.
+  it('AC12 — le noeud du canal reste un descendant porteur de data-cell-date', async () => {
+    await createWith([groupEntry(20)]);
+    const cell = cellOf(20);
+    const gauge = cell.querySelector('app-group-gauge')!;
+    expect(gauge.closest('[data-cell-date]')).toBe(cell);
+  });
+});

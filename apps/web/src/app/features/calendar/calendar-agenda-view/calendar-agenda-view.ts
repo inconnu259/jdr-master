@@ -2,11 +2,13 @@ import { Component, computed, input, output } from '@angular/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type { DaySlot } from '@master-jdr/shared';
 import { composeSeanceInfo, dateKeyToLocalMidnight } from '../day-detail.utils';
+import type { GroupAvailability } from '../group-availability.utils';
 import {
   participationAriaLabel,
   type VoteOptionActivatedEvent,
   type VoteParticipation,
 } from '../poll-track.utils';
+import { GroupGauge } from '../group-gauge/group-gauge';
 import { PollTrack } from '../poll-track/poll-track';
 
 /** Type d'entrée affichée dans la vue Agenda (Story 30.6, AC2) — un par couche pertinente. Chaque
@@ -58,6 +60,15 @@ export interface AgendaEntry {
    *  Sous-objet plutôt que sept champs plats : `AgendaEntry` est déjà chargé, et la story 36.7 en
    *  ajoutera. Renseigné pour les seules entrées `votes-en-cours`. */
   vote?: VoteParticipation;
+  /** Story 36.8 — la disponibilité du groupe sur ce créneau, en charge utile STRUCTURÉE.
+   *
+   *  ⚠️ `label` et `detail` portaient déjà cette information en texte libre (« Soir — 2/4
+   *  disponibles ») : cela suffisait à une liste, jamais à une jauge, qui a besoin des nombres.
+   *  Le texte reste, pour l'Agenda ; ce champ est ce que la grille et le rail consomment.
+   *
+   *  Renseigné pour les seules entrées `disponibilite-groupe`, qui n'existent qu'en contexte de
+   *  partie (AD-16 : la couche n'a aucun sens dans le calendrier personnel, AC8). */
+  group?: GroupAvailability;
 }
 
 const TYPE_LABELS: Record<AgendaEntryType, string> = {
@@ -76,7 +87,7 @@ const TYPE_LABELS: Record<AgendaEntryType, string> = {
 @Component({
   selector: 'app-calendar-agenda-view',
   standalone: true,
-  imports: [MatProgressSpinnerModule, PollTrack],
+  imports: [MatProgressSpinnerModule, PollTrack, GroupGauge],
   templateUrl: './calendar-agenda-view.html',
   styleUrl: './calendar-agenda-view.scss',
 })

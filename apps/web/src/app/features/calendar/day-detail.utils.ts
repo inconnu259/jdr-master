@@ -7,6 +7,7 @@ import type {
 import { computeDisplayStatus } from '../../core/availability/compute-display-status';
 import type { AgendaEntry } from './calendar-agenda-view/calendar-agenda-view';
 import type { VoteParticipation } from './poll-track.utils';
+import type { GroupAvailability } from './group-availability.utils';
 
 /**
  * Story 36.1 — modèle du rail de détail.
@@ -93,6 +94,18 @@ export interface DaySlotDetail {
    *  seulement quand le rang gagnant est `'vote'` — le texte suit le rang, la piste aussi
    *  (une séance confirmée qui l'emporte n'affiche pas la piste d'un vote concurrent). */
   pollVote: VoteParticipation | null;
+  /** Story 36.8 — la disponibilité du groupe sur ce créneau (FR-53), ou `null`.
+   *
+   *  🚨 **CE CHAMP NE SUIT PAS LE RANG GAGNANT**, contrairement à `seanceLabel`, `pollLabel` et
+   *  `pollVote` juste au-dessus. C'est délibéré et c'est toute la story : le groupe vit sur un
+   *  **canal séparé**, il ne concourt pas dans `SLOT_PRECEDENCE` et il reste visible **sous** une
+   *  séance comme sous un vote. Le copier sur le modèle de ses voisins — le geste le plus naturel
+   *  en lisant ce fichier — le rendrait invisible exactement dans les cas qui justifient la
+   *  couche, et reproduirait le défaut du 2026-08-17 (`EXPERIENCE.md:253`).
+   *
+   *  Il **est** gouverné par sa couche, comme `pollVote` : `disponibilite-groupe` éteinte ⇒
+   *  `null`, et la case retrouve alors ses bandes fusionnées (AC10/AC11). */
+  group: GroupAvailability | null;
 }
 
 export interface DayDetail {
@@ -184,6 +197,11 @@ export function buildDayDetail(
     );
     const seance = seanceMatches[0];
     const poll = pollMatches[0];
+    // Story 36.8 — le CANAL SÉPARÉ. Résolu ici, avec les autres, pour que grille et rail ne se
+    // contredisent jamais (AC16) — mais volontairement HORS de la chaîne `winner` ci-dessous.
+    const groupEntry = sameDay.find(
+      (e) => e.type === 'disponibilite-groupe' && entryCoversSlot(e.slot, slot),
+    );
 
     // AC6 / FR-50 : une séance confirmée rend le créneau indisponible INDÉPENDAMMENT de
     // l'affichage. La couche retire le texte, jamais le fait d'être pris.
@@ -239,6 +257,10 @@ export function buildDayDetail(
       // piste en même temps que le texte. `?? null` et jamais `undefined` — une seule
       // représentation de « rien à afficher ».
       pollVote: poll && active.has('votes-en-cours') ? (poll.vote ?? null) : null,
+      // Story 36.8 — gouverné par SA couche, et par rien d'autre : ni le rang gagnant, ni la
+      // présence d'une séance ou d'un vote ne l'effacent (AC2). `?? null` et jamais `undefined`
+      // — une seule représentation de « rien à afficher », comme partout dans ce fichier.
+      group: groupEntry && active.has('disponibilite-groupe') ? (groupEntry.group ?? null) : null,
     };
   });
 
