@@ -263,6 +263,12 @@ export class CalendarWeekView {
   readonly entries = input<AgendaEntry[]>([]);
   /** Couches actives : gouvernent ce qui est NOMMÉ dans la cellule, jamais l'indisponibilité. */
   readonly activeLayers = input<readonly CalendarLayerKey[]>([]);
+  /**
+   * Story 36.9 — les jours que le mode Destinée met en avant (clés `YYYY-MM-DD`), ou `null` hors
+   * mode. **Exactement l'ensemble que reçoit la vue Mois**, dérivé une seule fois par
+   * `CalendarView` (AC12) : les deux grilles estompent les mêmes jours ou aucune ne le fait.
+   */
+  readonly destinyDates = input<ReadonlySet<string> | null>(null);
 
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();
@@ -639,6 +645,34 @@ export class CalendarWeekView {
     const keys = this.selectedKeys();
     const time = cell.date.getTime();
     return keys.has(`${time}|${slot}`) || keys.has(`${time}|FULL_DAY`);
+  }
+
+  /**
+   * Story 36.9, AC1/AC8 — la colonne du jour s'estompe-t-elle ?
+   *
+   * 🚨 **L'unité est le JOUR, pas le créneau** — la même qu'en vue Mois, où la planche estompe la
+   * case entière. Un jour à moitié estompé se lirait comme deux jours ; et deux règles cohérentes
+   * par accident valent moins qu'une seule règle appliquée aux deux grilles.
+   *
+   * AC8 : une sélection ou un aperçu **n'importe où** dans la journée relève toute la colonne —
+   * sans quoi glisser sur des jours hors du vote courant ferait disparaître sa propre sélection.
+   * Le focus clavier est traité en CSS (`:not(:focus-within)`).
+   */
+  /** 🚨 Règle jumelle de `destinyInView` en vue Mois, trouvée à la vérification visuelle : une
+   *  semaine sans aucune date du vote courant s'estompait entièrement, sans rien mettre en avant.
+   *  **Un mode qui estomperait tout n'estompe rien.** */
+  private readonly destinyInView = computed(() => {
+    const dates = this.destinyDates();
+    return dates !== null && this.cells().some((c) => dates.has(this.dateKey(c.date)));
+  });
+
+  protected isDayDimmed(cell: WeekCell): boolean {
+    const dates = this.destinyDates();
+    if (dates === null || !this.destinyInView()) return false;
+    if (dates.has(this.dateKey(cell.date))) return false;
+    return !this.SLOT_ROWS.some(
+      (r) => this.isCellSelected(cell, r.slot) || this.getSlotData(cell, r.key).preview !== null,
+    );
   }
 
   /** Story 36.3, AC16 — la cellule courante : la dernière cliquée, celle dont le rail montre le

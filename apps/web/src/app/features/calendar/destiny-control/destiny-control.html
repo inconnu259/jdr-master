@@ -1,0 +1,38 @@
+<!-- AC10 : aucun vote ouvert ⇒ RIEN. Pas de bouton désactivé « pour une raison qu'on ignore ». -->
+@if (polls().length > 0) {
+  <div class="destiny">
+    <button
+      type="button"
+      class="destiny__chip"
+      [class.destiny__chip--active]="active()"
+      [attr.aria-pressed]="active()"
+      (click)="toggled.emit()"
+    >
+      <span class="destiny__glyph" aria-hidden="true">✦</span>{{ chipLabel() }}
+    </button>
+
+    <!-- AC2 : la navigation n'existe qu'à partir de DEUX votes ouverts (EXPERIENCE.md:575). Un
+         seul vote n'a pas de « suivant », et des chevrons inertes mentiraient sur ce qui existe. -->
+    @if (active() && polls().length > 1) {
+      <span class="destiny__nav">
+        <button
+          type="button"
+          class="destiny__arrow"
+          aria-label="Vote précédent"
+          (click)="prevRequested.emit()"
+        >
+          ‹
+        </button>
+        <span class="destiny__pos">{{ position() }} / {{ polls().length }}</span>
+        <button
+          type="button"
+          class="destiny__arrow"
+          aria-label="Vote suivant"
+          (click)="nextRequested.emit()"
+        >
+          ›
+        </button>
+      </span>
+    }
+  </div>
+}

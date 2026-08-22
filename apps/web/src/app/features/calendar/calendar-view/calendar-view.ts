@@ -57,6 +57,7 @@ import {
   toDateKey,
 } from '../day-detail.utils';
 import { CalendarLayerToggle } from '../calendar-layer-toggle/calendar-layer-toggle';
+import { DestinyControl, type DestinyPollRef } from '../destiny-control/destiny-control';
 import { ConstraintPanel } from '../constraint-panel/constraint-panel';
 import {
   ConflictDialog,
@@ -68,7 +69,7 @@ import { AvailableSlotsPanel, isNamedSlot } from '../available-slots/available-s
 import { VoteAnswerPicker } from '../vote-answer-picker/vote-answer-picker';
 import type { VoteOptionActivatedEvent, VoteParticipation } from '../poll-track.utils';
 import { PollCreationComponent } from '../../poll/poll-creation/poll-creation';
-import { PollStatusPanel } from '../../poll/poll-status/poll-status';
+import { PollMissingPanel } from '../poll-missing/poll-missing';
 
 /** Story 8.8, AC7/AC8 : un vote actif, étiqueté par son scénario (et sa séance si le scénario en a
  * plusieurs) — remplace le signal `activePoll` unique qui ne représentait qu'« un » poll par Partie. */
@@ -125,12 +126,13 @@ export interface EligibleSeanceEntry {
     CalendarAgendaView,
     CalendarDetailRail,
     CalendarLayerToggle,
+    DestinyControl,
     ConstraintPanel,
     MatButtonToggleModule,
     MatButtonModule,
     AvailableSlotsPanel,
     PollCreationComponent,
-    PollStatusPanel,
+    PollMissingPanel,
     VoteAnswerPicker,
     CdkConnectedOverlay,
   ],
@@ -560,6 +562,122 @@ export class CalendarView implements OnInit {
     return dates;
   });
 
+  // ─── Story 36.9 — le mode Destinée ────────────────────────────────────────
+  //
+  // 🚨 UN MODE, PAS UNE COUCHE (`EXPERIENCE.md:367`). Il ne rejoint JAMAIS `activeLayers` :
+  // `CALENDAR_LAYER_KEYS` est un type partagé, persisté dans `defaultCalendarLayers` du compte —
+  // y ajouter la Destinée l'exposerait à `resetToDefault()`, à `isOverridden()` et à l'écran
+  // Compte, et ferait de ce mode éphémère un réglage persistant.
+  //
+  // 🚨 L'état est un `pollId`, JAMAIS UN INDEX. `activePolls()` est reconstruit à chaque
+  // `scenariosSvc.changed()` : un index survivrait au rechargement en désignant un AUTRE vote, et
+  // la Destinée basculerait toute seule. Un `pollId` disparu, lui, est détectable — c'est l'effet
+  // de fin de mode plus bas (AC9).
+  protected readonly destinyPollId = signal<string | null>(null);
+
+  /** Dernier `destinyDates()` connu du vote courant, tant qu'il était encore présent dans
+   *  `destinyPolls()`. Seule trace qui reste une fois le vote disparu — c'est elle qui permet à
+   *  l'effet de fin de mode de distinguer « hors plage » de « réellement clos » en contexte
+   *  personnel (AC9, voir plus bas). Champ simple, pas un signal : écrit uniquement depuis
+   *  l'intérieur d'un effet, jamais lu de façon réactive. */
+  private lastDestinyDates: ReadonlySet<string> | null = null;
+
+  /**
+   * Les votes ouverts, nommés, dans l'ordre de première rencontre.
+   *
+   * 🚨 Dérivé d'`allCalendarEntries()` et **surtout pas** d'`activePolls()` : ce dernier est vide
+   * hors contexte de partie, alors que le calendrier personnel porte lui aussi des votes ouverts
+   * (agrégés depuis plusieurs parties par `GET /me/calendar`). Une seule dérivation sert donc les
+   * DEUX contextes, et le libellé est celui que l'entrée porte déjà — jamais recomposé.
+   */
+  protected readonly destinyPolls = computed<DestinyPollRef[]>(() => {
+    const seen = new Set<string>();
+    const polls: DestinyPollRef[] = [];
+    for (const e of this.allCalendarEntries()) {
+      if (e.type !== 'votes-en-cours' || !e.vote) continue;
+      if (seen.has(e.vote.pollId)) continue;
+      seen.add(e.vote.pollId);
+      polls.push({ pollId: e.vote.pollId, label: e.label });
+    }
+    return polls;
+  });
+
+  /** Le vote courant, ou `null` — y compris quand `destinyPollId` désigne un vote qui vient de
+   *  disparaître : la lecture est toujours honnête, avant même que l'effet ne nettoie le signal. */
+  protected readonly destinyPoll = computed<DestinyPollRef | null>(() => {
+    const id = this.destinyPollId();
+    return id === null ? null : (this.destinyPolls().find((p) => p.pollId === id) ?? null);
+  });
+
+  /**
+   * Les jours que le mode met en avant : `null` hors mode, sinon les clés `YYYY-MM-DD` portant
+   * une option du vote COURANT (AC1/AC12).
+   *
+   * 🚨 **Dérivé d'`allCalendarEntries()`, la liste NON filtrée** — jamais de `band.vote` ni de
+   * `DaySlotDetail.pollVote`, qui sont gouvernés par la couche `votes-en-cours`. Les en dériver
+   * ferait qu'une couche éteinte produirait un ensemble VIDE, donc une grille entièrement
+   * estompée sans rien mettre en avant. C'est le défaut que l'AC6 et son test verrouillent.
+   *
+   * Point de dérivation UNIQUE (AC12) : les deux vues consomment cet ensemble, aucune ne
+   * recalcule la pertinence depuis ses propres bandes (doctrine AD-12/AD-19, patron
+   * `seanceMarkerDates()` juste au-dessus).
+   */
+  protected readonly destinyDates = computed<ReadonlySet<string> | null>(() => {
+    const current = this.destinyPoll();
+    if (!current) return null;
+    const dates = new Set<string>();
+    for (const e of this.allCalendarEntries()) {
+      if (e.type !== 'votes-en-cours' || e.vote?.pollId !== current.pollId) continue;
+      if (e.date) dates.add(e.date);
+    }
+    return dates;
+  });
+
+  /**
+   * AC6 — activer le mode ALLUME `votes-en-cours` si elle est éteinte.
+   *
+   * Un mode qui concentre l'écran sur un vote ne peut pas laisser ce vote invisible : l'AC1 exige
+   * que « les créneaux proposés restent **pleinement lisibles** ». Coup de pouce **à sens
+   * unique** — `exitDestiny()` ne rééteint rien : on ne défait pas un réglage que l'utilisateur
+   * voit et peut refaire lui-même.
+   */
+  protected enterDestiny(pollId: string): void {
+    this.destinyPollId.set(pollId);
+    if (!this.activeLayers().includes('votes-en-cours')) {
+      this.activeLayers.update((keys) => [...keys, 'votes-en-cours']);
+    }
+  }
+
+  protected exitDestiny(): void {
+    this.destinyPollId.set(null);
+  }
+
+  /** Le contrôle a un seul bouton : il arme le mode sur le premier vote, ou le quitte. */
+  protected toggleDestiny(): void {
+    if (this.destinyPoll()) {
+      this.exitDestiny();
+      return;
+    }
+    const first = this.destinyPolls()[0];
+    if (first) this.enterDestiny(first.pollId);
+  }
+
+  private stepDestiny(delta: 1 | -1): void {
+    const polls = this.destinyPolls();
+    const current = this.destinyPoll();
+    if (!current || polls.length < 2) return;
+    const i = polls.findIndex((p) => p.pollId === current.pollId);
+    const next = polls[(i + delta + polls.length) % polls.length];
+    this.enterDestiny(next.pollId);
+  }
+
+  protected destinyNext(): void {
+    this.stepDestiny(1);
+  }
+  protected destinyPrev(): void {
+    this.stepDestiny(-1);
+  }
+
   protected readonly pollPanelOpen = signal(false);
   // Story 8.7, AC1/AC2 : renseigné depuis ?seanceId=... (arrivée depuis SeanceList) — verrouille
   // PollCreationComponent sur cette séance, ouvre automatiquement le panneau sans re-clic du MJ.
@@ -632,6 +750,54 @@ export class CalendarView implements OnInit {
     // serveur ne route jamais un événement d'une autre Partie vers cette connexion). Garde firstRun
     // (même piège que partout ailleurs, Stories 19.2/20.1/20.2/21.*) : le signal peut déjà porter
     // une valeur avant le montage.
+    // Story 36.9, AC9 — le mode Destinée doit savoir MOURIR. Un vote scellé, clôturé ou brûlé
+    // (par moi ailleurs, ou par un autre membre via SSE) disparaît de `destinyPolls()` sous les
+    // pieds du mode. Même piège que le sélecteur de réponse de la 36.7, que l'effet ci-dessus
+    // ferme explicitement.
+    //
+    // 🚨 Il se TERMINE, il ne bascule pas sur un autre vote : basculer en silence est exactement
+    // ce que l'encadré n°2 de la story interdit (« un vote que personne n'a demandé »). Un vote
+    // TIERS qui disparaît, lui, ne touche à rien — la garde est l'absence de l'id COURANT.
+    effect(() => {
+      const id = this.destinyPollId();
+      if (id === null) return;
+      const polls = this.destinyPolls();
+      const stillPresent = polls.some((p) => p.pollId === id);
+
+      if (stillPresent) {
+        // On garde une trace des dates du vote courant tant qu'il est visible : c'est la seule
+        // information qui survit à sa disparition, plus bas, pour juger si elle était prévisible
+        // (hors plage) ou non (réellement clos) — sans appel réseau dédié (encadré n°1).
+        untracked(() => {
+          this.lastDestinyDates = this.destinyDates();
+        });
+        return;
+      }
+
+      // « Le vote a disparu de la liste » ne veut dire « le vote est clos » QUE si la liste fait
+      // autorité sur ce qui est ouvert. C'est vrai en contexte de PARTIE (`activePolls()` dérive
+      // de TOUS les scénarios de la partie, remplacés d'un bloc après chargement) : absence ⇒ clos.
+      if (this.partieId()) {
+        untracked(() => this.destinyPollId.set(null));
+        return;
+      }
+
+      // 🚨 Contexte personnel : `GET /me/calendar` est chargé **par plage** (`fromDateStr()` /
+      // `toDateStr()`), et naviguer d'une semaine recharge une plage qui ne couvre plus forcément
+      // les créneaux du vote — un symptôme trouvé à la vérification visuelle (deux clics sur
+      // « semaine suivante » éteignaient le mode DÉFINITIVEMENT alors que le vote existait
+      // toujours). L'absence seule ne suffit donc plus : elle ne veut dire « clos » que si la
+      // plage actuellement chargée couvrait déjà TOUTES les dates connues du vote — sinon il est
+      // simplement hors plage, pas clos, et le mode survit (revue de code, AC9).
+      const dates = this.lastDestinyDates;
+      const from = this.fromDateStr();
+      const to = this.toDateStr();
+      const wasFullyInRange = dates !== null && [...dates].every((d) => d >= from && d <= to);
+      if (wasFullyInRange) {
+        untracked(() => this.destinyPollId.set(null));
+      }
+    });
+
     let firstRun = true;
     effect(() => {
       this.availabilitySvc.changed();
@@ -1122,21 +1288,14 @@ export class CalendarView implements OnInit {
     }
   }
 
-  protected async onChooseDate(pollId: string, optionId: string): Promise<void> {
-    const id = this.partieId();
-    if (!id || this.pollActionPending()) return;
-    this.pollActionPending.set(true);
-    this.error.set(null);
-    try {
-      await this.pollSvc.chooseDate(id, pollId, { optionId });
-      this.snack.open(this.theme.tone()['success.date_chosen'], undefined, { duration: 3000 });
-      await this.loadScenarios(id);
-    } catch {
-      this.error.set('Impossible de choisir cette date. Réessayez.');
-    } finally {
-      this.pollActionPending.set(false);
-    }
-  }
+  // ⚠️ Story 36.9, AC4 — `onChooseDate()` a été RETIRÉ d'ici. Il n'était appelé que par le
+  // `(chosen)` de `<app-poll-status>`, que la réduction du panneau supprime : le calendrier n'a
+  // plus de chemin de scellement, et un gestionnaire sans appelant est du code mort.
+  //
+  // 🚨 Le scellement N'A PAS DISPARU DU PROJET : la fiche de scénario (`seance-list`) rend
+  // toujours le panneau COMPLET, avec son bouton « Sceller ce créneau », et `PollService.
+  // chooseDate()` est intact. La story 36.12 rendra le scellement à l'Agenda, avec son propre
+  // chemin — le remettre ici « pour plus tard » n'aurait servi personne.
 
   // Story 8.8, AC6 : ramène le MJ vers la page d'origine (fiche de partie, ou fiche de scénario si
   // ouvert depuis SeanceList via `goToCalendarForSeance`) — s'appuie sur l'historique de navigation

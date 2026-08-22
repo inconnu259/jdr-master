@@ -10,6 +10,30 @@
   }
 }
 
+/* Story 36.9 — la ligne de contrôles : les couches, puis le mode Destinée À CÔTÉ d'elles (AC5).
+   `align-items: flex-start` plutôt que `baseline` : la bande de couches peut passer à deux lignes
+   sur téléphone, et la chip du mode doit rester en tête, sur sa première ligne, pas flotter au
+   milieu de la bande. */
+.calendar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+
+  /* `.layer-toggle` porte déjà sa marge basse (1rem) : elle espace toute la ligne de la bascule
+     de vues, et rien n'est ajouté ici — la doubler décalerait la grille vers le bas. */
+  app-calendar-layer-toggle {
+    display: block;
+  }
+
+  /* Aligné sur la PREMIÈRE ligne de chips : la bande peut passer à deux lignes sur téléphone, et
+     le mode doit rester en tête de la barre plutôt que de flotter à mi-hauteur. */
+  app-destiny-control {
+    display: block;
+    padding-top: 0.05rem;
+  }
+}
+
 .view-toggle {
   display: flex;
   justify-content: center;

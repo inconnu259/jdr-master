@@ -125,6 +125,18 @@
     pointer-events: none;
   }
 
+  /* Story 36.9 — mode Destinée : le jour ne relève pas du vote courant.
+     🚨 UNE OPACITÉ, ET RIEN D'AUTRE (AC3). Surtout PAS `pointer-events: none` comme `.past`
+     ci-dessus : le glissement casserait, et aucun test ne le verrait — le hit-test
+     (`elementFromPoint` + `closest`) est stubbé en jsdom. La case reste cliquable, focusable et
+     annoncée ; seule sa lisibilité recule.
+     `:not(:focus-within)` porte la moitié « focus clavier » de l'AC8 — un prédicat TypeScript
+     n'a pas accès au focus. Les moitiés « sélection » et « aperçu » vivent dans `isDimmed()`. */
+  &.day-cell--dim:not(:focus-within) {
+    opacity: 0.28;
+    transition: opacity 0.15s;
+  }
+
   /* Story 36.3 — la case marque le JOUR retenu par la plage ; c'est la bande qui marque le
      CRÉNEAU que la portée désigne. Le fond de la case est donc allégé par rapport à la story
      30.3 : à 35 % il noyait les trois bandes et rendait la portée illisible. */

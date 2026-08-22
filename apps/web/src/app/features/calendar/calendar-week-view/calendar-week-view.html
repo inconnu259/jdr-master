@@ -28,7 +28,14 @@
     >
       <div class="grid-cell header-corner"></div>
       @for (cell of cells(); track cell.date.getTime()) {
-        <div class="grid-cell col-header" [class.today]="cell.isToday">
+        <!-- Story 36.9 — l'estompe du mode Destinée porte sur le JOUR : l'en-tête de colonne la
+             reçoit en même temps que ses trois cellules, sinon un jour estompé garderait un
+             en-tête net et se lirait comme un jour mis en avant. -->
+        <div
+          class="grid-cell col-header"
+          [class.today]="cell.isToday"
+          [class.col-header--dim]="isDayDimmed(cell)"
+        >
           {{ cell.label }}
           @if (seanceDates().has(dateKey(cell.date))) {
             <span class="seance-dot" aria-hidden="true" title="Séance à venir"></span>
@@ -74,6 +81,7 @@
             [class.unknown]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status) === 'UNKNOWN'"
             [class.selected]="isCellSelected(cell, row.slot)"
             [class.current]="isCurrentCell(cell, row.slot)"
+            [class.slot-cell--dim]="isDayDimmed(cell)"
             [class.has-event]="!!eventTitle(getSlotData(cell, row.key))"
             [attr.role]="cell.isPast ? 'presentation' : 'button'"
             [attr.tabindex]="cell.isPast ? null : 0"

@@ -46,6 +46,10 @@
     >
       @for (week of weeks(); track $index) {
         @for (cell of week; track cell.date.getTime()) {
+          <!-- Story 36.9 — mode Destinée : `day-cell--dim` est une CLASSE, une opacité, rien
+               d'autre. Aucun nœud ajouté, aucun `aria-hidden`, aucun `tabindex` retiré, aucun
+               `pointer-events: none` — l'estompe est décorative et la case reste pleinement
+               interactive, gestes et lecteur d'écran compris (AC3). -->
           <div
             class="day-cell"
             [attr.data-cell-date]="cell.date.getTime()"
@@ -54,6 +58,7 @@
             [class.past]="cell.isPast"
             [class.selected]="isDaySelected(cell)"
             [class.current]="isCurrentDay(cell)"
+            [class.day-cell--dim]="isDimmed(cell)"
             [attr.aria-hidden]="!cell.isCurrentMonth ? 'true' : null"
             [attr.aria-label]="
               cell.isCurrentMonth

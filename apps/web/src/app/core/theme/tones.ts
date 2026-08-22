@@ -185,6 +185,13 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.vote_closed': "Ce vote est clos. L'oracle a tranché.",
     'alert.all_responded': 'Tous les compagnons ont répondu au vote.',
     'poll.status_summary': 'Vote ouvert — {responded}/{total} compagnons ont répondu',
+    /* — mode Destinée et panneau réduit (Story 36.9) — */
+    // Nom du MODE, identique dans les trois thèmes : « ✦ Destinée » est le nom que la spec lui
+    // donne (EXPERIENCE.md §4.4 ter), au même titre que « Vue mois ». La clé existe pour qu'un
+    // thème futur puisse le teinter, pas pour qu'il change aujourd'hui.
+    'cta.destiny_mode': 'Destinée',
+    'poll.missing_prefix': 'N’ont pas consulté l’oracle :',
+    'poll.responded_prefix': 'Ont consulté l’oracle :',
     /* — annonces (Epic 9) — */
     'announcement.scope_campaign_label': 'Toute la campagne',
     'announcement.scope_oneshot_label': 'Cette quête',
@@ -482,6 +489,10 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.vote_closed': 'Le vote de la forêt est terminé.',
     'alert.all_responded': "Tous les habitants ont répondu à l'appel.",
     'poll.status_summary': 'Vote ouvert — {responded}/{total} habitants ont répondu',
+    /* — mode Destinée et panneau réduit (Story 36.9) — */
+    'cta.destiny_mode': 'Destinée',
+    'poll.missing_prefix': 'N’ont pas parcouru la forêt :',
+    'poll.responded_prefix': 'Ont parcouru la forêt :',
     /* — annonces (Epic 9) — */
     'announcement.scope_campaign_label': 'Toute la forêt',
     'announcement.scope_oneshot_label': 'Cette expédition',
@@ -774,6 +785,10 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'poll.vote_closed': 'Registre de vote verrouillé.',
     'alert.all_responded': "Tout l'équipage a répondu au registre.",
     'poll.status_summary': 'Registre ouvert — {responded}/{total} membres ont répondu',
+    /* — mode Destinée et panneau réduit (Story 36.9) — */
+    'cta.destiny_mode': 'Destinée',
+    'poll.missing_prefix': 'N’ont pas alimenté le registre :',
+    'poll.responded_prefix': 'Ont alimenté le registre :',
     /* — annonces (Epic 9) — */
     'announcement.scope_campaign_label': 'Toute la mission',
     'announcement.scope_oneshot_label': 'Cette opération',

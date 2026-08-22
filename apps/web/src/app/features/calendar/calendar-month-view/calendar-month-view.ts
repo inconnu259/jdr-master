@@ -250,6 +250,16 @@ export class CalendarMonthView {
   readonly entries = input<AgendaEntry[]>([]);
   /** Couches actives : gouvernent le TEXTE des bandes, jamais leur rang ni l'indisponibilité. */
   readonly activeLayers = input<readonly CalendarLayerKey[]>([]);
+  /**
+   * Story 36.9 — les jours que le mode Destinée met en avant (clés `YYYY-MM-DD`), ou `null` hors
+   * mode.
+   *
+   * 🚨 **Cette vue ne calcule PAS la pertinence** (AC12) : elle reçoit l'ensemble dérivé une
+   * seule fois par `CalendarView` depuis les entrées NON filtrées, et la vue Semaine reçoit
+   * exactement le même. Le recalculer ici depuis `cell.bands[].vote` divergerait au premier cas
+   * limite — `band.vote` est gouverné par la couche `votes-en-cours`, l'ensemble ne l'est pas.
+   */
+  readonly destinyDates = input<ReadonlySet<string> | null>(null);
 
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();
@@ -566,6 +576,42 @@ export class CalendarMonthView {
 
   protected isDaySelected(cell: DayCell): boolean {
     return this.selectedDayTimes().has(cell.date.getTime());
+  }
+
+  /**
+   * Story 36.9, AC1/AC8 — la case s'estompe-t-elle ?
+   *
+   * L'unité de l'estompe est le **JOUR**, comme la planche contractuelle (`if(destin && !(day.e
+   * ||[]).some(x=>x.t==='vo'))`) : une case de ~115 px dont une bande sur trois serait claire et
+   * deux à 28 % serait du bruit, pas de la hiérarchie.
+   *
+   * 🚨 **AC8 — l'estompe ne doit jamais avaler ce que l'utilisateur est en train de faire.**
+   * `opacity` s'applique à tout le sous-arbre, liseré de sélection et aperçu compris : sans ces
+   * deux gardes, glisser sur des jours hors du vote courant ferait disparaître sa propre
+   * sélection pendant qu'elle fonctionne. Le focus clavier, lui, est traité en CSS
+   * (`:not(:focus-within)`) — un prédicat TypeScript n'y a pas accès.
+   */
+  /**
+   * 🚨 Défaut trouvé à la VÉRIFICATION VISUELLE, qu'aucun test n'aurait vu : activer la Destinée
+   * depuis un mois qui ne porte aucune date du vote courant estompait les 42 cases — un écran
+   * noir, sans rien mis en avant et sans dire pourquoi.
+   *
+   * **Un mode qui estomperait tout n'estompe rien.** L'estompe n'a de sens que RELATIVEMENT à ce
+   * qu'elle met en avant ; sans repère à l'écran elle ne transmet aucune information et ne coûte
+   * que de la lisibilité. Le contrôle, lui, reste visiblement actif et nomme le vote (AC5/AC11) :
+   * l'utilisateur sait ce qui est armé, il lui reste à naviguer jusqu'aux dates proposées.
+   */
+  private readonly destinyInView = computed(() => {
+    const dates = this.destinyDates();
+    return dates !== null && this.allCells().some((c) => dates.has(toDateKey(c.date)));
+  });
+
+  protected isDimmed(cell: DayCell): boolean {
+    const dates = this.destinyDates();
+    if (dates === null || !this.destinyInView()) return false;
+    if (dates.has(toDateKey(cell.date))) return false;
+    if (this.isDaySelected(cell)) return false;
+    return !cell.bands.some((b) => b.preview !== null);
   }
 
   /** Story 36.3, AC16 — la date courante : la dernière case cliquée, celle dont le rail montre

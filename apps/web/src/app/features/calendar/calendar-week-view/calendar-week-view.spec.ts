@@ -884,4 +884,75 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
 
     expect(emitted).toEqual([]);
   });
+
+  // ─── Story 36.9 — le mode Destinée : l'estompe de la colonne ────────────────────────────────
+
+  function createWithDestiny(dates: ReadonlySet<string> | null): void {
+    fixture = TestBed.createComponent(CalendarWeekView);
+    fixture.componentRef.setInput('startDate', futureStart);
+    fixture.componentRef.setInput('entries', []);
+    fixture.componentRef.setInput('activeLayers', ['votes-en-cours']);
+    fixture.componentRef.setInput('destinyDates', dates);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+
+  it('Story 36.9, AC1 — hors mode : aucune colonne estompée', () => {
+    createWithDestiny(null);
+    expect(el.querySelectorAll('.slot-cell--dim')).toHaveLength(0);
+  });
+
+  it('Story 36.9, AC1/AC12 — l’unité est le JOUR : toute la colonne s’estompe, en-tête compris', () => {
+    createWithDestiny(new Set([dayKey(2)]));
+
+    // Les trois créneaux du jour retenu restent nets…
+    for (const slot of ['MORNING', 'AFTERNOON', 'EVENING'] as const) {
+      expect(cellAt(slot, 2).classList.contains('slot-cell--dim')).toBe(false);
+    }
+    // …et ceux des six autres jours sont estompés (3 créneaux × 6 jours).
+    expect(el.querySelectorAll('.slot-cell--dim')).toHaveLength(18);
+
+    const headers = Array.from(el.querySelectorAll<HTMLElement>('.col-header'));
+    expect(headers[2].classList.contains('col-header--dim')).toBe(false);
+    expect(headers[3].classList.contains('col-header--dim')).toBe(true);
+  });
+
+  // 🚨 Même défaut que celui trouvé à la vérification visuelle en vue Mois : une semaine qui ne
+  // porte aucune date du vote courant s'estompait entièrement, sans rien mettre en avant.
+  it('Story 36.9, AC1 — aucune date du vote dans la semaine affichée : RIEN n’est estompé', () => {
+    createWithDestiny(new Set(['2026-11-03']));
+    expect(el.querySelectorAll('.slot-cell--dim')).toHaveLength(0);
+    expect(el.querySelectorAll('.col-header--dim')).toHaveLength(0);
+  });
+
+  it('Story 36.9, AC3 — 🚨 une cellule estompée reste PLEINEMENT interactive et annoncée', () => {
+    createWithDestiny(new Set([dayKey(2)]));
+    const dimmed = cellAt('EVENING', 4);
+
+    expect(dimmed.classList.contains('slot-cell--dim')).toBe(true);
+    expect(dimmed.getAttribute('aria-hidden')).toBeNull();
+    expect(dimmed.getAttribute('tabindex')).toBe('0');
+    expect(dimmed.getAttribute('role')).toBe('button');
+    // Le contrat DOM du glissement, inchangé.
+    expect(dimmed.getAttribute('data-cell-date')).toBeTruthy();
+    expect(dimmed.closest('[data-cell-date]')).toBe(dimmed);
+  });
+
+  it('Story 36.9, AC8 — une colonne estompée dont un créneau est SÉLECTIONNÉ cesse de l’être', () => {
+    vi.useFakeTimers();
+    createWithDestiny(new Set([dayKey(2)]));
+    const dimmed = cellAt('EVENING', 4);
+    expect(dimmed.classList.contains('slot-cell--dim')).toBe(true);
+
+    dimmed.dispatchEvent(pointer('pointerdown'));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    fixture.detectChanges();
+
+    expect(cellAt('EVENING', 4).classList.contains('selected')).toBe(true);
+    // 🚨 Le JOUR entier se relève, pas seulement la cellule : l'unité de l'estompe est le jour.
+    for (const slot of ['MORNING', 'AFTERNOON', 'EVENING'] as const) {
+      expect(cellAt(slot, 4).classList.contains('slot-cell--dim')).toBe(false);
+    }
+    expect(cellAt('EVENING', 5).classList.contains('slot-cell--dim')).toBe(true);
+  });
 });

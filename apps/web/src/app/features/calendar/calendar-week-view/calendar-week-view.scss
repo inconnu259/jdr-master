@@ -68,6 +68,12 @@
   color: var(--mat-sys-on-surface-variant);
   padding: 4px 2px;
 
+  /* Story 36.9 — l'en-tête suit sa colonne : l'unité de l'estompe est le JOUR. */
+  &--dim {
+    opacity: 0.28;
+    transition: opacity 0.15s;
+  }
+
   &.today {
     background: var(--mat-sys-primary);
     color: var(--mat-sys-on-primary);
@@ -164,6 +170,14 @@
     opacity: 0.3;
     cursor: default;
     pointer-events: none;
+  }
+
+  /* Story 36.9 — mode Destinée. Bloc JUMEAU de `.day-cell--dim` (vue Mois) : même valeur, même
+     garde. 🚨 Une opacité et RIEN d'autre — surtout pas `pointer-events: none` comme `.past`
+     ci-dessus, le glissement casserait sans qu'aucun test le voie. */
+  &.slot-cell--dim:not(:focus-within) {
+    opacity: 0.28;
+    transition: opacity 0.15s;
   }
 
   &.today-col {

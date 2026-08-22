@@ -1400,3 +1400,134 @@ describe('CalendarMonthView — le canal de groupe (Story 36.8)', () => {
     expect(gauge.closest('[data-cell-date]')).toBe(cell);
   });
 });
+
+// ─── Story 36.9 — le mode Destinée : l'estompe de la case ─────────────────────────────────────
+
+describe('CalendarMonthView — le mode Destinée (Story 36.9)', () => {
+  let el: HTMLElement;
+  let fixture: any;
+
+  async function createWith(inputs: Record<string, unknown> = {}) {
+    await TestBed.configureTestingModule({
+      imports: [CalendarMonthView],
+      providers: [provideAnimationsAsync()],
+    }).compileComponents();
+    const f = TestBed.createComponent(CalendarMonthView);
+    f.componentRef.setInput('activeLayers', [
+      'mes-disponibilites',
+      'mes-indisponibilites',
+      'mes-seances',
+      'votes-en-cours',
+    ]);
+    f.componentRef.setInput('initialDate', new Date(2026, 7, 15));
+    for (const [k, v] of Object.entries(inputs)) f.componentRef.setInput(k, v);
+    f.detectChanges();
+    fixture = f;
+    el = f.nativeElement;
+    return f;
+  }
+
+  function cellOf(day: number): HTMLElement {
+    const target = new Date(2026, 7, day).getTime();
+    return el.querySelector(`.day-cell[data-cell-date="${target}"]`) as HTMLElement;
+  }
+
+  function longPress(node: Element): void {
+    node.dispatchEvent(
+      new PointerEvent('pointerdown', {
+        clientX: 5,
+        clientY: 5,
+        pointerType: 'mouse',
+        bubbles: true,
+      }),
+    );
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    fixture.detectChanges();
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 10));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('AC1 — hors mode (ensemble null), AUCUNE case n’est estompée', async () => {
+    await createWith({ destinyDates: null });
+    expect(el.querySelectorAll('.day-cell--dim')).toHaveLength(0);
+  });
+
+  it('AC1 — mode actif : les jours du vote courant restent nets, les autres s’estompent', async () => {
+    await createWith({ destinyDates: new Set(['2026-08-20', '2026-08-21']) });
+
+    expect(cellOf(20).classList.contains('day-cell--dim')).toBe(false);
+    expect(cellOf(21).classList.contains('day-cell--dim')).toBe(false);
+    expect(cellOf(19).classList.contains('day-cell--dim')).toBe(true);
+    expect(cellOf(22).classList.contains('day-cell--dim')).toBe(true);
+    // L'estompe couvre toute la grille, pas seulement les jours porteurs de quelque chose.
+    expect(el.querySelectorAll('.day-cell--dim').length).toBe(40);
+  });
+
+  // 🚨 Défaut trouvé à la VÉRIFICATION VISUELLE, invisible à tous les autres tests : activer la
+  // Destinée depuis un mois qui ne porte AUCUNE date du vote courant estompait les 42 cases, sans
+  // rien mettre en avant et sans dire pourquoi. L'AC1 exige que « les créneaux proposés restent
+  // pleinement lisibles » — quand il n'y en a aucun à l'écran, estomper ne met rien en avant et ne
+  // coûte que de la lisibilité.
+  it('AC1 — aucune date du vote courant dans la grille affichée : RIEN n’est estompé', async () => {
+    await createWith({ destinyDates: new Set(['2026-11-03']) });
+    expect(el.querySelectorAll('.day-cell--dim')).toHaveLength(0);
+  });
+
+  it('AC3 — 🚨 une case estompée reste PLEINEMENT interactive et annoncée', async () => {
+    await createWith({ destinyDates: new Set(['2026-08-20']) });
+    const dimmed = cellOf(22);
+
+    expect(dimmed.classList.contains('day-cell--dim')).toBe(true);
+    // Rien n'est retiré : ni au pointeur, ni au clavier, ni au lecteur d'écran.
+    expect(dimmed.getAttribute('aria-hidden')).toBeNull();
+    expect(dimmed.getAttribute('tabindex')).toBe('0');
+    expect(dimmed.getAttribute('role')).toBe('button');
+    expect(dimmed.getAttribute('data-cell-date')).toBeTruthy();
+
+    // 🚨 Le contrat DOM du glissement : la bande reste un descendant porteur de data-cell-date.
+    // (Un jour sans rien rend UNE bande fusionnée — story 36.2, AC4.)
+    const band = dimmed.querySelector('.band')!;
+    expect(band.closest('[data-cell-date]')).toBe(dimmed);
+
+    // Et le geste marche : un appui maintenu arme toujours la sélection.
+    longPress(band);
+    expect(el.querySelector('app-selection-bar')).toBeTruthy();
+  });
+
+  it('AC8 — une case estompée qui est SÉLECTIONNÉE cesse de l’être', async () => {
+    await createWith({ destinyDates: new Set(['2026-08-20']) });
+    const dimmed = cellOf(22);
+    expect(dimmed.classList.contains('day-cell--dim')).toBe(true);
+
+    longPress(dimmed.querySelector('.band')!);
+
+    expect(cellOf(22).classList.contains('selected')).toBe(true);
+    expect(cellOf(22).classList.contains('day-cell--dim')).toBe(false);
+    // Le voisin, lui, reste estompé : c'est bien la sélection qui lève l'estompe, pas le mode.
+    expect(cellOf(23).classList.contains('day-cell--dim')).toBe(true);
+  });
+
+  it('AC8 — une case estompée en APERÇU de déclaration cesse de l’être', async () => {
+    await createWith({
+      destinyDates: new Set(['2026-08-20']),
+      pendingDto: {
+        kind: 'AVAILABLE',
+        recurKind: 'ONE_OFF',
+        slot: 'EVENING',
+        startDate: '2026-08-22T00:00:00.000Z',
+        endDate: '2026-08-22T00:00:00.000Z',
+      },
+    });
+
+    expect(cellOf(22).classList.contains('day-cell--dim')).toBe(false);
+    expect(cellOf(23).classList.contains('day-cell--dim')).toBe(true);
+  });
+});

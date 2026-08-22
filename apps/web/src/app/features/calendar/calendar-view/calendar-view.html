@@ -11,13 +11,27 @@
     @if (error()) {
       <p class="calendar-error" role="alert">{{ error() }}</p>
     }
-    <app-calendar-layer-toggle
-      [keys]="availableLayerKeys()"
-      [active]="activeLayers()"
-      [overridden]="isOverridden()"
-      (layerToggled)="toggleLayer($event)"
-      (resetRequested)="resetToDefault()"
-    />
+    <div class="calendar-controls">
+      <app-calendar-layer-toggle
+        [keys]="availableLayerKeys()"
+        [active]="activeLayers()"
+        [overridden]="isOverridden()"
+        (layerToggled)="toggleLayer($event)"
+        (resetRequested)="resetToDefault()"
+      />
+
+      <!-- Story 36.9, AC5 — 🚨 FRÈRE de la bande de couches, jamais une chip DEDANS : la
+           Destinée est un MODE, pas un filtre, et il doit se voir tant qu'il est actif
+           (EXPERIENCE.md:198). Quand la story 36.14 repliera les couches derrière
+           « ☰ Affichage », ce contrôle devra RESTER dehors. -->
+      <app-destiny-control
+        [polls]="destinyPolls()"
+        [currentPollId]="destinyPollId()"
+        (toggled)="toggleDestiny()"
+        (prevRequested)="destinyPrev()"
+        (nextRequested)="destinyNext()"
+      />
+    </div>
 
     <div class="view-toggle">
       <mat-button-toggle-group
@@ -39,6 +53,7 @@
         [initialDate]="sharedDate()"
         [entries]="calendarEntries()"
         [activeLayers]="activeLayers()"
+        [destinyDates]="destinyDates()"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onMonthDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"
@@ -54,6 +69,7 @@
         [seanceDates]="seanceMarkerDates()"
         [entries]="calendarEntries()"
         [activeLayers]="activeLayers()"
+        [destinyDates]="destinyDates()"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onWeekDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"
@@ -133,12 +149,15 @@
                   — Séance {{ entry.seanceIndex }}
                 }
               </p>
-              <app-poll-status
-                [poll]="entry.poll"
-                [members]="members()"
-                [busy]="pollActionPending()"
-                (chosen)="onChooseDate(entry.poll.id, $event)"
-              />
+              <!-- ⚠️ Story 36.9, AC4 — `<app-poll-status>` a été REMPLACÉ ici, et ici seulement.
+                   Le panneau du calendrier se réduit à des PERSONNES : dates, participation et ma
+                   réponse vivent désormais dans la grille (36.6 / 36.7), les y relister était une
+                   seconde lecture des mêmes faits.
+                   🚨 La fiche de scénario (`seance-list.html`) garde le panneau COMPLET et son
+                   bouton « Sceller ce créneau » — qui est le seul chemin de scellement du projet
+                   tant que la story 36.12 n'a pas livré celui de l'Agenda. Ne pas propager cette
+                   réduction là-bas. -->
+              <app-poll-missing [poll]="entry.poll" [members]="members()" />
               <button
                 mat-stroked-button
                 color="warn"
