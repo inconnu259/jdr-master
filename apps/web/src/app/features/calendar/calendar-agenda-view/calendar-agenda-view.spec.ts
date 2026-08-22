@@ -135,6 +135,7 @@ describe('CalendarAgendaView — piste de participation (Story 36.6)', () => {
     ...VOTE,
     key: 'poll-1-o1',
     vote: {
+      partieId: 'partie-1',
       pollId: 'poll-1',
       optionId: 'o1',
       yes: 2,
@@ -168,5 +169,49 @@ describe('CalendarAgendaView — piste de participation (Story 36.6)', () => {
   it('une séance ne porte jamais de piste', async () => {
     const fixture = await createAgenda([SEANCE]);
     expect(fixture.nativeElement.querySelector('app-poll-track')).toBeNull();
+  });
+});
+
+describe('CalendarAgendaView — activer une option de vote (Story 36.7, AC7)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const VOTED: AgendaEntry = {
+    ...VOTE,
+    key: 'poll-1-o1',
+    vote: {
+      partieId: 'partie-1',
+      pollId: 'poll-1',
+      optionId: 'o1',
+      yes: 2,
+      maybe: 1,
+      no: 0,
+      total: 4,
+      myAnswer: null,
+    },
+  };
+
+  it('une ligne de vote est activable, et le signale avec son ancre', async () => {
+    const fixture = await createAgenda([VOTED]);
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    const btn = fixture.nativeElement.querySelector('button.agenda-entry__vote-action');
+    expect(btn).toBeTruthy();
+    btn.click();
+    fixture.detectChanges();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].vote.optionId).toBe('o1');
+    expect(emitted[0].anchor).toBe(btn);
+  });
+
+  it('une entrée sans participation servie n’est pas activable', async () => {
+    const fixture = await createAgenda([{ ...VOTED, vote: undefined }]);
+    expect(fixture.nativeElement.querySelector('button.agenda-entry__vote-action')).toBeNull();
+  });
+
+  it('une entrée qui n’est pas un vote n’est jamais activable', async () => {
+    const fixture = await createAgenda([{ ...VOTE, type: 'mes-seances', vote: undefined }]);
+    expect(fixture.nativeElement.querySelector('button.agenda-entry__vote-action')).toBeNull();
   });
 });

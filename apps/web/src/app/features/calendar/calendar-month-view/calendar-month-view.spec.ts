@@ -695,10 +695,103 @@ describe('CalendarMonthView — les trois bandes', () => {
     TestBed.resetTestingModule();
   });
 
+  // ─── Story 36.7 — l'ouverture du sélecteur de réponse ──────────────────────────────────────
+
+  const VOTE_PARTICIPATION = {
+    partieId: 'partie-1',
+    pollId: 'p',
+    optionId: 'o1',
+    yes: 2,
+    maybe: 1,
+    no: 0,
+    total: 4,
+    myAnswer: 'YES',
+  };
+
+  it('Story 36.7, AC1 — taper une bande portant une option de vote signale l’option, avec son ancre', async () => {
+    const f = await createWith({
+      entries: [vote('2026-08-20', 'MORNING', VOTE_PARTICIPATION)],
+    });
+    const emitted: any[] = [];
+    f.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    const band = cellOf(20).querySelectorAll('.band')[0] as HTMLElement;
+    band.click();
+    f.detectChanges();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].vote).toEqual(VOTE_PARTICIPATION);
+    expect(emitted[0].slot).toBe('MORNING');
+    // L'ancre est la bande ELLE-MÊME : rien n'est inséré dans la case pour la porter (AC14).
+    expect(emitted[0].anchor).toBe(band);
+  });
+
+  it('Story 36.7, AC1 — le rail suit QUAND MÊME : les deux signaux partent du même tap', async () => {
+    const f = await createWith({
+      entries: [vote('2026-08-20', 'MORNING', VOTE_PARTICIPATION)],
+    });
+    const slots: any[] = [];
+    f.componentInstance.slotSelected.subscribe((e: any) => slots.push(e));
+
+    (cellOf(20).querySelectorAll('.band')[0] as HTMLElement).click();
+    f.detectChanges();
+
+    expect(slots).toHaveLength(1);
+  });
+
+  it('Story 36.7, AC6 — une sélection ARMÉE garde le tap : la case bascule, rien ne s’ouvre', async () => {
+    const f = await createWith({
+      entries: [vote('2026-08-20', 'MORNING', VOTE_PARTICIPATION)],
+    });
+    const emitted: any[] = [];
+    f.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    // Appui maintenu sur un AUTRE jour → la barre de sélection s'ouvre (36.3, AC15).
+    longPress(cellOf(21).querySelectorAll('.band')[0]);
+    expect(el.querySelector('app-selection-bar')).toBeTruthy();
+
+    // Puis tap sur la bande de vote : elle doit rejoindre la sélection, pas ouvrir le sélecteur.
+    (cellOf(20).querySelectorAll('.band')[0] as HTMLElement).click();
+    f.detectChanges();
+
+    expect(emitted).toEqual([]);
+    expect(cellOf(20).querySelectorAll('.band')[0].classList.contains('band--selected')).toBe(true);
+  });
+
+  it('Story 36.7, AC12 — couche « votes-en-cours » éteinte : aucun sélecteur ne s’ouvre', async () => {
+    const f = await createWith({
+      entries: [vote('2026-08-20', 'MORNING', VOTE_PARTICIPATION)],
+      activeLayers: ['mes-seances'],
+    });
+    const emitted: any[] = [];
+    f.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    (cellOf(20).querySelectorAll('.band')[0] as HTMLElement).click();
+    f.detectChanges();
+
+    expect(emitted).toEqual([]);
+  });
+
+  it('Story 36.7 — un créneau dont le rang gagnant est « séance » n’ouvre rien', async () => {
+    const f = await createWith({
+      entries: [seance('2026-08-20', 'MORNING'), vote('2026-08-20', 'MORNING', VOTE_PARTICIPATION)],
+    });
+    const emitted: any[] = [];
+    f.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    const band = cellOf(20).querySelectorAll('.band')[0] as HTMLElement;
+    expect(band.getAttribute('data-winner')).toBe('seance');
+    band.click();
+    f.detectChanges();
+
+    expect(emitted).toEqual([]);
+  });
+
   it('Story 36.6, AC1 — une bande dont le rang gagnant est « vote » porte la piste de participation', async () => {
     await createWith({
       entries: [
         vote('2026-08-20', 'MORNING', {
+          partieId: 'partie-1',
           pollId: 'p',
           optionId: 'o1',
           yes: 2,
@@ -719,6 +812,7 @@ describe('CalendarMonthView — les trois bandes', () => {
     await createWith({
       entries: [
         vote('2026-08-20', 'MORNING', {
+          partieId: 'partie-1',
           pollId: 'p',
           optionId: 'o1',
           yes: 2,
@@ -750,6 +844,7 @@ describe('CalendarMonthView — les trois bandes', () => {
     await createWith({
       entries: [
         vote('2026-08-20', 'MORNING', {
+          partieId: 'partie-1',
           pollId: 'p',
           optionId: 'o1',
           yes: 2,
@@ -771,6 +866,7 @@ describe('CalendarMonthView — les trois bandes', () => {
       entries: [
         seance('2026-08-20', 'EVENING'),
         vote('2026-08-20', 'EVENING', {
+          partieId: 'partie-1',
           pollId: 'p',
           optionId: 'o1',
           yes: 3,
@@ -791,6 +887,7 @@ describe('CalendarMonthView — les trois bandes', () => {
     await createWith({
       entries: [
         vote('2026-08-20', 'MORNING', {
+          partieId: 'partie-1',
           pollId: 'p',
           optionId: 'o1',
           yes: 2,

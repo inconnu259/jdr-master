@@ -72,6 +72,10 @@ function makePollService() {
     getHeatmap: vi.fn().mockResolvedValue([]),
     chooseDate: vi.fn().mockResolvedValue(undefined),
     closePoll: vi.fn().mockResolvedValue(undefined),
+    // Story 36.7 — les deux écritures du sélecteur de réponse. Sans elles, les nouveaux chemins
+    // lèvent au lieu d'échouer proprement.
+    castVote: vi.fn().mockResolvedValue(undefined),
+    withdrawVote: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -471,41 +475,30 @@ describe('CalendarView — activePolls() (Story 8.8, AC7 : plusieurs votes actif
     expect(fixture.nativeElement.textContent).toContain('Aucun vote de date en cours.');
   });
 
-  it('joueur (mode personal) : votes actifs affichés via app-poll-response, étiquetés', async () => {
+  // ⚠️ Story 36.7, AC3 — ce test CHANGE DE SENS. Il verrouillait la présence de
+  // `<app-poll-response>` dans le calendrier (story 8.8, AC8) ; depuis cette story, ce composant
+  // est le « second chemin de retrait » que l'AC3 interdit : « aucun second chemin de retrait ne
+  // subsiste dans le calendrier ». Il est retiré du calendrier, et de lui SEUL — il reste rendu
+  // par la fiche de scénario (`seance-list`, `scenario-read-dialog`), qui ont leurs propres tests.
+  // Ce que le joueur perd ici, la grille le lui rend : chaque créneau proposé est nommé et porte
+  // sa piste depuis la 36.6, et le sélecteur de réponse s'ouvre dessus.
+  it('AC3 — le calendrier ne rend plus app-poll-response : le sélecteur est le seul chemin', async () => {
     const { fixture } = await createCalendarView({
       mode: 'personal',
       partieId: 'partie-1',
-      scenarios: [ACTIVE_POLL_SCENARIO],
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
     });
-    expect(fixture.nativeElement.querySelector('app-poll-response')).toBeTruthy();
-    expect(fixture.nativeElement.textContent).toContain('Chapitre 1');
-  });
-
-  it('onPollResponded() met à jour uniquement l’entrée concernée (par pollId), pas de refetch', async () => {
-    const { fixture, scenariosSvc } = await createCalendarView({
-      mode: 'personal',
-      partieId: 'partie-1',
-      scenarios: [ACTIVE_POLL_SCENARIO],
-    });
+    expect(fixture.nativeElement.querySelector('app-poll-response')).toBeNull();
+    // Le vote reste LISIBLE dans le calendrier : l'option est projetée en entrée de calendrier.
     const comp = fixture.componentInstance as any;
-    const callsBefore = scenariosSvc.listAll.mock.calls.length;
-    // Reste OPEN (sinon l'entrée sortirait légitimement de activePolls, cf. filtre par statut).
-    const updatedPoll = {
-      ...ACTIVE_POLL_SCENARIO.seances[0].poll,
-      expiresAt: '2026-09-01T00:00:00.000Z',
-    };
-
-    comp.onPollResponded(updatedPoll);
-
-    expect(comp.activePolls()[0].poll.expiresAt).toBe('2026-09-01T00:00:00.000Z');
-    expect(scenariosSvc.listAll.mock.calls.length).toBe(callsBefore); // pas de refetch
+    expect(comp.calendarEntries().some((e: any) => e.type === 'votes-en-cours')).toBe(true);
   });
-});
 
-// ─── Sélecteur de séance pour lancer un vote depuis l'Oracle (Story 8.8, AC9) ─
-
-describe('CalendarView — eligibleSeances()/startVoteFor() (Story 8.8, AC9)', () => {
-  afterEach(() => TestBed.resetTestingModule());
+  // ⚠️ Story 36.7 — le test « onPollResponded() met à jour uniquement l’entrée concernée » a été
+  // RETIRÉ avec la méthode qu'il couvrait. Elle n'existait que pour l'`(responded)` de
+  // `<app-poll-response>`, retiré du calendrier par l'AC3 : elle n'avait plus aucun appelant.
+  // Ce que faisait sa mise à jour locale est désormais assuré par le rechargement explicite de
+  // `writeVote()` — un seul chemin de fraîcheur après une écriture, dans les deux contextes.
 
   const NO_POLL_SEANCE = {
     id: 'seanceX',
@@ -1302,6 +1295,7 @@ describe('CalendarView — une piste par créneau proposé (Story 36.6)', () => 
       .calendarEntries()
       .find((e: any) => e.type === 'votes-en-cours' && e.date === '2026-08-28');
     expect(first.vote).toEqual({
+      partieId: 'partie-1',
       pollId: 'poll1',
       optionId: 'o1',
       yes: 2,
@@ -1399,6 +1393,7 @@ describe('CalendarView — une piste par créneau proposé (Story 36.6)', () => 
     const votes = comp.calendarEntries().filter((e: any) => e.type === 'votes-en-cours');
     expect(votes).toHaveLength(2);
     expect(votes[0].vote).toEqual({
+      partieId: 'partie-9',
       pollId: 'poll9',
       optionId: 'o1',
       yes: 2,
@@ -1765,5 +1760,252 @@ describe('CalendarView — rail : AC11, activer une ligne ouvre le scénario', (
 
     const seances = comp.agendaEntries().filter((e: any) => e.type === 'mes-seances');
     for (const s of seances) expect(s.partieId).toBe('partie-1');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// Story 36.7 — le sélecteur de réponse de vote
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('CalendarView — le sélecteur de réponse de vote (Story 36.7)', () => {
+  /** 🚨 Le sélecteur vit dans le CONTENEUR D'OVERLAY, attaché à `document.body` — jamais dans
+   *  `fixture.nativeElement`. Une assertion négative faite dans le fixture passerait toujours,
+   *  pour une mauvaise raison. On interroge donc le document, et on nettoie entre les tests. */
+  function pickerEl(): HTMLElement | null {
+    return document.body.querySelector('app-vote-answer-picker');
+  }
+
+  function pickerOption(answer: string): HTMLButtonElement {
+    return document.body.querySelector(
+      `app-vote-answer-picker .opt2--answer[data-answer="${answer}"]`,
+    ) as HTMLButtonElement;
+  }
+
+  afterEach(() => {
+    // Sans ce nettoyage, les overlays s'accumulent d'un test à l'autre et les assertions de
+    // présence deviennent fausses par intermittence.
+    document.body.querySelectorAll('.cdk-overlay-container').forEach((n) => n.remove());
+  });
+
+  /** Ouvre le sélecteur en jouant le signal que les vues émettent (`voteOptionActivated`) —
+   *  le chemin réel, sans dépendre du rendu d'une bande dans jsdom. */
+  async function openPicker(fixture: any, vote: Record<string, unknown>, anchor?: HTMLElement) {
+    const el = anchor ?? document.createElement('div');
+    document.body.appendChild(el);
+    (fixture.componentInstance as any).onVoteOptionActivated({
+      vote,
+      date: new Date(2026, 7, 28),
+      slot: 'EVENING',
+      anchor: el,
+    });
+    await tick(fixture);
+    return el;
+  }
+
+  async function tick(fixture: any) {
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+  }
+
+  const PARTIE_VOTE = {
+    partieId: 'partie-1',
+    pollId: 'poll1',
+    optionId: 'o1',
+    yes: 2,
+    maybe: 1,
+    no: 0,
+    total: 4,
+    myAnswer: 'YES' as const,
+  };
+
+  it('AC1 — ouvre un sélecteur proposant oui, peut-être, non', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+
+    expect(pickerEl()).toBeNull();
+    await openPicker(fixture, PARTIE_VOTE);
+
+    expect(pickerEl()).toBeTruthy();
+    expect(pickerOption('YES')).toBeTruthy();
+    expect(pickerOption('MAYBE')).toBeTruthy();
+    expect(pickerOption('NO')).toBeTruthy();
+  });
+
+  it("AC1 — l'entête nomme le jour ET le créneau touchés", async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+    await openPicker(fixture, PARTIE_VOTE);
+
+    const head = document.body.querySelector('app-vote-answer-picker .picker__head');
+    expect(head?.textContent).toContain('28');
+    expect(head?.textContent?.toLowerCase()).toContain('soir');
+  });
+
+  it("AC8 — en contexte de partie, l'écriture vise la partie de la ROUTE", async () => {
+    const { fixture, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+    await openPicker(fixture, PARTIE_VOTE);
+
+    pickerOption('MAYBE').click();
+    await tick(fixture);
+
+    expect(pollSvc.castVote).toHaveBeenCalledWith('partie-1', 'poll1', {
+      optionId: 'o1',
+      answer: 'MAYBE',
+    });
+  });
+
+  it("AC8 — en calendrier PERSONNEL, l'écriture vise la partie de l'ENTRÉE, pas une autre", async () => {
+    // Le seul test qui prouve l'encadré n°3 : le calendrier personnel agrège plusieurs parties,
+    // et rien dans la route ne dit laquelle porte le vote touché.
+    const { fixture, pollSvc } = await createCalendarView({ mode: 'personal' });
+    await openPicker(fixture, { ...PARTIE_VOTE, partieId: 'partie-9', pollId: 'poll9' });
+
+    pickerOption('NO').click();
+    await tick(fixture);
+
+    expect(pollSvc.castVote).toHaveBeenCalledWith('partie-9', 'poll9', {
+      optionId: 'o1',
+      answer: 'NO',
+    });
+  });
+
+  it('AC2/AC3 — le retrait passe par ce sélecteur, et par lui seul', async () => {
+    const { fixture, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+    await openPicker(fixture, PARTIE_VOTE);
+
+    const withdraw = document.body.querySelector(
+      'app-vote-answer-picker .opt2--withdraw',
+    ) as HTMLButtonElement;
+    expect(withdraw).toBeTruthy();
+    withdraw.click();
+    await tick(fixture);
+
+    expect(pollSvc.withdrawVote).toHaveBeenCalledWith('partie-1', 'poll1', 'o1');
+  });
+
+  it('AC4 — fermer sans choisir ne change rien', async () => {
+    const { fixture, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+    await openPicker(fixture, PARTIE_VOTE);
+
+    (fixture.componentInstance as any).closePicker();
+    await tick(fixture);
+
+    expect(pickerEl()).toBeNull();
+    expect(pollSvc.castVote).not.toHaveBeenCalled();
+    expect(pollSvc.withdrawVote).not.toHaveBeenCalled();
+  });
+
+  it('AC4 — Échap ferme le sélecteur sans rien écrire', async () => {
+    const { fixture, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+    await openPicker(fixture, PARTIE_VOTE);
+
+    (fixture.componentInstance as any).onPickerKeydown(
+      new KeyboardEvent('keydown', { key: 'Escape' }),
+    );
+    await tick(fixture);
+
+    expect(pickerEl()).toBeNull();
+    expect(pollSvc.castVote).not.toHaveBeenCalled();
+  });
+
+  it("AC9 — après une écriture réussie, le sélecteur se ferme et l'écran se recharge", async () => {
+    const { fixture, pollSvc, scenariosSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+    const before = scenariosSvc.listAll.mock.calls.length;
+    await openPicker(fixture, PARTIE_VOTE);
+
+    pickerOption('YES').click();
+    await tick(fixture);
+
+    expect(pollSvc.castVote).toHaveBeenCalledTimes(1);
+    expect(scenariosSvc.listAll.mock.calls.length).toBeGreaterThan(before);
+    expect(pickerEl()).toBeNull();
+  });
+
+  it("AC9 — en calendrier personnel, c'est GET /me/calendar qui est rejoué", async () => {
+    const availabilitySvc = makeAvailabilityService();
+    const { fixture } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const before = availabilitySvc.getMyCalendar.mock.calls.length;
+    await openPicker(fixture, { ...PARTIE_VOTE, partieId: 'partie-9' });
+
+    pickerOption('YES').click();
+    await tick(fixture);
+
+    expect(availabilitySvc.getMyCalendar.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it("AC10 — un échec n'affiche jamais une réponse comme enregistrée", async () => {
+    // `myAnswer` se dérive de l'utilisateur courant : sans lui, la piste ne saurait pas dire ce
+    // que J'AI répondu, et l'assertion porterait sur rien.
+    const authSvc = { currentUser: signal<Partial<AuthUser> | null>({ id: 'me' }) };
+    const { fixture, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+      authSvc,
+    });
+    pollSvc.castVote.mockRejectedValueOnce(new Error('400'));
+    await openPicker(fixture, PARTIE_VOTE);
+
+    pickerOption('NO').click();
+    await tick(fixture);
+
+    const comp = fixture.componentInstance as any;
+    expect(comp.error()).toBeTruthy();
+    // L'état affiché n'a pas bougé : la piste dit toujours ce que le serveur, lui, dit.
+    const entry = comp
+      .calendarEntries()
+      .find((e: any) => e.type === 'votes-en-cours' && e.vote?.optionId === 'o1');
+    expect(entry.vote.myAnswer).toBe('YES');
+  });
+
+  it("AC11 — deux activations rapprochées ne produisent qu'UNE requête", async () => {
+    const { fixture, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [TWO_OPTION_POLL_SCENARIO],
+    });
+    // La première écriture est laissée EN VOL : c'est le seul état où la garde d'unicité peut
+    // être observée. On la relâche à la fin du test pour ne pas laisser de promesse pendante.
+    let release!: () => void;
+    const inFlight = new Promise<void>((resolve) => (release = resolve));
+    pollSvc.castVote.mockImplementationOnce(() => inFlight);
+    await openPicker(fixture, PARTIE_VOTE);
+
+    const comp = fixture.componentInstance as any;
+    comp.onVoteAnswerChosen('YES');
+    comp.onVoteAnswerChosen('NO');
+    await tick(fixture);
+
+    expect(pollSvc.castVote).toHaveBeenCalledTimes(1);
+    release();
+    await tick(fixture);
   });
 });

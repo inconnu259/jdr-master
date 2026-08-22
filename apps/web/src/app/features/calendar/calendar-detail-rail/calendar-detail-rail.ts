@@ -6,9 +6,11 @@ import {
   type RailSlot,
   type RailTarget,
   dateKeyToUtcMidnight,
+  dateKeyToLocalMidnight,
   composeSeanceInfo,
 } from '../day-detail.utils';
 import { PollTrack } from '../poll-track/poll-track';
+import { participationAriaLabel, type VoteOptionActivatedEvent } from '../poll-track.utils';
 
 const STATUS_LABELS: Record<SlotStatus, string> = {
   AVAILABLE: 'Disponible',
@@ -56,6 +58,15 @@ export class CalendarDetailRail {
    *  « fenêtre de séance », qui n'existe pas dans l'application. */
   readonly scenarioActivated = output<RailTarget>();
 
+  /** Story 36.7, AC7 — **le chemin CLAVIER vers le sélecteur de réponse.**
+   *
+   *  Les bandes des grilles ne sont pas focalisables, par décision explicite : un `tabindex` par
+   *  bande produirait 126 arrêts de tabulation sur une grille de six semaines
+   *  (`EXPERIENCE.md` §6 bis). Sans cette ligne activable, répondre à un vote serait donc
+   *  inatteignable au clavier. Le rail porte au plus trois lignes : il est le bon endroit, et il
+   *  le fait déjà pour une séance (AC11 de la 36.1). */
+  readonly voteOptionActivated = output<VoteOptionActivatedEvent>();
+
   protected readonly dayLabel = computed(() => {
     const d = this.detail();
     if (!d) return '';
@@ -91,5 +102,39 @@ export class CalendarDetailRail {
 
   protected onActivate(slot: DaySlotDetail): void {
     if (slot.seanceTarget) this.scenarioActivated.emit(slot.seanceTarget);
+  }
+
+  /** Nom accessible de la ligne de vote : il annonce l'ACTION, pas seulement l'objet — la
+   *  promesse faite au lecteur d'écran doit correspondre à ce qui va s'ouvrir (même règle que
+   *  `openLabel()` pour le scénario).
+   *
+   *  Revue de code 36.7 : `[attr.aria-label]` sur le bouton écrase le contenu, y compris le
+   *  `role="img"`/`aria-label` propre à `<app-poll-track>` qu'il enveloppe désormais — sans ce
+   *  repli le détail de la participation (compte, ma réponse) deviendrait inatteignable au
+   *  clavier/lecteur d'écran, régression symétrique de celle qu'`openLabel()` évite déjà pour les
+   *  informations pratiques d'une séance. */
+  protected voteLabel(slot: DaySlotDetail): string {
+    const detail = slot.pollVote ? participationAriaLabel(slot.pollVote) : null;
+    return detail
+      ? `Répondre au vote — ${slot.label.toLowerCase()} — ${detail}`
+      : `Répondre au vote — ${slot.label.toLowerCase()}`;
+  }
+
+  /** Story 36.7 — la ligne de vote signale son option ; c'est `CalendarView` qui ouvre le
+   *  sélecteur. Le rail reste un composant de RENDU PUR : il n'appelle rien.
+   *
+   *  La date est reconstruite à minuit LOCAL, comme celle qu'émettent les grilles : le rail ne
+   *  connaît son jour que sous forme de clé `YYYY-MM-DD`, et minuit UTC serait relu comme la
+   *  veille dans tout fuseau négatif. */
+  protected onVoteActivate(slot: DaySlotDetail, event: Event): void {
+    const detail = this.detail();
+    const vote = slot.pollVote;
+    if (!detail || !vote || !(event.currentTarget instanceof HTMLElement)) return;
+    this.voteOptionActivated.emit({
+      vote,
+      date: dateKeyToLocalMidnight(detail.date),
+      slot: slot.slot,
+      anchor: event.currentTarget,
+    });
   }
 }

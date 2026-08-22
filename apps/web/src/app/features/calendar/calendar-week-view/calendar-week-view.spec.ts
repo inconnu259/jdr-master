@@ -527,6 +527,7 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
 
   /** Story 36.6 — la participation portée par une option de vote. */
   const PARTICIPATION = {
+    partieId: 'partie-1',
     pollId: 'p',
     optionId: 'o1',
     yes: 2,
@@ -549,6 +550,20 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
     return Array.from(el.querySelectorAll<HTMLElement>(`.slot-cell[data-cell-slot="${slot}"]`))[
       dayIndex
     ];
+  }
+
+  /** Story 36.7 — le tap de la vue Semaine n'est PAS un `(click)` : il est synthétisé par
+   *  `onGridPointerUp()` quand le geste n'a pas armé. Le reproduire fidèlement est le seul moyen
+   *  de tester le vrai chemin. */
+  function pointer(type: string, x = 10, y = 10): PointerEvent {
+    return new PointerEvent(type, { clientX: x, clientY: y, pointerType: 'mouse', bubbles: true });
+  }
+
+  function tap(cell: HTMLElement): void {
+    const grid = el.querySelector('.week-grid') as HTMLElement;
+    cell.dispatchEvent(pointer('pointerdown'));
+    grid.dispatchEvent(pointer('pointerup'));
+    fixture.detectChanges();
   }
 
   beforeEach(() => {
@@ -654,6 +669,76 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
   });
 
   // ─── Story 36.6 — la piste de participation ────────────────────────────────────────────────
+
+  // ─── Story 36.7 — l'ouverture du sélecteur de réponse ──────────────────────────────────────
+
+  it('Story 36.7, AC1 — taper une cellule portant une option de vote signale l’option, avec son ancre', () => {
+    create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    const cell = cellAt('MORNING', 2);
+    tap(cell);
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].vote).toEqual(PARTICIPATION);
+    expect(emitted[0].slot).toBe('MORNING');
+    // L'ancre est la cellule elle-même — aucun nœud ajouté pour la porter (AC14).
+    expect(emitted[0].anchor).toBe(cell);
+  });
+
+  it('Story 36.7, AC1 — le rail suit quand même', () => {
+    create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);
+    const slots: any[] = [];
+    fixture.componentInstance.slotSelected.subscribe((e: any) => slots.push(e));
+
+    tap(cellAt('MORNING', 2));
+
+    expect(slots).toHaveLength(1);
+  });
+
+  it('Story 36.7, AC6 — une sélection armée garde le tap : aucun sélecteur ne s’ouvre', () => {
+    vi.useFakeTimers();
+    create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    // Appui maintenu sur une autre cellule → la barre s'ouvre.
+    const grid = el.querySelector('.week-grid') as HTMLElement;
+    cellAt('MORNING', 4).dispatchEvent(pointer('pointerdown'));
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    grid.dispatchEvent(pointer('pointerup'));
+    fixture.detectChanges();
+    expect(el.querySelector('app-selection-bar')).toBeTruthy();
+
+    tap(cellAt('MORNING', 2));
+
+    expect(emitted).toEqual([]);
+    expect(cellAt('MORNING', 2).classList.contains('selected')).toBe(true);
+  });
+
+  it('Story 36.7, AC12 — couche « votes-en-cours » éteinte : aucun sélecteur ne s’ouvre', () => {
+    create([voteEntry(2, { vote: PARTICIPATION })], ['mes-seances']);
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    tap(cellAt('MORNING', 2));
+
+    expect(emitted).toEqual([]);
+  });
+
+  it('Story 36.7 — une séance gagnante n’ouvre aucun sélecteur', () => {
+    create(
+      [seanceEntry(3), voteEntry(3, { slot: 'EVENING', vote: PARTICIPATION })],
+      ['mes-seances', 'votes-en-cours'],
+    );
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    tap(cellAt('EVENING', 3));
+
+    expect(emitted).toEqual([]);
+  });
 
   it('Story 36.6, AC1 — une cellule portant un vote rend sa piste de participation', () => {
     create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);

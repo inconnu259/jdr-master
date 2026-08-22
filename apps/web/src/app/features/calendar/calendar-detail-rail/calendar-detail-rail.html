@@ -39,7 +39,12 @@
         @if (s.seanceTarget) {
           <!-- AC11 : seule une ligne portant une séance nommée est activable, et c'est un vrai
                bouton — focalisable et atteignable au clavier sans code supplémentaire. -->
-          <button type="button" class="v v--action" [attr.aria-label]="openLabel(s)" (click)="onActivate(s)">
+          <button
+            type="button"
+            class="v v--action"
+            [attr.aria-label]="openLabel(s)"
+            (click)="onActivate(s)"
+          >
             <b>{{ s.seanceLabel }}</b>
             <!-- Story 36.5 — le rail est la surface la plus riche : il demande le niveau
                  complet, contrairement à la bande. Interpolation seule (AC9). -->
@@ -54,15 +59,28 @@
               <span class="m">{{ seanceInfo(s) }}</span>
             }
           </span>
+        } @else if (s.pollLabel && s.pollVote) {
+          <!-- Story 36.7, AC7 — un VRAI bouton, comme la ligne de séance : c'est le seul chemin
+               clavier vers le sélecteur de réponse, les bandes des grilles n'étant pas
+               focalisables. Il n'existe QUE si la participation est servie : une ligne cliquable
+               qui ne saurait pas quoi ouvrir serait un piège (dégradation honnête de la 36.6). -->
+          <button
+            type="button"
+            class="v v--action v--vote"
+            [attr.aria-label]="voteLabel(s)"
+            aria-haspopup="menu"
+            (click)="onVoteActivate(s, $event)"
+          >
+            <b>{{ s.pollLabel }}</b
+            ><span class="m"> · vote de date</span>
+            <!-- Story 36.6 — le rail est la surface la plus riche : il porte la piste, son
+                 compteur ET ma réponse en toutes lettres, à TOUTES les largeurs (AC4, AC5). -->
+            <app-poll-track class="rail-track track-lg" [vote]="s.pollVote" />
+          </button>
         } @else if (s.pollLabel) {
           <span class="v">
-            <b>{{ s.pollLabel }}</b><span class="m"> · vote de date</span>
-            <!-- Story 36.6 — le rail est la surface la plus riche : il porte la piste, son
-                 compteur ET ma réponse en toutes lettres, à TOUTES les largeurs (AC4, AC5). Il
-                 reste ainsi le recours quand la case du Mois abandonne le compteur. -->
-            @if (s.pollVote) {
-              <app-poll-track class="rail-track track-lg" [vote]="s.pollVote" />
-            }
+            <b>{{ s.pollLabel }}</b
+            ><span class="m"> · vote de date</span>
           </span>
         } @else {
           <!-- Jamais la couleur seule : l'état est écrit en toutes lettres (AC8). -->

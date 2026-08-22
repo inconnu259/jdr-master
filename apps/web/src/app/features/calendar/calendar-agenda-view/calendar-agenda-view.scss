@@ -40,3 +40,24 @@
 .agenda-view__empty {
   opacity: 0.7;
 }
+
+/* Story 36.7 — la ligne de vote est activable. C'est un vrai <button> (atteignable au clavier,
+   sans code supplémentaire) mais il ne doit pas RESSEMBLER à un bouton : il enveloppe la piste,
+   qui est déjà le signal visuel. Sans cette règle, l'apparence par défaut du navigateur pose un
+   rectangle gris autour de la piste — défaut constaté à la vérification visuelle. */
+.agenda-entry__vote-action {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--mat-sys-surface-container-high);
+  }
+}

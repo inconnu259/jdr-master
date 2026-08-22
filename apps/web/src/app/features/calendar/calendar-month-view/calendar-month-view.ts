@@ -187,7 +187,11 @@ interface PointerDownInfo {
 }
 
 import { PollTrack } from '../poll-track/poll-track';
-import { type VoteParticipation, participationAriaLabel } from '../poll-track.utils';
+import {
+  type VoteOptionActivatedEvent,
+  type VoteParticipation,
+  participationAriaLabel,
+} from '../poll-track.utils';
 
 @Component({
   selector: 'app-calendar-month-view',
@@ -217,6 +221,9 @@ export class CalendarMonthView {
    *  `ConstraintPanel`, donc vers la contrainte récurrente (story 1.7), la modification, la
    *  suppression et la découpe. Le tap n'ouvre plus le panneau. */
   readonly declarationPanelRequested = output<SlotSelectedEvent>();
+  /** Story 36.7 — une bande portant une option de vote vient d'être activée. La vue ne sait pas
+   *  qu'un sélecteur existe : elle signale, `CalendarView` décide. */
+  readonly voteOptionActivated = output<VoteOptionActivatedEvent>();
 
   protected readonly displayDate = signal(new Date());
 
@@ -384,7 +391,24 @@ export class CalendarMonthView {
     this.displayDateChange.emit(utc);
   }
 
-  protected onCellClick(date: Date, slot: DaySlot): void {
+  /**
+   * Le tap. **Point d'entrée UNIQUE** de tout ce qu'un appui court peut vouloir dire — n'en
+   * ouvrir aucun autre.
+   *
+   * Story 36.7 — l'ordre d'arbitrage, écrit ici et nulle part ailleurs :
+   * 1. date passée / hors mois ⇒ rien ;
+   * 2. **le rail suit, TOUJOURS** — même quand le sélecteur s'ouvre : « le rail suit, il ne se
+   *    commande pas » (36.1, AC2) ;
+   * 3. `suppressNextClick` ⇒ rien (clic parasite d'un geste armé) ;
+   * 4. **une sélection est ouverte ⇒ bascule du créneau, JAMAIS le sélecteur.** Un mode, et un
+   *    seul, réassigne le tap (collision 5) — et sans cette priorité, déclarer sur une plage
+   *    contenant un créneau proposé deviendrait impossible ;
+   * 5. le créneau porte une option de vote au rang gagnant ⇒ le sélecteur s'ouvre (collision 4) ;
+   * 6. sinon ⇒ lecture seule.
+   *
+   * `anchor` vient de l'événement : c'est la bande **déjà rendue**, jamais un nœud ajouté.
+   */
+  protected onCellClick(date: Date, slot: DaySlot, event?: Event): void {
     // Bloquer les clics sur les cellules hors-mois courant.
     const displayDate = this.displayDate();
     if (
@@ -412,7 +436,28 @@ export class CalendarMonthView {
     }
     // AC17/AC18 — une fois la barre ouverte, le même clic BASCULE le créneau touché. Le geste ne
     // change pas de nature, c'est le mode qui lui donne son sens.
-    if (this.selectedCells().length > 0) this.toggleCell(date, slot);
+    if (this.selectedCells().length > 0) {
+      this.toggleCell(date, slot);
+      return;
+    }
+    // Story 36.7, AC1 — hors sélection, une bande portant une option de vote ouvre le sélecteur
+    // de réponse. La condition est la MÊME que celle qui fait rendre la piste (`band.vote`), donc
+    // couche éteinte et rang « séance » gagnant excluent l'ouverture sans une ligne de plus.
+    const vote = this.voteAt(date, slot);
+    if (vote && event?.currentTarget instanceof HTMLElement) {
+      this.voteOptionActivated.emit({ vote, date, slot, anchor: event.currentTarget });
+    }
+  }
+
+  /** La participation portée par la bande de ce créneau, ou `null`. Lue sur le modèle DÉJÀ
+   *  calculé (`weeks()` ← `buildDayDetail`) : aucune règle de préséance n'est réécrite ici. */
+  private voteAt(date: Date, slot: DaySlot): VoteParticipation | null {
+    const cell = this.allCells().find((c) => c.date.getTime() === date.getTime());
+    if (!cell) return null;
+    // Un jour uniforme n'a qu'une bande fusionnée, et « uniforme » veut précisément dire qu'aucun
+    // événement n'y est posé (AC4 de la 36.2) : il ne peut donc pas porter de vote.
+    const band = cell.bands.find((b) => b.slot === slot);
+    return band?.vote ?? null;
   }
 
   /** Sélection d'une seule cellule, armée par `Espace` ou par `1`/`2`/`3` (AC7, AC15).

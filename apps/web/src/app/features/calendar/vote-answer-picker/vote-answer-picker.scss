@@ -1,0 +1,95 @@
+/* Story 36.7 — le sélecteur de réponse de vote.
+   Formes et dimensions reprises AU PIXEL du contrat d'UI (`contrat-ui-calendrier.html:198-203`).
+
+   🚨 Les COULEURS, elles, viennent des jetons du projet, pas de la planche : celle-ci écrit
+   `var(--sys-container)` et des `rgba()` en dur, qui sont ses propres alias de maquette. Ce jeton
+   n'existe pas dans `styles.scss` — un fond `var(--sys-container)` se résout en RIEN, et le
+   sélecteur est apparu TRANSPARENT à l'écran, les bandes du calendrier le traversant (défaut réel,
+   invisible aux tests, trouvé à la vérification visuelle). Les trois thèmes redéfinissent ces
+   jetons : les employer est aussi la seule façon que le sélecteur soit juste dans les trois. */
+
+.picker {
+  /* Un cran au-dessus du conteneur de la grille : ce panneau flotte au-dessus d'elle. */
+  background: var(--mat-sys-surface-container-high);
+  border: 1px solid var(--jdr-status-todo);
+  border-radius: 10px;
+  padding: var(--sp2);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 70%);
+  width: 215px;
+  box-sizing: border-box;
+}
+
+.picker__head {
+  font-size: 11px;
+  color: var(--jdr-text-muted);
+  padding: 2px 8px 5px;
+}
+
+.opt2 {
+  display: flex;
+  align-items: center;
+  gap: var(--sp2);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12.5px;
+
+  /* Ce sont de vrais <button> : ils doivent être atteignables au clavier et actionnables au
+     doigt, mais ne pas ressembler à des boutons Material — le contrat dessine des lignes de
+     menu. On neutralise donc l'apparence, jamais la sémantique. */
+  width: 100%;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover:not(:disabled),
+  &:focus-visible {
+    background: var(--mat-sys-surface-container-highest);
+  }
+
+  &:disabled {
+    /* AC11 — pendant une écriture. L'entrée reste LISIBLE : on signale l'attente, on ne fait pas
+       disparaître ce qu'on est en train de choisir. */
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  /* Ma réponse courante : un FOND, jamais une simple teinte de texte — et `aria-checked` le dit
+     en plus au lecteur d'écran (AC13, P-1). */
+  &.sel {
+    /* La planche écrit `rgba(126,200,164,.16)` — c'est `--color-available` du thème émeraude à
+       16 %. Exprimé ainsi, le marquage suit les trois thèmes au lieu d'en figer un. */
+    background: color-mix(in srgb, var(--color-available) 16%, transparent);
+  }
+
+  i {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex: 0 0 9px;
+  }
+
+  &[data-answer='YES'] i {
+    background: var(--color-available);
+  }
+
+  &[data-answer='MAYBE'] i {
+    background: var(--jdr-status-todo);
+  }
+
+  &[data-answer='NO'] i {
+    background: var(--color-unavailable);
+  }
+}
+
+.opt2--withdraw {
+  color: var(--jdr-text-muted);
+}
+
+.sep {
+  height: 1px;
+  background: var(--mat-sys-outline-variant);
+  margin: 4px 0;
+}

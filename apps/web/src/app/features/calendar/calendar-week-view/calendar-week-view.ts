@@ -214,6 +214,10 @@ export function buildWeek(
 interface PointerDownInfo {
   cell: WeekCell;
   slot: DaySlot;
+  /** Story 36.7 — la `.slot-cell` d'origine, retenue pour servir d'ANCRE au sélecteur de
+   *  réponse. Le tap de cette vue est synthétisé au `pointerup` sur la grille : sans cette
+   *  référence, l'élément touché serait perdu au moment de l'ouverture. */
+  element: HTMLElement | null;
   pointerId: number;
   pointerType: GesturePointerType;
   startX: number;
@@ -222,7 +226,11 @@ interface PointerDownInfo {
 }
 
 import { PollTrack } from '../poll-track/poll-track';
-import { type VoteParticipation, participationAriaLabel } from '../poll-track.utils';
+import {
+  type VoteOptionActivatedEvent,
+  type VoteParticipation,
+  participationAriaLabel,
+} from '../poll-track.utils';
 
 @Component({
   selector: 'app-calendar-week-view',
@@ -256,6 +264,9 @@ export class CalendarWeekView {
    *  `ConstraintPanel`, donc vers la contrainte récurrente (story 1.7), la modification, la
    *  suppression et la découpe. Le tap n'ouvre plus le panneau. */
   readonly declarationPanelRequested = output<SlotSelectedEvent>();
+  /** Story 36.7 — une cellule portant une option de vote vient d'être activée. Même contrat que
+   *  la vue Mois : la vue signale, `CalendarView` ouvre le sélecteur. */
+  readonly voteOptionActivated = output<VoteOptionActivatedEvent>();
 
   protected readonly displayWeekStart = signal<Date>(getWeekStart(new Date()));
 
@@ -456,7 +467,15 @@ export class CalendarWeekView {
     this.displayDateChange.emit(today);
   }
 
-  protected onCellClick(date: Date, slot: DaySlot): void {
+  /**
+   * Le tap — **point d'entrée unique**, comme en vue Mois. Cette vue n'a aucun `(click)` : le tap
+   * est synthétisé par `onGridPointerUp()` quand le geste n'a pas armé.
+   *
+   * Story 36.7 — ordre d'arbitrage identique à celui de la vue Mois (voir son `onCellClick`) :
+   * le rail suit toujours, une sélection ouverte garde le tap, et seule une cellule portant une
+   * option de vote au rang gagnant ouvre le sélecteur.
+   */
+  protected onCellClick(date: Date, slot: DaySlot, anchor?: HTMLElement | null): void {
     const now = new Date();
     // cellLocal est construit depuis les composantes UTC → getFullYear/Month/Date() == composantes UTC.
     const cellUtcMidnight = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
@@ -475,7 +494,20 @@ export class CalendarWeekView {
     }
     // AC17/AC18 — une fois la barre ouverte, le même clic BASCULE le créneau touché, quelle que
     // soit sa ligne : la contrainte de ligne droite est celle du GLISSEMENT, pas du clic.
-    if (this.selectedCells().length > 0) this.toggleCell(date, slot);
+    if (this.selectedCells().length > 0) {
+      this.toggleCell(date, slot);
+      return;
+    }
+    // Story 36.7, AC1 — même condition que celle qui fait rendre la piste (`eventVote`), donc
+    // couche éteinte et séance gagnante excluent l'ouverture sans condition supplémentaire.
+    // La ligne de la grille Semaine EST un créneau : `SLOT_ROWS` fait déjà la correspondance,
+    // on ne pose pas une seconde table. `FULL_DAY` n'y figure pas et ne porte donc jamais de vote.
+    const cell = this.cells().find((c) => c.date.getTime() === date.getTime());
+    const key = this.SLOT_ROWS.find((r) => r.slot === slot)?.key;
+    const vote = cell && key ? this.eventVote(this.getSlotData(cell, key)) : null;
+    if (vote && anchor) {
+      this.voteOptionActivated.emit({ vote, date, slot, anchor });
+    }
   }
 
   /** Sélection d'une seule cellule, armée au clavier (AC7, AC15). La portée part du créneau visé
@@ -609,6 +641,9 @@ export class CalendarWeekView {
     this.pointerDown = {
       cell,
       slot,
+      // Story 36.7 — l'ancre du sélecteur : la `.slot-cell` telle qu'elle existe déjà. Aucun
+      // nœud n'est ajouté pour la porter (le hit-test du glissement remonte par `closest`).
+      element: event.currentTarget instanceof HTMLElement ? event.currentTarget : null,
       pointerId: event.pointerId,
       pointerType: event.pointerType as GesturePointerType,
       startX: event.clientX,
@@ -661,7 +696,7 @@ export class CalendarWeekView {
     this.pointerDown = null;
     if (!wasArmed) {
       // Relâché sans déplacement ni appui maintenu écoulé → tap normal (AC3, AC9).
-      if (down) this.onCellClick(down.cell.date, down.slot);
+      if (down) this.onCellClick(down.cell.date, down.slot, down.element);
       return;
     }
     this.dragArmed.set(false);

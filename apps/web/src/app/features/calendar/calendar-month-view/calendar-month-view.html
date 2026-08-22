@@ -7,8 +7,13 @@
     <button mat-icon-button (click)="nextMonth()" aria-label="Mois suivant">
       <mat-icon>chevron_right</mat-icon>
     </button>
-    <button mat-icon-button (click)="goToToday()" aria-label="Revenir au mois actuel" class="today-btn"
-            [style.visibility]="isCurrentMonth() ? 'hidden' : 'visible'">
+    <button
+      mat-icon-button
+      (click)="goToToday()"
+      aria-label="Revenir au mois actuel"
+      class="today-btn"
+      [style.visibility]="isCurrentMonth() ? 'hidden' : 'visible'"
+    >
       <mat-icon>today</mat-icon>
     </button>
   </div>
@@ -50,11 +55,19 @@
             [class.selected]="isDaySelected(cell)"
             [class.current]="isCurrentDay(cell)"
             [attr.aria-hidden]="!cell.isCurrentMonth ? 'true' : null"
-            [attr.aria-label]="cell.isCurrentMonth ? (cell.date.getDate() + (cell.isToday ? ' (aujourd\'hui)' : '')) : null"
+            [attr.aria-label]="
+              cell.isCurrentMonth
+                ? cell.date.getDate() + (cell.isToday ? ' (aujourd\'hui)' : '')
+                : null
+            "
             [attr.aria-disabled]="cell.isCurrentMonth && cell.isPast ? 'true' : null"
-            [attr.role]="!cell.isCurrentMonth ? 'presentation' : (cell.isPast ? 'presentation' : 'button')"
-            [attr.tabindex]="!cell.isCurrentMonth ? null : (cell.isPast ? null : 0)"
-            [attr.aria-describedby]="cell.isCurrentMonth && !cell.isPast ? 'month-cell-instructions' : null"
+            [attr.role]="
+              !cell.isCurrentMonth ? 'presentation' : cell.isPast ? 'presentation' : 'button'
+            "
+            [attr.tabindex]="!cell.isCurrentMonth ? null : cell.isPast ? null : 0"
+            [attr.aria-describedby]="
+              cell.isCurrentMonth && !cell.isPast ? 'month-cell-instructions' : null
+            "
             (pointerdown)="onCellPointerDown($event, cell)"
             (keyup.enter)="onCellEnterKey()"
             (keydown.space)="$event.preventDefault()"
@@ -100,12 +113,16 @@
                 <span
                   class="band band--uniform"
                   [attr.data-winner]="cell.bands[0].winner"
-                  [attr.data-status]="cell.bands[0].preview !== null ? cell.bands[0].preview : cell.bands[0].status"
+                  [attr.data-status]="
+                    cell.bands[0].preview !== null ? cell.bands[0].preview : cell.bands[0].status
+                  "
                   [class.preview]="cell.bands[0].preview !== null"
                   [class.band--selected]="isDaySelected(cell)"
                   [attr.aria-label]="uniformAriaLabel(cell)"
                   role="img"
-                  (pointerdown)="$event.stopPropagation(); onBandPointerDown($event, cell, 'FULL_DAY')"
+                  (pointerdown)="
+                    $event.stopPropagation(); onBandPointerDown($event, cell, 'FULL_DAY')
+                  "
                   (click)="$event.stopPropagation(); onCellClick(cell.date, 'FULL_DAY')"
                 ></span>
               </div>
@@ -121,8 +138,10 @@
                     [class.band--selected]="isBandSelected(cell, band.slot)"
                     [attr.aria-label]="bandAriaLabel(band)"
                     role="img"
-                    (pointerdown)="$event.stopPropagation(); onBandPointerDown($event, cell, band.slot)"
-                    (click)="$event.stopPropagation(); onCellClick(cell.date, band.slot)"
+                    (pointerdown)="
+                      $event.stopPropagation(); onBandPointerDown($event, cell, band.slot)
+                    "
+                    (click)="$event.stopPropagation(); onCellClick(cell.date, band.slot, $event)"
                   >
                     @if (band.text) {
                       <span class="band__label">{{ band.text }}</span>

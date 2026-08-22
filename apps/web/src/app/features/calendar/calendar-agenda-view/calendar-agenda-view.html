@@ -24,7 +24,17 @@
                liste montre donc un créneau proposé par ligne, chacun avec sa piste, son compteur
                et ma réponse. L'Agenda a la place : rien n'y est replié (AC4, AC5). -->
           @if (entry.vote; as vote) {
-            <app-poll-track class="agenda-entry__track track-sm" [vote]="vote" />
+            <!-- Story 36.7 — la ligne devient activable : même sélecteur que les grilles et le
+                 rail. Un bouton, donc atteignable au clavier sans code supplémentaire. -->
+            <button
+              type="button"
+              class="agenda-entry__vote-action"
+              [attr.aria-label]="voteAriaLabel(entry)"
+              aria-haspopup="menu"
+              (click)="onVoteActivate(entry, $event)"
+            >
+              <app-poll-track class="agenda-entry__track track-sm" [vote]="vote" />
+            </button>
           }
         </li>
       }

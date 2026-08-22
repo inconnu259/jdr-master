@@ -50,6 +50,7 @@ const VOTE: AgendaEntry = {
   label: 'Les Cendres d’Ashal',
   slot: 'MORNING',
   vote: {
+    partieId: 'partie-1',
     pollId: 'p1',
     optionId: 'o1',
     yes: 2,
@@ -335,5 +336,52 @@ describe('CalendarDetailRail — piste de participation (Story 36.6)', () => {
 
     const soir = fixture.nativeElement.querySelectorAll('.it')[2] as HTMLElement;
     expect(soir.querySelector('app-poll-track')).toBeNull();
+  });
+});
+
+describe('CalendarDetailRail — le chemin CLAVIER vers le sélecteur de réponse (Story 36.7, AC7)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC7 — une ligne portant une option de vote est un VRAI bouton', async () => {
+    // Les bandes des grilles ne sont pas focalisables (126 arrêts de tabulation refusés,
+    // EXPERIENCE.md §6 bis) : sans cette ligne, répondre à un vote serait inatteignable au
+    // clavier. Le rail est donc le chemin d'accès, exactement comme il l'est déjà pour une séance.
+    const detail = buildDayDetail('2026-08-20', [VOTE], ALL_LAYERS, [], NOW);
+    const fixture = await createRail(detail);
+
+    const btn = fixture.nativeElement.querySelector('button.v--vote');
+    expect(btn).toBeTruthy();
+    expect(btn.getAttribute('aria-label')).toContain('Répondre au vote');
+  });
+
+  it('AC7 — l’activer signale l’option, avec le bouton pour ancre', async () => {
+    const detail = buildDayDetail('2026-08-20', [VOTE], ALL_LAYERS, [], NOW);
+    const fixture = await createRail(detail);
+    const emitted: any[] = [];
+    fixture.componentInstance.voteOptionActivated.subscribe((e: any) => emitted.push(e));
+
+    const btn = fixture.nativeElement.querySelector('button.v--vote') as HTMLElement;
+    btn.click();
+    fixture.detectChanges();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0].vote.optionId).toBe('o1');
+    expect(emitted[0].slot).toBe('MORNING');
+    expect(emitted[0].anchor).toBe(btn);
+    // Date LOCALE-minuit, comme celle qu'émettent les grilles — jamais UTC (cf.
+    // `dateKeyToLocalMidnight`).
+    expect(emitted[0].date.getFullYear()).toBe(2026);
+    expect(emitted[0].date.getDate()).toBe(20);
+  });
+
+  it('AC12 — sans participation servie, la ligne de vote n’est pas activable', async () => {
+    // Dégradation honnête héritée de la 36.6 : pas d'agrégats ⇒ pas de piste, donc pas de
+    // sélecteur non plus. Une ligne cliquable qui ne saurait pas quoi ouvrir serait un piège.
+    const sansPiste = { ...VOTE, vote: undefined };
+    const detail = buildDayDetail('2026-08-20', [sansPiste], ALL_LAYERS, [], NOW);
+    const fixture = await createRail(detail);
+
+    expect(fixture.nativeElement.querySelector('button.v--vote')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('vote de date');
   });
 });

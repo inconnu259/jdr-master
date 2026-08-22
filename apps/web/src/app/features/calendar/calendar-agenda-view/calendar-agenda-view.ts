@@ -1,8 +1,12 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type { DaySlot } from '@master-jdr/shared';
-import { composeSeanceInfo } from '../day-detail.utils';
-import type { VoteParticipation } from '../poll-track.utils';
+import { composeSeanceInfo, dateKeyToLocalMidnight } from '../day-detail.utils';
+import {
+  participationAriaLabel,
+  type VoteOptionActivatedEvent,
+  type VoteParticipation,
+} from '../poll-track.utils';
 import { PollTrack } from '../poll-track/poll-track';
 
 /** Type d'entrée affichée dans la vue Agenda (Story 30.6, AC2) — un par couche pertinente. Chaque
@@ -80,6 +84,10 @@ export class CalendarAgendaView {
   readonly entries = input<AgendaEntry[]>([]);
   readonly loading = input(false);
 
+  /** Story 36.7 — « Idem » de la table 1 d'`EXPERIENCE.md` : l'Agenda ouvre le même sélecteur de
+   *  réponse que les grilles. Composant de rendu pur : il signale, il n'écrit pas. */
+  readonly voteOptionActivated = output<VoteOptionActivatedEvent>();
+
   protected readonly sortedEntries = computed(() =>
     // Revue de code : clé de tri secondaire (libellé) pour les entrées sans date propre
     // (inscriptions ouvertes, votes sans option) — sinon deux entrées à date:'' ne se
@@ -104,5 +112,26 @@ export class CalendarAgendaView {
 
   protected typeLabel(type: AgendaEntryType): string {
     return TYPE_LABELS[type];
+  }
+
+  /** Revue de code 36.7 : même repli qu'au rail — `[attr.aria-label]` écrase le contenu du
+   *  bouton, y compris le `role="img"`/`aria-label` propre à `<app-poll-track>` qu'il enveloppe. */
+  protected voteAriaLabel(entry: AgendaEntry): string {
+    const detail = entry.vote ? participationAriaLabel(entry.vote) : null;
+    return detail
+      ? `Répondre au vote — ${entry.label} — ${detail}`
+      : `Répondre au vote — ${entry.label}`;
+  }
+
+  /** Date à minuit LOCAL, comme les grilles — jamais UTC (cf. `dateKeyToLocalMidnight`). */
+  protected onVoteActivate(entry: AgendaEntry, event: Event): void {
+    const vote = entry.vote;
+    if (!vote || !entry.date || !(event.currentTarget instanceof HTMLElement)) return;
+    this.voteOptionActivated.emit({
+      vote,
+      date: dateKeyToLocalMidnight(entry.date),
+      slot: entry.slot ?? 'FULL_DAY',
+      anchor: event.currentTarget,
+    });
   }
 }

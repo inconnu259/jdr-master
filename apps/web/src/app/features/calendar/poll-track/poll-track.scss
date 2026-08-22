@@ -1,0 +1,129 @@
+/* Story 36.6 — la piste de participation. Reprise AU PIXEL du contrat d'UI
+   (`contrat-ui-calendrier.html:112-120`) : hauteur 4 px, rayon 2 px, fond tramé à 45°. */
+
+:host {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+
+  /* 🚨 Le pointeur doit TOUJOURS atterrir sur la cellule / la bande qui porte
+     `data-cell-date`, jamais sur la piste : sans cela la sélection par glissement casse, et
+     aucun test ne le verrait (le hit-test est stubbé en jsdom — story 36.13, encadré n°3). */
+  pointer-events: none;
+}
+
+.track {
+  display: flex;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  flex: 0 0 52px;
+  width: 52px;
+
+  /* LA TRAME EST LE FOND, pas un quatrième segment : elle apparaît partout où les segments ne
+     couvrent pas. Même trame que « personne n'a répondu » ailleurs dans le calendrier — aucun
+     code visuel nouveau à apprendre (DESIGN.md:331). */
+  background: repeating-linear-gradient(
+    45deg,
+    transparent 0 2px,
+    rgba(127, 140, 141, 0.8) 2px 4px
+  );
+}
+
+.seg {
+  display: block;
+  height: 100%;
+}
+
+.seg-yes {
+  background: var(--color-available);
+}
+
+.seg-maybe {
+  background: var(--jdr-status-todo);
+}
+
+.seg-no {
+  background: var(--color-unavailable);
+}
+
+.cnt {
+  font-size: 9.5px;
+  color: var(--jdr-text-muted);
+  white-space: nowrap;
+}
+
+.mine {
+  font-size: 9px;
+  color: var(--jdr-accent-1);
+  white-space: nowrap;
+}
+
+/* Ma réponse : deux formulations émises, une seule montrée. Par défaut la phrase (rail, Agenda). */
+.mine-short {
+  display: none;
+  font-size: 9px;
+  color: var(--jdr-accent-1);
+  white-space: nowrap;
+}
+
+/* Les trois tailles du contrat. La surface hôte pose la classe ; elle ne calcule jamais de
+   largeur en TypeScript. */
+:host(.track-sm) .track {
+  flex-basis: 40px;
+  width: 40px;
+}
+
+:host(.track-lg) .track {
+  flex-basis: 70px;
+  width: 70px;
+}
+
+/* ── Densité par surface ───────────────────────────────────────────────────
+
+   🚨 Ces règles DOIVENT vivre ici, pas chez la surface appelante. `.cnt`, `.mine` et
+   `.mine-short` appartiennent à ce composant : l'encapsulation de vue d'Angular empêche un
+   sélecteur écrit dans `calendar-month-view.scss` ou `calendar-week-view.scss` de les atteindre.
+   Le défaut a été trouvé À L'ŒIL — la règle `.band--no-counter .cnt { display: none }` n'avait
+   aucun effet et le compteur s'affichait dans la case du Mois, contre l'AC4.
+
+   La surface pose une classe d'HÔTE ; l'hôte, lui, appartient au template du parent, donc le
+   parent peut le styler (largeur, marges) — mais pas son contenu. Les `@container` fonctionnent
+   depuis ici : le conteneur nommé est un ancêtre, la frontière de composant ne l'interrompt pas. */
+
+/* Case du Mois — AC4 : JAMAIS de compteur, à aucune largeur.
+
+   ⚠️ **Ni ma réponse.** Divergence assumée avec la planche (`contrat-ui-calendrier.html:797`,
+   qui rend « oui » dans la bande), et TROUVÉE À L'ŒIL : la grille du Mois est **plafonnée à
+   ~896 px, soit ~115 px de case, et elle ne grandit pas avec la fenêtre** — fait mesuré et
+   consigné par la story 36.5 dans `calendar-month-view.scss`. Piste (52 px) + « peut-être »
+   (~45 px) ne laissaient plus que ~15 px au titre, réduit à « C… ». C'est exactement le bruit que
+   la 36.5 a retiré en ramenant `.band__sub` à l'heure seule : l'accessoire cède, le titre reste.
+   Rien n'est perdu — le rail porte ma réponse à toutes les largeurs (36.1), et le nom accessible
+   de la piste la dit toujours (AC14). Un seuil plus haut serait inutile : il ne se déclencherait
+   jamais, la grille étant plafonnée. */
+:host(.in-month) .cnt,
+:host(.in-month) .mine,
+:host(.in-month) .mine-short {
+  display: none;
+}
+
+/* Cellule de Semaine — sous le seuil, ni compteur ni réponse : 43 px ne laissent la place qu'à
+   la forme. Le rail porte le détail complet à toutes les largeurs (acquis de la story 36.1). */
+:host(.in-week) .cnt,
+:host(.in-week) .mine,
+:host(.in-week) .mine-short {
+  display: none;
+}
+
+/* AC4 — au-dessus du seuil, la cellule a la place : le compteur double la forme et ma réponse
+   s'écrit. Même seuil que le titre et les informations pratiques (story 36.13).
+   La cellule prend la forme COURTE (« oui ») : elle est plus étroite que le rail, et la phrase
+   entière l'écraserait comme elle écrasait la bande du Mois. */
+@container week-grid (min-width: 500px) {
+  :host(.in-week) .cnt,
+  :host(.in-week) .mine-short {
+    display: inline;
+  }
+}

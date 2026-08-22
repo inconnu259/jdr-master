@@ -127,6 +127,20 @@ export function dateKeyToUtcMidnight(dateKey: string): Date {
 }
 
 /** Date locale → `YYYY-MM-DD`, même convention que `dateKey()` des vues Mois/Semaine. */
+/**
+ * Story 36.7 — `YYYY-MM-DD` vers minuit **LOCAL**.
+ *
+ * 🚨 Distinct de `dateKeyToUtcMidnight()`, et le choix n'est pas cosmétique. Les deux grilles
+ * construisent leurs cases en heure LOCALE (`buildMonth`/`buildWeek`), et `toDateKey()` relit des
+ * composantes locales : un événement d'activation portant une date à minuit UTC serait relu, dans
+ * tout fuseau négatif, comme la veille. Toute surface qui émet une date vers `CalendarView` passe
+ * donc par ici — le rail et l'Agenda, qui ne connaissent leur jour que sous forme de clé.
+ */
+export function dateKeyToLocalMidnight(dateKey: string): Date {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 export function toDateKey(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');

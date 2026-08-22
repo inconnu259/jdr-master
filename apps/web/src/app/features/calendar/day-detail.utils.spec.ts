@@ -177,6 +177,7 @@ describe('buildDayDetail — AC6 : la couche gouverne le texte, jamais l’indis
       label: 'Les Cendres d’Ashal',
       slot: 'MORNING',
       vote: {
+        partieId: 'partie-1',
         pollId: 'poll-1',
         optionId: 'o1',
         yes: 2,
@@ -189,6 +190,7 @@ describe('buildDayDetail — AC6 : la couche gouverne le texte, jamais l’indis
     const sansVotes = ALL_LAYERS.filter((l) => l !== 'votes-en-cours');
 
     expect(buildDayDetail('2026-08-20', [poll], ALL_LAYERS, [], NOW).slots[0].pollVote).toEqual({
+      partieId: 'partie-1',
       pollId: 'poll-1',
       optionId: 'o1',
       yes: 2,
@@ -208,13 +210,31 @@ describe('buildDayDetail — AC6 : la couche gouverne le texte, jamais l’indis
       date: '2026-08-20',
       label: 'Les Cendres d’Ashal',
       slot: 'MORNING',
-      vote: { pollId: 'p', optionId: 'o1', yes: 4, maybe: 0, no: 0, total: 4, myAnswer: 'YES' },
+      vote: {
+        partieId: 'partie-1',
+        pollId: 'p',
+        optionId: 'o1',
+        yes: 4,
+        maybe: 0,
+        no: 0,
+        total: 4,
+        myAnswer: 'YES',
+      },
     };
     const soir: AgendaEntry = {
       ...matin,
       key: 'poll-1-o2',
       slot: 'EVENING',
-      vote: { pollId: 'p', optionId: 'o2', yes: 1, maybe: 0, no: 0, total: 4, myAnswer: null },
+      vote: {
+        partieId: 'partie-1',
+        pollId: 'p',
+        optionId: 'o2',
+        yes: 1,
+        maybe: 0,
+        no: 0,
+        total: 4,
+        myAnswer: null,
+      },
     };
 
     const detail = buildDayDetail('2026-08-20', [matin, soir], ALL_LAYERS, [], NOW);
@@ -244,7 +264,16 @@ describe('buildDayDetail — AC6 : la couche gouverne le texte, jamais l’indis
       date: '2026-08-20',
       label: 'Vote concurrent',
       slot: 'EVENING',
-      vote: { pollId: 'p', optionId: 'o1', yes: 3, maybe: 0, no: 0, total: 4, myAnswer: null },
+      vote: {
+        partieId: 'partie-1',
+        pollId: 'p',
+        optionId: 'o1',
+        yes: 3,
+        maybe: 0,
+        no: 0,
+        total: 4,
+        myAnswer: null,
+      },
     };
 
     const detail = buildDayDetail('2026-08-20', [seanceEntry(), poll], ALL_LAYERS, [], NOW);

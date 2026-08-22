@@ -14,6 +14,7 @@ import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
+import { CdkConnectedOverlay, type ConnectedPosition } from '@angular/cdk/overlay';
 import { firstValueFrom } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import type {
@@ -30,6 +31,7 @@ import type {
   ScenarioDto,
   SeanceDto,
   SessionPollDto,
+  VoteAnswer,
 } from '@master-jdr/shared';
 import { CALENDAR_LAYER_KEYS, DEFAULT_CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
 import {
@@ -63,9 +65,10 @@ import {
 } from '../conflict-dialog/conflict-dialog';
 import { type SelectedCell, buildBatchItems } from '../selection.utils';
 import { AvailableSlotsPanel } from '../available-slots/available-slots';
+import { VoteAnswerPicker } from '../vote-answer-picker/vote-answer-picker';
+import type { VoteOptionActivatedEvent, VoteParticipation } from '../poll-track.utils';
 import { PollCreationComponent } from '../../poll/poll-creation/poll-creation';
 import { PollStatusPanel } from '../../poll/poll-status/poll-status';
-import { PollResponseComponent } from '../../poll/poll-response/poll-response';
 
 /** Story 8.8, AC7/AC8 : un vote actif, étiqueté par son scénario (et sa séance si le scénario en a
  * plusieurs) — remplace le signal `activePoll` unique qui ne représentait qu'« un » poll par Partie. */
@@ -85,6 +88,20 @@ const SLOT_LABELS: Record<DaySlot, string> = {
   EVENING: 'Soir',
   FULL_DAY: 'Journée',
 };
+
+/**
+ * Story 36.7 — les positions du sélecteur, dans l'ordre de préférence.
+ *
+ * Sous la bande d'abord (le geste vient d'en haut), au-dessus si la place manque en bas — cas
+ * réel et fréquent : la dernière ligne d'une grille de six semaines touche le bas de l'écran.
+ * `cdkConnectedOverlayPush` rattrape ensuite les débordements latéraux.
+ */
+const PICKER_POSITIONS: ConnectedPosition[] = [
+  { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 4 },
+  { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -4 },
+  { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top', offsetY: 4 },
+  { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom', offsetY: -4 },
+];
 
 const CALENDAR_CELL_DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', {
   weekday: 'short',
@@ -114,7 +131,8 @@ export interface EligibleSeanceEntry {
     AvailableSlotsPanel,
     PollCreationComponent,
     PollStatusPanel,
-    PollResponseComponent,
+    VoteAnswerPicker,
+    CdkConnectedOverlay,
   ],
   templateUrl: './calendar-view.html',
   styleUrl: './calendar-view.scss',
@@ -216,8 +234,7 @@ export class CalendarView implements OnInit {
   protected readonly isMjMode = computed(() => this.mode() === 'mj');
 
   // Story 8.8, AC9 : source unique de vérité — `activePolls`/`eligibleSeances` en sont dérivés
-  // (computed), pas peuplés séparément, pour rester cohérents après toute mutation locale
-  // (ex. onPollResponded()).
+  // (computed), pas peuplés séparément, pour rester cohérents après tout rechargement.
   protected readonly scenarios = signal<ScenarioDto[]>([]);
 
   // Story 8.8, AC7/AC8 : liste des votes actifs (OPEN) de la Partie, un par Séance, étiquetés par
@@ -337,6 +354,10 @@ export class CalendarView implements OnInit {
             detail: SLOT_LABELS[option.slot],
             slot: option.slot,
             vote: {
+              // Story 36.7 — le triplet d'identité de l'action. En contexte de partie il vient de
+              // la route ; il est porté jusqu'à la bande pour que le sélecteur de réponse n'ait
+              // rien à recomposer.
+              partieId: pid,
               pollId: entry.poll.id,
               optionId: option.id,
               yes: option.votes.filter((v) => v.answer === 'YES').length,
@@ -418,6 +439,11 @@ export class CalendarView implements OnInit {
               vote: !servedAggregates
                 ? undefined
                 : {
+                    // Story 36.7 — ici le `partieId` ne peut PAS venir de la route : le
+                    // calendrier personnel agrège plusieurs parties. Il vient de l'entrée
+                    // elle-même (`MyCalendarPollEntry.partieId`), et c'est le seul endroit de
+                    // l'application où voter dans la mauvaise partie serait possible.
+                    partieId: p.partieId,
                     pollId: p.pollId,
                     optionId: option.optionId,
                     yes: option.yes,
@@ -516,6 +542,22 @@ export class CalendarView implements OnInit {
   /** true pendant qu'une requête choose/close est en cours — évite une double action concurrente (double-clic, choix + annulation simultanés). */
   protected readonly pollActionPending = signal(false);
 
+  // ─── Story 36.7 — le sélecteur de réponse de vote ─────────────────────────
+  // UN SEUL sélecteur pour les quatre surfaces (case du Mois, cellule de Semaine, rail, Agenda) :
+  // elles signalent l'option activée, c'est ici qu'on l'ouvre et qu'on écrit. Deux
+  // implémentations produiraient deux façons de répondre selon l'écran.
+  //
+  // 🚨 L'ancre est l'élément DÉJÀ RENDU que la surface a touché (bande, cellule, bouton de
+  // ligne) — jamais un nœud ajouté pour l'occasion : un nœud de plus dans une cellule casserait
+  // le hit-test du glissement, et aucun test ne le verrait.
+  protected readonly pickerVote = signal<VoteParticipation | null>(null);
+  protected readonly pickerAnchor = signal<HTMLElement | null>(null);
+  protected readonly pickerLabel = signal('');
+  /** L'élément à qui rendre le focus à la fermeture — sans quoi un utilisateur clavier retombe
+   *  en haut du document (AC7). */
+  private pickerReturnFocus: HTMLElement | null = null;
+  protected readonly PICKER_POSITIONS = PICKER_POSITIONS;
+
   protected readonly mjSlots = computed(() =>
     this.availableSlots().filter((s): s is AvailableSlotDto => 'members' in s),
   );
@@ -545,6 +587,10 @@ export class CalendarView implements OnInit {
       const id = this.partieId();
       if (!id || !matchesPartie(change, id)) return;
       untracked(() => {
+        // Story 36.7 — un vote/retrait tiers peut avoir clos le sondage ou fait disparaître
+        // l'option affichée : le sélecteur ouvert référencerait alors des données périmées, et
+        // son ancre peut devenir un nœud détaché une fois la grille reconstruite ci-dessous.
+        this.closePicker();
         void this.loadScenarios(id);
         void this.refreshMjPanels();
       });
@@ -845,10 +891,15 @@ export class CalendarView implements OnInit {
   }
 
   protected onViewChange(value: string): void {
+    // Story 36.7 — changer de vue démonte la grille qui ancre le sélecteur ouvert.
+    this.closePicker();
     this.view.set(value as 'month' | 'week' | 'agenda');
   }
 
   protected async onMonthDateChange(d: Date): Promise<void> {
+    // Story 36.7 — naviguer de mois reconstruit les cases : l'ancre du sélecteur ouvert (une
+    // bande déjà rendue) serait détachée sans que ses données restent valides.
+    this.closePicker();
     this.sharedDate.set(d);
     const id = this.partieId();
     if (id) {
@@ -862,6 +913,8 @@ export class CalendarView implements OnInit {
   }
 
   protected async onWeekDateChange(d: Date): Promise<void> {
+    // Story 36.7 — même motif que `onMonthDateChange`.
+    this.closePicker();
     this.sharedDate.set(d);
     if (!this.partieId()) {
       const weekStart = getWeekStart(d);
@@ -896,18 +949,118 @@ export class CalendarView implements OnInit {
     if (id) await this.loadScenarios(id);
   }
 
-  // Story 8.8, AC8 : met à jour uniquement la séance concernée (le poll répondu, identifié par
-  // pollId) au sein de `scenarios` — pas de refetch complet, `activePolls` (computed) se
-  // recalcule automatiquement.
-  protected onPollResponded(poll: SessionPollDto): void {
-    this.scenarios.update((list) =>
-      list.map((scenario) => ({
-        ...scenario,
-        seances: scenario.seances.map((seance) =>
-          seance.poll?.id === poll.id ? { ...seance, poll } : seance,
-        ),
-      })),
+  /**
+   * Story 36.7, AC1 — une surface signale qu'une option de vote a été activée : on ouvre le
+   * sélecteur, ancré sur l'élément touché.
+   *
+   * Les surfaces ont déjà tranché *quand* : elles n'émettent que si elles rendent une piste sur
+   * ce créneau (couche allumée, rang gagnant `vote`, agrégats servis) et jamais pendant une
+   * sélection armée. Rien de tout cela n'est réévalué ici — une seconde règle diveregerait de la
+   * première au premier changement.
+   */
+  protected onVoteOptionActivated(event: VoteOptionActivatedEvent): void {
+    this.pickerVote.set(event.vote);
+    this.pickerAnchor.set(event.anchor);
+    this.pickerLabel.set(this.composePickerLabel(event.date, event.slot));
+    this.pickerReturnFocus = event.anchor;
+  }
+
+  /** « ven. 28 août — soir ». Composé ICI et non dans le sélecteur : les formateurs vivent déjà
+   *  dans ce fichier, et le sélecteur reste un composant de rendu pur. */
+  private composePickerLabel(date: Date, slot: DaySlot): string {
+    const day = CALENDAR_CELL_DATE_FORMAT.format(date);
+    return slot === 'FULL_DAY' ? day : `${day} — ${SLOT_LABELS[slot].toLowerCase()}`;
+  }
+
+  protected closePicker(): void {
+    this.pickerVote.set(null);
+    this.pickerAnchor.set(null);
+    // Le focus revient à la ligne ou à la bande d'où l'on vient (AC7). `isConnected` : la surface
+    // a pu être re-rendue entre-temps (rechargement après écriture).
+    const back = this.pickerReturnFocus;
+    this.pickerReturnFocus = null;
+    if (back?.isConnected) back.focus();
+  }
+
+  /** AC4 — `Échap` ferme sans rien changer.
+   *
+   *  🚨 C'est bien le `keydown` de l'OVERLAY, jamais celui de la grille : celle-ci a déjà le
+   *  sien, qui ANNULE la sélection en cours. Les deux ne doivent jamais se déclencher l'un
+   *  l'autre. */
+  protected onPickerKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      this.closePicker();
+    }
+  }
+
+  /** AC8/AC9/AC10/AC11 — répondre. */
+  protected async onVoteAnswerChosen(answer: VoteAnswer): Promise<void> {
+    const vote = this.pickerVote();
+    if (!vote || this.pollActionPending()) return;
+    await this.writeVote(
+      vote,
+      () => this.pollSvc.castVote(vote.partieId, vote.pollId, { optionId: vote.optionId, answer }),
+      'success.vote_cast',
+      this.theme.tone()['poll.cast_error'],
     );
+  }
+
+  /** AC3 — retirer. **Seul chemin de retrait du calendrier** depuis cette story. */
+  protected async onVoteWithdrawn(): Promise<void> {
+    const vote = this.pickerVote();
+    if (!vote || this.pollActionPending()) return;
+    await this.writeVote(
+      vote,
+      () => this.pollSvc.withdrawVote(vote.partieId, vote.pollId, vote.optionId),
+      'success.vote_withdrawn',
+      this.theme.tone()['poll.withdraw_error'],
+    );
+  }
+
+  /**
+   * Le corps commun des deux écritures — un seul endroit où vivent la garde d'unicité, le
+   * rechargement et le traitement de l'échec.
+   *
+   * 🚨 **On recharge, on ne reconstruit pas.** `PollResponseComponent` fabrique un
+   * `SessionPollDto` optimiste à la main parce qu'il n'a pas de rechargement sous la main ; ici
+   * `loadScenarios()` existe. Un rechargement coûte un appel sur une ACTION utilisateur (jamais
+   * au rendu — l'AC7 de la 36.6 porte sur l'affichage) et garantit que les quatre surfaces
+   * disent la même chose, la dérivation étant unique depuis la 36.6.
+   *
+   * 🚨 **On recharge AUSSI en cas d'échec** : un vote a pu être clos entre l'affichage et le
+   * geste (le serveur répond alors 400), et le calendrier personnel n'est pas câblé sur SSE —
+   * l'écran affichait donc peut-être un vote qui n'existe plus (AC10).
+   */
+  private async writeVote(
+    vote: VoteParticipation,
+    write: () => Promise<void>,
+    successToneKey: 'success.vote_cast' | 'success.vote_withdrawn',
+    errorMessage: string,
+  ): Promise<void> {
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    let ok = false;
+    try {
+      await write();
+      ok = true;
+    } catch {
+      this.error.set(errorMessage);
+    } finally {
+      this.pollActionPending.set(false);
+    }
+    // Revue de code 36.7 : fermer APRÈS l'écriture, jamais avant — sinon `[busy]` (câblé sur
+    // `pollActionPending`) ne peut jamais s'afficher (le sélecteur a déjà disparu), et un échec
+    // perd son contexte visuel au moment précis où l'utilisateur l'attend.
+    this.closePicker();
+
+    if (ok) this.snack.open(this.theme.tone()[successToneKey], undefined, { duration: 3000 });
+
+    // Les deux contextes n'ont pas la même source : contexte de partie ⇒ les scénarios (d'où
+    // `activePolls`) ; calendrier personnel ⇒ `GET /me/calendar`, qui n'a AUCUN temps réel.
+    const partieId = this.partieId();
+    if (partieId) await this.loadScenarios(partieId);
+    else await this.loadMeCalendarForRange(this.fromDateStr(), this.toDateStr());
   }
 
   protected async onClosePoll(pollId: string): Promise<void> {
