@@ -31,6 +31,17 @@
         (prevRequested)="destinyPrev()"
         (nextRequested)="destinyNext()"
       />
+
+      <!-- Story 36.10, AC1/AC10 — ⚠️ ÉCART ASSUMÉ avec `contrat-ui-calendrier.html:376`, qui
+           place ce bouton dans la barre de SÉLECTION. Celle-ci n'existe que tant qu'une sélection
+           existe : y loger l'armement obligerait le MJ à déclarer d'abord ses propres
+           disponibilités pour pouvoir composer un vote. Le bouton vit donc ici, frère de la
+           Destinée — même règle qu'elle : un mode s'arme hors panneau et se voit tant qu'il dure.
+           AC10 : rendu seulement pour un MJ, en contexte de partie, et seulement s'il y a
+           quelque chose à composer (un vote mis en avant, ou une séance qui en attend un). -->
+      @if (canCompose() && !composing()) {
+        <button type="button" class="compose-arm" (click)="startCompose()">Ajouter des dates</button>
+      }
     </div>
 
     <div class="view-toggle">
@@ -54,11 +65,15 @@
         [entries]="calendarEntries()"
         [activeLayers]="activeLayers()"
         [destinyDates]="destinyDates()"
+        [composing]="composing()"
+        [composedKeys]="composedKeys()"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onMonthDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"
         (declarationPanelRequested)="onDeclarationPanelRequested($event)"
         (voteOptionActivated)="onVoteOptionActivated($event)"
+        (composeToggled)="onComposeToggled($event)"
+        (composeCancelled)="cancelCompose()"
       />
     } @else if (view() === 'week') {
       <app-calendar-week-view
@@ -70,17 +85,37 @@
         [entries]="calendarEntries()"
         [activeLayers]="activeLayers()"
         [destinyDates]="destinyDates()"
+        [composing]="composing()"
+        [composedKeys]="composedKeys()"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onWeekDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"
         (declarationPanelRequested)="onDeclarationPanelRequested($event)"
         (voteOptionActivated)="onVoteOptionActivated($event)"
+        (composeToggled)="onComposeToggled($event)"
+        (composeCancelled)="cancelCompose()"
       />
     } @else {
       <app-calendar-agenda-view
         [entries]="agendaEntries()"
         [loading]="loading() || meCalendarLoading()"
         (voteOptionActivated)="onVoteOptionActivated($event)"
+      />
+    }
+
+    <!-- Story 36.10, AC1 — la barre PERSISTANTE du mode de composition, directement sous la
+         grille comme la barre de sélection. Elle reste rendue tant que le mode dure, y compris à
+         zéro créneau composé : c'est la seule sortie visible du mode avec `Échap`. Absente de la
+         vue Agenda, qui ne compose pas (« depuis la grille »). -->
+    @if (composing() && view() !== 'agenda') {
+      <app-compose-bar
+        [count]="composedCells().length"
+        [targetLabel]="composeTargetLabel()"
+        [busy]="pollActionPending()"
+        [canConfirm]="composeCanConfirm()"
+        [blockedReason]="composeBlockedReason()"
+        (confirmed)="confirmCompose()"
+        (cancelled)="cancelCompose()"
       />
     }
 
@@ -100,33 +135,11 @@
 
   @if (isMjMode()) {
     <div class="mj-results-panel">
-      <!-- Story 8.8, AC9 : sélecteur de séance pour lancer un vote directement depuis l'Oracle —
-           n'affiche que les séances éligibles (scénario non clôturé, aucun vote déjà lié, aucune
-           date déjà validée) ; étiquette toujours scénario ET séance, sans ambiguïté. -->
-      @if (eligibleSeances().length > 0) {
-        <div class="new-vote-form">
-          <label class="new-vote-form__label">
-            Planifier un vote pour :
-            <select #seanceSelect class="new-vote-form__select" (change)="noop()">
-              <option value="" selected>Choisir une séance…</option>
-              @for (entry of eligibleSeances(); track entry.seance.id) {
-                <option [value]="entry.seance.id">
-                  {{ entry.scenario.title }} — Séance {{ entry.seanceIndex }}
-                </option>
-              }
-            </select>
-          </label>
-          <button
-            mat-flat-button
-            color="primary"
-            type="button"
-            [disabled]="!seanceSelect.value"
-            (click)="startVoteFor(seanceSelect.value)"
-          >
-            Lancer le vote
-          </button>
-        </div>
-      }
+      <!-- ⚠️ Story 36.10, AC9 — le sélecteur « Planifier un vote pour : » a été RETIRÉ d'ici.
+           Il demandait la séance AVANT les dates, à côté d'un calendrier qui ne montrait pas ces
+           dates ; c'est le formulaire séparé que FR-52 supprime. La composition passe désormais
+           par « Ajouter des dates » et la sélection sur grille, et la séance se demande à la
+           validation. Conforme à l'annotation de la planche (`contrat-ui-calendrier.html:414`). -->
 
       <!-- Story 30.6, AC6 : couche « votes-en-cours », sans coût réseau supplémentaire (dérivée
            d'activePolls, déjà chargé) — masquée quand la couche est désactivée, et masquée en vue
@@ -135,7 +148,9 @@
       @if (isLayerActive('votes-en-cours') && view() !== 'agenda') {
         <div class="poll-section">
           <!-- Story 8.7, AC1 (corrigé en revue) : plus de vote sans séance — se lance depuis
-               « Lancer le vote » sur la fiche du scénario (SeanceList) ou le sélecteur ci-dessus.
+               « Lancer le vote » sur la fiche du scénario (SeanceList), ou depuis « Ajouter des
+               dates » et la composition sur grille (Story 36.10), qui demande la séance à la
+               validation.
                Story 8.8, AC7 : plusieurs votes actifs peuvent coexister (un par Séance), chacun
                étiqueté par son scénario/séance — remplace l'ancien panneau à un seul poll. -->
           @if (activePolls().length === 0) {

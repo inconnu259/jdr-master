@@ -275,6 +275,18 @@
     inset 0 0 0 100px color-mix(in srgb, var(--mat-sys-primary) 22%, transparent);
 }
 
+/* Story 36.10, AC13 — un créneau DÉSIGNÉ pour un vote. 🚨 Distinct de `.band--selected` :
+   sélectionner, c'est « ce créneau partira à l'écriture de MA disponibilité » ; composer, c'est
+   « ce créneau sera proposé à TOUT LE MONDE ». Deux intentions opposées ne peuvent pas porter le
+   même traitement. La teinte est celle du vote (`status-todo`), et le trait est TIRETÉ — la
+   forme, pas seulement la couleur (P-1), et « pas encore enregistré » se lit dans le pointillé. */
+.band--composed {
+  box-shadow:
+    inset 0 0 0 100px color-mix(in srgb, var(--jdr-status-todo, #f0a030) 24%, transparent);
+  outline: 2px dashed var(--jdr-status-todo, #f0a030);
+  outline-offset: -2px;
+}
+
 
 /* Le titre de la séance ou le libellé du vote, tronqué à l'ellipse et jamais reformaté.
    Il disparaît sous le seuil de densité (voir plus bas) : la forme survit, le texte cède. */

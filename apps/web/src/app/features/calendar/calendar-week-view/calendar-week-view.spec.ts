@@ -956,3 +956,171 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
     expect(cellAt('EVENING', 5).classList.contains('slot-cell--dim')).toBe(true);
   });
 });
+
+// ─── Story 36.10 — le mode de composition réassigne le tap (vue Semaine) ─────
+
+describe('CalendarWeekView — mode de composition (Story 36.10)', () => {
+  let fixture: ComponentFixture<CalendarWeekView>;
+  let el: HTMLElement;
+
+  // Semaine future : évite `isPast`, qui retire le rôle bouton et l'aria-label des cellules.
+  const futureStart = new Date();
+  futureStart.setDate(futureStart.getDate() + 14);
+  const weekStart = getWeekStart(
+    new Date(Date.UTC(futureStart.getFullYear(), futureStart.getMonth(), futureStart.getDate())),
+  );
+
+  /** Le jour de la colonne `i`, dans la convention `YYYY-MM-DD` des clés de composition. */
+  function dayKey(i: number): string {
+    const d = new Date(
+      weekStart.getUTCFullYear(),
+      weekStart.getUTCMonth(),
+      weekStart.getUTCDate() + i,
+    );
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  const PARTICIPATION = {
+    partieId: 'partie-1',
+    pollId: 'poll1',
+    optionId: 'opt1',
+    yes: 1,
+    maybe: 0,
+    no: 0,
+    total: 4,
+    myAnswer: null,
+  };
+
+  function voteEntry(dayIndex: number): AgendaEntry {
+    return {
+      key: `poll-${dayIndex}`,
+      type: 'votes-en-cours',
+      date: dayKey(dayIndex),
+      label: 'Les Cendres d Ashal',
+      slot: 'EVENING',
+      partieId: 'partie-1',
+      vote: PARTICIPATION,
+    } as AgendaEntry;
+  }
+
+  function create(inputs: Record<string, unknown> = {}): void {
+    fixture = TestBed.createComponent(CalendarWeekView);
+    fixture.componentRef.setInput('startDate', futureStart);
+    for (const [k, v] of Object.entries(inputs)) fixture.componentRef.setInput(k, v);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+
+  function cellAt(slot: 'MORNING' | 'AFTERNOON' | 'EVENING', dayIndex: number): HTMLElement {
+    return Array.from(el.querySelectorAll<HTMLElement>(`.slot-cell[data-cell-slot="${slot}"]`))[
+      dayIndex
+    ];
+  }
+
+  function pointer(type: string, x = 10, y = 10): PointerEvent {
+    return new PointerEvent(type, { clientX: x, clientY: y, pointerType: 'mouse', bubbles: true });
+  }
+
+  /** Le tap de cette vue n'est PAS un `(click)` : il est synthétisé par `onGridPointerUp()`. */
+  function tap(cell: HTMLElement): void {
+    const grid = el.querySelector('.week-grid') as HTMLElement;
+    cell.dispatchEvent(pointer('pointerdown'));
+    grid.dispatchEvent(pointer('pointerup'));
+    fixture.detectChanges();
+  }
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ imports: [CalendarWeekView] });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('AC2/AC12 — un tap émet composeToggled ET slotSelected, mais n’arme aucune sélection', () => {
+    create({ composing: true, composedKeys: new Set<string>() });
+    const composed = vi.fn();
+    const selected = vi.fn();
+    fixture.componentInstance.composeToggled.subscribe(composed);
+    fixture.componentInstance.slotSelected.subscribe(selected);
+
+    tap(cellAt('EVENING', 2));
+
+    expect(composed).toHaveBeenCalledTimes(1);
+    expect(composed.mock.calls[0][0].slot).toBe('EVENING');
+    expect(selected).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(0);
+    expect(el.querySelector('app-selection-bar')).toBeNull();
+  });
+
+  it('🚨 AC12 — une cellule portant un VOTE n’ouvre pas le sélecteur de réponse en composition', () => {
+    create({
+      entries: [voteEntry(2)],
+      activeLayers: ['votes-en-cours'],
+      composing: true,
+      composedKeys: new Set<string>(),
+    });
+    const voteActivated = vi.fn();
+    fixture.componentInstance.voteOptionActivated.subscribe(voteActivated);
+
+    tap(cellAt('EVENING', 2));
+
+    expect(voteActivated).not.toHaveBeenCalled();
+  });
+
+  it('hors composition, la même cellule ouvre bien le sélecteur', () => {
+    create({ entries: [voteEntry(2)], activeLayers: ['votes-en-cours'] });
+    const voteActivated = vi.fn();
+    fixture.componentInstance.voteOptionActivated.subscribe(voteActivated);
+
+    tap(cellAt('EVENING', 2));
+
+    expect(voteActivated).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC12/AC16 — au clavier, `Espace` compose au lieu d’armer une sélection', () => {
+    create({ composing: true, composedKeys: new Set<string>() });
+    const composed = vi.fn();
+    fixture.componentInstance.composeToggled.subscribe(composed);
+
+    cellAt('AFTERNOON', 3).dispatchEvent(new KeyboardEvent('keyup', { key: ' ', bubbles: true }));
+    fixture.detectChanges();
+
+    expect(composed).toHaveBeenCalledTimes(1);
+    expect(fixture.componentInstance['selectedCells']()).toHaveLength(0);
+  });
+
+  it('AC3 — `Échap` en composition remonte composeCancelled', () => {
+    create({ composing: true, composedKeys: new Set<string>() });
+    const cancelled = vi.fn();
+    fixture.componentInstance.composeCancelled.subscribe(cancelled);
+
+    (el.querySelector('.week-grid') as HTMLElement).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    fixture.detectChanges();
+
+    expect(cancelled).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC13/AC16 — une cellule composée porte sa classe ET son état en toutes lettres', () => {
+    create({ composing: true, composedKeys: new Set([`${dayKey(2)}|EVENING`]) });
+
+    const cell = cellAt('EVENING', 2);
+    expect(cell.classList.contains('slot-cell--composed')).toBe(true);
+    expect(cell.getAttribute('aria-label')).toContain('désigné pour le vote');
+
+    const other = cellAt('MORNING', 2);
+    expect(other.classList.contains('slot-cell--composed')).toBe(false);
+    expect(other.getAttribute('aria-label')).not.toContain('désigné pour le vote');
+  });
+
+  it('AC13 — composé et sélectionné sont DEUX traitements distincts', () => {
+    create({ composing: true, composedKeys: new Set([`${dayKey(2)}|EVENING`]) });
+    const cell = cellAt('EVENING', 2);
+    expect(cell.classList.contains('slot-cell--composed')).toBe(true);
+    expect(cell.classList.contains('selected')).toBe(false);
+  });
+});

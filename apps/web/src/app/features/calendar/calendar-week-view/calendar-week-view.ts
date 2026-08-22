@@ -26,8 +26,12 @@ import {
   MOVE_THRESHOLD_PX,
   type GesturePointerType,
   type SelectedCell,
+  composeCellKey,
   weekRangeCells,
 } from '../selection.utils';
+
+/** Story 36.10, AC16 — même mot qu'en vue Mois pour un créneau désigné. */
+const COMPOSED_ARIA = 'désigné pour le vote';
 
 interface SlotData {
   status: SlotStatus;
@@ -270,7 +274,20 @@ export class CalendarWeekView {
    */
   readonly destinyDates = input<ReadonlySet<string> | null>(null);
 
+  /**
+   * Story 36.10 — le mode de composition d'un vote (MJ). Mêmes entrées, même sémantique et même
+   * point d'étranglement qu'en vue Mois : les deux grilles doivent se comporter à l'identique,
+   * sans quoi le mode changerait de sens en changeant d'onglet.
+   */
+  readonly composing = input(false);
+  /** Créneaux composés, en clés `YYYY-MM-DD|SLOT` (`composeCellKey`). `null` hors mode. */
+  readonly composedKeys = input<ReadonlySet<string> | null>(null);
+
   readonly slotSelected = output<SlotSelectedEvent>();
+  /** Story 36.10, AC2 — un créneau vient d'être désigné ou retiré. */
+  readonly composeToggled = output<SlotSelectedEvent>();
+  /** Story 36.10, AC3 — `Échap` pendant la composition. */
+  readonly composeCancelled = output<void>();
   readonly displayDateChange = output<Date>();
   /** Story 30.3 : lot construit par un glissement (souris/tactile) ou une validation clavier —
    *  CalendarView construit les items et appelle createDeclarationBatch(), jamais cette vue. */
@@ -501,6 +518,13 @@ export class CalendarWeekView {
     // au glissement.
     this.slotSelected.emit({ date, slot });
     this.currentCell.set({ date, slot });
+    // 🚨 Story 36.10, AC2/AC12 — le mode de composition réassigne le tap, ICI, avant tout le
+    // reste. Le rail a déjà suivi juste au-dessus (principe 2) ; sélection et sélecteur de
+    // réponse sont neutralisés.
+    if (this.composing()) {
+      this.composeToggled.emit({ date, slot });
+      return;
+    }
     // Un geste armé se termine par un `click` spontané du navigateur : l'avaler, sinon il
     // rebasculerait la cellule qu'on vient de sélectionner (même garde qu'en vue Mois).
     if (this.suppressNextClick) {
@@ -528,6 +552,9 @@ export class CalendarWeekView {
   /** Sélection d'une seule cellule, armée au clavier (AC7, AC15). La portée part du créneau visé
    *  — la ligne de la grille Semaine EST un créneau. */
   private armSelection(date: Date, slot: DaySlot): void {
+    // 🚨 Story 36.10, AC12 — point d'étranglement unique (appui maintenu, glissement, clavier),
+    // exactement comme en vue Mois.
+    if (this.composing()) return;
     this.selectionAnchor.set({ date, slot });
     this.selectionCurrent.set({ date, slot });
     this.selectedCells.set([{ date, slot }]);
@@ -538,6 +565,11 @@ export class CalendarWeekView {
   protected onCellKeySelect(cell: WeekCell, slot: DaySlot): void {
     if (cell.isPast) return;
     this.slotSelected.emit({ date: cell.date, slot });
+    // Story 36.10, AC2/AC16 — parité clavier : en composition, désigner ajoute ou retire.
+    if (this.composing()) {
+      this.composeToggled.emit({ date: cell.date, slot });
+      return;
+    }
     this.armSelection(cell.date, slot);
   }
 
@@ -605,7 +637,12 @@ export class CalendarWeekView {
     return slotData.detail?.group ?? null;
   }
 
-  protected cellAriaLabel(cell: WeekCell, slotData: SlotData, slotName: string): string {
+  protected cellAriaLabel(
+    cell: WeekCell,
+    slotData: SlotData,
+    slotName: string,
+    slot?: DaySlot,
+  ): string {
     const labels: Record<SlotStatus, string> = {
       AVAILABLE: 'disponible',
       UNAVAILABLE: 'indisponible',
@@ -636,7 +673,16 @@ export class CalendarWeekView {
     // 36.7 pour la piste dans le rail.
     const groupe = this.eventGroup(slotData);
     if (groupe) parts.push(groupAriaLabel(groupe));
+    // Story 36.10, AC16 — l'état composé est annoncé, comme en vue Mois. Le créneau TYPÉ est
+    // passé par le gabarit (`row.slot`) plutôt que redéduit du libellé : `slotName` est du texte
+    // d'affichage, s'en servir de clé le rendrait intraduisible.
+    if (slot && this.isCellComposed(cell, slot)) parts.push(COMPOSED_ARIA);
     return parts.join(' — ');
+  }
+
+  /** Story 36.10, AC13 — ce créneau fait-il partie de la composition en cours ? */
+  protected isCellComposed(cell: WeekCell, slot: DaySlot): boolean {
+    return this.composedKeys()?.has(composeCellKey(cell.date, slot)) ?? false;
   }
 
   /** AC2/AC3 — le marquage suit la **portée** : passer la portée à « journée » doit allumer les
@@ -796,7 +842,8 @@ export class CalendarWeekView {
   }
 
   protected onShiftArrow(cell: WeekCell, slot: DaySlot, direction: -1 | 1): void {
-    if (cell.isPast) return;
+    // AC12 — ce chemin pose l'ancre lui-même, il lui faut donc sa propre garde.
+    if (cell.isPast || this.composing()) return;
     const anchor = this.selectionAnchor() ?? { date: cell.date, slot };
     if (!this.selectionAnchor()) this.selectionAnchor.set(anchor);
     const cellsArr = this.cells();
@@ -806,6 +853,15 @@ export class CalendarWeekView {
     const nextCell = cellsArr[nextIdx];
     if (nextCell.isPast) return;
     this.setRange({ date: nextCell.date, slot: anchor.slot });
+  }
+
+  /** Story 36.10, AC3 — `Échap` : une seule signification à un instant donné. */
+  protected onEscape(): void {
+    if (this.composing()) {
+      this.composeCancelled.emit();
+      return;
+    }
+    this.onSelectionCancelled();
   }
 
   protected onSelectionCancelled(): void {

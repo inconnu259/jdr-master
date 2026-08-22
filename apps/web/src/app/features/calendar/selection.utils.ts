@@ -67,3 +67,19 @@ export function buildBatchItems(
     };
   });
 }
+
+/**
+ * Story 36.10 — clé d'un créneau composé, `YYYY-MM-DD|SLOT`.
+ *
+ * 🚨 **Datée par sa JOURNÉE, jamais par `getTime()`.** Les deux extrémités qu'elle doit faire
+ * coïncider ne sont pas de même nature : d'un côté les `Date` LOCALES que les grilles
+ * construisent, de l'autre les dates ISO d'options de vote venues du serveur, dont le reste du
+ * calendrier ne lit déjà que les dix premiers caractères. Une clé fondée sur l'horodatage ferait
+ * diverger les deux dans tout fuseau non nul, et un créneau déjà proposé n'apparaîtrait pas
+ * comme composé.
+ *
+ * Point UNIQUE de la convention, partagé par `CalendarView` et les deux vues de grille.
+ */
+export function composeCellKey(date: Date, slot: DaySlot): string {
+  return `${toISODate(date)}|${slot}`;
+}

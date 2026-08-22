@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   UseGuards,
   forwardRef,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { ScenariosService } from '../scenarios/scenarios.service';
 import { CastVoteDto } from './dto/cast-vote.dto';
 import { ChooseDateDto } from './dto/choose-date.dto';
 import { PollService } from './poll.service';
+import { SetPollOptionsDto } from './dto/set-poll-options.dto';
 
 @UseGuards(AuthenticatedGuard)
 @Controller('parties/:id/poll')
@@ -91,6 +93,26 @@ export class PollController {
         err instanceof Error ? err.stack : err,
       );
     }
+  }
+
+  /**
+   * Story 36.10 (D-16) — mutation des options d'un vote OUVERT, composées sur la grille.
+   *
+   * **PUT et non PATCH** : le corps décrit l'ÉTAT COMPLET du jeu d'options voulu, pas une
+   * modification partielle. Route distincte de `:pollId/choose` (qui scelle) et de `DELETE
+   * :pollId` (qui clôt) — ne jamais en réutiliser une pour l'autre, même raisonnement qu'AD-10.
+   *
+   * 🚨 La création d'un vote ne passe PAS par ici et n'a toujours aucune route générique : elle
+   * reste `POST /scenarios/seances/:id/poll`, seul chemin qui garantit `Seance.pollId`.
+   */
+  @Put(':pollId/options')
+  setOptions(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @Param('pollId', ParseUUIDPipe) pollId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SetPollOptionsDto,
+  ) {
+    return this.poll.setOptions(partieId, pollId, user.id, dto);
   }
 
   @Delete(':pollId')

@@ -27,6 +27,12 @@ function makePrisma() {
     },
     pollOption: {
       findUnique: jest.fn(),
+      // Story 36.10 — la mutation d'options n'utilise QUE ces trois-là. `update` est présent
+      // uniquement pour pouvoir asserter qu'il n'est JAMAIS appelé : une option conservée garde
+      // son id et ne subit aucune écriture.
+      deleteMany: jest.fn(),
+      createMany: jest.fn(),
+      update: jest.fn(),
     },
     partie: {
       update: jest.fn(),
@@ -181,6 +187,21 @@ describe('PollService', () => {
     await expect(
       service.create('p1', 'mj1', {
         options: [opt('2026-08-01', 'MORNING'), opt('2026-08-01', 'MORNING')],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('🚨 create() — deux options représentant le MÊME instant sous des formats différents → BadRequestException (revue de code, Story 36.10)', async () => {
+    // '2026-08-01' et '2026-08-01T00:00:00.000Z' désignent le même instant, mais diffèrent comme
+    // chaînes brutes : avant la revue de code, la dédup de create() comparait la chaîne reçue, et
+    // ce doublon serait passé — divergent de la clé normalisée qu'utilise setOptions().
+    await expect(
+      service.create('p1', 'mj1', {
+        options: [
+          opt('2026-08-01', 'MORNING'),
+          opt('2026-08-01T00:00:00.000Z', 'MORNING'),
+        ],
       }),
     ).rejects.toThrow(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -512,5 +533,187 @@ describe('PollService', () => {
       BadRequestException,
     );
     expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
+  });
+
+  // ─── Story 36.10 (D-16) — mutation des options d'un vote ouvert ───────────
+  describe('setOptions()', () => {
+    /** Poll de départ à DEUX options, chacune portant une réponse. C'est le jeu qui rend
+     *  observable l'invariant central : une option conservée ne doit subir AUCUNE écriture. */
+    function pollWithOptions() {
+      return {
+        ...makePoll(),
+        options: [
+          {
+            id: 'optA',
+            pollId: 'poll1',
+            date: new Date('2026-08-01T00:00:00.000Z'),
+            slot: 'MORNING',
+            votes: [
+              {
+                userId: 'u1',
+                answer: 'YES',
+                user: { pseudo: 'Léa', displayName: 'Léa' },
+              },
+            ],
+          },
+          {
+            id: 'optB',
+            pollId: 'poll1',
+            date: new Date('2026-08-02T00:00:00.000Z'),
+            slot: 'AFTERNOON',
+            votes: [
+              {
+                userId: 'u2',
+                answer: 'NO',
+                user: { pseudo: 'Tom', displayName: 'Tom' },
+              },
+            ],
+          },
+        ],
+      };
+    }
+
+    beforeEach(() => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.sessionPoll.findUnique.mockResolvedValue(pollWithOptions());
+    });
+
+    it('→ MJ seul : getOwned qui rejette fait rejeter la mutation, sans aucune écriture (AC8)', async () => {
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      await expect(
+        service.setOptions('p1', 'poll1', 'joueur1', {
+          options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.pollOption.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.pollOption.createMany).not.toHaveBeenCalled();
+    });
+
+    it('→ poll introuvable : NotFoundException (AC14)', async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue(null);
+      await expect(
+        service.setOptions('p1', 'poll1', 'mj1', {
+          options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.pollOption.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("→ poll d'une AUTRE partie : NotFoundException, même si le MJ possède la partie de l'URL (AC14, sécurité)", async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        ...pollWithOptions(),
+        partieId: 'autre-partie',
+      });
+      await expect(
+        service.setOptions('p1', 'poll1', 'mj1', {
+          options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.pollOption.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('→ poll CLOSED : BadRequestException (AC14)', async () => {
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        ...pollWithOptions(),
+        status: 'CLOSED',
+      });
+      await expect(
+        service.setOptions('p1', 'poll1', 'mj1', {
+          options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.pollOption.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('→ deux options portant la même paire date + slot : BadRequestException (AC14)', async () => {
+      await expect(
+        service.setOptions('p1', 'poll1', 'mj1', {
+          options: [opt('2026-08-01', 'MORNING'), opt('2026-08-01', 'MORNING')],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.pollOption.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('→ moins de 2 options : BadRequestException (AC14, garde de service en plus du DTO)', async () => {
+      await expect(
+        service.setOptions('p1', 'poll1', 'mj1', {
+          options: [opt('2026-08-01', 'MORNING')],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.pollOption.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('→ plus de 40 options : BadRequestException (AC14, garde de service en plus du DTO)', async () => {
+      const options = Array.from({ length: 41 }, (_, i) =>
+        opt(`2026-09-${String(i + 1).padStart(2, '0')}`, 'EVENING'),
+      );
+      await expect(
+        service.setOptions('p1', 'poll1', 'mj1', { options }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.pollOption.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it("🚨 {A,B} → {A,C} : supprime l'id de B et LUI SEUL, crée C seul, et n'écrit JAMAIS sur A (AC5, AC7)", async () => {
+      await service.setOptions('p1', 'poll1', 'mj1', {
+        options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
+      });
+
+      // B retirée — et B seule.
+      expect(prisma.pollOption.deleteMany).toHaveBeenCalledTimes(1);
+      expect(prisma.pollOption.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['optB'] } },
+      });
+
+      // C créée — et C seule.
+      expect(prisma.pollOption.createMany).toHaveBeenCalledTimes(1);
+      const created = prisma.pollOption.createMany.mock.calls[0][0].data;
+      expect(created).toHaveLength(1);
+      expect(created[0]).toMatchObject({ pollId: 'poll1', slot: 'EVENING' });
+      expect(created[0].date.toISOString()).toBe('2026-08-03T00:00:00.000Z');
+
+      // 🚨 A conservée : aucune écriture ne la cible, d'aucune manière.
+      expect(prisma.pollOption.update).not.toHaveBeenCalled();
+      expect(
+        JSON.stringify(prisma.pollOption.deleteMany.mock.calls),
+      ).not.toContain('optA');
+      expect(
+        JSON.stringify(prisma.pollOption.createMany.mock.calls),
+      ).not.toContain('2026-08-01');
+    });
+
+    it('→ jeu identique à l’existant : aucune suppression, aucune création (AC5)', async () => {
+      await service.setOptions('p1', 'poll1', 'mj1', {
+        options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
+      });
+      expect(prisma.pollOption.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.pollOption.createMany).not.toHaveBeenCalled();
+    });
+
+    it('→ suppressions et créations dans UNE SEULE transaction (AC15)', async () => {
+      await service.setOptions('p1', 'poll1', 'mj1', {
+        options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('→ émet partieTopic ET notifyPartieSignalsChanged, les deux (AC15)', async () => {
+      await service.setOptions('p1', 'poll1', 'mj1', {
+        options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
+      });
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+        'p1',
+        'mj1',
+      );
+    });
+
+    it('→ renvoie le DTO relu, avec membersCount (AC5)', async () => {
+      prisma.membership.count.mockResolvedValue(3);
+      const dto = await service.setOptions('p1', 'poll1', 'mj1', {
+        options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
+      });
+      expect(dto.membersCount).toBe(4);
+      expect(dto.id).toBe('poll1');
+    });
   });
 });

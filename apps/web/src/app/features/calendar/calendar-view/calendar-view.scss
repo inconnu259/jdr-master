@@ -49,31 +49,21 @@
   margin-bottom: 12px;
 }
 
-.new-vote-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px;
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--mat-sys-outline-variant, #ccc);
-}
+/* Story 36.10, AC9 : les règles `.new-vote-form*` ont été retirées avec le sélecteur
+   « Planifier un vote pour : » qu'elles habillaient. */
 
-.new-vote-form__label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.75rem;
-  color: var(--mat-sys-on-surface-variant, #666);
-}
-
-.new-vote-form__select {
-  padding: 6px 8px;
-  border: 1px solid var(--mat-sys-outline, #999);
-  border-radius: 4px;
-  font-size: 0.875rem;
+/* Story 36.10, AC1 — l'armement du mode de composition. Même forme de chip que la Destinée
+   (`destiny-control.scss`) : ce sont deux entrées de mode, dans la même bande de contrôles, et
+   elles ne doivent pas se ressembler « presque ». Teinte primaire pour la distinguer du vote. */
+.compose-arm {
+  border: 1px solid var(--mat-sys-primary, #666);
+  border-radius: 999px;
   background: transparent;
-  color: inherit;
+  color: var(--mat-sys-primary, inherit);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .poll-entry {

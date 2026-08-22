@@ -24,7 +24,7 @@
       (pointerup)="onGridPointerUp($event)"
       (pointercancel)="onGridPointerUp($event)"
       (contextmenu)="isGestureActive() && $event.preventDefault()"
-      (keydown.escape)="onSelectionCancelled()"
+      (keydown.escape)="onEscape()"
     >
       <div class="grid-cell header-corner"></div>
       @for (cell of cells(); track cell.date.getTime()) {
@@ -80,12 +80,15 @@
             [class.preview]="getSlotData(cell, row.key).preview !== null"
             [class.unknown]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status) === 'UNKNOWN'"
             [class.selected]="isCellSelected(cell, row.slot)"
+            [class.slot-cell--composed]="isCellComposed(cell, row.slot)"
             [class.current]="isCurrentCell(cell, row.slot)"
             [class.slot-cell--dim]="isDayDimmed(cell)"
             [class.has-event]="!!eventTitle(getSlotData(cell, row.key))"
             [attr.role]="cell.isPast ? 'presentation' : 'button'"
             [attr.tabindex]="cell.isPast ? null : 0"
-            [attr.aria-label]="cell.isPast ? null : cellAriaLabel(cell, getSlotData(cell, row.key), row.label)"
+            [attr.aria-label]="
+              cell.isPast ? null : cellAriaLabel(cell, getSlotData(cell, row.key), row.label, row.slot)
+            "
             (pointerdown)="onCellPointerDown($event, cell, row.slot)"
             (keyup.enter)="onCellEnterKey()"
             (keydown.space)="$event.preventDefault()"
@@ -137,7 +140,7 @@
         (markUnavailable)="onSelectionCommit('UNAVAILABLE')"
         (otherRequested)="onOtherRequested()"
         (cancelled)="onSelectionCancelled()"
-        (keydown.escape)="onSelectionCancelled()"
+        (keydown.escape)="onEscape()"
       />
     }
   }

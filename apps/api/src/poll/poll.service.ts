@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { SessionPollDto } from '@master-jdr/shared';
+import type { DaySlot, SessionPollDto } from '@master-jdr/shared';
 import { PartiesService } from '../parties/parties.service';
 import { countParticipants } from '../parties/participant-count.util';
 import { PrismaService } from '../prisma/prisma.service';
@@ -14,6 +14,7 @@ import {
 import { CastVoteDto } from './dto/cast-vote.dto';
 import { ChooseDateDto } from './dto/choose-date.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
+import { SetPollOptionsDto } from './dto/set-poll-options.dto';
 
 const POLL_INCLUDE = {
   options: {
@@ -40,9 +41,13 @@ export class PollService {
   ): Promise<SessionPollDto> {
     await this.parties.getOwned(partieId, userId);
 
+    // Revue de code (Story 36.10) — clé normalisée par `optionKey()`, la MÊME que celle de
+    // `setOptions()` : comparer la chaîne brute reçue laissait deux dates représentant le même
+    // instant (composante horaire ou décalage différents) passer pour distinctes, ce que
+    // `@IsDateString()` autorise en entrée.
     const seen = new Set<string>();
     for (const o of dto.options) {
-      const key = `${o.date}|${o.slot}`;
+      const key = optionKey(new Date(o.date), o.slot);
       if (seen.has(key))
         throw new BadRequestException(
           'Options dupliquées (même date et créneau)',
@@ -208,6 +213,96 @@ export class PollService {
     await this.parties.notifyPartieSignalsChanged(partieId, userId);
   }
 
+  /**
+   * Story 36.10 (dérogation D-16) — remplace le jeu d'options d'un vote **OUVERT** par celui que
+   * le MJ vient de composer sur la grille. MJ seul (`getOwned`).
+   *
+   * 🚨 **RÉCONCILIATION, JAMAIS REMPLACEMENT.** `PollVote` est en cascade sur `PollOption`
+   * (`schema.prisma:313`) : supprimer toutes les options pour les recréer détruirait les réponses
+   * de TOUS les membres à chaque ajout d'une seule date. La comparaison se fait sur la clé métier
+   * `date|slot` — la même que celle du dédoublonnage de `create()` — et **une option conservée
+   * garde son `id` et ne subit aucune écriture**. Seules les options réellement retirées perdent
+   * leurs réponses, ce que Q-22 autorise sous avertissement préalable côté client.
+   *
+   * Le jeu reçu est **déclaratif et complet** : ce qui n'y est pas est retiré.
+   */
+  async setOptions(
+    partieId: string,
+    pollId: string,
+    userId: string,
+    dto: SetPollOptionsDto,
+  ): Promise<SessionPollDto> {
+    await this.parties.getOwned(partieId, userId);
+
+    const poll = await this.prisma.sessionPoll.findUnique({
+      where: { id: pollId },
+      include: POLL_INCLUDE,
+    });
+    // Le poll doit appartenir à la partie de l'URL : sans cette vérification, un MJ pourrait
+    // muter le vote d'une AUTRE partie en forgeant un pollId (même garde que castVote/choose).
+    if (!poll || poll.partieId !== partieId)
+      throw new NotFoundException('Poll introuvable');
+    if (poll.status !== 'OPEN')
+      throw new BadRequestException('Le poll est déjà fermé');
+
+    // Bornes redites ici, en plus du DTO : le service est appelable sans passer par le pipe de
+    // validation (tests, orchestration cross-module), et c'est lui qui porte l'invariant.
+    if (dto.options.length < 2 || dto.options.length > 40)
+      throw new BadRequestException('Un vote porte de 2 à 40 créneaux');
+
+    const wanted = new Map<string, { date: Date; slot: DaySlot }>();
+    for (const o of dto.options) {
+      const date = new Date(o.date);
+      const key = optionKey(date, o.slot);
+      if (wanted.has(key))
+        throw new BadRequestException(
+          'Options dupliquées (même date et créneau)',
+        );
+      wanted.set(key, { date, slot: o.slot });
+    }
+
+    const existing = new Map<string, string>(); // clé métier → id d'option
+    for (const opt of poll.options) {
+      existing.set(optionKey(opt.date, opt.slot), opt.id);
+    }
+
+    const toDeleteIds = [...existing.entries()]
+      .filter(([key]) => !wanted.has(key))
+      .map(([, id]) => id);
+    const toCreate = [...wanted.entries()]
+      .filter(([key]) => !existing.has(key))
+      .map(([, o]) => ({ pollId, date: o.date, slot: o.slot }));
+
+    // Une seule transaction : un retrait appliqué sans son ajout laisserait le vote dans un état
+    // que le MJ n'a jamais demandé.
+    await this.prisma.$transaction(async (tx) => {
+      if (toDeleteIds.length > 0) {
+        // La cascade `onDelete: Cascade` de PollVote → PollOption emporte les réponses de ces
+        // options, et d'elles seules.
+        await tx.pollOption.deleteMany({ where: { id: { in: toDeleteIds } } });
+      }
+      if (toCreate.length > 0) {
+        await tx.pollOption.createMany({ data: toCreate });
+      }
+    });
+
+    const updated = await this.prisma.sessionPoll.findUnique({
+      where: { id: pollId },
+      include: POLL_INCLUDE,
+    });
+    // Revue de code — même garde qu'à la lecture initiale : rien ne supprime un `SessionPoll`
+    // aujourd'hui, donc ce cas est inatteignable en pratique, mais `toDto(null, ...)` planterait
+    // en erreur non contrôlée plutôt qu'en 404 propre si ça changeait un jour.
+    if (!updated) throw new NotFoundException('Poll introuvable');
+    this.realtimeEvents.emit(partieTopic(partieId));
+    // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : ajouter une option fait RÉAPPARAÎTRE ce
+    // signal chez les membres qui avaient tout répondu ; en retirer une peut le faire
+    // disparaître. En plus de partieTopic ci-dessus, jamais en remplacement — getOwned()
+    // garantit que userId est déjà le MJ.
+    await this.parties.notifyPartieSignalsChanged(partieId, userId);
+    return toDto(updated, await countParticipants(this.prisma, partieId));
+  }
+
   async close(partieId: string, pollId: string, userId: string): Promise<void> {
     await this.parties.getOwned(partieId, userId);
     const poll = await this.prisma.sessionPoll.findUnique({
@@ -226,6 +321,16 @@ export class PollService {
     // ci-dessus, jamais en remplacement — getOwned() garantit que userId est déjà le MJ.
     await this.parties.notifyPartieSignalsChanged(partieId, userId);
   }
+}
+
+/** Story 36.10 (revue de code) — clé métier d'une option : `date|slot`, normalisée. Point UNIQUE
+ *  de la définition, partagé par le dédoublonnage de `create()` **et** la comparaison
+ *  « existante » / « voulue » de `setOptions()`. Une option se reconnaît par ce qu'elle propose,
+ *  jamais par sa position dans la liste — et deux dates représentant le même instant sous des
+ *  formats différents (composante horaire, décalage) doivent produire la MÊME clé, sans quoi
+ *  `create()` laisserait passer un doublon que `setOptions()` traiterait différemment. */
+function optionKey(date: Date, slot: string): string {
+  return `${date.toISOString()}|${slot}`;
 }
 
 /** Story 36.6 — `membersCount` est passé en paramètre (jamais dérivé de `poll`) : c'est une

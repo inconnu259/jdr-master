@@ -22,6 +22,7 @@ function makePollService() {
     withdrawVote: jest.fn(),
     choose: jest.fn(),
     close: jest.fn(),
+    setOptions: jest.fn(),
   };
 }
 
@@ -112,5 +113,16 @@ describe('PollController', () => {
   it('close() route vers PollService.close()', async () => {
     await controller.close('p1', 'poll1', user);
     expect(poll.close).toHaveBeenCalledWith('p1', 'poll1', 'mj1');
+  });
+
+  it('setOptions() route vers PollService.setOptions() (Story 36.10, D-16)', async () => {
+    const dto = {
+      options: [
+        { date: '2026-08-01', slot: 'MORNING' as const },
+        { date: '2026-08-03', slot: 'EVENING' as const },
+      ],
+    };
+    await controller.setOptions('p1', 'poll1', user, dto);
+    expect(poll.setOptions).toHaveBeenCalledWith('p1', 'poll1', 'mj1', dto);
   });
 });

@@ -1531,3 +1531,218 @@ describe('CalendarMonthView — le mode Destinée (Story 36.9)', () => {
     expect(cellOf(23).classList.contains('day-cell--dim')).toBe(true);
   });
 });
+
+// ─── Story 36.10 — le mode de composition réassigne le tap (vue Mois) ────────
+
+describe('CalendarMonthView — mode de composition (Story 36.10)', () => {
+  let el: HTMLElement;
+
+  const VOTE_ENTRY = {
+    key: 'vote-1',
+    type: 'votes-en-cours' as const,
+    date: '2026-08-20',
+    label: 'Chapitre 1',
+    slot: 'EVENING' as const,
+    vote: {
+      pollId: 'poll1',
+      optionId: 'opt1',
+      partieId: 'partie-1',
+      yes: 1,
+      no: 0,
+      maybe: 0,
+      total: 4,
+      myAnswer: null,
+    },
+  };
+
+  async function createWith(inputs: Record<string, unknown> = {}) {
+    await TestBed.configureTestingModule({
+      imports: [CalendarMonthView],
+      providers: [provideAnimationsAsync()],
+    }).compileComponents();
+    const f = TestBed.createComponent(CalendarMonthView);
+    f.componentRef.setInput('activeLayers', [
+      'mes-disponibilites',
+      'mes-indisponibilites',
+      'mes-seances',
+      'votes-en-cours',
+    ]);
+    f.componentRef.setInput('initialDate', new Date(2026, 7, 15));
+    for (const [k, v] of Object.entries(inputs)) f.componentRef.setInput(k, v);
+    f.detectChanges();
+    el = f.nativeElement;
+    return f;
+  }
+
+  function cellOf(day: number): HTMLElement {
+    const target = new Date(2026, 7, day).getTime();
+    return el.querySelector(`.day-cell[data-cell-date="${target}"]`) as HTMLElement;
+  }
+
+  /** La bande d'un créneau donné : 0 = matin, 1 = après-midi, 2 = soir.
+   *
+   *  🚨 N'existe QUE si la case n'est pas uniforme : une journée qui ne porte rien est rendue en
+   *  UNE seule bande fusionnée (AC4 de la 36.2). Les tests qui visent un créneau précis passent
+   *  donc une entrée sur ce jour — sans quoi `bandOf(j, 2)` est `undefined`, ce qui est le
+   *  comportement voulu et non un défaut du test. */
+  function bandOf(day: number, index: number): HTMLElement {
+    return [...cellOf(day).querySelectorAll('.band')][index] as HTMLElement;
+  }
+
+  /** La bande unique d'une case uniforme (journée entière). */
+  function uniformBandOf(day: number): HTMLElement {
+    return cellOf(day).querySelector('.band') as HTMLElement;
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 10));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('AC2/AC12 — en composition, un tap émet composeToggled ET slotSelected, mais n’arme AUCUNE sélection', async () => {
+    const f = await createWith({
+      entries: [VOTE_ENTRY],
+      composing: true,
+      composedKeys: new Set<string>(),
+    });
+    const composed = vi.fn();
+    const selected = vi.fn();
+    f.componentInstance.composeToggled.subscribe(composed);
+    f.componentInstance.slotSelected.subscribe(selected);
+
+    bandOf(20, 2).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    f.detectChanges();
+
+    expect(composed).toHaveBeenCalledTimes(1);
+    expect(composed.mock.calls[0][0].slot).toBe('EVENING');
+    // Le rail suit toujours : « le rail suit, il ne se commande pas » (principe 2).
+    expect(selected).toHaveBeenCalledTimes(1);
+    // 🚨 Aucune sélection armée : la barre de sélection ne doit pas apparaître.
+    expect(el.querySelector('app-selection-bar')).toBeNull();
+  });
+
+  it('🚨 AC12 — en composition, une bande portant un VOTE n’ouvre pas le sélecteur de réponse', async () => {
+    const f = await createWith({
+      entries: [VOTE_ENTRY],
+      composing: true,
+      composedKeys: new Set<string>(),
+    });
+    const voteActivated = vi.fn();
+    const composed = vi.fn();
+    f.componentInstance.voteOptionActivated.subscribe(voteActivated);
+    f.componentInstance.composeToggled.subscribe(composed);
+
+    bandOf(20, 2).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    f.detectChanges();
+
+    expect(voteActivated).not.toHaveBeenCalled();
+    expect(composed).toHaveBeenCalledTimes(1);
+  });
+
+  it('hors composition, la même bande ouvre bien le sélecteur (preuve que la neutralisation vient du mode)', async () => {
+    const f = await createWith({ entries: [VOTE_ENTRY] });
+    const voteActivated = vi.fn();
+    f.componentInstance.voteOptionActivated.subscribe(voteActivated);
+
+    bandOf(20, 2).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    f.detectChanges();
+
+    expect(voteActivated).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC12 — en composition, l’appui maintenu n’arme plus la sélection', async () => {
+    const f = await createWith({
+      entries: [VOTE_ENTRY],
+      composing: true,
+      composedKeys: new Set<string>(),
+    });
+
+    bandOf(20, 2).dispatchEvent(
+      new PointerEvent('pointerdown', {
+        clientX: 5,
+        clientY: 5,
+        pointerType: 'mouse',
+        bubbles: true,
+      }),
+    );
+    vi.advanceTimersByTime(LONG_PRESS_MS);
+    f.detectChanges();
+
+    expect(el.querySelector('app-selection-bar')).toBeNull();
+  });
+
+  it('AC12/AC16 — au clavier aussi : `1` compose au lieu d’armer une sélection', async () => {
+    const f = await createWith({ composing: true, composedKeys: new Set<string>() });
+    const composed = vi.fn();
+    f.componentInstance.composeToggled.subscribe(composed);
+
+    cellOf(20).dispatchEvent(new KeyboardEvent('keyup', { key: '1', bubbles: true }));
+    f.detectChanges();
+
+    expect(composed).toHaveBeenCalledTimes(1);
+    expect(composed.mock.calls[0][0].slot).toBe('MORNING');
+    expect(el.querySelector('app-selection-bar')).toBeNull();
+  });
+
+  it('AC17 — une date PASSÉE ne compose rien', async () => {
+    const f = await createWith({ composing: true, composedKeys: new Set<string>() });
+    const composed = vi.fn();
+    const selected = vi.fn();
+    f.componentInstance.composeToggled.subscribe(composed);
+    f.componentInstance.slotSelected.subscribe(selected);
+
+    // Le 5 août est antérieur au 10 août (temps figé) : la garde existante doit tenir. La case
+    // ne porte rien, donc une seule bande fusionnée — c'est elle qu'on touche.
+    uniformBandOf(5).dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    f.detectChanges();
+
+    expect(composed).not.toHaveBeenCalled();
+    expect(selected).not.toHaveBeenCalled();
+  });
+
+  it('AC3 — `Échap` en composition remonte composeCancelled, et pas l’annulation de sélection', async () => {
+    const f = await createWith({ composing: true, composedKeys: new Set<string>() });
+    const cancelled = vi.fn();
+    f.componentInstance.composeCancelled.subscribe(cancelled);
+
+    el.querySelector('.calendar-grid')!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+    );
+    f.detectChanges();
+
+    expect(cancelled).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC13/AC16 — un créneau composé porte sa classe ET son état en toutes lettres', async () => {
+    await createWith({
+      entries: [VOTE_ENTRY],
+      composing: true,
+      composedKeys: new Set(['2026-08-20|EVENING']),
+    });
+
+    const band = bandOf(20, 2);
+    expect(band.classList.contains('band--composed')).toBe(true);
+    expect(band.getAttribute('aria-label')).toContain('désigné pour le vote');
+
+    // Le voisin ne l'est pas : la classe suit bien la clé, pas le jour.
+    const morning = bandOf(20, 0);
+    expect(morning.classList.contains('band--composed')).toBe(false);
+    expect(morning.getAttribute('aria-label')).not.toContain('désigné pour le vote');
+  });
+
+  it('AC13 — composé et sélectionné sont DEUX traitements distincts', async () => {
+    await createWith({
+      entries: [VOTE_ENTRY],
+      composing: true,
+      composedKeys: new Set(['2026-08-20|EVENING']),
+    });
+    const band = bandOf(20, 2);
+    expect(band.classList.contains('band--composed')).toBe(true);
+    expect(band.classList.contains('band--selected')).toBe(false);
+  });
+});

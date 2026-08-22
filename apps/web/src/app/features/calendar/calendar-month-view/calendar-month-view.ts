@@ -31,8 +31,12 @@ import {
   MOVE_THRESHOLD_PX,
   type GesturePointerType,
   type SelectedCell,
+  composeCellKey,
   monthRangeDays,
 } from '../selection.utils';
+
+/** Story 36.10, AC16 — le mot que porte un créneau désigné, identique dans les deux grilles. */
+const COMPOSED_ARIA = 'désigné pour le vote';
 
 /** Story 36.8, AC11 — vrai dès qu'un créneau du jour porte le canal « disponibilité du groupe ».
  *
@@ -261,6 +265,20 @@ export class CalendarMonthView {
    */
   readonly destinyDates = input<ReadonlySet<string> | null>(null);
 
+  /**
+   * Story 36.10 — le mode de composition d'un vote (MJ).
+   *
+   * 🚨 **C'est le SEUL mode qui réassigne le tap** (`EXPERIENCE.md:538`, principe 4 ; collision 5).
+   * Tant qu'il est actif, un tap ne sélectionne plus, n'ouvre plus le sélecteur de réponse et
+   * n'ouvre plus de scénario : il ajoute ou retire un créneau des options. Le rail, lui, continue
+   * de suivre — « le rail suit, il ne se commande pas » (principe 2).
+   */
+  readonly composing = input(false);
+  /** Les créneaux composés, en clés `YYYY-MM-DD|SLOT` (`composeCellKey`). `null` hors mode.
+   *  🚨 Comme `destinyDates`, cette vue ne CALCULE rien : elle reçoit l'ensemble dérivé une fois
+   *  par `CalendarView`, et la vue Semaine reçoit exactement le même. */
+  readonly composedKeys = input<ReadonlySet<string> | null>(null);
+
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();
   /** Story 30.3 : lot construit par un glissement (souris/tactile) ou une validation clavier —
@@ -273,6 +291,14 @@ export class CalendarMonthView {
   /** Story 36.7 — une bande portant une option de vote vient d'être activée. La vue ne sait pas
    *  qu'un sélecteur existe : elle signale, `CalendarView` décide. */
   readonly voteOptionActivated = output<VoteOptionActivatedEvent>();
+
+  /** Story 36.10, AC2 — un créneau vient d'être désigné ou retiré. La vue ne connaît ni vote ni
+   *  endpoint : elle bascule, `CalendarView` accumule, et rien n'est écrit avant validation. */
+  readonly composeToggled = output<SlotSelectedEvent>();
+  /** Story 36.10, AC3 — `Échap` pendant la composition. La grille avait déjà son `Échap`, qui
+   *  annule la SÉLECTION : les deux ne peuvent pas être actifs en même temps, c'est le mode qui
+   *  décide lequel s'applique. */
+  readonly composeCancelled = output<void>();
 
   protected readonly displayDate = signal(new Date());
 
@@ -475,6 +501,13 @@ export class CalendarMonthView {
     // par l'AC1), ni la barre — celle-ci appartient à l'appui maintenu et au glissement.
     this.slotSelected.emit({ date, slot });
     this.currentDate.set(date);
+    // 🚨 Story 36.10, AC2/AC12 — LE MODE DE COMPOSITION RÉASSIGNE LE TAP, et il le fait ICI :
+    // avant la bascule de sélection, avant l'ouverture du sélecteur de réponse. Le rail a déjà
+    // reçu son `slotSelected` juste au-dessus (principe 2) ; tout le reste est neutralisé.
+    if (this.composing()) {
+      this.composeToggled.emit({ date, slot });
+      return;
+    }
     // Un geste armé (appui maintenu ou glissement) se termine par un `click` que le navigateur
     // émet de lui-même. Sans cette garde il rebasculerait aussitôt la case qu'on vient de
     // sélectionner — et un appui maintenu simple ressortait donc du mode modification à la
@@ -513,6 +546,10 @@ export class CalendarMonthView {
    *  La portée part du créneau visé : c'est la seule valeur qui rende la collision 8 vraie sans
    *  que l'utilisateur ait à toucher la barre. */
   private armSelection(date: Date, slot: DaySlot): void {
+    // 🚨 Story 36.10, AC12 — POINT D'ÉTRANGLEMENT UNIQUE. Appui maintenu, glissement et
+    // `Espace`/`1`/`2`/`3` passent tous par ici : une seule garde neutralise donc les trois
+    // pendant la composition, et aucun chemin d'armement ne peut lui échapper par oubli.
+    if (this.composing()) return;
     this.selectionAnchor.set({ date, slot });
     this.selectionCurrent.set({ date, slot });
     this.selectedCells.set([{ date, slot }]);
@@ -524,6 +561,12 @@ export class CalendarMonthView {
   protected onCellKeySelect(cell: DayCell, slot: DaySlot): void {
     if (cell.isPast || !cell.isCurrentMonth) return;
     this.slotSelected.emit({ date: cell.date, slot });
+    // Story 36.10, AC2/AC16 — au clavier comme au doigt : en composition, désigner un créneau
+    // l'ajoute ou le retire. Sans cette parité, le mode serait inaccessible sans pointeur.
+    if (this.composing()) {
+      this.composeToggled.emit({ date: cell.date, slot });
+      return;
+    }
     this.armSelection(cell.date, slot);
   }
 
@@ -531,7 +574,7 @@ export class CalendarMonthView {
    *  LETTRES : un lecteur d'écran ne voit ni fond, ni filet, ni trame. Quand un événement est
    *  posé et nommé, c'est son titre qui fait l'état (« Soir : Le Convoi du Nord ») ; quand la
    *  couche est éteinte, on retombe sur l'état de disponibilité, qui lui demeure (AC6). */
-  protected bandAriaLabel(band: DayBand): string {
+  protected bandAriaLabel(band: DayBand, composed = false): string {
     // Story 36.8, AC15 — 🚨 `.band` porte `role="img"` et un `aria-label` : celui-ci ÉCRASE le
     // contenu, y compris le `role="img"`/`aria-label` propre à `<app-group-gauge>` qu'elle
     // contient désormais. Sans ce repli, le canal serait purement visuel dans la case du Mois —
@@ -548,6 +591,9 @@ export class CalendarMonthView {
       if (band.info) parts.push(band.info);
       if (participation) parts.push(participation);
       if (groupe) parts.push(groupe);
+      // Story 36.10, AC16 — l'état composé est ANNONCÉ. Le liseré qui le montre n'existe pas pour
+      // un lecteur d'écran, et « jamais la couleur seule » (P-1) vaut aussi pour un filet.
+      if (composed) parts.push(COMPOSED_ARIA);
       return parts.join(' — ');
     }
     const labels: Record<SlotStatus, string> = {
@@ -555,8 +601,16 @@ export class CalendarMonthView {
       UNAVAILABLE: 'indisponible',
       UNKNOWN: 'non déclaré',
     };
-    const base = `${band.label} : ${labels[band.status]}`;
-    return groupe ? `${base} — ${groupe}` : base;
+    const parts = [`${band.label} : ${labels[band.status]}`];
+    if (groupe) parts.push(groupe);
+    if (composed) parts.push(COMPOSED_ARIA);
+    return parts.join(' — ');
+  }
+
+  /** Story 36.10, AC13 — ce créneau fait-il partie de la composition en cours ? Test
+   *  d'appartenance pur : la vue ne dérive rien, elle lit l'ensemble reçu (comme `destinyDates`). */
+  protected isBandComposed(cell: DayCell, slot: DaySlot): boolean {
+    return this.composedKeys()?.has(composeCellKey(cell.date, slot)) ?? false;
   }
 
   /** Story 36.8 — vrai quand la bande rend la JAUGE (et non des pastilles). Seule la jauge est
@@ -571,7 +625,10 @@ export class CalendarMonthView {
    *  JOURNÉE entière — jamais « Matin », qui ne serait vrai que par accident d'indexation
    *  (revue de code, décision utilisateur 2026-08-18). */
   protected uniformAriaLabel(cell: DayCell): string {
-    return this.bandAriaLabel({ ...cell.bands[0], label: 'Journée' });
+    return this.bandAriaLabel(
+      { ...cell.bands[0], label: 'Journée' },
+      this.isBandComposed(cell, 'FULL_DAY'),
+    );
   }
 
   protected isDaySelected(cell: DayCell): boolean {
@@ -765,7 +822,9 @@ export class CalendarMonthView {
   }
 
   protected onShiftArrow(cell: DayCell, direction: -1 | 1): void {
-    if (cell.isPast) return;
+    // AC12 — `Maj` + flèches étend une SÉLECTION ; il n'y en a pas pendant la composition. Cette
+    // garde est distincte de celle d'`armSelection()` : ce chemin pose l'ancre lui-même.
+    if (cell.isPast || this.composing()) return;
     // Ancre posée sans `current` : tant qu'aucune extension n'a abouti, aucune sélection ne
     // s'affiche. C'est ce qui fait qu'un Maj+flèche buttant sur le bord du mois ne sélectionne
     // rien du tout (garde issue de la revue de code de la story 30.3) — ne pas passer par
@@ -778,6 +837,16 @@ export class CalendarMonthView {
     const nextCell = this.allCells().find((c) => c.date.getTime() === next.getTime());
     if (!nextCell || nextCell.isPast || !nextCell.isCurrentMonth) return;
     this.setRange({ date: next, slot: anchor.slot });
+  }
+
+  /** Story 36.10, AC3 — `Échap` a UNE signification à un instant donné, jamais deux : en
+   *  composition il quitte le mode sans rien écrire, sinon il annule la sélection comme avant. */
+  protected onEscape(): void {
+    if (this.composing()) {
+      this.composeCancelled.emit();
+      return;
+    }
+    this.onSelectionCancelled();
   }
 
   protected onSelectionCancelled(): void {

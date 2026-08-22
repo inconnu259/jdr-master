@@ -42,7 +42,7 @@
       (pointerup)="onGridPointerUp($event)"
       (pointercancel)="onGridPointerUp($event)"
       (contextmenu)="isGestureActive() && $event.preventDefault()"
-      (keydown.escape)="onSelectionCancelled()"
+      (keydown.escape)="onEscape()"
     >
       @for (week of weeks(); track $index) {
         @for (cell of week; track cell.date.getTime()) {
@@ -123,6 +123,7 @@
                   "
                   [class.preview]="cell.bands[0].preview !== null"
                   [class.band--selected]="isDaySelected(cell)"
+                  [class.band--composed]="isBandComposed(cell, 'FULL_DAY')"
                   [attr.aria-label]="uniformAriaLabel(cell)"
                   role="img"
                   (pointerdown)="
@@ -142,7 +143,8 @@
                     [class.preview]="band.preview !== null"
                     [class.band--selected]="isBandSelected(cell, band.slot)"
                     [class.band--gauge]="bandHasGauge(band)"
-                    [attr.aria-label]="bandAriaLabel(band)"
+                    [class.band--composed]="isBandComposed(cell, band.slot)"
+                    [attr.aria-label]="bandAriaLabel(band, isBandComposed(cell, band.slot))"
                     role="img"
                     (pointerdown)="
                       $event.stopPropagation(); onBandPointerDown($event, cell, band.slot)
@@ -195,7 +197,7 @@
         (markUnavailable)="onSelectionCommit('UNAVAILABLE')"
         (otherRequested)="onOtherRequested()"
         (cancelled)="onSelectionCancelled()"
-        (keydown.escape)="onSelectionCancelled()"
+        (keydown.escape)="onEscape()"
       />
     }
   }

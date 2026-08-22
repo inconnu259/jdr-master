@@ -201,6 +201,15 @@
     box-shadow: inset 0 0 0 3px var(--mat-sys-on-surface);
   }
 
+  /* Story 36.10, AC13 — un créneau DÉSIGNÉ pour un vote, traité comme en vue Mois
+     (`.band--composed`) : teinte du vote, trait TIRETÉ, jamais la couleur seule. Distinct de
+     `.selected`, qui dit « ce créneau partira à l'écriture de MA disponibilité ». */
+  &.slot-cell--composed {
+    background: color-mix(in srgb, var(--jdr-status-todo, #f0a030) 24%, transparent);
+    outline: 2px dashed var(--jdr-status-todo, #f0a030);
+    outline-offset: -2px;
+  }
+
   /* Story 36.3, AC16 — la cellule courante : la dernière cliquée. Distinguée de `.selected` par
      la FORME (tirets contre plein) autant que par l'épaisseur, jamais par la seule couleur —
      et la sélection l'emporte quand les deux portent sur la même cellule. */

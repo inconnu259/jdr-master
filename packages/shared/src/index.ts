@@ -769,6 +769,26 @@ export interface CreatePollDto {
   scenarioRef?: string | null;
 }
 
+/**
+ * Payload de mutation des options d'un vote OUVERT (PUT /parties/:id/poll/:pollId/options,
+ * Story 36.10, dérogation D-16). MJ seul.
+ *
+ * 🚨 **Jeu DÉCLARATIF COMPLET, jamais un delta.** Le corps décrit l'état d'arrivée voulu : ce que
+ * la grille produit après composition. Un `{ add, remove }` obligerait le client à connaître les
+ * `id` d'options et à tenir un état intermédiaire.
+ *
+ * 🚨 **La réconciliation serveur se fait sur la clé métier `date` + `slot`, et une option
+ * CONSERVÉE GARDE SON `id`.** `PollVote` est en cascade sur `PollOption` : un « delete all +
+ * recreate » détruirait les réponses de TOUS les membres à chaque ajout d'une seule date. Seules
+ * les options réellement retirées perdent leurs réponses (Q-22, avertissement préalable côté
+ * client).
+ *
+ * Bornes identiques à `CreatePollDto` : 2 à 40 options, aucune paire `date` + `slot` en double.
+ */
+export interface SetPollOptionsDto {
+  options: { date: string; slot: DaySlot }[];
+}
+
 /** Payload pour voter sur une option (POST /parties/:id/poll/:pollId/vote). */
 export interface CastVoteDto {
   optionId: string;

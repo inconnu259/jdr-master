@@ -1,6 +1,5 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
-import { By } from '@angular/platform-browser';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -76,6 +75,8 @@ function makePollService() {
     // lèvent au lieu d'échouer proprement.
     castVote: vi.fn().mockResolvedValue(undefined),
     withdrawVote: vi.fn().mockResolvedValue(undefined),
+    // Story 36.10 — la mutation des options d'un vote ouvert (D-16).
+    setPollOptions: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -518,10 +519,13 @@ describe('CalendarView — activePolls() (Story 8.8, AC7 : plusieurs votes actif
 
     expect(comp.eligibleSeances()).toHaveLength(1);
     expect(comp.eligibleSeances()[0].seance.id).toBe('seanceX');
-    const option = fixture.nativeElement.querySelector(
-      '.new-vote-form__select option[value="seanceX"]',
-    );
-    expect(option.textContent.replace(/\s+/g, ' ').trim()).toBe('Chapitre 1 — Séance 1');
+    // ⚠️ Story 36.10, AC9 — l'étiquette n'est plus lue dans le `<option>` du sélecteur de
+    // l'Oracle (retiré) mais dans le choix proposé à la validation d'une composition, qui est le
+    // seul endroit où l'on désigne encore une séance. Le libellé, lui, n'a pas changé : scénario
+    // ET séance, sans ambiguïté.
+    expect(comp.composeSeanceChoices()).toEqual([
+      { seanceId: 'seanceX', label: 'Chapitre 1 — Séance 1' },
+    ]);
   });
 
   it('scénario PASSE → ses séances sont exclues (séance passée)', async () => {
@@ -587,66 +591,25 @@ describe('CalendarView — activePolls() (Story 8.8, AC7 : plusieurs votes actif
     expect(comp.eligibleSeances()).toHaveLength(0);
   });
 
-  it('aucune séance éligible → sélecteur absent du DOM', async () => {
+  it('⚠️ Story 36.10, AC9 — le sélecteur « Planifier un vote pour : » n’est plus rendu, quelle que soit l’éligibilité', async () => {
+    const scenario = { ...ACTIVE_POLL_SCENARIO, seances: [NO_POLL_SEANCE] };
     const { fixture } = await createCalendarView({
       mode: 'mj',
       partieId: 'partie-1',
-      scenarios: [ACTIVE_POLL_SCENARIO], // seule séance a déjà un poll OPEN
+      scenarios: [scenario], // une séance PARFAITEMENT éligible : l'ancien sélecteur s'affichait
     });
     expect(fixture.nativeElement.querySelector('.new-vote-form')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Planifier un vote pour');
   });
 
-  it('startVoteFor(seanceId) verrouille lockedSeanceId et ouvre pollPanelOpen (réutilise le flux existant)', async () => {
-    const scenario = { ...ACTIVE_POLL_SCENARIO, seances: [NO_POLL_SEANCE] };
-    const { fixture } = await createCalendarView({
-      mode: 'mj',
-      partieId: 'partie-1',
-      scenarios: [scenario],
-    });
-    const comp = fixture.componentInstance as any;
-
-    comp.startVoteFor('seanceX');
-
-    expect(comp.lockedSeanceId()).toBe('seanceX');
-    expect(comp.pollPanelOpen()).toBe(true);
-  });
-
-  it('startVoteFor("") (rien sélectionné) → ignoré, panneau reste fermé', async () => {
-    const scenario = { ...ACTIVE_POLL_SCENARIO, seances: [NO_POLL_SEANCE] };
-    const { fixture } = await createCalendarView({
-      mode: 'mj',
-      partieId: 'partie-1',
-      scenarios: [scenario],
-    });
-    const comp = fixture.componentInstance as any;
-
-    comp.startVoteFor('');
-
-    expect(comp.pollPanelOpen()).toBe(false);
-  });
-
-  it('clic sur "Lancer le vote" avec une séance sélectionnée dans le select → appelle startVoteFor', async () => {
-    const scenario = { ...ACTIVE_POLL_SCENARIO, seances: [NO_POLL_SEANCE] };
-    const { fixture } = await createCalendarView({
-      mode: 'mj',
-      partieId: 'partie-1',
-      scenarios: [scenario],
-    });
-    const comp = fixture.componentInstance as any;
-    const select: HTMLSelectElement = fixture.nativeElement.querySelector('.new-vote-form__select');
-    select.value = 'seanceX';
-    fixture.detectChanges();
-
-    // Invoque directement le handler du bouton (contourne les subtilités jsdom sur la
-    // synchronisation de l'attribut `disabled` natif après une mutation programmatique de
-    // `<select>.value` sans passer par une vraie interaction utilisateur) — teste le câblage
-    // template → startVoteFor(), déjà couvert unitairement ci-dessus pour la logique elle-même.
-    const btnDebugEl = fixture.debugElement.query(By.css('.new-vote-form button'));
-    btnDebugEl.triggerEventHandler('click', null);
-
-    expect(comp.lockedSeanceId()).toBe('seanceX');
-    expect(comp.pollPanelOpen()).toBe(true);
-  });
+  // ⚠️ Story 36.10, AC9 — les trois tests de `startVoteFor()` ont été retirés AVEC le
+  // gestionnaire et le sélecteur qui l'appelait (même geste que la 36.9 pour `onChooseDate()`).
+  // Ce qu'ils protégeaient — « désigner une séance mène bien à la création d'un vote » — est
+  // désormais couvert par les tests de composition : la séance se demande à la validation, et
+  // `createSeancePoll()` reste le seul chemin de création.
+  //
+  // 🚨 `lockedSeanceId` / `pollPanelOpen` ne sont PAS morts pour autant : ils portent l'arrivée
+  // depuis `SeanceList` via `?seanceId=`, couverte par son propre test plus haut.
 });
 
 // ─── Choix de la date finale (Story 3.4, révisé Story 8.8 — pollId explicite) ─
@@ -2523,5 +2486,394 @@ describe('CalendarView — le mode Destinée (Story 36.9)', () => {
       scenariosSvc.listAll.mock.calls.length,
       availabilitySvc.getMyCalendar.mock.calls.length,
     ]).toEqual(before);
+  });
+});
+
+// ─── Story 36.10 — composer un vote depuis la grille (FR-52, D-16) ───────────
+
+describe('CalendarView — mode de composition (Story 36.10)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  /** Une séance dont le vote OUVERT porte deux options, dont une déjà votée. C'est le jeu qui
+   *  rend observables l'AC13 (l'état de départ), l'AC6 (l'avertissement chiffré) et l'AC5. */
+  const POLL_WITH_OPTIONS = {
+    ...ACTIVE_POLL_SCENARIO,
+    seances: [
+      {
+        ...ACTIVE_POLL_SCENARIO.seances[0],
+        poll: {
+          ...ACTIVE_POLL_SCENARIO.seances[0].poll,
+          options: [
+            {
+              id: 'optA',
+              date: '2026-08-01T00:00:00.000Z',
+              slot: 'EVENING',
+              votes: [{ userId: 'u1', pseudo: 'Léa', displayName: 'Léa', answer: 'YES' }],
+            },
+            { id: 'optB', date: '2026-08-02T00:00:00.000Z', slot: 'MORNING', votes: [] },
+          ],
+        },
+      },
+    ],
+  };
+
+  const FREE_SEANCE_SCENARIO = {
+    ...ACTIVE_POLL_SCENARIO,
+    seances: [
+      { id: 'seanceX', scenarioId: 's1', compteRendu: null, createdAt: '2026-07-13T00:00:00.000Z' },
+    ],
+  };
+
+  function cell(iso: string, slot: string) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return { date: new Date(y, m - 1, d), slot };
+  }
+
+  // ── AC10 : le mode n'existe qu'en contexte de partie, côté MJ ──
+
+  it('AC10 — aucun point d’entrée de composition en contexte personnel', async () => {
+    const { fixture } = await createCalendarView({ scenarios: [FREE_SEANCE_SCENARIO] });
+    const comp = fixture.componentInstance as any;
+    expect(comp.canCompose()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.compose-arm')).toBeNull();
+  });
+
+  it('AC10 — aucun point d’entrée pour un membre non-MJ, même sur une partie', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'personal',
+      partieId: 'partie-1',
+      scenarios: [FREE_SEANCE_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+    expect(comp.canCompose()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.compose-arm')).toBeNull();
+  });
+
+  it('AC10 — la garde est STRUCTURELLE : startCompose() refuse même appelé de force', async () => {
+    const { fixture } = await createCalendarView({ scenarios: [FREE_SEANCE_SCENARIO] });
+    const comp = fixture.componentInstance as any;
+    comp.startCompose();
+    expect(comp.composing()).toBe(false);
+    expect(comp.composeTarget()).toBeNull();
+  });
+
+  it('AC1/AC10 — MJ sur une partie avec une séance éligible : le bouton « Ajouter des dates » est rendu', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [FREE_SEANCE_SCENARIO],
+    });
+    const btn = fixture.nativeElement.querySelector('.compose-arm');
+    expect(btn).not.toBeNull();
+    expect(btn.textContent.trim()).toBe('Ajouter des dates');
+  });
+
+  // ── AC13 : la composition part de l'état réel du vote ──
+
+  it('AC13 — armée sur un vote mis en avant, la composition contient DÉJÀ ses options', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [POLL_WITH_OPTIONS],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.destinyPollId.set('poll1');
+    comp.startCompose();
+
+    expect(comp.composing()).toBe(true);
+    expect(comp.composeTarget()).toEqual({ kind: 'poll', pollId: 'poll1' });
+    expect([...comp.composedKeys()].sort()).toEqual(['2026-08-01|EVENING', '2026-08-02|MORNING']);
+  });
+
+  it('AC4 — armée sans vote mis en avant, la composition vise un vote NEUF et part vide', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [FREE_SEANCE_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.startCompose();
+
+    expect(comp.composeTarget()).toEqual({ kind: 'new' });
+    expect(comp.composedCells()).toEqual([]);
+  });
+
+  // ── AC2 : le tap ajoute ou retire, sans rien écrire ──
+
+  it('AC2 — deux bascules sur le même créneau reviennent à l’état de départ, et RIEN n’est écrit', async () => {
+    const { fixture, pollSvc, scenariosSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [FREE_SEANCE_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.startCompose();
+
+    comp.onComposeToggled(cell('2026-09-04', 'EVENING'));
+    expect(comp.composedCells()).toHaveLength(1);
+    comp.onComposeToggled(cell('2026-09-04', 'EVENING'));
+    expect(comp.composedCells()).toHaveLength(0);
+
+    expect(pollSvc.setPollOptions).not.toHaveBeenCalled();
+    expect(scenariosSvc.createSeancePoll).not.toHaveBeenCalled();
+  });
+
+  it('AC2 — hors mode, une bascule est sans effet (aucun état fantôme)', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [FREE_SEANCE_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.onComposeToggled(cell('2026-09-04', 'EVENING'));
+    expect(comp.composedCells()).toEqual([]);
+  });
+
+  // ── AC3 : Échap et Annuler ne modifient rien ──
+
+  it('AC3 — annuler quitte le mode sans aucun appel d’écriture', async () => {
+    const { fixture, pollSvc, scenariosSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [POLL_WITH_OPTIONS],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.destinyPollId.set('poll1');
+    comp.startCompose();
+    comp.onComposeToggled(cell('2026-09-04', 'EVENING'));
+
+    comp.cancelCompose();
+
+    expect(comp.composing()).toBe(false);
+    expect(comp.composedCells()).toEqual([]);
+    expect(comp.composedKeys()).toBeNull();
+    expect(pollSvc.setPollOptions).not.toHaveBeenCalled();
+    expect(scenariosSvc.createSeancePoll).not.toHaveBeenCalled();
+  });
+
+  // ── AC14 côté client : les bornes, et la raison affichée ──
+
+  it('AC14 — moins de deux créneaux : validation impossible, et la raison est DITE', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [FREE_SEANCE_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.startCompose();
+    comp.onComposeToggled(cell('2026-09-04', 'EVENING'));
+    fixture.detectChanges();
+
+    expect(comp.composeCanConfirm()).toBe(false);
+    expect(comp.composeBlockedReason()).toContain('au moins deux');
+    expect(fixture.nativeElement.querySelector('.compose-bar__blocked')).not.toBeNull();
+  });
+
+  it('AC11 — aucune séance éligible : la création n’est pas validable, et l’écran le dit', async () => {
+    // Le seul scénario n'a qu'une séance, déjà liée à un vote OPEN ⇒ `eligibleSeances()` est vide.
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [POLL_WITH_OPTIONS],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.composing.set(true);
+    comp.composeTarget.set({ kind: 'new' });
+    comp.composedCells.set([cell('2026-09-04', 'EVENING'), cell('2026-09-05', 'EVENING')]);
+
+    expect(comp.composeCanConfirm()).toBe(false);
+    expect(comp.composeBlockedReason()).toContain('séance');
+  });
+
+  // ── AC5 / AC6 / AC7 : la validation d'un vote existant ──
+
+  it('AC5 — un simple AJOUT ne demande aucune confirmation et écrit le jeu COMPLET', async () => {
+    const { fixture, pollSvc, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [POLL_WITH_OPTIONS],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.destinyPollId.set('poll1');
+    comp.startCompose();
+    comp.onComposeToggled(cell('2026-08-03', 'EVENING'));
+
+    await comp.confirmCompose();
+
+    expect(dialog.open).not.toHaveBeenCalled();
+    expect(pollSvc.setPollOptions).toHaveBeenCalledWith('partie-1', 'poll1', {
+      options: [
+        { date: '2026-08-01', slot: 'EVENING' },
+        { date: '2026-08-02', slot: 'MORNING' },
+        { date: '2026-08-03', slot: 'EVENING' },
+      ],
+    });
+  });
+
+  it('AC6 — retirer une option VOTÉE ouvre l’avertissement AVANT l’appel, en nommant le nombre de réponses', async () => {
+    const { fixture, pollSvc, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [POLL_WITH_OPTIONS],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.destinyPollId.set('poll1');
+    comp.startCompose();
+    // optA porte une réponse ; on la retire et on ajoute un créneau pour rester dans les bornes.
+    comp.onComposeToggled(cell('2026-08-01', 'EVENING'));
+    comp.onComposeToggled(cell('2026-08-03', 'EVENING'));
+
+    await comp.confirmCompose();
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    const data = dialog.open.mock.calls[0][1]!.data;
+    expect(data.mode).toBe('poll');
+    expect(data.removedCount).toBe(1);
+    expect(data.voterCount).toBe(1);
+    // 🚨 Le dialogue est ANNULÉ par défaut dans ce harnais : rien ne doit être écrit.
+    expect(pollSvc.setPollOptions).not.toHaveBeenCalled();
+  });
+
+  it('AC6 — renoncer laisse la composition INTACTE : le MJ n’a rien à redésigner', async () => {
+    const { fixture, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [POLL_WITH_OPTIONS],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.destinyPollId.set('poll1');
+    comp.startCompose();
+    comp.onComposeToggled(cell('2026-08-01', 'EVENING'));
+    comp.onComposeToggled(cell('2026-08-03', 'EVENING'));
+
+    await comp.confirmCompose();
+
+    expect(pollSvc.setPollOptions).not.toHaveBeenCalled();
+    expect(comp.composing()).toBe(true);
+    expect([...comp.composedKeys()].sort()).toEqual(['2026-08-02|MORNING', '2026-08-03|EVENING']);
+  });
+
+  it('AC7 — retrait CONFIRMÉ : le jeu écrit ne contient plus l’option retirée, et contient les autres', async () => {
+    const { fixture, pollSvc, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [POLL_WITH_OPTIONS],
+    });
+    const comp = fixture.componentInstance as any;
+    dialog.__result = { seanceId: null };
+    comp.destinyPollId.set('poll1');
+    comp.startCompose();
+    comp.onComposeToggled(cell('2026-08-01', 'EVENING'));
+    comp.onComposeToggled(cell('2026-08-03', 'EVENING'));
+
+    await comp.confirmCompose();
+
+    expect(pollSvc.setPollOptions).toHaveBeenCalledWith('partie-1', 'poll1', {
+      options: [
+        { date: '2026-08-02', slot: 'MORNING' },
+        { date: '2026-08-03', slot: 'EVENING' },
+      ],
+    });
+    expect(comp.composing()).toBe(false);
+  });
+
+  // ── AC4 / AC11 : la création passe TOUJOURS par une séance ──
+
+  it('AC4/AC11 — créer appelle createSeancePoll() sur la séance désignée, JAMAIS setPollOptions()', async () => {
+    const { fixture, pollSvc, scenariosSvc, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [FREE_SEANCE_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+    dialog.__result = { seanceId: 'seanceX' };
+    comp.startCompose();
+    comp.onComposeToggled(cell('2026-09-04', 'EVENING'));
+    comp.onComposeToggled(cell('2026-09-05', 'MORNING'));
+
+    await comp.confirmCompose();
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(dialog.open.mock.calls[0][1]!.data.mode).toBe('new');
+    expect(scenariosSvc.createSeancePoll).toHaveBeenCalledWith('seanceX', [
+      { date: '2026-09-04', slot: 'EVENING' },
+      { date: '2026-09-05', slot: 'MORNING' },
+    ]);
+    expect(pollSvc.setPollOptions).not.toHaveBeenCalled();
+  });
+
+  it('AC11 — renoncer à la désignation de séance n’écrit rien', async () => {
+    const { fixture, scenariosSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [FREE_SEANCE_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.startCompose();
+    comp.onComposeToggled(cell('2026-09-04', 'EVENING'));
+    comp.onComposeToggled(cell('2026-09-05', 'MORNING'));
+
+    await comp.confirmCompose();
+
+    expect(scenariosSvc.createSeancePoll).not.toHaveBeenCalled();
+    expect(comp.composing()).toBe(true);
+  });
+
+  // ── Robustesse : le mode doit savoir mourir, sans écrire ──
+
+  it('le vote visé disparaît (scellé ou clos ailleurs) → la composition s’annule sans rien écrire', async () => {
+    const { fixture, pollSvc, scenariosSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [POLL_WITH_OPTIONS],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.destinyPollId.set('poll1');
+    comp.startCompose();
+    expect(comp.composing()).toBe(true);
+
+    comp.scenarios.set([]); // le vote n'est plus ouvert
+    fixture.detectChanges();
+
+    expect(comp.composing()).toBe(false);
+    expect(pollSvc.setPollOptions).not.toHaveBeenCalled();
+    expect(scenariosSvc.createSeancePoll).not.toHaveBeenCalled();
+  });
+
+  it('une erreur d’écriture NE FERME PAS le mode — la composition n’est pas perdue', async () => {
+    const { fixture, pollSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [POLL_WITH_OPTIONS],
+    });
+    const comp = fixture.componentInstance as any;
+    pollSvc.setPollOptions.mockRejectedValueOnce(new Error('boom'));
+    comp.destinyPollId.set('poll1');
+    comp.startCompose();
+    comp.onComposeToggled(cell('2026-08-03', 'EVENING'));
+
+    await comp.confirmCompose();
+
+    expect(comp.composing()).toBe(true);
+    expect(comp.composedCells()).toHaveLength(3);
+    expect(comp.error()).toContain('Impossible');
+  });
+
+  // ── AC1 : la barre persistante ──
+
+  it('AC1 — la barre est rendue tant que le mode dure, MÊME à zéro créneau composé', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [FREE_SEANCE_SCENARIO],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.startCompose();
+    fixture.detectChanges();
+
+    expect(comp.composedCells()).toEqual([]);
+    expect(fixture.nativeElement.querySelector('app-compose-bar')).not.toBeNull();
+    // Et l'armement disparaît : deux entrées simultanées dans le même mode seraient un piège.
+    expect(fixture.nativeElement.querySelector('.compose-arm')).toBeNull();
   });
 });

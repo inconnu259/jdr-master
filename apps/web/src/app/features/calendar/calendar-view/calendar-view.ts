@@ -52,6 +52,7 @@ import { CalendarDetailRail } from '../calendar-detail-rail/calendar-detail-rail
 import {
   type RailTarget,
   buildDayDetail,
+  dateKeyToLocalMidnight,
   entryCoversSlot,
   nextMeaningfulDate,
   toDateKey,
@@ -64,7 +65,13 @@ import {
   type ConflictDialogData,
   type ConflictResolutionByIndex,
 } from '../conflict-dialog/conflict-dialog';
-import { type SelectedCell, buildBatchItems } from '../selection.utils';
+import { type SelectedCell, buildBatchItems, composeCellKey } from '../selection.utils';
+import { ComposeBar } from '../compose-bar/compose-bar';
+import {
+  ComposeConfirmDialog,
+  type ComposeConfirmData,
+  type ComposeSeanceChoice,
+} from '../compose-confirm-dialog/compose-confirm-dialog';
 import { AvailableSlotsPanel, isNamedSlot } from '../available-slots/available-slots';
 import { VoteAnswerPicker } from '../vote-answer-picker/vote-answer-picker';
 import type { VoteOptionActivatedEvent, VoteParticipation } from '../poll-track.utils';
@@ -110,7 +117,15 @@ const CALENDAR_CELL_DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', {
   month: 'long',
 });
 
-/** Story 8.8, AC9 : une séance sans vote encore lancé, éligible pour le sélecteur de l'Oracle. */
+/** Story 36.10 — ce que la composition vise.
+ *
+ * 🚨 Un `pollId`, jamais un index (même raison qu'à la Destinée, story 36.9 encadré n°2) :
+ * `activePolls()` est reconstruit à chaque rechargement temps réel, et un index désignerait
+ * alors un AUTRE vote — donc écrirait les créneaux composés dans le mauvais. */
+export type ComposeTarget = { kind: 'poll'; pollId: string } | { kind: 'new' };
+
+/** Story 8.8, AC9 : une séance sans vote encore lancé — sert désormais à rattacher un vote neuf
+ *  composé sur la grille (Story 36.10, AC11). */
 export interface EligibleSeanceEntry {
   scenario: ScenarioDto;
   seance: SeanceDto;
@@ -127,6 +142,7 @@ export interface EligibleSeanceEntry {
     CalendarDetailRail,
     CalendarLayerToggle,
     DestinyControl,
+    ComposeBar,
     ConstraintPanel,
     MatButtonToggleModule,
     MatButtonModule,
@@ -678,6 +694,231 @@ export class CalendarView implements OnInit {
     this.stepDestiny(-1);
   }
 
+  // ─── Story 36.10 — le mode de composition d'un vote ───────────────────────
+  //
+  // 🚨 IL RÉASSIGNE LE TAP. C'est le SEUL mode de l'application qui en a le droit
+  // (`EXPERIENCE.md:538`, principe 4 ; collision 5). Le contraste avec la Destinée est entier :
+  // celle-ci ne change QUE l'affichage, celui-ci change ce que fait le doigt. Les deux états sont
+  // indépendants et peuvent coexister — ne jamais les fusionner.
+  //
+  // 🚨 MJ ET CONTEXTE DE PARTIE UNIQUEMENT (AC10). L'écriture exige `getOwned` et un `partieId` ;
+  // le calendrier personnel agrège des votes de PLUSIEURS parties et n'a pas de cible.
+  protected readonly composing = signal(false);
+  /** Ce que la composition vise : un vote ouvert à modifier, ou un vote à créer. */
+  protected readonly composeTarget = signal<ComposeTarget | null>(null);
+  /** Les créneaux composés, dans la forme que `SelectedCell` porte déjà partout ailleurs. */
+  protected readonly composedCells = signal<SelectedCell[]>([]);
+
+  /** Ce qui descend dans les deux grilles — un ensemble de clés, jamais la liste : les vues n'ont
+   *  qu'un test d'appartenance à faire, et la dérivation reste unique (doctrine `destinyDates()`). */
+  protected readonly composedKeys = computed<ReadonlySet<string> | null>(() => {
+    if (!this.composing()) return null;
+    return new Set(this.composedCells().map((c) => composeCellKey(c.date, c.slot)));
+  });
+
+  /** Le vote ouvert visé, ou `null` (cible « nouveau vote », ou vote disparu). */
+  private readonly composedPollEntry = computed(() => {
+    const target = this.composeTarget();
+    if (target?.kind !== 'poll') return null;
+    return this.activePolls().find((e) => e.poll.id === target.pollId) ?? null;
+  });
+
+  protected readonly composeTargetLabel = computed(() => {
+    const entry = this.composedPollEntry();
+    if (entry) {
+      const suffix = entry.scenario.seances.length > 1 ? ` — Séance ${entry.seanceIndex}` : '';
+      return `Créneaux du vote : ${entry.scenario.title}${suffix}`;
+    }
+    return 'Créneaux d’un nouveau vote';
+  });
+
+  /** Les séances auxquelles un vote neuf peut être rattaché (AC11). Vide ⇒ la création n'est pas
+   *  proposée : un vote sans séance est structurellement interdit. */
+  private readonly composeSeanceChoices = computed<ComposeSeanceChoice[]>(() =>
+    this.eligibleSeances().map((e) => ({
+      seanceId: e.seance.id,
+      label: `${e.scenario.title} — Séance ${e.seanceIndex}`,
+    })),
+  );
+
+  /** AC14 côté client : la borne serveur est 2..40, et la création exige une séance. Un bouton
+   *  qu'on ne peut pas presser doit dire pourquoi (`composeBlockedReason`), jamais rester inerte. */
+  protected readonly composeCanConfirm = computed(() => {
+    const n = this.composedCells().length;
+    if (n < 2 || n > 40) return false;
+    if (this.composeTarget()?.kind === 'new' && this.composeSeanceChoices().length === 0)
+      return false;
+    return true;
+  });
+
+  protected readonly composeBlockedReason = computed(() => {
+    const n = this.composedCells().length;
+    if (n < 2) return 'Un vote demande au moins deux créneaux.';
+    if (n > 40) return 'Quarante créneaux au maximum.';
+    if (this.composeTarget()?.kind === 'new' && this.composeSeanceChoices().length === 0)
+      return 'Aucune séance n’attend un vote : un vote se rattache toujours à une séance.';
+    return '';
+  });
+
+  /** Le point d'entrée n'existe que là où la composition a un sens (AC10). */
+  protected readonly canCompose = computed(() => {
+    if (!this.isMjMode() || this.partieId() === null) return false;
+    const destinyId = this.destinyPollId();
+    const hasTargetPoll =
+      destinyId !== null && this.activePolls().some((e) => e.poll.id === destinyId);
+    return hasTargetPoll || this.eligibleSeances().length > 0;
+  });
+
+  /**
+   * AC1 — arme le mode. La cible se déduit de ce que le MJ regarde : un vote mis en avant par la
+   * Destinée se MODIFIE, sinon on en compose un neuf.
+   *
+   * AC13 — modifier part de l'état RÉEL du vote : ses options actuelles sont déjà composées, sans
+   * quoi « retiré s'il y était déjà » (AC2) n'aurait aucun référent et le MJ ne pourrait
+   * qu'ajouter.
+   */
+  protected startCompose(): void {
+    if (!this.canCompose()) return;
+    // 🚨 On repart de `destinyPollId()` et d'`activePolls()`, jamais de `destinyPoll()` :
+    // celui-ci dérive des ENTRÉES du calendrier, donc d'un vote dont au moins une option tombe
+    // dans la plage affichée. Un vote mis en avant dont les créneaux sont hors du mois courant
+    // serait alors traité comme « pas de cible », et la validation créerait un SECOND vote au
+    // lieu de modifier le premier. `activePolls()` fait autorité en contexte de partie.
+    const destinyId = this.destinyPollId();
+    const entry = destinyId ? this.activePolls().find((e) => e.poll.id === destinyId) : null;
+
+    if (entry) {
+      this.composeTarget.set({ kind: 'poll', pollId: entry.poll.id });
+      // 🚨 Les options viennent d'`activePolls()`, jamais d'`allCalendarEntries()` : celles-ci
+      // sont bornées par la plage affichée en contexte personnel, et une option hors plage
+      // manquerait au jeu de départ — donc serait silencieusement SUPPRIMÉE à la validation.
+      const cells = entry.poll.options.map((o) => ({
+        date: dateKeyToLocalMidnight(o.date.substring(0, 10)),
+        slot: o.slot,
+      }));
+      this.composedCells.set(cells);
+    } else {
+      this.composeTarget.set({ kind: 'new' });
+      this.composedCells.set([]);
+    }
+    this.composing.set(true);
+  }
+
+  /** AC2 — bascule pure. Aucun appel réseau : rien n'est enregistré avant validation. */
+  protected onComposeToggled(event: SlotSelectedEvent): void {
+    if (!this.composing()) return;
+    const key = composeCellKey(event.date, event.slot);
+    this.composedCells.update((cells) => {
+      const without = cells.filter((c) => composeCellKey(c.date, c.slot) !== key);
+      return without.length === cells.length ? [...cells, { ...event }] : without;
+    });
+  }
+
+  /** AC3 — `Échap` et « Annuler » font la MÊME chose : sortir sans rien écrire. */
+  protected cancelCompose(): void {
+    this.composing.set(false);
+    this.composeTarget.set(null);
+    this.composedCells.set([]);
+  }
+
+  /**
+   * AC4 / AC5 / AC6 / AC7 / AC11 — valider la composition.
+   *
+   * 🚨 **L'avertissement précède l'écriture, jamais l'inverse** (AC6). Le nombre de votants est
+   * lu sur `activePolls()`, déjà chargé : aucun appel réseau n'est dépensé à compter ce qu'on a
+   * déjà en mémoire.
+   *
+   * Deux chemins d'écriture, et un seul appel dans chacun :
+   * - vote existant → `PUT …/poll/:pollId/options` ;
+   * - vote neuf → `POST /scenarios/seances/:id/poll`, **le seul chemin de création**, parce qu'un
+   *   `SessionPoll` sans `Seance` est interdit depuis la 8.8.
+   */
+  protected async confirmCompose(): Promise<void> {
+    const partieId = this.partieId();
+    const target = this.composeTarget();
+    if (!partieId || !target || !this.composeCanConfirm() || this.pollActionPending()) return;
+
+    const options = this.composedCells().map((c) => ({
+      date: toDateKey(c.date),
+      slot: c.slot,
+    }));
+
+    // Ce qui disparaît, et ce que cela coûte aux autres (AC6). Vide par construction sur une
+    // création : un vote qui n'existe pas ne porte aucune réponse.
+    const entry = this.composedPollEntry();
+    const keptKeys = new Set(this.composedCells().map((c) => composeCellKey(c.date, c.slot)));
+    const removed = (entry?.poll.options ?? []).filter(
+      (o) => !keptKeys.has(composeCellKey(dateKeyToLocalMidnight(o.date.substring(0, 10)), o.slot)),
+    );
+    const voterCount = removed.reduce((sum, o) => sum + o.votes.length, 0);
+
+    // Le dialogue ne s'ouvre que s'il a quelque chose à demander : une séance (création), ou
+    // l'accord du MJ sur une perte chiffrée (modification). Un retrait sans aucune réponse posée
+    // ne mérite pas d'interruption — l'AC6 ne la demande que « sur laquelle des membres ont voté ».
+    const needsDialog = target.kind === 'new' || voterCount > 0;
+    let seanceId: string | null = null;
+    if (needsDialog) {
+      const data: ComposeConfirmData = {
+        mode: target.kind === 'new' ? 'new' : 'poll',
+        slotCount: options.length,
+        removedCount: removed.length,
+        voterCount,
+        seances: this.composeSeanceChoices(),
+      };
+      const ref = this.dialog.open(ComposeConfirmDialog, { data });
+      const decision = (await firstValueFrom(ref.afterClosed())) as {
+        seanceId: string | null;
+      } | null;
+      // AC6 — renoncer ne modifie RIEN, et la composition reste telle quelle : le MJ n'a pas à
+      // tout redésigner parce qu'il a hésité une fois.
+      if (!decision) return;
+      seanceId = decision.seanceId;
+    }
+
+    // 🚨 Revue de code — `voterCount` a pu être calculé AVANT l'ouverture du dialogue, qui reste
+    // ouvert le temps que le MJ lise et décide. Un membre peut voter (SSE) sur une option en
+    // cours de retrait pendant cette fenêtre : revérifier juste avant l'écriture, jamais se fier
+    // au chiffre que le MJ a vu à l'ouverture. S'il a AUGMENTÉ, ne pas écrire en silence sur un
+    // consentement qui ne porte plus sur le bon nombre — redemander confirmation.
+    if (target.kind === 'poll') {
+      const freshEntry = this.composedPollEntry();
+      const freshRemoved = (freshEntry?.poll.options ?? []).filter(
+        (o) =>
+          !keptKeys.has(composeCellKey(dateKeyToLocalMidnight(o.date.substring(0, 10)), o.slot)),
+      );
+      const freshVoterCount = freshRemoved.reduce((sum, o) => sum + o.votes.length, 0);
+      if (freshVoterCount > voterCount) {
+        this.error.set(
+          'Une nouvelle réponse est arrivée depuis l’avertissement — revalidez pour voir le chiffre à jour.',
+        );
+        return;
+      }
+    }
+
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      if (target.kind === 'poll') {
+        // Même patron que `onClosePoll()` : `PollService` écrit, `loadScenarios()` relit. La
+        // notification de domaine est portée par le serveur, qui émet déjà `partieTopic` sur
+        // cette mutation (AC15) — `ScenariosService.notifyChanged()` est privé et réservé à ses
+        // propres écritures.
+        await this.pollSvc.setPollOptions(partieId, target.pollId, { options });
+      } else {
+        if (!seanceId) return;
+        await this.scenariosSvc.createSeancePoll(seanceId, options);
+      }
+      await this.loadScenarios(partieId);
+      this.cancelCompose();
+    } catch {
+      // 🚨 Le mode NE SE FERME PAS sur une erreur : la composition du MJ est en mémoire et nulle
+      // part ailleurs. La perdre l'obligerait à tout redésigner sur la grille.
+      this.error.set('Impossible d’enregistrer ces créneaux. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
   protected readonly pollPanelOpen = signal(false);
   // Story 8.7, AC1/AC2 : renseigné depuis ?seanceId=... (arrivée depuis SeanceList) — verrouille
   // PollCreationComponent sur cette séance, ouvre automatiquement le panneau sans re-clic du MJ.
@@ -798,6 +1039,21 @@ export class CalendarView implements OnInit {
       }
     });
 
+    // Story 36.10 — la composition aussi doit savoir mourir. Un vote scellé ou clôturé ailleurs
+    // (ou par un autre membre via SSE) pendant qu'on compose ses créneaux ne peut plus être écrit :
+    // le serveur refuserait (`status !== 'OPEN'`), et continuer à composer donnerait au MJ
+    // l'illusion d'un travail qui aboutira.
+    //
+    // 🚨 La garde de plage de la Destinée ne se recopie PAS ici, et c'est délibéré : la
+    // composition n'existe qu'en contexte de PARTIE (AC10), où `activePolls()` dérive de tous les
+    // scénarios et fait donc autorité sur ce qui est ouvert. « Absent » y veut bien dire « clos ».
+    effect(() => {
+      const target = this.composeTarget();
+      if (target?.kind !== 'poll') return;
+      const stillOpen = this.activePolls().some((e) => e.poll.id === target.pollId);
+      if (!stillOpen) untracked(() => this.cancelCompose());
+    });
+
     let firstRun = true;
     effect(() => {
       this.availabilitySvc.changed();
@@ -877,19 +1133,15 @@ export class CalendarView implements OnInit {
     }
   }
 
-  // Story 8.8, AC9 : sélection d'une séance éligible depuis l'Oracle — réutilise le flux existant
-  // (verrouillage `lockedSeanceId`/`pollPanelOpen`, `PollCreationComponent`), aucun nouveau chemin
-  // de création de vote.
-  protected startVoteFor(seanceId: string): void {
-    if (!seanceId) return;
-    this.lockedSeanceId.set(seanceId);
-    this.pollPanelOpen.set(true);
-  }
-
-  /** Aucun état à mettre à jour — force un cycle de détection de changements zoneless sur
-   *  (change), pour que [disabled] (qui lit seanceSelect.value directement) reflète la
-   *  sélection courante. Même pattern que SeanceList.onCapacityFormInput(). */
-  protected noop(): void {}
+  // ⚠️ Story 36.10, AC9 — `startVoteFor()` et `noop()` ont été SUPPRIMÉS avec le sélecteur
+  // « Planifier un vote pour : » qui les appelait (patron de la 36.9, qui a retiré
+  // `onChooseDate()` avec son panneau plutôt que de laisser du code mort). Désigner une séance
+  // avant de choisir des dates n'est plus le parcours : on compose les créneaux sur la grille,
+  // et la séance se demande à la validation (`confirmCompose()`).
+  //
+  // 🚨 `eligibleSeances()` reste, et `lockedSeanceId` / `pollPanelOpen` / `<app-poll-creation>`
+  // aussi : ils portent l'arrivée depuis `SeanceList` via `?seanceId=` (story 8.7), qui n'est pas
+  // le sélecteur visé par l'AC9.
 
   /**
    * Story 36.1, AC2 : le rail suit tout toucher de case, « quelle que soit la raison du toucher ».

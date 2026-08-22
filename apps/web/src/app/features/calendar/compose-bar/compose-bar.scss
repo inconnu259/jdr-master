@@ -1,0 +1,43 @@
+/* Même grammaire que `selection-bar.scss` — c'est la même famille de barre d'action sous la
+   grille — mais teintée `status-todo`, la couleur du vote, pour qu'on ne confonde jamais
+   « je déclare mes disponibilités » et « je compose les créneaux d'un vote ». */
+.compose-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 2px solid var(--jdr-status-todo, var(--mat-sys-primary));
+  border-radius: 10px;
+  background: color-mix(
+    in srgb,
+    var(--jdr-status-todo, #f0a030) 10%,
+    var(--mat-sys-surface-container)
+  );
+}
+
+.compose-bar__target {
+  font-size: 0.9rem;
+  color: var(--jdr-status-todo, var(--mat-sys-primary));
+}
+
+.compose-bar__count {
+  font-size: 0.85rem;
+}
+
+/* AC1 : la raison d'un bouton désactivé se lit, elle ne se devine pas. */
+.compose-bar__blocked {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.compose-bar__spacer {
+  flex: 1;
+}
+
+.compose-bar button[mat-flat-button],
+.compose-bar button[mat-button] {
+  padding-inline: 14px;
+  min-width: 0;
+}
