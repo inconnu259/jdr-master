@@ -1,50 +1,79 @@
+<!-- Story 36.11 — l'Agenda est rangé par CE QU'ON ATTEND DE MOI, pas par date. Aucun jour ne
+     figure en en-tête : la date redevient une propriété de la ligne (AC1, AC2). -->
 <div class="agenda-view">
   @if (loading()) {
     <mat-progress-spinner mode="indeterminate" diameter="32" />
-  } @else if (sortedEntries().length === 0) {
-    <p class="agenda-view__empty">Rien à afficher pour la période et les couches actives.</p>
+  } @else if (sections().length === 0) {
+    <p class="agenda-view__empty">{{ emptyMessage() }}</p>
   } @else {
-    <ul class="agenda-list">
-      @for (entry of sortedEntries(); track entry.key) {
-        <li class="agenda-entry" [class]="'agenda-entry--' + entry.type">
-          <span class="agenda-entry__badge">{{ typeLabel(entry.type) }}</span>
-          @if (entry.date) {
-            <span class="agenda-entry__date">{{ entry.date }}</span>
+    @for (section of sections(); track section.id) {
+      <!-- Une section vide n'arrive jamais ici : `sections()` les exclut, plutôt que de rendre un
+           en-tête suivi de rien (AC10). -->
+      <section class="agenda-section" [class]="'agenda-section--' + section.tint">
+        <h3 class="agenda-section__head">
+          <span class="agenda-section__key" aria-hidden="true"></span>
+          <span class="agenda-section__title">{{ sectionTitle(section) }}</span>
+          <span class="agenda-section__count">{{ section.entries.length }}</span>
+        </h3>
+        <ul class="agenda-list">
+          @for (entry of section.entries; track entry.key) {
+            <li class="agenda-entry" [class]="'agenda-entry--' + entry.type">
+              <span class="agenda-entry__kbar" aria-hidden="true"></span>
+
+              <!-- AC5/AC12 — une ligne ouvrable EST un bouton (clavier gratuit) ; une ligne qui
+                   n'ouvre rien n'en est pas un, et ne s'en donne pas l'air. Le corps est le même
+                   dans les deux cas : un seul gabarit, aucune duplication à maintenir. -->
+              @if (openTarget(entry); as target) {
+                <button
+                  type="button"
+                  class="agenda-entry__open"
+                  [attr.aria-label]="openLabel(entry)"
+                  (click)="scenarioActivated.emit(target)"
+                >
+                  <ng-container
+                    [ngTemplateOutlet]="body"
+                    [ngTemplateOutletContext]="{ $implicit: entry }"
+                  />
+                </button>
+              } @else {
+                <span class="agenda-entry__static">
+                  <ng-container
+                    [ngTemplateOutlet]="body"
+                    [ngTemplateOutletContext]="{ $implicit: entry }"
+                  />
+                </span>
+              }
+
+              <!-- Story 36.7 — le sélecteur de réponse, inchangé par la refonte : c'est l'UNIQUE
+                   chemin de réponse et de retrait des quatre surfaces. Frère de la ligne, jamais
+                   imbriqué dedans (AC13). -->
+              @if (entry.vote; as vote) {
+                <button
+                  type="button"
+                  class="agenda-entry__vote-action"
+                  [attr.aria-label]="voteAriaLabel(entry)"
+                  aria-haspopup="menu"
+                  (click)="onVoteActivate(entry, $event)"
+                >
+                  <app-poll-track class="agenda-entry__track track-sm" [vote]="vote" />
+                </button>
+              }
+
+              <!-- AC8 — la teinte double un libellé, elle ne le remplace jamais (P-1). -->
+              @if (badge(entry); as b) {
+                <span [class]="badgeClass(b)">{{ badgeLabel(b) }}</span>
+              }
+            </li>
           }
-          <span class="agenda-entry__label">{{ entry.label }}</span>
-          @if (entry.detail) {
-            <span class="agenda-entry__detail">{{ entry.detail }}</span>
-          }
-          <!-- Story 36.5 — champ PROPRE, jamais versé dans `detail` qui porte déjà trois usages.
-               L'agenda a de la place : niveau complet. Interpolation seule (AC9). -->
-          @if (seanceInfo(entry)) {
-            <span class="agenda-entry__infos">{{ seanceInfo(entry) }}</span>
-          }
-          <!-- Story 36.6 — depuis cette story, une entrée `votes-en-cours` est UNE OPTION : la
-               liste montre donc un créneau proposé par ligne, chacun avec sa piste, son compteur
-               et ma réponse. L'Agenda a la place : rien n'y est replié (AC4, AC5). -->
-          @if (entry.vote; as vote) {
-            <!-- Story 36.7 — la ligne devient activable : même sélecteur que les grilles et le
-                 rail. Un bouton, donc atteignable au clavier sans code supplémentaire. -->
-            <button
-              type="button"
-              class="agenda-entry__vote-action"
-              [attr.aria-label]="voteAriaLabel(entry)"
-              aria-haspopup="menu"
-              (click)="onVoteActivate(entry, $event)"
-            >
-              <app-poll-track class="agenda-entry__track track-sm" [vote]="vote" />
-            </button>
-          }
-          <!-- Story 36.8 — la disponibilité du groupe. L'Agenda avait déjà le texte
-               (« Soir — 2/4 disponibles ») ; il gagne la FORME, la même que les grilles et le
-               rail, pour que les quatre surfaces disent la même chose de la même façon. Ce n'est
-               pas un bouton : le groupe n'ouvre rien. -->
-          @if (entry.group; as group) {
-            <app-group-gauge class="agenda-entry__group in-agenda" [group]="group" />
-          }
-        </li>
-      }
-    </ul>
+        </ul>
+      </section>
+    }
   }
 </div>
+
+<ng-template #body let-entry>
+  <span class="agenda-entry__title">{{ entry.label }}</span>
+  @if (metaLine(entry); as meta) {
+    <span class="agenda-entry__meta">{{ meta }}</span>
+  }
+</ng-template>

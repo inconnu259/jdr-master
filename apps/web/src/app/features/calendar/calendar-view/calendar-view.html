@@ -23,14 +23,20 @@
       <!-- Story 36.9, AC5 — 🚨 FRÈRE de la bande de couches, jamais une chip DEDANS : la
            Destinée est un MODE, pas un filtre, et il doit se voir tant qu'il est actif
            (EXPERIENCE.md:198). Quand la story 36.14 repliera les couches derrière
-           « ☰ Affichage », ce contrôle devra RESTER dehors. -->
-      <app-destiny-control
-        [polls]="destinyPolls()"
-        [currentPollId]="destinyPollId()"
-        (toggled)="toggleDestiny()"
-        (prevRequested)="destinyPrev()"
-        (nextRequested)="destinyNext()"
-      />
+           « ☰ Affichage », ce contrôle devra RESTER dehors.
+           Story 36.11, D-3 — masqué en vue Agenda, comme le rail et la composition : la Destinée
+           ESTOMPE UNE GRILLE, et il n'y en a pas ici. Un contrôle visible sans effet est un
+           défaut, pas une neutralité. Le mode lui-même n'est PAS réinitialisé — revenir au Mois
+           le retrouve tel quel. -->
+      @if (view() !== 'agenda') {
+        <app-destiny-control
+          [polls]="destinyPolls()"
+          [currentPollId]="destinyPollId()"
+          (toggled)="toggleDestiny()"
+          (prevRequested)="destinyPrev()"
+          (nextRequested)="destinyNext()"
+        />
+      }
 
       <!-- Story 36.10, AC1/AC10 — ⚠️ ÉCART ASSUMÉ avec `contrat-ui-calendrier.html:376`, qui
            place ce bouton dans la barre de SÉLECTION. Celle-ci n'existe que tant qu'une sélection
@@ -96,10 +102,15 @@
         (composeCancelled)="cancelCompose()"
       />
     } @else {
+      <!-- Story 36.11 — `todayKey` est figé au montage par le parent : une seule source de
+           « maintenant » pour tout l'écran. `scenarioActivated` rejoint la MÊME navigation que
+           le rail (AC5) — aucun second `router.navigate` dans le projet. -->
       <app-calendar-agenda-view
         [entries]="agendaEntries()"
         [loading]="loading() || meCalendarLoading()"
+        [todayKey]="todayKey"
         (voteOptionActivated)="onVoteOptionActivated($event)"
+        (scenarioActivated)="onScenarioActivated($event)"
       />
     }
 

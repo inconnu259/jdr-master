@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ThemeToneService } from './theme-tone.service';
+import { THEMES, TONE_MAP } from './tones';
 
 describe('ThemeToneService', () => {
   afterEach(() => {
@@ -32,4 +33,29 @@ describe('ThemeToneService', () => {
 
     expect(service.activeTheme()).toBe('grimoire-emeraude');
   });
+});
+
+// Story 36.11 — garde contre le piège n°12 de la 36.9 : une clé posée dans un seul thème rend
+// `undefined` à l'écran dans les deux autres, et aucun test de composant ne le voit (ils tournent
+// tous sur le thème par défaut).
+describe('TONE_MAP — les clés de la vue Agenda existent dans les TROIS thèmes', () => {
+  const AGENDA_KEYS = [
+    'calendar.agenda.section_awaiting',
+    'calendar.agenda.section_scheduled',
+    'calendar.agenda.section_past',
+    'calendar.agenda.badge_answer_poll',
+    'calendar.agenda.badge_poll_open',
+    'calendar.agenda.badge_signup',
+    'calendar.agenda.badge_signed_up',
+    'calendar.agenda.badge_debrief',
+    'calendar.agenda.empty',
+  ];
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${AGENDA_KEYS.length} clés, toutes non vides`, () => {
+      for (const key of AGENDA_KEYS) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+      }
+    });
+  }
 });

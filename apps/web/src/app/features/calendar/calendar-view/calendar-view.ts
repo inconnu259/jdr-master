@@ -15,6 +15,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { CdkConnectedOverlay, type ConnectedPosition } from '@angular/cdk/overlay';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { firstValueFrom } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import type {
@@ -172,12 +173,39 @@ export class CalendarView implements OnInit {
   private readonly contextualNav = inject(ContextualNavService);
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly breakpointObserver = inject(BreakpointObserver);
+
+  /** Même seuil que `partie-detail` et `list-control-bar` — pas un troisième vocabulaire de
+   *  largeur dans l'application. */
+  private static readonly DESKTOP_QUERY = '(min-width: 1024px)';
 
   protected readonly declarations = signal<AvailabilityDeclarationDto[]>([]);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
 
-  protected readonly view = signal<'month' | 'week' | 'agenda'>('month');
+  /**
+   * Story 36.11, AC6 — **l'Agenda est la vue par défaut sur mobile**, le Mois sur ordinateur
+   * [Source: EXPERIENCE.md §9].
+   *
+   * 🚨 La largeur est lue **UNE SEULE FOIS**, ici, à l'initialisation. Aucun `effect()` ni
+   * `toSignal()` réactif ne doit réassigner ce signal : un défaut n'est pas un verrou (AC15), et
+   * une rotation d'écran ramènerait sinon l'utilisateur de force sur l'Agenda alors qu'il vient
+   * de choisir le Mois. `isMatched()` est synchrone — évite un rendu mobile qui clignoterait en
+   * desktop (même patron que `list-control-bar.ts`).
+   */
+  protected readonly view = signal<'month' | 'week' | 'agenda'>(
+    this.breakpointObserver.isMatched(CalendarView.DESKTOP_QUERY) ? 'month' : 'agenda',
+  );
+
+  /**
+   * Story 36.11 — le « maintenant » de l'écran, figé au montage.
+   *
+   * Une seule source pour toutes les surfaces : deux `new Date()` pourraient placer deux entrées
+   * de part et d'autre d'une frontière de jour et leur donner des sections incohérentes. Figé
+   * plutôt que réactif, comme `Dashboard.countdownNow` : un agenda qui se réorganiserait tout
+   * seul à minuit coûterait un timer permanent pour un gain nul.
+   */
+  protected readonly todayKey = toDateKey(new Date());
   protected readonly sharedDate = signal<Date>(new Date());
 
   // ─── Couches du calendrier (Story 30.6, AC1/AC3/AC4/AC7, encadré n°2) ──────
@@ -189,12 +217,24 @@ export class CalendarView implements OnInit {
   protected readonly meCalendar = signal<MeCalendarDto | null>(null);
   protected readonly meCalendarLoading = signal(false);
 
-  /** 5 couches hors contexte de partie (disponibilite-groupe absente, AD-16/AC8), 6 en contexte
-   *  de partie. */
+  /**
+   * Les couches dont la BARRE porte un interrupteur — 4 hors contexte de partie, 5 en contexte de
+   * partie (`disponibilite-groupe` absente hors partie, AD-16/AC8 de la 30.6).
+   *
+   * ⚠️ Story 36.11, AC7 — `inscriptions-ouvertes` ne figure plus ici. Une séance à inscription
+   * ouverte **n'a pas de date** : elle n'a aucune case où se poser, et l'interrupteur n'a jamais
+   * rien produit à l'écran. Elle vit désormais dans une section de l'Agenda.
+   *
+   * 🚨 **La CLÉ, elle, reste** dans `CALENDAR_LAYER_KEYS` et dans la préférence de compte
+   * [Source: prd.md:305]. La retirer de l'union ferait échouer la validation serveur
+   * (`@IsIn(CALENDAR_LAYER_KEYS)`) de tout compte l'ayant déjà enregistrée — et l'écran Compte
+   * continue de l'offrir. C'est l'interrupteur de la barre qui disparaît, pas la clé.
+   */
   protected readonly availableLayerKeys = computed<CalendarLayerKey[]>(() =>
-    this.partieId()
-      ? [...CALENDAR_LAYER_KEYS]
-      : CALENDAR_LAYER_KEYS.filter((k) => k !== 'disponibilite-groupe'),
+    CALENDAR_LAYER_KEYS.filter(
+      (k) =>
+        k !== 'inscriptions-ouvertes' && (this.partieId() ? true : k !== 'disponibilite-groupe'),
+    ),
   );
 
   private defaultLayersForContext(partieContext: boolean): CalendarLayerKey[] {
@@ -345,6 +385,11 @@ export class CalendarView implements OnInit {
             seanceHeure: seance.heureRdv,
             seanceLieu: seance.lieu,
             seanceNote: seance.notePratique,
+            // Story 36.11 — ce qui fait entrer une séance JOUÉE dans « C'est passé ». Gratuit
+            // ici, le SeanceDto complet est déjà chargé. 🚨 Renseigné dans cette branche
+            // SEULEMENT : `MyCalendarSeanceEntry` n'a pas de `compteRendu`, et le calendrier
+            // personnel ne charge de toute façon aucune date passée.
+            compteRenduManquant: !seance.compteRendu?.trim(),
           });
         }
       }
@@ -396,6 +441,10 @@ export class CalendarView implements OnInit {
           date: '',
           label: scenario.title,
           detail: `${seance.inscription!.inscrits.length}/${seance.inscription!.max} inscrits`,
+          // Story 36.11 — commande le badge (« S'inscrire » contre « Inscrit »), jamais
+          // l'appartenance à la section : une inscription reste dans « Ça t'attend » même une
+          // fois prise, c'est le libellé qui change (même règle que pour un vote répondu).
+          jeSuisInscrit: seance.inscription!.inscrits.some((i) => i.userId === myId),
         });
       }
       // Story 36.8 — ⚠️ le `continue` qui sautait les créneaux « aucun disponible ET aucun avis »
@@ -495,6 +544,10 @@ export class CalendarView implements OnInit {
             date: '',
             label: `${i.partieName} — ${i.scenarioTitle}`,
             detail: `${i.inscritsCount}/${i.inscriptionMax} inscrits`,
+            // Story 36.11 — servi par le DTO ici, dérivé de la liste des inscrits en contexte de
+            // partie. ⚠️ `MyCalendarOpenInscriptionEntry` ne porte AUCUN `scenarioId` : cette
+            // ligne n'est donc pas ouvrable (AC12), dette consignée.
+            jeSuisInscrit: i.jeSuisInscrit,
           });
         }
       }
@@ -521,7 +574,11 @@ export class CalendarView implements OnInit {
     const active = new Set(this.activeLayers());
     return this.allCalendarEntries().filter(
       (e) =>
-        active.has(e.type) &&
+        // Story 36.11, AC9 — 🚨 `inscriptions-ouvertes` ÉCHAPPE au filtre par couche. Son
+        // interrupteur a quitté la barre (AC7) mais sa clé survit dans la préférence de compte :
+        // un compte qui l'avait éteinte au palier précédent verrait sinon la section « Ça
+        // t'attend » amputée, sans plus aucun moyen de la rétablir.
+        (e.type === 'inscriptions-ouvertes' || active.has(e.type)) &&
         // Story 36.8 — un créneau dont personne n'a rien dit n'a rien à faire dans une LISTE : il
         // n'y ajouterait qu'une ligne « 0/4 disponibles » par créneau et par jour. Il doit en
         // revanche atteindre la GRILLE, où sa jauge vide porte une information (AC6). Le filtre

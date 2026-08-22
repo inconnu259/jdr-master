@@ -306,6 +306,18 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'account.calendar_layer.votes-en-cours': 'Les votes en cours',
     'account.calendar_layer.inscriptions-ouvertes': 'Les inscriptions ouvertes',
     'account.calendar_layer.disponibilite-groupe': 'La disponibilité du groupe',
+    /* — vue Agenda (Story 36.11) — les libellés de BADGE sont contractuels et identiques dans
+       les trois thèmes : EXPERIENCE.md §5 impose « Réponds au vote » / « Vote en cours » comme
+       la paire qui distingue à-faire et fait. Seuls les titres de section et le vide varient. */
+    'calendar.agenda.section_awaiting': 'Ce qui t’attend',
+    'calendar.agenda.section_scheduled': 'Ce qui est annoncé',
+    'calendar.agenda.section_past': 'Ce qui est révolu',
+    'calendar.agenda.badge_answer_poll': 'Réponds au vote',
+    'calendar.agenda.badge_poll_open': 'Vote en cours',
+    'calendar.agenda.badge_signup': 'S’inscrire',
+    'calendar.agenda.badge_signed_up': 'Inscrit',
+    'calendar.agenda.badge_debrief': 'Débriefer',
+    'calendar.agenda.empty': 'Rien ne t’attend, rien n’est annoncé.',
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',
@@ -603,6 +615,16 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'account.calendar_layer.votes-en-cours': 'Les votes en cours',
     'account.calendar_layer.inscriptions-ouvertes': 'Les inscriptions ouvertes',
     'account.calendar_layer.disponibilite-groupe': 'La disponibilité du groupe',
+    /* — vue Agenda (Story 36.11) — badges contractuels (EXPERIENCE.md §5), titres thématisés. */
+    'calendar.agenda.section_awaiting': 'Ce qui t’attend',
+    'calendar.agenda.section_scheduled': 'Ce qui est prévu',
+    'calendar.agenda.section_past': 'Ce qui est derrière',
+    'calendar.agenda.badge_answer_poll': 'Réponds au vote',
+    'calendar.agenda.badge_poll_open': 'Vote en cours',
+    'calendar.agenda.badge_signup': 'S’inscrire',
+    'calendar.agenda.badge_signed_up': 'Inscrit',
+    'calendar.agenda.badge_debrief': 'Débriefer',
+    'calendar.agenda.empty': 'Rien ne t’attend, rien n’est prévu.',
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',
@@ -900,6 +922,16 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'account.calendar_layer.votes-en-cours': 'Les votes en cours',
     'account.calendar_layer.inscriptions-ouvertes': 'Les inscriptions ouvertes',
     'account.calendar_layer.disponibilite-groupe': 'La disponibilité du groupe',
+    /* — vue Agenda (Story 36.11) — badges contractuels (EXPERIENCE.md §5), titres thématisés. */
+    'calendar.agenda.section_awaiting': 'À traiter',
+    'calendar.agenda.section_scheduled': 'Au programme',
+    'calendar.agenda.section_past': 'Aux archives',
+    'calendar.agenda.badge_answer_poll': 'Réponds au vote',
+    'calendar.agenda.badge_poll_open': 'Vote en cours',
+    'calendar.agenda.badge_signup': 'S’inscrire',
+    'calendar.agenda.badge_signed_up': 'Inscrit',
+    'calendar.agenda.badge_debrief': 'Débriefer',
+    'calendar.agenda.empty': 'Aucune tâche, aucune échéance.',
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',

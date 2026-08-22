@@ -18,7 +18,9 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
+import { CALENDAR_LAYER_KEYS, DEFAULT_CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { TONE_MAP } from '../../../core/theme/tones';
 
@@ -29,6 +31,19 @@ interface CreateOptions {
   scenarios?: any[];
   availabilitySvc?: ReturnType<typeof makeAvailabilityService>;
   authSvc?: ReturnType<typeof makeAuthService>;
+  /** Story 36.11, AC6 — largeur simulée. Par défaut **ordinateur**, ce qui préserve le défaut
+   *  « vue Mois » de toute la suite existante : jsdom répond `matches: false` à n'importe quelle
+   *  media query, donc sans ce mock chaque test basculerait en vue Agenda. */
+  desktop?: boolean;
+}
+
+/** Même forme que les mocks de `partie-detail.spec.ts` / `list-control-bar.spec.ts` :
+ *  `isMatched()` synchrone + un `observe()` qui n'émet qu'une fois. */
+function makeBreakpointObserver(desktop: boolean) {
+  return {
+    isMatched: () => desktop,
+    observe: () => of({ matches: desktop, breakpoints: {} }),
+  };
 }
 
 function makeActivatedRoute(partieId?: string, queryParams: Record<string, string> = {}) {
@@ -173,6 +188,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
       { provide: MatDialog, useValue: dialog },
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: RealtimeService, useValue: realtimeSvc },
+      { provide: BreakpointObserver, useValue: makeBreakpointObserver(opts.desktop ?? true) },
     ],
   }).compileComponents();
 
@@ -2875,5 +2891,204 @@ describe('CalendarView — mode de composition (Story 36.10)', () => {
     expect(fixture.nativeElement.querySelector('app-compose-bar')).not.toBeNull();
     // Et l'armement disparaît : deux entrées simultanées dans le même mode seraient un piège.
     expect(fixture.nativeElement.querySelector('.compose-arm')).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// Story 36.11 — La vue Agenda refondue
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+/** Une séance DATÉE et JOUÉE, sans compte-rendu : le seul jeu qui rende « C'est passé »
+ *  observable — et il n'existe qu'en contexte de partie (encadré n°2 de la story). */
+const SCENARIO_WITH_SEANCE = {
+  ...ACTIVE_POLL_SCENARIO,
+  seances: [
+    {
+      id: 'seanceD',
+      scenarioId: 's1',
+      compteRendu: null,
+      createdAt: '2026-07-13T00:00:00.000Z',
+      poll: {
+        ...ACTIVE_POLL_SCENARIO.seances[0].poll,
+        status: 'CLOSED',
+        chosenDate: '2026-08-01T00:00:00.000Z',
+        chosenSlot: 'EVENING',
+      },
+    },
+  ],
+};
+
+/** Le même scénario, vote OUVERT à une option — de quoi armer la Destinée. */
+const SCENARIO_WITH_OPEN_POLL = {
+  ...ACTIVE_POLL_SCENARIO,
+  seances: [
+    {
+      ...ACTIVE_POLL_SCENARIO.seances[0],
+      poll: {
+        ...ACTIVE_POLL_SCENARIO.seances[0].poll,
+        options: [{ id: 'optA', date: '2026-08-28T00:00:00.000Z', slot: 'EVENING', votes: [] }],
+      },
+    },
+  ],
+};
+
+describe('CalendarView — vue par défaut selon la largeur (Story 36.11, AC6/AC15)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC6 — sur téléphone, l’Agenda est la vue affichée par défaut', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal', desktop: false });
+    const comp = fixture.componentInstance as any;
+    expect(comp.view()).toBe('agenda');
+    expect(fixture.nativeElement.querySelector('app-calendar-agenda-view')).not.toBeNull();
+  });
+
+  it('AC6 — sur ordinateur, le Mois reste la vue par défaut', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal', desktop: true });
+    const comp = fixture.componentInstance as any;
+    expect(comp.view()).toBe('month');
+    expect(fixture.nativeElement.querySelector('app-calendar-month-view')).not.toBeNull();
+  });
+
+  it('AC15 — 🚨 un défaut n’est pas un verrou : le choix de l’utilisateur survit', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal', desktop: false });
+    const comp = fixture.componentInstance as any;
+
+    comp.onViewChange('month');
+    fixture.detectChanges();
+    expect(comp.view()).toBe('month');
+
+    // Une rotation d'écran ne doit RIEN réassigner : la largeur n'est lue qu'au montage. On
+    // relance donc un cycle complet de détection, ce qui rejouerait tout `effect()` mal placé.
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(comp.view()).toBe('month');
+  });
+});
+
+describe('CalendarView — la couche « inscriptions ouvertes » (Story 36.11, AC7/AC9)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC7 — son interrupteur a quitté la barre de contrôles (contexte personnel)', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+    const keys = (fixture.componentInstance as any).availableLayerKeys();
+    expect(keys).not.toContain('inscriptions-ouvertes');
+    expect(keys).toHaveLength(4);
+  });
+
+  it('AC7 — son interrupteur a quitté la barre de contrôles (contexte de partie)', async () => {
+    const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const keys = (fixture.componentInstance as any).availableLayerKeys();
+    expect(keys).not.toContain('inscriptions-ouvertes');
+    expect(keys).toContain('disponibilite-groupe');
+    expect(keys).toHaveLength(5);
+  });
+
+  it('AC7 — 🚨 la CLÉ survit dans l’union partagée : aucune préférence enregistrée n’est invalidée', () => {
+    expect(CALENDAR_LAYER_KEYS).toContain('inscriptions-ouvertes');
+    expect(DEFAULT_CALENDAR_LAYER_KEYS).toContain('inscriptions-ouvertes');
+  });
+
+  it('AC9 — 🚨 une préférence héritée qui éteint la couche ne peut plus vider la section', async () => {
+    const authSvc = makeAuthService(['mes-indisponibilites', 'mes-disponibilites', 'mes-seances']);
+    const { fixture } = await createCalendarView({
+      mode: 'personal',
+      authSvc,
+      availabilitySvc: (() => {
+        const svc = makeAvailabilityService();
+        svc.getMyCalendar.mockResolvedValue({
+          'mes-indisponibilites': [],
+          'mes-disponibilites': [],
+          'mes-seances': [],
+          'votes-en-cours': [],
+          'inscriptions-ouvertes': [
+            {
+              seanceId: 'si1',
+              partieId: 'pX',
+              partieName: 'Partie X',
+              scenarioTitle: 'La Halte du Griffon',
+              inscriptionMin: 2,
+              inscriptionMax: 5,
+              inscritsCount: 3,
+              jeSuisInscrit: false,
+            },
+          ],
+        });
+        return svc;
+      })(),
+    });
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.activeLayers()).not.toContain('inscriptions-ouvertes');
+    const inscriptions = comp
+      .agendaEntries()
+      .filter((e: any) => e.type === 'inscriptions-ouvertes');
+    expect(inscriptions).toHaveLength(1);
+    expect(inscriptions[0].jeSuisInscrit).toBe(false);
+  });
+});
+
+describe('CalendarView — ce que l’Agenda reçoit (Story 36.11, AC14, D-3)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC14 — passer en vue agenda n’émet AUCUN appel réseau supplémentaire', async () => {
+    const { fixture, availabilitySvc, pollSvc, scenariosSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_WITH_SEANCE],
+    });
+    const comp = fixture.componentInstance as any;
+    const before =
+      availabilitySvc.getMyDeclarations.mock.calls.length +
+      availabilitySvc.getMyCalendar.mock.calls.length +
+      pollSvc.getAvailableSlots.mock.calls.length +
+      pollSvc.getHeatmap.mock.calls.length +
+      scenariosSvc.listAll.mock.calls.length;
+
+    comp.onViewChange('agenda');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const after =
+      availabilitySvc.getMyDeclarations.mock.calls.length +
+      availabilitySvc.getMyCalendar.mock.calls.length +
+      pollSvc.getAvailableSlots.mock.calls.length +
+      pollSvc.getHeatmap.mock.calls.length +
+      scenariosSvc.listAll.mock.calls.length;
+    expect(after).toBe(before);
+  });
+
+  it('D-3 — le contrôle Destinée est masqué en vue Agenda, sans éteindre le mode', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_WITH_OPEN_POLL],
+    });
+    const comp = fixture.componentInstance as any;
+    expect(fixture.nativeElement.querySelector('app-destiny-control')).not.toBeNull();
+
+    comp.destinyPollId.set('poll1');
+    comp.onViewChange('agenda');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('app-destiny-control')).toBeNull();
+    // Le MODE survit : revenir au Mois le retrouve tel quel.
+    expect(comp.destinyPollId()).toBe('poll1');
+    comp.onViewChange('month');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-destiny-control')).not.toBeNull();
+  });
+
+  it('le compte-rendu manquant d’une séance passée remonte à l’Agenda (contexte de partie)', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_WITH_SEANCE],
+    });
+    const comp = fixture.componentInstance as any;
+    const seances = comp.agendaEntries().filter((e: any) => e.type === 'mes-seances');
+    expect(seances.length).toBeGreaterThan(0);
+    expect(seances[0].compteRenduManquant).toBe(true);
   });
 });
