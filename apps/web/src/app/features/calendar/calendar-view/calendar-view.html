@@ -46,7 +46,9 @@
            AC10 : rendu seulement pour un MJ, en contexte de partie, et seulement s'il y a
            quelque chose à composer (un vote mis en avant, ou une séance qui en attend un). -->
       @if (canCompose() && !composing()) {
-        <button type="button" class="compose-arm" (click)="startCompose()">Ajouter des dates</button>
+        <button type="button" class="compose-arm" (click)="startCompose()">
+          Ajouter des dates
+        </button>
       }
     </div>
 
@@ -105,12 +107,20 @@
       <!-- Story 36.11 — `todayKey` est figé au montage par le parent : une seule source de
            « maintenant » pour tout l'écran. `scenarioActivated` rejoint la MÊME navigation que
            le rail (AC5) — aucun second `router.navigate` dans le projet. -->
+      <!-- Story 36.12 — 🚨 `canSeal` porte les DEUX conditions : être MJ ET être dans le
+           calendrier d'une partie. Le calendrier personnel agrège plusieurs parties et ne sait
+           d'aucune si j'en suis le MJ — `isMjMode()` seul y laisserait passer des boutons qui
+           échoueraient en 403 (AC12). -->
       <app-calendar-agenda-view
         [entries]="agendaEntries()"
         [loading]="loading() || meCalendarLoading()"
         [todayKey]="todayKey"
+        [canSeal]="isMjMode() && partieId() !== null"
+        [missingByPoll]="missingByPoll()"
         (voteOptionActivated)="onVoteOptionActivated($event)"
         (scenarioActivated)="onScenarioActivated($event)"
+        (sealRequested)="onSealRequested($event)"
+        (pollLaunchRequested)="onPollLaunchRequested($event)"
       />
     }
 

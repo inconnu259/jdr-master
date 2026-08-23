@@ -35,6 +35,9 @@ interface CreateOptions {
    *  « vue Mois » de toute la suite existante : jsdom répond `matches: false` à n'importe quelle
    *  media query, donc sans ce mock chaque test basculerait en vue Agenda. */
   desktop?: boolean;
+  /** Story 36.12 — les membres servis par `GET /parties/:id/members`. Chargés en mode MJ
+   *  seulement ; ils alimentent `missingByPoll()` (AC14). */
+  members?: unknown[];
 }
 
 /** Même forme que les mocks de `partie-detail.spec.ts` / `list-control-bar.spec.ts` :
@@ -113,8 +116,8 @@ function makeSnackBar() {
   return { open: vi.fn() };
 }
 
-function makePartiesService() {
-  return { members: vi.fn().mockResolvedValue([]) };
+function makePartiesService(members: unknown[] = []) {
+  return { members: vi.fn().mockResolvedValue(members) };
 }
 
 function makeScenariosService(scenarios: any[] = []) {
@@ -170,7 +173,7 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
   const pollSvc = makePollService();
   const snack = makeSnackBar();
   const dialog = makeMatDialog();
-  const partiesSvc = makePartiesService();
+  const partiesSvc = makePartiesService(opts.members);
   const scenariosSvc = makeScenariosService(opts.scenarios ?? []);
   const realtimeSvc = makeRealtimeService();
 
@@ -3090,5 +3093,254 @@ describe('CalendarView — ce que l’Agenda reçoit (Story 36.11, AC14, D-3)', 
     const seances = comp.agendaEntries().filter((e: any) => e.type === 'mes-seances');
     expect(seances.length).toBeGreaterThan(0);
     expect(seances[0].compteRenduManquant).toBe(true);
+  });
+});
+
+// ─── Story 36.12 — l'Agenda du MJ : scellement et lancement de vote ─────────
+
+/** Un scénario portant DEUX séances : l'une avec un vote ouvert à deux options, l'autre sans le
+ *  moindre vote — donc éligible à « Lancer un vote » (AC5). */
+const SCENARIO_MJ_AGENDA = {
+  ...ACTIVE_POLL_SCENARIO,
+  seances: [
+    {
+      ...ACTIVE_POLL_SCENARIO.seances[0],
+      poll: {
+        ...ACTIVE_POLL_SCENARIO.seances[0].poll,
+        options: [
+          { id: 'optA', date: '2026-08-28T00:00:00.000Z', slot: 'EVENING', votes: [] },
+          { id: 'optB', date: '2026-08-29T00:00:00.000Z', slot: 'EVENING', votes: [] },
+        ],
+      },
+    },
+    {
+      id: 'seanceLibre',
+      scenarioId: 's1',
+      compteRendu: null,
+      createdAt: '2026-07-14T00:00:00.000Z',
+      poll: null,
+    },
+  ],
+};
+
+const SEAL_REQUEST = {
+  partieId: 'partie-1',
+  pollId: 'poll1',
+  optionId: 'optA',
+  dateLabel: 'ven. 28 août, soir',
+  pollLabel: 'Chapitre 1',
+};
+
+describe('CalendarView — sceller depuis l’Agenda (Story 36.12, AC10 à AC12)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC10/AC11 — confirmé : un seul appel, avec le bon optionId, puis rechargement', async () => {
+    const { fixture, pollSvc, scenariosSvc, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    dialog.__result = true;
+    const before = scenariosSvc.listAll.mock.calls.length;
+
+    await (fixture.componentInstance as any).onSealRequested(SEAL_REQUEST);
+
+    expect(pollSvc.chooseDate).toHaveBeenCalledTimes(1);
+    expect(pollSvc.chooseDate).toHaveBeenCalledWith('partie-1', 'poll1', { optionId: 'optA' });
+    // `chooseDate()` renvoie void : sans ce rechargement, la ligne resterait « vote ouvert ».
+    expect(scenariosSvc.listAll.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it('AC11 — 🚨 renoncer n’écrit RIEN', async () => {
+    const { fixture, pollSvc, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    dialog.__result = false;
+
+    await (fixture.componentInstance as any).onSealRequested(SEAL_REQUEST);
+
+    expect(dialog.open).toHaveBeenCalled();
+    expect(pollSvc.chooseDate).not.toHaveBeenCalled();
+  });
+
+  it('AC11 — la confirmation NOMME la date et le vote qu’elle scelle', async () => {
+    const { fixture, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    dialog.__result = false;
+
+    await (fixture.componentInstance as any).onSealRequested(SEAL_REQUEST);
+
+    expect(dialog.open.mock.calls[0][1]?.data).toEqual({
+      dateLabel: 'ven. 28 août, soir',
+      pollLabel: 'Chapitre 1',
+    });
+  });
+
+  it('AC10 — 🚨 garde anti-double-clic : deux demandes rapprochées, un SEUL dialogue et un seul appel', async () => {
+    const { fixture, pollSvc, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    dialog.__result = true;
+    const comp = fixture.componentInstance as any;
+
+    await Promise.all([comp.onSealRequested(SEAL_REQUEST), comp.onSealRequested(SEAL_REQUEST)]);
+
+    // Revue de code (36.12) — la garde posait `pollActionPending` seulement APRÈS résolution du
+    // dialogue : les deux appels passaient alors la garde et ouvraient chacun leur dialogue avant
+    // qu'aucun réseau ne parte. Elle est maintenant posée AVANT l'ouverture, donc un seul dialogue.
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(pollSvc.chooseDate).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC10 — un échec pose un message et ne laisse aucun état fantôme', async () => {
+    const { fixture, pollSvc, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    dialog.__result = true;
+    pollSvc.chooseDate.mockRejectedValueOnce(new Error('boom'));
+    const comp = fixture.componentInstance as any;
+
+    await comp.onSealRequested(SEAL_REQUEST);
+
+    expect(comp.error()).toContain('sceller');
+    expect(comp.pollActionPending()).toBe(false);
+  });
+
+  it('AC12 — 🚨 le calendrier personnel ne scelle jamais, et n’en donne pas l’air', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+    const comp = fixture.componentInstance as any;
+    comp.onViewChange('agenda');
+    fixture.detectChanges();
+
+    // `canSeal` porte les DEUX conditions ; sans `partieId`, il est faux quoi qu'il arrive — et
+    // aucun bouton n'est rendu, pas même désactivé.
+    expect(comp.partieId()).toBeNull();
+    expect(fixture.nativeElement.querySelector('.agenda-option__seal')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.agenda-entry__launch')).toBeNull();
+  });
+});
+
+describe('CalendarView — « Lancer un vote » depuis l’Agenda (Story 36.12, AC5, AC13)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC5 — une séance sans vote produit une ligne d’agenda, MJ seul', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    const sansDate = (fixture.componentInstance as any)
+      .agendaEntries()
+      .filter((e: any) => e.type === 'seances-sans-date');
+    expect(sansDate).toHaveLength(1);
+    expect(sansDate[0].seanceId).toBe('seanceLibre');
+    expect(sansDate[0].date).toBe('');
+  });
+
+  it('AC5 — 🚨 en mode joueur, aucune de ces lignes n’existe', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'personal',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    expect(
+      (fixture.componentInstance as any)
+        .agendaEntries()
+        .filter((e: any) => e.type === 'seances-sans-date'),
+    ).toHaveLength(0);
+  });
+
+  it('AC13 — bascule sur le Mois et arme la composition CIBLÉE sur la séance', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.onViewChange('agenda');
+
+    comp.onPollLaunchRequested('seanceLibre');
+    fixture.detectChanges();
+
+    expect(comp.view()).toBe('month');
+    expect(comp.composing()).toBe(true);
+    expect(comp.composeTarget()).toEqual({ kind: 'new', seanceId: 'seanceLibre' });
+    expect(comp.composedCells()).toEqual([]);
+    expect(fixture.nativeElement.querySelector('app-compose-bar')).not.toBeNull();
+  });
+
+  it('AC13 — 🚨 la séance n’est plus redemandée : un seul choix, donc pré-rempli', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.onPollLaunchRequested('seanceLibre');
+    expect(comp.composeSeanceChoices()).toEqual([
+      { seanceId: 'seanceLibre', label: 'Chapitre 1 — Séance 2' },
+    ]);
+  });
+
+  it('🚨 armée sans séance (« Ajouter des dates »), la liste reste complète', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.startCompose();
+    expect(comp.composeTarget()).toEqual({ kind: 'new' });
+    expect(comp.composeSeanceChoices()).toHaveLength(1);
+  });
+});
+
+describe('CalendarView — le regroupement ne touche PAS les grilles (Story 36.12, AC7)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('🚨 la vue Mois reçoit toujours UNE ENTRÉE PAR OPTION — la grille en dépend', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    const options = (fixture.componentInstance as any)
+      .calendarEntries()
+      .filter((e: any) => e.type === 'votes-en-cours');
+    expect(options).toHaveLength(2);
+    expect(options.map((e: any) => e.vote.optionId).sort()).toEqual(['optA', 'optB']);
+  });
+
+  it('AC14 — côté MJ, « qui manque » nomme ceux qui n’ont pas répondu à TOUTES les options', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+      members: [
+        { userId: 'u1', pseudo: 'lea', displayName: 'Léa', joinedAt: '' },
+        { userId: 'u2', pseudo: 'tom', displayName: 'Tom', joinedAt: '' },
+      ],
+    });
+    // Aucun vote posé sur les deux options : les deux membres manquent.
+    expect((fixture.componentInstance as any).missingByPoll()).toEqual({ poll1: ['Léa', 'Tom'] });
+  });
+
+  it('AC14 — 🚨 hors mode MJ, aucune identité ne peut fuir : la liste est vide', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'personal',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+      members: [{ userId: 'u1', pseudo: 'lea', displayName: 'Léa', joinedAt: '' }],
+    });
+    expect((fixture.componentInstance as any).missingByPoll()).toEqual({});
   });
 });

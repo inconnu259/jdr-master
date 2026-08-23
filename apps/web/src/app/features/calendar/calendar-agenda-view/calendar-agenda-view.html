@@ -1,5 +1,7 @@
 <!-- Story 36.11 — l'Agenda est rangé par CE QU'ON ATTEND DE MOI, pas par date. Aucun jour ne
-     figure en en-tête : la date redevient une propriété de la ligne (AC1, AC2). -->
+     figure en en-tête : la date redevient une propriété de la ligne (AC1, AC2).
+     Story 36.12 — une ligne de vote est UN VOTE, pas une option : ses créneaux se déplient
+     dessous, d'office s'il est mûr, à la demande sinon (AC7, AC8). -->
 <div class="agenda-view">
   @if (loading()) {
     <mat-progress-spinner mode="indeterminate" diameter="32" />
@@ -13,57 +15,145 @@
         <h3 class="agenda-section__head">
           <span class="agenda-section__key" aria-hidden="true"></span>
           <span class="agenda-section__title">{{ sectionTitle(section) }}</span>
-          <span class="agenda-section__count">{{ section.entries.length }}</span>
+          <span class="agenda-section__count">{{ section.rows.length }}</span>
         </h3>
         <ul class="agenda-list">
-          @for (entry of section.entries; track entry.key) {
-            <li class="agenda-entry" [class]="'agenda-entry--' + entry.type">
-              <span class="agenda-entry__kbar" aria-hidden="true"></span>
+          @for (row of section.rows; track row.key) {
+            @if (row.kind === 'poll') {
+              <!-- ─── Story 36.12 — la ligne d'un VOTE ─────────────────────────────────── -->
+              <li class="agenda-entry agenda-entry--poll">
+                <div class="agenda-entry__row">
+                  <span class="agenda-entry__kbar" aria-hidden="true"></span>
 
-              <!-- AC5/AC12 — une ligne ouvrable EST un bouton (clavier gratuit) ; une ligne qui
-                   n'ouvre rien n'en est pas un, et ne s'en donne pas l'air. Le corps est le même
-                   dans les deux cas : un seul gabarit, aucune duplication à maintenir. -->
-              @if (openTarget(entry); as target) {
-                <button
-                  type="button"
-                  class="agenda-entry__open"
-                  [attr.aria-label]="openLabel(entry)"
-                  (click)="scenarioActivated.emit(target)"
-                >
-                  <ng-container
-                    [ngTemplateOutlet]="body"
-                    [ngTemplateOutletContext]="{ $implicit: entry }"
-                  />
-                </button>
-              } @else {
-                <span class="agenda-entry__static">
-                  <ng-container
-                    [ngTemplateOutlet]="body"
-                    [ngTemplateOutletContext]="{ $implicit: entry }"
-                  />
-                </span>
-              }
+                  <!-- AC8 — le bouton de ligne DÉPLIE, il ne navigue pas : un vote n'a jamais été
+                       ouvrable (`openTarget()` rend `null` dès qu'une option est là). -->
+                  <button
+                    type="button"
+                    class="agenda-entry__open agenda-entry__disclose"
+                    [attr.aria-expanded]="isExpanded(row.group)"
+                    [attr.aria-label]="discloseLabel(row.group)"
+                    (click)="toggleExpanded(row.group)"
+                  >
+                    <span class="agenda-entry__title">{{ row.group.label }}</span>
+                    <span class="agenda-entry__meta">{{ pollMeta(row.group) }}</span>
+                  </button>
 
-              <!-- Story 36.7 — le sélecteur de réponse, inchangé par la refonte : c'est l'UNIQUE
-                   chemin de réponse et de retrait des quatre surfaces. Frère de la ligne, jamais
-                   imbriqué dedans (AC13). -->
-              @if (entry.vote; as vote) {
-                <button
-                  type="button"
-                  class="agenda-entry__vote-action"
-                  [attr.aria-label]="voteAriaLabel(entry)"
-                  aria-haspopup="menu"
-                  (click)="onVoteActivate(entry, $event)"
-                >
-                  <app-poll-track class="agenda-entry__track track-sm" [vote]="vote" />
-                </button>
-              }
+                  <!-- AC15 — « À sceller » pour le MJ d'un vote mûr, les libellés de la 36.11
+                       partout ailleurs. La teinte double le mot, elle ne le remplace jamais.
+                       Revue de code (36.12) — calculé UNE fois par passage (`as b`), comme pour
+                       les lignes non groupées ci-dessous : deux appels relisaient `canSeal()`. -->
+                  @if (pollBadge(row.group); as b) {
+                    <span [class]="badgeClass(b)">{{ badgeLabel(b) }}</span>
+                  }
+                </div>
 
-              <!-- AC8 — la teinte double un libellé, elle ne le remplace jamais (P-1). -->
-              @if (badge(entry); as b) {
-                <span [class]="badgeClass(b)">{{ badgeLabel(b) }}</span>
-              }
-            </li>
+                @if (isExpanded(row.group)) {
+                  <!-- AC1/AC4 — triées par faveur, le favori en avant SANS masquer les autres :
+                       la décision reste au MJ, donc les trois restent scellables. -->
+                  <ul class="agenda-options">
+                    @for (option of row.group.options; track option.key) {
+                      <li class="agenda-option" [class.agenda-option--fav]="$first">
+                        <!-- AC9 — le MÊME sélecteur de réponse que les grilles et le rail. Frère
+                             du bouton *Sceller*, jamais imbriqué : un bouton dans un bouton casse
+                             la navigation clavier. -->
+                        <button
+                          type="button"
+                          class="agenda-option__answer"
+                          [attr.aria-label]="voteAriaLabel(option)"
+                          aria-haspopup="menu"
+                          (click)="onVoteActivate(option, $event)"
+                        >
+                          <span class="agenda-option__date">{{ optionLabel(option) }}</span>
+                          <!-- 🚨 Le compteur (« 3 / 4 ») et ma réponse (« tu as dit oui ») sont
+                               émis PAR `<app-poll-track>` lui-même, toujours (36.6). Les
+                               redoubler ici les affichait deux fois par option — défaut trouvé à
+                               la vérification visuelle. Les surfaces ne reformulent jamais. -->
+                          @if (option.vote; as vote) {
+                            <app-poll-track
+                              class="agenda-option__track track-sm in-agenda"
+                              [vote]="vote"
+                            />
+                          }
+                        </button>
+
+                        <!-- AC3/AC12 — le scellement n'existe QUE là où il est possible : pas de
+                             bouton désactivé, pas de bouton du tout. -->
+                        @if (canSeal()) {
+                          <button
+                            type="button"
+                            class="agenda-option__seal"
+                            [attr.aria-label]="sealAriaLabel(row.group, option)"
+                            (click)="requestSeal(row.group, option)"
+                          >
+                            {{ sealLabel() }}
+                          </button>
+                        }
+                      </li>
+                    }
+                  </ul>
+                }
+              </li>
+            } @else {
+              <li class="agenda-entry" [class]="'agenda-entry--' + row.entry.type">
+                <span class="agenda-entry__kbar" aria-hidden="true"></span>
+
+                <!-- AC5/AC12 — une ligne ouvrable EST un bouton (clavier gratuit) ; une ligne qui
+                     n'ouvre rien n'en est pas un, et ne s'en donne pas l'air. Le corps est le même
+                     dans les deux cas : un seul gabarit, aucune duplication à maintenir. -->
+                @if (openTarget(row.entry); as target) {
+                  <button
+                    type="button"
+                    class="agenda-entry__open"
+                    [attr.aria-label]="openLabel(row.entry)"
+                    (click)="scenarioActivated.emit(target)"
+                  >
+                    <ng-container
+                      [ngTemplateOutlet]="body"
+                      [ngTemplateOutletContext]="{ $implicit: row.entry }"
+                    />
+                  </button>
+                } @else {
+                  <span class="agenda-entry__static">
+                    <ng-container
+                      [ngTemplateOutlet]="body"
+                      [ngTemplateOutletContext]="{ $implicit: row.entry }"
+                    />
+                  </span>
+                }
+
+                <!-- Story 36.7 — le sélecteur de réponse d'une option de vote non groupée (API
+                     dégradée qui ne sert pas les agrégats). Frère de la ligne, jamais imbriqué. -->
+                @if (row.entry.vote; as vote) {
+                  <button
+                    type="button"
+                    class="agenda-entry__vote-action"
+                    [attr.aria-label]="voteAriaLabel(row.entry)"
+                    aria-haspopup="menu"
+                    (click)="onVoteActivate(row.entry, $event)"
+                  >
+                    <app-poll-track class="agenda-entry__track track-sm" [vote]="vote" />
+                  </button>
+                }
+
+                <!-- Story 36.12, AC5/AC13 — la séance sans date porte une ACTION, pas un badge :
+                     lancer le vote qui lui manque. Le parent bascule sur le Mois et arme la
+                     composition de la 36.10 ; rien n'est écrit d'ici. -->
+                @if (row.entry.type === 'seances-sans-date') {
+                  <button
+                    type="button"
+                    class="agenda-entry__launch"
+                    (click)="pollLaunchRequested.emit(row.entry.seanceId ?? '')"
+                  >
+                    {{ launchLabel() }}
+                  </button>
+                }
+
+                <!-- AC8 — la teinte double un libellé, elle ne le remplace jamais (P-1). -->
+                @if (badge(row.entry); as b) {
+                  <span [class]="badgeClass(b)">{{ badgeLabel(b) }}</span>
+                }
+              </li>
+            }
           }
         </ul>
       </section>

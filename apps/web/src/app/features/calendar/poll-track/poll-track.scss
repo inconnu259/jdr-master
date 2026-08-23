@@ -24,11 +24,7 @@
   /* LA TRAME EST LE FOND, pas un quatrième segment : elle apparaît partout où les segments ne
      couvrent pas. Même trame que « personne n'a répondu » ailleurs dans le calendrier — aucun
      code visuel nouveau à apprendre (DESIGN.md:331). */
-  background: repeating-linear-gradient(
-    45deg,
-    transparent 0 2px,
-    rgba(127, 140, 141, 0.8) 2px 4px
-  );
+  background: repeating-linear-gradient(45deg, transparent 0 2px, rgba(127, 140, 141, 0.8) 2px 4px);
 }
 
 .seg {
@@ -124,6 +120,22 @@
 @container week-grid (min-width: 500px) {
   :host(.in-week) .cnt,
   :host(.in-week) .mine-short {
+    display: inline;
+  }
+}
+
+/* Option d'un vote déplié dans l'Agenda (story 36.12) — la piste y voisine avec la date du
+   créneau ET un bouton *Sceller*, sur une ligne qui peut n'avoir que ~300 px en contexte de
+   partie (le panneau MJ prend la moitié de l'écran). Au large, la phrase ; à l'étroit, le mot —
+   ce qui cède en premier est ma réponse, l'accessoire, jamais la date ni l'action.
+   Le conteneur est NOMMÉ (`agenda-list`, déclaré par `calendar-agenda-view.scss`) : une requête
+   anonyme depuis ici matcherait le premier conteneur venu. */
+@container agenda-list (max-width: 420px) {
+  :host(.in-agenda) .mine {
+    display: none;
+  }
+
+  :host(.in-agenda) .mine-short {
     display: inline;
   }
 }

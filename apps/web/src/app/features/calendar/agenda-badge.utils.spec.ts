@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { AgendaEntry } from './calendar-agenda-view/calendar-agenda-view';
+import type { VoteParticipation } from './poll-track.utils';
 import {
   addDaysToKey,
   badgeFor,
   daysBetweenKeys,
+  groupVoteEntries,
   imminenceLabel,
+  pollGroupBadge,
   sectionIdFor,
 } from './agenda-badge.utils';
 
@@ -197,6 +200,215 @@ describe('badgeFor (AC4, AC8, AC11)', () => {
 
   it('une entrée sans section n’a pas de badge', () => {
     expect(badgeFor({ key: 'k', type: 'mes-disponibilites', date: TODAY, label: 'x' }, TODAY)).toBe(
+      null,
+    );
+  });
+});
+
+// ─── Story 36.12 — le regroupement par vote, la maturité, la faveur ─────────
+
+/** Une option de vote, avec ses agrégats — la brique de tous les tests de groupe. */
+function option(over: Partial<AgendaEntry> & { o?: Partial<VoteParticipation> } = {}): AgendaEntry {
+  const { o, ...entryOver } = over;
+  return vote({
+    ...entryOver,
+    vote: {
+      partieId: 'p1',
+      pollId: 'poll1',
+      optionId: 'o1',
+      yes: 0,
+      maybe: 0,
+      no: 0,
+      total: 4,
+      myAnswer: null,
+      ...o,
+    },
+  });
+}
+
+describe('groupVoteEntries', () => {
+  it('rend UNE ligne par vote, quel que soit le nombre d’options (AC7)', () => {
+    const entries = [
+      option({ key: 'a', date: '2026-08-28', o: { optionId: 'o1' } }),
+      option({ key: 'b', date: '2026-08-29', o: { optionId: 'o2' } }),
+      option({ key: 'c', date: '2026-08-30', o: { optionId: 'o3' } }),
+    ];
+    const { groups, ungrouped } = groupVoteEntries(entries);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].options).toHaveLength(3);
+    expect(ungrouped).toHaveLength(0);
+  });
+
+  it('sépare deux votes entrelacés, sans les mélanger', () => {
+    const entries = [
+      option({ key: 'a', date: '2026-08-28', o: { pollId: 'A', optionId: 'a1' } }),
+      option({ key: 'b', date: '2026-08-29', o: { pollId: 'B', optionId: 'b1' } }),
+      option({ key: 'c', date: '2026-08-30', o: { pollId: 'A', optionId: 'a2' } }),
+    ];
+    const { groups } = groupVoteEntries(entries);
+    expect(groups.map((g) => g.pollId)).toEqual(['A', 'B']);
+    expect(groups[0].options).toHaveLength(2);
+    expect(groups[1].options).toHaveLength(1);
+  });
+
+  it('ne PERD pas une entrée de vote dépourvue d’agrégats (API dégradée)', () => {
+    const orphan = vote({ key: 'orphelin', vote: undefined });
+    const { groups, ungrouped } = groupVoteEntries([orphan, option({ key: 'a' })]);
+    expect(groups).toHaveLength(1);
+    expect(ungrouped).toEqual([orphan]);
+  });
+
+  it('retient la date la PLUS PROCHE du vote, pas celle de la première option', () => {
+    const { groups } = groupVoteEntries([
+      option({ key: 'a', date: '2026-09-15', o: { optionId: 'o1' } }),
+      option({ key: 'b', date: '2026-08-25', o: { optionId: 'o2' } }),
+    ]);
+    expect(groups[0].nearestDate).toBe('2026-08-25');
+  });
+
+  it('compte les répondants au MINIMUM des options, jamais à la somme', () => {
+    // 3 personnes sur le vendredi, 1 seule sur le samedi ⇒ 1 personne a répondu au VOTE.
+    const { groups } = groupVoteEntries([
+      option({ key: 'a', o: { optionId: 'o1', yes: 3 } }),
+      option({ key: 'b', o: { optionId: 'o2', yes: 1 } }),
+    ]);
+    expect(groups[0].respondedCount).toBe(1);
+  });
+});
+
+describe('isPollMature (Q-25)', () => {
+  it('critère A — tout le monde a répondu à TOUTES les options', () => {
+    const { groups } = groupVoteEntries([
+      option({ key: 'a', o: { optionId: 'o1', yes: 2, no: 2 } }),
+      option({ key: 'b', o: { optionId: 'o2', yes: 4 } }),
+    ]);
+    expect(groups[0].mature).toBe(true);
+  });
+
+  it('critère A — une seule option incomplète suffit à rendre le vote NON mûr', () => {
+    // 🚨 Le premier créneau est complet mais SANS majorité (1 oui sur 4) : sans cette précaution
+    // le critère B rendrait le vote mûr et le test ne prouverait plus rien sur le critère A.
+    const { groups } = groupVoteEntries([
+      option({ key: 'a', o: { optionId: 'o1', yes: 1, maybe: 1, no: 2 } }),
+      option({ key: 'b', o: { optionId: 'o2', yes: 1 } }),
+    ]);
+    expect(groups[0].respondedCount).toBe(1);
+    expect(groups[0].mature).toBe(false);
+  });
+
+  it('critère B — la majorité ABSOLUE, pas la majorité relative', () => {
+    // 2 oui sur 4 = la moitié, pas la majorité absolue.
+    const half = groupVoteEntries([
+      option({ key: 'a', o: { optionId: 'o1', yes: 2 } }),
+      option({ key: 'b', o: { optionId: 'o2', yes: 0 } }),
+    ]).groups[0];
+    expect(half.mature).toBe(false);
+
+    // 3 oui sur 4 franchissent le seuil, même si personne d’autre n’a répondu ailleurs.
+    const majority = groupVoteEntries([
+      option({ key: 'a', o: { optionId: 'o1', yes: 3 } }),
+      option({ key: 'b', o: { optionId: 'o2', yes: 0 } }),
+    ]).groups[0];
+    expect(majority.mature).toBe(true);
+  });
+
+  it('un effectif NUL n’est jamais mûr — sinon 0 >= 0 déplierait tout', () => {
+    const { groups } = groupVoteEntries([option({ key: 'a', o: { total: 0 } })]);
+    expect(groups[0].mature).toBe(false);
+  });
+
+  it('un effectif non numérique (API en retard) n’est jamais mûr', () => {
+    const { groups } = groupVoteEntries([
+      option({ key: 'a', o: { total: undefined as unknown as number } }),
+    ]);
+    expect(groups[0].mature).toBe(false);
+  });
+});
+
+describe('l’ordre par faveur (AC1, AC4)', () => {
+  it('trie par oui décroissant, puis peut-être, puis la date', () => {
+    const { groups } = groupVoteEntries([
+      option({ key: 'c', date: '2026-08-30', o: { optionId: 'o3', yes: 1, maybe: 0 } }),
+      option({ key: 'a', date: '2026-08-28', o: { optionId: 'o1', yes: 3 } }),
+      option({ key: 'b', date: '2026-08-29', o: { optionId: 'o2', yes: 1, maybe: 2 } }),
+    ]);
+    expect(groups[0].options.map((e) => e.key)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('départage deux options identiques par la date, de façon stable', () => {
+    const { groups } = groupVoteEntries([
+      option({ key: 'tard', date: '2026-09-02', o: { optionId: 'o2', yes: 2 } }),
+      option({ key: 'tot', date: '2026-08-25', o: { optionId: 'o1', yes: 2 } }),
+    ]);
+    expect(groups[0].options.map((e) => e.key)).toEqual(['tot', 'tard']);
+  });
+});
+
+describe('hasAnsweredAll (AC15)', () => {
+  it('avoir répondu à une option sur deux, ce n’est pas avoir répondu au vote', () => {
+    const { groups } = groupVoteEntries([
+      option({ key: 'a', o: { optionId: 'o1', myAnswer: 'YES' } }),
+      option({ key: 'b', o: { optionId: 'o2', myAnswer: null } }),
+    ]);
+    expect(groups[0].answeredAll).toBe(false);
+  });
+
+  it('avoir répondu partout, c’est avoir répondu au vote', () => {
+    const { groups } = groupVoteEntries([
+      option({ key: 'a', o: { optionId: 'o1', myAnswer: 'YES' } }),
+      option({ key: 'b', o: { optionId: 'o2', myAnswer: 'NO' } }),
+    ]);
+    expect(groups[0].answeredAll).toBe(true);
+  });
+});
+
+describe('pollGroupBadge (AC15)', () => {
+  function group(over: Partial<VoteParticipation>[], keys = ['a', 'b']) {
+    return groupVoteEntries(
+      over.map((o, i) => option({ key: keys[i], o: { optionId: `o${i}`, ...o } })),
+    ).groups[0];
+  }
+
+  it('MJ + vote mûr → « À sceller »', () => {
+    expect(pollGroupBadge(group([{ yes: 4 }, { yes: 4 }]), true)).toMatchObject({
+      kind: 'to-seal',
+      tone: 'todo',
+    });
+  });
+
+  it('vote mûr mais lecteur sans pouvoir de scellement → libellés de la 36.11', () => {
+    expect(pollGroupBadge(group([{ yes: 4 }, { yes: 4 }]), false)).toMatchObject({
+      kind: 'answer-poll',
+      tone: 'todo',
+    });
+  });
+
+  it('MJ + vote NON mûr → « Réponds au vote », jamais « À sceller »', () => {
+    expect(pollGroupBadge(group([{ yes: 1 }, { yes: 0 }]), true)).toMatchObject({
+      kind: 'answer-poll',
+      tone: 'todo',
+    });
+  });
+
+  it('j’ai répondu partout → « Vote en cours »', () => {
+    expect(
+      pollGroupBadge(group([{ myAnswer: 'YES' }, { myAnswer: 'MAYBE' }]), false),
+    ).toMatchObject({ kind: 'poll-open', tone: 'live' });
+  });
+});
+
+describe('sectionIdFor — la séance sans date proposée (AC5)', () => {
+  it('range la séance sans date dans « Ça t’attend »', () => {
+    expect(
+      sectionIdFor(
+        { key: 'sd-1', type: 'seances-sans-date', date: '', label: 'Le Convoi du Nord' },
+        TODAY,
+      ),
+    ).toBe('awaiting');
+  });
+
+  it('ne lui donne AUCUN badge — sa ligne porte une action, pas un état', () => {
+    expect(badgeFor({ key: 'sd-1', type: 'seances-sans-date', date: '', label: 'x' }, TODAY)).toBe(
       null,
     );
   });

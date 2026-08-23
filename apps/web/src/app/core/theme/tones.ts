@@ -318,6 +318,23 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'calendar.agenda.badge_signed_up': 'Inscrit',
     'calendar.agenda.badge_debrief': 'Débriefer',
     'calendar.agenda.empty': 'Rien ne t’attend, rien n’est annoncé.',
+    /* — Agenda du MJ (Story 36.12) — même règle : les LIBELLÉS D'ÉTAT et les gabarits chiffrés
+       sont contractuels et identiques partout, seuls les titres et les appels à l'action
+       prennent le registre du thème. */
+    'calendar.agenda.badge_to_seal': 'À sceller',
+    'calendar.agenda.poll_open': 'Vote ouvert',
+    'calendar.agenda.responded_count': '{n} sur {total} ont répondu',
+    'calendar.agenda.slots_proposed': '{n} créneaux proposés',
+    'calendar.agenda.missing_voters': 'il manque {names}',
+    'calendar.agenda.no_date': 'sans date',
+    'calendar.agenda.no_date_proposed': 'Aucune date proposée',
+    'calendar.agenda.action_launch_poll': 'Lancer un vote',
+    'calendar.agenda.action_seal': 'Sceller',
+    'calendar.agenda.action_expand': 'Déplier',
+    'calendar.agenda.action_collapse': 'Replier',
+    'calendar.agenda.seal_confirm_title': 'Sceller ce créneau ?',
+    'calendar.agenda.seal_confirm_body':
+      'La séance sera fixée à ce créneau et le vote se refermera. Les autres créneaux proposés disparaîtront.',
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',
@@ -625,6 +642,21 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'calendar.agenda.badge_signed_up': 'Inscrit',
     'calendar.agenda.badge_debrief': 'Débriefer',
     'calendar.agenda.empty': 'Rien ne t’attend, rien n’est prévu.',
+    /* — Agenda du MJ (Story 36.12) — libellés d'état contractuels, appels à l'action thématisés. */
+    'calendar.agenda.badge_to_seal': 'À sceller',
+    'calendar.agenda.poll_open': 'Vote ouvert',
+    'calendar.agenda.responded_count': '{n} sur {total} ont répondu',
+    'calendar.agenda.slots_proposed': '{n} créneaux proposés',
+    'calendar.agenda.missing_voters': 'il manque {names}',
+    'calendar.agenda.no_date': 'sans date',
+    'calendar.agenda.no_date_proposed': 'Aucune date proposée',
+    'calendar.agenda.action_launch_poll': 'Lancer un vote',
+    'calendar.agenda.action_seal': 'Planter',
+    'calendar.agenda.action_expand': 'Déployer',
+    'calendar.agenda.action_collapse': 'Replier',
+    'calendar.agenda.seal_confirm_title': 'Planter le drapeau sur ce créneau ?',
+    'calendar.agenda.seal_confirm_body':
+      'La séance se tiendra à ce créneau et le vote se refermera. Les autres créneaux proposés disparaîtront.',
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',
@@ -932,6 +964,21 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'calendar.agenda.badge_signed_up': 'Inscrit',
     'calendar.agenda.badge_debrief': 'Débriefer',
     'calendar.agenda.empty': 'Aucune tâche, aucune échéance.',
+    /* — Agenda du MJ (Story 36.12) — libellés d'état contractuels, appels à l'action thématisés. */
+    'calendar.agenda.badge_to_seal': 'À sceller',
+    'calendar.agenda.poll_open': 'Scrutin ouvert',
+    'calendar.agenda.responded_count': '{n} sur {total} ont répondu',
+    'calendar.agenda.slots_proposed': '{n} créneaux proposés',
+    'calendar.agenda.missing_voters': 'il manque {names}',
+    'calendar.agenda.no_date': 'sans date',
+    'calendar.agenda.no_date_proposed': 'Aucune date proposée',
+    'calendar.agenda.action_launch_poll': 'Ouvrir un scrutin',
+    'calendar.agenda.action_seal': 'Verrouiller',
+    'calendar.agenda.action_expand': 'Déployer',
+    'calendar.agenda.action_collapse': 'Rétracter',
+    'calendar.agenda.seal_confirm_title': 'Verrouiller l’engrenage sur ce créneau ?',
+    'calendar.agenda.seal_confirm_body':
+      'La séance sera fixée à ce créneau et le scrutin se refermera. Les autres créneaux proposés disparaîtront.',
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',

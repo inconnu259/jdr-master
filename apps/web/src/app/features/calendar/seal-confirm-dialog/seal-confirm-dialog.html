@@ -1,0 +1,20 @@
+<h2 mat-dialog-title>{{ theme.tone()['calendar.agenda.seal_confirm_title'] }}</h2>
+
+<mat-dialog-content>
+  <!-- AC11 — la confirmation NOMME la date et le créneau retenus. Une confirmation qui ne dit pas
+       sur quoi elle porte ne protège de rien. -->
+  <p>
+    <strong>{{ data.pollLabel }}</strong> — {{ data.dateLabel }}
+  </p>
+  <p>{{ theme.tone()['calendar.agenda.seal_confirm_body'] }}</p>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <!-- Revue de code (36.12) — thématisé, comme le reste du dialogue. Réutilise `account.cancel_btn`
+       plutôt que d'ajouter une clé dédiée : c'est déjà le libellé de renoncement générique thématisé
+       (« Renoncer » / « Abandonner » / « Annuler »). -->
+  <button mat-button type="button" (click)="cancel()">{{ theme.tone()['account.cancel_btn'] }}</button>
+  <button mat-flat-button color="primary" type="button" (click)="confirm()">
+    {{ theme.tone()['cta.choose_date'] }}
+  </button>
+</mat-dialog-actions>

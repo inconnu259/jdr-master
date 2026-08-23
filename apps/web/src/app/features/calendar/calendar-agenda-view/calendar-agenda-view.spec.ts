@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import type { RailTarget } from '../day-detail.utils';
 import type { VoteOptionActivatedEvent } from '../poll-track.utils';
-import { CalendarAgendaView, type AgendaEntry } from './calendar-agenda-view';
+import {
+  CalendarAgendaView,
+  type AgendaEntry,
+  type AgendaSealRequest,
+} from './calendar-agenda-view';
 
 /** Toutes les dates des fixtures sont relatives à ce jour, injecté — aucun `new Date()` réel
  *  n'entre dans ces tests (piège n°14 de la story). */
@@ -32,6 +36,22 @@ function entryTitles(fixture: { nativeElement: HTMLElement }): string[] {
 
 function badges(fixture: { nativeElement: HTMLElement }): string[] {
   return [...fixture.nativeElement.querySelectorAll('.agenda-badge')].map((n) =>
+    (n.textContent ?? '').trim(),
+  );
+}
+
+/** Story 36.12 — déplie la n-ième ligne de vote. Un vote non mûr est compact par défaut : sans ce
+ *  geste, ses options ne sont pas dans le DOM (AC2/AC8). */
+function expand(fixture: { nativeElement: HTMLElement; detectChanges: () => void }, index = 0) {
+  const lines =
+    fixture.nativeElement.querySelectorAll<HTMLButtonElement>('.agenda-entry__disclose');
+  lines[index].click();
+  fixture.detectChanges();
+}
+
+/** Les créneaux rendus sous une ligne de vote, dans l'ordre du DOM (donc de la faveur). */
+function optionLabels(fixture: { nativeElement: HTMLElement }): string[] {
+  return [...fixture.nativeElement.querySelectorAll('.agenda-option__date')].map((n) =>
     (n.textContent ?? '').trim(),
   );
 }
@@ -245,10 +265,23 @@ describe('CalendarAgendaView — ordre à l’intérieur des sections', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('« Ça t’attend » : ce qui réclame une action d’abord, puis par date, sans date en dernier', async () => {
+    // ⚠️ Story 36.12 — deux `pollId` DISTINCTS : deux options du même vote fusionneraient
+    // désormais en une seule ligne, et le test ne mesurerait plus un ordre.
     const fixture = await createAgenda([
-      { ...VOTE, key: 'repondu', label: 'B répondu', vote: { ...VOTE.vote!, myAnswer: 'YES' } },
+      {
+        ...VOTE,
+        key: 'repondu',
+        label: 'B répondu',
+        vote: { ...VOTE.vote!, pollId: 'pollB', myAnswer: 'YES' },
+      },
       INSCRIPTION,
-      { ...VOTE, key: 'attente', label: 'A en attente', date: '2026-08-30' },
+      {
+        ...VOTE,
+        key: 'attente',
+        label: 'A en attente',
+        date: '2026-08-30',
+        vote: { ...VOTE.vote!, pollId: 'pollA' },
+      },
     ]);
     expect(entryTitles(fixture)).toEqual(['A en attente', 'La Halte du Griffon', 'B répondu']);
   });
@@ -294,27 +327,38 @@ describe('CalendarAgendaView — activer une ligne (AC5, AC12)', () => {
     expect(fixture.nativeElement.querySelector('button[disabled]')).toBeNull();
   });
 
-  it('AC12 : 🚨 une ligne de vote n’est jamais ouvrable — pas de bouton dans un bouton', async () => {
+  it('AC12 : 🚨 une ligne de vote ne NAVIGUE jamais — et aucun bouton n’en contient un autre', async () => {
     const fixture = await createAgenda([{ ...VOTE, partieId: 'p1', scenarioId: 's1' }]);
-    expect(fixture.nativeElement.querySelector('.agenda-entry__open')).toBeNull();
-    expect(fixture.nativeElement.querySelectorAll('.agenda-entry button')).toHaveLength(1);
+    const emitted: RailTarget[] = [];
+    fixture.componentInstance.scenarioActivated.subscribe((t: RailTarget) => emitted.push(t));
+
+    // ⚠️ Story 36.12 — la ligne d'un vote EST un bouton, mais il déplie ; il n'ouvre rien.
+    const line: HTMLButtonElement = fixture.nativeElement.querySelector('.agenda-entry__disclose');
+    expect(line).toBeTruthy();
+    line.click();
+    expect(emitted).toHaveLength(0);
+
+    // La garde structurelle qui compte : aucun bouton n'est imbriqué dans un autre.
+    for (const button of fixture.nativeElement.querySelectorAll('button')) {
+      expect(button.querySelector('button')).toBeNull();
+    }
   });
 });
 
 describe('CalendarAgendaView — le sélecteur de réponse survit à la refonte (AC13)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('une ligne de vote porte sa piste et reste activable, avec son ancre', async () => {
+  it('une option dépliée porte sa piste et reste activable, avec son ancre', async () => {
+    // ⚠️ Story 36.12 — la piste vit désormais sur l'OPTION, pas sur la ligne : on déplie d'abord.
     const fixture = await createAgenda([VOTE]);
     const emitted: VoteOptionActivatedEvent[] = [];
     fixture.componentInstance.voteOptionActivated.subscribe((e: VoteOptionActivatedEvent) =>
       emitted.push(e),
     );
+    expand(fixture);
 
     expect(fixture.nativeElement.querySelector('app-poll-track')).toBeTruthy();
-    const action: HTMLButtonElement = fixture.nativeElement.querySelector(
-      '.agenda-entry__vote-action',
-    );
+    const action: HTMLButtonElement = fixture.nativeElement.querySelector('.agenda-option__answer');
     expect(action.getAttribute('aria-label')).toContain('Répondre au vote');
     expect(action.getAttribute('aria-haspopup')).toBe('menu');
 
@@ -328,5 +372,312 @@ describe('CalendarAgendaView — le sélecteur de réponse survit à la refonte 
   it('une séance ne porte jamais de piste de participation', async () => {
     const fixture = await createAgenda([SEANCE]);
     expect(fixture.nativeElement.querySelector('app-poll-track')).toBeNull();
+  });
+});
+
+// ─── Story 36.12 — l'Agenda du MJ ───────────────────────────────────────────
+
+/** Trois options d'un MÊME vote. `yes` par défaut à zéro : le vote n'est donc pas mûr, sauf si un
+ *  test le décide. */
+function options(...yes: number[]): AgendaEntry[] {
+  const dates = ['2026-08-28', '2026-08-29', '2026-08-30'];
+  return yes.map((y, i) => ({
+    ...VOTE,
+    key: `poll1-o${i}`,
+    date: dates[i],
+    vote: { ...VOTE.vote!, optionId: `o${i}`, yes: y },
+  }));
+}
+
+async function createMjAgenda(
+  entries: AgendaEntry[],
+  missingByPoll: Record<string, string[]> = {},
+) {
+  await TestBed.configureTestingModule({ imports: [CalendarAgendaView] }).compileComponents();
+  const fixture = TestBed.createComponent(CalendarAgendaView);
+  fixture.componentRef.setInput('entries', entries);
+  fixture.componentRef.setInput('todayKey', TODAY);
+  fixture.componentRef.setInput('canSeal', true);
+  fixture.componentRef.setInput('missingByPoll', missingByPoll);
+  fixture.detectChanges();
+  return fixture;
+}
+
+describe('CalendarAgendaView — une ligne = un vote (AC7)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('🚨 trois options d’un même vote ne font QU’UNE ligne', async () => {
+    const fixture = await createAgenda(options(0, 0, 0));
+    expect(entryTitles(fixture)).toEqual(['Les Cendres d’Ashal']);
+    expect(fixture.nativeElement.querySelectorAll('.agenda-entry')).toHaveLength(1);
+  });
+
+  it('deux votes distincts font deux lignes', async () => {
+    const [a] = options(0);
+    const b: AgendaEntry = {
+      ...VOTE,
+      key: 'autre',
+      label: 'Le Convoi du Nord',
+      vote: { ...VOTE.vote!, pollId: 'poll2', optionId: 'x' },
+    };
+    const fixture = await createAgenda([a, b]);
+    expect(entryTitles(fixture)).toHaveLength(2);
+  });
+
+  it('une option privée d’agrégats (API dégradée) garde sa ligne, elle n’est jamais perdue', async () => {
+    const fixture = await createAgenda([{ ...VOTE, key: 'orphelin', vote: undefined }]);
+    expect(entryTitles(fixture)).toEqual(['Les Cendres d’Ashal']);
+  });
+});
+
+describe('CalendarAgendaView — le dépliement (AC1, AC2, AC8)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC2 : un vote NON mûr est compact — aucune option dans le DOM', async () => {
+    const fixture = await createAgenda(options(1, 0, 0));
+    expect(optionLabels(fixture)).toEqual([]);
+    expect(
+      fixture.nativeElement.querySelector('.agenda-entry__disclose').getAttribute('aria-expanded'),
+    ).toBe('false');
+  });
+
+  it('AC1 : un vote mûr est déplié D’OFFICE, sans aucun geste', async () => {
+    // 3 oui sur 4 : majorité absolue, critère B de Q-25.
+    const fixture = await createAgenda(options(3, 0, 0));
+    expect(optionLabels(fixture)).toHaveLength(3);
+    expect(
+      fixture.nativeElement.querySelector('.agenda-entry__disclose').getAttribute('aria-expanded'),
+    ).toBe('true');
+  });
+
+  it('AC8 : 🚨 activer une ligne NON mûre la déplie — c’est le seul chemin de réponse', async () => {
+    const fixture = await createAgenda(options(1, 0, 0));
+    expand(fixture);
+    expect(optionLabels(fixture)).toHaveLength(3);
+    expect(
+      fixture.nativeElement.querySelector('.agenda-entry__disclose').getAttribute('aria-expanded'),
+    ).toBe('true');
+  });
+
+  it('AC8 : une seconde activation replie', async () => {
+    const fixture = await createAgenda(options(1, 0, 0));
+    expand(fixture);
+    expand(fixture);
+    expect(optionLabels(fixture)).toEqual([]);
+  });
+
+  it('AC8 : un vote MÛR peut être replié à la main', async () => {
+    const fixture = await createAgenda(options(3, 0, 0));
+    expand(fixture);
+    expect(optionLabels(fixture)).toEqual([]);
+  });
+});
+
+describe('CalendarAgendaView — les options dépliées (AC3, AC4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC4 : les options sont triées par faveur, le favori en tête', async () => {
+    const fixture = await createAgenda(options(0, 3, 1));
+    // Le créneau fait partie du libellé d'une option — contrairement au résumé de la méta, qui
+    // n'énumère que des dates : ici c'est la cible d'un scellement, elle doit être sans ambiguïté.
+    expect(optionLabels(fixture)).toEqual([
+      'sam. 29 août, soir',
+      'dim. 30 août, soir',
+      'ven. 28 août, soir',
+    ]);
+    expect(
+      fixture.nativeElement.querySelector('.agenda-option--fav .agenda-option__date').textContent,
+    ).toContain('29 août');
+  });
+
+  it('AC3 : chaque option porte sa piste et son compteur', async () => {
+    const fixture = await createAgenda(options(3, 1, 0));
+    expect(fixture.nativeElement.querySelectorAll('app-poll-track')).toHaveLength(3);
+    // 🚨 Le compteur est émis par `<app-poll-track>` lui-même (36.6) : la surface ne le redouble
+    // pas. Le redoubler l'affichait deux fois par option — défaut trouvé à l'écran.
+    expect(
+      [...fixture.nativeElement.querySelectorAll('app-poll-track .cnt')].map((n) =>
+        (n.textContent ?? '').trim(),
+      ),
+    ).toEqual(['3 / 4', '1 / 4', '0 / 4']);
+  });
+
+  it('AC4 : 🚨 TOUTES les options sont scellables, pas seulement le favori', async () => {
+    const fixture = await createMjAgenda(options(3, 1, 0));
+    expect(fixture.nativeElement.querySelectorAll('.agenda-option__seal')).toHaveLength(3);
+  });
+
+  it('AC6 : ma réponse est rendue en toutes lettres sur l’option', async () => {
+    const entries = options(1, 0, 0);
+    entries[0] = { ...entries[0], vote: { ...entries[0].vote!, myAnswer: 'YES' } };
+    const fixture = await createAgenda(entries);
+    expand(fixture);
+    // Émise par `<app-poll-track>`, qui produit les DEUX formulations — la surface n'en
+    // reformule aucune (36.6).
+    expect(fixture.nativeElement.querySelector('app-poll-track .mine').textContent.trim()).toBe(
+      'tu as dit oui',
+    );
+  });
+});
+
+describe('CalendarAgendaView — sceller (AC3, AC10, AC12)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC10 : le bouton émet le triplet d’identité de l’option, et son libellé', async () => {
+    const fixture = await createMjAgenda(options(3, 0, 0));
+    const emitted: AgendaSealRequest[] = [];
+    fixture.componentInstance.sealRequested.subscribe((r: AgendaSealRequest) => emitted.push(r));
+
+    fixture.nativeElement.querySelector('.agenda-option__seal').click();
+
+    expect(emitted).toHaveLength(1);
+    expect(emitted[0]).toMatchObject({
+      partieId: 'p1',
+      pollId: 'poll1',
+      optionId: 'o0',
+      pollLabel: 'Les Cendres d’Ashal',
+    });
+    expect(emitted[0].dateLabel).toContain('28 août');
+  });
+
+  it('AC6/AC12 : 🚨 sans pouvoir de scellement, AUCUN bouton — ni actif ni désactivé', async () => {
+    const fixture = await createAgenda(options(3, 0, 0));
+    expect(fixture.nativeElement.querySelectorAll('.agenda-option__seal')).toHaveLength(0);
+    expect(fixture.nativeElement.querySelector('button[disabled]')).toBeNull();
+    // AC6 — la structure de ligne, elle, est la MÊME : les options restent dépliées et lisibles.
+    expect(optionLabels(fixture)).toHaveLength(3);
+  });
+});
+
+describe('CalendarAgendaView — le badge d’une ligne de vote (AC15)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('MJ + vote mûr → « À sceller »', async () => {
+    const fixture = await createMjAgenda(options(3, 0, 0));
+    expect(badges(fixture)).toEqual(['À sceller']);
+  });
+
+  it('MJ + vote NON mûr → « Réponds au vote »', async () => {
+    const fixture = await createMjAgenda(options(1, 0, 0));
+    expect(badges(fixture)).toEqual(['Réponds au vote']);
+  });
+
+  it('joueur + vote mûr → « Réponds au vote », jamais « À sceller »', async () => {
+    const fixture = await createAgenda(options(3, 0, 0));
+    expect(badges(fixture)).toEqual(['Réponds au vote']);
+  });
+
+  it('🚨 avoir répondu à UNE option sur trois ne suffit pas : le vote reste en attente', async () => {
+    const entries = options(1, 0, 0);
+    entries[0] = { ...entries[0], vote: { ...entries[0].vote!, myAnswer: 'YES' } };
+    const fixture = await createAgenda(entries);
+    expect(badges(fixture)).toEqual(['Réponds au vote']);
+  });
+
+  it('avoir répondu partout → « Vote en cours »', async () => {
+    const fixture = await createAgenda(
+      options(1, 0, 0).map((e) => ({ ...e, vote: { ...e.vote!, myAnswer: 'YES' as const } })),
+    );
+    expect(badges(fixture)).toEqual(['Vote en cours']);
+  });
+});
+
+describe('CalendarAgendaView — la méta d’une ligne de vote (AC14)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function meta(fixture: { nativeElement: HTMLElement }): string {
+    return (fixture.nativeElement.querySelector('.agenda-entry__meta')?.textContent ?? '').trim();
+  }
+
+  it('deux créneaux sont énumérés', async () => {
+    const fixture = await createAgenda(options(0, 0));
+    expect(meta(fixture)).toContain('ven. 28 août, soir ou sam. 29 août, soir');
+  });
+
+  // Revue de code (36.12) — deux options même jour, créneaux différents : sans le créneau dans le
+  // résumé, elles étaient rendues indiscernables (« ven. 28 août ou ven. 28 août »).
+  it('deux options DU MÊME JOUR à des créneaux différents ne sont pas indiscernables', async () => {
+    const [morning, evening] = options(0, 0);
+    const fixture = await createAgenda([
+      { ...morning, date: '2026-08-28', slot: 'MORNING' },
+      { ...evening, date: '2026-08-28', slot: 'EVENING' },
+    ]);
+    expect(meta(fixture)).toContain('ven. 28 août, matin ou ven. 28 août, soir');
+  });
+
+  it('au-delà de deux, ils sont résumés', async () => {
+    const fixture = await createAgenda(options(0, 0, 0));
+    expect(meta(fixture)).toContain('3 créneaux proposés');
+  });
+
+  it('le compteur est celui du VOTE — le minimum sur les options, jamais la somme', async () => {
+    const fixture = await createAgenda(options(3, 1, 0));
+    expect(meta(fixture)).toContain('0 sur 4 ont répondu');
+  });
+
+  it('🚨 aucune piste au niveau du vote : une piste agrégée affirmerait un avis inexistant', async () => {
+    const fixture = await createAgenda(options(3, 1, 0));
+    expect(fixture.nativeElement.querySelector('.agenda-entry__row app-poll-track')).toBeNull();
+  });
+
+  it('côté MJ, la méta nomme qui manque', async () => {
+    const fixture = await createMjAgenda(options(1, 0, 0), { poll1: ['Léa', 'Tom'] });
+    expect(meta(fixture)).toContain('il manque Léa, Tom');
+  });
+
+  it('au-delà de trois manquants, elle en nomme trois et compte le reste', async () => {
+    const fixture = await createMjAgenda(options(1, 0, 0), {
+      poll1: ['Léa', 'Tom', 'Zoé', 'Ana', 'Bo'],
+    });
+    expect(meta(fixture)).toContain('Léa, Tom, Zoé et 2 autres');
+  });
+
+  it('côté joueur, elle ne nomme personne — aucune identité ne transite', async () => {
+    const fixture = await createAgenda(options(1, 0, 0));
+    expect(meta(fixture)).not.toContain('il manque');
+  });
+});
+
+describe('CalendarAgendaView — la séance sans date proposée (AC5, AC13)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const SANS_DATE: AgendaEntry = {
+    key: 'sans-date-1',
+    type: 'seances-sans-date',
+    date: '',
+    label: 'Le Convoi du Nord — Séance 4',
+    partieId: 'p1',
+    scenarioId: 's1',
+    seanceId: 'se4',
+  };
+
+  it('AC5 : la ligne dit ce qui manque et propose de lancer un vote', async () => {
+    const fixture = await createMjAgenda([SANS_DATE]);
+    expect(entryTitles(fixture)).toEqual(['Le Convoi du Nord — Séance 4']);
+    expect(fixture.nativeElement.querySelector('.agenda-entry__meta').textContent).toContain(
+      'Aucune date proposée',
+    );
+    expect(fixture.nativeElement.querySelector('.agenda-entry__launch').textContent.trim()).toBe(
+      'Lancer un vote',
+    );
+  });
+
+  it('AC13 : le bouton émet le seanceId', async () => {
+    const fixture = await createMjAgenda([SANS_DATE]);
+    const emitted: string[] = [];
+    fixture.componentInstance.pollLaunchRequested.subscribe((id: string) => emitted.push(id));
+    fixture.nativeElement.querySelector('.agenda-entry__launch').click();
+    expect(emitted).toEqual(['se4']);
+  });
+
+  it('🚨 elle porte une ACTION, pas un badge d’état — et elle ne navigue pas', async () => {
+    const fixture = await createMjAgenda([SANS_DATE]);
+    expect(badges(fixture)).toEqual([]);
+    expect(fixture.nativeElement.querySelector('.agenda-entry__open')).toBeNull();
+  });
+
+  it('elle se range en fin de « Ça t’attend », comme toute ligne sans date', async () => {
+    const fixture = await createMjAgenda([SANS_DATE, ...options(1, 0, 0)]);
+    expect(entryTitles(fixture)).toEqual(['Les Cendres d’Ashal', 'Le Convoi du Nord — Séance 4']);
   });
 });

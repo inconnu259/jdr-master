@@ -3,6 +3,18 @@
    styles.scss). Repli littéral sur chaque `var()`, patron `dashboard.scss` : aucune couleur n'est
    codée en dur, mais aucune ne disparaît si la variable manque. */
 
+/* Story 36.12 — la liste se mesure ELLE-MÊME, pas la fenêtre : en contexte de partie, panneau
+   ouvert, l'agenda peut n'occuper qu'un tiers d'un écran large. Une media query y appliquerait la
+   disposition large dans une colonne étroite — le défaut exact que la 36.13 a mesuré à l'écran
+   (986 px d'écart entre la fenêtre et la grille). */
+.agenda-view {
+  /* Conteneur NOMMÉ : `poll-track.scss` doit pouvoir l'interroger depuis l'intérieur du composant
+     de piste (doctrine de la 36.6 — les règles de `.cnt`/`.mine` vivent chez leur composant, pas
+     chez la surface, l'encapsulation de vue d'Angular les rendant inatteignables d'ici). Sans
+     nom, sa requête matcherait le premier conteneur venu, qui peut être `month-grid`. */
+  container: agenda-list / inline-size;
+}
+
 .agenda-section {
   margin-bottom: 1.25rem;
 
@@ -212,4 +224,132 @@
 
 .agenda-view__empty {
   opacity: 0.7;
+}
+
+/* ─── Story 36.12 — la ligne d'un vote, et ses créneaux dépliés ──────────────
+   La ligne de vote est la seule qui empile deux étages : son en-tête (identique aux autres
+   lignes) et, dessous, ses options. D'où la bascule en colonne — le reste de la liste garde la
+   disposition en ligne de la 36.11, intacte. */
+.agenda-entry--poll {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.agenda-entry__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* Le bouton de dépliement n'est pas une navigation : il ne doit donc pas ressembler à un lien,
+   seulement se signaler comme activable — même traitement que `.agenda-entry__open`, dont il
+   hérite déjà la mise en page. */
+.agenda-entry__disclose {
+  cursor: pointer;
+}
+
+.agenda-options {
+  list-style: none;
+  margin: 0;
+  /* Aligné sous le corps de la ligne, pas sous le liseré : les options appartiennent au titre,
+     et le décrochage le dit sans une seule bordure de plus. */
+  padding: 0 0 0 calc(3px + 0.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.agenda-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  border-radius: 8px;
+  padding: 0.1rem 0.25rem;
+  background: var(--mat-sys-surface-container-low, transparent);
+}
+
+/* AC4 — le favori est mis en avant SANS masquer les autres : un liseré et un titre plus dense,
+   jamais une option qui disparaîtrait ou cesserait d'être scellable. La décision reste au MJ. */
+.agenda-option--fav {
+  background: color-mix(in srgb, var(--jdr-status-todo, #f0a030) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--jdr-status-todo, #f0a030);
+}
+
+.agenda-option--fav .agenda-option__date {
+  font-weight: 700;
+}
+
+/* Le corps d'une option EST le bouton du sélecteur de réponse : toute la ligne répond, comme la
+   bande de la case et la ligne du rail. */
+.agenda-option__answer {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
+  /* 44 px de cible au doigt, y compris quand le texte est court (AC — vérification mobile). */
+  min-height: 36px;
+  padding: 0 0.3rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--mat-sys-surface-container-high);
+  }
+}
+
+.agenda-option__date {
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+/* La piste cède la place au texte quand la largeur manque : elle est le seul élément dont la
+   forme reste lisible réduite, et le compteur la double déjà en chiffres (AC3). */
+.agenda-option__track {
+  flex: 1 1 40px;
+  min-width: 28px;
+}
+
+/* AC3/AC12 — le scellement. Rendu seulement là où il est possible : ce sélecteur n'a aucun état
+   désactivé, parce qu'aucun bouton désactivé n'est jamais rendu. */
+.agenda-option__seal,
+.agenda-entry__launch {
+  flex: 0 0 auto;
+  min-height: 32px;
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--jdr-status-todo, #f0a030) 55%, transparent);
+  background: color-mix(in srgb, var(--jdr-status-todo, #f0a030) 14%, transparent);
+  color: var(--jdr-status-todo, #f0a030);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in srgb, var(--jdr-status-todo, #f0a030) 26%, transparent);
+  }
+}
+
+/* Dernier recours, sous 300 px : le bouton *Sceller* passe dessous plutôt que d'écraser la piste
+   à quelques pixels. C'est un repli, pas la disposition visée — au-dessus, ma réponse cède
+   d'abord (règle dans `poll-track.scss`), ce qui suffit à garder l'option sur une ligne. */
+@container agenda-list (max-width: 300px) {
+  .agenda-option {
+    flex-wrap: wrap;
+  }
+
+  .agenda-option__seal {
+    flex: 1 0 100%;
+  }
 }
