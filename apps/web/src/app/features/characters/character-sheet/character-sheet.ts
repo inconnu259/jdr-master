@@ -1,6 +1,7 @@
 import {
   Component,
   DestroyRef,
+  type ElementRef,
   OnInit,
   computed,
   effect,
@@ -9,11 +10,20 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs/operators';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
+import {
+  CdkConnectedOverlay,
+  CdkOverlayOrigin,
+  type ConnectedPosition,
+} from '@angular/cdk/overlay';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
 import { characterName, findContentEntry } from '../../../core/characters/character.util';
@@ -26,6 +36,7 @@ import {
   type PortraitCropperData,
   type PortraitCropResult,
 } from '../portrait-cropper/portrait-cropper';
+import { SheetActionsMenu } from './sheet-actions-menu/sheet-actions-menu';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { LevelUpBanner } from './level-up-banner/level-up-banner';
@@ -123,6 +134,18 @@ interface AttributePatternData {
   values: number[];
 }
 
+/**
+ * Story 31.1 — positions du menu « ⋮ » de la fiche, même patron que `DISPLAY_PANEL_POSITIONS`
+ * (`calendar-view.ts`, story 36.14) : sous le déclencheur, aligné sur son bord de départ, avec un
+ * repli au-dessus pour les très petites hauteurs. Le déclencheur vit en haut à droite de l'en-tête
+ * — priorité à l'alignement `end` plutôt que `start`, pour ne jamais dépasser à droite de l'écran.
+ */
+const SHEET_MENU_POSITIONS: ConnectedPosition[] = [
+  { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top', offsetY: 6 },
+  { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 6 },
+  { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom', offsetY: -6 },
+];
+
 interface NarrativeFields {
   sex?: string;
   age?: string;
@@ -146,6 +169,10 @@ interface NarrativeFields {
     NotesJournal,
     FieldEditPencil,
     IdentityLabel,
+    CdkConnectedOverlay,
+    CdkOverlayOrigin,
+    CdkTrapFocus,
+    SheetActionsMenu,
   ],
   templateUrl: './character-sheet.html',
   styleUrl: './character-sheet.scss',
@@ -158,6 +185,39 @@ export class CharacterSheet implements OnInit {
   protected readonly theme = inject(ThemeToneService);
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly breakpointObserver = inject(BreakpointObserver);
+
+  /**
+   * Story 31.1 — même seuil unique du projet que `CalendarView.DESKTOP_QUERY` (36.14),
+   * `partie-detail` et `list-control-bar` : ne pas en introduire un second.
+   */
+  private static readonly DESKTOP_QUERY = '(min-width: 1024px)';
+  protected readonly isDesktop = toSignal(
+    this.breakpointObserver.observe(CharacterSheet.DESKTOP_QUERY).pipe(map((r) => r.matches)),
+    { initialValue: this.breakpointObserver.isMatched(CharacterSheet.DESKTOP_QUERY) },
+  );
+
+  protected readonly sheetMenuOpen = signal(false);
+  protected readonly SHEET_MENU_POSITIONS = SHEET_MENU_POSITIONS;
+  private readonly sheetMenuTrigger = viewChild<ElementRef<HTMLButtonElement>>('sheetMenuTrigger');
+
+  protected toggleSheetMenu(): void {
+    this.sheetMenuOpen.update((open) => !open);
+  }
+
+  /** AC7 — rendre le focus au déclencheur : sans quoi un utilisateur clavier retombe en haut du
+   *  document (même patron que `CalendarView.closeDisplayPanel()`, story 36.14). */
+  protected closeSheetMenu(): void {
+    this.sheetMenuOpen.set(false);
+    this.sheetMenuTrigger()?.nativeElement.focus();
+  }
+
+  protected onSheetMenuKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      this.closeSheetMenu();
+    }
+  }
 
   // Requêtes par nom de ref plutôt que refs de template croisant les blocs `@if` (les pencils
   // sont déclarés dans des blocs conditionnels distincts de ceux qui masquent l'affichage
@@ -203,6 +263,12 @@ export class CharacterSheet implements OnInit {
    */
   protected readonly isOwner = computed(
     () => !!this.character() && this.character()?.userId === this.auth.currentUser()?.id,
+  );
+
+  /** AC6 — le recadrage PDF n'apparaît dans le menu que pour le propriétaire d'un personnage qui
+   *  porte déjà un portrait — même garde que `editPdfPortraitCrop()` ci-dessous. */
+  protected readonly showPdfCropInMenu = computed(
+    () => this.isOwner() && !!this.character()?.portraitUrl,
   );
 
   /**
@@ -548,9 +614,48 @@ export class CharacterSheet implements OnInit {
     }
   }
 
+  /**
+   * Story 31.1, AC4 — le menu se ferme AVANT que l'action ne parte : un export part en tâche de
+   * fond, le recadrage ouvre son propre `MatDialog`, et les deux se marcheraient dessus
+   * visuellement si le menu restait ouvert par-dessus.
+   */
+  protected onSheetMenuExportEditable(): void {
+    this.closeSheetMenu();
+    void this.exportPdf('editable');
+  }
+
+  protected onSheetMenuExport2Pages(): void {
+    this.closeSheetMenu();
+    void this.exportPdf('2pages');
+  }
+
+  protected onSheetMenuExportEquipment(): void {
+    this.closeSheetMenu();
+    void this.exportEquipmentPdf();
+  }
+
+  protected onSheetMenuExportNotes(): void {
+    this.closeSheetMenu();
+    void this.exportNotesPdf();
+  }
+
+  protected onSheetMenuCropPdfPortrait(): void {
+    this.closeSheetMenu();
+    this.editPdfPortraitCrop();
+  }
+
+  /** Revue de code 31.1 — un export en vol n'est plus visible (le menu se referme avant même que
+   *  l'appel ne parte, AC4), donc la garde qui vivait dans `[disabled]` sur les boutons de l'ancien
+   *  en-tête a disparu avec eux. Reprise ici, à l'entrée de chaque méthode : sans elle, rouvrir le
+   *  menu et recliquer pendant qu'un export est encore en vol lance un second appel concurrent qui
+   *  écrase silencieusement les signaux `exporting*`/`export*Error` partagés par le premier. */
+  private exportInFlight(): boolean {
+    return this.exporting() !== null || this.exportingEquipment() || this.exportingNotes();
+  }
+
   protected async exportPdf(format: 'editable' | '2pages'): Promise<void> {
     const c = this.character();
-    if (!c) return;
+    if (!c || this.exportInFlight()) return;
     this.exportError.set(null);
     this.exporting.set(format);
     try {
@@ -573,7 +678,7 @@ export class CharacterSheet implements OnInit {
 
   protected async exportEquipmentPdf(): Promise<void> {
     const c = this.character();
-    if (!c) return;
+    if (!c || this.exportInFlight()) return;
     this.exportEquipmentError.set(null);
     this.exportingEquipment.set(true);
     try {
@@ -596,7 +701,7 @@ export class CharacterSheet implements OnInit {
 
   protected async exportNotesPdf(): Promise<void> {
     const c = this.character();
-    if (!c) return;
+    if (!c || this.exportInFlight()) return;
     this.exportNotesError.set(null);
     this.exportingNotes.set(true);
     try {

@@ -49,6 +49,13 @@
   background: var(--jdr-status-soon, #ff7ad9);
 }
 
+/* Revue de code 36.11 — règle explicite plutôt qu'un repli accidentel sur la valeur de base de
+   `.agenda-section__key` : « C'est passé » ne doit sa couleur au hasard d'aucune coïncidence avec
+   le défaut, comme `--todo`/`--soon` juste au-dessus. */
+.agenda-section--done .agenda-section__key {
+  background: var(--jdr-status-done, #5a5a6a);
+}
+
 .agenda-section__count {
   font-size: 0.75rem;
   font-weight: 400;
@@ -90,6 +97,11 @@
 
 .agenda-section--soon .agenda-entry__kbar {
   background: var(--jdr-status-soon, #ff7ad9);
+}
+
+/* Revue de code 36.11 — même raison que `.agenda-section--done .agenda-section__key` ci-dessus. */
+.agenda-section--done .agenda-entry__kbar {
+  background: var(--jdr-status-done, #5a5a6a);
 }
 
 /* Corps de la ligne. Deux formes possibles — un bouton quand elle ouvre le scénario, un simple

@@ -211,6 +211,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.portrait_missing': 'Aucun portrait — le conteur imagine un visage',
     'character.portrait_edit_cta': 'Modifier le portrait',
     'character.pdf_crop_edit_cta': 'Ajuster le cadrage PDF',
+    'character.sheet_menu_trigger_aria': 'Actions de la fiche',
     'character.export_editable_cta': 'Exporter en PDF (éditable)',
     'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
     'character.export_equipment_cta': "Exporter l'équipement en PDF",
@@ -565,6 +566,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
       "Grave un visage si le cœur t'en dit — cette étape reste facultative, tu peux la traverser sans t'arrêter.",
     'character.portrait_missing': 'Aucun visage gravé — la forêt garde son mystère',
     'character.portrait_edit_cta': 'Modifier le portrait',
+    // Story 31.1 — clé manquante ici depuis l'origine (présente dans les deux autres thèmes) :
+    // le bouton de recadrage PDF s'affichait avec un texte vide en Forêt Ancienne. Corrigé au
+    // passage puisque cette story déplace précisément cette clé dans le nouveau menu.
+    'character.pdf_crop_edit_cta': 'Ajuster le cadrage PDF',
+    'character.sheet_menu_trigger_aria': 'Actions de la fiche',
     'character.export_editable_cta': 'Exporter en PDF (éditable)',
     'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
     'character.export_equipment_cta': "Exporter l'équipement en PDF",
@@ -912,6 +918,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.portrait_missing': 'Aucun portrait gravé sur la plaque',
     'character.portrait_edit_cta': 'Recalibrer le portrait',
     'character.pdf_crop_edit_cta': 'Recalibrer le cadrage PDF',
+    'character.sheet_menu_trigger_aria': 'Actions de la fiche',
     'character.export_editable_cta': 'Exporter en PDF (éditable)',
     'character.export_2pages_cta': 'Exporter en PDF (2 pages)',
     'character.export_equipment_cta': "Exporter l'équipement en PDF",

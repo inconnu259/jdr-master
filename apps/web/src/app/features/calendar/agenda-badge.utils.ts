@@ -103,7 +103,10 @@ export function imminenceLabel(
   if (days <= 0) return when ? when.today : "aujourd'hui";
   if (days === 1) return when ? when.tomorrow : 'demain';
   if (days < 14) return `dans ${days} j`;
-  return `dans ${Math.round(days / 7)} sem.`;
+  // Revue de code 36.11 — `Math.floor`, pas `Math.round` : avec l'arrondi, la transition « 2
+  // sem. » → « 3 sem. » avait lieu au jour 18 (17,5 arrondi au-dessus) plutôt qu'au jour 21
+  // attendu d'une granularité « semaines », survalorisant l'imminence de 3 jours.
+  return `dans ${Math.floor(days / 7)} sem.`;
 }
 
 /**

@@ -193,10 +193,14 @@ const SLOT_ORDER: Record<string, number> = { MORNING: 0, AFTERNOON: 1, EVENING: 
  *  dans le comparateur : le tri reste une comparaison de chaînes, comme partout ailleurs. */
 const NO_DATE_SORT_KEY = '9999-12-31';
 
+// Revue de code 36.11 — l'année est nécessaire : « C'est passé » et « C'est programmé » n'ont
+// aucune borne de date (au moins un an d'historique/d'avenir), donc deux entrées au même
+// jour-du-calendrier mais d'années différentes s'afficheraient sinon de façon identique.
 const AGENDA_DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', {
   weekday: 'long',
   day: 'numeric',
   month: 'long',
+  year: 'numeric',
 });
 
 /**
@@ -393,10 +397,21 @@ export class CalendarAgendaView {
       if (entry.detail) parts.push(entry.detail);
       // Revue de code de la 36.11 : ce libellé était codé en dur alors que tous les autres
       // passent par le registre du thème. Corrigé ici, cette méthode étant réécrite.
-      parts.push(this.theme.tone()['calendar.agenda.no_date']);
+      //
+      // Revue de code (2e passe, 2026-08-24) — garde explicite sur `!entry.date` ajoutée : le
+      // typage de `AgendaEntry` ne garantit pas que `date` soit vide pour ce type. Sans elle, une
+      // entrée qui porterait un jour une date afficherait à la fois la date ET « sans date »,
+      // contradictoire. `calendar-view.ts` pose toujours `date: ''` pour ce type aujourd'hui,
+      // mais rien ne le garantit au niveau du type.
+      if (!entry.date) parts.push(this.theme.tone()['calendar.agenda.no_date']);
     } else if (entry.type === 'seances-sans-date') {
       parts.push(this.theme.tone()['calendar.agenda.no_date_proposed']);
     } else if (entry.type === 'votes-en-cours' && entry.detail && !entry.date) {
+      // Revue de code (2e passe, 2026-08-24) — branche jamais atteinte par l'invariant de
+      // construction ACTUEL (`calendar-view.ts` pose toujours `date: option.date` pour ce type,
+      // une ligne par option) : conservée comme filet explicite, pas retirée, au cas où une
+      // évolution future produirait un `votes-en-cours` sans date propre (ex. créneau non encore
+      // choisi) — auquel cas le créneau seul (`detail`) resterait affiché.
       parts.push(entry.detail);
     }
     const infos = this.seanceInfo(entry);

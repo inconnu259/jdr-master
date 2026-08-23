@@ -103,6 +103,14 @@ describe('imminenceLabel (AC11 — libellés humains au dernier palier)', () => 
     expect(imminenceLabel('2026-09-05', 'EVENING', TODAY)).toBe('dans 2 sem.');
     expect(imminenceLabel('2026-09-12', 'EVENING', TODAY)).toBe('dans 3 sem.');
   });
+
+  // Revue de code 36.11 — `Math.round` faisait basculer « 2 sem. » → « 3 sem. » dès le jour 18
+  // (arrondi de 17,5) plutôt qu'au jour 21 attendu : verrouille la transition sur le bon jour.
+  it('la transition « 2 sem. » → « 3 sem. » a lieu au jour 21, pas au jour 18 (Math.floor)', () => {
+    expect(imminenceLabel('2026-09-09', 'EVENING', TODAY)).toBe('dans 2 sem.'); // jour 18
+    expect(imminenceLabel('2026-09-11', 'EVENING', TODAY)).toBe('dans 2 sem.'); // jour 20
+    expect(imminenceLabel('2026-09-12', 'EVENING', TODAY)).toBe('dans 3 sem.'); // jour 21
+  });
 });
 
 describe('sectionIdFor (AC1, AC9, encadré n°4)', () => {

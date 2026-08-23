@@ -33,53 +33,80 @@
           </button>
         }
       </div>
-      <div class="sheet__export-actions">
-        <div class="sheet__export-buttons">
-          <button
-            mat-stroked-button
-            type="button"
-            [disabled]="exporting() !== null || exportingEquipment() || exportingNotes()"
-            (click)="exportPdf('editable')"
-          >
-            {{ theme.tone()['character.export_editable_cta'] }}
-          </button>
-          <button
-            mat-stroked-button
-            type="button"
-            [disabled]="exporting() !== null || exportingEquipment() || exportingNotes()"
-            (click)="exportPdf('2pages')"
-          >
-            {{ theme.tone()['character.export_2pages_cta'] }}
-          </button>
-          <button
-            mat-stroked-button
-            type="button"
-            [disabled]="exporting() !== null || exportingEquipment() || exportingNotes()"
-            (click)="exportEquipmentPdf()"
-          >
-            {{ theme.tone()['character.export_equipment_cta'] }}
-          </button>
-          <button
-            mat-stroked-button
-            type="button"
-            [disabled]="exporting() !== null || exportingEquipment() || exportingNotes()"
-            (click)="exportNotesPdf()"
-          >
-            {{ theme.tone()['character.export_notes_cta'] }}
-          </button>
-        </div>
-        @if (isOwner() && c.portraitUrl) {
-          <button
-            mat-button
-            type="button"
-            class="sheet__pdf-crop-edit-cta"
-            (click)="editPdfPortraitCrop()"
-          >
-            {{ theme.tone()['character.pdf_crop_edit_cta'] }}
-          </button>
-        }
-      </div>
+      <!-- Story 31.1, AC1/AC2 — les cinq actions d'export/recadrage quittent la vue principale
+           pour ce menu « ⋮ ». Même patron cdkConnectedOverlay + CdkTrapFocus que le panneau
+           « Affichage » du calendrier (calendar-view.html, story 36.14) : menu ancré sur
+           ordinateur, feuille montant du bas sur téléphone — jamais `MatMenu` (proscrit,
+           shell.spec.ts). -->
+      <button
+        type="button"
+        class="sheet__menu-trigger"
+        cdkOverlayOrigin
+        #sheetMenuTrigger
+        #sheetMenuOrigin="cdkOverlayOrigin"
+        [class.sheet__menu-trigger--on]="sheetMenuOpen()"
+        [attr.aria-expanded]="sheetMenuOpen()"
+        aria-haspopup="dialog"
+        [attr.aria-label]="theme.tone()['character.sheet_menu_trigger_aria']"
+        (click)="toggleSheetMenu()"
+      >
+        <span aria-hidden="true">&#8942;</span>
+      </button>
     </header>
+
+    @if (isDesktop()) {
+      <ng-template
+        cdkConnectedOverlay
+        [cdkConnectedOverlayOrigin]="sheetMenuOrigin"
+        [cdkConnectedOverlayOpen]="sheetMenuOpen()"
+        [cdkConnectedOverlayHasBackdrop]="true"
+        [cdkConnectedOverlayPositions]="SHEET_MENU_POSITIONS"
+        cdkConnectedOverlayPush
+        [cdkConnectedOverlayViewportMargin]="8"
+        (backdropClick)="closeSheetMenu()"
+        (overlayKeydown)="onSheetMenuKeydown($event)"
+      >
+        <div
+          class="sheet-menu-surface sheet-menu-surface--menu"
+          role="dialog"
+          aria-modal="true"
+          tabindex="-1"
+          cdkTrapFocus
+          cdkTrapFocusAutoCapture
+          [attr.aria-label]="theme.tone()['character.sheet_menu_trigger_aria']"
+        >
+          <app-sheet-actions-menu
+            [showPdfCrop]="showPdfCropInMenu()"
+            (exportEditable)="onSheetMenuExportEditable()"
+            (export2Pages)="onSheetMenuExport2Pages()"
+            (exportEquipment)="onSheetMenuExportEquipment()"
+            (exportNotes)="onSheetMenuExportNotes()"
+            (cropPdfPortrait)="onSheetMenuCropPdfPortrait()"
+          />
+        </div>
+      </ng-template>
+    } @else if (sheetMenuOpen()) {
+      <div class="sheet-menu-backdrop" (click)="closeSheetMenu()" aria-hidden="true"></div>
+      <div
+        class="sheet-menu-surface sheet-menu-surface--sheet"
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+        cdkTrapFocus
+        cdkTrapFocusAutoCapture
+        [attr.aria-label]="theme.tone()['character.sheet_menu_trigger_aria']"
+        (keydown)="onSheetMenuKeydown($event)"
+      >
+        <app-sheet-actions-menu
+          [showPdfCrop]="showPdfCropInMenu()"
+          (exportEditable)="onSheetMenuExportEditable()"
+          (export2Pages)="onSheetMenuExport2Pages()"
+          (exportEquipment)="onSheetMenuExportEquipment()"
+          (exportNotes)="onSheetMenuExportNotes()"
+          (cropPdfPortrait)="onSheetMenuCropPdfPortrait()"
+        />
+      </div>
+    }
 
     @if (exportError(); as error) {
       <p class="sheet__export-error">{{ error }}</p>

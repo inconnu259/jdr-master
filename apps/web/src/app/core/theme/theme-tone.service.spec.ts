@@ -174,3 +174,25 @@ describe('TONE_MAP — les clés de la story 36.14 existent dans les TROIS thèm
     });
   }
 });
+
+// Story 31.1 — le menu « ⋮ » de la fiche. Même garde que ci-dessus : `character.pdf_crop_edit_cta`
+// manquait déjà dans `foret-ancienne` avant cette story (invisible faute de ce test), corrigé au
+// passage puisque cette story déplace précisément cette clé dans le nouveau menu.
+describe('TONE_MAP — les clés du menu de la fiche (story 31.1) existent dans les TROIS thèmes', () => {
+  const SHEET_MENU_KEYS = [
+    'character.sheet_menu_trigger_aria',
+    'character.export_editable_cta',
+    'character.export_2pages_cta',
+    'character.export_equipment_cta',
+    'character.export_notes_cta',
+    'character.pdf_crop_edit_cta',
+  ];
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${SHEET_MENU_KEYS.length} clés, toutes non vides`, () => {
+      for (const key of SHEET_MENU_KEYS) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+      }
+    });
+  }
+});
