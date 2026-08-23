@@ -12,13 +12,36 @@
       <p class="calendar-error" role="alert">{{ error() }}</p>
     }
     <div class="calendar-controls">
-      <app-calendar-layer-toggle
-        [keys]="availableLayerKeys()"
-        [active]="activeLayers()"
-        [overridden]="isOverridden()"
-        (layerToggled)="toggleLayer($event)"
-        (resetRequested)="resetToDefault()"
-      />
+      <!-- Story 36.14, AC1 — ⚠️ REMPLACE la bande de chips permanente de la story 30.6. Cinq
+           chips plus la chip Destinée ne tenaient pas sur une ligne : la barre passait à DEUX
+           lignes dès 1400 px et, sur téléphone, la grille commençait sous la ligne de flottaison
+           (`deferred-work.md:66`). Le patron n'est pas neuf — c'est celui de `ListControlBar`
+           (§4.2), réutilisé tel quel. -->
+      <button
+        type="button"
+        class="display-trigger"
+        cdkOverlayOrigin
+        #displayTrigger
+        #displayOrigin="cdkOverlayOrigin"
+        [class.display-trigger--on]="displayPanelOpen()"
+        [attr.aria-expanded]="displayPanelOpen()"
+        aria-haspopup="dialog"
+        [attr.aria-label]="theme.tone()['calendar.display.trigger_aria']"
+        (click)="toggleDisplayPanel()"
+      >
+        <span aria-hidden="true">&#9776;</span> {{ theme.tone()['calendar.display.trigger'] }}
+      </button>
+
+      <!-- AC3/AC4 — n'apparaît QUE si l'affichage s'écarte du défaut, et EST l'action de
+           rétablissement (un seul élément cliquable, pas un texte plus un bouton). `aria-live`
+           conservé de la 30.6 : son apparition doit s'entendre, pas seulement se voir. -->
+      <div aria-live="polite" class="display-summary-slot">
+        @if (isOverridden()) {
+          <button type="button" class="display-summary" (click)="resetToDefault()">
+            {{ layerSummaryLabel() }}
+          </button>
+        }
+      </div>
 
       <!-- Story 36.9, AC5 — 🚨 FRÈRE de la bande de couches, jamais une chip DEDANS : la
            Destinée est un MODE, pas un filtre, et il doit se voir tant qu'il est actif
@@ -50,19 +73,90 @@
           Ajouter des dates
         </button>
       }
+
+      <!-- AC1 — la bascule de vues PARTAGE cette ligne ; elle formait auparavant un bloc centré
+           sous la barre. Le ressort la pousse à droite, comme le contrat la dessine
+           (`contrat-ui-calendrier.html:66` : `.spacer{flex:1}`). -->
+      <span class="controls-spacer"></span>
+
+      <div class="view-toggle">
+        <mat-button-toggle-group
+          [value]="view()"
+          (change)="onViewChange($event.value)"
+          aria-label="Vue du calendrier"
+        >
+          <!-- AC1 — les DEUX formulations sont émises, le CSS choisit selon la largeur du
+               CONTENEUR (voir `.calendar-controls` dans le SCSS). Patron du projet : le composant
+               émet toujours son texte, seul le CSS masque — jamais un `@if` de largeur.
+               🚨 `aria-label` porte la forme LONGUE à toutes les largeurs : le nom accessible ne
+               se tronque jamais avec le visuel (défaut relevé en revue de la 36.5 sur le rail,
+               piège n°11 de la 36.13). -->
+          <mat-button-toggle value="month" aria-label="Vue mois">
+            <span class="vt-long">Vue mois</span><span class="vt-short">Mois</span>
+          </mat-button-toggle>
+          <mat-button-toggle value="week" aria-label="Vue semaine">
+            <span class="vt-long">Vue semaine</span><span class="vt-short">Sem.</span>
+          </mat-button-toggle>
+          <mat-button-toggle value="agenda" aria-label="Vue agenda">
+            <span class="vt-long">Vue agenda</span><span class="vt-short">Agenda</span>
+          </mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
     </div>
 
-    <div class="view-toggle">
-      <mat-button-toggle-group
-        [value]="view()"
-        (change)="onViewChange($event.value)"
-        aria-label="Vue du calendrier"
+    <!-- AC2 — LE MÊME contenu de panneau, deux enveloppes : menu ancré sur ordinateur, feuille
+         montant du bas sur téléphone. Un seul composant, deux présentations
+         [Source: DESIGN.md:300].
+         🚨 `MatMenu` est proscrit dans ce projet (`shell.spec.ts` l'interdit par test) et
+         `MatBottomSheet` n'y existe pas : les deux patrons employés ici existaient déjà — le
+         `cdkConnectedOverlay` de la 36.7 et la feuille maison du `ConstraintPanel`. -->
+    @if (isDesktop()) {
+      <ng-template
+        cdkConnectedOverlay
+        [cdkConnectedOverlayOrigin]="displayOrigin"
+        [cdkConnectedOverlayOpen]="displayPanelOpen()"
+        [cdkConnectedOverlayHasBackdrop]="true"
+        [cdkConnectedOverlayPositions]="DISPLAY_PANEL_POSITIONS"
+        cdkConnectedOverlayPush
+        [cdkConnectedOverlayViewportMargin]="8"
+        (backdropClick)="closeDisplayPanel()"
+        (overlayKeydown)="onDisplayPanelKeydown($event)"
       >
-        <mat-button-toggle value="month">Vue mois</mat-button-toggle>
-        <mat-button-toggle value="week">Vue semaine</mat-button-toggle>
-        <mat-button-toggle value="agenda">Vue agenda</mat-button-toggle>
-      </mat-button-toggle-group>
-    </div>
+        <div class="display-surface display-surface--menu" cdkTrapFocus cdkTrapFocusAutoCapture>
+          <app-calendar-display-panel
+            [keys]="availableLayerKeys()"
+            [active]="activeLayers()"
+            [legendVisible]="legendVisible()"
+            (layerToggled)="toggleLayer($event)"
+            (legendToggled)="toggleLegend()"
+            (resetRequested)="resetToDefault()"
+          />
+        </div>
+      </ng-template>
+    } @else if (displayPanelOpen()) {
+      <!-- `aria-hidden` : le voile double le geste de fermeture à la souris, il n'est pas une
+           commande à annoncer — `Échap` est le chemin clavier. Même patron que le voile du
+           `ConstraintPanel`, quelques lignes plus bas. -->
+      <div class="display-backdrop" (click)="closeDisplayPanel()" aria-hidden="true"></div>
+      <div
+        class="display-surface display-surface--sheet"
+        role="dialog"
+        tabindex="-1"
+        cdkTrapFocus
+        cdkTrapFocusAutoCapture
+        [attr.aria-label]="theme.tone()['calendar.display.trigger_aria']"
+        (keydown)="onDisplayPanelKeydown($event)"
+      >
+        <app-calendar-display-panel
+          [keys]="availableLayerKeys()"
+          [active]="activeLayers()"
+          [legendVisible]="legendVisible()"
+          (layerToggled)="toggleLayer($event)"
+          (legendToggled)="toggleLegend()"
+          (resetRequested)="resetToDefault()"
+        />
+      </div>
+    }
 
     @if (view() === 'month') {
       <app-calendar-month-view
@@ -151,6 +245,15 @@
         (scenarioActivated)="onScenarioActivated($event)"
         (voteOptionActivated)="onVoteOptionActivated($event)"
       />
+    }
+
+    <!-- Story 36.14, AC5/AC6 — D-2 : la légende se rend SOUS la grille et sous le rail.
+         Au-dessus, elle repousserait le calendrier vers le bas — exactement ce que cette story
+         supprime. Dans le panneau, elle disparaîtrait avec lui, alors que « l'écran doit rester
+         lisible sans elle » suppose de pouvoir la lire EN REGARDANT la grille
+         [Source: DESIGN.md:390]. Fermée par défaut ; son seul réglage est dans le panneau. -->
+    @if (legendVisible()) {
+      <app-calendar-legend [partieContext]="!!partieId()" />
     }
   </div>
 

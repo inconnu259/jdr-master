@@ -20,11 +20,14 @@
   }
 }
 
-.layer-toggle__reset {
-  border: none;
-  background: none;
-  text-decoration: underline;
-  cursor: pointer;
-  font-size: 0.85rem;
-  color: var(--mat-sys-error, #b00020);
+/* Story 36.14 — `.layer-toggle__reset` a suivi son bouton dans `CalendarDisplayPanel`. */
+
+/* Revue de code 36.14 — `.display-panel app-calendar-layer-toggle .layer-toggle { margin-bottom:
+   0 }` posé côté `CalendarDisplayPanel` était inatteignable : l'encapsulation de vue Angular
+   n'expose que la balise hôte au sélecteur du parent, jamais les éléments du template interne. Le
+   séparateur du panneau rythme déjà l'espacement (`display-panel__sep`) ; c'est ici, avec une
+   classe d'hôte, que le composant doit renoncer à sa propre marge — même patron que
+   `poll-track.scss:host(.in-legend)`. */
+:host(.in-panel) .layer-toggle {
+  margin-bottom: 0;
 }

@@ -1,3 +1,5 @@
+@use '../band-ranks' as ranks;
+
 .calendar-month {
   width: 100%;
   overflow: hidden;
@@ -210,42 +212,11 @@
   /* Le fond par défaut d'une bande sans rang : discret, jamais vide visuellement. */
   background: color-mix(in srgb, var(--color-unknown) 12%, transparent);
 
-  /* ── Rang 4 : mes disponibilités ─────────────────────────────────────────── */
-  /* `--color-available` et non `--jdr-accent-1` : l'équivalence n'est vraie qu'en
-     Grimoire Émeraude. En Atelier Cuivré, accent-1 est un bronze sans rapport. */
-  &[data-winner='available'] {
-    background: color-mix(in srgb, var(--color-available) 32%, transparent);
-  }
-
-  /* ── Rang 3 : mes indisponibilités ───────────────────────────────────────── */
-  &[data-winner='unavailable'] {
-    background: color-mix(in srgb, var(--color-unavailable) 32%, transparent);
-  }
-
-  /* ── Hors rang : personne ne s'est prononcé — la TRAME porte l'information ── */
-  &[data-winner='none'] {
-    background: repeating-linear-gradient(
-      45deg,
-      transparent 0 3px,
-      color-mix(in srgb, var(--color-unknown) 42%, transparent) 3px 6px
-    );
-  }
-
-  /* ── Rang 2 : vote en cours — LISERÉ gauche 3 px ─────────────────────────── */
-  /* ⚠️ Écart assumé au contrat d'UI, qui dessine un filet identique à celui de la
-     séance. Deux formes identiques ne laisseraient que la teinte pour distinguer
-     séance et vote, ce que P-1 interdit. Voir encadré n°3 de la story 36.2. */
-  &[data-winner='vote'] {
-    background: color-mix(in srgb, var(--jdr-status-todo, #f0a030) 24%, transparent);
-    border-left: 3px solid var(--jdr-status-todo, #f0a030);
-    padding-left: 0;
-  }
-
-  /* ── Rang 1 : séance confirmée — FILET intérieur ─────────────────────────── */
-  &[data-winner='seance'] {
-    background: color-mix(in srgb, var(--jdr-status-soon, #ff7ad9) 28%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--jdr-status-soon, #ff7ad9) 75%, transparent);
-  }
+  /* ⚠️ Story 36.14 — les cinq traitements de rang ont DÉMÉNAGÉ dans `../_band-ranks.scss`, sans
+     changer d'une virgule. Motif : la légende doit les reproduire « exactement », et
+     l'encapsulation de vue lui interdisait d'y accéder — la seule alternative était de les
+     recopier. Ils restent appliqués ici, à la même place dans la cascade. */
+  @include ranks.band-rank-treatments;
 
   /* Aperçu live pendant l'édition (ConstraintPanel) — repris de l'ancien segment. */
   &.preview {

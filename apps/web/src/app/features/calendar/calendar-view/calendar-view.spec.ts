@@ -4,11 +4,11 @@ import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { Location } from '@angular/common';
 import { vi } from 'vitest';
 import { CalendarView } from './calendar-view';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import type { AuthUser } from '@master-jdr/shared';
 import {
   AvailabilityService,
@@ -23,6 +23,7 @@ import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.se
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { TONE_MAP } from '../../../core/theme/tones';
+import { CalendarSessionLayersService } from '../calendar-session-layers.service';
 
 interface CreateOptions {
   mode?: 'mj' | 'personal';
@@ -49,12 +50,20 @@ function makeBreakpointObserver(desktop: boolean) {
   };
 }
 
+// Revue de code 36.14 (AC10, encadré n°2) — `CalendarView` s'abonne désormais à `paramMap`
+// (jamais une lecture unique du snapshot au montage), pour suivre un changement de `:id` sur une
+// instance réutilisée par Angular. Le mock doit donc porter les deux : `snapshot` pour les query
+// params lus une fois, `paramMap` (Observable) pour l'identité de Partie suivie en continu.
 function makeActivatedRoute(partieId?: string, queryParams: Record<string, string> = {}) {
   return {
     snapshot: {
       paramMap: { get: (key: string) => (key === 'id' ? (partieId ?? null) : null) },
       queryParamMap: { get: (key: string) => queryParams[key] ?? null },
     },
+    // `BehaviorSubject`, pas `of()` : un test de réutilisation de route (Story 36.14, encadré
+    // n°2) doit pouvoir pousser une seconde valeur sur la MÊME instance de composant, exactement
+    // ce que fait Angular quand il réutilise `CalendarView` sur un simple changement de `:id`.
+    paramMap: new BehaviorSubject(convertToParamMap(partieId ? { id: partieId } : {})),
   };
 }
 
@@ -217,6 +226,21 @@ async function createCalendarView(options?: CreateOptions | 'mj' | 'personal') {
     realtimeSvc,
     location,
   };
+}
+
+/**
+ * Story 36.14 — un remontage **dans la même session** : nouvelle instance de composant, MÊME
+ * injecteur, donc même `CalendarSessionLayersService`. C'est une navigation interne (quitter le
+ * calendrier puis y revenir), à ne pas confondre avec `TestBed.resetTestingModule()`, qui
+ * reconstruit l'injecteur et simule un RECHARGEMENT.
+ */
+async function remountCalendarViewInSession(mode?: 'personal' | 'mj') {
+  const fixture = TestBed.createComponent(CalendarView);
+  if (mode) fixture.componentRef.setInput('mode', mode);
+  fixture.detectChanges();
+  await fixture.whenStable();
+  fixture.detectChanges();
+  return fixture;
 }
 
 describe('CalendarView — signal mode', () => {
@@ -1106,21 +1130,341 @@ describe('CalendarView — couches actives (Story 30.6)', () => {
     expect(availabilitySvc.getMyCalendar.mock.calls.length).toBe(callsBefore);
   });
 
-  it('une bascule de visite ne modifie jamais le défaut — un remontage (nouvelle navigation) rétablit le défaut (AC3)', async () => {
+  /**
+   * ⚠️ Story 36.14 — CE TEST A CHANGÉ DE VÉRITÉ, il n'a pas été supprimé.
+   *
+   * Story 30.6, il prouvait qu'une bascule ne survivait à AUCUN remontage. Depuis la 36.14, une
+   * bascule survit à un remontage **dans la même session** (AC9) et ne survit **qu'à cela** : le
+   * `TestBed.resetTestingModule()` ci-dessous reconstruit l'injecteur, donc le service de mémoire,
+   * ce qui est exactement ce qu'un RECHARGEMENT fait en production (AC10).
+   *
+   * Ce qui n'a pas bougé, et que ce test continue de prouver : la bascule n'écrit jamais le
+   * **défaut de compte** (encadré n°2 de la 30.6) — le second montage retrouve la préférence
+   * d'origine, intacte.
+   */
+  it('un rechargement (injecteur reconstruit) rétablit le défaut de compte (AC10)', async () => {
     const authSvc = makeAuthService(['mes-disponibilites', 'mes-indisponibilites']);
     const { fixture } = await createCalendarView({ mode: 'personal', authSvc });
     const comp = fixture.componentInstance as any;
     comp.toggleLayer('mes-indisponibilites');
     expect(comp.activeLayers()).toEqual(['mes-disponibilites']);
 
-    // Remontage simulé (nouvelle instance du composant, même défaut de compte) — jamais
-    // persisté par la bascule précédente : aucun appel PATCH n'existe même dans ce composant.
     fixture.destroy();
     TestBed.resetTestingModule();
     const second = await createCalendarView({ mode: 'personal', authSvc });
     const comp2 = second.fixture.componentInstance as any;
 
     expect(comp2.activeLayers()).toEqual(['mes-disponibilites', 'mes-indisponibilites']);
+  });
+
+  it('une bascule survit à un retour sur le MÊME calendrier dans la MÊME session (AC9)', async () => {
+    const authSvc = makeAuthService(['mes-disponibilites', 'mes-indisponibilites']);
+    const { fixture } = await createCalendarView({ mode: 'personal', authSvc });
+    (fixture.componentInstance as any).toggleLayer('mes-indisponibilites');
+    fixture.destroy();
+
+    const second = await remountCalendarViewInSession('personal');
+
+    expect((second.componentInstance as any).activeLayers()).toEqual(['mes-disponibilites']);
+  });
+
+  it('la bascule écrit sous la clé DE CE calendrier, jamais sous une autre (AC10)', async () => {
+    const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    (fixture.componentInstance as any).toggleLayer('mes-seances');
+
+    const session = TestBed.inject(CalendarSessionLayersService);
+    expect(session.read('partie:partie-1')).not.toBeNull();
+    expect(session.read('personal')).toBeNull();
+    expect(session.read('partie:autre')).toBeNull();
+  });
+
+  /**
+   * 🚨 `resetToDefault()` ÉCRIT le défaut dans la mémoire, il n'efface pas l'entrée. Effacer
+   * laisserait la mémoire dire « jamais visité » alors que le lecteur vient d'exprimer un choix :
+   * inoffensif ici, mais le jour où le défaut de compte change en cours de session (écran Compte
+   * ouvert dans un autre onglet), un retour rejouerait une valeur que le lecteur a explicitement
+   * écartée.
+   */
+  it('resetToDefault() mémorise le défaut, et le retour en session le retrouve (AC9)', async () => {
+    const authSvc = makeAuthService(['mes-disponibilites', 'mes-indisponibilites']);
+    const { fixture } = await createCalendarView({ mode: 'personal', authSvc });
+    const comp = fixture.componentInstance as any;
+    comp.toggleLayer('mes-indisponibilites');
+    comp.resetToDefault();
+    fixture.destroy();
+
+    const session = TestBed.inject(CalendarSessionLayersService);
+    expect(session.read('personal')).toEqual(['mes-disponibilites', 'mes-indisponibilites']);
+
+    const second = await remountCalendarViewInSession('personal');
+    expect((second.componentInstance as any).activeLayers()).toEqual([
+      'mes-disponibilites',
+      'mes-indisponibilites',
+    ]);
+    expect((second.componentInstance as any).isOverridden()).toBe(false);
+  });
+});
+
+// ─── Réutilisation de route sans destruction (revue de code 36.14, encadré n°2) ──────────────
+//
+// Angular réutilise la MÊME instance de `CalendarView` quand seul le paramètre `:id` change sur
+// une route déjà appariée (`/parties/:id/calendar` → `/parties/:id/calendar` avec un autre id) :
+// `ngOnInit` ne se relance PAS. Ces tests poussent une seconde valeur sur le même
+// `ActivatedRoute.paramMap` (un `BehaviorSubject`, jamais un remontage de composant) pour prouver
+// que `partieId()`, la mémoire de session ET les données scopées à la Partie suivent — pas
+// seulement au premier montage. [Source: deferred-work.md:117]
+
+describe('CalendarView — changement de :id sur une instance réutilisée (revue de code 36.14)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function pushParamMap(id: string | undefined) {
+    const route = TestBed.inject(ActivatedRoute) as unknown as {
+      paramMap: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+    };
+    route.paramMap.next(convertToParamMap(id ? { id } : {}));
+  }
+
+  async function settle(fixture: { detectChanges: () => void }) {
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+  }
+
+  it("un changement de :id reprend la mémoire de session DE LA NOUVELLE partie, jamais celle de l'ancienne", async () => {
+    const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const comp = fixture.componentInstance as any;
+    comp.toggleLayer('mes-seances');
+
+    const session = TestBed.inject(CalendarSessionLayersService);
+    session.write('partie:partie-2', ['votes-en-cours']);
+
+    pushParamMap('partie-2');
+    await settle(fixture);
+
+    expect(comp.partieId()).toBe('partie-2');
+    expect(comp.activeLayers()).toEqual(['votes-en-cours']);
+  });
+
+  it('reconnecte le canal temps réel sur le nouveau partieId, et déconnecte l’ancien', async () => {
+    const { fixture, realtimeSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+    });
+
+    pushParamMap('partie-2');
+    await settle(fixture);
+
+    expect(realtimeSvc.disconnect).toHaveBeenCalledWith(partieTopic('partie-1'));
+    expect(realtimeSvc.connect).toHaveBeenCalledWith(partieTopic('partie-2'));
+  });
+
+  it('recharge les scénarios de la nouvelle partie (et non plus ceux de l’ancienne)', async () => {
+    const { fixture, scenariosSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+    });
+    const callsBefore = scenariosSvc.listAll.mock.calls.length;
+
+    pushParamMap('partie-2');
+    await settle(fixture);
+
+    expect(scenariosSvc.listAll.mock.calls.length).toBe(callsBefore + 1);
+    expect(scenariosSvc.listAll).toHaveBeenLastCalledWith('partie-2');
+  });
+
+  it('un retour au contexte personnel (id absent) réinitialise partieId() à null', async () => {
+    const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const comp = fixture.componentInstance as any;
+    expect(comp.partieId()).toBe('partie-1');
+
+    pushParamMap(undefined);
+    await settle(fixture);
+
+    expect(comp.partieId()).toBeNull();
+  });
+});
+
+// ─── La barre repliée, le panneau « Affichage » et la pastille (Story 36.14) ──────────────────
+
+describe('CalendarView — barre repliée et panneau « Affichage » (Story 36.14)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  /** Le panneau ancré est rendu dans le conteneur d'overlay du CDK, hors du fixture. */
+  function menuSurface(): HTMLElement | null {
+    return document.querySelector('.display-surface--menu');
+  }
+
+  async function openPanel(fixture: any) {
+    fixture.nativeElement.querySelector('.display-trigger').click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  it('AC1 — la bascule de vues partage la ligne de contrôles', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+    const bar = fixture.nativeElement.querySelector('.calendar-controls');
+
+    expect(bar.querySelector('mat-button-toggle-group')).toBeTruthy();
+    expect(bar.querySelector('.controls-spacer')).toBeTruthy();
+  });
+
+  it('AC1 — les couches ne sont plus une bande permanente dans la barre', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+    const bar = fixture.nativeElement.querySelector('.calendar-controls');
+
+    expect(bar.querySelector('app-calendar-layer-toggle')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.display-trigger')).toBeTruthy();
+  });
+
+  it('AC2 — sur ordinateur, activer le bouton ouvre un menu ancré', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal', desktop: true });
+    expect(menuSurface()).toBeNull();
+
+    await openPanel(fixture);
+
+    expect(menuSurface()).toBeTruthy();
+    expect(menuSurface()!.querySelectorAll('.layer-chip')).toHaveLength(4);
+    expect(document.querySelector('.display-surface--sheet')).toBeNull();
+  });
+
+  it('AC2 — sur téléphone, le même contenu monte du bas en feuille', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal', desktop: false });
+
+    await openPanel(fixture);
+
+    const sheet = fixture.nativeElement.querySelector('.display-surface--sheet');
+    expect(sheet).toBeTruthy();
+    expect(sheet.querySelector('app-calendar-display-panel')).toBeTruthy();
+    expect(menuSurface()).toBeNull();
+  });
+
+  /**
+   * 🚨 AC12 — le commentaire posé dans `calendar-view.html` par la story 36.9 s'adressait
+   * nommément à celle-ci : « Quand la story 36.14 repliera les couches derrière « ☰ Affichage »,
+   * ce contrôle devra RESTER dehors. » Un mode se voit tant qu'il est actif ; l'enfermer dans un
+   * panneau fermé par défaut le rendrait invisible.
+   */
+  it('AC12 — la Destinée reste dans la barre, jamais dans le panneau', async () => {
+    const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    await openPanel(fixture);
+
+    expect(
+      fixture.nativeElement.querySelector('.calendar-controls app-destiny-control'),
+    ).toBeTruthy();
+    expect(menuSurface()!.querySelector('app-destiny-control')).toBeNull();
+  });
+
+  it('AC3 — aucune pastille de résumé quand l’affichage est au défaut', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+
+    expect(fixture.nativeElement.querySelector('.display-summary')).toBeNull();
+  });
+
+  it('AC4 — un écart fait apparaître la pastille, qui compte sur les couches AFFICHÉES', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+    (fixture.componentInstance as any).toggleLayer('mes-seances');
+    fixture.detectChanges();
+
+    const badge = fixture.nativeElement.querySelector('.display-summary');
+    expect(badge).toBeTruthy();
+    // 4 interrupteurs en personnel (ni `inscriptions-ouvertes`, ni `disponibilite-groupe`),
+    // dont 3 restent actifs — le contrat exige « 3 sur 4 », jamais « sur 5 ».
+    expect(badge.textContent.trim()).toBe('Affichage filtré · 3 sur 4 · Rétablir');
+  });
+
+  it('AC4 — la pastille EST l’action de rétablissement', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+    const comp = fixture.componentInstance as any;
+    comp.toggleLayer('mes-seances');
+    fixture.detectChanges();
+
+    fixture.nativeElement.querySelector('.display-summary').click();
+    fixture.detectChanges();
+
+    expect(comp.isOverridden()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.display-summary')).toBeNull();
+  });
+
+  it('AC4 — en contexte de partie le dénominateur passe à 5', async () => {
+    const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    (fixture.componentInstance as any).toggleLayer('mes-seances');
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.display-summary').textContent.trim()).toBe(
+      'Affichage filtré · 4 sur 5 · Rétablir',
+    );
+  });
+
+  /**
+   * 🚨 AC17 — le piège fin de cette story. `isOverridden()` raisonne sur le jeu COMPLET des
+   * couches, `inscriptions-ouvertes` comprise, alors que la pastille COMPTE sur le jeu affiché.
+   * Restreindre `isOverridden()` à `availableLayerKeys()` ferait apparaître la pastille au premier
+   * affichage pour tout compte portant encore cette clé — garde-fou explicitement posé par la
+   * story 36.11 (tâche 7), qui a retiré l'interrupteur sans retirer la clé.
+   */
+  it('AC17 — un compte portant `inscriptions-ouvertes` n’affiche AUCUNE pastille au montage', async () => {
+    const authSvc = makeAuthService([...CALENDAR_LAYER_KEYS]);
+    const { fixture } = await createCalendarView({ mode: 'personal', authSvc });
+
+    expect((fixture.componentInstance as any).isOverridden()).toBe(false);
+    expect(fixture.nativeElement.querySelector('.display-summary')).toBeNull();
+  });
+
+  it('AC5 — la légende est fermée au montage et l’interrupteur du panneau l’ouvre', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+    const comp = fixture.componentInstance as any;
+    expect(comp.legendVisible()).toBe(false);
+
+    await openPanel(fixture);
+    (menuSurface()!.querySelector('.display-panel__legend-toggle') as HTMLElement).click();
+    fixture.detectChanges();
+
+    expect(comp.legendVisible()).toBe(true);
+  });
+
+  it('AC18 — le bouton porte un nom accessible et annonce son état', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+    const trigger = fixture.nativeElement.querySelector('.display-trigger');
+
+    expect(trigger.getAttribute('aria-label')).toBe("Régler l'affichage du calendrier");
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+    await openPanel(fixture);
+    expect(
+      fixture.nativeElement.querySelector('.display-trigger').getAttribute('aria-expanded'),
+    ).toBe('true');
+  });
+
+  it('AC18 — Échap ferme le panneau et rend le focus au bouton', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal', desktop: false });
+    await openPanel(fixture);
+    const comp = fixture.componentInstance as any;
+    expect(comp.displayPanelOpen()).toBe(true);
+
+    comp.onDisplayPanelKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+
+    expect(comp.displayPanelOpen()).toBe(false);
+    expect(document.activeElement).toBe(fixture.nativeElement.querySelector('.display-trigger'));
+  });
+
+  /**
+   * 🚨 `Échap` porte DEUX gestes sur cet écran : fermer le panneau, et annuler la sélection en
+   * cours dans la grille. Sans la barrière de propagation, fermer le panneau effacerait une
+   * sélection que l'utilisateur n'a pas touchée.
+   */
+  it('Échap sur le panneau ne se propage pas jusqu’à la grille', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal', desktop: false });
+    await openPanel(fixture);
+    const event = new KeyboardEvent('keydown', { key: 'Escape' });
+    const spy = vi.spyOn(event, 'stopPropagation');
+
+    (fixture.componentInstance as any).onDisplayPanelKeydown(event);
+
+    expect(spy).toHaveBeenCalled();
   });
 });
 
@@ -1359,12 +1703,47 @@ describe('CalendarView — une piste par créneau proposé (Story 36.6)', () => 
 describe('CalendarView — vue Agenda (Story 30.6)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
+  /**
+   * ⚠️ Story 36.14 — CE TEST A CHANGÉ DE VÉRITÉ, il n'a pas été supprimé. La bascule émet
+   * désormais DEUX formulations par vue (« Vue agenda » et « Agenda »), le CSS choisissant selon
+   * la largeur du conteneur : `textContent` rend donc leur concaténation.
+   *
+   * Il interroge maintenant le NOM ACCESSIBLE, qui est le vrai contrat : il porte la forme longue
+   * à toutes les largeurs et ne se tronque jamais avec le visuel (piège n°11 de la 36.13).
+   */
   it('troisième option "Vue agenda" présente dans le sélecteur (AC1)', async () => {
     const { fixture } = await createCalendarView('personal');
-    const toggles = Array.from(fixture.nativeElement.querySelectorAll('mat-button-toggle')).map(
-      (el: any) => el.textContent.trim(),
-    );
-    expect(toggles).toContain('Vue agenda');
+    // Material transfère `aria-label` sur le bouton interne : c'est LUI qui porte le nom
+    // accessible, l'hôte `<mat-button-toggle>` n'en a pas.
+    const names = Array.from(
+      fixture.nativeElement.querySelectorAll('mat-button-toggle button'),
+    ).map((el: any) => el.getAttribute('aria-label'));
+    expect(names).toEqual(['Vue mois', 'Vue semaine', 'Vue agenda']);
+  });
+
+  /**
+   * 🚨 DÉFAUT RÉEL TROUVÉ À L'ÉCRAN, et invisible à jsdom, qui n'évalue aucune container query.
+   * En contexte de partie, le panneau MJ prend la moitié de la largeur : la barre ne fait plus
+   * que **380 px dans une fenêtre de 1725 px**, alors que les trois libellés longs pèsent 319 px
+   * à eux seuls. Elle repassait à TROIS lignes — le défaut même que cette story répare.
+   *
+   * Ce que ce test peut voir : que les deux formulations existent TOUJOURS dans le DOM, jamais
+   * un `@if` de largeur. C'est la moitié testable de la règle ; l'autre moitié se mesure à l'œil.
+   */
+  it('AC1 — les deux formulations sont toujours dans le DOM, seul le CSS choisit', async () => {
+    const { fixture } = await createCalendarView('personal');
+    const root = fixture.nativeElement;
+
+    expect([...root.querySelectorAll('.vt-long')].map((e: any) => e.textContent.trim())).toEqual([
+      'Vue mois',
+      'Vue semaine',
+      'Vue agenda',
+    ]);
+    expect([...root.querySelectorAll('.vt-short')].map((e: any) => e.textContent.trim())).toEqual([
+      'Mois',
+      'Sem.',
+      'Agenda',
+    ]);
   });
 
   it('bascule vers la vue agenda affiche app-calendar-agenda-view', async () => {

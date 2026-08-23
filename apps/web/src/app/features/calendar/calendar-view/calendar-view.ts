@@ -1,6 +1,7 @@
 import {
   Component,
   DestroyRef,
+  type ElementRef,
   OnInit,
   computed,
   effect,
@@ -8,14 +9,22 @@ import {
   input,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { distinctUntilChanged, map } from 'rxjs/operators';
 import { Location } from '@angular/common';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { CdkConnectedOverlay, type ConnectedPosition } from '@angular/cdk/overlay';
+import {
+  CdkConnectedOverlay,
+  CdkOverlayOrigin,
+  type ConnectedPosition,
+} from '@angular/cdk/overlay';
 import { BreakpointObserver } from '@angular/cdk/layout';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { firstValueFrom } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import type {
@@ -45,6 +54,12 @@ import { PollService } from '../../../core/poll/poll.service';
 import { getMissingVoters } from '../../../core/poll/poll.util';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import {
+  CalendarSessionLayersService,
+  calendarSessionKey,
+} from '../calendar-session-layers.service';
+import { CalendarDisplayPanel } from '../calendar-display-panel/calendar-display-panel';
+import { CalendarLegend } from '../calendar-legend/calendar-legend';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
@@ -118,6 +133,21 @@ const PICKER_POSITIONS: ConnectedPosition[] = [
   { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom', offsetY: -4 },
 ];
 
+/**
+ * Story 36.14 — les positions du panneau « Affichage » sur ordinateur.
+ *
+ * 🚨 Jeu DISTINCT de `PICKER_POSITIONS` : celui-ci est calé sur une bande de grille, qui peut
+ * toucher le bas de l'écran ; le panneau, lui, pend d'un bouton en HAUT de page — la préférence
+ * naturelle est donc « sous, aligné à gauche », et le repli au-dessus n'est qu'un filet de
+ * sécurité pour les très petites hauteurs. Les réunir aurait donné au panneau les priorités du
+ * sélecteur, pour la seule raison qu'un tableau existait déjà.
+ */
+const DISPLAY_PANEL_POSITIONS: ConnectedPosition[] = [
+  { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 6 },
+  { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top', offsetY: 6 },
+  { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -6 },
+];
+
 const CALENDAR_CELL_DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', {
   weekday: 'short',
   day: 'numeric',
@@ -165,6 +195,10 @@ export interface EligibleSeanceEntry {
     PollMissingPanel,
     VoteAnswerPicker,
     CdkConnectedOverlay,
+    CdkOverlayOrigin,
+    CdkTrapFocus,
+    CalendarDisplayPanel,
+    CalendarLegend,
   ],
   templateUrl: './calendar-view.html',
   styleUrl: './calendar-view.scss',
@@ -187,6 +221,7 @@ export class CalendarView implements OnInit {
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly breakpointObserver = inject(BreakpointObserver);
+  private readonly sessionLayers = inject(CalendarSessionLayersService);
 
   /** Même seuil que `partie-detail` et `list-control-bar` — pas un troisième vocabulaire de
    *  largeur dans l'application. */
@@ -255,10 +290,28 @@ export class CalendarView implements OnInit {
     return partieContext ? base : base.filter((k) => k !== 'disponibilite-groupe');
   }
 
+  /**
+   * Story 36.14 — l'identité du calendrier dont on mémorise les couches pour la session.
+   *
+   * 🚨 **Dérivée du signal `partieId()`, jamais capturée au montage.** Les trois routes du
+   * calendrier (`/profile/calendar`, `/parties/:id/calendar`, `/parties/:id/guild-calendar`)
+   * montent le MÊME composant : Angular peut réutiliser l'instance sur un simple changement de
+   * paramètre, sans la détruire. Une clé figée dans `ngOnInit` conserverait alors celle du
+   * calendrier précédent, et l'AC10 (« l'ouverture d'un **autre** calendrier repart du défaut »)
+   * serait faux en production tout en restant vert en test.
+   * [Source: deferred-work.md:117 — le même piège, déjà constaté sur `fromDateStr`/`toDateStr`.]
+   */
+  private sessionKey(): string {
+    return calendarSessionKey(this.partieId(), this.mode());
+  }
+
   protected toggleLayer(key: CalendarLayerKey): void {
     this.activeLayers.update((keys) =>
       keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key],
     );
+    // AC9 — la bascule survit à un retour sur CE calendrier dans CETTE session. Toujours aucune
+    // écriture réseau : le défaut de compte n'est touché que par l'écran Compte (AC15).
+    this.sessionLayers.write(this.sessionKey(), this.activeLayers());
   }
 
   protected isLayerActive(key: CalendarLayerKey): boolean {
@@ -275,9 +328,86 @@ export class CalendarView implements OnInit {
     return current.some((k) => !defSet.has(k));
   });
 
+  // ─── Story 36.14 — la barre repliée : le panneau « Affichage », sa pastille, sa légende ───
+
+  /**
+   * ⚠️ Le panneau est un OVERLAY ancré au viewport, pas du contenu dans la grille : une media
+   * query est ici le bon outil, là où la vue Semaine emploie une container query (story 36.13).
+   * Le raisonnement de la 36.13 — « en contexte de partie un panneau latéral prend 40 % de la
+   * largeur et une media query mentirait » — vaut pour ce qui vit DANS la colonne ; un élément
+   * qui flotte au-dessus de tout n'a pas ce problème.
+   *
+   * Réactif, contrairement à `view` : celui-ci porte un DÉFAUT que l'utilisateur peut écarter
+   * (36.11, AC15), celui-là décrit la place disponible ici et maintenant — une rotation d'écran
+   * doit bien faire passer le menu ancré à la feuille du bas.
+   */
+  protected readonly isDesktop = toSignal(
+    this.breakpointObserver.observe(CalendarView.DESKTOP_QUERY).pipe(map((r) => r.matches)),
+    { initialValue: this.breakpointObserver.isMatched(CalendarView.DESKTOP_QUERY) },
+  );
+
+  protected readonly displayPanelOpen = signal(false);
+  /** AC5 — fermée par défaut. Portée écran, jamais mémorisée : la légende est une aide de
+   *  lecture ponctuelle, pas un réglage d'affichage au sens de FR-55. */
+  protected readonly legendVisible = signal(false);
+  protected readonly DISPLAY_PANEL_POSITIONS = DISPLAY_PANEL_POSITIONS;
+
+  private readonly displayTrigger = viewChild<ElementRef<HTMLButtonElement>>('displayTrigger');
+
+  protected toggleDisplayPanel(): void {
+    this.displayPanelOpen.update((open) => !open);
+  }
+
+  /** AC18 — rendre le focus au bouton : sans quoi un utilisateur clavier retombe en haut du
+   *  document, exactement le défaut déjà corrigé sur le sélecteur de vote (36.7, AC7). */
+  protected closeDisplayPanel(): void {
+    this.displayPanelOpen.set(false);
+    this.displayTrigger()?.nativeElement.focus();
+  }
+
+  protected onDisplayPanelKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      // 🚨 `stopPropagation` : `Échap` annule aussi la sélection en cours dans la grille. Sans
+      // cette barrière, fermer le panneau effacerait une sélection que l'utilisateur n'a pas
+      // touchée — deux gestes distincts sur la même touche, comme pour le sélecteur de la 36.7.
+      event.stopPropagation();
+      this.closeDisplayPanel();
+    }
+  }
+
+  protected toggleLegend(): void {
+    this.legendVisible.update((v) => !v);
+  }
+
+  /**
+   * AC4/AC6 — le libellé de la pastille de résumé.
+   *
+   * 🚨 Le dénominateur est `availableLayerKeys()` — les couches que CE calendrier expose : 4 en
+   * personnel, 5 en contexte de partie. Le contrat l'écrit noir sur blanc : « la pastille dit
+   * « 3 sur 4 », pas « 3 sur 5 » » [Source: contrat-ui-calendrier.html:277-278].
+   *
+   * ⚠️ À ne pas confondre avec `isOverridden()`, qui raisonne, lui, sur le jeu COMPLET,
+   * `inscriptions-ouvertes` comprise (AC17) : compter sur le jeu affiché et décider sur le jeu
+   * complet n'est pas une incohérence, c'est la seule combinaison qui ne mente ni au compteur ni
+   * à la condition d'apparition.
+   */
+  protected readonly layerSummaryLabel = computed(() => {
+    const shown = this.availableLayerKeys();
+    const active = new Set(this.activeLayers());
+    const n = shown.filter((k) => active.has(k)).length;
+    return this.theme
+      .tone()
+      ['calendar.display.filtered_badge'].replace('{n}', String(n))
+      .replace('{total}', String(shown.length));
+  });
+
   /** Aucun appel réseau : réaffecte l'état local depuis le défaut du compte (encadré n°2). */
   protected resetToDefault(): void {
     this.activeLayers.set(this.defaultLayersForContext(!!this.partieId()));
+    // 🚨 On ÉCRIT le défaut, on n'efface pas l'entrée : une entrée effacée dirait « jamais
+    // visité », et un retour en session rejouerait un défaut de compte que le lecteur vient
+    // peut-être d'écarter à nouveau depuis un autre onglet.
+    this.sessionLayers.write(this.sessionKey(), this.activeLayers());
   }
 
   protected readonly visibleDeclarations = computed<AvailabilityDeclarationDto[]>(() => {
@@ -1223,9 +1353,12 @@ export class CalendarView implements OnInit {
     });
   }
 
+  /** Sujet temps réel actuellement connecté (`partieTopic(id)`), pour le déconnecter proprement
+   *  au changement de Partie ET à la destruction du composant — voir `loadForPartieId()`. */
+  private connectedPartieTopic: string | null = null;
+
   async ngOnInit(): Promise<void> {
     this.contextualNav.set({ title: this.theme.tone()['nav.calendar'] });
-    const id = this.route.snapshot.paramMap.get('id');
     const fromParam = this.route.snapshot.queryParamMap.get('from');
     const toParam = this.route.snapshot.queryParamMap.get('to');
     if (fromParam && CalendarView.ISO_DATE_RE.test(fromParam)) this.fromDateStr.set(fromParam);
@@ -1236,20 +1369,56 @@ export class CalendarView implements OnInit {
     // pourrait forger l'URL guild-calendar/profile pour voir le panneau MJ-only, même si le
     // backend bloque déjà l'écriture via getOwned).
     const seanceIdParam = this.route.snapshot.queryParamMap.get('seanceId');
-    if (seanceIdParam && id && this.isMjMode()) {
+    if (seanceIdParam && this.route.snapshot.paramMap.get('id') && this.isMjMode()) {
       this.lockedSeanceId.set(seanceIdParam);
       this.pollPanelOpen.set(true);
     }
 
+    this.destroyRef.onDestroy(() => {
+      if (this.connectedPartieTopic) this.realtime.disconnect(this.connectedPartieTopic);
+    });
+
+    // 🚨 Revue de code 36.14 (AC10, encadré n°2) — abonné à `paramMap`, jamais lu une seule fois
+    // au montage. Les trois routes du calendrier (`/profile/calendar`, `/parties/:id/calendar`,
+    // `/parties/:id/guild-calendar`) montent le MÊME composant, et la stratégie de réutilisation
+    // par défaut d'Angular conserve l'instance sur un simple changement de `:id` — `ngOnInit` ne
+    // se relance alors PAS. Une lecture figée dans `ngOnInit` conserverait l'identité de la
+    // Partie précédente pour la mémoire de session ET pour toutes les données scopées à la
+    // Partie (déclarations, créneaux, heatmap, scénarios, membres, canal temps réel).
+    // [Source: deferred-work.md:117 — le même piège, déjà constaté sur `fromDateStr`/`toDateStr`.]
+    this.route.paramMap
+      .pipe(
+        map((params) => params.get('id')),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((id) => void this.loadForPartieId(id));
+  }
+
+  private async loadForPartieId(id: string | null): Promise<void> {
     // Story 30.6, Task 1 : état des couches actives, initialisé depuis le défaut du compte —
     // jamais persisté par la bascule elle-même (encadré n°2). `disponibilite-groupe` retirée hors
     // contexte de partie (AC8).
-    this.activeLayers.set(this.defaultLayersForContext(!!id));
+    //
+    // Story 36.14, AC8/AC9 — le défaut de compte est l'état d'ARRIVÉE, jamais un verrou : si ce
+    // calendrier a déjà été visité dans cette session, ses bascules reprennent la main. La
+    // mémoire est en RAM (voir `CalendarSessionLayersService`), donc un rechargement, une
+    // déconnexion ou un autre calendrier retombent ici même, sur le défaut (AC10).
+    const remembered = this.sessionLayers.read(calendarSessionKey(id, this.mode()));
+    this.activeLayers.set(remembered ?? this.defaultLayersForContext(!!id));
+
+    if (this.connectedPartieTopic) {
+      this.realtime.disconnect(this.connectedPartieTopic);
+      this.connectedPartieTopic = null;
+    }
+
+    this.partieId.set(id);
 
     if (id) {
-      this.partieId.set(id);
-      this.realtime.connect(partieTopic(id));
-      this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(id)));
+      const topic = partieTopic(id);
+      this.realtime.connect(topic);
+      this.connectedPartieTopic = topic;
+
       await Promise.all([
         this.router.navigate([], {
           relativeTo: this.route,
@@ -1264,8 +1433,8 @@ export class CalendarView implements OnInit {
       ]);
       // Revue de code Story 29.4 : la navigation interne ci-dessus (mêmes route/composant,
       // seuls les query params from/to changent) déclenche NavigationStart -> clear() sur
-      // ContextualNavService, qui vide le bandeau posé en tête de cette méthode — ngOnInit ne
-      // se relance pas (même instance). Repositionner le titre juste après.
+      // ContextualNavService, qui vide le bandeau posé en tête de `ngOnInit` — repositionner le
+      // titre juste après.
       this.contextualNav.set({ title: this.theme.tone()['nav.calendar'] });
       if (this.isMjMode()) {
         await this.loadMembers(id);

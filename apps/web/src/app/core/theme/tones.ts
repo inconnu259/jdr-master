@@ -335,6 +335,31 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'calendar.agenda.seal_confirm_title': 'Sceller ce créneau ?',
     'calendar.agenda.seal_confirm_body':
       'La séance sera fixée à ce créneau et le vote se refermera. Les autres créneaux proposés disparaîtront.',
+    /* — Story 36.14 : la barre repliée, le panneau « Affichage » et la légende —
+       🚨 Ces libellés sont IDENTIQUES dans les trois thèmes, comme les six
+       `account.calendar_layer.*` : le contrat d'UI les fixe verbatim
+       (`contrat-ui-calendrier.html:599-609`, `:655-665`, `:683-686`). La clé existe pour qu'un
+       thème futur puisse les teinter — même motif que `cta.destiny_mode` (story 36.9). */
+    'calendar.display.trigger': 'Affichage',
+    'calendar.display.trigger_aria': "Régler l'affichage du calendrier",
+    'calendar.display.section_visible': 'Ce que je vois',
+    'calendar.display.show_legend': 'Afficher la légende',
+    'calendar.display.filtered_badge': 'Affichage filtré · {n} sur {total} · Rétablir',
+    'calendar.legend.title': 'Légende',
+    'calendar.legend.group_obvious': 'Se passent d’explication',
+    'calendar.legend.group_needs': 'Demandent la légende',
+    'calendar.legend.entry.available': 'Je suis disponible',
+    'calendar.legend.entry.unavailable': 'Je suis indisponible',
+    'calendar.legend.entry.seance': 'Séance confirmée — tu es pris',
+    'calendar.legend.entry.vote': 'Créneau proposé au vote',
+    'calendar.legend.entry.poll_track': 'Participation : la piste = la troupe',
+    'calendar.legend.entry.group': 'Disponibilité du groupe',
+    'calendar.legend.entry.none': 'Personne ne s’est prononcé',
+    'account.calendar_intents_subtitle': 'Ce que je veux voir en arrivant sur un calendrier.',
+    'account.calendar_intent.disponibilites': 'Mes disponibilités & indisponibilités',
+    'account.calendar_intent.seances': 'Mes séances confirmées',
+    'account.calendar_intent.votes': 'Les votes en cours',
+    'account.calendar_intent.groupe': 'La disponibilité du groupe',
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',
@@ -657,6 +682,31 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'calendar.agenda.seal_confirm_title': 'Planter le drapeau sur ce créneau ?',
     'calendar.agenda.seal_confirm_body':
       'La séance se tiendra à ce créneau et le vote se refermera. Les autres créneaux proposés disparaîtront.',
+    /* — Story 36.14 : la barre repliée, le panneau « Affichage » et la légende —
+       🚨 Ces libellés sont IDENTIQUES dans les trois thèmes, comme les six
+       `account.calendar_layer.*` : le contrat d'UI les fixe verbatim
+       (`contrat-ui-calendrier.html:599-609`, `:655-665`, `:683-686`). La clé existe pour qu'un
+       thème futur puisse les teinter — même motif que `cta.destiny_mode` (story 36.9). */
+    'calendar.display.trigger': 'Affichage',
+    'calendar.display.trigger_aria': "Régler l'affichage du calendrier",
+    'calendar.display.section_visible': 'Ce que je vois',
+    'calendar.display.show_legend': 'Afficher la légende',
+    'calendar.display.filtered_badge': 'Affichage filtré · {n} sur {total} · Rétablir',
+    'calendar.legend.title': 'Légende',
+    'calendar.legend.group_obvious': 'Se passent d’explication',
+    'calendar.legend.group_needs': 'Demandent la légende',
+    'calendar.legend.entry.available': 'Je suis disponible',
+    'calendar.legend.entry.unavailable': 'Je suis indisponible',
+    'calendar.legend.entry.seance': 'Séance confirmée — tu es pris',
+    'calendar.legend.entry.vote': 'Créneau proposé au vote',
+    'calendar.legend.entry.poll_track': 'Participation : la piste = la troupe',
+    'calendar.legend.entry.group': 'Disponibilité du groupe',
+    'calendar.legend.entry.none': 'Personne ne s’est prononcé',
+    'account.calendar_intents_subtitle': 'Ce que je veux voir en arrivant sur un calendrier.',
+    'account.calendar_intent.disponibilites': 'Mes disponibilités & indisponibilités',
+    'account.calendar_intent.seances': 'Mes séances confirmées',
+    'account.calendar_intent.votes': 'Les votes en cours',
+    'account.calendar_intent.groupe': 'La disponibilité du groupe',
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',
@@ -979,6 +1029,31 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'calendar.agenda.seal_confirm_title': 'Verrouiller l’engrenage sur ce créneau ?',
     'calendar.agenda.seal_confirm_body':
       'La séance sera fixée à ce créneau et le scrutin se refermera. Les autres créneaux proposés disparaîtront.',
+    /* — Story 36.14 : la barre repliée, le panneau « Affichage » et la légende —
+       🚨 Ces libellés sont IDENTIQUES dans les trois thèmes, comme les six
+       `account.calendar_layer.*` : le contrat d'UI les fixe verbatim
+       (`contrat-ui-calendrier.html:599-609`, `:655-665`, `:683-686`). La clé existe pour qu'un
+       thème futur puisse les teinter — même motif que `cta.destiny_mode` (story 36.9). */
+    'calendar.display.trigger': 'Affichage',
+    'calendar.display.trigger_aria': "Régler l'affichage du calendrier",
+    'calendar.display.section_visible': 'Ce que je vois',
+    'calendar.display.show_legend': 'Afficher la légende',
+    'calendar.display.filtered_badge': 'Affichage filtré · {n} sur {total} · Rétablir',
+    'calendar.legend.title': 'Légende',
+    'calendar.legend.group_obvious': 'Se passent d’explication',
+    'calendar.legend.group_needs': 'Demandent la légende',
+    'calendar.legend.entry.available': 'Je suis disponible',
+    'calendar.legend.entry.unavailable': 'Je suis indisponible',
+    'calendar.legend.entry.seance': 'Séance confirmée — tu es pris',
+    'calendar.legend.entry.vote': 'Créneau proposé au vote',
+    'calendar.legend.entry.poll_track': 'Participation : la piste = la troupe',
+    'calendar.legend.entry.group': 'Disponibilité du groupe',
+    'calendar.legend.entry.none': 'Personne ne s’est prononcé',
+    'account.calendar_intents_subtitle': 'Ce que je veux voir en arrivant sur un calendrier.',
+    'account.calendar_intent.disponibilites': 'Mes disponibilités & indisponibilités',
+    'account.calendar_intent.seances': 'Mes séances confirmées',
+    'account.calendar_intent.votes': 'Les votes en cours',
+    'account.calendar_intent.groupe': 'La disponibilité du groupe',
     /* — identité — */
     'identity.character_label': 'Personnage',
     'identity.player_label': 'Joueur',

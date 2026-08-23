@@ -2,16 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import type { CalendarLayerKey } from '@master-jdr/shared';
 import { CalendarLayerToggle } from './calendar-layer-toggle';
 
-async function createToggle(
-  keys: CalendarLayerKey[],
-  active: CalendarLayerKey[],
-  overridden = false,
-) {
+async function createToggle(keys: CalendarLayerKey[], active: CalendarLayerKey[]) {
   await TestBed.configureTestingModule({ imports: [CalendarLayerToggle] }).compileComponents();
   const fixture = TestBed.createComponent(CalendarLayerToggle);
   fixture.componentRef.setInput('keys', keys);
   fixture.componentRef.setInput('active', active);
-  fixture.componentRef.setInput('overridden', overridden);
   fixture.detectChanges();
   return fixture;
 }
@@ -47,20 +42,22 @@ describe('CalendarLayerToggle', () => {
     expect(emitted).toEqual(['mes-disponibilites']);
   });
 
-  it('pastille de rétablissement absente par défaut (overridden=false)', async () => {
-    const fixture = await createToggle(KEYS, KEYS, false);
+  /**
+   * ⚠️ Story 36.14 — les deux tests du bouton « Rétablir » ne sont pas supprimés, ils ont
+   * DÉMÉNAGÉ avec lui : ils vivent dans `calendar-display-panel.spec.ts` (chemin explicite) et
+   * dans `calendar-view.spec.ts` (pastille de résumé, D-4). Ce qui reste vrai ici, et que ce test
+   * verrouille, c'est que le bandeau ne le porte plus.
+   */
+  it('ne porte plus le bouton de rétablissement — il est remonté dans le panneau (D-4)', async () => {
+    const fixture = await createToggle(KEYS, KEYS);
     expect(fixture.nativeElement.querySelector('.layer-toggle__reset')).toBeNull();
   });
 
-  it('pastille visible si overridden=true, clic émet resetRequested (AC4)', async () => {
-    const fixture = await createToggle(KEYS, KEYS, true);
-    const resetBtn = fixture.nativeElement.querySelector('.layer-toggle__reset');
-    expect(resetBtn).toBeTruthy();
-
-    let resetCalled = false;
-    fixture.componentInstance.resetRequested.subscribe(() => (resetCalled = true));
-    resetBtn.click();
-
-    expect(resetCalled).toBe(true);
+  it('se rend sans aucun input — aucun input requis', async () => {
+    await TestBed.configureTestingModule({ imports: [CalendarLayerToggle] }).compileComponents();
+    const fixture = TestBed.createComponent(CalendarLayerToggle);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.layer-toggle')).toBeTruthy();
+    expect(fixture.nativeElement.querySelectorAll('.layer-chip')).toHaveLength(0);
   });
 });

@@ -110,3 +110,67 @@ describe('TONE_MAP — les clés de la vue Agenda existent dans les TROIS thème
     });
   }
 });
+
+// Story 36.14 — la barre repliée, le panneau « Affichage », la légende et les intentions de
+// compte. Même garde que ci-dessus : aucun test de composant ne tourne hors du thème par défaut,
+// donc une clé oubliée dans deux thèmes sur trois ne se verrait qu'à l'écran.
+describe('TONE_MAP — les clés de la story 36.14 existent dans les TROIS thèmes', () => {
+  const DISPLAY_KEYS = [
+    'calendar.display.trigger',
+    'calendar.display.trigger_aria',
+    'calendar.display.section_visible',
+    'calendar.display.show_legend',
+    'calendar.display.filtered_badge',
+    'calendar.legend.title',
+    'calendar.legend.group_obvious',
+    'calendar.legend.group_needs',
+    'calendar.legend.entry.available',
+    'calendar.legend.entry.unavailable',
+    'calendar.legend.entry.seance',
+    'calendar.legend.entry.vote',
+    'calendar.legend.entry.poll_track',
+    'calendar.legend.entry.group',
+    'calendar.legend.entry.none',
+    'account.calendar_intents_subtitle',
+    'account.calendar_intent.disponibilites',
+    'account.calendar_intent.seances',
+    'account.calendar_intent.votes',
+    'account.calendar_intent.groupe',
+  ];
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${DISPLAY_KEYS.length} clés, toutes non vides`, () => {
+      for (const key of DISPLAY_KEYS) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+      }
+    });
+  }
+
+  // 🚨 Le déclencheur PARTAGE UNE LIGNE avec la bascule de vues, la pastille de résumé et jusqu'à
+  // deux chips de mode — et c'est cette ligne unique qui est toute la raison d'être de la story
+  // (`deferred-work.md:66` : la barre passait à DEUX lignes dès 1400 px). Un libellé long le
+  // reproduirait exactement. Même patron de garde que `calendar.agenda.action_seal`, dont la
+  // story 36.12 a découvert le défaut à l'écran et pas aux tests.
+  for (const theme of THEMES) {
+    it(`${theme} garde un libellé d'« Affichage » COURT`, () => {
+      expect(TONE_MAP[theme]['calendar.display.trigger'].length).toBeLessThanOrEqual(12);
+    });
+  }
+
+  // La pastille est `white-space: nowrap` et porte déjà deux nombres : son gabarit doit rester
+  // court, sinon elle pousse la bascule de vues hors de la ligne.
+  for (const theme of THEMES) {
+    it(`${theme} garde un gabarit de pastille COURT`, () => {
+      expect(TONE_MAP[theme]['calendar.display.filtered_badge'].length).toBeLessThanOrEqual(48);
+    });
+  }
+
+  // Un thème qui « oublierait » un trou rendrait le gabarit littéral (« {n} sur {total} »).
+  for (const theme of THEMES) {
+    it(`${theme} conserve les deux trous de la pastille de résumé`, () => {
+      const value = TONE_MAP[theme]['calendar.display.filtered_badge'];
+      expect(value, `${theme} / {n}`).toContain('{n}');
+      expect(value, `${theme} / {total}`).toContain('{total}');
+    });
+  }
+});

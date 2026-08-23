@@ -16,6 +16,14 @@
   padding: 1.5rem;
   max-width: 60rem;
   margin: 0 auto;
+
+  // Revue de code 36.14 : à 60rem partout, ce plafond rendait mort celui, plus large,
+  // que partie-detail.scss (story 6.1) pose à 72rem dès 1024px — 72rem > 60rem n'était
+  // jamais atteignable. Élargi ici pour que le plafond interne de partie-detail
+  // s'applique réellement sur grand écran (AC1 de la 36.14, contexte de partie MJ).
+  @media (min-width: 1024px) {
+    max-width: 90rem;
+  }
 }
 
 /* ── Barre de navigation à 4 destinations (Story 29.3) ──────────────────────

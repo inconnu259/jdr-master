@@ -48,9 +48,16 @@ mat-form-field {
 .saved {
   color: var(--mat-sys-primary, #2e7d32);
 }
-.calendar-layers {
+/* Story 36.14 — les quatre intentions ont remplacé les six cases techniques. */
+.calendar-intents {
   display: flex;
   flex-direction: column;
+}
+
+.calendar-intents__why {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--mat-sys-on-surface-variant, #666);
 }
 
 // Même patron visuel que FieldEditPencil (character-sheet) — dupliqué ici car ce bouton pilote un

@@ -17,6 +17,36 @@ import { FieldEditPencil } from '../characters/character-sheet/field-edit-pencil
 
 const DISPLAY_NAME_MAX_LENGTH = 60;
 
+/**
+ * Story 36.14, AC7 — les quatre INTENTIONS de l'écran de compte, et les clés que chacune écrit.
+ *
+ * « La préférence de calendrier cesse d'être une liste de couches techniques et pose la question
+ * utile : qu'est-ce que je veux voir en arrivant sur un calendrier ? » [Source: prd.md:354]
+ *
+ * 🚨 Deux clés pour la première intention, une pour les autres — et `inscriptions-ouvertes` n'y
+ * figure PAS : elle n'a plus d'interrupteur nulle part, mais la clé reste stockée et valide
+ * (`@IsIn(CALENDAR_LAYER_KEYS)` côté serveur). « La clé reste, l'interrupteur part », sans
+ * migration [Source: prd.md:305, addendum.md:83, annotation 35 du contrat].
+ *
+ * ⚠️ L'asymétrie avec le panneau « Affichage », qui sépare disponible et indisponible, est
+ * VOULUE : « pour répondre à un vote on garde les indisponibilités visibles tout en éteignant les
+ * disponibilités, qui ne sont que du bruit à ce moment-là » [Source: EXPERIENCE.md:221]. Le compte
+ * règle une intention d'arrivée, l'écran règle un geste de lecture.
+ */
+export type CalendarIntentId = 'disponibilites' | 'seances' | 'votes' | 'groupe';
+
+interface CalendarIntent {
+  id: CalendarIntentId;
+  keys: readonly CalendarLayerKey[];
+}
+
+const CALENDAR_INTENTS: readonly CalendarIntent[] = [
+  { id: 'disponibilites', keys: ['mes-disponibilites', 'mes-indisponibilites'] },
+  { id: 'seances', keys: ['mes-seances'] },
+  { id: 'votes', keys: ['votes-en-cours'] },
+  { id: 'groupe', keys: ['disponibilite-groupe'] },
+];
+
 @Component({
   selector: 'app-account',
   imports: [
@@ -44,7 +74,15 @@ export class Account {
   // Story 30.4 (AC1, AC4, Task 6) : jeu de couches actives par défaut, préférence de compte
   // (cross-appareil) — pas les bascules temporaires de la session, qui appartiennent à la Story
   // 30.6. Aucune bascule construite sur les écrans de calendrier eux-mêmes (encadré n°1 de la story).
+  //
+  // ⚠️ Story 36.14, AC7 — l'écran n'expose plus les six clés une à une : il pose QUATRE
+  // INTENTIONS. `CALENDAR_LAYER_KEYS` reste la source de vérité du stockage, et
+  // `onLayerToggle()` reste la primitive d'écriture (les tests de la 30.4 continuent de la
+  // couvrir) ; les intentions sont une PRÉSENTATION posée par-dessus, jamais une nouvelle forme
+  // de clé [Source: AD-1, AD-16 — aucune troisième forme de préférence].
   protected readonly calendarLayerKeys = CALENDAR_LAYER_KEYS;
+
+  protected readonly calendarIntents = CALENDAR_INTENTS;
 
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -118,6 +156,17 @@ export class Account {
     return this.auth.currentUser()?.defaultCalendarLayers?.includes(key) ?? false;
   }
 
+  /**
+   * Revue de code 36.14 — dernière valeur de `defaultCalendarLayers` CONFIRMÉE par le serveur,
+   * partagée par `onLayerToggle()` et `onIntentToggle()`. Cible du rollback à la place de
+   * `previous` : deux bascules rapprochées qui échouent TOUTES LES DEUX faisaient revenir
+   * l'affichage sur la valeur optimiste de la première, elle-même jamais confirmée — un état que
+   * ni le client ni le serveur n'avaient jamais réellement tenu. `previous` reste correct quand
+   * une seule écriture est en vol ; `confirmedLayers` reste correct même quand plusieurs
+   * s'enchaînent, en ne cédant du terrain qu'aux écritures qui ont vraiment réussi.
+   */
+  private confirmedLayers: CalendarLayerKey[] | null = null;
+
   /** Même patron optimiste-avec-rollback que `Dashboard.onHideFinishedChange()` (Story 30.4,
    *  Task 6) : mise à jour locale avant la requête, restauration en cas d'échec réseau.
    *  Revue de code : le rollback ne s'applique que si `next` est toujours la valeur affichée —
@@ -127,13 +176,87 @@ export class Account {
     const previous = this.auth.currentUser();
     if (!previous) return;
     const current = previous.defaultCalendarLayers ?? [];
+    this.confirmedLayers ??= current;
     const next = active ? [...current, key] : current.filter((k) => k !== key);
     this.auth.currentUser.set({ ...previous, defaultCalendarLayers: next });
-    this.account.updatePreferences({ defaultCalendarLayers: next }).catch(() => {
-      if (this.auth.currentUser()?.defaultCalendarLayers === next) {
-        this.auth.currentUser.set(previous);
-      }
-    });
+    this.account
+      .updatePreferences({ defaultCalendarLayers: next })
+      .then(() => {
+        this.confirmedLayers = next;
+      })
+      .catch(() => {
+        const latest = this.auth.currentUser();
+        if (latest?.defaultCalendarLayers === next) {
+          this.auth.currentUser.set({
+            ...latest,
+            defaultCalendarLayers: this.confirmedLayers ?? current,
+          });
+        }
+      });
+  }
+
+  private intentKeys(intent: CalendarIntentId): readonly CalendarLayerKey[] {
+    return CALENDAR_INTENTS.find((i) => i.id === intent)!.keys;
+  }
+
+  /** Cochée seulement si TOUTES ses clés sont actives — voir `isIntentIndeterminate()` pour le cas
+   *  mixte, qui ne doit surtout pas se lire « décochée ». */
+  protected isIntentActive(intent: CalendarIntentId): boolean {
+    return this.intentKeys(intent).every((k) => this.isLayerActive(k));
+  }
+
+  /**
+   * 🚨 D-3 — l'état MIXTE existe pour de vrai. L'écran livré par la story 30.4 offrait
+   * `mes-disponibilites` et `mes-indisponibilites` en deux cases distinctes : un compte peut donc
+   * porter exactement l'une des deux aujourd'hui.
+   *
+   * Sans cet état, la case d'intention se lirait « décochée », et le premier clic — vécu comme
+   * « j'allume » — passerait par `false` puis `true` ou, pire, effacerait la couche déjà active
+   * sans que rien ne le signale. `indeterminate` dit la vérité, et un clic depuis là ARME les deux
+   * clés : aucune couche ne disparaît sans un geste qui la vise.
+   */
+  protected isIntentIndeterminate(intent: CalendarIntentId): boolean {
+    const keys = this.intentKeys(intent);
+    const activeCount = keys.filter((k) => this.isLayerActive(k)).length;
+    return activeCount > 0 && activeCount < keys.length;
+  }
+
+  /**
+   * Écrit toutes les clés de l'intention **en un seul appel**.
+   *
+   * 🚨 Jamais deux `onLayerToggle()` successifs : chacun ouvre sa propre fenêtre de rollback sur
+   * la même préférence, et le second écraserait la mise à jour optimiste du premier — le patron
+   * de garde de la story 30.4 protège contre une bascule concurrente sur une AUTRE couche, pas
+   * contre deux écritures qu'on aurait soi-même mises en concurrence.
+   *
+   * 🚨 AC16 — `next` se construit par différence sur le jeu COURANT : toute clé hors de cette
+   * intention, `inscriptions-ouvertes` en tête, traverse intacte. Elle n'a plus d'interrupteur
+   * mais reste un réglage valide, et aucun écran ne permettrait de la rétablir si on la perdait.
+   */
+  protected onIntentToggle(intent: CalendarIntentId, active: boolean): void {
+    const previous = this.auth.currentUser();
+    if (!previous) return;
+    const keys = this.intentKeys(intent);
+    const current = previous.defaultCalendarLayers ?? [];
+    this.confirmedLayers ??= current;
+    const withoutIntent = current.filter((k) => !keys.includes(k));
+    const next = active ? [...withoutIntent, ...keys] : withoutIntent;
+
+    this.auth.currentUser.set({ ...previous, defaultCalendarLayers: next });
+    this.account
+      .updatePreferences({ defaultCalendarLayers: next })
+      .then(() => {
+        this.confirmedLayers = next;
+      })
+      .catch(() => {
+        const latest = this.auth.currentUser();
+        if (latest?.defaultCalendarLayers === next) {
+          this.auth.currentUser.set({
+            ...latest,
+            defaultCalendarLayers: this.confirmedLayers ?? current,
+          });
+        }
+      });
   }
 
   protected startPasswordEdit(): void {

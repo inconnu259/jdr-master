@@ -75,15 +75,22 @@
 
   <app-theme-selector />
 
+  <!-- ⚠️ Story 36.14, AC7 — REMPLACE les six cases techniques de la story 30.4. « Quatre
+       intentions, pas six clés techniques » (annotation 33 du contrat). Le titre existait déjà
+       dans `tones.ts` : il n'a pas été recréé. -->
   <div class="readonly-field">
     <span class="lbl">{{ theme.tone()['account.calendar_layers_title'] }}</span>
-    <div class="calendar-layers">
-      @for (key of calendarLayerKeys; track key) {
+    <p class="calendar-intents__why">
+      {{ theme.tone()['account.calendar_intents_subtitle'] }}
+    </p>
+    <div class="calendar-intents">
+      @for (intent of calendarIntents; track intent.id) {
         <mat-checkbox
-          [checked]="isLayerActive(key)"
-          (change)="onLayerToggle(key, $event.checked)"
+          [checked]="isIntentActive(intent.id)"
+          [indeterminate]="isIntentIndeterminate(intent.id)"
+          (change)="onIntentToggle(intent.id, $event.checked)"
         >
-          {{ theme.tone()['account.calendar_layer.' + key] }}
+          {{ theme.tone()['account.calendar_intent.' + intent.id] }}
         </mat-checkbox>
       }
     </div>

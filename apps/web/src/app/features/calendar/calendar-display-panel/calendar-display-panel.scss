@@ -1,0 +1,61 @@
+/* Le contenu du panneau « Affichage » (Story 36.14). Mise en page seulement : les deux
+   enveloppes (menu ancré, feuille du bas) portent le fond, la bordure et l'ombre — c'est ce qui
+   permet au même contenu de servir les deux surfaces sans une seule condition en TS. */
+.display-panel {
+  display: flex;
+  flex-direction: column;
+  /* `contrat-ui-calendrier.html:598` — 320 px sur ordinateur. La feuille du bas s'étale sur toute
+     la largeur : c'est un maximum, pas une largeur imposée. */
+  max-width: 320px;
+  box-sizing: border-box;
+}
+
+.display-panel__section-title {
+  margin: 0 0 6px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+.display-panel__sep {
+  width: 100%;
+  height: 1px;
+  margin: 0.75rem 0;
+  border: 0;
+  background: var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.12));
+}
+
+.display-panel__legend-toggle {
+  align-self: flex-start;
+  border: 1px solid var(--mat-sys-outline, #999);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  padding: 0.25rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  /* P-1 — l'état actif ne se lit jamais à la seule couleur : le fond change ET la graisse aussi,
+     exactement comme `.layer-chip--active` juste au-dessus. Deux interrupteurs voisins dans le
+     même panneau ne peuvent pas signaler « armé » de deux façons différentes. */
+  &--on {
+    background: var(--mat-sys-secondary-container, #cce);
+    font-weight: 600;
+  }
+}
+
+.display-panel__actions {
+  margin-top: 0.75rem;
+}
+
+.display-panel__reset {
+  border: none;
+  background: none;
+  text-decoration: underline;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: var(--mat-sys-error, #b00020);
+}

@@ -10,15 +10,4 @@
       {{ theme.tone()['account.calendar_layer.' + key] }}
     </button>
   }
-  <div aria-live="polite">
-    @if (overridden()) {
-      <button
-        type="button"
-        class="layer-toggle__reset"
-        (click)="resetRequested.emit()"
-      >
-        {{ theme.tone()['cta.restore_default_layers'] }}
-      </button>
-    }
-  </div>
 </div>

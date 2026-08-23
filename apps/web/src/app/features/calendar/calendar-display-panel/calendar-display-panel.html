@@ -1,0 +1,35 @@
+<div class="display-panel">
+  <p class="display-panel__section-title">{{ theme.tone()['calendar.display.section_visible'] }}</p>
+
+  <app-calendar-layer-toggle
+    class="in-panel"
+    [keys]="keys()"
+    [active]="active()"
+    (layerToggled)="layerToggled.emit($event)"
+  />
+
+  <hr class="display-panel__sep" />
+
+  <!-- AC5 — la légende se règle ICI, et nulle part ailleurs. `aria-pressed` plutôt qu'une case à
+       cocher : c'est un interrupteur d'affichage, pas une donnée de formulaire, et la bande de
+       couches juste au-dessus emploie déjà ce vocabulaire. -->
+  <button
+    type="button"
+    class="display-panel__legend-toggle"
+    [class.display-panel__legend-toggle--on]="legendVisible()"
+    [attr.aria-pressed]="legendVisible()"
+    (click)="legendToggled.emit()"
+  >
+    {{ theme.tone()['calendar.display.show_legend'] }}
+  </button>
+
+  <!-- D-4 — second point d'accès au rétablissement, chemin explicite ; la pastille de résumé de
+       la barre en est le raccourci contextuel. Le contrat dessine les deux
+       (`contrat-ui-calendrier.html:609` et `:243`). Toujours rendu : un bouton qui apparaîtrait
+       et disparaîtrait dans un panneau ouvert ferait sauter la mise en page sous le pouce. -->
+  <div class="display-panel__actions">
+    <button type="button" class="display-panel__reset" (click)="resetRequested.emit()">
+      {{ theme.tone()['cta.restore_default_layers'] }}
+    </button>
+  </div>
+</div>

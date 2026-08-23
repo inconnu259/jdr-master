@@ -124,6 +124,26 @@
   }
 }
 
+/* Légende (story 36.14) — la piste y est une ILLUSTRATION : elle montre la forme, pas un vote.
+   Ni compteur ni réponse, qui n'auraient aucun sens sur un exemple, et une largeur de 34 px,
+   celle que le contrat dessine pour l'entrée de légende (`contrat-ui-calendrier.html:662`).
+
+   🚨 Écrit ici et NON dans `calendar-legend.scss` : `.cnt` et `.mine` appartiennent à ce
+   composant, et l'encapsulation de vue rend inopérant tout sélecteur du parent qui les viserait.
+   C'est le défaut exact trouvé à l'œil pendant la story 36.6 — et retrouvé à l'œil pendant
+   celle-ci, où le compteur débordait de sa case et passait SOUS le libellé de l'entrée. Aucun
+   des 2182 tests ne l'a vu. */
+:host(.in-legend) .cnt,
+:host(.in-legend) .mine,
+:host(.in-legend) .mine-short {
+  display: none;
+}
+
+:host(.in-legend) .track {
+  flex-basis: 34px;
+  width: 34px;
+}
+
 /* Option d'un vote déplié dans l'Agenda (story 36.12) — la piste y voisine avec la date du
    créneau ET un bouton *Sceller*, sur une ligne qui peut n'avoir que ~300 px en contexte de
    partie (le panneau MJ prend la moitié de l'écran). Au large, la phrase ; à l'étroit, le mot —

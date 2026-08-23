@@ -1,0 +1,44 @@
+<div class="legend">
+  <p class="legend__title">{{ theme.tone()['calendar.legend.title'] }}</p>
+
+  <div class="legend__group">
+    <p class="legend__group-title">{{ theme.tone()['calendar.legend.group_obvious'] }}</p>
+    @for (entry of obviousEntries; track entry.shape) {
+      <p class="legend__line">
+        <!-- AC13 — la CLASSE RÉELLE de la bande, jamais une copie de ses valeurs. -->
+        <span class="legend__swatch" [attr.data-winner]="entry.shape" aria-hidden="true"></span>
+        <span class="legend__label">{{ theme.tone()[entry.labelKey] }}</span>
+      </p>
+    }
+  </div>
+
+  <div class="legend__group">
+    <p class="legend__group-title">{{ theme.tone()['calendar.legend.group_needs'] }}</p>
+    @for (entry of needsLegendEntries(); track entry.shape) {
+      <p class="legend__line">
+        @switch (entry.shape) {
+          @case ('track') {
+            <!-- Le VRAI composant : la piste, ses trois segments et sa part tramée sont ce que
+                 cette entrée explique. En redessiner une approximation trahirait l'annotation 31
+                 au moment même où on prétend la respecter. -->
+            <span class="legend__swatch legend__swatch--wide" aria-hidden="true">
+              <app-poll-track class="in-legend" [vote]="DEMO_VOTE" />
+            </span>
+          }
+          @case ('group') {
+            <span class="legend__swatch legend__swatch--gauge" aria-hidden="true">
+              <!-- Revue de code 36.14 — même classe d'hôte que la case du Mois
+                   (`calendar-month-view.html`), sinon `.cnt` se rend dans la pastille : c'est le
+                   même défaut que celui déjà corrigé sur `app-poll-track` ci-dessus. -->
+              <app-group-gauge class="in-month" [group]="DEMO_GROUP" />
+            </span>
+          }
+          @default {
+            <span class="legend__swatch" [attr.data-winner]="entry.shape" aria-hidden="true"></span>
+          }
+        }
+        <span class="legend__label">{{ theme.tone()[entry.labelKey] }}</span>
+      </p>
+    }
+  </div>
+</div>
