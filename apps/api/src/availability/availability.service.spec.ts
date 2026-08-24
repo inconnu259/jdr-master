@@ -2198,6 +2198,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'poll1',
         partieId: 'A',
+        expiresAt: new Date('2026-10-15T00:00:00Z'),
         options: [
           {
             id: 'o1',
@@ -2231,6 +2232,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         partieName: 'Ma Partie',
         // AC9 — MJ + 3 Membership. Même effectif que `AggregatedSlotDto.total`.
         membersCount: 4,
+        expiresAt: '2026-10-15T00:00:00.000Z',
         options: [
           {
             optionId: 'o1',
@@ -2253,6 +2255,32 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         ],
       },
     ]);
+  });
+
+  it("couche votes-en-cours : expiresAt null (sondage créé avant l'introduction du champ) → propagé tel quel, jamais une erreur", async () => {
+    mockMembershipGroupBy.mockResolvedValue([{ partieId: 'A', _count: 3 }]);
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        expiresAt: null,
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['votes-en-cours'][0].expiresAt).toBeNull();
   });
 
   it('AC11 — aucune identité de votant tiers ne transite : ni userId, ni pseudo, ni displayName (AD-9/AD-2)', async () => {

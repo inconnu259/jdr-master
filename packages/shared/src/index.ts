@@ -699,6 +699,8 @@ export interface MyCalendarPollEntry {
    *  et que `AggregatedSlotDto.total`. Agrégat anonyme : aucune identité ne s'en déduit. */
   membersCount: number;
   options: MyCalendarPollOption[];
+  /** Échéance du vote, `null` si non définie (votes créés avant l'introduction du champ). */
+  expiresAt: string | null;
 }
 
 /** Séance à inscription ouverte d'une de mes parties CAMPAGNE_EPISODIQUE (couche

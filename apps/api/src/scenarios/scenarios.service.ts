@@ -329,6 +329,10 @@ export class ScenariosService {
     });
 
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : un scénario ouvert peut rendre une inscription
+    // atteignable pour un membre — sans ceci, GET /me/calendar reste périmé jusqu'au prochain
+    // changement de plage.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -481,6 +485,9 @@ export class ScenariosService {
       where: { id: scenarioId },
     });
     this.realtimeEvents.emit(partieTopic(partie.id));
+    // Deferred-work (SSE, calendrier personnel) : une nouvelle séance peut apparaître dans
+    // mes-seances/inscriptions-ouvertes pour un membre — GET /me/calendar doit le savoir.
+    await this.parties.notifyPartieSignalsChanged(partie.id, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -588,6 +595,9 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : une séance supprimée peut retirer une ligne de
+    // mes-seances/votes-en-cours chez un membre — GET /me/calendar doit le savoir.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -684,6 +694,9 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : une date réinitialisée rouvre un vote absent de
+    // votes-en-cours chez un membre — GET /me/calendar doit le savoir.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -732,6 +745,9 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : une capacité posée peut rendre une inscription
+    // ouvrable pour un membre — GET /me/calendar doit le savoir.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -807,6 +823,11 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : une inscription change inscritsCount pour tous
+    // les autres membres — GET /me/calendar doit le savoir. `userId` ici est le joueur agissant,
+    // pas le MJ : notifyPartieSignalsChanged() veut l'id du MJ (partie.mjId), déjà résolu par
+    // getViewable() ci-dessus.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -841,6 +862,8 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : même raison qu'inscrire() ci-dessus.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 

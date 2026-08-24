@@ -129,6 +129,24 @@ describe('PollService', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 
+  it('create() → écrit expiresAt à ~14 jours dans le futur (jamais null)', async () => {
+    prisma.sessionPoll.create.mockResolvedValue(makePoll());
+    const before = Date.now();
+    await service.create('p1', 'mj1', {
+      options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
+    });
+    const after = Date.now();
+    const data = prisma.sessionPoll.create.mock.calls[0][0].data;
+    expect(data.expiresAt).toBeInstanceOf(Date);
+    const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
+    expect(data.expiresAt.getTime()).toBeGreaterThanOrEqual(
+      before + fourteenDaysMs,
+    );
+    expect(data.expiresAt.getTime()).toBeLessThanOrEqual(
+      after + fourteenDaysMs,
+    );
+  });
+
   it('create() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
     await service.create('p1', 'mj1', {

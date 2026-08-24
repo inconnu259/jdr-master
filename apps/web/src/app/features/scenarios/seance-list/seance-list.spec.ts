@@ -193,7 +193,6 @@ describe('SeanceList', () => {
         { isMj: true },
       );
       const comp = fixture.componentInstance as any;
-      vi.spyOn(window, 'confirm').mockReturnValue(true);
       const closedPoll: SessionPollDto = {
         ...POLL,
         status: 'CLOSED',
@@ -214,20 +213,21 @@ describe('SeanceList', () => {
       expect(emitted).toEqual(fresh);
     });
 
-    it('onChoose demande confirmation ; refusée → aucun appel à chooseDate (décision utilisateur 2026-08-24, harmonisation avec l’Agenda)', async () => {
+    it('🚨 onChoose() ne demande PAS sa propre confirmation (revue de code, 2026-08-24) — PollStatusPanel confirme déjà en amont via son ConfirmDialog, avant même d’émettre `chosen`', async () => {
       const { fixture, pollSvc } = await createComponent(
         { ...SCENARIO, seances: [SEANCE_WITH_POLL] },
         { isMj: true },
       );
       const comp = fixture.componentInstance as any;
-      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      const confirmSpy = vi.spyOn(window, 'confirm');
 
       await comp.onChoose('poll1', 'opt1');
 
-      expect(confirmSpy).toHaveBeenCalledWith(
-        'Sceller cette date ? Le vote sera définitivement clôturé.',
-      );
-      expect(pollSvc.chooseDate).not.toHaveBeenCalled();
+      // Un second `window.confirm()` ici doublerait le ConfirmDialog déjà ouvert par
+      // `PollStatusPanel.onChooseClick()` avant l'émission de `chosen` — deux prompts pour le
+      // même scellement, régression du 2026-08-24 corrigée par cette revue.
+      expect(confirmSpy).not.toHaveBeenCalled();
+      expect(pollSvc.chooseDate).toHaveBeenCalledWith('p1', 'poll1', { optionId: 'opt1' });
     });
 
     it('onClosePoll appelle closePoll PUIS recharge le scénario et émet seanceLinked', async () => {

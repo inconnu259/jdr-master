@@ -268,6 +268,14 @@ describe('RealtimeService', () => {
     expect(characterRolesSvc.notifyChanged).toHaveBeenCalledTimes(1);
   });
 
+  it("'open' sur un topic 'user:' déclenche AUSSI notifyRealtimeChanged() sur ScenariosService (deferred-work, SSE calendrier personnel) — même méthode que le préfixe 'partie:' ci-dessus, réutilisée telle quelle", () => {
+    service.connect(userTopic('u1'));
+
+    FakeEventSource.instances[0].emit('open');
+
+    expect(scenariosSvc.notifyRealtimeChanged).toHaveBeenCalledTimes(1);
+  });
+
   it('disconnect() ferme la connexion EventSource sous-jacente (AC5)', () => {
     service.connect(partieTopic('p1'));
 

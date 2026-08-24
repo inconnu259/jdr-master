@@ -97,6 +97,12 @@ export class RealtimeService {
     // le canal 'user:{id}' est déjà ouvert pour l'utilisateur courant, aucune connexion
     // supplémentaire par Partie (même discipline que `myParties` ci-dessus).
     { prefix: 'user:', notifyChanged: () => this.partySignals.notifyChanged() },
+    // Deferred-work (SSE, calendrier personnel) : RÉUTILISE `notifyRealtimeChanged()`, déjà câblée
+    // ci-dessus sur 'partie:' — elle ignore déjà quel partieId a changé (REALTIME_WILDCARD), donc
+    // convient telle quelle à un événement 'user:{id}' qui agrège plusieurs Parties. CalendarView
+    // (contexte personnel) se connecte à user:{id} et recharge GET /me/calendar sur ce même signal
+    // `ScenariosService.changed()` — pas de nouveau service, pas de nouvelle méthode.
+    { prefix: 'user:', notifyChanged: () => this.scenarios.notifyRealtimeChanged() },
   ];
 
   // Une entrée par connexion active (pas par topic) — deux connect() sur le même topic ouvrent

@@ -22,7 +22,7 @@ import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { CALENDAR_LAYER_KEYS, DEFAULT_CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
-import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
+import { RealtimeService, partieTopic, userTopic } from '../../../core/realtime/realtime.service';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { TONE_MAP } from '../../../core/theme/tones';
@@ -3475,6 +3475,101 @@ describe('CalendarView — ce que l’Agenda reçoit (Story 36.11, AC14, D-3)', 
     const seances = comp.agendaEntries().filter((e: any) => e.type === 'mes-seances');
     expect(seances.length).toBeGreaterThan(0);
     expect(seances[0].compteRenduManquant).toBe(true);
+  });
+
+  it('le compte-rendu manquant d’une séance passée remonte à l’Agenda (contexte personnel, deferred-work « C’est passé »)', async () => {
+    const availabilitySvc = makeAvailabilityService();
+    availabilitySvc.getMyCalendar = vi.fn().mockResolvedValue({
+      'mes-indisponibilites': [],
+      'mes-disponibilites': [],
+      'mes-seances': [
+        {
+          seanceId: 's1',
+          partieId: 'p1',
+          partieName: 'Partie',
+          scenarioId: 'sc1',
+          scenarioTitle: 'Le Convoi',
+          date: '2026-01-05',
+          slot: 'EVENING',
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
+          compteRenduManquant: true,
+        },
+      ],
+      'votes-en-cours': [],
+      'inscriptions-ouvertes': [],
+    });
+    const { fixture } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+    const seances = comp.agendaEntries().filter((e: any) => e.type === 'mes-seances');
+    expect(seances.length).toBeGreaterThan(0);
+    expect(seances[0].compteRenduManquant).toBe(true);
+  });
+
+  it("contexte personnel, sans query param `from` : la plage par défaut recule de 31 jours (deferred-work « C’est passé »)", async () => {
+    const { fixture, availabilitySvc } = await createCalendarView({ mode: 'personal' });
+    const comp = fixture.componentInstance as any;
+    const expected = new Date();
+    expected.setUTCDate(expected.getUTCDate() - 31);
+    const expectedFrom = expected.toISOString().substring(0, 10);
+    expect(comp.fromDateStr()).toBe(expectedFrom);
+    expect(availabilitySvc.getMyCalendar).toHaveBeenCalledWith(expectedFrom, expect.any(String));
+  });
+
+  it("contexte personnel, avec query param `from` explicite : la plage n'est PAS écrasée par le défaut -31j", async () => {
+    const { fixture, availabilitySvc } = await createCalendarView({
+      mode: 'personal',
+      queryParams: { from: '2026-01-01' },
+    });
+    const comp = fixture.componentInstance as any;
+    expect(comp.fromDateStr()).toBe('2026-01-01');
+    expect(availabilitySvc.getMyCalendar).toHaveBeenCalledWith('2026-01-01', expect.any(String));
+  });
+
+  it("contexte MJ : le défaut -31j du contexte personnel ne s'applique pas (fromDateStr reste aujourd'hui)", async () => {
+    const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
+    const comp = fixture.componentInstance as any;
+    const today = new Date().toISOString().substring(0, 10);
+    expect(comp.fromDateStr()).toBe(today);
+  });
+
+  it("contexte personnel : se connecte à userTopic(monId) au montage, se déconnecte au destroy (deferred-work, SSE calendrier personnel) — le calendrier personnel agrège plusieurs Parties, aucun partieTopic unique ne peut le couvrir", async () => {
+    const authSvc = { currentUser: signal({ id: 'me1' }) } as any;
+    const { fixture, realtimeSvc } = await createCalendarView({ mode: 'personal', authSvc });
+
+    expect(realtimeSvc.connect).toHaveBeenCalledWith(userTopic('me1'));
+
+    fixture.destroy();
+
+    expect(realtimeSvc.disconnect).toHaveBeenCalledWith(userTopic('me1'));
+  });
+
+  it("contexte MJ : connect(userTopic(...)) n'est PAS appelé — seul partieTopic(id) l'est", async () => {
+    const authSvc = { currentUser: signal({ id: 'me1' }) } as any;
+    const { realtimeSvc } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      authSvc,
+    });
+
+    expect(realtimeSvc.connect).toHaveBeenCalledWith(partieTopic('partie-1'));
+    expect(realtimeSvc.connect).not.toHaveBeenCalledWith(userTopic('me1'));
+  });
+
+  it('contexte personnel : un changement de scenariosSvc.changed() APRÈS le montage recharge GET /me/calendar (deferred-work, SSE calendrier personnel)', async () => {
+    const authSvc = { currentUser: signal({ id: 'me1' }) } as any;
+    const { fixture, availabilitySvc, scenariosSvc } = await createCalendarView({
+      mode: 'personal',
+      authSvc,
+    });
+    availabilitySvc.getMyCalendar.mockClear();
+
+    scenariosSvc.changed.set({ partieId: '*' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(availabilitySvc.getMyCalendar).toHaveBeenCalled();
   });
 });
 

@@ -155,12 +155,14 @@ export class SeanceList {
     this.editingCapacitySeanceId.set(null);
   }
 
-  // Décision utilisateur (2026-08-24, deferred-work.md) : harmonise avec le chemin de scellement
-  // depuis l'Agenda (CalendarAgendaView), qui demande déjà confirmation — même style que
-  // onDeleteSeance/onResetSeanceDate ci-dessous (action irréversible, ferme définitivement le vote).
+  // 🚨 Revue de code (deferred-work.md, 2026-08-24) : PAS de confirmation ici. `PollStatusPanel`
+  // (`app-poll-status`, seul émetteur de `chosen`) ouvre déjà son propre `ConfirmDialog` stylé
+  // AVANT d'émettre l'événement (`poll-status.ts:onChooseClick`) — un `window.confirm()` ajouté
+  // ici (décision du 2026-08-24, retirée) doublait le prompt : deux confirmations successives
+  // pour le même scellement. Toujours confirmé, une seule fois, via le MatDialog déjà en place —
+  // même mécanisme que `CalendarView.onSealRequested()` (Agenda/grille).
   protected async onChoose(pollId: string, optionId: string): Promise<void> {
     if (this.pollActionPending()) return;
-    if (!window.confirm('Sceller cette date ? Le vote sera définitivement clôturé.')) return;
     this.pollActionPending.set(true);
     this.error.set(null);
     try {

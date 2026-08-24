@@ -16,6 +16,8 @@ import { ChooseDateDto } from './dto/choose-date.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
 import { SetPollOptionsDto } from './dto/set-poll-options.dto';
 
+const DEFAULT_POLL_TTL_MS = 14 * 24 * 60 * 60 * 1000; // défaut 14 jours
+
 const POLL_INCLUDE = {
   options: {
     include: {
@@ -65,6 +67,7 @@ export class PollService {
           partieId,
           createdById: userId,
           scenarioRef: dto.scenarioRef ?? null,
+          expiresAt: new Date(Date.now() + DEFAULT_POLL_TTL_MS),
           options: {
             create: dto.options.map((o) => ({
               date: new Date(o.date),

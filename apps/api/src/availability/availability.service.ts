@@ -1088,6 +1088,7 @@ export class AvailabilityService {
     polls: Array<{
       id: string;
       partieId: string;
+      expiresAt: Date | null;
       options: {
         id: string;
         date: Date;
@@ -1116,6 +1117,7 @@ export class AvailabilityService {
         membersCount: participantCount(
           membershipCountByPartie.get(partie.id) ?? 0,
         ),
+        expiresAt: poll.expiresAt?.toISOString() ?? null,
         options: poll.options.map((o) => {
           const votes = o.votes ?? [];
           const mine = votes.find((v) => v.userId === userId);

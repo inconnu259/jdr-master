@@ -61,7 +61,7 @@ import {
 import { CalendarDisplayPanel } from '../calendar-display-panel/calendar-display-panel';
 import { CalendarLegend } from '../calendar-legend/calendar-legend';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
-import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
+import { RealtimeService, partieTopic, userTopic } from '../../../core/realtime/realtime.service';
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
 import { CalendarWeekView, getWeekStart } from '../calendar-week-view/calendar-week-view';
 import {
@@ -659,6 +659,7 @@ export class CalendarView implements OnInit {
             seanceHeure: s.heureRdv,
             seanceLieu: s.lieu,
             seanceNote: s.notePratique,
+            compteRenduManquant: s.compteRenduManquant,
           });
         }
         // Story 36.6, AC8/AC6 — même éclatement par option qu'en contexte de partie, mais les
@@ -1233,9 +1234,18 @@ export class CalendarView implements OnInit {
     d.setUTCDate(d.getUTCDate() + 56);
     return d.toISOString().substring(0, 10);
   }
+  private static thirtyOneDaysAgoIso(): string {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 31);
+    return d.toISOString().substring(0, 10);
+  }
 
   protected readonly fromDateStr = signal(CalendarView.todayIso());
   protected readonly toDateStr = signal(CalendarView.eightWeeksLaterIso());
+  // Story deferred-work (« C'est passé » en calendrier personnel) — vrai seulement si l'URL a
+  // explicitement fixé `from` au montage : sert à ne PAS écraser un lien partagé/query param par
+  // le défaut élargi vers le passé du contexte personnel, ci-dessous.
+  private hasExplicitRangeParam = false;
 
   private static readonly ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -1248,15 +1258,27 @@ export class CalendarView implements OnInit {
     effect(() => {
       const change = this.scenariosSvc.changed();
       const id = this.partieId();
-      if (!id || !matchesPartie(change, id)) return;
+      if (id) {
+        if (!matchesPartie(change, id)) return;
+        untracked(() => {
+          // Story 36.7 — un vote/retrait tiers peut avoir clos le sondage ou fait disparaître
+          // l'option affichée : le sélecteur ouvert référencerait alors des données périmées, et
+          // son ancre peut devenir un nœud détaché une fois la grille reconstruite ci-dessous.
+          this.closePicker();
+          void this.loadScenarios(id);
+          void this.refreshMjPanels();
+          if (this.isMjMode()) void this.loadMembers(id);
+        });
+        return;
+      }
+      // Deferred-work (SSE, calendrier personnel) — `change === null` est la valeur initiale au
+      // montage (rien à recharger, `loadForPartieId()` s'en charge déjà) ; toute valeur non nulle
+      // ensuite vient d'un événement `user:{id}` (connecté ci-dessus en contexte personnel
+      // seulement) — aucun filtrage par partieId possible ni utile ici, le calendrier personnel
+      // agrège plusieurs Parties.
+      if (change === null) return;
       untracked(() => {
-        // Story 36.7 — un vote/retrait tiers peut avoir clos le sondage ou fait disparaître
-        // l'option affichée : le sélecteur ouvert référencerait alors des données périmées, et
-        // son ancre peut devenir un nœud détaché une fois la grille reconstruite ci-dessous.
-        this.closePicker();
-        void this.loadScenarios(id);
-        void this.refreshMjPanels();
-        if (this.isMjMode()) void this.loadMembers(id);
+        void this.loadMeCalendarForRange(this.fromDateStr(), this.toDateStr());
       });
     });
 
@@ -1344,6 +1366,10 @@ export class CalendarView implements OnInit {
   /** Sujet temps réel actuellement connecté (`partieTopic(id)`), pour le déconnecter proprement
    *  au changement de Partie ET à la destruction du composant — voir `loadForPartieId()`. */
   private connectedPartieTopic: string | null = null;
+  /** Deferred-work (SSE, calendrier personnel) — même rôle que `connectedPartieTopic` mais pour
+   *  `userTopic(monId)`, connecté seulement en contexte personnel (`loadForPartieId()`) : le
+   *  calendrier personnel agrège plusieurs Parties, aucun `partieTopic` unique ne peut le couvrir. */
+  private connectedUserTopic: string | null = null;
 
   async ngOnInit(): Promise<void> {
     this.contextualNav.set({ title: this.theme.tone()['nav.calendar'] });
@@ -1351,6 +1377,7 @@ export class CalendarView implements OnInit {
     const toParam = this.route.snapshot.queryParamMap.get('to');
     if (fromParam && CalendarView.ISO_DATE_RE.test(fromParam)) this.fromDateStr.set(fromParam);
     if (toParam && CalendarView.ISO_DATE_RE.test(toParam)) this.toDateStr.set(toParam);
+    this.hasExplicitRangeParam = !!(fromParam && CalendarView.ISO_DATE_RE.test(fromParam));
 
     // Story 8.7, AC1/AC2 (corrigé en revue) : un vote de date exige toujours une séance — le
     // panneau ne s'ouvre que si `id` (partieId) est résolu ET que le mode est MJ (sinon un joueur
@@ -1364,6 +1391,7 @@ export class CalendarView implements OnInit {
 
     this.destroyRef.onDestroy(() => {
       if (this.connectedPartieTopic) this.realtime.disconnect(this.connectedPartieTopic);
+      if (this.connectedUserTopic) this.realtime.disconnect(this.connectedUserTopic);
     });
 
     // 🚨 Revue de code 36.14 (AC10, encadré n°2) — abonné à `paramMap`, jamais lu une seule fois
@@ -1399,6 +1427,10 @@ export class CalendarView implements OnInit {
       this.realtime.disconnect(this.connectedPartieTopic);
       this.connectedPartieTopic = null;
     }
+    if (this.connectedUserTopic) {
+      this.realtime.disconnect(this.connectedUserTopic);
+      this.connectedUserTopic = null;
+    }
 
     this.partieId.set(id);
 
@@ -1428,6 +1460,23 @@ export class CalendarView implements OnInit {
         await this.loadMembers(id);
       }
     } else {
+      // Deferred-work (SSE, calendrier personnel) — le calendrier personnel agrège plusieurs
+      // Parties : aucun `partieTopic` unique ne peut le couvrir, donc `user:{id}` (même patron que
+      // `dashboard.ts`). Le serveur y fait désormais un fan-out (`notifyPartieSignalsChanged`) sur
+      // toute écriture pertinente pour mes-seances/votes-en-cours/inscriptions-ouvertes.
+      const myId = this.authSvc.currentUser()?.id;
+      if (myId) {
+        const topic = userTopic(myId);
+        this.realtime.connect(topic);
+        this.connectedUserTopic = topic;
+      }
+      // Deferred-work (« C'est passé ») — sans plage explicite dans l'URL, le calendrier
+      // personnel élargit son point de départ à -31 jours : sans ça, `fromDateStr` par défaut
+      // (aujourd'hui) ne couvre jamais le passé et la section reste structurellement vide au
+      // premier chargement. Le contexte MJ (branche ci-dessus) n'est pas concerné.
+      if (!this.hasExplicitRangeParam) {
+        this.fromDateStr.set(CalendarView.thirtyOneDaysAgoIso());
+      }
       // Story 30.6, AC8/AC9 : contexte personnel — un seul appel GET /me/calendar pour les 5
       // couches temporelles, jamais depuis un contexte de partie.
       await Promise.all([
