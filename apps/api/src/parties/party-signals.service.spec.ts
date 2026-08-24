@@ -46,6 +46,12 @@ describe('PartySignalsService', () => {
     service = new PartySignalsService(prisma as any, parties as any);
   });
 
+  it("deferred-work (2026-08-24) : un utilisateur sans aucune Partie (ni MJ ni joueur) → objet vide, aucune erreur Prisma sur les requêtes groupées avec in: []", async () => {
+    // `parties.listForUser` renvoie déjà [] par défaut (beforeEach) — simule directement le cas.
+    const result = await service.getSignals('sans-partie');
+    expect(result).toEqual({});
+  });
+
   it('une partie sans aucun signal actif porte signals: [] (jamais une entrée absente, AC2)', async () => {
     // nextSessionDate null MAIS un poll OPEN existe déjà : ni PROCHAINE_SEANCE_CONNUE (pas de
     // date) ni AUCUNE_DATE_NI_VOTE (un vote est en cours) ne doivent se déclencher.
@@ -262,6 +268,31 @@ describe('PartySignalsService', () => {
     ]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).toContain('PROCHAINE_SEANCE_CONNUE');
+  });
+
+  it('deferred-work (2026-08-25) : nextSessionDate PASSÉ (jamais effacé après la date) → PROCHAINE_SEANCE_CONNUE absent, AUCUNE_DATE_NI_VOTE actif sans poll OPEN', async () => {
+    parties.listForUser.mockImplementation((_u: string, role: string) =>
+      Promise.resolve(
+        role === 'mj'
+          ? [
+              makePartie({
+                id: 'p1',
+                nextSessionDate: '2020-01-01T00:00:00.000Z',
+              }),
+            ]
+          : [],
+      ),
+    );
+    prisma.hommeDragon.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+    prisma.membership.groupBy.mockResolvedValue([
+      { partieId: 'p1', _count: { _all: 1 } },
+    ]);
+    prisma.scenario.groupBy.mockResolvedValue([
+      { partieId: 'p1', _count: { _all: 1 } },
+    ]);
+    const map = await service.getSignals('u1');
+    expect(map['p1'].signals).not.toContain('PROCHAINE_SEANCE_CONNUE');
+    expect(map['p1'].signals).toContain('AUCUNE_DATE_NI_VOTE');
   });
 
   it('PARTIE_TERMINEE : seul avec les signaux de fin (AC5) — aucun signal AUCUN_MEMBRE_INVITE/AUCUN_SCENARIO_EN_COURS/etc.', async () => {

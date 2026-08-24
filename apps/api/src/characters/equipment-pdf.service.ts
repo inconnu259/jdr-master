@@ -22,6 +22,18 @@ export class EquipmentPdfService {
     const templateBytes = await this.loadTemplate();
     const sheetData = character.sheetData as unknown as RyuutamaSheetData;
 
+    // Deferred-work (2026-08-24) — garde-fou informationnel : la migration one-off Story 14.1
+    // (`migrateEquipmentUnify`) est censée avoir traité toute fiche pré-existante, mais rien ne
+    // signalait plus une fiche qui aurait échappé à cette migration. `group` n'existe pas sur
+    // `RyuutamaSheetData['equipment']` (type courant) — un survivant ne peut donc venir que d'une
+    // donnée non migrée en base.
+    const legacyGroup = (sheetData.equipment as { group?: unknown } | undefined)?.group;
+    if (Array.isArray(legacyGroup) && legacyGroup.length > 0) {
+      this.logger.warn(
+        `Personnage ${character.id} porte encore un equipment.group non migré (${legacyGroup.length} entrée(s)), ignoré silencieusement par l'export PDF.`,
+      );
+    }
+
     const fields = mapEquipmentToPdfFields({
       ownerPseudo: character.ownerPseudo,
       characterName: sheetData.narrative?.name ?? '',

@@ -976,6 +976,71 @@ describe('ScenariosService', () => {
       });
     });
 
+    it("deferred-work (2026-08-24) : toSessionPollDto() porte displayName sur chaque vote — défaut pré-existant, PollVoteDto.displayName est requis mais poll était typé any (invisible au compilateur)", async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.membership.count.mockResolvedValue(1);
+      prisma.scenario.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          partieId: 'p1',
+          title: 'Les Cendres',
+          description: null,
+          status: 'EN_COURS',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01'),
+          closedAt: null,
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 'se1',
+          scenarioId: 's1',
+          createdAt: new Date('2026-07-01'),
+          dateValidee: null,
+          inscriptionMin: null,
+          inscriptionMax: null,
+          inscriptions: [],
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
+          poll: {
+            id: 'poll1',
+            partieId: 'p1',
+            status: 'OPEN',
+            scenarioRef: null,
+            expiresAt: null,
+            chosenDate: null,
+            chosenSlot: null,
+            options: [
+              {
+                id: 'opt1',
+                date: new Date('2026-08-01'),
+                slot: 'EVENING',
+                votes: [
+                  {
+                    userId: 'u1',
+                    answer: 'YES',
+                    user: { pseudo: 'Alice', displayName: 'Alice au pays' },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ]);
+
+      const result = await service.findAllForPartie('p1', 'u1');
+
+      expect(result[0].seances[0].poll?.options[0].votes[0]).toEqual({
+        userId: 'u1',
+        pseudo: 'Alice',
+        displayName: 'Alice au pays',
+        answer: 'YES',
+      });
+    });
+
     it('non-membre → 403 propagé par getViewable, aucune lecture', async () => {
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
@@ -2674,6 +2739,68 @@ describe('ScenariosService', () => {
         otherError,
       );
       expect(prisma.seance.delete).not.toHaveBeenCalled();
+    });
+
+    it('TOCTOU : seance.delete() lève P2025 (déjà supprimée concurremment) → 404 propre, pas un 500 (deferred-work 2026-08-25)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SECOND_SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.seance.findMany.mockResolvedValueOnce([
+        {
+          id: FIRST_SEANCE_ID,
+          scenarioId: VALID_SCENARIO_ID,
+          createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        },
+      ]);
+      prisma.seance.delete.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          'An operation failed because it depends on one or more records that were required but not found.',
+          { code: 'P2025', clientVersion: '7.8.0' },
+        ),
+      );
+
+      await expect(
+        service.deleteSeance(SECOND_SEANCE_ID, 'mj1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.sessionPoll.delete).not.toHaveBeenCalled();
+    });
+
+    it('TOCTOU : erreur Prisma autre que P2025 sur seance.delete() → propagée telle quelle', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SECOND_SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.seance.findMany.mockResolvedValueOnce([
+        {
+          id: FIRST_SEANCE_ID,
+          scenarioId: VALID_SCENARIO_ID,
+          createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        },
+      ]);
+      const otherError = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed.',
+        { code: 'P2002', clientVersion: '7.8.0' },
+      );
+      prisma.seance.delete.mockRejectedValue(otherError);
+
+      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toBe(
+        otherError,
+      );
     });
 
     it('séance liée à un vote (OPEN ou CLOSED) → le SessionPoll est supprimé avec elle (revue de code : plus d’orphelin)', async () => {

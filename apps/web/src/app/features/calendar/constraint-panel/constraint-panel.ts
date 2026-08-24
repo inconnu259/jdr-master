@@ -39,7 +39,7 @@ export { buildConstraintDto, type ConstraintFormValue } from './constraint-panel
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING: 'Soirée',
+  EVENING: 'Soir',
   FULL_DAY: 'Journée entière',
 };
 

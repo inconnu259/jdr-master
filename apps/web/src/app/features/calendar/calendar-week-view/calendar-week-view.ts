@@ -390,7 +390,7 @@ export class CalendarWeekView {
   }[] = [
     { key: 'morning', label: 'Matin', slot: 'MORNING' },
     { key: 'afternoon', label: 'Après-midi', slot: 'AFTERNOON' },
-    { key: 'evening', label: 'Soirée', slot: 'EVENING' },
+    { key: 'evening', label: 'Soir', slot: 'EVENING' },
   ];
 
   // ─── Sélection par glissement (Story 30.3) ─────────────────────────────────

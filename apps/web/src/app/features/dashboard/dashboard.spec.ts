@@ -494,7 +494,7 @@ describe('Dashboard — badges de signal (Story 29.7, AC3/AC9)', () => {
     const { fixture } = await createFixture(new Map(), undefined, [party], false, signals as any);
     const badge = fixture.nativeElement.querySelector('.signal-badge');
     expect(badge.textContent).toContain('12 août');
-    expect(badge.textContent).toContain('Soirée');
+    expect(badge.textContent).toContain('Soir');
   });
 
   it('PARTIE_TERMINEE n’est jamais rendu en badge (doublon avec .status-indicator, revue de code)', async () => {

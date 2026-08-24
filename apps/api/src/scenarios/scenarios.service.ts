@@ -585,7 +585,17 @@ export class ScenariosService {
     // écran ne dérive l'affichage que de `seance.poll`). Seance.pollId référence SessionPoll (FK) :
     // la Seance doit être supprimée avant le SessionPoll, jamais l'inverse.
     const pollIdToDelete = seance.pollId;
-    await this.prisma.seance.delete({ where: { id: seanceId } });
+    // Deferred-work (2026-08-25) : TOCTOU entre le findUnique() ci-dessus et ce delete() — une
+    // seconde suppression concurrente de la MÊME séance ferait lever un P2025 brut plutôt qu'un
+    // 404 propre. Même patron que `resolveScenarioOrThrow()` ci-dessous.
+    try {
+      await this.prisma.seance.delete({ where: { id: seanceId } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+        throw new NotFoundException('Séance introuvable');
+      }
+      throw e;
+    }
     if (pollIdToDelete) {
       await this.prisma.sessionPoll.delete({ where: { id: pollIdToDelete } });
     }
@@ -1071,7 +1081,11 @@ const SEANCE_INCLUDE = {
   poll: {
     include: {
       options: {
-        include: { votes: { include: { user: { select: { pseudo: true } } } } },
+        include: {
+          votes: {
+            include: { user: { select: { pseudo: true, displayName: true } } },
+          },
+        },
       },
     },
   },
@@ -1103,6 +1117,7 @@ function toSessionPollDto(poll: any, membersCount: number): SessionPollDto {
       votes: (opt.votes ?? []).map((v: any) => ({
         userId: v.userId,
         pseudo: v.user.pseudo,
+        displayName: v.user.displayName,
         answer: v.answer,
       })),
     })),

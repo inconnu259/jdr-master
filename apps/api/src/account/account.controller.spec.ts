@@ -295,6 +295,15 @@ describe('AccountController', () => {
       expect(account.updateTheme).not.toHaveBeenCalled();
     });
 
+    it("deferred-work (2026-08-24) : PATCH /me/preferences — id glissé dans le corps → 400 forbidNonWhitelisted, service jamais appelé", async () => {
+      account.updatePreferences.mockResolvedValue({ hideFinishedParties: true });
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ hideFinishedParties: true, id: 'autre-utilisateur' })
+        .expect(400); // forbidNonWhitelisted : id glissé dans le corps
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
     it('theme valide sans champ superflu → 200', async () => {
       account.updateTheme.mockResolvedValue({
         id: 'u1',

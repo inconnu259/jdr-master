@@ -116,11 +116,21 @@ export class PartySignalsService {
       openPollsByPartie.set(poll.partieId, list);
     }
 
+    const now = Date.now();
+
     const computeSignals = (
       partie: PartieDto,
       role: 'mj' | 'player',
     ): PartySignalCode[] => {
       const signals: PartySignalCode[] = [];
+      // Deferred-work (2026-08-25) : `Partie.nextSessionDate` n'est jamais effacé après la date
+      // passée (AD-3 interdit de le recalculer depuis les séances ici — c'est un champ matérialisé,
+      // recalculé uniquement par `recalculateNextSession()` sur événement). Une date passée non
+      // recalculée depuis désynchronise ces deux signaux si on la traite comme "connue" ; on la
+      // lit donc comme absente ici, sans jamais réécrire le champ.
+      const hasFutureSessionDate =
+        !!partie.nextSessionDate &&
+        new Date(partie.nextSessionDate).getTime() > now;
 
       // AC5 : une partie clôturée ne porte jamais un signal d'action, seuls les signaux de fin
       // subsistent — appliqué en premier, avant toute autre dérivation. Les deux signaux de fin
@@ -151,7 +161,7 @@ export class PartySignalsService {
           signals.push('AUCUN_MEMBRE_INVITE');
         if (!partiesWithCourantScenario.has(partie.id))
           signals.push('AUCUN_SCENARIO_EN_COURS');
-        if (!partie.nextSessionDate && !openPollsByPartie.has(partie.id)) {
+        if (!hasFutureSessionDate && !openPollsByPartie.has(partie.id)) {
           signals.push('AUCUNE_DATE_NI_VOTE');
         }
         if (partiesMissingResume.has(partie.id))
@@ -160,7 +170,7 @@ export class PartySignalsService {
           signals.push('COMPTE_RENDU_NON_REDIGE');
       }
 
-      if (partie.nextSessionDate) signals.push('PROCHAINE_SEANCE_CONNUE');
+      if (hasFutureSessionDate) signals.push('PROCHAINE_SEANCE_CONNUE');
       return signals;
     };
 

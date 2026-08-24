@@ -223,7 +223,7 @@ describe('CalendarWeekView — sélection par glissement', () => {
       fixture.detectChanges();
     };
 
-    // Sélection armée sur la ligne « Soirée ».
+    // Sélection armée sur la ligne « Soir ».
     slotCells('EVENING')[0].dispatchEvent(pointerEvent('pointerdown', 10, 10));
     vi.advanceTimersByTime(LONG_PRESS_MS);
     grid.dispatchEvent(pointerEvent('pointerup', 10, 10));
@@ -595,7 +595,7 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
     expect(icons.map((i) => i.getAttribute('aria-label'))).toEqual([
       'Matin',
       'Après-midi',
-      'Soirée',
+      'Soir',
     ]);
     expect(icons.some((i) => i.getAttribute('aria-hidden') === 'true')).toBe(false);
   });

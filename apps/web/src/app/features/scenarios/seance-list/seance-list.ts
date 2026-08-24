@@ -24,7 +24,7 @@ const HEURE_HH_MM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING: 'Soirée',
+  EVENING: 'Soir',
   FULL_DAY: 'Journée',
 };
 

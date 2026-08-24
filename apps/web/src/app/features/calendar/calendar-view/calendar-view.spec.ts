@@ -3571,6 +3571,35 @@ describe('CalendarView — ce que l’Agenda reçoit (Story 36.11, AC14, D-3)', 
 
     expect(availabilitySvc.getMyCalendar).toHaveBeenCalled();
   });
+
+  it('deferred-work : une inscription ouverte du calendrier personnel porte désormais scenarioId/partieId — la ligne devient ouvrable (AC12)', async () => {
+    const availabilitySvc = makeAvailabilityService();
+    availabilitySvc.getMyCalendar = vi.fn().mockResolvedValue({
+      'mes-indisponibilites': [],
+      'mes-disponibilites': [],
+      'mes-seances': [],
+      'votes-en-cours': [],
+      'inscriptions-ouvertes': [
+        {
+          seanceId: 's1',
+          partieId: 'p1',
+          partieName: 'Partie',
+          scenarioId: 'sc1',
+          scenarioTitle: 'Le Convoi',
+          inscriptionMin: 2,
+          inscriptionMax: 5,
+          inscritsCount: 3,
+          jeSuisInscrit: false,
+        },
+      ],
+    });
+    const { fixture } = await createCalendarView({ mode: 'personal', availabilitySvc });
+    const comp = fixture.componentInstance as any;
+    const entries = comp.agendaEntries().filter((e: any) => e.type === 'inscriptions-ouvertes');
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries[0].scenarioId).toBe('sc1');
+    expect(entries[0].partieId).toBe('p1');
+  });
 });
 
 // ─── Story 36.12 — l'Agenda du MJ : scellement et lancement de vote ─────────

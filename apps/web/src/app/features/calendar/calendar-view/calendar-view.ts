@@ -712,8 +712,11 @@ export class CalendarView implements OnInit {
             label: `${i.partieName} — ${i.scenarioTitle}`,
             detail: `${i.inscritsCount}/${i.inscriptionMax} inscrits`,
             // Story 36.11 — servi par le DTO ici, dérivé de la liste des inscrits en contexte de
-            // partie. ⚠️ `MyCalendarOpenInscriptionEntry` ne porte AUCUN `scenarioId` : cette
-            // ligne n'est donc pas ouvrable (AC12), dette consignée.
+            // partie. Deferred-work (2026-08-24) : `MyCalendarOpenInscriptionEntry` porte
+            // désormais `scenarioId`, la ligne est donc ouvrable comme en contexte de partie
+            // (`CalendarAgendaView.openTarget()` s'appuie déjà sur `partieId`+`scenarioId`).
+            partieId: i.partieId,
+            scenarioId: i.scenarioId,
             jeSuisInscrit: i.jeSuisInscrit,
           });
         }

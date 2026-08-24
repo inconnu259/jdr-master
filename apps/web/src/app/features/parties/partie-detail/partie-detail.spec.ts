@@ -341,7 +341,7 @@ describe('PartieDetail — widget de planification', () => {
     expect(dateEl).toBeTruthy();
     const text = dateEl!.textContent ?? '';
     expect(text).toContain('août');
-    expect(text).toContain('Soirée');
+    expect(text).toContain('Soir');
     expect(text).toContain('15');
   });
 
@@ -404,11 +404,15 @@ describe('PartieDetail — statut du vote', () => {
     };
   }
 
-  it('affiche la ligne de statut X/Y quand un poll OPEN existe', async () => {
+  it('affiche la ligne de statut X/Y quand un poll OPEN existe — Y = poll.membersCount (MJ compris, deferred-work 2026-08-24)', async () => {
     const { el } = await createFixture(makePartie(), MJ_ID, { members, poll: makePoll(['u1']) });
     const line = el.querySelector('.poll-status-line');
     expect(line).toBeTruthy();
-    expect(line!.textContent).toContain('1/2');
+    // `members` ne porte que 2 entrées (le MJ n'a jamais de ligne Membership), mais
+    // `makePoll().membersCount` vaut 4 (MJ compris, valeur serveur) — le Y affiché suit
+    // membersCount, pas members().length, sous peine de reproduire le bug à deux dénominateurs
+    // que la 36.6 a déjà corrigé côté calendrier (panneau `poll-status`).
+    expect(line!.textContent).toContain('1/4');
   });
 
   it("n'affiche pas la ligne de statut si aucun poll OPEN n'existe", async () => {

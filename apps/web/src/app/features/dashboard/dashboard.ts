@@ -64,7 +64,7 @@ const MAX_VISIBLE_BADGES = 2;
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING: 'Soirée',
+  EVENING: 'Soir',
   FULL_DAY: 'Journée',
 };
 

@@ -18,7 +18,7 @@ const POLL_DESYNC_MESSAGE = 'Vote créé mais introuvable dans la séance retour
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING: 'Soirée',
+  EVENING: 'Soir',
   FULL_DAY: 'Journée',
 };
 

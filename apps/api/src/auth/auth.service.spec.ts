@@ -394,6 +394,25 @@ describe('AuthService', () => {
       );
     });
 
+    it('deferred-work (2026-08-25) : invalide aussi tout autre PasswordResetToken non utilisé du même utilisateur (token fuité plus ancien)', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue(validRecord);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      tx.passwordResetToken.updateMany.mockResolvedValue({ count: 1 });
+      (argon2.hash as jest.Mock).mockResolvedValue('NEW_HASH');
+      tx.userSession.findMany.mockResolvedValue([]);
+
+      await service.resetPassword('r1.secretvalue', 'newpassword123');
+
+      expect(tx.passwordResetToken.updateMany).toHaveBeenCalledWith({
+        where: { id: 'r1', usedAt: null, expiresAt: { gt: expect.any(Date) } },
+        data: { usedAt: expect.any(Date) },
+      });
+      expect(tx.passwordResetToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', usedAt: null },
+        data: { usedAt: expect.any(Date) },
+      });
+    });
+
     it('aucune session active (UserSession.findMany vide) → invalidation en no-op, reset réussit normalement', async () => {
       prisma.passwordResetToken.findUnique.mockResolvedValue(validRecord);
       (argon2.verify as jest.Mock).mockResolvedValue(true);
@@ -544,6 +563,18 @@ describe('AuthService', () => {
       ).rejects.toThrow('Mot de passe actuel incorrect');
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(tx.user.update).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('deferred-work (2026-08-25) : compte supprimé entre le findUnique et la transaction (P2025) → NotFoundException, pas de 500 brut', async () => {
+      prisma.user.findUnique.mockResolvedValue(currentUser);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      (argon2.hash as jest.Mock).mockResolvedValue('NEW_HASH');
+      prisma.$transaction.mockRejectedValueOnce({ code: 'P2025' });
+
+      await expect(
+        service.changePassword('u1', 'currentpw', 'newpassword123', 's1'),
+      ).rejects.toThrow('Compte introuvable');
       expect(email.sendMail).not.toHaveBeenCalled();
     });
 

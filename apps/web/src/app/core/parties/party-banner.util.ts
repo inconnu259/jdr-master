@@ -457,7 +457,11 @@ function drawSteampunk(rng: () => number, base: BannerBase): SteampunkBanner {
   }
 
   const gears: GearParams[] = sizes.map((size, i) => {
-    // La chaîne se déploie du côté opposé au manomètre, en descendant.
+    // Deferred-work (2026-08-25) : commentaire corrigé — pour `corner === 'right'`, `rawX`
+    // AUGMENTE avec `progress` (rouages tardifs, plus petits) et dérive donc VERS le coin du
+    // manomètre, pas à l'opposé (l'inverse est vrai pour `corner === 'left'`). C'est
+    // `pushOutOfZone()` ci-dessous, pas cette formule, qui garantit l'absence de collision —
+    // testé par le test de propriété sur 500 graines par thème.
     const progress = gearCount === 1 ? 0 : i / (gearCount - 1);
     const spanX = BANNER_VIEWBOX_WIDTH - size;
     const rawX =

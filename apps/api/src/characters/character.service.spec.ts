@@ -2967,6 +2967,16 @@ describe('CharacterService', () => {
           service.updateContenant('char1', 'u1', 'missing', { weight: 1 }),
         ).rejects.toThrow(NotFoundException);
       });
+
+      it("un itemId valide mais appartenant à une autre catégorie (animaux) → NotFoundException, pour la bonne raison (deferred-work, gap de test comblé)", async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacterWithAnimaux([{ id: 'a1', name: 'Monture' }]),
+        );
+
+        await expect(
+          service.updateContenant('char1', 'u1', 'a1', { weight: 1 }),
+        ).rejects.toThrow(NotFoundException);
+      });
     });
 
     describe('removeContenant()', () => {

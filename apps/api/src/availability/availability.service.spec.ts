@@ -1190,6 +1190,15 @@ describe('AvailabilityService — émission temps réel', () => {
     expect(mockEmit).not.toHaveBeenCalled();
   });
 
+  it("deferred-work (2026-08-24) : create() n'échoue PAS si l'émission temps réel lève après le commit — la déclaration a déjà été écrite, un 500 ferait resoumettre une écriture déjà appliquée", async () => {
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }]);
+    mockEmit.mockImplementation(() => {
+      throw new Error('EventSource down');
+    });
+
+    await expect(service.create(USER_ID, baseDto)).resolves.toBeDefined();
+  });
+
   it('createBatch() n’émet partieTopic qu’une seule fois, quelle que soit la taille du lot (AC7)', async () => {
     mockMembershipFindMany.mockResolvedValue([
       { partieId: 'p1' },
@@ -2192,6 +2201,29 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     expect(result['inscriptions-ouvertes']).toEqual([]);
   });
 
+  it("un SessionPoll d'une partie tierce n'apparaît jamais dans votes-en-cours (AC7, deferred-work — même garde que mes-seances/inscriptions-ouvertes ci-dessus, jusqu'ici sans test dédié)", async () => {
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'pollEtranger',
+        // Partie 'Z' absente de myParties (mocké à [myPartie] seulement) — simule une ligne
+        // renvoyée par erreur (défense en profondeur, la requête réelle la filtrerait déjà).
+        partieId: 'Z',
+        expiresAt: null,
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+    expect(result['votes-en-cours']).toEqual([]);
+  });
+
   it('couche votes-en-cours : sondage OPEN avec une option dans la plage, identité de partie incluse, agrégats et ma réponse (Story 36.6)', async () => {
     mockMembershipGroupBy.mockResolvedValue([{ partieId: 'A', _count: 3 }]);
     mockSessionPollFindMany.mockResolvedValue([
@@ -2440,6 +2472,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         seanceId: 'seance1',
         partieId: 'A',
         partieName: 'Ma Partie',
+        scenarioId: 'scenario1',
         scenarioTitle: 'Enquête épisodique',
         inscriptionMin: 2,
         inscriptionMax: 5,

@@ -710,6 +710,7 @@ export interface MyCalendarOpenInscriptionEntry {
   seanceId: string;
   partieId: string;
   partieName: string;
+  scenarioId: string;
   scenarioTitle: string;
   inscriptionMin: number;
   inscriptionMax: number;

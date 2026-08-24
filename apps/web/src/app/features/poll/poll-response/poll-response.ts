@@ -18,7 +18,7 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING: 'Soirée',
+  EVENING: 'Soir',
   FULL_DAY: 'Journée',
 };
 

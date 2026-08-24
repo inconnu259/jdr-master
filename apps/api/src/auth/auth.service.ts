@@ -241,6 +241,14 @@ export class AuthService {
       // avec changePassword(), qui préserve la session courante — Story 28.5).
       await this.revokeSessions(tx, record.userId);
 
+      // Deferred-work (2026-08-25) : un token de reset plus ancien, non utilisé, resterait valide
+      // après ce reset réussi via CE token (`id` exclu, déjà marqué `usedAt` ci-dessus) — un lien
+      // de reset fuité mais non encore utilisé pourrait sinon encore servir après coup.
+      await tx.passwordResetToken.updateMany({
+        where: { userId: record.userId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+
       return updated;
     });
 
@@ -310,10 +318,21 @@ export class AuthService {
 
     const passwordHash = await argon2.hash(newPassword);
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({ where: { id: userId }, data: { passwordHash } });
-      await this.revokeSessions(tx, userId, exceptSid);
-    });
+    // Deferred-work (2026-08-25) : compte supprimé entre le findUnique ci-dessus et cette
+    // transaction (fenêtre astronomiquement improbable) — P2025 converti en 404 propre plutôt
+    // que de remonter en 500 brut.
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+        await this.revokeSessions(tx, userId, exceptSid);
+      });
+    } catch (e) {
+      // Même convention duck-typing que rollbackEmailChange() plus bas dans ce fichier.
+      if ((e as { code?: string })?.code === 'P2025') {
+        throw new NotFoundException('Compte introuvable');
+      }
+      throw e;
+    }
 
     // Hors transaction, best-effort — même patron que resetPassword().
     await this.email.sendMail('password-changed', user.email, {});

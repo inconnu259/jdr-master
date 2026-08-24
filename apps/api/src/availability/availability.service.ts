@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type {
@@ -70,6 +71,8 @@ export interface DeclarationLike {
 
 @Injectable()
 export class AvailabilityService {
+  private readonly logger = new Logger(AvailabilityService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtimeEvents: RealtimeEventsService,
@@ -101,10 +104,20 @@ export class AvailabilityService {
     ];
   }
 
+  // Deferred-work (2026-08-24) : appelée après que la mutation DB a déjà été committée (les 6
+  // sites d'appel) — une erreur ici ne doit jamais faire croire au client que l'écriture a échoué
+  // (500) alors qu'elle a bien eu lieu, ce qui ferait resoumettre une requête déjà appliquée.
+  // Même garde que `PartiesService.emitPartieAndMembersSafe()`/`emitMembersOnlySafe()`.
   private async emitForUser(userId: string): Promise<void> {
-    const partieIds = await this.affectedPartieIds(userId);
-    for (const id of partieIds) {
-      this.realtimeEvents.emit(partieTopic(id));
+    try {
+      const partieIds = await this.affectedPartieIds(userId);
+      for (const id of partieIds) {
+        this.realtimeEvents.emit(partieTopic(id));
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Échec de l'émission temps réel après mutation d'une déclaration de dispo/indispo (userId=${userId}) : ${String(err)}`,
+      );
     }
   }
 
@@ -1142,6 +1155,7 @@ export class AvailabilityService {
   private buildOpenInscriptionsLayer(
     seances: Array<{
       id: string;
+      scenarioId: string;
       poll: { chosenDate: Date | null } | null;
       dateValidee: Date | null;
       inscriptionMin: number | null;
@@ -1164,6 +1178,7 @@ export class AvailabilityService {
         seanceId: s.id,
         partieId: partie.id,
         partieName: partie.name,
+        scenarioId: s.scenarioId,
         scenarioTitle: s.scenario.title,
         inscriptionMin: s.inscriptionMin ?? 0,
         inscriptionMax: s.inscriptionMax,

@@ -550,9 +550,10 @@ export class CalendarAgendaView {
    * un bouton est du HTML invalide dont la navigation clavier ne se relève pas. La garde est
    * structurelle, pas une observation sur les données actuelles.
    *
-   * Une entrée sans scénario identifiable — l'inscription ouverte du calendrier personnel, dont
-   * le DTO ne porte pas de `scenarioId` — n'est pas cliquable **et ne s'en donne pas l'air** :
-   * pas de bouton désactivé, pas de bouton du tout.
+   * Une entrée sans scénario identifiable n'est pas cliquable **et ne s'en donne pas l'air** :
+   * pas de bouton désactivé, pas de bouton du tout. *(2026-08-24 : ce n'est plus le cas de
+   * l'inscription ouverte du calendrier personnel — `MyCalendarOpenInscriptionEntry` porte
+   * désormais `scenarioId`, la ligne est ouvrable comme en contexte de partie.)*
    */
   protected openTarget(entry: AgendaEntry): RailTarget | null {
     if (entry.vote || !entry.partieId || !entry.scenarioId) return null;

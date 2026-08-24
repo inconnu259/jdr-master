@@ -40,7 +40,7 @@ import type {
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING: 'Soirée',
+  EVENING: 'Soir',
   FULL_DAY: 'Journée',
 };
 import { AuthService } from '../../../core/auth/auth.service';
@@ -516,10 +516,14 @@ export class PartieDetail implements OnInit {
   protected pollStatusLabel(): string {
     const polls = this.activePolls();
     if (polls.length === 1) {
+      // Deferred-work (2026-08-24) : `{total}` prend `poll.membersCount` (MJ compris, valeur
+      // serveur), pas `this.members().length` (exclut le MJ, `GET /parties/:id/members` ne lui
+      // pose jamais de ligne `Membership`) — même dénominateur que le panneau du calendrier
+      // (story 36.6), qui avait le même bug à deux Y avant sa correction.
       return this.theme
         .tone()
         ['poll.status_summary'].replace('{responded}', String(this.respondedCount()))
-        .replace('{total}', String(this.members().length));
+        .replace('{total}', String(polls[0].membersCount));
     }
     return `${polls.length} votes de date en cours`;
   }

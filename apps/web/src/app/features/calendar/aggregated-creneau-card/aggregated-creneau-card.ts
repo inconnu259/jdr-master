@@ -4,7 +4,7 @@ import type { AggregatedSlotDto } from '@master-jdr/shared';
 const SLOT_LABELS: Record<string, string> = {
   MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING: 'Soirée',
+  EVENING: 'Soir',
 };
 
 @Component({
