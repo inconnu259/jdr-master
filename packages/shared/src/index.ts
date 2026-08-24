@@ -657,6 +657,12 @@ export interface MyCalendarSeanceEntry {
   heureRdv: string | null;
   lieu: string | null;
   notePratique: string | null;
+  /** Story 36.16 — le compte-rendu de cette séance manque, condition d'entrée dans la section
+   *  « C'est passé » de l'Agenda (déjà livrée côté front par la 36.11). Contrairement à
+   *  `AgendaEntry.compteRenduManquant` (contexte de partie, optionnel), **jamais optionnel ici**
+   *  : cette entrée provient toujours d'un `Seance` complet côté serveur, donc toujours
+   *  calculable — pas de distinction « on ne sait pas » à préserver. */
+  compteRenduManquant: boolean;
 }
 
 /** Une option d'un vote en cours, telle que la voit le calendrier PERSONNEL (Story 36.6, D-17).

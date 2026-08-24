@@ -11,7 +11,8 @@ import type {
   SlotStatus,
 } from '@master-jdr/shared';
 import { SelectionBar } from '../selection-bar/selection-bar';
-import type { AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
+import { SLOT_LABELS } from '../agenda-badge.utils';
+import type { AgendaEntry, AgendaSealRequest } from '../calendar-agenda-view/calendar-agenda-view';
 import {
   type DayDetail,
   type RailSlot,
@@ -19,6 +20,7 @@ import {
   bandsAreUniform,
   buildMonthDetails,
   composeSeanceInfo,
+  dateKeyToLocalMidnight,
   toDateKey,
 } from '../day-detail.utils';
 import {
@@ -37,6 +39,14 @@ import {
 
 /** Story 36.10, AC16 — le mot que porte un créneau désigné, identique dans les deux grilles. */
 const COMPOSED_ARIA = 'désigné pour le vote';
+
+/** Story 36.15 — bloc JUMEAU de `calendar-week-view.ts` (`SEAL_DATE_FORMAT`). Toute retouche ici
+ *  est à reporter là-bas. */
+const SEAL_DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+});
 
 /** Story 36.8, AC11 — vrai dès qu'un créneau du jour porte le canal « disponibilité du groupe ».
  *
@@ -279,6 +289,10 @@ export class CalendarMonthView {
    *  par `CalendarView`, et la vue Semaine reçoit exactement le même. */
   readonly composedKeys = input<ReadonlySet<string> | null>(null);
 
+  /** Story 36.15 — bloc JUMEAU de `calendar-week-view.ts` (`canSeal`). Même double garde que
+   *  `CalendarAgendaView.canSeal` (36.12) : être MJ ET être dans le calendrier d'une partie. */
+  readonly canSeal = input(false);
+
   readonly slotSelected = output<SlotSelectedEvent>();
   readonly displayDateChange = output<Date>();
   /** Story 30.3 : lot construit par un glissement (souris/tactile) ou une validation clavier —
@@ -291,6 +305,9 @@ export class CalendarMonthView {
   /** Story 36.7 — une bande portant une option de vote vient d'être activée. La vue ne sait pas
    *  qu'un sélecteur existe : elle signale, `CalendarView` décide. */
   readonly voteOptionActivated = output<VoteOptionActivatedEvent>();
+  /** Story 36.15, AC5/AC6 — bloc JUMEAU de `calendar-week-view.ts`. Réémis tel quel depuis
+   *  `<app-selection-bar>`, vers `CalendarView.onSealRequested()` (36.12). Aucune logique ici. */
+  readonly sealRequested = output<AgendaSealRequest>();
 
   /** Story 36.10, AC2 — un créneau vient d'être désigné ou retiré. La vue ne connaît ni vote ni
    *  endpoint : elle bascule, `CalendarView` accumule, et rien n'est écrit avant validation. */
@@ -357,6 +374,38 @@ export class CalendarMonthView {
   /** Ce que `Entrée` valide (AC6). Défaut `UNAVAILABLE` — le résultat que produisait déjà le
    *  chemin clavier, désormais affiché par la barre et modifiable. */
   protected readonly armedKind = signal<AvailKind>('UNAVAILABLE');
+
+  /** Story 36.15 — bloc JUMEAU de `calendar-week-view.ts` (`sealCandidate`). Toute retouche ici
+   *  est à reporter là-bas : les deux grilles doivent résoudre le même candidat pour la même
+   *  sélection/le même vote. */
+  protected readonly sealCandidate = computed<AgendaSealRequest | null>(() => {
+    if (!this.canSeal()) return null;
+    const cells = this.selectedCells();
+    if (cells.length !== 1) return null;
+    const cell = cells[0];
+    const dateKey = toDateKey(cell.date);
+    // Revue de code (36.15) — bloc JUMEAU de `calendar-week-view.ts` : `.filter()` + exiger
+    // EXACTEMENT une correspondance plutôt que `.find()`, pour ne jamais sceller silencieusement
+    // le mauvais vote si deux votes OPEN proposaient le même créneau exact.
+    const matches = this.entries().filter(
+      (e) => e.type === 'votes-en-cours' && e.date === dateKey && e.slot === cell.slot,
+    );
+    if (matches.length !== 1) return null;
+    const entry = matches[0];
+    if (!entry.vote) return null;
+    return {
+      partieId: entry.vote.partieId,
+      pollId: entry.vote.pollId,
+      optionId: entry.vote.optionId,
+      dateLabel: CalendarMonthView.sealDateLabel(entry.date, entry.slot),
+      pollLabel: entry.label,
+    };
+  });
+
+  private static sealDateLabel(dateKey: string, slot?: DaySlot): string {
+    const date = SEAL_DATE_FORMAT.format(dateKeyToLocalMidnight(dateKey));
+    return slot && slot !== 'FULL_DAY' ? `${date}, ${SLOT_LABELS[slot].toLowerCase()}` : date;
+  }
   /** AC16 — la date courante : la dernière case cliquée. Un tap court ne déclare rien, mais il
    *  désigne — le rail en montre le détail, et la case doit le dire aussi. */
   protected readonly currentDate = signal<Date | null>(null);

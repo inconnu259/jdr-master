@@ -159,6 +159,9 @@
     }
 
     @if (view() === 'month') {
+      <!-- Story 36.15 — `canSeal` : MÊME garde, MÊME commentaire que `<app-calendar-agenda-view>`
+           plus bas (le calendrier personnel agrège plusieurs parties et ne sait d'aucune si j'en
+           suis le MJ — `isMjMode()` seul y laisserait passer un bouton qui échouerait en 403). -->
       <app-calendar-month-view
         [declarations]="visibleDeclarations()"
         [loading]="loading()"
@@ -169,6 +172,7 @@
         [destinyDates]="destinyDates()"
         [composing]="composing()"
         [composedKeys]="composedKeys()"
+        [canSeal]="isMjMode() && partieId() !== null"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onMonthDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"
@@ -176,19 +180,21 @@
         (voteOptionActivated)="onVoteOptionActivated($event)"
         (composeToggled)="onComposeToggled($event)"
         (composeCancelled)="cancelCompose()"
+        (sealRequested)="onSealRequested($event)"
       />
     } @else if (view() === 'week') {
+      <!-- Story 36.15 — même garde `canSeal` que la vue Mois ci-dessus. -->
       <app-calendar-week-view
         [declarations]="visibleDeclarations()"
         [loading]="loading()"
         [pendingDto]="pendingDto()"
         [startDate]="sharedDate()"
-        [seanceDates]="seanceMarkerDates()"
         [entries]="calendarEntries()"
         [activeLayers]="activeLayers()"
         [destinyDates]="destinyDates()"
         [composing]="composing()"
         [composedKeys]="composedKeys()"
+        [canSeal]="isMjMode() && partieId() !== null"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onWeekDateChange($event)"
         (batchDeclareRequested)="onBatchDeclareRequested($event)"
@@ -196,6 +202,7 @@
         (voteOptionActivated)="onVoteOptionActivated($event)"
         (composeToggled)="onComposeToggled($event)"
         (composeCancelled)="cancelCompose()"
+        (sealRequested)="onSealRequested($event)"
       />
     } @else {
       <!-- Story 36.11 — `todayKey` est figé au montage par le parent : une seule source de

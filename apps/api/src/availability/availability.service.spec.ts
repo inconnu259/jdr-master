@@ -1864,6 +1864,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         heureRdv: null,
         lieu: null,
         notePratique: null,
+        // Story 36.16 : aucun `compteRendu` dans le mock → manquant.
+        compteRenduManquant: true,
       },
     ]);
   });
@@ -1900,6 +1902,127 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       heureRdv: '20:30',
       lieu: 'chez Marc',
       notePratique: 'pensez aux dés',
+    });
+  });
+
+  // ─── compteRenduManquant (Story 36.16) ────────────────────────────────────
+
+  it('AC1 : compte-rendu non renseigné (null) → compteRenduManquant = true', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        compteRendu: null,
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    expect(result['mes-seances'][0]).toMatchObject({
+      compteRenduManquant: true,
+    });
+  });
+
+  it('AC1 : compte-rendu ne portant que des espaces → compteRenduManquant = true', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        compteRendu: '   ',
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    expect(result['mes-seances'][0]).toMatchObject({
+      compteRenduManquant: true,
+    });
+  });
+
+  it('AC2 : compte-rendu renseigné → compteRenduManquant = false', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        compteRendu: 'La troupe a repoussé les maraudeurs.',
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    expect(result['mes-seances'][0]).toMatchObject({
+      compteRenduManquant: false,
+    });
+  });
+
+  it('AC3 : une plage passée renvoie bien les séances qualifiantes, sans changement serveur supplémentaire', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-07-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        compteRendu: null,
+      },
+    ]);
+
+    // Plage explicitement PASSÉE, envoyée par l'appelant — aucune borne serveur ne l'empêche.
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-07-01',
+      '2026-07-31',
+    );
+
+    expect(result['mes-seances']).toHaveLength(1);
+    expect(result['mes-seances'][0]).toMatchObject({
+      date: '2026-07-10',
+      compteRenduManquant: true,
     });
   });
 

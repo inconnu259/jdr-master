@@ -187,12 +187,13 @@ describe('SeanceList', () => {
   });
 
   describe('onChoose()/onClosePoll() rafraîchissent l’affichage (bug-fix : « rien ne se passe » après avoir scellé un créneau)', () => {
-    it('onChoose appelle chooseDate PUIS recharge le scénario et émet seanceLinked', async () => {
+    it('onChoose appelle chooseDate PUIS recharge le scénario et émet seanceLinked (confirmé)', async () => {
       const { fixture, scenariosSvc, pollSvc } = await createComponent(
         { ...SCENARIO, seances: [SEANCE_WITH_POLL] },
         { isMj: true },
       );
       const comp = fixture.componentInstance as any;
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
       const closedPoll: SessionPollDto = {
         ...POLL,
         status: 'CLOSED',
@@ -211,6 +212,22 @@ describe('SeanceList', () => {
       expect(pollSvc.chooseDate).toHaveBeenCalledWith('p1', 'poll1', { optionId: 'opt1' });
       expect(scenariosSvc.listAll).toHaveBeenCalledWith('p1');
       expect(emitted).toEqual(fresh);
+    });
+
+    it('onChoose demande confirmation ; refusée → aucun appel à chooseDate (décision utilisateur 2026-08-24, harmonisation avec l’Agenda)', async () => {
+      const { fixture, pollSvc } = await createComponent(
+        { ...SCENARIO, seances: [SEANCE_WITH_POLL] },
+        { isMj: true },
+      );
+      const comp = fixture.componentInstance as any;
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+      await comp.onChoose('poll1', 'opt1');
+
+      expect(confirmSpy).toHaveBeenCalledWith(
+        'Sceller cette date ? Le vote sera définitivement clôturé.',
+      );
+      expect(pollSvc.chooseDate).not.toHaveBeenCalled();
     });
 
     it('onClosePoll appelle closePoll PUIS recharge le scénario et émet seanceLinked', async () => {

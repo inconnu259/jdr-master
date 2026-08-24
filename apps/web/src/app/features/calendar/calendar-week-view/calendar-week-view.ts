@@ -11,10 +11,12 @@ import type {
   SlotStatus,
 } from '@master-jdr/shared';
 import { computeDisplayStatus } from '../../../core/availability/compute-display-status';
-import type { AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
+import { SLOT_LABELS } from '../agenda-badge.utils';
+import type { AgendaEntry, AgendaSealRequest } from '../calendar-agenda-view/calendar-agenda-view';
 import {
   buildMonthDetails,
   composeSeanceInfo,
+  dateKeyToLocalMidnight,
   toDateKey,
   type DayDetail,
   type DaySlotDetail,
@@ -32,6 +34,16 @@ import {
 
 /** Story 36.10, AC16 — même mot qu'en vue Mois pour un créneau désigné. */
 const COMPOSED_ARIA = 'désigné pour le vote';
+
+/** Story 36.15 — MÊME format que `OPTION_DATE_FORMAT` de `calendar-agenda-view.ts` : le libellé
+ *  du dialogue de confirmation doit se lire pareil, que le scellement parte de l'Agenda ou d'ici.
+ *  Dupliqué plutôt qu'exporté : `OPTION_DATE_FORMAT` est un détail interne de l'Agenda. Toute
+ *  retouche ici est à reporter là-bas. */
+const SEAL_DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+});
 
 interface SlotData {
   status: SlotStatus;
@@ -257,10 +269,6 @@ export class CalendarWeekView {
   readonly loading = input(false);
   readonly pendingDto = input<CreateAvailabilityDto | null>(null);
   readonly startDate = input<Date>(new Date());
-  /** Story 30.6, revue de code (AC1) : dates (yyyy-mm-dd) portant au moins une séance à venir de
-   *  la couche `mes-seances` — inscriptions-ouvertes n'a structurellement pas de date donc reste
-   *  Agenda-only. */
-  readonly seanceDates = input<Set<string>>(new Set());
   /** Story 36.13 — entrées du calendrier **non filtrées par couche** (`allCalendarEntries()`),
    *  exactement l'input que reçoit déjà la vue Mois. Les passer déjà filtrées ferait disparaître
    *  l'indisponibilité d'une séance en même temps que son titre, ce que FR-50 interdit (AC11). */
@@ -283,6 +291,12 @@ export class CalendarWeekView {
   /** Créneaux composés, en clés `YYYY-MM-DD|SLOT` (`composeCellKey`). `null` hors mode. */
   readonly composedKeys = input<ReadonlySet<string> | null>(null);
 
+  /** Story 36.15 — même double garde que `CalendarAgendaView.canSeal` (36.12) : être MJ ET être
+   *  dans le calendrier d'une partie. `CalendarView` la calcule (`isMjMode() && partieId() !==
+   *  null`), jamais cette vue — le calendrier personnel agrège plusieurs parties et ne sait
+   *  d'aucune si l'utilisateur en est le MJ. */
+  readonly canSeal = input(false);
+
   readonly slotSelected = output<SlotSelectedEvent>();
   /** Story 36.10, AC2 — un créneau vient d'être désigné ou retiré. */
   readonly composeToggled = output<SlotSelectedEvent>();
@@ -299,6 +313,9 @@ export class CalendarWeekView {
   /** Story 36.7 — une cellule portant une option de vote vient d'être activée. Même contrat que
    *  la vue Mois : la vue signale, `CalendarView` ouvre le sélecteur. */
   readonly voteOptionActivated = output<VoteOptionActivatedEvent>();
+  /** Story 36.15, AC5/AC6 — réémis tel quel depuis `<app-selection-bar>`, vers
+   *  `CalendarView.onSealRequested()` (confirmation + écriture, 36.12). Aucune logique ici. */
+  readonly sealRequested = output<AgendaSealRequest>();
 
   protected readonly displayWeekStart = signal<Date>(getWeekStart(new Date()));
 
@@ -396,6 +413,45 @@ export class CalendarWeekView {
   });
   /** Ce que `Entrée` valide (AC6). Défaut `UNAVAILABLE`, désormais affiché par la barre. */
   protected readonly armedKind = signal<AvailKind>('UNAVAILABLE');
+
+  /**
+   * Story 36.15, AC1/AC2/AC3/AC4 — le candidat de scellement pour la sélection courante, ou
+   * `null`. Toutes les gardes vivent ici, jamais dans `SelectionBar` (composant de rendu pur,
+   * qui ne connaît pas `entries()`) : `canSeal()` (MJ + contexte de partie), sélection à UN SEUL
+   * créneau, et une entrée `votes-en-cours` dont `date`/`slot` correspondent EXACTEMENT à ce
+   * créneau (ces entrées ne portent que des votes `OPEN`, cf. `CalendarView.activePolls()`).
+   */
+  protected readonly sealCandidate = computed<AgendaSealRequest | null>(() => {
+    if (!this.canSeal()) return null;
+    const cells = this.selectedCells();
+    if (cells.length !== 1) return null;
+    const cell = cells[0];
+    const dateKey = toDateKey(cell.date);
+    // Revue de code (36.15) — deux votes OPEN de la même partie pourraient en théorie proposer
+    // le même créneau exact : un `.find()` prendrait le premier silencieusement, au risque de
+    // sceller le mauvais vote. `.filter()` + exiger EXACTEMENT une correspondance traite ce cas
+    // comme AC2/AC4 traitent déjà l'absence de correspondance : aucun candidat, pas de bouton.
+    const matches = this.entries().filter(
+      (e) => e.type === 'votes-en-cours' && e.date === dateKey && e.slot === cell.slot,
+    );
+    if (matches.length !== 1) return null;
+    const entry = matches[0];
+    if (!entry.vote) return null;
+    return {
+      partieId: entry.vote.partieId,
+      pollId: entry.vote.pollId,
+      optionId: entry.vote.optionId,
+      dateLabel: CalendarWeekView.sealDateLabel(entry.date, entry.slot),
+      pollLabel: entry.label,
+    };
+  });
+
+  /** Même formatage que `CalendarAgendaView.optionLabel()` — le dialogue de confirmation doit
+   *  nommer le créneau à l'identique, que le scellement parte de l'Agenda ou d'ici. */
+  private static sealDateLabel(dateKey: string, slot?: DaySlot): string {
+    const date = SEAL_DATE_FORMAT.format(dateKeyToLocalMidnight(dateKey));
+    return slot && slot !== 'FULL_DAY' ? `${date}, ${SLOT_LABELS[slot].toLowerCase()}` : date;
+  }
   /** AC16 — la cellule courante : la dernière cliquée. Un tap court ne déclare rien, mais il
    *  désigne — le rail en montre le détail, et la cellule doit le dire aussi. */
   protected readonly currentCell = signal<SelectedCell | null>(null);

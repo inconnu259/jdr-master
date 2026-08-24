@@ -827,17 +827,6 @@ export class CalendarView implements OnInit {
     ),
   );
 
-  // Story 30.6, revue de code (AC1) : marqueur Mois/Semaine pour la couche `mes-seances` — dérivé
-  // d'agendaEntries() pour ne jamais dupliquer la logique de source (AD-17). `inscriptions-ouvertes`
-  // n'a structurellement pas de date (aucune séance validée), reste Agenda-only.
-  protected readonly seanceMarkerDates = computed<Set<string>>(() => {
-    const dates = new Set<string>();
-    for (const entry of this.agendaEntries()) {
-      if (entry.type === 'mes-seances' && entry.date) dates.add(entry.date);
-    }
-    return dates;
-  });
-
   // ─── Story 36.9 — le mode Destinée ────────────────────────────────────────
   //
   // 🚨 UN MODE, PAS UNE COUCHE (`EXPERIENCE.md:367`). Il ne rejoint JAMAIS `activeLayers` :
@@ -895,8 +884,7 @@ export class CalendarView implements OnInit {
    * estompée sans rien mettre en avant. C'est le défaut que l'AC6 et son test verrouillent.
    *
    * Point de dérivation UNIQUE (AC12) : les deux vues consomment cet ensemble, aucune ne
-   * recalcule la pertinence depuis ses propres bandes (doctrine AD-12/AD-19, patron
-   * `seanceMarkerDates()` juste au-dessus).
+   * recalcule la pertinence depuis ses propres bandes (doctrine AD-12/AD-19).
    */
   protected readonly destinyDates = computed<ReadonlySet<string> | null>(() => {
     const current = this.destinyPoll();

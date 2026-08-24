@@ -1124,3 +1124,146 @@ describe('CalendarWeekView — mode de composition (Story 36.10)', () => {
     expect(cell.classList.contains('selected')).toBe(false);
   });
 });
+
+// ─── Story 36.15 — Sceller depuis la barre de sélection ──────────────────────
+
+describe('CalendarWeekView — sceller depuis la barre de sélection (Story 36.15)', () => {
+  let fixture: ComponentFixture<CalendarWeekView>;
+  let el: HTMLElement;
+
+  const futureStart = new Date();
+  futureStart.setDate(futureStart.getDate() + 14);
+  const weekStart = getWeekStart(
+    new Date(Date.UTC(futureStart.getFullYear(), futureStart.getMonth(), futureStart.getDate())),
+  );
+
+  function dayKey(i: number): string {
+    const d = new Date(
+      weekStart.getUTCFullYear(),
+      weekStart.getUTCMonth(),
+      weekStart.getUTCDate() + i,
+    );
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  const PARTICIPATION = {
+    partieId: 'partie-1',
+    pollId: 'poll1',
+    optionId: 'opt1',
+    yes: 2,
+    maybe: 1,
+    no: 0,
+    total: 4,
+    myAnswer: null,
+  };
+
+  /** Vote OPEN sur mercredi (index 2) soir — `entries()` ne porte jamais de vote CLOSED
+   *  (cf. `CalendarView.activePolls()`, filtré `status === 'OPEN'`). */
+  function voteEntry(
+    dayIndex: number,
+    slot: 'MORNING' | 'AFTERNOON' | 'EVENING' = 'EVENING',
+  ): AgendaEntry {
+    return {
+      key: `poll-${dayIndex}`,
+      type: 'votes-en-cours',
+      date: dayKey(dayIndex),
+      label: 'Les Cendres d’Ashal',
+      slot,
+      partieId: 'partie-1',
+      vote: PARTICIPATION,
+    } as AgendaEntry;
+  }
+
+  function create(inputs: Record<string, unknown> = {}): void {
+    fixture = TestBed.createComponent(CalendarWeekView);
+    fixture.componentRef.setInput('startDate', futureStart);
+    for (const [k, v] of Object.entries(inputs)) fixture.componentRef.setInput(k, v);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+
+  function selectSingle(
+    dayIndex: number,
+    slot: 'MORNING' | 'AFTERNOON' | 'EVENING' = 'EVENING',
+  ): void {
+    const date = new Date(
+      weekStart.getUTCFullYear(),
+      weekStart.getUTCMonth(),
+      weekStart.getUTCDate() + dayIndex,
+    );
+    (fixture.componentInstance as any).selectedCells.set([{ date, slot }]);
+    fixture.detectChanges();
+  }
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ imports: [CalendarWeekView] });
+  });
+
+  afterEach(() => {
+    TestBed.resetTestingModule();
+  });
+
+  it('AC1 — sealCandidate résout le triplet depuis l’entrée votes-en-cours correspondante', () => {
+    create({ canSeal: true, entries: [voteEntry(2)] });
+    selectSingle(2, 'EVENING');
+    const candidate = (fixture.componentInstance as any).sealCandidate();
+    expect(candidate).toEqual({
+      partieId: 'partie-1',
+      pollId: 'poll1',
+      optionId: 'opt1',
+      dateLabel: expect.stringContaining('soir'),
+      pollLabel: 'Les Cendres d’Ashal',
+    });
+  });
+
+  it('AC1 — le bouton Sceller est rendu dans la barre de sélection', () => {
+    create({ canSeal: true, entries: [voteEntry(2)] });
+    selectSingle(2, 'EVENING');
+    expect(el.querySelector('.seal-btn')).not.toBeNull();
+  });
+
+  it('AC2 — sealCandidate est null quand aucune entrée ne correspond au créneau sélectionné', () => {
+    create({ canSeal: true, entries: [voteEntry(2, 'EVENING')] });
+    selectSingle(2, 'MORNING'); // même jour, autre créneau
+    expect((fixture.componentInstance as any).sealCandidate()).toBeNull();
+  });
+
+  it('AC3 — sealCandidate est null quand canSeal est faux, même avec une entrée correspondante', () => {
+    create({ canSeal: false, entries: [voteEntry(2)] });
+    selectSingle(2, 'EVENING');
+    expect((fixture.componentInstance as any).sealCandidate()).toBeNull();
+  });
+
+  it('Revue de code — deux entrées votes-en-cours sur le MÊME créneau (deux votes OPEN concurrents) → sealCandidate est null, jamais le premier match silencieux', () => {
+    const other = { ...voteEntry(2, 'EVENING'), key: 'poll-2-bis', label: 'Autre scénario' };
+    create({ canSeal: true, entries: [voteEntry(2, 'EVENING'), other] });
+    selectSingle(2, 'EVENING');
+    expect((fixture.componentInstance as any).sealCandidate()).toBeNull();
+  });
+
+  it('AC4 — sealCandidate est null sur une sélection de plusieurs créneaux', () => {
+    create({ canSeal: true, entries: [voteEntry(2)] });
+    const date = new Date(
+      weekStart.getUTCFullYear(),
+      weekStart.getUTCMonth(),
+      weekStart.getUTCDate() + 2,
+    );
+    (fixture.componentInstance as any).selectedCells.set([
+      { date, slot: 'EVENING' },
+      { date, slot: 'AFTERNOON' },
+    ]);
+    fixture.detectChanges();
+    expect((fixture.componentInstance as any).sealCandidate()).toBeNull();
+  });
+
+  it('AC5/AC6 — un clic sur Sceller émet sealRequested avec le candidat, sans appel réseau ici', () => {
+    create({ canSeal: true, entries: [voteEntry(2)] });
+    selectSingle(2, 'EVENING');
+    const spy = vi.fn();
+    fixture.componentInstance.sealRequested.subscribe(spy);
+    (el.querySelector('.seal-btn') as HTMLButtonElement).click();
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ pollId: 'poll1', optionId: 'opt1' }),
+    );
+  });
+});

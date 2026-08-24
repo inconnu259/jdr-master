@@ -37,9 +37,6 @@
           [class.col-header--dim]="isDayDimmed(cell)"
         >
           {{ cell.label }}
-          @if (seanceDates().has(dateKey(cell.date))) {
-            <span class="seance-dot" aria-hidden="true" title="Séance à venir"></span>
-          }
         </div>
       }
 
@@ -134,12 +131,14 @@
         [rangeLabel]="selectionRangeLabel()"
         [scope]="scope()"
         [armedKind]="armedKind()"
+        [sealCandidate]="sealCandidate()"
         (scopeChange)="onScopeChange($event)"
         (armedKindChange)="onArmedKindChange($event)"
         (markAvailable)="onSelectionCommit('AVAILABLE')"
         (markUnavailable)="onSelectionCommit('UNAVAILABLE')"
         (otherRequested)="onOtherRequested()"
         (cancelled)="onSelectionCancelled()"
+        (sealRequested)="sealRequested.emit($event)"
         (keydown.escape)="onEscape()"
       />
     }

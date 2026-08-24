@@ -2,12 +2,15 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
+import { By } from '@angular/platform-browser';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { BehaviorSubject, of } from 'rxjs';
 import { Location } from '@angular/common';
 import { vi } from 'vitest';
 import { CalendarView } from './calendar-view';
+import { CalendarWeekView } from '../calendar-week-view/calendar-week-view';
+import { CalendarMonthView } from '../calendar-month-view/calendar-month-view';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import type { AuthUser } from '@master-jdr/shared';
 import {
@@ -3605,6 +3608,84 @@ describe('CalendarView — sceller depuis l’Agenda (Story 36.12, AC10 à AC12)
     expect(comp.partieId()).toBeNull();
     expect(fixture.nativeElement.querySelector('.agenda-option__seal')).toBeNull();
     expect(fixture.nativeElement.querySelector('.agenda-entry__launch')).toBeNull();
+  });
+});
+
+describe('CalendarView — sceller depuis la grille (Story 36.15)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('AC1/AC3 — canSeal reçu par la vue Mois vaut isMjMode() && partieId() !== null', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.onViewChange('month');
+    fixture.detectChanges();
+
+    const month = fixture.debugElement.query(By.directive(CalendarMonthView));
+    expect(month.componentInstance.canSeal()).toBe(true);
+  });
+
+  it('AC1/AC3 — canSeal reçu par la vue Semaine vaut isMjMode() && partieId() !== null', async () => {
+    const { fixture } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.onViewChange('week');
+    fixture.detectChanges();
+
+    const week = fixture.debugElement.query(By.directive(CalendarWeekView));
+    expect(week.componentInstance.canSeal()).toBe(true);
+  });
+
+  it('AC3 — canSeal est faux en calendrier personnel, même sans changer de vue', async () => {
+    const { fixture } = await createCalendarView({ mode: 'personal' });
+    fixture.detectChanges();
+
+    const month = fixture.debugElement.query(By.directive(CalendarMonthView));
+    expect(month.componentInstance.canSeal()).toBe(false);
+  });
+
+  it('AC5/AC6 — sealRequested de la vue Mois route vers onSealRequested() (même chemin que l’Agenda)', async () => {
+    const { fixture, pollSvc, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.onViewChange('month');
+    fixture.detectChanges();
+    dialog.__result = true;
+
+    const month = fixture.debugElement.query(By.directive(CalendarMonthView));
+    month.componentInstance.sealRequested.emit(SEAL_REQUEST);
+    await fixture.whenStable();
+
+    expect(dialog.open).toHaveBeenCalled();
+    expect(pollSvc.chooseDate).toHaveBeenCalledWith('partie-1', 'poll1', { optionId: 'optA' });
+  });
+
+  it('AC5/AC6 — sealRequested de la vue Semaine route vers onSealRequested()', async () => {
+    const { fixture, pollSvc, dialog } = await createCalendarView({
+      mode: 'mj',
+      partieId: 'partie-1',
+      scenarios: [SCENARIO_MJ_AGENDA],
+    });
+    const comp = fixture.componentInstance as any;
+    comp.onViewChange('week');
+    fixture.detectChanges();
+    dialog.__result = true;
+
+    const week = fixture.debugElement.query(By.directive(CalendarWeekView));
+    week.componentInstance.sealRequested.emit(SEAL_REQUEST);
+    await fixture.whenStable();
+
+    expect(dialog.open).toHaveBeenCalled();
+    expect(pollSvc.chooseDate).toHaveBeenCalledWith('partie-1', 'poll1', { optionId: 'optA' });
   });
 });
 

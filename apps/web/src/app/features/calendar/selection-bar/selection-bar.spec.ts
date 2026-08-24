@@ -2,7 +2,16 @@ import { TestBed } from '@angular/core/testing';
 import { ComponentFixture } from '@angular/core/testing';
 import { vi } from 'vitest';
 import type { AvailKind, DaySlot } from '@master-jdr/shared';
+import type { AgendaSealRequest } from '../calendar-agenda-view/calendar-agenda-view';
 import { SelectionBar } from './selection-bar';
+
+const SEAL_CANDIDATE: AgendaSealRequest = {
+  partieId: 'p1',
+  pollId: 'poll1',
+  optionId: 'opt1',
+  dateLabel: 'ven. 28 août, soir',
+  pollLabel: 'Les Cendres d’Ashal',
+};
 
 describe('SelectionBar', () => {
   let fixture: ComponentFixture<SelectionBar>;
@@ -13,12 +22,14 @@ describe('SelectionBar', () => {
     rangeLabel: string | null = null,
     scope: DaySlot = 'FULL_DAY',
     armedKind: AvailKind = 'UNAVAILABLE',
+    sealCandidate: AgendaSealRequest | null = null,
   ): void {
     fixture = TestBed.createComponent(SelectionBar);
     fixture.componentRef.setInput('count', count);
     fixture.componentRef.setInput('rangeLabel', rangeLabel);
     fixture.componentRef.setInput('scope', scope);
     fixture.componentRef.setInput('armedKind', armedKind);
+    fixture.componentRef.setInput('sealCandidate', sealCandidate);
     fixture.detectChanges();
     el = fixture.nativeElement;
   }
@@ -141,5 +152,30 @@ describe('SelectionBar', () => {
     const live = el.querySelector('.visually-hidden[aria-live]')!;
     expect(live.textContent).toContain('Après-midi');
     expect(live.textContent).toContain('Disponible');
+  });
+
+  // ─── Story 36.15 ──────────────────────────────────────────────────────────
+
+  it('AC1/AC2 — aucun bouton Sceller quand sealCandidate est null', () => {
+    create(1, null, 'FULL_DAY', 'UNAVAILABLE', null);
+    expect(el.querySelector('.seal-btn')).toBeNull();
+  });
+
+  it('AC1 — le bouton Sceller apparaît quand sealCandidate est renseigné, thématisé', () => {
+    create(1, null, 'FULL_DAY', 'UNAVAILABLE', SEAL_CANDIDATE);
+    const btn = el.querySelector('.seal-btn') as HTMLButtonElement;
+    expect(btn).not.toBeNull();
+    expect(btn.textContent?.trim()).toBe('Sceller');
+    expect(btn.getAttribute('aria-label')).toBe(
+      'Sceller — Les Cendres d’Ashal — ven. 28 août, soir',
+    );
+  });
+
+  it('AC5 — clic sur Sceller émet sealRequested avec le candidat exact, aucun appel réseau ici', () => {
+    create(1, null, 'FULL_DAY', 'UNAVAILABLE', SEAL_CANDIDATE);
+    const spy = vi.fn();
+    fixture.componentInstance.sealRequested.subscribe(spy);
+    (el.querySelector('.seal-btn') as HTMLButtonElement).click();
+    expect(spy).toHaveBeenCalledWith(SEAL_CANDIDATE);
   });
 });

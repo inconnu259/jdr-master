@@ -36,6 +36,23 @@
 
   <span class="selection-bar__spacer"></span>
 
+  <!-- Story 36.15, AC1 — le bouton *Sceller*, seulement quand la sélection correspond à une
+       option d'un vote OPEN dont l'utilisateur est MJ. Placé avant Disponible/Indisponible,
+       comme dans le contrat d'UI (`contrat-ui-calendrier.html:376`). Aucune écriture ici : le
+       clic route vers `CalendarView.onSealRequested()` (confirmation + appel), 36.12. -->
+  @if (sealCandidate(); as candidate) {
+    <button
+      mat-flat-button
+      type="button"
+      color="primary"
+      class="seal-btn"
+      [attr.aria-label]="sealAriaLabel(candidate)"
+      (click)="sealRequested.emit(candidate)"
+    >
+      {{ sealLabel() }}
+    </button>
+  }
+
   <!--
     Intention armée (AC6) : c'est ce que `Entrée` validera. Marquée par la FORME du bouton —
     `mat-flat-button` (armé) contre `mat-stroked-button` (non armé) — et par `aria-pressed`,

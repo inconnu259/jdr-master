@@ -155,8 +155,12 @@ export class SeanceList {
     this.editingCapacitySeanceId.set(null);
   }
 
+  // Décision utilisateur (2026-08-24, deferred-work.md) : harmonise avec le chemin de scellement
+  // depuis l'Agenda (CalendarAgendaView), qui demande déjà confirmation — même style que
+  // onDeleteSeance/onResetSeanceDate ci-dessous (action irréversible, ferme définitivement le vote).
   protected async onChoose(pollId: string, optionId: string): Promise<void> {
     if (this.pollActionPending()) return;
+    if (!window.confirm('Sceller cette date ? Le vote sera définitivement clôturé.')) return;
     this.pollActionPending.set(true);
     this.error.set(null);
     try {

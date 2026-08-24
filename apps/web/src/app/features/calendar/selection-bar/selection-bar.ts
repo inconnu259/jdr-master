@@ -1,6 +1,8 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import type { AvailKind, DaySlot } from '@master-jdr/shared';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import type { AgendaSealRequest } from '../calendar-agenda-view/calendar-agenda-view';
 
 /** Un segment du sélecteur de portée. L'ordre est celui du contrat d'UI :
  *  Journée · Matin · Après-m. · Soir. [Source: contrat-ui-calendrier.html:254] */
@@ -51,6 +53,13 @@ export class SelectionBar {
   /** Ce que `Entrée` validera. Défaut `UNAVAILABLE` : c'est le résultat que produisait déjà le
    *  chemin clavier, à ceci près qu'il est désormais annoncé et modifiable (AC6). */
   readonly armedKind = input<AvailKind>('UNAVAILABLE');
+  /** Story 36.15 — le créneau sélectionné correspond à une option d'un vote OPEN dont
+   *  l'utilisateur est MJ : `null` sinon (aucune correspondance, sélection multiple, ou hors
+   *  contexte MJ/partie). Résolu par le parent (`CalendarWeekView`/`CalendarMonthView`), qui
+   *  connaît `entries()` — ce composant reste un composant de rendu pur, il ne fait que router
+   *  vers `PollService.chooseDate()` via `CalendarView.onSealRequested()` (36.12), jamais
+   *  l'appeler lui-même. */
+  readonly sealCandidate = input<AgendaSealRequest | null>(null);
 
   readonly scopeChange = output<DaySlot>();
   readonly armedKindChange = output<AvailKind>();
@@ -58,8 +67,23 @@ export class SelectionBar {
   readonly markUnavailable = output<void>();
   readonly otherRequested = output<void>();
   readonly cancelled = output<void>();
+  /** Story 36.15, AC5 — même contrat que `CalendarAgendaView.sealRequested` : aucune écriture
+   *  ici, `CalendarView.onSealRequested()` porte la confirmation et l'appel. */
+  readonly sealRequested = output<AgendaSealRequest>();
 
   protected readonly SCOPE_OPTIONS = SCOPE_OPTIONS;
+  private readonly theme = inject(ThemeToneService);
+
+  /** Même clé de thème que le bouton *Sceller* de l'Agenda (36.12) — la même action mérite le
+   *  même mot, sur les trois thèmes (« Sceller » / « Planter » / « Verrouiller »). */
+  protected readonly sealLabel = computed(() => this.theme.tone()['calendar.agenda.action_seal']);
+
+  /** AC1/AC8 — nomme le créneau qu'il scellerait, comme `sealAriaLabel()` de l'Agenda
+   *  (`calendar-agenda-view.ts:659`) : sans ça, ce bouton et « Autre… » se suivraient sans
+   *  distinction pour un lecteur d'écran. */
+  protected sealAriaLabel(candidate: AgendaSealRequest): string {
+    return `${this.sealLabel()} — ${candidate.pollLabel} — ${candidate.dateLabel}`;
+  }
 
   protected readonly scopeLabel = computed(
     () => SCOPE_OPTIONS.find((o) => o.slot === this.scope())?.fullLabel ?? 'créneaux variés',

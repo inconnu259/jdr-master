@@ -1746,3 +1746,117 @@ describe('CalendarMonthView — mode de composition (Story 36.10)', () => {
     expect(band.classList.contains('band--selected')).toBe(false);
   });
 });
+
+// ─── Story 36.15 — Sceller depuis la barre de sélection (bloc JUMEAU de la vue Semaine) ──────
+
+describe('CalendarMonthView — sceller depuis la barre de sélection (Story 36.15)', () => {
+  let fixture: ReturnType<typeof TestBed.createComponent<CalendarMonthView>>;
+  let el: HTMLElement;
+
+  const VOTE_ENTRY = {
+    key: 'vote-1',
+    type: 'votes-en-cours' as const,
+    date: '2026-08-20',
+    label: 'Chapitre 1',
+    slot: 'EVENING' as const,
+    partieId: 'partie-1',
+    vote: {
+      pollId: 'poll1',
+      optionId: 'opt1',
+      partieId: 'partie-1',
+      yes: 1,
+      no: 0,
+      maybe: 0,
+      total: 4,
+      myAnswer: null,
+    },
+  };
+
+  async function createWith(inputs: Record<string, unknown> = {}) {
+    await TestBed.configureTestingModule({
+      imports: [CalendarMonthView],
+      providers: [provideAnimationsAsync()],
+    }).compileComponents();
+    fixture = TestBed.createComponent(CalendarMonthView);
+    fixture.componentRef.setInput('initialDate', new Date(2026, 7, 15));
+    for (const [k, v] of Object.entries(inputs)) fixture.componentRef.setInput(k, v);
+    fixture.detectChanges();
+    el = fixture.nativeElement;
+  }
+
+  function selectSingle(day: number, slot: 'MORNING' | 'AFTERNOON' | 'EVENING' = 'EVENING'): void {
+    const date = new Date(2026, 7, day);
+    (fixture.componentInstance as any).selectedCells.set([{ date, slot }]);
+    fixture.detectChanges();
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 10));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  it('AC1/AC8 — sealCandidate résout le triplet depuis l’entrée votes-en-cours correspondante (jumeau Semaine)', async () => {
+    await createWith({ canSeal: true, entries: [VOTE_ENTRY] });
+    selectSingle(20, 'EVENING');
+    const candidate = (fixture.componentInstance as any).sealCandidate();
+    expect(candidate).toEqual({
+      partieId: 'partie-1',
+      pollId: 'poll1',
+      optionId: 'opt1',
+      dateLabel: expect.stringContaining('soir'),
+      pollLabel: 'Chapitre 1',
+    });
+  });
+
+  it('AC1 — le bouton Sceller est rendu dans la barre de sélection', async () => {
+    await createWith({ canSeal: true, entries: [VOTE_ENTRY] });
+    selectSingle(20, 'EVENING');
+    expect(el.querySelector('.seal-btn')).not.toBeNull();
+  });
+
+  it('AC2 — sealCandidate est null quand aucune entrée ne correspond au créneau sélectionné', async () => {
+    await createWith({ canSeal: true, entries: [VOTE_ENTRY] });
+    selectSingle(20, 'MORNING');
+    expect((fixture.componentInstance as any).sealCandidate()).toBeNull();
+  });
+
+  it('Revue de code — deux entrées votes-en-cours sur le MÊME créneau (deux votes OPEN concurrents) → sealCandidate est null, jamais le premier match silencieux', async () => {
+    const other = { ...VOTE_ENTRY, key: 'vote-2', label: 'Autre scénario' };
+    await createWith({ canSeal: true, entries: [VOTE_ENTRY, other] });
+    selectSingle(20, 'EVENING');
+    expect((fixture.componentInstance as any).sealCandidate()).toBeNull();
+  });
+
+  it('AC3 — sealCandidate est null quand canSeal est faux', async () => {
+    await createWith({ canSeal: false, entries: [VOTE_ENTRY] });
+    selectSingle(20, 'EVENING');
+    expect((fixture.componentInstance as any).sealCandidate()).toBeNull();
+  });
+
+  it('AC4 — sealCandidate est null sur une sélection de plusieurs créneaux', async () => {
+    await createWith({ canSeal: true, entries: [VOTE_ENTRY] });
+    const date = new Date(2026, 7, 20);
+    (fixture.componentInstance as any).selectedCells.set([
+      { date, slot: 'EVENING' },
+      { date, slot: 'AFTERNOON' },
+    ]);
+    fixture.detectChanges();
+    expect((fixture.componentInstance as any).sealCandidate()).toBeNull();
+  });
+
+  it('AC5/AC6 — un clic sur Sceller émet sealRequested avec le candidat, sans appel réseau ici', async () => {
+    await createWith({ canSeal: true, entries: [VOTE_ENTRY] });
+    selectSingle(20, 'EVENING');
+    const spy = vi.fn();
+    fixture.componentInstance.sealRequested.subscribe(spy);
+    (el.querySelector('.seal-btn') as HTMLButtonElement).click();
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ pollId: 'poll1', optionId: 'opt1' }),
+    );
+  });
+});

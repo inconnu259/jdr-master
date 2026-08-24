@@ -191,12 +191,14 @@
         [rangeLabel]="selectionRangeLabel()"
         [scope]="scope()"
         [armedKind]="armedKind()"
+        [sealCandidate]="sealCandidate()"
         (scopeChange)="onScopeChange($event)"
         (armedKindChange)="onArmedKindChange($event)"
         (markAvailable)="onSelectionCommit('AVAILABLE')"
         (markUnavailable)="onSelectionCommit('UNAVAILABLE')"
         (otherRequested)="onOtherRequested()"
         (cancelled)="onSelectionCancelled()"
+        (sealRequested)="sealRequested.emit($event)"
         (keydown.escape)="onEscape()"
       />
     }

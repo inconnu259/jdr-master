@@ -1023,6 +1023,8 @@ export class AvailabilityService {
       heureRdv?: string | null;
       lieu?: string | null;
       notePratique?: string | null;
+      // Story 36.16 — même raisonnement : déjà chargé par le findMany, aucun appel de plus.
+      compteRendu?: string | null;
     }>,
     partieById: Map<
       string,
@@ -1061,6 +1063,9 @@ export class AvailabilityService {
         heureRdv: s.heureRdv ?? null,
         lieu: s.lieu ?? null,
         notePratique: s.notePratique ?? null,
+        // Story 36.16 — même formule que `CalendarView.allCalendarEntries()` (front, ligne 535) :
+        // une chaîne vide ou uniquement des espaces compte comme manquant.
+        compteRenduManquant: !s.compteRendu?.trim(),
       });
     }
     return entries;
