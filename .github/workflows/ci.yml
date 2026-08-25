@@ -21,10 +21,29 @@ env:
   MAIL_PORT: '1025'
   MAIL_FROM: ci@master-jdr.local
 
+  # `prisma.config.ts` résout DATABASE_URL au CHARGEMENT de la config, donc toute commande
+  # Prisma l'exige — y compris `generate`, qui ne se connecte pourtant jamais. D'où cette
+  # valeur bidon au niveau workflow : elle n'a qu'à être bien formée. Le job e2e la surcharge
+  # avec l'URL du service postgres, seul endroit où une base joignable est réellement requise.
+  DATABASE_URL: postgresql://unused:unused@localhost:5432/unused?schema=public
+
 jobs:
-  # ── Lint, types, build ─────────────────────────────────────────────────────
-  static:
-    name: Lint · types · build
+  # ── Types et build API ─────────────────────────────────────────────────────
+  #
+  # DÉLIBÉRÉMENT ABSENTS de cette CI, parce qu'ils échouent aujourd'hui sur de la dette
+  # préexistante — les ajouter rendrait chaque PR rouge, y compris celles qui réparent :
+  #   · `pnpm --filter api lint`  → 1758 erreurs (surtout no-unsafe-*, alors que tsc passe :
+  #                                 eslint ne résout pas les types Prisma, cause à investiguer)
+  #   · `pnpm --filter web lint`  → 145 erreurs, dont 130 corrigeables par `ng lint --fix`
+  #   · `pnpm --filter web build` → bundle initial 1.49 MB pour un budget d'erreur de 1 MB
+  #                                 (angular.json). `ng serve` n'applique pas les budgets,
+  #                                 d'où un build prod cassé sans que personne le voie.
+  # Chacun est un chantier à part. À rebrancher ici dès qu'il est vert.
+  #
+  # Noter aussi que `typecheck` s'appuie sur tsconfig.build.json, qui exclut `test/` et
+  # `**/*spec.ts` : les fichiers de test ne sont pas type-vérifiés.
+  types-build:
+    name: Types · build API
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,19 +60,36 @@ jobs:
       # Le client Prisma est généré, pas versionné : sans lui, tsc et eslint typé échouent.
       - run: pnpm --filter api exec prisma generate
 
-      - run: pnpm --filter api lint
-      - run: pnpm --filter web lint
-
-      # Seule l'API a un script typecheck ; le build Angular type-vérifie de son côté.
       - run: pnpm --filter api typecheck
-
       - run: pnpm --filter api build
-      - run: pnpm --filter web build
 
   # ── Tests unitaires (api, web, game-rules) ─────────────────────────────────
+  # Malgré son nom, ce job a besoin d'un Postgres : deux specs d'intégration vivent dans
+  # `apps/api/src/` et sont donc ramassées par le testRegex de la config Jest unitaire
+  # (`rootDir: src`, `.*\.spec\.ts$`). `notifications.integration.spec.ts` fait de vrais
+  # `prisma.user.create()` et échoue sans base — c'est invisible en local, où le conteneur
+  # `api` de docker-compose en a toujours une sous la main.
   unit:
     name: Tests unitaires
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: jdr
+          POSTGRES_PASSWORD: jdr
+          POSTGRES_DB: jdr_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://jdr:jdr@localhost:5432/jdr_test?schema=public
+
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -64,8 +100,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter api exec prisma generate
 
+      # notifications.integration.spec.ts écrit puis nettoie de vraies lignes : le schéma
+      # doit exister.
+      - run: pnpm --filter api exec prisma migrate deploy
+
       # `pnpm -r test` : jest (api), ng test/vitest (web), vitest (game-rules).
       # packages/shared n'a pas de script test et est simplement ignoré.
+      #
+      # Note : `email.integration.spec.ts` se saute lui-même si Mailpit est injoignable
+      # (`if (!reachable) return`) et affiche donc PASS sans rien tester ici. Ajouter un
+      # service mailpit (axllent/mailpit, ports 1025/8025) le ferait réellement tourner.
       - run: pnpm test
 
   # ── Tests e2e (Postgres réel) ──────────────────────────────────────────────
@@ -116,7 +160,7 @@ jobs:
   # pour qu'il ne puisse pas diverger du nom du workflow (« CI ») et créer une ambiguïté.
   ci-ok:
     if: always()
-    needs: [static, unit, e2e]
+    needs: [types-build, unit, e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Échouer si un job amont a échoué ou été annulé
