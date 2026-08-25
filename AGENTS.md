@@ -24,7 +24,6 @@ Plateforme web de gestion de parties de JDR, multi-systèmes (MJ + joueurs). Ang
 - Ne pas régénérer le client Prisma ni appliquer les migrations à la main : `docker compose up` enchaîne `prisma generate`, `migrate deploy` et le seed admin (idempotent, `upsert` avec `update: {}`) à chaque démarrage.
 - Ne pas conclure d'un `pnpm test` vert dans `apps/api` que `@master-jdr/game-rules` se charge : tous les specs unitaires qui l'atteignent le neutralisent par `jest.mock('@master-jdr/game-rules', …)`. Seuls les e2e (`test/`, config propre, `pnpm test:e2e`) le chargent pour de vrai.
 - Ne pas retirer le `moduleNameMapper` `"^(\.{1,2}/.*)\.js$": "$1"` des deux configs Jest d'`apps/api` (bloc `jest` de `package.json` et `test/jest-e2e.json`) : `rewriteRelativeImportExtensions` du `tsconfig.json` réécrit à l'émission les imports `.ts` de `packages/game-rules/src/index.ts` en `.js` qui n'existent pas sur le disque. Sans ce mapper, tout chargement réel du paquet échoue — c'est ce qui cassait `app.e2e-spec.ts` de `3567c58` (2026-07-26) au 2026-08-25.
-- Lancer lint et tests explicitement avant de considérer un changement fini — il n'existe aucune CI dans ce dépôt pour les rattraper.
 
 ## Conventions qui s'écartent des défauts
 
