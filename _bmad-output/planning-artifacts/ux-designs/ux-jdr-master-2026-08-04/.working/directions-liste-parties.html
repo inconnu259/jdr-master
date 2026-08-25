@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palier 9 — Liste des parties, 4 directions</title>
+<style>
+/* ────────────────────────────────────────────────────────────────
+   Tokens repris TELS QUELS du design system de base (thème Grimoire
+   Émeraude, ux-jdr-master-20260626 §2/§3/§4/§5/§6).
+   Aucune couleur inventée : le sujet de ces variantes est la FORME.
+   ──────────────────────────────────────────────────────────────── */
+:root{
+  --primary-bg:#0d0a14; --surface-bg:#1a1428;
+  --accent-1:#7ec8a4; --accent-2:#9b6dff;
+  --gradient-cta:linear-gradient(135deg,#7ec8a4,#9b6dff);
+  --text-primary:#e8e8f0; --text-muted:#7a7a8a;
+  --status-unavailable:#e05252; --status-unknown:#3a3a4a; --status-mixed:#f0a030;
+  --border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px; --space-sm:8px; --space-md:12px; --space-base:16px; --space-lg:24px; --space-xl:32px;
+  --radius-card:10px; --radius-badge:6px; --radius-button:8px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5);
+  --text-sm:12px; --text-base:14px; --text-lg:16px; --text-xl:20px; --text-2xl:26px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:var(--text-base);line-height:1.5;padding:var(--space-lg)}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+.lede{color:var(--text-muted);max-width:70ch;margin:0 0 var(--space-lg)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:var(--space-xl);align-items:start}
+.col h2{font-size:var(--text-xl);margin:0 0 var(--space-xs)}
+.col .why{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-md);min-height:4.2em}
+.phone{width:340px;max-width:100%;border:1px solid var(--border-subtle);border-radius:22px;
+  background:var(--primary-bg);padding:var(--space-base) var(--space-md) var(--space-lg);
+  box-shadow:0 8px 32px rgba(0,0,0,.7)}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-base)}
+.topbar b{font-size:var(--text-lg)}
+.topbar span{color:var(--text-muted);font-size:var(--text-sm)}
+.tabs{display:flex;gap:var(--space-xs);margin-bottom:var(--space-md)}
+.tab{font-size:var(--text-sm);padding:4px 10px;border-radius:var(--radius-badge);
+  border:1px solid var(--border-subtle);color:var(--text-muted)}
+.tab.on{color:var(--text-primary);border-color:var(--accent-2)}
+.card{background:var(--surface-bg);border-radius:var(--radius-card);box-shadow:var(--elev-card);
+  margin-bottom:var(--space-md);overflow:hidden}
+.pname{font-size:var(--text-lg);font-weight:500}
+.pmeta{color:var(--text-muted);font-size:var(--text-sm)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:var(--text-sm);font-weight:500;
+  padding:2px 8px;border-radius:var(--radius-badge);border:1px solid;white-space:nowrap}
+.chip.todo{color:var(--status-mixed);border-color:var(--status-mixed);background:rgba(240,160,48,.15)}
+.chip.info{color:var(--text-muted);border-color:var(--status-unknown);background:rgba(58,58,74,.4)}
+.chip.mj{color:var(--accent-2);border-color:var(--accent-2);background:rgba(155,109,255,.13)}
+.chip.pj{color:var(--accent-1);border-color:var(--accent-1);background:rgba(126,200,164,.13)}
+.done{opacity:.45}
+.fav{color:var(--status-mixed)}
+.note{font-size:var(--text-sm);color:var(--text-muted);margin-top:var(--space-sm);
+  border-left:2px solid var(--border-subtle);padding-left:var(--space-sm)}
+/* ── A : bandeau d'état ── */
+.a-card{display:flex}
+.a-strip{width:5px;flex:none}
+.a-body{padding:var(--space-md);flex:1;min-width:0}
+.a-todo{display:flex;flex-wrap:wrap;gap:var(--space-xs);margin-top:var(--space-sm)}
+.a-emblem{width:34px;height:34px;border-radius:8px;flex:none;display:grid;place-items:center;
+  font-weight:700;font-size:var(--text-base);letter-spacing:-.5px}
+.a-head{display:flex;gap:var(--space-sm);align-items:center}
+/* ── B : liste dense ── */
+.b-row{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-sm) var(--space-md);
+  border-bottom:1px solid var(--border-subtle)}
+.b-glyph{width:28px;height:28px;border-radius:6px;flex:none;display:grid;place-items:center;font-size:15px;
+  background:rgba(255,255,255,.04);border:1px solid var(--border-subtle)}
+.b-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.b-txt{flex:1;min-width:0}
+.b-name{font-size:var(--text-base);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.b-sub{font-size:var(--text-sm);color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ── C : regroupement par urgence ── */
+.c-sect{font-size:var(--text-sm);text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);
+  margin:var(--space-base) 0 var(--space-sm);display:flex;align-items:center;gap:var(--space-sm)}
+.c-sect::after{content:"";flex:1;height:1px;background:var(--border-subtle)}
+.c-sect.hot{color:var(--status-mixed)}
+.c-card{padding:var(--space-md)}
+/* ── D : vignette générée ── */
+.d-cover{height:74px;position:relative;overflow:hidden}
+.d-cover::before,.d-cover::after{content:"";position:absolute;border-radius:50%}
+.d-cover::before{width:120px;height:120px;left:-30px;top:-46px;opacity:.5}
+.d-cover::after{width:80px;height:80px;right:14px;bottom:-40px;opacity:.35}
+.d-mark{position:absolute;right:var(--space-md);top:var(--space-sm);font-size:22px;font-weight:700;
+  color:rgba(255,255,255,.85);letter-spacing:-1px}
+.d-body{padding:var(--space-md)}
+</style>
+</head>
+<body>
+
+<h1>Liste des parties — quatre directions de forme</h1>
+<p class="lede">Mêmes tokens, même direction artistique, même contenu. Ce qui change : la densité, la manière de crier « ça t'attend », et la manière de reconnaître une partie d'un coup d'œil. Le nom du joueur est en romain, celui du personnage en italique — c'est une piste de convention, pas une décision. Les noms de parties sont des exemples.</p>
+
+<div class="grid">
+
+  <!-- ══════════════ A ══════════════ -->
+  <div class="col">
+    <h2>A — Bandeau d'état</h2>
+    <p class="why">Ce qui t'attend est écrit noir sur blanc, en toutes lettres, sous le nom. Un liseré vertical code l'urgence ; un emblème monogramme (lettre + couleur dérivée du nom) sert de repère. Aucune image : conforme au principe n°1 de la base.</p>
+    <div class="phone">
+      <div class="topbar"><b>Mes parties</b><span>4</span></div>
+      <div class="tabs"><span class="tab on">Toutes</span><span class="tab">Favorites</span><span class="tab">Terminées</span></div>
+
+      <div class="card a-card">
+        <div class="a-strip" style="background:var(--status-mixed)"></div>
+        <div class="a-body">
+          <div class="a-head">
+            <div class="a-emblem" style="background:rgba(224,82,82,.2);color:#e05252">CK</div>
+            <div style="min-width:0">
+              <div class="pname">Les Cendres de Kavaan <span class="fav">★</span></div>
+              <div class="pmeta">Campagne · <span class="chip pj">Joueur</span></div>
+            </div>
+          </div>
+          <div class="a-todo">
+            <span class="chip todo">◆ Personnage à créer</span>
+            <span class="chip todo">◆ Vote en cours</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card a-card">
+        <div class="a-strip" style="background:var(--status-mixed)"></div>
+        <div class="a-body">
+          <div class="a-head">
+            <div class="a-emblem" style="background:rgba(126,200,164,.2);color:var(--accent-1)">CN</div>
+            <div style="min-width:0">
+              <div class="pname">Le Convoi du Nord</div>
+              <div class="pmeta">Campagne épisodique · <span class="chip mj">MJ</span></div>
+            </div>
+          </div>
+          <div class="a-todo"><span class="chip todo">◆ Aucun scénario en cours</span></div>
+        </div>
+      </div>
+
+      <div class="card a-card">
+        <div class="a-strip" style="background:var(--accent-1)"></div>
+        <div class="a-body">
+          <div class="a-head">
+            <div class="a-emblem" style="background:rgba(155,109,255,.2);color:var(--accent-2)">NL</div>
+            <div style="min-width:0">
+              <div class="pname">La Nuit des Lanternes</div>
+              <div class="pmeta">One-shot · <span class="chip pj">Joueur</span> · <i>Ombreflèche</i></div>
+            </div>
+          </div>
+          <div class="a-todo"><span class="chip info">Séance le 12 août, soirée</span></div>
+        </div>
+      </div>
+
+      <div class="card a-card done">
+        <div class="a-strip" style="background:var(--status-unknown)"></div>
+        <div class="a-body">
+          <div class="a-head">
+            <div class="a-emblem" style="background:rgba(58,58,74,.5);color:#888899">SR</div>
+            <div style="min-width:0">
+              <div class="pname">Le Serment de Rives-Basses</div>
+              <div class="pmeta">Campagne · <span class="chip mj">MJ</span> · Terminée</div>
+            </div>
+          </div>
+          <div class="a-todo"><span class="chip todo">◆ Rapport de fin manquant</span></div>
+        </div>
+      </div>
+      <p class="note">Le plus explicite. Coût : une carte haute — 4 parties remplissent l'écran.</p>
+    </div>
+  </div>
+
+  <!-- ══════════════ B ══════════════ -->
+  <div class="col">
+    <h2>B — Liste dense</h2>
+    <p class="why">Une ligne par partie, dix parties visibles sans défiler. L'action se réduit à une pastille + un compte ; le détail attend l'ouverture. Le repère visuel est un glyphe choisi par le MJ à la création — c'est du texte, pas une image.</p>
+    <div class="phone">
+      <div class="topbar"><b>Mes parties</b><span>4</span></div>
+      <div class="tabs"><span class="tab on">Toutes</span><span class="tab">Favorites</span><span class="tab">Terminées</span></div>
+      <div class="card" style="padding:0">
+        <div class="b-row">
+          <span class="b-dot" style="background:var(--status-mixed)"></span>
+          <span class="b-glyph">🔥</span>
+          <span class="b-txt">
+            <span class="b-name">Les Cendres de Kavaan <span class="fav">★</span></span>
+            <span class="b-sub">Joueur · 2 choses à faire</span>
+          </span>
+          <span class="chip todo">2</span>
+        </div>
+        <div class="b-row">
+          <span class="b-dot" style="background:var(--status-mixed)"></span>
+          <span class="b-glyph">🛷</span>
+          <span class="b-txt">
+            <span class="b-name">Le Convoi du Nord</span>
+            <span class="b-sub">MJ · 1 chose à faire</span>
+          </span>
+          <span class="chip todo">1</span>
+        </div>
+        <div class="b-row">
+          <span class="b-dot" style="background:var(--accent-1)"></span>
+          <span class="b-glyph">🏮</span>
+          <span class="b-txt">
+            <span class="b-name">La Nuit des Lanternes</span>
+            <span class="b-sub">Joueur · <i>Ombreflèche</i> · 12 août</span>
+          </span>
+        </div>
+        <div class="b-row done" style="border-bottom:none">
+          <span class="b-dot" style="background:var(--status-unknown)"></span>
+          <span class="b-glyph">⚓</span>
+          <span class="b-txt">
+            <span class="b-name">Le Serment de Rives-Basses</span>
+            <span class="b-sub">MJ · Terminée · rapport manquant</span>
+          </span>
+          <span class="chip todo">1</span>
+        </div>
+      </div>
+      <p class="note">Le plus scannable, le plus mobile. Coût : « 2 choses à faire » ne dit pas <em>lesquelles</em> — il faut ouvrir.</p>
+    </div>
+  </div>
+
+  <!-- ══════════════ C ══════════════ -->
+  <div class="col">
+    <h2>C — Regroupement par urgence</h2>
+    <p class="why">La liste se trie toute seule : ce qui t'attend remonte en tête, sous un intertitre. Tu n'as plus à repérer les parties actives — l'écran a déjà fait le tri. Le rôle et le type restent en texte, pas en couleur seule.</p>
+    <div class="phone">
+      <div class="topbar"><b>Mes parties</b><span>4</span></div>
+
+      <div class="c-sect hot">◆ Ça t'attend (2)</div>
+      <div class="card c-card">
+        <div class="pname">Les Cendres de Kavaan <span class="fav">★</span></div>
+        <div class="pmeta">Campagne · <span class="chip pj">Joueur</span></div>
+        <div class="a-todo"><span class="chip todo">Personnage à créer</span><span class="chip todo">Vote en cours</span></div>
+      </div>
+      <div class="card c-card">
+        <div class="pname">Le Convoi du Nord</div>
+        <div class="pmeta">Campagne épisodique · <span class="chip mj">MJ</span></div>
+        <div class="a-todo"><span class="chip todo">Aucun scénario en cours</span></div>
+      </div>
+
+      <div class="c-sect">En cours (1)</div>
+      <div class="card c-card">
+        <div class="pname">La Nuit des Lanternes</div>
+        <div class="pmeta">One-shot · <span class="chip pj">Joueur</span> · <i>Ombreflèche</i></div>
+        <div class="a-todo"><span class="chip info">Séance le 12 août, soirée</span></div>
+      </div>
+
+      <div class="c-sect">Terminées (1)</div>
+      <div class="card c-card done">
+        <div class="pname">Le Serment de Rives-Basses</div>
+        <div class="pmeta">Campagne · <span class="chip mj">MJ</span></div>
+      </div>
+      <p class="note">Le moins d'effort mental. Coût : une partie change de place selon son état — on ne mémorise plus « elle est en 3ᵉ position ».</p>
+    </div>
+  </div>
+
+  <!-- ══════════════ D ══════════════ -->
+  <div class="col">
+    <h2>D — Vignette générée</h2>
+    <p class="why">La réponse la plus proche de ta piste « image », sans en être une : un bandeau de formes et de dégradés calculé à partir du nom de la partie, donc toujours identique pour une partie donnée et différent d'une partie à l'autre. Zéro fichier à héberger, zéro upload.</p>
+    <div class="phone">
+      <div class="topbar"><b>Mes parties</b><span>4</span></div>
+
+      <div class="card">
+        <div class="d-cover" style="background:linear-gradient(135deg,#3a1420,#1a1428)">
+          <div style="position:absolute;inset:0" >
+            <div style="position:absolute;width:120px;height:120px;left:-30px;top:-46px;border-radius:50%;background:#e05252;opacity:.45"></div>
+            <div style="position:absolute;width:80px;height:80px;right:14px;bottom:-40px;border-radius:50%;background:var(--status-mixed);opacity:.3"></div>
+          </div>
+          <div class="d-mark">CK</div>
+        </div>
+        <div class="d-body">
+          <div class="pname">Les Cendres de Kavaan <span class="fav">★</span></div>
+          <div class="pmeta">Campagne · <span class="chip pj">Joueur</span></div>
+          <div class="a-todo"><span class="chip todo">Personnage à créer</span><span class="chip todo">Vote en cours</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="d-cover" style="background:linear-gradient(135deg,#0f2a24,#1a1428)">
+          <div style="position:absolute;inset:0">
+            <div style="position:absolute;width:110px;height:110px;left:40%;top:-60px;border-radius:50%;background:var(--accent-1);opacity:.35"></div>
+            <div style="position:absolute;width:70px;height:70px;left:-20px;bottom:-34px;border-radius:50%;background:var(--accent-2);opacity:.3"></div>
+          </div>
+          <div class="d-mark">CN</div>
+        </div>
+        <div class="d-body">
+          <div class="pname">Le Convoi du Nord</div>
+          <div class="pmeta">Campagne épisodique · <span class="chip mj">MJ</span></div>
+          <div class="a-todo"><span class="chip todo">Aucun scénario en cours</span></div>
+        </div>
+      </div>
+
+      <div class="card done">
+        <div class="d-cover" style="background:linear-gradient(135deg,#1a1428,#0d0a14)">
+          <div class="d-mark">SR</div>
+        </div>
+        <div class="d-body">
+          <div class="pname">Le Serment de Rives-Basses</div>
+          <div class="pmeta">Campagne · <span class="chip mj">MJ</span> · Terminée</div>
+        </div>
+      </div>
+      <p class="note">Le plus reconnaissable. Coût : c'est la direction la plus haute — 2 parties par écran de téléphone — et elle amende le principe n°1 de la base.</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

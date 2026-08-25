@@ -221,8 +221,11 @@
           <ul class="sheet__talent-list">
             @for (talent of classData()?.talents ?? []; track talent.name) {
               <li>
-                <strong>{{ talent.name }}</strong>
-                <span class="sheet__detail">{{ talent.effect.description }}</span>
+                <button
+                  type="button"
+                  class="sheet__detail-trigger"
+                  (click)="openDetail(talent.name, talent.effect.description, $event)"
+                >{{ talent.name }}</button>
               </li>
             }
           </ul>
@@ -231,8 +234,11 @@
             <ul class="sheet__talent-list">
               @for (talent of secondary.talents; track talent.name) {
                 <li>
-                  <strong>{{ talent.name }}</strong>
-                  <span class="sheet__detail">{{ talent.effect.description }}</span>
+                  <button
+                    type="button"
+                    class="sheet__detail-trigger"
+                    (click)="openDetail(talent.name, talent.effect.description, $event)"
+                  >{{ talent.name }}</button>
                 </li>
               }
             </ul>
@@ -255,8 +261,11 @@
           <ul class="sheet__talent-list">
             @for (advantage of typeData()?.advantages ?? []; track advantage.name) {
               <li>
-                <strong>{{ advantage.name }}</strong>
-                <span class="sheet__detail">{{ advantage.effect }}</span>
+                <button
+                  type="button"
+                  class="sheet__detail-trigger"
+                  (click)="openDetail(advantage.name, advantage.effect, $event)"
+                >{{ advantage.name }}</button>
               </li>
             }
           </ul>
@@ -265,8 +274,11 @@
             <ul class="sheet__talent-list">
               @for (advantage of secondary.advantages; track advantage.name) {
                 <li>
-                  <strong>{{ advantage.name }}</strong>
-                  <span class="sheet__detail">{{ advantage.effect }}</span>
+                  <button
+                    type="button"
+                    class="sheet__detail-trigger"
+                    (click)="openDetail(advantage.name, advantage.effect, $event)"
+                  >{{ advantage.name }}</button>
                 </li>
               }
             </ul>
@@ -281,8 +293,12 @@
             <ul class="sheet__talent-list">
               @for (spell of magic.ritualSpells; track spell.key) {
                 <li>
-                  <strong>{{ spell.name }}</strong>
-                  <span class="sheet__detail">{{ spell.peCost }} PE — {{ spell.description }}</span>
+                  <button
+                    type="button"
+                    class="sheet__detail-trigger"
+                    (click)="openDetail(spell.name, spell.description, $event)"
+                  >{{ spell.name }}</button>
+                  <span class="sheet__detail">{{ spell.peCost }} PE</span>
                 </li>
               }
             </ul>
@@ -501,6 +517,15 @@
         </mat-tab>
       }
     </mat-tab-group>
+
+    @if (selectedDetail(); as d) {
+      <app-detail-surface
+        [title]="d.title"
+        [body]="d.body"
+        [openToken]="detailOpenToken()"
+        (closed)="closeDetail()"
+      />
+    }
   </article>
 } @else {
   <p class="sheet__loading">Chargement…</p>

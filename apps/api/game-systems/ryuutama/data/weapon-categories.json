@@ -1,0 +1,68 @@
+[
+  {
+    "key": "arc",
+    "label": "Arc",
+    "description": "Distance, mais difficiles à utiliser. Deux mains.",
+    "exampleWeapons": ["Arbalètes", "Arcs courts", "Arcs de chasse"],
+    "touchFormula": "AGI+INT-2",
+    "damageFormula": "AGI",
+    "price": 750,
+    "encumbrance": 3,
+    "hands": 2
+  },
+  {
+    "key": "epee-courte",
+    "label": "Épée courte",
+    "description": "Faciles à utiliser, mais peu de dégâts. Une main.",
+    "exampleWeapons": ["Dagues", "Poignards", "Wakizashis"],
+    "touchFormula": "AGI+INT+1",
+    "damageFormula": "INT-1",
+    "price": 400,
+    "encumbrance": 1,
+    "hands": 1
+  },
+  {
+    "key": "epee-longue",
+    "label": "Épée longue",
+    "description": "Bon compromis entre toucher et dégâts. Une main.",
+    "exampleWeapons": ["Épées larges", "Katanas", "Rapières"],
+    "touchFormula": "VIG+AGI",
+    "damageFormula": "VIG",
+    "price": 700,
+    "encumbrance": 3,
+    "hands": 1
+  },
+  {
+    "key": "hache",
+    "label": "Hache",
+    "description": "Peu précises et pour les costauds. Deux mains.",
+    "exampleWeapons": ["Haches de bataille", "Haches de bûcheron"],
+    "touchFormula": "VIG+VIG-1",
+    "damageFormula": "VIG",
+    "price": 500,
+    "encumbrance": 3,
+    "hands": 2
+  },
+  {
+    "key": "lance",
+    "label": "Lance",
+    "description": "Armes meurtrières. Deux mains.",
+    "exampleWeapons": ["Épieux", "Hallebardes", "Lances", "Tridents"],
+    "touchFormula": "VIG+AGI",
+    "damageFormula": "VIG+1",
+    "price": 350,
+    "encumbrance": 3,
+    "hands": 2
+  },
+  {
+    "key": "mains-nues",
+    "label": "Mains nues",
+    "description": "Armes de la dernière chance. Deux mains.",
+    "exampleWeapons": ["Armes improvisées", "Pieds", "Poings"],
+    "touchFormula": "VIG+AGI",
+    "damageFormula": "VIG-2",
+    "price": 0,
+    "encumbrance": 0,
+    "hands": 2
+  }
+]

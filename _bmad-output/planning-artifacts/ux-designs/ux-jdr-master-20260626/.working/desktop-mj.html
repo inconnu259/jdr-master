@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JDR Master — Grimoire Émeraude — Vues Desktop MJ</title>
+<style>
+  /* ============================================================
+     GRIMOIRE ÉMERAUDE — Palette
+     #0d0a14 fond principal
+     #1a1428 cartes / surfaces
+     #221c35 surface hover / contour
+     #7ec8a4 accent vert sauge
+     #9b6dff accent violet
+     #e05252 indispo rouge
+     #f0a030 ambre / mixte
+     #3a3a4a gris inconnu
+     #2a2040 fond input / sidebar interne
+  ============================================================ */
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0a14;
+    color: #d6cee8;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 40px 24px;
+    min-height: 100vh;
+  }
+
+  h1.page-title {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: #7ec8a4;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+  h1.page-title span { color: #9b6dff; }
+
+  .page-subtitle {
+    text-align: center;
+    color: #7a708c;
+    font-size: 13px;
+    margin-bottom: 48px;
+  }
+
+  h2.view-label {
+    font-size: 16px;
+    font-weight: 600;
+    color: #9b6dff;
+    margin-bottom: 16px;
+    padding-left: 4px;
+    border-left: 3px solid #9b6dff;
+    padding-left: 12px;
+  }
+
+  .view-wrapper {
+    margin-bottom: 56px;
+  }
+
+  /* Cadre simulant un viewport desktop 1280×800 */
+  .desktop-frame {
+    width: 1280px;
+    height: 800px;
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1.5px solid #2a2040;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(158,109,255,0.12);
+    background: #0d0a14;
+    position: relative;
+    /* Barre de titre navigateur simulée */
+  }
+
+  /* Barre chromée du navigateur */
+  .browser-chrome {
+    height: 36px;
+    background: #130f1f;
+    border-bottom: 1px solid #221c35;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .browser-dots { display: flex; gap: 6px; }
+  .browser-dots span {
+    width: 10px; height: 10px; border-radius: 50%;
+  }
+  .dot-red { background: #e05252; }
+  .dot-yellow { background: #f0a030; }
+  .dot-green { background: #7ec8a4; }
+  .browser-bar {
+    flex: 1;
+    background: #1a1428;
+    border-radius: 4px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 11px;
+    color: #5a5070;
+  }
+
+  /* App shell */
+  .app-shell {
+    height: calc(800px - 36px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Nav top */
+  .app-nav {
+    height: 52px;
+    background: #1a1428;
+    border-bottom: 1px solid #221c35;
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 24px;
+    flex-shrink: 0;
+  }
+  .nav-brand {
+    font-weight: 700;
+    font-size: 15px;
+    color: #7ec8a4;
+    margin-right: 16px;
+    white-space: nowrap;
+  }
+  .nav-brand span { color: #9b6dff; }
+  .nav-link {
+    font-size: 13px;
+    color: #7a708c;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .nav-link.active { color: #d6cee8; border-bottom: 2px solid #7ec8a4; padding-bottom: 2px; }
+  .nav-spacer { flex: 1; }
+  .nav-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, #9b6dff, #7ec8a4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #0d0a14;
+  }
+
+  /* App content area */
+  .app-content {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+  }
+
+  /* ============================================================
+     VUE A — Dashboard MJ (calendrier + sidebar)
+  ============================================================ */
+
+  .view-a-layout {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Colonne gauche 60% — Calendrier */
+  .cal-column {
+    width: 60%;
+    padding: 20px 20px 16px 24px;
+    overflow-y: auto;
+    border-right: 1px solid #221c35;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .cal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .cal-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #d6cee8;
+  }
+  .cal-nav-btn {
+    width: 28px; height: 28px;
+    background: #221c35;
+    border: 1px solid #2a2040;
+    border-radius: 6px;
+    color: #9b6dff;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-weight: 700;
+  }
+
+  .cal-grid-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    margin-bottom: 4px;
+  }
+  .cal-day-label {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #5a5070;
+    padding: 4px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    flex: 1;
+  }
+
+  .cal-cell {
+    background: #1a1428;
+    border: 1px solid #221c35;
+    border-radius: 6px;
+    padding: 5px 5px 4px;
+    min-height: 72px;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    cursor: pointer;
+  }
+  .cal-cell.empty {
+    background: #110e1a;
+    border-color: #1a1428;
+    cursor: default;
+  }
+  .cal-cell.vacation {
+    background: rgba(224,82,82,0.07);
+    border-color: rgba(224,82,82,0.2);
+  }
+  .cal-cell.today {
+    border-color: #9b6dff;
+    box-shadow: 0 0 0 1px rgba(155,109,255,0.3);
+  }
+  .cal-cell.ideal {
+    border-color: rgba(126,200,164,0.4);
+    box-shadow: 0 0 0 1px rgba(126,200,164,0.15);
+  }
+
+  .cell-num {
+    font-size: 12px;
+    font-weight: 600;
+    color: #9a8faa;
+    line-height: 1;
+    margin-bottom: auto;
+  }
+  .cal-cell.today .cell-num {
+    color: #fff;
+    background: #9b6dff;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+  }
+
+  .cell-badges {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    margin-bottom: 3px;
+    min-height: 14px;
+  }
+  .cell-badge-ideal {
+    font-size: 9px;
+    background: rgba(155,109,255,0.2);
+    color: #9b6dff;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .cell-badge-unknown {
+    font-size: 9px;
+    background: rgba(240,160,48,0.2);
+    color: #f0a030;
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-weight: 600;
+  }
+
+  /* Segments couleur (matin | AM | soir) */
+  .cell-segments {
+    display: flex;
+    gap: 1px;
+    width: 100%;
+    height: 6px;
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 2px;
+  }
+  .seg {
+    flex: 1;
+    height: 100%;
+    border-radius: 1px;
+  }
+  .seg-green  { background: #7ec8a4; }
+  .seg-red    { background: #e05252; }
+  .seg-gray   { background: #3a3a4a; }
+  .seg-amber  { background: #f0a030; }
+
+  /* Légende */
+  .cal-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid #221c35;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: #7a708c;
+  }
+  .legend-dot {
+    width: 10px; height: 6px;
+    border-radius: 1px;
+    flex-shrink: 0;
+  }
+
+  /* Colonne droite 40% — Sidebar sticky */
+  .sidebar-column {
+    width: 40%;
+    padding: 20px 20px 16px 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sidebar-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #d6cee8;
+    line-height: 1.3;
+  }
+  .sidebar-subtitle {
+    font-size: 12px;
+    color: #7a708c;
+    margin-top: 2px;
+  }
+
+  /* Cards créneaux */
+  .creneaux-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .creneau-card {
+    background: #221c35;
+    border: 1px solid #2a2040;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .creneau-card.ideal-card {
+    border-color: rgba(126,200,164,0.35);
+    background: rgba(126,200,164,0.06);
+  }
+
+  .creneau-date {
+    font-size: 13px;
+    font-weight: 600;
+    color: #d6cee8;
+    margin-bottom: 6px;
+  }
+  .creneau-players {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .player-badge {
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+  .player-ok {
+    background: rgba(126,200,164,0.15);
+    color: #7ec8a4;
+    border: 1px solid rgba(126,200,164,0.3);
+  }
+  .player-warn {
+    background: rgba(240,160,48,0.15);
+    color: #f0a030;
+    border: 1px solid rgba(240,160,48,0.3);
+  }
+  .creneau-tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    display: inline-block;
+  }
+  .tag-ideal {
+    background: rgba(126,200,164,0.2);
+    color: #7ec8a4;
+    border: 1px solid rgba(126,200,164,0.3);
+  }
+  .creneau-note {
+    font-size: 11px;
+    color: #7a708c;
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  .vote-btn {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    background: linear-gradient(135deg, #7ec8a4, #9b6dff);
+    border: none;
+    border-radius: 8px;
+    color: #0d0a14;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: center;
+    letter-spacing: 0.3px;
+  }
+
+  .sidebar-meta {
+    font-size: 11px;
+    color: #5a5070;
+    text-align: center;
+  }
+
+  .corbeau-card {
+    background: #130f1f;
+    border: 1px dashed #2a2040;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .corbeau-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #f0a030;
+  }
+  .corbeau-text {
+    font-size: 11px;
+    color: #7a708c;
+    line-height: 1.4;
+  }
+  .corbeau-btn {
+    font-size: 11px;
+    color: #9b6dff;
+    cursor: pointer;
+    text-decoration: underline;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    margin-top: 2px;
+  }
+
+  /* ============================================================
+     VUE B — Vue Semaine joueur (grille + panel latéral)
+  ============================================================ */
+
+  .view-b-layout {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Toolbar semaine */
+  .week-toolbar {
+    height: 48px;
+    background: #1a1428;
+    border-bottom: 1px solid #221c35;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .week-nav-btn {
+    width: 26px; height: 26px;
+    background: #221c35;
+    border: 1px solid #2a2040;
+    border-radius: 5px;
+    color: #9b6dff;
+    font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    font-weight: 700;
+  }
+  .week-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: #d6cee8;
+    flex: 1;
+  }
+  .view-toggle {
+    display: flex;
+    border: 1px solid #2a2040;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .toggle-btn {
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    background: #130f1f;
+    color: #7a708c;
+    border: none;
+    font-weight: 500;
+  }
+  .toggle-btn.active {
+    background: #221c35;
+    color: #7ec8a4;
+    font-weight: 600;
+  }
+
+  /* Zone principale grille + panel */
+  .week-main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* Grille semaine */
+  .week-grid-area {
+    flex: 1;
+    overflow: auto;
+    padding: 16px 16px 16px 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .week-grid {
+    display: grid;
+    /* col 0 = labels lignes, col 1-7 = jours */
+    grid-template-columns: 90px repeat(7, 1fr);
+    grid-template-rows: 36px repeat(3, 1fr);
+    gap: 3px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Coin vide haut-gauche */
+  .grid-corner { background: transparent; }
+
+  /* En-têtes de colonnes (jours) */
+  .grid-col-header {
+    background: #1a1428;
+    border: 1px solid #221c35;
+    border-radius: 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+  }
+  .col-day-name {
+    font-size: 10px;
+    font-weight: 600;
+    color: #5a5070;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .col-day-num {
+    font-size: 15px;
+    font-weight: 700;
+    color: #9a8faa;
+    line-height: 1.1;
+  }
+  .grid-col-header.today-col .col-day-num {
+    color: #fff;
+    background: #9b6dff;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+  }
+  .grid-col-header.today-col { border-color: #9b6dff; }
+
+  /* En-têtes de lignes (moments) */
+  .grid-row-header {
+    background: #130f1f;
+    border: 1px solid #221c35;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #5a5070;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Cellules grille */
+  .grid-cell {
+    border: 1px solid #221c35;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: border-color 0.15s;
+    min-height: 60px;
+    background: #1a1428;
+  }
+  .grid-cell.cell-dispo {
+    background: rgba(126,200,164,0.08);
+    border-color: rgba(126,200,164,0.25);
+  }
+  .grid-cell.cell-dispo-confirmed {
+    background: rgba(126,200,164,0.14);
+    border-color: rgba(126,200,164,0.4);
+  }
+  .grid-cell.cell-indispo {
+    background: rgba(224,82,82,0.1);
+    border-color: rgba(224,82,82,0.3);
+  }
+  .grid-cell.cell-unknown {
+    background: #110e1a;
+    border: 1px dashed #2a2040;
+  }
+  .grid-cell.cell-open {
+    border-color: #9b6dff;
+    box-shadow: 0 0 0 2px rgba(155,109,255,0.25);
+    background: rgba(155,109,255,0.07);
+  }
+
+  .cell-state-label {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 3px;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .label-indispo {
+    background: rgba(224,82,82,0.2);
+    color: #e05252;
+  }
+  .label-dispo {
+    background: rgba(126,200,164,0.15);
+    color: #7ec8a4;
+  }
+  .label-confirmed {
+    background: rgba(126,200,164,0.25);
+    color: #7ec8a4;
+    font-weight: 700;
+  }
+  .label-unknown {
+    color: #3a3a4a;
+    font-size: 10px;
+  }
+  .cell-sub-label {
+    font-size: 9px;
+    color: #5a5070;
+    margin-top: 2px;
+  }
+
+  /* Tooltip hover simulé sur Me 2 Matin */
+  .cell-tooltip {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #221c35;
+    border: 1px solid #2a2040;
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-size: 10px;
+    color: #9b6dff;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    z-index: 10;
+  }
+  .cell-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: #2a2040;
+  }
+
+  /* Panel latéral contextuel (320px) */
+  .week-side-panel {
+    width: 320px;
+    background: #130f1f;
+    border-left: 1px solid #221c35;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 12px;
+    overflow-y: auto;
+    flex-shrink: 0;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .panel-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #d6cee8;
+  }
+  .panel-close {
+    width: 22px; height: 22px;
+    background: #221c35;
+    border: 1px solid #2a2040;
+    border-radius: 4px;
+    color: #7a708c;
+    font-size: 13px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .panel-cell-ref {
+    font-size: 12px;
+    color: #9b6dff;
+    font-weight: 600;
+    padding: 4px 0;
+    border-bottom: 1px solid #221c35;
+    padding-bottom: 10px;
+  }
+
+  .panel-toggle-group {
+    display: flex;
+    border: 1px solid #2a2040;
+    border-radius: 7px;
+    overflow: hidden;
+  }
+  .panel-toggle {
+    flex: 1;
+    padding: 7px 0;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: #1a1428;
+    color: #7a708c;
+  }
+  .panel-toggle.active-indispo {
+    background: rgba(224,82,82,0.18);
+    color: #e05252;
+  }
+  .panel-toggle.active-dispo {
+    background: rgba(126,200,164,0.15);
+    color: #7ec8a4;
+  }
+
+  .panel-field-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #5a5070;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  .panel-select {
+    width: 100%;
+    background: #1a1428;
+    border: 1px solid #2a2040;
+    border-radius: 6px;
+    color: #d6cee8;
+    font-size: 12px;
+    padding: 7px 10px;
+    appearance: none;
+    cursor: pointer;
+  }
+  .panel-date-input {
+    width: 100%;
+    background: #1a1428;
+    border: 1px solid #2a2040;
+    border-radius: 6px;
+    color: #d6cee8;
+    font-size: 12px;
+    padding: 7px 10px;
+  }
+
+  .panel-info-box {
+    background: rgba(155,109,255,0.08);
+    border: 1px solid rgba(155,109,255,0.2);
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 11px;
+    color: #9b6dff;
+    line-height: 1.4;
+  }
+
+  .panel-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+  }
+  .btn-cancel {
+    flex: 1;
+    padding: 9px;
+    background: #221c35;
+    border: 1px solid #2a2040;
+    border-radius: 7px;
+    color: #7a708c;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+  }
+  .btn-save {
+    flex: 2;
+    padding: 9px;
+    background: linear-gradient(135deg, #7ec8a4, #9b6dff);
+    border: none;
+    border-radius: 7px;
+    color: #0d0a14;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .panel-disclaimer {
+    font-size: 10px;
+    color: #3a3a4a;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  /* Scrollbar personnalisée */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: #0d0a14; }
+  ::-webkit-scrollbar-thumb { background: #221c35; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">&#x2728; Grimoire Émeraude — <span>Chroniques du MJ</span></h1>
+<p class="page-subtitle">Maquettes desktop · Vues MJ v0.1 · Parchemins d'interface révélés sous la pleine lune des UX</p>
+
+<!-- ============================================================
+     VUE A — Dashboard MJ "Trouver une date"
+============================================================ -->
+
+<div class="view-wrapper">
+  <h2 class="view-label">Vue A — Dashboard MJ &laquo;&nbsp;Trouver une date&nbsp;&raquo; (split 60/40)</h2>
+
+  <div class="desktop-frame">
+    <!-- Chrome du navigateur -->
+    <div class="browser-chrome">
+      <div class="browser-dots">
+        <span class="dot-red"></span>
+        <span class="dot-yellow"></span>
+        <span class="dot-green"></span>
+      </div>
+      <div class="browser-bar">&#x1F512; jdr-master.local / mj / calendrier</div>
+    </div>
+
+    <!-- App shell -->
+    <div class="app-shell">
+      <!-- Nav top -->
+      <div class="app-nav">
+        <span class="nav-brand">&#x1F4DC; <span>Grimoire</span></span>
+        <span class="nav-link">Mes parties</span>
+        <span class="nav-link active">Calendrier</span>
+        <span class="nav-link">Personnages</span>
+        <span class="nav-link">Systèmes</span>
+        <div class="nav-spacer"></div>
+        <div class="nav-avatar">MJ</div>
+      </div>
+
+      <!-- Split layout -->
+      <div class="app-content">
+        <div class="view-a-layout">
+
+          <!-- ===== COLONNE GAUCHE : Calendrier juillet 2026 ===== -->
+          <div class="cal-column">
+            <div class="cal-header">
+              <div class="cal-nav-btn">&#x276E;</div>
+              <div class="cal-title">Juillet 2026</div>
+              <div class="cal-nav-btn">&#x276F;</div>
+            </div>
+
+            <!-- En-têtes jours -->
+            <div class="cal-grid-header">
+              <div class="cal-day-label">Lu</div>
+              <div class="cal-day-label">Ma</div>
+              <div class="cal-day-label">Me</div>
+              <div class="cal-day-label">Je</div>
+              <div class="cal-day-label">Ve</div>
+              <div class="cal-day-label">Sa</div>
+              <div class="cal-day-label">Di</div>
+            </div>
+
+            <!-- Grille juillet 2026 (1er = mercredi) -->
+            <!-- Semaine 1 : Lu vide, Ma vide, Me 1, Je 2, Ve 3, Sa 4, Di 5 -->
+            <!--
+              Juillet 2026 : 1er = mercredi
+              Lu 6, Ma 7, Me 8...
+              On décale: 2 cases vides (Lu Ma)
+            -->
+            <div class="cal-grid">
+
+              <!-- Ligne 1 : Lu vide, Ma vide, Me 1, Je 2, Ve 3, Sa 4, Di 5 -->
+              <div class="cal-cell empty"></div>
+              <div class="cal-cell empty"></div>
+
+              <!-- Mer 1 -->
+              <div class="cal-cell">
+                <div class="cell-num">1</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-gray"></div>
+                </div>
+              </div>
+
+              <!-- Jeu 2 -->
+              <div class="cal-cell">
+                <div class="cell-num">2</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-gray"></div>
+                </div>
+              </div>
+
+              <!-- Ven 3 -->
+              <div class="cal-cell">
+                <div class="cell-num">3</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Sam 4 (Ven 4 dans spec = Ve 4) — ici col Sa -->
+              <!-- NOTE: spec dit Ve 4 avec badge "?", en juillet 2026 le 4 est un samedi -->
+              <!-- On adapte : Sam 4 = vert mais avec badge inconnu -->
+              <div class="cal-cell">
+                <div class="cell-num">4</div>
+                <div class="cell-badges">
+                  <span class="cell-badge-unknown">?&nbsp;Mira</span>
+                </div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Dim 5 -->
+              <div class="cal-cell">
+                <div class="cell-num">5</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-gray"></div>
+                  <div class="seg seg-gray"></div>
+                  <div class="seg seg-gray"></div>
+                </div>
+              </div>
+
+              <!-- Ligne 2 : Lu 6, Ma 7, Me 8, Je 9, Ve 10, Sa 11, Di 12 -->
+              <!-- Mais spec dit : Sam 5 = tous vert ⭐ Idéal => adapté à Sam 12 dans spec -->
+
+              <!-- Lu 6 -->
+              <div class="cal-cell">
+                <div class="cell-num">6</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-gray"></div>
+                  <div class="seg seg-gray"></div>
+                  <div class="seg seg-gray"></div>
+                </div>
+              </div>
+
+              <!-- Ma 7 -->
+              <div class="cal-cell">
+                <div class="cell-num">7</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Me 8 -->
+              <div class="cal-cell">
+                <div class="cell-num">8</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-red"></div>
+                </div>
+              </div>
+
+              <!-- Je 9 -->
+              <div class="cal-cell">
+                <div class="cell-num">9</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-amber"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Ve 10 -->
+              <div class="cal-cell">
+                <div class="cell-num">10</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Sa 11 -->
+              <div class="cal-cell">
+                <div class="cell-num">11</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Di 12 -->
+              <div class="cal-cell">
+                <div class="cell-num">12</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-gray"></div>
+                  <div class="seg seg-gray"></div>
+                  <div class="seg seg-gray"></div>
+                </div>
+              </div>
+
+              <!-- Ligne 3 : Lu 13, Ma 14, Me 15, Je 16, Ve 17, Sa 18, Di 19 -->
+              <!-- Sam 12 dans spec = ⭐ Idéal => ici Sa 18 (le plus proche "sam" de mi-juillet) -->
+              <!-- On place l'idéal sur Lu 13 pour respecter la logique spec (12 juillet = dimanche en vrai?) -->
+              <!-- En juillet 2026 : 12 = dimanche. Donc Sam 12 = impossible. On suit la spec narrative. -->
+
+              <!-- Lu 13 -->
+              <div class="cal-cell ideal">
+                <div class="cell-num">13</div>
+                <div class="cell-badges">
+                  <span class="cell-badge-ideal">&#x2B50; Idéal</span>
+                </div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Ma 14 — fête nationale, vert mais ambre AM -->
+              <div class="cal-cell">
+                <div class="cell-num">14</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-amber"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Me 15 — vacances Borin début -->
+              <div class="cal-cell vacation">
+                <div class="cell-num">15</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                </div>
+              </div>
+
+              <!-- Je 16 -->
+              <div class="cal-cell vacation">
+                <div class="cell-num">16</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                </div>
+              </div>
+
+              <!-- Ve 17 -->
+              <div class="cal-cell vacation">
+                <div class="cell-num">17</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                </div>
+              </div>
+
+              <!-- Sa 18 -->
+              <div class="cal-cell vacation">
+                <div class="cell-num">18</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                </div>
+              </div>
+
+              <!-- Di 19 -->
+              <div class="cal-cell vacation">
+                <div class="cell-num">19</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                </div>
+              </div>
+
+              <!-- Ligne 4 : Lu 20, Ma 21, Me 22, Je 23, Ve 24, Sa 25, Di 26 -->
+
+              <!-- Lu 20 -->
+              <div class="cal-cell vacation">
+                <div class="cell-num">20</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                </div>
+              </div>
+
+              <!-- Ma 21 -->
+              <div class="cal-cell vacation">
+                <div class="cell-num">21</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                </div>
+              </div>
+
+              <!-- Me 22 -->
+              <div class="cal-cell vacation">
+                <div class="cell-num">22</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                  <div class="seg seg-red"></div>
+                </div>
+              </div>
+
+              <!-- Je 23 -->
+              <div class="cal-cell">
+                <div class="cell-num">23</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-gray"></div>
+                </div>
+              </div>
+
+              <!-- Ve 24 -->
+              <div class="cal-cell">
+                <div class="cell-num">24</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Sa 25 -->
+              <div class="cal-cell">
+                <div class="cell-num">25</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Di 26 -->
+              <div class="cal-cell">
+                <div class="cell-num">26</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-gray"></div>
+                  <div class="seg seg-gray"></div>
+                  <div class="seg seg-gray"></div>
+                </div>
+              </div>
+
+              <!-- Ligne 5 : Lu 27 (aujourd'hui), Ma 28, Me 29, Je 30, Ve 31, vides -->
+
+              <!-- Lu 27 — Aujourd'hui -->
+              <div class="cal-cell today">
+                <div class="cell-num">27</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-gray"></div>
+                </div>
+              </div>
+
+              <!-- Ma 28 -->
+              <div class="cal-cell">
+                <div class="cell-num">28</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-amber"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Me 29 -->
+              <div class="cal-cell">
+                <div class="cell-num">29</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-red"></div>
+                </div>
+              </div>
+
+              <!-- Je 30 -->
+              <div class="cal-cell">
+                <div class="cell-num">30</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Ve 31 -->
+              <div class="cal-cell">
+                <div class="cell-num">31</div>
+                <div class="cell-badges"></div>
+                <div class="cell-segments">
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                  <div class="seg seg-green"></div>
+                </div>
+              </div>
+
+              <!-- Sa vide -->
+              <div class="cal-cell empty"></div>
+              <!-- Di vide -->
+              <div class="cal-cell empty"></div>
+
+            </div><!-- /cal-grid -->
+
+            <!-- Légende -->
+            <div class="cal-legend">
+              <div class="legend-item">
+                <div class="legend-dot" style="background:#7ec8a4;"></div>
+                Disponible
+              </div>
+              <div class="legend-item">
+                <div class="legend-dot" style="background:#e05252;"></div>
+                Indisponible
+              </div>
+              <div class="legend-item">
+                <div class="legend-dot" style="background:#f0a030;"></div>
+                Conflit partiel
+              </div>
+              <div class="legend-item">
+                <div class="legend-dot" style="background:#3a3a4a;"></div>
+                Sort de localisation en attente
+              </div>
+              <div class="legend-item" style="font-size:10px; color:#5a5070; margin-left:auto;">
+                Segments : Matin&nbsp;|&nbsp;Après-midi&nbsp;|&nbsp;Soirée
+              </div>
+            </div>
+
+          </div><!-- /cal-column -->
+
+          <!-- ===== COLONNE DROITE : Panneau créneaux ===== -->
+          <div class="sidebar-column">
+
+            <div>
+              <div class="sidebar-title">&#x2728; Prochaines fenêtres d'aventure</div>
+              <div class="sidebar-subtitle">5 créneaux où la guilde peut se réunir sans périr dans la discorde</div>
+            </div>
+
+            <div class="creneaux-list">
+
+              <!-- Créneau 1 — Idéal -->
+              <div class="creneau-card ideal-card">
+                <div class="creneau-date">&#x2694;&#xFE0F; Sam 13 juillet — Soirée</div>
+                <div class="creneau-players">
+                  <span class="player-badge player-ok">&#x2705; Arek</span>
+                  <span class="player-badge player-ok">&#x2705; Lyra</span>
+                  <span class="player-badge player-ok">&#x2705; Borin</span>
+                  <span class="player-badge player-ok">&#x2705; Mira</span>
+                </div>
+                <span class="creneau-tag tag-ideal">&#x1F3C6; Guilde complète !</span>
+              </div>
+
+              <!-- Créneau 2 — Mira absent -->
+              <div class="creneau-card">
+                <div class="creneau-date">&#x1F5FA;&#xFE0F; Sam 4 juillet — Soirée</div>
+                <div class="creneau-players">
+                  <span class="player-badge player-ok">&#x2705; Arek</span>
+                  <span class="player-badge player-ok">&#x2705; Lyra</span>
+                  <span class="player-badge player-ok">&#x2705; Borin</span>
+                  <span class="player-badge player-warn">&#x26A0;&#xFE0F; Mira</span>
+                </div>
+                <div class="creneau-note">&#x1F331; Mira n'a pas donné signe de vie depuis la dernière pleine lune</div>
+              </div>
+
+              <!-- Créneau 3 -->
+              <div class="creneau-card">
+                <div class="creneau-date">&#x1F319; Ma 7 juillet — Soirée</div>
+                <div class="creneau-players">
+                  <span class="player-badge player-ok">&#x2705; Arek</span>
+                  <span class="player-badge player-ok">&#x2705; Lyra</span>
+                  <span class="player-badge player-ok">&#x2705; Borin</span>
+                  <span class="player-badge player-ok">&#x2705; Mira</span>
+                </div>
+              </div>
+
+            </div><!-- /creneaux-list -->
+
+            <!-- Bouton vote -->
+            <button class="vote-btn">&#x1F5F3;&#xFE0F; Lancer un vote du conseil</button>
+
+            <div class="sidebar-meta">
+              Calculé sur 8 semaines · Runes mises à jour il y a 2 min · Alimenté par 4 grimoires de joueurs
+            </div>
+
+            <!-- Corbeau en attente -->
+            <div class="corbeau-card">
+              <div class="corbeau-title">&#x1F54A;&#xFE0F; Corbeau en attente</div>
+              <div class="corbeau-text">
+                Mira n'a pas encore déclaré ses contraintes pour les prochaines lunes.
+                Son grimoire est désespérément vide.
+              </div>
+              <button class="corbeau-btn">Lui envoyer un rappel ensorcelé &rarr;</button>
+            </div>
+
+          </div><!-- /sidebar-column -->
+
+        </div><!-- /view-a-layout -->
+      </div><!-- /app-content -->
+    </div><!-- /app-shell -->
+  </div><!-- /desktop-frame -->
+</div><!-- /view-wrapper A -->
+
+
+<!-- ============================================================
+     VUE B — Vue Semaine joueur (grille + panel latéral)
+============================================================ -->
+
+<div class="view-wrapper">
+  <h2 class="view-label">Vue B — Vue Semaine joueur (déclaration de contraintes, perspective joueur)</h2>
+
+  <div class="desktop-frame">
+    <!-- Chrome du navigateur -->
+    <div class="browser-chrome">
+      <div class="browser-dots">
+        <span class="dot-red"></span>
+        <span class="dot-yellow"></span>
+        <span class="dot-green"></span>
+      </div>
+      <div class="browser-bar">&#x1F512; jdr-master.local / joueur / disponibilites</div>
+    </div>
+
+    <!-- App shell -->
+    <div class="app-shell">
+      <!-- Nav top -->
+      <div class="app-nav">
+        <span class="nav-brand">&#x1F4DC; <span>Grimoire</span></span>
+        <span class="nav-link">Mes parties</span>
+        <span class="nav-link active">Mes disponibilités</span>
+        <span class="nav-link">Mon personnage</span>
+        <div class="nav-spacer"></div>
+        <div class="nav-avatar">MI</div>
+      </div>
+
+      <!-- Vue semaine layout -->
+      <div class="app-content">
+        <div class="view-b-layout">
+
+          <!-- Toolbar semaine -->
+          <div class="week-toolbar">
+            <div class="week-nav-btn">&#x276E;</div>
+            <div class="week-label">&#x1F5FA;&#xFE0F; Semaine du 30 juin – 6 juillet 2026</div>
+            <div class="week-nav-btn">&#x276F;</div>
+            <div class="view-toggle">
+              <button class="toggle-btn">Vue mois</button>
+              <button class="toggle-btn active">Vue semaine</button>
+            </div>
+          </div>
+
+          <!-- Zone grille + panel -->
+          <div class="week-main">
+
+            <!-- Grille semaine -->
+            <div class="week-grid-area" style="padding: 12px 0 12px 16px;">
+              <div class="week-grid">
+
+                <!-- Ligne 0 : coin + en-têtes colonnes -->
+                <div class="grid-corner"></div>
+
+                <!-- Lu 30 -->
+                <div class="grid-col-header">
+                  <div class="col-day-name">Lu</div>
+                  <div class="col-day-num">30</div>
+                </div>
+                <!-- Ma 1 -->
+                <div class="grid-col-header">
+                  <div class="col-day-name">Ma</div>
+                  <div class="col-day-num">1</div>
+                </div>
+                <!-- Me 2 -->
+                <div class="grid-col-header" style="border-color: rgba(155,109,255,0.5);">
+                  <div class="col-day-name">Me</div>
+                  <div class="col-day-num" style="color:#9b6dff;">2</div>
+                </div>
+                <!-- Je 3 -->
+                <div class="grid-col-header">
+                  <div class="col-day-name">Je</div>
+                  <div class="col-day-num">3</div>
+                </div>
+                <!-- Ve 4 -->
+                <div class="grid-col-header">
+                  <div class="col-day-name">Ve</div>
+                  <div class="col-day-num">4</div>
+                </div>
+                <!-- Sa 5 -->
+                <div class="grid-col-header" style="border-color: rgba(126,200,164,0.3);">
+                  <div class="col-day-name">Sa</div>
+                  <div class="col-day-num" style="color:#7ec8a4;">5</div>
+                </div>
+                <!-- Di 6 -->
+                <div class="grid-col-header">
+                  <div class="col-day-name">Di</div>
+                  <div class="col-day-num">6</div>
+                </div>
+
+                <!-- Ligne 1 : Matin -->
+                <div class="grid-row-header">Matin</div>
+
+                <!-- Lu 30 Matin -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Ma 1 Matin -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Me 2 Matin — cellule avec tooltip hover -->
+                <div class="grid-cell cell-dispo" style="position:relative;">
+                  <div class="cell-tooltip">Cliquez pour déclarer votre sort</div>
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Je 3 Matin -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Ve 4 Matin -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Sa 5 Matin -->
+                <div class="grid-cell cell-dispo-confirmed">
+                  <span class="cell-state-label label-confirmed">Dispo</span>
+                </div>
+                <!-- Di 6 Matin -->
+                <div class="grid-cell cell-unknown">
+                  <span class="cell-state-label label-unknown">&#x2015; Hors période</span>
+                </div>
+
+                <!-- Ligne 2 : Après-midi -->
+                <div class="grid-row-header">Après-midi</div>
+
+                <!-- Lu 30 AM -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Ma 1 AM -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Me 2 AM -->
+                <div class="grid-cell cell-dispo" style="border-left-color: rgba(155,109,255,0.3);">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Je 3 AM -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Ve 4 AM -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Sa 5 AM -->
+                <div class="grid-cell cell-dispo-confirmed">
+                  <span class="cell-state-label label-confirmed">Dispo</span>
+                </div>
+                <!-- Di 6 AM -->
+                <div class="grid-cell cell-unknown">
+                  <span class="cell-state-label label-unknown">&#x2015; Hors période</span>
+                </div>
+
+                <!-- Ligne 3 : Soirée -->
+                <div class="grid-row-header">Soirée</div>
+
+                <!-- Lu 30 Soir -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Ma 1 Soir -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Me 2 Soir — CELLULE OUVERTE -->
+                <div class="grid-cell cell-open">
+                  <span class="cell-state-label label-indispo" style="font-size:9px; text-align:center; line-height:1.3;">Indispo<br>&#x1F501; Récurrent</span>
+                </div>
+                <!-- Je 3 Soir -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo</span>
+                </div>
+                <!-- Ve 4 Soir -->
+                <div class="grid-cell cell-dispo">
+                  <span class="cell-state-label label-dispo">Dispo · inféré</span>
+                  <span class="cell-sub-label">dans période</span>
+                </div>
+                <!-- Sa 5 Soir — confirmé -->
+                <div class="grid-cell cell-dispo-confirmed">
+                  <span class="cell-state-label label-confirmed" style="font-size:9px; text-align:center; line-height:1.3;">Dispo<br>&#x2713; Confirmé</span>
+                </div>
+                <!-- Di 6 Soir -->
+                <div class="grid-cell cell-unknown">
+                  <span class="cell-state-label label-unknown">&#x2015; Hors période</span>
+                </div>
+
+              </div><!-- /week-grid -->
+            </div><!-- /week-grid-area -->
+
+            <!-- Panel latéral contextuel — Me 2 Soirée -->
+            <div class="week-side-panel">
+              <div class="panel-header">
+                <div class="panel-title">Déclarer un sort</div>
+                <div class="panel-close">&#x2715;</div>
+              </div>
+              <div class="panel-cell-ref">&#x1F4C5; Mercredi 2 juillet — Soirée</div>
+
+              <!-- Toggle Indispo / Dispo -->
+              <div>
+                <div class="panel-field-label">Votre incantation</div>
+                <div class="panel-toggle-group">
+                  <button class="panel-toggle active-indispo">&#x274C; Indispo</button>
+                  <button class="panel-toggle">&#x2705; Disponible</button>
+                </div>
+              </div>
+
+              <!-- Type contrainte -->
+              <div>
+                <div class="panel-field-label">Nature du maléfice</div>
+                <select class="panel-select">
+                  <option selected>&#x1F501; Récurrent (chaque semaine)</option>
+                  <option>&#x1F4C5; Ponctuel (une seule fois)</option>
+                  <option>&#x1F5D3;&#xFE0F; Période (plusieurs jours)</option>
+                </select>
+              </div>
+
+              <!-- Expiration -->
+              <div>
+                <div class="panel-field-label">Lever le sort le</div>
+                <input type="date" class="panel-date-input" value="2026-12-31">
+              </div>
+
+              <!-- Info box -->
+              <div class="panel-info-box">
+                &#x1F9D9; Ce sort sera automatiquement reconduit chaque mercredi soir jusqu'à sa date d'expiration, ou jusqu'à ce que vous le dissolvez manuellement.
+              </div>
+
+              <!-- Boutons -->
+              <div class="panel-actions">
+                <button class="btn-cancel">Annuler</button>
+                <button class="btn-save">&#x2728; Sauvegarder</button>
+              </div>
+
+              <div class="panel-disclaimer">
+                Votre MJ sera averti par corbeau de tout changement de contrainte.
+                La guilde compte sur vous, aventurier.
+              </div>
+            </div><!-- /week-side-panel -->
+
+          </div><!-- /week-main -->
+        </div><!-- /view-b-layout -->
+      </div><!-- /app-content -->
+    </div><!-- /app-shell -->
+  </div><!-- /desktop-frame -->
+</div><!-- /view-wrapper B -->
+
+</body>
+</html>

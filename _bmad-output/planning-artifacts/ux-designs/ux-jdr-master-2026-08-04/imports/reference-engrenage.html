@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Engrenage Réaliste</title>
+  <style>
+    :root {
+      --gear-color: #3b82f6;
+      --bg-color: #0f172a;
+    }
+
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: var(--bg-color);
+    }
+
+    .gear-wrapper {
+      width: 180px;
+      height: 180px;
+      animation: spin 8s linear infinite;
+      filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.5));
+    }
+
+    .gear-svg {
+      width: 100%;
+      height: 100%;
+      fill: var(--gear-color);
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="gear-wrapper">
+    <svg class="gear-svg" viewBox="0 0 100 100">
+      <!-- Tracé vectoriel d'un engrenage mécanique à 8 dents avec trou central -->
+      <path d="
+        M 44,4 L 56,4 L 59,17 A 38,38 0 0,1 69,21 L 81,13 L 89,21 L 81,33 A 38,38 0 0,1 85,43 L 98,46 L 98,58 L 85,61 A 38,38 0 0,1 81,71 L 89,83 L 81,91 L 69,83 A 38,38 0 0,1 59,87 L 56,100 L 44,100 L 41,87 A 38,38 0 0,1 31,83 L 19,91 L 11,83 L 19,71 A 38,38 0 0,1 15,61 L 2,58 L 2,46 L 15,43 A 38,38 0 0,1 19,33 L 11,21 L 19,13 L 31,21 A 38,38 0 0,1 41,17 Z
+        M 50,33 A 17,17 0 1,0 50,67 A 17,17 0 1,0 50,33 Z
+      " fill-rule="evenodd"/>
+    </svg>
+  </div>
+
+</body>
+</html>

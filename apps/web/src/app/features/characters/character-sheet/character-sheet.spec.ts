@@ -903,6 +903,94 @@ describe('CharacterSheet', () => {
     });
   });
 
+  // ── Story 31.2 — surface de détail adaptative (FR-20) ──────────────────────────────────────
+
+  describe('surface de détail (talents/avantages)', () => {
+    function detailTriggerNamed(fixture: ComponentFixture<CharacterSheet>, name: string) {
+      const triggers: HTMLButtonElement[] = Array.from(
+        fixture.nativeElement.querySelectorAll('.sheet__detail-trigger'),
+      );
+      return triggers.find((b) => b.textContent?.trim() === name)!;
+    }
+
+    it('AC1 — activer un talent ouvre la surface avec son nom et sa description', async () => {
+      const { fixture } = await createComponent();
+      expect(fixture.nativeElement.querySelector('.detail-surface-panel')).toBeNull();
+
+      detailTriggerNamed(fixture, 'Légendes').click();
+      fixture.detectChanges();
+
+      const panel = fixture.nativeElement.querySelector('.detail-surface-panel');
+      expect(panel).not.toBeNull();
+      expect(panel.querySelector('.detail-surface-title').textContent).toContain('Légendes');
+      expect(panel.querySelector('.detail-surface-body').textContent).toContain('...');
+    });
+
+    it('AC1 — activer un avantage ouvre la surface (champ `effect`, pas `effect.description`)', async () => {
+      const { fixture } = await createComponent();
+
+      detailTriggerNamed(fixture, 'Précision').click();
+      fixture.detectChanges();
+
+      const panel = fixture.nativeElement.querySelector('.detail-surface-panel');
+      expect(panel.querySelector('.detail-surface-title').textContent).toContain('Précision');
+      expect(panel.querySelector('.detail-surface-body').textContent).toContain('+2');
+    });
+
+    it('AC4 — activer un second élément PENDANT que la surface est ouverte remplace le contenu, sans empiler', async () => {
+      const { fixture } = await createComponent();
+
+      detailTriggerNamed(fixture, 'Légendes').click();
+      fixture.detectChanges();
+      expect(document.querySelectorAll('.detail-surface-panel').length).toBe(1);
+
+      detailTriggerNamed(fixture, 'Précision').click();
+      fixture.detectChanges();
+
+      const panels = fixture.nativeElement.querySelectorAll('.detail-surface-panel');
+      expect(panels.length).toBe(1);
+      expect(panels[0].querySelector('.detail-surface-title').textContent).toContain('Précision');
+    });
+
+    it('fermer puis rouvrir sur un autre élément fonctionne', async () => {
+      const { fixture } = await createComponent();
+
+      detailTriggerNamed(fixture, 'Légendes').click();
+      fixture.detectChanges();
+      (fixture.nativeElement.querySelector('.detail-surface-close') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.detail-surface-panel')).toBeNull();
+
+      detailTriggerNamed(fixture, 'Précision').click();
+      fixture.detectChanges();
+      expect(
+        fixture.nativeElement.querySelector('.detail-surface-panel .detail-surface-title')
+          .textContent,
+      ).toContain('Précision');
+    });
+
+    it('AC6 — le focus revient au déclencheur d’origine à la fermeture', async () => {
+      const { fixture } = await createComponent();
+      const trigger = detailTriggerNamed(fixture, 'Légendes');
+      const focusSpy = vi.spyOn(trigger, 'focus');
+
+      trigger.click();
+      fixture.detectChanges();
+      (fixture.nativeElement.querySelector('.detail-surface-close') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(focusSpy).toHaveBeenCalled();
+    });
+
+    it('AC7 — les déclencheurs sont de vrais boutons, accessibles au clavier (Tab)', async () => {
+      const { fixture } = await createComponent();
+      const trigger = detailTriggerNamed(fixture, 'Légendes');
+      expect(trigger.tagName).toBe('BUTTON');
+      expect(trigger.getAttribute('type')).toBe('button');
+      expect(trigger.tabIndex).not.toBe(-1);
+    });
+  });
+
   it('niveau affiché dynamique (c.level) au lieu de "Niveau 1" figé', async () => {
     const character = { ...CHARACTER, xp: 3000, level: 6 };
     const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(character) });
@@ -1056,7 +1144,19 @@ describe('CharacterSheet', () => {
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Classe secondaire : Marchand');
     expect(text).toContain('Négociation');
-    expect(text).toContain('Baisse un prix');
+
+    // Story 31.2 — le texte descriptif n'est plus inline, il s'ouvre dans la surface de détail
+    // au clic sur le nom du talent (AC1).
+    const triggers: HTMLButtonElement[] = Array.from(
+      fixture.nativeElement.querySelectorAll('.sheet__detail-trigger'),
+    );
+    const negociationBtn = triggers.find((b) => b.textContent?.trim() === 'Négociation');
+    negociationBtn!.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.detail-surface-body').textContent).toContain(
+      'Baisse un prix',
+    );
   });
 
   it('type secondaire (capacité type) → sous-bloc "Type secondaire" dans Voie, avec ses avantages', async () => {

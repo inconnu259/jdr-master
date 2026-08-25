@@ -1,0 +1,9 @@
+[
+  { "key": "bruyant", "label": "Bruyant", "prix": "×0,7", "notes": "Crie, tape du pied, renâcle… Bref, n'est jamais discret." },
+  { "key": "entraine", "label": "Entraîné", "prix": "+5000", "notes": "+1 à tous les tests de déplacement. Peut être ajoutée à un animal que le personnage possède déjà." },
+  { "key": "fidele", "label": "Fidèle", "prix": "+1000", "notes": "Ne fuit jamais, ni ne se sépare de son maître. Peut être ajoutée à un animal que le personnage possède déjà." },
+  { "key": "malin", "label": "Malin", "prix": "×3", "notes": "Assez intelligent. Comprend ce que lui dit son maître." },
+  { "key": "robuste", "label": "Robuste", "prix": "×2", "notes": "Ne nécessite pas de nourriture spécifique dans les paysages de niveau 4 ou 5." },
+  { "key": "tetu", "label": "Têtu", "prix": "×0,7", "notes": "N'écoute pas toujours les ordres de son maître." },
+  { "key": "vient-de-naitre", "label": "Vient de naître", "prix": "×0,3", "notes": "Inutilisable pendant 6 mois, compte comme un animal de compagnie." }
+]

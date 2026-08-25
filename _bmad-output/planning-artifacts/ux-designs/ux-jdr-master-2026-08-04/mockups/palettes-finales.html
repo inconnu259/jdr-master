@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Palettes de statut retenues</title>
+<style>
+:root{--text-muted:#7a7a8a;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--radius-badge:6px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5)}
+.t-emeraude{--bg:#0d0a14;--surf:#1a1428;--a1:#7ec8a4;--a2:#9b6dff;--txt:#e8e8f0;--mut:#7a7a8a;
+  --s-todo:#f0a030;--s-live:#3fd4ff;--s-soon:#ff7ad9;--s-done:#5a5a6a}
+.t-foret{--bg:#080f0a;--surf:#0f1a10;--a1:#2ecc71;--a2:#f0c040;--txt:#e8f0ea;--mut:#6a806e;
+  --s-todo:#ff8a3d;--s-live:#4fd6c1;--s-soon:#6f8fd8;--s-done:#5f6b60}
+.t-steam{--bg:#1a1008;--surf:#241808;--a1:#cd7f32;--a2:#4a7c59;--txt:#e8dcc8;--mut:#8a7a5a;
+  --s-todo:#ffd21f;--s-live:#35b7c9;--s-soon:#6f9fd8;--s-done:#6b6459}
+.t-steam.patine{--s-live:#3fb894}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:#e8e8f0;padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 var(--space-sm)}
+.lede,.why{color:var(--text-muted);max-width:86ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:var(--space-base);align-items:start}
+.panel{background:var(--surf);border:1px solid var(--border-subtle);border-radius:var(--radius-card);
+  padding:var(--space-md);box-shadow:var(--elev-card);color:var(--txt)}
+.panel.pick{border-color:#7ec8a4}
+.ttl{font-size:var(--text-base);font-weight:500}
+.sub{font-size:11px;color:var(--mut);margin-bottom:var(--space-sm)}
+.strip4{display:flex;gap:4px;margin-bottom:var(--space-sm)}
+.strip4 i{flex:1;height:10px;border-radius:3px}
+.sl{display:flex;justify-content:space-between;align-items:center;gap:var(--space-sm);
+  padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:var(--text-sm)}
+.sl:last-child{border-bottom:none}
+.bg{display:inline-flex;align-items:center;gap:5px;font-size:var(--text-sm);padding:1px 8px;
+  border-radius:var(--radius-badge);border:1px solid;white-space:nowrap}
+.todo{color:var(--s-todo);border-color:var(--s-todo);background:color-mix(in srgb,var(--s-todo) 16%,transparent)}
+.live{color:var(--s-live);border-color:var(--s-live);background:color-mix(in srgb,var(--s-live) 15%,transparent)}
+.soon{color:var(--s-soon);border-color:var(--s-soon);background:color-mix(in srgb,var(--s-soon) 15%,transparent)}
+.soon.full{background:var(--s-soon);color:var(--bg);font-weight:600;border-color:var(--s-soon)}
+.done{color:var(--s-done);border-color:var(--s-done);background:color-mix(in srgb,var(--s-done) 26%,transparent)}
+.acc{margin-top:var(--space-sm);font-size:11px;color:var(--mut);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sw{display:inline-block;width:24px;height:13px;border-radius:4px;border:1px solid rgba(255,255,255,.16)}
+.hex{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:var(--mut)}
+.tag{position:absolute;right:var(--space-md);top:var(--space-md);font-size:10px;letter-spacing:.08em;
+  text-transform:uppercase;color:#7ec8a4}
+.wrap{position:relative}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md);max-width:86ch}
+</style>
+</head>
+<body>
+
+<h1>Les trois palettes retenues</h1>
+<p class="lede">Vitrail pour l'Émeraude, Automne au bleu brume pour la Forêt, Signalisation au bleu acier pour le Steampunk. Chacune vérifiée contre les deux accents de son thème, affichés en bas de panneau.</p>
+
+<div class="row">
+  <div class="wrap"><div class="panel t-emeraude pick"><span class="tag">retenue</span>
+    <div class="ttl">Grimoire Émeraude — Vitrail</div>
+    <div class="sub">Ambre chandelle · cyan arcanique · rose de sort · cendre</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i><i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ça t'attend</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">En cours</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Dans 13 jours</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Passé</span></div>
+    <div class="acc">accents <span class="sw" style="background:#7ec8a4"></span><span class="sw" style="background:#9b6dff"></span>
+      <span class="hex">#f0a030 · #3fd4ff · #ff7ad9 · #5a5a6a</span></div></div></div>
+
+  <div class="wrap"><div class="panel t-foret pick"><span class="tag">retenue</span>
+    <div class="ttl">Forêt Ancienne — Automne</div>
+    <div class="sub">Orange d'automne · eau claire · bleu brume · lichen</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i><i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ça t'attend</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">En cours</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Dans 13 jours</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Passé</span></div>
+    <div class="acc">accents <span class="sw" style="background:#2ecc71"></span><span class="sw" style="background:#f0c040"></span>
+      <span class="hex">#ff8a3d · #4fd6c1 · #6f8fd8 · #5f6b60</span></div></div></div>
+
+  <div class="wrap"><div class="panel t-steam">
+    <div class="ttl">Steampunk — ton choix tel quel</div>
+    <div class="sub">Jaune d'alerte · <b>bleu vapeur</b> · bleu acier · fonte</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i><i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ça t'attend</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">En cours</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Dans 13 jours</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Passé</span></div>
+    <div class="acc">accents <span class="sw" style="background:#cd7f32"></span><span class="sw" style="background:#4a7c59"></span>
+      <span class="hex">#ffd21f · #35b7c9 · #6f9fd8 · #6b6459</span></div>
+    <p class="note" style="color:var(--txt)">Regarde les deux badges bleus du milieu : « en cours » et « dans 13 jours » sont deux bleus à 24° l'un de l'autre.</p></div></div>
+
+  <div class="wrap"><div class="panel t-steam patine pick"><span class="tag">proposition</span>
+    <div class="ttl">Steampunk — avec vert-de-gris</div>
+    <div class="sub">Jaune d'alerte · <b>vert-de-gris</b> · bleu acier · fonte</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i><i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ça t'attend</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">En cours</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Dans 13 jours</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Passé</span></div>
+    <div class="acc">accents <span class="sw" style="background:#cd7f32"></span><span class="sw" style="background:#4a7c59"></span>
+      <span class="hex">#ffd21f · <b>#3fb894</b> · #6f9fd8 · #6b6459</span></div>
+    <p class="note" style="color:var(--txt)">Le vert-de-gris est la patine du cuivre oxydé : plus thématique encore, et franchement distinct du bleu acier.</p></div></div>
+</div>
+
+<h2>Récapitulatif</h2>
+<div class="row">
+  <div class="panel" style="--surf:#12101a;--txt:#e8e8f0;--mut:#7a7a8a">
+    <div class="sl"><span>Ça t'attend</span><span class="hex">#f0a030 · #ff8a3d · #ffd21f</span></div>
+    <div class="sl"><span>En cours</span><span class="hex">#3fd4ff · #4fd6c1 · #3fb894</span></div>
+    <div class="sl"><span>À venir</span><span class="hex">#ff7ad9 · #6f8fd8 · #6f9fd8</span></div>
+    <div class="sl"><span>Terminé</span><span class="hex">#5a5a6a · #5f6b60 · #6b6459</span></div>
+    <div class="acc">dans l'ordre : Émeraude · Forêt · Steampunk</div>
+  </div>
+</div>
+<p class="note">L'invariant qui gouverne ces trois palettes, et tout thème futur : dans un thème donné, les quatre statuts doivent être distinguables entre eux <em>et</em> éloignés des deux accents de ce thème. Les valeurs sont libres, la règle ne l'est pas.</p>
+
+</body>
+</html>

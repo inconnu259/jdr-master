@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JDR Master — Grimoire Émeraude — Création de personnage (mobile)</title>
+<style>
+  /*
+    Illustrates:
+    - EXPERIENCE.md Flow: character-creation wizard, step "Répartition des attributs" — mobile single-column variant
+    - Component Patterns: CalendarNav reuse (step-progress bar, textual label instead of dots),
+      AvailabilityBadge reuse (derived-stat pills), sticky bottom action bar (touch targets >= 44px)
+    - New minimal invention: attribute-assign chips, same grammar as desktop mock, enlarged for touch
+    - New minor concern: mobile-summary portrait avatar placeholder (initials only at this step;
+      see HTML comment near .summary-portrait for why)
+  */
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0a14;
+    color: #e8e8f0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 40px 24px;
+    min-height: 100vh;
+  }
+
+  h1.page-title { text-align: center; font-size: 22px; font-weight: 700; color: #7ec8a4; margin-bottom: 8px; }
+  h1.page-title span { color: #9b6dff; }
+  .page-subtitle { text-align: center; color: #7a7a8a; font-size: 13px; margin-bottom: 40px; }
+
+  /* Phone frame */
+  .phone-frame {
+    width: 375px;
+    height: 812px;
+    margin: 0 auto;
+    border-radius: 40px;
+    border: 8px solid #1a1428;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(155,109,255,0.12);
+    overflow: hidden;
+    position: relative;
+    background: #0d0a14;
+  }
+  .phone-notch {
+    position: absolute;
+    top: 0; left: 50%;
+    transform: translateX(-50%);
+    width: 140px; height: 22px;
+    background: #1a1428;
+    border-bottom-left-radius: 14px;
+    border-bottom-right-radius: 14px;
+    z-index: 10;
+  }
+  .phone-screen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .status-bar {
+    height: 30px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 22px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #e8e8f0;
+  }
+
+  /* Step-progress bar — textual label, mobile variant */
+  .step-nav {
+    padding: 6px 16px 12px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .step-nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .step-nav-btn {
+    width: 32px; height: 32px;
+    background: #1a1428;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 50%;
+    color: #9b6dff;
+    font-size: 14px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .step-nav-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #e8e8f0;
+    text-align: center;
+    flex: 1;
+  }
+  .step-progress-track {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+  }
+  .step-progress-fill {
+    height: 100%;
+    width: 37.5%;
+    border-radius: 2px;
+    background: linear-gradient(135deg, #7ec8a4, #9b6dff);
+  }
+
+  .wizard-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 16px 16px;
+  }
+
+  .step-heading {
+    font-size: 18px;
+    font-weight: 600;
+    color: #e8e8f0;
+    margin-bottom: 4px;
+  }
+  .step-instructions {
+    font-size: 12px;
+    color: #7a7a8a;
+    margin-bottom: 14px;
+  }
+
+  .pattern-banner {
+    background: rgba(155,109,255,0.08);
+    border: 1px solid rgba(155,109,255,0.2);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #9b6dff;
+    margin-bottom: 16px;
+  }
+  .pattern-banner strong { color: #e8e8f0; }
+
+  .attr-slot {
+    background: #1a1428;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .attr-slot-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: #7a7a8a;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .value-chip-row { display: flex; gap: 8px; }
+  .value-chip {
+    flex: 1;
+    min-height: 44px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: #221c35;
+    color: #e8e8f0;
+    font-size: 16px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .value-chip.selected {
+    border-color: #9b6dff;
+    background: rgba(155,109,255,0.14);
+    color: #9b6dff;
+  }
+  .value-chip.disabled { opacity: 0.35; }
+  .attr-hint { font-size: 11px; color: #7a7a8a; }
+
+  /* Live summary condensed for mobile — under the fold */
+  .mobile-summary {
+    background: #1a1428;
+    border-radius: 12px;
+    box-shadow: 0 0 24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+    padding: 16px;
+    margin-top: 6px;
+  }
+  .summary-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .summary-portrait {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7ec8a4, #9b6dff);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #0d0a14;
+    flex-shrink: 0;
+  }
+  .summary-name { font-size: 14px; font-weight: 600; color: #e8e8f0; }
+  .summary-sub { font-size: 11px; color: #7a7a8a; }
+
+  .summary-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #7a7a8a;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .derived-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+  .stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(126,200,164,0.3);
+    background: rgba(126,200,164,0.1);
+    color: #7ec8a4;
+  }
+  .stat-pill.alt {
+    border-color: rgba(155,109,255,0.3);
+    background: rgba(155,109,255,0.1);
+    color: #9b6dff;
+  }
+  .stat-pill .pill-key { color: #7a7a8a; }
+
+  /* Sticky bottom bar */
+  .sticky-bottom-bar {
+    flex-shrink: 0;
+    display: flex;
+    gap: 10px;
+    padding: 12px 16px calc(12px + 10px);
+    background: #1a1428;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .btn-secondary {
+    flex: 1;
+    min-height: 44px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #e8e8f0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .btn-primary {
+    flex: 1.4;
+    min-height: 44px;
+    background: linear-gradient(135deg, #7ec8a4, #9b6dff);
+    border: none;
+    border-radius: 10px;
+    color: #0d0a14;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .home-indicator {
+    position: absolute;
+    bottom: 8px; left: 50%;
+    transform: translateX(-50%);
+    width: 120px; height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.25);
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">&#x2728; Grimoire Émeraude — <span>Créer son voyageur</span></h1>
+<p class="page-subtitle">Assistant de création · vue mobile · étape 3/8 · label textuel + barre sticky bas d'écran</p>
+
+<div class="phone-frame">
+  <div class="phone-notch"></div>
+  <div class="phone-screen">
+
+    <div class="status-bar">
+      <span>9:41</span>
+      <span>&#x1F4F6; &#x1F50B;</span>
+    </div>
+
+    <div class="step-nav">
+      <div class="step-nav-row">
+        <div class="step-nav-btn">&#x276E;</div>
+        <div class="step-nav-title">Étape 3/8 &middot; Attributs</div>
+        <div class="step-nav-btn">&#x276F;</div>
+      </div>
+      <div class="step-progress-track"><div class="step-progress-fill"></div></div>
+    </div>
+
+    <div class="wizard-body">
+      <div class="step-heading">Choisir sa voie</div>
+      <div class="step-instructions">Répartissez le patron entre vigueur, agilité, intelligence et esprit.</div>
+
+      <div class="pattern-banner">
+        Patron <strong>Polyvalent</strong> — 8, 6, 6, 4 à distribuer
+      </div>
+
+      <div class="attr-slot">
+        <div class="attr-slot-name">Vigueur (VIG)</div>
+        <div class="value-chip-row">
+          <div class="value-chip selected">8</div>
+          <div class="value-chip disabled">6</div>
+          <div class="value-chip disabled">4</div>
+        </div>
+        <div class="attr-hint">Détermine les PV et la Condition</div>
+      </div>
+
+      <div class="attr-slot">
+        <div class="attr-slot-name">Agilité (AGI)</div>
+        <div class="value-chip-row">
+          <div class="value-chip disabled">6</div>
+          <div class="value-chip disabled">6</div>
+          <div class="value-chip selected">4</div>
+        </div>
+        <div class="attr-hint">Contribue à l'Initiative</div>
+      </div>
+
+      <div class="attr-slot">
+        <div class="attr-slot-name">Intelligence (INT)</div>
+        <div class="value-chip-row">
+          <div class="value-chip disabled">6</div>
+          <div class="value-chip selected">6</div>
+          <div class="value-chip disabled">4</div>
+        </div>
+        <div class="attr-hint">Contribue à l'Initiative</div>
+      </div>
+
+      <div class="attr-slot">
+        <div class="attr-slot-name">Esprit (ESP)</div>
+        <div class="value-chip-row">
+          <div class="value-chip selected">6</div>
+          <div class="value-chip disabled">6</div>
+          <div class="value-chip disabled">4</div>
+        </div>
+        <div class="attr-hint">Détermine les PE et la Condition</div>
+      </div>
+
+      <div class="mobile-summary">
+        <div class="summary-header">
+          <!-- portrait ajouté à une étape optionnelle plus tard dans le flow, ou modifiable depuis la fiche après création -->
+          <div class="summary-portrait">FE</div>
+          <div>
+            <div class="summary-name">Fenn</div>
+            <div class="summary-sub">Ménestrel · Technique</div>
+          </div>
+        </div>
+        <div class="summary-section-label">Statistiques dérivées</div>
+        <div class="derived-badges">
+          <span class="stat-pill"><span class="pill-key">PV</span> 16</span>
+          <span class="stat-pill alt"><span class="pill-key">PE</span> 12</span>
+          <span class="stat-pill"><span class="pill-key">Condition</span> 14</span>
+          <span class="stat-pill alt"><span class="pill-key">Initiative</span> 10</span>
+          <span class="stat-pill"><span class="pill-key">Encomb. max</span> 11</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sticky-bottom-bar">
+      <button class="btn-secondary">Précédent</button>
+      <button class="btn-primary">Suivant</button>
+    </div>
+
+    <div class="home-indicator"></div>
+  </div>
+</div>
+
+</body>
+</html>

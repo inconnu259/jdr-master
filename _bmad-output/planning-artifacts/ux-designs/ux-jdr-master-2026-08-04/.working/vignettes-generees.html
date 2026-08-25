@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vignettes générées — 3 styles × 3 thèmes</title>
+<style>
+/* Tokens des 3 thèmes, repris du design system de base (§2).
+   Tout est CSS pur : dégradés, formes, motifs. Aucun bitmap, aucune requête réseau.
+   Chaque vignette est déterministe : mêmes paramètres = même rendu pour une partie donnée. */
+:root{
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;--border-subtle:rgba(255,255,255,.06);
+  --space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+}
+.t-emeraude{--primary-bg:#0d0a14;--surface-bg:#1a1428;--accent-1:#7ec8a4;--accent-2:#9b6dff;--txt:#e8e8f0;--mut:#7a7a8a}
+.t-foret   {--primary-bg:#080f0a;--surface-bg:#0f1a10;--accent-1:#2ecc71;--accent-2:#f0c040;--txt:#e8f0ea;--mut:#6a806e}
+.t-steam   {--primary-bg:#1a1008;--surface-bg:#241808;--accent-1:#cd7f32;--accent-2:#4a7c59;--txt:#e8dcc8;--mut:#8a7a5a}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+.lede{color:var(--text-muted);max-width:78ch;margin:0 0 var(--space-lg)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px}
+.why{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-md);max-width:78ch}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--space-base)}
+.demo{background:var(--surface-bg);border-radius:var(--radius-card);overflow:hidden;
+  box-shadow:0 4px 12px rgba(0,0,0,.5);border:1px solid var(--border-subtle)}
+.cover{height:96px;position:relative;overflow:hidden;background:var(--primary-bg)}
+.mark{position:absolute;right:12px;top:8px;font-size:24px;font-weight:700;letter-spacing:-1px;
+  color:var(--txt);text-shadow:0 2px 8px rgba(0,0,0,.6)}
+.body{padding:var(--space-md);color:var(--txt)}
+.name{font-size:var(--text-lg);font-weight:500}
+.meta{font-size:var(--text-sm);color:var(--mut)}
+.tag{font-size:var(--text-sm);color:var(--mut);padding:2px 0 var(--space-sm);letter-spacing:.06em;text-transform:uppercase}
+
+/* ═══ Style 1 — NÉBULEUSE : masses floues, ambiance, aucun contour net ═══ */
+.g1{position:relative}
+.g1 i{position:absolute;border-radius:50%;filter:blur(14px)}
+.g1.t-emeraude{background:radial-gradient(120% 100% at 20% 0%,#241a3a,#0d0a14)}
+.g1.t-foret   {background:radial-gradient(120% 100% at 70% 10%,#12301c,#080f0a)}
+.g1.t-steam   {background:radial-gradient(120% 100% at 30% 100%,#3a2410,#1a1008)}
+
+/* ═══ Style 2 — BLASON : emblème géométrique centré, symétrique, net ═══ */
+.g2{display:grid;place-items:center}
+.g2 .sigil{width:60px;height:60px;position:relative}
+.g2.t-emeraude{background:linear-gradient(160deg,#1e1633,#0d0a14)}
+.g2.t-foret   {background:linear-gradient(160deg,#0f2416,#080f0a)}
+.g2.t-steam   {background:linear-gradient(160deg,#2e1e0c,#1a1008)}
+/* émeraude : sceau arcanique — deux losanges + anneau */
+.sig-arcane{border:2px solid var(--accent-2);transform:rotate(45deg);border-radius:6px}
+.sig-arcane::before{content:"";position:absolute;inset:9px;border:2px solid var(--accent-1);border-radius:4px}
+.sig-arcane::after{content:"";position:absolute;inset:-14px;border:1px dashed rgba(255,255,255,.18);border-radius:50%}
+/* forêt : feuille — deux coins arrondis opposés + nervure */
+.sig-leaf{background:linear-gradient(140deg,var(--accent-1),rgba(46,204,113,.25));
+  border-radius:0 70% 0 70%;box-shadow:0 0 24px rgba(46,204,113,.25)}
+.sig-leaf::after{content:"";position:absolute;left:50%;top:8%;width:2px;height:84%;
+  background:rgba(8,15,10,.65);transform:rotate(45deg);transform-origin:top}
+/* steampunk : engrenage — dents en conic-gradient + moyeu */
+.sig-gear{border-radius:50%;
+  background:conic-gradient(var(--accent-1) 0 8%,transparent 8% 16.6%,var(--accent-1) 16.6% 25%,
+  transparent 25% 33%,var(--accent-1) 33% 41%,transparent 41% 50%,var(--accent-1) 50% 58%,
+  transparent 58% 66%,var(--accent-1) 66% 75%,transparent 75% 83%,var(--accent-1) 83% 91%,transparent 91%)}
+.sig-gear::before{content:"";position:absolute;inset:11px;border-radius:50%;background:var(--primary-bg);
+  border:2px solid var(--accent-1)}
+.sig-gear::after{content:"";position:absolute;inset:24px;border-radius:50%;border:2px solid var(--accent-2)}
+
+/* ═══ Style 3 — MOTIF : trame répétée, plein cadre, lisible en petit ═══ */
+.g3.t-emeraude{background:
+  radial-gradient(1.6px 1.6px at 18px 12px,rgba(232,232,240,.55),transparent),
+  radial-gradient(1.4px 1.4px at 52px 40px,rgba(155,109,255,.75),transparent),
+  radial-gradient(1.8px 1.8px at 88px 20px,rgba(126,200,164,.7),transparent),
+  radial-gradient(1.3px 1.3px at 120px 56px,rgba(232,232,240,.4),transparent),
+  repeating-linear-gradient(114deg,transparent 0 26px,rgba(155,109,255,.12) 26px 27px),
+  linear-gradient(180deg,#1b1430,#0d0a14);background-size:140px 70px,140px 70px,140px 70px,140px 70px,auto,auto}
+.g3.t-foret{background:
+  repeating-linear-gradient(58deg,rgba(46,204,113,.16) 0 3px,transparent 3px 17px),
+  repeating-linear-gradient(-58deg,rgba(240,192,64,.10) 0 3px,transparent 3px 17px),
+  radial-gradient(60% 90% at 80% 110%,rgba(46,204,113,.30),transparent),
+  linear-gradient(180deg,#10271a,#080f0a)}
+.g3.t-steam{background:
+  repeating-linear-gradient(0deg,rgba(205,127,50,.16) 0 1px,transparent 1px 14px),
+  repeating-linear-gradient(90deg,rgba(205,127,50,.16) 0 1px,transparent 1px 14px),
+  repeating-linear-gradient(90deg,transparent 0 68px,rgba(74,124,89,.45) 68px 70px),
+  linear-gradient(180deg,#2b1c0b,#1a1008)}
+.g3 .arc{position:absolute;border:1.5px dashed rgba(255,255,255,.22);border-radius:50%}
+</style>
+</head>
+<body>
+
+<h1>Vignettes générées — 3 styles × 3 thèmes</h1>
+<p class="lede">Zéro image, zéro fichier : uniquement des dégradés, des formes et des motifs CSS. Chaque vignette est calculée à partir du nom de la partie (position des masses, angles, monogramme), donc stable dans le temps et différente d'une partie à l'autre. Le style change avec le thème actif — une même partie n'a pas la même vignette en Grimoire Émeraude et en Steampunk. Les trois styles ci-dessous sont trois <em>familles</em> ; c'est la famille que tu choisis, pas la vignette d'une partie donnée.</p>
+
+<!-- ══════════ STYLE 1 ══════════ -->
+<h2>Style 1 — Nébuleuse</h2>
+<p class="why">Des masses de couleur floutées, aucune forme identifiable. Le repère, c'est l'<strong>ambiance colorée</strong> — on reconnaît « la violette », « la rouge ». Le plus discret : la vignette ne cherche pas l'attention et laisse le nom dominer. Le moins distinctif au-delà d'une douzaine de parties, quand les ambiances commencent à se ressembler.</p>
+<div class="row">
+  <div class="demo t-emeraude"><div class="cover g1 t-emeraude">
+    <i style="width:120px;height:120px;left:-24px;top:-40px;background:#9b6dff;opacity:.55"></i>
+    <i style="width:90px;height:90px;right:20px;bottom:-38px;background:#7ec8a4;opacity:.40"></i>
+    <i style="width:46px;height:46px;left:52%;top:26px;background:#e8e8f0;opacity:.15"></i>
+    <div class="mark">CK</div></div>
+    <div class="body"><div class="tag">Grimoire Émeraude</div><div class="name">Les Cendres de Kavaan</div><div class="meta">Campagne · Joueur</div></div></div>
+
+  <div class="demo t-foret"><div class="cover g1 t-foret">
+    <i style="width:130px;height:130px;right:-30px;top:-52px;background:#2ecc71;opacity:.45"></i>
+    <i style="width:80px;height:80px;left:12px;bottom:-34px;background:#f0c040;opacity:.30"></i>
+    <i style="width:40px;height:40px;left:44%;top:44px;background:#e8f0ea;opacity:.12"></i>
+    <div class="mark">CN</div></div>
+    <div class="body"><div class="tag">Forêt Ancienne</div><div class="name">Le Convoi du Nord</div><div class="meta">Campagne épisodique · MJ</div></div></div>
+
+  <div class="demo t-steam"><div class="cover g1 t-steam">
+    <i style="width:120px;height:120px;left:30%;top:-50px;background:#cd7f32;opacity:.50"></i>
+    <i style="width:76px;height:76px;left:-18px;bottom:-30px;background:#4a7c59;opacity:.40"></i>
+    <div class="mark">NL</div></div>
+    <div class="body"><div class="tag">Médiéval Steampunk</div><div class="name">La Nuit des Lanternes</div><div class="meta">One-shot · Joueur</div></div></div>
+</div>
+
+<!-- ══════════ STYLE 2 ══════════ -->
+<h2>Style 2 — Blason</h2>
+<p class="why">Un emblème géométrique centré, net, propre à l'univers du thème : sceau arcanique en Émeraude, feuille en Forêt, engrenage en Steampunk. Le plus <strong>lisible en tout petit</strong> — il survit à une vignette de 40 px, donc il fonctionne aussi en mode liste dense. Le plus « identité » aussi : ça ressemble à un blason de compagnie. Contrepartie : deux parties du même thème se ressemblent davantage, la distinction repose surtout sur la couleur et le monogramme.</p>
+<div class="row">
+  <div class="demo t-emeraude"><div class="cover g2 t-emeraude"><div class="sigil sig-arcane"></div><div class="mark">CK</div></div>
+    <div class="body"><div class="tag">Grimoire Émeraude</div><div class="name">Les Cendres de Kavaan</div><div class="meta">Campagne · Joueur</div></div></div>
+  <div class="demo t-foret"><div class="cover g2 t-foret"><div class="sigil sig-leaf"></div><div class="mark">CN</div></div>
+    <div class="body"><div class="tag">Forêt Ancienne</div><div class="name">Le Convoi du Nord</div><div class="meta">Campagne épisodique · MJ</div></div></div>
+  <div class="demo t-steam"><div class="cover g2 t-steam"><div class="sigil sig-gear"></div><div class="mark">NL</div></div>
+    <div class="body"><div class="tag">Médiéval Steampunk</div><div class="name">La Nuit des Lanternes</div><div class="meta">One-shot · Joueur</div></div></div>
+</div>
+
+<!-- ══════════ STYLE 3 ══════════ -->
+<h2>Style 3 — Motif</h2>
+<p class="why">Une trame qui remplit tout le cadre : ciel étoilé et lignes de constellation en Émeraude, entrelacs végétal en Forêt, papier millimétré de plan d'ingénieur en Steampunk. Le plus <strong>texturé</strong> — c'est celui qui donne le plus l'impression d'une vraie couverture, et celui qui distingue le mieux les thèmes les uns des autres. Contrepartie : c'est aussi le plus chargé derrière le monogramme, et le motif étant régulier, deux parties du même thème se distinguent surtout par la couleur.</p>
+<div class="row">
+  <div class="demo t-emeraude"><div class="cover g3 t-emeraude">
+    <div class="arc" style="width:110px;height:110px;left:-30px;bottom:-56px"></div><div class="mark">CK</div></div>
+    <div class="body"><div class="tag">Grimoire Émeraude</div><div class="name">Les Cendres de Kavaan</div><div class="meta">Campagne · Joueur</div></div></div>
+  <div class="demo t-foret"><div class="cover g3 t-foret"><div class="mark">CN</div></div>
+    <div class="body"><div class="tag">Forêt Ancienne</div><div class="name">Le Convoi du Nord</div><div class="meta">Campagne épisodique · MJ</div></div></div>
+  <div class="demo t-steam"><div class="cover g3 t-steam">
+    <div class="arc" style="width:84px;height:84px;right:-24px;top:-30px;border-style:solid;border-color:rgba(205,127,50,.5)"></div><div class="mark">NL</div></div>
+    <div class="body"><div class="tag">Médiéval Steampunk</div><div class="name">La Nuit des Lanternes</div><div class="meta">One-shot · Joueur</div></div></div>
+</div>
+
+<h2>Et en tout petit ?</h2>
+<p class="why">Le mode liste dense n'a pas 96 px de haut à donner — il a 28 px carrés. C'est le vrai test de survie d'un style : ci-dessous, les trois familles réduites à la taille d'une puce de liste.</p>
+<div class="row" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+  <div class="demo t-emeraude" style="padding:var(--space-md);display:flex;gap:10px;align-items:center">
+    <div class="cover g1 t-emeraude" style="width:28px;height:28px;border-radius:6px;flex:none">
+      <i style="width:34px;height:34px;left:-8px;top:-10px;background:#9b6dff;opacity:.7;filter:blur(5px)"></i>
+      <i style="width:24px;height:24px;right:-6px;bottom:-8px;background:#7ec8a4;opacity:.5;filter:blur(5px)"></i></div>
+    <div><div class="name" style="font-size:var(--text-base)">Nébuleuse</div><div class="meta">l'ambiance survit, floue</div></div></div>
+
+  <div class="demo t-foret" style="padding:var(--space-md);display:flex;gap:10px;align-items:center">
+    <div class="cover g2 t-foret" style="width:28px;height:28px;border-radius:6px;flex:none">
+      <div class="sigil sig-leaf" style="width:17px;height:17px;box-shadow:none"></div></div>
+    <div><div class="name" style="font-size:var(--text-base)">Blason</div><div class="meta">reste net et reconnaissable</div></div></div>
+
+  <div class="demo t-steam" style="padding:var(--space-md);display:flex;gap:10px;align-items:center">
+    <div class="cover g3 t-steam" style="width:28px;height:28px;border-radius:6px;flex:none"></div>
+    <div><div class="name" style="font-size:var(--text-base)">Motif</div><div class="meta">devient une texture, illisible</div></div></div>
+</div>
+
+</body>
+</html>

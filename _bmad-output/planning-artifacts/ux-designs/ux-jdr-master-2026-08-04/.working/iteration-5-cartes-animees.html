@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Itération 5 — cartes animées par thème</title>
+<style>
+:root{
+  --text-muted:#7a7a8a;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --status-mixed:#f0a030;--status-unknown:#3a3a4a;
+}
+.t-steam{--bg:#1a1008;--surf:#241808;--a1:#cd7f32;--a2:#4a7c59;--txt:#e8dcc8;--mut:#8a7a5a}
+.t-emeraude{--bg:#0d0a14;--surf:#1a1428;--a1:#7ec8a4;--a2:#9b6dff;--txt:#e8e8f0;--mut:#7a7a8a}
+.t-foret{--bg:#080f0a;--surf:#0f1a10;--a1:#2ecc71;--a2:#f0c040;--txt:#e8f0ea;--mut:#6a806e}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:#e8e8f0;padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 var(--space-sm)}
+.lede,.why{color:var(--text-muted);max-width:82ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:var(--space-base);align-items:start}
+.demo{background:var(--surf);border-radius:var(--radius-card);overflow:hidden;border:1px solid var(--border-subtle);
+  box-shadow:0 4px 12px rgba(0,0,0,.5);display:flex}
+.strip{width:4px;flex:none}
+.in{flex:1;min-width:0}
+.cov{height:112px;position:relative;overflow:hidden}
+.mk{position:absolute;right:10px;top:5px;font-size:22px;font-weight:700;letter-spacing:-1px;color:var(--txt);
+  text-shadow:0 2px 12px rgba(0,0,0,.9);z-index:20}
+.bd{padding:var(--space-md)}
+.nm{font-size:var(--text-lg);font-weight:500;color:var(--txt)}
+.mt{font-size:var(--text-sm);color:var(--mut)}
+.caption{font-size:var(--text-sm);color:var(--text-muted);margin:var(--space-xs) 0 0}
+/* fonds */
+.blue{background:
+  repeating-linear-gradient(0deg,rgba(205,127,50,.13) 0 1px,transparent 1px 13px),
+  repeating-linear-gradient(90deg,rgba(205,127,50,.13) 0 1px,transparent 1px 13px),
+  linear-gradient(180deg,#2b1c0b,#1a1008)}
+.brass{background:linear-gradient(155deg,#3a2611,#1a1008 70%)}
+.sky{background:radial-gradient(140% 140% at 50% 0%,#2a1c46,#0d0a14)}
+.grove{background:radial-gradient(130% 115% at 62% 0%,#12301c,#080f0a)}
+/* animations */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes spinback{to{transform:rotate(-360deg)}}
+@keyframes needle{0%,100%{transform:rotate(-38deg)}45%{transform:rotate(26deg)}62%{transform:rotate(14deg)}}
+@keyframes puff{0%{transform:translate(0,0) scale(.6);opacity:0}20%{opacity:.42}100%{transform:translate(14px,-46px) scale(1.7);opacity:0}}
+@keyframes piston{0%,100%{transform:translateX(0)}50%{transform:translateX(11px)}}
+@keyframes drift{0%{transform:translate(0,0) scale(.85);opacity:0}14%{opacity:.9}82%{opacity:.45}100%{transform:translate(var(--dx,10px),-84px) scale(1.2);opacity:0}}
+@keyframes fall{0%{transform:translate(0,-14px) rotate(0);opacity:0}12%{opacity:.9}100%{transform:translate(var(--dx,22px),104px) rotate(220deg);opacity:0}}
+@keyframes glowpulse{0%,100%{opacity:.32;transform:scale(1)}50%{opacity:.6;transform:scale(1.1)}}
+@keyframes fly{0%{transform:translate(-46px,16px);opacity:0}14%{opacity:1}72%{opacity:1}100%{transform:translate(168px,-22px);opacity:0}}
+@keyframes twinkle{0%,100%{opacity:.22}50%{opacity:.95}}
+.spin{animation:spin 15s linear infinite}
+.spin.rev{animation-name:spinback}
+.s9{animation-duration:9s}.s22{animation-duration:22s}.s30{animation-duration:30s}
+.needle{animation:needle 5.5s ease-in-out infinite;transform-origin:50% 50%}
+.puff{position:absolute;border-radius:50%;background:#e8dcc8;filter:blur(6px);animation:puff 5s ease-out infinite}
+.piston{animation:piston 3.4s ease-in-out infinite}
+.particle{position:absolute;border-radius:50%;background:var(--a1);animation:drift 8s linear infinite}
+.leaf{position:absolute;border-radius:0 70% 0 70%;background:var(--a2);animation:fall 9s linear infinite}
+.halo{position:absolute;border-radius:50%;filter:blur(15px);animation:glowpulse 6s ease-in-out infinite}
+.star{position:absolute;width:2px;height:2px;border-radius:50%;background:#e8e8f0;animation:twinkle 3.4s ease-in-out infinite}
+.comet{position:absolute;animation:fly 7s ease-in-out infinite}
+/* comète : tête posée EXACTEMENT au bout de la queue.
+   La queue et la tête vivent dans un même conteneur pivoté ; la tête est centrée sur
+   l'extrémité droite de la queue via translate(50%,-50%). Plus aucun décalage possible. */
+.comet-rig{position:absolute;transform-origin:left center}
+.comet-tail{position:absolute;left:0;top:50%;transform:translateY(-50%);border-radius:99px;filter:blur(5px)}
+.comet-head{position:absolute;top:50%;border-radius:50%;transform:translate(-50%,-50%);filter:blur(1px)}
+.comet-head::after{content:"";position:absolute;inset:26%;border-radius:50%;background:#fff;filter:blur(2px)}
+@media (prefers-reduced-motion: reduce){
+  .spin,.needle,.puff,.piston,.particle,.leaf,.halo,.star,.comet{animation:none !important}
+  .puff{opacity:.28}.particle{opacity:.7}.leaf{opacity:.75}.halo{opacity:.4}.comet{transform:translate(58px,0);opacity:1}
+}
+/* pièces steampunk */
+.pipe{position:absolute;border:3px solid var(--a1);border-radius:10px;opacity:.55}
+.rivet{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--a1);opacity:.85}
+.rod{position:absolute;border-radius:3px;background:var(--a1);opacity:.8}
+.spring{position:absolute;height:12px;border-radius:2px;opacity:.75;
+  background:repeating-linear-gradient(70deg,var(--a1) 0 2px,transparent 2px 6px)}
+.chain{position:absolute;height:7px;border-radius:99px;opacity:.7;
+  background:repeating-linear-gradient(90deg,transparent 0 3px,var(--a2) 3px 8px)}
+</style>
+</head>
+<body>
+
+<!-- ══ bibliothèque d'engrenages : définis une fois, réutilisés partout ══ -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- B — dents droites -->
+    <g id="gB">
+      <g fill="currentColor">
+        <rect x="46" y="2" width="8" height="14" rx="1.5"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(30 50 50)"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(60 50 50)"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(90 50 50)"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(120 50 50)"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(150 50 50)"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(180 50 50)"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(210 50 50)"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(240 50 50)"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(270 50 50)"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(300 50 50)"/>
+        <rect x="46" y="2" width="8" height="14" rx="1.5" transform="rotate(330 50 50)"/>
+      </g>
+      <circle cx="50" cy="50" r="36" fill="none" stroke="currentColor" stroke-width="7"/>
+      <circle cx="50" cy="50" r="12" fill="none" stroke="currentColor" stroke-width="5"/>
+    </g>
+    <!-- C — trapèze + rayons -->
+    <g id="gC">
+      <g fill="currentColor">
+        <polygon points="45,4 55,4 53.5,17 46.5,17"/>
+        <polygon points="45,4 55,4 53.5,17 46.5,17" transform="rotate(36 50 50)"/>
+        <polygon points="45,4 55,4 53.5,17 46.5,17" transform="rotate(72 50 50)"/>
+        <polygon points="45,4 55,4 53.5,17 46.5,17" transform="rotate(108 50 50)"/>
+        <polygon points="45,4 55,4 53.5,17 46.5,17" transform="rotate(144 50 50)"/>
+        <polygon points="45,4 55,4 53.5,17 46.5,17" transform="rotate(180 50 50)"/>
+        <polygon points="45,4 55,4 53.5,17 46.5,17" transform="rotate(216 50 50)"/>
+        <polygon points="45,4 55,4 53.5,17 46.5,17" transform="rotate(252 50 50)"/>
+        <polygon points="45,4 55,4 53.5,17 46.5,17" transform="rotate(288 50 50)"/>
+        <polygon points="45,4 55,4 53.5,17 46.5,17" transform="rotate(324 50 50)"/>
+      </g>
+      <circle cx="50" cy="50" r="34" fill="none" stroke="currentColor" stroke-width="4"/>
+      <g stroke="currentColor" stroke-width="4"><line x1="50" y1="22" x2="50" y2="78"/><line x1="22" y1="50" x2="78" y2="50"/></g>
+      <circle cx="50" cy="50" r="10" fill="none" stroke="currentColor" stroke-width="4"/>
+    </g>
+    <!-- D — tracé technique -->
+    <g id="gD" stroke="currentColor" stroke-width="2.5" fill="none">
+      <rect x="46.5" y="6" width="7" height="11"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(24 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(48 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(72 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(96 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(120 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(144 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(168 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(192 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(216 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(240 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(264 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(288 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(312 50 50)"/>
+      <rect x="46.5" y="6" width="7" height="11" transform="rotate(336 50 50)"/>
+      <circle cx="50" cy="50" r="33"/><circle cx="50" cy="50" r="9"/>
+      <circle cx="50" cy="50" r="21" stroke-dasharray="4 4" opacity=".6"/>
+    </g>
+    <!-- E — silhouette pleine (d'après ta référence) -->
+    <g id="gE">
+      <path fill="currentColor" fill-rule="evenodd" d="M 44,4 L 56,4 L 59,17 A 38,38 0 0,1 69,21 L 81,13 L 89,21 L 81,33 A 38,38 0 0,1 85,43 L 98,46 L 98,58 L 85,61 A 38,38 0 0,1 81,71 L 89,83 L 81,91 L 69,83 A 38,38 0 0,1 59,87 L 56,100 L 44,100 L 41,87 A 38,38 0 0,1 31,83 L 19,91 L 11,83 L 19,71 A 38,38 0 0,1 15,61 L 2,58 L 2,46 L 15,43 A 38,38 0 0,1 19,33 L 11,21 L 19,13 L 31,21 A 38,38 0 0,1 41,17 Z M 50,33 A 17,17 0 1,0 50,67 A 17,17 0 1,0 50,33 Z"/>
+    </g>
+  </defs>
+</svg>
+
+<h1>Itération 5 — cartes animées</h1>
+<p class="lede">Le Steampunk avec les engrenages que tu as validés (B, C, D) plus ta silhouette de référence, assemblés en vraies machines avec manomètre, tuyaux, ressorts, chaînes, bielle et vapeur. La comète est recalée : queue et tête vivent désormais dans un même repère pivoté, la tête est centrée pile sur l'extrémité de la queue — plus aucun décalage possible. Et trois cartes animées par thème. Tout respecte « mouvement réduit ».</p>
+
+<!-- ═══════════════ STEAMPUNK ═══════════════ -->
+<h2>Médiéval Steampunk — trois machines</h2>
+<p class="why">Chaque carte mélange plusieurs techniques de rouage, tournant à des vitesses et des sens différents — c'est ce qui donne l'illusion d'un mécanisme réellement engrené plutôt que de disques qui tournent chacun dans leur coin.</p>
+<div class="row">
+
+  <div>
+    <div class="demo t-steam"><div class="strip" style="background:var(--status-mixed)"></div><div class="in">
+      <div class="cov blue">
+        <svg width="84" height="84" viewBox="0 0 100 100" class="spin s22" style="position:absolute;left:-6px;top:14px;color:#cd7f32"><use href="#gC"/></svg>
+        <svg width="50" height="50" viewBox="0 0 100 100" class="spin rev s9" style="position:absolute;left:62px;top:54px;color:#4a7c59"><use href="#gB"/></svg>
+        <svg width="34" height="34" viewBox="0 0 100 100" class="spin s30" style="position:absolute;left:74px;top:8px;color:#cd7f32"><use href="#gD"/></svg>
+        <div class="chain" style="width:66px;left:70px;top:44px;transform:rotate(-16deg)"></div>
+        <div class="pipe" style="width:44px;height:26px;right:6px;bottom:-8px;border-bottom:none"></div>
+        <div class="rivet" style="right:12px;bottom:22px"></div><div class="rivet" style="right:44px;bottom:22px"></div>
+        <div class="puff" style="width:16px;height:16px;right:22px;bottom:24px;animation-delay:.4s"></div>
+        <div class="puff" style="width:12px;height:12px;right:30px;bottom:22px;animation-delay:2.6s"></div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur · 2 choses à faire</div></div></div></div>
+    <p class="caption"><b>M1 — Transmission.</b> Roue à rayons (C), pignon rapide (B), roue-témoin en tracé (D), chaîne et échappement de vapeur.</p>
+  </div>
+
+  <div>
+    <div class="demo t-steam"><div class="strip" style="background:var(--a1)"></div><div class="in">
+      <div class="cov brass">
+        <svg width="60" height="60" viewBox="0 0 100 100" class="spin s22" style="position:absolute;left:6px;top:4px;color:#cd7f32"><use href="#gE"/></svg>
+        <svg width="40" height="40" viewBox="0 0 100 100" class="spin rev s9" style="position:absolute;left:48px;top:44px;color:#4a7c59"><use href="#gE"/></svg>
+        <!-- manomètre -->
+        <div style="position:absolute;right:14px;top:22px;width:46px;height:46px;border-radius:50%;
+          background:radial-gradient(circle at 36% 30%,#3b2a12,#1a1008);border:3px solid #cd7f32">
+          <div style="position:absolute;inset:6px;border-radius:50%;border:1px dashed rgba(232,220,200,.3)"></div>
+          <div class="needle" style="position:absolute;left:50%;top:50%;width:2px;height:15px;margin-left:-1px;
+            margin-top:-15px;background:#f0a030;transform-origin:50% 100%;border-radius:1px"></div>
+          <div style="position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:#cd7f32"></div>
+        </div>
+        <div class="spring piston" style="width:34px;left:36px;top:16px"></div>
+        <div class="rod piston" style="width:22px;height:4px;left:66px;top:20px"></div>
+        <div class="rivet" style="left:10px;bottom:10px"></div><div class="rivet" style="left:24px;bottom:10px"></div>
+        <div class="rivet" style="left:38px;bottom:10px"></div>
+        <div class="mk">CN</div></div>
+      <div class="bd"><div class="nm">Le Convoi du Nord</div><div class="mt">Campagne épisodique · MJ</div></div></div></div>
+    <p class="caption"><b>M2 — Régulateur.</b> Deux rouages pleins (ta référence), manomètre à aiguille qui oscille, ressort et bielle qui pompent, rivets.</p>
+  </div>
+
+  <div>
+    <div class="demo t-steam"><div class="strip" style="background:var(--status-unknown)"></div><div class="in">
+      <div class="cov blue">
+        <svg width="74" height="74" viewBox="0 0 100 100" class="spin s30" style="position:absolute;left:50%;margin-left:-37px;top:16px;color:#cd7f32"><use href="#gD"/></svg>
+        <svg width="40" height="40" viewBox="0 0 100 100" class="spin rev s9" style="position:absolute;left:6px;top:2px;color:#4a7c59"><use href="#gC"/></svg>
+        <svg width="30" height="30" viewBox="0 0 100 100" class="spin s22" style="position:absolute;right:8px;bottom:4px;color:#4a7c59"><use href="#gB"/></svg>
+        <svg width="22" height="22" viewBox="0 0 100 100" class="spin rev s22" style="position:absolute;right:26px;top:12px;color:#cd7f32"><use href="#gE"/></svg>
+        <div style="position:absolute;left:8px;top:92px;width:96px;height:0;border-top:1.2px solid rgba(232,220,200,.35)"></div>
+        <div class="rod" style="width:38px;height:3px;left:18px;top:60px;transform:rotate(22deg)"></div>
+        <div class="mk">NL</div></div>
+      <div class="bd"><div class="nm">La Nuit des Lanternes</div><div class="mt">One-shot · Joueur · terminée</div></div></div></div>
+    <p class="caption"><b>M3 — Planche d'étude.</b> Quatre rouages de tailles décroissantes sur fond de plan, cote au trait, bielle. Le plus sobre des trois.</p>
+  </div>
+</div>
+
+<!-- ═══════════════ GRIMOIRE ═══════════════ -->
+<h2>Grimoire Émeraude — trois comètes, alignement corrigé</h2>
+<p class="why">La tête est désormais posée exactement au bout de la queue, quelle que soit l'inclinaison : les deux vivent dans un conteneur pivoté d'un seul bloc, et la tête est centrée sur l'extrémité. Change l'angle, change la longueur — l'alignement suit.</p>
+<div class="row">
+
+  <div>
+    <div class="demo t-emeraude"><div class="strip" style="background:var(--status-mixed)"></div><div class="in">
+      <div class="cov sky">
+        <div class="star" style="left:22px;top:20px"></div><div class="star" style="left:98px;top:28px;animation-delay:1.1s"></div>
+        <div class="star" style="left:150px;top:72px;animation-delay:2.2s"></div><div class="star" style="left:64px;top:88px;animation-delay:2.9s"></div>
+        <div class="comet-rig" style="left:8px;top:70px;width:124px;height:16px;transform:rotate(-16deg)">
+          <div class="comet-tail" style="width:124px;height:13px;
+            background:linear-gradient(90deg,transparent,rgba(155,109,255,.5) 55%,rgba(126,200,164,.9))"></div>
+          <div class="comet-head" style="left:124px;width:24px;height:24px;
+            background:radial-gradient(circle,#e8fff5,#7ec8a4 52%,transparent 76%)"></div>
+        </div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur</div></div></div></div>
+    <p class="caption"><b>G1 — statique.</b> Trajectoire montante, longue traînée. La tête est pile au bout.</p>
+  </div>
+
+  <div>
+    <div class="demo t-emeraude"><div class="strip" style="background:var(--a1)"></div><div class="in">
+      <div class="cov sky" style="background:radial-gradient(130% 130% at 12% 92%,#1e2440,#0d0a14)">
+        <div class="star" style="left:40px;top:24px;animation-delay:.6s"></div><div class="star" style="left:118px;top:60px;animation-delay:1.7s"></div>
+        <div class="comet-rig" style="right:6px;top:24px;width:88px;height:20px;transform:rotate(150deg);transform-origin:right center">
+          <div class="comet-tail" style="width:88px;height:16px;
+            background:linear-gradient(90deg,transparent,rgba(126,200,164,.45) 50%,rgba(155,109,255,.95))"></div>
+          <div class="comet-head" style="left:88px;width:28px;height:28px;
+            background:radial-gradient(circle,#fff,#9b6dff 50%,transparent 76%)"></div>
+        </div>
+        <div class="mk">CN</div></div>
+      <div class="bd"><div class="nm">Le Convoi du Nord</div><div class="mt">Campagne épisodique · MJ</div></div></div></div>
+    <p class="caption"><b>G2 — statique.</b> Sens et teinte inversés, noyau améthyste. Même règle d'alignement, angle opposé.</p>
+  </div>
+
+  <div>
+    <div class="demo t-emeraude"><div class="strip" style="background:var(--a2)"></div><div class="in">
+      <div class="cov sky">
+        <div class="star" style="left:18px;top:24px"></div><div class="star" style="left:58px;top:82px;animation-delay:.9s"></div>
+        <div class="star" style="left:132px;top:32px;animation-delay:1.9s"></div><div class="star" style="left:100px;top:66px;animation-delay:2.6s"></div>
+        <div class="halo" style="width:70px;height:70px;left:40%;top:20px;background:#9b6dff"></div>
+        <div class="comet" style="position:absolute;inset:0">
+          <div class="comet-rig" style="left:0;top:58px;width:86px;height:14px;transform:rotate(-11deg)">
+            <div class="comet-tail" style="width:86px;height:11px;
+              background:linear-gradient(90deg,transparent,rgba(155,109,255,.6) 60%,rgba(232,255,245,.95))"></div>
+            <div class="comet-head" style="left:86px;width:20px;height:20px;
+              background:radial-gradient(circle,#fff,#7ec8a4 54%,transparent 76%)"></div>
+          </div>
+        </div>
+        <div class="mk">NL</div></div>
+      <div class="bd"><div class="nm">La Nuit des Lanternes</div><div class="mt">One-shot · Joueur · <b>animée</b></div></div></div></div>
+    <p class="caption"><b>G3 — animée.</b> La comète traverse en boucle, les étoiles scintillent en décalé, un halo respire au fond.</p>
+  </div>
+</div>
+
+<!-- ═══════════════ FORÊT ═══════════════ -->
+<h2>Forêt Ancienne — trois ambiances animées</h2>
+<p class="why">Trois registres du même monde : les lucioles qui montent, les feuilles qui tombent, la clairière qui respire. Tous en mouvement lent — rien qui accroche l'œil plus que l'information de la carte.</p>
+<div class="row">
+
+  <div>
+    <div class="demo t-foret"><div class="strip" style="background:var(--status-mixed)"></div><div class="in">
+      <div class="cov grove">
+        <div style="position:absolute;width:130px;height:130px;right:-32px;top:-54px;border-radius:50%;background:#2ecc71;opacity:.40;filter:blur(15px)"></div>
+        <div style="position:absolute;width:80px;height:80px;left:8px;bottom:-34px;border-radius:50%;background:#f0c040;opacity:.26;filter:blur(15px)"></div>
+        <div class="particle" style="width:4px;height:4px;left:20px;bottom:0;--dx:14px"></div>
+        <div class="particle" style="width:3px;height:3px;left:50px;bottom:0;--dx:-10px;animation-delay:1.4s"></div>
+        <div class="particle" style="width:5px;height:5px;left:84px;bottom:0;--dx:8px;animation-delay:2.8s;background:#f0c040"></div>
+        <div class="particle" style="width:3px;height:3px;left:118px;bottom:0;--dx:-14px;animation-delay:4.1s"></div>
+        <div class="particle" style="width:4px;height:4px;left:150px;bottom:0;--dx:6px;animation-delay:5.6s;background:#f0c040"></div>
+        <div class="mk">CN</div></div>
+      <div class="bd"><div class="nm">Le Convoi du Nord</div><div class="mt">Lucioles ascendantes</div></div></div></div>
+    <p class="caption"><b>F1.</b> Points lumineux qui montent en dérivant, vert et or mêlés.</p>
+  </div>
+
+  <div>
+    <div class="demo t-foret"><div class="strip" style="background:var(--a1)"></div><div class="in">
+      <div class="cov grove" style="background:radial-gradient(130% 115% at 20% 0%,#183a1e,#080f0a)">
+        <div style="position:absolute;width:110px;height:110px;left:-28px;top:-44px;border-radius:50%;background:#2ecc71;opacity:.34;filter:blur(16px)"></div>
+        <div class="leaf" style="width:9px;height:9px;left:26px;--dx:26px"></div>
+        <div class="leaf" style="width:7px;height:7px;left:66px;--dx:-18px;animation-delay:1.9s;background:#2ecc71"></div>
+        <div class="leaf" style="width:10px;height:10px;left:104px;--dx:18px;animation-delay:3.6s"></div>
+        <div class="leaf" style="width:8px;height:8px;left:142px;--dx:-24px;animation-delay:5.4s;background:#2ecc71"></div>
+        <div class="mk">RV</div></div>
+      <div class="bd"><div class="nm">Les Racines de Vellombre</div><div class="mt">Feuilles tombantes</div></div></div></div>
+    <p class="caption"><b>F2.</b> Feuilles dorées et vertes qui descendent en tournoyant.</p>
+  </div>
+
+  <div>
+    <div class="demo t-foret"><div class="strip" style="background:var(--status-unknown)"></div><div class="in">
+      <div class="cov grove" style="background:radial-gradient(150% 125% at 50% 55%,#0e2415,#080f0a)">
+        <div class="halo" style="width:88px;height:88px;left:50%;margin-left:-44px;top:8px;background:#2ecc71"></div>
+        <div class="halo" style="width:56px;height:56px;left:16px;bottom:-14px;background:#f0c040;animation-delay:2.4s"></div>
+        <div class="particle" style="width:3px;height:3px;left:60px;bottom:0;--dx:6px;animation-delay:.8s"></div>
+        <div class="particle" style="width:3px;height:3px;left:104px;bottom:0;--dx:-8px;animation-delay:3.2s;background:#f0c040"></div>
+        <div class="mk">MC</div></div>
+      <div class="bd"><div class="nm">La Marche des Cerfs</div><div class="mt">Clairière qui respire</div></div></div></div>
+    <p class="caption"><b>F3.</b> Deux halos qui pulsent en décalé, quelques particules rares. Le plus discret.</p>
+  </div>
+</div>
+
+<h2>Contrôle « mouvement réduit »</h2>
+<p class="why">Active la réduction des animations dans les réglages de ton système, puis recharge : tout se fige, et aucune composition ne perd d'élément. C'est la règle — une animation ne porte jamais d'information.</p>
+
+</body>
+</html>

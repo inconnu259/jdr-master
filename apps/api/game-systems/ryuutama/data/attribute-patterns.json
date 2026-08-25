@@ -1,0 +1,5 @@
+[
+  { "key": "equilibre", "label": "Équilibré", "values": [6, 6, 6, 6] },
+  { "key": "polyvalent", "label": "Polyvalent", "values": [8, 4, 6, 6] },
+  { "key": "specialiste", "label": "Spécialiste", "values": [4, 4, 8, 8] }
+]

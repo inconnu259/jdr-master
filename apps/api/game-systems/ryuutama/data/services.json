@@ -1,0 +1,28 @@
+[
+  { "key": "repas-mauvais", "categorie": "Repas (jour)", "label": "Mauvais repas", "prix": 1, "ou": "Partout", "notes": "-1 au test de condition du jour suivant" },
+  { "key": "repas-quelconque", "categorie": "Repas (jour)", "label": "Repas quelconque", "prix": 3, "ou": "Partout", "notes": "Pas de modificateur au test de condition du jour suivant" },
+  { "key": "repas-bon", "categorie": "Repas (jour)", "label": "Bon repas", "prix": 30, "ou": "Partout", "notes": "+1 au test de condition du jour suivant" },
+  { "key": "repas-festin-de-roi", "categorie": "Repas (jour)", "label": "Festin de roi", "prix": 1500, "ou": "Cité", "notes": "+3 au test de condition du jour suivant" },
+
+  { "key": "gite-salle-commune", "categorie": "Gîte (1 personne)", "label": "Salle commune", "prix": 5, "ou": "Partout", "notes": "Une pièce sans aucun mobilier. On dort à même le sol ou sur une paillasse. Le joueur fait deux tests de condition le lendemain et garde le plus mauvais." },
+  { "key": "gite-dortoir", "categorie": "Gîte (1 personne)", "label": "Dortoir", "prix": 20, "ou": "Partout", "notes": "Une grande pièce où s'alignent de 3 à 6 lits modestes et quelques tables." },
+  { "key": "gite-chambre-individuelle", "categorie": "Gîte (1 personne)", "label": "Chambre individuelle", "prix": 100, "ou": "Bourg", "notes": "Une pièce possédant un lit confortable et des meubles de bonne qualité. +1 au test de condition du lendemain." },
+  { "key": "gite-suite-royale", "categorie": "Gîte (1 personne)", "label": "Suite royale", "prix": 1200, "ou": "Cité", "notes": "Une chambre extrêmement confortable, au lit et au mobilier splendides. Le joueur fait deux tests de condition le lendemain et garde le meilleur." },
+
+  { "key": "service-bains-publics", "label": "Bains publics", "prix": 2, "ou": "Bourg", "notes": "Bains publics, thermes, sources chaudes, etc." },
+  { "key": "service-bibliotheque", "label": "Bibliothèque", "prix": 20, "ou": "Cité", "notes": "Renseignements sur des faits du passé. Peut être bien plus cher." },
+  { "key": "service-divination", "label": "Divination", "prix": 10, "ou": "Ville", "notes": "Lit l'avenir. Peut être bien plus cher." },
+  { "key": "service-envoi-de-colis", "label": "Envoi de colis", "prix": 80, "ou": "Ville", "notes": "Livre à la ville indiquée, jusqu'à un encombrement de 5." },
+  { "key": "service-envoi-de-courrier", "label": "Envoi de courrier", "prix": 20, "ou": "Ville", "notes": "Livre à la ville indiquée, mais pas plus d'un parchemin à la fois." },
+  { "key": "service-espion", "label": "Espion", "prix": 10, "ou": "Bourg", "notes": "Renseignements sur des faits actuels et passés. Peut être bien plus cher." },
+  { "key": "service-meteo", "label": "Météo (à 3 jours)", "prix": 10, "ou": "Partout", "notes": "La météo est prédite par un spécialiste. 70 % d'exactitude." },
+  { "key": "service-reparation-objet", "label": "Réparation d'objet", "prix": "Spécial", "ou": "Partout", "notes": "Ramène la résistance d'un objet à son maximum pour 20 % de son prix." },
+  { "key": "service-soins-blessures", "label": "Soins (blessures)", "prix": 100, "ou": "Partout", "notes": "Permet de récupérer d8 + d8 PV." },
+  { "key": "service-soins-etat", "label": "Soins (état)", "prix": 300, "ou": "Bourg", "notes": "Baisse le niveau d'un état de 3." },
+  { "key": "service-teinturier", "label": "Teinturier", "prix": 2, "ou": "Bourg", "notes": "Prix par vêtement. Nettoie aussi les armures." },
+  { "key": "service-urgences-etat", "label": "Urgences (état)", "prix": 250, "ou": "Bourg", "notes": "Annule les effets d'un état, mais uniquement pour 12 heures." },
+
+  { "key": "specialite-petite", "categorie": "Spécialités (villes)", "label": "Spécialité (petite)", "prix": 100, "encumbrance": 1, "notes": "Accessoires, épices, petits objets, verroterie, etc." },
+  { "key": "specialite-moyenne", "categorie": "Spécialités (villes)", "label": "Spécialité (moyenne)", "prix": 500, "encumbrance": 3, "notes": "Artisanat, fruits, légumes, etc." },
+  { "key": "specialite-grande", "categorie": "Spécialités (villes)", "label": "Spécialité (grande)", "prix": 1000, "encumbrance": 5, "notes": "Bois, huiles, meubles, minerais, etc." }
+]

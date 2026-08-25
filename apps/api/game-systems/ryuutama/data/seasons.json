@@ -1,0 +1,6 @@
+[
+  { "key": "printemps", "label": "Printemps" },
+  { "key": "ete", "label": "Été" },
+  { "key": "automne", "label": "Automne" },
+  { "key": "hiver", "label": "Hiver" }
+]

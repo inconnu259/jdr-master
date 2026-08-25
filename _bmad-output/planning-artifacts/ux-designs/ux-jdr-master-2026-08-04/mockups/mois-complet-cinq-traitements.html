@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La vue Mois — cinq traitements sur un mois complet</title>
+<style>
+:root{
+  --primary-bg:#0d0a14;--surface-bg:#1a1428;
+  --accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;
+  --status-todo:#f0a030;--status-soon:#ff7ad9;--status-done:#5a5a6a;
+  --status-unavailable:#e05252;--status-unknown:#3a3a4a;
+  --border-subtle:rgba(255,255,255,.07);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:34px;
+  --radius-card:10px;
+  --text-xs:11px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:27px;
+  /* teintes de fond dérivées */
+  --f-av:rgba(126,200,164,.30);--f-un:rgba(224,82,82,.30);
+  --f-se:rgba(255,122,217,.28);--f-vo:rgba(240,160,48,.24);
+  --l-se:rgba(255,122,217,.75);--l-vo:rgba(240,160,48,.75);
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg) var(--space-lg) 80px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 var(--space-xs);border-top:1px solid var(--border-subtle);padding-top:var(--space-lg)}
+h3{font-size:var(--text-lg);margin:var(--space-lg) 0 var(--space-sm)}
+p{max-width:96ch}
+.lede{color:var(--text-muted);margin:0 0 var(--space-lg)}
+.why{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-md);max-width:96ch}
+.pair{display:flex;gap:var(--space-xl);align-items:flex-start;flex-wrap:wrap}
+.tag{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);display:block;margin-bottom:6px}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md);max-width:76ch}
+.note b{color:var(--text-primary)}
+.verdict{font-size:var(--text-sm);margin-top:var(--space-md);padding:var(--space-sm) var(--space-md);
+  background:var(--surface-bg);border-radius:var(--radius-card);border:1px solid var(--border-subtle);max-width:84ch}
+.verdict b{color:var(--accent-1)}
+.verdict.warn b{color:var(--status-todo)}
+.verdict.bad b{color:var(--status-unavailable)}
+/* conteneurs */
+.desk{width:980px;max-width:100%;background:var(--primary-bg);border:1px solid var(--border-subtle);
+  border-radius:14px;padding:var(--space-md);box-shadow:0 8px 32px rgba(0,0,0,.6)}
+.phone{width:375px;background:var(--primary-bg);border:1px solid var(--border-subtle);
+  border-radius:22px;padding:var(--space-md);box-shadow:0 8px 32px rgba(0,0,0,.7)}
+.mhead{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px}
+.mhead div{font-size:var(--text-xs);color:var(--text-muted);text-align:center;letter-spacing:.05em}
+.phone .mhead div{font-size:9px}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+/* cellule générique */
+.c{background:rgba(255,255,255,.028);border-radius:5px;padding:2px 3px 0;display:flex;flex-direction:column;
+  overflow:hidden;position:relative}
+.desk .c{min-height:84px;padding:3px 4px 0}
+.phone .c{min-height:58px}
+.c.out{opacity:.22}
+.c.today{box-shadow:inset 0 0 0 1px rgba(126,200,164,.55)}
+.dn{font-size:var(--text-xs);color:var(--text-muted);line-height:1.1;flex:0 0 auto}
+.phone .dn{font-size:9px}
+.c.today .dn{color:var(--accent-1);font-weight:700}
+.fill{flex:1;min-height:0}
+/* ─── réglette 3 segments (P1, P4) ─── */
+.reg{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin:2px -1px 3px;flex:0 0 auto}
+.reg i{height:5px;border-radius:2px;background:var(--status-unknown)}
+.phone .reg i{height:4px}
+.reg i.av{background:var(--accent-1)}
+.reg i.un{background:var(--status-unavailable)}
+.reg i.uk{background:repeating-linear-gradient(45deg,transparent 0 2px,rgba(90,90,106,.8) 2px 4px)}
+.uni{height:5px;border-radius:2px;margin:2px -1px 3px;flex:0 0 auto}
+.phone .uni{height:4px}
+.uni.av{background:var(--accent-1)}
+.uni.un{background:var(--status-unavailable)}
+.uni.uk{background:repeating-linear-gradient(45deg,transparent 0 2px,rgba(90,90,106,.8) 2px 4px)}
+/* ─── puces (P1) ─── */
+.chip{display:flex;align-items:center;gap:3px;border-radius:4px;padding:1px 3px;font-size:10px;
+  line-height:1.3;min-width:0;margin-bottom:2px}
+.phone .chip{font-size:8px;padding:0 2px;gap:2px}
+.chip .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
+.chip.se{background:var(--f-se);box-shadow:inset 0 0 0 1px var(--l-se)}
+.chip.vo{background:var(--f-vo);border-left:3px solid var(--status-todo)}
+.chip.more{background:rgba(255,255,255,.06);color:var(--text-muted);font-weight:400;justify-content:center}
+svg.ic{width:10px;height:10px;flex:0 0 10px;stroke:currentColor;fill:none;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round}
+.phone svg.ic{width:8px;height:8px;flex:0 0 8px}
+.chip.se svg.ic{color:var(--status-soon)}
+.chip.vo svg.ic{color:var(--status-todo)}
+/* ─── N1 : découpage horizontal ─── */
+.h3{display:flex;flex-direction:column;gap:2px;margin:2px -1px 3px;flex:1}
+.h3 .b{border-radius:3px;background:var(--status-unknown);display:flex;align-items:center;
+  padding:0 4px;min-width:0;overflow:hidden}
+.desk .h3 .b{min-height:20px}
+.phone .h3 .b{min-height:13px;padding:0 2px}
+.h3 .b.av{background:var(--f-av)}
+.h3 .b.un{background:var(--f-un)}
+.h3 .b.uk{background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(90,90,106,.5) 3px 6px)}
+.h3 .b.se{background:var(--f-se);box-shadow:inset 0 0 0 1px var(--l-se)}
+.h3 .b.vo{background:var(--f-vo);box-shadow:inset 0 0 0 1px var(--l-vo)}
+.h3 .b .lbl{font-size:10px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.phone .h3 .b .lbl{font-size:7px}
+/* ─── N2 : découpage vertical ─── */
+.v3{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin:2px -1px 3px;flex:1}
+.v3 .b{border-radius:3px;background:var(--status-unknown);position:relative;overflow:hidden;
+  display:flex;align-items:center;justify-content:center}
+.v3 .b.av{background:var(--f-av)}
+.v3 .b.un{background:var(--f-un)}
+.v3 .b.uk{background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(90,90,106,.5) 3px 6px)}
+.v3 .b.se{background:var(--f-se);box-shadow:inset 0 0 0 1px var(--l-se)}
+.v3 .b.vo{background:var(--f-vo);box-shadow:inset 0 0 0 1px var(--l-vo)}
+.v3 .b .vlbl{writing-mode:vertical-rl;text-orientation:mixed;font-size:9px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-height:100%;line-height:1}
+.phone .v3 .b .vlbl{display:none}
+.v3 .b .glyph{font-size:10px;color:var(--text-primary);opacity:.9}
+/* ─── P3 : case haute ─── */
+.desk .c.tall{min-height:136px}
+.phone .c.tall{min-height:96px}
+.line{display:flex;align-items:center;gap:3px;font-size:9px;line-height:1.35;min-width:0;margin-bottom:1px}
+.phone .line{font-size:7px;gap:2px}
+.line .k{width:4px;height:11px;border-radius:2px;flex:0 0 4px;background:var(--status-unknown)}
+.phone .line .k{height:8px;width:3px;flex:0 0 3px}
+.line .k.av{background:var(--accent-1)}
+.line .k.un{background:var(--status-unavailable)}
+.line .k.se{background:var(--status-soon)}
+.line .k.vo{background:var(--status-todo)}
+.line .k.uk{background:repeating-linear-gradient(45deg,transparent 0 2px,rgba(90,90,106,.8) 2px 4px)}
+.line .n{color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.line .n.on{color:var(--text-primary);font-weight:700}
+/* ─── P4 : résumé ─── */
+.sum{display:flex;align-items:center;justify-content:center;border-radius:4px;padding:1px 2px;
+  font-size:10px;font-weight:700;margin-bottom:2px;min-width:0}
+.phone .sum{font-size:8px}
+.sum span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sum.se{background:var(--f-se);box-shadow:inset 0 0 0 1px var(--l-se)}
+.sum.vo{background:var(--f-vo);box-shadow:inset 0 0 0 1px var(--l-vo)}
+table.cmp{border-collapse:collapse;width:100%;font-size:var(--text-sm);margin-top:var(--space-md)}
+table.cmp th,table.cmp td{border:1px solid var(--border-subtle);padding:6px 9px;text-align:left;vertical-align:top}
+table.cmp th{color:var(--text-muted);font-weight:600;background:rgba(255,255,255,.02)}
+.legend{font-size:var(--text-sm);color:var(--text-muted);display:flex;gap:var(--space-base);flex-wrap:wrap;margin:var(--space-sm) 0 0}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{width:13px;height:13px;border-radius:3px;display:inline-block}
+</style>
+</head>
+<body>
+
+<h1>La vue Mois — cinq traitements, mois complet</h1>
+<p class="lede">Août 2026, <b>exactement les mêmes données</b> partout : 4 séances (dont une journée à deux séances,
+le 22), 5 créneaux au vote, des disponibilités mêlées et des jours sans rien.
+Chaque traitement est rendu <b>en desktop (980 px) et en mobile (375 px)</b>.</p>
+
+<div class="legend">
+  <span><i style="background:var(--f-av)"></i>disponible</span>
+  <span><i style="background:var(--f-un)"></i>indisponible</span>
+  <span><i style="background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(90,90,106,.6) 3px 6px)"></i>non déclaré</span>
+  <span><i style="background:var(--f-se);box-shadow:inset 0 0 0 1px var(--l-se)"></i>séance</span>
+  <span><i style="background:var(--f-vo);box-shadow:inset 0 0 0 1px var(--l-vo)"></i>vote</span>
+</div>
+
+<!-- ═══════════ N1 ═══════════ -->
+<h2>N1 · Découpage horizontal — trois bandes empilées</h2>
+<p class="why"><b>Non exploré jusqu'ici.</b> La case entière est coupée en trois bandes : matin en haut, après-midi au milieu,
+soir en bas. Chaque bande occupe <b>toute la largeur</b> de la case — donc elle peut porter du texte sur desktop.
+La position verticale dit le moment ; plus besoin d'icône ni de réglette séparée.</p>
+
+<div class="pair">
+  <div><span class="tag">Desktop — 980 px</span><div class="desk" id="n1-d"></div></div>
+  <div><span class="tag">Mobile — 375 px</span><div class="phone" id="n1-m"></div></div>
+</div>
+<div class="verdict"><b>Desktop :</b> chaque séance est nommée <b>à sa place</b>, le 22 montre ses deux séances sur deux bandes distinctes,
+et un seul objet porte tout — plus de partage entre réglette et puces.
+<br><b>Mobile :</b> le texte tombe, mais la <b>structure survit</b> : trois bandes de 13 px, on voit toujours <i>quand</i>
+sans savoir <i>quoi</i>. C'est la même dégradation que partout ailleurs.
+<br><b>Le grief à peser :</b> la grille est nettement plus bariolée qu'avec une réglette fine — chaque jour porte trois surfaces colorées
+pleine largeur au lieu d'un mince trait.</div>
+
+<!-- ═══════════ N2 ═══════════ -->
+<h2>N2 · Découpage vertical — trois colonnes</h2>
+<p class="why">Même principe, axe tourné : matin à gauche, après-midi au centre, soir à droite.
+Sur desktop, une colonne fait ≈ 42 px : le nom n'y tient qu'<b>écrit verticalement</b>. Sur mobile, ≈ 14 px : rien n'y tient.</p>
+
+<div class="pair">
+  <div><span class="tag">Desktop — 980 px</span><div class="desk" id="n2-d"></div></div>
+  <div><span class="tag">Mobile — 375 px</span><div class="phone" id="n2-m"></div></div>
+</div>
+<div class="verdict warn"><b>Ce qui se voit tout de suite :</b> le texte vertical est lisible une fois, pénible dix fois —
+et sur une grille de 42 cases, on en lit dix. Le 22 (deux séances) fonctionne pourtant très bien : deux colonnes voisines occupées.
+<br><b>Le vrai défaut est ailleurs :</b> l'œil balaie une grille de calendrier <b>horizontalement</b>, jour après jour. Des colonnes
+<i>dans</i> la case créent une seconde lecture horizontale qui entre en concurrence avec la première — on ne sait plus si deux
+surfaces voisines sont deux moments du même jour, ou deux jours.</div>
+
+<!-- ═══════════ P1 ═══════════ -->
+<h2>P1 · Réglette fine + puces nommées</h2>
+<p class="why">Deux registres séparés : la réglette de trois segments en bas dit la disponibilité, les puces au-dessus
+disent les événements et portent une icône de créneau.</p>
+
+<div class="pair">
+  <div><span class="tag">Desktop — 980 px</span><div class="desk" id="p1-d"></div></div>
+  <div><span class="tag">Mobile — 375 px</span><div class="phone" id="p1-m"></div></div>
+</div>
+<div class="verdict"><b>La grille la plus calme des cinq</b> : les jours sans événement ne portent qu'un trait de 5 px,
+et l'œil va droit aux quatre jours qui comptent. C'est aussi le plus proche de l'existant.
+<br><b>La limite :</b> l'icône est un code de plus à apprendre — trois pictogrammes à distinguer dans 10 px —
+là où N1 dit la même chose par la seule position.</div>
+
+<!-- ═══════════ P3 ═══════════ -->
+<h2>P3 · La case haute — une ligne par créneau occupé</h2>
+<div class="pair">
+  <div><span class="tag">Desktop — 980 px</span><div class="desk" id="p3-d"></div></div>
+  <div><span class="tag">Mobile — 375 px</span><div class="phone" id="p3-m"></div></div>
+</div>
+<div class="verdict bad"><b>Le mois ne tient plus.</b> Six lignes de 136 px : la grille seule dépasse 800 px, sans l'en-tête
+ni la barre de contrôles. Sur mobile, les lignes de texte sont à 7 px — sous le seuil de lisibilité.
+<br>Et l'effet pervers se voit sur le mois entier : <b>les jours vides occupent autant de place que les jours pleins</b>,
+donc la vue est chargée sans être informative.</div>
+
+<!-- ═══════════ P4 ═══════════ -->
+<h2>P4 · Résumé + détail au tap</h2>
+<div class="pair">
+  <div><span class="tag">Desktop — 980 px</span><div class="desk" id="p4-d"></div></div>
+  <div><span class="tag">Mobile — 375 px</span><div class="phone" id="p4-m"></div></div>
+</div>
+<div class="verdict"><b>Très lisible, et très pauvre.</b> Sur desktop, la place disponible est visiblement gâchée :
+« 2 séances » dans une case de 133 px de large qui pourrait nommer les deux.
+<br>Reste une bonne réponse <b>sur mobile</b>, où il n'y a de toute façon pas la place.</div>
+
+<!-- ═══════════ synthèse ═══════════ -->
+<h2>Ce que le mois entier révèle, et qu'une case isolée cachait</h2>
+<table class="cmp">
+  <tr><th>Critère</th><th>N1 horizontal</th><th>N2 vertical</th><th>P1 réglette+puces</th><th>P3 case haute</th><th>P4 résumé</th></tr>
+  <tr><td>Le mois tient sur un écran</td><td><b>Oui</b></td><td><b>Oui</b></td><td><b>Oui</b></td><td><b>Non</b></td><td><b>Oui</b></td></tr>
+  <tr><td>Le moment se lit sans code appris</td><td><b>Position</b></td><td>Position</td><td>Icône</td><td>Ligne</td><td>Non</td></tr>
+  <tr><td>Deux séances le même jour</td><td><b>Deux bandes nommées</b></td><td>Deux colonnes</td><td>Deux puces</td><td>Deux lignes</td><td>« 2 séances »</td></tr>
+  <tr><td>Calme visuel de la grille</td><td>Chargé</td><td>Très chargé</td><td><b>Calme</b></td><td>Chargé</td><td><b>Très calme</b></td></tr>
+  <tr><td>Survit à 48 px de large</td><td><b>Structure oui</b></td><td>Structure oui</td><td>Oui</td><td>Non</td><td>Oui</td></tr>
+  <tr><td>Sélection par glissement au créneau</td><td><b>Directe</b></td><td>Directe</td><td>Sur la réglette</td><td>Ambiguë</td><td>Impossible</td></tr>
+</table>
+
+<p class="why" style="margin-top:var(--space-base)"><b>Une conséquence qu'aucune planche de case isolée ne montrait :</b>
+N1 et N2 rendent la <b>sélection par glissement au créneau</b> possible <i>en vue Mois</i> — on glisse sur la bande du soir,
+de trois jours à sept. Aujourd'hui la vue Mois ne sait sélectionner qu'à la journée entière (les segments de 15 px
+n'étaient pas attrapables), et c'est pour cette raison que la vue Semaine avait été spécialisée en outil de saisie fine.
+<b>Avec N1, cette division du travail entre les deux vues n'est plus une nécessité — elle redevient un choix.</b></p>
+
+<script>
+// ═══ données : un seul jeu, utilisé par les cinq rendus ═══
+const M='m',A='a',S='s';
+const AV='av',UN='un',UK='uk';
+const days=[
+  {d:27,out:1},{d:28,out:1},{d:29,out:1},{d:30,out:1},{d:31,out:1},
+  {d:1,s:[AV,AV,AV]},{d:2,s:[AV,AV,AV]},
+  {d:3,s:[UK,UK,UK]},{d:4,s:[UK,UK,UN]},{d:5,s:[UK,UK,UK]},{d:6,s:[AV,AV,AV]},{d:7,s:[AV,AV,AV]},
+  {d:8,s:[AV,AV,UN],e:[{t:'se',sl:S,n:'Convoi du Nord',x:'chez Marc'}]},{d:9,s:[UK,UK,UK]},
+  {d:10,s:[UK,UK,UK]},{d:11,s:[AV,AV,AV]},
+  {d:12,s:[UK,UK,AV],e:[{t:'vo',sl:S,n:'Vote — Ashal'}]},
+  {d:13,s:[UK,UK,AV],e:[{t:'vo',sl:S,n:'Vote — Ashal'}]},
+  {d:14,s:[UN,UK,AV],e:[{t:'vo',sl:S,n:'Vote — Ashal'}]},
+  {d:15,s:[UN,UN,UN]},{d:16,s:[UK,UK,UK]},
+  {d:17,today:1,s:[UK,UK,UN]},{d:18,s:[AV,AV,AV]},{d:19,s:[AV,AV,AV]},
+  {d:20,s:[AV,AV,UN],e:[{t:'se',sl:S,n:'Convoi du Nord',x:'chez Marc'}]},
+  {d:21,s:[UK,UK,UN]},
+  {d:22,s:[AV,UN,UN],e:[{t:'se',sl:A,n:'Les Cendres d’Ashal',x:'visio'},{t:'se',sl:S,n:'Convoi du Nord',x:'chez Marc'}]},
+  {d:23,s:[UK,UK,UK]},
+  {d:24,s:[UK,UK,UK]},{d:25,s:[AV,AV,AV]},{d:26,s:[AV,AV,AV]},
+  {d:27,s:[UN,AV,AV],e:[{t:'se',sl:M,n:'Halte du Griffon',x:'brunch'}]},
+  {d:28,s:[UN,UK,AV],e:[{t:'vo',sl:S,n:'Vote — Ashal'}]},
+  {d:29,s:[AV,AV,AV],e:[{t:'vo',sl:S,n:'Vote — Ashal'}]},
+  {d:30,s:[UK,UK,UK]},
+  {d:31,s:[AV,AV,AV]},
+  {d:1,out:1},{d:2,out:1},{d:3,out:1},{d:4,out:1},{d:5,out:1},{d:6,out:1}
+];
+const SLOTI={m:0,a:1,s:2};
+const ICON={
+  m:'<svg class="ic" viewBox="0 0 24 24"><path d="M12 5v3M5.6 9.6l2 2M18.4 9.6l-2 2M3 18h18M7 18a5 5 0 0 1 10 0"/></svg>',
+  a:'<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>',
+  s:'<svg class="ic" viewBox="0 0 24 24"><path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z"/></svg>'
+};
+const GLYPH={se:'✦',vo:'?'};
+const HEAD=['lun','mar','mer','jeu','ven','sam','dim'];
+
+function evAt(day,sl){return (day.e||[]).find(x=>x.sl===sl)}
+function uniform(day){return day.s && day.s[0]===day.s[1] && day.s[1]===day.s[2]}
+function shell(day,extra){
+  const cls=['c'];if(day.out)cls.push('out');if(day.today)cls.push('today');if(extra)cls.push(extra);
+  return cls.join(' ');
+}
+function head(){return HEAD.map(h=>'<div>'+h+'</div>').join('')}
+
+// ─── N1 : trois bandes horizontales ───
+function renderN1(el,mobile){
+  el.innerHTML='<div class="mhead">'+head()+'</div><div class="grid">'+days.map(day=>{
+    if(day.out)return '<div class="'+shell(day)+'"><span class="dn">'+day.d+'</span></div>';
+    const bands=[M,A,S].map((sl,i)=>{
+      const ev=evAt(day,sl);
+      const st=ev?ev.t:day.s[i];
+      const lbl=ev&&!mobile?'<span class="lbl">'+ev.n+'</span>':'';
+      return '<div class="b '+st+'">'+lbl+'</div>';
+    }).join('');
+    return '<div class="'+shell(day)+'"><span class="dn">'+day.d+'</span><div class="h3">'+bands+'</div></div>';
+  }).join('')+'</div>';
+}
+// ─── N2 : trois colonnes verticales ───
+function renderN2(el,mobile){
+  el.innerHTML='<div class="mhead">'+head()+'</div><div class="grid">'+days.map(day=>{
+    if(day.out)return '<div class="'+shell(day)+'"><span class="dn">'+day.d+'</span></div>';
+    const cols=[M,A,S].map((sl,i)=>{
+      const ev=evAt(day,sl);
+      const st=ev?ev.t:day.s[i];
+      const inner=ev?(mobile?'<span class="glyph">'+GLYPH[ev.t]+'</span>':'<span class="vlbl">'+ev.n+'</span>'):'';
+      return '<div class="b '+st+'">'+inner+'</div>';
+    }).join('');
+    return '<div class="'+shell(day)+'"><span class="dn">'+day.d+'</span><div class="v3">'+cols+'</div></div>';
+  }).join('')+'</div>';
+}
+// ─── P1 : réglette + puces ───
+function renderP1(el,mobile){
+  el.innerHTML='<div class="mhead">'+head()+'</div><div class="grid">'+days.map(day=>{
+    if(day.out)return '<div class="'+shell(day)+'"><span class="dn">'+day.d+'</span></div>';
+    const evs=day.e||[];
+    const max=mobile?1:2;
+    let chips=evs.slice(0,max).map(ev=>{
+      const name=mobile?ev.n.split(' ')[0].replace('Vote','Vote'):ev.n;
+      return '<div class="chip '+ev.t+'">'+ICON[ev.sl]+'<span class="lbl">'+name+'</span></div>';
+    }).join('');
+    if(evs.length>max)chips+='<div class="chip more">+'+(evs.length-max)+'</div>';
+    const bar=uniform(day)?'<div class="uni '+day.s[0]+'"></div>'
+      :'<div class="reg">'+day.s.map(x=>'<i class="'+x+'"></i>').join('')+'</div>';
+    return '<div class="'+shell(day)+'"><span class="dn">'+day.d+'</span><div class="fill">'+chips+'</div>'+bar+'</div>';
+  }).join('')+'</div>';
+}
+// ─── P3 : case haute ───
+function renderP3(el,mobile){
+  el.innerHTML='<div class="mhead">'+head()+'</div><div class="grid">'+days.map(day=>{
+    if(day.out)return '<div class="'+shell(day,'tall')+'"><span class="dn">'+day.d+'</span></div>';
+    let lines='';
+    [M,A,S].forEach((sl,i)=>{
+      const ev=evAt(day,sl);
+      if(ev){lines+='<div class="line"><span class="k '+ev.t+'"></span><span class="n on">'+ev.n+'</span></div>';}
+      else{
+        const nm={av:'libre',un:'pris',uk:'—'}[day.s[i]];
+        const lb={m:'M',a:'AM',s:'S'}[sl];
+        lines+='<div class="line"><span class="k '+day.s[i]+'"></span><span class="n">'+lb+' '+nm+'</span></div>';
+      }
+    });
+    return '<div class="'+shell(day,'tall')+'"><span class="dn">'+day.d+'</span><div class="fill">'+lines+'</div></div>';
+  }).join('')+'</div>';
+}
+// ─── P4 : résumé ───
+function renderP4(el,mobile){
+  el.innerHTML='<div class="mhead">'+head()+'</div><div class="grid">'+days.map(day=>{
+    if(day.out)return '<div class="'+shell(day)+'"><span class="dn">'+day.d+'</span></div>';
+    const evs=day.e||[];
+    let sum='';
+    if(evs.length===1){
+      const n=mobile?evs[0].n.split(' ')[0]:evs[0].n;
+      sum='<div class="sum '+evs[0].t+'"><span>'+n+'</span></div>';
+    }else if(evs.length>1){
+      sum='<div class="sum se"><span>'+(mobile?'×'+evs.length:evs.length+' séances')+'</span></div>';
+    }
+    const bar=uniform(day)?'<div class="uni '+day.s[0]+'"></div>'
+      :'<div class="reg">'+day.s.map(x=>'<i class="'+x+'"></i>').join('')+'</div>';
+    return '<div class="'+shell(day)+'"><span class="dn">'+day.d+'</span><div class="fill">'+sum+'</div>'+bar+'</div>';
+  }).join('')+'</div>';
+}
+
+renderN1(document.getElementById('n1-d'),false);renderN1(document.getElementById('n1-m'),true);
+renderN2(document.getElementById('n2-d'),false);renderN2(document.getElementById('n2-m'),true);
+renderP1(document.getElementById('p1-d'),false);renderP1(document.getElementById('p1-m'),true);
+renderP3(document.getElementById('p3-d'),false);renderP3(document.getElementById('p3-m'),true);
+renderP4(document.getElementById('p4-d'),false);renderP4(document.getElementById('p4-m'),true);
+</script>
+</body>
+</html>

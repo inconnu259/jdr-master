@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compte à rebours thématique et palettes de statut par thème</title>
+<style>
+:root{--text-muted:#7a7a8a;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--radius-badge:6px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5)}
+.t-emeraude{--bg:#0d0a14;--surf:#1a1428;--a1:#7ec8a4;--a2:#9b6dff;--txt:#e8e8f0;--mut:#7a7a8a;
+  --s-todo:#f0a030;--s-live:#4fc98a;--s-soon:#8f7bff;--s-done:#5a5a6a}
+.t-foret{--bg:#080f0a;--surf:#0f1a10;--a1:#2ecc71;--a2:#f0c040;--txt:#e8f0ea;--mut:#6a806e;
+  --s-todo:#e05a45;--s-live:#35c7b0;--s-soon:#5aa9e6;--s-done:#5f6b60}
+.t-steam{--bg:#1a1008;--surf:#241808;--a1:#cd7f32;--a2:#4a7c59;--txt:#e8dcc8;--mut:#8a7a5a;
+  --s-todo:#ef4f52;--s-live:#3fb894;--s-soon:#6f9fd8;--s-done:#6b6459}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:#e8e8f0;padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px}
+h3{font-size:var(--text-lg);margin:0 0 var(--space-xs)}
+.lede,.why{color:var(--text-muted);max-width:84ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--space-base);align-items:start}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md)}
+.panel{background:var(--surf);border:1px solid var(--border-subtle);border-radius:var(--radius-card);
+  padding:var(--space-md);box-shadow:var(--elev-card);color:var(--txt)}
+.ttl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:var(--space-sm)}
+.bg{display:inline-flex;align-items:center;gap:5px;font-size:var(--text-sm);padding:1px 8px;
+  border-radius:var(--radius-badge);border:1px solid;white-space:nowrap}
+.todo{color:var(--s-todo);border-color:var(--s-todo);background:color-mix(in srgb,var(--s-todo) 16%,transparent)}
+.live{color:var(--s-live);border-color:var(--s-live);background:color-mix(in srgb,var(--s-live) 15%,transparent)}
+.soon{color:var(--s-soon);border-color:var(--s-soon);background:color-mix(in srgb,var(--s-soon) 15%,transparent)}
+.soon.full{background:var(--s-soon);color:var(--bg);font-weight:600}
+.done{color:var(--s-done);border-color:var(--s-done);background:color-mix(in srgb,var(--s-done) 25%,transparent)}
+.sl{display:flex;justify-content:space-between;align-items:center;gap:var(--space-sm);
+  padding:7px 0;border-bottom:1px solid var(--border-subtle);font-size:var(--text-sm)}
+.sl:last-child{border-bottom:none}
+.sw{display:inline-block;width:30px;height:15px;border-radius:4px;vertical-align:-3px;margin-right:7px;border:1px solid rgba(255,255,255,.14)}
+table{border-collapse:collapse;width:100%;font-size:var(--text-sm)}
+th,td{text-align:left;padding:6px var(--space-sm);border-bottom:1px solid var(--border-subtle)}
+th{color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;font-size:11px;font-weight:500}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:#b9b4c8}
+/* ══════ compte à rebours ══════ */
+.cd{margin-bottom:var(--space-md)}
+.cd-h{display:flex;justify-content:space-between;align-items:baseline;font-size:var(--text-sm);margin-bottom:5px}
+.cd-h b{font-size:var(--text-base);font-weight:500}
+.cd-h span{color:var(--mut)}
+/* Forêt — la liane pousse */
+.vine{position:relative;height:26px}
+.vine .stem{position:absolute;left:0;top:13px;height:3px;border-radius:2px;
+  background:linear-gradient(90deg,#2ecc71,#6ee39b);box-shadow:0 0 10px rgba(46,204,113,.35)}
+.vine .leaf{position:absolute;width:9px;height:9px;background:#2ecc71;border-radius:0 70% 0 70%}
+.vine .leaf.up{top:3px} .vine .leaf.dn{top:15px;transform:rotate(180deg)}
+.vine .bud{position:absolute;top:8px;width:12px;height:12px;border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,#f0c040,#b8860b);box-shadow:0 0 12px rgba(240,192,64,.5)}
+.vine .goal{position:absolute;right:0;top:6px;width:16px;height:16px;border:2px dashed rgba(240,192,64,.5);border-radius:50%}
+/* Steampunk — le manomètre monte */
+.gauge{position:relative;width:52px;height:52px;border-radius:50%;flex:none;
+  background:radial-gradient(circle at 36% 30%,#3b2a12,#1a1008);border:3px solid #cd7f32}
+.gauge i{position:absolute;inset:5px;border-radius:50%;border:1px dashed rgba(232,220,200,.25)}
+.gauge .nd{position:absolute;left:50%;bottom:50%;width:2px;height:17px;margin-left:-1px;border-radius:1px;
+  background:#f0a030;transform-origin:50% 100%}
+.gauge .hub{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#cd7f32}
+.gauge .red{position:absolute;inset:2px;border-radius:50%;
+  background:conic-gradient(from 200deg,transparent 0 62%,rgba(239,79,82,.55) 62% 80%,transparent 80%)}
+.press{flex:1;height:9px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden;position:relative}
+.press b{position:absolute;left:0;top:0;bottom:0;border-radius:5px;
+  background:repeating-linear-gradient(70deg,#cd7f32 0 4px,#a4652a 4px 8px)}
+/* Émeraude — la comète approche */
+.orbit{position:relative;height:34px;background:radial-gradient(120% 140% at 80% 0%,#241a3a,transparent);border-radius:8px;overflow:hidden}
+.orbit .star{position:absolute;right:10px;top:12px;width:10px;height:10px;border-radius:50%;
+  background:radial-gradient(circle,#fff,#9b6dff 60%,transparent 78%);box-shadow:0 0 14px rgba(155,109,255,.8)}
+.orbit .tiny{position:absolute;width:2px;height:2px;border-radius:50%;background:rgba(232,232,240,.5)}
+.orbit .rig{position:absolute;top:14px;height:8px}
+.orbit .tail{position:absolute;left:0;top:50%;transform:translateY(-50%);height:7px;border-radius:99px;filter:blur(3px);
+  background:linear-gradient(90deg,transparent,rgba(155,109,255,.55) 55%,rgba(126,200,164,.9))}
+.orbit .head{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;transform:translate(-50%,-50%);
+  background:radial-gradient(circle,#fff,#7ec8a4 52%,transparent 76%)}
+</style>
+</head>
+<body>
+
+<h1>Compte à rebours thématique &amp; palettes de statut par thème</h1>
+<p class="lede">Deux réponses. D'abord un élément de progression propre à chaque univers, qui réutilise le motif de sa bannière — la liane, le manomètre, la comète. Ensuite trois palettes de statut, une par thème, puisque l'améthyste de l'Émeraude n'a rien à faire dans une forêt ni dans un atelier.</p>
+
+<!-- ══════════════ COMPTE À REBOURS ══════════════ -->
+<h2>1 — Le compte à rebours, un motif par thème</h2>
+<p class="why">Il s'affiche sur le bloc « prochaine séance » — vue de partie, agenda, et carte de partie en mode grande vignette. Il se remplit sur les <strong>sept derniers jours</strong> : au-delà, il reste au repos, puisque tu as jugé qu'anticiper davantage n'a pas d'utilité. Il double le badge, il ne le remplace pas.</p>
+<div class="row">
+
+  <!-- Forêt -->
+  <div class="panel t-foret">
+    <div class="ttl">Forêt Ancienne — la liane pousse</div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span>dans 6 jours</span></div>
+      <div class="vine"><div class="stem" style="width:14%"></div><div class="leaf up" style="left:9%"></div>
+        <div class="bud" style="left:14%"></div><div class="goal"></div></div></div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span>dans 3 jours</span></div>
+      <div class="vine"><div class="stem" style="width:52%"></div><div class="leaf up" style="left:16%"></div>
+        <div class="leaf dn" style="left:33%"></div><div class="leaf up" style="left:46%"></div>
+        <div class="bud" style="left:52%"></div><div class="goal"></div></div></div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span>demain soir</span></div>
+      <div class="vine"><div class="stem" style="width:82%"></div><div class="leaf up" style="left:14%"></div>
+        <div class="leaf dn" style="left:30%"></div><div class="leaf up" style="left:46%"></div>
+        <div class="leaf dn" style="left:62%"></div><div class="leaf up" style="left:74%"></div>
+        <div class="bud" style="left:82%"></div><div class="goal"></div></div></div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span style="color:var(--a2)">ce soir</span></div>
+      <div class="vine"><div class="stem" style="width:94%"></div><div class="leaf up" style="left:14%"></div>
+        <div class="leaf dn" style="left:30%"></div><div class="leaf up" style="left:46%"></div>
+        <div class="leaf dn" style="left:62%"></div><div class="leaf up" style="left:78%"></div>
+        <div class="bud" style="left:92%;box-shadow:0 0 18px rgba(240,192,64,.85)"></div></div></div>
+    <p class="note" style="color:var(--mut)">La tige gagne du terrain, les feuilles apparaissent au passage, et le bourgeon doré atteint son cercle le jour venu.</p>
+  </div>
+
+  <!-- Steampunk -->
+  <div class="panel t-steam">
+    <div class="ttl">Steampunk — la pression monte</div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span>dans 6 jours</span></div>
+      <div style="display:flex;gap:var(--space-md);align-items:center">
+        <div class="gauge"><div class="red"></div><i></i><div class="nd" style="transform:rotate(-68deg)"></div><div class="hub"></div></div>
+        <div class="press"><b style="width:12%"></b></div></div></div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span>dans 3 jours</span></div>
+      <div style="display:flex;gap:var(--space-md);align-items:center">
+        <div class="gauge"><div class="red"></div><i></i><div class="nd" style="transform:rotate(-20deg)"></div><div class="hub"></div></div>
+        <div class="press"><b style="width:54%"></b></div></div></div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span>demain soir</span></div>
+      <div style="display:flex;gap:var(--space-md);align-items:center">
+        <div class="gauge"><div class="red"></div><i></i><div class="nd" style="transform:rotate(38deg)"></div><div class="hub"></div></div>
+        <div class="press"><b style="width:84%"></b></div></div></div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span style="color:#ef4f52">ce soir</span></div>
+      <div style="display:flex;gap:var(--space-md);align-items:center">
+        <div class="gauge" style="border-color:#ef4f52"><div class="red"></div><i></i>
+          <div class="nd" style="transform:rotate(66deg);background:#ef4f52"></div><div class="hub"></div></div>
+        <div class="press"><b style="width:97%;background:repeating-linear-gradient(70deg,#ef4f52 0 4px,#c23c3f 4px 8px)"></b></div></div></div>
+    <p class="note" style="color:var(--mut)">L'aiguille monte vers la zone rouge, la conduite se remplit. Le jour J, tout passe au rouge — la machine est sous pression.</p>
+  </div>
+
+  <!-- Émeraude -->
+  <div class="panel t-emeraude">
+    <div class="ttl">Grimoire Émeraude — la comète approche</div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span>dans 6 jours</span></div>
+      <div class="orbit"><span class="tiny" style="left:30%;top:8px"></span><span class="tiny" style="left:60%;top:24px"></span>
+        <span class="star"></span>
+        <div class="rig" style="left:2%;width:34px;transform:rotate(-4deg)">
+          <div class="tail" style="width:34px"></div><div class="head" style="left:34px;width:9px;height:9px"></div></div></div></div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span>dans 3 jours</span></div>
+      <div class="orbit"><span class="tiny" style="left:22%;top:22px"></span><span class="tiny" style="left:52%;top:7px"></span>
+        <span class="star"></span>
+        <div class="rig" style="left:26%;width:48px;transform:rotate(-4deg)">
+          <div class="tail" style="width:48px"></div><div class="head" style="left:48px;width:11px;height:11px"></div></div></div></div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span>demain soir</span></div>
+      <div class="orbit"><span class="tiny" style="left:18%;top:10px"></span>
+        <span class="star"></span>
+        <div class="rig" style="left:48%;width:56px;transform:rotate(-4deg)">
+          <div class="tail" style="width:56px"></div><div class="head" style="left:56px;width:13px;height:13px"></div></div></div></div>
+    <div class="cd"><div class="cd-h"><b>Séance 5</b><span style="color:var(--a2)">ce soir</span></div>
+      <div class="orbit"><span class="star" style="box-shadow:0 0 26px rgba(155,109,255,1);width:14px;height:14px;top:10px"></span>
+        <div class="rig" style="left:62%;width:62px;transform:rotate(-4deg)">
+          <div class="tail" style="width:62px"></div><div class="head" style="left:62px;width:16px;height:16px"></div></div></div></div>
+    <p class="note" style="color:var(--mut)">La comète se rapproche de l'étoile et grossit. Au dernier palier elle la touche, et l'étoile s'embrase.</p>
+  </div>
+</div>
+<p class="note" style="max-width:84ch"><b>Règle commune :</b> le compte à rebours est <em>décoratif et redondant</em>. Il double le badge et le libellé, il ne porte jamais une information qu'eux ne portent pas — sinon il devient illisible pour qui a coupé les animations ou ne distingue pas les couleurs. Il n'apparaît que dans les sept derniers jours, et sur un seul élément à la fois : la prochaine séance.</p>
+
+<!-- ══════════════ PALETTES ══════════════ -->
+<h2>2 — Trois palettes de statut, une par thème</h2>
+<p class="why">La règle qui les gouverne toutes : dans un thème donné, les quatre statuts doivent être <strong>distinguables entre eux</strong> et <strong>éloignés des deux accents de ce thème</strong>. C'est l'invariant ; les valeurs, elles, sont libres de suivre l'univers.</p>
+<div class="row">
+
+  <div class="panel t-emeraude">
+    <div class="ttl">Grimoire Émeraude — magie, améthyste, chandelle</div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ambre chandelle</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">Sauge vive</span></div>
+    <div class="sl"><span>Séance programmée</span><span class="bg soon">Améthyste</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Cendre</span></div>
+    <div style="margin-top:var(--space-sm);font-size:11px;color:var(--mut)">
+      accents du thème : <span class="sw" style="background:#7ec8a4"></span><span class="sw" style="background:#9b6dff"></span></div>
+  </div>
+
+  <div class="panel t-foret">
+    <div class="ttl">Forêt Ancienne — sous-bois, eau vive, aube</div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Feuille d'automne</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">Eau vive</span></div>
+    <div class="sl"><span>Séance programmée</span><span class="bg soon">Ciel d'aube</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Lichen</span></div>
+    <div style="margin-top:var(--space-sm);font-size:11px;color:var(--mut)">
+      accents du thème : <span class="sw" style="background:#2ecc71"></span><span class="sw" style="background:#f0c040"></span></div>
+  </div>
+
+  <div class="panel t-steam">
+    <div class="ttl">Steampunk — signal, patine, acier bleui</div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Rouge signal</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">Vert-de-gris</span></div>
+    <div class="sl"><span>Séance programmée</span><span class="bg soon">Acier bleui</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Fonte</span></div>
+    <div style="margin-top:var(--space-sm);font-size:11px;color:var(--mut)">
+      accents du thème : <span class="sw" style="background:#cd7f32"></span><span class="sw" style="background:#4a7c59"></span></div>
+  </div>
+</div>
+
+<h3 style="margin-top:var(--space-lg)">Les valeurs</h3>
+<table>
+  <tr><th></th><th>Grimoire Émeraude</th><th>Forêt Ancienne</th><th>Médiéval Steampunk</th></tr>
+  <tr><td>Ça t'attend</td>
+    <td><span class="sw" style="background:#f0a030"></span><code>#f0a030</code></td>
+    <td><span class="sw" style="background:#e05a45"></span><code>#e05a45</code></td>
+    <td><span class="sw" style="background:#ef4f52"></span><code>#ef4f52</code></td></tr>
+  <tr><td>En cours</td>
+    <td><span class="sw" style="background:#4fc98a"></span><code>#4fc98a</code></td>
+    <td><span class="sw" style="background:#35c7b0"></span><code>#35c7b0</code></td>
+    <td><span class="sw" style="background:#3fb894"></span><code>#3fb894</code></td></tr>
+  <tr><td>À venir</td>
+    <td><span class="sw" style="background:#8f7bff"></span><code>#8f7bff</code></td>
+    <td><span class="sw" style="background:#5aa9e6"></span><code>#5aa9e6</code></td>
+    <td><span class="sw" style="background:#6f9fd8"></span><code>#6f9fd8</code></td></tr>
+  <tr><td>Terminé</td>
+    <td><span class="sw" style="background:#5a5a6a"></span><code>#5a5a6a</code></td>
+    <td><span class="sw" style="background:#5f6b60"></span><code>#5f6b60</code></td>
+    <td><span class="sw" style="background:#6b6459"></span><code>#6b6459</code></td></tr>
+</table>
+<p class="note" style="max-width:84ch">Deux choix de fond, à valider. <b>Le vert reste le vert du « en cours » dans les trois thèmes</b> — décalé vers la turquoise en Forêt pour ne pas se confondre avec le vert d'accent, vers le vert-de-gris en Steampunk où il devient thématique. <b>Le « ça t'attend » vire au rouge hors de l'Émeraude</b>, parce que l'ambre y entrerait en conflit avec l'or de la Forêt et le cuivre du Steampunk. Le risque est qu'un rouge se lise comme une erreur plutôt que comme une invitation — c'est le point sur lequel j'attends surtout ton avis.</p>
+
+</body>
+</html>

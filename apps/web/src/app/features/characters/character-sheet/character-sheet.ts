@@ -1,7 +1,7 @@
 import {
   Component,
   DestroyRef,
-  type ElementRef,
+  ElementRef,
   OnInit,
   computed,
   effect,
@@ -29,6 +29,7 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { characterName, findContentEntry } from '../../../core/characters/character.util';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
+import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
 import { CharacterAvatar } from '../character-avatar/character-avatar';
 import { PortraitPanel } from '../portrait-panel/portrait-panel';
 import {
@@ -173,6 +174,7 @@ interface NarrativeFields {
     CdkOverlayOrigin,
     CdkTrapFocus,
     SheetActionsMenu,
+    DetailSurface,
   ],
   templateUrl: './character-sheet.html',
   styleUrl: './character-sheet.scss',
@@ -186,6 +188,7 @@ export class CharacterSheet implements OnInit {
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly breakpointObserver = inject(BreakpointObserver);
+  private readonly hostElement: ElementRef<HTMLElement> = inject(ElementRef);
 
   /**
    * Story 31.1 — même seuil unique du projet que `CalendarView.DESKTOP_QUERY` (36.14),
@@ -217,6 +220,44 @@ export class CharacterSheet implements OnInit {
       event.stopPropagation();
       this.closeSheetMenu();
     }
+  }
+
+  /**
+   * Story 31.2 (FR-20) — surface de détail adaptative pour les talents/avantages/sorts. Un seul
+   * signal, jamais une pile : activer un nouvel élément pendant que la surface est déjà ouverte
+   * REMPLACE `selectedDetail` en place (AC4) sans démonter/remonter `DetailSurface`, qui reste
+   * monté tant que `selectedDetail()` ne repasse pas à `null`.
+   */
+  protected readonly selectedDetail = signal<{ title: string; body: string } | null>(null);
+  /** [Review][Patch] Jeton d'ouverture transmis à `DetailSurface.openToken` — incrémenté à CHAQUE
+   *  activation pour que le focus rentre bien dans le panneau même quand deux déclencheurs
+   *  distincts partagent un titre+texte identiques (title()/body() seuls ne suffiraient pas,
+   *  l'égalité de valeur des signaux empêcherait l'effet de se redéclencher). */
+  protected readonly detailOpenToken = signal(0);
+  /** Bouton à l'origine de l'ouverture — pour lui rendre le focus à la fermeture (AC6, même
+   *  logique que `closeSheetMenu()` ci-dessus, mais pas de déclencheur UNIQUE ici : une fiche
+   *  porte des dizaines de talents/avantages, chacun pouvant rouvrir la même surface). */
+  private detailTrigger: HTMLElement | null = null;
+
+  protected openDetail(title: string, body: string, event: Event): void {
+    this.detailTrigger = event.currentTarget as HTMLElement;
+    this.selectedDetail.set({ title, body });
+    this.detailOpenToken.update((n) => n + 1);
+  }
+
+  protected closeDetail(): void {
+    this.selectedDetail.set(null);
+    /* [Review][Patch] Le déclencheur peut avoir quitté le DOM (ex. données du personnage
+     * rafraîchies pendant que la surface est ouverte) — .focus() sur un nœud détaché est un
+     * no-op silencieux ; on retombe sur le premier onglet visible plutôt que de perdre le focus. */
+    if (this.detailTrigger?.isConnected) {
+      this.detailTrigger.focus();
+    } else {
+      const host = this.hostElement.nativeElement;
+      host.setAttribute('tabindex', '-1');
+      host.focus();
+    }
+    this.detailTrigger = null;
   }
 
   // Requêtes par nom de ref plutôt que refs de template croisant les blocs `@if` (les pencils

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Steampunk S3 — trois générations</title>
+<style>
+:root{
+  --text-primary:#e8dcc8;--text-muted:#8a7a5a;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --status-mixed:#f0a030;--status-unknown:#3a3a4a;
+  --bg:#1a1008;--surf:#241808;--a1:#cd7f32;--a2:#4a7c59;--txt:#e8dcc8;--mut:#8a7a5a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 var(--space-sm)}
+.lede,.why{color:var(--text-muted);max-width:80ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:var(--space-base);align-items:start}
+.demo{background:var(--surf);border-radius:var(--radius-card);overflow:hidden;border:1px solid var(--border-subtle);
+  box-shadow:0 4px 12px rgba(0,0,0,.5);display:flex}
+.strip{width:4px;flex:none}
+.in{flex:1;min-width:0}
+.cov{height:104px;position:relative;overflow:hidden}
+.mk{position:absolute;right:10px;top:5px;font-size:22px;font-weight:700;letter-spacing:-1px;color:var(--txt);
+  text-shadow:0 2px 10px rgba(0,0,0,.8);z-index:6}
+.bd{padding:var(--space-md)}
+.nm{font-size:var(--text-lg);font-weight:500}
+.mt{font-size:var(--text-sm);color:var(--mut)}
+.caption{font-size:var(--text-sm);color:var(--text-muted);margin:var(--space-xs) 0 0}
+/* trame plan */
+.blue{background:
+  repeating-linear-gradient(0deg,rgba(205,127,50,.14) 0 1px,transparent 1px 13px),
+  repeating-linear-gradient(90deg,rgba(205,127,50,.14) 0 1px,transparent 1px 13px),
+  linear-gradient(180deg,#2b1c0b,#1a1008)}
+.blue.b2{background:
+  repeating-linear-gradient(0deg,rgba(74,124,89,.16) 0 1px,transparent 1px 15px),
+  repeating-linear-gradient(90deg,rgba(74,124,89,.16) 0 1px,transparent 1px 15px),
+  linear-gradient(160deg,#20240e,#1a1008)}
+.blue.b3{background:
+  repeating-linear-gradient(0deg,rgba(205,127,50,.10) 0 1px,transparent 1px 9px),
+  repeating-linear-gradient(90deg,rgba(205,127,50,.10) 0 1px,transparent 1px 9px),
+  linear-gradient(200deg,#33210d,#1a1008)}
+/* engrenages : dents fines en conic, moyeu évidé, rayons */
+.g{position:absolute;border-radius:50%;
+  background:conic-gradient(var(--tooth,var(--a1)) 0 3.1%,transparent 3.1% 6.25%,var(--tooth,var(--a1)) 6.25% 9.4%,transparent 9.4% 12.5%,
+  var(--tooth,var(--a1)) 12.5% 15.6%,transparent 15.6% 18.75%,var(--tooth,var(--a1)) 18.75% 21.9%,transparent 21.9% 25%,
+  var(--tooth,var(--a1)) 25% 28.1%,transparent 28.1% 31.25%,var(--tooth,var(--a1)) 31.25% 34.4%,transparent 34.4% 37.5%,
+  var(--tooth,var(--a1)) 37.5% 40.6%,transparent 40.6% 43.75%,var(--tooth,var(--a1)) 43.75% 46.9%,transparent 46.9% 50%,
+  var(--tooth,var(--a1)) 50% 53.1%,transparent 53.1% 56.25%,var(--tooth,var(--a1)) 56.25% 59.4%,transparent 59.4% 62.5%,
+  var(--tooth,var(--a1)) 62.5% 65.6%,transparent 65.6% 68.75%,var(--tooth,var(--a1)) 68.75% 71.9%,transparent 71.9% 75%,
+  var(--tooth,var(--a1)) 75% 78.1%,transparent 78.1% 81.25%,var(--tooth,var(--a1)) 81.25% 84.4%,transparent 84.4% 87.5%,
+  var(--tooth,var(--a1)) 87.5% 90.6%,transparent 90.6% 93.75%,var(--tooth,var(--a1)) 93.75% 96.9%,transparent 96.9%);
+  opacity:var(--op,.9)}
+.g::before{content:"";position:absolute;inset:11%;border-radius:50%;background:transparent;
+  border:2px solid var(--tooth,var(--a1));box-sizing:border-box}
+.g::after{content:"";position:absolute;inset:36%;border-radius:50%;border:2px solid var(--tooth,var(--a1));
+  background:var(--bg)}
+.g.v2{--tooth:var(--a2)}
+/* lignes de construction */
+.dash{position:absolute;border:1.2px dashed rgba(232,220,200,.28)}
+.dim{position:absolute;height:0;border-top:1.2px solid rgba(232,220,200,.35)}
+.dim::before,.dim::after{content:"";position:absolute;top:-3px;width:1.2px;height:7px;background:rgba(232,220,200,.35)}
+.dim::before{left:0} .dim::after{right:0}
+.rod{position:absolute;border-radius:2px;background:var(--a1);opacity:.75}
+/* petites vignettes */
+.mini-wrap{background:var(--surf);border-radius:var(--radius-card);border:1px solid var(--border-subtle);
+  overflow:hidden;max-width:440px}
+.mini-row{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-sm) var(--space-md);
+  border-bottom:1px solid var(--border-subtle)}
+.mini-row:last-child{border-bottom:none}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.mini{width:28px;height:28px;border-radius:6px;flex:none;position:relative;overflow:hidden}
+.mini-nm{font-size:var(--text-base);display:block}
+.mini-sub{font-size:var(--text-sm);color:var(--mut)}
+.mono{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;font-weight:700;
+  color:var(--txt);text-shadow:0 1px 4px rgba(0,0,0,.9)}
+</style>
+</head>
+<body>
+
+<h1>Steampunk « plan d'atelier » — trois générations</h1>
+<p class="lede">Même famille S3, plus fournie en mécanique : quatre à cinq rouages par vignette, dont certains coupés par le cadre, des cotes, des lignes de construction et des bielles. Les trois générations utilisent les mêmes règles avec des paramètres différents — c'est ce qui se passerait avec trois parties réellement distinctes. La bande verticale à gauche reste le signal d'état.</p>
+
+<div class="row">
+  <!-- ── Génération 1 ── -->
+  <div>
+    <div class="demo"><div class="strip" style="background:var(--status-mixed)"></div><div class="in">
+      <div class="cov blue">
+        <div class="g" style="width:62px;height:62px;left:8px;top:12px"></div>
+        <div class="g v2" style="width:40px;height:40px;left:60px;top:52px"></div>
+        <div class="g" style="width:30px;height:30px;left:86px;top:14px;--op:.75"></div>
+        <div class="g v2" style="width:46px;height:46px;left:-18px;top:70px;--op:.6"></div>
+        <div class="dash" style="width:52px;height:52px;left:54px;top:46px;border-radius:50%"></div>
+        <div class="dim" style="width:76px;left:8px;top:92px"></div>
+        <div class="rod" style="width:40px;height:3px;left:44px;top:32px;transform:rotate(28deg)"></div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur · 2 choses à faire</div></div></div></div>
+    <p class="caption"><b>Génération 1.</b> Gros rouage cuivre en haut à gauche, satellite vert en bas, cote horizontale. Dominante cuivre.</p>
+  </div>
+
+  <!-- ── Génération 2 ── -->
+  <div>
+    <div class="demo"><div class="strip" style="background:var(--a1)"></div><div class="in">
+      <div class="cov blue b2">
+        <div class="g v2" style="width:56px;height:56px;right:6px;top:-14px"></div>
+        <div class="g" style="width:44px;height:44px;left:16px;top:30px"></div>
+        <div class="g v2" style="width:34px;height:34px;left:52px;top:64px;--op:.8"></div>
+        <div class="g" style="width:24px;height:24px;left:2px;top:-8px;--op:.65"></div>
+        <div class="g" style="width:28px;height:28px;right:-10px;bottom:8px;--op:.7"></div>
+        <div class="dash" style="width:0;height:88px;left:38px;top:6px"></div>
+        <div class="dash" style="width:110px;height:0;left:6px;top:52px"></div>
+        <div class="mk">CN</div></div>
+      <div class="bd"><div class="nm">Le Convoi du Nord</div><div class="mt">Campagne épisodique · MJ</div></div></div></div>
+    <p class="caption"><b>Génération 2.</b> Cinq rouages, dominante bronze vert, croix de construction centrée. Trame plus large.</p>
+  </div>
+
+  <!-- ── Génération 3 ── -->
+  <div>
+    <div class="demo"><div class="strip" style="background:var(--status-unknown)"></div><div class="in">
+      <div class="cov blue b3">
+        <div class="g" style="width:72px;height:72px;left:50%;margin-left:-36px;top:18px"></div>
+        <div class="g v2" style="width:30px;height:30px;left:10px;top:6px;--op:.8"></div>
+        <div class="g v2" style="width:30px;height:30px;right:10px;bottom:2px;--op:.8"></div>
+        <div class="g" style="width:20px;height:20px;right:22px;top:14px;--op:.6"></div>
+        <div class="dash" style="width:86px;height:86px;left:50%;margin-left:-43px;top:11px;border-radius:50%"></div>
+        <div class="dim" style="width:60px;left:50%;margin-left:-30px;top:96px"></div>
+        <div class="mk">NL</div></div>
+      <div class="bd"><div class="nm">La Nuit des Lanternes</div><div class="mt">One-shot · Joueur · terminée</div></div></div></div>
+    <p class="caption"><b>Génération 3.</b> Composition symétrique, gros rouage centré cerclé de sa cote, deux satellites en diagonale. Trame fine.</p>
+  </div>
+</div>
+
+<h2>Les trois côte à côte, en 28 px</h2>
+<p class="why">Le test qui décide. À gauche la vignette réduite telle quelle ; à droite la même ligne avec un monogramme par-dessus, pour comparer ce qui porte réellement la reconnaissance à cette taille.</p>
+
+<div class="row" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+  <div>
+    <div class="mini-wrap">
+      <div class="mini-row"><span class="dot" style="background:var(--status-mixed)"></span>
+        <span class="mini blue"><span class="g" style="width:20px;height:20px;left:1px;top:2px"></span>
+          <span class="g v2" style="width:13px;height:13px;left:16px;top:15px"></span></span>
+        <span style="flex:1;min-width:0"><span class="mini-nm">Les Cendres de Kavaan</span><span class="mini-sub">Joueur · 2 choses à faire</span></span></div>
+      <div class="mini-row"><span class="dot" style="background:var(--a1)"></span>
+        <span class="mini blue b2"><span class="g v2" style="width:18px;height:18px;right:0;top:-4px"></span>
+          <span class="g" style="width:14px;height:14px;left:3px;top:9px"></span></span>
+        <span style="flex:1;min-width:0"><span class="mini-nm">Le Convoi du Nord</span><span class="mini-sub">MJ · 1 chose à faire</span></span></div>
+      <div class="mini-row"><span class="dot" style="background:var(--status-unknown)"></span>
+        <span class="mini blue b3"><span class="g" style="width:22px;height:22px;left:3px;top:4px"></span>
+          <span class="g v2" style="width:10px;height:10px;left:0;top:0"></span></span>
+        <span style="flex:1;min-width:0"><span class="mini-nm">La Nuit des Lanternes</span><span class="mini-sub">Joueur · terminée</span></span></div>
+    </div>
+    <p class="caption">Vignette seule : trois damiers cuivrés avec des disques. La différence existe, mais il faut la chercher.</p>
+  </div>
+
+  <div>
+    <div class="mini-wrap">
+      <div class="mini-row"><span class="dot" style="background:var(--status-mixed)"></span>
+        <span class="mini blue"><span class="g" style="width:20px;height:20px;left:1px;top:2px;--op:.45"></span>
+          <span class="mono">CK</span></span>
+        <span style="flex:1;min-width:0"><span class="mini-nm">Les Cendres de Kavaan</span><span class="mini-sub">Joueur · 2 choses à faire</span></span></div>
+      <div class="mini-row"><span class="dot" style="background:var(--a1)"></span>
+        <span class="mini blue b2"><span class="g v2" style="width:18px;height:18px;right:0;top:-4px;--op:.45"></span>
+          <span class="mono">CN</span></span>
+        <span style="flex:1;min-width:0"><span class="mini-nm">Le Convoi du Nord</span><span class="mini-sub">MJ · 1 chose à faire</span></span></div>
+      <div class="mini-row"><span class="dot" style="background:var(--status-unknown)"></span>
+        <span class="mini blue b3"><span class="g" style="width:22px;height:22px;left:3px;top:4px;--op:.45"></span>
+          <span class="mono">NL</span></span>
+        <span style="flex:1;min-width:0"><span class="mini-nm">La Nuit des Lanternes</span><span class="mini-sub">Joueur · terminée</span></span></div>
+    </div>
+    <p class="caption">Vignette atténuée + monogramme : reconnaissance immédiate, et l'ambiance mécanique est toujours là.</p>
+  </div>
+</div>
+
+</body>
+</html>

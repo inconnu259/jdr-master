@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La case du mois — quatre traitements</title>
+<style>
+:root{
+  --primary-bg:#0d0a14;--surface-bg:#1a1428;
+  --accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;
+  --status-todo:#f0a030;--status-soon:#ff7ad9;--status-done:#5a5a6a;
+  --status-unavailable:#e05252;--status-unknown:#3a3a4a;
+  --border-subtle:rgba(255,255,255,.07);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:34px;
+  --radius-card:10px;--radius-badge:6px;--radius-button:8px;
+  --text-xs:11px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:27px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg) var(--space-lg) 60px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px;border-top:1px solid var(--border-subtle);padding-top:var(--space-lg)}
+h3{font-size:var(--text-lg);margin:var(--space-lg) 0 var(--space-xs)}
+p{max-width:94ch}
+.lede{color:var(--text-muted);margin:0 0 var(--space-lg)}
+.why{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-md);max-width:94ch}
+.tag{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);display:block;margin-bottom:6px}
+.tag.good{color:var(--accent-1)}
+.tag.bad{color:var(--status-unavailable)}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-sm);max-width:74ch}
+.note b{color:var(--text-primary)}
+.verdict{font-size:var(--text-sm);margin-top:var(--space-sm);padding:var(--space-sm) var(--space-md);
+  background:var(--surface-bg);border-radius:var(--radius-card);border:1px solid var(--border-subtle);max-width:78ch}
+.verdict b{color:var(--accent-1)}
+.verdict.warn b{color:var(--status-todo)}
+.verdict.bad b{color:var(--status-unavailable)}
+/* ══ bandeau de cas ══ */
+.cases{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:var(--space-sm);
+  background:var(--primary-bg);border:1px solid var(--border-subtle);border-radius:14px;padding:var(--space-md)}
+.case{min-width:0}
+.caselabel{font-size:10px;color:var(--text-muted);line-height:1.25;margin-bottom:5px;min-height:44px}
+.caselabel b{color:var(--text-primary);display:block;font-size:var(--text-xs)}
+/* ══ la cellule ══ */
+.cell{background:rgba(255,255,255,.028);border-radius:6px;min-height:82px;padding:3px 4px 0;
+  position:relative;display:flex;flex-direction:column;overflow:hidden}
+.cell.today{box-shadow:inset 0 0 0 1px rgba(126,200,164,.5)}
+.dn{font-size:var(--text-xs);color:var(--text-muted);line-height:1.1}
+.cell.today .dn{color:var(--accent-1);font-weight:700}
+.body{flex:1;min-height:0;display:flex;flex-direction:column;gap:2px;margin-top:2px}
+/* réglette 3 segments */
+.reg{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin:2px -1px 3px}
+.reg i{height:5px;border-radius:2px;background:var(--status-unknown)}
+.reg i.av{background:var(--accent-1)}
+.reg i.un{background:var(--status-unavailable)}
+.reg i.uk{background:repeating-linear-gradient(45deg,transparent 0 2px,rgba(90,90,106,.85) 2px 4px);
+  box-shadow:inset 0 0 0 1px rgba(90,90,106,.5)}
+.reg.tall i{height:8px}
+/* réglette pleine journée (jour uniforme) */
+.uni{height:5px;border-radius:2px;margin:2px -1px 3px}
+.uni.av{background:var(--accent-1)}
+.uni.un{background:var(--status-unavailable)}
+/* puce d'événement */
+.chip{display:flex;align-items:center;gap:3px;border-radius:4px;padding:1px 3px;
+  font-size:10px;line-height:1.25;min-width:0}
+.chip .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
+.chip.se{background:rgba(255,122,217,.22);box-shadow:inset 0 0 0 1px rgba(255,122,217,.5)}
+.chip.vo{background:rgba(240,160,48,.18);border-left:3px solid var(--status-todo)}
+.chip.more{background:rgba(255,255,255,.05);color:var(--text-muted);justify-content:center;font-weight:400}
+svg.ic{width:11px;height:11px;flex:0 0 11px;stroke:currentColor;fill:none;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.chip.se svg.ic{color:var(--status-soon)}
+.chip.vo svg.ic{color:var(--status-todo)}
+/* P2 — ruban positionnel */
+.pos{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin:2px -1px}
+.pos .sl{height:16px;border-radius:3px;background:var(--status-unknown);position:relative;overflow:hidden}
+.pos .sl.av{background:rgba(126,200,164,.45)}
+.pos .sl.un{background:rgba(224,82,82,.45)}
+.pos .sl.uk{background:repeating-linear-gradient(45deg,transparent 0 2px,rgba(90,90,106,.7) 2px 4px)}
+.pos .sl.se{background:rgba(255,122,217,.5);box-shadow:inset 0 0 0 1px rgba(255,122,217,.8)}
+.pos .sl.vo{background:rgba(240,160,48,.45);box-shadow:inset 0 0 0 1px rgba(240,160,48,.8)}
+.pos .sl span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:700;color:var(--text-primary)}
+.poslbl{font-size:9px;color:var(--text-muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.poshead{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;font-size:8px;color:var(--text-muted);
+  text-align:center;margin:0 -1px}
+/* P3 — case haute */
+.cell.tall{min-height:132px}
+.line{display:flex;align-items:center;gap:3px;font-size:9px;line-height:1.3;min-width:0}
+.line .k{width:5px;height:12px;border-radius:2px;flex:0 0 5px;background:var(--status-unknown)}
+.line .k.av{background:var(--accent-1)}
+.line .k.un{background:var(--status-unavailable)}
+.line .k.se{background:var(--status-soon)}
+.line .k.vo{background:var(--status-todo)}
+.line .n{color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+.line .n.on{color:var(--text-primary);font-weight:700}
+/* P4 — résumé */
+.sum{display:flex;align-items:center;justify-content:center;gap:4px;flex:1;font-size:10px;font-weight:700;
+  border-radius:4px;padding:2px}
+.sum.se{background:rgba(255,122,217,.22);box-shadow:inset 0 0 0 1px rgba(255,122,217,.5)}
+.sum.vo{background:rgba(240,160,48,.18);box-shadow:inset 0 0 0 1px rgba(240,160,48,.45)}
+.sum.mix{background:rgba(155,109,255,.16);box-shadow:inset 0 0 0 1px rgba(155,109,255,.4);color:var(--text-muted);font-weight:400}
+.cnt{font-size:9px;color:var(--text-muted);text-align:center;margin-top:2px}
+/* détail du jour */
+.rail{margin-top:var(--space-md);background:var(--surface-bg);border:1px solid var(--accent-2);
+  border-radius:var(--radius-card);padding:var(--space-sm) var(--space-md);max-width:420px}
+.rail .dl{font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
+.rail .it{display:flex;gap:var(--space-sm);align-items:center;padding:4px 0;border-top:1px solid var(--border-subtle)}
+.rail .it:first-of-type{border-top:0}
+.rail .it .w{font-size:var(--text-xs);color:var(--text-muted);width:74px;flex:0 0 74px;display:flex;align-items:center;gap:5px}
+.rail .it .w svg{width:13px;height:13px}
+.rail .it .v{font-size:var(--text-sm);flex:1}
+.rail .it .v b{font-weight:700}
+.rail .it .v .m{color:var(--text-muted);font-size:var(--text-xs)}
+.pillav{color:var(--accent-1)}
+.pillun{color:var(--status-unavailable)}
+/* mobile */
+.phone{width:375px;background:var(--primary-bg);border:1px solid var(--border-subtle);
+  border-radius:22px;padding:var(--space-md);box-shadow:0 8px 32px rgba(0,0,0,.7)}
+.mo{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.mh{font-size:9px;color:var(--text-muted);text-align:center}
+.mcell{background:rgba(255,255,255,.028);border-radius:5px;min-height:56px;padding:2px 3px 0;
+  display:flex;flex-direction:column;overflow:hidden}
+.mcell .dn{font-size:9px}
+.mini{font-size:8px;font-weight:700;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  border-radius:3px;padding:0 2px;margin-top:1px}
+.mini.se{background:rgba(255,122,217,.3);color:var(--text-primary)}
+.mini.vo{background:rgba(240,160,48,.25);color:var(--text-primary)}
+.row{display:flex;gap:var(--space-lg);align-items:flex-start;flex-wrap:wrap}
+table.cmp{border-collapse:collapse;width:100%;font-size:var(--text-sm);margin-top:var(--space-md)}
+table.cmp th,table.cmp td{border:1px solid var(--border-subtle);padding:6px 9px;text-align:left;vertical-align:top}
+table.cmp th{color:var(--text-muted);font-weight:600;background:rgba(255,255,255,.02)}
+</style>
+</head>
+<body>
+
+<h1>La case du mois — quatre traitements</h1>
+<p class="lede">Le problème : la case porte <b>trois créneaux</b> (matin, après-midi, soir) et doit aussi porter des
+<b>événements</b> qui n'occupent parfois qu'un seul d'entre eux. Ma planche A l'ignorait — elle dessinait des cases pleines.
+Les quatre traitements ci-dessous sont éprouvés sur <b>les six mêmes situations</b>, dont les cas tordus.</p>
+
+<p class="why"><b>Les six situations.</b> ① jour uniformément disponible · ② disponible matin et après-midi, indisponible le soir ·
+③ séance le soir, disponible le reste · ④ <b>deux séances</b>, après-midi et soir, deux parties différentes ·
+⑤ vote sur le soir, indisponible le matin · ⑥ rien de déclaré.</p>
+
+<!-- ══════════ P1 ══════════ -->
+<h2>P1 · Réglette + puce datée par une icône</h2>
+<p class="why">La réglette de trois segments <b>reste</b> et garde son rôle actuel : la disponibilité, et elle seule.
+Les événements vivent au-dessus, en puces, et <b>disent leur créneau par l'icône</b> — celle-là même adoptée pour la
+gouttière de la vue Semaine (soleil levant / soleil / lune).</p>
+
+<div class="cases">
+  <div class="case"><div class="caselabel"><b>① Uniforme</b>3 créneaux dispo</div>
+    <div class="cell"><span class="dn">3</span><div class="body"></div><div class="uni av"></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>② Partagé</b>dispo M+AM, indispo S</div>
+    <div class="cell"><span class="dn">4</span><div class="body"></div><div class="reg"><i class="av"></i><i class="av"></i><i class="un"></i></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>③ Séance</b>le soir, dispo sinon</div>
+    <div class="cell"><span class="dn">20</span><div class="body">
+      <div class="chip se"><svg class="ic" viewBox="0 0 24 24"><path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z"/></svg><span class="lbl">Convoi</span></div>
+    </div><div class="reg"><i class="av"></i><i class="av"></i><i class="un"></i></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>④ Deux séances</b>AM et soir</div>
+    <div class="cell"><span class="dn">22</span><div class="body">
+      <div class="chip se"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg><span class="lbl">Ashal</span></div>
+      <div class="chip se"><svg class="ic" viewBox="0 0 24 24"><path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z"/></svg><span class="lbl">Convoi</span></div>
+    </div><div class="reg"><i class="av"></i><i class="un"></i><i class="un"></i></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>⑤ Vote</b>soir, indispo matin</div>
+    <div class="cell"><span class="dn">28</span><div class="body">
+      <div class="chip vo"><svg class="ic" viewBox="0 0 24 24"><path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z"/></svg><span class="lbl">Vote</span></div>
+    </div><div class="reg"><i class="un"></i><i class="uk"></i><i class="av"></i></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>⑥ Rien</b>aucune déclaration</div>
+    <div class="cell"><span class="dn">30</span><div class="body"></div><div class="reg"><i class="uk"></i><i class="uk"></i><i class="uk"></i></div></div></div>
+</div>
+
+<div class="verdict"><b>Ce qui marche :</b> deux registres qui ne se marchent jamais dessus — la réglette dit
+<i>quand je suis libre</i>, les puces disent <i>ce qui est posé</i>. Le cas ④ tient sans compromis : deux séances, deux lignes, deux icônes.
+Et le <b>jour uniforme</b> (①) économise la réglette en une seule barre pleine — ta première intuition, reprise telle quelle.
+<br><b>Ce qui coince :</b> deux puces plus la réglette réclament ~82 px de haut. C'est la hauteur actuelle du desktop (80 px), pas celle du mobile (52 px).</div>
+
+<!-- ══════════ P2 ══════════ -->
+<h2>P2 · Le ruban positionnel — la place dit le moment</h2>
+<p class="why">Un seul objet au lieu de deux : la réglette <b>devient</b> la surface d'affichage. Chaque tiers est un créneau ;
+un événement occupe le ou les tiers qu'il couvre. <b>Aucune icône n'est nécessaire</b> — la position horizontale porte l'information.</p>
+
+<div class="cases">
+  <div class="case"><div class="caselabel"><b>① Uniforme</b></div>
+    <div class="cell"><span class="dn">3</span><div class="body"></div>
+      <div class="poshead"><span>M</span><span>AM</span><span>S</span></div>
+      <div class="pos"><div class="sl av"></div><div class="sl av"></div><div class="sl av"></div></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>② Partagé</b></div>
+    <div class="cell"><span class="dn">4</span><div class="body"></div>
+      <div class="poshead"><span>M</span><span>AM</span><span>S</span></div>
+      <div class="pos"><div class="sl av"></div><div class="sl av"></div><div class="sl un"></div></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>③ Séance</b></div>
+    <div class="cell"><span class="dn">20</span><div class="body"></div>
+      <div class="poshead"><span>M</span><span>AM</span><span>S</span></div>
+      <div class="pos"><div class="sl av"></div><div class="sl av"></div><div class="sl se"><span>✦</span></div></div>
+      <div class="poslbl">Convoi du Nord</div></div></div>
+
+  <div class="case"><div class="caselabel"><b>④ Deux séances</b></div>
+    <div class="cell"><span class="dn">22</span><div class="body"></div>
+      <div class="poshead"><span>M</span><span>AM</span><span>S</span></div>
+      <div class="pos"><div class="sl av"></div><div class="sl se"><span>✦</span></div><div class="sl se"><span>✦</span></div></div>
+      <div class="poslbl">Ashal · Convoi</div></div></div>
+
+  <div class="case"><div class="caselabel"><b>⑤ Vote</b></div>
+    <div class="cell"><span class="dn">28</span><div class="body"></div>
+      <div class="poshead"><span>M</span><span>AM</span><span>S</span></div>
+      <div class="pos"><div class="sl un"></div><div class="sl uk"></div><div class="sl vo"><span>?</span></div></div>
+      <div class="poslbl">Vote — Ashal</div></div></div>
+
+  <div class="case"><div class="caselabel"><b>⑥ Rien</b></div>
+    <div class="cell"><span class="dn">30</span><div class="body"></div>
+      <div class="poshead"><span>M</span><span>AM</span><span>S</span></div>
+      <div class="pos"><div class="sl uk"></div><div class="sl uk"></div><div class="sl uk"></div></div></div></div>
+</div>
+
+<div class="verdict warn"><b>Ce qui marche :</b> c'est le plus compact et le plus honnête — <i>où</i> c'est dessiné dit <i>quand</i> ça se passe,
+sans icône ni légende. Le cas ④ se lit d'un coup : deux tiers pris, un libre le matin.
+<br><b>Ce qui coince :</b> un tiers de case fait ~40 px sur desktop et ~15 px sur mobile. <b>Aucun titre n'y tient jamais</b> —
+le nom part sous le ruban, et avec deux séances il devient « Ashal · Convoi », sans qu'on sache laquelle est laquelle.
+La couleur du créneau doit en outre servir <b>deux registres à la fois</b> (disponibilité et événement), ce qui rouvre exactement
+la confusion que la préséance devait fermer.</div>
+
+<!-- ══════════ P3 ══════════ -->
+<h2>P3 · La case haute — une ligne par créneau occupé</h2>
+<p class="why">La case grandit et devient une mini vue Semaine verticale : une ligne par créneau, avec son nom.
+Les lignes vides ne s'affichent pas.</p>
+
+<div class="cases">
+  <div class="case"><div class="caselabel"><b>① Uniforme</b></div>
+    <div class="cell tall"><span class="dn">3</span><div class="body">
+      <div class="line"><span class="k av"></span><span class="n">Disponible</span></div>
+    </div><div class="uni av"></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>② Partagé</b></div>
+    <div class="cell tall"><span class="dn">4</span><div class="body">
+      <div class="line"><span class="k av"></span><span class="n">M · AM libre</span></div>
+      <div class="line"><span class="k un"></span><span class="n">Soir pris</span></div>
+    </div></div></div>
+
+  <div class="case"><div class="caselabel"><b>③ Séance</b></div>
+    <div class="cell tall"><span class="dn">20</span><div class="body">
+      <div class="line"><span class="k av"></span><span class="n">M · AM libre</span></div>
+      <div class="line"><span class="k se"></span><span class="n on">Convoi du Nord</span></div>
+      <div class="line"><span class="k"></span><span class="n">soir · chez Marc</span></div>
+    </div></div></div>
+
+  <div class="case"><div class="caselabel"><b>④ Deux séances</b></div>
+    <div class="cell tall"><span class="dn">22</span><div class="body">
+      <div class="line"><span class="k av"></span><span class="n">Matin libre</span></div>
+      <div class="line"><span class="k se"></span><span class="n on">Ashal</span></div>
+      <div class="line"><span class="k se"></span><span class="n on">Convoi</span></div>
+    </div></div></div>
+
+  <div class="case"><div class="caselabel"><b>⑤ Vote</b></div>
+    <div class="cell tall"><span class="dn">28</span><div class="body">
+      <div class="line"><span class="k un"></span><span class="n">Matin pris</span></div>
+      <div class="line"><span class="k vo"></span><span class="n on">Vote — soir</span></div>
+      <div class="line"><span class="k"></span><span class="n">3 oui · 1 non</span></div>
+    </div></div></div>
+
+  <div class="case"><div class="caselabel"><b>⑥ Rien</b></div>
+    <div class="cell tall"><span class="dn">30</span><div class="body"></div>
+      <div class="reg"><i class="uk"></i><i class="uk"></i><i class="uk"></i></div></div></div>
+</div>
+
+<div class="verdict bad"><b>Ce qui marche :</b> tout est dit, rien n'est codé. C'est la version la plus riche.
+<br><b>Ce qui coince, et c'est rédhibitoire :</b> six lignes de 132 px font <b>792 px de grille</b>, sans l'en-tête ni la barre de contrôles.
+La vue Mois cesse de tenir sur un écran — <b>elle perd la seule chose qu'elle sait faire</b>, montrer le mois d'un seul regard.
+Et sur mobile, une case fait 48 px de large : « Convoi du Nord » n'y tient pas davantage qu'ailleurs.</div>
+
+<!-- ══════════ P4 ══════════ -->
+<h2>P4 · La journée résumée + le détail au tap</h2>
+<p class="why">La case ne montre que <b>le rang gagnant</b> et un compteur ; le détail complet s'ouvre au tap, dans le
+<b>rail</b> déjà retenu pour la vue Semaine en portrait (§9). Un composant, deux vues.</p>
+
+<div class="cases">
+  <div class="case"><div class="caselabel"><b>① Uniforme</b></div>
+    <div class="cell"><span class="dn">3</span><div class="body"></div><div class="uni av"></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>② Partagé</b></div>
+    <div class="cell"><span class="dn">4</span><div class="body"></div><div class="reg tall"><i class="av"></i><i class="av"></i><i class="un"></i></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>③ Séance</b></div>
+    <div class="cell"><span class="dn">20</span><div class="body"><div class="sum se">Convoi</div></div>
+      <div class="reg"><i class="av"></i><i class="av"></i><i class="un"></i></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>④ Deux séances</b></div>
+    <div class="cell"><span class="dn">22</span><div class="body"><div class="sum se">2 séances</div></div>
+      <div class="reg"><i class="av"></i><i class="un"></i><i class="un"></i></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>⑤ Vote</b></div>
+    <div class="cell"><span class="dn">28</span><div class="body"><div class="sum vo">Vote</div></div>
+      <div class="reg"><i class="un"></i><i class="uk"></i><i class="av"></i></div></div></div>
+
+  <div class="case"><div class="caselabel"><b>⑥ Rien</b></div>
+    <div class="cell"><span class="dn">30</span><div class="body"></div><div class="reg"><i class="uk"></i><i class="uk"></i><i class="uk"></i></div></div></div>
+</div>
+
+<div class="rail">
+  <div class="dl">Samedi 22 août — au tap sur la case ④</div>
+  <div class="it"><span class="w"><svg class="ic" viewBox="0 0 24 24" style="color:var(--text-muted)"><path d="M12 5v3M5.6 9.6l2 2M18.4 9.6l-2 2M3 18h18M7 18a5 5 0 0 1 10 0"/></svg>Matin</span>
+    <span class="v"><span class="pillav">Disponible</span></span></div>
+  <div class="it"><span class="w"><svg class="ic" viewBox="0 0 24 24" style="color:var(--text-muted)"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>Après-midi</span>
+    <span class="v"><b>Les Cendres d'Ashal</b><span class="m"> · en visio</span></span></div>
+  <div class="it"><span class="w"><svg class="ic" viewBox="0 0 24 24" style="color:var(--text-muted)"><path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z"/></svg>Soir</span>
+    <span class="v"><b>Le Convoi du Nord</b><span class="m"> · chez Marc, 20 h 30</span></span></div>
+</div>
+
+<div class="verdict"><b>Ce qui marche :</b> la grille reste dense et scannable, et le détail est <b>complet</b>, pas tronqué —
+le rail a toute la largeur de l'écran, là où la case a 48 px. Il réutilise un composant déjà décidé.
+<br><b>Ce qui coince :</b> « 2 séances » sans les nommer oblige à un geste. Sur une case unique (③, ⑤) on ne perd rien ; sur ④ on perd les noms.</div>
+
+<!-- ══════════ synthèse ══════════ -->
+<h2>Comparaison</h2>
+<table class="cmp">
+  <tr><th>Critère</th><th>P1 réglette + puces</th><th>P2 ruban positionnel</th><th>P3 case haute</th><th>P4 résumé + rail</th></tr>
+  <tr><td>Le créneau d'une séance est visible</td><td>Icône</td><td><b>Position</b></td><td>Ligne</td><td>Au tap</td></tr>
+  <tr><td>Deux séances le même jour</td><td><b>Deux puces nommées</b></td><td>Noms fusionnés</td><td><b>Deux lignes</b></td><td>« 2 séances »</td></tr>
+  <tr><td>Le mois tient sur un écran</td><td>Oui</td><td><b>Oui, largement</b></td><td><b>Non</b></td><td><b>Oui</b></td></tr>
+  <tr><td>Dispo et événement restent distincts</td><td><b>Oui, deux registres</b></td><td><b>Non, un seul</b></td><td>Oui</td><td>Oui</td></tr>
+  <tr><td>Tient dans 48 px de large (mobile)</td><td>Non — dégrade</td><td>Oui</td><td>Non</td><td>Oui — dégrade</td></tr>
+  <tr><td>Composants neufs à concevoir</td><td>1 (la puce)</td><td>1 (le ruban)</td><td>1 (la case haute)</td><td><b>0 — rail déjà retenu</b></td></tr>
+</table>
+
+<h2>Ce que je te propose : P1 sur desktop, P4 sur mobile — c'est le même objet</h2>
+<p class="why">Les deux ne s'opposent pas : <b>P4 est P1 dégradé</b>. Même règle de préséance, même réglette, même rail.
+Seul varie le nombre de puces que la case peut porter — exactement comme la vue Semaine varie son contenu selon la largeur (§9).
+Aucun quatrième composant, aucune deuxième conception.</p>
+
+<table class="cmp">
+  <tr><th>Situation</th><th>Case large (desktop, ≥ 100 px)</th><th>Case étroite (mobile, ~48 px)</th></tr>
+  <tr><td>Jour uniforme</td><td colspan="2"><b>Une seule barre pleine</b> — la réglette disparaît, il n'y a rien à distinguer</td></tr>
+  <tr><td>Créneaux différents, aucun événement</td><td colspan="2">Réglette à trois segments, comme aujourd'hui</td></tr>
+  <tr><td>Un événement</td><td>Puce nommée + icône de créneau, réglette dessous</td><td>Puce abrégée (« Convoi »), réglette dessous</td></tr>
+  <tr><td>Deux événements ou plus</td><td>Deux puces nommées, puis « +1 »</td><td>« 2 séances », détail au tap</td></tr>
+  <tr><td>Le détail complet</td><td colspan="2"><b>Le rail</b>, au tap sur la case — même composant que la vue Semaine</td></tr>
+</table>
+
+<h3>Rendu mobile</h3>
+<div class="row">
+  <div>
+    <span class="tag">Août 2026 — 375 px</span>
+    <div class="phone">
+      <div class="mo">
+        <div class="mh">L</div><div class="mh">M</div><div class="mh">M</div><div class="mh">J</div><div class="mh">V</div><div class="mh">S</div><div class="mh">D</div>
+        <div class="mcell"><span class="dn">17</span><div style="flex:1"></div><div class="reg"><i class="uk"></i><i class="uk"></i><i class="un"></i></div></div>
+        <div class="mcell"><span class="dn">18</span><div style="flex:1"></div><div class="uni av"></div></div>
+        <div class="mcell"><span class="dn">19</span><div style="flex:1"></div><div class="uni av"></div></div>
+        <div class="mcell"><span class="dn">20</span><div class="mini se">Convoi</div><div style="flex:1"></div><div class="reg"><i class="av"></i><i class="av"></i><i class="un"></i></div></div>
+        <div class="mcell"><span class="dn">21</span><div style="flex:1"></div><div class="reg"><i class="uk"></i><i class="uk"></i><i class="un"></i></div></div>
+        <div class="mcell"><span class="dn">22</span><div class="mini se">2 séances</div><div style="flex:1"></div><div class="reg"><i class="av"></i><i class="un"></i><i class="un"></i></div></div>
+        <div class="mcell"><span class="dn">23</span><div style="flex:1"></div><div class="reg"><i class="uk"></i><i class="uk"></i><i class="uk"></i></div></div>
+      </div>
+    </div>
+    <div class="note">« 2 séances » est tronqué à « 2 séan… » dans 48 px — on écrira <b>« ×2 »</b>.
+    La réglette, elle, reste parfaitement lisible : <b>c'est une information de forme, pas de texte</b>, et elle ne souffre pas de l'étroitesse.</div>
+  </div>
+  <div>
+    <div class="verdict"><b>La règle générale qui s'en dégage,</b> et qui vaut au-delà de la case du mois :
+    <br>· <b>la disponibilité se code par la forme</b> (réglette, position, trame) — elle survit à n'importe quelle largeur ;
+    <br>· <b>l'événement se code par le texte</b> — il dégrade avec la largeur, jusqu'à un compteur ;
+    <br>· <b>le détail complet vit dans le rail</b>, jamais dans la case.
+    <br>C'est la raison pour laquelle P2 a été écarté malgré son élégance : il fait porter les deux registres au même codage,
+    et le jour où l'un dégrade, l'autre tombe avec lui.</div>
+  </div>
+</div>
+
+</body>
+</html>

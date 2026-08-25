@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Itération 4 — engrenages, comètes, animation</title>
+<style>
+:root{
+  --text-muted:#7a7a8a;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --status-mixed:#f0a030;--status-unknown:#3a3a4a;
+}
+.t-steam{--bg:#1a1008;--surf:#241808;--a1:#cd7f32;--a2:#4a7c59;--txt:#e8dcc8;--mut:#8a7a5a}
+.t-emeraude{--bg:#0d0a14;--surf:#1a1428;--a1:#7ec8a4;--a2:#9b6dff;--txt:#e8e8f0;--mut:#7a7a8a}
+.t-foret{--bg:#080f0a;--surf:#0f1a10;--a1:#2ecc71;--a2:#f0c040;--txt:#e8f0ea;--mut:#6a806e}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:#e8e8f0;padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 var(--space-sm)}
+h3{font-size:var(--text-lg);margin:0 0 2px}
+.lede,.why{color:var(--text-muted);max-width:82ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:var(--space-base);align-items:start}
+.demo{background:var(--surf);border-radius:var(--radius-card);overflow:hidden;border:1px solid var(--border-subtle);
+  box-shadow:0 4px 12px rgba(0,0,0,.5);display:flex}
+.strip{width:4px;flex:none}
+.in{flex:1;min-width:0}
+.cov{height:104px;position:relative;overflow:hidden}
+.mk{position:absolute;right:10px;top:5px;font-size:22px;font-weight:700;letter-spacing:-1px;color:var(--txt);
+  text-shadow:0 2px 10px rgba(0,0,0,.85);z-index:9}
+.bd{padding:var(--space-md)}
+.nm{font-size:var(--text-lg);font-weight:500;color:var(--txt)}
+.mt{font-size:var(--text-sm);color:var(--mut)}
+.caption{font-size:var(--text-sm);color:var(--text-muted);margin:var(--space-xs) 0 0}
+.pill{display:inline-block;font-size:var(--text-sm);padding:1px 7px;border-radius:6px;
+  border:1px solid var(--status-mixed);color:var(--status-mixed);margin-left:6px}
+.swatch{background:var(--surf);border:1px solid var(--border-subtle);border-radius:var(--radius-card);
+  padding:var(--space-base);text-align:center}
+.swatch .box{height:120px;display:grid;place-items:center;background:var(--bg);border-radius:8px;margin-bottom:var(--space-sm)}
+/* trame plan d'atelier */
+.blue{background:
+  repeating-linear-gradient(0deg,rgba(205,127,50,.14) 0 1px,transparent 1px 13px),
+  repeating-linear-gradient(90deg,rgba(205,127,50,.14) 0 1px,transparent 1px 13px),
+  linear-gradient(180deg,#2b1c0b,#1a1008)}
+/* ── ancienne technique conique, pour comparaison ── */
+.g-conic{border-radius:50%;position:relative;
+  background:conic-gradient(#cd7f32 0 3.1%,transparent 3.1% 6.25%,#cd7f32 6.25% 9.4%,transparent 9.4% 12.5%,
+  #cd7f32 12.5% 15.6%,transparent 15.6% 18.75%,#cd7f32 18.75% 21.9%,transparent 21.9% 25%,
+  #cd7f32 25% 28.1%,transparent 28.1% 31.25%,#cd7f32 31.25% 34.4%,transparent 34.4% 37.5%,
+  #cd7f32 37.5% 40.6%,transparent 40.6% 43.75%,#cd7f32 43.75% 46.9%,transparent 46.9% 50%,
+  #cd7f32 50% 53.1%,transparent 53.1% 56.25%,#cd7f32 56.25% 59.4%,transparent 59.4% 62.5%,
+  #cd7f32 62.5% 65.6%,transparent 65.6% 68.75%,#cd7f32 68.75% 71.9%,transparent 71.9% 75%,
+  #cd7f32 75% 78.1%,transparent 78.1% 81.25%,#cd7f32 81.25% 84.4%,transparent 84.4% 87.5%,
+  #cd7f32 87.5% 90.6%,transparent 90.6% 93.75%,#cd7f32 93.75% 96.9%,transparent 96.9%)}
+.g-conic::before{content:"";position:absolute;inset:11%;border-radius:50%;border:2px solid #cd7f32}
+.g-conic::after{content:"";position:absolute;inset:36%;border-radius:50%;border:2px solid #cd7f32;background:#1a1008}
+/* animations */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes spinback{to{transform:rotate(-360deg)}}
+@keyframes drift{
+  0%{transform:translate(0,0) scale(.9);opacity:0}
+  12%{opacity:.85}
+  80%{opacity:.5}
+  100%{transform:translate(var(--dx,10px),-70px) scale(1.15);opacity:0}}
+@keyframes fly{
+  0%{transform:translate(-30px,18px);opacity:0}
+  15%{opacity:1}
+  70%{opacity:1}
+  100%{transform:translate(150px,-16px);opacity:0}}
+@keyframes twinkle{0%,100%{opacity:.25}50%{opacity:.9}}
+.spin{animation:spin 14s linear infinite;transform-origin:50% 50%}
+.spin.rev{animation-name:spinback;animation-duration:9s}
+.spin.slow{animation-duration:22s}
+.particle{position:absolute;border-radius:50%;background:var(--a1);animation:drift 7s linear infinite}
+.comet-run{animation:fly 6.5s ease-in-out infinite}
+.star{position:absolute;width:2px;height:2px;border-radius:50%;background:#e8e8f0;animation:twinkle 3.4s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){
+  .spin,.particle,.comet-run,.star{animation:none !important}
+  .particle{opacity:.6} .comet-run{transform:translate(60px,0);opacity:1}
+}
+.rm-demo *{animation:none !important}
+.rm-demo .particle{opacity:.6}
+.rm-demo .comet-run{transform:translate(60px,0);opacity:1}
+/* comète */
+.sky{background:
+  radial-gradient(120% 130% at 80% 10%,#241a3a,#0d0a14)}
+.tail{position:absolute;border-radius:50%;filter:blur(7px)}
+.core{position:absolute;border-radius:50%;filter:blur(2px)}
+.spark{position:absolute;width:3px;height:3px;border-radius:50%;background:#e8e8f0;box-shadow:0 0 7px 1px rgba(232,232,240,.85)}
+</style>
+</head>
+<body>
+
+<h1>Itération 4 — engrenages, comètes, animation</h1>
+<p class="lede">Trois chantiers : retravailler les engrenages (quatre techniques au choix), décliner la comète en trois générations, et une démonstration d'animation par thème avec sa version « mouvement réduit ». Nouveauté technique : trois des quatre engrenages sont en <strong>SVG inline</strong> — de la géométrie vectorielle écrite dans le HTML, pas un fichier image. C'est un léger amendement au principe n°1 de la base (« formes géométriques uniquement »), qui reste dans son esprit : tout est en valeurs numériques, modifiable sans outil graphique.</p>
+
+<!-- ═══════════ 1. ENGRENAGES ═══════════ -->
+<h2>1 — Quatre techniques d'engrenage</h2>
+<p class="why">Ce qui clochait : mes dents étaient des parts de tarte, elles s'élargissaient vers l'extérieur. Un vrai engrenage a des dents à flancs parallèles, posées sur une couronne. Survolez ou regardez — les trois derniers tournent pour montrer le rendu en mouvement.</p>
+<div class="row">
+  <div class="swatch t-steam">
+    <div class="box">
+      <div class="g-conic" style="width:96px;height:96px"></div>
+    </div>
+    <h3>A — Conique (l'actuel)</h3>
+    <p class="caption">Dents en secteurs. Elles s'évasent vers l'extérieur et se rejoignent au centre : d'où l'aspect « roue de loterie » plutôt que mécanique.</p>
+  </div>
+
+  <div class="swatch t-steam">
+    <div class="box">
+      <svg width="96" height="96" viewBox="0 0 100 100" class="spin">
+        <g fill="#cd7f32">
+          <g><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(30 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(60 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(90 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(120 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(150 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(180 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(210 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(240 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(270 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(300 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+          <g transform="rotate(330 50 50)"><rect x="46" y="2" width="8" height="14" rx="1.5"/></g>
+        </g>
+        <circle cx="50" cy="50" r="36" fill="none" stroke="#cd7f32" stroke-width="7"/>
+        <circle cx="50" cy="50" r="12" fill="none" stroke="#cd7f32" stroke-width="5"/>
+      </svg>
+    </div>
+    <h3>B — Dents droites</h3>
+    <p class="caption">Douze dents rectangulaires à flancs parallèles, couronne épaisse, moyeu. Le plus « pièce d'horlogerie », lisible même en petit.</p>
+  </div>
+
+  <div class="swatch t-steam">
+    <div class="box">
+      <svg width="96" height="96" viewBox="0 0 100 100" class="spin rev">
+        <g fill="#cd7f32">
+          <g><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(36 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(72 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(108 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(144 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(180 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(216 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(252 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(288 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(324 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+        </g>
+        <circle cx="50" cy="50" r="34" fill="#1a1008" stroke="#cd7f32" stroke-width="4"/>
+        <g stroke="#cd7f32" stroke-width="4">
+          <line x1="50" y1="22" x2="50" y2="78"/><line x1="22" y1="50" x2="78" y2="50"/>
+        </g>
+        <circle cx="50" cy="50" r="10" fill="#1a1008" stroke="#cd7f32" stroke-width="4"/>
+      </svg>
+    </div>
+    <h3>C — Dents trapèze + rayons</h3>
+    <p class="caption">Dix dents légèrement effilées, roue à quatre rayons évidés. Le plus mécanique et le plus aéré — on voit la trame du plan à travers.</p>
+  </div>
+
+  <div class="swatch t-steam">
+    <div class="box">
+      <svg width="96" height="96" viewBox="0 0 100 100" class="spin slow">
+        <g stroke="#cd7f32" stroke-width="2.5" fill="none">
+          <g><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(24 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(48 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(72 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(96 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(120 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(144 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(168 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(192 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(216 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(240 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(264 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(288 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(312 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <g transform="rotate(336 50 50)"><rect x="46.5" y="6" width="7" height="11"/></g>
+          <circle cx="50" cy="50" r="33"/>
+          <circle cx="50" cy="50" r="9"/>
+          <circle cx="50" cy="50" r="21" stroke-dasharray="4 4" opacity=".6"/>
+        </g>
+      </svg>
+    </div>
+    <h3>D — Tracé technique</h3>
+    <p class="caption">Contour seul, quinze dents fines, cercle primitif en pointillés. Cohérent au millimètre avec le fond de plan d'atelier — c'est un dessin, pas une pièce.</p>
+  </div>
+</div>
+
+<h3 style="margin-top:var(--space-lg)">La bannière avec la technique retenue (exemple : C)</h3>
+<div class="row" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+  <div>
+    <div class="demo t-steam"><div class="strip" style="background:var(--status-mixed)"></div><div class="in">
+      <div class="cov blue">
+        <svg width="86" height="86" viewBox="0 0 100 100" class="spin" style="position:absolute;left:2px;top:8px">
+          <g fill="#cd7f32">
+            <g><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(36 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+            <g transform="rotate(72 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(108 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+            <g transform="rotate(144 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(180 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+            <g transform="rotate(216 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(252 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+            <g transform="rotate(288 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(324 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          </g>
+          <circle cx="50" cy="50" r="34" fill="#1a1008" stroke="#cd7f32" stroke-width="4"/>
+          <g stroke="#cd7f32" stroke-width="4"><line x1="50" y1="22" x2="50" y2="78"/><line x1="22" y1="50" x2="78" y2="50"/></g>
+          <circle cx="50" cy="50" r="10" fill="#1a1008" stroke="#cd7f32" stroke-width="4"/>
+        </svg>
+        <svg width="52" height="52" viewBox="0 0 100 100" class="spin rev" style="position:absolute;left:74px;top:52px">
+          <g fill="#4a7c59">
+            <g><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(45 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+            <g transform="rotate(90 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(135 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+            <g transform="rotate(180 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(225 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+            <g transform="rotate(270 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(315 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          </g>
+          <circle cx="50" cy="50" r="33" fill="#1a1008" stroke="#4a7c59" stroke-width="5"/>
+          <circle cx="50" cy="50" r="10" fill="#1a1008" stroke="#4a7c59" stroke-width="4"/>
+        </svg>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur</div></div></div></div>
+    <p class="caption">Deux roues engrenées, tournant en sens inverse à des vitesses différentes.</p>
+  </div>
+</div>
+
+<!-- ═══════════ 2. COMÈTES ═══════════ -->
+<h2>2 — Comète : trois générations</h2>
+<p class="why">Mêmes règles, trois jeux de paramètres : angle de la trajectoire, longueur et teinte de la traînée, densité d'étoiles, position du noyau. La troisième est animée pour montrer ce que donnerait la comète en mouvement.</p>
+<div class="row">
+  <div>
+    <div class="demo t-emeraude"><div class="strip" style="background:var(--status-mixed)"></div><div class="in">
+      <div class="cov sky">
+        <div class="star" style="left:24px;top:18px"></div><div class="star" style="left:96px;top:30px;animation-delay:1.1s"></div>
+        <div class="star" style="left:140px;top:70px;animation-delay:2.2s"></div>
+        <div class="tail" style="width:118px;height:15px;left:6px;top:52px;transform:rotate(-12deg);
+          background:linear-gradient(90deg,transparent,rgba(155,109,255,.55) 55%,rgba(126,200,164,.9))"></div>
+        <div class="core" style="width:25px;height:25px;left:110px;top:40px;background:radial-gradient(circle,#e8fff5,#7ec8a4 55%,transparent 78%)"></div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur</div></div></div></div>
+    <p class="caption"><b>G1.</b> Trajectoire montante, traînée longue violet-vert, noyau à droite.</p>
+  </div>
+
+  <div>
+    <div class="demo t-emeraude"><div class="strip" style="background:var(--a1)"></div><div class="in">
+      <div class="cov sky" style="background:radial-gradient(130% 130% at 15% 90%,#1e2440,#0d0a14)">
+        <div class="star" style="left:40px;top:70px;animation-delay:.6s"></div><div class="star" style="left:112px;top:22px;animation-delay:1.7s"></div>
+        <div class="tail" style="width:82px;height:20px;right:10px;top:26px;transform:rotate(26deg);
+          background:linear-gradient(270deg,transparent,rgba(126,200,164,.5) 50%,rgba(155,109,255,.95))"></div>
+        <div class="core" style="width:30px;height:30px;left:26px;top:52px;background:radial-gradient(circle,#fff,#9b6dff 52%,transparent 78%)"></div>
+        <div class="mk">CN</div></div>
+      <div class="bd"><div class="nm">Le Convoi du Nord</div><div class="mt">Campagne épisodique · MJ</div></div></div></div>
+    <p class="caption"><b>G2.</b> Sens inversé, noyau violet à gauche, traînée courte et descendante.</p>
+  </div>
+
+  <div>
+    <div class="demo t-emeraude"><div class="strip" style="background:var(--status-unknown)"></div><div class="in">
+      <div class="cov sky" style="background:radial-gradient(140% 140% at 50% 0%,#2a1c46,#0d0a14)">
+        <div class="star" style="left:20px;top:26px"></div><div class="star" style="left:60px;top:80px;animation-delay:.9s"></div>
+        <div class="star" style="left:128px;top:34px;animation-delay:1.9s"></div><div class="star" style="left:96px;top:64px;animation-delay:2.6s"></div>
+        <div class="comet-run" style="position:absolute;left:0;top:0;width:100%;height:100%">
+          <div class="tail" style="width:70px;height:12px;left:6px;top:46px;transform:rotate(-8deg);
+            background:linear-gradient(90deg,transparent,rgba(155,109,255,.6) 60%,rgba(232,255,245,.95))"></div>
+          <div class="core" style="width:20px;height:20px;left:66px;top:42px;background:radial-gradient(circle,#fff,#7ec8a4 55%,transparent 78%)"></div>
+        </div>
+        <div class="mk">NL</div></div>
+      <div class="bd"><div class="nm">La Nuit des Lanternes</div><div class="mt">One-shot · Joueur <span class="pill">animée</span></div></div></div></div>
+    <p class="caption"><b>G3.</b> Trajectoire quasi horizontale, ciel dense — et la comète traverse en boucle.</p>
+  </div>
+</div>
+
+<!-- ═══════════ 3. ANIMATION ═══════════ -->
+<h2>3 — Animation par thème</h2>
+<p class="why">Une bannière animée par thème, dans son registre : particules qui montent pour la Forêt, rouages qui tournent pour le Steampunk, comète qui file pour l'Émeraude. Toutes n'animent que des transformations et de l'opacité — ce que la carte graphique traite seule, sans repeindre la page.</p>
+<div class="row">
+  <div>
+    <div class="demo t-foret"><div class="strip" style="background:var(--a1)"></div><div class="in">
+      <div class="cov" style="background:radial-gradient(130% 110% at 60% 0%,#12301c,#080f0a);position:relative">
+        <div style="position:absolute;width:135px;height:135px;right:-34px;top:-56px;border-radius:50%;background:#2ecc71;opacity:.42;filter:blur(15px)"></div>
+        <div style="position:absolute;width:82px;height:82px;left:10px;bottom:-36px;border-radius:50%;background:#f0c040;opacity:.28;filter:blur(15px)"></div>
+        <div class="particle" style="width:4px;height:4px;left:22px;bottom:0;--dx:14px;animation-delay:0s"></div>
+        <div class="particle" style="width:3px;height:3px;left:52px;bottom:0;--dx:-10px;animation-delay:1.3s"></div>
+        <div class="particle" style="width:5px;height:5px;left:84px;bottom:0;--dx:8px;animation-delay:2.5s;background:#f0c040"></div>
+        <div class="particle" style="width:3px;height:3px;left:118px;bottom:0;--dx:-14px;animation-delay:3.7s"></div>
+        <div class="particle" style="width:4px;height:4px;left:146px;bottom:0;--dx:6px;animation-delay:5.1s;background:#f0c040"></div>
+        <div class="mk">CN</div></div>
+      <div class="bd"><div class="nm">Le Convoi du Nord</div><div class="mt">Forêt Ancienne · particules ascendantes</div></div></div></div>
+  </div>
+
+  <div>
+    <div class="demo t-steam"><div class="strip" style="background:var(--status-mixed)"></div><div class="in">
+      <div class="cov blue">
+        <svg width="70" height="70" viewBox="0 0 100 100" class="spin" style="position:absolute;left:8px;top:16px">
+          <g fill="#cd7f32"><g><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(36 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(72 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(108 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(144 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(180 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(216 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(252 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(288 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(324 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g></g>
+          <circle cx="50" cy="50" r="34" fill="#1a1008" stroke="#cd7f32" stroke-width="4"/>
+          <g stroke="#cd7f32" stroke-width="4"><line x1="50" y1="22" x2="50" y2="78"/><line x1="22" y1="50" x2="78" y2="50"/></g>
+          <circle cx="50" cy="50" r="10" fill="#1a1008" stroke="#cd7f32" stroke-width="4"/>
+        </svg>
+        <svg width="46" height="46" viewBox="0 0 100 100" class="spin rev" style="position:absolute;left:66px;top:50px">
+          <g fill="#4a7c59"><g><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(45 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(90 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(135 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(180 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(225 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g>
+          <g transform="rotate(270 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g><g transform="rotate(315 50 50)"><polygon points="45,4 55,4 53.5,17 46.5,17"/></g></g>
+          <circle cx="50" cy="50" r="33" fill="#1a1008" stroke="#4a7c59" stroke-width="5"/>
+          <circle cx="50" cy="50" r="10" fill="#1a1008" stroke="#4a7c59" stroke-width="4"/>
+        </svg>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Steampunk · rouages engrenés</div></div></div></div>
+  </div>
+
+  <div>
+    <div class="demo t-emeraude"><div class="strip" style="background:var(--a2)"></div><div class="in">
+      <div class="cov sky" style="background:radial-gradient(140% 140% at 50% 0%,#2a1c46,#0d0a14)">
+        <div class="star" style="left:20px;top:26px"></div><div class="star" style="left:60px;top:80px;animation-delay:.9s"></div>
+        <div class="star" style="left:128px;top:34px;animation-delay:1.9s"></div>
+        <div class="comet-run" style="position:absolute;inset:0">
+          <div class="tail" style="width:70px;height:12px;left:6px;top:46px;transform:rotate(-8deg);
+            background:linear-gradient(90deg,transparent,rgba(155,109,255,.6) 60%,rgba(232,255,245,.95))"></div>
+          <div class="core" style="width:20px;height:20px;left:66px;top:42px;background:radial-gradient(circle,#fff,#7ec8a4 55%,transparent 78%)"></div>
+        </div>
+        <div class="mk">NL</div></div>
+      <div class="bd"><div class="nm">La Nuit des Lanternes</div><div class="mt">Grimoire Émeraude · comète en boucle</div></div></div></div>
+  </div>
+</div>
+
+<h3 style="margin-top:var(--space-lg)">Les mêmes, en « mouvement réduit »</h3>
+<p class="why">Ce que verrait quelqu'un ayant activé la réduction des animations dans son système. Rien ne bouge, et surtout : rien ne manque — la composition reste complète et lisible. C'est la règle à tenir, une animation ne doit jamais porter d'information.</p>
+<div class="row rm-demo">
+  <div><div class="demo t-foret"><div class="strip" style="background:var(--a1)"></div><div class="in">
+    <div class="cov" style="background:radial-gradient(130% 110% at 60% 0%,#12301c,#080f0a)">
+      <div style="position:absolute;width:135px;height:135px;right:-34px;top:-56px;border-radius:50%;background:#2ecc71;opacity:.42;filter:blur(15px)"></div>
+      <div class="particle" style="width:4px;height:4px;left:30px;top:44px"></div>
+      <div class="particle" style="width:3px;height:3px;left:72px;top:28px"></div>
+      <div class="particle" style="width:4px;height:4px;left:110px;top:58px;background:#f0c040"></div>
+      <div class="mk">CN</div></div>
+    <div class="bd"><div class="nm">Le Convoi du Nord</div><div class="mt">particules figées, composition intacte</div></div></div></div></div>
+
+  <div><div class="demo t-emeraude"><div class="strip" style="background:var(--a2)"></div><div class="in">
+    <div class="cov sky" style="background:radial-gradient(140% 140% at 50% 0%,#2a1c46,#0d0a14)">
+      <div class="star" style="left:20px;top:26px"></div><div class="star" style="left:128px;top:34px"></div>
+      <div class="comet-run" style="position:absolute;inset:0">
+        <div class="tail" style="width:70px;height:12px;left:6px;top:46px;transform:rotate(-8deg);
+          background:linear-gradient(90deg,transparent,rgba(155,109,255,.6) 60%,rgba(232,255,245,.95))"></div>
+        <div class="core" style="width:20px;height:20px;left:66px;top:42px;background:radial-gradient(circle,#fff,#7ec8a4 55%,transparent 78%)"></div></div>
+      <div class="mk">NL</div></div>
+    <div class="bd"><div class="nm">La Nuit des Lanternes</div><div class="mt">comète immobile, au repos</div></div></div></div></div>
+</div>
+
+</body>
+</html>

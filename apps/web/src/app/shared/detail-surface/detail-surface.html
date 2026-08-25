@@ -1,0 +1,19 @@
+<div class="detail-surface-backdrop" (click)="close()" aria-hidden="true"></div>
+<div
+  class="detail-surface-panel"
+  role="dialog"
+  [attr.aria-modal]="isDesktop() ? null : 'true'"
+  [attr.aria-label]="title() || 'Détail'"
+  [cdkTrapFocus]="!isDesktop()"
+  (keydown)="onKeydown($event)"
+>
+  <button
+    #closeBtn
+    type="button"
+    class="detail-surface-close"
+    (click)="close()"
+    aria-label="Fermer"
+  >✕</button>
+  <h2 class="detail-surface-title">{{ title() || 'Détail' }}</h2>
+  <p class="detail-surface-body">{{ body() || 'Aucune description disponible.' }}</p>
+</div>

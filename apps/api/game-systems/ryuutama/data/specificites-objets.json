@@ -1,0 +1,18 @@
+[
+  { "key": "beau", "categorie": "Particularités", "label": "Beau", "prix": "×2", "notes": "L'objet est esthétiquement superbe." },
+  { "key": "casse", "categorie": "Particularités", "label": "Cassé", "prix": "×0,5", "notes": "L'objet est inutilisable tant qu'il n'est pas réparé." },
+  { "key": "excellent", "categorie": "Particularités", "label": "Excellent", "prix": "×5", "notes": "L'objet bénéficie de +1 pour un bonus pertinent (au toucher pour une arme)." },
+  { "key": "fetide", "categorie": "Particularités", "label": "Fétide", "prix": "×0,7", "notes": "L'objet dégage une très mauvaise odeur qui ne part pas." },
+  { "key": "maudit", "categorie": "Particularités", "label": "Maudit", "prix": "×0,5", "notes": "L'objet attire le mauvais œil ou a été maudit. -1 aux tests de condition." },
+  { "key": "mignon", "categorie": "Particularités", "label": "Mignon", "prix": "×2", "notes": "L'objet est attendrissant ou mignon (forme, couleur, motif, etc.)." },
+  { "key": "repugnant", "categorie": "Particularités", "label": "Répugnant", "prix": "×0,8", "notes": "L'objet inspire le dégoût." },
+  { "key": "ringard", "categorie": "Particularités", "label": "Ringard", "prix": "×0,8", "notes": "L'objet est passé de mode ou une atteinte évidente au bon goût." },
+  { "key": "seconde-main", "categorie": "Particularités", "label": "Seconde main", "prix": "×0,8", "notes": "L'objet a déjà appartenu à quelqu'un et en porte encore la trace." },
+  { "key": "solide", "categorie": "Particularités", "label": "Solide", "prix": "×3", "notes": "L'objet est difficile à casser. Sa résistance est doublée." },
+  { "key": "mithril", "categorie": "Matériau", "label": "Mithril", "prix": "×10", "notes": "L'objet est aussi léger que résistant : Enc -2, -1 aux malus liés à l'Enc, 5 en résistance." },
+  { "key": "orichalque", "categorie": "Matériau", "label": "Orichalque", "prix": "×50", "notes": "L'objet est incassable. Si utilisé en armure, +2 au maximum de PV, et de PE." },
+  { "key": "ambulant", "categorie": "Magie", "label": "Ambulant", "prix": "+5000", "notes": "L'objet est animé et peut se déplacer de lui-même." },
+  { "key": "bavard", "categorie": "Magie", "label": "Bavard", "prix": "+2000", "notes": "L'objet parle. Et plutôt fort." },
+  { "key": "beni", "categorie": "Magie", "label": "Béni", "prix": "+8000", "notes": "L'objet bénéficie de +1 pour un bonus pertinent (au toucher pour une arme)." },
+  { "key": "lumineux", "categorie": "Magie", "label": "Lumineux", "prix": "+1200", "notes": "L'objet crée à peu près autant de lumière qu'une torche." }
+]

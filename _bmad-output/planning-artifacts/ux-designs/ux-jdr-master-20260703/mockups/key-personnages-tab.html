@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JDR Master — Grimoire Émeraude — Onglet Personnages</title>
+<style>
+  /*
+    Illustrates:
+    - EXPERIENCE.md Information Architecture: party detail page tab bar (Calendrier / Vote / Personnages)
+    - Component Patterns: CreneauCard reuse (character summary card), AvailabilityBadge reuse (stat pills)
+    - Flow: entry surface into the character-creation wizard (empty slot CTA)
+    - New minor concern: portrait avatar — illustrated SVG portrait cropped into the circular avatar
+      when a character has one uploaded (see Fenn's card); initials remain the fallback otherwise
+  */
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0a14;
+    color: #e8e8f0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    padding: 40px 24px;
+    min-height: 100vh;
+  }
+
+  h1.page-title {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 700;
+    color: #7ec8a4;
+    margin-bottom: 8px;
+  }
+  h1.page-title span { color: #9b6dff; }
+  .page-subtitle {
+    text-align: center;
+    color: #7a7a8a;
+    font-size: 13px;
+    margin-bottom: 40px;
+  }
+
+  .desktop-frame {
+    width: 1280px;
+    height: 800px;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1.5px solid #2a2040;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(155,109,255,0.12);
+    background: #0d0a14;
+    position: relative;
+  }
+
+  .browser-chrome {
+    height: 36px;
+    background: #130f1f;
+    border-bottom: 1px solid #221c35;
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .browser-dots { display: flex; gap: 6px; }
+  .browser-dots span { width: 10px; height: 10px; border-radius: 50%; }
+  .dot-red { background: #e05252; }
+  .dot-yellow { background: #f0a030; }
+  .dot-green { background: #7ec8a4; }
+  .browser-bar {
+    flex: 1;
+    background: #1a1428;
+    border-radius: 4px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 11px;
+    color: #7a7a8a;
+  }
+
+  .app-shell {
+    height: calc(800px - 36px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .app-nav {
+    height: 52px;
+    background: #1a1428;
+    border-bottom: 1px solid #221c35;
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 24px;
+    flex-shrink: 0;
+  }
+  .nav-brand { font-weight: 700; font-size: 15px; color: #7ec8a4; margin-right: 16px; white-space: nowrap; }
+  .nav-brand span { color: #9b6dff; }
+  .nav-link { font-size: 13px; color: #7a7a8a; white-space: nowrap; cursor: pointer; }
+  .nav-spacer { flex: 1; }
+  .nav-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, #9b6dff, #7ec8a4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #0d0a14;
+  }
+
+  /* Party header */
+  .party-header {
+    padding: 20px 32px 0;
+    flex-shrink: 0;
+  }
+  .party-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e8e8f0;
+  }
+  .party-subtitle {
+    font-size: 12px;
+    color: #7a7a8a;
+    margin-top: 4px;
+  }
+
+  /* Tab bar — reused visual pattern: underline active tab */
+  .tab-bar {
+    display: flex;
+    gap: 28px;
+    padding: 20px 32px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
+  }
+  .tab-item {
+    font-size: 14px;
+    font-weight: 500;
+    color: #7a7a8a;
+    padding-bottom: 12px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  .tab-item.active {
+    color: #e8e8f0;
+    border-bottom-color: #7ec8a4;
+    font-weight: 600;
+  }
+
+  /* Content */
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 32px 32px;
+  }
+
+  .section-label {
+    font-size: 16px;
+    font-weight: 500;
+    color: #e8e8f0;
+    margin-bottom: 4px;
+  }
+  .section-sub {
+    font-size: 12px;
+    color: #7a7a8a;
+    margin-bottom: 20px;
+  }
+
+  .characters-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 380px));
+    gap: 20px;
+  }
+
+  /* CreneauCard-style character card */
+  .character-card {
+    background: #1a1428;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    padding: 18px 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .character-card-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .character-portrait {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7ec8a4, #9b6dff);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700; color: #0d0a14;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .character-portrait svg { width: 100%; height: 100%; display: block; }
+  .character-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: #e8e8f0;
+  }
+  .character-meta {
+    font-size: 12px;
+    color: #7a7a8a;
+    margin-top: 2px;
+  }
+
+  .stat-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .stat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.03);
+    color: #e8e8f0;
+  }
+  .stat-badge .stat-key { color: #7a7a8a; }
+
+  .score-bar-track {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+  }
+  .score-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(135deg, #7ec8a4, #9b6dff);
+  }
+
+  .card-cta {
+    display: block;
+    width: 100%;
+    padding: 10px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    color: #e8e8f0;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  /* Empty slot card — invites creation */
+  .empty-slot-card {
+    background: #1a1428;
+    border: 1.5px dashed rgba(255,255,255,0.12);
+    border-radius: 10px;
+    padding: 28px 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    min-height: 220px;
+  }
+  .empty-slot-icon {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    border: 1.5px dashed rgba(255,255,255,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+    color: #7a7a8a;
+  }
+  .empty-slot-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e8e8f0;
+  }
+  .empty-slot-sub {
+    font-size: 12px;
+    color: #7a7a8a;
+    max-width: 220px;
+  }
+  .cta-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #7ec8a4, #9b6dff);
+    border: none;
+    border-radius: 10px;
+    color: #0d0a14;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 36px;
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">&#x2728; Grimoire Émeraude — <span>Onglet Personnages</span></h1>
+<p class="page-subtitle">Page détail de partie · onglet « Personnages » · un voyageur déjà inscrit (portrait illustré), un autre à créer</p>
+
+<div class="desktop-frame">
+  <div class="browser-chrome">
+    <div class="browser-dots">
+      <span class="dot-red"></span>
+      <span class="dot-yellow"></span>
+      <span class="dot-green"></span>
+    </div>
+    <div class="browser-bar">&#x1F512; jdr-master.local / parties / les-brumes-d-aubval / personnages</div>
+  </div>
+
+  <div class="app-shell">
+    <div class="app-nav">
+      <span class="nav-brand">&#x1F4DC; <span>Grimoire</span></span>
+      <span class="nav-link">Mes parties</span>
+      <span class="nav-link">Systèmes</span>
+      <div class="nav-spacer"></div>
+      <div class="nav-avatar">FE</div>
+    </div>
+
+    <div class="party-header">
+      <div class="party-title">Les Brumes d'Aubval</div>
+      <div class="party-subtitle">Ryuutama · 4 places · MJ : Sylas</div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab-item">Calendrier</div>
+      <div class="tab-item">Vote</div>
+      <div class="tab-item active">Personnages</div>
+    </div>
+
+    <div class="tab-content">
+      <div class="section-label">Les voyageurs de la troupe</div>
+      <div class="section-sub">Chaque aventurier grave son grimoire avant de prendre la route</div>
+
+      <div class="characters-grid">
+
+        <!-- Existing character: Fenn -->
+        <div class="character-card">
+          <div class="character-card-top">
+            <div class="character-portrait" aria-label="Portrait de Fenn">
+              <!-- Illustrated portrait, cropped/centered on the face to fill the circular avatar -->
+              <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                <rect width="48" height="48" fill="#2a2245"/>
+                <circle cx="24" cy="30" r="20" fill="#9b6dff" opacity="0.18"/>
+                <!-- shoulders / instrument neck hint -->
+                <path d="M8 48 Q10 34 24 32 Q38 34 40 48 Z" fill="#3a3060"/>
+                <rect x="30" y="14" width="4" height="20" rx="2" fill="#caa86a" transform="rotate(18 32 24)"/>
+                <!-- neck -->
+                <rect x="20" y="24" width="8" height="8" rx="3" fill="#e8c9a0"/>
+                <!-- head -->
+                <circle cx="24" cy="19" r="11" fill="#f0d3ab"/>
+                <!-- hair -->
+                <path d="M13 17 Q13 6 24 6 Q35 6 35 17 Q35 12 24 12 Q13 12 13 17 Z" fill="#7ec8a4"/>
+                <path d="M13 16 Q11 20 13 25 Q14.5 19 16 17 Z" fill="#7ec8a4"/>
+                <path d="M35 16 Q37 20 35 25 Q33.5 19 32 17 Z" fill="#7ec8a4"/>
+                <!-- eyes -->
+                <circle cx="19.5" cy="19" r="1.3" fill="#26203a"/>
+                <circle cx="28.5" cy="19" r="1.3" fill="#26203a"/>
+                <!-- soft smile -->
+                <path d="M20.5 24 Q24 26.5 27.5 24" stroke="#26203a" stroke-width="1.1" fill="none" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <div>
+              <div class="character-name">Fenn</div>
+              <div class="character-meta">Ménestrel · Technique · Niveau 1</div>
+            </div>
+          </div>
+          <div class="stat-badges">
+            <span class="stat-badge"><span class="stat-key">PV</span> 16</span>
+            <span class="stat-badge"><span class="stat-key">PE</span> 12</span>
+            <span class="stat-badge"><span class="stat-key">Init.</span> 10</span>
+          </div>
+          <div class="score-bar-track"><div class="score-bar-fill" style="width: 78%;"></div></div>
+          <button class="card-cta">Voir la fiche</button>
+        </div>
+
+        <!-- Empty slot -->
+        <div class="empty-slot-card">
+          <div class="empty-slot-icon">+</div>
+          <div class="empty-slot-title">Une place attend son voyageur</div>
+          <div class="empty-slot-sub">Un membre de la troupe n'a pas encore gravé son personnage dans le grimoire</div>
+          <button class="cta-button">Créer un personnage</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

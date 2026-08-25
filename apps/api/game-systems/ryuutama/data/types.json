@@ -1,0 +1,32 @@
+[
+  {
+    "key": "attaque",
+    "label": "Attaque",
+    "description": "Le personnage est très résistant et excelle en combat. Le moment voulu, il n'hésite pas à monter en première ligne et à se confronter aux monstres.",
+    "advantages": [
+      { "name": "Endurance", "effect": "+4 PV" },
+      { "name": "Puissance", "effect": "+1 aux dégâts" },
+      { "name": "Entraînement", "effect": "+1 arme favorite supplémentaire" }
+    ]
+  },
+  {
+    "key": "technique",
+    "label": "Technique",
+    "description": "Le personnage est capable d'analyser rapidement une situation et de prendre tout le recul nécessaire. C'est lui qu'on appelle lorsqu'il ne faut pas échouer.",
+    "advantages": [
+      { "name": "Précision", "effect": "+2 sur les tests de concentration (au lieu de +1, cf. p.73)" },
+      { "name": "Vitesse", "effect": "+1 à l'initiative" },
+      { "name": "Bagages", "effect": "+3 à la limite d'encombrement" }
+    ]
+  },
+  {
+    "key": "magie",
+    "label": "Magie",
+    "description": "Le personnage peut à tout moment réaliser l'impossible. Il est capable de faire appel à la magie des saisons et à la magie rituelle. Choisir ce type implique de sélectionner les sortilèges que le personnage peut utiliser.",
+    "advantages": [
+      { "name": "Volonté", "effect": "+4 PE" },
+      { "name": "Grimoire", "effect": "Accès aux sorts de magie rituelle" },
+      { "name": "Lié aux saisons", "effect": "Accès à la magie des saisons" }
+    ]
+  }
+]

@@ -1,0 +1,190 @@
+[
+  {
+    "key": "artisan",
+    "label": "Artisan",
+    "description": "Ces spécialistes savent créer tout ce qui est joli, efficace ou simplement pratique. En voyage, ils n'ont pas leur pareil pour réparer tout ce qui finit toujours par casser.",
+    "recommendedForBeginners": false,
+    "requiresSpecialty": true,
+    "specialtyLabel": "Type d'objet de spécialité",
+    "occupations": ["Cordonnier", "Cuisinier", "Forgeron", "Tailleur"],
+    "actions": ["Assembler", "Construire", "Coudre", "Fabriquer", "Forger", "Préparer", "Réparer"],
+    "talents": [
+      { "id": "creation", "name": "Création", "effect": { "description": "Fabrique un objet du type choisi lors de l'obtention de ce talent", "conditions": "Durée: encombrement de l'objet en jours. Coût: moitié de son prix." }, "attributes": ["VIG", "AGI"], "difficulty": "variable", "description": "Les artisans gagnent leur vie en créant des objets de tout type : beaux, pratiques, efficaces, etc. Avec assez de matériel et de temps, ils sont même capables de les fabriquer sur la route. Après un échec, utiliser ce talent à nouveau prend du temps, mais n'engendre pas de coût supplémentaire." },
+      { "id": "reparation", "name": "Réparation", "effect": { "description": "Répare un objet", "conditions": "Durée: encombrement de l'objet en heures. Coût: 10% de son prix." }, "attributes": ["VIG", "AGI"], "difficulty": "variable", "description": "Les artisans savent réparer les objets qui ont été endommagés, même lorsque ceux-ci ne correspondent pas à leur spécialité. La résistance de l'équipement réparé revient alors à son maximum." },
+      { "id": "transformation", "name": "Transformation", "effect": { "description": "Transforme une dépouille", "conditions": "Avoir accès à la dépouille d'un monstre." }, "attributes": ["AGI", "INT"], "difficulty": "2×niveau du monstre", "description": "Les artisans savent utiliser les dépouilles des monstres pour en tirer des ressources insoupçonnées. Le résultat de cette opération est indiqué dans la description du monstre." }
+    ]
+  },
+  {
+    "key": "chasseur",
+    "label": "Chasseur",
+    "description": "Les chasseurs abattent leurs proies grâce à leurs connaissances et à leur technique. Ils savent toujours où trouver de la nourriture, quitte à manger un monstre.",
+    "recommendedForBeginners": true,
+    "requiresSpecialty": false,
+    "occupations": ["Barbare", "Chasseur de monstres", "Pisteur", "Trappeur"],
+    "actions": ["Capturer", "Chasser", "Écorcher", "Pêcher", "Piéger", "Pister", "Traquer"],
+    "talents": [
+      { "id": "chasse", "name": "Chasse", "effect": { "description": "Nourrit autant de personnes que le résultat du test, ne peut pas aider à monter le campement", "conditions": "Avant le test de campement. Une fois par jour." }, "attributes": ["AGI", "INT"], "difficulty": "Paysage", "description": "Les chasseurs se sont fait une spécialité de ramener des animaux sauvages pour nourrir leurs compagnons. Ce talent s'utilise juste avant le test de campement. Plus le résultat est bon, plus il y a de nourriture disponible." },
+      { "id": "transformation", "name": "Transformation", "effect": { "description": "Transforme la dépouille d'un monstre en matériel selon son profil", "conditions": "Avoir accès à la dépouille d'un monstre." }, "attributes": ["AGI", "INT"], "difficulty": "2×niveau du monstre", "description": "Les chasseurs savent utiliser les dépouilles des monstres pour en tirer des ressources insoupçonnées. Le résultat de cette opération est indiqué dans la description du monstre." },
+      { "id": "traque", "name": "Traque", "effect": { "description": "Découvre un monstre et inflige +1 dégâts contre lui", "conditions": "Avoir découvert les traces d'un monstre." }, "attributes": ["VIG", "INT"], "difficulty": "Paysage", "description": "Les chasseurs savent remonter les traces d'un type de monstre particulier (œufs vivants, bêtes ou plantes fantastiques, etc.). Ils peuvent ainsi retrouver leur antre et bénéficier d'un bonus de +1 aux dégâts contre ceux qui s'y terrent." }
+    ]
+  },
+  {
+    "key": "fermier",
+    "label": "Fermier",
+    "description": "Vivant en accord avec la nature, les fermiers ont généralement un métier d'appoint. D'une part il garantit leur pitance, et d'autre part il leur permet d'être très polyvalents.",
+    "recommendedForBeginners": false,
+    "requiresSpecialty": false,
+    "occupations": ["Agriculteur", "Berger", "Éleveur", "Paysan", "Villageois"],
+    "actions": ["Cultiver", "Élever", "Labourer", "Prendre soin d'un animal", "Récolter", "Semer", "Transporter"],
+    "requiredChoices": [
+      { "key": "fermier-metier-appoint", "talentId": "metier-d-appoint", "kind": "eligible-talent", "label": "Talent emprunté (Métier d'appoint)" }
+    ],
+    "talents": [
+      { "id": "dressage", "name": "Dressage", "effect": { "description": "Peut avoir deux animaux supplémentaires sans dépense d'eau/vivres", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Les fermiers ont l'habitude d'utiliser des animaux pour porter leurs marchandises ou effectuer des travaux. Ils savent s'en occuper et peuvent donc être accompagnés de plus d'animaux que la plupart des voyageurs." },
+      { "id": "metier-d-appoint", "name": "Métier d'appoint", "effect": { "description": "Peut posséder un talent d'une autre classe impliquant un test, avec un malus de -1", "conditions": "Selon talent" }, "attributes": [], "difficulty": "-", "description": "Les fermiers n'ont pas une vie facile. La plupart ne peuvent se contenter des revenus de l'élevage ou de leurs champs et doivent exercer un métier d'appoint afin de pouvoir manger à leur faim. Un fermier peut donc choisir à la création un talent normalement réservé à une autre classe à condition que celui-ci implique un test. Toutefois, n'étant pas un spécialiste, il subit alors un malus de -1 à ce dernier." },
+      { "id": "robuste", "name": "Robuste", "effect": { "description": "+1 aux tests de condition, +3 à la limite d'équipement transportable", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Les fermiers ont généralement une très bonne condition physique grâce à leur vie réglée sur le rythme de la nature. De plus ils sont habitués aux travaux pénibles et rigoureux, et peuvent donc porter plus d'équipement que leurs compagnons." }
+    ]
+  },
+  {
+    "key": "guerisseur",
+    "label": "Guérisseur",
+    "description": "Respectés de tous, les guérisseurs soignent les maladies et referment les blessures. Tout le monde préfère en avoir un à ses côtés lors des coups durs.",
+    "recommendedForBeginners": true,
+    "requiresSpecialty": false,
+    "occupations": ["Herboriste", "Médecin", "Rebouteux", "Soigneur"],
+    "actions": ["Apaiser", "Cueillir", "Diagnostiquer", "Guérir", "Opérer", "Soigner", "Veiller sur quelqu'un"],
+    "talents": [
+      { "id": "elixir-miracle", "name": "Elixir miracle", "effect": { "description": "Annule un état pendant une heure et baisse sa difficulté du niveau de l'utilisateur", "conditions": "La cible subit un état et n'a pas reçu d'elixir aujourd'hui." }, "attributes": ["INT", "ESP"], "difficulty": "Difficulté de l'état", "description": "Grâce à des remèdes de leur fabrication, les guérisseurs peuvent soulager temporairement un état dont souffre un personnage, voire même le soigner partiellement ou le faire disparaître. Un personnage ne peut bénéficier d'un Elixir miracle qu'une fois par jour." },
+      { "id": "herboristerie", "name": "Herboristerie", "effect": { "description": "Obtient une unité d'herbe de soins", "conditions": "Après le test de campement. Une fois par jour." }, "attributes": ["VIG", "INT"], "difficulty": "Paysage", "description": "Les guérisseurs sont des spécialistes des plantes médicinales et savent toujours comment en dénicher. Les herbes fanent en un jour, mais peuvent être conservées une semaine dans une bouteille d'herboriste." },
+      { "id": "soins", "name": "Soins", "effect": { "description": "Soigne des PV égaux au résultat du test", "conditions": "Dépenser une unité d'herbes de soins et une unité d'eau." }, "attributes": ["INT", "ESP"], "difficulty": "Réussite automatique", "description": "Les guérisseurs utilisent des plantes et de l'eau afin de créer de puissants remèdes pour leurs compagnons. Le type de plante médicinale utilisée importe peu. La guérison se fait en quelques minutes." }
+    ]
+  },
+  {
+    "key": "marchand",
+    "label": "Marchand",
+    "description": "Ces commerçants itinérants échangent contre menue monnaie des produits d'origines diverses. Ils savent toujours dénicher ou provoquer les bonnes affaires.",
+    "recommendedForBeginners": true,
+    "requiresSpecialty": false,
+    "occupations": ["Caravanier", "Commerçant", "Entrepreneur", "Forain", "Marchand itinérant", "Négociant"],
+    "actions": ["Acheter", "Échanger", "Économiser", "Négocier", "Rationner", "Transporter", "Vendre"],
+    "talents": [
+      { "id": "commerce", "name": "Commerce", "effect": { "description": "Achète/vend des articles à un prix modifié (variation selon le résultat du test)", "conditions": "Négocier au moins 4 objets du même type." }, "attributes": ["INT", "ESP"], "difficulty": "variable (cf. tableau de variation du prix)", "description": "Les marchands achètent des articles en nombre pour les obtenir à vil prix et ainsi les revendre bien plus cher. Il est impossible d'annuler la transaction et les articles ne peuvent être revendus dans la même ville." },
+      { "id": "dressage", "name": "Dressage", "effect": { "description": "Peut avoir deux animaux supplémentaires sans dépense d'eau/vivres", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Les marchands ont l'habitude d'utiliser des animaux pour porter leurs marchandises ou effectuer des travaux. Ils savent s'en occuper et peuvent donc être accompagnés de plus d'animaux que la plupart des voyageurs." },
+      { "id": "eloquence", "name": "Éloquence", "effect": { "description": "+1 sur tous les tests de négociation", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Les marchands n'ont pas leur pareil quand il s'agit de convaincre quelqu'un ou de réaliser une transaction." }
+    ]
+  },
+  {
+    "key": "menestrel",
+    "label": "Ménestrel",
+    "description": "Les plus voyageurs des voyageurs. Ils vont de ville en ville et offrent leurs services. Leur musique est une source d'inspiration pour tous leurs compagnons.",
+    "recommendedForBeginners": true,
+    "requiresSpecialty": false,
+    "occupations": ["Acrobate", "Artiste itinérant", "Danseur", "Musicien", "Troubadour"],
+    "actions": ["Chanter", "Conter", "Créer", "Danser", "Faire des représentations", "Jouer de la musique"],
+    "talents": [
+      { "id": "legendes", "name": "Légendes", "effect": { "description": "Obtient des informations précises sur un sujet évoqué", "conditions": "Un sujet spécifique est évoqué devant le personnage." }, "attributes": ["INT", "INT"], "difficulty": "Au choix du meneur", "description": "Les ménestrels apprennent beaucoup de choses via d'anciennes chansons ou d'heureuses rencontres." },
+      { "id": "melodies", "name": "Mélodies", "effect": { "description": "+1 à tous les tests des compagnons après utilisation de la mélodie (sauf condition/initiative)", "conditions": "Être dans le paysage ou le climat de la mélodie. Dépenser 1 PV." }, "attributes": ["AGI", "ESP"], "difficulty": "Paysage", "description": "Les ménestrels savent se servir de leur musique pour exalter leurs compagnons ou leur remonter le moral. Une fois par partie, le personnage peut se souvenir d'une mélodie liée au climat/paysage déjà traversé." },
+      { "id": "voyages", "name": "Voyages", "effect": { "description": "+1 sur tous les tests de voyage (déplacement, orientation, campement...)", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Les ménestrels gagnent leur vie en voyageant. Ils savent comment se fatiguer le moins possible." }
+    ]
+  },
+  {
+    "key": "noble",
+    "label": "Noble",
+    "description": "Les nobles sont nés pour diriger les masses. Éduqués, connaissant les armes comme l'étiquette, tout est plus facile pour eux. Tout, sauf la vie en extérieur...",
+    "recommendedForBeginners": false,
+    "requiresSpecialty": false,
+    "occupations": ["Chevalier", "Dame de compagnie", "Ministre", "Prince", "Samouraï", "Seigneur"],
+    "actions": ["Célébrer", "Commander", "Corrompre", "Diriger", "Juger", "Protéger", "S'amuser", "Se battre"],
+    "talents": [
+      { "id": "erudition", "name": "Érudition", "effect": { "description": "Obtient des informations précises sur un sujet évoqué", "conditions": "Un sujet spécifique est évoqué devant le personnage." }, "attributes": ["INT", "INT"], "difficulty": "Au choix du meneur", "description": "Les nobles apprennent beaucoup de choses dans de nombreux domaines via les futilités de la haute société ou grâce au bourrage de crâne de leur précepteur. Mais rien de ce qui relève de la sagesse populaire..." },
+      { "id": "escrime", "name": "Escrime", "effect": { "description": "Ajoute une arme favorite supplémentaire (arc/épée longue/lance), +1 pour toucher si répété", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Les nobles apprennent le métier des armes essentiellement grâce à des joutes amicales ou à des entraînements prodigués par leur professeur particulier." },
+      { "id": "etiquette", "name": "Étiquette", "effect": { "description": "Impressionne un interlocuteur de haute naissance (test en opposition)", "conditions": "-" }, "attributes": ["AGI", "INT"], "difficulty": "Test en opposition", "description": "Les nobles connaissent les arcanes de protocole qui n'ont cours que parmi ceux de leur rang. En remportant un test opposé de ce talent, ils peuvent impressionner un autre personnage issu de la haute société." }
+    ]
+  },
+  {
+    "key": "dresseur",
+    "label": "Dresseur",
+    "description": "Les dresseurs regroupent différentes catégories de personnes qui ont appris à vivre auprès des monstres et à les apprivoiser au moins partiellement. Leur nom, leur occupation, ainsi que leur attitude et celle des populations rencontrées dépendent du type de créature dont ils se font une spécialité : botarcaniste (plantes fantastiques), démoniste (démons), dompteur (bêtes fantastiques), mathémagicien (créations magiques), nécromant (morts-vivants), etc.",
+    "recommendedForBeginners": false,
+    "requiresSpecialty": false,
+    "occupations": ["Botarcaniste", "Démoniste", "Dompteur", "Mathémagicien", "Nécromant"],
+    "actions": ["Apprivoiser", "Capturer", "Dompter", "Dresser", "Interdire", "Récompenser"],
+    "requiredChoices": [
+      { "key": "dresseur-autorite", "talentId": "autorite", "kind": "closed-list", "label": "Type de créature (Autorité)", "options": [
+        { "value": "animaux", "label": "Animaux" },
+        { "value": "plantes-fantastiques", "label": "Plantes fantastiques" },
+        { "value": "creations-magiques", "label": "Créations magiques" },
+        { "value": "demons", "label": "Démons" },
+        { "value": "morts-vivants", "label": "Morts-vivants" }
+      ] }
+    ],
+    "talents": [
+      { "id": "autorite", "name": "Autorité", "effect": { "description": "Amadoue, intimide ou contrôle un monstre du type de créature choisi (ou obtient le sort de magie rituelle Dressage)", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Les dresseurs choisissent un type de créature parmi les suivantes : animaux, plantes fantastiques, créations magiques, démons, morts-vivants. Ils sont capables de les amadouer, de les intimider et de les contrôler au moins partiellement." },
+      { "id": "dressage", "name": "Dressage", "effect": { "description": "Peut avoir deux animaux supplémentaires sans dépense d'eau/vivres", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Les dresseurs ont l'habitude d'utiliser des animaux pour porter leurs marchandises ou effectuer des travaux. Ils savent s'en occuper et peuvent donc être accompagnés de plus d'animaux que la plupart des voyageurs." },
+      { "id": "invocation", "name": "Invocation", "effect": { "description": "Fait apparaître une combinaison de monstres du type choisi, dans la limite du niveau du personnage", "conditions": "Coût: 1 heure et 1PV par niveau de monstre." }, "attributes": [], "difficulty": "-", "description": "Qu'ils utilisent la magie ou leurs simples expériences, les dresseurs peuvent attirer, invoquer ou créer un nombre de monstres dépendant de leur niveau et correspondant à leur type de prédilection." }
+    ]
+  },
+  {
+    "key": "ermite",
+    "label": "Ermite",
+    "description": "Ces hommes étranges vivent à l'écart des cités et au plus près de la nature. Fous ou sages, ils connaissent des secrets que l'on croyait perdus pour toujours.",
+    "recommendedForBeginners": false,
+    "requiresSpecialty": false,
+    "occupations": ["Ermite", "Idiot du village", "Illuminé", "Penseur", "Sage"],
+    "actions": ["Arriver là où on ne l'attend pas", "Dévoiler la vérité", "Marmonner", "Méditer", "Raconter une histoire oubliée", "S'isoler"],
+    "requiredChoices": [
+      { "key": "ermite-metier-appoint", "talentId": "metier-d-appoint", "kind": "eligible-talent", "label": "Talent emprunté (Métier d'appoint)" },
+      { "key": "ermite-metamorphose", "talentId": "metamorphose", "kind": "landscape-flavor", "label": "Type de paysage (Métamorphose)" }
+    ],
+    "talents": [
+      { "id": "metamorphose", "name": "Métamorphose", "effect": { "description": "Se transforme en n'importe quel animal vivant sur le paysage choisi ; perd la moitié de sa condition à chaque changement de forme", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Lors de l'acquisition de ce talent, les ermites doivent choisir un type de paysage (sans doute celui où ils ont établi leur retraite). Ils ont une telle connexion avec les dragons de ce paysage qu'ils peuvent comprendre une partie de leur pouvoir et se métamorphoser en animal." },
+      { "id": "mysteres", "name": "Mystères", "effect": { "description": "Obtient des informations qu'aucun compagnon n'a pu obtenir, avec un bonus par test/talent ayant échoué", "conditions": "Un sujet spécifique est évoqué devant le personnage." }, "attributes": ["INT", "INT"], "difficulty": "Au choix du meneur", "description": "Même s'ils vivent reclus, les ermites connaissent des choses qui échappent à la plupart de leurs contemporains. Personne ne sait s'ils doivent cela à une infime sagesse ou à de la folie douce, mais ils semblent être les meilleurs pour répondre aux questions que personne ne se pose." },
+      { "id": "metier-d-appoint", "name": "Métier d'appoint", "effect": { "description": "Peut posséder un talent d'une autre classe impliquant un test, avec un malus de -1", "conditions": "Selon talent" }, "attributes": [], "difficulty": "-", "description": "Les ermites ont eu une vie avant de choisir de se retirer. Même s'ils n'ont plus guère l'occasion de s'exercer, ils n'ont toutefois pas tout oublié de ce qui faisait leur quotidien. Un ermite peut donc choisir à la création un talent normalement réservé à une autre classe à condition que celui-ci implique un test. Toutefois, étant un peu rouillé, il subit un malus de -1 à ce dernier." }
+    ]
+  },
+  {
+    "key": "meteomancien",
+    "label": "Météomancien",
+    "description": "Les météomanciens sont des magiciens spécialisés dans les prédictions météorologiques. Leurs services sont courus par tous : fermiers, marins, voyageurs.",
+    "recommendedForBeginners": false,
+    "requiresSpecialty": false,
+    "occupations": ["Chaman", "Devin", "Météomancien", "Météorologue"],
+    "actions": ["Analyser", "Calculer la vitesse du vent", "Faire des relevés", "Mettre en garde", "Observer des nuages", "Prévoir", "Prendre des notes"],
+    "requiredChoices": [
+      { "key": "meteomancien-climatophile", "talentId": "climatophile", "kind": "landscape-capability", "label": "Climat favori supplémentaire (Climatophile)" }
+    ],
+    "talents": [
+      { "id": "climatophile", "name": "Climatophile", "effect": { "description": "+2 aux tests dont la difficulté dépend d'un climat favori supplémentaire", "conditions": "Être confronté à son climat favori." }, "attributes": [], "difficulty": "-", "description": "Les météomanciens ont tous des climats qu'ils préfèrent étudier lorsqu'ils y sont confrontés, ils se sentent galvanisés et ont même parfois du mal à tempérer leur enthousiasme." },
+      { "id": "impermeable", "name": "Imperméable", "effect": { "description": "Ignore le modificateur du climat sur un test en dépensant un point de maladresse ou la moitié de ses PE actuels", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Les météomanciens sont habitués au mauvais temps. Ils passent l'essentiel de leur apprentissage à voyager pour se confronter aux climats les plus rudes. Ils savent en minimiser les effets." },
+      { "id": "previsions", "name": "Prévisions", "effect": { "description": "Prédit le temps qu'il fera à un moment et un lieu donnés", "conditions": "Durée: niveau du paysage en heures." }, "attributes": ["INT", "ESP"], "difficulty": "Paysage ciblé", "description": "Qu'ils utilisent la magie, des grenouilles, des instruments complexes ou leur simple connaissance des dragons du climat, tous les météomanciens sont formés à prédire le temps qu'il va faire. Rien de tel pour pouvoir préparer ses voyages." }
+    ]
+  },
+  {
+    "key": "navigateur",
+    "label": "Navigateur",
+    "description": "Ces marins passent plus de la moitié de leur vie en mer. À bord de leur navire, ils mènent les voyageurs vers de nouvelles terres pleines d'aventures.",
+    "recommendedForBeginners": false,
+    "requiresSpecialty": false,
+    "occupations": ["Amiral", "Capitaine", "Marin", "Mousse", "Pirate"],
+    "actions": ["Boire", "Commander", "Faire le point", "Hisser les voiles", "Monter au mât", "Naviguer"],
+    "talents": [
+      { "id": "boit-sans-soif", "name": "Boit-sans-soif", "effect": { "description": "Considéré en pleine forme dès 9 (8 si pris deux fois) au test de condition s'il a bu de l'alcool la veille ; peut se passer d'eau", "conditions": "Avoir bu de l'alcool le jour précédent." }, "attributes": [], "difficulty": "-", "description": "Les navigateurs sont capables de boire de l'alcool comme du petit lait. Lors des longues traversées, l'eau douce croupit bien trop vite et il devient alors plus sûr d'étancher sa soif avec de l'alcool." },
+      { "id": "navigation", "name": "Navigation", "effect": { "description": "Teste la navigation en VIG+INT ; +2 aux tests d'orientation sur terre ou en mer (+3 si pris deux fois)", "conditions": "-" }, "attributes": ["VIG", "INT"], "difficulty": "Paysage", "description": "Même loin des terres, les navigateurs savent se repérer, calculer leur route. Ils connaissent leurs navires sur le bout des doigts et peuvent anticiper son comportement." },
+      { "id": "reparation", "name": "Réparation", "effect": { "description": "Répare un objet, sa résistance revient à son maximum", "conditions": "Durée: encombrement de l'objet en heures (cf. p. 44 Livre de Base). Coût: 10% du prix." }, "attributes": ["VIG", "AGI"], "difficulty": "variable (cf. tableau de prix)", "description": "Les navigateurs savent réparer les objets qui ont été endommagés, quelle que soit leur catégorie. La résistance de l'équipement réparé revient alors à son maximum." }
+    ]
+  },
+  {
+    "key": "professeur",
+    "label": "Professeur",
+    "description": "Les professeurs ont accumulé de nombreuses connaissances. Ils ne vivent désormais plus que pour transmettre, à moins qu'ils ne voyagent pour en acquérir de nouvelles.",
+    "recommendedForBeginners": false,
+    "requiresSpecialty": false,
+    "occupations": ["Chaperon", "Conseiller", "Instituteur", "Maître", "Précepteur", "Professeur"],
+    "actions": ["Conseiller", "Enseigner", "Expliquer", "Montrer", "Reprocher", "Révéler", "Sermonner"],
+    "talents": [
+      { "id": "consignes", "name": "Consignes", "effect": { "description": "Donne des consignes à un compagnon (bonus au test ou dé forcé au maximum, réussite critique ignorée) en dépensant la moitié de ses PE", "conditions": "Pouvoir communiquer avec son compagnon." }, "attributes": [], "difficulty": "-", "description": "Lorsqu'ils ont le temps de bien encadrer leurs disciples et que ceux-ci décident de les écouter, les professeurs savent comment sublimer leur potentiel. Ou au moins les aider à limiter la casse." },
+      { "id": "erudition", "name": "Érudition", "effect": { "description": "Obtient des informations précises sur un sujet évoqué", "conditions": "Un sujet spécifique est évoqué devant le personnage." }, "attributes": ["INT", "INT"], "difficulty": "Au choix du meneur", "description": "Les professeurs connaissent beaucoup de choses dans de nombreux domaines. Ils n'hésitent pas à bourrer le crâne de leurs élèves avec, même si tout ne se révèle pas toujours utile." },
+      { "id": "sermon", "name": "Sermon", "effect": { "description": "Sur un double 1, tous les voyageurs gagnent un point de maladresse supplémentaire (deux si pris deux fois)", "conditions": "-" }, "attributes": [], "difficulty": "-", "description": "Les professeurs ne sont pas toujours des compagnons très agréables. Ils passent plus de temps à vous reprocher vos erreurs qu'à faire quoi que ce soit et ils se croient obligés de vous expliquer ce que vous auriez dû faire. C'est à peine si on s'aperçoit que l'on apprend beaucoup à leurs contacts." }
+    ]
+  }
+]

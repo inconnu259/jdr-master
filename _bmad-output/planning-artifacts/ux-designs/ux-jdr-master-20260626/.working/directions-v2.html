@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JDR Master — Directions visuelles v2</title>
+<style>
+  /* === PAGE WRAPPER === */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #111;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #e0e0e0;
+    padding: 40px 20px 80px;
+    min-height: 100vh;
+  }
+  h1.page-title {
+    text-align: center;
+    font-size: 22px;
+    font-weight: 500;
+    color: #ccc;
+    margin-bottom: 8px;
+    letter-spacing: 0.05em;
+  }
+  p.page-sub {
+    text-align: center;
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 48px;
+  }
+
+  /* === LAYOUT 3 COLUMNS === */
+  .directions-row {
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .direction-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 375px;
+    flex-shrink: 0;
+  }
+  .direction-label {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .direction-rationale {
+    font-size: 12px;
+    line-height: 1.6;
+    color: #888;
+    text-align: center;
+    margin-bottom: 20px;
+    max-width: 340px;
+  }
+
+  /* === PHONE FRAME === */
+  .phone-frame {
+    width: 375px;
+    min-height: 667px;
+    border-radius: 40px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 0 0 8px #222, 0 0 0 10px #333, 0 24px 60px rgba(0,0,0,0.7);
+  }
+  .phone-notch {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 28px;
+    border-radius: 0 0 18px 18px;
+    z-index: 10;
+  }
+  .phone-screen {
+    width: 100%;
+    min-height: 667px;
+    padding-top: 36px;
+    overflow: hidden;
+  }
+
+  /* ============================================================
+     DIRECTION 1 — GRIMOIRE ÉMERAUDE
+     Fond: #0d0a14 (noir, pointe violette)
+     Fond carte: #1a1428
+     Accent 1: #7ec8a4 (vert sauge)
+     Accent 2: #9b6dff (violet lavande)
+     Bouton gradient: linear-gradient(135deg, #7ec8a4, #9b6dff)
+  ============================================================ */
+
+  .d1-screen {
+    background: #0d0a14;
+    color: #c8c0d8;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 0 0 24px 0;
+    min-height: 631px;
+  }
+  .d1-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid #1f1930;
+  }
+  .d1-campaign {
+    font-size: 18px;
+    font-weight: 600;
+    color: #f0ecff;
+    letter-spacing: 0.01em;
+  }
+  .d1-subtitle {
+    font-size: 12px;
+    color: #7ec8a4;
+    margin-top: 3px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .d1-body {
+    padding: 16px 16px 0;
+  }
+  .d1-card {
+    background: #1a1428;
+    border-radius: 14px;
+    padding: 14px 14px 12px;
+    margin-bottom: 10px;
+    border: 1px solid #261d3a;
+    position: relative;
+  }
+  .d1-date-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .d1-date {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e8e0ff;
+  }
+  .d1-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .d1-dot-ok { background: #7ec8a4; box-shadow: 0 0 6px #7ec8a480; }
+  .d1-dot-warn { background: #f0c040; }
+  .d1-dot-bad { background: #e07070; }
+  .d1-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 9px;
+  }
+  .d1-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+  .d1-badge-ok {
+    background: #102a1e;
+    color: #7ec8a4;
+    border: 1px solid #1e4532;
+  }
+  .d1-badge-warn {
+    background: #1e1a0d;
+    color: #c8a840;
+    border: 1px solid #3a2f0a;
+  }
+  .d1-badge-unknown {
+    background: #1c1828;
+    color: #9b6dff;
+    border: 1px solid #2d2048;
+  }
+  .d1-note {
+    font-size: 11px;
+    font-style: italic;
+    color: #9b6dff;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .d1-note-ok {
+    font-size: 11px;
+    font-style: italic;
+    color: #7ec8a4;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .d1-divider {
+    height: 1px;
+    background: #1f1930;
+    margin: 0 16px 14px;
+  }
+  .d1-footer {
+    padding: 0 16px;
+  }
+  .d1-cta {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, #7ec8a4, #9b6dff);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    margin-bottom: 12px;
+  }
+  .d1-footer-note {
+    font-size: 11px;
+    color: #5a4e6e;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .d1-footer-note span {
+    color: #9b6dff;
+  }
+  .d1-notch { background: #0d0a14; }
+
+  /* ============================================================
+     DIRECTION 2 — FORÊT ANCIENNE
+     Fond: #080f0a (noir quasi-pur, infime teinte verte)
+     Fond carte: #0f1a10 (légèrement plus clair)
+     Accent 1: #2ecc71 (vert émeraude)
+     Accent 2: #f0c040 (or doux)
+     Bouton gradient: linear-gradient(135deg, #2ecc71, #f0c040)
+  ============================================================ */
+
+  .d2-screen {
+    background: #080f0a;
+    color: #b8c8b0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 0 0 24px 0;
+    min-height: 631px;
+  }
+  .d2-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid #0d1e0f;
+    position: relative;
+  }
+  .d2-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #1a3a1e, transparent);
+  }
+  .d2-campaign {
+    font-size: 18px;
+    font-weight: 600;
+    color: #e8f4e0;
+  }
+  .d2-subtitle {
+    font-size: 12px;
+    color: #f0c040;
+    margin-top: 3px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .d2-body {
+    padding: 16px 16px 0;
+  }
+  .d2-card {
+    background: #0f1a10;
+    border-radius: 12px;
+    padding: 13px 13px 11px;
+    margin-bottom: 10px;
+    border: 1px solid #162818;
+  }
+  .d2-date-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 9px;
+  }
+  .d2-date {
+    font-size: 14px;
+    font-weight: 600;
+    color: #c8e8b8;
+  }
+  .d2-pip {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .d2-pip-ok { background: #2ecc71; }
+  .d2-pip-warn { background: #f0c040; }
+  .d2-pip-bad { background: #cc4444; }
+  .d2-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+  .d2-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+  .d2-badge-ok {
+    background: #0d2214;
+    color: #2ecc71;
+    border: 1px solid #1a4028;
+  }
+  .d2-badge-maybe {
+    background: #1e1a06;
+    color: #f0c040;
+    border: 1px solid #3a3010;
+  }
+  .d2-badge-no {
+    background: #200e0e;
+    color: #cc6666;
+    border: 1px solid #3a1818;
+  }
+  .d2-note {
+    font-size: 11px;
+    font-style: italic;
+    color: #f0c040;
+    line-height: 1.4;
+  }
+  .d2-note-ok {
+    font-size: 11px;
+    font-style: italic;
+    color: #2ecc71;
+    line-height: 1.4;
+  }
+  .d2-divider {
+    height: 1px;
+    background: #0d1e0f;
+    margin: 2px 16px 14px;
+  }
+  .d2-footer {
+    padding: 0 16px;
+  }
+  .d2-cta {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, #2ecc71, #f0c040);
+    color: #0a1a0a;
+    font-size: 15px;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    margin-bottom: 12px;
+  }
+  .d2-footer-note {
+    font-size: 11px;
+    color: #3a5c3a;
+    text-align: center;
+    line-height: 1.5;
+  }
+  .d2-footer-note span {
+    color: #f0c040;
+  }
+  .d2-notch { background: #080f0a; }
+
+  /* ============================================================
+     DIRECTION 3 — RUNES & PIERRE (Terminal RPG)
+     Fond: #0d0d0d (anthracite quasi-noir + radial subtil)
+     Fond lignes: aucune card ronde — lignes fines à la place
+     Accent: #39ff14 (vert néon)
+     Style: terminal hacker, typographie monospace, brutaliste
+  ============================================================ */
+
+  .d3-screen {
+    background: #0d0d0d;
+    background-image:
+      radial-gradient(ellipse at 50% 0%, #0a1a0a 0%, transparent 60%);
+    color: #39ff14;
+    font-family: 'Courier New', 'Consolas', monospace;
+    padding: 0 0 24px 0;
+    min-height: 631px;
+  }
+  .d3-scanlines {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 0, 0, 0.15) 2px,
+      rgba(0, 0, 0, 0.15) 4px
+    );
+    pointer-events: none;
+    z-index: 5;
+    border-radius: 40px;
+  }
+  .d3-header {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid #1a3a1a;
+    position: relative;
+  }
+  .d3-sys-line {
+    font-size: 9px;
+    color: #2a6a2a;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .d3-sys-line::before {
+    content: '> ';
+    color: #39ff14;
+  }
+  .d3-campaign {
+    font-size: 17px;
+    font-weight: 700;
+    color: #39ff14;
+    letter-spacing: 0.04em;
+    text-shadow: 0 0 8px #39ff1440;
+  }
+  .d3-subtitle {
+    font-size: 10px;
+    color: #2a6a2a;
+    margin-top: 2px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .d3-subtitle::before { content: '// '; }
+  .d3-body {
+    padding: 12px 16px 0;
+  }
+  .d3-section-label {
+    font-size: 9px;
+    color: #2a6a2a;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #1a3a1a;
+    padding-bottom: 4px;
+  }
+  .d3-section-label::before { content: '[ '; }
+  .d3-section-label::after { content: ' ]'; }
+  .d3-slot {
+    border-top: 1px solid #1a3a1a;
+    padding: 10px 0 8px;
+    position: relative;
+  }
+  .d3-slot:first-of-type {
+    border-top: none;
+  }
+  .d3-slot-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .d3-slot-date {
+    font-size: 13px;
+    font-weight: 700;
+    color: #39ff14;
+    letter-spacing: 0.02em;
+  }
+  .d3-slot-status {
+    font-size: 10px;
+    color: #2a6a2a;
+    letter-spacing: 0.06em;
+  }
+  .d3-roster {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px;
+    margin-bottom: 6px;
+  }
+  .d3-roster-item {
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: #2a6a2a;
+  }
+  .d3-roster-item.ok { color: #39ff14; }
+  .d3-roster-item.warn { color: #f0c040; }
+  .d3-roster-item.no { color: #cc4444; }
+  .d3-roster-item::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 1px;
+    flex-shrink: 0;
+  }
+  .d3-roster-item.ok::before { background: #39ff14; box-shadow: 0 0 4px #39ff14; }
+  .d3-roster-item.warn::before { background: #f0c040; }
+  .d3-roster-item.no::before { background: #cc4444; }
+  .d3-slot-note {
+    font-size: 10px;
+    color: #4a9a4a;
+    font-style: italic;
+    border-left: 2px solid #1a4a1a;
+    padding-left: 7px;
+    line-height: 1.4;
+  }
+  .d3-slot-note.all-ok {
+    border-left-color: #39ff14;
+    color: #39ff14;
+  }
+  .d3-slot-note.bad {
+    border-left-color: #cc4444;
+    color: #cc6666;
+  }
+  .d3-divider {
+    height: 1px;
+    background: linear-gradient(90deg, #39ff1420, #39ff1440, #39ff1420);
+    margin: 2px 0 12px;
+  }
+  .d3-footer {
+    padding: 0 16px;
+  }
+  .d3-cta {
+    display: block;
+    width: 100%;
+    padding: 13px;
+    border-radius: 0;
+    border: 1px solid #39ff14;
+    background: transparent;
+    color: #39ff14;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    text-shadow: 0 0 8px #39ff1460;
+    box-shadow: 0 0 10px #39ff1420, inset 0 0 10px #39ff1408;
+  }
+  .d3-cta::before { content: '> '; }
+  .d3-cta::after { content: ' <'; }
+  .d3-footer-note {
+    font-size: 10px;
+    color: #2a5a2a;
+    text-align: center;
+    line-height: 1.5;
+    letter-spacing: 0.02em;
+  }
+  .d3-footer-note span {
+    color: #f0c040;
+  }
+  .d3-notch { background: #0d0d0d; }
+  .d3-cursor {
+    display: inline-block;
+    width: 7px;
+    height: 12px;
+    background: #39ff14;
+    vertical-align: text-bottom;
+    animation: blink 1.1s step-end infinite;
+    margin-left: 2px;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">JDR Master — Directions visuelles v2</h1>
+<p class="page-sub">Vue mobile "Trouver une date" — MJ view — 375px · Dark mode</p>
+
+<div class="directions-row">
+
+  <!-- ============================
+       DIRECTION 1 — GRIMOIRE ÉMERAUDE
+  ============================= -->
+  <div class="direction-col">
+    <div class="direction-label" style="color: #9b6dff;">✦ Direction 1 — Grimoire Émeraude</div>
+    <p class="direction-rationale">
+      Fond quasi-noir à pointe violette (#0d0a14), cartes légèrement surélevées (#1a1428).
+      Vert sauge + lavande en alternance sur les emphases. Gradient sur le CTA.
+      Élégant, fantastique doux — comme un grimoire enchanté.
+    </p>
+    <div class="phone-frame">
+      <div class="phone-notch d1-notch"></div>
+      <div class="phone-screen d1-screen">
+
+        <!-- Header -->
+        <div class="d1-header">
+          <div class="d1-campaign">Draconis — Campagne des Ombres</div>
+          <div class="d1-subtitle">Prochaines fenêtres d'aventure</div>
+        </div>
+
+        <!-- Cards -->
+        <div class="d1-body">
+
+          <!-- Créneau 1 -->
+          <div class="d1-card">
+            <div class="d1-date-row">
+              <div class="d1-date">Vendredi 4 juillet — Soirée</div>
+              <div class="d1-status-dot d1-dot-warn"></div>
+            </div>
+            <div class="d1-badges">
+              <span class="d1-badge d1-badge-ok">✅ Arek ⚔️</span>
+              <span class="d1-badge d1-badge-ok">✅ Lyra 🧝</span>
+              <span class="d1-badge d1-badge-ok">✅ Borin 🪓</span>
+              <span class="d1-badge d1-badge-unknown">⚠️ Mira</span>
+            </div>
+            <div class="d1-note">Le pigeon voyageur n'est pas encore rentré au pigeonnier…</div>
+          </div>
+
+          <!-- Créneau 2 -->
+          <div class="d1-card">
+            <div class="d1-date-row">
+              <div class="d1-date">Samedi 12 juillet — Soirée</div>
+              <div class="d1-status-dot d1-dot-ok"></div>
+            </div>
+            <div class="d1-badges">
+              <span class="d1-badge d1-badge-ok">✅ Arek ⚔️</span>
+              <span class="d1-badge d1-badge-ok">✅ Lyra 🧝</span>
+              <span class="d1-badge d1-badge-ok">✅ Borin 🪓</span>
+              <span class="d1-badge d1-badge-ok">✅ Mira 🔮</span>
+            </div>
+            <div class="d1-note-ok">Tous les héros sont libres ! Rare exploit — le destin est de leur côté.</div>
+          </div>
+
+          <!-- Créneau 3 -->
+          <div class="d1-card">
+            <div class="d1-date-row">
+              <div class="d1-date">Vendredi 18 juillet — Soirée</div>
+              <div class="d1-status-dot d1-dot-bad"></div>
+            </div>
+            <div class="d1-badges">
+              <span class="d1-badge d1-badge-ok">✅ Arek ⚔️</span>
+              <span class="d1-badge d1-badge-warn">❌ Lyra 🧝</span>
+              <span class="d1-badge d1-badge-ok">✅ Borin 🪓</span>
+              <span class="d1-badge d1-badge-ok">✅ Mira 🔮</span>
+            </div>
+            <div class="d1-note">Lyra a une quête secondaire ce soir-là — impossible à annuler, dit-elle.</div>
+          </div>
+
+        </div>
+
+        <div class="d1-divider"></div>
+
+        <!-- Footer / CTA -->
+        <div class="d1-footer">
+          <button class="d1-cta">Convoquer le groupe</button>
+          <div class="d1-footer-note">
+            <span>Mira n'a pas encore déclaré ses indisponibilités</span><br>
+            — lui envoyer un corbeau ?
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================
+       DIRECTION 2 — FORÊT ANCIENNE
+  ============================= -->
+  <div class="direction-col">
+    <div class="direction-label" style="color: #2ecc71;">⬡ Direction 2 — Forêt Ancienne</div>
+    <p class="direction-rationale">
+      Fond quasi-pur à infime teinte verte (#080f0a), cartes discrètes (#0f1a10).
+      Vert émeraude pour les disponibilités, or pour les incertitudes.
+      Emphases alternées vert/or. Nature + magie, chaleureux mais sombre.
+    </p>
+    <div class="phone-frame">
+      <div class="phone-notch d2-notch"></div>
+      <div class="phone-screen d2-screen">
+
+        <!-- Header -->
+        <div class="d2-header">
+          <div class="d2-campaign">Draconis — Campagne des Ombres</div>
+          <div class="d2-subtitle">Prochaines fenêtres d'aventure</div>
+        </div>
+
+        <!-- Cards -->
+        <div class="d2-body">
+
+          <!-- Créneau 1 -->
+          <div class="d2-card">
+            <div class="d2-date-row">
+              <div class="d2-date">Vendredi 4 juillet — Soirée</div>
+              <div class="d2-pip d2-pip-warn"></div>
+            </div>
+            <div class="d2-badges">
+              <span class="d2-badge d2-badge-ok">✅ Arek ⚔️</span>
+              <span class="d2-badge d2-badge-ok">✅ Lyra 🧝</span>
+              <span class="d2-badge d2-badge-ok">✅ Borin 🪓</span>
+              <span class="d2-badge d2-badge-maybe">⚠️ Mira hésite (comme toujours)</span>
+            </div>
+            <div class="d2-note">Le pigeon voyageur a livré une réponse… illisible.</div>
+          </div>
+
+          <!-- Créneau 2 -->
+          <div class="d2-card">
+            <div class="d2-date-row">
+              <div class="d2-date">Samedi 12 juillet — Soirée</div>
+              <div class="d2-pip d2-pip-ok"></div>
+            </div>
+            <div class="d2-badges">
+              <span class="d2-badge d2-badge-ok">✅ Arek ⚔️</span>
+              <span class="d2-badge d2-badge-ok">✅ Lyra 🧝</span>
+              <span class="d2-badge d2-badge-ok">✅ Borin 🪓</span>
+              <span class="d2-badge d2-badge-ok">✅ Mira 🔮</span>
+            </div>
+            <div class="d2-note-ok">Tous les héros sont libres ! Rare exploit.</div>
+          </div>
+
+          <!-- Créneau 3 -->
+          <div class="d2-card">
+            <div class="d2-date-row">
+              <div class="d2-date">Vendredi 18 juillet — Soirée</div>
+              <div class="d2-pip d2-pip-bad"></div>
+            </div>
+            <div class="d2-badges">
+              <span class="d2-badge d2-badge-ok">✅ Arek ⚔️</span>
+              <span class="d2-badge d2-badge-no">❌ Lyra 🧝</span>
+              <span class="d2-badge d2-badge-ok">✅ Borin 🪓</span>
+              <span class="d2-badge d2-badge-ok">✅ Mira 🔮</span>
+            </div>
+            <div class="d2-note">Lyra a une quête secondaire ce soir-là — la guilde comprend, mais note l'absence.</div>
+          </div>
+
+        </div>
+
+        <div class="d2-divider"></div>
+
+        <!-- Footer / CTA -->
+        <div class="d2-footer">
+          <button class="d2-cta">⚔ Convoquer le groupe</button>
+          <div class="d2-footer-note">
+            Mira n'a toujours pas déclaré ses indispos —<br>
+            <span>lui envoyer un corbeau ?</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================
+       DIRECTION 3 — RUNES & PIERRE
+  ============================= -->
+  <div class="direction-col">
+    <div class="direction-label" style="color: #39ff14; text-shadow: 0 0 8px #39ff1480;">
+      &gt;_ Direction 3 — Runes &amp; Pierre
+    </div>
+    <p class="direction-rationale">
+      Terminal RPG brutaliste. Fond anthracite (#0d0d0d) + radial subtil.
+      Vert néon (#39ff14) exclusif, monospace, scanlines CSS, pas de cards arrondies —
+      lignes fines + bordures à angle droit. Interface "grimoire de données".
+    </p>
+    <div class="phone-frame">
+      <div class="d3-scanlines"></div>
+      <div class="phone-notch d3-notch"></div>
+      <div class="phone-screen d3-screen">
+
+        <!-- Header -->
+        <div class="d3-header">
+          <div class="d3-sys-line">SYSTÈME JDR-OS v3.7 // SESSION ACTIVE</div>
+          <div class="d3-campaign">DRACONIS // CAMPAGNE DES OMBRES<span class="d3-cursor"></span></div>
+          <div class="d3-subtitle">PROCHAINES FENÊTRES D'AVENTURE</div>
+        </div>
+
+        <!-- Slots (pas de cards rondes) -->
+        <div class="d3-body">
+          <div class="d3-section-label">CRÉNEAUX DISPONIBLES — 3 ENTRÉES</div>
+
+          <!-- Slot 1 -->
+          <div class="d3-slot">
+            <div class="d3-slot-header">
+              <span class="d3-slot-date">VEN 04/07 — SOIRÉE</span>
+              <span class="d3-slot-status">STATUS: PARTIEL</span>
+            </div>
+            <div class="d3-roster">
+              <span class="d3-roster-item ok">AREK ⚔️ CONFIRMÉ</span>
+              <span class="d3-roster-item ok">LYRA 🧝 CONFIRMÉE</span>
+              <span class="d3-roster-item ok">BORIN 🪓 PRÉSENT</span>
+              <span class="d3-roster-item warn">MIRA ??? EN ATTENTE</span>
+            </div>
+            <div class="d3-slot-note">Le pigeon voyageur n'a pas livré sa réponse. Mira n'a toujours pas donné signe de vie… la guilde s'impatiente.</div>
+          </div>
+
+          <!-- Slot 2 -->
+          <div class="d3-slot">
+            <div class="d3-slot-header">
+              <span class="d3-slot-date">SAM 12/07 — SOIRÉE</span>
+              <span class="d3-slot-status">STATUS: OPTIMAL</span>
+            </div>
+            <div class="d3-roster">
+              <span class="d3-roster-item ok">AREK ⚔️ CONFIRMÉ</span>
+              <span class="d3-roster-item ok">LYRA 🧝 CONFIRMÉE</span>
+              <span class="d3-roster-item ok">BORIN 🪓 PRÉSENT</span>
+              <span class="d3-roster-item ok">MIRA 🔮 CONFIRMÉE</span>
+            </div>
+            <div class="d3-slot-note all-ok">// TOUS LES HÉROS SONT LIBRES — RARE EXPLOIT. RECOMMANDÉ PAR L'ORACLE.</div>
+          </div>
+
+          <!-- Slot 3 -->
+          <div class="d3-slot">
+            <div class="d3-slot-header">
+              <span class="d3-slot-date">VEN 18/07 — SOIRÉE</span>
+              <span class="d3-slot-status">STATUS: DÉGRADÉ</span>
+            </div>
+            <div class="d3-roster">
+              <span class="d3-roster-item ok">AREK ⚔️ CONFIRMÉ</span>
+              <span class="d3-roster-item no">LYRA 🧝 INDISPONIBLE</span>
+              <span class="d3-roster-item ok">BORIN 🪓 PRÉSENT</span>
+              <span class="d3-roster-item ok">MIRA 🔮 CONFIRMÉE</span>
+            </div>
+            <div class="d3-slot-note bad">ERREUR: Lyra a une quête secondaire ce soir-là. Conflit d'agenda détecté.</div>
+          </div>
+
+        </div>
+
+        <div class="d3-divider"></div>
+
+        <!-- Footer / CTA -->
+        <div class="d3-footer">
+          <button class="d3-cta">LANCER LE VOTE DU CONSEIL</button>
+          <div class="d3-footer-note">
+            ALERTE: Mira n'a pas déclaré ses indispos —<br>
+            <span>ENVOYER UN CORBEAU ? [O/N]</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div><!-- .directions-row -->
+
+</body>
+</html>

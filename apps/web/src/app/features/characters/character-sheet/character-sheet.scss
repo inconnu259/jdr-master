@@ -264,3 +264,23 @@
   z-index: 199;
   background: rgba(0, 0, 0, 0.45);
 }
+
+// Story 31.2 — déclencheur de la surface de détail (talent/avantage/sort). Reset des styles de
+// bouton natif pour reprendre exactement l'apparence du <strong> qu'il remplace (AC7 : élément
+// interactif réel, mais visuellement identique à l'ancien texte inerte).
+.sheet__detail-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
+  }
+}

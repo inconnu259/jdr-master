@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Convention joueur / personnage — trois seconds signaux</title>
+<style>
+:root{
+  --primary-bg:#0d0a14;--surface-bg:#1a1428;--accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;--status-mixed:#f0a030;--status-unknown:#3a3a4a;
+  --status-unavailable:#e05252;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--radius-badge:6px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 var(--space-sm)}
+h3{font-size:var(--text-lg);margin:0 0 2px}
+.lede,.why{color:var(--text-muted);max-width:84ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--space-xl);align-items:start}
+.col > .sub{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-md);min-height:4.4em}
+.screen{background:var(--surface-bg);border-radius:var(--radius-card);box-shadow:var(--elev-card);
+  border:1px solid var(--border-subtle);margin-bottom:var(--space-md);overflow:hidden}
+.screen h4{margin:0;padding:var(--space-sm) var(--space-md);font-size:var(--text-sm);color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.07em;font-weight:500;border-bottom:1px solid var(--border-subtle);background:rgba(0,0,0,.2)}
+.line{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-sm) var(--space-md);
+  border-bottom:1px solid var(--border-subtle)}
+.line:last-child{border-bottom:none}
+.av{width:32px;height:32px;border-radius:8px;flex:none;display:grid;place-items:center;font-size:var(--text-sm);
+  font-weight:700;background:rgba(155,109,255,.18);color:var(--accent-2)}
+.txt{flex:1;min-width:0}
+.pc{color:var(--accent-1)}
+.pl{color:var(--text-muted)}
+.sub2{font-size:var(--text-sm)}
+.badge{font-size:var(--text-sm);padding:1px 7px;border-radius:var(--radius-badge);border:1px solid;white-space:nowrap}
+.b-ok{color:var(--accent-1);border-color:var(--accent-1);background:rgba(126,200,164,.13)}
+.b-no{color:var(--status-unavailable);border-color:var(--status-unavailable);background:rgba(224,82,82,.13)}
+.b-mid{color:var(--status-mixed);border-color:var(--status-mixed);background:rgba(240,160,48,.15)}
+.b-mj{color:var(--accent-2);border-color:var(--accent-2);background:rgba(155,109,255,.13)}
+.xp{font-size:var(--text-sm);color:var(--text-muted);border:1px solid var(--border-subtle);border-radius:6px;padding:2px 8px}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-sm)}
+.cost{color:var(--status-mixed)}
+.hard{border-color:var(--status-mixed)}
+/* — traitement A : typographie — */
+.a .pc{font-style:italic;font-weight:500}
+.a .pl{font-style:normal}
+/* — traitement B : icône — */
+.ic{width:13px;height:13px;vertical-align:-2px;margin-right:5px;flex:none}
+/* — traitement C : libellé — */
+.lbl{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted);
+  border:1px solid var(--border-subtle);border-radius:4px;padding:0 4px;margin-left:6px;vertical-align:1px}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <!-- personnage : écu -->
+  <g id="icPc"><path d="M8 1 L15 3.5 V8 C15 11.5 11.8 14.2 8 15 C4.2 14.2 1 11.5 1 8 V3.5 Z"
+    fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></g>
+  <!-- joueur : silhouette -->
+  <g id="icPl"><circle cx="8" cy="5" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <path d="M1.8 14.5 C1.8 10.6 4.6 9 8 9 C11.4 9 14.2 10.6 14.2 14.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></g>
+</defs></svg>
+
+<h1>Convention joueur / personnage — trois seconds signaux</h1>
+<p class="lede">Le personnage domine, comme tu l'as tranché : c'est lui qui porte la ligne, le joueur passe en second. La couleur ne fait que doubler le signal — vert sauge pour le personnage, gris pour le joueur — et ce sont les <strong>trois traitements ci-dessous</strong> qui portent réellement l'information, chacun appliqué aux mêmes quatre écrans. Le dernier écran de chaque colonne est le cas difficile : celui où il n'y a <em>qu'un</em> nom.</p>
+
+<div class="cols">
+
+<!-- ═════════ A — TYPOGRAPHIE ═════════ -->
+<div class="col a">
+  <h3>A — Typographie</h3>
+  <p class="sub">Le nom de personnage est en italique, celui du joueur en romain. Rien n'est ajouté à l'écran : aucune icône, aucun mot. La règle s'apprend en une fois, puis devient invisible.</p>
+
+  <div class="screen">
+    <h4>Détails › Troupe</h4>
+    <div class="line"><div class="av">OM</div><div class="txt">
+      <div class="pc">Ombreflèche</div><div class="pl sub2">Incon</div></div>
+      <span class="badge b-mid">Niveau 3</span></div>
+    <div class="line"><div class="av" style="background:rgba(126,200,164,.18);color:var(--accent-1)">BR</div><div class="txt">
+      <div class="pc">Brindavoine</div><div class="pl sub2">Marion</div></div></div>
+    <div class="line"><div class="av" style="background:rgba(58,58,74,.5);color:#888899">MJ</div><div class="txt">
+      <div class="pc">Le Vieux Grimoire</div><div class="pl sub2">Sylvain</div></div>
+      <span class="badge b-mj">MJ</span></div>
+  </div>
+
+  <div class="screen">
+    <h4>Disponibilités — jeudi 12</h4>
+    <div class="line"><div class="txt"><span class="pl">Incon</span> <span class="pc sub2">· Ombreflèche</span></div>
+      <span class="badge b-ok">Dispo</span></div>
+    <div class="line"><div class="txt"><span class="pl">Marion</span> <span class="pc sub2">· Brindavoine</span></div>
+      <span class="badge b-no">Occupée</span></div>
+  </div>
+
+  <div class="screen">
+    <h4>Distribution d'XP</h4>
+    <div class="line"><div class="txt"><div class="pc">Ombreflèche</div><div class="pl sub2">Incon</div></div><span class="xp">+ 120</span></div>
+    <div class="line"><div class="txt"><div class="pc">Brindavoine</div><div class="pl sub2">Marion</div></div><span class="xp">+ 120</span></div>
+  </div>
+
+  <div class="screen hard">
+    <h4>⚠ Cas difficile — un seul nom</h4>
+    <div class="line"><div class="txt"><div class="pl">Marion</div>
+      <div class="sub2" style="color:var(--text-muted)">Invitée le 2 août · en attente</div></div></div>
+    <div class="line"><div class="txt"><div class="pl">Sylvain</div>
+      <div class="sub2" style="color:var(--text-muted)">Annonce publiée hier</div></div></div>
+    <p class="note" style="margin:var(--space-sm) var(--space-md) var(--space-md)">Le romain dit « joueur » — mais seulement si on connaît la règle. Rien ne l'enseigne sur cet écran.</p>
+  </div>
+  <p class="note">Le plus léger et le plus élégant en liste. <span class="cost">Coût :</span> muet pour qui n'a pas appris la règle, et l'italique se voit mal sur un nom court.</p>
+</div>
+
+<!-- ═════════ B — ICÔNE ═════════ -->
+<div class="col b">
+  <h3>B — Icône</h3>
+  <p class="sub">Un écu devant le personnage, une silhouette devant le joueur. Se comprend sans explication, dès le premier écran, et fonctionne même isolé.</p>
+
+  <div class="screen">
+    <h4>Détails › Troupe</h4>
+    <div class="line"><div class="av">OM</div><div class="txt">
+      <div class="pc"><svg class="ic"><use href="#icPc"/></svg>Ombreflèche</div>
+      <div class="pl sub2"><svg class="ic"><use href="#icPl"/></svg>Incon</div></div>
+      <span class="badge b-mid">Niveau 3</span></div>
+    <div class="line"><div class="av" style="background:rgba(126,200,164,.18);color:var(--accent-1)">BR</div><div class="txt">
+      <div class="pc"><svg class="ic"><use href="#icPc"/></svg>Brindavoine</div>
+      <div class="pl sub2"><svg class="ic"><use href="#icPl"/></svg>Marion</div></div></div>
+    <div class="line"><div class="av" style="background:rgba(58,58,74,.5);color:#888899">MJ</div><div class="txt">
+      <div class="pc"><svg class="ic"><use href="#icPc"/></svg>Le Vieux Grimoire</div>
+      <div class="pl sub2"><svg class="ic"><use href="#icPl"/></svg>Sylvain</div></div>
+      <span class="badge b-mj">MJ</span></div>
+  </div>
+
+  <div class="screen">
+    <h4>Disponibilités — jeudi 12</h4>
+    <div class="line"><div class="txt"><span class="pl"><svg class="ic"><use href="#icPl"/></svg>Incon</span>
+      <span class="pc sub2"><svg class="ic"><use href="#icPc"/></svg>Ombreflèche</span></div>
+      <span class="badge b-ok">Dispo</span></div>
+    <div class="line"><div class="txt"><span class="pl"><svg class="ic"><use href="#icPl"/></svg>Marion</span>
+      <span class="pc sub2"><svg class="ic"><use href="#icPc"/></svg>Brindavoine</span></div>
+      <span class="badge b-no">Occupée</span></div>
+  </div>
+
+  <div class="screen">
+    <h4>Distribution d'XP</h4>
+    <div class="line"><div class="txt"><div class="pc"><svg class="ic"><use href="#icPc"/></svg>Ombreflèche</div>
+      <div class="pl sub2"><svg class="ic"><use href="#icPl"/></svg>Incon</div></div><span class="xp">+ 120</span></div>
+    <div class="line"><div class="txt"><div class="pc"><svg class="ic"><use href="#icPc"/></svg>Brindavoine</div>
+      <div class="pl sub2"><svg class="ic"><use href="#icPl"/></svg>Marion</div></div><span class="xp">+ 120</span></div>
+  </div>
+
+  <div class="screen hard">
+    <h4>⚠ Cas difficile — un seul nom</h4>
+    <div class="line"><div class="txt"><div class="pl"><svg class="ic"><use href="#icPl"/></svg>Marion</div>
+      <div class="sub2" style="color:var(--text-muted)">Invitée le 2 août · en attente</div></div></div>
+    <div class="line"><div class="txt"><div class="pl"><svg class="ic"><use href="#icPl"/></svg>Sylvain</div>
+      <div class="sub2" style="color:var(--text-muted)">Annonce publiée hier</div></div></div>
+    <p class="note" style="margin:var(--space-sm) var(--space-md) var(--space-md)">L'icône répond toute seule : c'est une personne, pas un personnage. Aucune règle à connaître.</p>
+  </div>
+  <p class="note">Le seul qui reste explicite quand le nom est isolé. <span class="cost">Coût :</span> un objet devant chaque nom, partout — la Troupe devient chargée quand les deux lignes en portent une.</p>
+</div>
+
+<!-- ═════════ C — LIBELLÉ ═════════ -->
+<div class="col c">
+  <h3>C — Libellé</h3>
+  <p class="sub">Le rôle est écrit, en petites capitales discrètes. Zéro ambiguïté possible, jamais rien à apprendre — et c'est le plus encombrant des trois.</p>
+
+  <div class="screen">
+    <h4>Détails › Troupe</h4>
+    <div class="line"><div class="av">OM</div><div class="txt">
+      <div class="pc">Ombreflèche<span class="lbl">personnage</span></div>
+      <div class="pl sub2">Incon<span class="lbl">joueur</span></div></div>
+      <span class="badge b-mid">Niv. 3</span></div>
+    <div class="line"><div class="av" style="background:rgba(126,200,164,.18);color:var(--accent-1)">BR</div><div class="txt">
+      <div class="pc">Brindavoine<span class="lbl">personnage</span></div>
+      <div class="pl sub2">Marion<span class="lbl">joueur</span></div></div></div>
+    <div class="line"><div class="av" style="background:rgba(58,58,74,.5);color:#888899">MJ</div><div class="txt">
+      <div class="pc">Le Vieux Grimoire<span class="lbl">personnage</span></div>
+      <div class="pl sub2">Sylvain<span class="lbl">MJ</span></div></div></div>
+  </div>
+
+  <div class="screen">
+    <h4>Disponibilités — jeudi 12</h4>
+    <div class="line"><div class="txt"><span class="pl">Incon<span class="lbl">joueur</span></span></div>
+      <span class="badge b-ok">Dispo</span></div>
+    <div class="line"><div class="txt"><span class="pl">Marion<span class="lbl">joueur</span></span></div>
+      <span class="badge b-no">Occupée</span></div>
+    <p class="note" style="margin:var(--space-sm) var(--space-md) var(--space-md)">Ici le personnage a dû sauter : deux noms et deux libellés ne tiennent pas sur une ligne de téléphone.</p>
+  </div>
+
+  <div class="screen">
+    <h4>Distribution d'XP</h4>
+    <div class="line"><div class="txt"><div class="pc">Ombreflèche<span class="lbl">personnage</span></div>
+      <div class="pl sub2">Incon<span class="lbl">joueur</span></div></div><span class="xp">+120</span></div>
+    <div class="line"><div class="txt"><div class="pc">Brindavoine<span class="lbl">personnage</span></div>
+      <div class="pl sub2">Marion<span class="lbl">joueur</span></div></div><span class="xp">+120</span></div>
+  </div>
+
+  <div class="screen hard">
+    <h4>⚠ Cas difficile — un seul nom</h4>
+    <div class="line"><div class="txt"><div class="pl">Marion<span class="lbl">joueur</span></div>
+      <div class="sub2" style="color:var(--text-muted)">Invitée le 2 août · en attente</div></div></div>
+    <div class="line"><div class="txt"><div class="pl">Sylvain<span class="lbl">joueur</span></div>
+      <div class="sub2" style="color:var(--text-muted)">Annonce publiée hier</div></div></div>
+    <p class="note" style="margin:var(--space-sm) var(--space-md) var(--space-md)">Imparable — mais on écrit « joueur » sur un écran qui ne parle que de joueurs.</p>
+  </div>
+  <p class="note">Impossible à mal comprendre. <span class="cost">Coût :</span> le plus lourd, et il sature les lignes sur mobile — la vue Disponibilités a dû abandonner le nom de personnage.</p>
+</div>
+
+</div>
+
+<h2>Le mélange qui se défend</h2>
+<p class="why">Ces trois traitements ne s'excluent pas forcément. La combinaison la plus économique : <b>typographie partout</b> (elle ne coûte rien et suffit là où les deux noms se côtoient, puisque la position les distingue déjà), <b>plus l'icône uniquement là où un nom est seul</b> — invitations, gestion des membres, auteur d'annonce, disponibilités. On ne paie l'encombrement que là où l'ambiguïté existe réellement.</p>
+<div class="cols" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+  <div class="col a">
+    <div class="screen">
+      <h4>Troupe — typographie seule</h4>
+      <div class="line"><div class="av">OM</div><div class="txt">
+        <div class="pc">Ombreflèche</div><div class="pl sub2">Incon</div></div><span class="badge b-mid">Niveau 3</span></div>
+      <div class="line"><div class="av" style="background:rgba(126,200,164,.18);color:var(--accent-1)">BR</div><div class="txt">
+        <div class="pc">Brindavoine</div><div class="pl sub2">Marion</div></div></div>
+    </div>
+    <p class="note">Les deux noms se suivent : la position lève l'ambiguïté, l'italique la confirme. Rien à ajouter.</p>
+  </div>
+  <div class="col b">
+    <div class="screen">
+      <h4>Gestion des membres — icône ajoutée</h4>
+      <div class="line"><div class="txt"><div class="pl"><svg class="ic"><use href="#icPl"/></svg>Marion</div>
+        <div class="sub2" style="color:var(--text-muted)">Membre depuis le 2 août</div></div>
+        <span class="badge b-no">Retirer</span></div>
+      <div class="line"><div class="txt"><div class="pl"><svg class="ic"><use href="#icPl"/></svg>Sylvain</div>
+        <div class="sub2" style="color:var(--text-muted)">Invité le 2 août · en attente</div></div></div>
+    </div>
+    <p class="note">Un seul nom, donc rien à comparer : l'icône devient nécessaire et son coût est justifié.</p>
+  </div>
+</div>
+
+</body>
+</html>

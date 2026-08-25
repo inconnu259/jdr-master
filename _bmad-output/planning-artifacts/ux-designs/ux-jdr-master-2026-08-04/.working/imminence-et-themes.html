@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Imminence et couleurs de statut par thème</title>
+<style>
+:root{--text-muted:#7a7a8a;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--radius-badge:6px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5)}
+/* palette de statut FIXE, proposee : independante des accents de theme */
+.fixe{--s-todo:#f0a030;--s-live:#4fc98a;--s-soon:#8f7bff;--s-done:#5a5a6a}
+/* palette DERIVEE du theme, telle qu'elle existe aujourd'hui (status-available = accent-1) */
+.t-emeraude{--bg:#0d0a14;--surf:#1a1428;--a1:#7ec8a4;--a2:#9b6dff;--txt:#e8e8f0;--mut:#7a7a8a}
+.t-foret   {--bg:#080f0a;--surf:#0f1a10;--a1:#2ecc71;--a2:#f0c040;--txt:#e8f0ea;--mut:#6a806e}
+.t-steam   {--bg:#1a1008;--surf:#241808;--a1:#cd7f32;--a2:#4a7c59;--txt:#e8dcc8;--mut:#8a7a5a}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:#e8e8f0;padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px}
+h3{font-size:var(--text-lg);margin:0 0 var(--space-xs)}
+.lede,.why{color:var(--text-muted);max-width:84ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--space-base);align-items:start}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md)}
+.bad{color:#e05252} .ok{color:#7ec8a4} .cost{color:#f0a030}
+.panel{background:var(--surf,#1a1428);border:1px solid var(--border-subtle);border-radius:var(--radius-card);
+  padding:var(--space-md);box-shadow:var(--elev-card)}
+.ttl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut,var(--text-muted));margin-bottom:var(--space-sm)}
+.sl{display:flex;justify-content:space-between;align-items:center;gap:var(--space-sm);
+  padding:7px 0;border-bottom:1px solid var(--border-subtle);font-size:var(--text-sm);color:var(--txt,#e8e8f0)}
+.sl:last-child{border-bottom:none}
+.sl b{font-weight:500}
+/* badges : 3 paliers d'intensite */
+.bg{display:inline-flex;align-items:center;gap:5px;font-size:var(--text-sm);padding:1px 8px;
+  border-radius:var(--radius-badge);border:1px solid;white-space:nowrap}
+.lvl1{background:transparent}                       /* lointain : contour seul */
+.lvl2{}                                             /* proche : teinte */
+.lvl3{color:#0d0a14 !important;font-weight:600}     /* imminent : plein */
+.soon.lvl1{color:var(--s-soon,#8f7bff);border-color:rgba(143,123,255,.55)}
+.soon.lvl2{color:var(--s-soon,#8f7bff);border-color:var(--s-soon,#8f7bff);background:rgba(143,123,255,.16)}
+.soon.lvl3{background:var(--s-soon,#8f7bff);border-color:var(--s-soon,#8f7bff)}
+.todo{color:var(--s-todo,#f0a030);border-color:var(--s-todo,#f0a030);background:rgba(240,160,48,.15)}
+.live{color:var(--s-live,#4fc98a);border-color:var(--s-live,#4fc98a);background:rgba(79,201,138,.14)}
+.done{color:var(--s-done,#5a5a6a);border-color:var(--s-done,#5a5a6a);background:rgba(90,90,106,.25)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.sw{display:inline-block;width:34px;height:16px;border-radius:4px;vertical-align:-3px;margin-right:8px}
+table{border-collapse:collapse;width:100%;max-width:720px;font-size:var(--text-sm)}
+th,td{text-align:left;padding:7px var(--space-sm);border-bottom:1px solid var(--border-subtle)}
+th{color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;font-size:11px;font-weight:500}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:var(--text-sm);color:#b9b4c8}
+</style>
+</head>
+<body>
+
+<h1>Imminence et couleurs de statut selon les thèmes</h1>
+<p class="lede">Deux questions distinctes : comment signaler qu'une date approche sans ajouter de couleur, et si les couleurs de statut doivent suivre le thème ou rester stables. La seconde a une réponse tranchée par un problème constaté dans les tokens actuels.</p>
+
+<!-- ═══════════ IMMINENCE ═══════════ -->
+<h2>1 — L'imminence est une intensité, pas un état</h2>
+<p class="why">Une séance programmée le 10 août est la même séance le 3 et le 9 : seule sa proximité change. Elle garde donc sa teinte « à venir » et gagne un <strong>libellé relatif</strong> plus un <strong>remplissage progressif</strong>. Trois paliers, pas plus.</p>
+<div class="row">
+  <div class="panel fixe">
+    <div class="ttl">Nous sommes le 5 août</div>
+    <div class="sl"><span><b>Séance 6</b> · 2 septembre</span><span class="bg soon lvl1">Dans 4 semaines</span></div>
+    <div class="sl"><span><b>Séance 5</b> · 18 août</span><span class="bg soon lvl1">Dans 13 jours</span></div>
+    <div class="sl"><span><b>Séance 4</b> · 10 août</span><span class="bg soon lvl2">Dans 5 jours</span></div>
+    <div class="sl"><span><b>Séance 3</b> · 6 août</span><span class="bg soon lvl3">Demain soir</span></div>
+    <div class="sl"><span><b>Séance 2</b> · 5 août</span><span class="bg soon lvl3">Ce soir</span></div>
+    <div class="sl"><span><b>Séance 1</b> · 24 juillet</span><span class="bg done">Jouée</span></div>
+  </div>
+  <div>
+    <table>
+      <tr><th>Palier</th><th>Quand</th><th>Traitement</th></tr>
+      <tr><td>Lointain</td><td>plus de 7 jours</td><td>Contour seul, teinte « à venir ». Discret : rien à faire.</td></tr>
+      <tr><td>Proche</td><td>7 jours à 2 jours</td><td>Badge teinté. On le remarque en balayant l'écran.</td></tr>
+      <tr><td>Imminent</td><td>demain et aujourd'hui</td><td>Badge plein, libellé humain — « demain soir », « ce soir ». Impossible à manquer.</td></tr>
+    </table>
+    <p class="note"><span class="ok">Pourquoi ça marche :</span> aucune teinte nouvelle, aucun état nouveau. L'échelle des quatre couleurs reste intacte, et l'imminence se lit à la <em>densité</em> du badge — un signal de forme, donc conforme à P-1 même sans la couleur.<br>
+    Au-delà d'une semaine, aucun renforcement : tu l'as dit toi-même, plus tôt ça n'a pas d'utilité.</p>
+    <p class="note">Corollaire déjà couvert : une fois la date passée sans compte-rendu, la séance bascule en « à débriefer » et devient ambre — elle passe de « à venir » à « ça t'attend », ce qui est exactement le bon message.</p>
+  </div>
+</div>
+
+<!-- ═══════════ THÈMES ═══════════ -->
+<h2>2 — Le problème constaté dans les tokens actuels</h2>
+<p class="why">Dans le design system de base, les couleurs de statut sont déclarées « cross-thème »… sauf une : <code>status-available: var(--accent-1)</code>. Elle suit donc l'accent du thème. Regarde ce que ça donne en Steampunk, où <code>accent-1</code> est le cuivre <code>#cd7f32</code>, face à l'ambre <code>#f0a030</code> du « ça t'attend ».</p>
+<div class="row">
+  <div class="panel t-steam">
+    <div class="ttl">Steampunk — palette actuelle (dérivée)</div>
+    <div class="sl"><span><b>Séance 4</b> · vote en cours</span>
+      <span class="bg" style="color:#f0a030;border-color:#f0a030;background:rgba(240,160,48,.15)">Réponds au vote</span></div>
+    <div class="sl"><span><b>La Route des Cendres</b></span>
+      <span class="bg" style="color:#cd7f32;border-color:#cd7f32;background:rgba(205,127,50,.15)">Courant</span></div>
+    <div class="sl"><span><b>Séance 5</b> · 18 août</span>
+      <span class="bg" style="color:#4a7c59;border-color:#4a7c59;background:rgba(74,124,89,.15)">Programmée</span></div>
+    <p class="note" style="color:#e8dcc8"><span class="bad">Collision :</span> « Réponds au vote » (ambre) et « Courant » (cuivre) sont à un cheveu l'un de l'autre. L'urgence cesse de se distinguer de la normalité — dans le thème même où le cuivre est partout.</p>
+  </div>
+
+  <div class="panel t-steam fixe">
+    <div class="ttl">Steampunk — palette de statut fixe (proposée)</div>
+    <div class="sl"><span><b>Séance 4</b> · vote en cours</span><span class="bg todo">Réponds au vote</span></div>
+    <div class="sl"><span><b>La Route des Cendres</b></span><span class="bg live">Courant</span></div>
+    <div class="sl"><span><b>Séance 5</b> · 18 août</span><span class="bg soon lvl2">Dans 13 jours</span></div>
+    <p class="note" style="color:#e8dcc8"><span class="ok">Lisible :</span> les quatre statuts restent distincts sur un fond cuivré, parce qu'ils ne dépendent plus de l'accent du thème.</p>
+  </div>
+</div>
+
+<h3 style="margin-top:var(--space-lg)">La même palette fixe, sur les trois thèmes</h3>
+<p class="why">Les teintes de statut ne bougent pas d'un thème à l'autre ; seuls les fonds, les textes et les accents décoratifs changent. Un même badge dit la même chose partout.</p>
+<div class="row">
+  <div class="panel t-emeraude fixe">
+    <div class="ttl">Grimoire Émeraude</div>
+    <div class="sl"><span><b>Séance 4</b></span><span class="bg todo">Réponds au vote</span></div>
+    <div class="sl"><span><b>Scénario courant</b></span><span class="bg live">Courant</span></div>
+    <div class="sl"><span><b>Séance 5</b></span><span class="bg soon lvl2">Dans 5 jours</span></div>
+    <div class="sl"><span><b>Séance 3</b></span><span class="bg soon lvl3">Ce soir</span></div>
+    <div class="sl"><span><b>Séance 1</b></span><span class="bg done">Jouée</span></div>
+  </div>
+  <div class="panel t-foret fixe">
+    <div class="ttl">Forêt Ancienne</div>
+    <div class="sl"><span><b>Séance 4</b></span><span class="bg todo">Réponds au vote</span></div>
+    <div class="sl"><span><b>Scénario courant</b></span><span class="bg live">Courant</span></div>
+    <div class="sl"><span><b>Séance 5</b></span><span class="bg soon lvl2">Dans 5 jours</span></div>
+    <div class="sl"><span><b>Séance 3</b></span><span class="bg soon lvl3">Ce soir</span></div>
+    <div class="sl"><span><b>Séance 1</b></span><span class="bg done">Jouée</span></div>
+  </div>
+  <div class="panel t-steam fixe">
+    <div class="ttl">Médiéval Steampunk</div>
+    <div class="sl"><span><b>Séance 4</b></span><span class="bg todo">Réponds au vote</span></div>
+    <div class="sl"><span><b>Scénario courant</b></span><span class="bg live">Courant</span></div>
+    <div class="sl"><span><b>Séance 5</b></span><span class="bg soon lvl2">Dans 5 jours</span></div>
+    <div class="sl"><span><b>Séance 3</b></span><span class="bg soon lvl3">Ce soir</span></div>
+    <div class="sl"><span><b>Séance 1</b></span><span class="bg done">Jouée</span></div>
+  </div>
+</div>
+
+<h3 style="margin-top:var(--space-lg)">Les quatre teintes proposées</h3>
+<table>
+  <tr><th>Rôle</th><th>Valeur</th><th>Remarque</th></tr>
+  <tr><td><span class="sw" style="background:#f0a030"></span>Ça t'attend</td><td><code>#f0a030</code></td><td>Inchangée — c'est déjà <code>status-mixed</code> aujourd'hui.</td></tr>
+  <tr><td><span class="sw" style="background:#4fc98a"></span>En cours</td><td><code>#4fc98a</code></td><td><b>Nouvelle.</b> Remplace <code>var(--accent-1)</code> : un vert franc, distinct du cuivre et de l'ambre dans les trois thèmes.</td></tr>
+  <tr><td><span class="sw" style="background:#8f7bff"></span>À venir</td><td><code>#8f7bff</code></td><td><b>Nouvelle.</b> Un violet légèrement plus vif que l'accent Émeraude, pour rester lisible sur les fonds bruns.</td></tr>
+  <tr><td><span class="sw" style="background:#5a5a6a"></span>Terminé</td><td><code>#5a5a6a</code></td><td>Proche de <code>status-unknown</code> actuel, un peu éclairci pour rester lisible sur le fond Steampunk.</td></tr>
+</table>
+<p class="note"><span class="cost">Ce qu'on perd :</span> les statuts ne participent plus à l'ambiance du thème — un badge ambre est ambre partout. C'est le prix d'une lecture identique dans les trois univers, et ça ne touche ni les fonds, ni les textes, ni les bannières, qui restent entièrement thématisés.</p>
+
+</body>
+</html>

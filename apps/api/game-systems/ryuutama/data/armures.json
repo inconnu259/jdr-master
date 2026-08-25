@@ -1,0 +1,6 @@
+[
+  { "key": "vetements-voyage", "label": "Vêtements (voyage)", "priceGold": 50, "encumbrance": 3, "hands": null, "protection": 0, "malus": null, "notes": "Vêtements pour voyageurs, au tissu solide et épais. Ils sont principalement en laine ou en coton." },
+  { "key": "armure-legere", "label": "Armure légère", "priceGold": 900, "encumbrance": 3, "hands": null, "protection": 1, "malus": null, "notes": "Armure en cuir protégeant le tronc. Quelques renforts de métal sur les points vitaux. Légère et souple." },
+  { "key": "armure-moyenne", "label": "Armure moyenne", "priceGold": 2000, "encumbrance": 5, "hands": null, "protection": 2, "malus": -1, "notes": "Armure de métal protégeant le tronc et les membres. Mais cela la rend assez lourde." },
+  { "key": "armure-lourde", "label": "Armure lourde", "priceGold": 10000, "encumbrance": 5, "hands": null, "protection": 3, "malus": -3, "notes": "Armure lourde métallique recouvrant tout le corps. Réduit grandement la liberté de mouvement." }
+]

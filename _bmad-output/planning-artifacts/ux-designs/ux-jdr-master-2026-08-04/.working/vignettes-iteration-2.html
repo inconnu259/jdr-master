@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vignettes — itération 2</title>
+<style>
+:root{
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --status-mixed:#f0a030;--status-unknown:#3a3a4a;
+}
+.t-emeraude{--bg:#0d0a14;--surf:#1a1428;--a1:#7ec8a4;--a2:#9b6dff;--txt:#e8e8f0;--mut:#7a7a8a}
+.t-foret   {--bg:#080f0a;--surf:#0f1a10;--a1:#2ecc71;--a2:#f0c040;--txt:#e8f0ea;--mut:#6a806e}
+.t-steam   {--bg:#1a1008;--surf:#241808;--a1:#cd7f32;--a2:#4a7c59;--txt:#e8dcc8;--mut:#8a7a5a}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px}
+h3{font-size:var(--text-lg);margin:0 0 2px}
+.lede{color:var(--text-muted);max-width:80ch;margin:0 0 var(--space-lg)}
+.why{color:var(--text-muted);font-size:var(--text-sm);max-width:80ch;margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--space-base);align-items:start}
+.demo{background:var(--surf);border-radius:var(--radius-card);overflow:hidden;border:1px solid var(--border-subtle);
+  box-shadow:0 4px 12px rgba(0,0,0,.5);display:flex}
+.strip{width:4px;flex:none}
+.demo-in{flex:1;min-width:0}
+.cov{height:100px;position:relative;overflow:hidden;background:var(--bg)}
+.mk{position:absolute;right:10px;top:6px;font-size:22px;font-weight:700;letter-spacing:-1px;color:var(--txt);
+  text-shadow:0 2px 10px rgba(0,0,0,.75);z-index:5}
+.bd{padding:var(--space-md);color:var(--txt)}
+.nm{font-size:var(--text-lg);font-weight:500}
+.mt{font-size:var(--text-sm);color:var(--mut)}
+.caption{font-size:var(--text-sm);color:var(--text-muted);margin:var(--space-xs) 0 0}
+/* rangée « petites vignettes » façon mode liste */
+.mini-wrap{background:var(--surf);border-radius:var(--radius-card);border:1px solid var(--border-subtle);overflow:hidden;max-width:420px}
+.mini-row{display:flex;align-items:center;gap:var(--space-sm);padding:var(--space-sm) var(--space-md);
+  border-bottom:1px solid var(--border-subtle);color:var(--txt)}
+.mini-row:last-child{border-bottom:none}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.mini{width:28px;height:28px;border-radius:6px;flex:none;position:relative;overflow:hidden;background:var(--bg)}
+.mini-nm{font-size:var(--text-base);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-sub{font-size:var(--text-sm);color:var(--mut)}
+
+/* ══ NÉBULEUSE ══ */
+.neb{position:relative}
+.neb i{position:absolute;border-radius:50%;filter:blur(15px)}
+.mini .neb i{filter:blur(5px)}
+.neb.f{background:radial-gradient(130% 110% at 60% 0%,#12301c,#080f0a)}
+
+/* ══ STEAMPUNK — machines ══ */
+.gear{position:absolute;border-radius:50%;
+  background:conic-gradient(var(--a1) 0 4.2%,transparent 4.2% 8.3%,var(--a1) 8.3% 12.5%,transparent 12.5% 16.6%,
+  var(--a1) 16.6% 20.8%,transparent 20.8% 25%,var(--a1) 25% 29.2%,transparent 29.2% 33.3%,
+  var(--a1) 33.3% 37.5%,transparent 37.5% 41.6%,var(--a1) 41.6% 45.8%,transparent 45.8% 50%,
+  var(--a1) 50% 54.2%,transparent 54.2% 58.3%,var(--a1) 58.3% 62.5%,transparent 62.5% 66.6%,
+  var(--a1) 66.6% 70.8%,transparent 70.8% 75%,var(--a1) 75% 79.2%,transparent 79.2% 83.3%,
+  var(--a1) 83.3% 87.5%,transparent 87.5% 91.6%,var(--a1) 91.6% 95.8%,transparent 95.8%)}
+.gear::before{content:"";position:absolute;inset:13%;border-radius:50%;background:var(--bg);
+  border:2px solid var(--a1);box-sizing:border-box}
+.gear::after{content:"";position:absolute;inset:34%;border-radius:50%;border:2px solid var(--a1);opacity:.55}
+.gear.alt{background-image:conic-gradient(var(--a2) 0 5.5%,transparent 5.5% 11%,var(--a2) 11% 16.6%,transparent 16.6% 22%,
+  var(--a2) 22% 27.7%,transparent 27.7% 33.3%,var(--a2) 33.3% 38.8%,transparent 38.8% 44.4%,
+  var(--a2) 44.4% 50%,transparent 50% 55.5%,var(--a2) 55.5% 61%,transparent 61% 66.6%,
+  var(--a2) 66.6% 72.2%,transparent 72.2% 77.7%,var(--a2) 77.7% 83.3%,transparent 83.3% 88.8%,
+  var(--a2) 88.8% 94.4%,transparent 94.4%)}
+.gear.alt::before{border-color:var(--a2)} .gear.alt::after{border-color:var(--a2)}
+.belt{position:absolute;border:2px solid var(--a2);border-radius:40px;opacity:.7}
+.rod{position:absolute;background:var(--a1);border-radius:2px;opacity:.85}
+.boiler{position:absolute;border:2px solid var(--a1);border-radius:12px 12px 6px 6px;
+  background:linear-gradient(180deg,rgba(205,127,50,.22),rgba(205,127,50,.05))}
+.rivet{position:absolute;width:3px;height:3px;border-radius:50%;background:var(--a1);opacity:.8}
+.pipe{position:absolute;border:2px solid var(--a1);border-bottom:none;border-radius:14px 14px 0 0;opacity:.75}
+.crank{position:absolute;border:2px solid var(--a2);border-radius:50%}
+.steam{position:absolute;border-radius:50%;background:#e8dcc8;filter:blur(6px)}
+.blue{background:
+  repeating-linear-gradient(0deg,rgba(205,127,50,.13) 0 1px,transparent 1px 13px),
+  repeating-linear-gradient(90deg,rgba(205,127,50,.13) 0 1px,transparent 1px 13px),
+  linear-gradient(180deg,#2b1c0b,#1a1008)}
+.dash{position:absolute;border:1.5px dashed rgba(232,220,200,.30)}
+
+/* ══ ÉMERAUDE — magie ══ */
+.circle{position:absolute;border-radius:50%;border:1.5px solid var(--a2)}
+.circle.d{border-style:dashed;opacity:.55}
+.ticks{position:absolute;border-radius:50%;
+  background:repeating-conic-gradient(var(--a1) 0 1.5deg,transparent 1.5deg 15deg);
+  -webkit-mask:radial-gradient(circle,transparent 62%,#000 63%);mask:radial-gradient(circle,transparent 62%,#000 63%)}
+.glow{position:absolute;border-radius:50%;filter:blur(13px)}
+.rays{position:absolute;border-radius:50%;
+  background:repeating-conic-gradient(rgba(155,109,255,.55) 0 2deg,transparent 2deg 11deg);
+  -webkit-mask:radial-gradient(circle,#000 8%,rgba(0,0,0,.35) 45%,transparent 72%);
+  mask:radial-gradient(circle,#000 8%,rgba(0,0,0,.35) 45%,transparent 72%)}
+.spark{position:absolute;width:3px;height:3px;border-radius:50%;background:#e8e8f0;box-shadow:0 0 6px 1px rgba(232,232,240,.8)}
+.ruled{background:
+  repeating-linear-gradient(180deg,transparent 0 11px,rgba(232,232,240,.10) 11px 12px),
+  linear-gradient(180deg,#1c1533,#0d0a14)}
+.seal{position:absolute;border-radius:50%;background:radial-gradient(circle at 35% 30%,#b04a5a,#6d2431);
+  box-shadow:0 2px 8px rgba(0,0,0,.6)}
+.initial{position:absolute;font-family:Georgia,"Times New Roman",serif;font-weight:700;color:var(--a1);
+  text-shadow:0 0 14px rgba(126,200,164,.55)}
+</style>
+</head>
+<body>
+
+<h1>Vignettes — itération 2</h1>
+<p class="lede">Trois chantiers séparés, suivant tes retours : différencier trois parties en Nébuleuse pour la Forêt Ancienne, remplacer l'engrenage solitaire du Steampunk par une vraie petite machine, et chercher une ambiance de sortilège pour le Grimoire Émeraude. Toujours zéro image : dégradés, formes et masques CSS. La fine bande verticale colorée à gauche de chaque carte est le signal d'état que tu as demandé — même vocabulaire que la pastille du mode liste.</p>
+
+<!-- ════════════════ 1. NÉBULEUSE × 3 PARTIES ════════════════ -->
+<h2>1 — Nébuleuse, Forêt Ancienne : trois parties différentes</h2>
+<p class="why">Mêmes règles de génération, trois jeux de paramètres différents (nombre de masses, position, taille, dosage vert/or). C'est le test que tu voulais : est-ce qu'on les distingue vraiment, et est-ce que ça tient en petit ?</p>
+<div class="row">
+  <div>
+    <div class="demo t-foret"><div class="strip" style="background:var(--status-mixed)"></div><div class="demo-in">
+      <div class="cov neb f">
+        <i style="width:135px;height:135px;right:-34px;top:-56px;background:#2ecc71;opacity:.48"></i>
+        <i style="width:82px;height:82px;left:10px;bottom:-36px;background:#f0c040;opacity:.30"></i>
+        <i style="width:40px;height:40px;left:46%;top:46px;background:#e8f0ea;opacity:.12"></i>
+        <div class="mk">CN</div></div>
+      <div class="bd"><div class="nm">Le Convoi du Nord</div><div class="mt">Campagne épisodique · MJ</div></div></div></div>
+    <p class="caption">Masse verte dominante en haut à droite, éclat doré en bas.</p>
+  </div>
+  <div>
+    <div class="demo t-foret"><div class="strip" style="background:var(--a1)"></div><div class="demo-in">
+      <div class="cov neb f" style="background:radial-gradient(130% 110% at 15% 90%,#1a3410,#080f0a)">
+        <i style="width:100px;height:100px;left:-26px;top:-30px;background:#f0c040;opacity:.42"></i>
+        <i style="width:118px;height:118px;right:-24px;bottom:-52px;background:#2ecc71;opacity:.50"></i>
+        <div class="mk">RV</div></div>
+      <div class="bd"><div class="nm">Les Racines de Vellombre</div><div class="mt">Campagne · Joueur</div></div></div></div>
+    <p class="caption">Or en haut à gauche, vert en bas à droite — diagonale inversée.</p>
+  </div>
+  <div>
+    <div class="demo t-foret"><div class="strip" style="background:var(--status-unknown)"></div><div class="demo-in">
+      <div class="cov neb f" style="background:radial-gradient(150% 120% at 50% 50%,#0e2415,#080f0a)">
+        <i style="width:66px;height:66px;left:16%;top:-22px;background:#2ecc71;opacity:.55"></i>
+        <i style="width:66px;height:66px;right:14%;bottom:-24px;background:#2ecc71;opacity:.40"></i>
+        <i style="width:52px;height:52px;left:52%;top:34px;background:#f0c040;opacity:.28"></i>
+        <div class="mk">MC</div></div>
+      <div class="bd"><div class="nm">La Marche des Cerfs</div><div class="mt">One-shot · Joueur</div></div></div></div>
+    <p class="caption">Trois petites masses réparties — plus dense, moins de vide.</p>
+  </div>
+</div>
+
+<h3 style="margin-top:var(--space-lg)">Les mêmes, en mode liste (28 px)</h3>
+<p class="why">Le vrai test. À cette taille il ne reste que la dominante colorée et sa direction.</p>
+<div class="mini-wrap t-foret">
+  <div class="mini-row"><span class="dot" style="background:var(--status-mixed)"></span>
+    <span class="mini neb f"><i style="width:38px;height:38px;right:-9px;top:-15px;background:#2ecc71;opacity:.62"></i>
+      <i style="width:24px;height:24px;left:2px;bottom:-10px;background:#f0c040;opacity:.45"></i></span>
+    <span style="flex:1;min-width:0"><span class="mini-nm" style="display:block">Le Convoi du Nord</span>
+      <span class="mini-sub">MJ · 1 chose à faire</span></span></div>
+  <div class="mini-row"><span class="dot" style="background:var(--a1)"></span>
+    <span class="mini neb f" style="background:radial-gradient(130% 110% at 15% 90%,#1a3410,#080f0a)">
+      <i style="width:30px;height:30px;left:-8px;top:-9px;background:#f0c040;opacity:.55"></i>
+      <i style="width:34px;height:34px;right:-7px;bottom:-14px;background:#2ecc71;opacity:.62"></i></span>
+    <span style="flex:1;min-width:0"><span class="mini-nm" style="display:block">Les Racines de Vellombre</span>
+      <span class="mini-sub">Joueur · 12 août</span></span></div>
+  <div class="mini-row"><span class="dot" style="background:var(--status-unknown)"></span>
+    <span class="mini neb f" style="background:radial-gradient(150% 120% at 50% 50%,#0e2415,#080f0a)">
+      <i style="width:19px;height:19px;left:14%;top:-6px;background:#2ecc71;opacity:.65"></i>
+      <i style="width:19px;height:19px;right:12%;bottom:-7px;background:#2ecc71;opacity:.5"></i>
+      <i style="width:15px;height:15px;left:50%;top:9px;background:#f0c040;opacity:.4"></i></span>
+    <span style="flex:1;min-width:0"><span class="mini-nm" style="display:block">La Marche des Cerfs</span>
+      <span class="mini-sub">Joueur · terminée</span></span></div>
+</div>
+
+<!-- ════════════════ 2. STEAMPUNK ════════════════ -->
+<h2>2 — Médiéval Steampunk : trois machines</h2>
+<p class="why">Fini l'engrenage solitaire. Trois assemblages, du plus mécanique au plus « plan d'atelier ». Les dents sont plus nombreuses et plus fines qu'à l'itération 1 — c'est ce qui donnait l'aspect « pas ouf ».</p>
+<div class="row">
+  <div>
+    <div class="demo t-steam"><div class="strip" style="background:var(--status-mixed)"></div><div class="demo-in">
+      <div class="cov" style="background:linear-gradient(160deg,#31200d,#1a1008)">
+        <div class="gear" style="width:74px;height:74px;left:-16px;top:16px"></div>
+        <div class="gear alt" style="width:50px;height:50px;left:48px;top:-8px"></div>
+        <div class="gear" style="width:38px;height:38px;left:74px;top:52px"></div>
+        <div class="belt" style="width:96px;height:34px;left:8px;top:34px;transform:rotate(-14deg)"></div>
+        <div class="rod" style="width:52px;height:3px;right:8px;top:22px;transform:rotate(24deg)"></div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur</div></div></div></div>
+    <p class="caption"><b>S1 — Train de rouages.</b> Trois engrenages engrenés, une courroie, une bielle. Le plus « ça tourne ».</p>
+  </div>
+  <div>
+    <div class="demo t-steam"><div class="strip" style="background:var(--a1)"></div><div class="demo-in">
+      <div class="cov" style="background:linear-gradient(170deg,#2e1e0c,#1a1008)">
+        <div class="steam" style="width:34px;height:34px;left:26px;top:-14px;opacity:.20"></div>
+        <div class="steam" style="width:22px;height:22px;left:52px;top:-4px;opacity:.14"></div>
+        <div class="boiler" style="width:56px;height:52px;left:18px;top:30px"></div>
+        <div class="rivet" style="left:24px;top:36px"></div><div class="rivet" style="left:66px;top:36px"></div>
+        <div class="rivet" style="left:24px;top:74px"></div><div class="rivet" style="left:66px;top:74px"></div>
+        <div class="pipe" style="width:30px;height:26px;left:31px;top:12px"></div>
+        <div class="crank" style="width:34px;height:34px;right:20px;top:38px"></div>
+        <div class="rod" style="width:26px;height:3px;right:22px;top:54px;transform:rotate(-32deg);background:var(--a2)"></div>
+        <div class="gear" style="width:26px;height:26px;right:12px;bottom:8px"></div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur</div></div></div></div>
+    <p class="caption"><b>S2 — Chaudière &amp; manivelle.</b> Cuve rivetée, cheminée, vapeur, manivelle et bielle. Le plus narratif.</p>
+  </div>
+  <div>
+    <div class="demo t-steam"><div class="strip" style="background:var(--status-unknown)"></div><div class="demo-in">
+      <div class="cov blue">
+        <div class="gear" style="width:58px;height:58px;left:14px;top:6px;opacity:.85"></div>
+        <div class="gear alt" style="width:40px;height:40px;left:62px;top:44px;opacity:.85"></div>
+        <div class="dash" style="width:96px;height:0;left:8px;top:78px"></div>
+        <div class="dash" style="width:0;height:64px;left:43px;top:14px"></div>
+        <div class="dash" style="width:44px;height:44px;left:60px;top:42px;border-radius:50%"></div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur</div></div></div></div>
+    <p class="caption"><b>S3 — Plan d'atelier.</b> Papier millimétré, deux rouages cotés, lignes de construction. Le plus sobre.</p>
+  </div>
+</div>
+
+<h3 style="margin-top:var(--space-lg)">Les trois, en 28 px</h3>
+<div class="mini-wrap t-steam">
+  <div class="mini-row"><span class="dot" style="background:var(--status-mixed)"></span>
+    <span class="mini" style="background:linear-gradient(160deg,#31200d,#1a1008)">
+      <span class="gear" style="width:26px;height:26px;left:-6px;top:4px"></span>
+      <span class="gear alt" style="width:17px;height:17px;left:15px;top:-3px"></span></span>
+    <span style="flex:1"><span class="mini-nm" style="display:block">S1 — Train de rouages</span>
+      <span class="mini-sub">lisible : deux disques dentés</span></span></div>
+  <div class="mini-row"><span class="dot" style="background:var(--a1)"></span>
+    <span class="mini" style="background:linear-gradient(170deg,#2e1e0c,#1a1008)">
+      <span class="boiler" style="width:15px;height:14px;left:4px;top:9px"></span>
+      <span class="crank" style="width:10px;height:10px;right:3px;top:11px"></span></span>
+    <span style="flex:1"><span class="mini-nm" style="display:block">S2 — Chaudière</span>
+      <span class="mini-sub">devient deux taches — fragile</span></span></div>
+  <div class="mini-row"><span class="dot" style="background:var(--status-unknown)"></span>
+    <span class="mini blue"><span class="gear" style="width:18px;height:18px;left:2px;top:2px;opacity:.9"></span></span>
+    <span style="flex:1"><span class="mini-nm" style="display:block">S3 — Plan d'atelier</span>
+      <span class="mini-sub">la trame disparaît, le rouage reste</span></span></div>
+</div>
+
+<!-- ════════════════ 3. ÉMERAUDE ════════════════ -->
+<h2>3 — Grimoire Émeraude : trois ambiances de sortilège</h2>
+<p class="why">Rien de figuratif : de la lumière, des cercles et de la trame. Le registre du thème est la magie et le grimoire, donc trois angles — le rituel, le sort lancé, la page enluminée.</p>
+<div class="row">
+  <div>
+    <div class="demo t-emeraude"><div class="strip" style="background:var(--status-mixed)"></div><div class="demo-in">
+      <div class="cov" style="background:radial-gradient(90% 130% at 50% 130%,#241a3a,#0d0a14)">
+        <div class="glow" style="width:86px;height:86px;left:50%;top:34px;margin-left:-43px;background:#9b6dff;opacity:.42"></div>
+        <div class="ticks" style="width:92px;height:92px;left:50%;top:28px;margin-left:-46px;opacity:.75"></div>
+        <div class="circle" style="width:66px;height:66px;left:50%;top:41px;margin-left:-33px"></div>
+        <div class="circle d" style="width:44px;height:44px;left:50%;top:52px;margin-left:-22px;border-color:var(--a1)"></div>
+        <div class="spark" style="left:24px;top:26px"></div><div class="spark" style="right:30px;top:18px"></div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur</div></div></div></div>
+    <p class="caption"><b>E1 — Cercle d'invocation.</b> Anneau gradué, cercles concentriques, halo. Le plus rituel.</p>
+  </div>
+  <div>
+    <div class="demo t-emeraude"><div class="strip" style="background:var(--a1)"></div><div class="demo-in">
+      <div class="cov" style="background:radial-gradient(70% 90% at 28% 62%,#2a1c46,#0d0a14)">
+        <div class="rays" style="width:150px;height:150px;left:-14px;top:-26px"></div>
+        <div class="glow" style="width:44px;height:44px;left:38px;top:36px;background:#7ec8a4;opacity:.85"></div>
+        <div class="spark" style="left:96px;top:24px"></div><div class="spark" style="left:120px;top:56px"></div>
+        <div class="spark" style="left:78px;top:82px"></div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur</div></div></div></div>
+    <p class="caption"><b>E2 — Sortilège en vol.</b> Un cœur lumineux, des rais qui s'échappent, des étincelles. Le plus vivant.</p>
+  </div>
+  <div>
+    <div class="demo t-emeraude"><div class="strip" style="background:var(--status-unknown)"></div><div class="demo-in">
+      <div class="cov ruled">
+        <div class="initial" style="left:14px;top:14px;font-size:52px;line-height:1">C</div>
+        <div class="seal" style="width:26px;height:26px;right:20px;bottom:14px"></div>
+        <div class="circle d" style="width:34px;height:34px;right:16px;bottom:10px;border-color:rgba(232,232,240,.25)"></div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">Campagne · Joueur</div></div></div></div>
+    <p class="caption"><b>E3 — Page enluminée.</b> Lignes réglées, lettrine, sceau de cire. Le plus « grimoire », le moins magique.</p>
+  </div>
+</div>
+
+<h3 style="margin-top:var(--space-lg)">Les trois, en 28 px</h3>
+<div class="mini-wrap t-emeraude">
+  <div class="mini-row"><span class="dot" style="background:var(--status-mixed)"></span>
+    <span class="mini" style="background:radial-gradient(90% 130% at 50% 120%,#241a3a,#0d0a14)">
+      <span class="glow" style="width:24px;height:24px;left:2px;top:3px;background:#9b6dff;opacity:.55;filter:blur(5px)"></span>
+      <span class="circle" style="width:16px;height:16px;left:6px;top:6px"></span></span>
+    <span style="flex:1"><span class="mini-nm" style="display:block">E1 — Cercle</span>
+      <span class="mini-sub">l'anneau tient, les graduations non</span></span></div>
+  <div class="mini-row"><span class="dot" style="background:var(--a1)"></span>
+    <span class="mini" style="background:radial-gradient(70% 90% at 28% 62%,#2a1c46,#0d0a14)">
+      <span class="rays" style="width:44px;height:44px;left:-6px;top:-8px"></span>
+      <span class="glow" style="width:14px;height:14px;left:6px;top:10px;background:#7ec8a4;opacity:.9;filter:blur(4px)"></span></span>
+    <span style="flex:1"><span class="mini-nm" style="display:block">E2 — Sortilège</span>
+      <span class="mini-sub">le point lumineux reste identifiable</span></span></div>
+  <div class="mini-row"><span class="dot" style="background:var(--status-unknown)"></span>
+    <span class="mini ruled"><span class="initial" style="left:5px;top:-2px;font-size:22px">C</span></span>
+    <span style="flex:1"><span class="mini-nm" style="display:block">E3 — Page enluminée</span>
+      <span class="mini-sub">devient une lettrine seule — c'est net</span></span></div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,353 @@
+<title>Vue chronologique — Direction A, responsive</title>
+<style>
+  /* Mock dark-only intentionnel : jdr-master est "dark mode obligatoire" (DESIGN.md §1) —
+     thème Grimoire Émeraude uniquement, tokens repris tels quels du design system existant. */
+  :root {
+    --primary-bg:  #0d0a14;
+    --surface-bg:  #1a1428;
+    --surface-bg-2:#221b34;
+    --accent-1:    #7ec8a4;
+    --accent-1-rgb: 126,200,164;
+    --accent-2:    #9b6dff;
+    --text-primary:#e8e8f0;
+    --text-muted:  #7a7a8a;
+    --status-unknown:     #3a3a4a;
+    --border-subtle: rgba(255,255,255,0.06);
+    --radius-card: 10px;
+    --radius-badge: 6px;
+    --elevation-card: 0 4px 12px rgba(0,0,0,0.5);
+    --elevation-panel: 0 0 24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+    --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-base: 16px; --space-lg: 24px; --space-xl: 32px;
+    --bp-tablet: 768px; /* aligné sur le token existant --bp-tablet du design system */
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--primary-bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  body { padding: var(--space-xl) var(--space-base); max-width: 1180px; margin: 0 auto; }
+  @media (min-width: 768px) { body { padding: var(--space-xl); } }
+
+  h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; text-wrap: balance; }
+  .subhead { color: var(--text-muted); margin: 0 0 var(--space-lg); max-width: 62ch; font-size: 13px; }
+  .breakpoint-note {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--accent-2); border: 1px solid var(--accent-2);
+    border-radius: var(--radius-badge); padding: 3px 8px; margin-bottom: var(--space-lg);
+  }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase;
+    padding: 2px 7px; border-radius: var(--radius-badge); border: 1px solid;
+    white-space: nowrap;
+  }
+  .badge.passe   { color: var(--text-muted); border-color: var(--border-subtle); background: rgba(255,255,255,0.03); }
+  .badge.courant { color: var(--accent-1); border-color: var(--accent-1); background: rgba(var(--accent-1-rgb),0.15); }
+  .badge.avenir  { color: #9a9aaa; border-color: var(--status-unknown); border-style: dashed; background: rgba(58,58,74,0.35); }
+
+  .timeline-wrap {
+    background: var(--surface-bg);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-card);
+    box-shadow: var(--elevation-panel);
+    padding: var(--space-lg) var(--space-base) var(--space-base);
+  }
+
+  .h-card {
+    background: var(--surface-bg-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-card);
+    padding: var(--space-md);
+  }
+  .h-title { font-size: 14px; font-weight: 600; margin: 0 0 4px; text-wrap: balance; }
+  .h-meta { font-size: 11px; color: var(--text-muted); }
+
+  /* =========================================================
+     MOBILE / PETIT ÉCRAN (< 768px) — timeline VERTICALE
+     Pattern éprouvé (ligne + point à gauche, carte à droite), pas de scroll interne :
+     la page défile normalement.
+     ========================================================= */
+  .timeline-vertical { display: block; }
+  @media (min-width: 768px) { .timeline-vertical { display: none; } }
+
+  .v-track { position: relative; padding-left: 28px; }
+  .v-track::before {
+    content: ''; position: absolute; left: 9px; top: 4px; bottom: 4px; width: 2px;
+    background: linear-gradient(to bottom, var(--border-subtle), var(--accent-1) 45%, var(--accent-1) 70%, var(--border-subtle));
+  }
+  .v-node { position: relative; margin-bottom: var(--space-lg); }
+  .v-node:last-child { margin-bottom: 0; }
+  .v-node .dot {
+    position: absolute; left: -28px; top: 6px; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--surface-bg); border: 2px solid var(--border-subtle); z-index: 1;
+  }
+  .v-node.is-passe .dot { border-color: var(--text-muted); }
+  .v-node.is-courant .dot { border-color: var(--accent-1); background: var(--accent-1); box-shadow: 0 0 0 4px rgba(var(--accent-1-rgb),0.2); }
+  .v-node.is-avenir .dot { border-color: var(--status-unknown); border-style: dashed; }
+  .v-node.is-passe .h-card { opacity: 0.55; }
+  .v-node.is-courant .h-card { border-color: var(--accent-1); box-shadow: var(--elevation-card); }
+  .v-node.is-avenir .h-card { border-style: dashed; background: transparent; }
+  .v-node .v-cards { display: flex; flex-direction: column; gap: var(--space-sm); }
+  .v-date { font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+  /* =========================================================
+     DESKTOP (≥ 768px) — timeline HORIZONTALE
+     Header de nœud à hauteur FIXE (40px) : date et point y sont positionnés en absolu
+     PAR RAPPORT À CE HEADER FIXE, jamais par rapport à la carte (hauteur variable) —
+     c'est ce qui garantit l'alignement quel que soit le contenu de la carte.
+     ========================================================= */
+  .timeline-horizontal { display: none; }
+  @media (min-width: 768px) { .timeline-horizontal { display: block; } }
+
+  .h-scroll-outer { position: relative; }
+  .timeline-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    cursor: grab;
+    scrollbar-color: var(--accent-1) transparent;
+    scrollbar-width: thin;
+  }
+  .timeline-scroll.is-dragging { cursor: grabbing; scroll-behavior: auto; }
+  .timeline-scroll::-webkit-scrollbar { height: 8px; }
+  .timeline-scroll::-webkit-scrollbar-track { background: transparent; }
+  .timeline-scroll::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
+  .timeline-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent-1); }
+
+  /* Fondus latéraux — signalent qu'il y a du contenu à défiler sans dépendre du texte d'aide */
+  .fade-edge { position: absolute; top: 0; bottom: 8px; width: 40px; pointer-events: none; z-index: 3; }
+  .fade-edge.left  { left: 0; background: linear-gradient(to right, var(--surface-bg), transparent); }
+  .fade-edge.right { right: 0; background: linear-gradient(to left, var(--surface-bg), transparent); }
+
+  .h-track {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 32px;
+    min-width: max-content;
+    padding: 0 var(--space-lg) var(--space-sm);
+  }
+  .h-track::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0; top: 34px; /* = centre du point : header 40px de haut, point 12px, bas du header */
+    height: 2px;
+    background: linear-gradient(to right, var(--border-subtle), var(--accent-1) 30%, var(--accent-1) 78%, var(--border-subtle));
+    z-index: 0;
+  }
+
+  .h-node { position: relative; z-index: 1; width: 200px; flex: 0 0 auto; }
+
+  .node-head { position: relative; height: 40px; }
+  .node-head .h-datestamp {
+    position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    font-size: 11px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .node-head .dot {
+    position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--surface-bg); border: 2px solid var(--border-subtle);
+  }
+  .h-node.is-passe .dot { border-color: var(--text-muted); }
+  .h-node.is-courant .dot { border-color: var(--accent-1); background: var(--accent-1); box-shadow: 0 0 0 5px rgba(var(--accent-1-rgb),0.2); }
+  .h-node.is-avenir .dot { border-color: var(--status-unknown); border-style: dashed; }
+
+  .node-cards { margin-top: var(--space-sm); display: flex; flex-direction: column; gap: var(--space-sm); }
+  .h-node.is-passe .h-card { opacity: 0.55; }
+  .h-node.is-courant .h-card { border-color: var(--accent-1); box-shadow: var(--elevation-card); }
+  .h-node.is-avenir .h-card { border-style: dashed; background: transparent; }
+  .h-node.is-avenir .h-title { font-size: 13px; font-weight: 500; color: #b8b8c8; }
+
+  .scroll-hint {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--accent-2); margin-top: var(--space-sm);
+  }
+
+  .notes { margin-top: var(--space-base); font-size: 12px; color: var(--text-muted); max-width: 70ch; }
+  .notes b { color: var(--text-primary); font-weight: 600; }
+</style>
+
+<h1>Direction A — responsive : vertical (mobile) / horizontal (desktop)</h1>
+<p class="subhead">
+  Bascule automatique selon la largeur d'écran, sur le même seuil que le reste de l'app
+  (<code>--bp-tablet: 768px</code>). Redimensionne la fenêtre pour voir le changement en direct.
+</p>
+<div class="breakpoint-note" id="bp-indicator">⟳ largeur actuelle : —</div>
+
+<div class="timeline-wrap">
+
+  <!-- ============ MOBILE : vertical ============ -->
+  <div class="timeline-vertical">
+    <div class="v-track">
+
+      <div class="v-node is-passe">
+        <div class="dot"></div>
+        <div class="v-cards">
+          <div class="h-card">
+            <div class="h-title">La Veillée des Cendres</div>
+            <div class="h-meta"><span class="badge passe">Passé</span> <span class="v-date">3 mai</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="v-node is-passe">
+        <div class="dot"></div>
+        <div class="v-cards">
+          <div class="h-card">
+            <div class="h-title">L'Auberge du Corbeau Blanc</div>
+            <div class="h-meta"><span class="badge passe">Passé</span> <span class="v-date">17 mai</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="v-node is-courant">
+        <div class="dot"></div>
+        <div class="v-cards">
+          <div class="h-card">
+            <div class="h-title">Le Marché aux Ombres</div>
+            <div class="h-meta"><span class="badge courant">Courant</span> 5/6 inscrits</div>
+          </div>
+          <div class="h-card">
+            <div class="h-title">La Dette du Forgeron</div>
+            <div class="h-meta"><span class="badge courant">Courant</span> 3/4 inscrits</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="v-node is-avenir">
+        <div class="dot"></div>
+        <div class="v-cards">
+          <div class="h-card">
+            <div class="h-title">🔒 Sans titre révélé</div>
+            <div class="h-meta"><span class="badge avenir">À venir</span> <span class="v-date">14 juil.</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ DESKTOP : horizontal ============ -->
+  <div class="timeline-horizontal">
+    <div class="h-scroll-outer">
+      <div class="fade-edge left"></div>
+      <div class="fade-edge right"></div>
+      <div class="timeline-scroll" id="scroller">
+        <div class="h-track">
+
+          <div class="h-node is-passe">
+            <div class="node-head"><span class="h-datestamp">3 mai</span><span class="dot"></span></div>
+            <div class="node-cards">
+              <div class="h-card"><div class="h-title">La Veillée des Cendres</div><div class="h-meta"><span class="badge passe">Passé</span></div></div>
+            </div>
+          </div>
+
+          <div class="h-node is-passe">
+            <div class="node-head"><span class="h-datestamp">17 mai</span><span class="dot"></span></div>
+            <div class="node-cards">
+              <div class="h-card"><div class="h-title">L'Auberge du Corbeau Blanc</div><div class="h-meta"><span class="badge passe">Passé</span></div></div>
+            </div>
+          </div>
+
+          <div class="h-node is-passe">
+            <div class="node-head"><span class="h-datestamp">3 juin</span><span class="dot"></span></div>
+            <div class="node-cards">
+              <div class="h-card"><div class="h-title">Les Docks silencieux</div><div class="h-meta"><span class="badge passe">Passé</span></div></div>
+            </div>
+          </div>
+
+          <div class="h-node is-passe">
+            <div class="node-head"><span class="h-datestamp">21 juin</span><span class="dot"></span></div>
+            <div class="node-cards">
+              <div class="h-card"><div class="h-title">Le Pacte du Puits, une soirée mouvementée</div><div class="h-meta"><span class="badge passe">Passé</span></div></div>
+            </div>
+          </div>
+
+          <div class="h-node is-courant">
+            <div class="node-head"><span class="h-datestamp">en cours</span><span class="dot"></span></div>
+            <div class="node-cards">
+              <div class="h-card"><div class="h-title">Le Marché aux Ombres</div><div class="h-meta"><span class="badge courant">Courant</span> 5/6 inscrits</div></div>
+              <div class="h-card"><div class="h-title">La Dette du Forgeron</div><div class="h-meta"><span class="badge courant">Courant</span> 3/4 inscrits</div></div>
+            </div>
+          </div>
+
+          <div class="h-node is-avenir">
+            <div class="node-head"><span class="h-datestamp">14 juil.</span><span class="dot"></span></div>
+            <div class="node-cards">
+              <div class="h-card"><div class="h-title">🔒 Sans titre révélé</div><div class="h-meta"><span class="badge avenir">À venir</span></div></div>
+            </div>
+          </div>
+
+          <div class="h-node is-avenir">
+            <div class="node-head"><span class="h-datestamp">28 juil.</span><span class="dot"></span></div>
+            <div class="node-cards">
+              <div class="h-card"><div class="h-title">🔒 Sans titre révélé</div><div class="h-meta"><span class="badge avenir">À venir</span></div></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+    <div class="scroll-hint"><span>↔</span> molette, glisser-déposer, ou trackpad — tout fonctionne</div>
+  </div>
+
+</div>
+
+<p class="notes">
+  <b>Corrections apportées :</b> le point et la date de chaque scénario sont maintenant positionnés
+  à l'intérieur d'un en-tête de <i>hauteur fixe</i> (40px), jamais calculés par rapport à la carte
+  (dont la hauteur varie selon le nombre de lignes du titre ou le nombre de cartes empilées en mode
+  parallèle) — la ligne, elle, est calée une fois pour toutes sur le centre de ce point fixe, donc
+  plus de décalage possible. Le défilement horizontal répond maintenant à la molette (verticale,
+  convertie automatiquement) et au glisser-déposer à la souris, en plus du trackpad. En dessous de
+  768px de large, on repasse simplement sur le pattern vertical de la version précédente (page qui
+  défile normalement, aucun scroll interne à aller chercher).
+</p>
+
+<script>
+  (function () {
+    var bpIndicator = document.getElementById('bp-indicator');
+    function updateBpIndicator() {
+      var w = window.innerWidth;
+      var mode = w >= 768 ? 'horizontale (desktop)' : 'verticale (mobile)';
+      bpIndicator.textContent = '⟳ largeur actuelle : ' + w + 'px — timeline ' + mode;
+    }
+    updateBpIndicator();
+    window.addEventListener('resize', updateBpIndicator);
+
+    var scroller = document.getElementById('scroller');
+    if (!scroller) return;
+    function isDesktop() { return window.matchMedia('(min-width: 768px)').matches; }
+
+    // Molette verticale → défilement horizontal
+    scroller.addEventListener('wheel', function (e) {
+      if (!isDesktop()) return;
+      if (Math.abs(e.deltaY) >= Math.abs(e.deltaX)) {
+        e.preventDefault();
+        scroller.scrollLeft += e.deltaY;
+      }
+    }, { passive: false });
+
+    // Glisser-déposer à la souris
+    var isDown = false, startX = 0, startScroll = 0;
+    scroller.addEventListener('mousedown', function (e) {
+      if (!isDesktop()) return;
+      isDown = true;
+      scroller.classList.add('is-dragging');
+      startX = e.pageX;
+      startScroll = scroller.scrollLeft;
+    });
+    window.addEventListener('mouseup', function () {
+      isDown = false;
+      scroller.classList.remove('is-dragging');
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!isDown) return;
+      e.preventDefault();
+      scroller.scrollLeft = startScroll - (e.pageX - startX);
+    });
+  })();
+</script>

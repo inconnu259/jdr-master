@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Itération — filtres, disponibilité du groupe, participation au vote, agenda MJ</title>
+<style>
+:root{
+  --jdr-bg:#0d0a14;--jdr-surface:#1a1428;
+  --jdr-accent-1:#7ec8a4;--jdr-accent-2:#9b6dff;
+  --jdr-text:#e8e0f0;--jdr-text-muted:#9b8fb0;
+  --jdr-status-todo:#f0a030;--jdr-status-live:#3fd4ff;--jdr-status-soon:#ff7ad9;--jdr-status-done:#5a5a6a;
+  --color-available:#7ec8a4;--color-unavailable:#e74c3c;--color-unknown:#7f8c8d;--color-mixed:#f0a030;
+  --sys-bg:#09070f;--sys-surface:#0d0a14;--sys-variant:#221c35;--sys-container:#1a1428;
+  --sys-high:#221c35;--sys-highest:#2a2340;
+  --sp1:4px;--sp2:8px;--sp3:12px;--sp4:16px;--sp5:24px;--sp6:34px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#05040a;color:var(--jdr-text);padding:var(--sp5) var(--sp5) 80px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:1.5}
+h1{font-size:27px;margin:0 0 var(--sp1)}
+h2{font-size:20px;margin:var(--sp6) 0 var(--sp1);border-top:1px solid rgba(255,255,255,.09);padding-top:var(--sp5)}
+h3{font-size:16px;margin:var(--sp5) 0 var(--sp2)}
+p{max-width:96ch}
+.lede{color:var(--jdr-text-muted);margin:0 0 var(--sp4)}
+.why{color:var(--jdr-text-muted);font-size:12.5px;margin:0 0 var(--sp3);max-width:92ch}
+.tag{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--jdr-text-muted);display:block;margin-bottom:6px}
+.tag.bad{color:#ef7a6d}.tag.good{color:var(--jdr-accent-1)}
+.row{display:flex;gap:var(--sp5);align-items:flex-start;flex-wrap:wrap}
+.screen{background:var(--sys-surface);border:1px solid rgba(255,255,255,.09);border-radius:12px;
+  padding:var(--sp3);box-shadow:0 8px 28px rgba(0,0,0,.6)}
+.note{font-size:12.5px;color:var(--jdr-text-muted);border-left:2px solid rgba(255,255,255,.12);
+  padding-left:var(--sp2);margin-top:var(--sp2);max-width:64ch}
+.note b{color:var(--jdr-text)}
+.verdict{font-size:12.5px;margin-top:var(--sp2);padding:var(--sp2) var(--sp3);background:var(--sys-container);
+  border-radius:10px;border:1px solid rgba(255,255,255,.1);max-width:80ch}
+.verdict b{color:var(--jdr-accent-1)}
+.verdict.warn b{color:var(--jdr-status-todo)}
+/* chrome */
+.chip{display:inline-block;border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:3px 11px;
+  font-size:12px;color:var(--jdr-text-muted);white-space:nowrap}
+.chip.on{border-color:var(--jdr-accent-2);background:rgba(155,109,255,.16);color:var(--jdr-text)}
+.chip.destin{border-color:var(--jdr-status-todo);color:var(--jdr-status-todo);background:rgba(240,160,48,.13)}
+.chip.reset{border-color:rgba(126,200,164,.45);color:var(--jdr-accent-1)}
+.mat-stroked{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.2);
+  color:var(--jdr-text-muted);border-radius:20px;padding:4px 12px;font-size:12.5px}
+.mat-stroked.acc{border-color:rgba(126,200,164,.5);color:var(--jdr-accent-1)}
+.mat-flat{display:inline-flex;align-items:center;gap:6px;background:var(--jdr-accent-1);color:#062018;
+  border-radius:20px;padding:5px 13px;font-size:12.5px;font-weight:600}
+.toggle-group{display:inline-flex;border:1px solid rgba(255,255,255,.18);border-radius:20px;overflow:hidden}
+.toggle-group span{padding:4px 13px;font-size:12.5px;color:var(--jdr-text-muted)}
+.toggle-group span.on{background:rgba(126,200,164,.18);color:var(--jdr-text)}
+.spacer{flex:1}
+.bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+/* cellule à bandes */
+.cell{background:var(--sys-variant);border-radius:6px;padding:2px 3px;display:flex;flex-direction:column;
+  width:132px;min-height:86px;overflow:hidden}
+.cell.wide{width:190px}
+.dn{font-size:11px;color:var(--jdr-text-muted);padding-left:2px}
+.bands{display:flex;flex-direction:column;gap:2px;flex:1;margin-top:2px}
+.b{border-radius:3px;display:flex;align-items:center;padding:0 4px;min-height:20px;min-width:0;
+  overflow:hidden;background:rgba(127,140,141,.20);position:relative}
+.b.av{background:color-mix(in srgb,var(--color-available) 32%,transparent)}
+.b.un{background:color-mix(in srgb,var(--color-unavailable) 32%,transparent)}
+.b.uk{background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(127,140,141,.42) 3px 6px)}
+.b.se{background:color-mix(in srgb,var(--jdr-status-soon) 28%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--jdr-status-soon) 75%,transparent)}
+.b.vo{background:color-mix(in srgb,var(--jdr-status-todo) 24%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--jdr-status-todo) 70%,transparent)}
+.b .lbl{font-size:10.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.b .sub{font-size:9.5px;color:var(--jdr-text-muted);margin-left:5px;white-space:nowrap}
+/* ── jauge de groupe : canal secondaire, bord droit ── */
+.gauge{position:absolute;right:2px;top:2px;bottom:2px;width:5px;border-radius:2px;
+  background:rgba(127,140,141,.45);overflow:hidden;display:flex;flex-direction:column-reverse}
+.gauge i{display:block;width:100%;background:var(--color-available)}
+.gauge.blocked i{background:var(--color-unavailable)}
+.b.hasgauge{padding-right:11px}
+/* variante pastilles MJ */
+.members{display:flex;gap:2px;margin-left:auto;padding-right:1px}
+.members i{width:7px;height:7px;border-radius:50%;display:block}
+.members i.y{background:var(--color-available)}
+.members i.n{background:var(--color-unavailable)}
+.members i.q{background:rgba(127,140,141,.75)}
+/* ── barre de tendance : AVANT / APRÈS ── */
+.trend{display:flex;height:4px;border-radius:2px;overflow:hidden;width:52px;flex:0 0 52px;margin-left:auto}
+.trend.old{background:transparent}
+.trend.new{background:repeating-linear-gradient(45deg,transparent 0 2px,rgba(127,140,141,.75) 2px 4px)}
+.trend i{display:block;height:100%}
+.trend .y{background:var(--color-available)}
+.trend .m{background:var(--jdr-status-todo)}
+.trend .n{background:var(--color-unavailable)}
+.count{font-size:9.5px;color:var(--jdr-text-muted);margin-left:5px;white-space:nowrap}
+/* rail */
+.rail{background:var(--sys-container);border:1px solid rgba(255,255,255,.12);border-radius:10px;
+  padding:var(--sp2) var(--sp3);width:390px}
+.rail .dl{font-size:11px;color:var(--jdr-text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.rail .it{display:flex;gap:var(--sp2);align-items:center;padding:4px 0;border-top:1px solid rgba(255,255,255,.07)}
+.rail .it:first-of-type{border-top:0}
+.rail .it .w{font-size:11px;color:var(--jdr-text-muted);width:76px;flex:0 0 76px;display:flex;align-items:center;gap:5px}
+.rail .it .v{font-size:12.5px;flex:1}
+.rail .it .v .m{color:var(--jdr-text-muted);font-size:11px}
+svg.ic{width:13px;height:13px;flex:0 0 13px;stroke:currentColor;fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round;color:var(--jdr-text-muted)}
+.who{display:flex;gap:5px;flex-wrap:wrap;font-size:11px}
+.who span{display:inline-flex;align-items:center;gap:3px}
+.who i{width:7px;height:7px;border-radius:50%}
+/* agenda */
+.sect{margin-bottom:var(--sp3)}
+.sect>.h{display:flex;align-items:center;gap:var(--sp2);font-size:13px;font-weight:700;margin-bottom:6px}
+.sect>.h .k{width:8px;height:8px;border-radius:2px}
+.item{display:flex;gap:var(--sp2);background:var(--sys-container);border-radius:10px;padding:var(--sp2) var(--sp3);
+  margin-bottom:5px;align-items:center}
+.item .bd{flex:1;min-width:0}
+.item .ti{font-size:13.5px;font-weight:600}
+.item .me{font-size:11.5px;color:var(--jdr-text-muted)}
+.item .kbar{width:3px;border-radius:2px;align-self:stretch;flex:0 0 3px}
+.badge{font-size:11px;padding:1px 8px;border-radius:6px;white-space:nowrap}
+.badge.todo{background:rgba(240,160,48,.16);color:var(--jdr-status-todo);border:1px solid rgba(240,160,48,.45)}
+.badge.soon{background:rgba(255,122,217,.16);color:var(--jdr-status-soon);border:1px solid rgba(255,122,217,.45)}
+.opts{margin:5px 0 0;padding:6px 0 0;border-top:1px solid rgba(255,255,255,.08)}
+.opt{display:flex;align-items:center;gap:var(--sp2);padding:3px 0;font-size:12px}
+.opt .d{width:118px;flex:0 0 118px;color:var(--jdr-text-muted)}
+.opt .fav{color:var(--jdr-accent-1);font-weight:700}
+table.cmp{border-collapse:collapse;width:100%;font-size:12.5px;margin-top:var(--sp3)}
+table.cmp th,table.cmp td{border:1px solid rgba(255,255,255,.1);padding:6px 9px;text-align:left;vertical-align:top}
+table.cmp th{color:var(--jdr-text-muted);font-weight:600;background:rgba(255,255,255,.03)}
+.grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:var(--sp3);max-width:900px}
+.caselab{font-size:11px;color:var(--jdr-text-muted);margin-bottom:5px;min-height:32px}
+.caselab b{display:block;color:var(--jdr-text);font-size:12px}
+</style>
+</head>
+<body>
+
+<h1>Itération — filtres, groupe, participation, agenda MJ</h1>
+<p class="lede">Quatre points soulevés après la planche contractuelle. <b>Celle-ci sera mise à jour une fois ces points tranchés.</b></p>
+
+<!-- ═══════════════ 1 ═══════════════ -->
+<h2>1 · Les filtres prennent une ligne entière pour rien</h2>
+<p class="why">Cinq chips plus la légende plus la Destinée : une bande permanente, alors qu'on n'y touche que rarement.
+<b>Un patron existe déjà</b> dans la spine pour exactement ce problème — la barre de contrôles de la liste des parties (§4.2),
+qui combine trois choses : <b>masquage au défilement</b>, <b>pastille de résumé</b> dès qu'on s'écarte du défaut, et <b>révélation par icône</b>.</p>
+
+<div class="row">
+  <div>
+    <span class="tag bad">Aujourd'hui — bande permanente</span>
+    <div class="screen" style="width:560px">
+      <div class="bar" style="margin-bottom:var(--sp3)">
+        <span class="chip on">Mes indisponibilités</span><span class="chip on">Mes disponibilités</span>
+        <span class="chip on">Mes séances confirmées</span><span class="chip on">Les votes en cours</span>
+        <span class="chip on">La disponibilité du groupe</span><span class="chip">Légende</span>
+        <span class="chip destin">✦ Destinée</span>
+      </div>
+      <div style="height:64px;background:var(--sys-variant);border-radius:6px;display:flex;align-items:center;
+        justify-content:center;color:var(--jdr-text-muted);font-size:12px">le calendrier commence ici</div>
+    </div>
+    <div class="note">Deux lignes de chips sur un écran étroit, <b>poussant la grille vers le bas</b> — sur mobile, la grille commence sous la ligne de flottaison.</div>
+  </div>
+
+  <div>
+    <span class="tag good">Proposé — un seul bouton, un résumé quand il y a lieu</span>
+    <div class="screen" style="width:560px">
+      <div class="bar" style="margin-bottom:var(--sp3)">
+        <span class="mat-stroked">☰ Affichage</span>
+        <span class="chip reset">Affichage filtré · 3 sur 5 · Rétablir</span>
+        <span class="spacer"></span>
+        <span class="chip destin">✦ Destinée · Ashal ‹ 1/2 ›</span>
+        <span class="toggle-group"><span class="on">Vue mois</span><span>Vue semaine</span><span>Vue agenda</span></span>
+      </div>
+      <div style="height:64px;background:var(--sys-variant);border-radius:6px;display:flex;align-items:center;
+        justify-content:center;color:var(--jdr-text-muted);font-size:12px">le calendrier commence ici</div>
+    </div>
+    <div class="note"><b>Au repos, une seule ligne</b>, partagée avec la bascule de vues. La pastille de résumé
+    n'apparaît <b>que</b> si l'affichage s'écarte du défaut, et porte l'action « Rétablir » — c'est le bouton existant,
+    déplacé dedans. <b>Destinée reste dehors</b> : c'est un mode, pas un filtre, et il doit se voir quand il est actif.</div>
+  </div>
+</div>
+
+<h3>Ce que le bouton ouvre</h3>
+<div class="row">
+  <div>
+    <span class="tag">Panneau « Affichage » — desktop : menu ancré · mobile : feuille du bas</span>
+    <div class="screen" style="width:330px">
+      <div style="font-size:11px;color:var(--jdr-text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px">Ce que je vois</div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px">
+        <label style="display:flex;gap:8px;align-items:center"><span class="chip on">✓</span>Mes indisponibilités</label>
+        <label style="display:flex;gap:8px;align-items:center"><span class="chip on">✓</span>Mes disponibilités</label>
+        <label style="display:flex;gap:8px;align-items:center"><span class="chip on">✓</span>Mes séances confirmées</label>
+        <label style="display:flex;gap:8px;align-items:center"><span class="chip on">✓</span>Les votes en cours</label>
+        <label style="display:flex;gap:8px;align-items:center"><span class="chip">&nbsp;&nbsp;</span>La disponibilité du groupe</label>
+      </div>
+      <div style="height:1px;background:rgba(255,255,255,.1);margin:var(--sp3) 0"></div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:12.5px"><span class="chip">&nbsp;&nbsp;</span>Afficher la légende</label>
+      <div style="margin-top:var(--sp3)"><span class="mat-stroked acc">Rétablir mon grimoire par défaut</span></div>
+    </div>
+    <div class="note">La légende y entre aussi — c'est un réglage d'affichage, pas une action. <b>Une chip de moins sur la barre.</b></div>
+  </div>
+  <div>
+    <div class="verdict"><b>Pourquoi ce patron plutôt qu'un autre :</b> il est <b>déjà décidé et déjà décrit</b> pour la liste
+    des parties (§4.2), et la spine pose explicitement que <b>liste et calendrier partagent la même grammaire d'interaction</b> —
+    des modes d'affichage plus des filtres. Réutiliser le même patron ne coûte aucun concept neuf, et l'utilisateur n'a
+    qu'une seule chose à apprendre pour les deux écrans.
+    <br><br><b>Écarté :</b> une barre d'icônes sans libellé — cinq pictogrammes de couches ne s'apprennent pas, et
+    la spine interdit déjà la pastille seule pour les modes d'affichage de la liste.</div>
+  </div>
+</div>
+
+<!-- ═══════════════ 2 ═══════════════ -->
+<h2>2 · La disponibilité du groupe — jamais dessinée jusqu'ici</h2>
+<p class="why"><b>Le problème que ça pose, et que je n'avais pas résolu :</b> la préséance range « tendance du groupe »
+au <b>dernier</b> rang. Donc dès que j'ai déclaré quoi que ce soit, ou qu'une séance est posée, elle est masquée —
+c'est-à-dire <b>presque toujours</b>. Une couche qu'on n'allume que pour ne rien voir ne sert à rien.</p>
+
+<div class="verdict warn"><b>La sortie : le groupe ne concourt pas pour le même canal.</b> Le fond de la bande dit
+<i>ma</i> situation ; le groupe s'affiche sur un <b>canal séparé</b> — une jauge fine au bord droit de la bande,
+remplie à proportion des membres disponibles. Deux dimensions différentes, deux canaux différents,
+<b>plus aucune concurrence de préséance</b>.</div>
+
+<h3>Vue joueur — la jauge agrégée</h3>
+<div class="grid4">
+  <div><div class="caselab"><b>Journée vide</b>rien de déclaré</div>
+    <div class="cell"><span class="dn">24</span><div class="bands">
+      <div class="b uk hasgauge"><span class="gauge"><i style="height:50%"></i></span></div>
+      <div class="b uk hasgauge"><span class="gauge"><i style="height:50%"></i></span></div>
+      <div class="b uk hasgauge"><span class="gauge"><i style="height:100%"></i></span></div>
+    </div></div>
+    <div class="note">Le soir, <b>tout le monde est libre</b> — jauge pleine. Rien d'autre à l'écran ne le disait.</div>
+  </div>
+
+  <div><div class="caselab"><b>Journée déclarée</b>mes dispos posées</div>
+    <div class="cell"><span class="dn">25</span><div class="bands">
+      <div class="b av hasgauge"><span class="gauge"><i style="height:25%"></i></span></div>
+      <div class="b av hasgauge"><span class="gauge"><i style="height:75%"></i></span></div>
+      <div class="b av hasgauge"><span class="gauge"><i style="height:100%"></i></span></div>
+    </div></div>
+    <div class="note">Je suis libre toute la journée, <b>le groupe ne l'est qu'au soir</b>. L'information cohabite sans se masquer.</div>
+  </div>
+
+  <div><div class="caselab"><b>Journée chargée</b>séance + vote</div>
+    <div class="cell"><span class="dn">28</span><div class="bands">
+      <div class="b un hasgauge"><span class="gauge"><i style="height:25%"></i></span></div>
+      <div class="b se hasgauge"><span class="lbl">Ashal</span><span class="gauge"><i style="height:100%"></i></span></div>
+      <div class="b vo hasgauge"><span class="lbl">Vote</span><span class="gauge"><i style="height:75%"></i></span></div>
+    </div></div>
+    <div class="note"><b>La jauge survit même sous une séance.</b> C'est tout l'intérêt du canal séparé : elle n'entre jamais en préséance.</div>
+  </div>
+
+  <div><div class="caselab"><b>Groupe bloqué</b>personne n'est libre</div>
+    <div class="cell"><span class="dn">15</span><div class="bands">
+      <div class="b av hasgauge"><span class="gauge blocked"><i style="height:100%"></i></span></div>
+      <div class="b uk hasgauge"><span class="gauge"><i style="height:25%"></i></span></div>
+      <div class="b uk hasgauge"><span class="gauge"><i style="height:0%"></i></span></div>
+    </div></div>
+    <div class="note">Jauge <b>rouge pleine</b> = tous bloqués (le matin) ; jauge <b>vide</b> = personne de disponible et personne ne s'est prononcé (le soir). Deux vides différents.</div>
+  </div>
+</div>
+
+<h3>Vue MJ — nommément, par membre</h3>
+<div class="row" style="align-items:flex-start">
+  <div>
+    <div class="cell wide"><span class="dn">28</span><div class="bands">
+      <div class="b un"><span class="members"><i class="y"></i><i class="n"></i><i class="q"></i><i class="n"></i></span></div>
+      <div class="b se"><span class="lbl">Ashal</span><span class="members"><i class="y"></i><i class="y"></i><i class="y"></i><i class="y"></i></span></div>
+      <div class="b vo"><span class="lbl">Vote</span><span class="members"><i class="y"></i><i class="y"></i><i class="q"></i><i class="n"></i></span></div>
+    </div></div>
+    <div class="note">Une pastille par membre, dans l'ordre fixe de la troupe — <b>la position identifie la personne</b>,
+    la couleur son statut. Quatre membres tiennent dans 190 px ; au-delà de six, on retombe sur la jauge et le rail donne les noms.</div>
+  </div>
+  <div>
+    <div class="rail">
+      <div class="dl">Vendredi 28 août — la troupe</div>
+      <div class="it"><span class="w"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v3M5.6 9.6l2 2M18.4 9.6l-2 2M3 18h18M7 18a5 5 0 0 1 10 0"/></svg>Matin</span>
+        <span class="v"><span class="who">
+          <span><i style="background:var(--color-available)"></i>Incon</span>
+          <span><i style="background:var(--color-unavailable)"></i>Marc</span>
+          <span><i style="background:rgba(127,140,141,.75)"></i>Léa</span>
+          <span><i style="background:var(--color-unavailable)"></i>Tom</span></span></span></div>
+      <div class="it"><span class="w"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>Après-m.</span>
+        <span class="v"><b>Les Cendres d’Ashal</b><span class="m"> · en visio · toute la troupe</span></span></div>
+      <div class="it"><span class="w"><svg class="ic" viewBox="0 0 24 24"><path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z"/></svg>Soir</span>
+        <span class="v"><span class="who">
+          <span><i style="background:var(--color-available)"></i>Incon</span>
+          <span><i style="background:var(--color-available)"></i>Marc</span>
+          <span><i style="background:rgba(127,140,141,.75)"></i>Léa</span>
+          <span><i style="background:var(--color-unavailable)"></i>Tom</span></span></span></div>
+    </div>
+    <div class="verdict"><b>Le rail porte les noms, la case porte la forme.</b> Même règle que partout :
+    la forme survit à l'étroitesse, le texte cède et se replie dans le rail.
+    <br>C'est aussi ce qui rend « Fenêtres de la destinée » moins nécessaire comme liste séparée — elle devient
+    la <b>lecture longue</b> de ce que la grille montre déjà.</div>
+  </div>
+</div>
+
+<!-- ═══════════════ 3 ═══════════════ -->
+<h2>3 · Participation au vote — le défaut que tu as trouvé</h2>
+<p class="why">Ma barre de tendance montrait les proportions <b>parmi les répondants</b>. Elle ne disait rien du
+<b>nombre</b> de répondants. Quatre situations très différentes produisaient des barres identiques ou presque.</p>
+
+<div class="row">
+  <div>
+    <span class="tag bad">Avant — la barre ment</span>
+    <div class="screen" style="width:290px">
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:96px;color:var(--jdr-text-muted)">0 sur 4</span><span class="trend old" style="background:rgba(127,140,141,.5)"></span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:96px;color:var(--jdr-text-muted)">1 sur 4 — oui</span><span class="trend old"><i class="y" style="width:100%"></i></span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:96px;color:var(--jdr-text-muted)">3 sur 4 — 3 oui</span><span class="trend old"><i class="y" style="width:100%"></i></span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:96px;color:var(--jdr-text-muted)">4 sur 4 — 4 oui</span><span class="trend old"><i class="y" style="width:100%"></i></span></div>
+      </div>
+    </div>
+    <div class="note"><b>Les trois dernières sont identiques.</b> Un créneau voté par une seule personne se lit
+    comme un créneau plébiscité par toute la troupe — exactement ce qu'il ne faut pas pour choisir une date.</div>
+  </div>
+
+  <div>
+    <span class="tag good">Après — la piste dit la participation</span>
+    <div class="screen" style="width:330px">
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:96px;color:var(--jdr-text-muted)">0 sur 4</span><span class="trend new"></span><span class="count">0/4</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:96px;color:var(--jdr-text-muted)">1 sur 4 — oui</span><span class="trend new"><i class="y" style="width:25%"></i></span><span class="count">1/4</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:96px;color:var(--jdr-text-muted)">3 sur 4 — 3 oui</span><span class="trend new"><i class="y" style="width:75%"></i></span><span class="count">3/4</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:96px;color:var(--jdr-text-muted)">4 sur 4 — 4 oui</span><span class="trend new"><i class="y" style="width:100%"></i></span><span class="count">4/4</span></div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:96px;color:var(--jdr-text-muted)">4 sur 4 — mêlé</span><span class="trend new"><i class="y" style="width:50%"></i><i class="m" style="width:25%"></i><i class="n" style="width:25%"></i></span><span class="count">4/4</span></div>
+      </div>
+    </div>
+    <div class="note"><b>La piste entière représente la troupe.</b> Ce qui est trameé, c'est ce qui manque —
+    la même trame que « personne n'a répondu » ailleurs dans le calendrier, donc rien de neuf à apprendre.
+    <b>La longueur dit combien, les couleurs disent quoi.</b>
+    <br>Le compteur « 3/4 » double la forme dès qu'il y a la place (vue Semaine, rail, Agenda) et tombe en vue Mois étroite.</div>
+  </div>
+</div>
+
+<div class="verdict"><b>Ce n'était pas une décision manquante mais un dessin faux :</b> <code>DESIGN.md §7.9</code> disait déjà
+<i>« sur fond <code>status-unknown</code> pour la part sans réponse »</i>. Mes planches ne l'ont jamais rendu.
+La correction ne change pas la spécification écrite — elle la fait enfin apparaître.</div>
+
+<!-- ═══════════════ 4 ═══════════════ -->
+<h2>4 · L'Agenda du MJ — sceller sans changer de vue</h2>
+<p class="why">L'Agenda est organisé par <b>ce qu'on attend de moi</b>. Or ce qu'on attend d'un MJ dont le vote est mûr,
+c'est précisément de <b>trancher</b>. Sans ça, il doit repasser en vue Mois pour sceller.</p>
+
+<div class="row">
+  <div>
+    <span class="tag">Agenda — MJ</span>
+    <div class="screen" style="width:560px">
+      <div class="sect">
+        <div class="h"><span class="k" style="background:var(--jdr-status-todo)"></span>Ça t'attend</div>
+        <div class="item" style="flex-direction:column;align-items:stretch">
+          <div style="display:flex;gap:var(--sp2);align-items:center">
+            <span class="kbar" style="background:var(--jdr-status-todo)"></span>
+            <div class="bd"><div class="ti">Les Cendres d’Ashal — Séance 2</div>
+              <div class="me">Vote ouvert · il manque <b style="color:var(--jdr-status-todo)">Léa, Tom</b></div></div>
+            <span class="badge todo">À sceller</span>
+          </div>
+          <div class="opts">
+            <div class="opt"><span class="d fav">Ven 28, soir</span><span class="trend new" style="width:70px;flex:0 0 70px"><i class="y" style="width:50%"></i><i class="m" style="width:25%"></i></span><span class="count">3/4</span><span class="spacer"></span><span class="mat-flat">Sceller</span></div>
+            <div class="opt"><span class="d">Sam 29, soir</span><span class="trend new" style="width:70px;flex:0 0 70px"><i class="y" style="width:25%"></i><i class="n" style="width:25%"></i></span><span class="count">2/4</span><span class="spacer"></span><span class="mat-stroked">Sceller</span></div>
+            <div class="opt"><span class="d">Dim 30, après-m.</span><span class="trend new" style="width:70px;flex:0 0 70px"></span><span class="count">0/4</span><span class="spacer"></span><span class="mat-stroked">Sceller</span></div>
+          </div>
+        </div>
+        <div class="item"><span class="kbar" style="background:var(--jdr-status-todo)"></span>
+          <div class="bd"><div class="ti">Le Convoi du Nord — Séance 4</div><div class="me">Aucune date proposée</div></div>
+          <span class="badge todo">Lancer un vote</span></div>
+      </div>
+      <div class="sect">
+        <div class="h"><span class="k" style="background:var(--jdr-status-soon)"></span>C'est programmé</div>
+        <div class="item"><span class="kbar" style="background:var(--jdr-status-soon)"></span>
+          <div class="bd"><div class="ti">Le Convoi du Nord — Séance 3</div><div class="me">Samedi 22 août, soir · chez Marc, 20 h 30</div></div>
+          <span class="badge soon">dans 5 j</span></div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="verdict"><b>Oui, et c'est plus qu'un confort.</b> Les options du vote se déplient <b>dans la ligne</b>,
+    triées par faveur, chacune avec sa piste de participation et son bouton. Le favori est mis en avant,
+    <b>sans jamais masquer les autres</b> — la décision reste au MJ.
+    <br><br><b>« Lancer un vote »</b> apparaît pour une séance sans date : c'est ce qui reste du sélecteur
+    « Planifier un vote pour : », mais posé là où le MJ constate le manque.</div>
+    <div class="note"><b>Côté joueur, la même ligne</b> montre les options et son propre choix, avec le sélecteur
+    de réponse au tap — mais aucun bouton « Sceller ». Une seule structure, deux rôles.</div>
+    <div class="note"><b>Point à trancher :</b> les options se déplient-elles <b>toujours</b>, ou seulement
+    quand le vote est « mûr » (tout le monde a répondu, ou une date se détache) ? Toujours dépliées, trois votes
+    ouverts font une longue page.</div>
+  </div>
+</div>
+
+<h2>Récapitulatif des décisions demandées</h2>
+<table class="cmp">
+  <tr><th>#</th><th>Point</th><th>Proposition</th></tr>
+  <tr><td>1</td><td>Encombrement des filtres</td><td>Bouton <b>« ☰ Affichage »</b> + pastille de résumé only si écart au défaut, sur la même ligne que la bascule de vues. Légende rangée dedans, Destinée laissée dehors</td></tr>
+  <tr><td>2</td><td>Disponibilité du groupe</td><td><b>Canal séparé</b> : jauge au bord droit de la bande (joueur) · pastilles par membre (MJ, ≤ 6) · noms dans le rail. Jamais en concurrence de préséance</td></tr>
+  <tr><td>3</td><td>Participation au vote</td><td><b>La piste entière = la troupe</b> ; la partie tramée est ce qui manque ; compteur « 3/4 » dès qu'il y a la place</td></tr>
+  <tr><td>4</td><td>Agenda du MJ</td><td>Options du vote <b>dépliées dans la ligne</b>, triées par faveur, bouton <b>Sceller</b> par option, plus « Lancer un vote » pour une séance sans date</td></tr>
+</table>
+
+</body>
+</html>
