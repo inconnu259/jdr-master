@@ -3,13 +3,19 @@
 Plateforme web open source de gestion de parties de JDR (multi-systèmes, MJ + joueurs).
 **Vision : `docs/spec.md` · Feuille de route : `docs/backlog.md`.** Lire ces deux fichiers en début de session.
 
+Instructions agent versionnées, lues par tous les outils : `AGENTS.md`. Ce fichier-ci le
+complète pour Claude Code — les deux se lisent ensemble, sans redite.
+
 ## Stack & structure
 
 - Monorepo **pnpm**, **tout via Docker** (aucun outil Node sur l'hôte — voir `README.md`).
 - `apps/web` : **Angular 22** (conventions 2025 : `app.ts`, control-flow `@if/@for`, signals ; test-runner Vitest).
 - `apps/api` : **NestJS 11** + **Prisma 7** (générateur `prisma-client-js` legacy pour l'instant ;
   migration vers le nouveau générateur `prisma-client` + driver adapter prévue au palier 1).
-- `packages/shared` : types partagés, importés en **`import type`** (effacés au runtime).
+- `packages/shared` : types **et** valeurs runtime partagés (`THEMES`, `GAME_SYSTEMS`,
+  `CALENDAR_LAYER_KEYS`, `checkPartieKindTransition()`…). `import type` réservé aux types :
+  sur une valeur il l'efface et casse à l'exécution.
+- `packages/game-rules` : règles de jeu exécutables (Ryuutama) + leurs tests Vitest.
 - Base : **PostgreSQL 17**.
 - Versions épinglées : Node 24 LTS, pnpm 11.8, Angular 22, Nest 11, Prisma 7.
 
@@ -25,7 +31,9 @@ souhaité peut exécuter un `preinstall` malveillant qui exfiltre tokens npm/Git
 
 Si une dépendance manque : **s'arrêter et demander**. Ne jamais « débloquer » en installant.
 Autorisé sans demander : `npx`/`pnpm exec` sur un binaire **déjà présent** dans `node_modules`
-(eslint, jest, vitest, prettier, tsc…) — aucun téléchargement dans ce cas.
+(eslint, jest, vitest, prettier, tsc…) — aucun téléchargement dans ce cas. Uniquement
+**dans un conteneur** : l'hôte n'a aucun `node_modules`, ils vivent dans des volumes
+Docker nommés (cf. `docker-compose.yml`).
 
 ## Commandes (toujours via Docker)
 
@@ -38,8 +46,12 @@ Autorisé sans demander : `npx`/`pnpm exec` sur un binaire **déjà présent** d
 
 - **Architecture plugin** : systèmes de jeu modulaires, fiche **pilotée par un schéma** (spec §5).
   Penser modularité multi-système et contenu data-driven dès qu'on touche aux systèmes.
-- **Sécurité** : checklist `docs/security.md` ; Semgrep en continu ; durcissement (argon2, throttler,
-  Helmet, validation) dès le palier auth.
+- **Sécurité** : checklist `docs/security.md` ; durcissement (argon2, throttler, Helmet,
+  validation) dès le palier auth. Aucune analyse statique automatisée en place (ni Semgrep,
+  ni CI) — la revue passe par `/security-review`.
+- **Langue du code** : ce dépôt déroge à la règle globale « code et commentaires en anglais ».
+  Ici, commentaires et messages d'erreur sont **en français**, comme les ~5 200 lignes
+  existantes. Ne pas introduire d'anglais, ne pas retraduire l'existant.
 - **Temps réel (SSE)** : tout nouveau composant/page affichant des données scopées à une Partie
   (ou à l'utilisateur, cf. canal `user:{id}`) doit être évalué pour un besoin de câblage sur le
   signal `changed`/`notifyChanged()` du service de domaine concerné, propagé via `RealtimeService`

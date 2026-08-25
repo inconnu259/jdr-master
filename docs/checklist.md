@@ -20,7 +20,7 @@
 
 ## Tâches sensibles (auth, données, upload, autorisation)
 - [ ] Dérouler la checklist de **`docs/security.md`** pour la couche concernée.
-      (Semgrep scanne déjà en continu après chaque édition.)
+      (Aucun scan automatique en place : ni Semgrep, ni CI. La revue est manuelle.)
 
 ## Nouveau composant affichant des données de Partie (ou de l'utilisateur)
 - [ ] **Évaluer le besoin de câblage temps réel (SSE)** : ce composant a-t-il besoin de refléter
@@ -59,4 +59,4 @@
 
 ## Outils Claude utiles
 - **Mode plan** · **`/security-review`** · **`/code-review`** · **`/verify`** · **`/run`** · **`/simplify`**
-- **Context7** (doc à jour des libs) · **Semgrep** (sécurité en continu)
+- **Context7** (doc à jour des libs)

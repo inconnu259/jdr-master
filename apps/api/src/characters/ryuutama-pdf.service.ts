@@ -42,13 +42,15 @@ const PDF_TEMPLATE_PATH = join(
  * incrustation de vérification superposée sur le rendu réel) — bord intérieur du cadre.
  * Remplace l'estimation initiale (90×110, jamais vérifiée) très en-deçà de la vraie zone et
  * mal positionnée, cf. captures utilisateur lors de la revue de la Story 4.6.
- * Dupliquées intentionnellement dans `RYUUTAMA_PDF_PORTRAIT_WIDTH/HEIGHT` (`@master-jdr/shared`,
- * consommées par `PortraitCropper` côté web) plutôt que partagées : `@master-jdr/shared` est une
- * frontière **types uniquement, effacée au runtime** (CLAUDE.md/project-context.md) — Jest ne
- * transforme pas ce module en tant que dépendance de workspace (`node_modules`, hors `rootDir`
- * de l'API), donc un import de valeur runtime depuis ce package casse la suite `api` (confirmé :
- * `SyntaxError: Unexpected token 'export'`). Si ces valeurs changent, mettre à jour les deux
- * emplacements (et considérer construire `@master-jdr/shared` en JS si ce besoin se répète).
+ * Dupliquées avec `RYUUTAMA_PDF_PORTRAIT_WIDTH/HEIGHT` (`@master-jdr/shared`, consommées par
+ * `PortraitCropper` côté web). Héritage, plus une nécessité : la duplication datait d'une époque
+ * où Jest ne transformait pas ce package comme dépendance de workspace (`node_modules`, hors
+ * `rootDir` de l'API), et où tout import de valeur runtime cassait la suite `api`
+ * (`SyntaxError: Unexpected token 'export'`). `transformIgnorePatterns` couvre désormais
+ * `@master-jdr/shared` et l'API importe déjà des valeurs de ce package (`GAME_SYSTEMS` dans
+ * `parties/dto/create-partie.dto.ts`, `THEMES` dans `auth/auth.service.ts`) : ces constantes
+ * pourraient donc être importées plutôt que redéclarées. Tant que ce n'est pas fait, si ces
+ * valeurs changent, mettre à jour les deux emplacements.
  */
 const PORTRAIT_X = 344.87;
 const PORTRAIT_Y = 646.92;

@@ -1059,10 +1059,13 @@ export interface UpdateNarrativeFieldDto {
  * au cadre réel du PDF.
  *
  * **Dupliquées, pas partagées**, avec `PORTRAIT_WIDTH`/`PORTRAIT_HEIGHT` dans
- * `apps/api/src/characters/ryuutama-pdf.service.ts` : `@master-jdr/shared` est une frontière
- * **types uniquement, effacée au runtime** (CLAUDE.md/project-context.md), donc l'API ne peut
- * pas importer ces constantes comme valeurs (Jest ne transforme pas ce module en tant que
- * dépendance de workspace). Si ces valeurs changent, mettre à jour les deux emplacements.
+ * `apps/api/src/characters/ryuutama-pdf.service.ts`. La duplication est un héritage : elle datait
+ * d'une époque où Jest ne transformait pas ce package comme dépendance de workspace, ce qui cassait
+ * tout import de valeur runtime côté API. Cette contrainte est levée — `transformIgnorePatterns`
+ * transforme désormais `@master-jdr/shared` (cf. la config `jest` d'`apps/api/package.json`), et
+ * l'API importe déjà des valeurs d'ici (`GAME_SYSTEMS` dans `parties/dto/create-partie.dto.ts`,
+ * `THEMES` dans `auth/auth.service.ts`). Tant que la duplication subsiste : si ces valeurs
+ * changent, mettre à jour les deux emplacements.
  */
 export const RYUUTAMA_PDF_PORTRAIT_WIDTH = 188.18;
 export const RYUUTAMA_PDF_PORTRAIT_HEIGHT = 136.48;
