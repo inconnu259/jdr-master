@@ -1,6 +1,19 @@
-<article class="annonce-card">
+<article
+  class="annonce-card"
+  [id]="'announcement-' + announcement().id"
+  [class.annonce-card--unseen]="unseen()"
+  [attr.role]="unseen() ? 'button' : null"
+  [attr.tabindex]="unseen() ? 0 : null"
+  (click)="onActivate()"
+  (keydown.enter)="onActivate()"
+  (keydown.space)="$event.preventDefault(); onActivate()"
+>
   <!-- AC4/AC5 : le libellé de portée est un texte réel dans le DOM, jamais seulement une couleur
-       d'accent CSS — lu par un lecteur d'écran au même titre que le reste du contenu. -->
+       d'accent CSS — lu par un lecteur d'écran au même titre que le reste du contenu. Même règle
+       pour l'indicateur « non lue » (Story 29.13). -->
+  @if (unseen()) {
+    <span class="annonce-card__unseen-label">{{ theme.tone()['announcement.unseen_label'] }}</span>
+  }
   <span class="annonce-card__scope-label">{{ scopeLabel() }}</span>
   <span class="annonce-card__author">
     <app-identity-label [playerName]="announcement().authorDisplayName" />

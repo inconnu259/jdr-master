@@ -1,0 +1,8 @@
+[
+  { "key": "blesse", "label": "Blessé" },
+  { "key": "choc", "label": "Choc" },
+  { "key": "empoisonne", "label": "Empoisonné" },
+  { "key": "las", "label": "Las" },
+  { "key": "malade", "label": "Malade" },
+  { "key": "surexcite", "label": "Surexcité" }
+]

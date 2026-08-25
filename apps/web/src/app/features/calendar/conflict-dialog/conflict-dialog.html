@@ -1,0 +1,114 @@
+<h2 mat-dialog-title>{{ title() }}</h2>
+
+<mat-dialog-content>
+  <p class="intent">
+    Tu déclares <b>{{ data.kindLabel }}</b> {{ data.intentLabel }}.
+  </p>
+
+  @if (!walking()) {
+    <!-- Les trois issues. Chacune NOMME les créneaux qu'elle touche et dit sa conséquence :
+         un simple décompte ne permettrait pas de décider (AC2). -->
+    <button
+      type="button"
+      class="choice"
+      mat-stroked-button
+      data-test="choice-overwrite"
+      (click)="onChoose('overwrite')"
+    >
+      <span class="choice__label">Remplacer</span>
+      <span class="choice__body">
+        <!-- L'adjectif QUALIFIE le sujet ici, il s'accorde donc — contrairement à « passent en
+             disponible » plus bas, où le contrat d'UI le laisse invariable. -->
+        <b
+          >{{ steps().length === 1 ? 'Le créneau devient' : 'Les ' + steps().length + ' deviennent' }}
+          {{ data.kindLabel }}{{ steps().length > 1 ? 's' : '' }}</b
+        >
+        <span class="choice__detail">{{ conflictLabels().join(' · ') }}</span>
+      </span>
+    </button>
+
+    <button
+      type="button"
+      class="choice"
+      mat-stroked-button
+      data-test="choice-keep"
+      (click)="onChoose('keep')"
+    >
+      <span class="choice__label">Conserver</span>
+      <span class="choice__body">
+        <b>{{ steps().length === 1 ? 'Ce créneau reste' : 'Ces ' + steps().length + ' restent' }}
+          comme {{ steps().length === 1 ? 'il est' : 'ils sont' }}</b>
+        <span class="choice__detail">
+          @if (data.freeCount === 1) {
+            Le 1 autre passe en {{ data.kindLabel }}
+          } @else if (data.freeCount > 1) {
+            Les {{ data.freeCount }} autres passent en {{ data.kindLabel }}
+          } @else {
+            Rien d'autre n'est enregistré
+          }
+        </span>
+      </span>
+    </button>
+
+    <button
+      type="button"
+      class="choice choice--walkthrough"
+      mat-stroked-button
+      data-test="choice-walkthrough"
+      (click)="onWalkthrough()"
+    >
+      <span class="choice__label">Au cas par cas</span>
+      <span class="choice__body">
+        <b>On les passe en revue un par un</b>
+        <span class="choice__detail">
+          {{ steps().length }} décision{{ steps().length > 1 ? 's' : '' }} à prendre
+        </span>
+      </span>
+    </button>
+
+    <!-- Ligne d'exception : ce n'est pas une option qu'on prend, c'est une exception qu'on subit.
+         Elle est donc distincte des trois choix et n'est pas actionnable (AC11). L'indisponibilité
+         dérivée d'une séance n'est jamais persistée : il n'y a structurellement rien à écraser. -->
+    @if (data.seanceExceptions.length > 0) {
+      <p class="exception">
+        <span class="exception__mark" aria-hidden="true">✦</span>
+        <span>
+          <b>{{ data.seanceExceptions.join(' · ') }}
+            {{ data.seanceExceptions.length > 1 ? 'ne sont pas dans la liste' : 'n\'est pas dans la liste' }}</b>
+          <span class="exception__detail">
+            Tu y as une séance. Aucun de ces choix n'y touche. Si elle est annulée, tu redeviens
+            {{ data.kindLabel }}.
+          </span>
+        </span>
+      </p>
+    }
+  } @else {
+    <div class="step">
+      <p class="step__progress">{{ progressLabel() }}</p>
+      <p class="step__label">{{ currentStep()?.label }}</p>
+      <p class="visually-hidden" aria-live="polite">{{ stepAnnouncement() }}</p>
+      <div class="step__actions">
+        <button
+          type="button"
+          mat-flat-button
+          data-test="step-overwrite"
+          (click)="onStepDecision('overwrite')"
+        >
+          Remplacer
+        </button>
+        <button
+          type="button"
+          mat-stroked-button
+          data-test="step-keep"
+          (click)="onStepDecision('keep')"
+        >
+          Conserver
+        </button>
+      </div>
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" mat-button data-test="cancel" (click)="onCancel()">Annuler</button>
+</mat-dialog-actions>

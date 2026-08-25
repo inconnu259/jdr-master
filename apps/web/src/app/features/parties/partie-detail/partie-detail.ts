@@ -40,7 +40,7 @@ import type {
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING: 'Soirée',
+  EVENING: 'Soir',
   FULL_DAY: 'Journée',
 };
 import { AuthService } from '../../../core/auth/auth.service';
@@ -53,6 +53,7 @@ import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { getRespondedCount } from '../../../core/poll/poll.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
@@ -66,6 +67,8 @@ import { ScenarioTimeline } from '../../scenarios/scenario-timeline/scenario-tim
 import { AnnouncementFormComponent } from '../../announcements/announcement-form/announcement-form';
 import { AnnonceCard } from '../../announcements/annonce-card/annonce-card';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
+import { scrollToAnnouncement } from '../../../core/announcements/scroll-to-announcement.util';
 import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
 import { HommeDragonSheet } from '../../homme-dragon/homme-dragon-sheet/homme-dragon-sheet';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
@@ -111,11 +114,13 @@ export class PartieDetail implements OnInit {
   private readonly myPartiesSvc = inject(MyPartiesService);
   private readonly scenariosSvc = inject(ScenariosService);
   private readonly announcementsSvc = inject(AnnouncementsService);
+  private readonly unseenAnnouncementsSvc = inject(UnseenAnnouncementsService);
   private readonly characterRolesSvc = inject(CharacterRolesService);
   private readonly characterSvc = inject(CharacterService);
   private readonly dialog = inject(MatDialog);
   private readonly breakpointObserver = inject(BreakpointObserver);
   protected readonly theme = inject(ThemeToneService);
+  private readonly contextualNav = inject(ContextualNavService);
   private readonly destroyRef = inject(DestroyRef);
 
   private static readonly DESKTOP_QUERY = '(min-width: 1024px)';
@@ -139,6 +144,9 @@ export class PartieDetail implements OnInit {
   // Story 9.2 : liste complète (campagne + scopée) chargée une fois, filtrée côté client par
   // consommateur (AD-6 — même principe que activePolls/ScenariosService.listAll()).
   protected readonly announcements = signal<AnnouncementDto[]>([]);
+  // Story 29.13 (révision) : id transmis en query param par le bandeau du Shell — consommé une
+  // seule fois dès que l'annonce apparaît dans campaignAnnouncements() (cf. effect() au constructeur).
+  private pendingScrollAnnouncementId = this.route.snapshot.queryParamMap.get('announcementId');
   private announcementsReqId = 0;
   private characterRolesReqId = 0;
   // Story 27.3 : liste des rôles de groupe assignés sur cette Partie, chargée une fois puis
@@ -151,6 +159,11 @@ export class PartieDetail implements OnInit {
     this.partie()?.kind === 'ONE_SHOT'
       ? this.theme.tone()['announcement.scope_oneshot_label']
       : this.theme.tone()['announcement.scope_campaign_label'],
+  );
+  // Story 29.13 (révision) : le marquage « vue » se déclenche sur un clic explicite de l'utilisateur
+  // sur AnnonceCard (opened()), plus au simple affichage.
+  protected readonly unseenAnnouncementIds = computed(
+    () => new Set(this.unseenAnnouncementsSvc.unseenAnnouncements().map((a) => a.id)),
   );
   protected readonly gameSystemContent = signal<GameSystemContentDto | null>(null);
   protected readonly search = signal('');
@@ -206,7 +219,8 @@ export class PartieDetail implements OnInit {
     const p = this.partie();
     if (!me) return false;
     const displayName = me.displayName;
-    if (this.members().some((m) => m.userId !== me.id && m.displayName === displayName)) return true;
+    if (this.members().some((m) => m.userId !== me.id && m.displayName === displayName))
+      return true;
     return !!p && p.mjId !== me.id && p.mjDisplayName === displayName;
   });
 
@@ -304,6 +318,20 @@ export class PartieDetail implements OnInit {
   };
 
   constructor() {
+    // Story 29.4 : bandeau contextuel — réactif (partie() se résout de façon asynchrone), pas un
+    // simple appel statique dans ngOnInit(). Correction post-test : le sous-titre porte le
+    // système de jeu et le type de partie (ex. « Ryuutama · Campagne épisodique ») — portait
+    // auparavant le rôle MJ, retiré du bandeau (déjà visible via les actions MJ-only de l'écran).
+    // Reprend le mat-card-header retiré de la carte (partie-detail.html) plutôt que de dupliquer.
+    effect(() => {
+      const p = this.partie();
+      if (!p) return;
+      this.contextualNav.set({
+        title: p.name,
+        subtitle: `${this.system(p.gameSystemId)} · ${this.kind(p.kind)}`,
+      });
+    });
+
     effect(() => {
       if (this.isMj()) void this.loadLinks();
     });
@@ -406,6 +434,28 @@ export class PartieDetail implements OnInit {
       }
       untracked(() => void this.reloadCharacterRoles());
     });
+
+    // Story 29.13 (révision du 2026-08-13, retour utilisateur) : clic sur le bandeau du Shell —
+    // force l'onglet "Détails" (0, où vivent les annonces de campagne) puis défile jusqu'à
+    // l'annonce visée dès qu'elle apparaît dans campaignAnnouncements(). Après `tabSetKey()`
+    // (qui remet `manualTabIndex` à `null` à chaque changement MJ/desktop) pour ne pas être écrasé.
+    effect(() => {
+      const id = this.pendingScrollAnnouncementId;
+      if (!id) return;
+      const found = this.campaignAnnouncements().some((a) => a.id === id);
+      if (!found) return;
+      untracked(() => {
+        this.pendingScrollAnnouncementId = null;
+        this.manualTabIndex.set(0);
+        scrollToAnnouncement(id);
+      });
+    });
+  }
+
+  /** Story 29.13 (révision) : « j'ouvre l'annonce » = clic explicite sur AnnonceCard, plus le
+   *  simple affichage (qui refermait la notification avant que l'utilisateur n'ait pu la voir). */
+  protected markAnnouncementOpened(announcementId: string): void {
+    void this.unseenAnnouncementsSvc.markRead(announcementId);
   }
 
   /** Recharge `characters` seul (roster) — réutilisé par l'effet temps réel et par
@@ -466,10 +516,14 @@ export class PartieDetail implements OnInit {
   protected pollStatusLabel(): string {
     const polls = this.activePolls();
     if (polls.length === 1) {
+      // Deferred-work (2026-08-24) : `{total}` prend `poll.membersCount` (MJ compris, valeur
+      // serveur), pas `this.members().length` (exclut le MJ, `GET /parties/:id/members` ne lui
+      // pose jamais de ligne `Membership`) — même dénominateur que le panneau du calendrier
+      // (story 36.6), qui avait le même bug à deux Y avant sa correction.
       return this.theme
         .tone()
         ['poll.status_summary'].replace('{responded}', String(this.respondedCount()))
-        .replace('{total}', String(this.members().length));
+        .replace('{total}', String(polls[0].membersCount));
     }
     return `${polls.length} votes de date en cours`;
   }
@@ -573,6 +627,16 @@ export class PartieDetail implements OnInit {
     this.notice.set(this.theme.tone()['partie.notice_copy']);
   }
 
+  /** Réversible (AC2) — pas de `ConfirmDialog`, contrairement à `confirmDelete()` (irréversible).
+   *  Mise à jour directe du signal local, même immédiateté que `invite()`/`createLink()`. */
+  async closeGame(p: PartieDto): Promise<void> {
+    this.partie.set(await this.parties.close(p.id));
+  }
+
+  async reopenGame(p: PartieDto): Promise<void> {
+    this.partie.set(await this.parties.reopen(p.id));
+  }
+
   async confirmDelete(p: PartieDto): Promise<void> {
     const ref = this.dialog.open(ConfirmDialog, {
       data: { message: `Supprimer « ${p.name} » ? Cette action est irréversible.` },
@@ -645,7 +709,9 @@ export class PartieDetail implements OnInit {
     const p = this.partie();
     if (!p) return;
     const reqId = ++this.characterRolesReqId;
-    const list = await this.characterRolesSvc.listForPartie(p.id).catch(() => this.characterRoles());
+    const list = await this.characterRolesSvc
+      .listForPartie(p.id)
+      .catch(() => this.characterRoles());
     if (reqId === this.characterRolesReqId) this.characterRoles.set(list);
   }
 
@@ -657,7 +723,8 @@ export class PartieDetail implements OnInit {
    */
   protected async downloadAsset(key: string, section: 'reference' | 'prep'): Promise<void> {
     const p = this.partie();
-    const downloading = section === 'reference' ? this.downloadingReferenceAsset : this.downloadingPrepAsset;
+    const downloading =
+      section === 'reference' ? this.downloadingReferenceAsset : this.downloadingPrepAsset;
     const error = section === 'reference' ? this.referenceAssetError : this.prepAssetError;
     if (!p || downloading()) return;
     error.set(null);

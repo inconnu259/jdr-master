@@ -1,0 +1,122 @@
+<!-- Story 36.1 — rail de détail. Région live : il se repeuple sans action explicite de
+     consultation (AC10), et n'ouvre ni ne ferme rien, donc aucune règle de piège de focus. -->
+<div
+  class="rail"
+  [class.rail--loading]="loading()"
+  role="region"
+  aria-label="Détail du jour"
+  aria-live="polite"
+>
+  @if (detail(); as d) {
+    <div class="dl">{{ dayLabel() }}</div>
+
+    <!-- Les TROIS créneaux, toujours — y compris les vides, qui disent leur état (AC2/AC4). -->
+    @for (s of d.slots; track s.slot) {
+      <div class="it" [class.it--touched]="isTouched(s)">
+        <span class="w">
+          @switch (s.slot) {
+            @case ('MORNING') {
+              <svg class="ic" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v3M5.6 9.6l2 2M18.4 9.6l-2 2M3 18h18M7 18a5 5 0 0 1 10 0" />
+              </svg>
+            }
+            @case ('AFTERNOON') {
+              <svg class="ic" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="4.2" />
+                <path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
+              </svg>
+            }
+            @case ('EVENING') {
+              <svg class="ic" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z" />
+              </svg>
+            }
+          }
+          <span class="w-label">{{ s.label }}</span>
+          <span class="w-label-short">{{ s.shortLabel }}</span>
+        </span>
+
+        @if (s.seanceTarget) {
+          <!-- AC11 : seule une ligne portant une séance nommée est activable, et c'est un vrai
+               bouton — focalisable et atteignable au clavier sans code supplémentaire. -->
+          <button
+            type="button"
+            class="v v--action"
+            [attr.aria-label]="openLabel(s)"
+            (click)="onActivate(s)"
+          >
+            <b>{{ s.seanceLabel }}</b>
+            <!-- Story 36.5 — le rail est la surface la plus riche : il demande le niveau
+                 complet, contrairement à la bande. Interpolation seule (AC9). -->
+            @if (seanceInfo(s)) {
+              <span class="m">{{ seanceInfo(s) }}</span>
+            }
+          </button>
+        } @else if (s.seanceLabel) {
+          <span class="v">
+            <b>{{ s.seanceLabel }}</b>
+            @if (seanceInfo(s)) {
+              <span class="m">{{ seanceInfo(s) }}</span>
+            }
+          </span>
+        } @else if (s.pollLabel && s.pollVote) {
+          <!-- Story 36.7, AC7 — un VRAI bouton, comme la ligne de séance : c'est le seul chemin
+               clavier vers le sélecteur de réponse, les bandes des grilles n'étant pas
+               focalisables. Il n'existe QUE si la participation est servie : une ligne cliquable
+               qui ne saurait pas quoi ouvrir serait un piège (dégradation honnête de la 36.6). -->
+          <button
+            type="button"
+            class="v v--action v--vote"
+            [attr.aria-label]="voteLabel(s)"
+            aria-haspopup="menu"
+            (click)="onVoteActivate(s, $event)"
+          >
+            <b>{{ s.pollLabel }}</b
+            ><span class="m"> · vote de date</span>
+            <!-- Story 36.6 — le rail est la surface la plus riche : il porte la piste, son
+                 compteur ET ma réponse en toutes lettres, à TOUTES les largeurs (AC4, AC5). -->
+            <app-poll-track class="rail-track track-lg" [vote]="s.pollVote" />
+          </button>
+        } @else if (s.pollLabel) {
+          <span class="v">
+            <b>{{ s.pollLabel }}</b
+            ><span class="m"> · vote de date</span>
+          </span>
+        } @else {
+          <!-- Jamais la couleur seule : l'état est écrit en toutes lettres (AC8). -->
+          <span class="v" [attr.data-status]="s.status">{{ statusLabel(s.status) }}</span>
+        }
+
+        <!-- Story 36.8, AC7 — LA LECTURE LONGUE du canal de groupe.
+
+             Elle s'AJOUTE à la valeur ci-dessus, elle ne la remplace jamais : le rail continue de
+             dire « Disponible » / « Rien de prévu » (AC8 de la 36.1), et il dit en plus où en est
+             le groupe — y compris quand une séance ou un vote occupe le créneau (AC2).
+
+             ⚠️ Ce n'est PAS un bouton : le groupe n'ouvre rien. Les lignes activables restent la
+             séance (36.1) et le vote (36.7) ; une affordance qui ne mène nulle part est un piège.
+
+             ⚠️ Noms pour le MJ, compteurs anonymes pour un joueur — et c'est LA DONNÉE qui en
+             décide, pas un drapeau de rôle : le serveur ne sert d'identités qu'au MJ. -->
+        @if (s.group; as g) {
+          @if (groupMembers(g); as members) {
+            <span class="grp" [attr.aria-label]="groupLabel(g)" role="img">
+              @for (m of members; track m.userId) {
+                <span class="grp__m" [attr.data-status]="m.status" aria-hidden="true">
+                  <b>{{ m.displayName }}</b>
+                  <span class="grp__s">{{ statusWord(m) }}</span>
+                  <span class="grp__g">{{ statusGlyph(m) }}</span>
+                </span>
+              }
+            </span>
+          } @else {
+            <app-group-gauge class="grp grp--gauge in-rail" [group]="g" />
+          }
+        }
+      </div>
+    }
+  } @else {
+    <div class="dl">Détail du jour</div>
+    <div class="it"><span class="v empty">Aucun jour à détailler</span></div>
+  }
+</div>

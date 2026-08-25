@@ -1,8 +1,10 @@
-import { TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, Subject } from 'rxjs';
 import { vi } from 'vitest';
 import type { AuthUser, CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
@@ -56,6 +58,16 @@ function makeCharacterService(overrides: Partial<ReturnType<typeof defaultSvc>> 
   return { ...defaultSvc(), ...overrides };
 }
 
+/** Story 31.1 — même patron que `calendar-view.spec.ts` : jsdom n'implémente pas `matchMedia`,
+ *  `BreakpointObserver` doit donc être mocké. Défaut **ordinateur**, sinon chaque test du menu
+ *  basculerait sur la feuille mobile sans le vouloir. */
+function makeBreakpointObserver(desktop: boolean) {
+  return {
+    isMatched: () => desktop,
+    observe: () => of({ matches: desktop, breakpoints: {} }),
+  };
+}
+
 function defaultSvc() {
   return {
     get: vi.fn().mockResolvedValue(CHARACTER),
@@ -64,9 +76,7 @@ function defaultSvc() {
     exportEquipmentPdf: vi
       .fn()
       .mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
-    exportNotesPdf: vi
-      .fn()
-      .mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
+    exportNotesPdf: vi.fn().mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' })),
     updatePortrait: vi.fn(),
     patchPdfPortraitCrop: vi.fn(),
     getHistory: vi.fn().mockResolvedValue([]),
@@ -91,6 +101,7 @@ async function createComponent(
   dialogResult: unknown = null,
   currentUserId: string | null = 'u1',
   partieId = 'p1',
+  desktop = true,
 ) {
   const dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(dialogResult) }) };
   const auth = {
@@ -104,6 +115,7 @@ async function createComponent(
   await TestBed.configureTestingModule({
     imports: [CharacterSheet],
     providers: [
+      provideNoopAnimations(),
       { provide: CharacterService, useValue: characterSvc },
       { provide: MatDialog, useValue: dialog },
       { provide: AuthService, useValue: auth },
@@ -114,6 +126,7 @@ async function createComponent(
         },
       },
       { provide: RealtimeService, useValue: realtimeSvc },
+      { provide: BreakpointObserver, useValue: makeBreakpointObserver(desktop) },
     ],
   }).compileComponents();
 
@@ -130,18 +143,65 @@ async function createComponent(
   return { fixture, characterSvc, dialog, auth, realtimeSvc };
 }
 
+/**
+ * Story 29.5 : sélectionne un onglet de la sous-navigation locale (0=Fiche, 1=Équipement,
+ * 2=Journal, 3=Historique si présent) — le contenu d'un `mat-tab` n'est rendu dans le DOM qu'une
+ * fois activé (comportement natif de `mat-tab-group`, même contrainte que `partie-detail.spec.ts`).
+ */
+async function selectTab(fixture: ComponentFixture<CharacterSheet>, index: number): Promise<void> {
+  (
+    fixture.componentInstance as unknown as { onTabIndexChange: (i: number) => void }
+  ).onTabIndexChange(index);
+  fixture.detectChanges();
+  // mat-tab-group met à jour son en-tête immédiatement mais attache le contenu du mat-tab-body
+  // nouvellement actif sur un cycle de détection ultérieur (portail CDK) — un seul
+  // detectChanges()/whenStable() ne suffit pas toujours en environnement zoneless.
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+  await fixture.whenStable();
+  fixture.detectChanges();
+}
+
+/**
+ * Story 31.1 — ouvre le menu « ⋮ » de la fiche (clic sur le déclencheur) et laisse le temps à
+ * l'overlay CDK de s'attacher (portail asynchrone, même contrainte que `selectTab` ci-dessus).
+ */
+async function openSheetMenu(fixture: ComponentFixture<CharacterSheet>): Promise<void> {
+  const trigger: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__menu-trigger');
+  trigger.click();
+  fixture.detectChanges();
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+    fixture.detectChanges();
+  }
+}
+
+/** Boutons d'action DANS le menu ouvert — le portail CDK attache la surface ancrée à
+ *  `document.body`, hors de `fixture.nativeElement` ; la feuille mobile, elle, reste dans le
+ *  template du composant. `document.querySelectorAll` couvre les deux cas sans distinction. */
+function sheetMenuButtons(): NodeListOf<HTMLButtonElement> {
+  return document.querySelectorAll('.actions-menu__item');
+}
+
 describe('CharacterSheet', () => {
+  // Story 31.1 — patcher les deux méthodes statiques sur la VRAIE classe `URL`, plutôt que la
+  // remplacer entièrement (`vi.stubGlobal('URL', { ...URL })` perdait le constructeur : le CDK
+  // Overlay du nouveau menu en a besoin en interne, et `new URL(...)` levait `TypeError: URL is
+  // not a constructor` dès qu'un test ouvrait le menu).
+  const originalCreateObjectURL = URL.createObjectURL;
+  const originalRevokeObjectURL = URL.revokeObjectURL;
+
   beforeEach(() => {
-    vi.stubGlobal('URL', {
-      ...URL,
-      createObjectURL: vi.fn(() => 'blob:mock-url'),
-      revokeObjectURL: vi.fn(),
-    });
+    URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+    URL.revokeObjectURL = vi.fn();
   });
 
   afterEach(() => {
     TestBed.resetTestingModule();
-    vi.unstubAllGlobals();
+    URL.createObjectURL = originalCreateObjectURL;
+    URL.revokeObjectURL = originalRevokeObjectURL;
   });
 
   it('charge le personnage et le contenu, affiche les sections avec labels résolus (pas les clés brutes)', async () => {
@@ -286,20 +346,38 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.textContent).toContain('Forgeron');
   });
 
-  it('clic sur "Exporter en PDF (éditable)" → appelle exportPdf(id, "editable") et déclenche un téléchargement', async () => {
+  // Story 31.1 — les cinq actions ont quitté la vue principale pour le menu « ⋮ » : chaque test
+  // ouvre désormais le menu avant d'interroger ses boutons. Le comportement testé (quel service
+  // est appelé, avec quels arguments, quelle erreur s'affiche) ne change pas — voir AC3.
+
+  it("AC1 — aucune action d'export visible tant que le menu est fermé (ordinateur)", async () => {
+    const { fixture } = await createComponent();
+    expect(fixture.nativeElement.querySelector('.sheet__export-actions')).toBeNull();
+    expect(document.querySelectorAll('.actions-menu__item').length).toBe(0);
+  });
+
+  // Revue de code 31.1 — l'AC1 nomme littéralement « sur téléphone », mais aucun test de ce
+  // fichier ne passait jamais `desktop=false` avant ce patch : toute la branche feuille mobile
+  // (`character-sheet.html`, bloc `@else if (sheetMenuOpen())`) tournait sans filet.
+  it("AC1 — aucune action d'export visible tant que le menu est fermé (téléphone)", async () => {
+    await createComponent(makeCharacterService(), 'char1', null, 'u1', 'p1', false);
+    expect(document.querySelectorAll('.actions-menu__item').length).toBe(0);
+  });
+
+  it('clic sur "Exporter en PDF (éditable)" → appelle exportPdf(id, "editable"), déclenche un téléchargement, et referme le menu (AC3, AC4)', async () => {
     const { fixture, characterSvc } = await createComponent();
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
 
-    const buttons = fixture.nativeElement.querySelectorAll(
-      '.sheet__export-actions button',
-    ) as NodeListOf<HTMLButtonElement>;
-    buttons[0].click();
+    await openSheetMenu(fixture);
+    sheetMenuButtons()[0].click();
+    fixture.detectChanges();
     await Promise.resolve();
     await Promise.resolve();
     fixture.detectChanges();
 
     expect(characterSvc.exportPdf).toHaveBeenCalledWith('char1', 'editable');
     expect(clickSpy).toHaveBeenCalled();
+    expect(document.querySelectorAll('.actions-menu__item').length).toBe(0);
     clickSpy.mockRestore();
   });
 
@@ -307,10 +385,9 @@ describe('CharacterSheet', () => {
     const { fixture, characterSvc } = await createComponent();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
 
-    const buttons = fixture.nativeElement.querySelectorAll(
-      '.sheet__export-actions button',
-    ) as NodeListOf<HTMLButtonElement>;
-    buttons[1].click();
+    await openSheetMenu(fixture);
+    sheetMenuButtons()[1].click();
+    fixture.detectChanges();
     await Promise.resolve();
     await Promise.resolve();
     fixture.detectChanges();
@@ -322,10 +399,9 @@ describe('CharacterSheet', () => {
     const { fixture, characterSvc } = await createComponent();
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
 
-    const buttons = fixture.nativeElement.querySelectorAll(
-      '.sheet__export-actions button',
-    ) as NodeListOf<HTMLButtonElement>;
-    buttons[2].click();
+    await openSheetMenu(fixture);
+    sheetMenuButtons()[2].click();
+    fixture.detectChanges();
     await Promise.resolve();
     await Promise.resolve();
     fixture.detectChanges();
@@ -341,10 +417,9 @@ describe('CharacterSheet', () => {
     });
     const { fixture } = await createComponent(characterSvc);
 
-    const buttons = fixture.nativeElement.querySelectorAll(
-      '.sheet__export-actions button',
-    ) as NodeListOf<HTMLButtonElement>;
-    buttons[2].click();
+    await openSheetMenu(fixture);
+    sheetMenuButtons()[2].click();
+    fixture.detectChanges();
     await Promise.resolve();
     await Promise.resolve();
     fixture.detectChanges();
@@ -358,10 +433,9 @@ describe('CharacterSheet', () => {
     const { fixture, characterSvc } = await createComponent();
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
 
-    const buttons = fixture.nativeElement.querySelectorAll(
-      '.sheet__export-actions button',
-    ) as NodeListOf<HTMLButtonElement>;
-    buttons[3].click();
+    await openSheetMenu(fixture);
+    sheetMenuButtons()[3].click();
+    fixture.detectChanges();
     await Promise.resolve();
     await Promise.resolve();
     fixture.detectChanges();
@@ -377,10 +451,9 @@ describe('CharacterSheet', () => {
     });
     const { fixture } = await createComponent(characterSvc);
 
-    const buttons = fixture.nativeElement.querySelectorAll(
-      '.sheet__export-actions button',
-    ) as NodeListOf<HTMLButtonElement>;
-    buttons[3].click();
+    await openSheetMenu(fixture);
+    sheetMenuButtons()[3].click();
+    fixture.detectChanges();
     await Promise.resolve();
     await Promise.resolve();
     fixture.detectChanges();
@@ -390,7 +463,12 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.textContent).toContain(comp.exportNotesError());
   });
 
-  it('les 4 boutons d\'export sont tous désactivés pendant un export notes en cours (garde étendue)', async () => {
+  // ⚠️ CETTE STORY CHANGE LA VÉRITÉ DE CE TEST — pas supprimé, réécrit. Avant la 31.1, les quatre
+  // boutons restaient VISIBLES ET DÉSACTIVÉS pendant un export en cours (ils vivaient en
+  // permanence dans l'en-tête). Depuis la 31.1 (AC4), le menu se referme AUSSITÔT le clic, avant
+  // même que l'export ne résolve — il n'y a donc plus de bouton à désactiver : la garde devient
+  // « le menu est fermé », pas « les boutons sont disabled ».
+  it("un clic sur une action ferme le menu immédiatement, avant même que l'export ne résolve (AC4)", async () => {
     let resolveExport: (blob: Blob) => void;
     const pending = new Promise<Blob>((resolve) => {
       resolveExport = resolve;
@@ -400,20 +478,12 @@ describe('CharacterSheet', () => {
     });
     const { fixture } = await createComponent(characterSvc);
 
-    const buttons = fixture.nativeElement.querySelectorAll(
-      '.sheet__export-actions button',
-    ) as NodeListOf<HTMLButtonElement>;
-    buttons[3].click();
-    await Promise.resolve();
+    await openSheetMenu(fixture);
+    expect(sheetMenuButtons().length).toBe(4);
+    sheetMenuButtons()[3].click();
     fixture.detectChanges();
 
-    const refreshedButtons = fixture.nativeElement.querySelectorAll(
-      '.sheet__export-actions button',
-    ) as NodeListOf<HTMLButtonElement>;
-    expect(refreshedButtons[0].disabled).toBe(true);
-    expect(refreshedButtons[1].disabled).toBe(true);
-    expect(refreshedButtons[2].disabled).toBe(true);
-    expect(refreshedButtons[3].disabled).toBe(true);
+    expect(document.querySelectorAll('.actions-menu__item').length).toBe(0);
 
     resolveExport!(new Blob(['%PDF-1.6'], { type: 'application/pdf' }));
     await Promise.resolve();
@@ -427,10 +497,9 @@ describe('CharacterSheet', () => {
     });
     const { fixture } = await createComponent(characterSvc);
 
-    const buttons = fixture.nativeElement.querySelectorAll(
-      '.sheet__export-actions button',
-    ) as NodeListOf<HTMLButtonElement>;
-    buttons[0].click();
+    await openSheetMenu(fixture);
+    sheetMenuButtons()[0].click();
+    fixture.detectChanges();
     await Promise.resolve();
     await Promise.resolve();
     fixture.detectChanges();
@@ -613,18 +682,24 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.textContent).toContain(comp.portraitError());
   });
 
-  it('CTA "Ajuster le cadrage PDF" absent si le personnage n\'a pas de portrait', async () => {
+  // Story 31.1 — le CTA de recadrage PDF est désormais la 5e action DANS le menu, jamais rendu
+  // seul dans l'en-tête : ouvrir le menu avant de vérifier sa présence/absence (AC6).
+
+  it('menu — "Ajuster le cadrage PDF" absent si le personnage n\'a pas de portrait (AC6)', async () => {
     const { fixture } = await createComponent();
-    expect(fixture.nativeElement.querySelector('.sheet__pdf-crop-edit-cta')).toBeNull();
+    await openSheetMenu(fixture);
+    expect(sheetMenuButtons().length).toBe(4);
   });
 
-  it('propriétaire + portrait existant → clic sur "Ajuster le cadrage PDF" ouvre le dialogue en mode rect', async () => {
+  it('propriétaire + portrait existant → le menu porte les 5 actions, et cliquer "Ajuster le cadrage PDF" ouvre le dialogue en mode rect (AC2, AC6)', async () => {
     const withPortrait = { ...CHARACTER, portraitUrl: '/uploads/portraits/x.jpg' };
     const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(withPortrait) });
     const { fixture, dialog } = await createComponent(characterSvc);
 
-    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__pdf-crop-edit-cta');
-    btn.click();
+    await openSheetMenu(fixture);
+    const buttons = sheetMenuButtons();
+    expect(buttons.length).toBe(5);
+    buttons[4].click();
 
     expect(dialog.open).toHaveBeenCalledWith(
       expect.anything(),
@@ -634,11 +709,12 @@ describe('CharacterSheet', () => {
     );
   });
 
-  it('MJ (non-propriétaire) → CTA "Ajuster le cadrage PDF" absent (lecture seule, FR39)', async () => {
+  it('MJ (non-propriétaire) → "Ajuster le cadrage PDF" absent du menu (lecture seule, FR39, AC6)', async () => {
     const withPortrait = { ...CHARACTER, portraitUrl: '/uploads/portraits/x.jpg' };
     const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(withPortrait) });
     const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
-    expect(fixture.nativeElement.querySelector('.sheet__pdf-crop-edit-cta')).toBeNull();
+    await openSheetMenu(fixture);
+    expect(sheetMenuButtons().length).toBe(4);
   });
 
   it('dialogue résolu → appelle patchPdfPortraitCrop puis rafraîchit le personnage affiché', async () => {
@@ -652,8 +728,9 @@ describe('CharacterSheet', () => {
     const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
     const { fixture } = await createComponent(characterSvc, 'char1', { file, cropData });
 
-    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__pdf-crop-edit-cta');
-    btn.click();
+    await openSheetMenu(fixture);
+    sheetMenuButtons()[4].click();
+    fixture.detectChanges();
     await Promise.resolve();
     await Promise.resolve();
     fixture.detectChanges();
@@ -673,14 +750,245 @@ describe('CharacterSheet', () => {
     const file = new File(['x'], 'p.jpg', { type: 'image/jpeg' });
     const { fixture } = await createComponent(characterSvc, 'char1', { file, cropData });
 
-    const btn: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__pdf-crop-edit-cta');
-    btn.click();
+    await openSheetMenu(fixture);
+    sheetMenuButtons()[4].click();
+    fixture.detectChanges();
     await Promise.resolve();
     await Promise.resolve();
     fixture.detectChanges();
 
     const comp = fixture.componentInstance as any;
     expect(comp.portraitError()).toBeTruthy();
+  });
+
+  // ── Story 31.1 — le menu « ⋮ » lui-même (déclencheur, clavier, contenu exact) ──────────────
+
+  it('AC5 — le bouton "Modifier le portrait" (avatar) n\'est jamais dans le menu', async () => {
+    const { fixture } = await createComponent();
+    expect(fixture.nativeElement.querySelector('.sheet__portrait-edit-cta')).not.toBeNull();
+
+    await openSheetMenu(fixture);
+    const menuText = Array.from(sheetMenuButtons())
+      .map((b) => b.textContent)
+      .join(' ');
+    expect(menuText).not.toContain(
+      (fixture.componentInstance as any).theme.tone()['character.portrait_edit_cta'],
+    );
+  });
+
+  it('AC7 — le déclencheur porte un nom accessible et aria-haspopup', async () => {
+    const { fixture } = await createComponent();
+    const trigger: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__menu-trigger');
+    expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(trigger.getAttribute('aria-label')).toBeTruthy();
+  });
+
+  it('AC7 — Échap ferme le menu et rend le focus au déclencheur', async () => {
+    const { fixture } = await createComponent();
+    const trigger: HTMLButtonElement = fixture.nativeElement.querySelector('.sheet__menu-trigger');
+    const focusSpy = vi.spyOn(trigger, 'focus');
+
+    await openSheetMenu(fixture);
+    expect(sheetMenuButtons().length).toBeGreaterThan(0);
+
+    const comp = fixture.componentInstance as any;
+    comp.onSheetMenuKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(comp.sheetMenuOpen()).toBe(false);
+    expect(focusSpy).toHaveBeenCalled();
+  });
+
+  it('AC8 — aucun mat-menu dans le DOM', async () => {
+    const { fixture } = await createComponent();
+    await openSheetMenu(fixture);
+    expect(document.querySelector('mat-menu')).toBeNull();
+    expect(fixture.nativeElement.querySelector('mat-menu')).toBeNull();
+  });
+
+  // ── Revue de code 31.1 — la branche feuille mobile (`@else if (sheetMenuOpen())`), jamais
+  // exercée avant ce patch : tous les tests du menu tournaient avec `desktop=true` par défaut. ──
+
+  describe('menu sur téléphone (feuille du bas)', () => {
+    it('ouvre une feuille role="dialog" aria-modal avec les 4 actions', async () => {
+      const { fixture } = await createComponent(
+        makeCharacterService(),
+        'char1',
+        null,
+        'u1',
+        'p1',
+        false,
+      );
+      await openSheetMenu(fixture);
+
+      const sheet = document.querySelector('.sheet-menu-surface--sheet');
+      expect(sheet).not.toBeNull();
+      expect(sheet!.getAttribute('role')).toBe('dialog');
+      expect(sheet!.getAttribute('aria-modal')).toBe('true');
+      expect(sheetMenuButtons().length).toBe(4);
+    });
+
+    it('clic sur le voile referme la feuille', async () => {
+      const { fixture } = await createComponent(
+        makeCharacterService(),
+        'char1',
+        null,
+        'u1',
+        'p1',
+        false,
+      );
+      await openSheetMenu(fixture);
+      expect(sheetMenuButtons().length).toBe(4);
+
+      const backdrop: HTMLElement = document.querySelector('.sheet-menu-backdrop')!;
+      backdrop.click();
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(document.querySelectorAll('.actions-menu__item').length).toBe(0);
+    });
+
+    it('Échap ferme la feuille et rend le focus au déclencheur', async () => {
+      const { fixture } = await createComponent(
+        makeCharacterService(),
+        'char1',
+        null,
+        'u1',
+        'p1',
+        false,
+      );
+      const trigger: HTMLButtonElement =
+        fixture.nativeElement.querySelector('.sheet__menu-trigger');
+      const focusSpy = vi.spyOn(trigger, 'focus');
+
+      await openSheetMenu(fixture);
+      expect(sheetMenuButtons().length).toBe(4);
+
+      const comp = fixture.componentInstance as any;
+      comp.onSheetMenuKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(comp.sheetMenuOpen()).toBe(false);
+      expect(focusSpy).toHaveBeenCalled();
+    });
+
+    it('clic sur une action ferme la feuille et appelle le service (AC3, AC4)', async () => {
+      const { fixture, characterSvc } = await createComponent(
+        makeCharacterService(),
+        'char1',
+        null,
+        'u1',
+        'p1',
+        false,
+      );
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
+
+      await openSheetMenu(fixture);
+      sheetMenuButtons()[0].click();
+      fixture.detectChanges();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+
+      expect(characterSvc.exportPdf).toHaveBeenCalledWith('char1', 'editable');
+      expect(document.querySelectorAll('.actions-menu__item').length).toBe(0);
+    });
+  });
+
+  // ── Story 31.2 — surface de détail adaptative (FR-20) ──────────────────────────────────────
+
+  describe('surface de détail (talents/avantages)', () => {
+    function detailTriggerNamed(fixture: ComponentFixture<CharacterSheet>, name: string) {
+      const triggers: HTMLButtonElement[] = Array.from(
+        fixture.nativeElement.querySelectorAll('.sheet__detail-trigger'),
+      );
+      return triggers.find((b) => b.textContent?.trim() === name)!;
+    }
+
+    it('AC1 — activer un talent ouvre la surface avec son nom et sa description', async () => {
+      const { fixture } = await createComponent();
+      expect(fixture.nativeElement.querySelector('.detail-surface-panel')).toBeNull();
+
+      detailTriggerNamed(fixture, 'Légendes').click();
+      fixture.detectChanges();
+
+      const panel = fixture.nativeElement.querySelector('.detail-surface-panel');
+      expect(panel).not.toBeNull();
+      expect(panel.querySelector('.detail-surface-title').textContent).toContain('Légendes');
+      expect(panel.querySelector('.detail-surface-body').textContent).toContain('...');
+    });
+
+    it('AC1 — activer un avantage ouvre la surface (champ `effect`, pas `effect.description`)', async () => {
+      const { fixture } = await createComponent();
+
+      detailTriggerNamed(fixture, 'Précision').click();
+      fixture.detectChanges();
+
+      const panel = fixture.nativeElement.querySelector('.detail-surface-panel');
+      expect(panel.querySelector('.detail-surface-title').textContent).toContain('Précision');
+      expect(panel.querySelector('.detail-surface-body').textContent).toContain('+2');
+    });
+
+    it('AC4 — activer un second élément PENDANT que la surface est ouverte remplace le contenu, sans empiler', async () => {
+      const { fixture } = await createComponent();
+
+      detailTriggerNamed(fixture, 'Légendes').click();
+      fixture.detectChanges();
+      expect(document.querySelectorAll('.detail-surface-panel').length).toBe(1);
+
+      detailTriggerNamed(fixture, 'Précision').click();
+      fixture.detectChanges();
+
+      const panels = fixture.nativeElement.querySelectorAll('.detail-surface-panel');
+      expect(panels.length).toBe(1);
+      expect(panels[0].querySelector('.detail-surface-title').textContent).toContain('Précision');
+    });
+
+    it('fermer puis rouvrir sur un autre élément fonctionne', async () => {
+      const { fixture } = await createComponent();
+
+      detailTriggerNamed(fixture, 'Légendes').click();
+      fixture.detectChanges();
+      (fixture.nativeElement.querySelector('.detail-surface-close') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.detail-surface-panel')).toBeNull();
+
+      detailTriggerNamed(fixture, 'Précision').click();
+      fixture.detectChanges();
+      expect(
+        fixture.nativeElement.querySelector('.detail-surface-panel .detail-surface-title')
+          .textContent,
+      ).toContain('Précision');
+    });
+
+    it('AC6 — le focus revient au déclencheur d’origine à la fermeture', async () => {
+      const { fixture } = await createComponent();
+      const trigger = detailTriggerNamed(fixture, 'Légendes');
+      const focusSpy = vi.spyOn(trigger, 'focus');
+
+      trigger.click();
+      fixture.detectChanges();
+      (fixture.nativeElement.querySelector('.detail-surface-close') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(focusSpy).toHaveBeenCalled();
+    });
+
+    it('AC7 — les déclencheurs sont de vrais boutons, accessibles au clavier (Tab)', async () => {
+      const { fixture } = await createComponent();
+      const trigger = detailTriggerNamed(fixture, 'Légendes');
+      expect(trigger.tagName).toBe('BUTTON');
+      expect(trigger.getAttribute('type')).toBe('button');
+      expect(trigger.tabIndex).not.toBe(-1);
+    });
   });
 
   it('niveau affiché dynamique (c.level) au lieu de "Niveau 1" figé', async () => {
@@ -724,6 +1032,9 @@ describe('CharacterSheet', () => {
 
   it('propriétaire → section Historique visible', async () => {
     const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'u1');
+    // Story 29.5 : Historique est désormais un onglet de la sous-navigation locale (index 3,
+    // hasHistoryTab() vrai pour le propriétaire) — son contenu n'est rendu qu'une fois sélectionné.
+    await selectTab(fixture, 3);
     expect(fixture.nativeElement.querySelector('.sheet__history')).not.toBeNull();
   });
 
@@ -731,6 +1042,7 @@ describe('CharacterSheet', () => {
     const asMj = { ...CHARACTER, viewerIsMj: true };
     const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
     const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+    await selectTab(fixture, 3);
     expect(fixture.nativeElement.querySelector('.sheet__history')).not.toBeNull();
   });
 
@@ -832,7 +1144,19 @@ describe('CharacterSheet', () => {
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Classe secondaire : Marchand');
     expect(text).toContain('Négociation');
-    expect(text).toContain('Baisse un prix');
+
+    // Story 31.2 — le texte descriptif n'est plus inline, il s'ouvre dans la surface de détail
+    // au clic sur le nom du talent (AC1).
+    const triggers: HTMLButtonElement[] = Array.from(
+      fixture.nativeElement.querySelectorAll('.sheet__detail-trigger'),
+    );
+    const negociationBtn = triggers.find((b) => b.textContent?.trim() === 'Négociation');
+    negociationBtn!.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.detail-surface-body').textContent).toContain(
+      'Baisse un prix',
+    );
   });
 
   it('type secondaire (capacité type) → sous-bloc "Type secondaire" dans Voie, avec ses avantages', async () => {
@@ -945,11 +1269,14 @@ describe('CharacterSheet', () => {
 
   it('section Inventaire visible pour le propriétaire', async () => {
     const { fixture } = await createComponent();
+    // Story 29.5 : Équipement est désormais l'onglet d'index 1 de la sous-navigation locale.
+    await selectTab(fixture, 1);
     expect(fixture.nativeElement.querySelector('app-inventory-tab')).not.toBeNull();
   });
 
   it('section Inventaire visible pour le MJ (lecture) — équipement individuel non dupliqué dans la carte Équipement (Story 14.2)', async () => {
     const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'mj-stranger');
+    await selectTab(fixture, 1);
     expect(fixture.nativeElement.querySelector('app-inventory-tab')).not.toBeNull();
     // "Nécessaire de voyage" (individual) ne doit jamais apparaître dans la carte "Équipement" —
     // seul l'objet fétiche y reste, la liste group/individual a été retirée (Story 14.2, AC5).
@@ -962,12 +1289,15 @@ describe('CharacterSheet', () => {
 
   it('section Notes visible pour le propriétaire, isOwner=true transmis', async () => {
     const { fixture } = await createComponent();
+    // Story 29.5 : Journal est désormais l'onglet d'index 2 de la sous-navigation locale.
+    await selectTab(fixture, 2);
     const notesEl = fixture.nativeElement.querySelector('app-notes-journal');
     expect(notesEl).not.toBeNull();
   });
 
   it('section Notes visible pour le MJ (lecture)', async () => {
     const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'mj-stranger');
+    await selectTab(fixture, 2);
     expect(fixture.nativeElement.querySelector('app-notes-journal')).not.toBeNull();
   });
 
@@ -978,18 +1308,33 @@ describe('CharacterSheet', () => {
       null,
       'joueur-tiers',
     );
+    await selectTab(fixture, 2);
     expect(fixture.nativeElement.querySelector('app-notes-journal')).not.toBeNull();
   });
 
   describe('édition MJ (FieldEditPencil, Story 6.6)', () => {
-    it('viewerIsMj:true → pencils attributs (×4) + objet fétiche + XP + arme + 6 champs narratifs visibles', async () => {
+    it('viewerIsMj:true → pencils attributs (×4) + XP + arme + 6 champs narratifs visibles sur l’onglet Fiche', async () => {
       const asMj = { ...CHARACTER, viewerIsMj: true };
       const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
       const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
 
-      const pencils = fixture.nativeElement.querySelectorAll('.field-edit-pencil__button');
-      // 4 attributs + fétiche + XP + arme + 6 narratifs = 13 (l'inventaire est géré séparément par InventoryTab).
-      expect(pencils.length).toBe(13);
+      // Story 29.5 : les pencils MJ sont désormais répartis sur 2 onglets — 4 attributs + XP +
+      // arme + 6 narratifs = 12 sur l'onglet Fiche (index 0, actif par défaut), l'objet fétiche
+      // (1 pencil) est sur l'onglet Équipement (index 1) — vérifié séparément ci-dessous.
+      const pencilsOnFiche = fixture.nativeElement.querySelectorAll('.field-edit-pencil__button');
+      expect(pencilsOnFiche.length).toBe(12);
+    });
+
+    it('viewerIsMj:true → pencil objet fétiche visible sur l’onglet Équipement', async () => {
+      const asMj = { ...CHARACTER, viewerIsMj: true };
+      const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asMj) });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'mj-stranger');
+
+      await selectTab(fixture, 1);
+      const pencilsOnEquipment = fixture.nativeElement.querySelectorAll(
+        '.field-edit-pencil__button',
+      );
+      expect(pencilsOnEquipment.length).toBe(1);
     });
 
     it('propriétaire (isOwner:true) → seuls les 6 pencils narratifs visibles (pas attributs/fétiche/XP/arme, MJ-only)', async () => {
@@ -1401,7 +1746,7 @@ describe('CharacterSheet', () => {
       };
     }
 
-    it('Fermier + talent emprunté (Métier d\'appoint) → nom du talent, effet, malus -1, classe d\'origine', async () => {
+    it("Fermier + talent emprunté (Métier d'appoint) → nom du talent, effet, malus -1, classe d'origine", async () => {
       const character = makeCharacterDto({
         sheetData: baseSheetData('fermier', {
           classChoices: { 'fermier-metier-appoint': 'guerisseur:soins' },
@@ -1636,6 +1981,53 @@ describe('CharacterSheet', () => {
       const { fixture } = await createComponent(characterSvc);
 
       expect(fixture.nativeElement.textContent).toContain('patron Équilibré');
+    });
+  });
+
+  describe('CharacterSheet — sous-navigation locale (Story 29.5)', () => {
+    it('propriétaire → 4 onglets (Fiche, Équipement, Journal, Historique)', async () => {
+      const { fixture } = await createComponent();
+      const labels = Array.from(
+        fixture.nativeElement.querySelectorAll('[role="tab"] .mdc-tab__text-label'),
+      ).map((el: any) => el.textContent.trim());
+      expect(labels).toEqual(['Fiche', 'Inventaire', 'Journal de notes', 'Historique']);
+    });
+
+    it("fellow player (ni propriétaire, ni MJ) → 3 onglets, l'onglet Historique est absent du DOM (pas seulement vide)", async () => {
+      const asFellowPlayer = { ...CHARACTER, viewerIsMj: false };
+      const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(asFellowPlayer) });
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'joueur-tiers');
+
+      const labels = Array.from(
+        fixture.nativeElement.querySelectorAll('[role="tab"] .mdc-tab__text-label'),
+      ).map((el: any) => el.textContent.trim());
+      expect(labels).toEqual(['Fiche', 'Inventaire', 'Journal de notes']);
+      expect(fixture.nativeElement.textContent).not.toContain('Historique');
+    });
+
+    it("changer d'onglet ne recharge pas la fiche ni ne perd le contexte courant (characterId, partieId)", async () => {
+      const characterSvc = makeCharacterService();
+      const { fixture } = await createComponent(characterSvc, 'char1', null, 'u1', 'p1');
+      const component = fixture.componentInstance as unknown as {
+        character: () => { id: string } | null;
+      };
+      const characterBefore = component.character();
+      const getCallsBefore = (characterSvc.get as ReturnType<typeof vi.fn>).mock.calls.length;
+
+      await selectTab(fixture, 1);
+      await selectTab(fixture, 2);
+
+      expect(component.character()).toBe(characterBefore); // même référence, pas un rechargement
+      expect((characterSvc.get as ReturnType<typeof vi.fn>).mock.calls.length).toBe(getCallsBefore);
+    });
+
+    it("l'onglet actif est distingué autrement que par la seule couleur (soulignement Material natif, même principe qu'AC3 de la Story 29.3)", async () => {
+      const { fixture } = await createComponent();
+      await selectTab(fixture, 1);
+
+      const activeTab = fixture.nativeElement.querySelector('[role="tab"][aria-selected="true"]');
+      expect(activeTab).not.toBeNull();
+      expect(activeTab.querySelector('.mdc-tab-indicator')).not.toBeNull();
     });
   });
 });

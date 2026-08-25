@@ -16,6 +16,8 @@ const fakePoll: SessionPollDto = {
   expiresAt: null,
   chosenDate: null,
   chosenSlot: null,
+  // Story 36.6 — effectif de la troupe (MJ + membres).
+  membersCount: 4,
   options: [
     { id: 'opt1', date: '2026-08-01T00:00:00.000Z', slot: 'MORNING', votes: [] },
     {
@@ -30,6 +32,7 @@ const fakePoll: SessionPollDto = {
 function makePollService() {
   return {
     castVote: vi.fn().mockResolvedValue(undefined),
+    withdrawVote: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -50,6 +53,9 @@ function makeThemeService() {
     tone: () => ({
       'success.vote_cast': 'Réponse enregistrée !',
       'cta.confirm_votes': 'Confirmer',
+      'cta.withdraw_vote': 'Retirer',
+      'success.vote_withdrawn': 'Réponse retirée !',
+      'poll.withdraw_error': 'Le retrait a échoué.',
       'poll.vote_closed': 'Vote clos',
       'poll.status_title': 'Vote en cours',
     }),
@@ -165,5 +171,171 @@ describe('PollResponseComponent', () => {
     expect(comp.isClosed()).toBe(true);
     comp.setAnswer('opt1', 'YES');
     expect(comp.pendingAnswers().get('opt1')).toBeUndefined();
+  });
+
+  describe('retrait de réponse (Story 30.1, AD-10)', () => {
+    it('aucun bouton de retrait sur une option sans réponse (opt1)', async () => {
+      const { fixture } = await createComponent();
+      const buttons = fixture.nativeElement.querySelectorAll(
+        '.poll-response__option',
+      ) as NodeListOf<HTMLElement>;
+      // opt1 (index 0, aucune réponse pré-remplie) ne porte pas de bouton de retrait.
+      expect(buttons[0].querySelector('.poll-response__withdraw')).toBeNull();
+    });
+
+    it('un bouton de retrait est visible sur une option déjà répondue (opt2, pré-remplie par ngOnInit)', async () => {
+      const { fixture } = await createComponent();
+      const buttons = fixture.nativeElement.querySelectorAll(
+        '.poll-response__option',
+      ) as NodeListOf<HTMLElement>;
+      expect(buttons[1].querySelector('.poll-response__withdraw')).not.toBeNull();
+    });
+
+    it('clic sur retirer → appelle PollService.withdrawVote avec les bons ids', async () => {
+      const { fixture, pollSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+
+      await comp.withdraw('opt2');
+
+      expect(pollSvc.withdrawVote).toHaveBeenCalledWith('p1', 'poll1', 'opt2');
+    });
+
+    it('après succès → pendingAnswers ne contient plus l’option, le bouton de retrait disparaît', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      expect(comp.pendingAnswers().get('opt2')).toBe('YES');
+
+      await comp.withdraw('opt2');
+      fixture.detectChanges();
+
+      expect(comp.pendingAnswers().get('opt2')).toBeUndefined();
+      const buttons = fixture.nativeElement.querySelectorAll('.poll-response__option');
+      expect(buttons[1].querySelector('.poll-response__withdraw')).toBeNull();
+    });
+
+    it('émet (responded) avec le poll mis à jour localement (ligne retirée de opt.votes)', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      let emitted: SessionPollDto | undefined;
+      comp.responded.subscribe((p: SessionPollDto) => (emitted = p));
+
+      await comp.withdraw('opt2');
+
+      expect(emitted).toBeDefined();
+      const opt2 = emitted!.options.find((o) => o.id === 'opt2')!;
+      expect(opt2.votes.some((v) => v.userId === 'u1')).toBe(false);
+    });
+
+    it('poll CLOSED → withdraw() sans effet', async () => {
+      const closedPoll: SessionPollDto = { ...fakePoll, status: 'CLOSED' };
+      const { fixture, pollSvc } = await createComponent(closedPoll);
+      const comp = fixture.componentInstance as any;
+
+      await comp.withdraw('opt2');
+
+      expect(pollSvc.withdrawVote).not.toHaveBeenCalled();
+    });
+
+    it('un échec de retrait laisse la réponse affichée telle quelle', async () => {
+      const { fixture, pollSvc } = await createComponent();
+      pollSvc.withdrawVote = vi.fn().mockRejectedValue(new Error('network'));
+      const comp = fixture.componentInstance as any;
+
+      await comp.withdraw('opt2');
+
+      expect(comp.pendingAnswers().get('opt2')).toBe('YES');
+    });
+  });
+
+  describe('revue de code Story 30.1 : patches', () => {
+    it("une sélection locale non confirmée (opt1) n'affiche pas le bouton de retrait", async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+
+      comp.setAnswer('opt1', 'YES');
+      fixture.detectChanges();
+
+      const buttons = fixture.nativeElement.querySelectorAll('.poll-response__option');
+      expect(buttons[0].querySelector('.poll-response__withdraw')).toBeNull();
+    });
+
+    it('après confirmation réussie, le bouton de retrait apparaît pour la nouvelle option confirmée', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+
+      comp.setAnswer('opt1', 'YES');
+      await comp.onConfirm();
+      fixture.detectChanges();
+
+      expect(comp.confirmedOptionIds().has('opt1')).toBe(true);
+      const buttons = fixture.nativeElement.querySelectorAll('.poll-response__option');
+      expect(buttons[0].querySelector('.poll-response__withdraw')).not.toBeNull();
+    });
+
+    it('un vote en échec ne rejoint pas confirmedOptionIds', async () => {
+      const { fixture, pollSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      pollSvc.castVote = vi.fn().mockRejectedValue(new Error('network'));
+
+      comp.setAnswer('opt1', 'YES');
+      await comp.onConfirm();
+
+      expect(comp.confirmedOptionIds().has('opt1')).toBe(false);
+    });
+
+    it('après un retrait réussi, opt2 sort de confirmedOptionIds', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      expect(comp.confirmedOptionIds().has('opt2')).toBe(true);
+
+      await comp.withdraw('opt2');
+
+      expect(comp.confirmedOptionIds().has('opt2')).toBe(false);
+    });
+
+    it('un second withdraw() pendant que le premier est en vol ne déclenche pas un second appel réseau', async () => {
+      const { fixture, pollSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      let resolveWithdraw!: () => void;
+      pollSvc.withdrawVote = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveWithdraw = resolve;
+          }),
+      );
+
+      const first = comp.withdraw('opt2');
+      await comp.withdraw('opt2');
+      expect(pollSvc.withdrawVote).toHaveBeenCalledTimes(1);
+
+      resolveWithdraw();
+      await first;
+    });
+
+    it('onConfirm() exclut une option dont le retrait est en vol', async () => {
+      const { fixture, pollSvc } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      let resolveWithdraw!: () => void;
+      pollSvc.withdrawVote = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveWithdraw = resolve;
+          }),
+      );
+
+      const withdrawal = comp.withdraw('opt2');
+      comp.setAnswer('opt1', 'NO');
+      await comp.onConfirm();
+
+      expect(pollSvc.castVote).toHaveBeenCalledTimes(1);
+      expect(pollSvc.castVote).toHaveBeenCalledWith(
+        'p1',
+        'poll1',
+        expect.objectContaining({ optionId: 'opt1' }),
+      );
+
+      resolveWithdraw();
+      await withdrawal;
+    });
   });
 });

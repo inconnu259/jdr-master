@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+# Un push de plus sur la même branche annule le run devenu obsolète.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Lecture seule : aucun job n'a besoin d'écrire dans le dépôt.
+permissions:
+  contents: read
+
+env:
+  # Validées au chargement par EmailModule (readMailConfig) : sans elles AppModule refuse de
+  # démarrer. Aucune connexion SMTP n'est ouverte — nodemailer se connecte au premier envoi.
+  MAIL_HOST: localhost
+  MAIL_PORT: '1025'
+  MAIL_FROM: ci@master-jdr.local
+
+jobs:
+  # ── Lint, types, build ─────────────────────────────────────────────────────
+  static:
+    name: Lint · types · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # version lue dans packageManager (package.json)
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Le client Prisma est généré, pas versionné : sans lui, tsc et eslint typé échouent.
+      - run: pnpm --filter api exec prisma generate
+
+      - run: pnpm --filter api lint
+      - run: pnpm --filter web lint
+
+      # Seule l'API a un script typecheck ; le build Angular type-vérifie de son côté.
+      - run: pnpm --filter api typecheck
+
+      - run: pnpm --filter api build
+      - run: pnpm --filter web build
+
+  # ── Tests unitaires (api, web, game-rules) ─────────────────────────────────
+  unit:
+    name: Tests unitaires
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter api exec prisma generate
+
+      # `pnpm -r test` : jest (api), ng test/vitest (web), vitest (game-rules).
+      # packages/shared n'a pas de script test et est simplement ignoré.
+      - run: pnpm test
+
+  # ── Tests e2e (Postgres réel) ──────────────────────────────────────────────
+  e2e:
+    name: Tests e2e
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: jdr
+          POSTGRES_PASSWORD: jdr
+          POSTGRES_DB: jdr_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      # PrismaService jette si DATABASE_URL est absent, et onModuleInit appelle $connect() :
+      # app.e2e-spec.ts boote AppModule, il lui faut donc une base réellement joignable.
+      DATABASE_URL: postgresql://jdr:jdr@localhost:5432/jdr_test?schema=public
+      SESSION_SECRET: ci-secret-non-sensible
+      WEB_ORIGIN: http://localhost:4200
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter api exec prisma generate
+
+      # `migrate deploy` (pas `dev`) : applique les migrations existantes sans en créer.
+      - run: pnpm --filter api exec prisma migrate deploy
+
+      - run: pnpm --filter api test:e2e
+
+  # ── Porte unique pour la protection de branche ─────────────────────────────
+  # Exiger CE check seul, jamais les jobs un par un : ajouter ou renommer un job plus tard
+  # ne demandera aucune retouche des réglages GitHub.
+  # Le nom du check exigé côté GitHub est l'id du job : « ci-ok ». Pas de `name:` ici,
+  # pour qu'il ne puisse pas diverger du nom du workflow (« CI ») et créer une ambiguïté.
+  ci-ok:
+    if: always()
+    needs: [static, unit, e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Échouer si un job amont a échoué ou été annulé
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
+      - run: echo "Tous les jobs ont réussi."

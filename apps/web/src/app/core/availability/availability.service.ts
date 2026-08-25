@@ -6,17 +6,26 @@ import type {
   AvailabilityDeclarationDto,
   AvailKind,
   ConflictInfo,
+  CreateAvailabilityBatchItem,
+  CreateAvailabilityBatchResult,
   CreateAvailabilityDto,
   CreateAvailabilityResult,
   DaySlot,
+  MeCalendarDto,
   UpdateAvailabilityDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
 export { ConflictInfo };
 
+/** Un conflit rendu par le serveur. `batchIndex` n'est renseigné que par la route groupée
+ *  (`BatchConflictInfo`) : c'est la SEULE clé qui relie un conflit à la cellule sélectionnée
+ *  qui l'a provoqué — les dates portées par ConflictInfo sont celles de la déclaration
+ *  EXISTANTE (nulles pour une récurrente), pas celles du créneau soumis (Story 36.4). */
+export type ConflictEntry = ConflictInfo & { batchIndex?: number };
+
 export class ConflictError extends Error {
-  constructor(public readonly conflicts: ConflictInfo[]) {
+  constructor(public readonly conflicts: ConflictEntry[]) {
     super('Conflicting declarations detected');
     Object.setPrototypeOf(this, ConflictError.prototype);
   }
@@ -78,6 +87,32 @@ export class AvailabilityService {
     );
   }
 
+  // Un seul POST portant tout le lot — jamais une boucle sur createDeclaration() (AC1).
+  // Depuis la Story 36.4 (D-18), chaque item peut porter sa propre `conflictResolution` : la
+  // route groupée n'échoue plus en bloc, elle absorbe l'écrasement et la découpe. Elle ne
+  // remplace pas pour autant createDeclaration() — ConstraintPanel reste sur la route unitaire,
+  // seul chemin de la contrainte récurrente et de la découpe d'occurrence.
+  createDeclarationBatch(
+    items: CreateAvailabilityBatchItem[],
+  ): Promise<CreateAvailabilityBatchResult> {
+    return firstValueFrom(
+      this.http
+        .post<CreateAvailabilityBatchResult>(
+          `${API}/availability/batch`,
+          { items },
+          { withCredentials: true },
+        )
+        .pipe(
+          catchError((err: HttpErrorResponse) => {
+            if (err.status === 409 && Array.isArray(err.error?.conflicts)) {
+              return throwError(() => new ConflictError(err.error.conflicts as ConflictEntry[]));
+            }
+            return throwError(() => err);
+          }),
+        ),
+    );
+  }
+
   updateDeclaration(
     id: string,
     dto: Partial<UpdateAvailabilityDto>,
@@ -98,6 +133,18 @@ export class AvailabilityService {
   splitOccurrence(id: string, body: SplitOccurrenceBody): Promise<SplitOccurrenceResult> {
     return firstValueFrom(
       this.http.post<SplitOccurrenceResult>(`${API}/availability/${id}/split`, body, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  // Story 30.6, AC8/AC10 : un seul appel pour les 5 couches personnelles (Story 30.5, AD-18) —
+  // appelé uniquement en contexte personnel (`profile/calendar`), jamais depuis un contexte de
+  // partie (AC9), rappelé à chaque changement de plage affichée.
+  getMyCalendar(from: string, to: string): Promise<MeCalendarDto> {
+    return firstValueFrom(
+      this.http.get<MeCalendarDto>(`${API}/me/calendar`, {
+        params: { from, to },
         withCredentials: true,
       }),
     );

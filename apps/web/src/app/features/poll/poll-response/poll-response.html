@@ -14,9 +14,17 @@
           <button
             mat-stroked-button
             [class.poll-response__btn--active]="getAnswer(opt.id) === a"
-            [disabled]="isClosed() || saving()"
+            [disabled]="isClosed() || saving() || withdrawingOptionIds().has(opt.id)"
             (click)="setAnswer(opt.id, a)"
           >{{ a }}</button>
+        }
+        @if (confirmedOptionIds().has(opt.id)) {
+          <button
+            mat-stroked-button
+            class="poll-response__withdraw"
+            [disabled]="isClosed() || saving() || withdrawingOptionIds().has(opt.id)"
+            (click)="withdraw(opt.id)"
+          >{{ theme.tone()['cta.withdraw_vote'] }}</button>
         }
       </div>
       @if (failedOptionIds().has(opt.id)) {

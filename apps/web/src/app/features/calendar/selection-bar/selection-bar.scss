@@ -1,0 +1,84 @@
+/* Les styles Angular sont encapsulés par composant : `.visually-hidden` est défini dans
+   `calendar-month-view.scss` et n'atteint donc PAS ce composant. Sans cette copie, la région
+   live de la barre s'affiche en clair — défaut constaté à l'écran, qu'aucun test ne voyait. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--mat-sys-primary);
+  border-radius: 10px;
+  background: var(--mat-sys-surface-container);
+}
+
+.selection-bar__count {
+  font-size: 0.9rem;
+}
+
+.selection-bar__range {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.selection-bar__spacer {
+  flex: 1;
+}
+
+/* Six contrôles sur une ligne : à la largeur courante du calendrier (~890 px de barre), le
+   rembourrage par défaut de Material faisait passer « Annuler » seul à la ligne suivante.
+   `flex-wrap` reste le filet de sécurité en dessous. */
+.selection-bar button[mat-stroked-button],
+.selection-bar button[mat-flat-button],
+.selection-bar button[mat-button] {
+  padding-inline: 14px;
+  min-width: 0;
+}
+
+/* ─── Portée (AC2) ────────────────────────────────────────────────────────
+   Un seul arrêt de tabulation : le conteneur porte le focus, les segments
+   sont en tabindex="-1" et se parcourent aux flèches (AC13). */
+.selection-bar__scope {
+  display: inline-flex;
+  border: 1px solid var(--mat-sys-outline-variant, rgba(127, 127, 127, 0.4));
+  border-radius: 16px;
+  overflow: hidden;
+
+  &:focus-visible {
+    outline: 2px solid var(--mat-sys-primary);
+    outline-offset: 2px;
+  }
+}
+
+.scope-seg {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 0.75rem;
+  color: var(--mat-sys-on-surface-variant);
+  cursor: pointer;
+
+  /* AC14 / P-1 — le segment retenu ne se distingue pas par la seule couleur : il gagne aussi
+     de la graisse et un anneau intérieur. */
+  &.on {
+    background: color-mix(in srgb, var(--mat-sys-primary) 20%, transparent);
+    color: var(--mat-sys-on-surface);
+    font-weight: 600;
+    box-shadow: inset 0 0 0 1px var(--mat-sys-primary);
+  }
+}

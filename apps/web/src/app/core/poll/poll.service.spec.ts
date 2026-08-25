@@ -67,4 +67,12 @@ describe('PollService', () => {
     await promise;
   });
 
+  it('withdrawVote appelle DELETE /parties/p1/poll/poll1/vote/opt1 (Story 30.1)', async () => {
+    const promise = service.withdrawVote('p1', 'poll1', 'opt1');
+    const req = http.expectOne(`${API_BASE}/parties/p1/poll/poll1/vote/opt1`);
+    expect(req.request.method).toBe('DELETE');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(null);
+    await promise;
+  });
 });

@@ -1,0 +1,59 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+   Les traitements de rang d'une bande — SOURCE UNIQUE (Story 36.14, AC13)
+   ═══════════════════════════════════════════════════════════════════════════════════════════
+
+   Ces règles habillaient jusqu'ici la seule vue Mois. La légende doit reproduire « EXACTEMENT le
+   traitement réel de la case — pas une approximation »
+   [Source: contrat-ui-calendrier.html:670, annotation 31], et l'encapsulation de vue d'Angular
+   interdit à un composant d'atteindre le SCSS d'un autre : sans ce partial, la légende aurait dû
+   RECOPIER sept teintes, quatre opacités et une trame.
+
+   🚨 Pourquoi c'est un vrai risque et pas une précaution de principe : au moment d'écrire cette
+   story, TROIS valeurs différentes circulaient déjà pour la seule trame « personne ne s'est
+   prononcé » — 42 % dans le code, 70 % dans la planche contractuelle, 40 % dans `DESIGN.md`. Une
+   quatrième copie aurait divergé au premier ajustement de thème. Ici, la fidélité de la légende
+   est STRUCTURELLE : elle ne peut plus se périmer.
+
+   ⚠️ ÉCART ASSUMÉ AVEC LA PLANCHE, déjà arbitré par la story 36.2 et conservé tel quel : le vote
+   porte un LISERÉ GAUCHE là où `contrat-ui-calendrier.html` dessine un filet identique à celui de
+   la séance. Deux formes identiques ne laisseraient que la teinte pour distinguer séance et vote,
+   ce que P-1 interdit. La légende hérite donc du liseré, et c'est le comportement voulu. */
+
+@mixin band-rank-treatments {
+  /* ── Rang 4 : mes disponibilités ─────────────────────────────────────────── */
+  /* `--color-available` et non `--jdr-accent-1` : l'équivalence n'est vraie qu'en
+     Grimoire Émeraude. En Atelier Cuivré, accent-1 est un bronze sans rapport. */
+  &[data-winner='available'] {
+    background: color-mix(in srgb, var(--color-available) 32%, transparent);
+  }
+
+  /* ── Rang 3 : mes indisponibilités ───────────────────────────────────────── */
+  &[data-winner='unavailable'] {
+    background: color-mix(in srgb, var(--color-unavailable) 32%, transparent);
+  }
+
+  /* ── Hors rang : personne ne s'est prononcé — la TRAME porte l'information ── */
+  &[data-winner='none'] {
+    background: repeating-linear-gradient(
+      45deg,
+      transparent 0 3px,
+      color-mix(in srgb, var(--color-unknown) 42%, transparent) 3px 6px
+    );
+  }
+
+  /* ── Rang 2 : vote en cours — LISERÉ gauche 3 px ─────────────────────────── */
+  /* ⚠️ Écart assumé au contrat d'UI, qui dessine un filet identique à celui de la
+     séance. Deux formes identiques ne laisseraient que la teinte pour distinguer
+     séance et vote, ce que P-1 interdit. Voir encadré n°3 de la story 36.2. */
+  &[data-winner='vote'] {
+    background: color-mix(in srgb, var(--jdr-status-todo, #f0a030) 24%, transparent);
+    border-left: 3px solid var(--jdr-status-todo, #f0a030);
+    padding-left: 0;
+  }
+
+  /* ── Rang 1 : séance confirmée — FILET intérieur ─────────────────────────── */
+  &[data-winner='seance'] {
+    background: color-mix(in srgb, var(--jdr-status-soon, #ff7ad9) 28%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--jdr-status-soon, #ff7ad9) 75%, transparent);
+  }
+}

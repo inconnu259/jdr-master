@@ -1,0 +1,28 @@
+<!--
+  Story 36.6 — la piste, le compteur et ma réponse sont TOUJOURS émis. Aucun @if de largeur :
+  la densité est réglée par les container queries, DEPUIS LA FEUILLE DE CE COMPOSANT (AC4).
+
+  La portion non couverte par les trois segments n'est PAS un quatrième nœud : c'est le fond
+  tramé de `.track` qui transparaît (`contrat-ui-calendrier.html:112-120`, DESIGN.md:331).
+-->
+<span class="track" role="img" [attr.aria-label]="ariaLabel()">
+  @if (segments().yes > 0) {
+    <i class="seg seg-yes" [style.width]="pct(segments().yes)"></i>
+  }
+  @if (segments().maybe > 0) {
+    <i class="seg seg-maybe" [style.width]="pct(segments().maybe)"></i>
+  }
+  @if (segments().no > 0) {
+    <i class="seg seg-no" [style.width]="pct(segments().no)"></i>
+  }
+</span>
+<!-- Doublures VISUELLES de la piste (AC4, AC5) : aria-hidden, sinon le lecteur d'écran
+     entendrait trois fois la même information. Le nom accessible complet vit sur .track. -->
+<span class="cnt" aria-hidden="true">{{ counter() }}</span>
+@if (mineFull()) {
+  <!-- Les DEUX formulations sont émises, le CSS choisit selon la surface : la case du Mois n'a la
+       place que du mot (« oui », `contrat-ui-calendrier.html:797`), le rail phrase (« tu as dit
+       oui », `:440`). Un seul utilitaire les produit — les surfaces ne reformulent jamais. -->
+  <span class="mine" aria-hidden="true">{{ mineFull() }}</span>
+  <span class="mine-short" aria-hidden="true">{{ mineShort() }}</span>
+}

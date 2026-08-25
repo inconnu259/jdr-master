@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Signalétique d'état — scénarios et séances</title>
+<style>
+:root{--primary-bg:#0d0a14;--surface-bg:#1a1428;--accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;--status-mixed:#f0a030;--status-unknown:#3a3a4a;
+  --status-unavailable:#e05252;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--radius-badge:6px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5)}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px}
+h3{font-size:var(--text-lg);margin:0 0 var(--space-xs)}
+.lede,.why{color:var(--text-muted);max-width:84ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--space-xl);align-items:start}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md)}
+.cost{color:var(--status-mixed)} .ok{color:var(--accent-1)}
+table{border-collapse:collapse;width:100%;max-width:760px;font-size:var(--text-sm)}
+th,td{text-align:left;padding:7px var(--space-sm);border-bottom:1px solid var(--border-subtle);vertical-align:top}
+th{color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;font-size:11px;font-weight:500}
+.sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:6px}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:var(--text-sm);padding:1px 8px;
+  border-radius:var(--radius-badge);border:1px solid;white-space:nowrap}
+.b-todo{color:var(--status-mixed);border-color:var(--status-mixed);background:rgba(240,160,48,.15)}
+.b-live{color:var(--accent-1);border-color:var(--accent-1);background:rgba(126,200,164,.13)}
+.b-soon{color:var(--accent-2);border-color:var(--accent-2);background:rgba(155,109,255,.13)}
+.b-done{color:var(--text-muted);border-color:var(--status-unknown);background:rgba(58,58,74,.4)}
+.b-draft{color:var(--text-muted);border-color:var(--text-muted);border-style:dashed;background:transparent}
+.card{background:var(--surface-bg);border-radius:var(--radius-card);box-shadow:var(--elev-card);
+  border:1px solid var(--border-subtle);padding:var(--space-md);margin-bottom:var(--space-sm)}
+/* chronologie */
+.tl{position:relative;padding-left:26px}
+.tl::before{content:"";position:absolute;left:7px;top:6px;bottom:6px;width:2px;background:var(--border-subtle)}
+.ev{position:relative;margin-bottom:var(--space-lg)}
+.ev::before{content:"";position:absolute;left:-24px;top:6px;width:14px;height:14px;border-radius:50%;
+  background:var(--primary-bg);border:2px solid var(--status-unknown);box-sizing:border-box}
+.ev.done::before{border-color:var(--status-unknown);background:var(--status-unknown)}
+.ev.live::before{border-color:var(--accent-1);background:var(--accent-1);box-shadow:0 0 0 4px rgba(126,200,164,.18)}
+.ev.todo::before{border-color:var(--status-mixed);background:var(--status-mixed);box-shadow:0 0 0 4px rgba(240,160,48,.18)}
+.ev.soon::before{border-color:var(--accent-2)}
+.ev.draft::before{border-color:var(--text-muted);border-style:dashed;background:var(--primary-bg)}
+.ev .date{font-size:11px;color:var(--text-muted);letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px}
+.ev .ti{font-size:var(--text-base);font-weight:500}
+.ev .meta{font-size:var(--text-sm);color:var(--text-muted);margin-top:2px}
+.ev .bd{margin-top:6px}
+.ev.done .ti{color:var(--text-muted)}
+.ev.draft{opacity:.75}
+.seances{margin-top:var(--space-sm);border-left:2px solid var(--border-subtle);padding-left:var(--space-md)}
+.sl{display:flex;justify-content:space-between;align-items:center;gap:var(--space-sm);
+  padding:5px 0;font-size:var(--text-sm);border-bottom:1px solid var(--border-subtle)}
+.sl:last-child{border-bottom:none}
+.sl b{font-weight:500;color:var(--text-primary)}
+.frame{background:var(--primary-bg);border:1px solid var(--border-subtle);border-radius:14px;
+  padding:var(--space-base);box-shadow:0 8px 32px rgba(0,0,0,.7);max-width:340px}
+.fh{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-md)}
+.fh b{font-size:var(--text-lg)}
+.fh span{font-size:var(--text-sm);color:var(--text-muted)}
+</style>
+</head>
+<body>
+
+<h1>Signalétique d'état — scénarios et séances</h1>
+<p class="lede">Dix états à distinguer : quatre pour le scénario, six pour la séance. Leur donner une couleur chacun produirait un nuancier illisible. La proposition ci-dessous n'en utilise <strong>que quatre</strong> — exactement celles déjà employées sur la liste des parties — et confie l'état précis au libellé. Une seule échelle de couleur pour toute l'application.</p>
+
+<h2>1 — Le vocabulaire : la couleur dit l'urgence, le mot dit l'état</h2>
+<p class="why">La couleur répond à « est-ce que ça me concerne maintenant ? », jamais à « qu'est-ce que c'est ? ». C'est ce qui permet de passer de dix états à quatre teintes sans rien perdre — et de respecter P-1, puisque le libellé est toujours là.</p>
+<table>
+  <tr><th>Teinte</th><th>Signification</th><th>États de scénario</th><th>États de séance</th></tr>
+  <tr>
+    <td><span class="sw" style="background:var(--status-mixed)"></span>Ambre</td>
+    <td><b>Ça t'attend</b> — une action de ta part est requise</td>
+    <td>—</td>
+    <td>À planifier · En vote (tu n'as pas répondu) · À débriefer</td>
+  </tr>
+  <tr>
+    <td><span class="sw" style="background:var(--accent-1)"></span>Vert sauge</td>
+    <td><b>En cours</b> — vivant, rien à faire dans l'immédiat</td>
+    <td>Courant</td>
+    <td>En vote (tu as répondu) · Inscriptions ouvertes</td>
+  </tr>
+  <tr>
+    <td><span class="sw" style="background:var(--accent-2)"></span>Lavande</td>
+    <td><b>À venir</b> — daté, en attente de son tour</td>
+    <td>À venir</td>
+    <td>Programmée</td>
+  </tr>
+  <tr>
+    <td><span class="sw" style="background:var(--status-unknown)"></span>Gris</td>
+    <td><b>Terminé</b> — consultable, en retrait</td>
+    <td>Passé</td>
+    <td>Jouée</td>
+  </tr>
+  <tr>
+    <td><span class="sw" style="border:1px dashed var(--text-muted);background:transparent"></span>Contour tireté</td>
+    <td><b>Non publié</b> — visible du MJ seul</td>
+    <td>Brouillon</td>
+    <td>—</td>
+  </tr>
+</table>
+<p class="note">Le brouillon n'est pas une cinquième couleur : c'est le <b>contour tireté</b>, un traitement de forme et non de teinte. Il ne peut donc jamais être confondu avec un état publié, et il reste lisible même pour qui distingue mal les couleurs.</p>
+
+<h2>2 — La chronologie, côté MJ et côté joueur</h2>
+<p class="why">La même campagne, vue par les deux. Les nœuds sont ancrés sur la ligne, les dates sont affichées, et les scénarios respirent — les trois défauts relevés le 14 juillet. Le point décisif est ailleurs : <strong>l'anti-spoil doit tenir dans la signalétique elle-même</strong>. Un joueur ne doit pas déduire d'un espace, d'un trou ou d'un compteur qu'un scénario brouillon existe.</p>
+<div class="row">
+
+  <div>
+    <h3>Vue MJ</h3>
+    <div class="frame">
+      <div class="fh"><b>Les Cendres de Kavaan</b><span>4 scénarios</span></div>
+      <div class="tl">
+        <div class="ev done">
+          <div class="date">12 juin — 3 juillet</div>
+          <div class="ti">L'Auberge du Corbeau</div>
+          <div class="bd"><span class="badge b-done">Passé</span></div>
+          <div class="seances">
+            <div class="sl"><span><b>Séance 1</b> · 12 juin</span><span class="badge b-done">Jouée</span></div>
+            <div class="sl"><span><b>Séance 2</b> · 3 juillet</span><span class="badge b-todo">À débriefer</span></div>
+          </div>
+        </div>
+        <div class="ev live">
+          <div class="date">depuis le 24 juillet</div>
+          <div class="ti">La Route des Cendres</div>
+          <div class="bd"><span class="badge b-live">Courant</span></div>
+          <div class="seances">
+            <div class="sl"><span><b>Séance 3</b> · 24 juillet</span><span class="badge b-done">Jouée</span></div>
+            <div class="sl"><span><b>Séance 4</b> · date à trouver</span><span class="badge b-todo">En vote</span></div>
+          </div>
+        </div>
+        <div class="ev soon">
+          <div class="date">à partir du 2 septembre</div>
+          <div class="ti">Le Col de Vellombre</div>
+          <div class="bd"><span class="badge b-soon">À venir</span></div>
+        </div>
+        <div class="ev draft">
+          <div class="date">non planifié</div>
+          <div class="ti">Le Serment brisé</div>
+          <div class="bd"><span class="badge b-draft">Brouillon — invisible des joueurs</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="note">Le MJ voit les quatre, dont son brouillon nettement marqué comme non publié.</p>
+  </div>
+
+  <div>
+    <h3>Vue joueur</h3>
+    <div class="frame">
+      <div class="fh"><b>Les Cendres de Kavaan</b><span>3 scénarios</span></div>
+      <div class="tl">
+        <div class="ev done">
+          <div class="date">12 juin — 3 juillet</div>
+          <div class="ti">L'Auberge du Corbeau</div>
+          <div class="bd"><span class="badge b-done">Passé</span></div>
+          <div class="seances">
+            <div class="sl"><span><b>Séance 1</b> · 12 juin</span><span class="badge b-done">Jouée</span></div>
+            <div class="sl"><span><b>Séance 2</b> · 3 juillet</span><span class="badge b-done">Jouée</span></div>
+          </div>
+        </div>
+        <div class="ev live">
+          <div class="date">depuis le 24 juillet</div>
+          <div class="ti">La Route des Cendres</div>
+          <div class="bd"><span class="badge b-live">Courant</span></div>
+          <div class="seances">
+            <div class="sl"><span><b>Séance 3</b> · 24 juillet</span><span class="badge b-done">Jouée</span></div>
+            <div class="sl"><span><b>Séance 4</b> · date à trouver</span><span class="badge b-todo">Réponds au vote</span></div>
+          </div>
+        </div>
+        <div class="ev soon">
+          <div class="date">à partir du 2 septembre</div>
+          <div class="ti">Le Col de Vellombre</div>
+          <div class="bd"><span class="badge b-soon">À venir</span></div>
+          <div class="meta">Le contenu s'ouvrira au démarrage.</div>
+        </div>
+      </div>
+    </div>
+    <p class="note"><span class="ok">Anti-spoil tenu :</span> la ligne s'arrête au dernier scénario publié. Aucun espace vide, aucun « 4 scénarios » affiché, aucun nœud fantôme — rien ne trahit l'existence du brouillon.<br>
+    <span class="cost">Conséquence à assumer :</span> le compteur en en-tête diffère entre MJ et joueur. C'est voulu, et c'est le prix de l'anti-spoil.</p>
+  </div>
+</div>
+
+<h2>3 — Le même vocabulaire, ailleurs</h2>
+<p class="why">L'intérêt de n'avoir que quatre teintes, c'est qu'elles suivent partout : la bande verticale d'une carte de partie, la pastille d'une ligne de liste, le nœud d'un scénario et le badge d'une séance disent tous la même chose avec la même couleur.</p>
+<div class="row">
+  <div>
+    <div class="card" style="display:flex;gap:var(--space-md);padding:0;overflow:hidden">
+      <div style="width:4px;background:var(--status-mixed);flex:none"></div>
+      <div style="padding:var(--space-md) var(--space-md) var(--space-md) 0">
+        <div style="font-weight:500">Les Cendres de Kavaan</div>
+        <div style="font-size:var(--text-sm);color:var(--text-muted)">Campagne · Joueur</div>
+        <div style="margin-top:6px"><span class="badge b-todo">Réponds au vote</span></div>
+      </div>
+    </div>
+    <p class="note">Carte de partie — bande ambre, même mot que dans la chronologie.</p>
+  </div>
+  <div>
+    <div class="card" style="padding:var(--space-sm) var(--space-md)">
+      <div class="sl" style="border:none"><span><b>Séance 4</b> · date à trouver</span><span class="badge b-todo">Réponds au vote</span></div>
+      <div class="sl" style="border:none"><span><b>Séance 5</b> · 12 septembre</span><span class="badge b-soon">Programmée</span></div>
+      <div class="sl" style="border:none"><span><b>Séance 6</b> · inscriptions</span><span class="badge b-live">3 places restantes</span></div>
+    </div>
+    <p class="note">Liste de séances — mêmes teintes, libellés propres à chaque état.</p>
+  </div>
+</div>
+
+</body>
+</html>

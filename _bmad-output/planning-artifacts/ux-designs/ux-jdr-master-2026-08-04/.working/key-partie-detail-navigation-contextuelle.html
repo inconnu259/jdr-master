@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<title>Maquette — sous-navigation contextuelle (29.4), écran Partie</title>
+<style>
+/*
+  Spine sections illustrés :
+  - EXPERIENCE.md § Navigation (à mettre à jour) : bandeau du haut contextuel + sous-navigation locale
+  - EXPERIENCE.md § Accessibility Floor : distinction de l'entrée active au-delà de la couleur
+  - Story 29.4 (epics.md) : ACs 1-6
+  Tokens réels extraits de apps/web/src/styles.scss (.theme-grimoire-emeraude), pas des valeurs inventées.
+  Contenu réel : nom de partie "Les Cendres de Kavaan" (EXPERIENCE.md, Flow 1), libellés d'onglets et de
+  navigation tels qu'implémentés dans apps/web/src/app/core/theme/tones.ts.
+*/
+:root {
+  --jdr-bg:           #0d0a14;
+  --jdr-surface:      #1a1428;
+  --jdr-surface-2:    #221c35;
+  --jdr-accent-1:     #7ec8a4;
+  --jdr-accent-2:     #9b6dff;
+  --jdr-text:         #e8e0f0;
+  --jdr-text-muted:   #9b8fb0;
+  --jdr-gradient-cta: linear-gradient(135deg, #7ec8a4, #9b6dff);
+  --jdr-status-todo:  #f0a030;
+  --jdr-status-live:  #3fd4ff;
+  --jdr-status-soon:  #ff7ad9;
+  --jdr-border:       rgba(255,255,255,0.08);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 2rem;
+  background: #050308;
+  color: var(--jdr-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+h1 { font-size: 1.3rem; margin: 0 0 0.25rem; }
+h2 { font-size: 1.05rem; margin: 2.5rem 0 0.5rem; color: var(--jdr-text); border-bottom: 1px solid var(--jdr-border); padding-bottom: 0.4rem; }
+p.lead { color: var(--jdr-text-muted); margin: 0 0 1.5rem; max-width: 60rem; line-height: 1.5; }
+p.caption { color: var(--jdr-text-muted); font-size: 0.85rem; margin: 0.5rem 0 0; }
+
+/* ── Section 1 : pistes de bandeau (question logo/titre) ─────────────────── */
+.variants-row {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+.variant {
+  width: 320px;
+}
+.variant-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--jdr-accent-1);
+  margin-bottom: 0.4rem;
+}
+.variant-frame {
+  background: var(--jdr-surface);
+  border: 1px solid var(--jdr-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.vheader {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.9rem;
+  background: linear-gradient(180deg, #241c3a, #1a1428);
+  border-bottom: 1px solid var(--jdr-border);
+}
+.wordmark {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--jdr-gradient-cta);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.wordmark--small { font-size: 0.75rem; opacity: 0.75; }
+.wordmark--home { font-size: 0.95rem; cursor: pointer; }
+.ctx-title { font-weight: 600; font-size: 0.95rem; }
+.ctx-sub { font-size: 0.72rem; color: var(--jdr-text-muted); }
+.vheader-stack { display: flex; flex-direction: column; gap: 0.05rem; }
+.monogram {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: var(--jdr-gradient-cta);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 0.85rem; color: #0d0a14; flex-shrink: 0;
+}
+
+/* ── Section 2/3 : maquettes pleine grandeur ──────────────────────────────── */
+.frame-row { display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap; }
+
+.phone {
+  width: 375px;
+  border: 10px solid #000;
+  border-radius: 36px;
+  background: var(--jdr-bg);
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+.phone-screen { height: 720px; display: flex; flex-direction: column; }
+
+.browser {
+  width: 900px;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  border: 1px solid var(--jdr-border);
+}
+.browser-chrome {
+  background: #2a2a30; padding: 0.5rem 0.8rem; display: flex; gap: 0.4rem; align-items: center;
+}
+.browser-chrome .dot { width: 10px; height: 10px; border-radius: 50%; background: #555; }
+.browser-body { background: var(--jdr-bg); height: 560px; overflow: hidden; display: flex; flex-direction: column; }
+
+/* Bandeau contextuel (haut) */
+.top-bar {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.6rem 1rem;
+  background: linear-gradient(180deg, #241c3a, #1a1428);
+  border-bottom: 1px solid var(--jdr-border);
+  flex-shrink: 0;
+}
+.top-bar .status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--jdr-status-live);
+  flex-shrink: 0;
+}
+.top-bar .titles { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.top-bar .titles .t1 { font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-bar .titles .t2 { font-size: 0.72rem; color: var(--jdr-text-muted); }
+.top-bar .spacer { flex: 1; }
+
+/* Sous-navigation locale (onglets) */
+.local-tabs {
+  display: flex;
+  gap: 0.2rem;
+  padding: 0 0.5rem;
+  background: var(--jdr-surface);
+  border-bottom: 1px solid var(--jdr-border);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+.local-tab {
+  padding: 0.6rem 0.75rem;
+  font-size: 0.82rem;
+  color: var(--jdr-text-muted);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.local-tab--active {
+  color: var(--jdr-accent-1);
+  border-bottom-color: var(--jdr-accent-1);
+  font-weight: 700;
+}
+
+/* Contenu */
+.content { flex: 1; overflow-y: auto; padding: 1rem; }
+.card {
+  background: var(--jdr-surface);
+  border: 1px solid var(--jdr-border);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.8rem;
+}
+.card h3 { margin: 0 0 0.4rem; font-size: 0.9rem; }
+.card p { margin: 0; font-size: 0.82rem; color: var(--jdr-text-muted); }
+.member-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0; font-size: 0.85rem; }
+.member-row .av { width: 24px; height: 24px; border-radius: 50%; background: var(--jdr-gradient-cta); flex-shrink: 0; }
+.member-row em { font-style: italic; }
+
+/* Barre globale — bas (mobile) */
+.global-bottom {
+  display: flex; justify-content: space-around;
+  padding: 0.4rem 0.25rem calc(0.25rem + 8px);
+  background: var(--jdr-surface);
+  border-top: 1px solid var(--jdr-border);
+  flex-shrink: 0;
+}
+.global-link { display: flex; flex-direction: column; align-items: center; gap: 0.15rem; font-size: 0.62rem; color: var(--jdr-text-muted); }
+.global-link .ic { width: 20px; height: 20px; border-radius: 5px; background: var(--jdr-surface-2); }
+
+/* Barre globale — haut (desktop) */
+.global-top {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(180deg, #241c3a, #1a1428);
+  border-bottom: 1px solid var(--jdr-border);
+  flex-shrink: 0;
+}
+.global-top .spacer { flex: 1; }
+.global-top .glink { font-size: 0.8rem; padding: 0.3rem 0.6rem; border-radius: 999px; color: var(--jdr-text-muted); }
+.global-top .glink--active { color: var(--jdr-accent-1); font-weight: 700; background: rgba(126,200,164,0.12); }
+
+.note-box {
+  background: rgba(155,109,255,0.08);
+  border: 1px solid rgba(155,109,255,0.3);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  font-size: 0.85rem;
+  color: var(--jdr-text-muted);
+  max-width: 60rem;
+  margin: 1rem 0 0;
+}
+.note-box strong { color: var(--jdr-text); }
+</style>
+</head>
+<body>
+
+<h1>Sous-navigation contextuelle — écran Partie « Les Cendres de Kavaan »</h1>
+<p class="lead">Maquette pour valider l'idée avant de construire la story 29.4. Thème Grimoire Émeraude, tokens réels (<code>apps/web/src/styles.scss</code>). La barre globale à 4 destinations (Parties/Personnages/Calendrier/Compte) reste visible sur les deux formats — c'est la sous-navigation locale (les onglets de la Partie) et le titre du bandeau qui deviennent contextuels.</p>
+
+<h2>1. Trois pistes pour le bandeau du haut (votre question sur le wordmark)</h2>
+<p class="lead" style="margin-bottom:1rem">Pour rappel, la base <code>DESIGN.md</code> dit déjà : « Pas de logo — le nom seul en typographie fait office de marque ». <code>master-jdr</code> reste donc un texte stylisé, pas une image — la question est seulement de savoir ce qu'il devient quand un titre contextuel apparaît.</p>
+
+<div class="variants-row">
+  <div class="variant">
+    <div class="variant-label">A — Le titre remplace le wordmark</div>
+    <div class="variant-frame">
+      <div class="vheader">
+        <span class="status-dot" style="width:8px;height:8px;border-radius:50%;background:#3fd4ff;flex-shrink:0"></span>
+        <div class="vheader-stack">
+          <span class="ctx-title">Les Cendres de Kavaan</span>
+        </div>
+      </div>
+    </div>
+    <p class="caption">Le wordmark disparaît des écrans contextualisés ; il ne reste visible que sur Dashboard/Personnages/Calendrier/Compte (écrans « racine », voir piste C plus bas pour ceux-là). Le plus sobre, aucune redondance — mais on perd le repère de marque en profondeur dans l'app.</p>
+  </div>
+
+  <div class="variant">
+    <div class="variant-label">B — Wordmark réduit + titre à côté</div>
+    <div class="variant-frame">
+      <div class="vheader">
+        <span class="wordmark wordmark--small">jdr</span>
+        <div class="vheader-stack">
+          <span class="ctx-title">Les Cendres de Kavaan</span>
+        </div>
+      </div>
+    </div>
+    <p class="caption">Le wordmark rétrécit en abréviation cliquable (retour à l'accueil), le titre domine visuellement. Garde un repère de marque partout, sans lui laisser la vedette.</p>
+  </div>
+
+  <div class="variant">
+    <div class="variant-label">C — Monogramme + titre, sous-titre de statut</div>
+    <div class="variant-frame">
+      <div class="vheader">
+        <span class="monogram">JM</span>
+        <div class="vheader-stack">
+          <span class="ctx-title">Les Cendres de Kavaan</span>
+          <span class="ctx-sub">En cours · Maître</span>
+        </div>
+      </div>
+    </div>
+    <p class="caption">Le wordmark texte devient un monogramme carré (2 lettres, dégradé de marque) — amorce discrète d'un « vrai logo » sans casser la règle « pas de bitmap » de DESIGN.md (formes/typo uniquement). Le sous-titre ajoute le statut et le rôle, déjà connus par ailleurs (signalétique d'état, 29.7) — à activer seulement si utile, sinon redondant.</p>
+  </div>
+
+  <div class="variant">
+    <div class="variant-label" style="color:#ffd54a">✅ Retenu — B + sous-titre de C, à la demande</div>
+    <div class="variant-frame" style="border-color:rgba(255,213,74,0.5)">
+      <div class="vheader">
+        <span class="wordmark wordmark--small">jdr</span>
+        <div class="vheader-stack">
+          <span class="ctx-title">Les Cendres de Kavaan</span>
+          <span class="ctx-sub">Maître</span>
+        </div>
+      </div>
+    </div>
+    <p class="caption">Le wordmark réduit de B, avec le sous-titre de C affiché <strong>seulement quand il apporte une info utile</strong> et absente du reste de l'écran — pas systématique. Ici, le rôle (Maître) sur l'écran Partie ; sur un écran où rien ne le justifie, le sous-titre disparaît et on retombe sur B pur (2e ligne du bandeau ci-dessous).</p>
+  </div>
+</div>
+
+<h2>2. Écran complet — mobile (barre basse fixe)</h2>
+<div class="frame-row">
+  <div>
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="top-bar">
+          <span class="wordmark wordmark--small">jdr</span>
+          <div class="titles">
+            <span class="t1">Les Cendres de Kavaan</span>
+            <span class="t2">Maître</span>
+          </div>
+          <span class="spacer"></span>
+          <span class="status-dot" title="En cours"></span>
+        </div>
+        <div class="local-tabs">
+          <div class="local-tab local-tab--active">Détails</div>
+          <div class="local-tab">Ma fiche</div>
+          <div class="local-tab">Invitations</div>
+          <div class="local-tab">Scénarios</div>
+          <div class="local-tab">Chronologie</div>
+        </div>
+        <div class="content">
+          <div class="card">
+            <h3>Prochaine séance</h3>
+            <p>Samedi 14 février, 20h30</p>
+          </div>
+          <div class="card">
+            <h3>⚔ Compagnons</h3>
+            <div class="member-row"><span class="av"></span><span><em>Ombreflèche</em> — Incon</span></div>
+            <div class="member-row"><span class="av"></span><span><em>Fenn</em> — Léa</span></div>
+          </div>
+        </div>
+        <div class="global-bottom">
+          <div class="global-link"><span class="ic"></span>Parties</div>
+          <div class="global-link"><span class="ic"></span>Personnages</div>
+          <div class="global-link"><span class="ic"></span>Calendrier</div>
+          <div class="global-link"><span class="ic"></span>Mon grimoire</div>
+        </div>
+      </div>
+    </div>
+    <p class="caption">Onglet actif « Détails » : couleur + gras + soulignement (jamais la couleur seule, même règle que la barre globale). La barre globale (bas) reste entièrement intacte et cliquable pendant qu'on est dans la Partie.</p>
+  </div>
+</div>
+
+<h2>3. Écran complet — desktop (barre haute)</h2>
+<div class="frame-row">
+  <div>
+    <div class="browser">
+      <div class="browser-chrome"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+      <div class="browser-body">
+        <div class="global-top">
+          <span class="wordmark" style="font-size:1rem">master-jdr</span>
+          <span class="spacer"></span>
+          <span class="glink glink--active">Mes aventures</span>
+          <span class="glink">Personnages</span>
+          <span class="glink">Calendrier</span>
+          <span class="glink">Mon grimoire</span>
+        </div>
+        <div class="top-bar">
+          <div class="titles">
+            <span class="t1">Les Cendres de Kavaan</span>
+            <span class="t2">Maître</span>
+          </div>
+          <span class="spacer"></span>
+          <span class="status-dot" title="En cours"></span>
+        </div>
+        <div class="local-tabs">
+          <div class="local-tab local-tab--active">Détails</div>
+          <div class="local-tab">Ma fiche</div>
+          <div class="local-tab">Invitations</div>
+          <div class="local-tab">Scénarios</div>
+          <div class="local-tab">Chronologie</div>
+        </div>
+        <div class="content">
+          <div class="card">
+            <h3>Prochaine séance</h3>
+            <p>Samedi 14 février, 20h30</p>
+          </div>
+          <div class="card">
+            <h3>⚔ Compagnons</h3>
+            <div class="member-row"><span class="av"></span><span><em>Ombreflèche</em> — Incon</span></div>
+            <div class="member-row"><span class="av"></span><span><em>Fenn</em> — Léa</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="caption">Sur desktop, la barre globale (« Mes aventures » actif ici serait plutôt neutre puisqu'on est descendu dans une Partie — question ouverte ci-dessous) surmonte le bandeau contextuel. Deux rangées distinctes : la globale ne bouge jamais, la contextuelle change à chaque écran.</p>
+  </div>
+</div>
+
+<div class="note-box">
+  <strong>Point ouvert non tranché par cette maquette :</strong> sur desktop, une fois « dans » une Partie, l'entrée « Mes aventures » de la barre globale doit-elle rester visuellement active (on vient de là) ou redevenir neutre (on n'y est plus littéralement) ? Les deux se défendent — à trancher avec vous avant la story.
+</div>
+
+</body>
+</html>

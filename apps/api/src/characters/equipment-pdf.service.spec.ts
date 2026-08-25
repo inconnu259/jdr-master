@@ -137,4 +137,31 @@ describe('EquipmentPdfService', () => {
       /introuvable\/incompatible/,
     );
   });
+
+  it("un equipment.group legacy (donnée pré-migration Story 14.1 non migrée) → avertissement loggé, aucun crash (deferred-work, garde-fou ajouté)", async () => {
+    const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+    const character = makeCharacter({
+      sheetData: {
+        narrative: { name: 'Miren' },
+        equipment: {
+          individual: [],
+          contenants: [],
+          animaux: [],
+          group: ['Ancienne entrée jamais migrée'],
+        },
+      },
+    });
+
+    await service.fillEquipmentPdf(character);
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('c1'));
+  });
+
+  it('equipment sans group (cas normal) → aucun avertissement', async () => {
+    const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+
+    await service.fillEquipmentPdf(makeCharacter());
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
 });

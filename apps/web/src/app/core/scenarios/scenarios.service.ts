@@ -8,6 +8,7 @@ import type {
   ScenarioDocumentDto,
   ScenarioDto,
   SetCompteRenduDto,
+  SetInfosPratiquesDto,
   SetResumeFinDto,
   SetSeanceCapacityDto,
   UpdateScenarioDto,
@@ -240,6 +241,21 @@ export class ScenariosService {
       this.http.patch<ScenarioDto>(
         `${API_BASE}/scenarios/seances/${seanceId}/compte-rendu`,
         { compteRendu } satisfies SetCompteRenduDto,
+        { withCredentials: true },
+      ),
+    );
+    this.notifyChanged(result.partieId);
+    return result;
+  }
+
+  /** Informations pratiques d'une séance (Story 36.5). Un seul PATCH pour les trois champs :
+   *  le MJ les saisit ensemble, et `null` vide un champ. Retour du `ScenarioDto` complet puis
+   *  `notifyChanged`, qui repropage vers ScenarioTimeline, SeanceList et CalendarView. */
+  async setInfosPratiques(seanceId: string, dto: SetInfosPratiquesDto): Promise<ScenarioDto> {
+    const result = await firstValueFrom(
+      this.http.patch<ScenarioDto>(
+        `${API_BASE}/scenarios/seances/${seanceId}/infos-pratiques`,
+        dto satisfies SetInfosPratiquesDto,
         { withCredentials: true },
       ),
     );

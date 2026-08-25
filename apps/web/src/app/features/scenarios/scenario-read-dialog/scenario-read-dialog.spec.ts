@@ -19,6 +19,7 @@ import { PollService } from '../../../core/poll/poll.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
 import { makeAnnouncementDto } from '../../../core/announcements/announcement-dto.fixture';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 
@@ -49,6 +50,9 @@ const PARTIE: PartieDto = {
   nextSessionDate: null,
   nextSessionSlot: null,
   role: 'mj',
+  status: 'EN_COURS',
+  isFavorite: false,
+  coverImageVersion: null,
 };
 
 async function createComponent(
@@ -62,6 +66,8 @@ async function createComponent(
     announcements = [] as AnnouncementDto[],
     initialChanged = null as { partieId: string } | null,
     partie = PARTIE,
+    unseenAnnouncementIds = [] as string[],
+    markAnnouncementRead = vi.fn().mockResolvedValue(undefined),
   }: {
     partieKind?: PartieKind;
     characters?: CharacterDto[];
@@ -71,6 +77,8 @@ async function createComponent(
     announcements?: AnnouncementDto[];
     initialChanged?: { partieId: string } | null;
     partie?: PartieDto;
+    unseenAnnouncementIds?: string[];
+    markAnnouncementRead?: ReturnType<typeof vi.fn>;
   } = {},
 ) {
   const dialogRef = { close: vi.fn() };
@@ -92,6 +100,10 @@ async function createComponent(
   };
   const announcementsSvc = { listAll: vi.fn().mockResolvedValue(announcements) };
   const partiesSvc = { get: vi.fn().mockResolvedValue(partie) };
+  const unseenAnnouncementsSvc = {
+    unseenAnnouncements: signal(announcements.filter((a) => unseenAnnouncementIds.includes(a.id))),
+    markRead: markAnnouncementRead,
+  };
 
   await TestBed.configureTestingModule({
     imports: [ScenarioReadDialog],
@@ -106,6 +118,7 @@ async function createComponent(
       { provide: CharacterService, useValue: characterSvc },
       { provide: PartiesService, useValue: partiesSvc },
       { provide: AnnouncementsService, useValue: announcementsSvc },
+      { provide: UnseenAnnouncementsService, useValue: unseenAnnouncementsSvc },
     ],
   }).compileComponents();
 
@@ -641,6 +654,9 @@ describe('ScenarioReadDialog', () => {
               id: 'seance1',
               scenarioId: 's1',
               compteRendu: null,
+              heureRdv: null,
+              lieu: null,
+              notePratique: null,
               createdAt: '2026-07-12T00:00:00.000Z',
               poll: {
                 id: 'poll1',
@@ -650,6 +666,8 @@ describe('ScenarioReadDialog', () => {
                 expiresAt: null,
                 chosenDate: null,
                 chosenSlot: null,
+                // Story 36.6 — effectif de la troupe (MJ + membres).
+                membersCount: 4,
                 options: [],
               },
             },
@@ -764,6 +782,55 @@ describe('ScenarioReadDialog', () => {
       );
       expect(badge).toBeTruthy();
       expect(badge!.textContent.trim()).toBe('MJ');
+    });
+
+    it("Story 29.13 (révision) : une annonce non vue affichée n'appelle jamais markRead() tant qu'elle n'est pas cliquée", async () => {
+      const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+      await createComponent(
+        { ...BASE, status: 'COURANT' },
+        {
+          announcements: [makeAnnouncementDto({ id: 'ann-scenario', scenarioId: 's1' })],
+          unseenAnnouncementIds: ['ann-scenario'],
+          markAnnouncementRead,
+        },
+      );
+
+      expect(markAnnouncementRead).not.toHaveBeenCalled();
+    });
+
+    it('Story 29.13 (révision) : un clic sur une annonce scopée non vue déclenche markRead() avec le bon id', async () => {
+      const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'COURANT' },
+        {
+          announcements: [makeAnnouncementDto({ id: 'ann-scenario', scenarioId: 's1' })],
+          unseenAnnouncementIds: ['ann-scenario'],
+          markAnnouncementRead,
+        },
+      );
+
+      fixture.nativeElement
+        .querySelector('.scenario-announcements app-annonce-card article')
+        ?.dispatchEvent(new Event('click'));
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(markAnnouncementRead).toHaveBeenCalledWith('ann-scenario');
+    });
+
+    it("Story 29.13 (AC2/AC6) : une annonce non affichée (A_VENIR, anti-spoil) ne déclenche jamais markRead(), même en tentant un clic", async () => {
+      const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+      const { fixture } = await createComponent(
+        { ...BASE, status: 'A_VENIR' },
+        {
+          announcements: [makeAnnouncementDto({ id: 'ann-masquee', scenarioId: 's1' })],
+          unseenAnnouncementIds: ['ann-masquee'],
+          markAnnouncementRead,
+        },
+      );
+
+      expect(fixture.nativeElement.querySelector('app-annonce-card')).toBeNull();
+      expect(markAnnouncementRead).not.toHaveBeenCalled();
     });
 
     it("AC6 : jamais affichée quand le statut est A_VENIR/BROUILLON, même si la donnée est présente", async () => {

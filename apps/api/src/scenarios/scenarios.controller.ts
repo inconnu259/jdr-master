@@ -30,6 +30,7 @@ import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import { CreateSeancePollDto } from './dto/create-seance-poll.dto';
 import { SetSeanceCapacityDto } from './dto/set-seance-capacity.dto';
 import { SetCompteRenduDto } from './dto/set-compte-rendu.dto';
+import { SetInfosPratiquesDto } from './dto/set-infos-pratiques.dto';
 import { SetResumeFinDto } from './dto/set-resume-fin.dto';
 
 const MAX_DOCUMENT_SIZE = 5 * 1024 * 1024;
@@ -189,6 +190,18 @@ export class ScenariosController {
     @Body() dto: SetCompteRenduDto,
   ) {
     return this.scenarios.setCompteRendu(seanceId, user.id, dto.compteRendu);
+  }
+
+  // Story 36.5 — informations pratiques (D-15). Un seul PATCH pour les trois champs : le MJ les
+  // saisit ensemble. Comme partout dans ce contrôleur, l'autorisation MJ est vérifiée EN SERVICE
+  // (parties.getOwned), pas par un guard de route.
+  @Patch('scenarios/seances/:id/infos-pratiques')
+  setInfosPratiques(
+    @Param('id', ParseUUIDPipe) seanceId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SetInfosPratiquesDto,
+  ) {
+    return this.scenarios.setInfosPratiques(seanceId, user.id, dto);
   }
 
   @Post('parties/:id/documents')

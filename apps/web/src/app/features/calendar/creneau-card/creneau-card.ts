@@ -7,7 +7,7 @@ import { ambiguousUserIds } from '../../../shared/identity/identity-ambiguity.ut
 const SLOT_LABELS: Record<string, string> = {
   MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING: 'Soirée',
+  EVENING: 'Soir',
 };
 
 const STATUS_ICONS: Record<SlotStatus, string> = {

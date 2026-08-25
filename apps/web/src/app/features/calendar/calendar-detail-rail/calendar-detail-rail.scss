@@ -1,0 +1,248 @@
+/* Story 36.1 — rail de détail.
+   Valeurs reprises du contrat d'UI (mockups/contrat-ui-calendrier.html, CSS `.rail`).
+   Aucun slug de thème n'est ciblé : tout passe par les tokens, pour rester neutre au renommage
+   `medieval-steampunk` → `atelier-cuivre` prévu à l'épic 35. */
+
+.rail {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--mat-sys-surface-container);
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 10px;
+
+  &--loading {
+    opacity: 0.6;
+  }
+}
+
+.dl {
+  margin-bottom: 5px;
+  font-size: 11px;
+  color: var(--jdr-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.it {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 0;
+  border-top: 1px solid var(--mat-sys-outline-variant, #ccc);
+
+  &:first-child {
+    border-top: 0;
+  }
+
+  /* Créneau effectivement touché : mis en avant par le POIDS, pas par la seule couleur. */
+  &--touched .v {
+    font-weight: 600;
+  }
+}
+
+.w {
+  display: flex;
+  flex: 0 0 78px;
+  width: 78px;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--jdr-text-muted);
+}
+
+.ic {
+  flex: 0 0 13px;
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--jdr-text-muted);
+}
+
+/* Le libellé long est le défaut ; l'abrégé ne sort que sous le seuil (voir plus bas). */
+.w-label-short {
+  display: none;
+}
+
+.v {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--jdr-text);
+
+  b {
+    font-weight: 600;
+  }
+
+  /* Accessoires (lieu, heure, note). Story 36.5 : ils portent désormais une VRAIE information
+     (les informations pratiques d'une séance), pas un ornement — d'où la troncature explicite,
+     que le rail n'avait pas. */
+  .m {
+    display: block;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--jdr-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &[data-status='AVAILABLE'] {
+    color: var(--color-available);
+  }
+
+  &[data-status='UNAVAILABLE'] {
+    color: var(--color-unavailable);
+  }
+
+  &[data-status='UNKNOWN'] {
+    color: var(--jdr-text-muted);
+  }
+
+  &.empty {
+    color: var(--jdr-text-muted);
+    font-style: italic;
+  }
+}
+
+/* Ligne activable (AC11). Le bouton se fond dans la ligne : c'est la ligne qui est cliquable,
+   pas un contrôle rapporté. Survol et focus se voient sans reposer sur la couleur seule. */
+.v--action {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+
+  b {
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--jdr-text) 40%, transparent);
+    text-underline-offset: 2px;
+  }
+
+  &:hover b {
+    text-decoration-color: var(--jdr-text);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--jdr-accent-1);
+    outline-offset: 2px;
+  }
+}
+
+/* Densité étroite : le libellé de créneau s'abrège et les accessoires se replient.
+   Les TROIS lignes restent — aucune largeur n'en retire une (invariant de la story). */
+@media (max-width: 767px) {
+  .w {
+    flex: 0 0 62px;
+    width: 62px;
+    font-size: 10px;
+  }
+
+  .w-label {
+    display: none;
+  }
+
+  .w-label-short {
+    display: inline;
+  }
+
+  .v {
+    font-size: 11.5px;
+
+    /* ⚠️ Story 36.5, AC11 — ÉCART ASSUMÉ vs DESIGN.md:373, qui range les accessoires parmi ce
+       qui est « replié en premier quand la place manque ». Cette règle a été écrite quand
+       l'accessoire était un ornement. Depuis la story 36.2 la bande de la case perd tout texte
+       sous 712 px de grille : si le rail masquait le sien sous 768 px, les informations
+       pratiques seraient invisibles PARTOUT sur téléphone — ce que l'AC10 de la story 36.2
+       interdit (« la vue mois sur téléphone ne dit à aucun moment moins qu'avant »).
+       Elles restent donc, sur leur propre ligne, en corps réduit. À répercuter par bmad-ux. */
+    .m {
+      display: block;
+      font-size: 10.5px;
+    }
+  }
+}
+
+
+/* ── Story 36.8 — la lecture longue du canal de groupe ──────────────────────
+
+   Elle vient APRÈS la valeur du créneau, sur la même ligne : le rail dit d'abord ce que porte le
+   créneau (« Disponible », un titre de séance, un vote), puis où en est le groupe. Les deux
+   cohabitent — c'est le canal séparé, jusque dans le rail.
+
+   ⚠️ Aucun `cursor: pointer`, aucun état de survol : ce n'est pas une cible. Les seules lignes
+   activables du rail restent la séance (36.1) et le vote (36.7). */
+.grp {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  min-width: 0;
+  font-size: 10.5px;
+  color: var(--jdr-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Un membre nommé et son statut. La couleur DOUBLE le mot, elle ne le remplace jamais (P-1) :
+   « ALICE disponible » se lit sans distinguer les teintes. Revue de code du 36.8 : le nom
+   lui-même est désormais colorisé par statut (lien visuel avec les pastilles des autres
+   surfaces) — un gain de lisibilité en un coup d'œil, et surtout ce qui reste visible sous le
+   seuil téléphone une fois le mot entier cédé. */
+.grp__m {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+
+  b {
+    font-weight: 600;
+    color: var(--jdr-text);
+  }
+
+  &[data-status='AVAILABLE'] b,
+  &[data-status='AVAILABLE'] .grp__s,
+  &[data-status='AVAILABLE'] .grp__g {
+    color: var(--color-available);
+  }
+
+  &[data-status='UNAVAILABLE'] b,
+  &[data-status='UNAVAILABLE'] .grp__s,
+  &[data-status='UNAVAILABLE'] .grp__g {
+    color: var(--color-unavailable);
+  }
+
+  &[data-status='UNKNOWN'] b,
+  &[data-status='UNKNOWN'] .grp__s,
+  &[data-status='UNKNOWN'] .grp__g {
+    color: var(--jdr-text-muted);
+  }
+}
+
+/* Le glyphe court (D/I/?) : caché tant que le mot entier tient, c'est lui qui prend le relais
+   en dessous. */
+.grp__g {
+  display: none;
+}
+
+/* Sous le seuil téléphone, le mot entier cède avant le nom : le rail y porte déjà le titre de
+   séance et les informations pratiques, qui sont l'information de première nécessité (AC11 de
+   la 36.2). Revue de code du 36.8 : contrairement à la version précédente, RIEN n'est perdu à
+   l'œil ici — le nom colorisé et le glyphe court prennent le relais du mot, P-1 reste respecté
+   (jamais la seule couleur) même sous ce seuil. */
+@media (max-width: 500px) {
+  .grp__m .grp__s {
+    display: none;
+  }
+
+  .grp__g {
+    display: inline;
+  }
+}

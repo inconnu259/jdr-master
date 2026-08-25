@@ -1,0 +1,50 @@
+[
+  {
+    "key": "prix-de-vente-par-niveau",
+    "label": "Prix de vente par niveau",
+    "prixParNiveau": [
+      { "niveau": 1, "prixPo": 100 },
+      { "niveau": 2, "prixPo": 300 },
+      { "niveau": 3, "prixPo": 800 },
+      { "niveau": 4, "prixPo": null, "notes": "Non disponible" },
+      { "niveau": 5, "prixPo": null, "notes": "Non disponible" }
+    ],
+    "notes": "Seuls les herboristes et les guérisseurs vendent de telles herbes. Ils ne les rachètent presque jamais."
+  },
+  { "key": "pomme-du-couchant", "categorie": "Soins du corps", "label": "Pomme du couchant", "niveau": 1, "paysage": "Plaine", "partie": "Fruit", "effets": "Soigne la douleur et rend 2 PV.", "description": "Arbre à feuillage persistant ressemblant à un pommier. Son fruit a la couleur du crépuscule. Il est tonique et nutritif." },
+  { "key": "volubilis-couronne", "categorie": "Soins du corps", "label": "Volubilis couronné", "niveau": 1, "paysage": "Lande", "partie": "Fleur", "effets": "En tisane, il favorise le sommeil. Le test de condition suivant est considéré comme un 6.", "description": "Plante dont les fleurs forment une couronne très colorée dont la teinte varie selon la météo entre le rouge, le bleu, le blanc et le violet." },
+  { "key": "laque-de-l-ogre", "categorie": "Soins du corps", "label": "Laque de l'ogre", "niveau": 2, "paysage": "Bois", "partie": "Sève", "effets": "Poison. Dose pour une flèche. Ajoute 2 aux dégâts si la pointe en est enduite à l'avance.", "description": "Arbre à feuilles caduques faisant entre 4 et 5 mètres de haut. Son écorce est gris cendré et une sève noire visqueuse en suinte si on perce cette dernière." },
+  { "key": "paume-du-geant", "categorie": "Soins du corps", "label": "Paume du géant", "niveau": 2, "paysage": "Rocaille", "partie": "Feuille", "effets": "Soigne les jambes lourdes. Annule les dégâts occasionnés par un test de déplacement.", "description": "Plante vivace dont les grandes feuilles sont recouvertes d'un liquide collant vert pâle. Prolifère dans les environnements humides." },
+  { "key": "carthame-de-l-aube", "categorie": "Soins du corps", "label": "Carthame de l'aube", "niveau": 3, "paysage": "Marais", "partie": "Tige", "effets": "Revitalise l'énergie du corps. Autorise un test de condition immédiat pour guérir d'un état physique avec un bonus de +1.", "description": "Sorte de chardon aux fleurs d'un rouge aussi vif que du sang. Ses tiges contiennent un puissant stupéfiant, et il faut donc les manipuler avec précaution." },
+
+  { "key": "campanule-de-rosee", "categorie": "Soins de l'esprit", "label": "Campanule de rosée", "niveau": 2, "paysage": "Colline", "partie": "Fleur", "effets": "Stimule la confiance en soi. Ajoute un point à un test d'ESP.", "description": "Plante dont la fleur dépasse 1 mètre. Pousse en haut des collines et ne fleurit qu'entourée de brume matinale." },
+  { "key": "chrysantheme-du-soleil-de-minuit", "categorie": "Soins de l'esprit", "label": "Chrysanthème du soleil de minuit", "niveau": 3, "paysage": "Montagne", "partie": "Fleur", "effets": "Calme l'âme. Permet de faire immédiatement un test de condition à +1 pour guérir d'un état psychologique.", "description": "Chrysanthème aux fleurs mauves et originaire des régions froides. Fleurit au soleil de minuit. Ses pétales séchés font la base d'un thé fameux." },
+  { "key": "perce-neige-lunaire", "categorie": "Soins de l'esprit", "label": "Perce-neige lunaire", "niveau": 3, "paysage": "Forêt", "partie": "Feuille", "effets": "Améliore la concentration. Pendant un jour, les tests de concentration nécessitent 1 PE de moins, jusqu'à un minimum d'un point.", "description": "Plante qui ne s'épanouit qu'à la lumière de la lune. Il lui faudrait un an pour pousser d'un centimètre. Si on en fait un jus, elle ouvre l'esprit." },
+
+  { "key": "gentiane-du-crepuscule", "categorie": "Améliorations", "label": "Gentiane du crépuscule", "niveau": 3, "paysage": "Tous ceux de niveau 3, de nuit.", "partie": "Pollen", "effets": "Ajoute le niveau du magicien à la puissance d'un sort faisant gagner ou perdre des points de vie.", "description": "Plante dont les fleurs ne s'ouvrent que la nuit. Elles forment une sorte de sac légèrement violacé." },
+  { "key": "elixir-de-gelee-royale", "categorie": "Améliorations", "label": "Élixir de gelée royale", "niveau": 4, "paysage": "Jungle", "partie": "Nid", "effets": "Double la durée des sorts non instantanés.", "description": "Se trouve dans des fourmilières de 2 mètres de haut, dont la couche externe, faite de boue et de terre, est plus dure que la pierre." },
+  { "key": "melon-noir", "categorie": "Améliorations", "label": "Melon noir", "niveau": 4, "paysage": "Désert", "partie": "Fruit", "effets": "Permet de lancer un sort de zone sans risquer de toucher ses alliés.", "description": "Cucurbitacée très rare poussant dans les arbres morts du désert. Complètement noir : feuilles, fruits, tiges. Répand une abominable odeur de fermentation." },
+  { "key": "tulipe-du-vent-qui-hurle", "categorie": "Améliorations", "label": "Tulipe du vent qui hurle", "niveau": 4, "paysage": "Jungle, par Vent fort", "partie": "Fleur", "effets": "Permet de rajouter 1 cible à un sort visant autrement une cible unique.", "description": "Genre de liliacée ne germant que là où souffle un vent déchaîné dans lequel ses fleurs vertes répandent leur pollen." },
+  { "key": "yggdrasill", "categorie": "Améliorations", "label": "Yggdrasill", "niveau": 5, "paysage": "Haute Mont.", "partie": "Branche", "effets": "Transforme un sort de magie brute autre qu'instantané et ciblant une personne en un sort de magie cérémonielle ciblant plusieurs alliés et durant 12 heures.", "description": "L'Yggdrasill est considéré comme le gardien de la forêt. Il pousse dans les hautes montagnes et on dit que son écorce est aussi dure que l'orichalque.", "notes": "On ne peut utiliser qu'une seule herbe d'amélioration par sort." },
+
+  {
+    "key": "repartition-par-paysage",
+    "label": "Répartition par niveau/paysage",
+    "repartition": [
+      { "niveau": 1, "paysage": "Lande", "nom": "Volubilis couronné", "categorie": "Corps" },
+      { "niveau": 1, "paysage": "Plaine", "nom": "Pomme du couchant", "categorie": "Corps" },
+      { "niveau": 2, "paysage": "Bois", "nom": "Laque de l'ogre", "categorie": "Corps" },
+      { "niveau": 2, "paysage": "Colline", "nom": "Campanule de rosée", "categorie": "Esprit" },
+      { "niveau": 2, "paysage": "Rocaille", "nom": "Paume du géant", "categorie": "Corps" },
+      { "niveau": 3, "paysage": "Forêt", "nom": "Perce-neige lunaire", "categorie": "Esprit" },
+      { "niveau": 3, "paysage": "Marais", "nom": "Carthame de l'aube", "categorie": "Corps" },
+      { "niveau": 3, "paysage": "Montagne", "nom": "Chrysanthème du soleil de minuit", "categorie": "Esprit" },
+      { "niveau": 4, "paysage": "Désert", "nom": "Melon noir", "categorie": "Amélioration" },
+      { "niveau": 4, "paysage": "Jungle", "nom": "Élixir de gelée royale", "categorie": "Amélioration" },
+      { "niveau": 5, "paysage": "Haute Montagne", "nom": "Yggdrasill", "categorie": "Amélioration" },
+      { "niveau": null, "paysage": "Jungle / Vent fort", "nom": "Tulipe du vent qui hurle", "categorie": "Amélioration" },
+      { "niveau": null, "paysage": "Paysages de niv. 3 / Nuit uniquement", "nom": "Gentiane du crépuscule", "categorie": "Amélioration" }
+    ],
+    "noteRetranscription": "Le livre orthographie cette herbe « Carthame de l'aube » dans le tableau Soins du corps mais « Carthame de l'aubre » dans le tableau Répartition. La graphie « aube » a été retenue partout, plus cohérente avec le reste du texte."
+  }
+]

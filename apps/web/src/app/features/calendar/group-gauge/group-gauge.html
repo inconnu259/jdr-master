@@ -1,0 +1,35 @@
+<!--
+  Story 36.8 — deux formes, une seule décidée par la DONNÉE (jamais par un drapeau de rôle) :
+  des pastilles quand le serveur a servi les identités et que la troupe tient en six, la jauge
+  agrégée sinon. Le nom accessible complet vit sur l'hôte (`role="img"`), donc tout ce qui suit
+  est `aria-hidden` : il double la forme à l'œil, il ne doit pas la doubler à l'oreille.
+-->
+@if (pastilles(); as members) {
+  <!-- Vue MJ, jusqu'à six membres — EN FLUX dans la bande (`margin-left: auto`), et non en
+       absolu : le contrat les aligne à droite du contenu, pas par-dessus
+       (`contrat-ui-calendrier.html:107-111`). La bande ne réserve donc PAS les 11 px de marge
+       dans ce cas. -->
+  <span class="members" aria-hidden="true">
+    @for (m of members; track m.userId) {
+      <i [class]="pastilleClass(m)"></i>
+    }
+  </span>
+} @else {
+  <!-- Jauge : bande verticale au bord droit, remplie PAR LE BAS (`flex-direction: column-reverse`
+       dans la feuille), à proportion des membres disponibles.
+
+       🚨 Les DEUX VIDES (AC6) : `.gg-gauge--blocked` rend la jauge pleine en rouge (tout le monde
+       est bloqué) ; sans lui, une hauteur remplie de zéro veut dire « personne de disponible et
+       personne ne s'est prononcé ». Même hauteur, deux informations — c'est la classe qui les
+       sépare, et le nom accessible qui les dit. -->
+  <span class="gg-gauge" [class.gg-gauge--blocked]="allBlocked()" aria-hidden="true">
+    @if (allBlocked()) {
+      <i class="fill" style="height: 100%"></i>
+    } @else if (fill() > 0) {
+      <i class="fill" [style.height]="pct(fill())"></i>
+    }
+  </span>
+}
+<!-- Doublure textuelle, là où la surface a la place (rail, Agenda). Toujours émise, jamais
+     conditionnée en TypeScript : c'est le CSS qui la montre. -->
+<span class="cnt" aria-hidden="true">{{ counter() }}</span>

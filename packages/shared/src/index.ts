@@ -9,6 +9,46 @@ export const THEMES = ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampun
 
 export type Theme = (typeof THEMES)[number];
 
+/** Critères de tri de la liste des parties (FR-10, AD-1, Story 29.8) — union fermée, validée
+ *  côté serveur via `@IsIn(PARTIE_SORTS)`, jamais une chaîne libre. */
+export const PARTIE_SORTS = ['urgence', 'date', 'nom', 'type', 'statut'] as const;
+
+export type PartieSort = (typeof PARTIE_SORTS)[number];
+
+/** Modes de densité d'affichage des listes (FR-45, AD-1, Story 29.9) — union fermée **partagée**
+ *  entre la liste des parties et la vue « mes personnages » (CAP-18 : « une seule grammaire »),
+ *  chacune gardant sa propre valeur mémorisée (`partiesViewMode`/`charactersViewMode`). Littéral
+ *  `"medium"` (pas `'moyen'`) : doit rester synchronisé avec le défaut Prisma du Structural Seed. */
+export const LIST_VIEW_MODES = ['large', 'medium', 'compact'] as const;
+
+export type ListViewMode = (typeof LIST_VIEW_MODES)[number];
+
+/** Critères de tri de la vue « mes personnages » (FR-45, AD-1, Story 29.9) — union fermée
+ *  distincte de `PARTIE_SORTS` (AD-1 : « niveau, partie, nom pour les personnages »), pas de
+ *  vocabulaire partagé au-delà de `'nom'`, présent dans les deux unions. */
+export const CHARACTER_SORTS = ['niveau', 'partie', 'nom'] as const;
+
+export type CharacterSort = (typeof CHARACTER_SORTS)[number];
+
+/** Couches d'affichage du calendrier (FR-46, AD-16, Story 30.4) — union fermée, validée côté
+ *  serveur via `@IsIn(CALENDAR_LAYER_KEYS, { each: true })`, jamais une chaîne libre. La couche
+ *  `disponibilite-groupe` n'a de sens que dans le calendrier d'une partie — c'est la **lecture**
+ *  qui l'ignore hors contexte (Story 30.6), pas le stockage/le défaut qui la refuse (AD-16). */
+export const CALENDAR_LAYER_KEYS = [
+  'mes-indisponibilites',
+  'mes-disponibilites',
+  'mes-seances',
+  'votes-en-cours',
+  'inscriptions-ouvertes',
+  'disponibilite-groupe',
+] as const;
+
+export type CalendarLayerKey = (typeof CALENDAR_LAYER_KEYS)[number];
+
+/** Jeu de couches actives par défaut pour un compte qui n'a jamais réglé cette préférence
+ *  (`calendarLayersSetAt === null`, AD-16) — toutes actives, y compris `disponibilite-groupe`. */
+export const DEFAULT_CALENDAR_LAYER_KEYS: CalendarLayerKey[] = [...CALENDAR_LAYER_KEYS];
+
 /** Utilisateur authentifié (renvoyé par /auth/login, /auth/me). Jamais le hash. */
 export interface AuthUser {
   id: string;
@@ -21,6 +61,23 @@ export interface AuthUser {
   /** Thème choisi sur le compte. `null` = jamais choisi — le thème local est alors adopté une
    *  seule fois et poussé vers le compte (AD-13). Toujours présent, jamais `undefined`. */
   theme: Theme | null;
+  /** Préférence « masquer les parties terminées » (FR-3, AD-1, Story 29.8) — appliquée côté front
+   *  à la liste déjà chargée, jamais par un filtre serveur. */
+  hideFinishedParties: boolean;
+  /** Critère de tri mémorisé de la liste des parties (FR-10, AD-1, Story 29.8). */
+  partiesSort: PartieSort;
+  /** Mode d'affichage mémorisé de la liste des parties (FR-45, AD-1, Story 29.9). */
+  partiesViewMode: ListViewMode;
+  /** Mode d'affichage mémorisé de la vue « mes personnages » (FR-45, AD-1, Story 29.9). */
+  charactersViewMode: ListViewMode;
+  /** Critère de tri mémorisé de la vue « mes personnages » (FR-45, AD-1, Story 29.9). */
+  charactersSort: CharacterSort;
+  /** Couches actives du calendrier (FR-46, AD-16, Story 30.4) — toujours résolu côté serveur,
+   *  jamais `undefined` : si le compte n'a jamais réglé cette préférence, porte
+   *  `DEFAULT_CALENDAR_LAYER_KEYS` ; si réglé (y compris à vide), porte exactement ce qui a été
+   *  enregistré. Contrairement à `theme`, aucun sentinel `null` n'est exposé au client — la
+   *  distinction « jamais réglé » / « tout éteint » est résolue en interne (AD-16). */
+  defaultCalendarLayers: CalendarLayerKey[];
 }
 
 /** Corps de la requête PATCH /me/display-name. */
@@ -51,6 +108,121 @@ export type GameSystemId = (typeof GAME_SYSTEMS)[number]['id'];
 /** Type d'une partie. En 1b l'UI n'expose que ONE_SHOT + CAMPAGNE_LINEAIRE (libellé « Campagne »). */
 export type PartieKind = 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE' | 'CAMPAGNE_EPISODIQUE';
 
+/** Statut d'une partie — dérivé côté serveur à partir de `Partie.closedAt` et de la présence de
+ *  scénarios (AD-8), jamais recalculé côté client (Story 29.6). */
+export type PartieStatus = 'A_VENIR' | 'EN_COURS' | 'TERMINEE';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Conversion du type d'une partie (Story 29.14)
+//
+// POINT DE DÉRIVATION UNIQUE de la matrice de conversion. Le serveur (garde de
+// `PartiesService.convertKind()`) et le formulaire d'édition consomment tous deux
+// `checkPartieKindTransition()` — il n'existe pas deux tables de règles, qui
+// divergeraient (Règle B de la story, esprit d'AD-17).
+//
+// Le `kind` gouverne des invariants dans quatre services :
+//   - ONE_SHOT              : exactement un scénario, créé avec la partie (AD-7)
+//   - CAMPAGNE_LINEAIRE     : au plus un scénario COURANT à la fois (AD-10)
+//   - CAMPAGNE_EPISODIQUE   : participation individuelle + inscriptions à capacité
+// Jusqu'à cette story, `update()` écrivait `kind` sans aucune vérification.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** État de la partie au moment où une conversion est évaluée. Lu par le serveur dans la
+ *  transaction ; reconstitué côté client depuis la liste des scénarios de la partie. */
+export interface PartieKindTransitionState {
+  scenarioCount: number;
+  /** Nombre de scénarios au statut `COURANT`. */
+  courantCount: number;
+  /** `Partie.closedAt !== null`. */
+  isClosed: boolean;
+}
+
+/** Motifs de refus — union fermée. Le serveur renvoie un code, jamais une phrase : le libellé
+ *  est thématisable côté client, et un code se teste sans dépendre d'une formulation. */
+export type PartieKindTransitionRefusal =
+  /** Règle C : une partie clôturée se rouvre avant d'être convertie. */
+  | 'PARTIE_CLOSED'
+  /** Cas 3 et 5 : un one-shot n'a qu'un scénario (AD-7), on ne sait pas lequel garder. */
+  | 'TOO_MANY_SCENARIOS_FOR_ONE_SHOT';
+
+/** Effets à appliquer dans la transaction de conversion, en plus de l'écriture du `kind`. */
+export type PartieKindTransitionEffect =
+  /** Cas 3 et 5 à zéro scénario : en créer un (+ sa séance), comme le fait `PartiesService.create()`
+   *  pour un ONE_SHOT. Sans cela la partie serait définitivement coincée sans scénario —
+   *  `ScenariosService.create()` refuse d'en créer un sur un ONE_SHOT. */
+  | 'CREATE_SCENARIO'
+  /** Cas 2 et 4 : inscrire les membres actuels comme participants de chaque scénario existant.
+   *  Ce n'est pas une invention : hors épisodique, le code tient déjà pour vrai que « tous les
+   *  membres actuels sont réputés participer » (`homme-dragon.service.ts`). Sans ce semis, la
+   *  conversion viderait les notes de rétrospective et ferait refuser les associations de journal. */
+  | 'SEED_PARTICIPANTS'
+  /** Cas 6 avec plusieurs COURANT : rétrograder en `A_VENIR` tous ceux que le MJ n'a pas retenus.
+   *  Séances, votes et dates sont conservés (Règle A — rien n'est jamais effacé). */
+  | 'DEMOTE_EXTRA_COURANTS';
+
+export type PartieKindTransitionVerdict =
+  | { allowed: false; refusal: PartieKindTransitionRefusal }
+  | {
+      allowed: true;
+      effects: PartieKindTransitionEffect[];
+      /** Vrai quand `DEMOTE_EXTRA_COURANTS` s'applique : le MJ doit désigner le scénario qui reste
+       *  Courant. Le serveur exige alors `courantScenarioId`. */
+      requiresCourantChoice: boolean;
+    };
+
+/**
+ * Évalue une conversion de type de partie. Fonction **pure** : aucune dépendance à Prisma,
+ * Nest ou Angular, testable isolément.
+ *
+ * Une transition identité (`from === to`) est toujours autorisée et sans effet — le formulaire
+ * renvoie systématiquement `kind`, y compris inchangé.
+ */
+export function checkPartieKindTransition(
+  from: PartieKind,
+  to: PartieKind,
+  state: PartieKindTransitionState,
+): PartieKindTransitionVerdict {
+  if (from === to) {
+    return { allowed: true, effects: [], requiresCourantChoice: false };
+  }
+
+  // Règle C — évaluée avant tout le reste : une partie clôturée ne se convertit pas.
+  if (state.isClosed) {
+    return { allowed: false, refusal: 'PARTIE_CLOSED' };
+  }
+
+  const effects: PartieKindTransitionEffect[] = [];
+
+  if (to === 'ONE_SHOT') {
+    // Cas 3 et 5. À deux scénarios ou plus, aucune règle ne dit lequel survivrait : refus.
+    if (state.scenarioCount >= 2) {
+      return { allowed: false, refusal: 'TOO_MANY_SCENARIOS_FOR_ONE_SHOT' };
+    }
+    if (state.scenarioCount === 0) {
+      effects.push('CREATE_SCENARIO');
+    }
+    return { allowed: true, effects, requiresCourantChoice: false };
+  }
+
+  if (to === 'CAMPAGNE_EPISODIQUE') {
+    // Cas 2 et 4 — toujours autorisés, la réparation rend la conversion non destructive.
+    return {
+      allowed: true,
+      effects: ['SEED_PARTICIPANTS'],
+      requiresCourantChoice: false,
+    };
+  }
+
+  // to === 'CAMPAGNE_LINEAIRE' — cas 1 et 6.
+  // Le verrou « un seul COURANT » d'AD-10 ne s'applique qu'aux nouveaux passages en COURANT ; il
+  // ne répare pas l'existant. Sans rétrogradation, l'invariant naîtrait déjà violé.
+  const requiresCourantChoice = state.courantCount >= 2;
+  if (requiresCourantChoice) {
+    effects.push('DEMOTE_EXTRA_COURANTS');
+  }
+  return { allowed: true, effects, requiresCourantChoice };
+}
+
 /** Une partie telle que renvoyée par l'API. */
 export interface PartieDto {
   id: string;
@@ -70,6 +242,40 @@ export interface PartieDto {
   /** Rôle de l'appelant sur cette partie — calculé serveur (`mjId === userId`), jamais dérivé
    *  côté client (Story 29.1, AD-15). Toujours présent, contrairement à `mjPseudo`/`mjDisplayName`. */
   role: 'mj' | 'player';
+  /** Toujours présent, calculé serveur (AD-8) — jamais dérivé côté client (Story 29.6). */
+  status: PartieStatus;
+  /** Toujours présent, calculé serveur (Story 29.8) — jamais dérivé côté client. */
+  isFavorite: boolean;
+  /** Jeton de version de la couverture (Story 29.12, AD-19) — dérivé de `Partie.coverImageUrl`,
+   *  change à chaque dépôt. Sert à la fois d'indicateur de présence (`null` = pas d'image, la
+   *  bannière générée s'applique) et de paramètre de cache-busting pour
+   *  `GET /parties/:id/cover` : jamais le chemin de stockage lui-même, qui n'apporte rien côté
+   *  client (l'URL se construit depuis l'`id` de la partie, même patron que
+   *  `CharacterAvatar.absolutePortraitUrl`). */
+  coverImageVersion: string | null;
+}
+
+/** Code de signal d'état d'une partie (FR-12, AD-3) — union fermée, jamais un booléen libre ni
+ *  une chaîne construite à la volée côté client (Story 29.7). */
+export type PartySignalCode =
+  | 'PERSONNAGE_A_CREER'
+  | 'VOTE_EN_COURS_SANS_REPONSE'
+  | 'COMPTE_RENDU_NON_REDIGE'
+  | 'HOMME_DRAGON_A_CREER'
+  | 'AUCUN_MEMBRE_INVITE'
+  | 'AUCUN_SCENARIO_EN_COURS'
+  | 'AUCUNE_DATE_NI_VOTE'
+  | 'RAPPORT_FIN_MANQUANT'
+  | 'PROCHAINE_SEANCE_CONNUE'
+  | 'PARTIE_TERMINEE';
+
+/** Réponse de `GET /me/party-signals` — une entrée par partie de l'utilisateur, jamais une entrée
+ *  absente (`signals: []` si aucun signal actif). `role`/`status` sont dupliqués depuis `PartieDto`
+ *  volontairement (AD-3) : l'écran de liste n'a besoin d'aucun autre appel. */
+export interface PartySignalsDto {
+  role: 'mj' | 'player';
+  status: PartieStatus;
+  signals: PartySignalCode[];
 }
 
 /** Statut d'une invitation in-app. */
@@ -154,6 +360,13 @@ export interface SeanceDto {
   /** Inscription à capacité limitée (CAMPAGNE_EPISODIQUE uniquement, Story 8.3) — peuplé seulement si `inscriptionMax` est défini sur la Seance (AD-4 : jamais en même temps que `poll`). */
   inscription?: SeanceInscriptionDto;
   compteRendu: string | null;
+  /** Informations pratiques (Story 36.5, D-15 amendée le 2026-08-19) — trois champs
+   *  facultatifs, séparés pour qu'on puisse en lâcher un quand la place manque.
+   *  `heureRdv` est une ÉTIQUETTE `"HH:MM"`, jamais un instant : rien ne la parse, ne la
+   *  compare ni ne la trie, et la chaîne de disponibilité reste au créneau de journée. */
+  heureRdv: string | null;
+  lieu: string | null;
+  notePratique: string | null;
   createdAt: string;
 }
 
@@ -168,6 +381,16 @@ export interface SeanceInscriptionDto {
 /** Payload de rédaction du compte-rendu d'une Seance (PATCH /scenarios/seances/:id/compte-rendu). */
 export interface SetCompteRenduDto {
   compteRendu: string;
+}
+
+/** Payload des informations pratiques d'une Seance (PATCH /scenarios/seances/:id/infos-pratiques,
+ *  Story 36.5). Un seul payload pour les trois champs : le MJ les saisit ensemble, et une écriture
+ *  partielle compliquerait la remise à vide. `null` VIDE le champ — le distinguer de `undefined`
+ *  n'aurait pas de sens ici, les trois étant toujours envoyés ensemble. */
+export interface SetInfosPratiquesDto {
+  heureRdv: string | null;
+  lieu: string | null;
+  notePratique: string | null;
 }
 
 /** Payload de définition de la capacité d'une Seance (PATCH /scenarios/seances/:id/capacite). */
@@ -308,11 +531,60 @@ export interface ConflictInfo {
   startDate: string | null;
   endDate: string | null;
   dayOfWeek: number | null;
+  /** Conflit INTERNE au lot (entre deux items du même lot, `id` synthétique
+   *  `batch-item-{index}`) : irrésoluble, aucun choix de résolution n'y a de sens (AC14).
+   *  Absent/`false` = conflit avec une déclaration persistée, résoluble. Story 36.4. */
+  internal?: boolean;
 }
 
 /** Résultat d'un POST /availability (avec ou sans résolution de conflit). */
 export interface CreateAvailabilityResult {
   created: AvailabilityDeclarationDto[];
+}
+
+/** Élément d'un lot d'écriture groupée (POST /availability/batch) : forme de
+ *  CreateAvailabilityDto sans replacingId — cet identifiant n'a de sens que depuis le
+ *  panneau, qui remplace une déclaration précise.
+ *
+ *  `conflictResolution` est en revanche porté PAR ITEM depuis la Story 36.4 (dérogation
+ *  D-18) : la route groupée n'échoue plus en bloc sur conflit, elle absorbe l'écrasement
+ *  et la découpe. C'est un renversement assumé de l'AC2 de la Story 30.2 et de la phrase
+ *  3 d'AD-21 — les phrases 1 (un seul appel) et 2 (écriture transactionnelle tout-ou-rien)
+ *  restent vraies. La résolution est par item, et non globale au lot, parce que le
+ *  parcours « Au cas par cas » décide créneau par créneau : un seul contrat couvre donc
+ *  les trois issues (Remplacer / Conserver / Au cas par cas). */
+export interface CreateAvailabilityBatchItem {
+  kind: AvailKind;
+  recurKind: RecurKind;
+  dayOfWeek?: number | null;
+  slot: DaySlot;
+  startDate?: string | null;
+  endDate?: string | null;
+  expiresAt: string;
+  /** Résolution choisie pour CE créneau après détection de conflit (Story 36.4, D-18).
+   *  Absente = aucune résolution : un conflit sur cet item fait échouer le lot avec un 409
+   *  qui énumère TOUS les conflits, ce que le dialogue de résolution consomme. */
+  conflictResolution?: 'overwrite' | 'keep';
+}
+
+/** Payload de POST /availability/batch. */
+export interface CreateAvailabilityBatchDto {
+  items: CreateAvailabilityBatchItem[];
+}
+
+/** Résultat de POST /availability/batch. ⚠️ `created.length` n'égale PAS forcément
+ *  `items.length` et son ordre ne correspond PAS positionnellement à `items` : un item
+ *  résolu `keep` peut produire 0 à N pièces (découpe « à trous » autour des conflits
+ *  conservés), quand tout autre item en produit exactement une. Ne jamais indexer
+ *  `created[i]` en supposant qu'il correspond à `items[i]` (Story 36.4). */
+export interface CreateAvailabilityBatchResult {
+  created: AvailabilityDeclarationDto[];
+}
+
+/** Conflit détecté dans un lot : ConflictInfo enrichi de l'index de l'élément fautif. */
+export interface BatchConflictInfo extends ConflictInfo {
+  /** Index (0-based) de l'élément du lot en conflit avec cette déclaration. */
+  batchIndex: number;
 }
 
 /** Payload partiel pour la mise à jour d'une déclaration. */
@@ -326,11 +598,24 @@ export interface UpdateAvailabilityDto {
   expiresAt?: string;
 }
 
+/** Statut d'un membre de la troupe sur un créneau donné, avec son identité.
+ *
+ *  Forme UNIQUE, partagée par `AvailableSlotDto.members` et par le `members` que
+ *  `GET /parties/:id/heatmap` sert **au seul MJ** (Story 36.8). Deux définitions voisines
+ *  divergeraient à la première évolution — c'est exactement le défaut à deux dénominateurs que
+ *  `participantCount()` a corrigé côté effectif. */
+export interface SlotMemberDto {
+  userId: string;
+  pseudo: string;
+  displayName: string;
+  status: SlotStatus;
+}
+
 /** Créneau calculé disponible pour une partie (retourné par GET /parties/:id/available-slots). */
 export interface AvailableSlotDto {
   date: string;
   slot: DaySlot;
-  members: { userId: string; pseudo: string; displayName: string; status: SlotStatus }[];
+  members: SlotMemberDto[];
 }
 
 /** Vue agrégée d'un créneau disponible pour un joueur non-MJ (sans identité des membres). */
@@ -341,6 +626,108 @@ export interface AggregatedSlotDto {
   unavailable: number;
   unknown: number;
   total: number;
+  /** Story 36.8 (FR-53) — le détail nominatif du créneau, servi **au seul MJ**, pour la couche
+   *  « disponibilité du groupe » : une pastille par membre, la POSITION identifiant la personne.
+   *
+   *  🚨 **Absent, jamais `[]`, pour un joueur.** Un tableau vide laisserait déduire qu'une liste
+   *  existe ailleurs ; l'omission ne dit rien. Même discipline que `listMembers()`, qui met
+   *  `email: undefined` et non `null` pour un non-MJ.
+   *
+   *  Optionnel par nécessité (les appelants existants ne le connaissent pas), et c'est la seule
+   *  raison : côté front, la projection qui en dérive est **requise** (`| null`), pour que le
+   *  compilateur attrape toute surface qui l'oublierait. */
+  members?: SlotMemberDto[];
+}
+
+/** Séance datée d'une de mes parties (couche `mes-seances`, `GET /me/calendar`, AD-18, Story 30.5).
+ *  Identité de partie/scénario incluse : ce sont mes propres parties, la notion de partie tierce
+ *  n'existe pas dans le calendrier personnel (AD-9, AC4 Story 30.5). */
+export interface MyCalendarSeanceEntry {
+  seanceId: string;
+  partieId: string;
+  partieName: string;
+  scenarioId: string;
+  scenarioTitle: string;
+  date: string;
+  slot: DaySlot;
+  /** Informations pratiques (Story 36.5). Elles doivent transiter par CE chemin aussi : sans
+   *  cela le calendrier personnel ne les verrait jamais, le contexte de partie étant le seul à
+   *  disposer du `SeanceDto` complet. Aucun appel supplémentaire — les scalaires de `Seance`
+   *  sont déjà chargés par le `findMany` de `getMyCalendar`. */
+  heureRdv: string | null;
+  lieu: string | null;
+  notePratique: string | null;
+  /** Story 36.16 — le compte-rendu de cette séance manque, condition d'entrée dans la section
+   *  « C'est passé » de l'Agenda (déjà livrée côté front par la 36.11). Contrairement à
+   *  `AgendaEntry.compteRenduManquant` (contexte de partie, optionnel), **jamais optionnel ici**
+   *  : cette entrée provient toujours d'un `Seance` complet côté serveur, donc toujours
+   *  calculable — pas de distinction « on ne sait pas » à préserver. */
+  compteRenduManquant: boolean;
+}
+
+/** Une option d'un vote en cours, telle que la voit le calendrier PERSONNEL (Story 36.6, D-17).
+ *
+ *  ⚠️ Contrairement à `PollOptionDto` (contexte de partie, AD-20 : la charge utile porte l'identité
+ *  de tous les votants), cette forme est **strictement anonyme** : des compteurs, et ma seule
+ *  réponse. Le calendrier personnel agrège des parties entre lesquelles rien ne doit transiter
+ *  (AD-9/AD-2) — n'y ajouter jamais un `userId`, un `pseudo` ni un `displayName`. */
+export interface MyCalendarPollOption {
+  /** Story 36.6 — sans lui, ni ma réponse ni un agrégat ne sont adressables, et le sélecteur de
+   *  réponse (story 36.7) ne pourrait pas voter depuis le calendrier personnel. */
+  optionId: string;
+  date: string;
+  slot: DaySlot;
+  yes: number;
+  maybe: number;
+  no: number;
+  /** `null` = je n'ai pas répondu. Jamais `undefined` : « pas de réponse » a une seule
+   *  représentation, comme l'absence de ligne `PollVote` côté base (AD-10). */
+  myAnswer: VoteAnswer | null;
+}
+
+/** Vote de date en cours sur une de mes parties (couche `votes-en-cours`, `GET /me/calendar`,
+ *  Story 30.5). Une entrée par sondage, pas par option — le client éclate par option. Depuis la
+ *  Story 36.6, porte aussi l'effectif de la troupe (`membersCount`) et, par option, les agrégats
+ *  de réponses et ma réponse (`MyCalendarPollOption`) — l'appel unique existant suffit désormais
+ *  à alimenter la piste de participation, sans appel réseau supplémentaire (AD-20). */
+export interface MyCalendarPollEntry {
+  pollId: string;
+  partieId: string;
+  partieName: string;
+  /** Story 36.6 — effectif de la troupe : **le MJ + ses membres** (`participantCount()`), le
+   *  dénominateur de la piste de participation. Même nombre que `SessionPollDto.membersCount`
+   *  et que `AggregatedSlotDto.total`. Agrégat anonyme : aucune identité ne s'en déduit. */
+  membersCount: number;
+  options: MyCalendarPollOption[];
+  /** Échéance du vote, `null` si non définie (votes créés avant l'introduction du champ). */
+  expiresAt: string | null;
+}
+
+/** Séance à inscription ouverte d'une de mes parties CAMPAGNE_EPISODIQUE (couche
+ *  `inscriptions-ouvertes`, `GET /me/calendar`, Story 30.5, D-13). Non filtrée par plage de dates :
+ *  une séance en attente d'inscriptions n'a pas encore de date propre. */
+export interface MyCalendarOpenInscriptionEntry {
+  seanceId: string;
+  partieId: string;
+  partieName: string;
+  scenarioId: string;
+  scenarioTitle: string;
+  inscriptionMin: number;
+  inscriptionMax: number;
+  inscritsCount: number;
+  jeSuisInscrit: boolean;
+}
+
+/** Réponse de `GET /me/calendar` (AD-18, Story 30.5) : un seul appel pour toute la plage,
+ *  indexé par couche. `disponibilite-groupe` n'y figure jamais (AD-16) — elle n'a de sens que
+ *  dans le calendrier d'une partie, pas dans le calendrier personnel. Une couche sans contenu
+ *  porte un tableau vide, jamais une clé absente. */
+export interface MeCalendarDto {
+  'mes-indisponibilites': AvailabilityDeclarationDto[];
+  'mes-disponibilites': AvailabilityDeclarationDto[];
+  'mes-seances': MyCalendarSeanceEntry[];
+  'votes-en-cours': MyCalendarPollEntry[];
+  'inscriptions-ouvertes': MyCalendarOpenInscriptionEntry[];
 }
 
 /** Vote de date (SessionPoll). */
@@ -352,6 +739,17 @@ export interface SessionPollDto {
   expiresAt: string | null;
   chosenDate: string | null;
   chosenSlot: DaySlot | null;
+  /** Story 36.6 — effectif de la troupe : **le MJ + ses membres** (`participantCount()`), le même
+   *  nombre que `AggregatedSlotDto.total`. C'est le DÉNOMINATEUR de la piste de participation.
+   *
+   *  Il vit ici et non dans `PollOptionDto` pour deux raisons. (1) C'est une propriété de la
+   *  partie, pas de l'option. (2) 🚨 Les deux `toSessionPollDto` (`poll.service.ts`,
+   *  `scenarios.service.ts`) typent leur entrée en `any`, donc `options: (…).map(…)` produit un
+   *  `any[]` que TypeScript ne vérifie **pas** : un champ ajouté à l'intérieur des options
+   *  manquerait silencieusement. À la racine du littéral, le compilateur l'attrape.
+   *
+   *  Requis, jamais optionnel : un effectif absent rendrait une piste au dénominateur indéfini. */
+  membersCount: number;
   options: PollOptionDto[];
 }
 
@@ -378,6 +776,26 @@ export interface PollVoteDto {
 export interface CreatePollDto {
   options: { date: string; slot: DaySlot }[];
   scenarioRef?: string | null;
+}
+
+/**
+ * Payload de mutation des options d'un vote OUVERT (PUT /parties/:id/poll/:pollId/options,
+ * Story 36.10, dérogation D-16). MJ seul.
+ *
+ * 🚨 **Jeu DÉCLARATIF COMPLET, jamais un delta.** Le corps décrit l'état d'arrivée voulu : ce que
+ * la grille produit après composition. Un `{ add, remove }` obligerait le client à connaître les
+ * `id` d'options et à tenir un état intermédiaire.
+ *
+ * 🚨 **La réconciliation serveur se fait sur la clé métier `date` + `slot`, et une option
+ * CONSERVÉE GARDE SON `id`.** `PollVote` est en cascade sur `PollOption` : un « delete all +
+ * recreate » détruirait les réponses de TOUS les membres à chaque ajout d'une seule date. Seules
+ * les options réellement retirées perdent leurs réponses (Q-22, avertissement préalable côté
+ * client).
+ *
+ * Bornes identiques à `CreatePollDto` : 2 à 40 options, aucune paire `date` + `slot` en double.
+ */
+export interface SetPollOptionsDto {
+  options: { date: string; slot: DaySlot }[];
 }
 
 /** Payload pour voter sur une option (POST /parties/:id/poll/:pollId/vote). */
@@ -458,6 +876,14 @@ export interface CharacterDto {
  *  appelants. */
 export interface MyCharacterDto extends CharacterDto {
   partieName: string;
+  /** Libellé de classe résolu côté serveur (Story 29.9, contenu de jeu du système du personnage) —
+   *  `null` si `sheetData.classId` est absent ou ne référence aucune entrée du catalogue. */
+  classLabel: string | null;
+  /** Libellé de type résolu côté serveur, même patron que `classLabel`. */
+  typeLabel: string | null;
+  /** Libellé du rôle de groupe assigné à ce personnage sur sa Partie (Story 27.2), résolu côté
+   *  serveur — `null` si aucun rôle n'est assigné. */
+  groupRoleLabel: string | null;
 }
 
 /** Une ligne d'une distribution d'XP : le montant accordé à un personnage. */
@@ -633,10 +1059,13 @@ export interface UpdateNarrativeFieldDto {
  * au cadre réel du PDF.
  *
  * **Dupliquées, pas partagées**, avec `PORTRAIT_WIDTH`/`PORTRAIT_HEIGHT` dans
- * `apps/api/src/characters/ryuutama-pdf.service.ts` : `@master-jdr/shared` est une frontière
- * **types uniquement, effacée au runtime** (CLAUDE.md/project-context.md), donc l'API ne peut
- * pas importer ces constantes comme valeurs (Jest ne transforme pas ce module en tant que
- * dépendance de workspace). Si ces valeurs changent, mettre à jour les deux emplacements.
+ * `apps/api/src/characters/ryuutama-pdf.service.ts`. La duplication est un héritage : elle datait
+ * d'une époque où Jest ne transformait pas ce package comme dépendance de workspace, ce qui cassait
+ * tout import de valeur runtime côté API. Cette contrainte est levée — `transformIgnorePatterns`
+ * transforme désormais `@master-jdr/shared` (cf. la config `jest` d'`apps/api/package.json`), et
+ * l'API importe déjà des valeurs d'ici (`GAME_SYSTEMS` dans `parties/dto/create-partie.dto.ts`,
+ * `THEMES` dans `auth/auth.service.ts`). Tant que la duplication subsiste : si ces valeurs
+ * changent, mettre à jour les deux emplacements.
  */
 export const RYUUTAMA_PDF_PORTRAIT_WIDTH = 188.18;
 export const RYUUTAMA_PDF_PORTRAIT_HEIGHT = 136.48;

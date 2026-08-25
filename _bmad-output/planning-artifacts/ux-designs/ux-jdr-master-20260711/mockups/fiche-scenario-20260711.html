@@ -1,0 +1,365 @@
+<title>Fiche scénario — Courant / Passé</title>
+<style>
+  :root {
+    --primary-bg:  #0d0a14;
+    --surface-bg:  #1a1428;
+    --surface-bg-2:#221b34;
+    --accent-1:    #7ec8a4;
+    --accent-1-rgb: 126,200,164;
+    --accent-2:    #9b6dff;
+    --accent-2-rgb: 155,109,255;
+    --gradient-cta: linear-gradient(135deg,#7ec8a4,#9b6dff);
+    --text-primary:#e8e8f0;
+    --text-muted:  #7a7a8a;
+    --status-available:   var(--accent-1);
+    --status-unavailable: #e05252;
+    --status-unknown:     #3a3a4a;
+    --status-mixed:       #f0a030;
+    --border-subtle: rgba(255,255,255,0.06);
+    --radius-card: 10px;
+    --radius-badge: 6px;
+    --radius-button: 8px;
+    --radius-button-cta: 10px;
+    --elevation-card: 0 4px 12px rgba(0,0,0,0.5);
+    --elevation-panel: 0 0 24px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04);
+    --space-xs: 4px; --space-sm: 8px; --space-md: 12px; --space-base: 16px; --space-lg: 24px; --space-xl: 32px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--primary-bg); color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  body { padding: var(--space-xl) var(--space-base); max-width: 980px; margin: 0 auto; }
+
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subhead { color: var(--text-muted); margin: 0 0 var(--space-lg); font-size: 13px; max-width: 65ch; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: var(--space-lg); border-bottom: 1px solid var(--border-subtle); }
+  .tab-btn {
+    appearance: none; background: none; border: none; color: var(--text-muted);
+    font-size: 13px; font-weight: 600; padding: 10px 14px; cursor: pointer;
+    border-bottom: 2px solid transparent; font-family: inherit;
+  }
+  .tab-btn.active { color: var(--accent-1); border-bottom-color: var(--accent-1); }
+  .tab-btn:hover:not(.active) { color: var(--text-primary); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .card {
+    background: var(--surface-bg); border: 1px solid var(--border-subtle); border-radius: var(--radius-card);
+    box-shadow: var(--elevation-panel); padding: var(--space-lg); margin-bottom: var(--space-base);
+  }
+  .card h2 { font-size: 15px; margin: 0 0 var(--space-sm); display:flex; align-items:center; gap:8px; }
+  .card h2 .pencil {
+    width: 22px; height: 22px; border-radius: var(--radius-badge); border: 1px solid var(--border-subtle);
+    color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; cursor: pointer; margin-left: auto;
+  }
+  .card h2 .pencil:hover { color: var(--accent-2); border-color: var(--accent-2); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.02em; text-transform: uppercase; padding: 2px 7px; border-radius: var(--radius-badge);
+    border: 1px solid; white-space: nowrap;
+  }
+  .badge.courant { color: var(--accent-1); border-color: var(--accent-1); background: rgba(var(--accent-1-rgb),0.15); }
+  .badge.passe   { color: var(--text-muted); border-color: var(--border-subtle); background: rgba(255,255,255,0.03); }
+
+  .scenario-header { display: flex; align-items: baseline; gap: var(--space-sm); margin-bottom: 2px; flex-wrap: wrap; }
+  .scenario-header h1 { margin: 0; }
+  .scenario-sub { color: var(--text-muted); font-size: 12px; margin-bottom: var(--space-lg); }
+
+  .desc-text { color: var(--text-primary); font-size: 13px; }
+  .desc-text.muted { color: var(--text-muted); font-style: italic; }
+
+  /* Documents */
+  .doc-row { display: flex; align-items: center; gap: var(--space-sm); padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
+  .doc-row:last-child { border-bottom: none; }
+  .doc-icon { width: 28px; height: 28px; border-radius: var(--radius-badge); background: var(--surface-bg-2); display: flex; align-items: center; justify-content: center; font-size: 13px; flex: 0 0 auto; }
+  .doc-name { font-size: 13px; flex: 1 1 auto; }
+  .doc-size { font-size: 11px; color: var(--text-muted); }
+  .doc-lib-tag { font-size: 10px; color: var(--accent-2); border: 1px solid var(--accent-2); border-radius: var(--radius-badge); padding: 1px 5px; }
+
+  /* Participants — reprend le composant réel CharacterSummaryCard (avatar + perso + classe + pseudo joueur) */
+  .participants-grid { display: flex; flex-direction: column; gap: var(--space-sm); }
+  .char-summary-card {
+    display: flex; align-items: center; gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border: 1px solid var(--border-subtle); border-radius: var(--radius-button);
+    background: var(--surface-bg-2); cursor: pointer; text-align: left; width: 100%;
+    font-family: inherit; color: inherit;
+  }
+  .char-summary-card:hover { border-color: var(--accent-2); }
+  .char-avatar {
+    width: 40px; height: 40px; border-radius: 50%; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff;
+  }
+  .char-summary-info { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+  .char-name { font-weight: 600; font-size: 13px; }
+  .char-class { font-size: 12px; color: var(--text-muted); }
+  .char-owner { font-size: 11px; color: var(--text-muted); font-style: italic; }
+
+  /* Capacity fill (épisodique) */
+  .fill-row { display: flex; align-items: center; gap: var(--space-base); margin-top: var(--space-sm); flex-wrap: wrap; }
+  .fill-card { background: var(--surface-bg-2); border: 1px solid var(--border-subtle); border-radius: var(--radius-card); padding: var(--space-md); flex: 1 1 240px; }
+  .fill-card h3 { margin: 0 0 2px; font-size: 13px; }
+  .fill-count { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+  .fill-bar-track { height: 8px; border-radius: 4px; background: var(--status-unknown); overflow: hidden; }
+  .fill-bar-fill { height: 100%; border-radius: 4px; }
+  .fill-card.entre .fill-bar-fill { width: 83%; background: var(--status-mixed); }
+  .fill-label { margin-top: 4px; font-size: 11px; font-weight: 600; }
+  .fill-card.entre .fill-label { color: var(--status-mixed); }
+  .fill-actions { display: flex; gap: var(--space-sm); margin-top: var(--space-md); }
+
+  .btn {
+    font-size: 13px; font-weight: 600; border-radius: var(--radius-button); padding: 8px 14px;
+    border: 1px solid var(--border-subtle); background: transparent; color: var(--text-primary); cursor: pointer;
+    font-family: inherit;
+  }
+  .btn:hover { border-color: var(--accent-1); color: var(--accent-1); }
+  .btn-cta {
+    background: var(--gradient-cta); color: #fff; border: none; border-radius: var(--radius-button-cta);
+    padding: 9px 16px; font-weight: 600;
+  }
+  .btn-danger-outline { border-color: rgba(224,82,82,0.4); color: #e0928f; }
+  .btn-danger-outline:hover { border-color: #e05252; color: #e05252; }
+
+  /* Séance / vote */
+  .poll-option { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-card); margin-bottom: 6px; }
+  .poll-option .date-label { font-weight: 500; }
+  .poll-option .vote-count { font-size: 11px; color: var(--text-muted); }
+
+  /* Actions MJ footer */
+  .mj-actions { display: flex; justify-content: flex-end; gap: var(--space-sm); }
+
+  /* Rétrospective */
+  .compte-rendu { border-left: 2px solid var(--border-subtle); padding-left: var(--space-md); margin-bottom: var(--space-md); }
+  .compte-rendu:last-child { margin-bottom: 0; }
+  .compte-rendu .cr-date { font-size: 11px; color: var(--text-muted); margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+  .compte-rendu .cr-text { font-size: 13px; }
+
+  .journal-row { display: flex; align-items: flex-start; gap: var(--space-sm); padding: 8px 0; border-bottom: 1px solid var(--border-subtle); }
+  .journal-row:last-child { border-bottom: none; }
+  .journal-check { margin-top: 3px; accent-color: var(--accent-1); }
+  .journal-meta { font-size: 11px; color: var(--text-muted); }
+  .journal-text { font-size: 13px; margin-top: 2px; }
+  .journal-author { color: var(--accent-2); font-weight: 600; }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-base); padding: var(--space-sm) 0; border-bottom: 1px solid var(--border-subtle); margin-bottom: var(--space-sm); }
+  .toggle-label { font-size: 13px; }
+  .toggle-sub { font-size: 11px; color: var(--text-muted); }
+  .switch { position: relative; width: 38px; height: 22px; flex: 0 0 auto; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .track { position: absolute; inset: 0; background: var(--status-unknown); border-radius: 999px; transition: background .15s; cursor: pointer; }
+  .switch .track::before { content:''; position:absolute; width:16px; height:16px; left:3px; top:3px; background:#fff; border-radius:50%; transition: transform .15s; }
+  .switch input:checked + .track { background: var(--accent-1); }
+  .switch input:checked + .track::before { transform: translateX(16px); }
+
+  .annonces-list { display: flex; flex-direction: column; gap: var(--space-sm); }
+  .annonce { border: 1px solid var(--border-subtle); border-radius: var(--radius-card); padding: var(--space-sm) var(--space-md); background: var(--surface-bg-2); }
+  .annonce-scope { font-size: 10px; color: var(--accent-2); text-transform: uppercase; letter-spacing: .02em; margin-bottom: 2px; }
+  .annonce-text { font-size: 13px; }
+  .annonce-date { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+</style>
+
+<h1 style="font-size:20px;margin-bottom:4px;">Fiche scénario — exploration de 3 vues</h1>
+<p class="subhead">Contenu réel du PRD Palier 4 (FR-1 à FR-3, FR-8, FR-12/13, FR-15/16, FR-19/20). Bascule les onglets pour comparer les états.</p>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="courant-lin">Courant — linéaire</button>
+  <button class="tab-btn" data-tab="courant-epi">Courant — épisodique</button>
+  <button class="tab-btn" data-tab="passe">Passé — rétrospective</button>
+</div>
+
+<!-- ============ COURANT LINÉAIRE ============ -->
+<div class="tab-panel active" id="courant-lin">
+  <div class="scenario-header"><h1>Le Marché aux Ombres</h1><span class="badge courant">Courant</span></div>
+  <div class="scenario-sub">Campagne « Les Chroniques d'Ashvale » · scénario 5</div>
+
+  <div class="card">
+    <h2>Description <span class="pencil">✎</span></h2>
+    <p class="desc-text">Un marchand disparaît chaque nuit de pleine lune dans le quartier des tanneurs. Les rumeurs parlent d'un pacte rompu avec quelque chose venu des égouts...</p>
+  </div>
+
+  <div class="card">
+    <h2>Documents <span class="pencil">＋</span></h2>
+    <div class="doc-row">
+      <div class="doc-icon">📄</div>
+      <div class="doc-name">Lettre du marchand Ossian (à lire aux joueurs)</div>
+      <div class="doc-size">180 Ko</div>
+    </div>
+    <div class="doc-row">
+      <div class="doc-icon">🗺️</div>
+      <div class="doc-name">Plan du quartier des tanneurs</div>
+      <div class="doc-size">1,2 Mo</div>
+    </div>
+    <div class="doc-row">
+      <div class="doc-icon">📚</div>
+      <div class="doc-name">Règles maison — combat en milieu urbain</div>
+      <div class="doc-size">64 Ko</div>
+      <span class="doc-lib-tag">bibliothèque campagne</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Participants</h2>
+    <div class="participants-grid">
+      <button class="char-summary-card" type="button">
+        <div class="char-avatar" style="background:var(--accent-1);">Ar</div>
+        <div class="char-summary-info"><span class="char-name">Arek</span><span class="char-class">Guerrier · Chasseur</span><span class="char-owner">Joueur : Théo M.</span></div>
+      </button>
+      <button class="char-summary-card" type="button">
+        <div class="char-avatar" style="background:var(--accent-2);">Ly</div>
+        <div class="char-summary-info"><span class="char-name">Lyra</span><span class="char-class">Ménestrel · Voyageuse</span><span class="char-owner">Joueuse : Sofia K.</span></div>
+      </button>
+      <button class="char-summary-card" type="button">
+        <div class="char-avatar" style="background:var(--accent-1);">Fe</div>
+        <div class="char-summary-info"><span class="char-name">Fenn</span><span class="char-class">Chasseur · Artisan</span><span class="char-owner">Joueur : Marco D.</span></div>
+      </button>
+      <button class="char-summary-card" type="button">
+        <div class="char-avatar" style="background:var(--accent-2);">Th</div>
+        <div class="char-summary-info"><span class="char-name">Théo</span><span class="char-class">Guerrier · Technique</span><span class="char-owner">Joueur : Yanis P.</span></div>
+      </button>
+    </div>
+    <p class="scenario-sub" style="margin:8px 0 0;">Tous les membres de la campagne — participation implicite (linéaire). Cliquer une carte ouvre l'aperçu du personnage (composant <code>CharacterSummaryCard</code> déjà existant dans l'app).</p>
+  </div>
+
+  <div class="card">
+    <h2>Séance — sélection de date <span class="pencil">＋</span></h2>
+    <div class="poll-option"><span class="date-label">Samedi 19 juillet, 20h</span><span class="vote-count">3/4 disponibles</span></div>
+    <div class="poll-option"><span class="date-label">Dimanche 20 juillet, 15h</span><span class="vote-count">4/4 disponibles</span></div>
+    <p class="scenario-sub" style="margin:8px 0 0;">Vote de date existant (Epics 1-3), inchangé.</p>
+  </div>
+
+  <div class="mj-actions">
+    <button class="btn">Ajouter une séance</button>
+    <button class="btn btn-cta">Clôturer le scénario</button>
+  </div>
+</div>
+
+<!-- ============ COURANT ÉPISODIQUE ============ -->
+<div class="tab-panel" id="courant-epi">
+  <div class="scenario-header"><h1>Le Marché aux Ombres</h1><span class="badge courant">Courant</span></div>
+  <div class="scenario-sub">Campagne « L'Agence des Ombres » (épisodique) · une des 2 enquêtes ouvertes en ce moment</div>
+
+  <div class="card">
+    <h2>Description <span class="pencil">✎</span></h2>
+    <p class="desc-text">Un marchand disparaît chaque nuit de pleine lune dans le quartier des tanneurs...</p>
+  </div>
+
+  <div class="card">
+    <h2>Qui participe ?</h2>
+    <p class="scenario-sub" style="margin:0 0 8px;">Choix individuel (épisodique) — chaque joueur du vivier décide de s'inscrire ou non à cette enquête.</p>
+    <div class="participants-grid">
+      <button class="char-summary-card" type="button">
+        <div class="char-avatar" style="background:var(--accent-1);">Ar</div>
+        <div class="char-summary-info"><span class="char-name">Arek</span><span class="char-class">Guerrier · Chasseur</span><span class="char-owner">Joueur : Théo M.</span></div>
+      </button>
+      <button class="char-summary-card" type="button">
+        <div class="char-avatar" style="background:var(--accent-2);">Ly</div>
+        <div class="char-summary-info"><span class="char-name">Lyra</span><span class="char-class">Ménestrel · Voyageuse</span><span class="char-owner">Joueuse : Sofia K.</span></div>
+      </button>
+      <button class="char-summary-card" type="button">
+        <div class="char-avatar" style="background:var(--accent-1);">Fe</div>
+        <div class="char-summary-info"><span class="char-name">Fenn</span><span class="char-class">Chasseur · Artisan</span><span class="char-owner">Joueur : Marco D.</span></div>
+      </button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Séance — inscription à capacité limitée</h2>
+    <div class="fill-row">
+      <div class="fill-card entre">
+        <h3>Samedi 19 juillet, 20h</h3>
+        <div class="fill-count">5 / 6 inscrits (min. 4)</div>
+        <div class="fill-bar-track"><div class="fill-bar-fill"></div></div>
+        <div class="fill-label">Entre min et max</div>
+      </div>
+    </div>
+    <div class="fill-actions">
+      <button class="btn">Proposer une autre date</button>
+      <button class="btn btn-cta">Valider cette date</button>
+    </div>
+    <p class="scenario-sub" style="margin:8px 0 0;">La validation reste toujours une décision du MJ — jamais automatique, même une fois le maximum atteint.</p>
+  </div>
+
+  <div class="mj-actions">
+    <button class="btn btn-danger-outline">Clôturer le scénario</button>
+  </div>
+</div>
+
+<!-- ============ PASSÉ — RÉTROSPECTIVE ============ -->
+<div class="tab-panel" id="passe">
+  <div class="scenario-header"><h1>Les Docks silencieux</h1><span class="badge passe">Passé</span></div>
+  <div class="scenario-sub">Campagne « Les Chroniques d'Ashvale » · scénario 4 · clôturé le 21 juin</div>
+
+  <div class="card">
+    <h2>Résumé de fin <span class="pencil">✎</span></h2>
+    <p class="desc-text">Le groupe a débusqué le contrebandier Silas dans l'entrepôt 7. Fenn a fait s'effondrer une passerelle pour bloquer sa fuite — un coup d'éclat que la table n'est pas près d'oublier. Silas a été livré à la garde, mais son carnet de comptes a disparu dans l'incendie qui a suivi...</p>
+  </div>
+
+  <div class="card">
+    <h2>Comptes-rendus de séance</h2>
+    <div class="compte-rendu">
+      <div class="cr-date">Séance du 14 juin</div>
+      <div class="cr-text">Infiltration des docks, repérage de l'entrepôt suspect. Théo a soudoyé un garde.</div>
+    </div>
+    <div class="compte-rendu">
+      <div class="cr-date">Séance du 21 juin</div>
+      <div class="cr-text">Confrontation avec Silas, effondrement de la passerelle, arrestation.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Journal des joueurs associé</h2>
+
+    <div class="toggle-row">
+      <div>
+        <div class="toggle-label">Association automatique</div>
+        <div class="toggle-sub">Associe toute entrée déjà partagée, datée pendant ce scénario — sans geste supplémentaire.</div>
+      </div>
+      <label class="switch"><input type="checkbox" checked><span class="track"></span></label>
+    </div>
+
+    <div class="journal-row">
+      <input type="checkbox" class="journal-check" checked disabled>
+      <div>
+        <div class="journal-meta"><span class="journal-author">Lyra</span> · 21 juin</div>
+        <div class="journal-text">« Je n'oublierai jamais le visage de Silas quand la passerelle a cédé. Fenn est complètement inconscient, mais bon sang, quel moment. »</div>
+      </div>
+    </div>
+    <div class="journal-row">
+      <input type="checkbox" class="journal-check" checked disabled>
+      <div>
+        <div class="journal-meta"><span class="journal-author">Arek</span> · 21 juin</div>
+        <div class="journal-text">« On a laissé filer le carnet de comptes. Ça va nous revenir dessus, j'en suis sûr. »</div>
+      </div>
+    </div>
+    <p class="scenario-sub" style="margin:8px 0 0;">Réglage désactivé : chaque joueur coche manuellement quelles entrées apparaissent ici (cases à cocher activées).</p>
+  </div>
+
+  <div class="card">
+    <h2>Annonces liées</h2>
+    <div class="annonces-list">
+      <div class="annonce">
+        <div class="annonce-scope">Ce scénario</div>
+        <div class="annonce-text">La prochaine séance est décalée d'une semaine, désolé pour le contretemps !</div>
+        <div class="annonce-date">19 juin</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+      document.querySelectorAll('.tab-panel').forEach(function (p) { p.classList.remove('active'); });
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+    });
+  });
+</script>

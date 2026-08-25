@@ -1,0 +1,301 @@
+@if (showCoverImage()) {
+  <!-- Image de couverture (Story 29.12, AD-19) : l'emporte dans les trois modes, jamais la
+       composition générée en dessous (AC2 seconde clause — l'animation du thème n'accompagne
+       jamais une image téléversée). Décoratif comme le reste du composant : le nom de la partie
+       est déjà affiché à côté. Repli sur la bannière générée si le fichier a disparu du disque
+       (CAP-20, `onCoverImageError()`). -->
+  <img
+    class="party-banner"
+    [src]="coverImageSrc()"
+    alt=""
+    aria-hidden="true"
+    (error)="onCoverImageError()"
+  />
+} @else if (mode() === 'compact') {
+  <!-- Mode liste : rendu PROPRE, jamais la composition réduite (DESIGN.md §7.3/§9). À 28 px, ce
+       qui distingue deux parties n'est ni le motif ni la composition, mais le monogramme et la
+       dominante colorée — c'est donc tout ce qu'on rend, et c'est aussi ce qui rend une liste de
+       douze bannières tenable. -->
+  <span class="party-banner party-banner--compact" [class]="tintClass(params().dominant)" aria-hidden="true">
+    <span class="party-banner__monogram">{{ monogram() }}</span>
+  </span>
+} @else {
+  <!-- Modes grand et moyen : LA MÊME composition, deux cadrages. `slice` recadre au centre pour
+       le carré 44 px (§7.3 « la composition recadrée au centre »), ce qui garantit qu'un seul
+       rendu sert les deux modes — AC3. -->
+  <svg
+    class="party-banner"
+    [attr.viewBox]="viewBox"
+    preserveAspectRatio="xMidYMid slice"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <defs>
+      <radialGradient
+        [attr.id]="backgroundId"
+        cx="50%"
+        cy="50%"
+        r="75%"
+        [attr.fx]="params().backgroundFocus.x + '%'"
+        [attr.fy]="params().backgroundFocus.y + '%'"
+      >
+        <stop offset="0%" [attr.stop-color]="'var(--jdr-banner-glow)'" />
+        <stop offset="100%" [attr.stop-color]="'var(--jdr-banner-base)'" />
+      </radialGradient>
+
+      <!-- ATTÉNUATION (Story 29.11, Task 0b). La Story 29.10 rendait des cercles et des rectangles
+           à bord net : un halo sans flou n'est pas un halo, c'est un disque, et c'est ce que le
+           retour utilisateur a décrit par « tout est très géométrique strict ».
+           Choix technique : des DÉGRADÉS partout où c'est possible, un seul `<filter>` partagé là
+           où le dégradé ne suffit pas. Un `feGaussianBlur` par halo coûterait cher — jusqu'à cinq
+           bannières coexistent en mode moyen — alors qu'un dégradé radial donne le même bord fondu
+           pour rien. Repli documenté par la story, retenu ici comme choix principal. -->
+      <radialGradient [attr.id]="haloGradientId" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="currentColor" stop-opacity="0.55" />
+        <stop offset="55%" stop-color="currentColor" stop-opacity="0.28" />
+        <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+      </radialGradient>
+
+      <!-- Queue de comète : opaque à la tête, éteinte à la traîne. -->
+      <linearGradient [attr.id]="tailGradientId" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stop-color="currentColor" stop-opacity="0" />
+        <stop offset="60%" stop-color="currentColor" stop-opacity="0.5" />
+        <stop offset="100%" stop-color="currentColor" stop-opacity="0.95" />
+      </linearGradient>
+
+      <!-- Tête de comète : cœur blanc, halo teinté, bord éteint — l'effet de braise de la maquette
+           (`.comet-head::after`) sans second élément à tenir aligné. -->
+      <radialGradient [attr.id]="headGradientId" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="var(--jdr-text, #fff)" stop-opacity="1" />
+        <stop offset="45%" stop-color="currentColor" stop-opacity="0.9" />
+        <stop offset="100%" stop-color="currentColor" stop-opacity="0" />
+      </radialGradient>
+
+      <!-- Vapeur : sans bord, sinon ce sont des ronds gris. -->
+      <radialGradient [attr.id]="steamGradientId" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="var(--jdr-text, #e8dcc8)" stop-opacity="0.3" />
+        <stop offset="100%" stop-color="var(--jdr-text, #e8dcc8)" stop-opacity="0" />
+      </radialGradient>
+
+      <!-- L'unique filtre de la composition : la queue de comète en a besoin dans l'axe
+           PERPENDICULAIRE, qu'aucun dégradé longitudinal ne peut adoucir. -->
+      <filter [attr.id]="softenId" x="-30%" y="-60%" width="160%" height="220%">
+        <feGaussianBlur stdDeviation="1.6" />
+      </filter>
+
+      @if (steampunk()) {
+        <!-- Grille de plan technique : CONSTANTE du thème, jamais un élément tiré — toute
+             bannière Atelier Cuivré la porte (DESIGN.md §7.3, corrigé par iteration-7). -->
+        <pattern [attr.id]="gridId" width="13" height="13" patternUnits="userSpaceOnUse">
+          <path d="M 13 0 L 0 0 0 13" fill="none" stroke="currentColor" stroke-width="0.5" />
+        </pattern>
+
+        <!-- Techniques de rouage B / C / E. La technique D est rejetée (DESIGN.md §7.3) : ne pas
+             l'ajouter. Géométries reprises de mockups/iteration-6-regles-de-generation.html. -->
+        <g [attr.id]="gearId('B')">
+          <g fill="currentColor">
+            @for (a of [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]; track a) {
+              <rect x="46" y="2" width="8" height="14" rx="1.5" [attr.transform]="'rotate(' + a + ' 50 50)'" />
+            }
+          </g>
+          <circle cx="50" cy="50" r="36" fill="none" stroke="currentColor" stroke-width="7" />
+          <circle cx="50" cy="50" r="12" fill="none" stroke="currentColor" stroke-width="5" />
+        </g>
+        <g [attr.id]="gearId('C')">
+          <g fill="currentColor">
+            @for (a of [0, 36, 72, 108, 144, 180, 216, 252, 288, 324]; track a) {
+              <polygon points="45,4 55,4 53.5,17 46.5,17" [attr.transform]="'rotate(' + a + ' 50 50)'" />
+            }
+          </g>
+          <circle cx="50" cy="50" r="34" fill="none" stroke="currentColor" stroke-width="4" />
+          <g stroke="currentColor" stroke-width="4">
+            <line x1="50" y1="22" x2="50" y2="78" />
+            <line x1="22" y1="50" x2="78" y2="50" />
+          </g>
+          <circle cx="50" cy="50" r="10" fill="none" stroke="currentColor" stroke-width="4" />
+        </g>
+        <g [attr.id]="gearId('E')">
+          <path
+            fill="currentColor"
+            fill-rule="evenodd"
+            d="M 44,4 L 56,4 L 59,17 A 38,38 0 0,1 69,21 L 81,13 L 89,21 L 81,33 A 38,38 0 0,1 85,43 L 98,46 L 98,58 L 85,61 A 38,38 0 0,1 81,71 L 89,83 L 81,91 L 69,83 A 38,38 0 0,1 59,87 L 56,100 L 44,100 L 41,87 A 38,38 0 0,1 31,83 L 19,91 L 11,83 L 19,71 A 38,38 0 0,1 15,61 L 2,58 L 2,46 L 15,43 A 38,38 0 0,1 19,33 L 11,21 L 19,13 L 31,21 A 38,38 0 0,1 41,17 Z M 50,33 A 17,17 0 1,0 50,67 A 17,17 0 1,0 50,33 Z"
+          />
+        </g>
+      }
+    </defs>
+
+    <rect
+      class="party-banner__background"
+      x="0"
+      y="0"
+      [attr.width]="viewBoxWidth"
+      [attr.height]="viewBoxHeight"
+      [attr.fill]="backgroundFill()"
+    />
+
+    <!-- ─── Grimoire Émeraude : ciel et comètes ─── -->
+    @if (emeraude(); as p) {
+      <circle
+        class="party-banner__halo"
+        [class]="tintClass(p.halo.tint)"
+        [attr.cx]="p.halo.x"
+        [attr.cy]="p.halo.y"
+        [attr.r]="p.halo.size / 2"
+        [attr.fill]="haloFill()"
+        [style.--pb-delay]="seconds(p.halo.delaySeconds)"
+      />
+      @for (star of p.stars; track $index) {
+        <circle
+          class="party-banner__star"
+          [attr.cx]="star.x"
+          [attr.cy]="star.y"
+          [attr.r]="star.radius"
+          [style.--pb-delay]="seconds(star.delaySeconds)"
+        />
+      }
+      @for (comet of p.comets; track $index) {
+        <!-- Repère unique de la comète : un seul θ porte orientation, position de tête et sens
+             (DESIGN.md §8). Le `<g>` INTERNE porte l'animation de vol — un élément ne peut avoir
+             qu'une seule propriété `transform`, animer celui-ci écraserait le repère. -->
+        <g class="party-banner__comet" [attr.transform]="cometTransform(comet)">
+          <g
+            class="party-banner__comet-fly"
+            [style.--pb-speed]="seconds(comet.speedSeconds)"
+            [style.--pb-travel]="travel(comet)"
+          >
+            <!-- Queue effilée : large à la tête, pointue à la traîne. Un rectangle donnait une
+                 barre, ce que le retour utilisateur a relevé. -->
+            <path
+              class="party-banner__comet-tail"
+              [class]="tintClass(comet.tint)"
+              [attr.d]="cometTailPath(comet)"
+              [attr.fill]="tailFill()"
+              [attr.filter]="softenFilter()"
+            />
+            <circle
+              class="party-banner__comet-head"
+              [class]="tintClass(comet.tint)"
+              [attr.cx]="comet.length"
+              cy="0"
+              [attr.r]="comet.headSize / 2"
+              [attr.fill]="headFill()"
+            />
+          </g>
+        </g>
+      }
+    }
+
+    <!-- ─── Forêt Ancienne : clairière ─── -->
+    @if (foret(); as p) {
+      @for (halo of p.halos; track $index) {
+        <circle
+          class="party-banner__halo"
+          [class]="tintClass(halo.tint)"
+          [attr.cx]="halo.x"
+          [attr.cy]="halo.y"
+          [attr.r]="halo.size / 2"
+          [attr.fill]="haloFill()"
+          [style.--pb-delay]="seconds(halo.delaySeconds)"
+        />
+      }
+      @for (mobile of p.mobiles; track $index) {
+        @if (p.mobileKind === 'leaves') {
+          <!-- Feuille : goutte asymétrique (`border-radius: 0 70% 0 70%` de la maquette), inclinée
+               de sa propre rotation. Un `<rect rx>` donnait un galet. -->
+          <g [attr.transform]="mobileTransform(mobile)">
+            <path
+              class="party-banner__leaf"
+              [class]="tintClass(mobile.tint)"
+              [attr.d]="leafPath(mobile)"
+              fill="currentColor"
+              [style.--pb-delay]="seconds(mobile.delaySeconds)"
+              [style.--pb-drift]="units(mobile.driftX)"
+            />
+          </g>
+        } @else {
+          <circle
+            class="party-banner__mote"
+            [class]="tintClass(mobile.tint)"
+            [attr.cx]="mobile.x"
+            [attr.cy]="mobile.y"
+            [attr.r]="mobile.size / 2"
+            fill="currentColor"
+            [style.--pb-delay]="seconds(mobile.delaySeconds)"
+            [style.--pb-drift]="units(mobile.driftX)"
+          />
+        }
+      }
+    }
+
+    <!-- ─── Atelier Cuivré (clé `medieval-steampunk`, cf. Story 35.1) : planche d'atelier ─── -->
+    @if (steampunk(); as p) {
+      <rect
+        class="party-banner__grid tint-1"
+        x="0"
+        y="0"
+        [attr.width]="viewBoxWidth"
+        [attr.height]="viewBoxHeight"
+        [attr.fill]="gridFill()"
+      />
+      @for (gear of p.gears; track $index) {
+        <g class="party-banner__gear" [attr.transform]="gearTransform(gear)">
+          <!-- La rotation vit sur un `<g>` interne, pour la même raison que la comète : le `<g>`
+               externe porte déjà le placement. -->
+          <g
+            class="party-banner__gear-spin"
+            [class.party-banner__gear-spin--reverse]="gear.reverse"
+            [style.--pb-speed]="seconds(gear.speedSeconds)"
+            style="transform-origin: 50px 50px"
+          >
+            <use class="party-banner__gear-shape" [class]="tintClass(gear.tint)" [attr.href]="gearHref(gear.technique)" />
+          </g>
+        </g>
+      }
+      @for (rivet of p.rivets; track $index) {
+        <circle class="party-banner__rivet tint-1" [attr.cx]="rivet.x" [attr.cy]="rivet.y" r="2" fill="currentColor" />
+      }
+      @if (p.steam) {
+        @for (puff of steamPuffs(p); track $index) {
+          <circle
+            class="party-banner__steam"
+            [attr.cx]="puff.x"
+            [attr.cy]="puff.y"
+            [attr.r]="puff.r"
+            [attr.fill]="steamFill()"
+            [style.--pb-delay]="seconds(puff.delaySeconds)"
+          />
+        }
+      }
+      <!-- Manomètre : toujours présent, dessiné EN DERNIER pour rester au-dessus. Sa zone
+           d'exclusion (cercle + 8 px) est garantie côté dérivation, pas ici. -->
+      <g class="party-banner__gauge tint-1" [attr.transform]="'translate(' + p.gauge.x + ' ' + p.gauge.y + ')'">
+        <circle
+          [attr.cx]="p.gauge.size / 2"
+          [attr.cy]="p.gauge.size / 2"
+          [attr.r]="p.gauge.size / 2"
+          class="party-banner__gauge-face"
+        />
+        <circle
+          [attr.cx]="p.gauge.size / 2"
+          [attr.cy]="p.gauge.size / 2"
+          [attr.r]="p.gauge.size / 2 - 1.5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3"
+        />
+        <g [attr.transform]="'translate(' + p.gauge.size / 2 + ' ' + p.gauge.size / 2 + ')'">
+          <g class="party-banner__gauge-needle-pivot">
+            <line
+              class="party-banner__gauge-needle"
+              x1="0"
+              y1="0"
+              [attr.x2]="-p.gauge.size / 3.4"
+              [attr.y2]="-p.gauge.size / 4"
+            />
+          </g>
+        </g>
+        <circle [attr.cx]="p.gauge.size / 2" [attr.cy]="p.gauge.size / 2" r="2.5" fill="currentColor" />
+      </g>
+    }
+  </svg>
+}

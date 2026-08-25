@@ -4,10 +4,6 @@ import * as argon2 from 'argon2';
 // AuthService -> import RUNTIME (pas `import type`) de THEMES depuis @master-jdr/shared (ESM, non
 // transformé par ts-jest) — même piège déjà documenté pour GAME_SYSTEMS/@master-jdr/game-rules et
 // pour update-theme.dto.ts (Story 28.4, revue de code).
-jest.mock('@master-jdr/shared', () => ({
-  THEMES: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
-}));
-
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -59,9 +55,19 @@ describe('AuthService', () => {
     id: 'u1',
     email: 'a@b.c',
     pseudo: 'alice',
+    displayName: 'alice',
     passwordHash: 'HASH',
     role: 'USER' as const,
     createdAt: new Date(),
+    theme: null,
+    mustResetPassword: false,
+    partiesSort: 'urgence',
+    hideFinishedParties: false,
+    partiesViewMode: 'medium',
+    charactersViewMode: 'medium',
+    charactersSort: 'partie',
+    calendarLayersSetAt: null,
+    calendarLayers: [],
   };
 
   beforeEach(() => {
@@ -187,6 +193,18 @@ describe('AuthService', () => {
       expect(inviteLinks.consumeLink).toHaveBeenCalledWith(tx, 'tok', 'u1');
       expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ pseudo: 'alice' });
+    });
+
+    it('AC8 (Story 30.4) : defaultCalendarLayers jamais undefined — compte tout juste créé, jeu par défaut appliqué', async () => {
+      tx.user.create.mockResolvedValue(fakeUser);
+      const result = await service.register({
+        email: 'a@b.c',
+        pseudo: 'alice',
+        password: 'password123',
+        token: 'tok',
+      });
+      expect(result.defaultCalendarLayers).toBeDefined();
+      expect(result.defaultCalendarLayers.length).toBeGreaterThan(0);
     });
 
     it('bug fix : émet un événement temps réel scopé sur la Partie rejointe, après la transaction', async () => {
@@ -376,6 +394,25 @@ describe('AuthService', () => {
       );
     });
 
+    it('deferred-work (2026-08-25) : invalide aussi tout autre PasswordResetToken non utilisé du même utilisateur (token fuité plus ancien)', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue(validRecord);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      tx.passwordResetToken.updateMany.mockResolvedValue({ count: 1 });
+      (argon2.hash as jest.Mock).mockResolvedValue('NEW_HASH');
+      tx.userSession.findMany.mockResolvedValue([]);
+
+      await service.resetPassword('r1.secretvalue', 'newpassword123');
+
+      expect(tx.passwordResetToken.updateMany).toHaveBeenCalledWith({
+        where: { id: 'r1', usedAt: null, expiresAt: { gt: expect.any(Date) } },
+        data: { usedAt: expect.any(Date) },
+      });
+      expect(tx.passwordResetToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'u1', usedAt: null },
+        data: { usedAt: expect.any(Date) },
+      });
+    });
+
     it('aucune session active (UserSession.findMany vide) → invalidation en no-op, reset réussit normalement', async () => {
       prisma.passwordResetToken.findUnique.mockResolvedValue(validRecord);
       (argon2.verify as jest.Mock).mockResolvedValue(true);
@@ -526,6 +563,18 @@ describe('AuthService', () => {
       ).rejects.toThrow('Mot de passe actuel incorrect');
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(tx.user.update).not.toHaveBeenCalled();
+      expect(email.sendMail).not.toHaveBeenCalled();
+    });
+
+    it('deferred-work (2026-08-25) : compte supprimé entre le findUnique et la transaction (P2025) → NotFoundException, pas de 500 brut', async () => {
+      prisma.user.findUnique.mockResolvedValue(currentUser);
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      (argon2.hash as jest.Mock).mockResolvedValue('NEW_HASH');
+      prisma.$transaction.mockRejectedValueOnce({ code: 'P2025' });
+
+      await expect(
+        service.changePassword('u1', 'currentpw', 'newpassword123', 's1'),
+      ).rejects.toThrow('Compte introuvable');
       expect(email.sendMail).not.toHaveBeenCalled();
     });
 

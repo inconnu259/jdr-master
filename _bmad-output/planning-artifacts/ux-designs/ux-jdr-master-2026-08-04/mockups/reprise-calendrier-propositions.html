@@ -1,0 +1,540 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reprise calendrier — propositions comparées</title>
+<style>
+:root{
+  --primary-bg:#0d0a14;--surface-bg:#1a1428;--surface-2:#221a33;
+  --accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;
+  --status-todo:#f0a030;--status-live:#3fd4ff;--status-soon:#ff7ad9;--status-done:#5a5a6a;
+  --status-unavailable:#e05252;--status-unknown:#3a3a4a;
+  --border-subtle:rgba(255,255,255,.07);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:34px;
+  --radius-card:10px;--radius-badge:6px;--radius-button:8px;
+  --text-xs:11px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:27px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg) var(--space-lg) 60px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px;border-top:1px solid var(--border-subtle);padding-top:var(--space-lg)}
+h3{font-size:var(--text-lg);margin:var(--space-lg) 0 var(--space-xs)}
+h4{font-size:var(--text-base);margin:0 0 var(--space-sm);color:var(--text-muted);font-weight:600;
+  text-transform:uppercase;letter-spacing:.07em;font-size:var(--text-sm)}
+p{max-width:88ch}
+.lede{color:var(--text-muted);margin:0 0 var(--space-lg)}
+.why{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-md);max-width:88ch}
+.q{display:inline-block;font-size:var(--text-xs);letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-2);border:1px solid rgba(155,109,255,.4);background:rgba(155,109,255,.1);
+  border-radius:var(--radius-badge);padding:2px 7px;margin-bottom:var(--space-sm)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:var(--space-lg);align-items:start}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:var(--space-lg);align-items:start}
+.frame{background:var(--primary-bg);border:1px solid var(--border-subtle);border-radius:14px;
+  padding:var(--space-md);box-shadow:0 8px 32px rgba(0,0,0,.65)}
+.frame.phone{max-width:330px}
+.tag{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);
+  display:block;margin-bottom:6px}
+.tag.bad{color:var(--status-unavailable)}
+.tag.good{color:var(--accent-1)}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md)}
+.note b{color:var(--text-primary)}
+.verdict{font-size:var(--text-sm);margin-top:var(--space-sm);padding:var(--space-sm) var(--space-md);
+  background:var(--surface-bg);border-radius:var(--radius-card);border:1px solid var(--border-subtle)}
+.verdict b{color:var(--accent-1)}
+.reco{border-color:rgba(126,200,164,.45);box-shadow:0 0 0 1px rgba(126,200,164,.18)}
+.pill{display:inline-block;font-size:var(--text-xs);padding:1px 7px;border-radius:20px;
+  border:1px solid var(--accent-1);color:var(--accent-1);background:rgba(126,200,164,.12);margin-left:6px}
+/* ═══ en-tête d'écran ═══ */
+.hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-md);gap:var(--space-sm)}
+.hdr b{font-size:var(--text-lg)}
+.seg{display:inline-flex;border:1px solid var(--border-subtle);border-radius:var(--radius-button);overflow:hidden}
+.seg span{padding:3px 9px;font-size:var(--text-sm);color:var(--text-muted)}
+.seg span.on{color:var(--text-primary);background:rgba(155,109,255,.18)}
+/* ═══ grille mois ═══ */
+.mo{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;user-select:none}
+.mh{font-size:var(--text-xs);color:var(--text-muted);text-align:center;padding:2px 0;text-transform:uppercase;letter-spacing:.06em}
+.mc{background:rgba(255,255,255,.028);border-radius:5px;min-height:62px;padding:3px 4px;position:relative;overflow:hidden}
+.mc .d{font-size:var(--text-xs);color:var(--text-muted)}
+.mc.today .d{color:var(--accent-1);font-weight:700}
+.mc.out{opacity:.28}
+.mc.av{background:rgba(126,200,164,.20)}
+.mc.un{background:rgba(224,82,82,.20)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--accent-2);position:absolute;right:5px;top:6px}
+/* la case « après » */
+.ev{margin-top:2px;border-radius:4px;padding:2px 4px;font-size:var(--text-xs);line-height:1.25;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev.seance{background:rgba(255,122,217,.22);border-left:3px solid var(--status-soon);color:var(--text-primary);font-weight:600}
+.ev.seance.imminent{background:rgba(255,122,217,.42)}
+.ev.vote{background:rgba(240,160,48,.16);border-left:3px solid var(--status-todo);color:var(--text-primary)}
+.ev.sub{color:var(--text-muted);font-weight:400;border:0;background:none;padding:0 0 0 3px}
+.mc.locked{background:rgba(255,122,217,.09);box-shadow:inset 0 0 0 1px rgba(255,122,217,.30)}
+/* tendance de vote : 3 segments */
+.trend{display:flex;height:4px;border-radius:2px;overflow:hidden;margin-top:3px;background:var(--status-unknown)}
+.trend i{display:block;height:100%}
+.trend .y{background:var(--accent-1)}
+.trend .m{background:var(--status-todo)}
+.trend .n{background:var(--status-unavailable)}
+.mine{position:absolute;left:4px;bottom:3px;font-size:9px;color:var(--accent-1);letter-spacing:.04em}
+/* ═══ grille semaine ═══ */
+.wk{display:grid;grid-template-columns:52px repeat(7,1fr);gap:3px;user-select:none}
+.wc{background:rgba(255,255,255,.03);border-radius:5px;min-height:52px;position:relative;padding:3px 4px;overflow:hidden}
+.wc.hd{background:none;min-height:0;font-size:var(--text-xs);color:var(--text-muted);text-align:center;padding:2px 0}
+.wc.hd.today{color:var(--accent-1);font-weight:700}
+.wc.rl{background:none;min-height:0;font-size:var(--text-xs);color:var(--text-muted);
+  display:flex;align-items:center;justify-content:flex-end;padding-right:6px}
+.wc.av{background:rgba(126,200,164,.28)}
+.wc.un{background:rgba(224,82,82,.28)}
+.wc.uk{background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(58,58,74,.4) 3px 6px)}
+.wc.sel{background:rgba(155,109,255,.40);box-shadow:inset 0 0 0 2px var(--accent-2)}
+.wc.seance{background:rgba(255,122,217,.20);box-shadow:inset 0 0 0 1px rgba(255,122,217,.5)}
+.wc .t{font-size:var(--text-xs);font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wc .s{font-size:10px;color:var(--text-muted);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ═══ agenda ═══ */
+.day{margin-bottom:var(--space-md)}
+.dhead{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);
+  display:flex;align-items:center;gap:var(--space-sm);margin-bottom:6px}
+.dhead::after{content:"";flex:1;height:1px;background:var(--border-subtle)}
+.item{display:flex;gap:var(--space-sm);background:var(--surface-bg);border-radius:var(--radius-card);
+  padding:var(--space-sm) var(--space-md);margin-bottom:5px;align-items:flex-start}
+.item .bar{width:3px;border-radius:2px;align-self:stretch;flex:0 0 3px}
+.item .bar.soon{background:var(--status-soon)}
+.item .bar.todo{background:var(--status-todo)}
+.item .bar.done{background:var(--status-done)}
+.item .bd{flex:1;min-width:0}
+.item .ti{font-size:var(--text-base);font-weight:600;line-height:1.3}
+.item .me{font-size:var(--text-sm);color:var(--text-muted)}
+.badge{font-size:var(--text-xs);padding:1px 7px;border-radius:var(--radius-badge);white-space:nowrap;align-self:center}
+.badge.todo{background:rgba(240,160,48,.16);color:var(--status-todo);border:1px solid rgba(240,160,48,.45)}
+.badge.soon{background:rgba(255,122,217,.16);color:var(--status-soon);border:1px solid rgba(255,122,217,.45)}
+.badge.full{background:var(--status-soon);color:#1a1428;border:1px solid var(--status-soon);font-weight:700}
+.badge.done{background:rgba(90,90,106,.2);color:var(--status-done);border:1px solid rgba(90,90,106,.5)}
+/* piste 2 : ruban */
+.ribbon{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:var(--space-md)}
+.rc{border-radius:5px;min-height:40px;background:rgba(255,255,255,.03);padding:3px;text-align:center;position:relative}
+.rc .d{font-size:10px;color:var(--text-muted)}
+.rc.has{background:rgba(255,122,217,.18);box-shadow:inset 0 0 0 1px rgba(255,122,217,.45)}
+.rc.vote{background:rgba(240,160,48,.16);box-shadow:inset 0 0 0 1px rgba(240,160,48,.45)}
+.rc.on{outline:2px solid var(--accent-2);outline-offset:1px}
+.rc .m{font-size:9px;line-height:1.1;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* piste 3 : sections d'action */
+.sect{margin-bottom:var(--space-base)}
+.sect>.h{display:flex;align-items:center;gap:var(--space-sm);font-size:var(--text-sm);font-weight:700;margin-bottom:6px}
+.sect>.h .c{font-size:var(--text-xs);color:var(--text-muted);font-weight:400}
+.sect>.h .k{width:8px;height:8px;border-radius:2px}
+/* ═══ divers ═══ */
+.selbar{display:flex;align-items:center;gap:var(--space-sm);margin-top:var(--space-md);flex-wrap:wrap;
+  background:var(--surface-bg);border:1px solid var(--accent-2);border-radius:var(--radius-card);
+  padding:var(--space-sm) var(--space-md);box-shadow:var(--elev-card)}
+.selbar b{font-size:var(--text-sm)}
+.selbar .sp{flex:1}
+.btn{font-size:var(--text-sm);padding:4px 10px;border-radius:var(--radius-button);border:1px solid;
+  white-space:nowrap;display:inline-block}
+.btn.no{color:var(--status-unavailable);border-color:var(--status-unavailable);background:rgba(224,82,82,.13)}
+.btn.yes{color:var(--accent-1);border-color:var(--accent-1);background:rgba(126,200,164,.13)}
+.btn.gh{color:var(--text-muted);border-color:var(--border-subtle)}
+.btn.pr{color:var(--accent-2);border-color:var(--accent-2);background:rgba(155,109,255,.14)}
+.scope{display:inline-flex;border:1px solid var(--border-subtle);border-radius:var(--radius-button);overflow:hidden}
+.scope span{padding:3px 8px;font-size:var(--text-xs);color:var(--text-muted)}
+.scope span.on{color:var(--text-primary);background:rgba(126,200,164,.2)}
+.dialog{background:var(--surface-bg);border:1px solid var(--border-subtle);border-radius:var(--radius-card);
+  padding:var(--space-base);box-shadow:var(--elev-card);max-width:420px}
+.dialog h5{margin:0 0 var(--space-sm);font-size:var(--text-lg)}
+.dialog .row{display:flex;gap:var(--space-sm);align-items:flex-start;padding:var(--space-sm) 0;
+  border-top:1px solid var(--border-subtle);font-size:var(--text-sm)}
+.dialog .row b{display:block}
+.dialog .row .d{color:var(--text-muted);font-size:var(--text-xs)}
+.legend{background:var(--surface-bg);border:1px solid var(--border-subtle);border-radius:var(--radius-card);
+  padding:var(--space-md);font-size:var(--text-sm)}
+.legend .l{display:flex;align-items:center;gap:var(--space-sm);margin-bottom:5px;color:var(--text-muted)}
+.legend .l i{width:14px;height:14px;border-radius:3px;flex:0 0 14px}
+.legend .grp{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);
+  margin:var(--space-sm) 0 5px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:var(--text-sm);padding:3px 10px;
+  border-radius:20px;border:1px solid var(--border-subtle);color:var(--text-muted);margin:0 5px 5px 0}
+.chip.on{color:var(--text-primary);border-color:var(--accent-2);background:rgba(155,109,255,.16)}
+.chip.destin{color:var(--status-todo);border-color:var(--status-todo);background:rgba(240,160,48,.14)}
+table.cmp{border-collapse:collapse;width:100%;font-size:var(--text-sm);margin-top:var(--space-md)}
+table.cmp th,table.cmp td{border:1px solid var(--border-subtle);padding:6px 9px;text-align:left;vertical-align:top}
+table.cmp th{color:var(--text-muted);font-weight:600;background:rgba(255,255,255,.02)}
+</style>
+</head>
+<body>
+
+<h1>Reprise du calendrier — propositions comparées</h1>
+<p class="lede">Support du point UX du 2026-08-17. Chaque planche pose une question et montre les options côte à côte.
+Palette : <b>Grimoire Émeraude</b> (les trois thèmes suivent les mêmes règles, seules les valeurs changent).
+Rien ici ne fait autorité : <code>DESIGN.md</code> et <code>EXPERIENCE.md</code> gagnent sur toute planche.</p>
+
+<!-- ══════════════════════════ A ══════════════════════════ -->
+<h2>A · La case du mois : que voit-on d'un coup d'œil ?</h2>
+<p class="why">L'irritant fondateur : une séance confirmée se signale aujourd'hui par un point de couleur, raté à tous les coups.
+La question n'est pas « comment le rendre plus visible » mais <b>qui gagne la place</b> quand plusieurs couches tombent sur le même jour (FR-49).</p>
+
+<div class="grid2">
+  <div>
+    <span class="tag bad">Aujourd'hui</span>
+    <div class="frame">
+      <div class="hdr"><b>Août 2026</b><span class="seg"><span class="on">Mois</span><span>Semaine</span><span>Agenda</span></span></div>
+      <div class="mo">
+        <div class="mh">L</div><div class="mh">M</div><div class="mh">M</div><div class="mh">J</div><div class="mh">V</div><div class="mh">S</div><div class="mh">D</div>
+        <div class="mc out"><span class="d">27</span></div><div class="mc out"><span class="d">28</span></div>
+        <div class="mc out"><span class="d">29</span></div><div class="mc out"><span class="d">30</span></div>
+        <div class="mc out"><span class="d">31</span></div><div class="mc av"><span class="d">1</span></div><div class="mc av"><span class="d">2</span></div>
+
+        <div class="mc"><span class="d">3</span></div><div class="mc un"><span class="d">4</span></div>
+        <div class="mc"><span class="d">5</span></div><div class="mc av"><span class="d">6</span></div>
+        <div class="mc av"><span class="d">7</span></div><div class="mc av"><span class="d">8</span></div><div class="mc"><span class="d">9</span></div>
+
+        <div class="mc"><span class="d">10</span></div><div class="mc av"><span class="d">11</span></div>
+        <div class="mc av"><span class="d">12</span><span class="dot"></span></div><div class="mc av"><span class="d">13</span><span class="dot"></span></div>
+        <div class="mc"><span class="d">14</span><span class="dot"></span></div><div class="mc un"><span class="d">15</span></div><div class="mc"><span class="d">16</span></div>
+
+        <div class="mc today"><span class="d">17</span></div><div class="mc av"><span class="d">18</span></div>
+        <div class="mc av"><span class="d">19</span></div><div class="mc av"><span class="d">20</span><span class="dot"></span></div>
+        <div class="mc"><span class="d">21</span></div><div class="mc av"><span class="d">22</span></div><div class="mc"><span class="d">23</span></div>
+      </div>
+      <div class="note">Trois points violets le 12, 13, 14 : ce sont des <b>options de vote</b>. Un quatrième le 20 : c'est une <b>séance confirmée</b>.
+      Rien ne les distingue, rien ne dit lequel réclame quelque chose de moi.</div>
+    </div>
+  </div>
+
+  <div>
+    <span class="tag good">Proposé — préséance + nommage</span>
+    <div class="frame reco">
+      <div class="hdr"><b>Août 2026</b><span class="seg"><span class="on">Mois</span><span>Semaine</span><span>Agenda</span></span></div>
+      <div class="mo">
+        <div class="mh">L</div><div class="mh">M</div><div class="mh">M</div><div class="mh">J</div><div class="mh">V</div><div class="mh">S</div><div class="mh">D</div>
+        <div class="mc out"><span class="d">27</span></div><div class="mc out"><span class="d">28</span></div>
+        <div class="mc out"><span class="d">29</span></div><div class="mc out"><span class="d">30</span></div>
+        <div class="mc out"><span class="d">31</span></div><div class="mc av"><span class="d">1</span></div><div class="mc av"><span class="d">2</span></div>
+
+        <div class="mc"><span class="d">3</span></div><div class="mc un"><span class="d">4</span></div>
+        <div class="mc"><span class="d">5</span></div><div class="mc av"><span class="d">6</span></div>
+        <div class="mc av"><span class="d">7</span></div><div class="mc av"><span class="d">8</span></div><div class="mc"><span class="d">9</span></div>
+
+        <div class="mc"><span class="d">10</span></div><div class="mc av"><span class="d">11</span></div>
+        <div class="mc"><span class="d">12</span><div class="ev vote">Convoi du Nord</div><div class="trend"><i class="y" style="width:60%"></i><i class="m" style="width:20%"></i><i class="n" style="width:20%"></i></div><span class="mine">tu as dit oui</span></div>
+        <div class="mc"><span class="d">13</span><div class="ev vote">Convoi du Nord</div><div class="trend"><i class="y" style="width:20%"></i><i class="m" style="width:20%"></i><i class="n" style="width:60%"></i></div></div>
+        <div class="mc"><span class="d">14</span><div class="ev vote">Convoi du Nord</div><div class="trend"><i class="y" style="width:80%"></i><i class="m" style="width:20%"></i></div><span class="mine">tu as dit oui</span></div>
+        <div class="mc un"><span class="d">15</span></div><div class="mc"><span class="d">16</span></div>
+
+        <div class="mc today"><span class="d">17</span></div><div class="mc av"><span class="d">18</span></div>
+        <div class="mc av"><span class="d">19</span></div>
+        <div class="mc locked"><span class="d">20</span><div class="ev seance">Le Convoi du Nord</div><div class="ev sub">soir · chez Marc</div></div>
+        <div class="mc"><span class="d">21</span></div><div class="mc av"><span class="d">22</span></div><div class="mc"><span class="d">23</span></div>
+      </div>
+      <div class="note">Le 20 : la séance <b>prend la case</b> et la teinte en « engagé » — la disponibilité déclarée ne s'affiche plus,
+      elle est devenue sans objet. Le 12, 13, 14 : options de vote, avec la <b>tendance</b> (barre à trois segments : oui / peut-être / non)
+      et le rappel de <b>ma</b> réponse. Le 13 se lit d'un coup comme le mauvais soir.</div>
+    </div>
+  </div>
+</div>
+
+<div class="verdict"><b>Règle de préséance proposée</b> — séance confirmée &gt; vote en cours &gt; mes indisponibilités &gt; mes disponibilités &gt; tendance du groupe.
+Une seule gagne la case ; les autres restent au tap. <b>Corollaire :</b> une séance confirmée <b>éteint l'affichage</b> de ma disponibilité sur ce créneau, mais jamais le fait d'être pris.</div>
+
+<!-- ══════════════════════════ B ══════════════════════════ -->
+<h2>B · La case de la semaine : la place est là, autant s'en servir</h2>
+<p class="why">Les cases de la vue Semaine sont les plus grandes des trois vues. Y mettre une pastille est le gaspillage le plus visible du calendrier actuel.
+C'est là que les <b>informations pratiques</b> (D-15) trouvent leur place naturelle.</p>
+
+<div class="grid2">
+  <div>
+    <span class="tag bad">Aujourd'hui</span>
+    <div class="frame">
+      <div class="hdr"><b>17 – 23 août</b><span class="seg"><span>Mois</span><span class="on">Semaine</span><span>Agenda</span></span></div>
+      <div class="wk">
+        <div class="wc rl"></div>
+        <div class="wc hd today">L 17</div><div class="wc hd">M 18</div><div class="wc hd">M 19</div><div class="wc hd">J 20</div><div class="wc hd">V 21</div><div class="wc hd">S 22</div><div class="wc hd">D 23</div>
+        <div class="wc rl">Matin</div>
+        <div class="wc uk"></div><div class="wc av"></div><div class="wc av"></div><div class="wc uk"></div><div class="wc uk"></div><div class="wc av"></div><div class="wc uk"></div>
+        <div class="wc rl">Après-m.</div>
+        <div class="wc uk"></div><div class="wc av"></div><div class="wc av"></div><div class="wc uk"></div><div class="wc uk"></div><div class="wc av"></div><div class="wc uk"></div>
+        <div class="wc rl">Soir</div>
+        <div class="wc un"></div><div class="wc av"></div><div class="wc av"></div><div class="wc av"><span class="dot"></span></div><div class="wc un"></div><div class="wc av"></div><div class="wc uk"></div>
+      </div>
+      <div class="note">Le point violet du jeudi soir est une séance. Dans une case de 52 px de haut.</div>
+    </div>
+  </div>
+
+  <div>
+    <span class="tag good">Proposé</span>
+    <div class="frame reco">
+      <div class="hdr"><b>17 – 23 août</b><span class="seg"><span>Mois</span><span class="on">Semaine</span><span>Agenda</span></span></div>
+      <div class="wk">
+        <div class="wc rl"></div>
+        <div class="wc hd today">L 17</div><div class="wc hd">M 18</div><div class="wc hd">M 19</div><div class="wc hd">J 20</div><div class="wc hd">V 21</div><div class="wc hd">S 22</div><div class="wc hd">D 23</div>
+        <div class="wc rl">Matin</div>
+        <div class="wc uk"></div><div class="wc av"></div><div class="wc av"></div><div class="wc uk"></div><div class="wc uk"></div><div class="wc av"></div><div class="wc uk"></div>
+        <div class="wc rl">Après-m.</div>
+        <div class="wc uk"></div><div class="wc av"></div><div class="wc av"></div><div class="wc uk"></div><div class="wc uk"></div><div class="wc av"></div><div class="wc uk"></div>
+        <div class="wc rl">Soir</div>
+        <div class="wc un"></div><div class="wc av"></div><div class="wc av"></div>
+        <div class="wc seance"><div class="t">Le Convoi du Nord</div><div class="s">chez Marc · 20 h 30</div><div class="s">pensez aux dés</div></div>
+        <div class="wc un"></div><div class="wc av"></div><div class="wc uk"></div>
+      </div>
+      <div class="note">Le titre, le lieu, l'heure de rendez-vous, le rappel. <b>Ce ne sont pas des champs structurés</b> :
+      c'est le texte libre écrit par le MJ, affiché tel quel et tronqué si besoin (D-15). L'application ne gagne aucune notion d'heure.</div>
+    </div>
+  </div>
+</div>
+
+<div class="verdict"><b>Q-20 — la même case sur mobile.</b> Sept colonnes sur 375 px donnent ~45 px de large : le titre n'y tient pas.
+Trois issues possibles, à trancher aujourd'hui : <b>(a)</b> la vue Semaine passe à 3 jours sur mobile et garde tout ;
+<b>(b)</b> elle garde 7 jours et dégrade en pastille, l'Agenda prenant le relais ; <b>(c)</b> elle disparaît sur mobile.</div>
+
+<!-- ══════════════════════════ C ══════════════════════════ -->
+<h2>C · La vue Agenda — trois pistes <span class="q">Q-19</span></h2>
+<p class="why">« Du texte, on n'y comprend rien, on n'a pas envie de lire le truc. » La question est de savoir si l'Agenda manque
+d'une <b>forme visuelle</b> ou d'une <b>intention</b>. Les trois pistes répondent différemment. Toutes trois hébergent les
+<b>inscriptions ouvertes</b>, qui n'ont pas de date et ne peuvent donc vivre dans une grille.</p>
+
+<div class="grid3">
+  <!-- Piste 1 -->
+  <div>
+    <span class="tag">Piste 1 — la liste, mais lisible</span>
+    <div class="frame phone">
+      <div class="hdr"><b>Agenda</b><span class="seg"><span>Mois</span><span>Sem.</span><span class="on">Agenda</span></span></div>
+      <div class="day">
+        <div class="dhead">Jeudi 20 août</div>
+        <div class="item"><span class="bar soon"></span><div class="bd"><div class="ti">Le Convoi du Nord</div><div class="me">Soir · chez Marc, 20 h 30</div></div><span class="badge full">dans 3 j</span></div>
+      </div>
+      <div class="day">
+        <div class="dhead">Samedi 29 août</div>
+        <div class="item"><span class="bar todo"></span><div class="bd"><div class="ti">Les Cendres d'Ashal</div><div class="me">3 dates proposées</div></div><span class="badge todo">Réponds</span></div>
+      </div>
+      <div class="day">
+        <div class="dhead">Sans date</div>
+        <div class="item"><span class="bar todo"></span><div class="bd"><div class="ti">La Halte du Griffon</div><div class="me">Inscriptions · 3 / 5 places</div></div><span class="badge todo">S'inscrire</span></div>
+      </div>
+      <div class="note">Correction incrémentale : même structure, cartes typées, badge d'action à droite.
+      <b>Le jour reste en tête de section</b> — c'est précisément ce que tu trouves difficile à te représenter.</div>
+    </div>
+    <div class="verdict">Le moins cher. Ne répond pas à « il manque une information visuelle ».</div>
+  </div>
+
+  <!-- Piste 2 -->
+  <div>
+    <span class="tag">Piste 2 — ruban calendaire + détail</span>
+    <div class="frame phone">
+      <div class="hdr"><b>Agenda</b><span class="seg"><span>Mois</span><span>Sem.</span><span class="on">Agenda</span></span></div>
+      <div class="ribbon">
+        <div class="rc"><span class="d">L 17</span></div>
+        <div class="rc"><span class="d">M 18</span></div>
+        <div class="rc"><span class="d">M 19</span></div>
+        <div class="rc has on"><span class="d">J 20</span><div class="m">Convoi</div></div>
+        <div class="rc"><span class="d">V 21</span></div>
+        <div class="rc"><span class="d">S 22</span></div>
+        <div class="rc"><span class="d">D 23</span></div>
+      </div>
+      <div class="ribbon">
+        <div class="rc"><span class="d">L 24</span></div>
+        <div class="rc"><span class="d">M 25</span></div>
+        <div class="rc"><span class="d">M 26</span></div>
+        <div class="rc"><span class="d">J 27</span></div>
+        <div class="rc vote"><span class="d">V 28</span><div class="m">vote</div></div>
+        <div class="rc vote"><span class="d">S 29</span><div class="m">vote</div></div>
+        <div class="rc"><span class="d">D 30</span></div>
+      </div>
+      <div class="item"><span class="bar soon"></span><div class="bd"><div class="ti">Le Convoi du Nord</div><div class="me">Jeudi 20, soir · chez Marc, 20 h 30</div></div><span class="badge full">dans 3 j</span></div>
+      <div class="item"><span class="bar todo"></span><div class="bd"><div class="ti">Les Cendres d'Ashal</div><div class="me">Vote — 28 ou 29 août</div></div><span class="badge todo">Réponds</span></div>
+      <div class="note">Le temps garde une <b>forme spatiale</b> : deux ou trois semaines en bandes, le vide se voit,
+      les trous entre séances aussi. Le détail suit dessous, la bande sélectionnée le filtre.</div>
+    </div>
+    <div class="verdict">Répond directement à ton intuition — « une sorte de calendrier avec seulement les infos de l'agenda ».
+    <b>Risque :</b> redevient un troisième calendrier, et donc un doublon du Mois.</div>
+  </div>
+
+  <!-- Piste 3 -->
+  <div>
+    <span class="tag">Piste 3 — par ce qu'on attend de moi</span>
+    <div class="frame phone reco">
+      <div class="hdr"><b>Agenda</b><span class="seg"><span>Mois</span><span>Sem.</span><span class="on">Agenda</span></span></div>
+      <div class="sect">
+        <div class="h"><span class="k" style="background:var(--status-todo)"></span>Ça t'attend<span class="c">2</span></div>
+        <div class="item"><span class="bar todo"></span><div class="bd"><div class="ti">Les Cendres d'Ashal</div><div class="me">Vote ouvert · 28 ou 29 août · 2 réponses sur 4</div></div><span class="badge todo">Réponds</span></div>
+        <div class="item"><span class="bar todo"></span><div class="bd"><div class="ti">La Halte du Griffon</div><div class="me">Inscriptions · 3 / 5 places · sans date</div></div><span class="badge todo">S'inscrire</span></div>
+      </div>
+      <div class="sect">
+        <div class="h"><span class="k" style="background:var(--status-soon)"></span>C'est programmé<span class="c">2</span></div>
+        <div class="item"><span class="bar soon"></span><div class="bd"><div class="ti">Le Convoi du Nord</div><div class="me">Jeudi 20, soir · chez Marc, 20 h 30</div></div><span class="badge full">dans 3 j</span></div>
+        <div class="item"><span class="bar soon"></span><div class="bd"><div class="ti">Le Convoi du Nord</div><div class="me">Jeudi 10 sept., soir</div></div><span class="badge soon">dans 3 sem.</span></div>
+      </div>
+      <div class="sect">
+        <div class="h"><span class="k" style="background:var(--status-done)"></span>C'est passé<span class="c">1</span></div>
+        <div class="item"><span class="bar done"></span><div class="bd"><div class="ti">Le Convoi du Nord</div><div class="me">Jeudi 6 août · compte-rendu à écrire</div></div><span class="badge done">Débriefer</span></div>
+      </div>
+      <div class="note">Aucun jour en tête : l'axe n'est plus le temps mais <b>l'action attendue</b>. La date redevient une propriété de la ligne.
+      C'est la lecture qui correspond à la question « qu'est-ce qui m'attend ». Une séance s'ouvre au tap.</div>
+    </div>
+    <div class="verdict"><b>Ma recommandation.</b> Le Mois et la Semaine portent déjà le temps ; l'Agenda n'a aucune raison
+    de le porter une troisième fois. Sa valeur propre, c'est le tri par urgence — et c'est la seule des trois pistes
+    qui donne enfin un foyer naturel aux inscriptions ouvertes.</div>
+  </div>
+</div>
+
+<table class="cmp">
+  <tr><th>Critère</th><th>Piste 1 — liste enrichie</th><th>Piste 2 — ruban</th><th>Piste 3 — par urgence</th></tr>
+  <tr><td>« Qu'est-ce qui m'attend ? »</td><td>Il faut lire</td><td>Il faut lire, mais on situe</td><td><b>Immédiat</b></td></tr>
+  <tr><td>Doublon avec Mois / Semaine</td><td>Faible</td><td><b>Élevé</b></td><td>Nul</td></tr>
+  <tr><td>Inscriptions ouvertes (sans date)</td><td>Section « sans date », bancale</td><td>Hors ruban, bancale</td><td><b>Naturelles</b></td></tr>
+  <tr><td>Tient sur mobile</td><td>Oui</td><td>Oui, 2 bandes max</td><td>Oui</td></tr>
+  <tr><td>Candidat par défaut sur mobile</td><td>Passable</td><td>Oui</td><td><b>Oui</b></td></tr>
+</table>
+
+<!-- ══════════════════════════ D ══════════════════════════ -->
+<h2>D · Le mode Destinée — le vote entre dans la grille <span class="q">Q-21</span></h2>
+<p class="why">Aujourd'hui : un panneau latéral qui liste les créneaux groupés par jour, à côté d'un calendrier qui ne les montre pas.
+Proposition : un <b>filtre de mise en avant</b> qui n'est pas une couche de plus mais un <b>mode</b> — il éteint le bruit et
+concentre l'écran sur un vote à la fois.</p>
+
+<div class="grid2">
+  <div>
+    <div class="frame">
+      <div class="hdr"><b>Août 2026</b><span class="seg"><span class="on">Mois</span><span>Semaine</span><span>Agenda</span></span></div>
+      <div style="margin-bottom:var(--space-md)">
+        <span class="chip on">Mes dispos</span><span class="chip">Séances</span><span class="chip destin">✦ Destinée · Les Cendres d'Ashal ‹ 1 / 2 ›</span>
+      </div>
+      <div class="mo">
+        <div class="mh">L</div><div class="mh">M</div><div class="mh">M</div><div class="mh">J</div><div class="mh">V</div><div class="mh">S</div><div class="mh">D</div>
+        <div class="mc" style="opacity:.35"><span class="d">24</span></div>
+        <div class="mc" style="opacity:.35"><span class="d">25</span></div>
+        <div class="mc" style="opacity:.35"><span class="d">26</span></div>
+        <div class="mc" style="opacity:.35"><span class="d">27</span></div>
+        <div class="mc"><span class="d">28</span><div class="ev vote">Soir</div><div class="trend"><i class="y" style="width:75%"></i><i class="m" style="width:25%"></i></div><span class="mine">tu as dit oui</span></div>
+        <div class="mc"><span class="d">29</span><div class="ev vote">Soir</div><div class="trend"><i class="y" style="width:25%"></i><i class="m" style="width:25%"></i><i class="n" style="width:50%"></i></div></div>
+        <div class="mc" style="opacity:.35"><span class="d">30</span></div>
+      </div>
+      <div class="selbar" style="border-color:var(--status-todo)">
+        <b>28 août — 3 oui, 1 peut-être</b><span class="sp"></span>
+        <span class="btn yes">Sceller ce créneau</span><span class="btn gh">Ajouter des dates</span>
+      </div>
+      <div class="note">Tout ce qui ne relève pas du vote s'estompe. Les chevrons <b>‹ 1 / 2 ›</b> passent d'un vote ouvert à l'autre.
+      Le créneau qui ne porte que des oui se repère sans lire une liste — c'est exactement le geste « sceller ».</div>
+    </div>
+  </div>
+  <div>
+    <h4>Ce que devient le panneau « Vote en cours »</h4>
+    <p class="why">Deux options. <b>(a)</b> Il disparaît : la grille porte tout, le panneau n'a plus de raison d'être.
+    <b>(b)</b> Il reste en repli, réduit à la liste des <b>votants manquants</b> — la seule information que la grille ne sait pas
+    porter par créneau (« qui n'a pas encore répondu »).</p>
+    <div class="legend">
+      <div class="grp">Repli proposé — le panneau ne garde que ceci</div>
+      <div class="l"><i style="background:var(--status-todo)"></i>Manquants : <b style="color:var(--text-primary)">Léa, Tom</b></div>
+      <div class="l"><i style="background:var(--accent-1)"></i>Ont répondu : Incon, Marc</div>
+      <div class="grp">Et la fenêtre de la Destinée ?</div>
+      <div class="l">Elle devient le <b style="color:var(--text-primary)">mode ci-contre</b> — plus une fenêtre.</div>
+    </div>
+    <div class="verdict"><b>Ma recommandation : (b).</b> « Qui manque » est une question de personnes, pas de dates —
+    elle n'a pas de case où se poser, exactement comme les inscriptions ouvertes.</div>
+    <div class="note"><b>Q-22, à trancher.</b> Retirer une option d'un vote ouvert : que deviennent les réponses déjà données dessus ?
+    Proposition — le retrait est <b>permis</b>, les réponses portées par cette option sont supprimées, et l'écran le dit avant
+    (« 2 personnes ont voté pour ce créneau »). Les réponses des autres créneaux ne bougent pas.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ E ══════════════════════════ -->
+<h2>E · Sélectionner, choisir la portée, résoudre les conflits</h2>
+<p class="why">La sélection devient le geste principal (FR-57). Deux ajouts : la <b>portée</b> se choisit après coup, et le conflit
+cesse d'être un mur (D-18).</p>
+
+<div class="grid2">
+  <div>
+    <div class="frame">
+      <div class="hdr"><b>Août 2026</b><span class="seg"><span class="on">Mois</span><span>Semaine</span><span>Agenda</span></span></div>
+      <div class="mo">
+        <div class="mh">L</div><div class="mh">M</div><div class="mh">M</div><div class="mh">J</div><div class="mh">V</div><div class="mh">S</div><div class="mh">D</div>
+        <div class="mc"><span class="d">3</span><div class="ev" style="background:rgba(155,109,255,.4)">&nbsp;</div></div>
+        <div class="mc un"><span class="d">4</span><div class="ev" style="background:rgba(155,109,255,.4)">&nbsp;</div></div>
+        <div class="mc"><span class="d">5</span><div class="ev" style="background:rgba(155,109,255,.4)">&nbsp;</div></div>
+        <div class="mc"><span class="d">6</span><div class="ev" style="background:rgba(155,109,255,.4)">&nbsp;</div></div>
+        <div class="mc"><span class="d">7</span><div class="ev" style="background:rgba(155,109,255,.4)">&nbsp;</div></div>
+        <div class="mc locked"><span class="d">8</span><div class="ev seance">Convoi du Nord</div></div>
+        <div class="mc"><span class="d">9</span><div class="ev" style="background:rgba(155,109,255,.4)">&nbsp;</div></div>
+      </div>
+      <div class="selbar">
+        <b>7 jours sélectionnés</b>
+        <span class="scope"><span class="on">Journée</span><span>Matin</span><span>Après-m.</span><span>Soir</span></span>
+        <span class="sp"></span>
+        <span class="btn yes">Disponible</span><span class="btn no">Indisponible</span><span class="btn gh">Annuler</span>
+      </div>
+      <div class="note">La <b>portée</b> vit dans la barre, pas dans le geste : on sélectionne des jours, puis on dit « le soir seulement ».
+      Le 8 est sélectionné comme les autres — mais il porte une séance, et rien ne l'en délogera.</div>
+      <div class="note"><b>Le panneau de déclaration ne meurt pas</b> : « Autre… » dans cette barre l'ouvre, et lui seul sait
+      déclarer <b>« tous les mardis soir »</b>. Un glissement sur des dates ne peut pas exprimer une règle.</div>
+    </div>
+  </div>
+  <div>
+    <h4>Le dialogue de conflit</h4>
+    <div class="dialog">
+      <h5>3 créneaux sont déjà déclarés</h5>
+      <div style="font-size:var(--text-sm);color:var(--text-muted)">Tu déclares <b style="color:var(--accent-1)">disponible</b> du 3 au 9 août, le soir.</div>
+      <div class="row"><span class="btn yes">Remplacer</span><div><b>Les 3 deviennent disponibles</b><span class="d">Mardi 4 (indisponible) · Vendredi 7 (indisponible) · Dimanche 9 (indisponible)</span></div></div>
+      <div class="row"><span class="btn gh">Conserver</span><div><b>Ces 3 restent comme ils sont</b><span class="d">Les 4 autres jours passent en disponible</span></div></div>
+      <div class="row"><span class="btn pr">Au cas par cas</span><div><b>On les passe en revue un par un</b><span class="d">3 décisions à prendre</span></div></div>
+      <div class="row" style="border-color:rgba(255,122,217,.35)"><span style="font-size:18px;line-height:1">✦</span><div><b style="color:var(--status-soon)">Samedi 8 n'est pas dans la liste</b><span class="d">Tu y as une séance — « Le Convoi du Nord ». Aucun de ces trois choix n'y touche. Si la séance est annulée, tu redeviens disponible.</span></div></div>
+    </div>
+    <div class="verdict">La ligne rose n'est pas un cas particulier codé à la main : l'indisponibilité issue d'une séance
+    <b>n'est pas stockée</b>, elle est calculée à la lecture. Il n'y a structurellement rien à écraser.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ F ══════════════════════════ -->
+<h2>F · La légende, et « qu'est-ce qui m'intéresse »</h2>
+
+<div class="grid2">
+  <div>
+    <h4>Légende — dépliable, jamais nécessaire</h4>
+    <div class="legend">
+      <div class="grp">Se passent d'explication</div>
+      <div class="l"><i style="background:rgba(126,200,164,.55)"></i>Je suis disponible</div>
+      <div class="l"><i style="background:rgba(224,82,82,.55)"></i>Je suis indisponible</div>
+      <div class="grp">Demandent la légende</div>
+      <div class="l"><i style="background:rgba(255,122,217,.35);box-shadow:inset 0 0 0 1px rgba(255,122,217,.6)"></i>Séance confirmée — tu es pris</div>
+      <div class="l"><i style="background:rgba(240,160,48,.3);border-left:3px solid var(--status-todo)"></i>Créneau proposé au vote</div>
+      <div class="l"><i class="trend" style="width:14px;height:6px;border-radius:2px;display:inline-block;background:linear-gradient(90deg,var(--accent-1) 0 60%,var(--status-todo) 60% 80%,var(--status-unavailable) 80% 100%)"></i>Tendance du vote : oui / peut-être / non</div>
+      <div class="l"><i style="background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(58,58,74,.9) 3px 6px)"></i>Personne n'a répondu</div>
+      <div class="note" style="margin-top:var(--space-md)">Règle : <b>vert et rouge n'ont pas besoin d'explication</b>.
+      Tout ce qui code par l'intensité, la trame ou une teinte sans sens partagé en demande une.
+      La légende est un complément — l'écran doit rester lisible sans elle.</div>
+    </div>
+  </div>
+  <div>
+    <h4>Préférences — la question posée autrement</h4>
+    <div class="legend">
+      <div style="font-size:var(--text-sm);color:var(--text-muted);margin-bottom:var(--space-sm)">
+        <b style="color:var(--text-primary)">Quand j'ouvre un calendrier, je veux voir :</b></div>
+      <div style="margin-bottom:var(--space-sm)">
+        <span class="chip on">✓ Mes dispos &amp; indispos</span>
+        <span class="chip on">✓ Les séances confirmées</span>
+        <span class="chip on">✓ Les votes en cours</span>
+        <span class="chip">La dispo du groupe</span>
+      </div>
+      <div class="note">Quatre intentions au lieu de six clés techniques. « Mes dispos &amp; indispos » regroupe les deux
+      interrupteurs actuels ; ils restent séparables dans les filtres de l'écran, où l'asymétrie d'usage a du sens.
+      <b>Les inscriptions ouvertes disparaissent d'ici</b> — elles n'ont pas de case, elles vivent dans l'Agenda.</div>
+      <div class="note"><b>Mémoire de session.</b> Ce réglage est l'état d'<b>arrivée</b>. Ce que je change en cours de visite
+      me suit si je reviens sur <b>le même</b> calendrier dans la <b>même</b> session ; un rechargement, une déconnexion,
+      ou un <b>autre</b> calendrier repartent d'ici.</div>
+    </div>
+  </div>
+</div>
+
+<h2>Ce qu'il reste à trancher aujourd'hui</h2>
+<table class="cmp">
+  <tr><th>#</th><th>Question</th><th>Ma proposition</th></tr>
+  <tr><td>Q-19</td><td>Forme de la vue Agenda</td><td><b>Piste 3</b> — par ce qu'on attend de moi</td></tr>
+  <tr><td>Q-20</td><td>Vue Semaine sur mobile</td><td><b>(a)</b> 3 jours au lieu de 7, tout est conservé</td></tr>
+  <tr><td>Q-21</td><td>Panneau « Vote en cours » et fenêtre Destinée</td><td>La fenêtre devient un <b>mode</b> ; le panneau se réduit à « qui manque »</td></tr>
+  <tr><td>Q-22</td><td>Retrait d'une option de vote ouvert</td><td>Permis, réponses de cette option supprimées, prévenu avant</td></tr>
+  <tr><td>—</td><td>Ordre de préséance dans une case</td><td>Séance &gt; vote &gt; indispo &gt; dispo &gt; groupe</td></tr>
+</table>
+
+</body>
+</html>

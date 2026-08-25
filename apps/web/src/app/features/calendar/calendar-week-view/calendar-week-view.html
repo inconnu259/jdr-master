@@ -16,38 +16,131 @@
   @if (loading()) {
     <div class="loading-overlay"><mat-spinner diameter="40" /></div>
   } @else {
-    <div class="week-grid" role="grid">
+    <div
+      class="week-grid"
+      role="grid"
+      tabindex="-1"
+      (pointermove)="onGridPointerMove($event)"
+      (pointerup)="onGridPointerUp($event)"
+      (pointercancel)="onGridPointerUp($event)"
+      (contextmenu)="isGestureActive() && $event.preventDefault()"
+      (keydown.escape)="onEscape()"
+    >
       <div class="grid-cell header-corner"></div>
       @for (cell of cells(); track cell.date.getTime()) {
-        <div class="grid-cell col-header" [class.today]="cell.isToday">
+        <!-- Story 36.9 — l'estompe du mode Destinée porte sur le JOUR : l'en-tête de colonne la
+             reçoit en même temps que ses trois cellules, sinon un jour estompé garderait un
+             en-tête net et se lirait comme un jour mis en avant. -->
+        <div
+          class="grid-cell col-header"
+          [class.today]="cell.isToday"
+          [class.col-header--dim]="isDayDimmed(cell)"
+        >
           {{ cell.label }}
         </div>
       }
 
       @for (row of SLOT_ROWS; track row.key) {
-        <div class="grid-cell row-label">{{ row.label }}</div>
+        <!-- Story 36.13, AC1/AC2 — l'icône REMPLACE le mot dans la gouttière : elle porte donc un
+             aria-label explicite, contrairement au rail où elle accompagne le mot et reste
+             aria-hidden (DESIGN.md §7.10). Le SVG est celui du rail, à l'identique — un seul
+             dessin par objet. -->
+        <div class="grid-cell row-label">
+          @switch (row.slot) {
+            @case ('MORNING') {
+              <svg class="slot-icon" viewBox="0 0 24 24" role="img" [attr.aria-label]="row.label">
+                <path d="M12 5v3M5.6 9.6l2 2M18.4 9.6l-2 2M3 18h18M7 18a5 5 0 0 1 10 0" />
+              </svg>
+            }
+            @case ('AFTERNOON') {
+              <svg class="slot-icon" viewBox="0 0 24 24" role="img" [attr.aria-label]="row.label">
+                <circle cx="12" cy="12" r="4.2" />
+                <path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
+              </svg>
+            }
+            @case ('EVENING') {
+              <svg class="slot-icon" viewBox="0 0 24 24" role="img" [attr.aria-label]="row.label">
+                <path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z" />
+              </svg>
+            }
+          }
+        </div>
         @for (cell of cells(); track cell.date.getTime()) {
           <div
             class="grid-cell slot-cell"
+            [attr.data-cell-date]="cell.date.getTime()"
+            [attr.data-cell-slot]="row.slot"
             [attr.data-status]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status)"
+            [attr.data-winner]="cellWinner(getSlotData(cell, row.key))"
             [class.past]="cell.isPast"
             [class.today-col]="cell.isToday"
             [class.preview]="getSlotData(cell, row.key).preview !== null"
             [class.unknown]="(getSlotData(cell, row.key).preview ?? getSlotData(cell, row.key).status) === 'UNKNOWN'"
+            [class.selected]="isCellSelected(cell, row.slot)"
+            [class.slot-cell--composed]="isCellComposed(cell, row.slot)"
+            [class.current]="isCurrentCell(cell, row.slot)"
+            [class.slot-cell--dim]="isDayDimmed(cell)"
+            [class.has-event]="!!eventTitle(getSlotData(cell, row.key))"
             [attr.role]="cell.isPast ? 'presentation' : 'button'"
             [attr.tabindex]="cell.isPast ? null : 0"
-            [attr.aria-label]="cell.isPast ? null : cellAriaLabel(cell, getSlotData(cell, row.key), row.label)"
-            (click)="onCellClick(cell.date, row.slot)"
-            (keyup.enter)="onCellClick(cell.date, row.slot)"
+            [attr.aria-label]="
+              cell.isPast ? null : cellAriaLabel(cell, getSlotData(cell, row.key), row.label, row.slot)
+            "
+            (pointerdown)="onCellPointerDown($event, cell, row.slot)"
+            (keyup.enter)="onCellEnterKey()"
             (keydown.space)="$event.preventDefault()"
-            (keyup.space)="onCellClick(cell.date, row.slot)"
+            (keyup.space)="onCellKeySelect(cell, row.slot)"
+            (keydown.shift.arrowright)="$event.preventDefault(); onShiftArrow(cell, row.slot, 1)"
+            (keydown.shift.arrowleft)="$event.preventDefault(); onShiftArrow(cell, row.slot, -1)"
           >
+            <!-- Story 36.13, AC3/AC4/AC5 — le contenu est TOUJOURS émis, aux deux densités ; seul
+                 le CSS (container query `week-grid`) décide de ce qui se voit. Aucun @if de
+                 largeur, donc aucune vue supplémentaire instanciée à la bascule.
+                 AC9 — ces nœuds restent des descendants de .slot-cell, qui porte data-cell-date :
+                 le hit-test du glissement (elementFromPoint + closest) continue de les remonter. -->
+            @if (eventTitle(getSlotData(cell, row.key)); as title) {
+              <span class="ev-title">{{ title }}</span>
+            }
+            @if (eventInfo(getSlotData(cell, row.key)); as info) {
+              <span class="ev-info">{{ info }}</span>
+            }
             @if (getSlotData(cell, row.key).declLabel) {
               <span class="decl-label">{{ getSlotData(cell, row.key).declLabel }}</span>
+            }
+            <!-- Story 36.6 — la piste de participation, et son compteur « 3 / 4 » que la cellule
+                 de Semaine a la place de porter (AC4). Descendante de `.slot-cell` et en
+                 `pointer-events: none`, comme tout ce que cette cellule contient : le glissement
+                 doit continuer de remonter à la case (AC9, encadré n°3 de la story 36.13). -->
+            @if (eventVote(getSlotData(cell, row.key)); as vote) {
+              <app-poll-track class="ev-track in-week track-sm" [vote]="vote" />
+            }
+            <!-- Story 36.8 — le CANAL SÉPARÉ. 🚨 Aucune garde de rang : il survit sous une
+                 séance et sous un vote (AC2). Descendante de `.slot-cell` (qui porte
+                 `data-cell-date`) et en `pointer-events: none`, comme tout ce que cette cellule
+                 contient : le glissement doit continuer de remonter à la case (AC12). -->
+            @if (eventGroup(getSlotData(cell, row.key)); as group) {
+              <app-group-gauge class="ev-group in-week" [group]="group" />
             }
           </div>
         }
       }
     </div>
+    @if (selectedCells().length > 0) {
+      <app-selection-bar
+        [count]="selectedCells().length"
+        [rangeLabel]="selectionRangeLabel()"
+        [scope]="scope()"
+        [armedKind]="armedKind()"
+        [sealCandidate]="sealCandidate()"
+        (scopeChange)="onScopeChange($event)"
+        (armedKindChange)="onArmedKindChange($event)"
+        (markAvailable)="onSelectionCommit('AVAILABLE')"
+        (markUnavailable)="onSelectionCommit('UNAVAILABLE')"
+        (otherRequested)="onOtherRequested()"
+        (cancelled)="onSelectionCancelled()"
+        (sealRequested)="sealRequested.emit($event)"
+        (keydown.escape)="onEscape()"
+      />
+    }
   }
 </div>

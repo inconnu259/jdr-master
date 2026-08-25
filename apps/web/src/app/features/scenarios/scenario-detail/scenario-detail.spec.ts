@@ -55,7 +55,12 @@ async function createComponent(
       provideAnimationsAsync(),
       { provide: ScenariosService, useValue: scenariosSvc },
       { provide: Router, useValue: router },
-      { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 's1' } } } },
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          snapshot: { paramMap: { get: () => 's1' }, queryParamMap: { get: () => null } },
+        },
+      },
       { provide: RealtimeService, useValue: realtimeSvc },
     ],
   }).compileComponents();
@@ -98,7 +103,12 @@ describe('ScenarioDetail', () => {
         provideAnimationsAsync(),
         { provide: ScenariosService, useValue: scenariosSvc },
         { provide: Router, useValue: router },
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 's1' } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: { paramMap: { get: () => 's1' }, queryParamMap: { get: () => null } },
+          },
+        },
         { provide: RealtimeService, useValue: realtimeSvc },
       ],
     }).compileComponents();

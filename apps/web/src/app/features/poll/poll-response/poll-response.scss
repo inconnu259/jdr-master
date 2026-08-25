@@ -52,6 +52,10 @@
     border-color: var(--mat-sys-primary, #1a6fc4) !important;
   }
 
+  &__withdraw {
+    color: var(--mat-sys-on-surface-variant, #666) !important;
+  }
+
   &__footer {
     margin-top: 1rem;
     display: flex;

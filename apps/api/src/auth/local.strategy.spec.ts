@@ -1,14 +1,28 @@
 import { UnauthorizedException } from '@nestjs/common';
-
-// LocalStrategy -> AuthService -> import RUNTIME (pas `import type`) de THEMES depuis
-// @master-jdr/shared (ESM, non transformé par ts-jest) — même piège déjà documenté (mémoire
-// projet, Story 28.4/28.5).
-jest.mock('@master-jdr/shared', () => ({
-  THEMES: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
-}));
-
+import { DEFAULT_CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
 import { LocalStrategy } from './local.strategy';
 import { AuthService } from './auth.service';
+
+function makeUser(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'u1',
+    email: 'a@b.c',
+    pseudo: 'alice',
+    displayName: 'alice',
+    role: 'USER',
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    theme: null,
+    mustResetPassword: false,
+    partiesSort: 'urgence',
+    hideFinishedParties: false,
+    partiesViewMode: 'medium',
+    charactersViewMode: 'medium',
+    charactersSort: 'partie',
+    calendarLayersSetAt: null,
+    calendarLayers: [],
+    ...overrides,
+  };
+}
 
 describe('LocalStrategy', () => {
   let strategy: LocalStrategy;
@@ -27,15 +41,20 @@ describe('LocalStrategy', () => {
     );
   });
 
-  it("compte valide sans mustResetPassword → renvoie l'utilisateur (attaché à req.user)", async () => {
-    const user = { id: 'u1', email: 'a@b.c', mustResetPassword: false };
+  it("compte valide sans mustResetPassword → renvoie l'utilisateur converti en AuthUser (Story 30.4), attaché à req.user", async () => {
+    const user = makeUser();
     authService.validateUser.mockResolvedValue(user);
 
-    await expect(strategy.validate('a@b.c', 'good')).resolves.toBe(user);
+    const result = await strategy.validate('a@b.c', 'good');
+
+    expect(result).toMatchObject({ id: 'u1', email: 'a@b.c' });
+    // AC8 : defaultCalendarLayers toujours résolu, jamais undefined.
+    expect(result.defaultCalendarLayers).toEqual(DEFAULT_CALENDAR_LAYER_KEYS);
+    expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
   });
 
   it('Story 28.6 : mustResetPassword: true → connexion refusée avec un message dédié, même mot de passe correct', async () => {
-    const user = { id: 'u1', email: 'a@b.c', mustResetPassword: true };
+    const user = makeUser({ mustResetPassword: true });
     authService.validateUser.mockResolvedValue(user);
 
     await expect(strategy.validate('a@b.c', 'good')).rejects.toThrow(

@@ -250,6 +250,63 @@
         }
       }
 
+      <!-- Story 36.5 — informations pratiques (D-15). Trois champs SÉPARÉS, un seul bouton :
+           le MJ les saisit ensemble. Aucun <textarea> : les trois surfaces d'affichage sont en
+           white-space:nowrap, un retour à la ligne ne pourrait pas s'y rendre.
+           ⚠️ Contrairement au compte-rendu juste en dessous, AUCUN état incitatif côté joueur —
+           l'AC4 veut que rien ne soit réservé ni affiché quand il n'y a rien. -->
+      <div class="seance-row__infos-pratiques">
+        @if (isMj()) {
+          <div class="infos-pratiques__fields">
+            <label class="infos-pratiques__field">
+              <span class="infos-pratiques__label">Heure</span>
+              <!-- Le widget natif fournit le sélecteur ET la validation de format, et rend
+                   déjà "HH:MM". C'est une ÉTIQUETTE : rien ne la parse en aval. -->
+              <input #heureInput type="time" [value]="infoDraft(seance.id, 'heureRdv')" />
+              @if (malformedHeureRdv(seance); as raw) {
+                <span class="infos-pratiques__warning">
+                  ⚠️ Valeur stockée non reconnue ("{{ raw }}"), champ affiché vide — enregistrer
+                  sans la corriger l'effacera.
+                </span>
+              }
+            </label>
+            <label class="infos-pratiques__field">
+              <span class="infos-pratiques__label">Lieu</span>
+              <!-- Champ visible même vide : c'est lui qui rappelle au MJ de le renseigner. -->
+              <input
+                #lieuInput
+                type="text"
+                maxlength="80"
+                placeholder="chez Marc, en visio…"
+                [value]="infoDraft(seance.id, 'lieu')"
+              />
+            </label>
+            <label class="infos-pratiques__field infos-pratiques__field--wide">
+              <span class="infos-pratiques__label">À savoir</span>
+              <input
+                #noteInput
+                type="text"
+                maxlength="200"
+                placeholder="pensez aux dés…"
+                [value]="infoDraft(seance.id, 'notePratique')"
+              />
+            </label>
+          </div>
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="pollActionPending()"
+            (click)="
+              onSetInfosPratiques(seance.id, heureInput.value, lieuInput.value, noteInput.value)
+            "
+          >
+            Enregistrer les informations pratiques
+          </button>
+        } @else if (seanceInfos(seance)) {
+          <p class="seance-row__infos-pratiques-text">{{ seanceInfos(seance) }}</p>
+        }
+      </div>
+
       <div class="seance-row__compte-rendu">
         @if (isMj()) {
           <textarea

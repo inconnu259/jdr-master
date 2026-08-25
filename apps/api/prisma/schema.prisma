@@ -22,6 +22,12 @@ model User {
   createdAt         DateTime   @default(now())
   theme             String? // AD-13 — null = jamais choisi, le thème local est alors adopté une fois
   mustResetPassword Boolean    @default(false) // Story 28.6 — posé par rollbackEmailChange(), remis à false par resetPassword()
+  partiesSort         String  @default("urgence") // AD-1 — union fermée dans @master-jdr/shared (Story 29.8)
+  hideFinishedParties Boolean @default(false) // AD-1 — préférence d'affichage, appliquée côté front (Story 29.8)
+  partiesViewMode     String  @default("medium") // AD-1 — une paire PAR LISTE, jamais partagée (Story 29.9)
+  charactersViewMode  String  @default("medium") // AD-1 (Story 29.9)
+  charactersSort      String  @default("partie") // AD-1 — vocabulaire disjoint de celui des parties (Story 29.9)
+  calendarLayersSetAt DateTime? // AD-16 — null = jamais réglé, le jeu par défaut s'applique (Story 30.4)
 
   mjOfParties               Partie[]                   @relation("PartieMJ")
   memberships               Membership[]
@@ -39,6 +45,9 @@ model User {
   hommeDragons              HommeDragon[]
   emailChangeTokens         EmailChangeToken[]
   emailChangeRollbackTokens EmailChangeRollbackToken[]
+  favorites                 PartieFavorite[]
+  announcementReads         AnnouncementRead[]
+  calendarLayers            UserCalendarLayer[]
 }
 
 enum PartieKind {
@@ -61,6 +70,8 @@ model Partie {
   nextSessionDate DateTime? // Date confirmée de la prochaine séance (mise à jour par Epic 3)
   nextSessionSlot DaySlot? // Créneau confirmé
   reminderSentAt  DateTime? // null = rappel pas encore envoyé pour le créneau courant (Epic 5)
+  closedAt        DateTime? // AD-8 — seul état persisté ; "en cours"/"pas encore commencée" dérivés à la lecture (Story 29.6)
+  coverImageUrl   String? // Story 29.12, AD-19 — null = bannière générée. Seule donnée persistée (jamais dimensions/checksum/horodatage, qui seraient du dérivé)
 
   memberships         Membership[]
   invitations         Invitation[]
@@ -73,6 +84,35 @@ model Partie {
   announcements       Announcement[]
   hommeDragons        HommeDragon[]
   characterGroupRoles CharacterGroupRole[]
+  favorites           PartieFavorite[]
+}
+
+/// Une partie marquée favorite par un utilisateur (Story 29.8) — état multi-valué, donc relationnel
+/// (AD-1/P6-AD-1), jamais un booléen sur `Partie` qui appartiendrait alors à tout le monde.
+model PartieFavorite {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partieId  String
+  partie    Partie   @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, partieId])
+}
+
+/// Une couche de calendrier active pour un utilisateur (Story 30.4) — état multi-valué, donc
+/// relationnel (AD-16, application directe d'AD-1 au cas ensemble-de-valeurs) : une ligne par
+/// couche ACTIVE, l'absence de ligne vaut couche éteinte. `layerKey` est une union fermée
+/// déclarée dans `@master-jdr/shared` (`CalendarLayerKey`), validée à l'écriture, jamais une
+/// chaîne libre. `User.calendarLayersSetAt` distingue « jamais réglé » (le défaut s'applique) de
+/// « réglé, y compris à vide ».
+model UserCalendarLayer {
+  id       String @id @default(uuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  layerKey String
+
+  @@unique([userId, layerKey])
 }
 
 enum InvitationStatus {
@@ -493,6 +533,14 @@ model Seance {
   inscriptionMax Int?
   dateValidee    DateTime?
   compteRendu    String?
+  /// Informations pratiques (Story 36.5, dérogation D-15 amendée le 2026-08-19).
+  /// heureRdv est une ÉTIQUETTE, jamais un instant : String "HH:MM" que rien ne parse,
+  /// ne compare ni ne trie. JAMAIS un DateTime ni un type time — une colonne typée
+  /// « heure » ferait entrer une seconde granularité temporelle dans un modèle qui
+  /// raisonne en créneau de journée (addendum §5.7, garde n°1).
+  heureRdv       String?
+  lieu           String?
+  notePratique   String?
   createdAt      DateTime     @default(now())
 
   inscriptions Inscription[]
@@ -547,8 +595,24 @@ model Announcement {
   scenario   Scenario? @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
   text       String
   createdAt  DateTime  @default(now())
+  reads      AnnouncementRead[]
 
   @@index([partieId, createdAt])
+}
+
+/// État « vue » d'une annonce par un utilisateur (Story 29.13, AD-1) — relationnel, jamais un
+/// timestamp scalaire sur `User` : un scalaire ne pourrait pas distinguer « vue dans la Partie A »
+/// de « pas vue dans la Partie B », ce qu'AC3 exige explicitement (état par appareil éliminé,
+/// mémorisé sur le compte).
+model AnnouncementRead {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  readAt         DateTime     @default(now())
+
+  @@unique([userId, announcementId])
 }
 
 /// Rôle de groupe assigné à un personnage (Epic 27, Story 27.2) — relationnel, jamais dans

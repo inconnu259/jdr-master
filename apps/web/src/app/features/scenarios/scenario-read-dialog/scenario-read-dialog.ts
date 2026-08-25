@@ -14,6 +14,7 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
@@ -68,6 +69,7 @@ export class ScenarioReadDialog implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly announcementsSvc = inject(AnnouncementsService);
+  private readonly unseenAnnouncementsSvc = inject(UnseenAnnouncementsService);
   protected readonly theme = inject(ThemeToneService);
   protected readonly currentUserId = computed(() => this.auth.currentUser()?.id);
   protected readonly isMj = computed(() => this.data.isMj ?? false);
@@ -103,6 +105,12 @@ export class ScenarioReadDialog implements OnInit {
   );
   protected readonly canSeeAnnouncements = computed(
     () => this.isMj() || !this.isEpisodique() || this.isParticipating(),
+  );
+  // Story 29.13 (révision) : le marquage « vue » se déclenche sur un clic explicite de l'utilisateur
+  // sur AnnonceCard (opened()), plus au simple affichage — le template lui-même n'itère déjà que
+  // sur les annonces effectivement affichées (`isRestricted()`/`canSeeAnnouncements()`, AC3/AC6).
+  protected readonly unseenAnnouncementIds = computed(
+    () => new Set(this.unseenAnnouncementsSvc.unseenAnnouncements().map((a) => a.id)),
   );
   protected readonly participantCharacters = computed(() => {
     const ids = new Set((this.scenario().participants ?? []).map((p) => p.userId));
@@ -146,6 +154,12 @@ export class ScenarioReadDialog implements OnInit {
       if (!matchesPartie(change, this.data.scenario.partieId)) return;
       untracked(() => void this.refreshScenario());
     });
+  }
+
+  /** Story 29.13 (révision) : « j'ouvre l'annonce » = clic explicite sur AnnonceCard, plus le
+   *  simple affichage. */
+  protected markAnnouncementOpened(announcementId: string): void {
+    void this.unseenAnnouncementsSvc.markRead(announcementId);
   }
 
   private async refreshScenario(): Promise<void> {

@@ -1,0 +1,78 @@
+<div
+  class="list-control-bar"
+  [class.list-control-bar--hidden]="hiddenByScroll()"
+  [class.list-control-bar--expanded]="expanded()"
+>
+  <div class="list-control-bar__row">
+    <button
+      type="button"
+      mat-icon-button
+      class="list-control-bar__toggle"
+      [attr.aria-expanded]="expanded()"
+      [attr.aria-label]="theme.tone()['list_control_bar.toggle_aria']"
+      (click)="expanded.set(!expanded())"
+    >
+      <mat-icon aria-hidden="true">tune</mat-icon>
+    </button>
+
+    @if (isDesktop() && searchQuery() !== null) {
+      <label class="list-control-bar__search">
+        <mat-icon aria-hidden="true">search</mat-icon>
+        <input
+          type="text"
+          [attr.aria-label]="searchLabel()"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="searchQueryChange.emit($event)"
+        />
+      </label>
+    }
+
+    <div class="list-control-bar__modes" role="group" [attr.aria-label]="theme.tone()['list_control_bar.view_mode_group_aria']">
+      @for (mode of viewModeOptions(); track mode) {
+        <button
+          type="button"
+          mat-icon-button
+          class="list-control-bar__mode"
+          [class.list-control-bar__mode--active]="mode === viewMode()"
+          [attr.aria-pressed]="mode === viewMode()"
+          [attr.aria-label]="modeAriaLabel(mode)"
+          (click)="viewModeChange.emit(mode)"
+        >
+          <mat-icon aria-hidden="true">{{ modeIcon(mode) }}</mat-icon>
+        </button>
+      }
+    </div>
+
+    @if (hasDeviatedFromDefault()) {
+      <button type="button" mat-button class="list-control-bar__reset" (click)="resetRequested.emit()">
+        <mat-icon aria-hidden="true">restart_alt</mat-icon>
+        {{ theme.tone()['list_control_bar.reset_pill_label'] }}
+      </button>
+    }
+  </div>
+
+  <div class="list-control-bar__fields">
+    @if (!isDesktop() && searchQuery() !== null) {
+      <label class="list-control-bar__search list-control-bar__search--mobile">
+        <mat-icon aria-hidden="true">search</mat-icon>
+        <input
+          type="text"
+          [attr.aria-label]="searchLabel()"
+          [ngModel]="searchQuery()"
+          (ngModelChange)="searchQueryChange.emit($event)"
+        />
+      </label>
+    }
+
+    <label class="list-control-bar__field">
+      <span class="list-control-bar__label">{{ theme.tone()['list_control_bar.sort_label'] }}</span>
+      <select [ngModel]="sortValue()" (ngModelChange)="sortChange.emit($event)">
+        @for (opt of sortOptions(); track opt.value) {
+          <option [value]="opt.value">{{ opt.label }}</option>
+        }
+      </select>
+    </label>
+
+    <ng-content select="[extraFilters]" />
+  </div>
+</div>

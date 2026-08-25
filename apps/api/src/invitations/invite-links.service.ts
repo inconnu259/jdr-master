@@ -100,6 +100,12 @@ export class InviteLinksService {
     // Bug fix (revue de code) : l'utilisateur qui rejoint lui-même n'était notifié sur aucune de
     // ses AUTRES sessions/onglets déjà ouverts (miroir de removeMember()).
     this.realtimeEvents.emit(userTopic(userId));
+    // AUCUN_MEMBRE_INVITE (Story 29.7, AD-14) : le MJ doit voir ce signal se lever quand quelqu'un
+    // rejoint par lien. En plus des émissions ci-dessus, jamais en remplacement.
+    await this.parties.notifyPartieSignalsChanged(
+      link.partieId,
+      link.partie.mjId,
+    );
     return { ok: true, partieId: link.partieId };
   }
 
@@ -112,7 +118,7 @@ export class InviteLinksService {
     tx: Prisma.TransactionClient,
     token: string,
     userId: string,
-  ): Promise<InviteLink> {
+  ): Promise<InviteLink & { partie: { mjId: string } }> {
     const link = await tx.inviteLink.findUnique({
       where: { token },
       include: { partie: { select: { mjId: true } } },

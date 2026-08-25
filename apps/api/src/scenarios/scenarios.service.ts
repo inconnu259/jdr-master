@@ -17,6 +17,7 @@ import type {
 } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { countParticipants } from '../parties/participant-count.util';
 import { CharacterService } from '../characters/character.service';
 import { PollService } from '../poll/poll.service';
 import {
@@ -222,6 +223,7 @@ export class ScenariosService {
     const seancesByScenario = await loadSeancesBatch(
       this.prisma,
       scenarios.map((s) => s.id),
+      await countParticipants(this.prisma, partieId),
     );
     return scenarios.map((s) =>
       toDto(s, partie.kind, undefined, seancesByScenario.get(s.id) ?? []),
@@ -245,7 +247,11 @@ export class ScenariosService {
       take: pagination?.take,
     });
     const scenarioIds = scenarios.map((s) => s.id);
-    const seancesByScenario = await loadSeancesBatch(this.prisma, scenarioIds);
+    const seancesByScenario = await loadSeancesBatch(
+      this.prisma,
+      scenarioIds,
+      await countParticipants(this.prisma, partieId),
+    );
 
     if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
       return Promise.all(
@@ -323,6 +329,10 @@ export class ScenariosService {
     });
 
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : un scénario ouvert peut rendre une inscription
+    // atteignable pour un membre — sans ceci, GET /me/calendar reste périmé jusqu'au prochain
+    // changement de plage.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -367,6 +377,8 @@ export class ScenariosService {
         return tx.scenario.findUniqueOrThrow({ where: { id: scenarioId } });
       });
       this.realtimeEvents.emit(partieTopic(partie.id));
+      // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : en plus de partieTopic, jamais en remplacement.
+      await this.parties.notifyPartieSignalsChanged(partie.id, mjId);
       return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
     }
 
@@ -383,6 +395,9 @@ export class ScenariosService {
       where: { id: scenarioId },
     });
     this.realtimeEvents.emit(partieTopic(partie.id));
+    // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
+    // remplacement.
+    await this.parties.notifyPartieSignalsChanged(partie.id, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -415,6 +430,9 @@ export class ScenariosService {
       where: { id: scenarioId },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : la partie perd son scénario COURANT — en plus
+    // de partieTopic ci-dessus, jamais en remplacement.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -467,6 +485,9 @@ export class ScenariosService {
       where: { id: scenarioId },
     });
     this.realtimeEvents.emit(partieTopic(partie.id));
+    // Deferred-work (SSE, calendrier personnel) : une nouvelle séance peut apparaître dans
+    // mes-seances/inscriptions-ouvertes pour un membre — GET /me/calendar doit le savoir.
+    await this.parties.notifyPartieSignalsChanged(partie.id, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -564,7 +585,17 @@ export class ScenariosService {
     // écran ne dérive l'affichage que de `seance.poll`). Seance.pollId référence SessionPoll (FK) :
     // la Seance doit être supprimée avant le SessionPoll, jamais l'inverse.
     const pollIdToDelete = seance.pollId;
-    await this.prisma.seance.delete({ where: { id: seanceId } });
+    // Deferred-work (2026-08-25) : TOCTOU entre le findUnique() ci-dessus et ce delete() — une
+    // seconde suppression concurrente de la MÊME séance ferait lever un P2025 brut plutôt qu'un
+    // 404 propre. Même patron que `resolveScenarioOrThrow()` ci-dessous.
+    try {
+      await this.prisma.seance.delete({ where: { id: seanceId } });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
+        throw new NotFoundException('Séance introuvable');
+      }
+      throw e;
+    }
     if (pollIdToDelete) {
       await this.prisma.sessionPoll.delete({ where: { id: pollIdToDelete } });
     }
@@ -574,6 +605,9 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : une séance supprimée peut retirer une ligne de
+    // mes-seances/votes-en-cours chez un membre — GET /me/calendar doit le savoir.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -670,6 +704,9 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : une date réinitialisée rouvre un vote absent de
+    // votes-en-cours chez un membre — GET /me/calendar doit le savoir.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -718,6 +755,9 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : une capacité posée peut rendre une inscription
+    // ouvrable pour un membre — GET /me/calendar doit le savoir.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -793,6 +833,11 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : une inscription change inscritsCount pour tous
+    // les autres membres — GET /me/calendar doit le savoir. `userId` ici est le joueur agissant,
+    // pas le MJ : notifyPartieSignalsChanged() veut l'id du MJ (partie.mjId), déjà résolu par
+    // getViewable() ci-dessus.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -827,6 +872,8 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Deferred-work (SSE, calendrier personnel) : même raison qu'inscrire() ci-dessus.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -857,6 +904,51 @@ export class ScenariosService {
       where: { id: scenario.id },
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // COMPTE_RENDU_NON_REDIGE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
+    // remplacement.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+  }
+
+  /** Informations pratiques d'une séance (Story 36.5, dérogation D-15 amendée le 2026-08-19).
+   *  Même forme que setCompteRendu : champ neutre de Seance, jamais restreint par kind ni par un
+   *  statut (Seance n'en a aucun), écriture MJ-only via getOwned.
+   *
+   *  🚨 Les trois valeurs sont écrites TELLES QUELLES. `heureRdv` n'est ni parsée, ni convertie,
+   *  ni comparée : c'est une étiquette `"HH:MM"`, dont la forme a été garantie par le DTO. La
+   *  chaîne de disponibilité continue de raisonner en créneau de journée (addendum §5.7).
+   *  `null` vide le champ — c'est le seul moyen de le faire, et il doit rester possible. */
+  async setInfosPratiques(
+    seanceId: string,
+    mjId: string,
+    dto: SetInfosPratiquesPayload,
+  ): Promise<ScenarioDto> {
+    const seance = await this.prisma.seance.findUnique({
+      where: { id: seanceId },
+    });
+    if (!seance) throw new NotFoundException('Séance introuvable');
+    const scenario = await resolveScenarioOrThrow(
+      this.prisma,
+      seance.scenarioId,
+    );
+    const partie = await this.parties.getOwned(scenario.partieId, mjId);
+
+    // Un seul update pour les trois champs : ils sont saisis ensemble.
+    await this.prisma.seance.update({
+      where: { id: seanceId },
+      data: {
+        heureRdv: dto.heureRdv,
+        lieu: dto.lieu,
+        notePratique: dto.notePratique,
+      },
+    });
+
+    const updated = await this.prisma.scenario.findUniqueOrThrow({
+      where: { id: scenario.id },
+    });
+    this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // Pas de notifyPartieSignalsChanged ici : contrairement au compte-rendu, l'absence
+    // d'informations pratiques n'est PAS un manquement et ne porte aucun signal (AC4).
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -887,6 +979,9 @@ export class ScenariosService {
     });
 
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    // RAPPORT_FIN_MANQUANT (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
+    // remplacement.
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -986,7 +1081,11 @@ const SEANCE_INCLUDE = {
   poll: {
     include: {
       options: {
-        include: { votes: { include: { user: { select: { pseudo: true } } } } },
+        include: {
+          votes: {
+            include: { user: { select: { pseudo: true, displayName: true } } },
+          },
+        },
       },
     },
   },
@@ -999,7 +1098,9 @@ const SEANCE_INCLUDE = {
   },
 } as const;
 
-function toSessionPollDto(poll: any): SessionPollDto {
+/** Story 36.6 — `membersCount` arrive en paramètre : c'est une propriété de la PARTIE, calculée
+ *  UNE fois par appel par `countParticipants()` (jamais une par séance ni par sondage, AD-3). */
+function toSessionPollDto(poll: any, membersCount: number): SessionPollDto {
   return {
     id: poll.id,
     partieId: poll.partieId,
@@ -1008,6 +1109,7 @@ function toSessionPollDto(poll: any): SessionPollDto {
     expiresAt: poll.expiresAt?.toISOString() ?? null,
     chosenDate: poll.chosenDate?.toISOString() ?? null,
     chosenSlot: poll.chosenSlot,
+    membersCount,
     options: (poll.options ?? []).map((opt: any) => ({
       id: opt.id,
       date: opt.date.toISOString(),
@@ -1015,17 +1117,26 @@ function toSessionPollDto(poll: any): SessionPollDto {
       votes: (opt.votes ?? []).map((v: any) => ({
         userId: v.userId,
         pseudo: v.user.pseudo,
+        displayName: v.user.displayName,
         answer: v.answer,
       })),
     })),
   };
 }
 
-function toSeanceDto(seance: any): SeanceDto {
+/** Forme du payload accepté par setInfosPratiques (Story 36.5). Miroir de `SetInfosPratiquesDto`
+ *  côté shared ; les trois champs sont saisis ensemble et `null` vide le champ. */
+export interface SetInfosPratiquesPayload {
+  heureRdv: string | null;
+  lieu: string | null;
+  notePratique: string | null;
+}
+
+function toSeanceDto(seance: any, membersCount: number): SeanceDto {
   return {
     id: seance.id,
     scenarioId: seance.scenarioId,
-    poll: seance.poll ? toSessionPollDto(seance.poll) : undefined,
+    poll: seance.poll ? toSessionPollDto(seance.poll, membersCount) : undefined,
     inscription:
       seance.inscriptionMax != null
         ? {
@@ -1041,6 +1152,11 @@ function toSeanceDto(seance: any): SeanceDto {
           }
         : undefined,
     compteRendu: seance.compteRendu,
+    // Story 36.5 — rendus tels quels. `heureRdv` reste une CHAÎNE : aucun new Date(), aucun
+    // formatage, aucun tri. Le client l'affiche, il ne la calcule pas.
+    heureRdv: seance.heureRdv ?? null,
+    lieu: seance.lieu ?? null,
+    notePratique: seance.notePratique ?? null,
     createdAt: seance.createdAt.toISOString(),
   };
 }
@@ -1071,6 +1187,7 @@ async function resolveScenarioOrThrow(
 async function loadSeancesBatch(
   prisma: PrismaService,
   scenarioIds: string[],
+  membersCount: number,
 ): Promise<Map<string, SeanceDto[]>> {
   const seances = await prisma.seance.findMany({
     where: { scenarioId: { in: scenarioIds } },
@@ -1080,7 +1197,7 @@ async function loadSeancesBatch(
   const byScenario = new Map<string, SeanceDto[]>();
   for (const s of seances) {
     const list = byScenario.get(s.scenarioId) ?? [];
-    list.push(toSeanceDto(s));
+    list.push(toSeanceDto(s, membersCount));
     byScenario.set(s.scenarioId, list);
   }
   return byScenario;
@@ -1089,8 +1206,9 @@ async function loadSeancesBatch(
 async function loadSeances(
   prisma: PrismaService,
   scenarioId: string,
+  membersCount: number,
 ): Promise<SeanceDto[]> {
-  const byScenario = await loadSeancesBatch(prisma, [scenarioId]);
+  const byScenario = await loadSeancesBatch(prisma, [scenarioId], membersCount);
   return byScenario.get(scenarioId) ?? [];
 }
 
@@ -1104,7 +1222,11 @@ async function toEnrichedDto(
   scenario: any,
   partieKind: PartieKind,
 ): Promise<ScenarioDto> {
-  const seances = await loadSeances(prisma, scenario.id);
+  // Story 36.6 — l'effectif est dérivé de `scenario.partieId`, déjà chargé, plutôt que threadé
+  // depuis les 18 points d'appel : un paramètre de plus sur chacun n'aurait rien garanti de plus
+  // et aurait multiplié les occasions de l'oublier. Un seul comptage par appel.
+  const membersCount = await countParticipants(prisma, scenario.partieId);
+  const seances = await loadSeances(prisma, scenario.id, membersCount);
   if (partieKind !== 'CAMPAGNE_EPISODIQUE') {
     const retrospectiveNotes = await loadRetrospectiveNotes(
       prisma,

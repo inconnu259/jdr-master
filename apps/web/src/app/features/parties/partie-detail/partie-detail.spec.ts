@@ -27,10 +27,12 @@ import { AvailabilityService } from '../../../core/availability/availability.ser
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
 import { MatDialog } from '@angular/material/dialog';
 import { TONE_MAP } from '../../../core/theme/tones';
+import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 
 // Story 18.3 : PartieDetail injecte désormais RealtimeService (providedIn: 'root', non fourni par
 // aucune des configurations TestBed de ce fichier — Angular l'auto-construit réellement partout).
@@ -84,7 +86,13 @@ function wrapPollsAsScenarios(polls: SessionPollDto[]): any[] {
     createdAt: '',
     closedAt: null,
     seances: [
-      { id: `seance-${poll.id}`, scenarioId: `s-${poll.id}`, compteRendu: null, createdAt: '', poll },
+      {
+        id: `seance-${poll.id}`,
+        scenarioId: `s-${poll.id}`,
+        compteRendu: null,
+        createdAt: '',
+        poll,
+      },
     ],
   }));
 }
@@ -127,6 +135,9 @@ function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
     nextSessionDate: null,
     nextSessionSlot: null,
     role: 'mj',
+    status: 'EN_COURS',
+    isFavorite: false,
+    coverImageVersion: null,
     ...overrides,
   };
 }
@@ -168,6 +179,8 @@ function makePartiesService(
     createInviteLink: vi.fn(),
     revokeInviteLink: vi.fn(),
     remove: vi.fn(),
+    close: vi.fn().mockResolvedValue({ ...partie, status: 'TERMINEE' }),
+    reopen: vi.fn().mockResolvedValue({ ...partie, status: 'EN_COURS' }),
     listXpDistributions: vi.fn().mockResolvedValue([]),
     createXpDistribution: vi.fn(),
     changed,
@@ -182,10 +195,13 @@ interface CreateFixtureOptions {
   characters?: CharacterDto[];
   links?: InviteLinkDto[];
   announcements?: AnnouncementDto[];
+  unseenAnnouncementIds?: string[];
+  markAnnouncementRead?: ReturnType<typeof vi.fn>;
   characterRoles?: CharacterGroupRoleDto[];
   noopAnimations?: boolean;
   desktop?: boolean;
   displayName?: string;
+  announcementIdQueryParam?: string;
 }
 
 async function createFixture(
@@ -200,14 +216,25 @@ async function createFixture(
       // MatTabGroup anime le changement d'onglet via le Web Animations API, non fiable en jsdom —
       // les tests qui doivent naviguer entre onglets utilisent le mode noop pour un rendu synchrone.
       options.noopAnimations ? provideNoopAnimations() : provideAnimationsAsync(),
-      { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => partie.id } } } },
+      {
+        provide: ActivatedRoute,
+        useValue: {
+          snapshot: {
+            paramMap: { get: () => partie.id },
+            queryParamMap: { get: () => options.announcementIdQueryParam ?? null },
+          },
+        },
+      },
       { provide: AuthService, useValue: makeAuthService(currentUserId, options.displayName) },
       {
         provide: PartiesService,
         useValue: makePartiesService(partie, options.members ?? [], options.links ?? []),
       },
       { provide: BreakpointObserver, useValue: makeBreakpointObserver(options.desktop ?? true) },
-      { provide: MyPartiesService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
+      {
+        provide: MyPartiesService,
+        useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) },
+      },
       { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
       {
         provide: CharacterService,
@@ -235,6 +262,17 @@ async function createFixture(
           listAll: vi.fn().mockResolvedValue(options.announcements ?? []),
           // Bug fix (temps réel) : PartieDetail réagit désormais à ce signal (annonces).
           changed: signal(0),
+        },
+      },
+      {
+        provide: UnseenAnnouncementsService,
+        useValue: {
+          unseenAnnouncements: signal(
+            (options.announcements ?? []).filter((a) =>
+              (options.unseenAnnouncementIds ?? []).includes(a.id),
+            ),
+          ),
+          markRead: options.markAnnouncementRead ?? vi.fn().mockResolvedValue(undefined),
         },
       },
       {
@@ -303,7 +341,7 @@ describe('PartieDetail — widget de planification', () => {
     expect(dateEl).toBeTruthy();
     const text = dateEl!.textContent ?? '';
     expect(text).toContain('août');
-    expect(text).toContain('Soirée');
+    expect(text).toContain('Soir');
     expect(text).toContain('15');
   });
 
@@ -329,7 +367,13 @@ describe('PartieDetail — statut du vote', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   const members: PartieMemberDto[] = [
-    { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@test.com', joinedAt: '' },
+    {
+      userId: 'u1',
+      pseudo: 'Alice',
+      displayName: 'Alice au pays',
+      email: 'alice@test.com',
+      joinedAt: '',
+    },
     { userId: 'u2', pseudo: 'Bob', displayName: 'Bobby', email: 'bob@test.com', joinedAt: '' },
   ];
 
@@ -342,6 +386,8 @@ describe('PartieDetail — statut du vote', () => {
       expiresAt: null,
       chosenDate: null,
       chosenSlot: null,
+      // Story 36.6 — effectif de la troupe (MJ + membres).
+      membersCount: 4,
       options: [
         {
           id: 'opt1',
@@ -358,11 +404,15 @@ describe('PartieDetail — statut du vote', () => {
     };
   }
 
-  it('affiche la ligne de statut X/Y quand un poll OPEN existe', async () => {
+  it('affiche la ligne de statut X/Y quand un poll OPEN existe — Y = poll.membersCount (MJ compris, deferred-work 2026-08-24)', async () => {
     const { el } = await createFixture(makePartie(), MJ_ID, { members, poll: makePoll(['u1']) });
     const line = el.querySelector('.poll-status-line');
     expect(line).toBeTruthy();
-    expect(line!.textContent).toContain('1/2');
+    // `members` ne porte que 2 entrées (le MJ n'a jamais de ligne Membership), mais
+    // `makePoll().membersCount` vaut 4 (MJ compris, valeur serveur) — le Y affiché suit
+    // membersCount, pas members().length, sous peine de reproduire le bug à deux dénominateurs
+    // que la 36.6 a déjà corrigé côté calendrier (panneau `poll-status`).
+    expect(line!.textContent).toContain('1/4');
   });
 
   it("n'affiche pas la ligne de statut si aucun poll OPEN n'existe", async () => {
@@ -470,7 +520,13 @@ describe('PartieDetail — roster (Story 6.1)', () => {
 
   const members: PartieMemberDto[] = [
     { userId: MJ_ID, pseudo: 'Sylas', displayName: 'Sylas', email: 'sylas@test.com', joinedAt: '' },
-    { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@test.com', joinedAt: '' },
+    {
+      userId: PLAYER_ID,
+      pseudo: 'Alice',
+      displayName: 'Alice au pays',
+      email: 'alice@test.com',
+      joinedAt: '',
+    },
   ];
 
   it('desktop → affiche app-roster-rail, pas app-roster-strip', async () => {
@@ -532,12 +588,23 @@ describe('PartieDetail — roster (Story 6.1)', () => {
       providers: [
         provideRouter([]),
         provideNoopAnimations(),
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => 'party-1' } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              paramMap: { get: () => 'party-1' },
+              queryParamMap: { get: () => null },
+            },
+          },
+        },
         { provide: AuthService, useValue: makeAuthService(PLAYER_ID) },
         { provide: PartiesService, useValue: makePartiesService(makePartie(), members, []) },
         { provide: BreakpointObserver, useValue: dynamicBreakpointObserver },
-        { provide: MyPartiesService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
-      { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
+        {
+          provide: MyPartiesService,
+          useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) },
+        },
+        { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
           provide: CharacterService,
           useValue: {
@@ -548,8 +615,14 @@ describe('PartieDetail — roster (Story 6.1)', () => {
         },
         { provide: ThemeToneService, useValue: makeToneService() },
         { provide: ScenariosService, useValue: makeScenariosService() },
-        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) } },
-        { provide: CharacterRolesService, useValue: { listForPartie: vi.fn().mockResolvedValue([]), changed: signal(0) } },
+        {
+          provide: AnnouncementsService,
+          useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) },
+        },
+        {
+          provide: CharacterRolesService,
+          useValue: { listForPartie: vi.fn().mockResolvedValue([]), changed: signal(0) },
+        },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();
@@ -638,8 +711,20 @@ describe('PartieDetail — invitations', () => {
 
   it('le MJ peut retirer un membre depuis la liste "Membres actuels" de l\'onglet Invitations', async () => {
     const members: PartieMemberDto[] = [
-      { userId: MJ_ID, pseudo: 'Sylas', displayName: 'Sylas', email: 'sylas@test.com', joinedAt: '' },
-      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@test.com', joinedAt: '' },
+      {
+        userId: MJ_ID,
+        pseudo: 'Sylas',
+        displayName: 'Sylas',
+        email: 'sylas@test.com',
+        joinedAt: '',
+      },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Alice au pays',
+        email: 'alice@test.com',
+        joinedAt: '',
+      },
     ];
     const { fixture, el } = await createFixture(makePartie(), MJ_ID, {
       members,
@@ -913,6 +998,115 @@ describe('PartieDetail — consultation des annonces « toute la campagne » (St
   });
 });
 
+describe('PartieDetail — marquage « vue » des annonces de campagne sur clic explicite (Story 29.13, révision)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it("une annonce non vue affichée n'appelle jamais markRead() tant qu'elle n'est pas cliquée", async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [makeAnnouncementDto({ id: 'ann-non-vue', text: 'Non vue' })];
+    const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+
+    await createFixture(partie, MJ_ID, {
+      announcements,
+      unseenAnnouncementIds: ['ann-non-vue'],
+      markAnnouncementRead,
+    });
+
+    expect(markAnnouncementRead).not.toHaveBeenCalled();
+  });
+
+  it('un clic sur une annonce non vue déclenche markRead() avec le bon id', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [makeAnnouncementDto({ id: 'ann-non-vue', text: 'Non vue' })];
+    const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+
+    const { fixture, el } = await createFixture(partie, MJ_ID, {
+      announcements,
+      unseenAnnouncementIds: ['ann-non-vue'],
+      markAnnouncementRead,
+    });
+
+    el.querySelector('app-annonce-card article')?.dispatchEvent(new Event('click'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(markAnnouncementRead).toHaveBeenCalledWith('ann-non-vue');
+  });
+
+  it('un clic sur une annonce déjà vue (absente des non-vues) ne déclenche aucun appel', async () => {
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [makeAnnouncementDto({ id: 'ann-deja-vue', text: 'Déjà vue' })];
+    const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
+
+    const { fixture, el } = await createFixture(partie, MJ_ID, {
+      announcements,
+      unseenAnnouncementIds: [],
+      markAnnouncementRead,
+    });
+
+    el.querySelector('app-annonce-card article')?.dispatchEvent(new Event('click'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(markAnnouncementRead).not.toHaveBeenCalled();
+  });
+});
+
+describe('PartieDetail — arrivée depuis le bandeau du Shell (Story 29.13, révision du 2026-08-13)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('force l\'onglet "Détails" même quand un autre onglet serait sélectionné par défaut (joueur mobile)', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [makeAnnouncementDto({ id: 'ann-cible', scenarioId: null })];
+
+    const { fixture } = await createFixture(partie, 'player-1', {
+      announcements,
+      unseenAnnouncementIds: ['ann-cible'],
+      announcementIdQueryParam: 'ann-cible',
+      desktop: false, // sans forçage, un joueur mobile atterrit sur "Ma fiche" (index 1)
+      noopAnimations: true,
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect((fixture.componentInstance as any).selectedTabIndex()).toBe(0);
+  });
+
+  it("fait défiler jusqu'à l'AnnonceCard visée et la met en évidence", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const announcements = [makeAnnouncementDto({ id: 'ann-cible', scenarioId: null })];
+
+    const { fixture, el } = await createFixture(partie, MJ_ID, {
+      announcements,
+      unseenAnnouncementIds: ['ann-cible'],
+      announcementIdQueryParam: 'ann-cible',
+      noopAnimations: true,
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    // scrollToAnnouncement() retente via requestAnimationFrame jusqu'à trouver l'élément.
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+
+    const target = el.querySelector('#announcement-ann-cible');
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+    expect(target?.classList.contains('annonce-card--highlight')).toBe(true);
+  });
+
+  it("n'interfère pas quand aucun announcementId n'est présent dans l'URL", async () => {
+    const scrollSpy = vi.fn();
+    Element.prototype.scrollIntoView = scrollSpy;
+    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+
+    await createFixture(partie, MJ_ID, { noopAnimations: true });
+
+    expect(scrollSpy).not.toHaveBeenCalled();
+  });
+});
+
 describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
@@ -1077,7 +1271,7 @@ describe('PartieDetail — fiches de référence (Story 12.1)', () => {
     expect(characterSvc.getGameSystemAsset).toHaveBeenCalledWith(partie.id, 'ryuutama', 'carte');
   });
 
-  it('échec du téléchargement → message d\'erreur affiché, pas de plantage', async () => {
+  it("échec du téléchargement → message d'erreur affiché, pas de plantage", async () => {
     const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID);
     const characterSvc = TestBed.inject(CharacterService) as any;
@@ -1154,20 +1348,23 @@ describe('PartieDetail — fiches de préparation MJ-only (Story 12.2)', () => {
     ['objectif-voyage', 5],
     ['oeuf-de-bataille', 6],
     ['structure', 7],
-  ])('clic sur le lien #%s (index %i) → appelle getGameSystemAsset(partieId, "ryuutama", "%s")', async (key, index) => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
-    const { fixture, el } = await createFixture(partie, MJ_ID);
-    const characterSvc = TestBed.inject(CharacterService) as any;
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
+  ])(
+    'clic sur le lien #%s (index %i) → appelle getGameSystemAsset(partieId, "ryuutama", "%s")',
+    async (key, index) => {
+      const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+      const { fixture, el } = await createFixture(partie, MJ_ID);
+      const characterSvc = TestBed.inject(CharacterService) as any;
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
 
-    const buttons = el.querySelectorAll<HTMLButtonElement>('.prep-sheets__links button');
-    buttons[index as number].click();
-    await Promise.resolve();
-    await Promise.resolve();
-    fixture.detectChanges();
+      const buttons = el.querySelectorAll<HTMLButtonElement>('.prep-sheets__links button');
+      buttons[index as number].click();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
 
-    expect(characterSvc.getGameSystemAsset).toHaveBeenCalledWith(partie.id, 'ryuutama', key);
-  });
+      expect(characterSvc.getGameSystemAsset).toHaveBeenCalledWith(partie.id, 'ryuutama', key);
+    },
+  );
 });
 
 describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', () => {
@@ -1199,12 +1396,23 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
       providers: [
         provideRouter([]),
         provideAnimationsAsync(),
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => initial.id } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              paramMap: { get: () => initial.id },
+              queryParamMap: { get: () => null },
+            },
+          },
+        },
         { provide: AuthService, useValue: makeAuthService(MJ_ID) },
         { provide: PartiesService, useValue: partiesSvc },
         { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
-        { provide: MyPartiesService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
-      { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
+        {
+          provide: MyPartiesService,
+          useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) },
+        },
+        { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
           provide: CharacterService,
           useValue: {
@@ -1215,7 +1423,10 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         },
         { provide: ThemeToneService, useValue: makeToneService() },
         { provide: ScenariosService, useValue: makeScenariosService([]) },
-        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) } },
+        {
+          provide: AnnouncementsService,
+          useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) },
+        },
         {
           provide: HommeDragonService,
           useValue: {
@@ -1226,7 +1437,10 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
             changed: signal(0),
           },
         },
-        { provide: CharacterRolesService, useValue: { listForPartie: vi.fn().mockResolvedValue([]), changed: signal(0) } },
+        {
+          provide: CharacterRolesService,
+          useValue: { listForPartie: vi.fn().mockResolvedValue([]), changed: signal(0) },
+        },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();
@@ -1241,9 +1455,9 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
     fixture.detectChanges();
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(Array.from(el.querySelectorAll('div[role="tab"]')).map((t) => t.textContent?.trim())).not.toContain(
-      'Homme Dragon',
-    );
+    expect(
+      Array.from(el.querySelectorAll('div[role="tab"]')).map((t) => t.textContent?.trim()),
+    ).not.toContain('Homme Dragon');
 
     // Revue de code Story 18.3 : déclenche un vrai événement SSE (pas un appel direct à
     // notifyChanged()) — exerce la chaîne complète EventSource -> RealtimeService.onSignal ->
@@ -1260,15 +1474,17 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
     fixture.detectChanges();
 
     expect(partiesSvc.get).toHaveBeenCalledTimes(2);
-    expect(Array.from(el.querySelectorAll('div[role="tab"]')).map((t) => t.textContent?.trim())).toContain(
-      'Homme Dragon',
-    );
+    expect(
+      Array.from(el.querySelectorAll('div[role="tab"]')).map((t) => t.textContent?.trim()),
+    ).toContain('Homme Dragon');
   });
 
   it('AC2 : le patch visibilitychange est retiré — un dispatch manuel ne déclenche plus aucun rechargement', async () => {
     const initial = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
     const { fixture, el } = await createFixture(initial, MJ_ID);
-    const partiesSvcSpy = TestBed.inject(PartiesService) as unknown as { get: ReturnType<typeof vi.fn> };
+    const partiesSvcSpy = TestBed.inject(PartiesService) as unknown as {
+      get: ReturnType<typeof vi.fn>;
+    };
     const callsBefore = partiesSvcSpy.get.mock.calls.length;
 
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
@@ -1375,18 +1591,29 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
     expect(comp.characterRoles()).toEqual([role]);
   });
 
-  it("garde firstRun : un CharacterService.changed() déjà non-nul au montage ne déclenche PAS de refetch redondant", async () => {
+  it('garde firstRun : un CharacterService.changed() déjà non-nul au montage ne déclenche PAS de refetch redondant', async () => {
     const initial = makePartie({ mjId: MJ_ID });
     await TestBed.configureTestingModule({
       imports: [PartieDetail],
       providers: [
         provideRouter([]),
         provideAnimationsAsync(),
-        { provide: ActivatedRoute, useValue: { snapshot: { paramMap: { get: () => initial.id } } } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              paramMap: { get: () => initial.id },
+              queryParamMap: { get: () => null },
+            },
+          },
+        },
         { provide: AuthService, useValue: makeAuthService(MJ_ID) },
         { provide: PartiesService, useValue: makePartiesService(initial) },
         { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
-        { provide: MyPartiesService, useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) } },
+        {
+          provide: MyPartiesService,
+          useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) },
+        },
         { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
         {
           provide: CharacterService,
@@ -1398,8 +1625,14 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
         },
         { provide: ThemeToneService, useValue: makeToneService() },
         { provide: ScenariosService, useValue: makeScenariosService() },
-        { provide: AnnouncementsService, useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) } },
-        { provide: CharacterRolesService, useValue: { listForPartie: vi.fn().mockResolvedValue([]), changed: signal(0) } },
+        {
+          provide: AnnouncementsService,
+          useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) },
+        },
+        {
+          provide: CharacterRolesService,
+          useValue: { listForPartie: vi.fn().mockResolvedValue([]), changed: signal(0) },
+        },
         { provide: MatDialog, useValue: { open: vi.fn() } },
       ],
     }).compileComponents();
@@ -1441,7 +1674,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
 
 // ─── Alerte d'homonymie (Story 28.3, AC1/AC2) ─────────────────────────────
 
-describe('PartieDetail — alerte d\'homonymie', () => {
+describe("PartieDetail — alerte d'homonymie", () => {
   afterEach(() => {
     TestBed.resetTestingModule();
     sessionStorage.clear();
@@ -1449,8 +1682,20 @@ describe('PartieDetail — alerte d\'homonymie', () => {
 
   it('deux membres avec le même displayName → avertissement visible (AC1)', async () => {
     const members: PartieMemberDto[] = [
-      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'a@test.com', joinedAt: '' },
-      { userId: 'other', pseudo: 'Bob', displayName: 'Même Nom', email: 'b@test.com', joinedAt: '' },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Même Nom',
+        email: 'a@test.com',
+        joinedAt: '',
+      },
+      {
+        userId: 'other',
+        pseudo: 'Bob',
+        displayName: 'Même Nom',
+        email: 'b@test.com',
+        joinedAt: '',
+      },
     ];
     const { el } = await createFixture(makePartie(), PLAYER_ID, {
       members,
@@ -1461,8 +1706,20 @@ describe('PartieDetail — alerte d\'homonymie', () => {
 
   it("Revue de code : le bandeau porte role=alert et aria-live=polite (annoncé aux lecteurs d'écran)", async () => {
     const members: PartieMemberDto[] = [
-      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'a@test.com', joinedAt: '' },
-      { userId: 'other', pseudo: 'Bob', displayName: 'Même Nom', email: 'b@test.com', joinedAt: '' },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Même Nom',
+        email: 'a@test.com',
+        joinedAt: '',
+      },
+      {
+        userId: 'other',
+        pseudo: 'Bob',
+        displayName: 'Même Nom',
+        email: 'b@test.com',
+        joinedAt: '',
+      },
     ];
     const { el } = await createFixture(makePartie(), PLAYER_ID, {
       members,
@@ -1476,7 +1733,13 @@ describe('PartieDetail — alerte d\'homonymie', () => {
   it('le displayName du joueur courant identique à celui du MJ (absent de members()) → avertissement visible (AC1)', async () => {
     const partie = makePartie({ mjId: MJ_ID, mjDisplayName: 'Même Nom' });
     const members: PartieMemberDto[] = [
-      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'a@test.com', joinedAt: '' },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Même Nom',
+        email: 'a@test.com',
+        joinedAt: '',
+      },
     ];
     const { el } = await createFixture(partie, PLAYER_ID, {
       members,
@@ -1487,7 +1750,13 @@ describe('PartieDetail — alerte d\'homonymie', () => {
 
   it('aucun homonyme → aucun avertissement', async () => {
     const members: PartieMemberDto[] = [
-      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Alice', email: 'a@test.com', joinedAt: '' },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Alice',
+        email: 'a@test.com',
+        joinedAt: '',
+      },
       { userId: 'other', pseudo: 'Bob', displayName: 'Bob', email: 'b@test.com', joinedAt: '' },
     ];
     const { el } = await createFixture(makePartie(), PLAYER_ID, {
@@ -1499,8 +1768,20 @@ describe('PartieDetail — alerte d\'homonymie', () => {
 
   it('clic "Ignorer" → l\'avertissement disparaît et sessionStorage est écrit avec la bonne clé (AC2)', async () => {
     const members: PartieMemberDto[] = [
-      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'a@test.com', joinedAt: '' },
-      { userId: 'other', pseudo: 'Bob', displayName: 'Même Nom', email: 'b@test.com', joinedAt: '' },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Même Nom',
+        email: 'a@test.com',
+        joinedAt: '',
+      },
+      {
+        userId: 'other',
+        pseudo: 'Bob',
+        displayName: 'Même Nom',
+        email: 'b@test.com',
+        joinedAt: '',
+      },
     ];
     const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
       members,
@@ -1520,11 +1801,23 @@ describe('PartieDetail — alerte d\'homonymie', () => {
     expect(sessionStorage.getItem(`homonymy-dismissed:party-1:${PLAYER_ID}`)).toBe('1');
   });
 
-  it('rechargement avec la clé déjà en sessionStorage → avertissement absent même si l\'homonymie existe (AC2)', async () => {
+  it("rechargement avec la clé déjà en sessionStorage → avertissement absent même si l'homonymie existe (AC2)", async () => {
     sessionStorage.setItem(`homonymy-dismissed:party-1:${PLAYER_ID}`, '1');
     const members: PartieMemberDto[] = [
-      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'a@test.com', joinedAt: '' },
-      { userId: 'other', pseudo: 'Bob', displayName: 'Même Nom', email: 'b@test.com', joinedAt: '' },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Même Nom',
+        email: 'a@test.com',
+        joinedAt: '',
+      },
+      {
+        userId: 'other',
+        pseudo: 'Bob',
+        displayName: 'Même Nom',
+        email: 'b@test.com',
+        joinedAt: '',
+      },
     ];
     const { el } = await createFixture(makePartie(), PLAYER_ID, {
       members,
@@ -1544,8 +1837,20 @@ describe('PartieDetail — pseudo en complément (Troupe + gestion des membres)'
     // n'apparaît donc jamais dans `members()`. Ce test doit utiliser deux joueurs réels, une
     // fixture qui y placerait le MJ testerait un état que le backend ne peut pas produire.
     const members: PartieMemberDto[] = [
-      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'alice@test.com', joinedAt: '' },
-      { userId: 'other-player', pseudo: 'Bob', displayName: 'Même Nom', email: 'bob@test.com', joinedAt: '' },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Même Nom',
+        email: 'alice@test.com',
+        joinedAt: '',
+      },
+      {
+        userId: 'other-player',
+        pseudo: 'Bob',
+        displayName: 'Même Nom',
+        email: 'bob@test.com',
+        joinedAt: '',
+      },
     ];
     const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
       members,
@@ -1562,7 +1867,9 @@ describe('PartieDetail — pseudo en complément (Troupe + gestion des membres)'
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const component = fixture.componentInstance as unknown as { showTroupe: WritableSignal<boolean> };
+    const component = fixture.componentInstance as unknown as {
+      showTroupe: WritableSignal<boolean>;
+    };
     component.showTroupe.set(true);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -1575,7 +1882,13 @@ describe('PartieDetail — pseudo en complément (Troupe + gestion des membres)'
   it('gestion des membres (onglet Invitations) : membres homonymes → pseudo affiché', async () => {
     // Revue de code : le MJ n'apparaît jamais dans `members()` — seuls des joueurs réels ici.
     const members: PartieMemberDto[] = [
-      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Même Nom', email: 'alice@test.com', joinedAt: '' },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Même Nom',
+        email: 'alice@test.com',
+        joinedAt: '',
+      },
       { userId: 'p2', pseudo: 'Bob', displayName: 'Même Nom', email: 'bob@test.com', joinedAt: '' },
     ];
     const { fixture, el } = await createFixture(makePartie(), MJ_ID, {
@@ -1599,8 +1912,20 @@ describe('PartieDetail — pseudo en complément (Troupe + gestion des membres)'
   it('aucune collision entre membres → aucun pseudo affiché', async () => {
     // Revue de code : le MJ n'apparaît jamais dans `members()` — seuls des joueurs réels ici.
     const members: PartieMemberDto[] = [
-      { userId: PLAYER_ID, pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@test.com', joinedAt: '' },
-      { userId: 'other-player', pseudo: 'Bob', displayName: 'Bob', email: 'bob@test.com', joinedAt: '' },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Alice au pays',
+        email: 'alice@test.com',
+        joinedAt: '',
+      },
+      {
+        userId: 'other-player',
+        pseudo: 'Bob',
+        displayName: 'Bob',
+        email: 'bob@test.com',
+        joinedAt: '',
+      },
     ];
     const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
       members,
@@ -1615,7 +1940,9 @@ describe('PartieDetail — pseudo en complément (Troupe + gestion des membres)'
     await fixture.whenStable();
     fixture.detectChanges();
 
-    const component = fixture.componentInstance as unknown as { showTroupe: WritableSignal<boolean> };
+    const component = fixture.componentInstance as unknown as {
+      showTroupe: WritableSignal<boolean>;
+    };
     component.showTroupe.set(true);
     fixture.detectChanges();
     await fixture.whenStable();
@@ -1634,5 +1961,125 @@ describe('PartieDetail — pseudo en complément (Troupe + gestion des membres)'
     const badge = el.querySelector('.announcements-feed .annonce-card__mj-badge');
     expect(badge).toBeTruthy();
     expect(badge!.textContent?.trim()).toBe('MJ');
+  });
+});
+
+describe('PartieDetail — bandeau contextuel (Story 29.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('le sous-titre porte le système de jeu et le type de partie (correction post-test)', async () => {
+    const partie = makePartie({
+      mjId: MJ_ID,
+      name: 'Les Cendres de Kavaan',
+      gameSystemId: 'draconis',
+      kind: 'ONE_SHOT',
+    });
+    await createFixture(partie, MJ_ID);
+
+    const contextualNav = TestBed.inject(ContextualNavService);
+    expect(contextualNav.title()).toBe('Les Cendres de Kavaan');
+    expect(contextualNav.subtitle()).toBe('Draconis · One-shot');
+  });
+
+  it('le sous-titre est identique pour le MJ et pour un joueur (plus de rôle dans le bandeau)', async () => {
+    const partie = makePartie({
+      mjId: MJ_ID,
+      name: 'Les Cendres de Kavaan',
+      gameSystemId: 'draconis',
+      kind: 'ONE_SHOT',
+    });
+    await createFixture(partie, PLAYER_ID);
+
+    const contextualNav = TestBed.inject(ContextualNavService);
+    expect(contextualNav.title()).toBe('Les Cendres de Kavaan');
+    expect(contextualNav.subtitle()).toBe('Draconis · One-shot');
+  });
+});
+
+// ─── Clôture explicite d'une partie (Story 29.6) ──────────────────────────
+
+describe('PartieDetail — clôture explicite (Story 29.6)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('le MJ voit le bouton "Clôturer" quand status !== TERMINEE, jamais "Rouvrir"', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const { el } = await createFixture(partie, MJ_ID);
+    const actions = el.querySelector('mat-card-actions');
+    expect(actions!.textContent).toContain('Clore le grimoire');
+    expect(actions!.textContent).not.toContain('Rouvrir le grimoire');
+  });
+
+  it('le MJ voit le bouton "Rouvrir" quand status === TERMINEE, jamais "Clôturer"', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'TERMINEE' });
+    const { el } = await createFixture(partie, MJ_ID);
+    const actions = el.querySelector('mat-card-actions');
+    expect(actions!.textContent).toContain('Rouvrir le grimoire');
+    expect(actions!.textContent).not.toContain('Clore le grimoire');
+  });
+
+  it('un joueur ne voit ni le bouton "Clôturer" ni "Rouvrir" (actions MJ-only)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+    const actions = el.querySelector('mat-card-actions');
+    expect(actions?.textContent ?? '').not.toContain('Clore le grimoire');
+    expect(actions?.textContent ?? '').not.toContain('Rouvrir le grimoire');
+  });
+
+  it('clic sur "Clôturer" appelle PartiesService.close et met à jour partie() avec la réponse', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const { fixture, el } = await createFixture(partie, MJ_ID);
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      close: ReturnType<typeof vi.fn>;
+    };
+
+    const buttons = Array.from(el.querySelectorAll('mat-card-actions button'));
+    const closeBtn = buttons.find((b) => b.textContent?.includes('Clore le grimoire')) as
+      | HTMLButtonElement
+      | undefined;
+    expect(closeBtn).toBeTruthy();
+    closeBtn!.click();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(parties.close).toHaveBeenCalledWith('party-1');
+    const component = fixture.componentInstance;
+    expect((component as unknown as { partie: () => { status: string } }).partie().status).toBe(
+      'TERMINEE',
+    );
+  });
+
+  it('clic sur "Rouvrir" appelle PartiesService.reopen et met à jour partie() avec la réponse', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'TERMINEE' });
+    const { fixture, el } = await createFixture(partie, MJ_ID);
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      reopen: ReturnType<typeof vi.fn>;
+    };
+
+    const buttons = Array.from(el.querySelectorAll('mat-card-actions button'));
+    const reopenBtn = buttons.find((b) => b.textContent?.includes('Rouvrir le grimoire')) as
+      | HTMLButtonElement
+      | undefined;
+    expect(reopenBtn).toBeTruthy();
+    reopenBtn!.click();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(parties.reopen).toHaveBeenCalledWith('party-1');
+    const component = fixture.componentInstance;
+    expect((component as unknown as { partie: () => { status: string } }).partie().status).toBe(
+      'EN_COURS',
+    );
+  });
+
+  it('le bandeau "partie terminée" est visible pour un joueur (pas seulement le MJ) quand status === TERMINEE', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'TERMINEE' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+    expect(el.querySelector('.closed-banner')).toBeTruthy();
+  });
+
+  it('le bandeau "partie terminée" est absent quand status !== TERMINEE', async () => {
+    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const { el } = await createFixture(partie, MJ_ID);
+    expect(el.querySelector('.closed-banner')).toBeFalsy();
   });
 });

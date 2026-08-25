@@ -1,7 +1,7 @@
 .head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 1rem;
 }
 .empty {
@@ -14,10 +14,150 @@
   gap: 1rem;
   margin-top: 1rem;
 }
+// Densité d'affichage (Story 29.9, AC1 — DESIGN.md §4.1 : ~2 tuiles/écran mobile en grande
+// vignette, ~4-5 en moyen, ~12 en liste). Les modes grand et moyen partagent le gabarit carte ;
+// le mode liste a son PROPRE gabarit (`.row`, cf. dashboard.html) — §7.7 « ne pas » l'exige
+// explicitement, une carte rétrécie n'est pas une liste. Sur mobile `.grid` reste à une colonne :
+// c'est donc la HAUTEUR de l'élément, pas la largeur des colonnes, qui fait la densité.
+.grid--large {
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: 1.25rem;
+}
+.grid--large .tile mat-card-header {
+  padding: 1.1rem 1.25rem 0;
+}
+.grid--large .tile mat-card-title {
+  font-size: 1.25rem;
+}
+.grid--large .tile mat-card-subtitle {
+  font-size: 1rem;
+}
+.grid--large .tile .signal-badges {
+  padding: 0.5rem 1.25rem 1.1rem;
+}
+.grid--large .tile .signal-badge {
+  font-size: 0.95em;
+  padding: 0.25rem 0.7rem;
+}
+
+.grid--medium {
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+
+// ── Mode liste (AC1) : une ligne par partie, pleine largeur, cadre unique ────────────────────
+// Gabarit repris de la direction B de la maquette `directions-liste-parties.html` : pastille
+// d'état, vignette atténuée + monogramme (Story 29.10), texte, compteur unique.
+.grid--compact {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--mat-sys-outline-variant, #ccc);
+  cursor: pointer;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: var(--mat-sys-surface-container-high, rgba(0, 0, 0, 0.04));
+  }
+}
+.row--closed {
+  opacity: 0.8;
+}
+.row__dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--mat-sys-outline-variant, #ccc);
+}
+// Les 4 mêmes teintes que la bande verticale des cartes (DESIGN.md §7.2 : « équivalent exact »).
+.row__dot--awaiting {
+  background: var(--jdr-status-todo, #f0a030);
+}
+.row__dot--live {
+  background: var(--jdr-status-live, #3fd4ff);
+}
+.row__dot--soon {
+  background: var(--jdr-status-soon, #ff7ad9);
+}
+.row__dot--closed {
+  background: var(--jdr-status-done, #5a5a6a);
+}
+// Vignette atténuée + monogramme (Story 29.10) — s'intercale entre la pastille d'état et le
+// texte, sans faire grandir la ligne : 28 px est plus bas que la hauteur de deux lignes de texte.
+.row__vignette {
+  flex: none;
+}
+.row__txt {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+// Nom et sous-ligne tronqués, jamais enroulés : une ligne par partie est ce qui fait la densité.
+.row__name {
+  font-weight: 500;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row__sub {
+  font-size: 0.75rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+// Compteur unique (§4.1 bis) — porte son propre aria-label, le nombre nu ne dit rien seul.
+.row__count {
+  flex: none;
+  min-width: 1.25rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 1rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-align: center;
+  background: color-mix(in srgb, var(--jdr-status-todo, #f0a030) 20%, transparent);
+  border: 1px solid var(--jdr-status-todo, #f0a030);
+}
 .tile {
   cursor: pointer;
+  overflow: hidden; // la bannière du mode grand doit épouser les coins arrondis de la carte
 }
-.role-indicator {
+// En-tête de tuile : la vignette 44 px du mode moyen se pose à gauche du titre (Story 29.10).
+// En mode grand, ce conteneur n'a qu'un enfant et se comporte comme avant.
+.tile__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+.tile__head mat-card-header {
+  flex: 1;
+  min-width: 0;
+}
+.tile__vignette {
+  margin: 1rem 0 0 1rem;
+}
+// Story 29.6 (AC5) : « en retrait » — teinte --jdr-status-done (Story 29.0) en accent de bord,
+// doublée du signal non chromatique .status-indicator ci-dessous (jamais la couleur seule).
+.tile--closed {
+  border-left: 3px solid var(--jdr-status-done, #5a5a6a);
+  opacity: 0.8;
+}
+.role-indicator,
+.status-indicator {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
@@ -28,4 +168,99 @@
   font-size: 1rem;
   width: 1rem;
   height: 1rem;
+}
+
+// Story 29.7 (AC8) : teinte --jdr-status-todo (Story 29.0) pour une partie qui réclame une
+// action — même principe que .tile--closed (bord + opacité), jamais la couleur seule (doublée
+// des badges .signal-badge ci-dessous, qui portent toujours une icône + un libellé).
+.tile--awaiting {
+  border-left: 3px solid var(--jdr-status-todo, #f0a030);
+}
+
+// Bug fix (revue utilisateur post-29.7) : StateRail (DESIGN.md §7.2) exige les 4 mêmes teintes
+// sur toute carte, quel que soit son statut — .tile--live/.tile--soon manquaient, seuls
+// .tile--awaiting/.tile--closed avaient été câblés initialement.
+.tile--live {
+  border-left: 3px solid var(--jdr-status-live, #3fd4ff);
+}
+.tile--soon {
+  border-left: 3px solid var(--jdr-status-soon, #ff7ad9);
+}
+
+.signal-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding-top: 0.25rem;
+}
+
+// Badges de signal (AC3, AC9) : icône + libellé toujours ensemble, jamais la pastille seule.
+.signal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.8em;
+  background: color-mix(in srgb, var(--jdr-status-todo, #f0a030) 20%, transparent);
+  border: 1px solid var(--jdr-status-todo, #f0a030);
+
+  mat-icon {
+    font-size: 0.9rem;
+    width: 0.9rem;
+    height: 0.9rem;
+  }
+}
+.signal-badge--more {
+  background: transparent;
+  border-style: dashed;
+  opacity: 0.8;
+}
+
+// Retour utilisateur post-29.7 : PROCHAINE_SEANCE_CONNUE est informatif (« à venir »), pas une
+// action à faire — il ne doit pas porter la couleur d'urgence --jdr-status-todo comme les badges
+// actionnables (réponse à un vote, compte-rendu à écrire, etc.), cf. Dashboard.badgeTone().
+.signal-badge--soon {
+  background: color-mix(in srgb, var(--jdr-status-soon, #ff7ad9) 20%, transparent);
+  border-color: var(--jdr-status-soon, #ff7ad9);
+}
+
+// Filtres rôle/statut/masquage (Story 29.8) — désormais projetés dans `ListControlBar`
+// (Story 29.9, slot `extraFilters`), qui porte lui-même le repli par défaut/le masquage au
+// défilement/la pastille de résumé. Seul le style des champs projetés reste ici.
+.controls-bar__reveal {
+  margin-top: 0.5rem;
+}
+.controls-bar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.85em;
+}
+.controls-bar__field--checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
+.controls-bar__label {
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+// Étoile de favori (AC1) — icône + aria-label toujours ensemble, jamais la couleur seule.
+.favorite-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.1rem;
+  vertical-align: middle;
+  color: var(--mat-sys-on-surface-variant, #666);
+
+  mat-icon {
+    font-size: 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+}
+.favorite-btn--active {
+  color: var(--jdr-status-soon, #ff7ad9);
 }

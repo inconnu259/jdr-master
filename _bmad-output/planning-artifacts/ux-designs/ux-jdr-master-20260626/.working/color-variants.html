@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JDR Master — Variantes de couleurs (dark mode)</title>
+  <style>
+    /* ================================================================
+       RESET & BASE
+       ================================================================ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #080808;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 14px;
+      padding: 32px 16px 48px;
+      min-height: 100vh;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      margin-bottom: 8px;
+      color: #ffffff;
+    }
+    .subtitle {
+      text-align: center;
+      font-size: .85rem;
+      color: #888;
+      margin-bottom: 32px;
+    }
+
+    /* ================================================================
+       GRID — 5 colonnes côte à côte, wrap au besoin
+       ================================================================ */
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    /* ================================================================
+       CARTE VARIANTE (wrapper)
+       ================================================================ */
+    .variant {
+      width: 220px;
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(255,255,255,.08);
+    }
+
+    /* En-tête de la variante */
+    .variant-header {
+      padding: 14px 16px 10px;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    /* Corps : le snippet UI réaliste */
+    .variant-body {
+      flex: 1;
+      padding: 14px 14px 16px;
+    }
+
+    /* Swatches en bas */
+    .swatches {
+      display: flex;
+      gap: 6px;
+      padding: 10px 14px 14px;
+      flex-wrap: wrap;
+    }
+    .swatch {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: .65rem;
+      color: rgba(255,255,255,.55);
+    }
+    .swatch-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,.15);
+    }
+
+    /* ================================================================
+       SNIPPET UI COMMUN — réutilisé dans chaque variante
+       ================================================================ */
+    .slot-card {
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .slot-label {
+      font-size: .7rem;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .slot-date {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .slot-time {
+      font-size: .75rem;
+      opacity: .7;
+      margin-bottom: 10px;
+    }
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-bottom: 10px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: 99px;
+      font-size: .68rem;
+      font-weight: 600;
+    }
+    .badge-ok   { background: rgba(46,204,113,.15); color: #2ecc71; border: 1px solid rgba(46,204,113,.35); }
+    .badge-warn { background: rgba(255,193,7,.12);  color: #ffc107; border: 1px solid rgba(255,193,7,.3);  }
+
+    /* Bouton CTA — on surcharge la couleur via une var locale */
+    .cta-btn {
+      display: block;
+      width: 100%;
+      padding: 8px 0;
+      border: none;
+      border-radius: 6px;
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .04em;
+      cursor: pointer;
+      text-align: center;
+      transition: opacity .15s;
+      margin-bottom: 8px;
+    }
+    .cta-btn:hover { opacity: .85; }
+
+    .microcopy {
+      font-size: .65rem;
+      text-align: center;
+      opacity: .55;
+      line-height: 1.4;
+      font-style: italic;
+    }
+
+    /* ================================================================
+       ① FORÊT ANCIENNE
+       Fond : #0d1a0f  Accent : #2ecc71  CTA : #f0c040
+       ================================================================ */
+    .v1 { background: #0d1a0f; }
+
+    .v1 .variant-header {
+      background: #0d1a0f;
+      color: #2ecc71;  /* vert émeraude */
+      border-bottom: 1px solid rgba(46,204,113,.18);
+    }
+    .v1 .slot-card {
+      background: #142017;
+      border: 1px solid rgba(46,204,113,.2);
+    }
+    .v1 .slot-label { color: #2ecc71; }
+    .v1 .slot-date  { color: #e8f5e2; }
+    .v1 .slot-time  { color: #a0c0a0; }
+    .v1 .cta-btn {
+      background: #f0c040; /* or */
+      color: #0d1a0f;
+    }
+    .v1 .swatches { background: #0d1a0f; border-top: 1px solid rgba(46,204,113,.12); }
+
+    /* ================================================================
+       ② NÉON DONJON
+       Fond : #111827  Accent : #39ff14  Texte : #f0f0f0
+       ================================================================ */
+    .v2 { background: #111827; }
+
+    .v2 .variant-header {
+      background: #111827;
+      color: #39ff14;  /* vert néon */
+      border-bottom: 1px solid rgba(57,255,20,.2);
+    }
+    .v2 .slot-card {
+      background: #1a2234;
+      border: 1px solid rgba(57,255,20,.25);
+      box-shadow: 0 0 12px rgba(57,255,20,.06);
+    }
+    .v2 .slot-label { color: #39ff14; text-shadow: 0 0 8px rgba(57,255,20,.6); }
+    .v2 .slot-date  { color: #f0f0f0; }
+    .v2 .slot-time  { color: #8899aa; }
+    .v2 .cta-btn {
+      background: #39ff14;
+      color: #0a0f00;
+      box-shadow: 0 0 14px rgba(57,255,20,.4);
+    }
+    .v2 .swatches { background: #111827; border-top: 1px solid rgba(57,255,20,.12); }
+
+    /* ================================================================
+       ③ GRIMOIRE ÉMERAUDE
+       Fond : #120d1a  Accent 1 : #7ec8a4 (vert sauge)  Accent 2 : #9b6dff (violet)
+       ================================================================ */
+    .v3 { background: #120d1a; }
+
+    .v3 .variant-header {
+      background: linear-gradient(135deg, #120d1a 60%, #1a0f2a);
+      color: #7ec8a4;   /* vert sauge */
+      border-bottom: 1px solid rgba(155,109,255,.2);
+    }
+    .v3 .slot-card {
+      background: #1a1228;
+      border: 1px solid rgba(155,109,255,.25);
+    }
+    .v3 .slot-label { color: #9b6dff; } /* violet pour le label */
+    .v3 .slot-date  { color: #e8daf8; }
+    .v3 .slot-time  { color: #9080aa; }
+    .v3 .badge-ok   { background: rgba(126,200,164,.12); color: #7ec8a4; border-color: rgba(126,200,164,.3); }
+    .v3 .cta-btn {
+      background: linear-gradient(90deg, #9b6dff, #7ec8a4);
+      color: #0d0618;
+    }
+    .v3 .swatches { background: #120d1a; border-top: 1px solid rgba(155,109,255,.12); }
+
+    /* ================================================================
+       ④ CARTE AU TRÉSOR
+       Fond : #1a1208  Accent : #6aaa64 (vert mousse)  Or : #d4a843
+       ================================================================ */
+    .v4 { background: #1a1208; }
+
+    .v4 .variant-header {
+      background: #1a1208;
+      color: #d4a843; /* or doux */
+      border-bottom: 1px solid rgba(212,168,67,.2);
+    }
+    .v4 .slot-card {
+      background: #221a0d;
+      border: 1px solid rgba(106,170,100,.2);
+    }
+    .v4 .slot-label { color: #6aaa64; } /* vert mousse */
+    .v4 .slot-date  { color: #f0e8d0; }
+    .v4 .slot-time  { color: #9a8870; }
+    .v4 .badge-ok   { background: rgba(106,170,100,.14); color: #6aaa64; border-color: rgba(106,170,100,.3); }
+    .v4 .badge-warn { background: rgba(212,168,67,.12); color: #d4a843; border-color: rgba(212,168,67,.3); }
+    .v4 .cta-btn {
+      background: #d4a843;
+      color: #1a1208;
+    }
+    .v4 .swatches { background: #1a1208; border-top: 1px solid rgba(212,168,67,.15); }
+
+    /* ================================================================
+       ⑤ TEMPÊTE ARCTIQUE
+       Fond : #0a0e1a  Accent 1 : #00d4aa (turquoise)  Accent 2 : #4dd9e0 (cyan)
+       ================================================================ */
+    .v5 { background: #0a0e1a; }
+
+    .v5 .variant-header {
+      background: #0a0e1a;
+      color: #00d4aa; /* turquoise */
+      border-bottom: 1px solid rgba(0,212,170,.2);
+    }
+    .v5 .slot-card {
+      background: #10172a;
+      border: 1px solid rgba(77,217,224,.2);
+    }
+    .v5 .slot-label { color: #4dd9e0; } /* cyan */
+    .v5 .slot-date  { color: #d8f0f4; }
+    .v5 .slot-time  { color: #6090a0; }
+    .v5 .badge-ok   { background: rgba(0,212,170,.12); color: #00d4aa; border-color: rgba(0,212,170,.3); }
+    .v5 .badge-warn { background: rgba(255,193,7,.12); color: #ffc107; border-color: rgba(255,193,7,.3); }
+    .v5 .cta-btn {
+      background: linear-gradient(90deg, #00d4aa, #4dd9e0);
+      color: #050a14;
+    }
+    .v5 .swatches { background: #0a0e1a; border-top: 1px solid rgba(77,217,224,.12); }
+
+  </style>
+</head>
+<body>
+
+  <h1>JDR Master — Variantes de couleurs</h1>
+  <p class="subtitle">Dark mode · 5 palettes · Snippet UI réaliste</p>
+
+  <div class="grid">
+
+    <!-- ① FORÊT ANCIENNE ------------------------------------------- -->
+    <div class="variant v1">
+      <div class="variant-header">① Forêt Ancienne</div>
+
+      <div class="variant-body">
+        <div class="slot-card">
+          <div class="slot-label">Créneau disponible</div>
+          <div class="slot-date">Samedi 4 juil.</div>
+          <div class="slot-time">20h00 – 23h30</div>
+          <div class="badges">
+            <span class="badge badge-ok">✅ Arek</span>
+            <span class="badge badge-ok">✅ Lyra</span>
+            <span class="badge badge-warn">⚠️ Mira</span>
+          </div>
+          <button class="cta-btn">Valider ce créneau</button>
+          <div class="microcopy">Deux héros confirment, un elfe hésite.<br>Classique.</div>
+        </div>
+      </div>
+
+      <div class="swatches">
+        <span class="swatch"><span class="swatch-dot" style="background:#0d1a0f"></span>#0d1a0f</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#2ecc71"></span>#2ecc71</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#f0c040"></span>#f0c040</span>
+      </div>
+    </div>
+
+    <!-- ② NÉON DONJON ---------------------------------------------- -->
+    <div class="variant v2">
+      <div class="variant-header">② Néon Donjon</div>
+
+      <div class="variant-body">
+        <div class="slot-card">
+          <div class="slot-label">Créneau disponible</div>
+          <div class="slot-date">Samedi 4 juil.</div>
+          <div class="slot-time">20h00 – 23h30</div>
+          <div class="badges">
+            <span class="badge badge-ok">✅ Arek</span>
+            <span class="badge badge-ok">✅ Lyra</span>
+            <span class="badge badge-warn">⚠️ Mira</span>
+          </div>
+          <button class="cta-btn">Valider ce créneau</button>
+          <div class="microcopy">Mira n'a toujours pas répondu… soupir.</div>
+        </div>
+      </div>
+
+      <div class="swatches">
+        <span class="swatch"><span class="swatch-dot" style="background:#111827"></span>#111827</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#39ff14"></span>#39ff14</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#f0f0f0"></span>#f0f0f0</span>
+      </div>
+    </div>
+
+    <!-- ③ GRIMOIRE ÉMERAUDE ---------------------------------------- -->
+    <div class="variant v3">
+      <div class="variant-header">③ Grimoire Émeraude</div>
+
+      <div class="variant-body">
+        <div class="slot-card">
+          <div class="slot-label">Créneau disponible</div>
+          <div class="slot-date">Samedi 4 juil.</div>
+          <div class="slot-time">20h00 – 23h30</div>
+          <div class="badges">
+            <span class="badge badge-ok">✅ Arek</span>
+            <span class="badge badge-ok">✅ Lyra</span>
+            <span class="badge badge-warn">⚠️ Mira</span>
+          </div>
+          <button class="cta-btn">Valider ce créneau</button>
+          <div class="microcopy">Le sort de planification est en cours.<br>Mira résiste encore.</div>
+        </div>
+      </div>
+
+      <div class="swatches">
+        <span class="swatch"><span class="swatch-dot" style="background:#120d1a"></span>#120d1a</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#7ec8a4"></span>#7ec8a4</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#9b6dff"></span>#9b6dff</span>
+      </div>
+    </div>
+
+    <!-- ④ CARTE AU TRÉSOR ------------------------------------------ -->
+    <div class="variant v4">
+      <div class="variant-header">④ Carte au Trésor</div>
+
+      <div class="variant-body">
+        <div class="slot-card">
+          <div class="slot-label">Créneau disponible</div>
+          <div class="slot-date">Samedi 4 juil.</div>
+          <div class="slot-time">20h00 – 23h30</div>
+          <div class="badges">
+            <span class="badge badge-ok">✅ Arek</span>
+            <span class="badge badge-ok">✅ Lyra</span>
+            <span class="badge badge-warn">⚠️ Mira</span>
+          </div>
+          <button class="cta-btn">Valider ce créneau</button>
+          <div class="microcopy">X marque le bon soir. Mira est<br>quelque part sur la carte… on espère.</div>
+        </div>
+      </div>
+
+      <div class="swatches">
+        <span class="swatch"><span class="swatch-dot" style="background:#1a1208"></span>#1a1208</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#6aaa64"></span>#6aaa64</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#d4a843"></span>#d4a843</span>
+      </div>
+    </div>
+
+    <!-- ⑤ TEMPÊTE ARCTIQUE ----------------------------------------- -->
+    <div class="variant v5">
+      <div class="variant-header">⑤ Tempête Arctique</div>
+
+      <div class="variant-body">
+        <div class="slot-card">
+          <div class="slot-label">Créneau disponible</div>
+          <div class="slot-date">Samedi 4 juil.</div>
+          <div class="slot-time">20h00 – 23h30</div>
+          <div class="badges">
+            <span class="badge badge-ok">✅ Arek</span>
+            <span class="badge badge-ok">✅ Lyra</span>
+            <span class="badge badge-warn">⚠️ Mira</span>
+          </div>
+          <button class="cta-btn">Valider ce créneau</button>
+          <div class="microcopy">Deux réponses. Le troisième signal<br>se perd dans le blizzard.</div>
+        </div>
+      </div>
+
+      <div class="swatches">
+        <span class="swatch"><span class="swatch-dot" style="background:#0a0e1a"></span>#0a0e1a</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#00d4aa"></span>#00d4aa</span>
+        <span class="swatch"><span class="swatch-dot" style="background:#4dd9e0"></span>#4dd9e0</span>
+      </div>
+    </div>
+
+  </div><!-- /.grid -->
+
+</body>
+</html>

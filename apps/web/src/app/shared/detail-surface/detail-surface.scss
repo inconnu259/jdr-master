@@ -1,0 +1,96 @@
+// Story 31.2 — mécanique fixed + media query reprise de ConstraintPanel
+// (apps/web/src/app/features/calendar/constraint-panel/constraint-panel.scss:1-23), seuil
+// délibérément aligné sur 1024px (DESKTOP_QUERY du reste du projet) plutôt que les 768px propres
+// à ConstraintPanel.
+//
+// z-index 199/200 : même paire déjà utilisée par .constraint-backdrop/app-constraint-panel
+// (calendrier) et .sheet-menu-backdrop/.sheet-menu-surface (fiche, story 31.1) — TROISIÈME
+// consommateur du même motif en dur, jamais centralisé en jeton nommé (dette déjà consignée,
+// hors périmètre de cette story).
+// 🚨 Trouvé à la vérification visuelle (Task 4) : un voile plein écran BLOQUE LES CLICS sur les
+// autres déclencheurs de la fiche pendant que le panneau est ouvert — le premier clic sur un
+// second talent le referme au lieu de le remplacer (AC4 cassé, un panneau latéral desktop ne doit
+// PAS désactiver le reste de la fiche, qui doit rester « entièrement visible » ET interactive,
+// AC2). Masqué à partir du seuil desktop : la fermeture au clic extérieur (et l'assombrissement)
+// ne concernent que la feuille mobile (AC3), où le contenu recouvert n'est de toute façon pas
+// interagissable pendant que la feuille est ouverte.
+.detail-surface-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.32);
+  z-index: 199;
+
+  @media (min-width: 1024px) {
+    display: none;
+  }
+}
+
+.detail-surface-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
+  padding: 20px 16px 24px;
+  max-height: 85vh;
+  overflow-y: auto;
+  animation: detailSurfaceSlideUp 0.25s ease-out;
+
+  @media (min-width: 1024px) {
+    top: 64px;
+    bottom: 0;
+    left: auto;
+    right: 0;
+    width: 320px;
+    border-radius: 0;
+    max-height: none;
+    animation: detailSurfaceSlideIn 0.25s ease-out;
+  }
+}
+
+@keyframes detailSurfaceSlideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes detailSurfaceSlideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.detail-surface-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--mat-sys-on-surface);
+  padding: 4px;
+}
+
+.detail-surface-title {
+  margin: 0 32px 12px 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.detail-surface-body {
+  margin: 0;
+  white-space: pre-line;
+  line-height: 1.5;
+}

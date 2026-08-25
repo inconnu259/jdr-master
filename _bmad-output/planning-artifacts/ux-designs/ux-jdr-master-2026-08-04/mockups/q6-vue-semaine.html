@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q-6 — vue semaine : saisie rapide vs agenda</title>
+<style>
+:root{--primary-bg:#0d0a14;--surface-bg:#1a1428;--accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;--status-unavailable:#e05252;--status-unknown:#3a3a4a;
+  --status-mixed:#f0a030;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--radius-badge:6px;--radius-button:8px;
+  --text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5)}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px}
+h3{font-size:var(--text-lg);margin:var(--space-base) 0 var(--space-xs)}
+.lede,.why{color:var(--text-muted);max-width:84ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:var(--space-xl);align-items:start}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md)}
+.cost{color:var(--status-mixed)}
+.ok{color:var(--accent-1)}
+.frame{background:var(--primary-bg);border:1px solid var(--border-subtle);border-radius:14px;
+  padding:var(--space-md);box-shadow:0 8px 32px rgba(0,0,0,.7)}
+.frame.phone{max-width:340px}
+.hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-md)}
+.hdr b{font-size:var(--text-lg)}
+.hdr span{color:var(--text-muted);font-size:var(--text-sm)}
+.seg{display:inline-flex;border:1px solid var(--border-subtle);border-radius:var(--radius-button);overflow:hidden}
+.seg span{padding:4px 10px;font-size:var(--text-sm);color:var(--text-muted)}
+.seg span.on{color:var(--text-primary);background:rgba(155,109,255,.16)}
+/* ══ grille semaine ══ */
+.wk{display:grid;grid-template-columns:56px repeat(7,1fr);gap:3px;user-select:none}
+.wc{background:rgba(255,255,255,.03);border-radius:5px;min-height:44px;position:relative}
+.wc.hd{background:none;min-height:0;font-size:var(--text-sm);color:var(--text-muted);text-align:center;padding:2px 0}
+.wc.hd.today{color:var(--accent-1)}
+.wc.rl{background:none;min-height:0;font-size:var(--text-sm);color:var(--text-muted);
+  display:flex;align-items:center;justify-content:flex-end;padding-right:6px}
+.wc.av{background:rgba(126,200,164,.35)}
+.wc.un{background:rgba(224,82,82,.35)}
+.wc.uk{background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(58,58,74,.45) 3px 6px)}
+.wc.sel{background:rgba(155,109,255,.42);box-shadow:inset 0 0 0 2px var(--accent-2)}
+.wc.sel::after{content:"";position:absolute;inset:0;border-radius:5px}
+.wc.past{opacity:.32}
+.cursor{position:absolute;width:16px;height:16px;border:2px solid #fff;border-radius:50%;
+  right:-9px;bottom:-9px;background:rgba(155,109,255,.5);box-shadow:0 0 0 3px rgba(0,0,0,.35)}
+.selbar{display:flex;align-items:center;gap:var(--space-sm);margin-top:var(--space-md);
+  background:var(--surface-bg);border:1px solid var(--accent-2);border-radius:var(--radius-card);
+  padding:var(--space-sm) var(--space-md);box-shadow:var(--elev-card)}
+.selbar b{font-size:var(--text-base)}
+.selbar .sp{flex:1}
+.btn{font-size:var(--text-sm);padding:5px 11px;border-radius:var(--radius-button);border:1px solid;white-space:nowrap}
+.btn.no{color:var(--status-unavailable);border-color:var(--status-unavailable);background:rgba(224,82,82,.13)}
+.btn.yes{color:var(--accent-1);border-color:var(--accent-1);background:rgba(126,200,164,.13)}
+.btn.gh{color:var(--text-muted);border-color:var(--border-subtle)}
+.legend{display:flex;gap:var(--space-md);flex-wrap:wrap;font-size:var(--text-sm);color:var(--text-muted);margin-top:var(--space-sm)}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:5px}
+/* ══ agenda ══ */
+.day{margin-bottom:var(--space-md)}
+.dhead{font-size:var(--text-sm);text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);
+  display:flex;align-items:center;gap:var(--space-sm);margin-bottom:var(--space-sm)}
+.dhead::after{content:"";flex:1;height:1px;background:var(--border-subtle)}
+.dhead.hot{color:var(--status-mixed)}
+.item{display:flex;gap:var(--space-sm);background:var(--surface-bg);border-radius:var(--radius-card);
+  padding:var(--space-sm) var(--space-md);margin-bottom:var(--space-sm);box-shadow:var(--elev-card);align-items:flex-start}
+.rail{width:3px;border-radius:2px;align-self:stretch;flex:none}
+.it{flex:1;min-width:0}
+.t1{font-size:var(--text-base);font-weight:500}
+.t2{font-size:var(--text-sm);color:var(--text-muted)}
+.chips{display:flex;gap:var(--space-xs);flex-wrap:wrap;margin-top:6px}
+.chip{font-size:var(--text-sm);padding:2px 8px;border-radius:var(--radius-badge);border:1px solid;white-space:nowrap}
+.c-vote{color:var(--status-mixed);border-color:var(--status-mixed);background:rgba(240,160,48,.15)}
+.c-ok{color:var(--accent-1);border-color:var(--accent-1);background:rgba(126,200,164,.13)}
+.c-no{color:var(--status-unavailable);border-color:var(--status-unavailable);background:rgba(224,82,82,.13)}
+.c-mut{color:var(--text-muted);border-color:var(--status-unknown);background:rgba(58,58,74,.4)}
+.pc{color:var(--accent-1);font-style:italic}
+</style>
+</head>
+<body>
+
+<h1>Q-6 — les deux pistes, côte à côte</h1>
+<p class="lede">À gauche, la vue semaine cesse d'être un doublon du mois et devient l'outil de saisie en masse. À droite, elle disparaît au profit d'une vue Agenda qui répond à « où j'en suis ». Ce ne sont pas deux versions du même écran : ce sont deux réponses à deux questions différentes — et rien n'interdit, à la fin, de garder les deux.</p>
+
+<div class="two">
+
+<!-- ════════ 1. SAISIE RAPIDE ════════ -->
+<div>
+  <h2>1 — Saisie rapide par glissement</h2>
+  <p class="why">Tu appuies sur mardi soir, tu glisses jusqu'à vendredi soir : les quatre créneaux se sélectionnent. Une barre apparaît, tu choisis « indisponible », c'est enregistré en une fois. Aujourd'hui, le même geste demande quatre ouvertures du panneau et quatre validations.</p>
+
+  <h3>Desktop — sélection en cours</h3>
+  <div class="frame">
+    <div class="hdr"><b>Semaine du 10 au 16 août</b>
+      <span class="seg"><span>Mois</span><span class="on">Semaine</span></span></div>
+    <div class="wk">
+      <div class="wc rl"></div>
+      <div class="wc hd">Lun 10</div><div class="wc hd">Mar 11</div><div class="wc hd today">Mer 12</div>
+      <div class="wc hd">Jeu 13</div><div class="wc hd">Ven 14</div><div class="wc hd">Sam 15</div><div class="wc hd">Dim 16</div>
+
+      <div class="wc rl">Matin</div>
+      <div class="wc uk"></div><div class="wc uk"></div><div class="wc uk"></div>
+      <div class="wc uk"></div><div class="wc uk"></div><div class="wc av"></div><div class="wc av"></div>
+
+      <div class="wc rl">Après-midi</div>
+      <div class="wc uk"></div><div class="wc uk"></div><div class="wc uk"></div>
+      <div class="wc uk"></div><div class="wc uk"></div><div class="wc av"></div><div class="wc av"></div>
+
+      <div class="wc rl">Soirée</div>
+      <div class="wc un"></div>
+      <div class="wc sel"></div><div class="wc sel"></div><div class="wc sel"></div>
+      <div class="wc sel"><span class="cursor"></span></div>
+      <div class="wc av"></div><div class="wc uk"></div>
+    </div>
+    <div class="selbar">
+      <b>4 créneaux</b><span class="t2">mar. → ven., soirée</span>
+      <span class="sp"></span>
+      <span class="btn no">Indisponible</span><span class="btn yes">Disponible</span><span class="btn gh">Annuler</span>
+    </div>
+    <div class="legend">
+      <span><i style="background:rgba(126,200,164,.5)"></i>disponible</span>
+      <span><i style="background:rgba(224,82,82,.5)"></i>indisponible</span>
+      <span><i style="background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(58,58,74,.7) 3px 6px)"></i>non renseigné</span>
+      <span><i style="background:rgba(155,109,255,.6)"></i>sélection</span>
+    </div>
+  </div>
+
+  <h3>Mobile — même geste au doigt</h3>
+  <div class="frame phone">
+    <div class="hdr"><b>10 → 16 août</b><span class="seg"><span>M</span><span class="on">S</span></span></div>
+    <div class="wk" style="grid-template-columns:38px repeat(7,1fr);gap:2px">
+      <div class="wc rl" style="font-size:11px"></div>
+      <div class="wc hd" style="font-size:11px">L</div><div class="wc hd" style="font-size:11px">M</div>
+      <div class="wc hd today" style="font-size:11px">M</div><div class="wc hd" style="font-size:11px">J</div>
+      <div class="wc hd" style="font-size:11px">V</div><div class="wc hd" style="font-size:11px">S</div><div class="wc hd" style="font-size:11px">D</div>
+      <div class="wc rl" style="font-size:11px">Mat.</div>
+      <div class="wc uk"></div><div class="wc uk"></div><div class="wc uk"></div><div class="wc uk"></div><div class="wc uk"></div><div class="wc av"></div><div class="wc av"></div>
+      <div class="wc rl" style="font-size:11px">A-m.</div>
+      <div class="wc uk"></div><div class="wc uk"></div><div class="wc uk"></div><div class="wc uk"></div><div class="wc uk"></div><div class="wc av"></div><div class="wc av"></div>
+      <div class="wc rl" style="font-size:11px">Soir</div>
+      <div class="wc un"></div><div class="wc sel"></div><div class="wc sel"></div><div class="wc sel"></div>
+      <div class="wc sel"><span class="cursor"></span></div><div class="wc av"></div><div class="wc uk"></div>
+    </div>
+    <div class="selbar" style="flex-wrap:wrap">
+      <b>4 créneaux</b><span class="sp"></span>
+      <span class="btn no">Indispo</span><span class="btn yes">Dispo</span>
+    </div>
+  </div>
+
+  <p class="note"><span class="ok">Gagne :</span> quatre déclarations en un geste au lieu de quatre allers-retours dans le panneau — c'est FR-32 traité de face. La vue semaine cesse d'être un doublon.<br>
+  <span class="cost">Coût :</span> le glissement est un geste à apprendre, et il faut le rendre annulable ; la grille reste étroite sur téléphone.</p>
+</div>
+
+<!-- ════════ 2. AGENDA ════════ -->
+<div>
+  <h2>2 — Vue Agenda</h2>
+  <p class="why">La semaine disparaît, remplacée par une liste chronologique de ce qui compte : séances datées, votes en cours avec leurs créneaux, tes propres déclarations à venir. Ce qui vit aujourd'hui dans un panneau en bas de page, atteint par un bouton « Voir les créneaux calculés », remonte ici en premier plan.</p>
+
+  <div class="frame phone">
+    <div class="hdr"><b>Mon agenda</b>
+      <span class="seg"><span>Mois</span><span class="on">Agenda</span></span></div>
+
+    <div class="day">
+      <div class="dhead hot">◆ Ça t'attend</div>
+      <div class="item"><div class="rail" style="background:var(--status-mixed)"></div><div class="it">
+        <div class="t1">Vote de date en cours</div>
+        <div class="t2">Les Cendres de Kavaan — Séance 2</div>
+        <div class="chips"><span class="chip c-vote">jeu. 13, soirée</span><span class="chip c-vote">sam. 15, après-midi</span>
+          <span class="chip c-vote">dim. 16, soirée</span></div>
+        <div class="t2" style="margin-top:6px">Tu n'as pas encore répondu · clôture dans 3 jours</div>
+      </div></div>
+    </div>
+
+    <div class="day">
+      <div class="dhead">Cette semaine</div>
+      <div class="item"><div class="rail" style="background:var(--accent-2)"></div><div class="it">
+        <div class="t1">Séance confirmée — mer. 12, soirée</div>
+        <div class="t2">Le Convoi du Nord — Épisode « La passe gelée »</div>
+        <div class="chips"><span class="chip c-ok">Tu es inscrit</span><span class="chip c-mut">4 participants</span>
+          <span class="chip c-mut"><span class="pc">Brindavoine</span></span></div>
+      </div></div>
+      <div class="item"><div class="rail" style="background:var(--status-unavailable)"></div><div class="it">
+        <div class="t1">Indisponible — ven. 14, soirée</div>
+        <div class="t2">Déclaré le 2 août · expire le 30 septembre</div>
+      </div></div>
+    </div>
+
+    <div class="day">
+      <div class="dhead">La semaine prochaine</div>
+      <div class="item"><div class="rail" style="background:var(--accent-1)"></div><div class="it">
+        <div class="t1">Disponible — sam. 22 et dim. 23</div>
+        <div class="t2">Récurrent, tous les week-ends</div>
+      </div></div>
+      <div class="item"><div class="rail" style="background:var(--status-unknown)"></div><div class="it">
+        <div class="t1">Rien de prévu</div>
+        <div class="t2">Aucune séance, aucun vote en cours</div>
+      </div></div>
+    </div>
+  </div>
+
+  <p class="note"><span class="ok">Gagne :</span> répond enfin à « où j'en suis » — la question centrale du palier. Les séances et les votes cessent d'être cachés sous un bouton de défilement, et FR-33/FR-34 sont servis nativement.<br>
+  <span class="cost">Coût :</span> ne remplace pas la saisie — pour déclarer une indisponibilité, il faut toujours retourner sur le mois. Et FR-32 reste entièrement à traiter ailleurs.</p>
+</div>
+
+</div>
+
+<h2>Ce que la comparaison montre</h2>
+<p class="why">Les deux ne s'opposent pas : la première répond à <em>« comment je saisis vite »</em>, la seconde à <em>« où j'en suis »</em>. Prendre les deux donnerait trois vues (Mois, Semaine, Agenda) — soit un sélecteur à trois entrées sur une page déjà chargée. Prendre l'Agenda seul laisse FR-32 sans réponse. Prendre la saisie rapide seule laisse les séances et les votes enterrés en bas de page. C'est ce compromis-là que tu arbitres.</p>
+
+</body>
+</html>

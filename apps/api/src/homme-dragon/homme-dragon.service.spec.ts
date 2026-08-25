@@ -80,6 +80,7 @@ function makePartiesService() {
     getOwned: jest.fn(),
     getViewable: jest.fn(),
     listMembers: jest.fn(),
+    notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -236,6 +237,23 @@ describe('HommeDragonService', () => {
       await service.create('p1', 'mj1', dto);
 
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal HOMME_DRAGON_A_CREER)', async () => {
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        gameSystemId: 'ryuutama',
+        name: 'Ma Campagne',
+      });
+      prisma.hommeDragon.create.mockResolvedValue(makeHommeDragon());
+
+      await service.create('p1', 'mj1', dto);
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+        'p1',
+        'mj1',
+      );
     });
 
     it('mondesProteges non fourni → pré-rempli avec partie.name en défense de profondeur', async () => {

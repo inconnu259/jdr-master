@@ -1,0 +1,42 @@
+.poll-missing {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.poll-missing__title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.poll-missing__summary {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+/* Les noms sont des `app-identity-label` en flux : une ligne qui se replie, jamais une liste à
+   puces — le panneau tient en trois lignes, c'est tout son intérêt. */
+.poll-missing__row {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.poll-missing__prefix {
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+/* P-1 : la teinte double le préfixe, elle ne le remplace jamais — « N'ont pas répondu : » est
+   écrit en toutes lettres. */
+.poll-missing__row--missing .poll-missing__prefix {
+  color: var(--jdr-status-todo, var(--mat-sys-on-surface-variant, #666));
+  font-weight: 600;
+}
+
+.poll-missing__all {
+  color: var(--color-available, var(--mat-sys-on-surface-variant, #666));
+}

@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JDR Master — Directions visuelles</title>
+<style>
+  /* Reset & base */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    /* Fond neutre sombre pour mettre en valeur les frames */
+    background: #18191c;
+    color: #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 40px 24px 64px;
+    min-height: 100vh;
+  }
+
+  h1.page-title {
+    text-align: center;
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 48px;
+  }
+
+  .directions-grid {
+    display: flex;
+    gap: 48px;
+    justify-content: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .direction-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    max-width: 375px;
+    width: 100%;
+  }
+
+  .direction-meta {
+    width: 100%;
+    padding: 0 4px;
+  }
+  .direction-meta h2 {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .direction-meta p {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #999;
+  }
+
+  /* Frame mobile — conteneur générique */
+  .phone-frame {
+    width: 375px;
+    min-height: 720px;
+    border-radius: 36px;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  /* ===================================================
+     DIRECTION 1 — "Salle des Cartes"
+     Palette :
+       bg-deep:    #0f1923  (fond principal)
+       bg-card:    #1e2d3d  (surface carte)
+       bg-card-alt:#162333  (fond alternatif léger)
+       accent:     #4dd9e0  (cyan clair)
+       accent-dim: #2a9ba1  (cyan atténué pour bordures)
+       text-hi:    #e8f4f8  (texte principal)
+       text-lo:    #7a9bb5  (texte secondaire)
+       ok:         #3ecf8e  (vert succès)
+       warn:       #f0c060  (ambre attention)
+       ko:         #e05a5a  (rouge absent)
+  =================================================== */
+  .d1 {
+    background: #0f1923;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .d1-statusbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px 6px;
+  }
+  .d1-statusbar span {
+    font-size: 12px;
+    font-weight: 600;
+    color: #7a9bb5;
+    letter-spacing: 0.03em;
+  }
+
+  .d1-header {
+    padding: 12px 20px 16px;
+    border-bottom: 1px solid #1e2d3d;
+  }
+  .d1-header .label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #4dd9e0;
+    margin-bottom: 4px;
+  }
+  .d1-header h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #e8f4f8;
+    margin-bottom: 2px;
+  }
+  .d1-header .sub {
+    font-size: 12px;
+    color: #7a9bb5;
+  }
+
+  .d1-section-label {
+    padding: 16px 20px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #4dd9e0;
+  }
+
+  .d1-slot {
+    margin: 0 14px 10px;
+    background: #1e2d3d;
+    border-radius: 10px;
+    padding: 14px 16px;
+    border: 1px solid #253d52;
+  }
+  .d1-slot.best {
+    border-color: #4dd9e0;
+  }
+  .d1-slot-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .d1-slot-date {
+    font-size: 14px;
+    font-weight: 600;
+    color: #e8f4f8;
+  }
+  .d1-slot-period {
+    font-size: 11px;
+    color: #7a9bb5;
+    background: #162333;
+    padding: 3px 8px;
+    border-radius: 4px;
+  }
+  .d1-slot.best .d1-slot-date {
+    color: #4dd9e0;
+  }
+  .d1-players {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .d1-player {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px 3px 6px;
+    border-radius: 4px;
+  }
+  .d1-player.ok   { background: #0d2e20; color: #3ecf8e; border: 1px solid #1a5e3a; }
+  .d1-player.warn { background: #2e2310; color: #f0c060; border: 1px solid #5e4210; }
+  .d1-player.ko   { background: #2e1010; color: #e05a5a; border: 1px solid #5e2020; }
+  .d1-player-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .d1-player.ok   .d1-player-dot { background: #3ecf8e; }
+  .d1-player.warn .d1-player-dot { background: #f0c060; }
+  .d1-player.ko   .d1-player-dot { background: #e05a5a; }
+
+  .d1-actions {
+    padding: 12px 14px 8px;
+  }
+  .d1-btn {
+    display: block;
+    width: 100%;
+    padding: 13px;
+    background: #4dd9e0;
+    color: #0f1923;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    border: none;
+    border-radius: 8px;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .d1-note {
+    margin: 8px 14px 16px;
+    padding: 10px 12px;
+    background: #162333;
+    border-left: 3px solid #f0c060;
+    border-radius: 0 6px 6px 0;
+    font-size: 12px;
+    color: #7a9bb5;
+    line-height: 1.5;
+  }
+  .d1-note strong { color: #f0c060; font-weight: 500; }
+
+  /* ===================================================
+     DIRECTION 2 — "Taverne"
+     Palette :
+       bg-deep:    #1a1208  (brun-noir)
+       bg-card:    #261a09  (carte brun foncé)
+       bg-card-alt:#1e1407  (fond alt)
+       accent:     #f0a030  (ambre/or)
+       accent-dim: #a06a18  (ambre atténué)
+       text-hi:    #f5e8d0  (parchemin clair)
+       text-lo:    #8a7055  (brun clair)
+       ok:         #6aba6a  (vert doux)
+       warn:       #f0c060  (or/ambre)
+       ko:         #c85a5a  (rouge brique)
+  =================================================== */
+  .d2 {
+    background: #1a1208;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .d2-statusbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px 6px;
+  }
+  .d2-statusbar span {
+    font-size: 12px;
+    font-weight: 500;
+    color: #8a7055;
+  }
+
+  .d2-header {
+    padding: 12px 20px 18px;
+  }
+  .d2-header .breadcrumb {
+    font-size: 11px;
+    color: #8a7055;
+    margin-bottom: 6px;
+    letter-spacing: 0.04em;
+  }
+  .d2-header h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #f0a030;
+    margin-bottom: 4px;
+  }
+  .d2-header .sub {
+    font-size: 13px;
+    color: #8a7055;
+    line-height: 1.4;
+  }
+
+  .d2-divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, #3a2810, transparent);
+    margin: 0 20px 16px;
+  }
+
+  .d2-slot {
+    margin: 0 16px 12px;
+    background: #261a09;
+    border-radius: 14px;
+    padding: 16px;
+    border: 1px solid #3a2810;
+    position: relative;
+    overflow: hidden;
+  }
+  .d2-slot.best {
+    border-color: #f0a030;
+  }
+  .d2-slot.best::before {
+    content: "★ Meilleure date";
+    position: absolute;
+    top: 0; right: 0;
+    background: #f0a030;
+    color: #1a1208;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 0 14px 0 10px;
+    letter-spacing: 0.04em;
+  }
+  .d2-slot-head {
+    margin-bottom: 12px;
+  }
+  .d2-slot-date {
+    font-size: 15px;
+    font-weight: 600;
+    color: #f5e8d0;
+  }
+  .d2-slot-period {
+    font-size: 12px;
+    color: #8a7055;
+    margin-top: 1px;
+  }
+  .d2-players {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .d2-player {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+  .d2-player.ok   { background: #0e2a0e; color: #6aba6a; border: 1px solid #2a5a2a; }
+  .d2-player.warn { background: #2e2010; color: #f0c060; border: 1px solid #6e5010; }
+  .d2-player.ko   { background: #2a0e0e; color: #c85a5a; border: 1px solid #5a2020; }
+  .d2-icon { font-size: 13px; }
+
+  .d2-actions {
+    padding: 4px 16px 12px;
+  }
+  .d2-btn {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    background: #f0a030;
+    color: #1a1208;
+    font-size: 15px;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    text-align: center;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+  }
+
+  .d2-note {
+    margin: 4px 16px 16px;
+    padding: 12px 14px;
+    background: #261a09;
+    border-radius: 12px;
+    border: 1px solid #3a2810;
+    font-size: 12px;
+    color: #8a7055;
+    line-height: 1.55;
+  }
+  .d2-note strong { color: #f0c060; font-weight: 500; }
+
+  /* ===================================================
+     DIRECTION 3 — "Grimoire Digital"
+     Palette :
+       bg-deep:    #110d1a  (très sombre violet)
+       bg-card:    #1c1530  (surface carte violet foncé)
+       bg-card-alt:#160f28  (fond alt)
+       accent:     #9b6dff  (violet-lavande)
+       accent2:    #ff6b9d  (rose)
+       accent-dim: #5c3da8  (violet atténué)
+       text-hi:    #ede0ff  (blanc lavande)
+       text-lo:    #7c6a9e  (lilas gris)
+       ok:         #50e3a4  (vert menthe)
+       warn:       #f9c846  (jaune)
+       ko:         #ff6b6b  (rose-rouge)
+  =================================================== */
+  .d3 {
+    background: #110d1a;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .d3-statusbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 20px 6px;
+  }
+  .d3-statusbar span {
+    font-size: 12px;
+    font-weight: 500;
+    color: #7c6a9e;
+  }
+
+  .d3-header {
+    padding: 10px 20px 16px;
+    position: relative;
+  }
+  .d3-glyph {
+    position: absolute;
+    top: 8px; right: 18px;
+    font-size: 32px;
+    opacity: 0.12;
+    line-height: 1;
+    color: #9b6dff;
+    font-weight: 900;
+    letter-spacing: -4px;
+    user-select: none;
+  }
+  .d3-header .label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #9b6dff;
+    margin-bottom: 4px;
+  }
+  .d3-header h3 {
+    font-size: 17px;
+    font-weight: 700;
+    color: #ede0ff;
+    margin-bottom: 4px;
+    line-height: 1.25;
+  }
+  .d3-header .sub {
+    font-size: 12px;
+    color: #7c6a9e;
+    line-height: 1.4;
+  }
+
+  .d3-separator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 20px 14px;
+  }
+  .d3-separator-line {
+    flex: 1;
+    height: 1px;
+    background: #2a1f48;
+  }
+  .d3-separator-dot {
+    width: 4px; height: 4px;
+    background: #9b6dff;
+    border-radius: 50%;
+    opacity: 0.5;
+  }
+
+  .d3-slot {
+    margin: 0 14px 10px;
+    background: #1c1530;
+    border-radius: 14px;
+    padding: 14px 16px;
+    border: 1px solid #2a1f48;
+  }
+  .d3-slot.best {
+    border-color: #9b6dff;
+    background: #1e1638;
+  }
+  .d3-slot-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+  }
+  .d3-slot-info {}
+  .d3-slot-date {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ede0ff;
+    margin-bottom: 1px;
+  }
+  .d3-slot.best .d3-slot-date {
+    color: #9b6dff;
+  }
+  .d3-slot-period {
+    font-size: 11px;
+    color: #7c6a9e;
+  }
+  .d3-score {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: #2a1f48;
+    color: #9b6dff;
+    letter-spacing: 0.04em;
+  }
+  .d3-slot.best .d3-score {
+    background: #9b6dff;
+    color: #110d1a;
+  }
+
+  /* Tokens joueurs style "pion" */
+  .d3-players {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .d3-token {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    width: 42px;
+  }
+  .d3-token-circle {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    border: 2px solid transparent;
+  }
+  .d3-token.ok   .d3-token-circle { background: #0d3028; color: #50e3a4; border-color: #1a6050; }
+  .d3-token.warn .d3-token-circle { background: #2e2a0a; color: #f9c846; border-color: #5a5010; }
+  .d3-token.ko   .d3-token-circle { background: #2e0d1a; color: #ff6b9d; border-color: #6e1a3a; }
+  .d3-token-name {
+    font-size: 9px;
+    color: #7c6a9e;
+    text-align: center;
+    letter-spacing: 0.02em;
+  }
+  .d3-token.ok   .d3-token-name { color: #50e3a4; opacity: 0.7; }
+  .d3-token.warn .d3-token-name { color: #f9c846; opacity: 0.7; }
+  .d3-token.ko   .d3-token-name { color: #ff6b9d; opacity: 0.7; }
+
+  .d3-actions {
+    padding: 8px 14px 10px;
+  }
+  .d3-btn {
+    display: block;
+    width: 100%;
+    padding: 14px;
+    background: #9b6dff;
+    color: #110d1a;
+    font-size: 14px;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    text-align: center;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+  }
+  .d3-btn-accent2 {
+    background: linear-gradient(90deg, #9b6dff 0%, #ff6b9d 100%);
+    color: #fff;
+  }
+
+  .d3-note {
+    margin: 4px 14px 14px;
+    padding: 10px 12px;
+    background: #1c1530;
+    border-radius: 10px;
+    border: 1px solid #2a1f48;
+    font-size: 11px;
+    color: #7c6a9e;
+    line-height: 1.5;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .d3-note-icon {
+    color: #ff6b9d;
+    font-size: 14px;
+    margin-top: 1px;
+    flex-shrink: 0;
+  }
+  .d3-note strong { color: #ff6b9d; font-weight: 600; }
+
+  /* Couleurs de titre par direction */
+  .d1-title-color { color: #4dd9e0; }
+  .d2-title-color { color: #f0a030; }
+  .d3-title-color { color: #9b6dff; }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">JDR Master · Directions visuelles · "Trouver une date" · Vue MJ Mobile</h1>
+
+<div class="directions-grid">
+
+  <!-- ====================================================
+       DIRECTION 1 — "Salle des Cartes"
+  ==================================================== -->
+  <div class="direction-col">
+    <div class="direction-meta">
+      <h2 class="d1-title-color">Direction 1 — "Salle des Cartes"</h2>
+      <p>Outil pro sobre, ardoise/cyan. Hiérarchie rigoureuse, densité maîtrisée. Pense Amsel Suite : pas de folklore fantastique, juste de l'efficacité élégante. Idéal pour les MJ qui veulent une interface de commandement, pas une taverne.</p>
+    </div>
+    <div class="phone-frame d1">
+
+      <!-- Status bar -->
+      <div class="d1-statusbar">
+        <span>21:42</span>
+        <span>●●●</span>
+      </div>
+
+      <!-- Header campagne -->
+      <div class="d1-header">
+        <div class="label">Campagne active</div>
+        <h3>Draconis — Campagne des Ombres</h3>
+        <div class="sub">5 créneaux analysés · 4 joueurs invités</div>
+      </div>
+
+      <!-- Titre section -->
+      <div class="d1-section-label">Créneaux disponibles</div>
+
+      <!-- Slot 1 — Warning Mira -->
+      <div class="d1-slot">
+        <div class="d1-slot-head">
+          <span class="d1-slot-date">Vendredi 4 juillet</span>
+          <span class="d1-slot-period">Soirée</span>
+        </div>
+        <div class="d1-players">
+          <span class="d1-player ok"><span class="d1-player-dot"></span>Arek</span>
+          <span class="d1-player ok"><span class="d1-player-dot"></span>Lyra</span>
+          <span class="d1-player ok"><span class="d1-player-dot"></span>Borin</span>
+          <span class="d1-player warn"><span class="d1-player-dot"></span>Mira ?</span>
+        </div>
+      </div>
+
+      <!-- Slot 2 — Best -->
+      <div class="d1-slot best">
+        <div class="d1-slot-head">
+          <span class="d1-slot-date">Samedi 12 juillet</span>
+          <span class="d1-slot-period">Soirée</span>
+        </div>
+        <div class="d1-players">
+          <span class="d1-player ok"><span class="d1-player-dot"></span>Arek</span>
+          <span class="d1-player ok"><span class="d1-player-dot"></span>Lyra</span>
+          <span class="d1-player ok"><span class="d1-player-dot"></span>Borin</span>
+          <span class="d1-player ok"><span class="d1-player-dot"></span>Mira</span>
+        </div>
+      </div>
+
+      <!-- Slot 3 — Lyra absente -->
+      <div class="d1-slot">
+        <div class="d1-slot-head">
+          <span class="d1-slot-date">Vendredi 18 juillet</span>
+          <span class="d1-slot-period">Soirée</span>
+        </div>
+        <div class="d1-players">
+          <span class="d1-player ok"><span class="d1-player-dot"></span>Arek</span>
+          <span class="d1-player ko"><span class="d1-player-dot"></span>Lyra</span>
+          <span class="d1-player ok"><span class="d1-player-dot"></span>Borin</span>
+          <span class="d1-player ok"><span class="d1-player-dot"></span>Mira</span>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="d1-actions">
+        <button class="d1-btn">Lancer un vote</button>
+      </div>
+
+      <!-- Note Lyra -->
+      <div class="d1-note">
+        <strong>Lyra</strong> n'a pas encore indiqué ses dispos pour juillet — lui rappeler ?
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ====================================================
+       DIRECTION 2 — "Taverne"
+  ==================================================== -->
+  <div class="direction-col">
+    <div class="direction-meta">
+      <h2 class="d2-title-color">Direction 2 — "Taverne"</h2>
+      <p>Brun-noir chaud, ambre, radius généreux. L'interface qu'on imagine dans un jeu. Conviviale sans être kitch — le folklore JDR en dosage raisonnable. Les joueurs s'y sentent comme à la table, pas devant un tableur.</p>
+    </div>
+    <div class="phone-frame d2">
+
+      <!-- Status bar -->
+      <div class="d2-statusbar">
+        <span>21:42</span>
+        <span>⠿</span>
+      </div>
+
+      <!-- Header -->
+      <div class="d2-header">
+        <div class="breadcrumb">Mes parties › Draconis</div>
+        <h3>Campagne des Ombres</h3>
+        <div class="sub">Voici où tout le monde (ou presque) est libre ☽</div>
+      </div>
+
+      <div class="d2-divider"></div>
+
+      <!-- Slot 1 -->
+      <div class="d2-slot">
+        <div class="d2-slot-head">
+          <div class="d2-slot-date">Vendredi 4 juillet</div>
+          <div class="d2-slot-period">Soirée</div>
+        </div>
+        <div class="d2-players">
+          <span class="d2-player ok"><span class="d2-icon">✓</span>Arek</span>
+          <span class="d2-player ok"><span class="d2-icon">✓</span>Lyra</span>
+          <span class="d2-player ok"><span class="d2-icon">✓</span>Borin</span>
+          <span class="d2-player warn"><span class="d2-icon">?</span>Mira</span>
+        </div>
+      </div>
+
+      <!-- Slot 2 — Best -->
+      <div class="d2-slot best">
+        <div class="d2-slot-head">
+          <div class="d2-slot-date">Samedi 12 juillet</div>
+          <div class="d2-slot-period">Soirée</div>
+        </div>
+        <div class="d2-players">
+          <span class="d2-player ok"><span class="d2-icon">✓</span>Arek</span>
+          <span class="d2-player ok"><span class="d2-icon">✓</span>Lyra</span>
+          <span class="d2-player ok"><span class="d2-icon">✓</span>Borin</span>
+          <span class="d2-player ok"><span class="d2-icon">✓</span>Mira</span>
+        </div>
+      </div>
+
+      <!-- Slot 3 -->
+      <div class="d2-slot">
+        <div class="d2-slot-head">
+          <div class="d2-slot-date">Vendredi 18 juillet</div>
+          <div class="d2-slot-period">Soirée</div>
+        </div>
+        <div class="d2-players">
+          <span class="d2-player ok"><span class="d2-icon">✓</span>Arek</span>
+          <span class="d2-player ko"><span class="d2-icon">✗</span>Lyra</span>
+          <span class="d2-player ok"><span class="d2-icon">✓</span>Borin</span>
+          <span class="d2-player ok"><span class="d2-icon">✓</span>Mira</span>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="d2-actions">
+        <button class="d2-btn">Lancer un vote</button>
+      </div>
+
+      <!-- Note -->
+      <div class="d2-note">
+        <strong>Lyra</strong> n'a pas encore rendu son parchemin de dispos pour juillet. Un petit pigeon voyageur s'impose ?
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ====================================================
+       DIRECTION 3 — "Grimoire Digital"
+  ==================================================== -->
+  <div class="direction-col">
+    <div class="direction-meta">
+      <h2 class="d3-title-color">Direction 3 — "Grimoire Digital"</h2>
+      <p>Violet foncé, lavande, touche de rose. Les joueurs sont de vrais "tokens" — petits pions sur une table virtuelle. Plus fun, plus coloré, un soupçon de magie numérique. Pour les groupes qui aiment que leur outil ressemble à un jeu.</p>
+    </div>
+    <div class="phone-frame d3">
+
+      <!-- Status bar -->
+      <div class="d3-statusbar">
+        <span>21:42</span>
+        <span style="color:#9b6dff;font-size:11px;letter-spacing:0.12em;">●●●</span>
+      </div>
+
+      <!-- Header -->
+      <div class="d3-header">
+        <div class="d3-glyph">✦✦</div>
+        <div class="label">Partie en cours</div>
+        <h3>Draconis<br>Campagne des Ombres</h3>
+        <div class="sub">5 créneaux où (presque) tout le monde peut jouer</div>
+      </div>
+
+      <div class="d3-separator">
+        <div class="d3-separator-line"></div>
+        <div class="d3-separator-dot"></div>
+        <div class="d3-separator-line"></div>
+      </div>
+
+      <!-- Slot 1 -->
+      <div class="d3-slot">
+        <div class="d3-slot-head">
+          <div class="d3-slot-info">
+            <div class="d3-slot-date">Vendredi 4 juillet</div>
+            <div class="d3-slot-period">Soirée</div>
+          </div>
+          <span class="d3-score">3/4</span>
+        </div>
+        <div class="d3-players">
+          <div class="d3-token ok">
+            <div class="d3-token-circle">Ar</div>
+            <div class="d3-token-name">Arek</div>
+          </div>
+          <div class="d3-token ok">
+            <div class="d3-token-circle">Ly</div>
+            <div class="d3-token-name">Lyra</div>
+          </div>
+          <div class="d3-token ok">
+            <div class="d3-token-circle">Bo</div>
+            <div class="d3-token-name">Borin</div>
+          </div>
+          <div class="d3-token warn">
+            <div class="d3-token-circle">Mi</div>
+            <div class="d3-token-name">Mira ?</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slot 2 — Best -->
+      <div class="d3-slot best">
+        <div class="d3-slot-head">
+          <div class="d3-slot-info">
+            <div class="d3-slot-date">Samedi 12 juillet</div>
+            <div class="d3-slot-period">Soirée</div>
+          </div>
+          <span class="d3-score">4/4</span>
+        </div>
+        <div class="d3-players">
+          <div class="d3-token ok">
+            <div class="d3-token-circle">Ar</div>
+            <div class="d3-token-name">Arek</div>
+          </div>
+          <div class="d3-token ok">
+            <div class="d3-token-circle">Ly</div>
+            <div class="d3-token-name">Lyra</div>
+          </div>
+          <div class="d3-token ok">
+            <div class="d3-token-circle">Bo</div>
+            <div class="d3-token-name">Borin</div>
+          </div>
+          <div class="d3-token ok">
+            <div class="d3-token-circle">Mi</div>
+            <div class="d3-token-name">Mira</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slot 3 -->
+      <div class="d3-slot">
+        <div class="d3-slot-head">
+          <div class="d3-slot-info">
+            <div class="d3-slot-date">Vendredi 18 juillet</div>
+            <div class="d3-slot-period">Soirée</div>
+          </div>
+          <span class="d3-score">3/4</span>
+        </div>
+        <div class="d3-players">
+          <div class="d3-token ok">
+            <div class="d3-token-circle">Ar</div>
+            <div class="d3-token-name">Arek</div>
+          </div>
+          <div class="d3-token ko">
+            <div class="d3-token-circle">Ly</div>
+            <div class="d3-token-name">Lyra</div>
+          </div>
+          <div class="d3-token ok">
+            <div class="d3-token-circle">Bo</div>
+            <div class="d3-token-name">Borin</div>
+          </div>
+          <div class="d3-token ok">
+            <div class="d3-token-circle">Mi</div>
+            <div class="d3-token-name">Mira</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="d3-actions">
+        <button class="d3-btn d3-btn-accent2">Lancer un vote</button>
+      </div>
+
+      <!-- Note -->
+      <div class="d3-note">
+        <span class="d3-note-icon">✦</span>
+        <span><strong>Lyra</strong> n'a pas encore lancé sa rune de dispo pour juillet — un rappel magique ?</span>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /directions-grid -->
+
+</body>
+</html>

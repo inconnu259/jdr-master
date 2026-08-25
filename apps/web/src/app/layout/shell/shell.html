@@ -1,9 +1,39 @@
-<mat-toolbar color="primary">
+<!-- Revue de code Story 29.4 : masqué sur mobile UNIQUEMENT quand le bandeau contextuel prend le
+     relais (contextualNav.title() posé) — sinon les routes non câblées à ContextualNavService
+     (ex. formulaire de Partie, fiche personnage) se retrouveraient sans aucun en-tête sur mobile. -->
+<mat-toolbar color="primary" [class.hidden-mobile]="contextualNav.title()">
   <mat-toolbar-row>
     <span class="logo" routerLink="/">master-jdr</span>
     <span class="spacer"></span>
   </mat-toolbar-row>
 </mat-toolbar>
+
+<!-- Story 29.13 (révision) : bandeau « push », une annonce non vue à la fois — distinct du badge
+     nav (Parties), visible même hors de la Partie concernée. -->
+@if (banner(); as b) {
+  <div class="announcement-banner" role="status">
+    <a
+      class="announcement-banner__link"
+      [routerLink]="
+        b.announcement.scenarioId
+          ? ['/parties', b.announcement.partieId, 'scenarios', b.announcement.scenarioId]
+          : ['/parties', b.announcement.partieId]
+      "
+      [queryParams]="{ announcementId: b.announcement.id }"
+    >
+      <span class="announcement-banner__partie">{{ b.partieName }}</span>
+      <span class="announcement-banner__text">{{ b.announcement.text }}</span>
+    </a>
+    <button
+      class="announcement-banner__close"
+      type="button"
+      [attr.aria-label]="'Fermer la notification de ' + b.partieName"
+      (click)="dismissBanner(b.announcement.id)"
+    >
+      <mat-icon aria-hidden="true">close</mat-icon>
+    </button>
+  </div>
+}
 
 <!-- Story 29.3 : barre à 4 destinations — mêmes liens, barre haute sur desktop / barre basse sur
      mobile (bascule CSS, cf. shell.scss). L'entrée active porte aria-current="page" (posé par
@@ -15,11 +45,11 @@
     routerLinkActive="nav-bar__link--active"
     [routerLinkActiveOptions]="{ exact: true }"
     ariaCurrentWhenActive="page"
-    [matBadge]="openPollsCount()"
-    [matBadgeHidden]="openPollsCount() === 0"
+    [matBadge]="homeBadgeCount()"
+    [matBadgeHidden]="homeBadgeCount() === 0"
     matBadgeColor="warn"
     matBadgeSize="small"
-    [matBadgeDescription]="openPollsCount() + ' vote(s) en attente de réponse'"
+    [matBadgeDescription]="homeBadgeDescription()"
   >
     <mat-icon aria-hidden="true">home</mat-icon>
     <span>{{ theme.tone()['nav.my_games'] }}</span>
@@ -52,6 +82,22 @@
     <span>{{ theme.tone()['nav.account'] }}</span>
   </a>
 </nav>
+
+<!-- Story 29.4 : bandeau contextuel (titre + sous-titre optionnel), propre à l'écran courant.
+     Sur desktop le mat-toolbar (wordmark complet) reste seul responsable de la marque. Sur mobile
+     il est masqué (cf. shell.scss) et ce bandeau porte à la place un wordmark réduit — un seul
+     bandeau au lieu de deux empilés, cf. correction post-test de 29.4. -->
+@if (contextualNav.title(); as title) {
+  <div class="contextual-header">
+    <a class="wordmark-compact" routerLink="/">jdr</a>
+    <div class="titles">
+      <span class="t1" role="heading" aria-level="1">{{ title }}</span>
+      @if (contextualNav.subtitle(); as subtitle) {
+        <span class="t2">{{ subtitle }}</span>
+      }
+    </div>
+  </div>
+}
 
 <main class="content">
   <router-outlet />

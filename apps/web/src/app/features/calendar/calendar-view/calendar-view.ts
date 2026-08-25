@@ -1,45 +1,104 @@
 import {
   Component,
   DestroyRef,
-  ElementRef,
+  type ElementRef,
   OnInit,
-  ViewChild,
   computed,
   effect,
   inject,
   input,
   signal,
   untracked,
+  viewChild,
 } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { distinctUntilChanged, map } from 'rxjs/operators';
 import { Location } from '@angular/common';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+import {
+  CdkConnectedOverlay,
+  CdkOverlayOrigin,
+  type ConnectedPosition,
+} from '@angular/cdk/overlay';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
+import { firstValueFrom } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import type {
   AggregatedSlotDto,
+  AvailKind,
   AvailabilityDeclarationDto,
   AvailableSlotDto,
+  CalendarLayerKey,
+  CreateAvailabilityBatchItem,
   CreateAvailabilityDto,
   DaySlot,
+  MeCalendarDto,
   PartieMemberDto,
   ScenarioDto,
   SeanceDto,
   SessionPollDto,
+  VoteAnswer,
 } from '@master-jdr/shared';
-import { AvailabilityService } from '../../../core/availability/availability.service';
+import { CALENDAR_LAYER_KEYS, DEFAULT_CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
+import {
+  AvailabilityService,
+  ConflictError,
+} from '../../../core/availability/availability.service';
+import { AuthService } from '../../../core/auth/auth.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { PollService } from '../../../core/poll/poll.service';
+import { getMissingVoters } from '../../../core/poll/poll.util';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
-import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
+import {
+  CalendarSessionLayersService,
+  calendarSessionKey,
+} from '../calendar-session-layers.service';
+import { CalendarDisplayPanel } from '../calendar-display-panel/calendar-display-panel';
+import { CalendarLegend } from '../calendar-legend/calendar-legend';
+import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
+import { RealtimeService, partieTopic, userTopic } from '../../../core/realtime/realtime.service';
 import { CalendarMonthView, SlotSelectedEvent } from '../calendar-month-view/calendar-month-view';
-import { CalendarWeekView } from '../calendar-week-view/calendar-week-view';
+import { CalendarWeekView, getWeekStart } from '../calendar-week-view/calendar-week-view';
+import {
+  CalendarAgendaView,
+  type AgendaEntry,
+  type AgendaSealRequest,
+} from '../calendar-agenda-view/calendar-agenda-view';
+import { SealConfirmDialog } from '../seal-confirm-dialog/seal-confirm-dialog';
+import { CalendarDetailRail } from '../calendar-detail-rail/calendar-detail-rail';
+import {
+  type RailTarget,
+  buildDayDetail,
+  dateKeyToLocalMidnight,
+  entryCoversSlot,
+  nextMeaningfulDate,
+  toDateKey,
+} from '../day-detail.utils';
+import { CalendarLayerToggle } from '../calendar-layer-toggle/calendar-layer-toggle';
+import { DestinyControl, type DestinyPollRef } from '../destiny-control/destiny-control';
 import { ConstraintPanel } from '../constraint-panel/constraint-panel';
-import { AvailableSlotsPanel } from '../available-slots/available-slots';
+import {
+  ConflictDialog,
+  type ConflictDialogData,
+  type ConflictResolutionByIndex,
+} from '../conflict-dialog/conflict-dialog';
+import { type SelectedCell, buildBatchItems, composeCellKey } from '../selection.utils';
+import { ComposeBar } from '../compose-bar/compose-bar';
+import {
+  ComposeConfirmDialog,
+  type ComposeConfirmData,
+  type ComposeSeanceChoice,
+} from '../compose-confirm-dialog/compose-confirm-dialog';
+import { AvailableSlotsPanel, isNamedSlot } from '../available-slots/available-slots';
+import { VoteAnswerPicker } from '../vote-answer-picker/vote-answer-picker';
+import type { VoteOptionActivatedEvent, VoteParticipation } from '../poll-track.utils';
 import { PollCreationComponent } from '../../poll/poll-creation/poll-creation';
-import { PollStatusPanel } from '../../poll/poll-status/poll-status';
-import { PollResponseComponent } from '../../poll/poll-response/poll-response';
+import { PollMissingPanel } from '../poll-missing/poll-missing';
 
 /** Story 8.8, AC7/AC8 : un vote actif, étiqueté par son scénario (et sa séance si le scénario en a
  * plusieurs) — remplace le signal `activePoll` unique qui ne représentait qu'« un » poll par Partie. */
@@ -51,7 +110,66 @@ export interface ActivePollEntry {
   poll: SessionPollDto;
 }
 
-/** Story 8.8, AC9 : une séance sans vote encore lancé, éligible pour le sélecteur de l'Oracle. */
+/** Libellés des créneaux, pour NOMMER un créneau en conflit (Story 36.4, AC2) — le dialogue
+ *  nomme, il ne compte pas. */
+const SLOT_LABELS: Record<DaySlot, string> = {
+  MORNING: 'Matin',
+  AFTERNOON: 'Après-midi',
+  EVENING: 'Soir',
+  FULL_DAY: 'Journée',
+};
+
+/**
+ * Story 36.7 — les positions du sélecteur, dans l'ordre de préférence.
+ *
+ * Sous la bande d'abord (le geste vient d'en haut), au-dessus si la place manque en bas — cas
+ * réel et fréquent : la dernière ligne d'une grille de six semaines touche le bas de l'écran.
+ * `cdkConnectedOverlayPush` rattrape ensuite les débordements latéraux.
+ */
+const PICKER_POSITIONS: ConnectedPosition[] = [
+  { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 4 },
+  { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -4 },
+  { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top', offsetY: 4 },
+  { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom', offsetY: -4 },
+];
+
+/**
+ * Story 36.14 — les positions du panneau « Affichage » sur ordinateur.
+ *
+ * 🚨 Jeu DISTINCT de `PICKER_POSITIONS` : celui-ci est calé sur une bande de grille, qui peut
+ * toucher le bas de l'écran ; le panneau, lui, pend d'un bouton en HAUT de page — la préférence
+ * naturelle est donc « sous, aligné à gauche », et le repli au-dessus n'est qu'un filet de
+ * sécurité pour les très petites hauteurs. Les réunir aurait donné au panneau les priorités du
+ * sélecteur, pour la seule raison qu'un tableau existait déjà.
+ */
+const DISPLAY_PANEL_POSITIONS: ConnectedPosition[] = [
+  { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top', offsetY: 6 },
+  { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top', offsetY: 6 },
+  { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -6 },
+];
+
+const CALENDAR_CELL_DATE_FORMAT = new Intl.DateTimeFormat('fr-FR', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'long',
+});
+
+/** Story 36.10 — ce que la composition vise.
+ *
+ * 🚨 Un `pollId`, jamais un index (même raison qu'à la Destinée, story 36.9 encadré n°2) :
+ * `activePolls()` est reconstruit à chaque rechargement temps réel, et un index désignerait
+ * alors un AUTRE vote — donc écrirait les créneaux composés dans le mauvais. */
+/** Ce que la composition de créneaux vise.
+ *
+ *  🚨 Story 36.12 — `seanceId` **facultatif** sur `'new'` : quand la composition est armée depuis
+ *  l'Agenda, le MJ a déjà désigné la séance en cliquant sa ligne, et la lui redemander à la
+ *  validation serait une question dont il a déjà donné la réponse. Renseigné, il restreint
+ *  `composeSeanceChoices()` à cette séance — ce qui suffit à pré-remplir `ComposeConfirmDialog`,
+ *  qui le fait déjà quand il n'y a qu'un choix. Aucune ligne à changer dans le dialogue. */
+export type ComposeTarget = { kind: 'poll'; pollId: string } | { kind: 'new'; seanceId?: string };
+
+/** Story 8.8, AC9 : une séance sans vote encore lancé — sert désormais à rattacher un vote neuf
+ *  composé sur la grille (Story 36.10, AC11). */
 export interface EligibleSeanceEntry {
   scenario: ScenarioDto;
   seance: SeanceDto;
@@ -64,13 +182,23 @@ export interface EligibleSeanceEntry {
   imports: [
     CalendarMonthView,
     CalendarWeekView,
+    CalendarAgendaView,
+    CalendarDetailRail,
+    CalendarLayerToggle,
+    DestinyControl,
+    ComposeBar,
     ConstraintPanel,
     MatButtonToggleModule,
     MatButtonModule,
     AvailableSlotsPanel,
     PollCreationComponent,
-    PollStatusPanel,
-    PollResponseComponent,
+    PollMissingPanel,
+    VoteAnswerPicker,
+    CdkConnectedOverlay,
+    CdkOverlayOrigin,
+    CdkTrapFocus,
+    CalendarDisplayPanel,
+    CalendarLegend,
   ],
   templateUrl: './calendar-view.html',
   styleUrl: './calendar-view.scss',
@@ -78,9 +206,8 @@ export interface EligibleSeanceEntry {
 export class CalendarView implements OnInit {
   readonly mode = input<'personal' | 'mj'>('personal');
 
-  @ViewChild('slotsPanel') private readonly slotsPanel?: ElementRef<HTMLElement>;
-
   private readonly availabilitySvc = inject(AvailabilityService);
+  private readonly authSvc = inject(AuthService);
   private readonly partiesSvc = inject(PartiesService);
   private readonly pollSvc = inject(PollService);
   private readonly scenariosSvc = inject(ScenariosService);
@@ -88,16 +215,210 @@ export class CalendarView implements OnInit {
   private readonly router = inject(Router);
   private readonly location = inject(Location);
   private readonly snack = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
   protected readonly theme = inject(ThemeToneService);
+  private readonly contextualNav = inject(ContextualNavService);
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly breakpointObserver = inject(BreakpointObserver);
+  private readonly sessionLayers = inject(CalendarSessionLayersService);
+
+  /** Même seuil que `partie-detail` et `list-control-bar` — pas un troisième vocabulaire de
+   *  largeur dans l'application. */
+  private static readonly DESKTOP_QUERY = '(min-width: 1024px)';
 
   protected readonly declarations = signal<AvailabilityDeclarationDto[]>([]);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
 
-  protected readonly view = signal<'month' | 'week'>('month');
+  /**
+   * Story 36.11, AC6 — **l'Agenda est la vue par défaut sur mobile**, le Mois sur ordinateur
+   * [Source: EXPERIENCE.md §9].
+   *
+   * 🚨 La largeur est lue **UNE SEULE FOIS**, ici, à l'initialisation. Aucun `effect()` ni
+   * `toSignal()` réactif ne doit réassigner ce signal : un défaut n'est pas un verrou (AC15), et
+   * une rotation d'écran ramènerait sinon l'utilisateur de force sur l'Agenda alors qu'il vient
+   * de choisir le Mois. `isMatched()` est synchrone — évite un rendu mobile qui clignoterait en
+   * desktop (même patron que `list-control-bar.ts`).
+   */
+  protected readonly view = signal<'month' | 'week' | 'agenda'>(
+    this.breakpointObserver.isMatched(CalendarView.DESKTOP_QUERY) ? 'month' : 'agenda',
+  );
+
+  /**
+   * Story 36.11 — le « maintenant » de l'écran, figé au montage.
+   *
+   * Une seule source pour toutes les surfaces : deux `new Date()` pourraient placer deux entrées
+   * de part et d'autre d'une frontière de jour et leur donner des sections incohérentes. Figé
+   * plutôt que réactif, comme `Dashboard.countdownNow` : un agenda qui se réorganiserait tout
+   * seul à minuit coûterait un timer permanent pour un gain nul.
+   */
+  protected readonly todayKey = toDateKey(new Date());
   protected readonly sharedDate = signal<Date>(new Date());
+
+  // ─── Couches du calendrier (Story 30.6, AC1/AC3/AC4/AC7, encadré n°2) ──────
+  // Signal purement local, jamais persisté par la bascule elle-même — seul l'écran Compte (Story
+  // 30.4) écrit `defaultCalendarLayers`. Initialisé au montage depuis le défaut du compte.
+  protected readonly activeLayers = signal<CalendarLayerKey[]>([]);
+  // Contenu de GET /me/calendar (contexte personnel uniquement, AC8/AC9) — jamais peuplé en
+  // contexte de partie.
+  protected readonly meCalendar = signal<MeCalendarDto | null>(null);
+  protected readonly meCalendarLoading = signal(false);
+
+  /**
+   * Les couches dont la BARRE porte un interrupteur — 4 hors contexte de partie, 5 en contexte de
+   * partie (`disponibilite-groupe` absente hors partie, AD-16/AC8 de la 30.6).
+   *
+   * ⚠️ Story 36.11, AC7 — `inscriptions-ouvertes` ne figure plus ici. Une séance à inscription
+   * ouverte **n'a pas de date** : elle n'a aucune case où se poser, et l'interrupteur n'a jamais
+   * rien produit à l'écran. Elle vit désormais dans une section de l'Agenda.
+   *
+   * 🚨 **La CLÉ, elle, reste** dans `CALENDAR_LAYER_KEYS` et dans la préférence de compte
+   * [Source: prd.md:305]. La retirer de l'union ferait échouer la validation serveur
+   * (`@IsIn(CALENDAR_LAYER_KEYS)`) de tout compte l'ayant déjà enregistrée — et l'écran Compte
+   * continue de l'offrir. C'est l'interrupteur de la barre qui disparaît, pas la clé.
+   */
+  protected readonly availableLayerKeys = computed<CalendarLayerKey[]>(() =>
+    CALENDAR_LAYER_KEYS.filter(
+      (k) =>
+        k !== 'inscriptions-ouvertes' && (this.partieId() ? true : k !== 'disponibilite-groupe'),
+    ),
+  );
+
+  private defaultLayersForContext(partieContext: boolean): CalendarLayerKey[] {
+    const base = this.authSvc.currentUser()?.defaultCalendarLayers ?? DEFAULT_CALENDAR_LAYER_KEYS;
+    return partieContext ? base : base.filter((k) => k !== 'disponibilite-groupe');
+  }
+
+  /**
+   * Story 36.14 — l'identité du calendrier dont on mémorise les couches pour la session.
+   *
+   * 🚨 **Dérivée du signal `partieId()`, jamais capturée au montage.** Les trois routes du
+   * calendrier (`/profile/calendar`, `/parties/:id/calendar`, `/parties/:id/guild-calendar`)
+   * montent le MÊME composant : Angular peut réutiliser l'instance sur un simple changement de
+   * paramètre, sans la détruire. Une clé figée dans `ngOnInit` conserverait alors celle du
+   * calendrier précédent, et l'AC10 (« l'ouverture d'un **autre** calendrier repart du défaut »)
+   * serait faux en production tout en restant vert en test.
+   * [Source: deferred-work.md:117 — le même piège, déjà constaté sur `fromDateStr`/`toDateStr`.]
+   */
+  private sessionKey(): string {
+    return calendarSessionKey(this.partieId(), this.mode());
+  }
+
+  protected toggleLayer(key: CalendarLayerKey): void {
+    this.activeLayers.update((keys) =>
+      keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key],
+    );
+    // AC9 — la bascule survit à un retour sur CE calendrier dans CETTE session. Toujours aucune
+    // écriture réseau : le défaut de compte n'est touché que par l'écran Compte (AC15).
+    this.sessionLayers.write(this.sessionKey(), this.activeLayers());
+  }
+
+  protected isLayerActive(key: CalendarLayerKey): boolean {
+    return this.activeLayers().includes(key);
+  }
+
+  /** AC4/AC7 : comparaison d'ensemble complète (ajouts ET retraits), pas seulement les couches
+   *  ajoutées — un retrait doit rester détecté (encadré n°2). */
+  protected readonly isOverridden = computed(() => {
+    const current = this.activeLayers();
+    const def = this.defaultLayersForContext(!!this.partieId());
+    if (current.length !== def.length) return true;
+    const defSet = new Set(def);
+    return current.some((k) => !defSet.has(k));
+  });
+
+  // ─── Story 36.14 — la barre repliée : le panneau « Affichage », sa pastille, sa légende ───
+
+  /**
+   * ⚠️ Le panneau est un OVERLAY ancré au viewport, pas du contenu dans la grille : une media
+   * query est ici le bon outil, là où la vue Semaine emploie une container query (story 36.13).
+   * Le raisonnement de la 36.13 — « en contexte de partie un panneau latéral prend 40 % de la
+   * largeur et une media query mentirait » — vaut pour ce qui vit DANS la colonne ; un élément
+   * qui flotte au-dessus de tout n'a pas ce problème.
+   *
+   * Réactif, contrairement à `view` : celui-ci porte un DÉFAUT que l'utilisateur peut écarter
+   * (36.11, AC15), celui-là décrit la place disponible ici et maintenant — une rotation d'écran
+   * doit bien faire passer le menu ancré à la feuille du bas.
+   */
+  protected readonly isDesktop = toSignal(
+    this.breakpointObserver.observe(CalendarView.DESKTOP_QUERY).pipe(map((r) => r.matches)),
+    { initialValue: this.breakpointObserver.isMatched(CalendarView.DESKTOP_QUERY) },
+  );
+
+  protected readonly displayPanelOpen = signal(false);
+  /** AC5 — fermée par défaut. Portée écran, jamais mémorisée : la légende est une aide de
+   *  lecture ponctuelle, pas un réglage d'affichage au sens de FR-55. */
+  protected readonly legendVisible = signal(false);
+  protected readonly DISPLAY_PANEL_POSITIONS = DISPLAY_PANEL_POSITIONS;
+
+  private readonly displayTrigger = viewChild<ElementRef<HTMLButtonElement>>('displayTrigger');
+
+  protected toggleDisplayPanel(): void {
+    this.displayPanelOpen.update((open) => !open);
+  }
+
+  /** AC18 — rendre le focus au bouton : sans quoi un utilisateur clavier retombe en haut du
+   *  document, exactement le défaut déjà corrigé sur le sélecteur de vote (36.7, AC7). */
+  protected closeDisplayPanel(): void {
+    this.displayPanelOpen.set(false);
+    this.displayTrigger()?.nativeElement.focus();
+  }
+
+  protected onDisplayPanelKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      // 🚨 `stopPropagation` : `Échap` annule aussi la sélection en cours dans la grille. Sans
+      // cette barrière, fermer le panneau effacerait une sélection que l'utilisateur n'a pas
+      // touchée — deux gestes distincts sur la même touche, comme pour le sélecteur de la 36.7.
+      event.stopPropagation();
+      this.closeDisplayPanel();
+    }
+  }
+
+  protected toggleLegend(): void {
+    this.legendVisible.update((v) => !v);
+  }
+
+  /**
+   * AC4/AC6 — le libellé de la pastille de résumé.
+   *
+   * 🚨 Le dénominateur est `availableLayerKeys()` — les couches que CE calendrier expose : 4 en
+   * personnel, 5 en contexte de partie. Le contrat l'écrit noir sur blanc : « la pastille dit
+   * « 3 sur 4 », pas « 3 sur 5 » » [Source: contrat-ui-calendrier.html:277-278].
+   *
+   * ⚠️ À ne pas confondre avec `isOverridden()`, qui raisonne, lui, sur le jeu COMPLET,
+   * `inscriptions-ouvertes` comprise (AC17) : compter sur le jeu affiché et décider sur le jeu
+   * complet n'est pas une incohérence, c'est la seule combinaison qui ne mente ni au compteur ni
+   * à la condition d'apparition.
+   */
+  protected readonly layerSummaryLabel = computed(() => {
+    const shown = this.availableLayerKeys();
+    const active = new Set(this.activeLayers());
+    const n = shown.filter((k) => active.has(k)).length;
+    return this.theme
+      .tone()
+      ['calendar.display.filtered_badge'].replace('{n}', String(n))
+      .replace('{total}', String(shown.length));
+  });
+
+  /** Aucun appel réseau : réaffecte l'état local depuis le défaut du compte (encadré n°2). */
+  protected resetToDefault(): void {
+    this.activeLayers.set(this.defaultLayersForContext(!!this.partieId()));
+    // 🚨 On ÉCRIT le défaut, on n'efface pas l'entrée : une entrée effacée dirait « jamais
+    // visité », et un retour en session rejouerait un défaut de compte que le lecteur vient
+    // peut-être d'écarter à nouveau depuis un autre onglet.
+    this.sessionLayers.write(this.sessionKey(), this.activeLayers());
+  }
+
+  protected readonly visibleDeclarations = computed<AvailabilityDeclarationDto[]>(() => {
+    const active = this.activeLayers();
+    const showAvail = active.includes('mes-disponibilites');
+    const showUnavail = active.includes('mes-indisponibilites');
+    return this.declarations().filter((d) => (d.kind === 'AVAILABLE' ? showAvail : showUnavail));
+  });
+
+  /** Garde anti-double-ouverture du dialogue de résolution (Story 36.4). */
+  private readonly conflictDialogOpen = signal(false);
 
   protected readonly panelOpen = signal(false);
   protected readonly selectedDate = signal<Date>(new Date());
@@ -114,8 +435,7 @@ export class CalendarView implements OnInit {
   protected readonly isMjMode = computed(() => this.mode() === 'mj');
 
   // Story 8.8, AC9 : source unique de vérité — `activePolls`/`eligibleSeances` en sont dérivés
-  // (computed), pas peuplés séparément, pour rester cohérents après toute mutation locale
-  // (ex. onPollResponded()).
+  // (computed), pas peuplés séparément, pour rester cohérents après tout rechargement.
   protected readonly scenarios = signal<ScenarioDto[]>([]);
 
   // Story 8.8, AC7/AC8 : liste des votes actifs (OPEN) de la Partie, un par Séance, étiquetés par
@@ -149,16 +469,764 @@ export class CalendarView implements OnInit {
     return entries;
   });
 
+  // Story 30.6, AC4/AC2 : séances de mes parties dont l'inscription est ouverte — dérivation
+  // séparée de `eligibleSeances()` (qui sert un besoin différent, MJ-only : lancer un vote).
+  // Même règle que `buildOpenInscriptionsLayer` côté serveur (Story 30.5) : `inscription.max`
+  // défini, aucune date validée (ni poll.chosenDate ni inscription.dateValidee).
+  private openInscriptionSeances(): { scenario: ScenarioDto; seance: SeanceDto }[] {
+    const out: { scenario: ScenarioDto; seance: SeanceDto }[] = [];
+    for (const scenario of this.scenarios()) {
+      for (const seance of scenario.seances) {
+        if (seance.inscription?.max == null) continue;
+        const validated = seance.poll?.chosenDate ?? seance.inscription?.dateValidee;
+        if (validated) continue;
+        out.push({ scenario, seance });
+      }
+    }
+    return out;
+  }
+
+  // Story 30.6, Task 6/AC2 : liste chronologique unique fusionnant les couches actives — deux
+  // chemins de source distincts selon le contexte (encadré n°1) :
+  // - Contexte de partie (`partieId()` renseigné) : dérivée des signaux déjà chargés par cette
+  //   page (`scenarios`, `activePolls`, `availableSlots`/`heatmap`), aucun appel réseau de plus
+  //   (AC9).
+  // - Contexte personnel (`partieId()` absent) : dérivée de `meCalendar()` (Story 30.5, AC8), qui
+  //   porte déjà `mes-seances`/`votes-en-cours`/`inscriptions-ouvertes` filtrées par plage.
+  //
+  // Story 36.1, encadré n°2 : la dérivation est faite UNE SEULE FOIS, sans filtrage par couche.
+  // Deux consommateurs en dépendent, avec des besoins opposés :
+  //  - la vue Agenda ne veut que les couches actives (`agendaEntries()`, ci-dessous) ;
+  //  - le rail de détail a besoin des entrées NON filtrées, parce qu'une séance dont la couche
+  //    est éteinte doit continuer de rendre son créneau indisponible (FR-50 / AC6). Filtrer ici
+  //    ferait disparaître l'indisponibilité en même temps que le titre.
+  // Le filtrage par couche vit donc en aval, et seulement sur ce qui est NOMMÉ.
+  private readonly allCalendarEntries = computed<AgendaEntry[]>(() => {
+    const entries: AgendaEntry[] = [];
+    const pid = this.partieId();
+
+    if (pid) {
+      for (const scenario of this.scenarios()) {
+        for (const seance of scenario.seances) {
+          const date = seance.poll?.chosenDate ?? seance.inscription?.dateValidee;
+          if (!date) continue;
+          entries.push({
+            key: `seance-${seance.id}`,
+            type: 'mes-seances',
+            date: date.substring(0, 10),
+            label: scenario.title,
+            detail: seance.poll?.chosenSlot ?? undefined,
+            slot: seance.poll?.chosenSlot ?? 'FULL_DAY',
+            // AC7 : en contexte de partie, `scenarios()` ne contient QUE les scénarios de cette
+            // partie — une séance d'une autre partie n'arrive jamais ici, et n'est donc ni
+            // nommée ni navigable. Elle n'existe que sous forme d'indisponibilité anonyme,
+            // dérivée côté serveur (AD-9).
+            partieId: pid,
+            scenarioId: scenario.id,
+            seanceId: seance.id,
+            // Story 36.5 — gratuits ici : le SeanceDto complet est déjà chargé.
+            seanceHeure: seance.heureRdv,
+            seanceLieu: seance.lieu,
+            seanceNote: seance.notePratique,
+            // Story 36.11 — ce qui fait entrer une séance JOUÉE dans « C'est passé ». Gratuit
+            // ici, le SeanceDto complet est déjà chargé. 🚨 Renseigné dans cette branche
+            // SEULEMENT : `MyCalendarSeanceEntry` n'a pas de `compteRendu`, et le calendrier
+            // personnel ne charge de toute façon aucune date passée.
+            compteRenduManquant: !seance.compteRendu?.trim(),
+          });
+        }
+      }
+      // Story 36.6, AC8 — UNE entrée par OPTION, jamais une par sondage. Avant cette story, un
+      // vote proposant vendredi ET samedi ne marquait que le vendredi : l'entrée unique portait
+      // la date de la PREMIÈRE option, et tous les autres créneaux proposés restaient muets en
+      // Mois, en Semaine et au rail. C'est ce que corrige l'éclatement ci-dessous.
+      //
+      // AD-20 : les compteurs et ma réponse se dérivent ici, côté client, de `PollOptionDto.votes`
+      // — cet écran détient déjà la charge utile complète. Aucun appel réseau n'en part.
+      const myId = this.authSvc.currentUser()?.id;
+      for (const entry of this.activePolls()) {
+        for (const option of entry.poll.options) {
+          const mine = option.votes.find((v) => v.userId === myId);
+          entries.push({
+            key: `poll-${entry.poll.id}-${option.id}`,
+            type: 'votes-en-cours',
+            date: option.date.substring(0, 10),
+            label: entry.scenario.title,
+            // Story 36.6 — le CRÉNEAU, comme pour une séance. Le « N option(s) proposée(s) »
+            // d'avant décrivait le SONDAGE ; répété sur chacune de ses options éclatées, il
+            // devenait un bruit trompeur (constaté à l'œil dans l'Agenda). Ce que la ligne doit
+            // dire, c'est le créneau qu'elle propose — traduit, comme SLOT_LABELS le fait déjà
+            // pour les séances (revue de code du 36.6 : le code brut fuitait ici).
+            detail: SLOT_LABELS[option.slot],
+            slot: option.slot,
+            vote: {
+              // Story 36.7 — le triplet d'identité de l'action. En contexte de partie il vient de
+              // la route ; il est porté jusqu'à la bande pour que le sélecteur de réponse n'ait
+              // rien à recomposer.
+              partieId: pid,
+              pollId: entry.poll.id,
+              optionId: option.id,
+              yes: option.votes.filter((v) => v.answer === 'YES').length,
+              maybe: option.votes.filter((v) => v.answer === 'MAYBE').length,
+              no: option.votes.filter((v) => v.answer === 'NO').length,
+              // Le dénominateur vient du serveur (`membersCount`) et JAMAIS de `members()`, qui
+              // n'est chargé qu'en mode MJ : un joueur n'a aucun effectif en mémoire.
+              total: entry.poll.membersCount,
+              myAnswer: mine ? mine.answer : null,
+            },
+          });
+        }
+      }
+      for (const { scenario, seance } of this.openInscriptionSeances()) {
+        entries.push({
+          key: `inscription-${seance.id}`,
+          type: 'inscriptions-ouvertes',
+          date: '',
+          label: scenario.title,
+          detail: `${seance.inscription!.inscrits.length}/${seance.inscription!.max} inscrits`,
+          // Story 36.11 — commande le badge (« S'inscrire » contre « Inscrit »), jamais
+          // l'appartenance à la section : une inscription reste dans « Ça t'attend » même une
+          // fois prise, c'est le libellé qui change (même règle que pour un vote répondu).
+          jeSuisInscrit: seance.inscription!.inscrits.some((i) => i.userId === myId),
+        });
+      }
+      // Story 36.8 — ⚠️ le `continue` qui sautait les créneaux « aucun disponible ET aucun avis »
+      // a été RETIRÉ : c'est précisément l'un des DEUX VIDES que l'AC6 demande de distinguer
+      // (jauge vide « personne ne s'est prononcé » vs jauge rouge pleine « tout le monde est
+      // bloqué »). Tant qu'il filtrait ici, la grille ne pouvait structurellement pas montrer le
+      // premier. La liste Agenda, elle, continue de ne rien afficher pour ces créneaux — mais le
+      // filtre est désormais À L'AFFICHAGE (`agendaEntries()`), jamais à la source.
+      // Story 36.12, AC5 — les séances auxquelles il manque un vote. 🚨 MJ UNIQUEMENT : un joueur
+      // ne peut pas lancer de vote, et lui montrer une ligne dont l'unique contenu est une action
+      // qui lui est refusée serait une promesse creuse. Elles n'existent qu'en contexte de partie,
+      // `eligibleSeances()` dérivant de `scenarios()`.
+      //
+      // Agenda-only et sans date, exactement comme `inscriptions-ouvertes` : aucune case ne les
+      // porte, ni en Mois, ni en Semaine, ni au rail.
+      if (this.isMjMode()) {
+        for (const e of this.eligibleSeances()) {
+          entries.push({
+            key: `sans-date-${e.seance.id}`,
+            type: 'seances-sans-date',
+            date: '',
+            label:
+              e.scenario.seances.length > 1
+                ? `${e.scenario.title} — Séance ${e.seanceIndex}`
+                : e.scenario.title,
+            partieId: pid,
+            scenarioId: e.scenario.id,
+            seanceId: e.seance.id,
+          });
+        }
+      }
+      for (const slot of this.heatmap()) {
+        entries.push({
+          key: `groupe-${slot.date}-${slot.slot}`,
+          type: 'disponibilite-groupe',
+          date: slot.date,
+          label: `${slot.slot} — ${slot.available}/${slot.total} disponibles`,
+          detail: slot.unavailable > 0 ? `${slot.unavailable} indisponible(s)` : undefined,
+          slot: slot.slot,
+          // La charge utile STRUCTURÉE que la grille et le rail consomment (le `label` ci-dessus
+          // reste le texte de l'Agenda). `members` vient du serveur et n'existe que pour le MJ :
+          // `?? null` — jamais `undefined`, une seule représentation de « aucune identité ».
+          group: {
+            available: slot.available,
+            unavailable: slot.unavailable,
+            unknown: slot.unknown,
+            total: slot.total,
+            members: slot.members ?? null,
+          },
+        });
+      }
+    } else {
+      const mc = this.meCalendar();
+      if (mc) {
+        for (const s of mc['mes-seances']) {
+          entries.push({
+            key: `seance-${s.seanceId}`,
+            type: 'mes-seances',
+            date: s.date,
+            label: `${s.partieName} — ${s.scenarioTitle}`,
+            detail: s.slot,
+            slot: s.slot,
+            partieId: s.partieId,
+            scenarioId: s.scenarioId,
+            seanceId: s.seanceId,
+            // Story 36.5, AC6 — le second chemin d'alimentation. Sans ces trois lignes ET
+            // l'enrichissement de MyCalendarSeanceEntry côté serveur, les informations pratiques
+            // marcheraient en contexte de partie et manqueraient sur profile/calendar.
+            seanceHeure: s.heureRdv,
+            seanceLieu: s.lieu,
+            seanceNote: s.notePratique,
+            compteRenduManquant: s.compteRenduManquant,
+          });
+        }
+        // Story 36.6, AC8/AC6 — même éclatement par option qu'en contexte de partie, mais les
+        // agrégats sont ici SERVIS (D-17) : le calendrier personnel n'a pas la charge utile des
+        // votants, et ne doit pas l'avoir (AD-9). L'appel unique existant les porte désormais ;
+        // aucun appel supplémentaire n'est émis.
+        for (const p of mc['votes-en-cours']) {
+          // 🚨 Dégradation honnête, trouvée à la vérification visuelle : pendant un déploiement,
+          // un client neuf peut interroger une API qui ne sert pas encore les agrégats. Sans
+          // cette garde, le rail affichait « NaN / undefined ». On préfère NE PAS rendre de piste
+          // plutôt qu'en rendre une vide, qui affirmerait faussement « personne n'a répondu ».
+          const servedAggregates = typeof p.membersCount === 'number';
+          for (const option of p.options) {
+            entries.push({
+              // `date`/`slot` sont toujours servis, même par une API dégradée (pré-36.6) —
+              // contrairement à `optionId`, absent de cette forme. Une clé bâtie sur `optionId`
+              // collisionnerait alors entre toutes les options d'un même vote (revue de code du
+              // 36.6).
+              key: `poll-${p.pollId}-${option.date}-${option.slot}`,
+              type: 'votes-en-cours',
+              date: option.date,
+              label: p.partieName,
+              // Idem contexte de partie (cf. commentaire ci-dessus, ligne ~332).
+              detail: SLOT_LABELS[option.slot],
+              slot: option.slot,
+              vote: !servedAggregates
+                ? undefined
+                : {
+                    // Story 36.7 — ici le `partieId` ne peut PAS venir de la route : le
+                    // calendrier personnel agrège plusieurs parties. Il vient de l'entrée
+                    // elle-même (`MyCalendarPollEntry.partieId`), et c'est le seul endroit de
+                    // l'application où voter dans la mauvaise partie serait possible.
+                    partieId: p.partieId,
+                    pollId: p.pollId,
+                    optionId: option.optionId,
+                    yes: option.yes,
+                    maybe: option.maybe,
+                    no: option.no,
+                    total: p.membersCount,
+                    myAnswer: option.myAnswer,
+                  },
+            });
+          }
+        }
+        for (const i of mc['inscriptions-ouvertes']) {
+          entries.push({
+            key: `inscription-${i.seanceId}`,
+            type: 'inscriptions-ouvertes',
+            date: '',
+            label: `${i.partieName} — ${i.scenarioTitle}`,
+            detail: `${i.inscritsCount}/${i.inscriptionMax} inscrits`,
+            // Story 36.11 — servi par le DTO ici, dérivé de la liste des inscrits en contexte de
+            // partie. Deferred-work (2026-08-24) : `MyCalendarOpenInscriptionEntry` porte
+            // désormais `scenarioId`, la ligne est donc ouvrable comme en contexte de partie
+            // (`CalendarAgendaView.openTarget()` s'appuie déjà sur `partieId`+`scenarioId`).
+            partieId: i.partieId,
+            scenarioId: i.scenarioId,
+            jeSuisInscrit: i.jeSuisInscrit,
+          });
+        }
+      }
+    }
+
+    for (const d of this.declarations()) {
+      entries.push({
+        key: `decl-${d.id}`,
+        type: d.kind === 'AVAILABLE' ? 'mes-disponibilites' : 'mes-indisponibilites',
+        date: d.startDate ?? '',
+        label: d.recurKind === 'RECURRING' ? 'Récurrent' : 'Ponctuel',
+        detail: d.slot,
+        slot: d.slot,
+      });
+    }
+
+    return entries;
+  });
+
+  // Story 30.6, Task 6/AC2 : liste chronologique unique fusionnant les couches ACTIVES.
+  // Le filtre par type est exactement équivalent à l'ancien gating bloc par bloc, y compris pour
+  // les déclarations (dont `visibleDeclarations()` applique le même mapping kind → couche).
+  protected readonly agendaEntries = computed<AgendaEntry[]>(() => {
+    const active = new Set(this.activeLayers());
+    return this.allCalendarEntries().filter(
+      (e) =>
+        // Story 36.11, AC9 — 🚨 `inscriptions-ouvertes` ÉCHAPPE au filtre par couche. Son
+        // interrupteur a quitté la barre (AC7) mais sa clé survit dans la préférence de compte :
+        // un compte qui l'avait éteinte au palier précédent verrait sinon la section « Ça
+        // t'attend » amputée, sans plus aucun moyen de la rétablir.
+        // Story 36.12 — `seances-sans-date` échappe pour une raison différente et plus simple :
+        // ce n'est pas une clé de `CALENDAR_LAYER_KEYS`, donc `active.has()` serait TOUJOURS faux
+        // et la ligne n'apparaîtrait jamais. Elle n'a pas d'interrupteur parce qu'elle n'est pas
+        // une couche : c'est une action attendue du MJ, pas une matière à afficher ou masquer.
+        (e.type === 'inscriptions-ouvertes' ||
+          e.type === 'seances-sans-date' ||
+          active.has(e.type)) &&
+        // Story 36.8 — un créneau dont personne n'a rien dit n'a rien à faire dans une LISTE : il
+        // n'y ajouterait qu'une ligne « 0/4 disponibles » par créneau et par jour. Il doit en
+        // revanche atteindre la GRILLE, où sa jauge vide porte une information (AC6). Le filtre
+        // vit donc ici, à l'affichage, et non plus à la source (`allCalendarEntries`).
+        (e.type !== 'disponibilite-groupe' ||
+          e.group == null ||
+          e.group.available > 0 ||
+          e.group.unavailable > 0),
+    );
+  });
+
+  /**
+   * Story 36.12, AC14 — qui n'a pas encore répondu, par `pollId`, pour la méta de la ligne de
+   * vote côté MJ (« il manque Léa, Tom »).
+   *
+   * 🚨 `getMissingVoters()` est **la** définition de « manquant » du projet — celle de la fiche de
+   * scénario et de `<app-poll-missing>`, juste à côté sur cet écran. En réécrire une seconde ici
+   * garantirait qu'elles finissent par diverger.
+   *
+   * 🚨 **Vide hors mode MJ, et structurellement vide en calendrier personnel** : `members()` n'y
+   * est jamais chargé, et `MyCalendarPollOption` est anonyme par conception (AD-9) — aucune
+   * identité de votant ne doit transiter par le calendrier personnel.
+   *
+   * ⚠️ Dette connue, héritée de la 36.6 : `GET /parties/:id/members` ne renvoie pas le MJ, qui
+   * peut pourtant voter. La liste ne peut donc pas le nommer ; le compteur, lui, reste juste,
+   * puisqu'il vient de `membersCount`.
+   */
+  protected readonly missingByPoll = computed<Record<string, string[]>>(() => {
+    // Revue de code (36.12) — même double garde que `canSeal` (`isMjMode() && partieId() !==
+    // null`), documentée là-bas comme nécessaire : aujourd'hui `members()` reste vide hors
+    // contexte de partie, mais rien ne le garantit structurellement sans ce second test explicite.
+    if (!this.isMjMode() || this.partieId() === null) return {};
+    if (!this.membersLoaded()) return {};
+    const members = this.members();
+    const out: Record<string, string[]> = {};
+    for (const entry of this.activePolls()) {
+      const missing = getMissingVoters(entry.poll, members);
+      if (missing.length > 0) out[entry.poll.id] = missing.map((m) => m.displayName || m.pseudo);
+    }
+    return out;
+  });
+
+  /** Story 36.2 — les entrées **non filtrées** transmises à la vue Mois, qui arbitre la préséance
+   *  bande par bande. Volontairement distinct d'`agendaEntries()` : la case doit continuer de
+   *  rendre un créneau indisponible quand la couche « mes séances » est éteinte (FR-50), ce
+   *  qu'une liste déjà filtrée rendrait impossible. */
+  protected readonly calendarEntries = computed<AgendaEntry[]>(() => this.allCalendarEntries());
+
+  // ─── Rail de détail (Story 36.1) ──────────────────────────────────────────
+  // Signaux DÉDIÉS, distincts de `selectedDate`/`selectedSlot` : ces derniers appartiennent au
+  // ConstraintPanel et sont liés à `panelOpen`/`closePanel()`. Les réutiliser viderait le rail à
+  // chaque fermeture du panneau (encadré n°1, piège n°1).
+  protected readonly railDate = signal<Date | null>(null);
+  protected readonly railSlot = signal<DaySlot | null>(null);
+
+  /** AC3 — au repos, le prochain jour portant quelque chose ; à défaut, aujourd'hui (jamais un
+   *  rail blanc). Dérivé de la liste COMPLÈTE (`allCalendarEntries()`), pas des couches actives :
+   *  le rail suit, il ne se commande pas — désactiver une couche ne doit pas le faire sauter vers
+   *  un autre jour. */
+  private readonly railDateKey = computed<string>(() => {
+    const touched = this.railDate();
+    if (touched) return toDateKey(touched);
+    const todayKey = toDateKey(new Date());
+    return nextMeaningfulDate(this.allCalendarEntries(), todayKey) ?? todayKey;
+  });
+
+  /** AC5 — purement dérivé des signaux déjà chargés : aucun appel réseau n'part d'ici. */
+  protected readonly railDetail = computed(() =>
+    buildDayDetail(
+      this.railDateKey(),
+      this.allCalendarEntries(),
+      this.activeLayers(),
+      this.visibleDeclarations(),
+    ),
+  );
+
+  // ─── Story 36.9 — le mode Destinée ────────────────────────────────────────
+  //
+  // 🚨 UN MODE, PAS UNE COUCHE (`EXPERIENCE.md:367`). Il ne rejoint JAMAIS `activeLayers` :
+  // `CALENDAR_LAYER_KEYS` est un type partagé, persisté dans `defaultCalendarLayers` du compte —
+  // y ajouter la Destinée l'exposerait à `resetToDefault()`, à `isOverridden()` et à l'écran
+  // Compte, et ferait de ce mode éphémère un réglage persistant.
+  //
+  // 🚨 L'état est un `pollId`, JAMAIS UN INDEX. `activePolls()` est reconstruit à chaque
+  // `scenariosSvc.changed()` : un index survivrait au rechargement en désignant un AUTRE vote, et
+  // la Destinée basculerait toute seule. Un `pollId` disparu, lui, est détectable — c'est l'effet
+  // de fin de mode plus bas (AC9).
+  protected readonly destinyPollId = signal<string | null>(null);
+
+  /** Dernier `destinyDates()` connu du vote courant, tant qu'il était encore présent dans
+   *  `destinyPolls()`. Seule trace qui reste une fois le vote disparu — c'est elle qui permet à
+   *  l'effet de fin de mode de distinguer « hors plage » de « réellement clos » en contexte
+   *  personnel (AC9, voir plus bas). Champ simple, pas un signal : écrit uniquement depuis
+   *  l'intérieur d'un effet, jamais lu de façon réactive. */
+  private lastDestinyDates: ReadonlySet<string> | null = null;
+
+  /**
+   * Les votes ouverts, nommés, dans l'ordre de première rencontre.
+   *
+   * 🚨 Dérivé d'`allCalendarEntries()` et **surtout pas** d'`activePolls()` : ce dernier est vide
+   * hors contexte de partie, alors que le calendrier personnel porte lui aussi des votes ouverts
+   * (agrégés depuis plusieurs parties par `GET /me/calendar`). Une seule dérivation sert donc les
+   * DEUX contextes, et le libellé est celui que l'entrée porte déjà — jamais recomposé.
+   */
+  protected readonly destinyPolls = computed<DestinyPollRef[]>(() => {
+    const seen = new Set<string>();
+    const polls: DestinyPollRef[] = [];
+    for (const e of this.allCalendarEntries()) {
+      if (e.type !== 'votes-en-cours' || !e.vote) continue;
+      if (seen.has(e.vote.pollId)) continue;
+      seen.add(e.vote.pollId);
+      polls.push({ pollId: e.vote.pollId, label: e.label });
+    }
+    return polls;
+  });
+
+  /** Le vote courant, ou `null` — y compris quand `destinyPollId` désigne un vote qui vient de
+   *  disparaître : la lecture est toujours honnête, avant même que l'effet ne nettoie le signal. */
+  protected readonly destinyPoll = computed<DestinyPollRef | null>(() => {
+    const id = this.destinyPollId();
+    return id === null ? null : (this.destinyPolls().find((p) => p.pollId === id) ?? null);
+  });
+
+  /**
+   * Les jours que le mode met en avant : `null` hors mode, sinon les clés `YYYY-MM-DD` portant
+   * une option du vote COURANT (AC1/AC12).
+   *
+   * 🚨 **Dérivé d'`allCalendarEntries()`, la liste NON filtrée** — jamais de `band.vote` ni de
+   * `DaySlotDetail.pollVote`, qui sont gouvernés par la couche `votes-en-cours`. Les en dériver
+   * ferait qu'une couche éteinte produirait un ensemble VIDE, donc une grille entièrement
+   * estompée sans rien mettre en avant. C'est le défaut que l'AC6 et son test verrouillent.
+   *
+   * Point de dérivation UNIQUE (AC12) : les deux vues consomment cet ensemble, aucune ne
+   * recalcule la pertinence depuis ses propres bandes (doctrine AD-12/AD-19).
+   */
+  protected readonly destinyDates = computed<ReadonlySet<string> | null>(() => {
+    const current = this.destinyPoll();
+    if (!current) return null;
+    const dates = new Set<string>();
+    for (const e of this.allCalendarEntries()) {
+      if (e.type !== 'votes-en-cours' || e.vote?.pollId !== current.pollId) continue;
+      if (e.date) dates.add(e.date);
+    }
+    return dates;
+  });
+
+  /**
+   * AC6 — activer le mode ALLUME `votes-en-cours` si elle est éteinte.
+   *
+   * Un mode qui concentre l'écran sur un vote ne peut pas laisser ce vote invisible : l'AC1 exige
+   * que « les créneaux proposés restent **pleinement lisibles** ». Coup de pouce **à sens
+   * unique** — `exitDestiny()` ne rééteint rien : on ne défait pas un réglage que l'utilisateur
+   * voit et peut refaire lui-même.
+   */
+  protected enterDestiny(pollId: string): void {
+    this.destinyPollId.set(pollId);
+    if (!this.activeLayers().includes('votes-en-cours')) {
+      this.activeLayers.update((keys) => [...keys, 'votes-en-cours']);
+    }
+  }
+
+  protected exitDestiny(): void {
+    this.destinyPollId.set(null);
+  }
+
+  /** Le contrôle a un seul bouton : il arme le mode sur le premier vote, ou le quitte. */
+  protected toggleDestiny(): void {
+    if (this.destinyPoll()) {
+      this.exitDestiny();
+      return;
+    }
+    const first = this.destinyPolls()[0];
+    if (first) this.enterDestiny(first.pollId);
+  }
+
+  private stepDestiny(delta: 1 | -1): void {
+    const polls = this.destinyPolls();
+    const current = this.destinyPoll();
+    if (!current || polls.length < 2) return;
+    const i = polls.findIndex((p) => p.pollId === current.pollId);
+    const next = polls[(i + delta + polls.length) % polls.length];
+    this.enterDestiny(next.pollId);
+  }
+
+  protected destinyNext(): void {
+    this.stepDestiny(1);
+  }
+  protected destinyPrev(): void {
+    this.stepDestiny(-1);
+  }
+
+  // ─── Story 36.10 — le mode de composition d'un vote ───────────────────────
+  //
+  // 🚨 IL RÉASSIGNE LE TAP. C'est le SEUL mode de l'application qui en a le droit
+  // (`EXPERIENCE.md:538`, principe 4 ; collision 5). Le contraste avec la Destinée est entier :
+  // celle-ci ne change QUE l'affichage, celui-ci change ce que fait le doigt. Les deux états sont
+  // indépendants et peuvent coexister — ne jamais les fusionner.
+  //
+  // 🚨 MJ ET CONTEXTE DE PARTIE UNIQUEMENT (AC10). L'écriture exige `getOwned` et un `partieId` ;
+  // le calendrier personnel agrège des votes de PLUSIEURS parties et n'a pas de cible.
+  protected readonly composing = signal(false);
+  /** Ce que la composition vise : un vote ouvert à modifier, ou un vote à créer. */
+  protected readonly composeTarget = signal<ComposeTarget | null>(null);
+  /** Les créneaux composés, dans la forme que `SelectedCell` porte déjà partout ailleurs. */
+  protected readonly composedCells = signal<SelectedCell[]>([]);
+
+  /** Ce qui descend dans les deux grilles — un ensemble de clés, jamais la liste : les vues n'ont
+   *  qu'un test d'appartenance à faire, et la dérivation reste unique (doctrine `destinyDates()`). */
+  protected readonly composedKeys = computed<ReadonlySet<string> | null>(() => {
+    if (!this.composing()) return null;
+    return new Set(this.composedCells().map((c) => composeCellKey(c.date, c.slot)));
+  });
+
+  /** Le vote ouvert visé, ou `null` (cible « nouveau vote », ou vote disparu). */
+  private readonly composedPollEntry = computed(() => {
+    const target = this.composeTarget();
+    if (target?.kind !== 'poll') return null;
+    return this.activePolls().find((e) => e.poll.id === target.pollId) ?? null;
+  });
+
+  protected readonly composeTargetLabel = computed(() => {
+    const entry = this.composedPollEntry();
+    if (entry) {
+      const suffix = entry.scenario.seances.length > 1 ? ` — Séance ${entry.seanceIndex}` : '';
+      return `Créneaux du vote : ${entry.scenario.title}${suffix}`;
+    }
+    return 'Créneaux d’un nouveau vote';
+  });
+
+  /** Les séances auxquelles un vote neuf peut être rattaché (AC11). Vide ⇒ la création n'est pas
+   *  proposée : un vote sans séance est structurellement interdit. */
+  private readonly composeSeanceChoices = computed<ComposeSeanceChoice[]>(() => {
+    const target = this.composeTarget();
+    // Story 36.12, AC13 — armée depuis une ligne d'agenda, la composition connaît déjà sa séance.
+    // On restreint la liste plutôt que d'ajouter un chemin : le dialogue pré-remplit tout seul
+    // quand il n'y a qu'un choix, et si la séance a cessé d'être éligible entre-temps (un vote y
+    // a été créé ailleurs), la liste devient vide et `composeBlockedReason()` le dit.
+    const only = target?.kind === 'new' ? target.seanceId : undefined;
+    return this.eligibleSeances()
+      .filter((e) => !only || e.seance.id === only)
+      .map((e) => ({
+        seanceId: e.seance.id,
+        label: `${e.scenario.title} — Séance ${e.seanceIndex}`,
+      }));
+  });
+
+  /** AC14 côté client : la borne serveur est 2..40, et la création exige une séance. Un bouton
+   *  qu'on ne peut pas presser doit dire pourquoi (`composeBlockedReason`), jamais rester inerte. */
+  protected readonly composeCanConfirm = computed(() => {
+    const n = this.composedCells().length;
+    if (n < 2 || n > 40) return false;
+    if (this.composeTarget()?.kind === 'new' && this.composeSeanceChoices().length === 0)
+      return false;
+    return true;
+  });
+
+  protected readonly composeBlockedReason = computed(() => {
+    const n = this.composedCells().length;
+    if (n < 2) return 'Un vote demande au moins deux créneaux.';
+    if (n > 40) return 'Quarante créneaux au maximum.';
+    if (this.composeTarget()?.kind === 'new' && this.composeSeanceChoices().length === 0)
+      return 'Aucune séance n’attend un vote : un vote se rattache toujours à une séance.';
+    return '';
+  });
+
+  /** Le point d'entrée n'existe que là où la composition a un sens (AC10). */
+  protected readonly canCompose = computed(() => {
+    if (!this.isMjMode() || this.partieId() === null) return false;
+    const destinyId = this.destinyPollId();
+    const hasTargetPoll =
+      destinyId !== null && this.activePolls().some((e) => e.poll.id === destinyId);
+    return hasTargetPoll || this.eligibleSeances().length > 0;
+  });
+
+  /**
+   * AC1 — arme le mode. La cible se déduit de ce que le MJ regarde : un vote mis en avant par la
+   * Destinée se MODIFIE, sinon on en compose un neuf.
+   *
+   * AC13 — modifier part de l'état RÉEL du vote : ses options actuelles sont déjà composées, sans
+   * quoi « retiré s'il y était déjà » (AC2) n'aurait aucun référent et le MJ ne pourrait
+   * qu'ajouter.
+   */
+  protected startCompose(seanceId?: string): void {
+    if (!this.canCompose()) return;
+
+    // Story 36.12, AC13 — armée depuis l'Agenda sur une séance précise : on compose un vote NEUF
+    // pour ELLE, sans regarder la Destinée. Sinon « Lancer un vote » sur une séance modifierait
+    // le vote mis en avant d'une autre.
+    //
+    // 🚨 Revue de code (36.12) — ne JAMAIS écraser une composition déjà en cours avec des créneaux
+    // choisis : sans cette garde, cliquer « Lancer un vote » sur une autre séance pendant qu'une
+    // composition est en cours viderait silencieusement la sélection du MJ.
+    if (seanceId) {
+      if (this.composing() && this.composedCells().length > 0) return;
+      this.composeTarget.set({ kind: 'new', seanceId });
+      this.composedCells.set([]);
+      this.composing.set(true);
+      return;
+    }
+
+    // 🚨 On repart de `destinyPollId()` et d'`activePolls()`, jamais de `destinyPoll()` :
+    // celui-ci dérive des ENTRÉES du calendrier, donc d'un vote dont au moins une option tombe
+    // dans la plage affichée. Un vote mis en avant dont les créneaux sont hors du mois courant
+    // serait alors traité comme « pas de cible », et la validation créerait un SECOND vote au
+    // lieu de modifier le premier. `activePolls()` fait autorité en contexte de partie.
+    const destinyId = this.destinyPollId();
+    const entry = destinyId ? this.activePolls().find((e) => e.poll.id === destinyId) : null;
+
+    if (entry) {
+      this.composeTarget.set({ kind: 'poll', pollId: entry.poll.id });
+      // 🚨 Les options viennent d'`activePolls()`, jamais d'`allCalendarEntries()` : celles-ci
+      // sont bornées par la plage affichée en contexte personnel, et une option hors plage
+      // manquerait au jeu de départ — donc serait silencieusement SUPPRIMÉE à la validation.
+      const cells = entry.poll.options.map((o) => ({
+        date: dateKeyToLocalMidnight(o.date.substring(0, 10)),
+        slot: o.slot,
+      }));
+      this.composedCells.set(cells);
+    } else {
+      this.composeTarget.set({ kind: 'new' });
+      this.composedCells.set([]);
+    }
+    this.composing.set(true);
+  }
+
+  /** AC2 — bascule pure. Aucun appel réseau : rien n'est enregistré avant validation. */
+  protected onComposeToggled(event: SlotSelectedEvent): void {
+    if (!this.composing()) return;
+    const key = composeCellKey(event.date, event.slot);
+    this.composedCells.update((cells) => {
+      const without = cells.filter((c) => composeCellKey(c.date, c.slot) !== key);
+      return without.length === cells.length ? [...cells, { ...event }] : without;
+    });
+  }
+
+  /** AC3 — `Échap` et « Annuler » font la MÊME chose : sortir sans rien écrire. */
+  protected cancelCompose(): void {
+    this.composing.set(false);
+    this.composeTarget.set(null);
+    this.composedCells.set([]);
+  }
+
+  /**
+   * AC4 / AC5 / AC6 / AC7 / AC11 — valider la composition.
+   *
+   * 🚨 **L'avertissement précède l'écriture, jamais l'inverse** (AC6). Le nombre de votants est
+   * lu sur `activePolls()`, déjà chargé : aucun appel réseau n'est dépensé à compter ce qu'on a
+   * déjà en mémoire.
+   *
+   * Deux chemins d'écriture, et un seul appel dans chacun :
+   * - vote existant → `PUT …/poll/:pollId/options` ;
+   * - vote neuf → `POST /scenarios/seances/:id/poll`, **le seul chemin de création**, parce qu'un
+   *   `SessionPoll` sans `Seance` est interdit depuis la 8.8.
+   */
+  protected async confirmCompose(): Promise<void> {
+    const partieId = this.partieId();
+    const target = this.composeTarget();
+    if (!partieId || !target || !this.composeCanConfirm() || this.pollActionPending()) return;
+
+    const options = this.composedCells().map((c) => ({
+      date: toDateKey(c.date),
+      slot: c.slot,
+    }));
+
+    // Ce qui disparaît, et ce que cela coûte aux autres (AC6). Vide par construction sur une
+    // création : un vote qui n'existe pas ne porte aucune réponse.
+    const entry = this.composedPollEntry();
+    const keptKeys = new Set(this.composedCells().map((c) => composeCellKey(c.date, c.slot)));
+    const removed = (entry?.poll.options ?? []).filter(
+      (o) => !keptKeys.has(composeCellKey(dateKeyToLocalMidnight(o.date.substring(0, 10)), o.slot)),
+    );
+    const voterCount = removed.reduce((sum, o) => sum + o.votes.length, 0);
+
+    // Le dialogue ne s'ouvre que s'il a quelque chose à demander : une séance (création), ou
+    // l'accord du MJ sur une perte chiffrée (modification). Un retrait sans aucune réponse posée
+    // ne mérite pas d'interruption — l'AC6 ne la demande que « sur laquelle des membres ont voté ».
+    const needsDialog = target.kind === 'new' || voterCount > 0;
+    let seanceId: string | null = null;
+    if (needsDialog) {
+      const data: ComposeConfirmData = {
+        mode: target.kind === 'new' ? 'new' : 'poll',
+        slotCount: options.length,
+        removedCount: removed.length,
+        voterCount,
+        seances: this.composeSeanceChoices(),
+      };
+      const ref = this.dialog.open(ComposeConfirmDialog, { data });
+      const decision = (await firstValueFrom(ref.afterClosed())) as {
+        seanceId: string | null;
+      } | null;
+      // AC6 — renoncer ne modifie RIEN, et la composition reste telle quelle : le MJ n'a pas à
+      // tout redésigner parce qu'il a hésité une fois.
+      if (!decision) return;
+      seanceId = decision.seanceId;
+    }
+
+    // 🚨 Revue de code — `voterCount` a pu être calculé AVANT l'ouverture du dialogue, qui reste
+    // ouvert le temps que le MJ lise et décide. Un membre peut voter (SSE) sur une option en
+    // cours de retrait pendant cette fenêtre : revérifier juste avant l'écriture, jamais se fier
+    // au chiffre que le MJ a vu à l'ouverture. S'il a AUGMENTÉ, ne pas écrire en silence sur un
+    // consentement qui ne porte plus sur le bon nombre — redemander confirmation.
+    if (target.kind === 'poll') {
+      const freshEntry = this.composedPollEntry();
+      const freshRemoved = (freshEntry?.poll.options ?? []).filter(
+        (o) =>
+          !keptKeys.has(composeCellKey(dateKeyToLocalMidnight(o.date.substring(0, 10)), o.slot)),
+      );
+      const freshVoterCount = freshRemoved.reduce((sum, o) => sum + o.votes.length, 0);
+      if (freshVoterCount > voterCount) {
+        this.error.set(
+          'Une nouvelle réponse est arrivée depuis l’avertissement — revalidez pour voir le chiffre à jour.',
+        );
+        return;
+      }
+    }
+
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    try {
+      if (target.kind === 'poll') {
+        // Même patron que `onClosePoll()` : `PollService` écrit, `loadScenarios()` relit. La
+        // notification de domaine est portée par le serveur, qui émet déjà `partieTopic` sur
+        // cette mutation (AC15) — `ScenariosService.notifyChanged()` est privé et réservé à ses
+        // propres écritures.
+        await this.pollSvc.setPollOptions(partieId, target.pollId, { options });
+      } else {
+        if (!seanceId) return;
+        await this.scenariosSvc.createSeancePoll(seanceId, options);
+      }
+      await this.loadScenarios(partieId);
+      this.cancelCompose();
+    } catch {
+      // 🚨 Le mode NE SE FERME PAS sur une erreur : la composition du MJ est en mémoire et nulle
+      // part ailleurs. La perdre l'obligerait à tout redésigner sur la grille.
+      this.error.set('Impossible d’enregistrer ces créneaux. Réessayez.');
+    } finally {
+      this.pollActionPending.set(false);
+    }
+  }
+
   protected readonly pollPanelOpen = signal(false);
   // Story 8.7, AC1/AC2 : renseigné depuis ?seanceId=... (arrivée depuis SeanceList) — verrouille
   // PollCreationComponent sur cette séance, ouvre automatiquement le panneau sans re-clic du MJ.
   protected readonly lockedSeanceId = signal<string | null>(null);
   protected readonly members = signal<PartieMemberDto[]>([]);
+  /** Revue de code (36.12) — distingue « personne ne manque » de « pas encore chargé » pour
+   *  `missingByPoll`, que `members().length === 0` seul ne pouvait pas trancher. */
+  protected readonly membersLoaded = signal(false);
   /** true pendant qu'une requête choose/close est en cours — évite une double action concurrente (double-clic, choix + annulation simultanés). */
   protected readonly pollActionPending = signal(false);
 
+  // ─── Story 36.7 — le sélecteur de réponse de vote ─────────────────────────
+  // UN SEUL sélecteur pour les quatre surfaces (case du Mois, cellule de Semaine, rail, Agenda) :
+  // elles signalent l'option activée, c'est ici qu'on l'ouvre et qu'on écrit. Deux
+  // implémentations produiraient deux façons de répondre selon l'écran.
+  //
+  // 🚨 L'ancre est l'élément DÉJÀ RENDU que la surface a touché (bande, cellule, bouton de
+  // ligne) — jamais un nœud ajouté pour l'occasion : un nœud de plus dans une cellule casserait
+  // le hit-test du glissement, et aucun test ne le verrait.
+  protected readonly pickerVote = signal<VoteParticipation | null>(null);
+  protected readonly pickerAnchor = signal<HTMLElement | null>(null);
+  protected readonly pickerLabel = signal('');
+  /** L'élément à qui rendre le focus à la fermeture — sans quoi un utilisateur clavier retombe
+   *  en haut du document (AC7). */
+  private pickerReturnFocus: HTMLElement | null = null;
+  protected readonly PICKER_POSITIONS = PICKER_POSITIONS;
+
   protected readonly mjSlots = computed(() =>
-    this.availableSlots().filter((s): s is AvailableSlotDto => 'members' in s),
+    // Story 36.8 — `'members' in s` ne discrimine plus : `AggregatedSlotDto` porte désormais un
+    // `members?` optionnel (couche « disponibilité du groupe », MJ seul). Le discriminant est
+    // maintenant l'ABSENCE d'agrégats, écrite une fois dans `available-slots.ts`.
+    this.availableSlots().filter(isNamedSlot),
   );
 
   private static todayIso(): string {
@@ -169,9 +1237,18 @@ export class CalendarView implements OnInit {
     d.setUTCDate(d.getUTCDate() + 56);
     return d.toISOString().substring(0, 10);
   }
+  private static thirtyOneDaysAgoIso(): string {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 31);
+    return d.toISOString().substring(0, 10);
+  }
 
   protected readonly fromDateStr = signal(CalendarView.todayIso());
   protected readonly toDateStr = signal(CalendarView.eightWeeksLaterIso());
+  // Story deferred-work (« C'est passé » en calendrier personnel) — vrai seulement si l'URL a
+  // explicitement fixé `from` au montage : sert à ne PAS écraser un lien partagé/query param par
+  // le défaut élargi vers le passé du contexte personnel, ci-dessous.
+  private hasExplicitRangeParam = false;
 
   private static readonly ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -184,10 +1261,27 @@ export class CalendarView implements OnInit {
     effect(() => {
       const change = this.scenariosSvc.changed();
       const id = this.partieId();
-      if (!id || !matchesPartie(change, id)) return;
+      if (id) {
+        if (!matchesPartie(change, id)) return;
+        untracked(() => {
+          // Story 36.7 — un vote/retrait tiers peut avoir clos le sondage ou fait disparaître
+          // l'option affichée : le sélecteur ouvert référencerait alors des données périmées, et
+          // son ancre peut devenir un nœud détaché une fois la grille reconstruite ci-dessous.
+          this.closePicker();
+          void this.loadScenarios(id);
+          void this.refreshMjPanels();
+          if (this.isMjMode()) void this.loadMembers(id);
+        });
+        return;
+      }
+      // Deferred-work (SSE, calendrier personnel) — `change === null` est la valeur initiale au
+      // montage (rien à recharger, `loadForPartieId()` s'en charge déjà) ; toute valeur non nulle
+      // ensuite vient d'un événement `user:{id}` (connecté ci-dessus en contexte personnel
+      // seulement) — aucun filtrage par partieId possible ni utile ici, le calendrier personnel
+      // agrège plusieurs Parties.
+      if (change === null) return;
       untracked(() => {
-        void this.loadScenarios(id);
-        void this.refreshMjPanels();
+        void this.loadMeCalendarForRange(this.fromDateStr(), this.toDateStr());
       });
     });
 
@@ -198,6 +1292,69 @@ export class CalendarView implements OnInit {
     // serveur ne route jamais un événement d'une autre Partie vers cette connexion). Garde firstRun
     // (même piège que partout ailleurs, Stories 19.2/20.1/20.2/21.*) : le signal peut déjà porter
     // une valeur avant le montage.
+    // Story 36.9, AC9 — le mode Destinée doit savoir MOURIR. Un vote scellé, clôturé ou brûlé
+    // (par moi ailleurs, ou par un autre membre via SSE) disparaît de `destinyPolls()` sous les
+    // pieds du mode. Même piège que le sélecteur de réponse de la 36.7, que l'effet ci-dessus
+    // ferme explicitement.
+    //
+    // 🚨 Il se TERMINE, il ne bascule pas sur un autre vote : basculer en silence est exactement
+    // ce que l'encadré n°2 de la story interdit (« un vote que personne n'a demandé »). Un vote
+    // TIERS qui disparaît, lui, ne touche à rien — la garde est l'absence de l'id COURANT.
+    effect(() => {
+      const id = this.destinyPollId();
+      if (id === null) return;
+      const polls = this.destinyPolls();
+      const stillPresent = polls.some((p) => p.pollId === id);
+
+      if (stillPresent) {
+        // On garde une trace des dates du vote courant tant qu'il est visible : c'est la seule
+        // information qui survit à sa disparition, plus bas, pour juger si elle était prévisible
+        // (hors plage) ou non (réellement clos) — sans appel réseau dédié (encadré n°1).
+        untracked(() => {
+          this.lastDestinyDates = this.destinyDates();
+        });
+        return;
+      }
+
+      // « Le vote a disparu de la liste » ne veut dire « le vote est clos » QUE si la liste fait
+      // autorité sur ce qui est ouvert. C'est vrai en contexte de PARTIE (`activePolls()` dérive
+      // de TOUS les scénarios de la partie, remplacés d'un bloc après chargement) : absence ⇒ clos.
+      if (this.partieId()) {
+        untracked(() => this.destinyPollId.set(null));
+        return;
+      }
+
+      // 🚨 Contexte personnel : `GET /me/calendar` est chargé **par plage** (`fromDateStr()` /
+      // `toDateStr()`), et naviguer d'une semaine recharge une plage qui ne couvre plus forcément
+      // les créneaux du vote — un symptôme trouvé à la vérification visuelle (deux clics sur
+      // « semaine suivante » éteignaient le mode DÉFINITIVEMENT alors que le vote existait
+      // toujours). L'absence seule ne suffit donc plus : elle ne veut dire « clos » que si la
+      // plage actuellement chargée couvrait déjà TOUTES les dates connues du vote — sinon il est
+      // simplement hors plage, pas clos, et le mode survit (revue de code, AC9).
+      const dates = this.lastDestinyDates;
+      const from = this.fromDateStr();
+      const to = this.toDateStr();
+      const wasFullyInRange = dates !== null && [...dates].every((d) => d >= from && d <= to);
+      if (wasFullyInRange) {
+        untracked(() => this.destinyPollId.set(null));
+      }
+    });
+
+    // Story 36.10 — la composition aussi doit savoir mourir. Un vote scellé ou clôturé ailleurs
+    // (ou par un autre membre via SSE) pendant qu'on compose ses créneaux ne peut plus être écrit :
+    // le serveur refuserait (`status !== 'OPEN'`), et continuer à composer donnerait au MJ
+    // l'illusion d'un travail qui aboutira.
+    //
+    // 🚨 La garde de plage de la Destinée ne se recopie PAS ici, et c'est délibéré : la
+    // composition n'existe qu'en contexte de PARTIE (AC10), où `activePolls()` dérive de tous les
+    // scénarios et fait donc autorité sur ce qui est ouvert. « Absent » y veut bien dire « clos ».
+    effect(() => {
+      const target = this.composeTarget();
+      if (target?.kind !== 'poll') return;
+      const stillOpen = this.activePolls().some((e) => e.poll.id === target.pollId);
+      if (!stillOpen) untracked(() => this.cancelCompose());
+    });
+
     let firstRun = true;
     effect(() => {
       this.availabilitySvc.changed();
@@ -209,27 +1366,82 @@ export class CalendarView implements OnInit {
     });
   }
 
+  /** Sujet temps réel actuellement connecté (`partieTopic(id)`), pour le déconnecter proprement
+   *  au changement de Partie ET à la destruction du composant — voir `loadForPartieId()`. */
+  private connectedPartieTopic: string | null = null;
+  /** Deferred-work (SSE, calendrier personnel) — même rôle que `connectedPartieTopic` mais pour
+   *  `userTopic(monId)`, connecté seulement en contexte personnel (`loadForPartieId()`) : le
+   *  calendrier personnel agrège plusieurs Parties, aucun `partieTopic` unique ne peut le couvrir. */
+  private connectedUserTopic: string | null = null;
+
   async ngOnInit(): Promise<void> {
-    const id = this.route.snapshot.paramMap.get('id');
+    this.contextualNav.set({ title: this.theme.tone()['nav.calendar'] });
     const fromParam = this.route.snapshot.queryParamMap.get('from');
     const toParam = this.route.snapshot.queryParamMap.get('to');
     if (fromParam && CalendarView.ISO_DATE_RE.test(fromParam)) this.fromDateStr.set(fromParam);
     if (toParam && CalendarView.ISO_DATE_RE.test(toParam)) this.toDateStr.set(toParam);
+    this.hasExplicitRangeParam = !!(fromParam && CalendarView.ISO_DATE_RE.test(fromParam));
 
     // Story 8.7, AC1/AC2 (corrigé en revue) : un vote de date exige toujours une séance — le
     // panneau ne s'ouvre que si `id` (partieId) est résolu ET que le mode est MJ (sinon un joueur
     // pourrait forger l'URL guild-calendar/profile pour voir le panneau MJ-only, même si le
     // backend bloque déjà l'écriture via getOwned).
     const seanceIdParam = this.route.snapshot.queryParamMap.get('seanceId');
-    if (seanceIdParam && id && this.isMjMode()) {
+    if (seanceIdParam && this.route.snapshot.paramMap.get('id') && this.isMjMode()) {
       this.lockedSeanceId.set(seanceIdParam);
       this.pollPanelOpen.set(true);
     }
 
+    this.destroyRef.onDestroy(() => {
+      if (this.connectedPartieTopic) this.realtime.disconnect(this.connectedPartieTopic);
+      if (this.connectedUserTopic) this.realtime.disconnect(this.connectedUserTopic);
+    });
+
+    // 🚨 Revue de code 36.14 (AC10, encadré n°2) — abonné à `paramMap`, jamais lu une seule fois
+    // au montage. Les trois routes du calendrier (`/profile/calendar`, `/parties/:id/calendar`,
+    // `/parties/:id/guild-calendar`) montent le MÊME composant, et la stratégie de réutilisation
+    // par défaut d'Angular conserve l'instance sur un simple changement de `:id` — `ngOnInit` ne
+    // se relance alors PAS. Une lecture figée dans `ngOnInit` conserverait l'identité de la
+    // Partie précédente pour la mémoire de session ET pour toutes les données scopées à la
+    // Partie (déclarations, créneaux, heatmap, scénarios, membres, canal temps réel).
+    // [Source: deferred-work.md:117 — le même piège, déjà constaté sur `fromDateStr`/`toDateStr`.]
+    this.route.paramMap
+      .pipe(
+        map((params) => params.get('id')),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((id) => void this.loadForPartieId(id));
+  }
+
+  private async loadForPartieId(id: string | null): Promise<void> {
+    // Story 30.6, Task 1 : état des couches actives, initialisé depuis le défaut du compte —
+    // jamais persisté par la bascule elle-même (encadré n°2). `disponibilite-groupe` retirée hors
+    // contexte de partie (AC8).
+    //
+    // Story 36.14, AC8/AC9 — le défaut de compte est l'état d'ARRIVÉE, jamais un verrou : si ce
+    // calendrier a déjà été visité dans cette session, ses bascules reprennent la main. La
+    // mémoire est en RAM (voir `CalendarSessionLayersService`), donc un rechargement, une
+    // déconnexion ou un autre calendrier retombent ici même, sur le défaut (AC10).
+    const remembered = this.sessionLayers.read(calendarSessionKey(id, this.mode()));
+    this.activeLayers.set(remembered ?? this.defaultLayersForContext(!!id));
+
+    if (this.connectedPartieTopic) {
+      this.realtime.disconnect(this.connectedPartieTopic);
+      this.connectedPartieTopic = null;
+    }
+    if (this.connectedUserTopic) {
+      this.realtime.disconnect(this.connectedUserTopic);
+      this.connectedUserTopic = null;
+    }
+
+    this.partieId.set(id);
+
     if (id) {
-      this.partieId.set(id);
-      this.realtime.connect(partieTopic(id));
-      this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(id)));
+      const topic = partieTopic(id);
+      this.realtime.connect(topic);
+      this.connectedPartieTopic = topic;
+
       await Promise.all([
         this.router.navigate([], {
           relativeTo: this.route,
@@ -242,11 +1454,38 @@ export class CalendarView implements OnInit {
         this.loadHeatmap(id),
         this.loadScenarios(id),
       ]);
+      // Revue de code Story 29.4 : la navigation interne ci-dessus (mêmes route/composant,
+      // seuls les query params from/to changent) déclenche NavigationStart -> clear() sur
+      // ContextualNavService, qui vide le bandeau posé en tête de `ngOnInit` — repositionner le
+      // titre juste après.
+      this.contextualNav.set({ title: this.theme.tone()['nav.calendar'] });
       if (this.isMjMode()) {
-        this.members.set(await this.partiesSvc.members(id).catch(() => []));
+        await this.loadMembers(id);
       }
     } else {
-      await this.loadDeclarations();
+      // Deferred-work (SSE, calendrier personnel) — le calendrier personnel agrège plusieurs
+      // Parties : aucun `partieTopic` unique ne peut le couvrir, donc `user:{id}` (même patron que
+      // `dashboard.ts`). Le serveur y fait désormais un fan-out (`notifyPartieSignalsChanged`) sur
+      // toute écriture pertinente pour mes-seances/votes-en-cours/inscriptions-ouvertes.
+      const myId = this.authSvc.currentUser()?.id;
+      if (myId) {
+        const topic = userTopic(myId);
+        this.realtime.connect(topic);
+        this.connectedUserTopic = topic;
+      }
+      // Deferred-work (« C'est passé ») — sans plage explicite dans l'URL, le calendrier
+      // personnel élargit son point de départ à -31 jours : sans ça, `fromDateStr` par défaut
+      // (aujourd'hui) ne couvre jamais le passé et la section reste structurellement vide au
+      // premier chargement. Le contexte MJ (branche ci-dessus) n'est pas concerné.
+      if (!this.hasExplicitRangeParam) {
+        this.fromDateStr.set(CalendarView.thirtyOneDaysAgoIso());
+      }
+      // Story 30.6, AC8/AC9 : contexte personnel — un seul appel GET /me/calendar pour les 5
+      // couches temporelles, jamais depuis un contexte de partie.
+      await Promise.all([
+        this.loadDeclarations(),
+        this.loadMeCalendarForRange(this.fromDateStr(), this.toDateStr()),
+      ]);
     }
   }
 
@@ -261,21 +1500,56 @@ export class CalendarView implements OnInit {
     }
   }
 
-  // Story 8.8, AC9 : sélection d'une séance éligible depuis l'Oracle — réutilise le flux existant
-  // (verrouillage `lockedSeanceId`/`pollPanelOpen`, `PollCreationComponent`), aucun nouveau chemin
-  // de création de vote.
-  protected startVoteFor(seanceId: string): void {
-    if (!seanceId) return;
-    this.lockedSeanceId.set(seanceId);
-    this.pollPanelOpen.set(true);
+  /**
+   * Revue de code (36.12) — `members()` n'était chargé qu'une fois à `ngOnInit`, jamais
+   * resynchronisé : un membre qui rejoint/quitte en cours de session laissait « il manque … »
+   * périmé (`missingByPoll`). Rappelée depuis l'effet `scenariosSvc.changed()` ci-dessous, seul
+   * canal temps réel scopé `partie:{id}` que ce composant écoute déjà — pas une garantie qu'un
+   * changement de composition l'émette toujours, mais le meilleur signal disponible sans ajouter
+   * un nouveau canal SSE.
+   */
+  private async loadMembers(partieId: string): Promise<void> {
+    this.members.set(await this.partiesSvc.members(partieId).catch(() => []));
+    this.membersLoaded.set(true);
   }
 
-  /** Aucun état à mettre à jour — force un cycle de détection de changements zoneless sur
-   *  (change), pour que [disabled] (qui lit seanceSelect.value directement) reflète la
-   *  sélection courante. Même pattern que SeanceList.onCapacityFormInput(). */
-  protected noop(): void {}
+  // ⚠️ Story 36.10, AC9 — `startVoteFor()` et `noop()` ont été SUPPRIMÉS avec le sélecteur
+  // « Planifier un vote pour : » qui les appelait (patron de la 36.9, qui a retiré
+  // `onChooseDate()` avec son panneau plutôt que de laisser du code mort). Désigner une séance
+  // avant de choisir des dates n'est plus le parcours : on compose les créneaux sur la grille,
+  // et la séance se demande à la validation (`confirmCompose()`).
+  //
+  // 🚨 `eligibleSeances()` reste, et `lockedSeanceId` / `pollPanelOpen` / `<app-poll-creation>`
+  // aussi : ils portent l'arrivée depuis `SeanceList` via `?seanceId=` (story 8.7), qui n'est pas
+  // le sélecteur visé par l'AC9.
 
+  /**
+   * Story 36.1, AC2 : le rail suit tout toucher de case, « quelle que soit la raison du toucher ».
+   *
+   * ⚠️ Story 36.3, AC1 — ce handler est **amputé, pas supprimé**. Il n'ouvre plus le panneau de
+   * déclaration : le toucher arme désormais une sélection dans la vue enfant, et le panneau se
+   * rejoint par « Autre… » (`onDeclarationPanelRequested`). C'est le renversement demandé par
+   * FR-57 : « la sélection est le geste, le panneau est le chemin avancé ». Les quatre lignes de
+   * préparation du panneau ont migré telles quelles dans le handler ci-dessous.
+   */
   protected onSlotSelected(event: SlotSelectedEvent): void {
+    this.railDate.set(event.date);
+    this.railSlot.set(event.slot);
+  }
+
+  /**
+   * Story 36.3, AC4/AC10 — « Autre… » de la barre de sélection. **Seul chemin** vers
+   * `ConstraintPanel` depuis cette story, donc seul chemin vers la contrainte récurrente
+   * (story 1.7), la modification, la suppression et la découpe d'une récurrente.
+   *
+   * `selectedExisting` est indispensable : sans lui le panneau s'ouvrirait en création alors
+   * qu'une déclaration couvre déjà la cellule, et la suppression comme la découpe deviendraient
+   * inatteignables.
+   */
+  protected onDeclarationPanelRequested(event: SlotSelectedEvent): void {
+    this.railDate.set(event.date);
+    this.railSlot.set(event.slot);
+
     this.selectedDate.set(event.date);
     this.selectedSlot.set(event.slot);
     this.selectedExisting.set(this.findMatchingDeclaration(event.date, event.slot));
@@ -283,18 +1557,217 @@ export class CalendarView implements OnInit {
     this.panelOpen.set(true);
   }
 
+  /** Story 36.1, AC11 — activer une ligne du rail ouvre LE SCÉNARIO qui porte la séance. Aucun
+   *  écran de séance n'existe dans l'application : une séance n'a d'existence qu'à l'intérieur de
+   *  son scénario, qui porte le contexte utile (chronologie, autres séances, compte rendu). */
+  protected async onScenarioActivated(target: RailTarget): Promise<void> {
+    await this.router.navigate(['/parties', target.partieId, 'scenarios', target.scenarioId]);
+  }
+
+  /** Story 36.4, D-18 — un conflit ne fait plus échouer le geste : il OUVRE une résolution.
+   *
+   *  Les deux vues effacent leur sélection AVANT de connaître le résultat (`onSelectionCommit`) :
+   *  `event.cells` est donc la seule chose qui survive au 409, et c'est elle qui permet à la fois
+   *  de NOMMER les créneaux (AC2) et de rejouer le lot résolu (AC12). On la retient ici.
+   *
+   *  Un geste produit au plus DEUX appels : le premier, puis le lot résolu. « Au cas par cas »
+   *  n'en ajoute aucun — c'est un parcours interne au dialogue (AC10). */
+  protected async onBatchDeclareRequested(event: {
+    cells: SelectedCell[];
+    kind: AvailKind;
+  }): Promise<void> {
+    const items = buildBatchItems(event.cells, event.kind);
+    try {
+      await this.availabilitySvc.createDeclarationBatch(items);
+      await this.loadDeclarations();
+      await this.refreshMjPanels();
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        await this.resolveBatchConflicts(err, event.cells, event.kind, items);
+        return;
+      }
+      this.snack.open('Impossible d’enregistrer ces disponibilités. Réessayez.', undefined, {
+        duration: 5000,
+      });
+    }
+  }
+
+  private async resolveBatchConflicts(
+    err: ConflictError,
+    cells: SelectedCell[],
+    kind: AvailKind,
+    items: CreateAvailabilityBatchItem[],
+  ): Promise<void> {
+    // AC14 : un conflit INTERNE au lot reste irrésoluble — aucun des deux créneaux n'est
+    // « l'existant », « Remplacer » n'y aurait aucun sens. Le serveur le signe via `internal`
+    // (Story 36.4 — remplace le sondage par préfixe d'id de la Story 30.2, revue de code).
+    const resolvable = err.conflicts.filter((c) => typeof c.batchIndex === 'number' && !c.internal);
+    if (resolvable.length === 0) {
+      const labels = err.conflicts.map((c) => c.startDate ?? c.dayOfWeek).join(', ');
+      this.snack.open(
+        labels
+          ? `Ces créneaux se contredisent entre eux (${labels}). Rien n'a été enregistré.`
+          : "Ces créneaux se contredisent entre eux. Rien n'a été enregistré.",
+        undefined,
+        { duration: 5000 },
+      );
+      return;
+    }
+
+    // Garde anti-double-ouverture (patron `dialogPending()` de PollStatusPanel) : posée avant
+    // tout await, sans quoi deux gestes rapprochés ouvriraient deux dialogues concurrents. Le
+    // second geste est notifié plutôt que silencieusement perdu (revue de code Story 36.4).
+    if (this.conflictDialogOpen()) {
+      this.snack.open(
+        'Une résolution de conflit est déjà en cours. Terminez-la avant de recommencer.',
+        undefined,
+        { duration: 5000 },
+      );
+      return;
+    }
+    this.conflictDialogOpen.set(true);
+    try {
+      const conflictedIndexes = new Set(resolvable.map((c) => c.batchIndex as number));
+      const kindLabel = kind === 'AVAILABLE' ? 'disponible' : 'indisponible';
+      const seanceExceptions = this.seanceCoveredCells(cells, conflictedIndexes);
+      const data: ConflictDialogData = {
+        kindLabel,
+        intentLabel: this.describeSelection(cells),
+        conflicts: resolvable.map((c) => ({
+          batchIndex: c.batchIndex as number,
+          label: this.describeCell(cells[c.batchIndex as number]),
+        })),
+        // Les cellules d'exception séance ne sont ni en conflit ni « libres » : le compteur
+        // « Les N autres passent en… » ne doit pas les recompter (AC2/AC11, revue de code).
+        freeCount: cells.length - conflictedIndexes.size - seanceExceptions.length,
+        seanceExceptions,
+      };
+
+      const ref = this.dialog.open(ConflictDialog, { data });
+      const resolution = (await firstValueFrom(
+        ref.afterClosed(),
+      )) as ConflictResolutionByIndex | null;
+      if (!resolution) return;
+
+      // Un seul appel portant TOUT le lot, chaque créneau en conflit muni de sa décision.
+      const resolved = items.map((item, index) =>
+        resolution[index] ? { ...item, conflictResolution: resolution[index] } : item,
+      );
+      try {
+        await this.availabilitySvc.createDeclarationBatch(resolved);
+      } catch (resubmitErr) {
+        // Une résolution peut elle-même échouer sur un nouveau 409 (conflit interne révélé
+        // seulement après résolution de l'externe, ou collision de course) : on ne l'avale pas
+        // dans le message générique, on relance la résolution avec les conflits à jour
+        // (revue de code Story 36.4).
+        if (resubmitErr instanceof ConflictError) {
+          this.conflictDialogOpen.set(false);
+          await this.resolveBatchConflicts(resubmitErr, cells, kind, resolved);
+          return;
+        }
+        throw resubmitErr;
+      }
+      await this.loadDeclarations();
+      await this.refreshMjPanels();
+    } catch {
+      this.snack.open('Impossible d’enregistrer ces disponibilités. Réessayez.', undefined, {
+        duration: 5000,
+      });
+    } finally {
+      this.conflictDialogOpen.set(false);
+    }
+  }
+
+  /** Créneaux de la sélection couverts par une séance et qui ne sont PAS en conflit : ce sont
+   *  eux que le dialogue signale en exception (AC11). Ils ne peuvent structurellement pas
+   *  figurer dans `conflicts` — l'indisponibilité dérivée d'une séance n'est jamais persistée
+   *  (AD-9), il n'y a rien à écraser. Dérivé d'`allCalendarEntries()`, déjà en mémoire pour les
+   *  deux contextes : aucun appel réseau supplémentaire. */
+  private seanceCoveredCells(cells: SelectedCell[], conflicted: Set<number>): string[] {
+    const seances = this.allCalendarEntries().filter((e) => e.type === 'mes-seances');
+    if (seances.length === 0) return [];
+    const labels: string[] = [];
+    cells.forEach((cell, index) => {
+      if (conflicted.has(index)) return;
+      const key = toDateKey(cell.date);
+      const covered = seances.some((e) => e.date === key && entryCoversSlot(e.slot, cell.slot));
+      if (covered) labels.push(this.describeCell(cell));
+    });
+    return labels;
+  }
+
+  /** ⚠️ Le créneau est OMIS quand il vaut la journée entière. Vérifié à l'écran : « jeu. 20 août ·
+   *  Journée · ven. 21 août · Journée · … » emploie le même séparateur entre la date et le créneau
+   *  qu'entre deux créneaux, si bien qu'on ne distingue plus les items de la liste. Le contrat d'UI
+   *  écrit d'ailleurs « Mar 4 · Ven 7 · Dim 9 », sans créneau. Il reste nommé dès qu'il porte une
+   *  information (Matin / Après-midi / Soir). */
+  private describeCell(cell: SelectedCell | undefined): string {
+    if (!cell) return 'Créneau inconnu';
+    const date = CALENDAR_CELL_DATE_FORMAT.format(cell.date);
+    return cell.slot === 'FULL_DAY' ? date : `${date} · ${SLOT_LABELS[cell.slot]}`;
+  }
+
+  /** Rappelle l'intention du geste sous le titre du dialogue — « du 3 au 9 août, le soir ». */
+  private describeSelection(cells: SelectedCell[]): string {
+    if (cells.length === 0) return 'sur aucun créneau';
+    if (cells.length === 1) return `le ${this.describeCell(cells[0])}`;
+    const sorted = [...cells].sort((a, b) => a.date.getTime() - b.date.getTime());
+    const from = CALENDAR_CELL_DATE_FORMAT.format(sorted[0].date);
+    const to = CALENDAR_CELL_DATE_FORMAT.format(sorted[sorted.length - 1].date);
+    return `sur ${cells.length} créneaux, du ${from} au ${to}`;
+  }
+
   protected onViewChange(value: string): void {
-    this.view.set(value as 'month' | 'week');
+    // Story 36.7 — changer de vue démonte la grille qui ancre le sélecteur ouvert.
+    this.closePicker();
+    this.view.set(value as 'month' | 'week' | 'agenda');
   }
 
   protected async onMonthDateChange(d: Date): Promise<void> {
+    // Story 36.7 — naviguer de mois reconstruit les cases : l'ancre du sélecteur ouvert (une
+    // bande déjà rendue) serait détachée sans que ses données restent valides.
+    this.closePicker();
     this.sharedDate.set(d);
     const id = this.partieId();
-    if (id) await this.loadHeatmap(id, d);
+    if (id) {
+      await this.loadHeatmap(id, d);
+    } else {
+      // Story 30.6, AC10 : la plage affichée du calendrier personnel change — GET /me/calendar
+      // est rappelé avec la nouvelle plage, jamais un cache silencieusement périmé.
+      const { from, to } = CalendarView.monthGridRange(d);
+      await this.loadMeCalendarForRange(from, to);
+    }
   }
 
-  protected onWeekDateChange(d: Date): void {
+  protected async onWeekDateChange(d: Date): Promise<void> {
+    // Story 36.7 — même motif que `onMonthDateChange`.
+    this.closePicker();
     this.sharedDate.set(d);
+    const partieId = this.partieId();
+    if (partieId) {
+      // Story 36.8, AC13 — 🚨 jusqu'ici, naviguer de semaine en contexte de partie ne rechargeait
+      // RIEN : c'était sans conséquence visible tant que la couche « disponibilité du groupe »
+      // n'était pas dessinée dans la grille. Depuis cette story, deux semaines d'avance suffisent
+      // à la faire disparaître sans que l'écran le dise, alors que la spine la veut « dans toutes
+      // les vues de grille ».
+      //
+      // `monthGridRange(d)` — la MÊME plage que `onMonthDateChange`, jamais une seconde inventée :
+      // elle couvre largement la semaine de `d` (42 jours autour de son mois) et reste sous le
+      // plafond serveur de 45 jours. Effet de bord accepté : deux navigations de semaine dans le
+      // même mois rechargent la même plage, pour une requête déjà bornée.
+      await this.loadHeatmap(partieId, d);
+      return;
+    }
+    // Story 30.6, AC10 : contexte personnel — la plage affichée change, `GET /me/calendar` est
+    // rappelé avec elle, jamais un cache silencieusement périmé.
+    const weekStart = getWeekStart(d);
+    const weekEnd = new Date(
+      Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 6),
+    );
+    await this.loadMeCalendarForRange(
+      CalendarView.toIsoDate(weekStart),
+      CalendarView.toIsoDate(weekEnd),
+    );
   }
 
   protected onFormChanged(dto: CreateAvailabilityDto | null): void {
@@ -318,18 +1791,118 @@ export class CalendarView implements OnInit {
     if (id) await this.loadScenarios(id);
   }
 
-  // Story 8.8, AC8 : met à jour uniquement la séance concernée (le poll répondu, identifié par
-  // pollId) au sein de `scenarios` — pas de refetch complet, `activePolls` (computed) se
-  // recalcule automatiquement.
-  protected onPollResponded(poll: SessionPollDto): void {
-    this.scenarios.update((list) =>
-      list.map((scenario) => ({
-        ...scenario,
-        seances: scenario.seances.map((seance) =>
-          seance.poll?.id === poll.id ? { ...seance, poll } : seance,
-        ),
-      })),
+  /**
+   * Story 36.7, AC1 — une surface signale qu'une option de vote a été activée : on ouvre le
+   * sélecteur, ancré sur l'élément touché.
+   *
+   * Les surfaces ont déjà tranché *quand* : elles n'émettent que si elles rendent une piste sur
+   * ce créneau (couche allumée, rang gagnant `vote`, agrégats servis) et jamais pendant une
+   * sélection armée. Rien de tout cela n'est réévalué ici — une seconde règle diveregerait de la
+   * première au premier changement.
+   */
+  protected onVoteOptionActivated(event: VoteOptionActivatedEvent): void {
+    this.pickerVote.set(event.vote);
+    this.pickerAnchor.set(event.anchor);
+    this.pickerLabel.set(this.composePickerLabel(event.date, event.slot));
+    this.pickerReturnFocus = event.anchor;
+  }
+
+  /** « ven. 28 août — soir ». Composé ICI et non dans le sélecteur : les formateurs vivent déjà
+   *  dans ce fichier, et le sélecteur reste un composant de rendu pur. */
+  private composePickerLabel(date: Date, slot: DaySlot): string {
+    const day = CALENDAR_CELL_DATE_FORMAT.format(date);
+    return slot === 'FULL_DAY' ? day : `${day} — ${SLOT_LABELS[slot].toLowerCase()}`;
+  }
+
+  protected closePicker(): void {
+    this.pickerVote.set(null);
+    this.pickerAnchor.set(null);
+    // Le focus revient à la ligne ou à la bande d'où l'on vient (AC7). `isConnected` : la surface
+    // a pu être re-rendue entre-temps (rechargement après écriture).
+    const back = this.pickerReturnFocus;
+    this.pickerReturnFocus = null;
+    if (back?.isConnected) back.focus();
+  }
+
+  /** AC4 — `Échap` ferme sans rien changer.
+   *
+   *  🚨 C'est bien le `keydown` de l'OVERLAY, jamais celui de la grille : celle-ci a déjà le
+   *  sien, qui ANNULE la sélection en cours. Les deux ne doivent jamais se déclencher l'un
+   *  l'autre. */
+  protected onPickerKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      this.closePicker();
+    }
+  }
+
+  /** AC8/AC9/AC10/AC11 — répondre. */
+  protected async onVoteAnswerChosen(answer: VoteAnswer): Promise<void> {
+    const vote = this.pickerVote();
+    if (!vote || this.pollActionPending()) return;
+    await this.writeVote(
+      vote,
+      () => this.pollSvc.castVote(vote.partieId, vote.pollId, { optionId: vote.optionId, answer }),
+      'success.vote_cast',
+      this.theme.tone()['poll.cast_error'],
     );
+  }
+
+  /** AC3 — retirer. **Seul chemin de retrait du calendrier** depuis cette story. */
+  protected async onVoteWithdrawn(): Promise<void> {
+    const vote = this.pickerVote();
+    if (!vote || this.pollActionPending()) return;
+    await this.writeVote(
+      vote,
+      () => this.pollSvc.withdrawVote(vote.partieId, vote.pollId, vote.optionId),
+      'success.vote_withdrawn',
+      this.theme.tone()['poll.withdraw_error'],
+    );
+  }
+
+  /**
+   * Le corps commun des deux écritures — un seul endroit où vivent la garde d'unicité, le
+   * rechargement et le traitement de l'échec.
+   *
+   * 🚨 **On recharge, on ne reconstruit pas.** `PollResponseComponent` fabrique un
+   * `SessionPollDto` optimiste à la main parce qu'il n'a pas de rechargement sous la main ; ici
+   * `loadScenarios()` existe. Un rechargement coûte un appel sur une ACTION utilisateur (jamais
+   * au rendu — l'AC7 de la 36.6 porte sur l'affichage) et garantit que les quatre surfaces
+   * disent la même chose, la dérivation étant unique depuis la 36.6.
+   *
+   * 🚨 **On recharge AUSSI en cas d'échec** : un vote a pu être clos entre l'affichage et le
+   * geste (le serveur répond alors 400), et le calendrier personnel n'est pas câblé sur SSE —
+   * l'écran affichait donc peut-être un vote qui n'existe plus (AC10).
+   */
+  private async writeVote(
+    vote: VoteParticipation,
+    write: () => Promise<void>,
+    successToneKey: 'success.vote_cast' | 'success.vote_withdrawn',
+    errorMessage: string,
+  ): Promise<void> {
+    this.pollActionPending.set(true);
+    this.error.set(null);
+    let ok = false;
+    try {
+      await write();
+      ok = true;
+    } catch {
+      this.error.set(errorMessage);
+    } finally {
+      this.pollActionPending.set(false);
+    }
+    // Revue de code 36.7 : fermer APRÈS l'écriture, jamais avant — sinon `[busy]` (câblé sur
+    // `pollActionPending`) ne peut jamais s'afficher (le sélecteur a déjà disparu), et un échec
+    // perd son contexte visuel au moment précis où l'utilisateur l'attend.
+    this.closePicker();
+
+    if (ok) this.snack.open(this.theme.tone()[successToneKey], undefined, { duration: 3000 });
+
+    // Les deux contextes n'ont pas la même source : contexte de partie ⇒ les scénarios (d'où
+    // `activePolls`) ; calendrier personnel ⇒ `GET /me/calendar`, qui n'a AUCUN temps réel.
+    const partieId = this.partieId();
+    if (partieId) await this.loadScenarios(partieId);
+    else await this.loadMeCalendarForRange(this.fromDateStr(), this.toDateStr());
   }
 
   protected async onClosePoll(pollId: string): Promise<void> {
@@ -347,20 +1920,72 @@ export class CalendarView implements OnInit {
     }
   }
 
-  protected async onChooseDate(pollId: string, optionId: string): Promise<void> {
+  /**
+   * Story 36.12, AC10/AC11 — sceller un créneau depuis l'Agenda.
+   *
+   * *(La 36.9 avait retiré l'ancien `onChooseDate()` avec le panneau qui l'appelait, en annonçant
+   * que cette story rendrait le scellement à l'Agenda « avec son propre chemin ». Le voici : il
+   * est écrit neuf, il ne ressuscite rien.)*
+   *
+   * 🚨 **Le calendrier n'est PAS le seul chemin de scellement** : la fiche de scénario
+   * (`seance-list`) garde son panneau complet et son bouton. Ce chemin s'ajoute, il ne déplace
+   * rien.
+   *
+   * Patron d'écriture identique à `onClosePoll()` : garde anti-double-clic, appel, **rechargement
+   * obligatoire** (`chooseDate()` renvoie `void` — sans `loadScenarios()`, la ligne resterait
+   * affichée comme un vote ouvert, défaut déjà payé une fois), message d'erreur sur échec.
+   */
+  protected async onSealRequested(request: AgendaSealRequest): Promise<void> {
     const id = this.partieId();
     if (!id || this.pollActionPending()) return;
+
+    // Revue de code (36.12) — posé AVANT d'ouvrir le dialogue, pas seulement avant l'écriture :
+    // sans cela, deux clics rapprochés sur *Sceller* (même sur deux options différentes) passaient
+    // tous les deux la garde ci-dessus — elle ne se refermait qu'après confirmation du premier —
+    // et ouvraient chacun leur propre dialogue de confirmation.
     this.pollActionPending.set(true);
-    this.error.set(null);
     try {
-      await this.pollSvc.chooseDate(id, pollId, { optionId });
-      this.snack.open(this.theme.tone()['success.date_chosen'], undefined, { duration: 3000 });
-      await this.loadScenarios(id);
-    } catch {
-      this.error.set('Impossible de choisir cette date. Réessayez.');
+      const ref = this.dialog.open(SealConfirmDialog, {
+        data: { dateLabel: request.dateLabel, pollLabel: request.pollLabel },
+      });
+      const confirmed = await firstValueFrom(ref.afterClosed());
+      if (!confirmed) return;
+      await this.writeSeal(id, request);
     } finally {
       this.pollActionPending.set(false);
     }
+  }
+
+  private async writeSeal(id: string, request: AgendaSealRequest): Promise<void> {
+    this.error.set(null);
+    try {
+      // `request.partieId` vient du triplet d'identité de l'option (36.7), jamais de la route :
+      // c'est la seule valeur qui reste juste si une ligne d'une autre partie atteignait un jour
+      // cette surface. Le serveur reste la garde (`getOwned`), quoi qu'envoie le client.
+      await this.pollSvc.chooseDate(request.partieId, request.pollId, {
+        optionId: request.optionId,
+      });
+      await this.loadScenarios(id);
+      await this.refreshMjPanels();
+    } catch {
+      this.error.set('Impossible de sceller ce créneau. Réessayez.');
+    }
+  }
+
+  /**
+   * Story 36.12, AC13 — « Lancer un vote » depuis une ligne d'agenda.
+   *
+   * 🚨 **Aucun formulaire nouveau, aucun second chemin de création.** On bascule sur le Mois et on
+   * arme le mode de composition de la 36.10, ciblé sur la séance : le MJ désigne ses créneaux sur
+   * la grille, la barre persistante valide. C'est ce que FR-52 demande — le premier geste est la
+   * grille — et c'est le sélecteur « Planifier un vote pour : » qu'elle a supprimé qu'on
+   * ressusciterait en ouvrant ici un dialogue de dates.
+   */
+  protected onPollLaunchRequested(seanceId: string): void {
+    if (!seanceId) return;
+    // `onViewChange` ferme le sélecteur de réponse : la vue Agenda qui l'ancrait va être démontée.
+    this.onViewChange('month');
+    this.startCompose(seanceId);
   }
 
   // Story 8.8, AC6 : ramène le MJ vers la page d'origine (fiche de partie, ou fiche de scénario si
@@ -394,10 +2019,6 @@ export class CalendarView implements OnInit {
     ]);
   }
 
-  protected scrollToSlots(): void {
-    this.slotsPanel?.nativeElement.scrollIntoView({ behavior: 'smooth' });
-  }
-
   protected onFromChange(event: Event): void {
     this.fromDateStr.set((event.target as HTMLInputElement).value);
   }
@@ -421,6 +2042,9 @@ export class CalendarView implements OnInit {
       queryParams: { from, to, weeks: null },
       queryParamsHandling: 'merge',
     });
+    // Revue de code Story 29.4 : même piège que ngOnInit — cette navigation interne vide le
+    // bandeau contextuel via NavigationStart -> clear(), à repositionner.
+    this.contextualNav.set({ title: this.theme.tone()['nav.calendar'] });
     await this.loadAvailableSlots(id, from, to);
   }
 
@@ -434,9 +2058,15 @@ export class CalendarView implements OnInit {
     }
   }
 
-  private async loadHeatmap(id: string, centerDate: Date = new Date()): Promise<void> {
-    // Calcule exactement la grille du mois affiché (même logique que buildMonth : 6×7 = 42 jours)
-    // centerDate est un Date UTC-midnight (émis par displayDateChange) → utiliser getUTC*
+  private static toIsoDate(d: Date): string {
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+  }
+
+  /** Calcule exactement la grille du mois affiché (même logique que buildMonth : 6×7 = 42 jours) —
+   *  `centerDate` est un Date UTC-midnight (émis par displayDateChange) → utiliser getUTC*.
+   *  Story 30.6 : extrait de `loadHeatmap` (comportement inchangé) pour être réutilisé par
+   *  `onMonthDateChange` en contexte personnel (AC10). */
+  private static monthGridRange(centerDate: Date): { from: string; to: string } {
     const year = centerDate.getUTCFullYear();
     const month = centerDate.getUTCMonth();
     const firstOfMonth = new Date(Date.UTC(year, month, 1));
@@ -446,12 +2076,28 @@ export class CalendarView implements OnInit {
     const gridEnd = new Date(
       Date.UTC(gridStart.getUTCFullYear(), gridStart.getUTCMonth(), gridStart.getUTCDate() + 41),
     );
-    const toIso = (d: Date) =>
-      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    return { from: CalendarView.toIsoDate(gridStart), to: CalendarView.toIsoDate(gridEnd) };
+  }
+
+  // Revue de code : identifiant de requête incrémental, même patron que `meCalendarReqId` —
+  // une navigation rapide (mois/semaine suivant·e) peut déclencher plusieurs appels
+  // `getHeatmap()` qui ne résolvent pas dans l'ordre ; seule la réponse de la dernière requête
+  // émise est appliquée.
+  private heatmapReqId = 0;
+
+  private async loadHeatmap(id: string, centerDate: Date = new Date()): Promise<void> {
+    const { from, to } = CalendarView.monthGridRange(centerDate);
+    const reqId = ++this.heatmapReqId;
     try {
-      this.heatmap.set(await this.pollSvc.getHeatmap(id, toIso(gridStart), toIso(gridEnd)));
+      const result = await this.pollSvc.getHeatmap(id, from, to);
+      if (reqId !== this.heatmapReqId) return;
+      this.heatmap.set(result);
     } catch {
-      // non-bloquant — le heatmap est un overlay facultatif
+      if (reqId !== this.heatmapReqId) return;
+      // non-bloquant — le heatmap est un overlay facultatif, mais un échec ne doit pas laisser
+      // une couche périmée à l'écran : un canal vide (AC10) est moins trompeur qu'une jauge qui
+      // ne reflète plus la réalité.
+      this.heatmap.set([]);
     }
   }
 
@@ -463,6 +2109,35 @@ export class CalendarView implements OnInit {
       this.slotsError.set('Impossible de charger les créneaux.');
     } finally {
       this.slotsLoading.set(false);
+    }
+  }
+
+  // Story 30.6, AC8/AC9/AC10 : un seul appel pour les couches temporelles du calendrier
+  // personnel — jamais appelée en contexte de partie.
+  // Revue de code : identifiant de requête incrémental — une navigation rapide (mois/semaine
+  // suivant·e) peut déclencher plusieurs appels getMyCalendar() qui ne résolvent pas dans l'ordre ;
+  // seule la réponse de la dernière requête émise est appliquée.
+  private meCalendarReqId = 0;
+
+  private async loadMeCalendarForRange(from: string, to: string): Promise<void> {
+    this.fromDateStr.set(from);
+    this.toDateStr.set(to);
+    this.meCalendarLoading.set(true);
+    const reqId = ++this.meCalendarReqId;
+    try {
+      const result = await this.availabilitySvc.getMyCalendar(from, to);
+      if (reqId !== this.meCalendarReqId) return;
+      this.meCalendar.set(result);
+      this.error.set(null);
+    } catch {
+      if (reqId !== this.meCalendarReqId) return;
+      // Revue de code (AC10) : ne jamais laisser la plage précédente affichée comme si elle
+      // était à jour — signaler l'échec et vider les couches temporelles plutôt que de les
+      // laisser silencieusement périmées.
+      this.meCalendar.set(null);
+      this.error.set('Impossible de charger le calendrier pour cette période.');
+    } finally {
+      if (reqId === this.meCalendarReqId) this.meCalendarLoading.set(false);
     }
   }
 

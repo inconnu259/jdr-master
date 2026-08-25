@@ -1,0 +1,30 @@
+[
+  {
+    "key": "necessaire-voyage",
+    "label": "Nécessaire de voyage",
+    "priceGold": 150,
+    "items": [
+      { "itemKey": "grand-sac-a-dos", "quantity": 1 },
+      { "itemKey": "sac-de-couchage", "quantity": 1 },
+      { "itemKey": "couverts", "quantity": 1 },
+      { "itemKey": "outre", "quantity": 1 },
+      { "itemKey": "rations", "quantity": 2 }
+    ]
+  },
+  {
+    "key": "necessaire-intendance",
+    "label": "Nécessaire d'intendance",
+    "priceGold": 800,
+    "items": [
+      { "itemKey": "animal-de-bat", "quantity": 1 },
+      { "itemKey": "tonneau", "quantity": 1 },
+      { "itemKey": "caisse", "quantity": 1 },
+      { "itemKey": "necessaire-de-cuisine", "quantity": 1 },
+      { "itemKey": "torche", "quantity": 3 },
+      { "itemKey": "briquet", "quantity": 1 },
+      { "itemKey": "savon", "quantity": 1 },
+      { "itemKey": "necessaire-a-lessive", "quantity": 1 },
+      { "itemKey": "tente", "quantity": 1 }
+    ]
+  }
+]

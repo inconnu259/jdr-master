@@ -26,6 +26,7 @@
 .inventory-tab__add-form,
 .inventory-tab__edit-form {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
 }
@@ -33,4 +34,6 @@
 .inventory-tab__add-form input,
 .inventory-tab__edit-form input {
   min-height: 36px;
+  min-width: 0;
+  flex: 1 1 8rem;
 }

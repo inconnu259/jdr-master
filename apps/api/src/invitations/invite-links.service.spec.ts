@@ -26,7 +26,7 @@ describe('InviteLinksService', () => {
     };
     $transaction: jest.Mock;
   };
-  let parties: { getOwned: jest.Mock };
+  let parties: { getOwned: jest.Mock; notifyPartieSignalsChanged: jest.Mock };
   let realtimeEvents: { emit: jest.Mock };
 
   beforeEach(() => {
@@ -40,6 +40,7 @@ describe('InviteLinksService', () => {
     };
     parties = {
       getOwned: jest.fn().mockResolvedValue({ id: 'p1', mjId: 'mj1' }),
+      notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
     };
     realtimeEvents = { emit: jest.fn() };
     service = new InviteLinksService(
@@ -222,6 +223,7 @@ describe('InviteLinksService', () => {
   it('join : émet un événement temps réel scopé sur la Partie après la transaction', async () => {
     jest.spyOn(service, 'consumeLink').mockResolvedValue({
       partieId: 'p1',
+      partie: { mjId: 'mj1' },
     } as never);
     const res = await service.join('tok', 'u');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
@@ -231,9 +233,22 @@ describe('InviteLinksService', () => {
   it("join : émet aussi userTopic(userId) (bug fix : les AUTRES sessions/onglets déjà ouverts du joueur n'étaient jamais notifiés)", async () => {
     jest.spyOn(service, 'consumeLink').mockResolvedValue({
       partieId: 'p1',
+      partie: { mjId: 'mj1' },
     } as never);
     await service.join('tok', 'u');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
+  });
+
+  it('join : notifie aussi PartiesService.notifyPartieSignalsChanged pour le MJ (Story 29.7, AD-14, signal AUCUN_MEMBRE_INVITE)', async () => {
+    jest.spyOn(service, 'consumeLink').mockResolvedValue({
+      partieId: 'p1',
+      partie: { mjId: 'mj1' },
+    } as never);
+    await service.join('tok', 'u');
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+    );
   });
 
   // --- findOrCreateForEmail (Story 5.2) ---

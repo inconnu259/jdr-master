@@ -1,7 +1,15 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import type { AuthUser, Theme } from '@master-jdr/shared';
+import type {
+  AnnouncementDto,
+  AuthUser,
+  CalendarLayerKey,
+  CharacterSort,
+  ListViewMode,
+  PartieSort,
+  Theme,
+} from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
 @Injectable({ providedIn: 'root' })
@@ -21,11 +29,7 @@ export class AccountService {
   /** N'applique jamais le thème (AD-13) — lit/écrit uniquement la préférence côté compte. */
   setTheme(theme: Theme): Promise<AuthUser> {
     return firstValueFrom(
-      this.http.patch<AuthUser>(
-        `${API_BASE}/me/theme`,
-        { theme },
-        { withCredentials: true },
-      ),
+      this.http.patch<AuthUser>(`${API_BASE}/me/theme`, { theme }, { withCredentials: true }),
     );
   }
 
@@ -44,6 +48,58 @@ export class AccountService {
       this.http.patch<{ ok: true }>(
         `${API_BASE}/me/email`,
         { currentPassword, newEmail },
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Patch partiel (Story 29.8, étendu Story 29.9) — préférences mémorisées sur le compte. */
+  updatePreferences(prefs: {
+    partiesSort?: PartieSort;
+    hideFinishedParties?: boolean;
+    partiesViewMode?: ListViewMode;
+    charactersViewMode?: ListViewMode;
+    charactersSort?: CharacterSort;
+    defaultCalendarLayers?: CalendarLayerKey[];
+  }): Promise<AuthUser> {
+    return firstValueFrom(
+      this.http.patch<AuthUser>(`${API_BASE}/me/preferences`, prefs, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  addFavorite(partieId: string): Promise<{ ok: true }> {
+    return firstValueFrom(
+      this.http.put<{ ok: true }>(
+        `${API_BASE}/me/favorites/${partieId}`,
+        {},
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  removeFavorite(partieId: string): Promise<{ ok: true }> {
+    return firstValueFrom(
+      this.http.delete<{ ok: true }>(`${API_BASE}/me/favorites/${partieId}`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  getUnseenAnnouncements(): Promise<AnnouncementDto[]> {
+    return firstValueFrom(
+      this.http.get<AnnouncementDto[]>(`${API_BASE}/me/unseen-announcements`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  markAnnouncementRead(announcementId: string): Promise<{ ok: true }> {
+    return firstValueFrom(
+      this.http.put<{ ok: true }>(
+        `${API_BASE}/me/announcements-read/${announcementId}`,
+        {},
         { withCredentials: true },
       ),
     );

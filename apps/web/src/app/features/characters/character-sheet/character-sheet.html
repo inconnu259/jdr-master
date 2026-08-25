@@ -33,53 +33,80 @@
           </button>
         }
       </div>
-      <div class="sheet__export-actions">
-        <div class="sheet__export-buttons">
-          <button
-            mat-stroked-button
-            type="button"
-            [disabled]="exporting() !== null || exportingEquipment() || exportingNotes()"
-            (click)="exportPdf('editable')"
-          >
-            {{ theme.tone()['character.export_editable_cta'] }}
-          </button>
-          <button
-            mat-stroked-button
-            type="button"
-            [disabled]="exporting() !== null || exportingEquipment() || exportingNotes()"
-            (click)="exportPdf('2pages')"
-          >
-            {{ theme.tone()['character.export_2pages_cta'] }}
-          </button>
-          <button
-            mat-stroked-button
-            type="button"
-            [disabled]="exporting() !== null || exportingEquipment() || exportingNotes()"
-            (click)="exportEquipmentPdf()"
-          >
-            {{ theme.tone()['character.export_equipment_cta'] }}
-          </button>
-          <button
-            mat-stroked-button
-            type="button"
-            [disabled]="exporting() !== null || exportingEquipment() || exportingNotes()"
-            (click)="exportNotesPdf()"
-          >
-            {{ theme.tone()['character.export_notes_cta'] }}
-          </button>
-        </div>
-        @if (isOwner() && c.portraitUrl) {
-          <button
-            mat-button
-            type="button"
-            class="sheet__pdf-crop-edit-cta"
-            (click)="editPdfPortraitCrop()"
-          >
-            {{ theme.tone()['character.pdf_crop_edit_cta'] }}
-          </button>
-        }
-      </div>
+      <!-- Story 31.1, AC1/AC2 — les cinq actions d'export/recadrage quittent la vue principale
+           pour ce menu « ⋮ ». Même patron cdkConnectedOverlay + CdkTrapFocus que le panneau
+           « Affichage » du calendrier (calendar-view.html, story 36.14) : menu ancré sur
+           ordinateur, feuille montant du bas sur téléphone — jamais `MatMenu` (proscrit,
+           shell.spec.ts). -->
+      <button
+        type="button"
+        class="sheet__menu-trigger"
+        cdkOverlayOrigin
+        #sheetMenuTrigger
+        #sheetMenuOrigin="cdkOverlayOrigin"
+        [class.sheet__menu-trigger--on]="sheetMenuOpen()"
+        [attr.aria-expanded]="sheetMenuOpen()"
+        aria-haspopup="dialog"
+        [attr.aria-label]="theme.tone()['character.sheet_menu_trigger_aria']"
+        (click)="toggleSheetMenu()"
+      >
+        <span aria-hidden="true">&#8942;</span>
+      </button>
     </header>
+
+    @if (isDesktop()) {
+      <ng-template
+        cdkConnectedOverlay
+        [cdkConnectedOverlayOrigin]="sheetMenuOrigin"
+        [cdkConnectedOverlayOpen]="sheetMenuOpen()"
+        [cdkConnectedOverlayHasBackdrop]="true"
+        [cdkConnectedOverlayPositions]="SHEET_MENU_POSITIONS"
+        cdkConnectedOverlayPush
+        [cdkConnectedOverlayViewportMargin]="8"
+        (backdropClick)="closeSheetMenu()"
+        (overlayKeydown)="onSheetMenuKeydown($event)"
+      >
+        <div
+          class="sheet-menu-surface sheet-menu-surface--menu"
+          role="dialog"
+          aria-modal="true"
+          tabindex="-1"
+          cdkTrapFocus
+          cdkTrapFocusAutoCapture
+          [attr.aria-label]="theme.tone()['character.sheet_menu_trigger_aria']"
+        >
+          <app-sheet-actions-menu
+            [showPdfCrop]="showPdfCropInMenu()"
+            (exportEditable)="onSheetMenuExportEditable()"
+            (export2Pages)="onSheetMenuExport2Pages()"
+            (exportEquipment)="onSheetMenuExportEquipment()"
+            (exportNotes)="onSheetMenuExportNotes()"
+            (cropPdfPortrait)="onSheetMenuCropPdfPortrait()"
+          />
+        </div>
+      </ng-template>
+    } @else if (sheetMenuOpen()) {
+      <div class="sheet-menu-backdrop" (click)="closeSheetMenu()" aria-hidden="true"></div>
+      <div
+        class="sheet-menu-surface sheet-menu-surface--sheet"
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+        cdkTrapFocus
+        cdkTrapFocusAutoCapture
+        [attr.aria-label]="theme.tone()['character.sheet_menu_trigger_aria']"
+        (keydown)="onSheetMenuKeydown($event)"
+      >
+        <app-sheet-actions-menu
+          [showPdfCrop]="showPdfCropInMenu()"
+          (exportEditable)="onSheetMenuExportEditable()"
+          (export2Pages)="onSheetMenuExport2Pages()"
+          (exportEquipment)="onSheetMenuExportEquipment()"
+          (exportNotes)="onSheetMenuExportNotes()"
+          (cropPdfPortrait)="onSheetMenuCropPdfPortrait()"
+        />
+      </div>
+    }
 
     @if (exportError(); as error) {
       <p class="sheet__export-error">{{ error }}</p>
@@ -106,7 +133,15 @@
       <app-portrait-panel [characterId]="c.id" [portraitUrl]="c.portraitUrl" [name]="name()" />
     }
 
-    <div class="sheet__body">
+    <!-- Story 29.5 : sous-navigation locale, même patron que PartieDetail (29.4) — mat-tab-group
+         piloté par selectedTabIndex()/onTabIndexChange() purement local, aucune route Angular
+         enfant (cf. story 29.5, Décision d'implémentation). -->
+    <mat-tab-group
+      [selectedIndex]="selectedTabIndex()"
+      (selectedIndexChange)="onTabIndexChange($event)"
+    >
+      <mat-tab [label]="theme.tone()['evolution.main_sheet_tab_label']">
+        <div class="sheet__body">
       <div class="sheet__column">
         <section class="sheet__card">
           <h2 class="sheet__card-title">
@@ -186,8 +221,11 @@
           <ul class="sheet__talent-list">
             @for (talent of classData()?.talents ?? []; track talent.name) {
               <li>
-                <strong>{{ talent.name }}</strong>
-                <span class="sheet__detail">{{ talent.effect.description }}</span>
+                <button
+                  type="button"
+                  class="sheet__detail-trigger"
+                  (click)="openDetail(talent.name, talent.effect.description, $event)"
+                >{{ talent.name }}</button>
               </li>
             }
           </ul>
@@ -196,8 +234,11 @@
             <ul class="sheet__talent-list">
               @for (talent of secondary.talents; track talent.name) {
                 <li>
-                  <strong>{{ talent.name }}</strong>
-                  <span class="sheet__detail">{{ talent.effect.description }}</span>
+                  <button
+                    type="button"
+                    class="sheet__detail-trigger"
+                    (click)="openDetail(talent.name, talent.effect.description, $event)"
+                  >{{ talent.name }}</button>
                 </li>
               }
             </ul>
@@ -220,8 +261,11 @@
           <ul class="sheet__talent-list">
             @for (advantage of typeData()?.advantages ?? []; track advantage.name) {
               <li>
-                <strong>{{ advantage.name }}</strong>
-                <span class="sheet__detail">{{ advantage.effect }}</span>
+                <button
+                  type="button"
+                  class="sheet__detail-trigger"
+                  (click)="openDetail(advantage.name, advantage.effect, $event)"
+                >{{ advantage.name }}</button>
               </li>
             }
           </ul>
@@ -230,8 +274,11 @@
             <ul class="sheet__talent-list">
               @for (advantage of secondary.advantages; track advantage.name) {
                 <li>
-                  <strong>{{ advantage.name }}</strong>
-                  <span class="sheet__detail">{{ advantage.effect }}</span>
+                  <button
+                    type="button"
+                    class="sheet__detail-trigger"
+                    (click)="openDetail(advantage.name, advantage.effect, $event)"
+                  >{{ advantage.name }}</button>
                 </li>
               }
             </ul>
@@ -246,8 +293,12 @@
             <ul class="sheet__talent-list">
               @for (spell of magic.ritualSpells; track spell.key) {
                 <li>
-                  <strong>{{ spell.name }}</strong>
-                  <span class="sheet__detail">{{ spell.peCost }} PE — {{ spell.description }}</span>
+                  <button
+                    type="button"
+                    class="sheet__detail-trigger"
+                    (click)="openDetail(spell.name, spell.description, $event)"
+                  >{{ spell.name }}</button>
+                  <span class="sheet__detail">{{ spell.peCost }} PE</span>
                 </li>
               }
             </ul>
@@ -337,36 +388,6 @@
         </section>
 
         <section class="sheet__card">
-          <h2 class="sheet__card-title">Équipement</h2>
-          @if (fetiqueObject() || viewerIsMj()) {
-            <p class="sheet__fetish-box">
-              Objet fétiche :
-              @if (!fetishPencil()?.editing()) {
-                {{ fetiqueObject() }}
-              }
-              @if (viewerIsMj()) {
-                <app-field-edit-pencil
-                  #fetishPencil
-                  label="l'objet fétiche"
-                  [value]="fetiqueObject() ?? ''"
-                  (confirm)="submitFieldEdit('fetiqueObject', $event)"
-                />
-              }
-            </p>
-          }
-        </section>
-
-        <section class="sheet__card">
-          <h2 class="sheet__card-title">{{ theme.tone()['evolution.inventory_section_title'] }}</h2>
-          <app-inventory-tab
-            [character]="c"
-            [isOwner]="isOwner()"
-            [viewerIsMj]="viewerIsMj()"
-            (characterUpdated)="character.set($event)"
-          />
-        </section>
-
-        <section class="sheet__card">
           <h2 class="sheet__card-title">Notes narratives</h2>
           @if (narrative().sex || viewerIsMj() || isOwner()) {
             <div class="sheet__narrative-field">
@@ -448,19 +469,63 @@
           }
         </section>
       </div>
-    </div>
+        </div>
+      </mat-tab>
 
-    @if (isOwner() || viewerIsMj()) {
-      <section class="sheet__card sheet__history">
-        <h2 class="sheet__card-title">{{ theme.tone()['evolution.history_tab_label'] }}</h2>
-        <app-history-tab [characterId]="c.id" [content]="content()" />
-      </section>
+      <mat-tab [label]="theme.tone()['evolution.inventory_section_title']">
+        <section class="sheet__card">
+          <h2 class="sheet__card-title">Équipement</h2>
+          @if (fetiqueObject() || viewerIsMj()) {
+            <p class="sheet__fetish-box">
+              Objet fétiche :
+              @if (!fetishPencil()?.editing()) {
+                {{ fetiqueObject() }}
+              }
+              @if (viewerIsMj()) {
+                <app-field-edit-pencil
+                  #fetishPencil
+                  label="l'objet fétiche"
+                  [value]="fetiqueObject() ?? ''"
+                  (confirm)="submitFieldEdit('fetiqueObject', $event)"
+                />
+              }
+            </p>
+          }
+        </section>
+
+        <section class="sheet__card">
+          <app-inventory-tab
+            [character]="c"
+            [isOwner]="isOwner()"
+            [viewerIsMj]="viewerIsMj()"
+            (characterUpdated)="character.set($event)"
+          />
+        </section>
+      </mat-tab>
+
+      <mat-tab [label]="theme.tone()['evolution.notes_journal_title']">
+        <section class="sheet__card">
+          <app-notes-journal [characterId]="c.id" [isOwner]="isOwner()" />
+        </section>
+      </mat-tab>
+
+      @if (hasHistoryTab()) {
+        <mat-tab [label]="theme.tone()['evolution.history_tab_label']">
+          <section class="sheet__card sheet__history">
+            <app-history-tab [characterId]="c.id" [content]="content()" />
+          </section>
+        </mat-tab>
+      }
+    </mat-tab-group>
+
+    @if (selectedDetail(); as d) {
+      <app-detail-surface
+        [title]="d.title"
+        [body]="d.body"
+        [openToken]="detailOpenToken()"
+        (closed)="closeDetail()"
+      />
     }
-
-    <section class="sheet__card">
-      <h2 class="sheet__card-title">{{ theme.tone()['evolution.notes_journal_title'] }}</h2>
-      <app-notes-journal [characterId]="c.id" [isOwner]="isOwner()" />
-    </section>
   </article>
 } @else {
   <p class="sheet__loading">Chargement…</p>

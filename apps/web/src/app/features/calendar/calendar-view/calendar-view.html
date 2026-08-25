@@ -1,114 +1,321 @@
 <div class="calendar-page" [class.calendar-page--mj]="isMjMode()">
-  <button class="oracle-back-btn" mat-stroked-button type="button" (click)="goBack()">
-    ← Retour
-  </button>
+  <!-- Correction post-test 29.4 : bouton retour utile seulement sur les routes scopées à une
+       Partie (non atteignables depuis la barre globale) — redondant sur /profile/calendar,
+       destination globale « Calendrier » déjà accessible en un geste. -->
+  @if (partieId()) {
+    <button class="oracle-back-btn" mat-stroked-button type="button" (click)="goBack()">
+      ← Retour
+    </button>
+  }
   <div class="calendar-main">
     @if (error()) {
       <p class="calendar-error" role="alert">{{ error() }}</p>
     }
-    <div class="view-toggle">
-      <mat-button-toggle-group [value]="view()" (change)="onViewChange($event.value)" aria-label="Vue du calendrier">
-        <mat-button-toggle value="month">Vue mois</mat-button-toggle>
-        <mat-button-toggle value="week">Vue semaine</mat-button-toggle>
-      </mat-button-toggle-group>
+    <div class="calendar-controls">
+      <!-- Story 36.14, AC1 — ⚠️ REMPLACE la bande de chips permanente de la story 30.6. Cinq
+           chips plus la chip Destinée ne tenaient pas sur une ligne : la barre passait à DEUX
+           lignes dès 1400 px et, sur téléphone, la grille commençait sous la ligne de flottaison
+           (`deferred-work.md:66`). Le patron n'est pas neuf — c'est celui de `ListControlBar`
+           (§4.2), réutilisé tel quel. -->
+      <button
+        type="button"
+        class="display-trigger"
+        cdkOverlayOrigin
+        #displayTrigger
+        #displayOrigin="cdkOverlayOrigin"
+        [class.display-trigger--on]="displayPanelOpen()"
+        [attr.aria-expanded]="displayPanelOpen()"
+        aria-haspopup="dialog"
+        [attr.aria-label]="theme.tone()['calendar.display.trigger_aria']"
+        (click)="toggleDisplayPanel()"
+      >
+        <span aria-hidden="true">&#9776;</span> {{ theme.tone()['calendar.display.trigger'] }}
+      </button>
+
+      <!-- AC3/AC4 — n'apparaît QUE si l'affichage s'écarte du défaut, et EST l'action de
+           rétablissement (un seul élément cliquable, pas un texte plus un bouton). `aria-live`
+           conservé de la 30.6 : son apparition doit s'entendre, pas seulement se voir. -->
+      <div aria-live="polite" class="display-summary-slot">
+        @if (isOverridden()) {
+          <button type="button" class="display-summary" (click)="resetToDefault()">
+            {{ layerSummaryLabel() }}
+          </button>
+        }
+      </div>
+
+      <!-- Story 36.9, AC5 — 🚨 FRÈRE de la bande de couches, jamais une chip DEDANS : la
+           Destinée est un MODE, pas un filtre, et il doit se voir tant qu'il est actif
+           (EXPERIENCE.md:198). Quand la story 36.14 repliera les couches derrière
+           « ☰ Affichage », ce contrôle devra RESTER dehors.
+           Story 36.11, D-3 — masqué en vue Agenda, comme le rail et la composition : la Destinée
+           ESTOMPE UNE GRILLE, et il n'y en a pas ici. Un contrôle visible sans effet est un
+           défaut, pas une neutralité. Le mode lui-même n'est PAS réinitialisé — revenir au Mois
+           le retrouve tel quel. -->
+      @if (view() !== 'agenda') {
+        <app-destiny-control
+          [polls]="destinyPolls()"
+          [currentPollId]="destinyPollId()"
+          (toggled)="toggleDestiny()"
+          (prevRequested)="destinyPrev()"
+          (nextRequested)="destinyNext()"
+        />
+      }
+
+      <!-- Story 36.10, AC1/AC10 — ⚠️ ÉCART ASSUMÉ avec `contrat-ui-calendrier.html:376`, qui
+           place ce bouton dans la barre de SÉLECTION. Celle-ci n'existe que tant qu'une sélection
+           existe : y loger l'armement obligerait le MJ à déclarer d'abord ses propres
+           disponibilités pour pouvoir composer un vote. Le bouton vit donc ici, frère de la
+           Destinée — même règle qu'elle : un mode s'arme hors panneau et se voit tant qu'il dure.
+           AC10 : rendu seulement pour un MJ, en contexte de partie, et seulement s'il y a
+           quelque chose à composer (un vote mis en avant, ou une séance qui en attend un). -->
+      @if (canCompose() && !composing()) {
+        <button type="button" class="compose-arm" (click)="startCompose()">
+          Ajouter des dates
+        </button>
+      }
+
+      <!-- AC1 — la bascule de vues PARTAGE cette ligne ; elle formait auparavant un bloc centré
+           sous la barre. Le ressort la pousse à droite, comme le contrat la dessine
+           (`contrat-ui-calendrier.html:66` : `.spacer{flex:1}`). -->
+      <span class="controls-spacer"></span>
+
+      <div class="view-toggle">
+        <mat-button-toggle-group
+          [value]="view()"
+          (change)="onViewChange($event.value)"
+          aria-label="Vue du calendrier"
+        >
+          <!-- AC1 — les DEUX formulations sont émises, le CSS choisit selon la largeur du
+               CONTENEUR (voir `.calendar-controls` dans le SCSS). Patron du projet : le composant
+               émet toujours son texte, seul le CSS masque — jamais un `@if` de largeur.
+               🚨 `aria-label` porte la forme LONGUE à toutes les largeurs : le nom accessible ne
+               se tronque jamais avec le visuel (défaut relevé en revue de la 36.5 sur le rail,
+               piège n°11 de la 36.13). -->
+          <mat-button-toggle value="month" aria-label="Vue mois">
+            <span class="vt-long">Vue mois</span><span class="vt-short">Mois</span>
+          </mat-button-toggle>
+          <mat-button-toggle value="week" aria-label="Vue semaine">
+            <span class="vt-long">Vue semaine</span><span class="vt-short">Sem.</span>
+          </mat-button-toggle>
+          <mat-button-toggle value="agenda" aria-label="Vue agenda">
+            <span class="vt-long">Vue agenda</span><span class="vt-short">Agenda</span>
+          </mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
     </div>
 
+    <!-- AC2 — LE MÊME contenu de panneau, deux enveloppes : menu ancré sur ordinateur, feuille
+         montant du bas sur téléphone. Un seul composant, deux présentations
+         [Source: DESIGN.md:300].
+         🚨 `MatMenu` est proscrit dans ce projet (`shell.spec.ts` l'interdit par test) et
+         `MatBottomSheet` n'y existe pas : les deux patrons employés ici existaient déjà — le
+         `cdkConnectedOverlay` de la 36.7 et la feuille maison du `ConstraintPanel`. -->
+    @if (isDesktop()) {
+      <ng-template
+        cdkConnectedOverlay
+        [cdkConnectedOverlayOrigin]="displayOrigin"
+        [cdkConnectedOverlayOpen]="displayPanelOpen()"
+        [cdkConnectedOverlayHasBackdrop]="true"
+        [cdkConnectedOverlayPositions]="DISPLAY_PANEL_POSITIONS"
+        cdkConnectedOverlayPush
+        [cdkConnectedOverlayViewportMargin]="8"
+        (backdropClick)="closeDisplayPanel()"
+        (overlayKeydown)="onDisplayPanelKeydown($event)"
+      >
+        <div class="display-surface display-surface--menu" cdkTrapFocus cdkTrapFocusAutoCapture>
+          <app-calendar-display-panel
+            [keys]="availableLayerKeys()"
+            [active]="activeLayers()"
+            [legendVisible]="legendVisible()"
+            (layerToggled)="toggleLayer($event)"
+            (legendToggled)="toggleLegend()"
+            (resetRequested)="resetToDefault()"
+          />
+        </div>
+      </ng-template>
+    } @else if (displayPanelOpen()) {
+      <!-- `aria-hidden` : le voile double le geste de fermeture à la souris, il n'est pas une
+           commande à annoncer — `Échap` est le chemin clavier. Même patron que le voile du
+           `ConstraintPanel`, quelques lignes plus bas. -->
+      <div class="display-backdrop" (click)="closeDisplayPanel()" aria-hidden="true"></div>
+      <div
+        class="display-surface display-surface--sheet"
+        role="dialog"
+        tabindex="-1"
+        cdkTrapFocus
+        cdkTrapFocusAutoCapture
+        [attr.aria-label]="theme.tone()['calendar.display.trigger_aria']"
+        (keydown)="onDisplayPanelKeydown($event)"
+      >
+        <app-calendar-display-panel
+          [keys]="availableLayerKeys()"
+          [active]="activeLayers()"
+          [legendVisible]="legendVisible()"
+          (layerToggled)="toggleLayer($event)"
+          (legendToggled)="toggleLegend()"
+          (resetRequested)="resetToDefault()"
+        />
+      </div>
+    }
+
     @if (view() === 'month') {
+      <!-- Story 36.15 — `canSeal` : MÊME garde, MÊME commentaire que `<app-calendar-agenda-view>`
+           plus bas (le calendrier personnel agrège plusieurs parties et ne sait d'aucune si j'en
+           suis le MJ — `isMjMode()` seul y laisserait passer un bouton qui échouerait en 403). -->
       <app-calendar-month-view
-        [declarations]="declarations()"
+        [declarations]="visibleDeclarations()"
         [loading]="loading()"
         [pendingDto]="pendingDto()"
         [initialDate]="sharedDate()"
-        [heatmap]="heatmap()"
+        [entries]="calendarEntries()"
+        [activeLayers]="activeLayers()"
+        [destinyDates]="destinyDates()"
+        [composing]="composing()"
+        [composedKeys]="composedKeys()"
+        [canSeal]="isMjMode() && partieId() !== null"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onMonthDateChange($event)"
+        (batchDeclareRequested)="onBatchDeclareRequested($event)"
+        (declarationPanelRequested)="onDeclarationPanelRequested($event)"
+        (voteOptionActivated)="onVoteOptionActivated($event)"
+        (composeToggled)="onComposeToggled($event)"
+        (composeCancelled)="cancelCompose()"
+        (sealRequested)="onSealRequested($event)"
       />
-    } @else {
+    } @else if (view() === 'week') {
+      <!-- Story 36.15 — même garde `canSeal` que la vue Mois ci-dessus. -->
       <app-calendar-week-view
-        [declarations]="declarations()"
+        [declarations]="visibleDeclarations()"
         [loading]="loading()"
         [pendingDto]="pendingDto()"
         [startDate]="sharedDate()"
+        [entries]="calendarEntries()"
+        [activeLayers]="activeLayers()"
+        [destinyDates]="destinyDates()"
+        [composing]="composing()"
+        [composedKeys]="composedKeys()"
+        [canSeal]="isMjMode() && partieId() !== null"
         (slotSelected)="onSlotSelected($event)"
         (displayDateChange)="onWeekDateChange($event)"
+        (batchDeclareRequested)="onBatchDeclareRequested($event)"
+        (declarationPanelRequested)="onDeclarationPanelRequested($event)"
+        (voteOptionActivated)="onVoteOptionActivated($event)"
+        (composeToggled)="onComposeToggled($event)"
+        (composeCancelled)="cancelCompose()"
+        (sealRequested)="onSealRequested($event)"
+      />
+    } @else {
+      <!-- Story 36.11 — `todayKey` est figé au montage par le parent : une seule source de
+           « maintenant » pour tout l'écran. `scenarioActivated` rejoint la MÊME navigation que
+           le rail (AC5) — aucun second `router.navigate` dans le projet. -->
+      <!-- Story 36.12 — 🚨 `canSeal` porte les DEUX conditions : être MJ ET être dans le
+           calendrier d'une partie. Le calendrier personnel agrège plusieurs parties et ne sait
+           d'aucune si j'en suis le MJ — `isMjMode()` seul y laisserait passer des boutons qui
+           échoueraient en 403 (AC12). -->
+      <app-calendar-agenda-view
+        [entries]="agendaEntries()"
+        [loading]="loading() || meCalendarLoading()"
+        [todayKey]="todayKey"
+        [canSeal]="isMjMode() && partieId() !== null"
+        [missingByPoll]="missingByPoll()"
+        (voteOptionActivated)="onVoteOptionActivated($event)"
+        (scenarioActivated)="onScenarioActivated($event)"
+        (sealRequested)="onSealRequested($event)"
+        (pollLaunchRequested)="onPollLaunchRequested($event)"
       />
     }
 
-    @if (isMjMode()) {
-      <button class="see-slots-btn" mat-stroked-button (click)="scrollToSlots()">
-        Voir les créneaux calculés
-      </button>
+    <!-- Story 36.10, AC1 — la barre PERSISTANTE du mode de composition, directement sous la
+         grille comme la barre de sélection. Elle reste rendue tant que le mode dure, y compris à
+         zéro créneau composé : c'est la seule sortie visible du mode avec `Échap`. Absente de la
+         vue Agenda, qui ne compose pas (« depuis la grille »). -->
+    @if (composing() && view() !== 'agenda') {
+      <app-compose-bar
+        [count]="composedCells().length"
+        [targetLabel]="composeTargetLabel()"
+        [busy]="pollActionPending()"
+        [canConfirm]="composeCanConfirm()"
+        [blockedReason]="composeBlockedReason()"
+        (confirmed)="confirmCompose()"
+        (cancelled)="cancelCompose()"
+      />
     }
-    @if (!isMjMode() && partieId()) {
-      <button class="see-slots-btn" mat-stroked-button (click)="scrollToSlots()">
-        Voir les créneaux de la guilde
-      </button>
+
+    <!-- Story 36.1 — rail de détail : permanent sous la grille, aux deux vues et à toutes les
+         largeurs. Aucun geste ne l'ouvre ni ne le ferme (AC1). Absent de la vue Agenda, qui est
+         elle-même une liste détaillée. -->
+    @if (view() !== 'agenda') {
+      <app-calendar-detail-rail
+        [detail]="railDetail()"
+        [touchedSlot]="railSlot()"
+        [loading]="loading() || meCalendarLoading()"
+        (scenarioActivated)="onScenarioActivated($event)"
+        (voteOptionActivated)="onVoteOptionActivated($event)"
+      />
+    }
+
+    <!-- Story 36.14, AC5/AC6 — D-2 : la légende se rend SOUS la grille et sous le rail.
+         Au-dessus, elle repousserait le calendrier vers le bas — exactement ce que cette story
+         supprime. Dans le panneau, elle disparaîtrait avec lui, alors que « l'écran doit rester
+         lisible sans elle » suppose de pouvoir la lire EN REGARDANT la grille
+         [Source: DESIGN.md:390]. Fermée par défaut ; son seul réglage est dans le panneau. -->
+    @if (legendVisible()) {
+      <app-calendar-legend [partieContext]="!!partieId()" />
     }
   </div>
 
   @if (isMjMode()) {
-    <div class="mj-results-panel" #slotsPanel>
-      <!-- Story 8.8, AC9 : sélecteur de séance pour lancer un vote directement depuis l'Oracle —
-           n'affiche que les séances éligibles (scénario non clôturé, aucun vote déjà lié, aucune
-           date déjà validée) ; étiquette toujours scénario ET séance, sans ambiguïté. -->
-      @if (eligibleSeances().length > 0) {
-        <div class="new-vote-form">
-          <label class="new-vote-form__label">
-            Planifier un vote pour :
-            <select #seanceSelect class="new-vote-form__select" (change)="noop()">
-              <option value="" selected>Choisir une séance…</option>
-              @for (entry of eligibleSeances(); track entry.seance.id) {
-                <option [value]="entry.seance.id">
-                  {{ entry.scenario.title }} — Séance {{ entry.seanceIndex }}
-                </option>
-              }
-            </select>
-          </label>
-          <button
-            mat-flat-button
-            color="primary"
-            type="button"
-            [disabled]="!seanceSelect.value"
-            (click)="startVoteFor(seanceSelect.value)"
-          >
-            Lancer le vote
-          </button>
+    <div class="mj-results-panel">
+      <!-- ⚠️ Story 36.10, AC9 — le sélecteur « Planifier un vote pour : » a été RETIRÉ d'ici.
+           Il demandait la séance AVANT les dates, à côté d'un calendrier qui ne montrait pas ces
+           dates ; c'est le formulaire séparé que FR-52 supprime. La composition passe désormais
+           par « Ajouter des dates » et la sélection sur grille, et la séance se demande à la
+           validation. Conforme à l'annotation de la planche (`contrat-ui-calendrier.html:414`). -->
+
+      <!-- Story 30.6, AC6 : couche « votes-en-cours », sans coût réseau supplémentaire (dérivée
+           d'activePolls, déjà chargé) — masquée quand la couche est désactivée, et masquée en vue
+           Agenda (revue de code) où agendaEntries() affiche déjà ces mêmes votes chronologiquement,
+           pour éviter le doublon. -->
+      @if (isLayerActive('votes-en-cours') && view() !== 'agenda') {
+        <div class="poll-section">
+          <!-- Story 8.7, AC1 (corrigé en revue) : plus de vote sans séance — se lance depuis
+               « Lancer le vote » sur la fiche du scénario (SeanceList), ou depuis « Ajouter des
+               dates » et la composition sur grille (Story 36.10), qui demande la séance à la
+               validation.
+               Story 8.8, AC7 : plusieurs votes actifs peuvent coexister (un par Séance), chacun
+               étiqueté par son scénario/séance — remplace l'ancien panneau à un seul poll. -->
+          @if (activePolls().length === 0) {
+            <p class="hint">Aucun vote de date en cours.</p>
+          }
+          @for (entry of activePolls(); track entry.poll.id) {
+            <div class="poll-entry">
+              <p class="poll-entry__label">
+                {{ entry.scenario.title }}
+                @if (entry.scenario.seances.length > 1) {
+                  — Séance {{ entry.seanceIndex }}
+                }
+              </p>
+              <!-- ⚠️ Story 36.9, AC4 — `<app-poll-status>` a été REMPLACÉ ici, et ici seulement.
+                   Le panneau du calendrier se réduit à des PERSONNES : dates, participation et ma
+                   réponse vivent désormais dans la grille (36.6 / 36.7), les y relister était une
+                   seconde lecture des mêmes faits.
+                   🚨 La fiche de scénario (`seance-list.html`) garde le panneau COMPLET et son
+                   bouton « Sceller ce créneau » — qui est le seul chemin de scellement du projet
+                   tant que la story 36.12 n'a pas livré celui de l'Agenda. Ne pas propager cette
+                   réduction là-bas. -->
+              <app-poll-missing [poll]="entry.poll" [members]="members()" />
+              <button
+                mat-stroked-button
+                color="warn"
+                [disabled]="pollActionPending()"
+                (click)="onClosePoll(entry.poll.id)"
+              >
+                {{ theme.tone()['cta.cancel_poll'] }}
+              </button>
+            </div>
+          }
         </div>
       }
-
-      <div class="poll-section">
-        <!-- Story 8.7, AC1 (corrigé en revue) : plus de vote sans séance — se lance depuis
-             « Lancer le vote » sur la fiche du scénario (SeanceList) ou le sélecteur ci-dessus.
-             Story 8.8, AC7 : plusieurs votes actifs peuvent coexister (un par Séance), chacun
-             étiqueté par son scénario/séance — remplace l'ancien panneau à un seul poll. -->
-        @if (activePolls().length === 0) {
-          <p class="hint">Aucun vote de date en cours.</p>
-        }
-        @for (entry of activePolls(); track entry.poll.id) {
-          <div class="poll-entry">
-            <p class="poll-entry__label">
-              {{ entry.scenario.title }}
-              @if (entry.scenario.seances.length > 1) {
-                — Séance {{ entry.seanceIndex }}
-              }
-            </p>
-            <app-poll-status
-              [poll]="entry.poll"
-              [members]="members()"
-              [busy]="pollActionPending()"
-              (chosen)="onChooseDate(entry.poll.id, $event)"
-            />
-            <button
-              mat-stroked-button
-              color="warn"
-              [disabled]="pollActionPending()"
-              (click)="onClosePoll(entry.poll.id)"
-            >
-              {{ theme.tone()['cta.cancel_poll'] }}
-            </button>
-          </div>
-        }
-      </div>
 
       <div class="date-range-form">
         <label class="date-range-label">
@@ -131,33 +338,31 @@
         </label>
         <button mat-stroked-button (click)="onSearch()">Rechercher</button>
       </div>
-      <app-available-slots
-        [slots]="availableSlots()"
-        [loading]="slotsLoading()"
-        [error]="slotsError()"
-      />
+      <!-- Story 30.6, AC5 : contenu de l'ancien panneau « voir les créneaux calculés », devenu la
+           couche disponibilite-groupe — plus de bouton de défilement dédié, visible seulement
+           quand la couche est active. Masquée en vue Agenda (revue de code) — agendaEntries()
+           affiche déjà ces mêmes créneaux chronologiquement, pour éviter le doublon. -->
+      @if (isLayerActive('disponibilite-groupe') && view() !== 'agenda') {
+        <app-available-slots
+          [slots]="availableSlots()"
+          [loading]="slotsLoading()"
+          [error]="slotsError()"
+        />
+      }
     </div>
   }
 
   @if (!isMjMode() && partieId()) {
-    <div class="guild-slots-panel" #slotsPanel>
-      <!-- Story 8.8, AC8 : même refonte multi-votes côté joueur — un app-poll-response par vote
-           actif, étiqueté par scénario/séance comme côté MJ. -->
-      @for (entry of activePolls(); track entry.poll.id) {
-        <div class="poll-entry">
-          <p class="poll-entry__label">
-            {{ entry.scenario.title }}
-            @if (entry.scenario.seances.length > 1) {
-              — Séance {{ entry.seanceIndex }}
-            }
-          </p>
-          <app-poll-response
-            [partieId]="partieId()!"
-            [poll]="entry.poll"
-            (responded)="onPollResponded($event)"
-          />
-        </div>
-      }
+    <div class="guild-slots-panel">
+      <!-- ⚠️ Story 36.7, AC3 — `<app-poll-response>` a été RETIRÉ d'ici, et d'ici seulement.
+           Il portait le « second chemin de retrait » que l'AC3 interdit dans le calendrier
+           (« aucun second chemin de retrait ne subsiste »), en plus d'un second chemin de
+           réponse que le contrat d'UI ne prévoit pas. Le sélecteur ancré sur la bande les
+           remplace tous les deux, dans les DEUX contextes et pour tout membre — MJ compris,
+           qui n'avait ici aucun chemin de réponse.
+           Le composant lui-même n'est pas supprimé : la fiche de scénario (`seance-list`,
+           `scenario-read-dialog`) continue de le rendre. La liste de créneaux groupés par jour
+           qui disparaît ici est précisément ce que la story 36.9 doit retirer du panneau. -->
       <div class="date-range-form">
         <label class="date-range-label">
           Du
@@ -179,11 +384,15 @@
         </label>
         <button mat-stroked-button (click)="onSearch()">Rechercher</button>
       </div>
-      <app-available-slots
-        [slots]="availableSlots()"
-        [loading]="slotsLoading()"
-        [error]="slotsError()"
-      />
+      <!-- Story 30.6, AC5 : couche disponibilite-groupe côté joueur — masquée en vue Agenda
+           (revue de code, doublon avec agendaEntries()). -->
+      @if (isLayerActive('disponibilite-groupe') && view() !== 'agenda') {
+        <app-available-slots
+          [slots]="availableSlots()"
+          [loading]="slotsLoading()"
+          [error]="slotsError()"
+        />
+      }
     </div>
   }
 </div>
@@ -210,4 +419,32 @@
     (cancelled)="closePanel()"
     (formChanged)="onFormChanged($event)"
   />
+}
+
+<!-- Story 36.7 — le sélecteur de réponse, ancré sur la bande / la cellule / la ligne touchée.
+     Premier `cdkConnectedOverlay` du projet : `MatDialog`, seul patron flottant existant ici,
+     est centré à l'écran alors que le contrat d'UI dit « ancré sur cette bande ».
+     `hasBackdrop` donne la fermeture au clic extérieur (AC4) sans code, et `overlayKeydown`
+     porte `Échap` — celui de la grille annule la sélection, les deux ne se croisent jamais. -->
+@if (pickerVote(); as vote) {
+  <ng-template
+    cdkConnectedOverlay
+    [cdkConnectedOverlayOrigin]="pickerAnchor()!"
+    [cdkConnectedOverlayOpen]="true"
+    [cdkConnectedOverlayHasBackdrop]="true"
+    [cdkConnectedOverlayPositions]="PICKER_POSITIONS"
+    cdkConnectedOverlayPush
+    [cdkConnectedOverlayViewportMargin]="8"
+    (backdropClick)="closePicker()"
+    (detach)="closePicker()"
+    (overlayKeydown)="onPickerKeydown($event)"
+  >
+    <app-vote-answer-picker
+      [vote]="vote"
+      [slotLabel]="pickerLabel()"
+      [busy]="pollActionPending()"
+      (answerChosen)="onVoteAnswerChosen($event)"
+      (withdrawRequested)="onVoteWithdrawn()"
+    />
+  </ng-template>
 }

@@ -1,0 +1,19 @@
+<div class="actions-menu" (focusout)="onMenuFocusOut($event)">
+  <button type="button" class="actions-menu__item" (click)="exportEditable.emit()">
+    {{ theme.tone()['character.export_editable_cta'] }}
+  </button>
+  <button type="button" class="actions-menu__item" (click)="export2Pages.emit()">
+    {{ theme.tone()['character.export_2pages_cta'] }}
+  </button>
+  <button type="button" class="actions-menu__item" (click)="exportEquipment.emit()">
+    {{ theme.tone()['character.export_equipment_cta'] }}
+  </button>
+  <button type="button" class="actions-menu__item" (click)="exportNotes.emit()">
+    {{ theme.tone()['character.export_notes_cta'] }}
+  </button>
+  @if (showPdfCrop()) {
+    <button type="button" class="actions-menu__item" (click)="cropPdfPortrait.emit()">
+      {{ theme.tone()['character.pdf_crop_edit_cta'] }}
+    </button>
+  }
+</div>

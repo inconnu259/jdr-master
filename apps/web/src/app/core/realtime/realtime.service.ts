@@ -10,6 +10,7 @@ import { MyPartiesService } from '../my-parties/my-parties.service';
 import { AvailabilityService } from '../availability/availability.service';
 import { AnnouncementsService } from '../announcements/announcements.service';
 import { CharacterRolesService } from '../character-roles/character-roles.service';
+import { PartySignalsService } from '../parties/party-signals.service';
 
 export function partieTopic(partieId: string): string {
   return `partie:${partieId}`;
@@ -59,6 +60,7 @@ export class RealtimeService {
   private readonly availability = inject(AvailabilityService);
   private readonly announcements = inject(AnnouncementsService);
   private readonly characterRoles = inject(CharacterRolesService);
+  private readonly partySignals = inject(PartySignalsService);
 
   // Table de correspondance topic-prefix -> services à notifier (AD-3), câblée ici, dans
   // RealtimeService lui-même (jamais par le composant appelant connect()/disconnect()) —
@@ -91,6 +93,16 @@ export class RealtimeService {
     { prefix: 'partie:', notifyChanged: () => this.availability.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.announcements.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.characterRoles.notifyChanged() },
+    // `PartySignalsService` (Story 29.7, AD-3/AD-14) : préfixe 'user:' SEUL, jamais 'partie:' —
+    // le canal 'user:{id}' est déjà ouvert pour l'utilisateur courant, aucune connexion
+    // supplémentaire par Partie (même discipline que `myParties` ci-dessus).
+    { prefix: 'user:', notifyChanged: () => this.partySignals.notifyChanged() },
+    // Deferred-work (SSE, calendrier personnel) : RÉUTILISE `notifyRealtimeChanged()`, déjà câblée
+    // ci-dessus sur 'partie:' — elle ignore déjà quel partieId a changé (REALTIME_WILDCARD), donc
+    // convient telle quelle à un événement 'user:{id}' qui agrège plusieurs Parties. CalendarView
+    // (contexte personnel) se connecte à user:{id} et recharge GET /me/calendar sur ce même signal
+    // `ScenariosService.changed()` — pas de nouveau service, pas de nouvelle méthode.
+    { prefix: 'user:', notifyChanged: () => this.scenarios.notifyRealtimeChanged() },
   ];
 
   // Une entrée par connexion active (pas par topic) — deux connect() sur le même topic ouvrent

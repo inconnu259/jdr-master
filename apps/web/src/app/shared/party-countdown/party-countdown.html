@@ -1,0 +1,81 @@
+<!-- Décoratif : aucun texte, aucun rôle, aucun libellé. Le badge et la date qu'il double portent
+     déjà toute l'information (AC5). -->
+<span class="countdown" aria-hidden="true">
+  @switch (activeTheme()) {
+    <!-- ─── Forêt Ancienne : la liane pousse ─── -->
+    @case ('foret-ancienne') {
+      <span class="countdown__vine">
+        <!-- La « voie » s'arrête avant le cercle-objectif : c'est elle qui donne à la tige, aux
+             feuilles et au bourgeon un repère commun, sans quoi le bourgeon dépasserait la tige. -->
+        <span class="countdown__lane">
+          <!-- `scaleX` depuis le bord gauche, jamais `width` (AC6). -->
+          <span class="countdown__stem" [style.transform]="'scaleX(' + fillScale() + ')'">
+            <!-- Mouvement INTERNE de la barre — même principe que le motif rayé de la conduite
+                 Atelier Cuivré, le seul motif que l'utilisateur a trouvé vivant. Sans lui, une
+                 barre qui n'avance que d'un septième par jour paraît figée. -->
+            <span class="countdown__stem-flow"></span>
+          </span>
+          @for (position of leafPositions; track position; let i = $index) {
+            <span
+              class="countdown__leaf"
+              [class.countdown__leaf--down]="i % 2 === 1"
+              [class.countdown__leaf--lit]="leafLit(position)"
+              [style.left.%]="position * 100"
+              [style.--cd-delay]="i * 0.4 + 's'"
+            >
+              <!-- La feuille se balance sur un enfant : le parent porte l'allumage (opacité et
+                   échelle), l'animer ici l'écraserait. -->
+              <span class="countdown__leaf-blade"></span>
+            </span>
+          }
+          <span class="countdown__bud" [class.countdown__bud--near]="inRedZone()" [style.left.%]="fillScale() * 100"></span>
+        </span>
+        <span class="countdown__goal" [class.countdown__goal--near]="inRedZone()"></span>
+      </span>
+    }
+
+    <!-- ─── Atelier Cuivré : la pression monte ─── -->
+    @case ('medieval-steampunk') {
+      <span class="countdown__press-row">
+        <span class="countdown__gauge" [class.countdown__gauge--red]="inRedZone()">
+          <span class="countdown__gauge-red"></span>
+          <span class="countdown__gauge-dial"></span>
+          <!-- La position vient de `progress` ; l'oscillation autour d'elle est l'ambiance, et
+               elle s'amplifie en zone rouge (exception documentée, cf. le composant). -->
+          <span class="countdown__needle-pivot" [style.transform]="'rotate(' + needleAngle() + 'deg)'">
+            <span class="countdown__needle"></span>
+          </span>
+          <span class="countdown__hub"></span>
+        </span>
+        <span class="countdown__pipe">
+          <span class="countdown__pipe-fill" [style.transform]="'scaleX(' + fillScale() + ')'">
+            <!-- Le motif rayé défile À L'INTÉRIEUR de la conduite : c'est l'ambiance. La LONGUEUR
+                 de la conduite, elle, c'est `progress`. -->
+            <span class="countdown__pipe-stripes"></span>
+          </span>
+        </span>
+      </span>
+    }
+
+    <!-- ─── Grimoire Émeraude : la comète approche ─── -->
+    @default {
+      <span class="countdown__orbit">
+        <span class="countdown__tiny" style="left: 24%; top: 22%"></span>
+        <span class="countdown__tiny" style="left: 52%; top: 72%"></span>
+        <span class="countdown__tiny" style="left: 70%; top: 16%"></span>
+        <!-- Retour utilisateur : une comète qui traverse d'un bout à l'autre ne se lit pas quand
+             le trajet dure sept jours. C'est donc SA QUEUE QUI EST LA BARRE — elle s'étire depuis
+             le bord gauche, la tête posée à son extrémité, l'étoile marquant l'arrivée. Le
+             mouvement d'un jour reste imperceptible, mais la forme, elle, se lit d'un coup d'œil. -->
+        <span class="countdown__lane">
+          <span class="countdown__tail" [style.transform]="'scaleX(' + fillScale() + ')'">
+            <!-- Matière qui file vers la tête : le pendant du motif rayé de la conduite. -->
+            <span class="countdown__tail-flow"></span>
+          </span>
+          <span class="countdown__head" [style.left.%]="fillScale() * 100"></span>
+        </span>
+        <span class="countdown__star" [class.countdown__star--near]="inRedZone()"></span>
+      </span>
+    }
+  }
+</span>

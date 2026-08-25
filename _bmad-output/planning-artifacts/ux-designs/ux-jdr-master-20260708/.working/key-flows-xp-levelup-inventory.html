@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Propositions — Distribution XP, Montée de niveau, Inventaire</title>
+<style>
+  /*
+    Discovery — 3 flows encore non maquettés : distribution d'XP (MJ),
+    montée de niveau (joueur), ajout d'inventaire (joueur + MJ).
+    Contenu réel : Fenn (Ménestrel, Technique, Niveau 1, VIG8/AGI4/INT6/ESP6, PV16/PE12),
+    règles XP tirées du PRD §4.1/§4.2 (prd-jdr-master-20260707).
+  */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background:#060410; color:#e8e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; line-height:1.5; padding:32px 16px 80px; }
+  h1 { text-align:center; font-size:20px; color:#7ec8a4; margin-bottom:6px; } h1 span{color:#9b6dff;}
+  .intro { text-align:center; color:#7a7a8a; font-size:13px; max-width:680px; margin:0 auto 40px; }
+  .option-block { max-width: 1000px; margin: 0 auto 56px; }
+  .option-label { font-size:15px; font-weight:700; margin-bottom:4px; display:flex; align-items:center; gap:8px; }
+  .option-badge { font-size:11px; font-weight:700; color:#0d0a14; background:#7ec8a4; padding:2px 8px; border-radius:6px; }
+  .option-sub { font-size:12px; color:#7a7a8a; margin-bottom:16px; }
+
+  .panel {
+    background:#0d0a14; border:1.5px solid #2a2040; border-radius:12px;
+    box-shadow:0 24px 64px rgba(0,0,0,0.6); padding: 24px 28px; max-width: 640px; margin: 0 auto;
+  }
+  .panel-title { font-size:16px; font-weight:700; margin-bottom:2px; }
+  .panel-sub { font-size:11px; color:#7a7a8a; margin-bottom:18px; }
+
+  .rules-reminder {
+    background: rgba(126,200,164,0.06); border:1px solid rgba(126,200,164,0.25); border-radius:8px;
+    padding: 10px 14px; font-size:11px; color:#b8d9c8; margin-bottom: 18px;
+  }
+  .rules-reminder b { color:#7ec8a4; }
+
+  .field-row { margin-bottom: 14px; }
+  .field-label { font-size:11px; font-weight:600; color:#7a7a8a; margin-bottom:5px; display:block; text-transform:uppercase; letter-spacing:0.03em; }
+  .field-input {
+    width:100%; background:#1a1428; border:1px solid rgba(255,255,255,0.1); border-radius:7px;
+    padding: 9px 12px; color:#e8e8f0; font-size:13px;
+  }
+  .field-hint { font-size:10px; color:#7a7a8a; margin-top:4px; }
+  .row-3 { display:grid; grid-template-columns: repeat(3,1fr); gap:10px; }
+
+  .suggested-total {
+    display:flex; align-items:center; justify-content:space-between;
+    background: rgba(155,109,255,0.08); border:1px solid rgba(155,109,255,0.3); border-radius:8px;
+    padding:12px 16px; margin: 16px 0; font-size:13px;
+  }
+  .suggested-total b { font-size:18px; color:#9b6dff; }
+
+  .player-xp-row {
+    display:flex; align-items:center; gap:10px; background:#1a1428; border:1px solid rgba(255,255,255,0.06);
+    border-radius:8px; padding:10px 12px; margin-bottom:8px;
+  }
+  .player-xp-row input[type=checkbox] { width:16px; height:16px; }
+  .p-avatar { width:28px; height:28px; border-radius:50%; background:linear-gradient(135deg,#7ec8a4,#9b6dff); flex-shrink:0; }
+  .p-info { flex:1; }
+  .p-name { font-size:12px; font-weight:600; } .p-char { font-size:10px; color:#7a7a8a; }
+  .p-amount { width:70px; background:#0d0a14; border:1px solid rgba(255,255,255,0.1); border-radius:6px; padding:6px 8px; color:#e8e8f0; font-size:12px; text-align:right; }
+  .p-bonus-btn { font-size:10px; color:#7ec8a4; cursor:pointer; white-space:nowrap; }
+
+  .btn-primary {
+    width:100%; padding:12px; background:linear-gradient(135deg,#7ec8a4,#9b6dff); border:none; border-radius:9px;
+    color:#0d0a14; font-size:13px; font-weight:700; cursor:pointer; margin-top:8px;
+  }
+  .btn-secondary {
+    width:100%; padding:10px; background:transparent; border:1px solid rgba(255,255,255,0.12); border-radius:9px;
+    color:#e8e8f0; font-size:12px; font-weight:600; cursor:pointer; margin-top:8px;
+  }
+
+  /* Level up */
+  .char-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+  .char-portrait-lg { width:48px; height:48px; border-radius:50%; background:linear-gradient(135deg,#7ec8a4,#9b6dff); flex-shrink:0; }
+  .char-name-lg { font-size:16px; font-weight:700; } .char-meta-lg { font-size:11px; color:#7a7a8a; }
+
+  .levelup-banner {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    background: linear-gradient(135deg, rgba(126,200,164,0.15), rgba(155,109,255,0.15));
+    border:1px solid rgba(126,200,164,0.4); border-radius:10px; padding: 14px 16px; margin-bottom:18px;
+  }
+  .levelup-banner-text { font-size:13px; font-weight:700; }
+  .levelup-banner-sub { font-size:11px; color:#b8d9c8; font-weight:400; }
+  .btn-small {
+    padding:8px 16px; background:linear-gradient(135deg,#7ec8a4,#9b6dff); border:none; border-radius:8px;
+    color:#0d0a14; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;
+  }
+
+  .step-progress { display:flex; gap:6px; margin-bottom:16px; }
+  .step-dot { flex:1; height:4px; border-radius:2px; background: rgba(255,255,255,0.08); }
+  .step-dot.done { background:#7ec8a4; }
+  .step-dot.active { background:#9b6dff; }
+
+  .pv-pe-split { display:flex; align-items:center; gap:16px; margin: 12px 0 18px; }
+  .split-col { flex:1; text-align:center; background:#1a1428; border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:16px; }
+  .split-label { font-size:11px; color:#7a7a8a; margin-bottom:8px; }
+  .split-controls { display:flex; align-items:center; justify-content:center; gap:10px; }
+  .split-btn { width:28px; height:28px; border-radius:50%; border:1px solid rgba(255,255,255,0.15); background:#0d0a14; color:#e8e8f0; font-size:15px; cursor:pointer; }
+  .split-value { font-size:20px; font-weight:700; min-width:24px; }
+  .points-left { text-align:center; font-size:11px; color:#9b6dff; margin-bottom:14px; }
+
+  .attr-grid { display:grid; grid-template-columns: repeat(4,1fr); gap:8px; margin-bottom:16px; }
+  .attr-choice { background:#1a1428; border:1.5px solid rgba(255,255,255,0.08); border-radius:8px; padding:12px 8px; text-align:center; cursor:pointer; }
+  .attr-choice.selected { border-color:#7ec8a4; background: rgba(126,200,164,0.1); }
+  .attr-choice.disabled { opacity:0.35; cursor:not-allowed; }
+  .attr-name { font-size:11px; color:#7a7a8a; margin-bottom:4px; }
+  .attr-val { font-size:16px; font-weight:700; }
+  .attr-arrow { font-size:10px; color:#7ec8a4; }
+
+  /* Inventory */
+  .encumb-bar-wrap { margin-bottom:18px; }
+  .encumb-label-row { display:flex; justify-content:space-between; font-size:11px; color:#7a7a8a; margin-bottom:6px; }
+  .encumb-track { height:8px; border-radius:4px; background:rgba(255,255,255,0.06); overflow:hidden; }
+  .encumb-fill { height:100%; background:linear-gradient(90deg,#7ec8a4,#9b6dff); }
+  .encumb-fill.over { background: linear-gradient(90deg,#e05252,#f0a030); }
+
+  .item-row {
+    display:flex; align-items:center; gap:10px; background:#1a1428; border:1px solid rgba(255,255,255,0.06);
+    border-radius:8px; padding:10px 12px; margin-bottom:8px;
+  }
+  .item-name { flex:1; font-size:12px; font-weight:600; }
+  .item-source { font-size:9px; color:#9b6dff; background:rgba(155,109,255,0.12); padding:2px 6px; border-radius:5px; }
+  .item-weight { font-size:11px; color:#7a7a8a; }
+  .item-pencil { width:22px; height:22px; border-radius:5px; display:flex; align-items:center; justify-content:center; color:#7a7a8a; cursor:pointer; font-size:12px; border:1px solid rgba(255,255,255,0.08); }
+
+  .add-item-row { display:flex; gap:8px; margin-top:14px; }
+  .add-item-row input { flex:1; }
+  .add-item-row input:last-of-type { flex: 0 0 80px; }
+</style>
+</head>
+<body>
+
+<h1>&#x1F4DC; <span>Grimoire Émeraude</span> — Propositions : distribution XP, montée de niveau, inventaire</h1>
+<p class="intro">Contenu réel : Fenn (Ménestrel · Technique · Niveau 1, VIG8/AGI4/INT6/ESP6, PV16/PE12), règles PRD §4.1/§4.2. À discuter, rien n'est figé.</p>
+
+<!-- FLOW 1: XP distribution -->
+<div class="option-block">
+  <div class="option-label"><span class="option-badge">1</span> Distribution d'XP — vue MJ</div>
+  <div class="option-sub">Ouverte depuis le bouton dédié sur la page Partie (panneau/modale, pas une page à part — action rapide). Calcul assisté (FR-2) affiché comme suggestion modifiable, jamais imposé.</div>
+  <div class="panel">
+    <div class="panel-title">Distribuer de l'XP</div>
+    <div class="panel-sub">Les Brumes d'Aubval · calcul basé sur les règles Ryuutama, ajustable</div>
+
+    <div class="rules-reminder">
+      <b>Rappel des règles</b> — Difficulté du voyage : 5–7 → 100 XP · 8–10 → 200 · 11–14 → 300 · 15+ → 500.
+      +50 XP par souffle de l'homme-dragon utilisé. +10 XP par niveau du monstre le plus fort vaincu.
+    </div>
+
+    <div class="field-row">
+      <span class="field-label">Calcul assisté</span>
+      <div class="row-3">
+        <div>
+          <input class="field-input" value="8–10 (200 XP)" readonly>
+          <div class="field-hint">Difficulté max du voyage</div>
+        </div>
+        <div>
+          <input class="field-input" value="0 souffle" readonly>
+          <div class="field-hint">Souffles homme-dragon</div>
+        </div>
+        <div>
+          <input class="field-input" value="Nv. 5 (50 XP)" readonly>
+          <div class="field-hint">Monstre le plus fort vaincu</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggested-total">
+      <span>Montant suggéré (par joueur)</span>
+      <b>250 XP</b>
+    </div>
+
+    <div class="field-row">
+      <span class="field-label">Joueurs de cette distribution</span>
+      <div class="player-xp-row">
+        <input type="checkbox" checked>
+        <div class="p-avatar"></div>
+        <div class="p-info"><div class="p-name">Alice</div><div class="p-char">Fenn · Niv. 1 · 40 XP actuel</div></div>
+        <span class="p-bonus-btn">+ bonus</span>
+        <input class="p-amount" value="250">
+      </div>
+      <div class="player-xp-row">
+        <input type="checkbox" checked>
+        <div class="p-avatar"></div>
+        <div class="p-info"><div class="p-name">Bob</div><div class="p-char">Rok · Niv. 3 · 2100 XP actuel</div></div>
+        <span class="p-bonus-btn" style="color:#f0a030;">+50 bonus</span>
+        <input class="p-amount" value="300">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <span class="field-label">Note (optionnelle)</span>
+      <input class="field-input" placeholder="Ex. : Bob a désamorcé le piège du pont tout seul (+50 bonus)" value="Bob a désamorcé le piège du pont tout seul (+50 bonus)">
+    </div>
+
+    <button class="btn-primary">Confirmer la distribution</button>
+    <div class="field-hint" style="text-align:center; margin-top:8px;">Alice franchira le niveau 2 (seuil 100 XP) — elle sera notifiée pour appliquer ses gains.</div>
+  </div>
+</div>
+
+<!-- FLOW 2: level up -->
+<div class="option-block">
+  <div class="option-label"><span class="option-badge">2</span> Montée de niveau — vue joueur</div>
+  <div class="option-sub">État A : bannière persistante sur la fiche (n'importe quand, pas de popup forcée bloquante — le joueur clique quand il est prêt). État B : l'assistant guidé, étape par étape.</div>
+
+  <div class="panel" style="margin-bottom:16px;">
+    <div class="char-header">
+      <div class="char-portrait-lg"></div>
+      <div><div class="char-name-lg">Fenn</div><div class="char-meta-lg">Ménestrel · Technique · Niveau 1</div></div>
+    </div>
+    <div class="levelup-banner">
+      <div>
+        <div class="levelup-banner-text">&#x2728; Niveau 2 disponible !</div>
+        <div class="levelup-banner-sub">290 XP cumulé · seuil franchi à 100 XP</div>
+      </div>
+      <button class="btn-small">Level up !</button>
+    </div>
+    <div class="field-hint">Cette bannière reste affichée tant que la montée n'est pas appliquée — pas d'urgence, pas de blocage du reste de la fiche.</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Montée au niveau 2</div>
+    <div class="panel-sub">Étape 2 sur 2 — Fenn</div>
+    <div class="step-progress"><div class="step-dot done"></div><div class="step-dot active"></div></div>
+
+    <div class="field-row">
+      <span class="field-label">Répartition PV / PE (3 points)</span>
+      <div class="pv-pe-split">
+        <div class="split-col">
+          <div class="split-label">PV (actuel 16)</div>
+          <div class="split-controls"><span class="split-btn">−</span><span class="split-value">+2</span><span class="split-btn">+</span></div>
+        </div>
+        <div class="split-col">
+          <div class="split-label">PE (actuel 12)</div>
+          <div class="split-controls"><span class="split-btn">−</span><span class="split-value">+1</span><span class="split-btn">+</span></div>
+        </div>
+      </div>
+      <div class="points-left">0 point restant à répartir</div>
+    </div>
+
+    <div class="field-row">
+      <span class="field-label">Capacité débloquée : Attribut (+2)</span>
+      <div class="attr-grid">
+        <div class="attr-choice"><div class="attr-name">AGI</div><div class="attr-val">4</div></div>
+        <div class="attr-choice"><div class="attr-name">ESP</div><div class="attr-val">6</div></div>
+        <div class="attr-choice"><div class="attr-name">INT</div><div class="attr-val">6</div></div>
+        <div class="attr-choice selected"><div class="attr-name">VIG</div><div class="attr-val">8</div><div class="attr-arrow">→ 10</div></div>
+      </div>
+      <div class="field-hint">Un attribut déjà à 12 ne peut plus être choisi tant qu'un autre est disponible.</div>
+    </div>
+
+    <button class="btn-primary">Valider le niveau 2</button>
+  </div>
+</div>
+
+<!-- FLOW 3: inventory -->
+<div class="option-block">
+  <div class="option-label"><span class="option-badge">3</span> Inventaire — vue joueur (MJ : mêmes lignes + crayon d'édition)</div>
+  <div class="option-sub">Onglet dédié sur la fiche. Encombrement chiffré affiché en tête, ajout rapide en bas. Objets ajoutés par le MJ marqués visuellement (ex. la lettre reçue entre deux parties).</div>
+  <div class="panel">
+    <div class="panel-title">Inventaire de Fenn</div>
+    <div class="panel-sub">Individuel — l'équipement de groupe reste sur un onglet séparé</div>
+
+    <div class="encumb-bar-wrap">
+      <div class="encumb-label-row"><span>Encombrement</span><span>7,5 / 9</span></div>
+      <div class="encumb-track"><div class="encumb-fill" style="width:83%;"></div></div>
+    </div>
+
+    <div class="item-row">
+      <span class="item-name">Lance en bois de frêne</span>
+      <span class="item-weight">2,0 kg</span>
+      <div class="item-pencil">&#x270E;</div>
+    </div>
+    <div class="item-row">
+      <span class="item-name">Sac de couchage</span>
+      <span class="item-weight">1,5 kg</span>
+      <div class="item-pencil">&#x270E;</div>
+    </div>
+    <div class="item-row">
+      <span class="item-name">Lettre scellée du seigneur d'Aubval</span>
+      <span class="item-source">ajouté par le MJ</span>
+      <span class="item-weight">0,1 kg</span>
+      <div class="item-pencil">&#x270E;</div>
+    </div>
+
+    <div class="add-item-row">
+      <input class="field-input" placeholder="Nom de l'objet">
+      <input class="field-input" placeholder="Poids (kg)">
+    </div>
+    <button class="btn-secondary">+ Ajouter un objet</button>
+  </div>
+</div>
+
+</body>
+</html>

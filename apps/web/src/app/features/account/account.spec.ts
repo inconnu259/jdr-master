@@ -4,10 +4,12 @@ import { provideRouter, Router } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { vi } from 'vitest';
 import type { AuthUser } from '@master-jdr/shared';
+import { CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
 import { Account } from './account';
 import { AuthService } from '../../core/auth/auth.service';
 import { AccountService } from '../../core/account/account.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
+import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 
 function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
   return {
@@ -18,6 +20,19 @@ function makeUser(overrides: Partial<AuthUser> = {}): AuthUser {
     role: 'USER',
     createdAt: '2026-01-01T00:00:00.000Z',
     theme: 'grimoire-emeraude',
+    hideFinishedParties: false,
+    partiesSort: 'urgence',
+    partiesViewMode: 'medium',
+    charactersViewMode: 'medium',
+    charactersSort: 'partie',
+    defaultCalendarLayers: [
+      'mes-indisponibilites',
+      'mes-disponibilites',
+      'mes-seances',
+      'votes-en-cours',
+      'inscriptions-ouvertes',
+      'disponibilite-groupe',
+    ],
     ...overrides,
   };
 }
@@ -48,6 +63,20 @@ function makeThemeService() {
       'account.email_change_wrong_current': 'Mot de passe actuel incorrect.',
       'account.email_change_taken': 'Cette adresse est déjà utilisée par un autre compte.',
       'account.email_change_error': 'La demande a échoué. Réessayez.',
+      'account.calendar_layers_title': 'Ce que révèle mon calendrier',
+      'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
+      'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
+      'account.calendar_layer.mes-seances': 'Mes séances confirmées',
+      'account.calendar_layer.votes-en-cours': 'Les votes en cours',
+      'account.calendar_layer.inscriptions-ouvertes': 'Les inscriptions ouvertes',
+      'account.calendar_layer.disponibilite-groupe': 'La disponibilité du groupe',
+      // Story 36.14 — les quatre intentions remplacent les six clés techniques à l'écran ; les
+      // `account.calendar_layer.*` restent au-dessus, encore utilisées par le panneau du calendrier.
+      'account.calendar_intents_subtitle': 'Ce que je veux voir en arrivant sur un calendrier.',
+      'account.calendar_intent.disponibilites': 'Mes disponibilités & indisponibilités',
+      'account.calendar_intent.seances': 'Mes séances confirmées',
+      'account.calendar_intent.votes': 'Les votes en cours',
+      'account.calendar_intent.groupe': 'La disponibilité du groupe',
       'nav.logout': 'Fermer le grimoire',
     }),
     // ThemeSelector (intégré à l'écran de compte, Story 28.4) a besoin de ces membres.
@@ -69,6 +98,7 @@ async function createFixture(
     setTheme: vi.fn(),
     changePassword: vi.fn(),
     requestEmailChange: vi.fn(),
+    updatePreferences: vi.fn(),
   },
 ) {
   const currentUserSignal = signal<AuthUser | null>(currentUser);
@@ -481,6 +511,134 @@ describe('Account — changement d’adresse e-mail (crayon d’édition, revue 
   });
 });
 
+describe('Account — jeu de couches du calendrier par défaut (Story 30.4, Task 6)', () => {
+  it('coche une couche → appelle updatePreferences avec le tableau attendu et met à jour currentUser optimistiquement', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn(),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi.fn().mockResolvedValue(undefined),
+    };
+    const { fixture, currentUserSignal } = await createFixture(
+      makeUser({ defaultCalendarLayers: ['mes-seances'] }),
+      accountSvc,
+    );
+    const component = fixture.componentInstance as any;
+
+    component.onLayerToggle('votes-en-cours', true);
+    fixture.detectChanges();
+
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual(['mes-seances', 'votes-en-cours']);
+    expect(accountSvc.updatePreferences).toHaveBeenCalledWith({
+      defaultCalendarLayers: ['mes-seances', 'votes-en-cours'],
+    });
+  });
+
+  it('décoche une couche → retirée du tableau envoyé', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn(),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi.fn().mockResolvedValue(undefined),
+    };
+    const { fixture, currentUserSignal } = await createFixture(
+      makeUser({ defaultCalendarLayers: ['mes-seances', 'votes-en-cours'] }),
+      accountSvc,
+    );
+    const component = fixture.componentInstance as any;
+
+    component.onLayerToggle('mes-seances', false);
+    fixture.detectChanges();
+
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual(['votes-en-cours']);
+    expect(accountSvc.updatePreferences).toHaveBeenCalledWith({
+      defaultCalendarLayers: ['votes-en-cours'],
+    });
+  });
+
+  it('échec réseau → restaure la valeur locale précédente (rollback, même patron que Dashboard.onHideFinishedChange())', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn(),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi.fn().mockRejectedValue(new Error('network')),
+    };
+    const { fixture, currentUserSignal } = await createFixture(
+      makeUser({ defaultCalendarLayers: ['mes-seances'] }),
+      accountSvc,
+    );
+    const component = fixture.componentInstance as any;
+
+    component.onLayerToggle('votes-en-cours', true);
+    fixture.detectChanges();
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual(['mes-seances', 'votes-en-cours']);
+
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual(['mes-seances']);
+  });
+
+  it("revue de code : rollback d'une requête échouée n'écrase pas une bascule plus récente déjà réussie", async () => {
+    let rejectFirst!: (e: unknown) => void;
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn(),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((_, reject) => (rejectFirst = reject)))
+        .mockResolvedValueOnce(undefined),
+    };
+    const { fixture, currentUserSignal } = await createFixture(
+      makeUser({ defaultCalendarLayers: ['mes-seances'] }),
+      accountSvc,
+    );
+    const component = fixture.componentInstance as any;
+
+    component.onLayerToggle('votes-en-cours', true);
+    fixture.detectChanges();
+    component.onLayerToggle('inscriptions-ouvertes', true);
+    fixture.detectChanges();
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual([
+      'mes-seances',
+      'votes-en-cours',
+      'inscriptions-ouvertes',
+    ]);
+
+    rejectFirst(new Error('network'));
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+
+    expect(currentUserSignal()?.defaultCalendarLayers).toEqual([
+      'mes-seances',
+      'votes-en-cours',
+      'inscriptions-ouvertes',
+    ]);
+  });
+
+  /**
+   * ⚠️ Story 36.14 — CE TEST A CHANGÉ DE VÉRITÉ, il n'a pas été supprimé. La story 30.4 rendait
+   * UNE case par clé (six) ; l'AC7 de la 36.14 impose QUATRE INTENTIONS. Ce qui reste vrai, et
+   * que ce test continue de prouver, c'est que l'écran reflète bien `defaultCalendarLayers` :
+   * seule la granularité de la présentation a changé, pas le stockage.
+   */
+  it('rend une case par INTENTION (quatre), reflétant defaultCalendarLayers courant', async () => {
+    const { fixture } = await createFixture(makeUser({ defaultCalendarLayers: ['mes-seances'] }));
+    const comp = fixture.componentInstance as any;
+
+    expect(fixture.nativeElement.querySelectorAll('.calendar-intents mat-checkbox').length).toBe(4);
+    expect(comp.isIntentActive('seances')).toBe(true);
+    expect(comp.isIntentActive('votes')).toBe(false);
+  });
+});
+
 describe('Account — déconnexion (Story 29.3, foyer déplacé depuis le menu du Shell)', () => {
   it('un bouton de déconnexion est rendu', async () => {
     const { fixture } = await createFixture();
@@ -505,5 +663,148 @@ describe('Account — déconnexion (Story 29.3, foyer déplacé depuis le menu d
 
     expect(authSvc.logout).toHaveBeenCalledTimes(1);
     expect(navigateSpy).toHaveBeenCalledWith(['/login']);
+  });
+});
+
+describe('Account — bandeau contextuel (Story 29.4)', () => {
+  it("ngOnInit() renseigne ContextualNavService avec le titre de l'écran", async () => {
+    await createFixture();
+
+    const contextualNav = TestBed.inject(ContextualNavService);
+    expect(contextualNav.title()).toBe('Mon grimoire personnel');
+  });
+});
+
+// ─── Les quatre intentions (Story 36.14, AC7/AC16, D-3) ───────────────────────────────────────
+
+describe('Account — « Ce que révèle mon calendrier » en intentions (Story 36.14)', () => {
+  function makeAccountSvc() {
+    return {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn(),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  async function createWithLayers(defaultCalendarLayers: string[]) {
+    const accountSvc = makeAccountSvc();
+    const created = await createFixture(makeUser({ defaultCalendarLayers } as any), accountSvc);
+    return { ...created, accountSvc };
+  }
+
+  function sentLayers(accountSvc: ReturnType<typeof makeAccountSvc>) {
+    return accountSvc.updatePreferences.mock.calls[0][0].defaultCalendarLayers as string[];
+  }
+
+  it('AC7 — quatre cases d’intention, jamais six clés techniques', async () => {
+    const { fixture } = await createWithLayers([...CALENDAR_LAYER_KEYS]);
+    const labels = [
+      ...fixture.nativeElement.querySelectorAll('.calendar-intents mat-checkbox'),
+    ].map((e: any) => e.textContent.trim());
+
+    expect(labels).toEqual([
+      'Mes disponibilités & indisponibilités',
+      'Mes séances confirmées',
+      'Les votes en cours',
+      'La disponibilité du groupe',
+    ]);
+  });
+
+  it('AC7 — « Les inscriptions ouvertes » n’apparaît plus à l’écran', async () => {
+    const { fixture } = await createWithLayers([...CALENDAR_LAYER_KEYS]);
+    expect(fixture.nativeElement.textContent).not.toContain('Les inscriptions ouvertes');
+  });
+
+  it('l’intention de disponibilités écrit LES DEUX clés en UN SEUL appel', async () => {
+    const { fixture, accountSvc } = await createWithLayers(['mes-seances']);
+
+    (fixture.componentInstance as any).onIntentToggle('disponibilites', true);
+
+    // Un seul aller-retour : deux appels successifs ouvriraient deux fenêtres de rollback
+    // concurrentes sur la même préférence.
+    expect(accountSvc.updatePreferences).toHaveBeenCalledTimes(1);
+    expect(sentLayers(accountSvc)).toContain('mes-disponibilites');
+    expect(sentLayers(accountSvc)).toContain('mes-indisponibilites');
+  });
+
+  it('éteindre l’intention de disponibilités retire LES DEUX clés', async () => {
+    const { fixture, accountSvc } = await createWithLayers([
+      'mes-disponibilites',
+      'mes-indisponibilites',
+      'mes-seances',
+    ]);
+
+    (fixture.componentInstance as any).onIntentToggle('disponibilites', false);
+
+    expect(sentLayers(accountSvc)).toEqual(['mes-seances']);
+  });
+
+  /**
+   * 🚨 AC16 — LE défaut silencieux que cette tâche pouvait introduire. L'écran n'offre plus de
+   * case pour `inscriptions-ouvertes`, mais la clé reste un réglage de compte valide
+   * [Source: prd.md:305, addendum.md:83]. Si une écriture d'intention la laissait tomber, une
+   * préférence livrée trois jours plus tôt serait effacée par un geste sans rapport — et plus
+   * aucun écran ne permettrait de la rétablir.
+   */
+  it('AC16 — `inscriptions-ouvertes` survit intacte à une écriture d’intention', async () => {
+    const { fixture, accountSvc } = await createWithLayers([
+      'inscriptions-ouvertes',
+      'mes-seances',
+    ]);
+
+    (fixture.componentInstance as any).onIntentToggle('votes', true);
+
+    expect(sentLayers(accountSvc)).toContain('inscriptions-ouvertes');
+    expect(sentLayers(accountSvc)).toContain('votes-en-cours');
+  });
+
+  /**
+   * D-3 — l'écran de la story 30.4 offrait les deux disponibilités SÉPARÉMENT : un compte peut
+   * donc porter aujourd'hui exactement l'une des deux. Regrouper naïvement (cochée si les deux
+   * sont là) ferait disparaître la couche active au premier clic, sans que personne le voie.
+   */
+  it('D-3 — état mixte hérité → case indéterminée, jamais silencieusement décochée', async () => {
+    const { fixture } = await createWithLayers(['mes-disponibilites']);
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.isIntentIndeterminate('disponibilites')).toBe(true);
+    expect(comp.isIntentActive('disponibilites')).toBe(false);
+  });
+
+  it('D-3 — un clic depuis l’état mixte ARME les deux clés', async () => {
+    const { fixture, accountSvc } = await createWithLayers(['mes-disponibilites']);
+
+    (fixture.componentInstance as any).onIntentToggle('disponibilites', true);
+
+    expect(sentLayers(accountSvc)).toContain('mes-disponibilites');
+    expect(sentLayers(accountSvc)).toContain('mes-indisponibilites');
+  });
+
+  it('les deux disponibilités actives → case cochée, non indéterminée', async () => {
+    const { fixture } = await createWithLayers(['mes-disponibilites', 'mes-indisponibilites']);
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.isIntentActive('disponibilites')).toBe(true);
+    expect(comp.isIntentIndeterminate('disponibilites')).toBe(false);
+  });
+
+  it('une intention à clé unique reste simple (séances, votes, groupe)', async () => {
+    const { fixture } = await createWithLayers(['mes-seances']);
+    const comp = fixture.componentInstance as any;
+
+    expect(comp.isIntentActive('seances')).toBe(true);
+    expect(comp.isIntentActive('votes')).toBe(false);
+    expect(comp.isIntentActive('groupe')).toBe(false);
+    expect(comp.isIntentIndeterminate('seances')).toBe(false);
+  });
+
+  it('mise à jour optimiste de currentUser, comme la story 30.4', async () => {
+    const { fixture, currentUserSignal } = await createWithLayers(['mes-seances']);
+
+    (fixture.componentInstance as any).onIntentToggle('votes', true);
+
+    expect(currentUserSignal()?.defaultCalendarLayers).toContain('votes-en-cours');
   });
 });

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q-20 — la gouttière, les icônes et le paysage</title>
+<style>
+:root{
+  --primary-bg:#0d0a14;--surface-bg:#1a1428;
+  --accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;
+  --status-todo:#f0a030;--status-soon:#ff7ad9;--status-done:#5a5a6a;
+  --status-unavailable:#e05252;--status-unknown:#3a3a4a;
+  --border-subtle:rgba(255,255,255,.07);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:34px;
+  --radius-card:10px;--radius-badge:6px;--radius-button:8px;
+  --text-xs:11px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:27px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg) var(--space-lg) 60px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px;border-top:1px solid var(--border-subtle);padding-top:var(--space-lg)}
+h3{font-size:var(--text-lg);margin:var(--space-lg) 0 var(--space-xs)}
+p{max-width:92ch}
+.lede{color:var(--text-muted);margin:0 0 var(--space-lg)}
+.why{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-md);max-width:92ch}
+.row{display:flex;gap:var(--space-lg);align-items:flex-start;flex-wrap:wrap}
+.tag{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);
+  display:block;margin-bottom:6px}
+.tag.good{color:var(--accent-1)}
+.tag.bad{color:var(--status-unavailable)}
+.phone{width:375px;background:var(--primary-bg);border:1px solid var(--border-subtle);
+  border-radius:22px;padding:var(--space-md);box-shadow:0 8px 32px rgba(0,0,0,.7)}
+.phone.reco{border-color:rgba(126,200,164,.45);box-shadow:0 0 0 1px rgba(126,200,164,.2),0 8px 32px rgba(0,0,0,.7)}
+.land{width:812px;max-width:100%;background:var(--primary-bg);border:1px solid var(--border-subtle);
+  border-radius:22px;padding:var(--space-md);box-shadow:0 8px 32px rgba(0,0,0,.7)}
+.hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-sm);gap:6px}
+.hdr b{font-size:var(--text-base)}
+.seg{display:inline-flex;border:1px solid var(--border-subtle);border-radius:var(--radius-button);overflow:hidden}
+.seg span{padding:3px 8px;font-size:var(--text-xs);color:var(--text-muted)}
+.seg span.on{color:var(--text-primary);background:rgba(155,109,255,.18)}
+.ruler{font-size:10px;color:var(--text-muted);text-align:center;margin-top:6px;letter-spacing:.04em}
+.ruler b{color:var(--accent-1)}
+.ruler.warn b{color:var(--status-todo)}
+/* grille semaine paramétrable par la gouttière */
+.wk{display:grid;gap:2px}
+.wk.g38{grid-template-columns:38px repeat(7,1fr)}
+.wk.g22{grid-template-columns:22px repeat(7,1fr)}
+.wk.g26{grid-template-columns:26px repeat(7,1fr)}
+.wk.g0{grid-template-columns:repeat(7,1fr)}
+.wk .h{font-size:9px;color:var(--text-muted);text-align:center;padding:2px 0}
+.wk .h.today{color:var(--accent-1);font-weight:700}
+.wk .rl{font-size:9px;color:var(--text-muted);display:flex;align-items:center;justify-content:center;
+  text-align:center;line-height:1.05}
+.wk .c{background:rgba(255,255,255,.03);border-radius:4px;min-height:40px;position:relative;overflow:hidden;padding:2px 3px}
+.wk .c.av{background:rgba(126,200,164,.28)}
+.wk .c.un{background:rgba(224,82,82,.28)}
+.wk .c.uk{background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(58,58,74,.4) 3px 6px)}
+.wk .c.se{background:rgba(255,122,217,.32);box-shadow:inset 0 0 0 1px rgba(255,122,217,.65)}
+.wk .c.vo{background:rgba(240,160,48,.20);box-shadow:inset 0 0 0 1px rgba(240,160,48,.55)}
+.wk .c.sel{outline:2px solid var(--accent-2);outline-offset:-2px}
+.glyph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;
+  color:var(--status-soon);font-weight:700}
+.mini{font-size:9px;line-height:1.1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini.s{color:var(--status-soon)}
+.mini.v{color:var(--status-todo)}
+.t{font-size:var(--text-xs);font-weight:700;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.s{font-size:10px;color:var(--text-muted);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+svg.ic{display:block;width:15px;height:15px;stroke:var(--text-muted);fill:none;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round}
+/* rail de détail */
+.rail{margin-top:var(--space-sm);background:var(--surface-bg);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-card);padding:var(--space-sm) var(--space-md)}
+.rail .dl{font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.rail .it{display:flex;gap:var(--space-sm);align-items:flex-start;padding:3px 0}
+.rail .it .bar{width:3px;border-radius:2px;align-self:stretch;flex:0 0 3px}
+.rail .it .bar.so{background:var(--status-soon)}
+.rail .it .bar.td{background:var(--status-todo)}
+.rail .it .ti{font-size:var(--text-sm);font-weight:600;line-height:1.25}
+.rail .it .me{font-size:var(--text-xs);color:var(--text-muted)}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md);max-width:60ch}
+.note b{color:var(--text-primary)}
+.verdict{font-size:var(--text-sm);margin-top:var(--space-sm);padding:var(--space-sm) var(--space-md);
+  background:var(--surface-bg);border-radius:var(--radius-card);border:1px solid var(--border-subtle);max-width:70ch}
+.verdict b{color:var(--accent-1)}
+.verdict.warn b{color:var(--status-todo)}
+table.cmp{border-collapse:collapse;font-size:var(--text-sm);margin-top:var(--space-md)}
+table.cmp th,table.cmp td{border:1px solid var(--border-subtle);padding:6px 10px;text-align:left}
+table.cmp th{color:var(--text-muted);font-weight:600;background:rgba(255,255,255,.02)}
+table.cmp td.num{text-align:right;font-variant-numeric:tabular-nums}
+.gain{color:var(--status-todo);font-weight:700}
+.bigfig{font-size:var(--text-2xl);color:var(--status-todo);font-weight:700;line-height:1.1}
+</style>
+</head>
+<body>
+
+<h1>Q-20 — la gouttière, les icônes, et le paysage</h1>
+<p class="lede">Ta question : en récupérant la place perdue à gauche (« Matin / Après-midi / Soir »), la vue Semaine à sept jours
+redevient-elle lisible en portrait ? <b>Voici le calcul, puis ce qu'il permet vraiment.</b></p>
+
+<!-- ═══════════════ 1 ═══════════════ -->
+<h2>1 · Ce que la gouttière rend, au pixel près</h2>
+<p class="why">Téléphone de 375 px, moins 12 px de marge de chaque côté = <b>351 px utiles</b>. Sept colonnes séparées par
+six espaces de 2 px. Tout ce qu'on retire à gauche se partage entre <b>sept</b> colonnes — c'est là que ça coince.</p>
+
+<table class="cmp">
+  <tr><th>Traitement de la gouttière</th><th class="num">Largeur</th><th class="num">Par jour</th><th class="num">Gain</th></tr>
+  <tr><td>« Matin / Après-m. / Soir » (aujourd'hui)</td><td class="num">38 px</td><td class="num">42,4 px</td><td class="num">—</td></tr>
+  <tr><td>« M / AM / S »</td><td class="num">22 px</td><td class="num">44,7 px</td><td class="num gain">+2,3 px</td></tr>
+  <tr><td>Icônes (soleil levant / soleil / soleil couchant)</td><td class="num">26 px</td><td class="num">44,1 px</td><td class="num gain">+1,7 px</td></tr>
+  <tr><td>Gouttière supprimée (icônes dans la cellule)</td><td class="num">0 px</td><td class="num">47,9 px</td><td class="num gain">+5,5 px</td></tr>
+</table>
+
+<div class="verdict warn"><b>Le verdict est net : au mieux +5,5 px par jour.</b> Un titre comme « Convoi du Nord » réclame
+environ 90 px en corps 11. On passe de 42 à 48 px — on reste <b>à moins de la moitié</b> de ce qu'il faudrait.
+La gouttière n'est pas le problème : <b>sept colonnes sur un téléphone en portrait, c'est le problème.</b></div>
+
+<h3>Les trois traitements, côte à côte</h3>
+<div class="row">
+  <div>
+    <span class="tag">Aujourd'hui — 38 px</span>
+    <div class="phone" style="width:355px">
+      <div class="wk g38">
+        <div class="rl"></div>
+        <div class="h today">L17</div><div class="h">M18</div><div class="h">M19</div><div class="h">J20</div><div class="h">V21</div><div class="h">S22</div><div class="h">D23</div>
+        <div class="rl">Matin</div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl">Après-m.</div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl">Soir</div>
+        <div class="c un"></div><div class="c av"></div><div class="c av"></div><div class="c se"><span class="glyph">✦</span></div><div class="c un"></div><div class="c vo"></div><div class="c uk"></div>
+      </div>
+      <div class="ruler warn"><b>42,4 px</b> par jour</div>
+    </div>
+  </div>
+
+  <div>
+    <span class="tag">Abrégé — 22 px</span>
+    <div class="phone" style="width:355px">
+      <div class="wk g22">
+        <div class="rl"></div>
+        <div class="h today">L17</div><div class="h">M18</div><div class="h">M19</div><div class="h">J20</div><div class="h">V21</div><div class="h">S22</div><div class="h">D23</div>
+        <div class="rl">M</div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl">AM</div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl">S</div>
+        <div class="c un"></div><div class="c av"></div><div class="c av"></div><div class="c se"><span class="glyph">✦</span></div><div class="c un"></div><div class="c vo"></div><div class="c uk"></div>
+      </div>
+      <div class="ruler warn"><b>44,7 px</b> par jour</div>
+    </div>
+    <div class="note"><b>« M » et « AM » sont ambigus</b> à l'écrit : M peut se lire matin ou midi, et la colonne d'en-tête
+    utilise déjà M pour mardi et mercredi. Trois lettres identiques pour trois choses différentes sur le même écran.</div>
+  </div>
+
+  <div>
+    <span class="tag good">Icônes — 26 px</span>
+    <div class="phone" style="width:355px">
+      <div class="wk g26">
+        <div class="rl"></div>
+        <div class="h today">L17</div><div class="h">M18</div><div class="h">M19</div><div class="h">J20</div><div class="h">V21</div><div class="h">S22</div><div class="h">D23</div>
+        <div class="rl">
+          <svg class="ic" viewBox="0 0 24 24" aria-label="Matin"><path d="M12 5v3M5.6 9.6l2 2M18.4 9.6l-2 2M3 18h18M7 18a5 5 0 0 1 10 0"/><path d="M9 21h6" stroke-dasharray="1 3"/></svg>
+        </div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl">
+          <svg class="ic" viewBox="0 0 24 24" aria-label="Après-midi"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg>
+        </div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl">
+          <svg class="ic" viewBox="0 0 24 24" aria-label="Soir"><path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z"/></svg>
+        </div>
+        <div class="c un"></div><div class="c av"></div><div class="c av"></div><div class="c se"><span class="glyph">✦</span></div><div class="c un"></div><div class="c vo"></div><div class="c uk"></div>
+      </div>
+      <div class="ruler warn"><b>44,1 px</b> par jour</div>
+    </div>
+    <div class="note">Soleil levant, soleil haut, croissant de lune. <b>Sans ambiguïté, et plus étroit que « Après-m. »</b>.
+    Le SVG inline est autorisé (DESIGN.md, amendement 1). À conserver <b>indépendamment</b> de la décision sur les sept colonnes :
+    c'est un gain de clarté, même s'il ne règle pas la largeur.</div>
+  </div>
+</div>
+
+<!-- ═══════════════ 2 ═══════════════ -->
+<h2>2 · Alors que met-on dans 48 px ? Le rail de détail</h2>
+<p class="why">Puisque la cellule ne portera jamais le titre en portrait, elle porte <b>le fait</b> — cette case est prise, ce créneau est au vote —
+et le <b>texte va sous la grille</b>, pour le jour touché. C'est ta propre logique de l'agenda, appliquée à la semaine :
+la grille situe, le rail nomme.</p>
+
+<div class="row">
+  <div>
+    <span class="tag good">7 colonnes + icônes + rail de détail</span>
+    <div class="phone reco">
+      <div class="hdr"><b>17 – 23 août</b><span class="seg"><span>Mois</span><span class="on">Sem.</span><span>Agenda</span></span></div>
+      <div class="wk g26">
+        <div class="rl"></div>
+        <div class="h today">L17</div><div class="h">M18</div><div class="h">M19</div><div class="h">J20</div><div class="h">V21</div><div class="h">S22</div><div class="h">D23</div>
+        <div class="rl"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v3M5.6 9.6l2 2M18.4 9.6l-2 2M3 18h18M7 18a5 5 0 0 1 10 0"/></svg></div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg></div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl"><svg class="ic" viewBox="0 0 24 24"><path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z"/></svg></div>
+        <div class="c un"></div><div class="c av"></div><div class="c av"></div>
+        <div class="c se sel"><div class="mini s">Convoi</div></div>
+        <div class="c un"></div><div class="c vo"><div class="mini v">Vote</div></div><div class="c uk"></div>
+      </div>
+      <div class="rail">
+        <div class="dl">Jeudi 20 — soir</div>
+        <div class="it"><span class="bar so"></span><div><div class="ti">Le Convoi du Nord</div><div class="me">chez Marc · 20 h 30 · pensez aux dés</div></div></div>
+      </div>
+      <div class="ruler">La grille situe · le rail nomme · le tap déplace le rail</div>
+    </div>
+    <div class="note">Dans 48 px, un mot tient : <b>« Convoi »</b>, <b>« Vote »</b>. Assez pour ne plus rater la case —
+    ce qui était l'irritant réel. Le rail donne le reste sans quitter l'écran, et suit la case touchée.
+    <b>Le rail n'est pas un panneau caché</b> : il est toujours visible, montrant par défaut le jour le plus proche qui porte quelque chose.</div>
+  </div>
+
+  <div>
+    <span class="tag bad">Rappel — sans rien de tout ça</span>
+    <div class="phone">
+      <div class="hdr"><b>17 – 23 août</b><span class="seg"><span>Mois</span><span class="on">Sem.</span><span>Agenda</span></span></div>
+      <div class="wk g38">
+        <div class="rl"></div>
+        <div class="h today">L17</div><div class="h">M18</div><div class="h">M19</div><div class="h">J20</div><div class="h">V21</div><div class="h">S22</div><div class="h">D23</div>
+        <div class="rl">Matin</div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl">Après-m.</div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl">Soir</div>
+        <div class="c un"></div><div class="c av"></div><div class="c av"></div><div class="c se"><span class="glyph" style="font-size:10px">•</span></div><div class="c un"></div><div class="c av"></div><div class="c uk"></div>
+      </div>
+      <div class="ruler warn">Le point qu'on rate à tous les coups</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ 3 ═══════════════ -->
+<h2>3 · Le paysage — ton autre idée, et elle marche</h2>
+<p class="why">812 px de large, moins 24 px de marges = 788 px utiles. Gouttière de 26 px, six espaces : <b>≈ 107 px par jour</b>.
+Le titre, le lieu et l'heure tiennent <b>dans la cellule</b>, sans rail et sans compromis.</p>
+
+<div class="land">
+  <div class="hdr"><b>17 – 23 août 2026</b><span class="seg"><span>Mois</span><span class="on">Semaine</span><span>Agenda</span></span></div>
+  <div class="wk g26">
+    <div class="rl"></div>
+    <div class="h today">Lun 17</div><div class="h">Mar 18</div><div class="h">Mer 19</div><div class="h">Jeu 20</div><div class="h">Ven 21</div><div class="h">Sam 22</div><div class="h">Dim 23</div>
+    <div class="rl"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v3M5.6 9.6l2 2M18.4 9.6l-2 2M3 18h18M7 18a5 5 0 0 1 10 0"/></svg></div>
+    <div class="c uk" style="min-height:52px"></div><div class="c av" style="min-height:52px"></div><div class="c av" style="min-height:52px"></div><div class="c uk" style="min-height:52px"></div><div class="c uk" style="min-height:52px"></div><div class="c av" style="min-height:52px"></div><div class="c uk" style="min-height:52px"></div>
+    <div class="rl"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M2 12h2.4M19.6 12H22M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M19.1 4.9l-1.7 1.7M6.6 17.4l-1.7 1.7"/></svg></div>
+    <div class="c uk" style="min-height:52px"></div><div class="c av" style="min-height:52px"></div><div class="c av" style="min-height:52px"></div><div class="c uk" style="min-height:52px"></div><div class="c uk" style="min-height:52px"></div><div class="c av" style="min-height:52px"></div><div class="c uk" style="min-height:52px"></div>
+    <div class="rl"><svg class="ic" viewBox="0 0 24 24"><path d="M20 14.5A7.5 7.5 0 0 1 9.5 4a7.5 7.5 0 1 0 10.5 10.5z"/></svg></div>
+    <div class="c un" style="min-height:52px"></div><div class="c av" style="min-height:52px"></div><div class="c av" style="min-height:52px"></div>
+    <div class="c se" style="min-height:52px"><div class="t">Convoi du Nord</div><div class="s">chez Marc</div><div class="s">20 h 30</div></div>
+    <div class="c un" style="min-height:52px"></div>
+    <div class="c vo" style="min-height:52px"><div class="t">Vote — Ashal</div><div class="s">3 oui · 1 non</div></div>
+    <div class="c uk" style="min-height:52px"></div>
+  </div>
+  <div class="ruler"><b>≈ 107 px</b> par jour — le titre tient sans rail, comme sur ordinateur</div>
+</div>
+
+<div class="verdict"><b>Ce qui se dessine, et que je te propose de retenir.</b> Une seule grille à sept colonnes,
+qui <b>change de densité</b> selon la largeur disponible — pas trois vues à maintenir :
+<br>· <b>&lt; 500 px (portrait)</b> — icônes en gouttière, un mot dans la case, le rail de détail sous la grille ;
+<br>· <b>≥ 500 px (paysage, tablette, ordinateur)</b> — le titre, le lieu et l'heure dans la cellule, le rail devient inutile et disparaît.
+<br>Le passage de l'un à l'autre est <b>le geste que tu fais déjà</b> : tourner le téléphone. Rien à apprendre, rien à activer.</div>
+
+<p class="why" style="margin-top:var(--space-base)"><b>Ce que ça écarte, et pourquoi c'est bien.</b> Plus besoin de la grille pivotée (option d),
+plus besoin d'amputer la semaine à trois jours (option a), plus besoin de supprimer la vue sur mobile (option c).
+La semaine reste entière partout, la sélection par glissement reste identique partout, et la seule chose qui varie
+est <b>la quantité de texte que la case peut porter</b> — ce qui est exactement la différence réelle entre les deux orientations.</p>
+
+</body>
+</html>

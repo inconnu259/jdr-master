@@ -1,3 +1,49 @@
+jest.mock('node:fs/promises', () => ({
+  mkdir: jest.fn().mockResolvedValue(undefined),
+  writeFile: jest.fn().mockResolvedValue(undefined),
+  unlink: jest.fn().mockResolvedValue(undefined),
+  readFile: jest.fn().mockResolvedValue(Buffer.from('fake-cover-bytes')),
+}));
+
+// Doit être un UUID valide (pas une étiquette lisible) : `extractUploadFilename()` (appelé par
+// `coverImageVersion()` en lecture) valide la forme du nom de fichier par regex — une valeur
+// mockée hors-format ferait échouer silencieusement l'extraction et casserait les assertions sur
+// `dto.coverImageVersion` de façon trompeuse (défense en profondeur qui se retournerait contre le
+// test).
+jest.mock('node:crypto', () => {
+  const actual =
+    jest.requireActual<typeof import('node:crypto')>('node:crypto');
+  return {
+    ...actual,
+    randomUUID: jest.fn(() => '99999999-9999-9999-9999-999999999999'),
+  };
+});
+
+// Mock partiel, même patron que character.service.spec.ts : detectImageMime/mimeForExtension/etc.
+// restent réels (fonctions pures), seule stripImageMetadata est mockée (passthrough) pour éviter
+// qu'un vrai sharp() sur un buffer de test (signature magique seule) échoue.
+jest.mock('../common/image-upload.util', () => ({
+  ...jest.requireActual('../common/image-upload.util'),
+  stripImageMetadata: jest.fn((buf: Buffer) => Promise.resolve(buf)),
+}));
+
+// `sharp` mocké pour le redimensionnement des dérivées (Task 5) — seule la chaîne
+// resize()/webp()/toBuffer() est exercée par PartiesService, jamais autoOrient() (qui vit dans
+// stripImageMetadata, lui-même mocké en passthrough ci-dessus).
+const sharpResizeCalls: unknown[] = [];
+jest.mock('sharp', () => {
+  const chain: any = {};
+  chain.resize = jest.fn((opts: unknown) => {
+    sharpResizeCalls.push(opts);
+    return chain;
+  });
+  chain.webp = jest.fn(() => chain);
+  chain.toBuffer = jest
+    .fn()
+    .mockResolvedValue(Buffer.from('resized-webp-bytes'));
+  return jest.fn(() => chain);
+});
+
 import {
   BadRequestException,
   ForbiddenException,
@@ -5,6 +51,7 @@ import {
 } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -22,6 +69,7 @@ describe('PartiesService', () => {
     partie: {
       create: jest.Mock;
       findUnique: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
       findMany: jest.Mock;
       update: jest.Mock;
       delete: jest.Mock;
@@ -36,14 +84,27 @@ describe('PartiesService', () => {
     };
     scenario: {
       create: jest.Mock;
+      count: jest.Mock;
+      groupBy: jest.Mock;
+      findUnique: jest.Mock;
+      findMany: jest.Mock;
+      updateMany: jest.Mock;
+    };
+    scenarioParticipant: {
+      createMany: jest.Mock;
     };
     seance: {
       create: jest.Mock;
+    };
+    partieFavorite: {
+      findUnique: jest.Mock;
+      findMany: jest.Mock;
     };
     $transaction: jest.Mock;
   };
   let avail: {
     getActiveDeclarations: jest.Mock;
+    getActiveDeclarationsWithSeances: jest.Mock;
     computeSlotStatus: jest.Mock;
   };
   let realtimeEvents: { emit: jest.Mock };
@@ -61,10 +122,15 @@ describe('PartiesService', () => {
   };
 
   beforeEach(() => {
+    // Les mocks de `node:fs/promises`/`sharp` sont au niveau module (jest.mock ci-dessus) : sans
+    // ce reset, l'historique d'appels (writeFile/unlink) fuiterait d'un test à l'autre, faussant
+    // les assertions `toHaveBeenCalledTimes`/`not.toHaveBeenCalled` des tests de couverture.
+    jest.clearAllMocks();
     const p: any = {
       partie: {
         create: jest.fn(),
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
         delete: jest.fn(),
@@ -79,9 +145,25 @@ describe('PartiesService', () => {
       },
       scenario: {
         create: jest.fn().mockResolvedValue({ id: 'scenario1' }),
+        // Défaut « sans scénario » (status: A_VENIR) — les tests de dérivation ci-dessous
+        // reconfigurent explicitement ces mocks quand ils veulent tester EN_COURS/TERMINEE.
+        count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      scenarioParticipant: {
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
       seance: {
         create: jest.fn(),
+      },
+      // Défaut « aucun favori » — les tests dédiés au favori (Story 29.8) reconfigurent
+      // explicitement ces mocks.
+      partieFavorite: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
       },
     };
     // $transaction exécute le callback avec le même mock en guise de `tx`
@@ -89,6 +171,9 @@ describe('PartiesService', () => {
     prisma = p;
     avail = {
       getActiveDeclarations: jest.fn().mockResolvedValue(new Map()),
+      // getAvailableSlots/getHeatmap appellent cette variante (AD-9, Story 30.5) — le mock reflète
+      // getActiveDeclarations par défaut ; les tests AD-9 dédiés reconfigurent explicitement.
+      getActiveDeclarationsWithSeances: jest.fn().mockResolvedValue(new Map()),
       computeSlotStatus: jest.fn().mockReturnValue('UNKNOWN'),
     };
     realtimeEvents = { emit: jest.fn() };
@@ -133,7 +218,36 @@ describe('PartiesService', () => {
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
+      status: 'EN_COURS',
+      isFavorite: false,
+      coverImageVersion: null,
     });
+  });
+
+  it('create() ONE_SHOT ne fait aucun appel scenario.count/groupBy — hasScenario connu synchronement (Story 29.6)', async () => {
+    prisma.partie.create.mockResolvedValue(partie);
+    await service.create('mj1', {
+      name: 'La Nuit',
+      kind: 'ONE_SHOT',
+      gameSystemId: 'draconis',
+    });
+    expect(prisma.scenario.count).not.toHaveBeenCalled();
+    expect(prisma.scenario.groupBy).not.toHaveBeenCalled();
+  });
+
+  it('create CAMPAGNE_LINEAIRE renvoie status: A_VENIR (aucun scénario auto-créé, Story 29.6)', async () => {
+    prisma.partie.create.mockResolvedValue({
+      ...partie,
+      kind: 'CAMPAGNE_LINEAIRE',
+    });
+    const dto = await service.create('mj1', {
+      name: 'Les Chroniques',
+      kind: 'CAMPAGNE_LINEAIRE',
+      gameSystemId: 'draconis',
+    });
+    expect(dto.status).toBe('A_VENIR');
+    expect(prisma.scenario.count).not.toHaveBeenCalled();
+    expect(prisma.scenario.groupBy).not.toHaveBeenCalled();
   });
 
   it('create ONE_SHOT crée automatiquement son scénario unique BROUILLON dans la même transaction (AC3, Story 7.1)', async () => {
@@ -190,6 +304,9 @@ describe('PartiesService', () => {
         nextSessionDate: null,
         nextSessionSlot: null,
         role: 'player',
+        status: 'A_VENIR',
+        isFavorite: false,
+        coverImageVersion: null,
       },
     ]);
     expect(prisma.membership.findMany).toHaveBeenCalledWith(
@@ -214,8 +331,123 @@ describe('PartiesService', () => {
         nextSessionDate: null,
         nextSessionSlot: null,
         role: 'mj',
+        status: 'A_VENIR',
+        isFavorite: false,
+        coverImageVersion: null,
       },
     ]);
+  });
+
+  it('listForUser(mj) : status: EN_COURS quand scenario.groupBy renvoie un compte > 0 pour la partie (Story 29.6)', async () => {
+    prisma.partie.findMany.mockResolvedValue([partie]);
+    prisma.scenario.groupBy.mockResolvedValue([
+      { partieId: 'p1', _count: { _all: 2 } },
+    ]);
+    const [dto] = await service.listForUser('mj1', 'mj');
+    expect(dto.status).toBe('EN_COURS');
+  });
+
+  it('listForUser(mj) : status: TERMINEE quand closedAt est renseigné, quel que soit le nombre de scénarios (Story 29.6)', async () => {
+    prisma.partie.findMany.mockResolvedValue([
+      { ...partie, closedAt: new Date('2026-08-01T00:00:00.000Z') },
+    ]);
+    prisma.scenario.groupBy.mockResolvedValue([
+      { partieId: 'p1', _count: { _all: 3 } },
+    ]);
+    const [dto] = await service.listForUser('mj1', 'mj');
+    expect(dto.status).toBe('TERMINEE');
+  });
+
+  it('listForUser(mj) : scenario.groupBy appelé une seule fois pour N parties (pas de N+1, AD-3)', async () => {
+    const partieB = { ...partie, id: 'p2' };
+    prisma.partie.findMany.mockResolvedValue([partie, partieB]);
+    await service.listForUser('mj1', 'mj');
+    expect(prisma.scenario.groupBy).toHaveBeenCalledTimes(1);
+    expect(prisma.scenario.groupBy).toHaveBeenCalledWith({
+      by: ['partieId'],
+      where: { partieId: { in: ['p1', 'p2'] } },
+      _count: { _all: true },
+    });
+    expect(prisma.scenario.count).not.toHaveBeenCalled();
+  });
+
+  describe('isFavorite (Story 29.8)', () => {
+    it('listForUser(mj) : une partie favorite porte isFavorite: true, une autre isFavorite: false', async () => {
+      const partieB = { ...partie, id: 'p2' };
+      prisma.partie.findMany.mockResolvedValue([partie, partieB]);
+      prisma.partieFavorite.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+      const [dtoA, dtoB] = await service.listForUser('mj1', 'mj');
+      expect(dtoA.isFavorite).toBe(true);
+      expect(dtoB.isFavorite).toBe(false);
+    });
+
+    it('listForUser(mj) : partieFavorite.findMany appelé une seule fois pour N parties (pas de N+1, AD-3)', async () => {
+      const partieB = { ...partie, id: 'p2' };
+      prisma.partie.findMany.mockResolvedValue([partie, partieB]);
+      await service.listForUser('mj1', 'mj');
+      expect(prisma.partieFavorite.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.partieFavorite.findMany).toHaveBeenCalledWith({
+        where: { userId: 'mj1', partieId: { in: ['p1', 'p2'] } },
+        select: { partieId: true },
+      });
+    });
+
+    it('listForUser(player) : une partie favorite porte isFavorite: true', async () => {
+      prisma.membership.findMany.mockResolvedValue([{ partie }]);
+      prisma.partieFavorite.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+      const [dto] = await service.listForUser('u', 'player');
+      expect(dto.isFavorite).toBe(true);
+    });
+
+    it('create() : isFavorite: false, aucune requête partieFavorite émise', async () => {
+      prisma.partie.create.mockResolvedValue(partie);
+      const dto = await service.create('mj1', {
+        name: 'La Nuit',
+        kind: 'ONE_SHOT',
+        gameSystemId: 'draconis',
+      });
+      expect(dto.isFavorite).toBe(false);
+      expect(prisma.partieFavorite.findUnique).not.toHaveBeenCalled();
+      expect(prisma.partieFavorite.findMany).not.toHaveBeenCalled();
+    });
+
+    it('findOneDto() : isFavorite toujours présent (true si favori)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.partieFavorite.findUnique.mockResolvedValue({
+        id: 'f1',
+        userId: 'mj1',
+        partieId: 'p1',
+      });
+      const dto = await service.findOneDto('p1', 'mj1');
+      expect(dto.isFavorite).toBe(true);
+      expect(prisma.partieFavorite.findUnique).toHaveBeenCalledWith({
+        where: { userId_partieId: { userId: 'mj1', partieId: 'p1' } },
+      });
+    });
+
+    it('update()/close()/reopen() : isFavorite toujours présent dans le DTO retourné', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue(partie);
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.partieFavorite.findUnique.mockResolvedValue({
+        id: 'f1',
+        userId: 'mj1',
+        partieId: 'p1',
+      });
+
+      const updated = await service.update('p1', 'mj1', {
+        name: 'Nouveau nom',
+      });
+      expect(updated.isFavorite).toBe(true);
+
+      const closed = await service.close('p1', 'mj1');
+      expect(closed.isFavorite).toBe(true);
+
+      const reopened = await service.reopen('p1', 'mj1');
+      expect(reopened.isFavorite).toBe(true);
+    });
   });
 
   it("toPartieDto() n'énumère que les champs du DTO — un champ Prisma non listé (ex. futur ajout de colonne) ne fuite jamais (revue de code, AC6)", async () => {
@@ -237,6 +469,9 @@ describe('PartiesService', () => {
         'nextSessionDate',
         'nextSessionSlot',
         'role',
+        'status',
+        'isFavorite',
+        'coverImageVersion',
       ].sort(),
     );
   });
@@ -266,8 +501,305 @@ describe('PartiesService', () => {
         'nextSessionDate',
         'nextSessionSlot',
         'role',
+        'status',
+        'isFavorite',
+        'coverImageVersion',
       ].sort(),
     );
+  });
+
+  describe('coverImageVersion (Story 29.12, AD-19)', () => {
+    it('sans couverture (coverImageUrl null) → coverImageVersion null', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        { ...partie, coverImageUrl: null },
+      ]);
+      const [dto] = await service.listForUser('mj1', 'mj');
+      expect(dto.coverImageVersion).toBeNull();
+    });
+
+    it('avec une couverture valide → coverImageVersion est le stem UUID, sans extension ni préfixe', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        {
+          ...partie,
+          coverImageUrl:
+            '/uploads/covers/11111111-1111-1111-1111-111111111111.webp',
+        },
+      ]);
+      const [dto] = await service.listForUser('mj1', 'mj');
+      expect(dto.coverImageVersion).toBe(
+        '11111111-1111-1111-1111-111111111111',
+      );
+    });
+
+    it('coverImageUrl corrompu (mauvais préfixe ou format invalide) → coverImageVersion null, jamais une exception', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        { ...partie, coverImageUrl: '/uploads/portraits/x.jpg' },
+      ]);
+      const [dto] = await service.listForUser('mj1', 'mj');
+      expect(dto.coverImageVersion).toBeNull();
+    });
+  });
+
+  describe('setCoverImage/removeCoverImage/getCoverFile (Story 29.12, Task 10)', () => {
+    function makeCoverFile(buffer = Buffer.from([0xff, 0xd8, 0xff, 0xe0])) {
+      return {
+        buffer,
+        originalname: 'cover.jpg',
+        mimetype: 'image/jpeg',
+        size: buffer.length,
+      } as Express.Multer.File;
+    }
+
+    beforeEach(() => {
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj-pseudo',
+        displayName: 'MJ Nom',
+      });
+    });
+
+    it('AC1 : dépôt → coverImageUrl renseigné en DB, les 3 dérivées écrites sur disque', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        coverImageUrl:
+          '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+      });
+      prisma.partie.findUniqueOrThrow.mockResolvedValue({
+        ...partie,
+        coverImageUrl:
+          '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+      });
+
+      const dto = await service.setCoverImage('p1', 'mj1', makeCoverFile());
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: {
+          coverImageUrl:
+            '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+        },
+      });
+      expect(writeFile).toHaveBeenCalledTimes(3);
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-large.webp',
+        ),
+        expect.any(Buffer),
+      );
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-medium.webp',
+        ),
+        expect.any(Buffer),
+      );
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-compact.webp',
+        ),
+        expect.any(Buffer),
+      );
+      expect(dto.coverImageVersion).toBe(
+        '99999999-9999-9999-9999-999999999999',
+      );
+    });
+
+    it('AC9 : chaque dérivée est redimensionnée pour son mode — dimensions distinctes par mode, jamais une largeur unique', async () => {
+      sharpResizeCalls.length = 0;
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue(partie);
+      prisma.partie.findUniqueOrThrow.mockResolvedValue(partie);
+
+      await service.setCoverImage('p1', 'mj1', makeCoverFile());
+
+      expect(sharpResizeCalls).toContainEqual(
+        expect.objectContaining({ width: 640, height: 248, fit: 'cover' }),
+      );
+      expect(sharpResizeCalls).toContainEqual(
+        expect.objectContaining({ width: 88, height: 88, fit: 'cover' }),
+      );
+      expect(sharpResizeCalls).toContainEqual(
+        expect.objectContaining({ width: 56, height: 56, fit: 'cover' }),
+      );
+    });
+
+    it('AC4 : joueur non-MJ → ForbiddenException, aucune écriture disque', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+      await expect(
+        service.setCoverImage('p1', 'autre', makeCoverFile()),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(writeFile).not.toHaveBeenCalled();
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('fichier non-image (octets magiques invalides) → BadRequestException, aucune écriture disque', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      await expect(
+        service.setCoverImage(
+          'p1',
+          'mj1',
+          makeCoverFile(Buffer.from('not an image')),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(writeFile).not.toHaveBeenCalled();
+    });
+
+    it('remplacement → les 3 dérivées de l’ancienne couverture sont supprimées, pas laissées orphelines', async () => {
+      const OLD_STEM = '22222222-2222-2222-2222-222222222222';
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        coverImageUrl: `/uploads/covers/${OLD_STEM}.webp`,
+      });
+      prisma.partie.update.mockResolvedValue(partie);
+      prisma.partie.findUniqueOrThrow.mockResolvedValue(partie);
+
+      await service.setCoverImage('p1', 'mj1', makeCoverFile());
+
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(`${OLD_STEM}-large.webp`),
+      );
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(`${OLD_STEM}-medium.webp`),
+      );
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(`${OLD_STEM}-compact.webp`),
+      );
+    });
+
+    it('échec DB après écriture disque → les dérivées fraîchement écrites sont nettoyées, erreur propagée', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.setCoverImage('p1', 'mj1', makeCoverFile()),
+      ).rejects.toThrow('db down');
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-large.webp',
+        ),
+      );
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-medium.webp',
+        ),
+      );
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '99999999-9999-9999-9999-999999999999-compact.webp',
+        ),
+      );
+    });
+
+    it('dépôt émet un événement temps réel scopé sur la Partie et ses membres (AD-14)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue(partie);
+      prisma.partie.findUniqueOrThrow.mockResolvedValue(partie);
+
+      await service.setCoverImage('p1', 'mj1', makeCoverFile());
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+    });
+
+    it('AC3 : retrait → coverImageUrl remis à null, les 3 dérivées supprimées', async () => {
+      const STEM = '33333333-3333-3333-3333-333333333333';
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        coverImageUrl: `/uploads/covers/${STEM}.webp`,
+      });
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        coverImageUrl: null,
+      });
+      prisma.partie.findUniqueOrThrow.mockResolvedValue({
+        ...partie,
+        coverImageUrl: null,
+      });
+
+      const dto = await service.removeCoverImage('p1', 'mj1');
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { coverImageUrl: null },
+      });
+      expect(unlink).toHaveBeenCalledWith(
+        expect.stringContaining(`${STEM}-large.webp`),
+      );
+      expect(dto.coverImageVersion).toBeNull();
+    });
+
+    it('AC4 : retrait par un joueur non-MJ → ForbiddenException, aucune écriture', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      await expect(
+        service.removeCoverImage('p1', 'autre'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('retrait émet un événement temps réel scopé sur la Partie et ses membres (AD-14)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue(partie);
+      prisma.partie.findUniqueOrThrow.mockResolvedValue(partie);
+
+      await service.removeCoverImage('p1', 'mj1');
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+    });
+
+    it('getCoverFile : lit la dérivée du mode demandé et renvoie le jeton de version', async () => {
+      const STEM = '44444444-4444-4444-4444-444444444444';
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        coverImageUrl: `/uploads/covers/${STEM}.webp`,
+      });
+      (readFile as jest.Mock).mockResolvedValue(
+        Buffer.from('derivative-bytes'),
+      );
+
+      const result = await service.getCoverFile('p1', 'mj1', 'medium');
+
+      expect(readFile).toHaveBeenCalledWith(
+        expect.stringContaining(`${STEM}-medium.webp`),
+      );
+      expect(result).toEqual({
+        buffer: Buffer.from('derivative-bytes'),
+        mime: 'image/webp',
+        version: STEM,
+      });
+    });
+
+    it('getCoverFile : aucune couverture (coverImageUrl null) → null, jamais un accès disque', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        coverImageUrl: null,
+      });
+      const result = await service.getCoverFile('p1', 'mj1', 'large');
+      expect(result).toBeNull();
+      expect(readFile).not.toHaveBeenCalled();
+    });
+
+    it('getCoverFile : coverImageUrl renseigné mais fichier absent du disque → null, jamais une exception (CAP-20)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        coverImageUrl:
+          '/uploads/covers/55555555-5555-5555-5555-555555555555.webp',
+      });
+      (readFile as jest.Mock).mockRejectedValue(new Error('ENOENT'));
+
+      await expect(
+        service.getCoverFile('p1', 'mj1', 'large'),
+      ).resolves.toBeNull();
+    });
+
+    it('getCoverFile : non-membre et non-MJ → ForbiddenException (getViewable)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+      prisma.membership.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getCoverFile('p1', 'etranger', 'large'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
   });
 
   it('getViewable : renvoie la partie au MJ sans vérifier les memberships', async () => {
@@ -311,8 +843,11 @@ describe('PartiesService', () => {
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
+      status: 'A_VENIR',
       mjPseudo: 'mj-pseudo',
       mjDisplayName: 'MJ Nom',
+      isFavorite: false,
+      coverImageVersion: null,
     });
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: 'mj1' },
@@ -343,9 +878,34 @@ describe('PartiesService', () => {
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'player',
+      status: 'A_VENIR',
       mjPseudo: 'mj-pseudo',
       mjDisplayName: 'MJ Nom',
+      isFavorite: false,
+      coverImageVersion: null,
     });
+  });
+
+  it('findOneDto : status: EN_COURS quand la partie a au moins un scénario (Story 29.6)', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.scenario.count.mockResolvedValue(1);
+    prisma.user.findUnique.mockResolvedValue(null);
+    const dto = await service.findOneDto('p1', 'mj1');
+    expect(dto.status).toBe('EN_COURS');
+    expect(prisma.scenario.count).toHaveBeenCalledWith({
+      where: { partieId: 'p1' },
+    });
+  });
+
+  it('findOneDto : status: TERMINEE quand closedAt est renseigné, même avec des scénarios (Story 29.6)', async () => {
+    prisma.partie.findUnique.mockResolvedValue({
+      ...partie,
+      closedAt: new Date('2026-08-01T00:00:00.000Z'),
+    });
+    prisma.scenario.count.mockResolvedValue(3);
+    prisma.user.findUnique.mockResolvedValue(null);
+    const dto = await service.findOneDto('p1', 'mj1');
+    expect(dto.status).toBe('TERMINEE');
   });
 
   it('findOneDto : 403 si ni MJ ni membre (getViewable inchangée)', async () => {
@@ -371,6 +931,9 @@ describe('PartiesService', () => {
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
+      status: 'A_VENIR',
+      isFavorite: false,
+      coverImageVersion: null,
     });
     expect((dto as any).mjPseudo).toBeUndefined();
   });
@@ -398,6 +961,19 @@ describe('PartiesService', () => {
     await service.removeMember('p1', 'mj1', 'u');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
+  });
+
+  it('removeMember : notifie aussi le MJ via userTopic (Story 29.7, AD-14, signal AUCUN_MEMBRE_INVITE réapparaissant si dernier membre retiré)', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+    prisma.membership.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'mj1',
+      pseudo: 'mj-pseudo',
+      displayName: 'MJ Nom',
+    });
+    prisma.membership.findMany.mockResolvedValue([]);
+    await service.removeMember('p1', 'mj1', 'u');
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
   });
 
   it('getOwned : 404 si introuvable', async () => {
@@ -441,6 +1017,156 @@ describe('PartiesService', () => {
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
+      status: 'A_VENIR',
+      isFavorite: false,
+      coverImageVersion: null,
+    });
+  });
+
+  describe('close/reopen (Story 29.6, AD-8/AD-14)', () => {
+    beforeEach(() => {
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj-pseudo',
+        displayName: 'MJ Nom',
+      });
+    });
+
+    it('close() : MJ uniquement (403 sinon, aucun update)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      await expect(service.close('p1', 'autre')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('close() : renseigne closedAt (AC1)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-09T00:00:00.000Z'),
+      });
+      await service.close('p1', 'mj1');
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { closedAt: expect.any(Date) },
+      });
+    });
+
+    it('close() : renvoie status: TERMINEE', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-09T00:00:00.000Z'),
+      });
+      const dto = await service.close('p1', 'mj1');
+      expect(dto.status).toBe('TERMINEE');
+    });
+
+    it('close() : émet partieTopic(id) et userTopic(userId) pour le MJ et chaque membre résolu (AD-14)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-09T00:00:00.000Z'),
+      });
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' } },
+        { user: { id: 'u2', pseudo: 'Bob', displayName: 'Bob' } },
+      ]);
+      await service.close('p1', 'mj1');
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u2'));
+    });
+
+    it('close() sur une partie CAMPAGNE sans aucun scénario : recalcule hasScenario plutôt que de le supposer (Story 29.6, Task 5)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.scenario.count.mockResolvedValue(0);
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        kind: 'CAMPAGNE_LINEAIRE',
+        closedAt: new Date('2026-08-09T00:00:00.000Z'),
+      });
+      const dto = await service.close('p1', 'mj1');
+      // closedAt prime toujours sur hasScenario dans toPartieDto() — TERMINEE quel que soit le
+      // nombre de scénarios (cf. tests de dérivation ci-dessus).
+      expect(dto.status).toBe('TERMINEE');
+    });
+
+    it('reopen() : MJ uniquement (403 sinon, aucun update)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      await expect(service.reopen('p1', 'autre')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('reopen() : efface closedAt (AC2)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      prisma.partie.update.mockResolvedValue({ ...partie, closedAt: null });
+      await service.reopen('p1', 'mj1');
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { closedAt: null },
+      });
+    });
+
+    it('reopen() : la partie redevient active — status: A_VENIR sans scénario, EN_COURS sinon (AC2)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      prisma.partie.update.mockResolvedValue({ ...partie, closedAt: null });
+      prisma.scenario.count.mockResolvedValue(0);
+      const dto = await service.reopen('p1', 'mj1');
+      expect(dto.status).toBe('A_VENIR');
+    });
+
+    it('reopen() : émet partieTopic(id) et userTopic(userId) pour le MJ et chaque membre résolu (AD-14)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        closedAt: new Date('2026-08-01T00:00:00.000Z'),
+      });
+      prisma.partie.update.mockResolvedValue({ ...partie, closedAt: null });
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' } },
+      ]);
+      await service.reopen('p1', 'mj1');
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+    });
+  });
+
+  describe('notifyPartieSignalsChanged (Story 29.7, AD-14)', () => {
+    it("émet userTopic(userId) pour le MJ et chaque membre résolu, MAIS PAS partieTopic (déjà émis par l'appelant — revue de code, double émission corrigée)", async () => {
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' } },
+      ]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj-pseudo',
+        displayName: 'MJ Nom',
+      });
+      await service.notifyPartieSignalsChanged('p1', 'mj1');
+      expect(realtimeEvents.emit).not.toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+    });
+
+    it("n'échoue jamais l'appelant si l'émission lève une exception (même garde que close()/reopen())", async () => {
+      prisma.membership.findMany.mockRejectedValue(new Error('boom'));
+      await expect(
+        service.notifyPartieSignalsChanged('p1', 'mj1'),
+      ).resolves.toBeUndefined();
     });
   });
 
@@ -517,7 +1243,7 @@ describe('PartiesService', () => {
     beforeEach(() => {
       prisma.partie.findUnique.mockResolvedValue(partie); // mjId = 'mj1'
       prisma.membership.findMany.mockResolvedValue(members);
-      avail.getActiveDeclarations.mockResolvedValue(
+      avail.getActiveDeclarationsWithSeances.mockResolvedValue(
         new Map([
           ['u1', []],
           ['u2', []],
@@ -528,8 +1254,11 @@ describe('PartiesService', () => {
 
     it('appelle getActiveDeclarations une seule fois pour N membres (pas de N+1)', async () => {
       await service.getAvailableSlots('p1', 'mj1', 1);
-      expect(avail.getActiveDeclarations).toHaveBeenCalledTimes(1);
-      expect(avail.getActiveDeclarations).toHaveBeenCalledWith(['u1', 'u2']);
+      expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledTimes(1);
+      expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledWith([
+        'u1',
+        'u2',
+      ]);
     });
 
     it('les créneaux avec membres non-MJ UNAVAILABLE sont classés en priorité 3 (fins de liste)', async () => {
@@ -573,10 +1302,14 @@ describe('PartiesService', () => {
       prisma.membership.findMany.mockResolvedValue([
         { userId: 'u1', user: { id: 'u1', pseudo: 'Alice' } },
       ]);
-      avail.getActiveDeclarations.mockResolvedValue(new Map([['u1', []]]));
+      avail.getActiveDeclarationsWithSeances.mockResolvedValue(
+        new Map([['u1', []]]),
+      );
 
       await service.getAvailableSlots('p1', 'mj1', 1);
-      expect(avail.getActiveDeclarations).toHaveBeenCalledWith(['u1']);
+      expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledWith([
+        'u1',
+      ]);
     });
 
     it('renvoie au plus 20 créneaux (limite de résultats)', async () => {
@@ -633,7 +1366,7 @@ describe('PartiesService', () => {
         prisma.partie.findUnique.mockResolvedValue(partie);
         prisma.user.findUnique.mockResolvedValue(mjUser);
         prisma.membership.findMany.mockResolvedValue([memberU1]);
-        avail.getActiveDeclarations.mockResolvedValue(
+        avail.getActiveDeclarationsWithSeances.mockResolvedValue(
           new Map([
             ['mj1', []],
             ['u1', []],
@@ -688,7 +1421,7 @@ describe('PartiesService', () => {
         ...members,
         { userId: 'player1', user: { id: 'player1', pseudo: 'Charlie' } },
       ]);
-      avail.getActiveDeclarations.mockResolvedValue(
+      avail.getActiveDeclarationsWithSeances.mockResolvedValue(
         new Map([
           ['u1', []],
           ['u2', []],
@@ -720,7 +1453,7 @@ describe('PartiesService', () => {
       beforeEach(() => {
         prisma.partie.findUnique.mockResolvedValue(partie);
         prisma.membership.findMany.mockResolvedValue(members);
-        avail.getActiveDeclarations.mockResolvedValue(
+        avail.getActiveDeclarationsWithSeances.mockResolvedValue(
           new Map([
             ['u1', []],
             ['u2', []],
@@ -769,7 +1502,7 @@ describe('PartiesService', () => {
           'mj1',
           1,
         )) as AvailableSlotDto[];
-        expect(avail.getActiveDeclarations).toHaveBeenCalledTimes(1);
+        expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledTimes(1);
         expect(results.length).toBeGreaterThanOrEqual(0);
       });
 
@@ -801,6 +1534,558 @@ describe('PartiesService', () => {
         await expect(
           service.getAvailableSlots('p1', 'mj1', 8, '2024-01-01', '2025-12-31'),
         ).rejects.toBeInstanceOf(BadRequestException);
+      });
+    });
+  });
+
+  describe('getAvailableSlots — AD-9 end-to-end (Story 30.5)', () => {
+    // Câblage réel PartiesService + AvailabilityService (pas de mock sur avail) : vérifie que la
+    // production appelle bien getActiveDeclarationsWithSeances et que la dérivation traverse
+    // effectivement jusqu'aux deux vues (AC3, AC6), sans identité de la Partie tierce (AC3).
+    const partieA = {
+      id: 'A',
+      name: 'Partie A',
+      kind: 'ONE_SHOT',
+      gameSystemId: 'draconis',
+      description: null,
+      mjId: 'mjA',
+      createdAt: new Date(),
+      nextSessionDate: null,
+      nextSessionSlot: null,
+    };
+
+    it("un membre occupé par une séance datée d'une autre Partie (B) apparaît UNAVAILABLE dans le calendrier de A, pour la vue MJ ET la vue joueur, sans qu'aucun champ ne nomme la Partie B", async () => {
+      const p: any = {
+        partie: {
+          findUnique: jest.fn().mockResolvedValue(partieA),
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'B',
+              kind: 'ONE_SHOT',
+              mjId: 'mjB',
+              memberships: [{ userId: 'u1' }],
+            },
+          ]),
+        },
+        membership: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              userId: 'u1',
+              user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice' },
+            },
+          ]),
+        },
+        user: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ id: 'mjA', pseudo: 'MJ', displayName: 'MJ' }),
+        },
+        availabilityDeclaration: { findMany: jest.fn().mockResolvedValue([]) },
+        seance: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'seanceB1',
+              poll: {
+                chosenDate: new Date('2026-09-20T00:00:00Z'),
+                chosenSlot: 'EVENING',
+              },
+              dateValidee: null,
+              inscriptions: [],
+              scenario: { partieId: 'B' },
+            },
+          ]),
+        },
+      };
+      const realAvailability = new AvailabilityService(p, {
+        emit: jest.fn(),
+      } as unknown as RealtimeEventsService);
+      const svc = new PartiesService(p, realAvailability, {
+        emit: jest.fn(),
+      } as unknown as RealtimeEventsService);
+
+      const mjResults = (await svc.getAvailableSlots(
+        'A',
+        'mjA',
+        8,
+        '2026-09-20',
+        '2026-09-20',
+      )) as AvailableSlotDto[];
+      const eveningMj = mjResults.find((r) => r.slot === 'EVENING')!;
+      expect(eveningMj.members.find((m) => m.userId === 'u1')!.status).toBe(
+        'UNAVAILABLE',
+      );
+      const mjSerialized = JSON.stringify(mjResults);
+      expect(mjSerialized).not.toContain('mjB');
+      expect(mjSerialized).not.toContain('partieB');
+
+      const playerResults = (await svc.getAvailableSlots(
+        'A',
+        'u1',
+        8,
+        '2026-09-20',
+        '2026-09-20',
+      )) as AggregatedSlotDto[];
+      const eveningPlayer = playerResults.find((r) => r.slot === 'EVENING')!;
+      expect(eveningPlayer.unavailable).toBeGreaterThanOrEqual(1);
+
+      // AC6 : getHeatmap (pas seulement la branche non-MJ de getAvailableSlots) doit s'accorder
+      // avec la vue MJ sur le même créneau, sans nommer la Partie B non plus.
+      const heatmap = await svc.getHeatmap(
+        'A',
+        'u1',
+        '2026-09-20',
+        '2026-09-20',
+      );
+      const eveningHeatmap = heatmap.find((r) => r.slot === 'EVENING')!;
+      expect(eveningHeatmap.unavailable).toBeGreaterThanOrEqual(1);
+      expect(JSON.stringify(heatmap)).not.toContain('mjB');
+    });
+  });
+
+  describe('getHeatmap — disponibilité du groupe nominative (Story 36.8)', () => {
+    /** Pose une partie à trois participants : le MJ `mj1` plus deux membres, chacun avec un
+     *  statut distinct sur le créneau du matin. Les statuts sont dérivés du `userId` pour que
+     *  l'assertion puisse vérifier l'APPARIEMENT identité ↔ statut, et pas seulement la présence
+     *  d'une liste (AC4 : « la position identifie la personne, la couleur son statut »). */
+    function setupTroupe(): void {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.membership.findMany.mockResolvedValue([
+        {
+          userId: 'u1',
+          user: { id: 'u1', pseudo: 'alice', displayName: 'Alice' },
+        },
+        { userId: 'u2', user: { id: 'u2', pseudo: 'bob', displayName: 'Bob' } },
+      ]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj',
+        displayName: 'Le MJ',
+      });
+      avail.getActiveDeclarationsWithSeances.mockResolvedValue(
+        new Map([
+          ['mj1', []],
+          ['u1', []],
+          ['u2', []],
+        ]),
+      );
+      const byUser: Record<string, string> = {
+        mj1: 'AVAILABLE',
+        u1: 'UNAVAILABLE',
+        u2: 'UNKNOWN',
+      };
+      // `computeSlotStatus(decls, date, slot)` ne reçoit pas l'utilisateur : on l'identifie par
+      // le tableau de déclarations, dont l'identité de référence est celle posée dans la Map
+      // ci-dessus. Le mock rejoue donc l'ordre d'appel de `participants.map(...)`.
+      let call = 0;
+      const order = ['mj1', 'u1', 'u2'];
+      avail.computeSlotStatus.mockImplementation(
+        () => byUser[order[call++ % order.length]],
+      );
+    }
+
+    it('sert `members` au MJ, dans l’ordre fixe de la troupe, statut apparié à l’identité (AC4)', async () => {
+      setupTroupe();
+
+      const heatmap = await service.getHeatmap(
+        'p1',
+        'mj1',
+        '2026-09-01',
+        '2026-09-01',
+      );
+
+      const morning = heatmap.find((r) => r.slot === 'MORNING')!;
+      expect(morning.members).toEqual([
+        {
+          userId: 'mj1',
+          pseudo: 'mj',
+          displayName: 'Le MJ',
+          status: 'AVAILABLE',
+        },
+        {
+          userId: 'u1',
+          pseudo: 'alice',
+          displayName: 'Alice',
+          status: 'UNAVAILABLE',
+        },
+        { userId: 'u2', pseudo: 'bob', displayName: 'Bob', status: 'UNKNOWN' },
+      ]);
+      // Les agrégats restent servis à l'identique : le champ s'AJOUTE, il ne remplace rien.
+      expect(morning.total).toBe(3);
+      expect(morning.available).toBe(1);
+    });
+
+    it("n'expose AUCUNE identité à un joueur — la clé est ABSENTE, jamais un tableau vide (AC14)", async () => {
+      setupTroupe();
+
+      const heatmap = await service.getHeatmap(
+        'p1',
+        'u1',
+        '2026-09-01',
+        '2026-09-01',
+      );
+
+      const morning = heatmap.find((r) => r.slot === 'MORNING')!;
+      // `hasOwnProperty` et non `toBeUndefined()` : un `members: undefined` explicite passerait
+      // la seconde assertion tout en sérialisant la clé dans certaines configurations.
+      expect(Object.prototype.hasOwnProperty.call(morning, 'members')).toBe(
+        false,
+      );
+      const serialized = JSON.stringify(heatmap);
+      expect(serialized).not.toContain('alice');
+      expect(serialized).not.toContain('Alice');
+      expect(serialized).not.toContain('u2');
+    });
+
+    it("ordonne les membres par date d'adhésion — sans quoi « la position identifie la personne » est faux (AC4)", async () => {
+      setupTroupe();
+
+      await service.getHeatmap('p1', 'mj1', '2026-09-01', '2026-09-01');
+
+      // Revue de code : `userId` en départage — `joinedAt` seul ne garantit pas un ordre stable
+      // si deux membres partagent le même timestamp (invitation groupée).
+      expect(prisma.membership.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
+        }),
+      );
+    });
+  });
+
+  describe('convertKind (Story 29.14 — garde de conversion de type)', () => {
+    // La VRAIE matrice de `@master-jdr/shared` est exercée ici : les verdicts ne sont jamais
+    // simulés, ils sont produits par l'état que ces tests posent dans les mocks Prisma. La table
+    // de vérité elle-même (les 6 transitions × leurs états limites) est couverte séparément par
+    // `apps/web/src/app/core/parties/partie-kind-transition.spec.ts`.
+    const campagne = { ...partie, kind: 'CAMPAGNE_LINEAIRE', closedAt: null };
+    const episodique = {
+      ...partie,
+      kind: 'CAMPAGNE_EPISODIQUE',
+      closedAt: null,
+    };
+
+    /** Pose le nombre de scénarios total et le nombre de COURANT vus par la conversion.
+     *  Distingue les deux appels par leur clause `where`, plutôt que par leur ordre. */
+    function setScenarioCounts(total: number, courant: number): void {
+      prisma.scenario.count.mockImplementation((args: any) =>
+        Promise.resolve(args?.where?.status === 'COURANT' ? courant : total),
+      );
+    }
+
+    /** Vrai si AUCUNE écriture n'a eu lieu, sur aucune des quatre tables concernées (AC10). */
+    function expectNoWrites(): void {
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+      expect(prisma.scenario.create).not.toHaveBeenCalled();
+      expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
+      expect(prisma.scenarioParticipant.createMany).not.toHaveBeenCalled();
+      expect(prisma.seance.create).not.toHaveBeenCalled();
+    }
+
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(campagne);
+      prisma.partie.update.mockResolvedValue({
+        ...campagne,
+        kind: 'ONE_SHOT',
+      });
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj-pseudo',
+        displayName: 'MJ Nom',
+      });
+      setScenarioCounts(1, 0);
+    });
+
+    it('MJ uniquement : 403 pour un non-MJ, et aucune écriture', async () => {
+      await expect(
+        service.convertKind('p1', 'autre', { kind: 'ONE_SHOT' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expectNoWrites();
+    });
+
+    it('Cas 1 — ONE_SHOT → CAMPAGNE_LINEAIRE : autorisée sans condition', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, closedAt: null });
+
+      await service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_LINEAIRE' });
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { kind: 'CAMPAGNE_LINEAIRE' },
+      });
+    });
+
+    it('AC10 — refus (3 scénarios → ONE_SHOT) : BadRequest levée AVANT toute écriture', async () => {
+      setScenarioCounts(3, 0);
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expectNoWrites();
+    });
+
+    it('AC6 — le message de refus nomme la cause réelle et le nombre en jeu', async () => {
+      setScenarioCounts(3, 0);
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).rejects.toThrow(/3/);
+    });
+
+    it('Règle C — partie clôturée : refus avec un message distinct invitant à rouvrir', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...campagne,
+        closedAt: new Date(),
+      });
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).rejects.toThrow(/rouvr/i);
+      expectNoWrites();
+    });
+
+    it('Règle C — la clôture prime sur un refus qui serait sinon dû au nombre de scénarios', async () => {
+      setScenarioCounts(5, 0);
+      prisma.partie.findUnique.mockResolvedValue({
+        ...campagne,
+        closedAt: new Date(),
+      });
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).rejects.toThrow(/rouvr/i);
+    });
+
+    it('Cas 3 à 1 scénario : autorisée, écrit le kind et rien d’autre', async () => {
+      await service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { kind: 'ONE_SHOT' },
+      });
+      expect(prisma.scenario.create).not.toHaveBeenCalled();
+      expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
+      expect(prisma.scenarioParticipant.createMany).not.toHaveBeenCalled();
+    });
+
+    it('AC7 — cas 3 à 0 scénario : crée un scénario BROUILLON titré du nom de la partie, ET sa séance', async () => {
+      setScenarioCounts(0, 0);
+      prisma.scenario.create.mockResolvedValue({ id: 'sc-neuf' });
+
+      await service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
+
+      expect(prisma.scenario.create).toHaveBeenCalledWith({
+        data: { partieId: 'p1', title: campagne.name, status: 'BROUILLON' },
+      });
+      expect(prisma.seance.create).toHaveBeenCalledWith({
+        data: { scenarioId: 'sc-neuf' },
+      });
+    });
+
+    it('AC8 — cas 4 : inscrit chaque membre à chaque scénario existant', async () => {
+      prisma.scenario.findMany.mockResolvedValue([{ id: 's1' }, { id: 's2' }]);
+      prisma.membership.findMany.mockResolvedValue([
+        { userId: 'u1' },
+        { userId: 'u2' },
+      ]);
+
+      await service.convertKind('p1', 'mj1', {
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+
+      const call = prisma.scenarioParticipant.createMany.mock.calls[0][0];
+      expect(call.data).toEqual(
+        expect.arrayContaining([
+          { scenarioId: 's1', userId: 'u1' },
+          { scenarioId: 's1', userId: 'u2' },
+          { scenarioId: 's2', userId: 'u1' },
+          { scenarioId: 's2', userId: 'u2' },
+        ]),
+      );
+      expect(call.data).toHaveLength(4);
+    });
+
+    it('AC8 — le semis est idempotent : skipDuplicates, rejouer ne crée aucun doublon', async () => {
+      prisma.scenario.findMany.mockResolvedValue([{ id: 's1' }]);
+      prisma.membership.findMany.mockResolvedValue([{ userId: 'u1' }]);
+
+      await service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_EPISODIQUE' });
+
+      expect(prisma.scenarioParticipant.createMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skipDuplicates: true }),
+      );
+    });
+
+    it('semis sans aucun membre : aucun appel createMany à vide', async () => {
+      prisma.scenario.findMany.mockResolvedValue([{ id: 's1' }]);
+      prisma.membership.findMany.mockResolvedValue([]);
+
+      await service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_EPISODIQUE' });
+
+      expect(prisma.scenarioParticipant.createMany).not.toHaveBeenCalled();
+    });
+
+    it('AC9 — effet DEMOTE_EXTRA_COURANTS : rétrograde en A_VENIR tous les COURANT sauf celui désigné', async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 'sc-garde',
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+
+      await service.convertKind('p1', 'mj1', {
+        kind: 'CAMPAGNE_LINEAIRE',
+        courantScenarioId: 'sc-garde',
+      });
+
+      expect(prisma.scenario.updateMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1', status: 'COURANT', id: { not: 'sc-garde' } },
+        data: { status: 'A_VENIR' },
+      });
+    });
+
+    it('AC9 — la rétrogradation ne touche ni séances, ni votes, ni dates (Règle A)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 'sc-garde',
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+
+      await service.convertKind('p1', 'mj1', {
+        kind: 'CAMPAGNE_LINEAIRE',
+        courantScenarioId: 'sc-garde',
+      });
+
+      // Seul `status` est écrit : aucune suppression de séance, aucun champ de date touché.
+      expect(prisma.scenario.updateMany.mock.calls[0][0].data).toEqual({
+        status: 'A_VENIR',
+      });
+      expect(prisma.seance.create).not.toHaveBeenCalled();
+    });
+
+    it('requiresCourantChoice sans courantScenarioId : BadRequest, aucune écriture', async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_LINEAIRE' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expectNoWrites();
+    });
+
+    it("courantScenarioId d'une AUTRE partie : BadRequest, aucune écriture", async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 'sc-ailleurs',
+        partieId: 'p-autre',
+        status: 'COURANT',
+      });
+
+      await expect(
+        service.convertKind('p1', 'mj1', {
+          kind: 'CAMPAGNE_LINEAIRE',
+          courantScenarioId: 'sc-ailleurs',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expectNoWrites();
+    });
+
+    it('courantScenarioId qui n’est pas COURANT : BadRequest, aucune écriture', async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: 'sc-brouillon',
+        partieId: 'p1',
+        status: 'BROUILLON',
+      });
+
+      await expect(
+        service.convertKind('p1', 'mj1', {
+          kind: 'CAMPAGNE_LINEAIRE',
+          courantScenarioId: 'sc-brouillon',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expectNoWrites();
+    });
+
+    it('courantScenarioId introuvable : BadRequest, aucune écriture', async () => {
+      prisma.partie.findUnique.mockResolvedValue(episodique);
+      setScenarioCounts(4, 2);
+      prisma.scenario.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.convertKind('p1', 'mj1', {
+          kind: 'CAMPAGNE_LINEAIRE',
+          courantScenarioId: 'sc-fantome',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expectNoWrites();
+    });
+
+    it('AD-14 — émet partieTopic et userTopic pour le MJ et chaque membre après un succès', async () => {
+      // `resolveParticipants()` lit les memberships avec `include: { user }` — forme différente du
+      // `select: { userId }` utilisé par le semis de participants.
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'u1-pseudo', displayName: 'U1' } },
+      ]);
+
+      await service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+    });
+
+    it('une émission qui échoue ne transforme pas un commit réussi en 500 (patron close()/reopen())', async () => {
+      prisma.membership.findMany.mockRejectedValue(new Error('boom'));
+
+      await expect(
+        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).resolves.toMatchObject({ id: 'p1' });
+    });
+
+    it("renvoie un PartieDto projeté avec role: 'mj' (AD-15)", async () => {
+      const dto = await service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
+      expect(dto).toMatchObject({ id: 'p1', role: 'mj', kind: 'ONE_SHOT' });
+    });
+  });
+
+  describe('update() — verrou contre le changement de type silencieux (Story 29.14, Task 4)', () => {
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+    });
+
+    it('un kind DIFFÉRENT est rejeté, sans écriture — la conversion a sa propre route', async () => {
+      await expect(
+        service.update('p1', 'mj1', { kind: 'ONE_SHOT' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('un kind IDENTIQUE reste accepté — le formulaire renvoie toujours les quatre champs', async () => {
+      await expect(
+        service.update('p1', 'mj1', {
+          name: 'Nouveau nom',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      ).resolves.toBeDefined();
+      expect(prisma.partie.update).toHaveBeenCalled();
+    });
+
+    it('sans kind du tout : enregistrement normal', async () => {
+      await service.update('p1', 'mj1', { name: 'Nouveau nom' });
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom' },
       });
     });
   });

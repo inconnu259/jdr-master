@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q-5 / Q-9 — clarification</title>
+<style>
+:root{--primary-bg:#0d0a14;--surface-bg:#1a1428;--accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;--status-mixed:#f0a030;--status-unknown:#3a3a4a;
+  --border-subtle:rgba(255,255,255,.06);--overlay:rgba(0,0,0,.55);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--radius-badge:6px;--radius-button:8px;
+  --text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5)}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px}
+h3{font-size:var(--text-lg);margin:0 0 2px}
+.lede,.why{color:var(--text-muted);max-width:84ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--space-xl);align-items:start}
+.sub{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-md);min-height:3.6em}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md)}
+.cost{color:var(--status-mixed)} .ok{color:var(--accent-1)} .new{color:var(--status-mixed)}
+.phone{width:300px;border:1px solid var(--border-subtle);border-radius:20px;background:var(--primary-bg);
+  box-shadow:0 8px 32px rgba(0,0,0,.7);overflow:hidden;position:relative;height:440px;display:flex;flex-direction:column}
+.body{flex:1;overflow:hidden;padding:var(--space-md) var(--space-md) 0}
+.tabbar{display:flex;border-top:1px solid var(--border-subtle);background:rgba(0,0,0,.35);flex:none}
+.tb{flex:1;text-align:center;padding:7px 0 9px;color:var(--text-muted);font-size:11px}
+.tb.on{color:var(--accent-1)}
+.shead{display:flex;gap:var(--space-sm);align-items:flex-start;margin-bottom:var(--space-md)}
+.por{width:44px;height:44px;border-radius:10px;flex:none;background:rgba(155,109,255,.18);
+  display:grid;place-items:center;font-weight:700;color:var(--accent-2)}
+.nm{font-size:var(--text-lg);font-weight:500;font-style:italic;color:var(--accent-1)}
+.pl{font-size:var(--text-sm);color:var(--text-muted)}
+.kebab{font-size:20px;line-height:1;padding:2px 5px;border-radius:6px;color:var(--text-muted)}
+.kebab.hl{color:var(--text-primary);background:rgba(155,109,255,.22);box-shadow:0 0 0 2px var(--accent-2)}
+.blk{background:var(--surface-bg);border-radius:var(--radius-card);padding:var(--space-sm) var(--space-md);
+  margin-bottom:var(--space-sm);box-shadow:var(--elev-card)}
+.blkh{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:6px}
+.attrs{display:flex;gap:var(--space-sm)}
+.at{flex:1;text-align:center;background:rgba(255,255,255,.04);border-radius:6px;padding:4px 0}
+.at b{display:block;font-size:var(--text-lg)} .at span{font-size:11px;color:var(--text-muted)}
+.rowi{display:flex;justify-content:space-between;align-items:center;padding:5px 0;
+  border-bottom:1px solid var(--border-subtle)}
+.rowi:last-child{border-bottom:none}
+.rowi small{color:var(--text-muted);font-size:var(--text-sm)}
+.chev{color:var(--text-muted);font-size:var(--text-sm)}
+.menu{position:absolute;right:10px;top:56px;background:var(--surface-bg);border:1px solid var(--accent-2);
+  border-radius:var(--radius-card);box-shadow:0 8px 32px rgba(0,0,0,.85);padding:var(--space-xs) 0;min-width:206px;z-index:20}
+.menu div{padding:7px var(--space-md);font-size:var(--text-base)}
+.menu div.sepr{border-top:1px solid var(--border-subtle);margin-top:var(--space-xs);padding-top:var(--space-sm)}
+.menu small{display:block;color:var(--text-muted);font-size:11px}
+.subnav{display:flex;gap:var(--space-md);border-bottom:1px solid var(--border-subtle);margin-bottom:var(--space-sm)}
+.snv{padding:5px 2px;font-size:var(--text-sm);color:var(--text-muted);border-bottom:2px solid transparent}
+.snv.on{color:var(--text-primary);border-bottom-color:var(--accent-2);font-weight:500}
+.snv.tag{color:var(--status-mixed)}
+.arrow{color:var(--status-mixed);font-size:var(--text-sm);margin:var(--space-xs) 0 0}
+/* desktop Q-9 */
+.desk{display:flex;border:1px solid var(--border-subtle);border-radius:12px;overflow:hidden;
+  background:var(--primary-bg);height:330px}
+.desk .left{flex:1;padding:var(--space-md);overflow:hidden}
+.desk .side{width:236px;flex:none;background:var(--surface-bg);border-left:1px solid var(--border-subtle);
+  padding:var(--space-base);box-shadow:-8px 0 24px rgba(0,0,0,.45)}
+.sh-k{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin-bottom:2px}
+.sh-t{font-size:var(--text-lg);font-weight:500;margin-bottom:var(--space-sm)}
+.sh-b{font-size:var(--text-sm);color:#cfcada}
+.sh-b p{margin:0 0 var(--space-sm)}
+.tagl{display:inline-block;font-size:11px;padding:1px 7px;border-radius:var(--radius-badge);
+  border:1px solid var(--border-subtle);color:var(--text-muted);margin-right:4px}
+.acc{background:rgba(255,255,255,.03);border-radius:8px;padding:var(--space-sm) var(--space-md);margin-top:6px;
+  font-size:var(--text-sm);color:#cfcada;border-left:2px solid var(--accent-2)}
+.pushed{outline:1px dashed rgba(240,160,48,.5);outline-offset:2px;position:relative}
+.pushed::after{content:"poussé vers le bas";position:absolute;right:6px;top:-16px;font-size:10px;color:var(--status-mixed)}
+</style>
+</head>
+<body>
+
+<h1>Clarification — Q-5 et Q-9</h1>
+<p class="lede">Deux points à éclaircir : par où l'on accède aux exports selon la piste retenue, et ce qui distingue réellement les deux formes de consultation (c'est-à-dire, uniquement, leur comportement sur desktop).</p>
+
+<!-- ══════════ Q-5 ══════════ -->
+<h2>Q-5 — le chemin d'accès, dans les deux cas</h2>
+<p class="why">Rappel du contexte réel, vérifié dans le code : la fiche de personnage est <strong>une seule page qui défile</strong>, avec des cartes empilées. Elle n'a pas d'onglets. Les onglets existent au niveau de la <em>partie</em> (Détails, Personnages, Invitations), et c'est là que vivent les grimoires de référence.</p>
+<div class="row">
+
+  <div>
+    <h3>A — Menu de la fiche</h3>
+    <p class="sub">Chemin : Parties → une partie → un personnage → le bouton ⋮ de l'en-tête. Aucun ajout de navigation, l'entrée est là où l'œil la cherche.</p>
+    <div class="phone">
+      <div class="body">
+        <div class="shead"><div class="por">OM</div>
+          <div style="flex:1;min-width:0"><div class="nm">Ombreflèche</div><div class="pl">Incon · Météomancien</div></div>
+          <div class="kebab hl">⋮</div></div>
+        <div class="blk"><div class="blkh">Attributs</div>
+          <div class="attrs"><div class="at"><b>d8</b><span>AGI</span></div><div class="at"><b>d6</b><span>ESP</span></div>
+            <div class="at"><b>d8</b><span>INT</span></div><div class="at"><b>d6</b><span>VIG</span></div></div></div>
+        <div class="blk"><div class="blkh">Talents</div>
+          <div class="rowi">Climatophile <span class="chev">›</span></div>
+          <div class="rowi">Lecture du ciel <span class="chev">›</span></div></div>
+      </div>
+      <div class="menu">
+        <div>Exporter la fiche (éditable)</div>
+        <div>Exporter la fiche (2 pages)</div>
+        <div>Exporter l'équipement</div>
+        <div>Exporter les notes</div>
+        <div class="sepr">Recadrer le portrait<small>pour l'export PDF</small></div>
+      </div>
+      <div class="tabbar"><div class="tb on">Parties</div><div class="tb">Personnages</div>
+        <div class="tb">Calendrier</div><div class="tb">Compte</div></div>
+    </div>
+    <p class="arrow">↑ un seul geste depuis la fiche, rien de nouveau à construire</p>
+    <p class="note"><span class="ok">Gagne :</span> aucune navigation ajoutée, aucune ligne prise à l'écran.<br>
+    <span class="cost">Coût :</span> qui n'ouvre pas le menu ignore que l'export existe.</p>
+  </div>
+
+  <div>
+    <h3>C — Destination « Documents »</h3>
+    <p class="sub">Chemin : même parcours, mais il faut d'abord <span class="new">créer une sous-navigation sur le personnage</span> — Fiche · Journal · Documents — qui n'existe pas aujourd'hui.</p>
+    <div class="phone">
+      <div class="body">
+        <div class="shead"><div class="por">OM</div>
+          <div style="flex:1;min-width:0"><div class="nm">Ombreflèche</div><div class="pl">Incon · Météomancien</div></div></div>
+        <div class="subnav"><span class="snv">Fiche</span><span class="snv">Journal</span><span class="snv on tag">Documents</span></div>
+        <div class="blk"><div class="blkh">Exports de ce personnage</div>
+          <div class="rowi">Fiche (éditable) <span class="chev">↓</span></div>
+          <div class="rowi">Fiche (2 pages) <span class="chev">↓</span></div>
+          <div class="rowi">Équipement <span class="chev">↓</span></div>
+          <div class="rowi">Notes <span class="chev">↓</span></div></div>
+        <div class="blk"><div class="blkh">Réglages d'impression</div>
+          <div class="rowi">Cadrage du portrait PDF <span class="chev">›</span></div></div>
+      </div>
+      <div class="tabbar"><div class="tb on">Parties</div><div class="tb">Personnages</div>
+        <div class="tb">Calendrier</div><div class="tb">Compte</div></div>
+    </div>
+    <p class="arrow">↑ la barre Fiche · Journal · Documents est <b>à construire</b> — elle n'existe pas</p>
+    <p class="note"><span class="ok">Gagne :</span> parfaitement découvrable, et de la place pour d'autres documents plus tard.<br>
+    <span class="cost">Coût :</span> une sous-navigation entière à créer sur le personnage, plus une ligne permanente à l'écran, pour cinq actions occasionnelles. Et les grimoires de référence, eux, restent au niveau de la partie — le regroupement que j'espérais n'a pas lieu, parce que les deux ne sont pas au même niveau.</p>
+  </div>
+</div>
+
+<!-- ══════════ Q-9 ══════════ -->
+<h2>Q-9 — la différence est uniquement sur desktop</h2>
+<p class="why">Sur téléphone, les deux options font <strong>exactement la même chose</strong> : une feuille qui monte du bas. Inutile de la remontrer. C'est le desktop, et lui seul, qui les sépare.</p>
+<div class="row">
+
+  <div>
+    <h3>Surface adaptative — le texte s'ouvre à côté</h3>
+    <p class="sub">Un panneau apparaît à droite. La fiche garde sa position, ses attributs restent lisibles, on peut comparer le texte et les chiffres.</p>
+    <div class="desk">
+      <div class="left">
+        <div class="shead"><div class="por">OM</div>
+          <div style="flex:1;min-width:0"><div class="nm">Ombreflèche</div><div class="pl">Incon · Météomancien · type Magie</div></div>
+          <div class="kebab">⋮</div></div>
+        <div class="blk"><div class="blkh">Attributs</div>
+          <div class="attrs"><div class="at"><b>d8</b><span>AGI</span></div><div class="at"><b>d6</b><span>ESP</span></div>
+            <div class="at"><b>d8</b><span>INT</span></div><div class="at"><b>d6</b><span>VIG</span></div></div></div>
+        <div class="blk"><div class="blkh">Talents</div>
+          <div class="rowi" style="color:var(--accent-2)">Climatophile <span class="chev">›</span></div>
+          <div class="rowi">Lecture du ciel <span class="chev">›</span></div></div>
+        <div class="blk"><div class="blkh">Équipement</div>
+          <div class="rowi">Bâton de marche <small>1</small></div>
+          <div class="rowi">Nécessaire de voyage <small>3</small></div></div>
+      </div>
+      <div class="side">
+        <div class="sh-k">Talent de classe</div>
+        <div class="sh-t">Climatophile</div>
+        <div class="sh-b">
+          <p>Vous choisissez un paysage ou un climat à la création de votre personnage.</p>
+          <p>Tous vos jets liés à ce paysage bénéficient d'un bonus de +1, et vous ne subissez jamais ses effets néfastes.</p>
+          <div><span class="tagl">INT</span><span class="tagl">difficulté 6</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="note"><span class="ok">Gagne :</span> la fiche entière reste visible pendant la lecture — rien ne bouge, rien n'est masqué.<br>
+    <span class="cost">Coût :</span> un seul texte à la fois ; ouvrir un autre talent remplace le contenu du panneau.</p>
+  </div>
+
+  <div>
+    <h3>Dépliant — le texte s'ouvre dedans</h3>
+    <p class="sub">Le texte se déplie sous l'élément, à l'intérieur de la fiche, et pousse vers le bas tout ce qui suit. Deux talents peuvent rester ouverts en même temps.</p>
+    <div class="desk">
+      <div class="left">
+        <div class="shead"><div class="por">OM</div>
+          <div style="flex:1;min-width:0"><div class="nm">Ombreflèche</div><div class="pl">Incon · Météomancien · type Magie</div></div>
+          <div class="kebab">⋮</div></div>
+        <div class="blk"><div class="blkh">Attributs</div>
+          <div class="attrs"><div class="at"><b>d8</b><span>AGI</span></div><div class="at"><b>d6</b><span>ESP</span></div>
+            <div class="at"><b>d8</b><span>INT</span></div><div class="at"><b>d6</b><span>VIG</span></div></div></div>
+        <div class="blk"><div class="blkh">Talents</div>
+          <div class="rowi" style="color:var(--accent-2)">Climatophile <span class="chev">⌄</span></div>
+          <div class="acc"><p style="margin:0 0 6px">Vous choisissez un paysage ou un climat à la création de votre personnage.</p>
+            <p style="margin:0 0 6px">Tous vos jets liés à ce paysage bénéficient d'un bonus de +1, et vous ne subissez jamais ses effets néfastes.</p>
+            <div><span class="tagl">INT</span><span class="tagl">difficulté 6</span></div></div>
+          <div class="rowi" style="margin-top:8px">Lecture du ciel <span class="chev">›</span></div></div>
+        <div class="blk pushed"><div class="blkh">Équipement</div>
+          <div class="rowi">Bâton de marche <small>1</small></div></div>
+      </div>
+    </div>
+    <p class="note"><span class="ok">Gagne :</span> plusieurs textes ouverts simultanément, pour comparer deux talents.<br>
+    <span class="cost">Coût :</span> tout ce qui suit descend — l'équipement est repoussé hors de vue au moment où on lit, et la position de chaque chose devient imprévisible.</p>
+  </div>
+</div>
+
+</body>
+</html>

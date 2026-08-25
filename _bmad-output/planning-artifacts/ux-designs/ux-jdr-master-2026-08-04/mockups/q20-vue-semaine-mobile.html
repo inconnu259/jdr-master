@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q-20 — la vue Semaine sur mobile</title>
+<style>
+:root{
+  --primary-bg:#0d0a14;--surface-bg:#1a1428;
+  --accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;
+  --status-todo:#f0a030;--status-soon:#ff7ad9;--status-done:#5a5a6a;
+  --status-unavailable:#e05252;--status-unknown:#3a3a4a;
+  --border-subtle:rgba(255,255,255,.07);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:34px;
+  --radius-card:10px;--radius-badge:6px;--radius-button:8px;
+  --text-xs:11px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:27px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg) var(--space-lg) 60px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px;border-top:1px solid var(--border-subtle);padding-top:var(--space-lg)}
+p{max-width:90ch}
+.lede{color:var(--text-muted);margin:0 0 var(--space-lg)}
+.why{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-md);max-width:90ch}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:var(--space-lg);align-items:start}
+.col{min-width:0}
+.tag{font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);
+  display:block;margin-bottom:6px}
+.tag.good{color:var(--accent-1)}
+.tag.bad{color:var(--status-unavailable)}
+/* téléphone 375 px, rendu à l'échelle */
+.phone{width:375px;max-width:100%;background:var(--primary-bg);border:1px solid var(--border-subtle);
+  border-radius:22px;padding:var(--space-md);box-shadow:0 8px 32px rgba(0,0,0,.7)}
+.phone.reco{border-color:rgba(126,200,164,.45);box-shadow:0 0 0 1px rgba(126,200,164,.2),0 8px 32px rgba(0,0,0,.7)}
+.hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-sm);gap:6px}
+.hdr b{font-size:var(--text-base)}
+.seg{display:inline-flex;border:1px solid var(--border-subtle);border-radius:var(--radius-button);overflow:hidden}
+.seg span{padding:3px 8px;font-size:var(--text-xs);color:var(--text-muted)}
+.seg span.on{color:var(--text-primary);background:rgba(155,109,255,.18)}
+.ruler{font-size:10px;color:var(--text-muted);text-align:center;margin-top:6px;letter-spacing:.05em}
+/* ══ (a) 3 jours ══ */
+.g3{display:grid;grid-template-columns:46px repeat(3,1fr);gap:3px}
+.g3 .h{font-size:var(--text-xs);color:var(--text-muted);text-align:center;padding:2px 0}
+.g3 .h.today{color:var(--accent-1);font-weight:700}
+.g3 .rl{font-size:var(--text-xs);color:var(--text-muted);display:flex;align-items:center;justify-content:flex-end;padding-right:5px}
+.g3 .c{background:rgba(255,255,255,.03);border-radius:5px;min-height:58px;padding:4px 5px;overflow:hidden}
+.g3 .c.av{background:rgba(126,200,164,.28)}
+.g3 .c.un{background:rgba(224,82,82,.28)}
+.g3 .c.uk{background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(58,58,74,.4) 3px 6px)}
+.g3 .c.se{background:rgba(255,122,217,.20);box-shadow:inset 0 0 0 1px rgba(255,122,217,.55)}
+.t{font-size:var(--text-xs);font-weight:700;line-height:1.22}
+.s{font-size:10px;color:var(--text-muted);line-height:1.25}
+.nav{display:flex;justify-content:space-between;align-items:center;font-size:var(--text-xs);
+  color:var(--text-muted);margin-top:var(--space-sm)}
+.dots{display:flex;gap:4px}
+.dots i{width:5px;height:5px;border-radius:50%;background:var(--status-unknown)}
+.dots i.on{background:var(--accent-2)}
+/* ══ (b) 7 jours pastille ══ */
+.g7{display:grid;grid-template-columns:38px repeat(7,1fr);gap:2px}
+.g7 .h{font-size:9px;color:var(--text-muted);text-align:center;padding:2px 0}
+.g7 .h.today{color:var(--accent-1);font-weight:700}
+.g7 .rl{font-size:9px;color:var(--text-muted);display:flex;align-items:center;justify-content:flex-end;padding-right:4px}
+.g7 .c{background:rgba(255,255,255,.03);border-radius:4px;min-height:38px;position:relative}
+.g7 .c.av{background:rgba(126,200,164,.28)}
+.g7 .c.un{background:rgba(224,82,82,.28)}
+.g7 .c.uk{background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(58,58,74,.4) 3px 6px)}
+.g7 .c.se{background:rgba(255,122,217,.35);box-shadow:inset 0 0 0 1px rgba(255,122,217,.6)}
+.g7 .c.se::after{content:"✦";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:13px;color:var(--status-soon)}
+/* ══ (d) grille pivotée ══ */
+.piv{display:grid;grid-template-columns:60px repeat(3,1fr);gap:3px}
+.piv .h{font-size:var(--text-xs);color:var(--text-muted);text-align:center;padding:2px 0}
+.piv .dl{font-size:var(--text-xs);color:var(--text-muted);display:flex;flex-direction:column;
+  justify-content:center;padding-right:5px;line-height:1.15}
+.piv .dl b{color:var(--text-primary);font-size:var(--text-sm)}
+.piv .dl.today b{color:var(--accent-1)}
+.piv .c{background:rgba(255,255,255,.03);border-radius:5px;min-height:46px;padding:4px 6px;overflow:hidden}
+.piv .c.av{background:rgba(126,200,164,.28)}
+.piv .c.un{background:rgba(224,82,82,.28)}
+.piv .c.uk{background:repeating-linear-gradient(45deg,transparent 0 3px,rgba(58,58,74,.4) 3px 6px)}
+.piv .c.se{background:rgba(255,122,217,.20);box-shadow:inset 0 0 0 1px rgba(255,122,217,.55)}
+.piv .c.vo{background:rgba(240,160,48,.16);box-shadow:inset 0 0 0 1px rgba(240,160,48,.5)}
+.piv .span3{grid-column:2 / span 3}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md)}
+.note b{color:var(--text-primary)}
+.verdict{font-size:var(--text-sm);margin-top:var(--space-sm);padding:var(--space-sm) var(--space-md);
+  background:var(--surface-bg);border-radius:var(--radius-card);border:1px solid var(--border-subtle)}
+.verdict b{color:var(--accent-1)}
+table.cmp{border-collapse:collapse;width:100%;font-size:var(--text-sm);margin-top:var(--space-base)}
+table.cmp th,table.cmp td{border:1px solid var(--border-subtle);padding:6px 9px;text-align:left;vertical-align:top}
+table.cmp th{color:var(--text-muted);font-weight:600;background:rgba(255,255,255,.02)}
+.selbar{display:flex;align-items:center;gap:6px;margin-top:var(--space-sm);flex-wrap:wrap;
+  background:var(--surface-bg);border:1px solid var(--accent-2);border-radius:var(--radius-card);
+  padding:6px var(--space-sm)}
+.selbar b{font-size:var(--text-xs)}
+.btn{font-size:var(--text-xs);padding:3px 9px;border-radius:var(--radius-button);border:1px solid;white-space:nowrap}
+.btn.no{color:var(--status-unavailable);border-color:var(--status-unavailable);background:rgba(224,82,82,.13)}
+.btn.yes{color:var(--accent-1);border-color:var(--accent-1);background:rgba(126,200,164,.13)}
+</style>
+</head>
+<body>
+
+<h1>Q-20 — la vue Semaine sur mobile</h1>
+<p class="lede">Sept colonnes sur 375 px laissent <b>≈ 45 px par jour</b>. Le titre d'une séance n'y tient pas, et FR-49/FR-50 exigent
+qu'on le voie. Les quatre écrans ci-dessous sont rendus à la <b>largeur réelle d'un téléphone</b> — même semaine, mêmes données.</p>
+
+<h2>Les quatre issues</h2>
+
+<div class="row">
+
+  <!-- (a) -->
+  <div class="col">
+    <span class="tag">(a) — 3 jours au lieu de 7</span>
+    <div class="phone">
+      <div class="hdr"><b>Jeu 20 – sam 22</b><span class="seg"><span>Mois</span><span class="on">Sem.</span><span>Agenda</span></span></div>
+      <div class="g3">
+        <div class="rl"></div><div class="h today">Jeu 20</div><div class="h">Ven 21</div><div class="h">Sam 22</div>
+        <div class="rl">Matin</div>
+        <div class="c uk"></div><div class="c uk"></div><div class="c av"></div>
+        <div class="rl">Après-m.</div>
+        <div class="c uk"></div><div class="c uk"></div><div class="c av"></div>
+        <div class="rl">Soir</div>
+        <div class="c se"><div class="t">Convoi du Nord</div><div class="s">chez Marc</div><div class="s">20 h 30</div></div>
+        <div class="c un"></div><div class="c av"></div>
+      </div>
+      <div class="nav"><span>‹ 17 – 19</span><span class="dots"><i></i><i class="on"></i><i></i></span><span>23 – 25 ›</span></div>
+      <div class="ruler">≈ 95 px par jour</div>
+    </div>
+    <div class="note">Tout tient : titre, lieu, heure. On navigue par fenêtres de trois jours.
+    <b>Mais ce n'est plus une semaine</b> — voir la semaine entière demande trois écrans, et la saisie en masse
+    « du lundi au dimanche » cesse d'être un seul geste.</div>
+  </div>
+
+  <!-- (b) -->
+  <div class="col">
+    <span class="tag bad">(b) — 7 jours dégradés en pastille</span>
+    <div class="phone">
+      <div class="hdr"><b>17 – 23 août</b><span class="seg"><span>Mois</span><span class="on">Sem.</span><span>Agenda</span></span></div>
+      <div class="g7">
+        <div class="rl"></div>
+        <div class="h today">L17</div><div class="h">M18</div><div class="h">M19</div><div class="h">J20</div><div class="h">V21</div><div class="h">S22</div><div class="h">D23</div>
+        <div class="rl">Mat.</div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl">A-m.</div>
+        <div class="c uk"></div><div class="c av"></div><div class="c av"></div><div class="c uk"></div><div class="c uk"></div><div class="c av"></div><div class="c uk"></div>
+        <div class="rl">Soir</div>
+        <div class="c un"></div><div class="c av"></div><div class="c av"></div><div class="c se"></div><div class="c un"></div><div class="c av"></div><div class="c uk"></div>
+      </div>
+      <div class="ruler">≈ 42 px par jour</div>
+    </div>
+    <div class="note">La semaine entière tient, la saisie en masse reste d'un geste.
+    <b>Mais on retombe exactement sur l'irritant de départ</b> : le jeudi soir porte un symbole, pas une séance.
+    Il faut taper pour savoir de quoi il s'agit.</div>
+  </div>
+
+</div>
+
+<div class="row" style="margin-top:var(--space-xl)">
+
+  <!-- (d) -->
+  <div class="col">
+    <span class="tag good">(d) — la grille pivote : les jours en lignes</span>
+    <div class="phone reco">
+      <div class="hdr"><b>17 – 23 août</b><span class="seg"><span>Mois</span><span class="on">Sem.</span><span>Agenda</span></span></div>
+      <div class="piv">
+        <div class="h"></div><div class="h">Matin</div><div class="h">Après-m.</div><div class="h">Soir</div>
+
+        <div class="dl today"><b>Lun 17</b>aujourd'hui</div>
+        <div class="c uk"></div><div class="c uk"></div><div class="c un"></div>
+
+        <div class="dl"><b>Mar 18</b></div>
+        <div class="c av"></div><div class="c av"></div><div class="c av"></div>
+
+        <div class="dl"><b>Mer 19</b></div>
+        <div class="c av"></div><div class="c av"></div><div class="c av"></div>
+
+        <div class="dl"><b>Jeu 20</b></div>
+        <div class="c uk"></div><div class="c uk"></div>
+        <div class="c se"><div class="t">Convoi du Nord</div><div class="s">chez Marc · 20 h 30</div></div>
+
+        <div class="dl"><b>Ven 21</b></div>
+        <div class="c uk"></div><div class="c uk"></div><div class="c un"></div>
+
+        <div class="dl"><b>Sam 22</b></div>
+        <div class="c av"></div><div class="c av"></div>
+        <div class="c vo"><div class="t">Vote — Ashal</div><div class="s">3 oui · 1 non</div></div>
+
+        <div class="dl"><b>Dim 23</b></div>
+        <div class="c uk"></div><div class="c uk"></div><div class="c uk"></div>
+      </div>
+      <div class="selbar"><b>Mar → jeu, soir</b><span style="flex:1"></span><span class="btn yes">Dispo</span><span class="btn no">Indispo</span></div>
+      <div class="ruler">≈ 100 px par créneau · la semaine entière visible</div>
+    </div>
+    <div class="note">Même contenu, axes échangés : <b>7 lignes de jours, 3 colonnes de créneaux</b>.
+    Le texte a de la place parce qu'il se développe dans la largeur — le sens où un téléphone en a.
+    La semaine reste entière, la sélection par glissement reste possible (verticalement, dans le sens du pouce),
+    et la lecture « quel jour, quel moment » ne change pas de vocabulaire.</div>
+    <div class="verdict"><b>Ma recommandation.</b> C'est la seule option qui ne sacrifie ni la semaine entière, ni le texte.
+    Coût : la grille mobile n'est plus la transposition de la grille desktop — c'est une transposition, pas un second écran à concevoir.</div>
+  </div>
+
+  <!-- (c) -->
+  <div class="col">
+    <span class="tag">(c) — pas de vue Semaine sur mobile</span>
+    <div class="phone" style="opacity:.75">
+      <div class="hdr"><b>Août 2026</b><span class="seg"><span class="on">Mois</span><span>Agenda</span></span></div>
+      <div style="padding:var(--space-lg) 0;text-align:center;color:var(--text-muted);font-size:var(--text-sm)">
+        Deux vues seulement.<br>La saisie en masse se fait en vue Mois,<br>à la journée entière.<br><br>
+        <span style="color:var(--status-todo)">La finesse par créneau devient<br>inaccessible depuis un téléphone.</span>
+      </div>
+    </div>
+    <div class="note">Le plus simple à construire. <b>Mais il retire une capacité au support majoritaire</b> :
+    l'estimation d'usage du palier est de 60 à 80 % sur téléphone côté joueur. Déclarer « je ne peux que le soir »
+    demanderait un ordinateur.</div>
+    <div class="verdict">À écarter, sauf si la vue Semaine s'avère inutilisée à l'usage réel.</div>
+  </div>
+
+</div>
+
+<h2>Comparaison</h2>
+<table class="cmp">
+  <tr><th>Critère</th><th>(a) 3 jours</th><th>(b) 7 pastilles</th><th>(c) pas de Semaine</th><th>(d) grille pivotée</th></tr>
+  <tr><td>La séance se lit sans taper</td><td>Oui</td><td><b>Non</b></td><td>—</td><td><b>Oui</b></td></tr>
+  <tr><td>La semaine entière est visible</td><td><b>Non</b> (3 écrans)</td><td>Oui</td><td>—</td><td><b>Oui</b></td></tr>
+  <tr><td>Saisie « lundi → dimanche » d'un geste</td><td><b>Non</b></td><td>Oui</td><td>Journée entière seulement</td><td><b>Oui</b></td></tr>
+  <tr><td>Finesse par créneau sur mobile</td><td>Oui</td><td>Oui</td><td><b>Perdue</b></td><td>Oui</td></tr>
+  <tr><td>Écart avec la grille desktop</td><td>Faible</td><td>Nul</td><td>—</td><td>Modéré (axes échangés)</td></tr>
+  <tr><td>Informations pratiques affichables</td><td>Oui</td><td>Non</td><td>—</td><td><b>Oui</b></td></tr>
+</table>
+
+<p class="why" style="margin-top:var(--space-base)"><b>Note sur (d).</b> Le pivot ne s'applique qu'en dessous du seuil mobile ;
+au-delà, la grille reste jours en colonnes. C'est une bascule de mise en page, pas une seconde vue à maintenir —
+les mêmes cellules, le même geste de sélection, la même préséance d'affichage.</p>
+
+</body>
+</html>

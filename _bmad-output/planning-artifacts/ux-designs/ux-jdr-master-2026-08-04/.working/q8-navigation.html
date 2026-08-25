@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Q-8 — navigation : barre basse vs onglets</title>
+<style>
+:root{--primary-bg:#0d0a14;--surface-bg:#1a1428;--accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;--status-mixed:#f0a030;--status-unknown:#3a3a4a;
+  --status-unavailable:#e05252;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--radius-badge:6px;--radius-button:8px;
+  --text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5)}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px}
+h3{font-size:var(--text-lg);margin:var(--space-base) 0 var(--space-xs)}
+.lede,.why{color:var(--text-muted);max-width:84ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:var(--space-xl);align-items:start}
+.pair{display:flex;gap:var(--space-base);flex-wrap:wrap}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md)}
+.cost{color:var(--status-mixed)} .ok{color:var(--accent-1)}
+.phone{width:300px;border:1px solid var(--border-subtle);border-radius:20px;background:var(--primary-bg);
+  box-shadow:0 8px 32px rgba(0,0,0,.7);overflow:hidden;display:flex;flex-direction:column;height:520px}
+.body{flex:1;overflow:hidden;padding:var(--space-md) var(--space-md) 0}
+.hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-sm)}
+.hdr b{font-size:var(--text-lg)}
+.burger{color:var(--text-muted);font-size:18px}
+.ctrl{display:flex;gap:var(--space-xs);align-items:center;margin-bottom:var(--space-sm)}
+.ico{width:28px;height:28px;border-radius:var(--radius-button);border:1px solid var(--border-subtle);
+  display:grid;place-items:center;color:var(--text-muted);font-size:12px;flex:none}
+.ico.on{color:var(--text-primary);border-color:var(--accent-2);background:rgba(155,109,255,.13)}
+.drop{font-size:var(--text-sm);color:var(--text-muted);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-button);padding:4px 8px;white-space:nowrap}
+.sect{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);
+  margin:var(--space-sm) 0 var(--space-xs);display:flex;align-items:center;gap:6px}
+.sect::after{content:"";flex:1;height:1px;background:var(--border-subtle)}
+.sect.hot{color:var(--status-mixed)}
+.card{display:flex;background:var(--surface-bg);border-radius:var(--radius-card);box-shadow:var(--elev-card);
+  margin-bottom:var(--space-sm);overflow:hidden}
+.strip{width:4px;flex:none}
+.cin{flex:1;min-width:0;display:flex;gap:var(--space-sm);padding:var(--space-sm) var(--space-md);align-items:flex-start}
+.vg{width:40px;height:40px;border-radius:8px;flex:none;position:relative;overflow:hidden;
+  background:radial-gradient(120% 110% at 60% 0%,#241a3a,#0d0a14)}
+.vg.f{background:radial-gradient(130% 110% at 60% 0%,#12301c,#080f0a)}
+.vg i{position:absolute;border-radius:50%;filter:blur(6px)}
+.vg .mk{position:absolute;inset:0;display:grid;place-items:center;font-size:12px;font-weight:700;
+  color:rgba(232,232,240,.92);text-shadow:0 1px 4px rgba(0,0,0,.9)}
+.tx{flex:1;min-width:0}
+.n1{font-size:var(--text-base);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.n2{font-size:var(--text-sm);color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc{color:var(--accent-1);font-style:italic}
+.chips{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+.chip{font-size:11px;padding:1px 7px;border-radius:var(--radius-badge);border:1px solid;white-space:nowrap}
+.c-todo{color:var(--status-mixed);border-color:var(--status-mixed);background:rgba(240,160,48,.15)}
+.c-info{color:var(--text-muted);border-color:var(--status-unknown);background:rgba(58,58,74,.4)}
+.c-mj{color:var(--accent-2);border-color:var(--accent-2);background:rgba(155,109,255,.13)}
+.c-pj{color:var(--accent-1);border-color:var(--accent-1);background:rgba(126,200,164,.13)}
+.done{opacity:.45}
+/* barre basse */
+.tabbar{display:flex;border-top:1px solid var(--border-subtle);background:rgba(0,0,0,.35);flex:none}
+.tb{flex:1;text-align:center;padding:8px 0 10px;color:var(--text-muted);font-size:11px}
+.tb svg{display:block;margin:0 auto 3px}
+.tb.on{color:var(--accent-1)}
+.tb.on svg{color:var(--accent-1)}
+/* onglets haut */
+.tabs{display:flex;gap:var(--space-sm);border-bottom:1px solid var(--border-subtle);margin-bottom:var(--space-sm)}
+.tab{padding:6px 2px;font-size:var(--text-base);color:var(--text-muted);border-bottom:2px solid transparent}
+.tab.on{color:var(--text-primary);border-bottom-color:var(--accent-2);font-weight:500}
+/* desktop */
+.desk{border:1px solid var(--border-subtle);border-radius:12px;background:var(--primary-bg);overflow:hidden;max-width:620px}
+.topnav{display:flex;align-items:center;gap:var(--space-base);padding:10px var(--space-base);
+  border-bottom:1px solid var(--border-subtle);background:rgba(0,0,0,.3)}
+.topnav .brand{font-weight:600;margin-right:var(--space-sm)}
+.topnav a{font-size:var(--text-sm);color:var(--text-muted)}
+.topnav a.on{color:var(--accent-1)}
+.topnav .sp{flex:1}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="iDice"><rect x="2" y="2" width="16" height="16" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <circle cx="7" cy="7" r="1.3" fill="currentColor"/><circle cx="13" cy="13" r="1.3" fill="currentColor"/>
+    <circle cx="10" cy="10" r="1.3" fill="currentColor"/></g>
+  <g id="iShield"><path d="M10 2 L17 4.4 V9.6 C17 13.8 13.6 16.9 10 18 C6.4 16.9 3 13.8 3 9.6 V4.4 Z"
+    fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></g>
+  <g id="iCal"><rect x="2.5" y="4" width="15" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <line x1="2.5" y1="8.5" x2="17.5" y2="8.5" stroke="currentColor" stroke-width="1.6"/>
+    <line x1="6.5" y1="2" x2="6.5" y2="5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+    <line x1="13.5" y1="2" x2="13.5" y2="5.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></g>
+  <g id="iUser"><circle cx="10" cy="7" r="3.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
+    <path d="M3.4 17.6 C3.4 13.6 6.4 12 10 12 C13.6 12 16.6 13.6 16.6 17.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></g>
+</defs></svg>
+
+<h1>Q-8 — deux navigations, sur pièce</h1>
+<p class="lede">Même contenu, même liste que celle qu'on a conçue : regroupement par urgence, bande d'état, bannière générative en petit format, convention d'identité appliquée (personnage en italique). Seule change la façon d'atteindre les personnages — et, avec elle, la façon d'atteindre tout le reste.</p>
+
+<div class="two">
+
+<!-- ═══════ A — BARRE BASSE ═══════ -->
+<div>
+  <h2>A — Barre de navigation basse</h2>
+  <p class="why">Quatre destinations permanentes, à portée de pouce. On sait toujours où on est, et changer d'écran ne demande jamais de remonter en haut de page.</p>
+  <div class="pair">
+    <div class="phone">
+      <div class="body">
+        <div class="hdr"><b>Mes parties</b><span class="burger">⌕</span></div>
+        <div class="ctrl"><span class="ico">▦</span><span class="ico on">▤</span><span class="ico">☰</span>
+          <span class="drop">Urgent ▾</span><span class="ico" style="margin-left:auto">⛭</span></div>
+        <div class="sect hot">◆ Ça t'attend (2)</div>
+        <div class="card"><div class="strip" style="background:var(--status-mixed)"></div><div class="cin">
+          <div class="vg"><i style="width:44px;height:44px;left:-10px;top:-14px;background:#9b6dff;opacity:.55"></i>
+            <i style="width:30px;height:30px;right:-6px;bottom:-10px;background:#7ec8a4;opacity:.4"></i><span class="mk">CK</span></div>
+          <div class="tx"><div class="n1">Les Cendres de Kavaan ★</div>
+            <div class="n2">Campagne · <span class="pc">Ombreflèche</span></div>
+            <div class="chips"><span class="chip c-todo">Personnage à créer</span><span class="chip c-todo">Vote</span></div></div>
+        </div></div>
+        <div class="card"><div class="strip" style="background:var(--status-mixed)"></div><div class="cin">
+          <div class="vg f"><i style="width:40px;height:40px;right:-8px;top:-12px;background:#2ecc71;opacity:.5"></i>
+            <span class="mk">CN</span></div>
+          <div class="tx"><div class="n1">Le Convoi du Nord</div>
+            <div class="n2">Épisodique · <span class="chip c-mj">MJ</span></div>
+            <div class="chips"><span class="chip c-todo">Aucun scénario</span></div></div>
+        </div></div>
+        <div class="sect">En cours (1)</div>
+        <div class="card"><div class="strip" style="background:var(--accent-1)"></div><div class="cin">
+          <div class="vg"><i style="width:36px;height:36px;left:50%;top:-12px;background:#7ec8a4;opacity:.45"></i><span class="mk">NL</span></div>
+          <div class="tx"><div class="n1">La Nuit des Lanternes</div>
+            <div class="n2">One-shot · <span class="pc">Brindavoine</span></div>
+            <div class="chips"><span class="chip c-info">12 août, soirée</span></div></div>
+        </div></div>
+      </div>
+      <div class="tabbar">
+        <div class="tb on"><svg width="20" height="20"><use href="#iDice"/></svg>Parties</div>
+        <div class="tb"><svg width="20" height="20"><use href="#iShield"/></svg>Personnages</div>
+        <div class="tb"><svg width="20" height="20"><use href="#iCal"/></svg>Calendrier</div>
+        <div class="tb"><svg width="20" height="20"><use href="#iUser"/></svg>Compte</div>
+      </div>
+    </div>
+
+    <div class="phone">
+      <div class="body">
+        <div class="hdr"><b>Mes personnages</b><span class="burger">⌕</span></div>
+        <div class="ctrl"><span class="ico">▦</span><span class="ico on">▤</span><span class="ico">☰</span>
+          <span class="drop">Par partie ▾</span></div>
+        <div class="card"><div class="strip" style="background:var(--status-mixed)"></div><div class="cin">
+          <div class="vg" style="background:rgba(155,109,255,.18)"><span class="mk">OM</span></div>
+          <div class="tx"><div class="n1 pc">Ombreflèche</div>
+            <div class="n2">Les Cendres de Kavaan · niveau 3</div>
+            <div class="chips"><span class="chip c-todo">Montée de niveau</span></div></div>
+        </div></div>
+        <div class="card"><div class="strip" style="background:var(--accent-1)"></div><div class="cin">
+          <div class="vg" style="background:rgba(126,200,164,.18)"><span class="mk">BR</span></div>
+          <div class="tx"><div class="n1 pc">Brindavoine</div>
+            <div class="n2">La Nuit des Lanternes · niveau 1</div></div>
+        </div></div>
+        <div class="card done"><div class="strip" style="background:var(--status-unknown)"></div><div class="cin">
+          <div class="vg" style="background:rgba(58,58,74,.5)"><span class="mk">GR</span></div>
+          <div class="tx"><div class="n1 pc">Grelotte</div>
+            <div class="n2">Le Serment de Rives-Basses · terminée</div></div>
+        </div></div>
+      </div>
+      <div class="tabbar">
+        <div class="tb"><svg width="20" height="20"><use href="#iDice"/></svg>Parties</div>
+        <div class="tb on"><svg width="20" height="20"><use href="#iShield"/></svg>Personnages</div>
+        <div class="tb"><svg width="20" height="20"><use href="#iCal"/></svg>Calendrier</div>
+        <div class="tb"><svg width="20" height="20"><use href="#iUser"/></svg>Compte</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Sur desktop, les mêmes entrées en barre haute</h3>
+  <div class="desk">
+    <div class="topnav"><span class="brand">jdr-master</span>
+      <a class="on">Parties</a><a>Personnages</a><a>Calendrier</a><span class="sp"></span><a>Compte</a></div>
+    <div style="padding:var(--space-md)">
+      <div class="ctrl"><span class="ico">▦</span><span class="ico on">▤</span><span class="ico">☰</span>
+        <span class="drop">Urgent ▾</span><span class="drop">Tous</span>
+        <span class="drop" style="margin-left:auto">⌕ Rechercher une partie</span></div>
+      <div class="sect hot">◆ Ça t'attend (2)</div>
+      <div class="card" style="max-width:none"><div class="strip" style="background:var(--status-mixed)"></div><div class="cin">
+        <div class="vg"><span class="mk">CK</span></div>
+        <div class="tx"><div class="n1">Les Cendres de Kavaan ★</div>
+          <div class="n2">Campagne · <span class="pc">Ombreflèche</span></div></div></div></div>
+    </div>
+  </div>
+
+  <p class="note"><span class="ok">Gagne :</span> traite Q-8, l'entrée Compte (FR-1) et le vide laissé par la bascule MJ/joueur (FR-7) d'un seul coup. Le pouce atteint tout sans remonter. Le calendrier cesse d'être enfoui dans un menu.<br>
+  <span class="cost">Coût :</span> c'est une refonte de la navigation, et la barre mange environ 50 px de hauteur en permanence.</p>
+</div>
+
+<!-- ═══════ B — ONGLETS ═══════ -->
+<div>
+  <h2>B — Onglets en tête de page</h2>
+  <p class="why">Deux onglets au-dessus de la liste, le reste de la navigation inchangé : le menu garde Calendrier, Compte et la création de partie.</p>
+  <div class="pair">
+    <div class="phone">
+      <div class="body">
+        <div class="hdr"><b>≡</b><span class="burger">⌕</span></div>
+        <div class="tabs"><span class="tab on">Parties</span><span class="tab">Personnages</span></div>
+        <div class="ctrl"><span class="ico">▦</span><span class="ico on">▤</span><span class="ico">☰</span>
+          <span class="drop">Urgent ▾</span><span class="ico" style="margin-left:auto">⛭</span></div>
+        <div class="sect hot">◆ Ça t'attend (2)</div>
+        <div class="card"><div class="strip" style="background:var(--status-mixed)"></div><div class="cin">
+          <div class="vg"><i style="width:44px;height:44px;left:-10px;top:-14px;background:#9b6dff;opacity:.55"></i>
+            <span class="mk">CK</span></div>
+          <div class="tx"><div class="n1">Les Cendres de Kavaan ★</div>
+            <div class="n2">Campagne · <span class="pc">Ombreflèche</span></div>
+            <div class="chips"><span class="chip c-todo">Personnage à créer</span><span class="chip c-todo">Vote</span></div></div>
+        </div></div>
+        <div class="card"><div class="strip" style="background:var(--status-mixed)"></div><div class="cin">
+          <div class="vg f"><i style="width:40px;height:40px;right:-8px;top:-12px;background:#2ecc71;opacity:.5"></i><span class="mk">CN</span></div>
+          <div class="tx"><div class="n1">Le Convoi du Nord</div>
+            <div class="n2">Épisodique · <span class="chip c-mj">MJ</span></div>
+            <div class="chips"><span class="chip c-todo">Aucun scénario</span></div></div>
+        </div></div>
+        <div class="sect">En cours (1)</div>
+        <div class="card"><div class="strip" style="background:var(--accent-1)"></div><div class="cin">
+          <div class="vg"><span class="mk">NL</span></div>
+          <div class="tx"><div class="n1">La Nuit des Lanternes</div>
+            <div class="n2">One-shot · <span class="pc">Brindavoine</span></div></div></div></div>
+      </div>
+    </div>
+
+    <div class="phone">
+      <div class="body">
+        <div class="hdr"><b>≡</b><span class="burger">⌕</span></div>
+        <div class="tabs"><span class="tab">Parties</span><span class="tab on">Personnages</span></div>
+        <div class="ctrl"><span class="ico">▦</span><span class="ico on">▤</span><span class="ico">☰</span>
+          <span class="drop">Par partie ▾</span></div>
+        <div class="card"><div class="strip" style="background:var(--status-mixed)"></div><div class="cin">
+          <div class="vg" style="background:rgba(155,109,255,.18)"><span class="mk">OM</span></div>
+          <div class="tx"><div class="n1 pc">Ombreflèche</div>
+            <div class="n2">Les Cendres de Kavaan · niveau 3</div>
+            <div class="chips"><span class="chip c-todo">Montée de niveau</span></div></div></div></div>
+        <div class="card"><div class="strip" style="background:var(--accent-1)"></div><div class="cin">
+          <div class="vg" style="background:rgba(126,200,164,.18)"><span class="mk">BR</span></div>
+          <div class="tx"><div class="n1 pc">Brindavoine</div>
+            <div class="n2">La Nuit des Lanternes · niveau 1</div></div></div></div>
+        <div class="card done"><div class="strip" style="background:var(--status-unknown)"></div><div class="cin">
+          <div class="vg" style="background:rgba(58,58,74,.5)"><span class="mk">GR</span></div>
+          <div class="tx"><div class="n1 pc">Grelotte</div>
+            <div class="n2">Le Serment de Rives-Basses · terminée</div></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note"><span class="ok">Gagne :</span> le plus petit changement possible, bascule immédiate, aucune refonte. Rien d'autre ne bouge.<br>
+  <span class="cost">Coût :</span> trois lignes empilées avant la première partie (titre, onglets, contrôles) sur un écran de téléphone. Et ça ne traite que Q-8 : le Compte et le Calendrier restent derrière le menu ≡, donc à deux gestes.</p>
+</div>
+
+</div>
+
+<h2>Le point qui tranche, à mon avis</h2>
+<p class="why">Compte l'empilement en haut de l'écran mobile. Dans la version B : titre, onglets, barre de contrôles, intertitre de section — la première partie commence au quart de l'écran. Dans la version A, la navigation est descendue en bas où elle ne dispute rien au contenu, et le haut ne porte que le titre et les contrôles. Sur un palier dont le reproche fondateur est <em>« l'app ne dit pas où on en est »</em>, chaque ligne gagnée en haut est une carte de partie visible en plus.</p>
+
+</body>
+</html>

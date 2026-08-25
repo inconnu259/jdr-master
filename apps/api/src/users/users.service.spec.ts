@@ -30,6 +30,7 @@ describe('UsersService', () => {
       await service.findByEmailOrPseudo('alice');
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: { OR: [{ email: 'alice' }, { pseudo: 'alice' }] },
+        include: { calendarLayers: true },
       });
     });
 

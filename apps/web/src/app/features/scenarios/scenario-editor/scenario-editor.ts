@@ -11,6 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import type {
@@ -25,6 +26,8 @@ import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenari
 import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { AnnouncementsService } from '../../../core/announcements/announcements.service';
+import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
+import { scrollToAnnouncement } from '../../../core/announcements/scroll-to-announcement.util';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { FieldEditPencil } from '../../characters/character-sheet/field-edit-pencil/field-edit-pencil';
@@ -70,9 +73,11 @@ export class ScenarioEditor implements OnInit {
   private readonly characterService = inject(CharacterService);
   private readonly partiesService = inject(PartiesService);
   private readonly announcementsService = inject(AnnouncementsService);
+  private readonly unseenAnnouncementsSvc = inject(UnseenAnnouncementsService);
   protected readonly theme = inject(ThemeToneService);
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
 
   readonly scenarioInput = input.required<ScenarioDto>({ alias: 'scenario' });
 
@@ -128,6 +133,14 @@ export class ScenarioEditor implements OnInit {
   protected readonly scenarioAnnouncements = computed(() =>
     this.announcements().filter((a) => a.scenarioId === this.scenario()?.id),
   );
+  // Story 29.13 (révision) : le marquage « vue » se déclenche sur un clic explicite de l'utilisateur
+  // sur AnnonceCard (opened()), plus au simple affichage.
+  protected readonly unseenAnnouncementIds = computed(
+    () => new Set(this.unseenAnnouncementsSvc.unseenAnnouncements().map((a) => a.id)),
+  );
+  // Story 29.13 (révision) : id transmis en query param par le bandeau du Shell — consommé une
+  // seule fois dès que l'annonce apparaît dans scenarioAnnouncements() (cf. effect() au constructeur).
+  private pendingScrollAnnouncementId = this.route.snapshot.queryParamMap.get('announcementId');
 
   // AD-4 : `participants` n'est renvoyé par le backend que pour CAMPAGNE_EPISODIQUE (toujours
   // `undefined` sinon) — sa seule présence sert de signal fiable, sans avoir à threader `partieKind`
@@ -192,6 +205,25 @@ export class ScenarioEditor implements OnInit {
       if (!matchesPartie(change, partieId)) return;
       untracked(() => void this.refreshScenario());
     });
+
+    // Story 29.13 (révision du 2026-08-13, retour utilisateur) : clic sur le bandeau du Shell —
+    // défile jusqu'à l'annonce visée dès qu'elle apparaît dans scenarioAnnouncements().
+    effect(() => {
+      const id = this.pendingScrollAnnouncementId;
+      if (!id) return;
+      const found = this.scenarioAnnouncements().some((a) => a.id === id);
+      if (!found) return;
+      untracked(() => {
+        this.pendingScrollAnnouncementId = null;
+        scrollToAnnouncement(id);
+      });
+    });
+  }
+
+  /** Story 29.13 (révision) : « j'ouvre l'annonce » = clic explicite sur AnnonceCard, plus le
+   *  simple affichage. */
+  protected markAnnouncementOpened(announcementId: string): void {
+    void this.unseenAnnouncementsSvc.markRead(announcementId);
   }
 
   private applyScenario(s: ScenarioDto): void {

@@ -17,7 +17,7 @@ import { ConfirmDialog } from '../../parties/confirm-dialog/confirm-dialog';
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
   AFTERNOON: 'Après-midi',
-  EVENING: 'Soirée',
+  EVENING: 'Soir',
   FULL_DAY: 'Journée',
 };
 

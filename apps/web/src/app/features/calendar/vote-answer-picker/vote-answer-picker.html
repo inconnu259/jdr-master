@@ -1,0 +1,44 @@
+<!--
+  Story 36.7 — le sélecteur de réponse, repris AU PIXEL du contrat d'UI
+  (`contrat-ui-calendrier.html:198-203` pour la forme, `:626-636` pour le contenu).
+
+  Motif ARIA de menu : le conteneur est nommé par le jour et le créneau, chaque choix est un
+  `menuitemradio` dont `aria-checked` dit lequel est le mien, le retrait est un `menuitem`.
+-->
+<div class="picker" role="menu" [attr.aria-label]="'Répondre au vote — ' + slotLabel()">
+  <!-- Nommer le créneau n'est pas décoratif : le sélecteur est ancré sur une bande de quelques
+       pixels, et rien d'autre à l'écran ne dit sur QUEL créneau on est en train de répondre. -->
+  <div class="picker__head">{{ slotLabel() }}</div>
+
+  @for (answer of ANSWERS; track answer) {
+    <button
+      #answerBtn
+      type="button"
+      class="opt2 opt2--answer"
+      role="menuitemradio"
+      [class.sel]="isMine(answer)"
+      [attr.aria-checked]="isMine(answer)"
+      [attr.data-answer]="answer"
+      [disabled]="busy()"
+      (click)="choose(answer)"
+    >
+      <!-- La pastille DOUBLE le mot, elle ne le remplace jamais (P-1). -->
+      <i aria-hidden="true"></i>{{ label(answer) }}
+    </button>
+  }
+
+  @if (canWithdraw()) {
+    <!-- La quatrième entrée est le chemin UNIQUE de FR-35 dans le calendrier
+         (`contrat-ui-calendrier.html:634`) : depuis cette story, aucun autre n'y subsiste. -->
+    <div class="sep" aria-hidden="true"></div>
+    <button
+      type="button"
+      class="opt2 opt2--withdraw"
+      role="menuitem"
+      [disabled]="busy()"
+      (click)="withdraw()"
+    >
+      Retirer ma réponse
+    </button>
+  }
+</div>

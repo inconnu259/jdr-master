@@ -1,0 +1,27 @@
+/* Le contenu du menu « ⋮ » de la fiche (Story 31.1). Mise en page seulement : les deux enveloppes
+   (menu ancré, feuille du bas) portent le fond, la bordure et l'ombre — même patron que
+   `calendar-display-panel.scss` (36.14), pour la même raison : un seul composant, deux
+   présentations. */
+.actions-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  box-sizing: border-box;
+}
+
+.actions-menu__item {
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 6px;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--mat-sys-secondary-container, #cce);
+  }
+}

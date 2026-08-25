@@ -1,0 +1,42 @@
+[
+  {
+    "key": "classId",
+    "label": "Choisir sa classe",
+    "text": "La première chose à faire est de choisir sa classe. Celle-ci correspond à la fois au métier et à la position sociale du voyageur. Les classes recommandées aux débutants sont le chasseur, le guérisseur, le marchand et le ménestrel. L'artisan, le fermier et le noble sont à conseiller aux joueurs qui ont déjà un peu plus l'habitude."
+  },
+  {
+    "key": "typeId",
+    "label": "Choisir son type",
+    "text": "Les voyageurs sont confrontés à des difficultés très diverses et privilégient souvent une même façon de les résoudre. Choisissez un des types suivants :"
+  },
+  {
+    "key": "magic",
+    "label": "Choisir sa magie",
+    "text": "Le personnage peut à tout moment réaliser l'impossible. On distingue deux types de magie : la magie rituelle et la magie des saisons. Même s'il faut passer du temps à l'étudier et à s'entraîner avant d'en percer les mystères, tout le monde peut apprendre la magie rituelle. Tous les êtres humains possèdent un lien avec l'une ou l'autre des saisons. Choisissez votre saison d'affinité, puis les sorts de magie rituelle que votre voyageur connaît déjà."
+  },
+  {
+    "key": "attributes",
+    "label": "Déterminer les attributs",
+    "text": "Avant de partir en voyage, on détermine les quatre attributs des personnages. Ceux-ci représentent les forces et les faiblesses des voyageurs : l'agilité (AGI), l'esprit (ESP), l'intelligence (INT) et la vigueur (VIG). Leur niveau est indiqué par un nombre pair compris entre 4 et 12 (4 et 8 pour un voyageur débutant). Plus ce nombre est élevé, mieux c'est. Il indique le dé utilisé lors des tests concernant cet attribut. Ainsi, un joueur dont le personnage a 6 en vigueur lance un dé à 6 faces à chaque test de VIG. Choisissez une des trois possibilités ci-dessous et répartissez librement les valeurs entre les attributs. Ainsi, un personnage polyvalent pourra avoir d8 en VIG, d4 en AGI, d6 en INT et d6 en ESP."
+  },
+  {
+    "key": "weaponCategoryId",
+    "label": "Choisir une arme favorite",
+    "text": "Il y a une famille d'armes que le voyageur a appris à manier et qu'il utilise en priorité lorsqu'il doit se battre. Il s'agit de son arme favorite. Choisissez-en une parmi les catégories suivantes : arcs, épées courtes, épées longues, haches et lances. Le voyageur possède une arme gratuite de cette catégorie dans son équipement de départ. Quand il utilise tout autre type d'arme, il s'épuise plus rapidement et perd 1 PV par attaque"
+  },
+  {
+    "key": "fetiqueObject",
+    "label": "Choisir son objet fétiche",
+    "text": "Votre voyageur possède un objet fétiche qu'il emporte partout avec lui et qui en dit beaucoup sur sa personnalité. Toutefois, celui-ci n'a aucun effet en termes de jeu. Choisissez l'objet en question."
+  },
+  {
+    "key": "equipment",
+    "label": "Acheter son équipement",
+    "text": "Pour les débutants ou les parties rapides, l'option suivante vous permet de jouer et de créer un personnage de façon simplifiée."
+  },
+  {
+    "key": "narrative",
+    "label": "Lui donner une personnalité",
+    "text": "Prenez le temps de décider des détails suivants :"
+  }
+]

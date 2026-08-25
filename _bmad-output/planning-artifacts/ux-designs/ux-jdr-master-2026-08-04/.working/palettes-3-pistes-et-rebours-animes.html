@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trois pistes de palette + comptes à rebours animés</title>
+<style>
+:root{--text-muted:#7a7a8a;--border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--radius-badge:6px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5)}
+/* fonds + accents des 3 themes (inchanges) */
+.t-emeraude{--bg:#0d0a14;--surf:#1a1428;--a1:#7ec8a4;--a2:#9b6dff;--txt:#e8e8f0;--mut:#7a7a8a}
+.t-foret{--bg:#080f0a;--surf:#0f1a10;--a1:#2ecc71;--a2:#f0c040;--txt:#e8f0ea;--mut:#6a806e}
+.t-steam{--bg:#1a1008;--surf:#241808;--a1:#cd7f32;--a2:#4a7c59;--txt:#e8dcc8;--mut:#8a7a5a}
+/* ── PISTE 1 : universelle, identique dans les 3 themes ── */
+.p1{--s-todo:#f2555f;--s-live:#6fd66a;--s-soon:#5b8dff;--s-done:#5f5f6c}
+/* ── PISTE 2 : thematique, une declinaison par univers ── */
+.p2.t-emeraude{--s-todo:#f0a030;--s-live:#3fd4ff;--s-soon:#ff7ad9;--s-done:#5a5a6a}
+.p2.t-foret{--s-todo:#e0573f;--s-live:#35c7b0;--s-soon:#6f8fd8;--s-done:#5f6b60}
+.p2.t-steam{--s-todo:#ef4f52;--s-live:#35b7c9;--s-soon:#8f86d8;--s-done:#6b6459}
+/* ── PISTE 3 : sobre, une seule couleur vive ── */
+.p3{--s-todo:#ff9147;--s-live:#b9c4bd;--s-soon:#8b93a8;--s-done:#55555f}
+.p3.t-steam{--s-live:#c8bfae;--s-soon:#94907f}
+.p3.t-foret{--s-live:#bcccbe;--s-soon:#8b9a95}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:#e8e8f0;padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px}
+h3{font-size:var(--text-lg);margin:var(--space-base) 0 var(--space-xs)}
+.lede,.why{color:var(--text-muted);max-width:86ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:var(--space-base);align-items:start}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md);max-width:86ch}
+.panel{background:var(--surf);border:1px solid var(--border-subtle);border-radius:var(--radius-card);
+  padding:var(--space-md);box-shadow:var(--elev-card);color:var(--txt)}
+.ttl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);margin-bottom:var(--space-sm)}
+.sl{display:flex;justify-content:space-between;align-items:center;gap:var(--space-sm);
+  padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:var(--text-sm)}
+.sl:last-child{border-bottom:none}
+.bg{display:inline-flex;align-items:center;gap:5px;font-size:var(--text-sm);padding:1px 8px;
+  border-radius:var(--radius-badge);border:1px solid;white-space:nowrap}
+.todo{color:var(--s-todo);border-color:var(--s-todo);background:color-mix(in srgb,var(--s-todo) 16%,transparent)}
+.live{color:var(--s-live);border-color:var(--s-live);background:color-mix(in srgb,var(--s-live) 15%,transparent)}
+.soon{color:var(--s-soon);border-color:var(--s-soon);background:color-mix(in srgb,var(--s-soon) 15%,transparent)}
+.soon.full{background:var(--s-soon);color:var(--bg);font-weight:600;border-color:var(--s-soon)}
+.done{color:var(--s-done);border-color:var(--s-done);background:color-mix(in srgb,var(--s-done) 26%,transparent)}
+.acc{margin-top:var(--space-sm);font-size:11px;color:var(--mut);display:flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:26px;height:14px;border-radius:4px;border:1px solid rgba(255,255,255,.16)}
+.strip4{display:flex;gap:4px;margin-bottom:var(--space-sm)}
+.strip4 i{flex:1;height:8px;border-radius:3px}
+/* ══════ comptes a rebours animes ══════ */
+@keyframes grow{0%{width:6%}88%{width:94%}100%{width:94%}}
+@keyframes budmove{0%{left:6%}88%{left:92%}100%{left:92%}}
+@keyframes budglow{0%,80%{box-shadow:0 0 8px rgba(240,192,64,.4)}92%,100%{box-shadow:0 0 20px rgba(240,192,64,.95)}}
+@keyframes leafin{0%,10%{opacity:0;transform:scale(.4)}25%,100%{opacity:1;transform:scale(1)}}
+@keyframes needle{0%{transform:rotate(-72deg)}88%{transform:rotate(66deg)}100%{transform:rotate(66deg)}}
+@keyframes fill{0%{width:8%}88%{width:97%}100%{width:97%}}
+@keyframes approach{0%{left:2%}88%{left:62%}100%{left:62%}}
+@keyframes swell{0%{width:8px;height:8px}88%{width:16px;height:16px}100%{width:16px;height:16px}}
+@keyframes starburn{0%,80%{box-shadow:0 0 12px rgba(155,109,255,.7);width:10px;height:10px}
+  92%,100%{box-shadow:0 0 26px rgba(155,109,255,1);width:15px;height:15px}}
+.anim{animation-duration:8s;animation-iteration-count:infinite;animation-timing-function:linear}
+@media (prefers-reduced-motion: reduce){.anim{animation:none !important}}
+/* liane */
+.vine{position:relative;height:28px}
+.vine .stem{position:absolute;left:0;top:14px;height:3px;border-radius:2px;width:6%;
+  background:linear-gradient(90deg,#2ecc71,#6ee39b);box-shadow:0 0 10px rgba(46,204,113,.35);animation-name:grow}
+.vine .leaf{position:absolute;width:9px;height:9px;background:#2ecc71;border-radius:0 70% 0 70%;opacity:0;animation-name:leafin}
+.vine .leaf.up{top:4px} .vine .leaf.dn{top:16px;transform:rotate(180deg)}
+.vine .bud{position:absolute;top:9px;width:12px;height:12px;border-radius:50%;left:6%;
+  background:radial-gradient(circle at 35% 35%,#f0c040,#b8860b);animation-name:budmove,budglow}
+.vine .goal{position:absolute;right:0;top:7px;width:16px;height:16px;border:2px dashed rgba(240,192,64,.5);border-radius:50%}
+/* manometre */
+.gauge{position:relative;width:54px;height:54px;border-radius:50%;flex:none;
+  background:radial-gradient(circle at 36% 30%,#3b2a12,#1a1008);border:3px solid #cd7f32}
+.gauge i{position:absolute;inset:5px;border-radius:50%;border:1px dashed rgba(232,220,200,.25)}
+.gauge .red{position:absolute;inset:2px;border-radius:50%;
+  background:conic-gradient(from 200deg,transparent 0 62%,rgba(239,79,82,.55) 62% 80%,transparent 80%)}
+.gauge .nd{position:absolute;left:50%;bottom:50%;width:2px;height:18px;margin-left:-1px;border-radius:1px;
+  background:#f0a030;transform-origin:50% 100%;animation-name:needle}
+.gauge .hub{position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#cd7f32}
+.press{flex:1;height:10px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden;position:relative}
+.press b{position:absolute;left:0;top:0;bottom:0;border-radius:5px;width:8%;animation-name:fill;
+  background:repeating-linear-gradient(70deg,#cd7f32 0 4px,#a4652a 4px 8px)}
+/* comete */
+.orbit{position:relative;height:38px;border-radius:8px;overflow:hidden;
+  background:radial-gradient(120% 150% at 84% 10%,#241a3a,transparent)}
+.orbit .star{position:absolute;right:12px;top:14px;width:10px;height:10px;border-radius:50%;
+  background:radial-gradient(circle,#fff,#9b6dff 60%,transparent 78%);animation-name:starburn}
+.orbit .tiny{position:absolute;width:2px;height:2px;border-radius:50%;background:rgba(232,232,240,.45)}
+.orbit .rig{position:absolute;top:19px;height:8px;left:2%;animation-name:approach;transform:rotate(-4deg);transform-origin:left center}
+.orbit .tail{position:absolute;left:0;top:50%;transform:translateY(-50%);height:7px;width:52px;border-radius:99px;filter:blur(3px);
+  background:linear-gradient(90deg,transparent,rgba(155,109,255,.55) 55%,rgba(126,200,164,.9))}
+.orbit .head{position:absolute;left:52px;top:50%;border-radius:50%;transform:translate(-50%,-50%);width:8px;height:8px;
+  background:radial-gradient(circle,#fff,#7ec8a4 52%,transparent 76%);animation-name:swell}
+.cap{font-size:11px;color:var(--mut);margin-top:6px}
+</style>
+</head>
+<body>
+
+<h1>Trois pistes de palette, et les comptes à rebours en mouvement</h1>
+<p class="lede">Tu as relevé une faute que j'avais laissée passer : l'améthyste <code>#8f7bff</code> du « à venir » en Émeraude était à quelques degrés de l'accent lavande <code>#9b6dff</code> du thème — exactement le défaut que je reprochais au Steampunk. Les trois pistes ci-dessous sont donc toutes vérifiées contre les accents de chaque thème, et affichent ces accents en regard pour que tu puisses juger toi-même.</p>
+
+<!-- ══════════════ REBOURS ANIMÉS ══════════════ -->
+<h2>Les comptes à rebours, animés</h2>
+<p class="why">Démonstration accélérée : les sept derniers jours défilent en huit secondes, en boucle. Dans l'application, la progression est évidemment imperceptible à l'œil — c'est en revenant le lendemain qu'on voit que ça a avancé. Tout se fige si tu as activé la réduction des animations.</p>
+<div class="row">
+  <div class="panel t-foret">
+    <div class="ttl">Forêt Ancienne — la liane pousse</div>
+    <div class="vine">
+      <div class="stem anim"></div>
+      <div class="leaf up anim" style="left:16%;animation-delay:1.2s"></div>
+      <div class="leaf dn anim" style="left:32%;animation-delay:2.4s"></div>
+      <div class="leaf up anim" style="left:48%;animation-delay:3.6s"></div>
+      <div class="leaf dn anim" style="left:64%;animation-delay:4.8s"></div>
+      <div class="leaf up anim" style="left:78%;animation-delay:6s"></div>
+      <div class="bud anim"></div><div class="goal"></div>
+    </div>
+    <p class="cap">La tige gagne du terrain, les feuilles apparaissent une à une, le bourgeon s'embrase en atteignant son cercle.</p>
+  </div>
+
+  <div class="panel t-steam">
+    <div class="ttl">Steampunk — la pression monte</div>
+    <div style="display:flex;gap:var(--space-md);align-items:center;height:54px">
+      <div class="gauge"><div class="red"></div><i></i><div class="nd anim"></div><div class="hub"></div></div>
+      <div class="press"><b class="anim"></b></div>
+    </div>
+    <p class="cap">L'aiguille monte vers la zone rouge pendant que la conduite se remplit.</p>
+  </div>
+
+  <div class="panel t-emeraude">
+    <div class="ttl">Grimoire Émeraude — la comète approche</div>
+    <div class="orbit">
+      <span class="tiny" style="left:24%;top:9px"></span><span class="tiny" style="left:48%;top:28px"></span>
+      <span class="tiny" style="left:66%;top:6px"></span>
+      <span class="star anim"></span>
+      <div class="rig anim"><div class="tail"></div><div class="head anim"></div></div>
+    </div>
+    <p class="cap">La comète se rapproche et grossit ; l'étoile s'embrase à l'arrivée.</p>
+  </div>
+</div>
+
+<!-- ══════════════ PISTE 1 ══════════════ -->
+<h2>Piste 1 — Universelle</h2>
+<p class="why">Une seule palette pour les trois thèmes, choisie pour être loin des <strong>six</strong> accents à la fois. Une seule chose à retenir, aucune surprise en changeant de thème, et un badge photographié dans un thème reste compréhensible dans un autre. Ce que ça coûte : les statuts ne participent à aucune ambiance.</p>
+<div class="row">
+  <div class="panel t-emeraude p1"><div class="ttl">Grimoire Émeraude</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i>
+      <i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ça t'attend</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">En cours</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Dans 13 jours</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Passé</span></div>
+    <div class="acc">accents du thème <span class="sw" style="background:#7ec8a4"></span><span class="sw" style="background:#9b6dff"></span></div></div>
+  <div class="panel t-foret p1"><div class="ttl">Forêt Ancienne</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i>
+      <i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ça t'attend</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">En cours</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Dans 13 jours</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Passé</span></div>
+    <div class="acc">accents du thème <span class="sw" style="background:#2ecc71"></span><span class="sw" style="background:#f0c040"></span></div></div>
+  <div class="panel t-steam p1"><div class="ttl">Médiéval Steampunk</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i>
+      <i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ça t'attend</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">En cours</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Dans 13 jours</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Passé</span></div>
+    <div class="acc">accents du thème <span class="sw" style="background:#cd7f32"></span><span class="sw" style="background:#4a7c59"></span></div></div>
+</div>
+<p class="note">Valeurs : <code>#f2555f</code> framboise · <code>#6fd66a</code> vert pousse · <code>#5b8dff</code> azur · <code>#5f5f6c</code> gris. Aucune n'approche un accent, dans aucun thème.</p>
+
+<!-- ══════════════ PISTE 2 ══════════════ -->
+<h2>Piste 2 — Thématique</h2>
+<p class="why">Une déclinaison par univers, chacune tirée de son imaginaire et vérifiée contre ses propres accents. Le changement de thème devient un vrai dépaysement jusque dans la signalétique. Ce que ça coûte : douze couleurs à maintenir au lieu de quatre, et chaque futur thème rouvrira le chantier.</p>
+<div class="row">
+  <div class="panel t-emeraude p2"><div class="ttl">Émeraude — chandelle, cyan arcanique, rose de sort</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i>
+      <i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ambre chandelle</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">Cyan arcanique</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Rose de sort</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Cendre</span></div>
+    <div class="acc">accents <span class="sw" style="background:#7ec8a4"></span><span class="sw" style="background:#9b6dff"></span></div></div>
+  <div class="panel t-foret p2"><div class="ttl">Forêt — feuille d'automne, eau vive, brume</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i>
+      <i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Feuille d'automne</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">Eau vive</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Brume</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Lichen</span></div>
+    <div class="acc">accents <span class="sw" style="background:#2ecc71"></span><span class="sw" style="background:#f0c040"></span></div></div>
+  <div class="panel t-steam p2"><div class="ttl">Steampunk — signal, vapeur, violet d'acier</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i>
+      <i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Rouge signal</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">Bleu vapeur</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Violet d'acier</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Fonte</span></div>
+    <div class="acc">accents <span class="sw" style="background:#cd7f32"></span><span class="sw" style="background:#4a7c59"></span></div></div>
+</div>
+<p class="note">Le « à venir » n'est plus bleu partout : rose en Émeraude, bleu brume en Forêt, violet d'acier en Steampunk — ce qui répond à ta remarque sur le ciel d'aube et l'acier bleui, qui se ressemblaient trop d'un thème à l'autre.</p>
+
+<!-- ══════════════ PISTE 3 ══════════════ -->
+<h2>Piste 3 — Sobre</h2>
+<p class="why">Une seule couleur vive dans toute l'interface : celle de l'urgence. Les trois autres statuts sont des gris nuancés, distingués par la <strong>clarté</strong> plutôt que par la teinte, et légèrement teintés selon le thème. Aucune collision possible par construction, et l'œil va droit à ce qui réclame une action — puisque c'est la seule chose colorée à l'écran.</p>
+<div class="row">
+  <div class="panel t-emeraude p3"><div class="ttl">Grimoire Émeraude</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i>
+      <i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ça t'attend</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">En cours</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Dans 13 jours</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Passé</span></div>
+    <div class="acc">accents <span class="sw" style="background:#7ec8a4"></span><span class="sw" style="background:#9b6dff"></span></div></div>
+  <div class="panel t-foret p3"><div class="ttl">Forêt Ancienne</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i>
+      <i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ça t'attend</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">En cours</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Dans 13 jours</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Passé</span></div>
+    <div class="acc">accents <span class="sw" style="background:#2ecc71"></span><span class="sw" style="background:#f0c040"></span></div></div>
+  <div class="panel t-steam p3"><div class="ttl">Médiéval Steampunk</div>
+    <div class="strip4"><i style="background:var(--s-todo)"></i><i style="background:var(--s-live)"></i>
+      <i style="background:var(--s-soon)"></i><i style="background:var(--s-done)"></i></div>
+    <div class="sl"><span>Réponds au vote</span><span class="bg todo">Ça t'attend</span></div>
+    <div class="sl"><span>Scénario courant</span><span class="bg live">En cours</span></div>
+    <div class="sl"><span>Séance le 18</span><span class="bg soon">Dans 13 jours</span></div>
+    <div class="sl"><span>Séance ce soir</span><span class="bg soon full">Ce soir</span></div>
+    <div class="sl"><span>Scénario passé</span><span class="bg done">Passé</span></div>
+    <div class="acc">accents <span class="sw" style="background:#cd7f32"></span><span class="sw" style="background:#4a7c59"></span></div></div>
+</div>
+<p class="note">C'est la piste la plus radicale et, à mon avis, la plus efficace pour l'objectif du palier : sur un écran où une seule chose est colorée, on ne peut pas rater ce qui attend une action. Elle demande en revanche d'assumer une interface presque monochrome hors urgence — ce qui est un vrai parti pris esthétique, pas seulement fonctionnel.</p>
+
+</body>
+</html>

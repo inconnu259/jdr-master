@@ -1,0 +1,109 @@
+// Story 36.3 a montré que `.visually-hidden` n'est PAS globale : les styles Angular sont
+// encapsulés par composant, et la région live s'affichait en clair. Elle est donc redéfinie ici.
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.intent {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+// Vérifié à l'écran : Material impose son propre alignement au contenu du bouton, si bien que le
+// libellé se retrouve AU-DESSUS de sa conséquence et que l'ensemble est centré. Plutôt que de lutter
+// contre le composant, l'empilement est assumé — mais rendu délibéré, et aligné à gauche.
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  // Material tronque le contenu d'un bouton sur une seule ligne : ces deux règles rendent la
+  // hauteur au contenu, chaque issue portant un libellé ET sa conséquence.
+  height: auto;
+  line-height: 1.35;
+}
+
+.choice__label {
+  font-weight: 600;
+}
+
+.choice__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  white-space: normal;
+}
+
+.choice__detail {
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+// Le contrat d'UI distingue « Au cas par cas » par un accent. La distinction PORTANTE reste
+// le libellé (P-1) : la couleur ne fait que doubler ce que le texte dit déjà.
+.choice--walkthrough {
+  border-color: var(--mat-sys-tertiary, #7a5af8);
+}
+
+.exception {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--mat-sys-outline-variant, #ccc);
+  border-radius: 0.5rem;
+}
+
+.exception__mark {
+  font-size: 1.05rem;
+}
+
+.exception__detail {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+// Vérifié à l'écran : une barre de défilement parasite apparaissait en mode défilé sur un contenu
+// pourtant court — la marge basse de `.step__label` traversait la boîte et débordait `mat-dialog-
+// content`. Passée en padding sur le conteneur, elle ne s'échappe plus.
+.step {
+  text-align: center;
+  padding-bottom: 0.25rem;
+}
+
+.step__progress {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--mat-sys-on-surface-variant, #666);
+}
+
+.step__label {
+  margin: 0.25rem 0;
+  padding-bottom: 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.step__actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}

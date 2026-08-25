@@ -95,6 +95,11 @@ function makePrisma() {
     inscription: {
       deleteMany: jest.fn(),
     },
+    // Story 36.6 — effectif de la troupe (SessionPollDto.membersCount). 0 Membership par défaut,
+    // soit un effectif de 1 (le MJ) : aucun effet sur les tests existants.
+    membership: {
+      count: jest.fn().mockResolvedValue(0),
+    },
     partie: {
       findUniqueOrThrow: jest.fn().mockResolvedValue({
         id: 'p1',
@@ -110,7 +115,11 @@ function makePrisma() {
 }
 
 function makeParties() {
-  return { getOwned: jest.fn(), getViewable: jest.fn() };
+  return {
+    getOwned: jest.fn(),
+    getViewable: jest.fn(),
+    notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
+  };
 }
 
 function makeCharacters() {
@@ -915,6 +924,123 @@ describe('ScenariosService', () => {
       expect(result[0]).toMatchObject({ id: 's1', status: 'BROUILLON' });
     });
 
+    it("Story 36.6 (AC7/AC9/AC10) — le SessionPollDto d'une séance porte l'effectif MJ + membres, compté UNE seule fois pour tout l'appel", async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.membership.count.mockResolvedValue(3);
+      prisma.scenario.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          partieId: 'p1',
+          title: 'Les Cendres',
+          description: null,
+          status: 'EN_COURS',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01'),
+          closedAt: null,
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 'se1',
+          scenarioId: 's1',
+          createdAt: new Date('2026-07-01'),
+          dateValidee: null,
+          inscriptionMin: null,
+          inscriptionMax: null,
+          inscriptions: [],
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
+          poll: {
+            id: 'poll1',
+            partieId: 'p1',
+            status: 'OPEN',
+            scenarioRef: null,
+            expiresAt: null,
+            chosenDate: null,
+            chosenSlot: null,
+            options: [],
+          },
+        },
+      ]);
+
+      const result = await service.findAllForPartie('p1', 'u1');
+
+      expect(result[0].seances[0].poll?.membersCount).toBe(4);
+      // AD-3 : jamais un comptage par séance ni par sondage — un seul pour l'appel entier.
+      expect(prisma.membership.count).toHaveBeenCalledTimes(1);
+      expect(prisma.membership.count).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+      });
+    });
+
+    it("deferred-work (2026-08-24) : toSessionPollDto() porte displayName sur chaque vote — défaut pré-existant, PollVoteDto.displayName est requis mais poll était typé any (invisible au compilateur)", async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.membership.count.mockResolvedValue(1);
+      prisma.scenario.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          partieId: 'p1',
+          title: 'Les Cendres',
+          description: null,
+          status: 'EN_COURS',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01'),
+          closedAt: null,
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 'se1',
+          scenarioId: 's1',
+          createdAt: new Date('2026-07-01'),
+          dateValidee: null,
+          inscriptionMin: null,
+          inscriptionMax: null,
+          inscriptions: [],
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
+          poll: {
+            id: 'poll1',
+            partieId: 'p1',
+            status: 'OPEN',
+            scenarioRef: null,
+            expiresAt: null,
+            chosenDate: null,
+            chosenSlot: null,
+            options: [
+              {
+                id: 'opt1',
+                date: new Date('2026-08-01'),
+                slot: 'EVENING',
+                votes: [
+                  {
+                    userId: 'u1',
+                    answer: 'YES',
+                    user: { pseudo: 'Alice', displayName: 'Alice au pays' },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ]);
+
+      const result = await service.findAllForPartie('p1', 'u1');
+
+      expect(result[0].seances[0].poll?.options[0].votes[0]).toEqual({
+        userId: 'u1',
+        pseudo: 'Alice',
+        displayName: 'Alice au pays',
+        answer: 'YES',
+      });
+    });
+
     it('non-membre → 403 propagé par getViewable, aucune lecture', async () => {
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
@@ -1428,6 +1554,31 @@ describe('ScenariosService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
+    it('notifie aussi PartiesService.notifyPartieSignalsChanged (deferred-work, SSE calendrier personnel)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'BROUILLON',
+      });
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.scenario.update.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Le Marché aux Ombres',
+        description: null,
+        status: 'A_VENIR',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-12T00:00:00.000Z'),
+        closedAt: null,
+      });
+
+      await service.open(VALID_SCENARIO_ID, 'mj1');
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    });
+
     it('CAMPAGNE_EPISODIQUE : participants restent peuplés dans le DTO retourné après open() (non-régression)', async () => {
       prisma.scenario.findUnique.mockResolvedValue({
         id: VALID_SCENARIO_ID,
@@ -1578,6 +1729,40 @@ describe('ScenariosService', () => {
       await service.markCourant(VALID_SCENARIO_ID, 'mj1');
 
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('CAMPAGNE_LINEAIRE : notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal AUCUN_SCENARIO_EN_COURS)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'A_VENIR',
+      });
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.tx.scenario.findFirst.mockResolvedValue(null);
+      prisma.tx.scenario.updateMany.mockResolvedValue({ count: 1 });
+      prisma.tx.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 2',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-12T00:00:00.000Z'),
+        closedAt: null,
+      });
+
+      await service.markCourant(VALID_SCENARIO_ID, 'mj1');
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+        'p1',
+        'mj1',
+      );
     });
 
     it('CAMPAGNE_LINEAIRE, statut changé sous le nez du verrou (count 0) → 409, aucune écriture (AC1, TOCTOU)', async () => {
@@ -1855,6 +2040,39 @@ describe('ScenariosService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
+    it('notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal AUCUN_SCENARIO_EN_COURS)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'PASSE',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: new Date('2026-07-13T10:00:00.000Z'),
+      });
+
+      await service.close(VALID_SCENARIO_ID, 'mj1');
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+        'p1',
+        'mj1',
+      );
+    });
+
     it('CAMPAGNE_EPISODIQUE : participants restent peuplés dans le DTO retourné après close() (non-régression)', async () => {
       prisma.scenario.findUnique.mockResolvedValue({
         id: VALID_SCENARIO_ID,
@@ -2083,7 +2301,14 @@ describe('ScenariosService', () => {
           id: 'seance-1',
           scenarioId: VALID_SCENARIO_ID,
           poll: undefined,
+          inscription: undefined,
           compteRendu: null,
+          // Story 36.5 : les trois champs d'informations pratiques figurent désormais dans
+          // SeanceDto. Une séance qui n'en porte aucun les expose à null — jamais absents,
+          // pour que le client n'ait pas à distinguer « absent » de « vide ».
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
           createdAt: '2026-07-13T00:00:00.000Z',
         },
       ]);
@@ -2116,6 +2341,35 @@ describe('ScenariosService', () => {
       await service.addSeance(VALID_SCENARIO_ID, 'mj1');
 
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('notifie aussi PartiesService.notifyPartieSignalsChanged (deferred-work, SSE calendrier personnel)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        status: 'COURANT',
+      });
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue({
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Chapitre 1',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: 3,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+      });
+
+      await service.addSeance(VALID_SCENARIO_ID, 'mj1');
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
     });
 
     it('aucun plafond — une 3e séance se crée sans erreur', async () => {
@@ -2428,6 +2682,30 @@ describe('ScenariosService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
+    it('notifie aussi PartiesService.notifyPartieSignalsChanged (deferred-work, SSE calendrier personnel)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SECOND_SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.seance.findMany.mockResolvedValueOnce([
+        {
+          id: FIRST_SEANCE_ID,
+          scenarioId: VALID_SCENARIO_ID,
+          createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        },
+      ]);
+
+      await service.deleteSeance(SECOND_SEANCE_ID, 'mj1');
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    });
+
     it('référence scénario orpheline → 404 explicite, pas de 500 (Story 17.2 AC2)', async () => {
       prisma.seance.findUnique.mockResolvedValue({
         id: SECOND_SEANCE_ID,
@@ -2461,6 +2739,68 @@ describe('ScenariosService', () => {
         otherError,
       );
       expect(prisma.seance.delete).not.toHaveBeenCalled();
+    });
+
+    it('TOCTOU : seance.delete() lève P2025 (déjà supprimée concurremment) → 404 propre, pas un 500 (deferred-work 2026-08-25)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SECOND_SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.seance.findMany.mockResolvedValueOnce([
+        {
+          id: FIRST_SEANCE_ID,
+          scenarioId: VALID_SCENARIO_ID,
+          createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        },
+      ]);
+      prisma.seance.delete.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          'An operation failed because it depends on one or more records that were required but not found.',
+          { code: 'P2025', clientVersion: '7.8.0' },
+        ),
+      );
+
+      await expect(
+        service.deleteSeance(SECOND_SEANCE_ID, 'mj1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.sessionPoll.delete).not.toHaveBeenCalled();
+    });
+
+    it('TOCTOU : erreur Prisma autre que P2025 sur seance.delete() → propagée telle quelle', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SECOND_SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.seance.findMany.mockResolvedValueOnce([
+        {
+          id: FIRST_SEANCE_ID,
+          scenarioId: VALID_SCENARIO_ID,
+          createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        },
+      ]);
+      const otherError = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed.',
+        { code: 'P2002', clientVersion: '7.8.0' },
+      );
+      prisma.seance.delete.mockRejectedValue(otherError);
+
+      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toBe(
+        otherError,
+      );
     });
 
     it('séance liée à un vote (OPEN ou CLOSED) → le SessionPoll est supprimé avec elle (revue de code : plus d’orphelin)', async () => {
@@ -2899,6 +3239,26 @@ describe('ScenariosService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
+    it('notifie aussi PartiesService.notifyPartieSignalsChanged (deferred-work, SSE calendrier personnel)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        pollId: 'poll1',
+        dateValidee: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+      prisma.seance.findMany.mockResolvedValue([]);
+
+      await service.resetSeanceDate(SEANCE_ID, 'mj1');
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    });
+
     it('le SessionPoll lié est supprimé (revue de code : sans séance, le vote perd son sens — plus d’orphelin)', async () => {
       prisma.seance.findUnique.mockResolvedValue({
         id: SEANCE_ID,
@@ -3088,6 +3448,25 @@ describe('ScenariosService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
+    it('notifie aussi PartiesService.notifyPartieSignalsChanged (deferred-work, SSE calendrier personnel)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        inscriptionMin: null,
+        inscriptionMax: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+
+      await service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6);
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    });
+
     it('non-épisodique (CAMPAGNE_LINEAIRE) → rejet 400, aucune écriture (AC1)', async () => {
       prisma.seance.findUnique.mockResolvedValue({
         id: SEANCE_ID,
@@ -3274,6 +3653,33 @@ describe('ScenariosService', () => {
       expect(prisma.tx.inscription.create).toHaveBeenCalledWith({
         data: { seanceId: SEANCE_ID, userId: 'u1' },
       });
+    });
+
+    it('notifie PartiesService.notifyPartieSignalsChanged avec le mjId de la Partie, pas userId (deferred-work, SSE calendrier personnel)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+        inscriptionMin: 4,
+        inscriptionMax: 6,
+        dateValidee: null,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getViewable.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+      prisma.tx.inscription.findUnique.mockResolvedValue(null);
+      prisma.tx.seance.findUniqueOrThrow.mockResolvedValue({
+        id: SEANCE_ID,
+        inscriptionMax: 6,
+      });
+      prisma.tx.inscription.count.mockResolvedValue(2);
+      prisma.seance.findMany.mockResolvedValue([]);
+
+      await service.inscrire(SEANCE_ID, 'u1');
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
     });
 
     it('capacité modifiée entre la lecture initiale et la transaction → utilise la valeur relue sous le verrou', async () => {
@@ -3556,6 +3962,23 @@ describe('ScenariosService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
+    it('notifie PartiesService.notifyPartieSignalsChanged avec le mjId de la Partie, pas userId (deferred-work, SSE calendrier personnel)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getViewable.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+
+      await service.desinscrire(SEANCE_ID, 'u1');
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    });
+
     it('scénario PASSE → retrait toujours autorisé (décision explicite, Story 17.2 AC1)', async () => {
       prisma.seance.findUnique.mockResolvedValue({
         id: SEANCE_ID,
@@ -3716,6 +4139,26 @@ describe('ScenariosService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
+    it('notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal COMPTE_RENDU_NON_REDIGE)', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+
+      await service.setCompteRendu(SEANCE_ID, 'mj1', 'texte');
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+        'p1',
+        'mj1',
+      );
+    });
+
     it('chaîne vide acceptée — efface un compte-rendu déjà rédigé', async () => {
       prisma.seance.findUnique.mockResolvedValue({
         id: SEANCE_ID,
@@ -3757,6 +4200,140 @@ describe('ScenariosService', () => {
         service.setCompteRendu(SEANCE_ID, 'stranger', 'texte'),
       ).rejects.toThrow(ForbiddenException);
       expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── setInfosPratiques (Story 36.5, D-15 amendée) ────────────────────────
+  describe('setInfosPratiques()', () => {
+    const SEANCE_ID = '33333333-3333-4333-a333-333333333333';
+
+    function mockScenario(overrides: Record<string, unknown> = {}) {
+      return {
+        id: VALID_SCENARIO_ID,
+        partieId: 'p1',
+        title: 'Scénario',
+        description: null,
+        status: 'COURANT',
+        dureeHeures: null,
+        dureeSeances: null,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01T00:00:00.000Z'),
+        closedAt: null,
+        seances: [],
+        ...overrides,
+      };
+    }
+
+    const PAYLOAD = {
+      heureRdv: '20:30',
+      lieu: 'chez Marc',
+      notePratique: 'pensez aux dés',
+    };
+
+    function arrange(kind = 'CAMPAGNE_LINEAIRE') {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind });
+    }
+
+    it.each(['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as const)(
+      '%s : les trois champs enregistrés, aucune restriction de kind (AC1)',
+      async (kind) => {
+        arrange(kind);
+
+        await service.setInfosPratiques(SEANCE_ID, 'mj1', PAYLOAD);
+
+        expect(prisma.seance.update).toHaveBeenCalledWith({
+          where: { id: SEANCE_ID },
+          data: PAYLOAD,
+        });
+      },
+    );
+
+    it('AC1 : les trois champs sont écrits en UNE seule mise à jour', async () => {
+      arrange();
+
+      await service.setInfosPratiques(SEANCE_ID, 'mj1', PAYLOAD);
+
+      expect(prisma.seance.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('AC4 : null est accepté et VIDE le champ', async () => {
+      arrange();
+
+      await service.setInfosPratiques(SEANCE_ID, 'mj1', {
+        heureRdv: null,
+        lieu: null,
+        notePratique: null,
+      });
+
+      expect(prisma.seance.update).toHaveBeenCalledWith({
+        where: { id: SEANCE_ID },
+        data: { heureRdv: null, lieu: null, notePratique: null },
+      });
+    });
+
+    it('AC4 : un seul champ renseigné, les deux autres vidés', async () => {
+      arrange();
+
+      await service.setInfosPratiques(SEANCE_ID, 'mj1', {
+        heureRdv: null,
+        lieu: 'en visio',
+        notePratique: null,
+      });
+
+      expect(prisma.seance.update).toHaveBeenCalledWith({
+        where: { id: SEANCE_ID },
+        data: { heureRdv: null, lieu: 'en visio', notePratique: null },
+      });
+    });
+
+    it('AC5 : non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+      prisma.seance.findUnique.mockResolvedValue({
+        id: SEANCE_ID,
+        scenarioId: VALID_SCENARIO_ID,
+      });
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.setInfosPratiques(SEANCE_ID, 'stranger', PAYLOAD),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('séance introuvable → 404, aucune écriture', async () => {
+      prisma.seance.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.setInfosPratiques('inconnue', 'mj1', PAYLOAD),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+    });
+
+    it('émet un événement temps réel sur la partie', async () => {
+      arrange();
+
+      await service.setInfosPratiques(SEANCE_ID, 'mj1', PAYLOAD);
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith('partie:p1');
+    });
+
+    // AC2 — la garde n°2 rendue exécutable : heureRdv n'est jamais interprétée.
+    it('AC2 : heureRdv est transmise telle quelle, sans être convertie en date', async () => {
+      arrange();
+
+      await service.setInfosPratiques(SEANCE_ID, 'mj1', PAYLOAD);
+
+      const written = (
+        prisma.seance.update.mock.calls[0] as [{ data: { heureRdv: unknown } }]
+      )[0].data;
+      expect(typeof written.heureRdv).toBe('string');
+      expect(written.heureRdv).toBe('20:30');
+      expect(written.heureRdv).not.toBeInstanceOf(Date);
     });
   });
 
@@ -3813,6 +4390,24 @@ describe('ScenariosService', () => {
       await service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte');
 
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal RAPPORT_FIN_MANQUANT)', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(mockScenario());
+      prisma.scenario.update.mockResolvedValue(mockScenario());
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
+      parties.getOwned.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        kind: 'CAMPAGNE_LINEAIRE',
+      });
+
+      await service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte');
+
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+        'p1',
+        'mj1',
+      );
     });
 
     it('chaîne vide acceptée — efface un résumé déjà rédigé', async () => {

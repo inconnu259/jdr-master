@@ -21,19 +21,24 @@
     gap: 1rem;
   }
 
-  &__export-actions {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0.4rem;
+  &__menu-trigger {
     margin-left: auto;
-  }
+    align-self: flex-start;
+    border: 1px solid var(--mat-sys-outline, #999);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--mat-sys-on-surface-variant, inherit);
+    width: 2.25rem;
+    height: 2.25rem;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
 
-  &__export-buttons {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 0.5rem;
+    /* P-1 — menu ouvert : le fond change ET la graisse aussi, jamais la couleur seule. */
+    &--on {
+      background: var(--mat-sys-secondary-container, #cce);
+      font-weight: 600;
+    }
   }
 
   &__export-error {
@@ -42,8 +47,7 @@
     margin: 0;
   }
 
-  &__portrait-edit-cta,
-  &__pdf-crop-edit-cta {
+  &__portrait-edit-cta {
     padding: 0;
     min-width: 0;
     font-size: 0.8rem;
@@ -220,5 +224,63 @@
       flex: 1;
       min-width: 0;
     }
+  }
+}
+
+/* ── Story 31.1 — les deux enveloppes du menu « ⋮ » de la fiche ─────────────────────────────
+   Même patron que `.display-surface`/`.display-backdrop` du calendrier (36.14) : le fond, la
+   bordure et l'ombre vivent ICI, pas dans `SheetActionsMenu` — ce qui permet au même contenu de
+   servir un menu ancré et une feuille montant du bas. */
+.sheet-menu-surface {
+  background: var(--mat-sys-surface-container, #1a1428);
+  color: var(--mat-sys-on-surface, inherit);
+  box-sizing: border-box;
+  padding: 8px;
+}
+
+.sheet-menu-surface--menu {
+  border: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.12));
+  border-radius: 14px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.65);
+}
+
+.sheet-menu-surface--sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 200;
+  border-top: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.12));
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -10px 36px rgba(0, 0, 0, 0.65);
+  max-height: 80vh;
+  overflow-y: auto;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+.sheet-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+// Story 31.2 — déclencheur de la surface de détail (talent/avantage/sort). Reset des styles de
+// bouton natif pour reprendre exactement l'apparence du <strong> qu'il remplace (AC7 : élément
+// interactif réel, mais visuellement identique à l'ancien texte inerte).
+.sheet__detail-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
   }
 }

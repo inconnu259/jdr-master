@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Itération 8 — trajectoire des comètes</title>
+<style>
+:root{--primary-bg:#0d0a14;--surface-bg:#1a1428;--accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;--status-mixed:#f0a030;--status-unknown:#3a3a4a;
+  --border-subtle:rgba(255,255,255,.06);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 var(--space-sm)}
+.lede,.why{color:var(--text-muted);max-width:84ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:var(--space-base);align-items:start}
+.demo{background:var(--surface-bg);border-radius:var(--radius-card);overflow:hidden;border:1px solid var(--border-subtle);
+  box-shadow:0 4px 12px rgba(0,0,0,.5);display:flex}
+.strip{width:4px;flex:none}.in{flex:1;min-width:0}
+.cov{height:124px;position:relative;overflow:hidden;background:radial-gradient(140% 140% at 50% 0%,#2a1c46,#0d0a14)}
+.mk{position:absolute;right:10px;bottom:6px;font-size:20px;font-weight:700;letter-spacing:-1px;
+  color:var(--text-primary);text-shadow:0 2px 12px rgba(0,0,0,.9);z-index:30}
+.bd{padding:var(--space-md)}
+.nm{font-size:var(--text-lg);font-weight:500}
+.mt{font-size:var(--text-sm);color:var(--text-muted)}
+.seed{font-size:var(--text-sm);color:var(--text-muted);margin:var(--space-xs) 0 0;font-family:ui-monospace,Menlo,Consolas,monospace}
+.code{background:#100d18;border:1px solid var(--border-subtle);border-radius:var(--radius-card);
+  padding:var(--space-md) var(--space-base);font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:var(--text-sm);color:#b9b4c8;max-width:84ch;white-space:pre-wrap;margin:0 0 var(--space-base)}
+.code b{color:#7ec8a4;font-weight:400}
+
+/* ══════════════════════════════════════════════════════════════
+   LA CORRECTION.
+   .comet-axis  : conteneur pivoté de l'angle θ. Tout ce qu'il contient
+                  vit dans un repère où « la droite » = la direction de vol.
+   .comet-move  : n'anime QU'UN translateX — donc forcément le long de θ.
+   .comet-rig   : queue horizontale + tête collée à son extrémité.
+   Conséquence : queue, tête et trajectoire partagent le même et unique
+   angle. Ils ne peuvent plus diverger, quel que soit le tirage.
+   ══════════════════════════════════════════════════════════════ */
+@keyframes travel{
+  0%   {transform:translateX(-150px);opacity:0}
+  12%  {opacity:1}
+  74%  {opacity:1}
+  100% {transform:translateX(200px);opacity:0}
+}
+.comet-axis{position:absolute;left:0;top:50%;width:100%;height:0;transform-origin:50% 50%}
+.comet-move{position:absolute;left:0;top:0;animation:travel 7s linear infinite}
+.comet-rig{position:absolute;left:0;top:0}
+.comet-tail{position:absolute;left:0;top:50%;transform:translateY(-50%);border-radius:99px;filter:blur(5px)}
+.comet-head{position:absolute;top:50%;border-radius:50%;transform:translate(-50%,-50%);filter:blur(1px)}
+.comet-head::after{content:"";position:absolute;inset:26%;border-radius:50%;background:#fff;filter:blur(2px)}
+@keyframes twinkle{0%,100%{opacity:.22}50%{opacity:.95}}
+@keyframes glowpulse{0%,100%{opacity:.30;transform:scale(1)}50%{opacity:.6;transform:scale(1.12)}}
+.star{position:absolute;width:2px;height:2px;border-radius:50%;background:#e8e8f0;animation:twinkle 3.4s ease-in-out infinite}
+.halo{position:absolute;border-radius:50%;filter:blur(16px);animation:glowpulse 6s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){
+  .comet-move,.star,.halo{animation:none !important}
+  .comet-move{transform:translateX(30px);opacity:1}}
+/* démonstration du défaut, à gauche */
+@keyframes travelWrong{
+  0%{transform:translate(-56px,18px);opacity:0}14%{opacity:1}72%{opacity:1}100%{transform:translate(176px,-24px);opacity:0}}
+.wrong{position:absolute;inset:0;animation:travelWrong 7s ease-in-out infinite}
+.wrong .comet-rig{position:absolute;transform-origin:left center}
+.axis-guide{position:absolute;left:0;top:50%;width:100%;height:0;border-top:1px dashed rgba(240,160,48,.45)}
+</style>
+</head>
+<body>
+
+<h1>Itération 8 — la comète avance dans l'axe de sa queue</h1>
+<p class="lede">Le défaut venait de deux angles indépendants : la queue était pivotée d'un angle tiré, la trajectoire suivait un vecteur figé. Ils ne s'accordaient que par hasard. Désormais un <strong>seul</strong> angle pilote la queue, la tête et le déplacement — et il est impossible de les désynchroniser, y compris en tirant l'angle au hasard.</p>
+
+<div class="code">.comet-axis  { transform: rotate(<b>θ</b>) }        ← le repère entier est incliné de θ
+  .comet-move  { animation: translateX(…) }   ← n'avance que sur X <b>local</b> : donc dans l'axe θ
+    .comet-rig   { queue horizontale + tête à son extrémité }
+
+Un seul θ. Trois usages. Aucune désynchronisation possible.</div>
+
+<h2>Le défaut, à côté de la correction</h2>
+<p class="why">À gauche l'ancien comportement : la trajectoire (pointillés) ne suit pas l'axe de la queue, la comète dérive en crabe. À droite le nouveau, même angle de queue : elle file dans son axe.</p>
+<div class="row">
+  <div>
+    <div class="demo"><div class="strip" style="background:#e05252"></div><div class="in">
+      <div class="cov">
+        <div class="axis-guide" style="top:56px;transform:rotate(-8deg)"></div>
+        <div class="wrong"><div class="comet-rig" style="left:0;top:40px;width:70px;height:12px;transform:rotate(-34deg)">
+          <div class="comet-tail" style="width:70px;height:10px;background:linear-gradient(90deg,transparent,rgba(126,200,164,.5) 55%,rgba(232,255,245,.9))"></div>
+          <div class="comet-head" style="left:70px;width:17px;height:17px;background:radial-gradient(circle,#fff,#7ec8a4 54%,transparent 76%)"></div>
+        </div></div>
+        <div class="mk">✗</div></div>
+      <div class="bd"><div class="nm">Avant</div><div class="mt">queue à −34°, trajectoire à −8° : marche en crabe</div></div></div></div>
+  </div>
+  <div>
+    <div class="demo"><div class="strip" style="background:var(--accent-1)"></div><div class="in">
+      <div class="cov">
+        <div class="axis-guide" style="transform:rotate(-34deg)"></div>
+        <div class="comet-axis" style="transform:rotate(-34deg)"><div class="comet-move">
+          <div class="comet-rig" style="width:70px;height:12px;top:-6px">
+            <div class="comet-tail" style="width:70px;height:10px;background:linear-gradient(90deg,transparent,rgba(126,200,164,.5) 55%,rgba(232,255,245,.9))"></div>
+            <div class="comet-head" style="left:70px;width:17px;height:17px;background:radial-gradient(circle,#fff,#7ec8a4 54%,transparent 76%)"></div>
+          </div></div></div>
+        <div class="mk">✓</div></div>
+      <div class="bd"><div class="nm">Après</div><div class="mt">un seul angle : −34° pour la queue <em>et</em> la trajectoire</div></div></div></div>
+  </div>
+</div>
+
+<h2>Quatre tirages, quatre axes</h2>
+<p class="why">Mêmes règles, angles différents — y compris des comètes qui traversent de droite à gauche (θ &gt; 90°) et des descendantes. Aucune ne dérive.</p>
+<div class="row">
+
+  <div>
+    <div class="demo"><div class="strip" style="background:var(--status-mixed)"></div><div class="in">
+      <div class="cov">
+        <div class="halo" style="width:76px;height:76px;left:44%;top:14px;background:#9b6dff"></div>
+        <div class="star" style="left:18px;top:22px"></div><div class="star" style="left:132px;top:30px;animation-delay:1.9s"></div>
+        <div class="star" style="left:100px;top:86px;animation-delay:2.6s"></div>
+        <div class="comet-axis" style="top:66px;transform:rotate(-14deg)"><div class="comet-move" style="animation-duration:7s">
+          <div class="comet-rig" style="width:84px;height:14px;top:-7px">
+            <div class="comet-tail" style="width:84px;height:11px;background:linear-gradient(90deg,transparent,rgba(155,109,255,.6) 60%,rgba(232,255,245,.95))"></div>
+            <div class="comet-head" style="left:84px;width:20px;height:20px;background:radial-gradient(circle,#fff,#7ec8a4 54%,transparent 76%)"></div>
+          </div></div></div>
+        <div class="mk">CK</div></div>
+      <div class="bd"><div class="nm">Les Cendres de Kavaan</div><div class="mt">1 comète · θ = −14° · 7 s</div></div></div></div>
+    <p class="seed">montante, gauche → droite</p>
+  </div>
+
+  <div>
+    <div class="demo"><div class="strip" style="background:var(--accent-1)"></div><div class="in">
+      <div class="cov" style="background:radial-gradient(140% 140% at 20% 10%,#2a1c46,#0d0a14)">
+        <div class="halo" style="width:70px;height:70px;left:8px;top:10px;background:#7ec8a4;animation-delay:1.4s"></div>
+        <div class="star" style="left:60px;top:24px;animation-delay:.6s"></div><div class="star" style="left:118px;top:70px;animation-delay:1.7s"></div>
+        <div class="comet-axis" style="top:52px;transform:rotate(168deg)"><div class="comet-move" style="animation-duration:8s">
+          <div class="comet-rig" style="width:88px;height:16px;top:-8px">
+            <div class="comet-tail" style="width:88px;height:13px;background:linear-gradient(90deg,transparent,rgba(126,200,164,.5) 55%,rgba(232,255,245,.92))"></div>
+            <div class="comet-head" style="left:88px;width:22px;height:22px;background:radial-gradient(circle,#fff,#9b6dff 52%,transparent 76%)"></div>
+          </div></div></div>
+        <div class="mk">CN</div></div>
+      <div class="bd"><div class="nm">Le Convoi du Nord</div><div class="mt">1 comète · θ = 168° · 8 s</div></div></div></div>
+    <p class="seed">droite → gauche, légèrement montante</p>
+  </div>
+
+  <div>
+    <div class="demo"><div class="strip" style="background:var(--accent-2)"></div><div class="in">
+      <div class="cov" style="background:radial-gradient(150% 150% at 70% 90%,#2f1f4e,#0d0a14)">
+        <div class="halo" style="width:84px;height:84px;right:-12px;bottom:-18px;background:#9b6dff;animation-delay:.9s"></div>
+        <div class="star" style="left:16px;top:34px"></div><div class="star" style="left:92px;top:24px;animation-delay:2.1s"></div>
+        <div class="star" style="left:56px;top:76px;animation-delay:3.4s"></div>
+        <div class="comet-axis" style="top:30px;transform:rotate(30deg)"><div class="comet-move" style="animation-duration:9s">
+          <div class="comet-rig" style="width:78px;height:14px;top:-7px">
+            <div class="comet-tail" style="width:78px;height:12px;background:linear-gradient(90deg,transparent,rgba(155,109,255,.55) 58%,rgba(232,255,245,.95))"></div>
+            <div class="comet-head" style="left:78px;width:19px;height:19px;background:radial-gradient(circle,#fff,#7ec8a4 54%,transparent 76%)"></div>
+          </div></div></div>
+        <div class="mk">NL</div></div>
+      <div class="bd"><div class="nm">La Nuit des Lanternes</div><div class="mt">1 comète · θ = +30° · 9 s</div></div></div></div>
+    <p class="seed">descendante, gauche → droite</p>
+  </div>
+
+  <div>
+    <div class="demo"><div class="strip" style="background:var(--status-unknown)"></div><div class="in">
+      <div class="cov" style="background:radial-gradient(150% 150% at 40% 0%,#241a3a,#0d0a14)">
+        <div class="halo" style="width:66px;height:66px;left:20%;top:40px;background:#7ec8a4;animation-delay:2.2s"></div>
+        <div class="star" style="left:24px;top:18px"></div><div class="star" style="left:78px;top:52px;animation-delay:1.2s"></div>
+        <div class="star" style="left:126px;top:26px;animation-delay:2.3s"></div><div class="star" style="left:44px;top:98px;animation-delay:3.1s"></div>
+        <div class="comet-axis" style="top:34px;transform:rotate(-24deg)"><div class="comet-move" style="animation-duration:10s">
+          <div class="comet-rig" style="width:92px;height:15px;top:-7px">
+            <div class="comet-tail" style="width:92px;height:12px;background:linear-gradient(90deg,transparent,rgba(155,109,255,.55) 58%,rgba(232,255,245,.95))"></div>
+            <div class="comet-head" style="left:92px;width:21px;height:21px;background:radial-gradient(circle,#fff,#9b6dff 52%,transparent 76%)"></div>
+          </div></div></div>
+        <div class="comet-axis" style="top:96px;transform:rotate(204deg)"><div class="comet-move" style="animation-duration:6.5s;animation-delay:2.4s">
+          <div class="comet-rig" style="width:54px;height:11px;top:-5px">
+            <div class="comet-tail" style="width:54px;height:9px;background:linear-gradient(90deg,transparent,rgba(126,200,164,.5) 55%,rgba(232,232,240,.9))"></div>
+            <div class="comet-head" style="left:54px;width:14px;height:14px;background:radial-gradient(circle,#fff,#7ec8a4 52%,transparent 76%)"></div>
+          </div></div></div>
+        <div class="mk">RV</div></div>
+      <div class="bd"><div class="nm">Les Racines de Vellombre</div><div class="mt">2 comètes · θ = −24° et 204°</div></div></div></div>
+    <p class="seed">deux sens opposés, deux vitesses</p>
+  </div>
+</div>
+
+</body>
+</html>

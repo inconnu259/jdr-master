@@ -1,0 +1,4 @@
+[
+  { "key": "bouclier-leger", "label": "Bouclier léger", "priceGold": 400, "encumbrance": 3, "hands": 1, "defense": 7, "malus": null, "notes": "Bouclier pouvant être porté d'une main. Le plus souvent en cuir et en bois, il n'encombre pas son porteur." },
+  { "key": "bouclier-lourd", "label": "Bouclier lourd", "priceGold": 1200, "encumbrance": 3, "hands": 1, "defense": 9, "malus": -1, "notes": "Grand bouclier cachant la moitié du corps. Souvent en métal, peu pratique à transporter, lourd et encombrant." }
+]

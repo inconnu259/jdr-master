@@ -6,8 +6,24 @@ import { CreneauCard } from '../creneau-card/creneau-card';
 
 type AnySlotDto = AvailableSlotDto | AggregatedSlotDto;
 
+/**
+ * Discrimine la vue MJ (nominative) de la vue joueur (agrégée).
+ *
+ * 🚨 **`'members' in s` ne discrimine plus depuis la story 36.8** : `AggregatedSlotDto` porte
+ * désormais un `members?` optionnel (le détail nominatif de la couche « disponibilité du groupe »,
+ * servi au seul MJ par `GET /parties/:id/heatmap`). Le test de présence rendait donc `s.members`
+ * possiblement `undefined` — attrapé par le compilateur, pas par un test.
+ *
+ * On discrimine désormais par ce que la vue MJ n'a **pas** : les agrégats. `AvailableSlotDto` ne
+ * porte ni `total`, ni `available`, ni `unavailable` — c'est précisément sa définition, et ce
+ * discriminant-là ne peut pas devenir ambigu par ajout d'un champ facultatif.
+ */
+export function isNamedSlot(s: AnySlotDto): s is AvailableSlotDto {
+  return !('total' in s);
+}
+
 function slotPriority(s: AnySlotDto): number {
-  if ('members' in s) {
+  if (isNamedSlot(s)) {
     const hasUnavail = s.members.some((m) => m.status === 'UNAVAILABLE');
     const availCount = s.members.filter((m) => m.status === 'AVAILABLE').length;
     if (hasUnavail) return 3;
@@ -22,7 +38,7 @@ function slotPriority(s: AnySlotDto): number {
 }
 
 function availableCount(s: AnySlotDto): number {
-  return 'members' in s ? s.members.filter((m) => m.status === 'AVAILABLE').length : s.available;
+  return isNamedSlot(s) ? s.members.filter((m) => m.status === 'AVAILABLE').length : s.available;
 }
 
 @Component({
@@ -53,6 +69,6 @@ export class AvailableSlotsPanel {
   );
 
   protected isMjSlot(s: AnySlotDto): s is AvailableSlotDto {
-    return 'members' in s;
+    return isNamedSlot(s);
   }
 }

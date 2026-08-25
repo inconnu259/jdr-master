@@ -6,11 +6,13 @@ import {
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 
-// AccountController -> update-theme.dto.ts -> import RUNTIME (pas `import type`) de THEMES depuis
-// @master-jdr/shared (ESM, non transformé par ts-jest) — même piège déjà documenté pour
-// GAME_SYSTEMS (realtime.module.spec.ts) et @master-jdr/game-rules (mémoire projet).
-jest.mock('@master-jdr/shared', () => ({
-  THEMES: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
+// AccountController -> AccountService -> toDto() (AnnouncementsService, Story 29.13, AD-17) ->
+// transitivement CharacterService -> @master-jdr/game-rules (ESM, non transformé par ts-jest).
+jest.mock('@master-jdr/game-rules', () => ({
+  validate: jest.fn(),
+  computeDerived: jest.fn(),
+  pendingLevels: jest.fn(),
+  LEVEL_TABLE: [],
 }));
 
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
@@ -19,7 +21,15 @@ import { AccountController } from './account.controller';
 import { AccountService } from './account.service';
 
 function makeAccountService() {
-  return { updateDisplayName: jest.fn(), updateTheme: jest.fn() };
+  return {
+    updateDisplayName: jest.fn(),
+    updateTheme: jest.fn(),
+    updatePreferences: jest.fn(),
+    addFavorite: jest.fn(),
+    removeFavorite: jest.fn(),
+    getUnseenAnnouncements: jest.fn(),
+    markAnnouncementRead: jest.fn(),
+  };
 }
 
 function makeAuthService() {
@@ -106,6 +116,63 @@ describe('AccountController', () => {
       'oldpw',
       'new@b.c',
     );
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("updatePreferences() lit l'id depuis la session (req.user), jamais depuis le corps", async () => {
+    account.updatePreferences.mockResolvedValue({
+      id: 'u1',
+      partiesSort: 'date',
+    });
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.updatePreferences(req, {
+      partiesSort: 'date',
+    });
+
+    expect(account.updatePreferences).toHaveBeenCalledWith('u1', {
+      partiesSort: 'date',
+    });
+    expect(result).toEqual({ id: 'u1', partiesSort: 'date' });
+  });
+
+  it("addFavorite() lit l'id depuis la session et le partieId depuis l'URL", async () => {
+    account.addFavorite.mockResolvedValue({ ok: true });
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.addFavorite(req, 'p1');
+
+    expect(account.addFavorite).toHaveBeenCalledWith('u1', 'p1');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("removeFavorite() lit l'id depuis la session et le partieId depuis l'URL", async () => {
+    account.removeFavorite.mockResolvedValue({ ok: true });
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.removeFavorite(req, 'p1');
+
+    expect(account.removeFavorite).toHaveBeenCalledWith('u1', 'p1');
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("getUnseenAnnouncements() lit l'id depuis la session (req.user) (Story 29.13)", async () => {
+    account.getUnseenAnnouncements.mockResolvedValue([]);
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.getUnseenAnnouncements(req);
+
+    expect(account.getUnseenAnnouncements).toHaveBeenCalledWith('u1');
+    expect(result).toEqual([]);
+  });
+
+  it("markAnnouncementRead() lit l'id depuis la session et l'announcementId depuis l'URL (Story 29.13)", async () => {
+    account.markAnnouncementRead.mockResolvedValue({ ok: true });
+
+    const req = { user: { id: 'u1' } } as any;
+    const result = await controller.markAnnouncementRead(req, 'a1');
+
+    expect(account.markAnnouncementRead).toHaveBeenCalledWith('u1', 'a1');
     expect(result).toEqual({ ok: true });
   });
 
@@ -228,6 +295,15 @@ describe('AccountController', () => {
       expect(account.updateTheme).not.toHaveBeenCalled();
     });
 
+    it("deferred-work (2026-08-24) : PATCH /me/preferences — id glissé dans le corps → 400 forbidNonWhitelisted, service jamais appelé", async () => {
+      account.updatePreferences.mockResolvedValue({ hideFinishedParties: true });
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ hideFinishedParties: true, id: 'autre-utilisateur' })
+        .expect(400); // forbidNonWhitelisted : id glissé dans le corps
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
     it('theme valide sans champ superflu → 200', async () => {
       account.updateTheme.mockResolvedValue({
         id: 'u1',
@@ -324,6 +400,113 @@ describe('AccountController', () => {
         'oldpw',
         'new@example.com',
       );
+    });
+
+    it('partiesSort hors union fermée → 400, service jamais appelé (AC4, Story 29.8)', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ partiesSort: 'favori' })
+        .expect(400);
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
+    it('hideFinishedParties non booléen → 400, service jamais appelé', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ hideFinishedParties: 'oui' })
+        .expect(400);
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
+    it('patch partiel (un seul champ fourni) → 200', async () => {
+      account.updatePreferences.mockResolvedValue({
+        id: 'u1',
+        partiesSort: 'nom',
+      });
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ partiesSort: 'nom' })
+        .expect(200);
+      expect(account.updatePreferences).toHaveBeenCalledWith('u1', {
+        partiesSort: 'nom',
+      });
+    });
+
+    it('corps vide (aucun champ) → 200, patch vide transmis', async () => {
+      account.updatePreferences.mockResolvedValue({ id: 'u1' });
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({})
+        .expect(200);
+      expect(account.updatePreferences).toHaveBeenCalledWith('u1', {});
+    });
+
+    it('partiesViewMode hors union fermée → 400, service jamais appelé (AC4, Story 29.9)', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ partiesViewMode: 'geant' })
+        .expect(400);
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
+    it('charactersViewMode hors union fermée → 400, service jamais appelé (AC4, Story 29.9)', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ charactersViewMode: 'geant' })
+        .expect(400);
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
+    it('charactersSort hors union fermée → 400, service jamais appelé (AC4, Story 29.9)', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send({ charactersSort: 'urgence' }) // vocabulaire des parties, disjoint de celui des personnages
+        .expect(400);
+      expect(account.updatePreferences).not.toHaveBeenCalled();
+    });
+
+    it('patch combinant les 6 champs de préférence en un seul appel → 200, tous transmis (Story 29.9)', async () => {
+      account.updatePreferences.mockResolvedValue({ id: 'u1' });
+      const body = {
+        partiesSort: 'date',
+        hideFinishedParties: true,
+        partiesViewMode: 'compact',
+        charactersViewMode: 'large',
+        charactersSort: 'niveau',
+      };
+      await request(app.getHttpServer())
+        .patch('/me/preferences')
+        .send(body)
+        .expect(200);
+      expect(account.updatePreferences).toHaveBeenCalledWith('u1', body);
+    });
+
+    it('PUT /me/favorites/:partieId → 200', async () => {
+      account.addFavorite.mockResolvedValue({ ok: true });
+      await request(app.getHttpServer()).put('/me/favorites/p1').expect(200);
+      expect(account.addFavorite).toHaveBeenCalledWith('u1', 'p1');
+    });
+
+    it('DELETE /me/favorites/:partieId → 200', async () => {
+      account.removeFavorite.mockResolvedValue({ ok: true });
+      await request(app.getHttpServer()).delete('/me/favorites/p1').expect(200);
+      expect(account.removeFavorite).toHaveBeenCalledWith('u1', 'p1');
+    });
+
+    it('GET /me/unseen-announcements → 200 (Story 29.13)', async () => {
+      account.getUnseenAnnouncements.mockResolvedValue([]);
+      await request(app.getHttpServer())
+        .get('/me/unseen-announcements')
+        .expect(200);
+      expect(account.getUnseenAnnouncements).toHaveBeenCalledWith('u1');
+    });
+
+    it('PUT /me/announcements-read/:announcementId → 200, corps vide accepté (Story 29.13)', async () => {
+      account.markAnnouncementRead.mockResolvedValue({ ok: true });
+      await request(app.getHttpServer())
+        .put('/me/announcements-read/a1')
+        .expect(200);
+      expect(account.markAnnouncementRead).toHaveBeenCalledWith('u1', 'a1');
     });
   });
 });

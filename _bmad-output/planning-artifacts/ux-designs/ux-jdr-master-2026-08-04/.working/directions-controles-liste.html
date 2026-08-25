@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contrôles de la liste — 3 approches + 3 modes d'affichage</title>
+<style>
+/* Tokens du design system de base, thème Grimoire Émeraude (§2-§6). Rien d'inventé côté couleur. */
+:root{
+  --primary-bg:#0d0a14;--surface-bg:#1a1428;--accent-1:#7ec8a4;--accent-2:#9b6dff;
+  --text-primary:#e8e8f0;--text-muted:#7a7a8a;--status-mixed:#f0a030;--status-unknown:#3a3a4a;
+  --border-subtle:rgba(255,255,255,.06);--overlay:rgba(0,0,0,.55);
+  --space-xs:4px;--space-sm:8px;--space-md:12px;--space-base:16px;--space-lg:24px;--space-xl:32px;
+  --radius-card:10px;--radius-badge:6px;--radius-button:8px;
+  --text-sm:12px;--text-base:14px;--text-lg:16px;--text-xl:20px;--text-2xl:26px;
+  --elev-card:0 4px 12px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{margin:0;background:#07050c;color:var(--text-primary);padding:var(--space-lg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:var(--text-base);line-height:1.5}
+h1{font-size:var(--text-2xl);margin:0 0 var(--space-xs)}
+h2{font-size:var(--text-xl);margin:var(--space-xl) 0 2px}
+.lede,.why{color:var(--text-muted);max-width:80ch}
+.lede{margin:0 0 var(--space-lg)}
+.why{font-size:var(--text-sm);margin:0 0 var(--space-md)}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:var(--space-xl);align-items:start}
+.col h3{font-size:var(--text-lg);margin:0 0 2px}
+.col .sub{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 var(--space-md);min-height:5.4em}
+.phone{width:330px;max-width:100%;border:1px solid var(--border-subtle);border-radius:22px;background:var(--primary-bg);
+  padding:var(--space-md) var(--space-md) var(--space-lg);box-shadow:0 8px 32px rgba(0,0,0,.7);position:relative;overflow:hidden}
+.hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:var(--space-sm)}
+.hdr b{font-size:var(--text-xl)}
+.hdr span{color:var(--text-muted);font-size:var(--text-sm)}
+.note{font-size:var(--text-sm);color:var(--text-muted);border-left:2px solid var(--border-subtle);
+  padding-left:var(--space-sm);margin-top:var(--space-md)}
+.cost{color:var(--status-mixed)}
+/* contrôles */
+.bar{display:flex;align-items:center;gap:var(--space-xs);margin-bottom:var(--space-sm);flex-wrap:wrap}
+.ico{width:30px;height:30px;border-radius:var(--radius-button);border:1px solid var(--border-subtle);
+  display:grid;place-items:center;color:var(--text-muted);font-size:13px;flex:none}
+.ico.on{color:var(--text-primary);border-color:var(--accent-2);background:rgba(155,109,255,.13)}
+.seg{display:flex;border:1px solid var(--border-subtle);border-radius:var(--radius-button);overflow:hidden;flex:none}
+.seg span{padding:5px 10px;font-size:var(--text-sm);color:var(--text-muted)}
+.seg span.on{color:var(--text-primary);background:rgba(155,109,255,.16)}
+.drop{font-size:var(--text-sm);color:var(--text-muted);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-button);padding:5px 9px;white-space:nowrap}
+.search{flex:1;min-width:90px;font-size:var(--text-sm);color:var(--text-muted);border:1px solid var(--border-subtle);
+  border-radius:var(--radius-button);padding:5px 9px}
+.chips{display:flex;gap:var(--space-xs);flex-wrap:wrap;margin-bottom:var(--space-sm)}
+.chip{font-size:var(--text-sm);padding:2px 8px;border-radius:var(--radius-badge);border:1px solid;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:5px}
+.chip.act{color:var(--accent-2);border-color:var(--accent-2);background:rgba(155,109,255,.13)}
+.chip.todo{color:var(--status-mixed);border-color:var(--status-mixed);background:rgba(240,160,48,.15)}
+.chip.info{color:var(--text-muted);border-color:var(--status-unknown);background:rgba(58,58,74,.4)}
+.chip.mj{color:var(--accent-2);border-color:var(--accent-2);background:rgba(155,109,255,.13)}
+.chip.pj{color:var(--accent-1);border-color:var(--accent-1);background:rgba(126,200,164,.13)}
+/* feuille de réglages */
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface-bg);border-radius:14px 14px 0 0;
+  padding:var(--space-base);box-shadow:0 -8px 32px rgba(0,0,0,.7);border-top:1px solid var(--border-subtle)}
+.sheet .grab{width:34px;height:4px;border-radius:2px;background:var(--status-unknown);margin:0 auto var(--space-md)}
+.sheet h4{margin:0 0 var(--space-xs);font-size:var(--text-sm);color:var(--text-muted);
+  text-transform:uppercase;letter-spacing:.07em;font-weight:500}
+.sheet .grp{margin-bottom:var(--space-md)}
+.opt{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:var(--text-base)}
+.opt small{color:var(--text-muted);font-size:var(--text-sm)}
+.radio{width:16px;height:16px;border-radius:50%;border:1px solid var(--status-unknown);flex:none}
+.radio.on{border-color:var(--accent-2);box-shadow:inset 0 0 0 3.5px var(--accent-2)}
+.cta{margin-top:var(--space-sm);text-align:center;padding:9px;border-radius:var(--radius-button);
+  background:linear-gradient(135deg,#7ec8a4,#9b6dff);color:#0d0a14;font-weight:600;font-size:var(--text-base)}
+.dim{position:absolute;inset:0;background:var(--overlay)}
+/* cartes de liste */
+.card{background:var(--surface-bg);border-radius:var(--radius-card);box-shadow:var(--elev-card);margin-bottom:var(--space-sm);overflow:hidden}
+.pname{font-size:var(--text-lg);font-weight:500}
+.pmeta{color:var(--text-muted);font-size:var(--text-sm)}
+.pad{padding:var(--space-md)}
+.todos{display:flex;flex-wrap:wrap;gap:var(--space-xs);margin-top:var(--space-sm)}
+.done{opacity:.45}
+.fav{color:var(--status-mixed)}
+.sect{font-size:var(--text-sm);text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);
+  margin:var(--space-md) 0 var(--space-sm);display:flex;align-items:center;gap:var(--space-sm)}
+.sect::after{content:"";flex:1;height:1px;background:var(--border-subtle)}
+.sect.hot{color:var(--status-mixed)}
+/* vignettes (famille Blason, cf. vignettes-generees.html) */
+.vg{position:relative;background:linear-gradient(160deg,#1e1633,#0d0a14);display:grid;place-items:center;flex:none}
+.sig{width:56%;height:56%;position:relative;border:2px solid var(--accent-2);transform:rotate(45deg);border-radius:5px}
+.sig::before{content:"";position:absolute;inset:16%;border:2px solid var(--accent-1);border-radius:3px}
+.vg .mk{position:absolute;right:6px;top:3px;font-size:15px;font-weight:700;color:rgba(232,232,240,.9)}
+.vg.big{height:78px;width:100%}
+.vg.mid{width:44px;height:44px;border-radius:8px}
+.vg.sm{width:26px;height:26px;border-radius:6px}
+.mid-row{display:flex;gap:var(--space-md);padding:var(--space-md);align-items:flex-start}
+.list-row{display:flex;gap:var(--space-sm);align-items:center;padding:var(--space-sm) var(--space-md);
+  border-bottom:1px solid var(--border-subtle)}
+.dot{width:8px;height:8px;border-radius:50%;flex:none}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+</head>
+<body>
+
+<h1>Contrôles de la liste — trois approches</h1>
+<p class="lede">Même liste, mêmes réglages disponibles (mode d'affichage, tri, filtre rôle et statut, recherche, mémorisation du défaut). Ce qui change, c'est <strong>ce que ça coûte en hauteur d'écran et en nombre de gestes</strong>. Sur un téléphone, chaque ligne de contrôles est une carte de partie en moins.</p>
+
+<div class="row">
+
+  <!-- ═══ A ═══ -->
+  <div class="col">
+    <h3>A — Barre d'icônes</h3>
+    <p class="sub">Une seule ligne, toujours là : trois icônes de mode, un tri, un filtre. Les filtres actifs apparaissent en pastilles retirables sous la barre, et seulement quand il y en a. Réglages atteignables en un geste, coût permanent d'une ligne.</p>
+    <div class="phone">
+      <div class="hdr"><b>Mes parties</b><span>4</span></div>
+      <div class="bar">
+        <span class="ico">▦</span><span class="ico on">▤</span><span class="ico">☰</span>
+        <span class="drop">Urgent d'abord ▾</span>
+        <span class="ico" style="margin-left:auto">⚲</span>
+        <span class="ico">⛭</span>
+      </div>
+      <div class="chips"><span class="chip act">MJ ✕</span><span class="chip act">En cours ✕</span></div>
+
+      <div class="card"><div class="mid-row">
+        <div class="vg mid"><div class="sig"></div></div>
+        <div style="min-width:0;flex:1">
+          <div class="pname ell">Le Convoi du Nord</div>
+          <div class="pmeta">Campagne épisodique · <span class="chip mj">MJ</span></div>
+          <div class="todos"><span class="chip todo">Aucun scénario en cours</span></div>
+        </div></div></div>
+
+      <div class="card"><div class="mid-row">
+        <div class="vg mid"><div class="sig"></div></div>
+        <div style="min-width:0;flex:1">
+          <div class="pname ell">Les Braises d'Onmyo</div>
+          <div class="pmeta">Campagne · <span class="chip mj">MJ</span></div>
+          <div class="todos"><span class="chip info">Séance le 12 août</span></div>
+        </div></div></div>
+
+      <p class="note">Le meilleur rapport puissance/encombrement. <span class="cost">Coût :</span> les icônes de mode doivent s'apprendre — trois pictogrammes sans libellé.</p>
+    </div>
+  </div>
+
+  <!-- ═══ B ═══ -->
+  <div class="col">
+    <h3>B — Barre complète</h3>
+    <p class="sub">Tout est visible et étiqueté en toutes lettres : segments de mode, segments de rôle, tri, recherche. Rien à découvrir, rien à mémoriser. Sur téléphone, ça mange deux à trois lignes avant la première partie.</p>
+    <div class="phone">
+      <div class="hdr"><b>Mes parties</b><span>4</span></div>
+      <div class="bar"><span class="search">⚲ Rechercher une partie</span></div>
+      <div class="bar">
+        <span class="seg"><span>Grand</span><span class="on">Moyen</span><span>Liste</span></span>
+      </div>
+      <div class="bar">
+        <span class="seg"><span class="on">Tous</span><span>MJ</span><span>Joueur</span></span>
+        <span class="drop">Urgent ▾</span>
+      </div>
+
+      <div class="card"><div class="mid-row">
+        <div class="vg mid"><div class="sig"></div></div>
+        <div style="min-width:0;flex:1">
+          <div class="pname ell">Les Cendres de Kavaan <span class="fav">★</span></div>
+          <div class="pmeta">Campagne · <span class="chip pj">Joueur</span></div>
+          <div class="todos"><span class="chip todo">Personnage à créer</span></div>
+        </div></div></div>
+
+      <div class="card"><div class="mid-row">
+        <div class="vg mid"><div class="sig"></div></div>
+        <div style="min-width:0;flex:1">
+          <div class="pname ell">Le Convoi du Nord</div>
+          <div class="pmeta">Épisodique · <span class="chip mj">MJ</span></div>
+        </div></div></div>
+
+      <p class="note">Zéro apprentissage, idéal sur desktop où la place ne manque pas. <span class="cost">Coût :</span> sur téléphone, la première partie commence à mi-écran — exactement le reproche « ça ne dit pas où on en est ».</p>
+    </div>
+  </div>
+
+  <!-- ═══ C ═══ -->
+  <div class="col">
+    <h3>C — Feuille de réglages</h3>
+    <p class="sub">L'écran ne porte qu'une recherche et un bouton « Affichage ». Tout le reste vit dans une feuille qui monte du bas : modes, tri, filtres, et la case « garder comme affichage par défaut ». Coût permanent quasi nul, un geste de plus pour régler.</p>
+    <div class="phone">
+      <div class="hdr"><b>Mes parties</b><span>4</span></div>
+      <div class="bar"><span class="search">⚲ Rechercher</span><span class="drop">⛭ Affichage</span></div>
+      <div class="card"><div class="mid-row">
+        <div class="vg mid"><div class="sig"></div></div>
+        <div style="min-width:0;flex:1"><div class="pname ell">Les Cendres de Kavaan</div>
+        <div class="pmeta">Campagne · <span class="chip pj">Joueur</span></div></div></div></div>
+      <div class="card"><div class="mid-row">
+        <div class="vg mid"><div class="sig"></div></div>
+        <div style="min-width:0;flex:1"><div class="pname ell">Le Convoi du Nord</div>
+        <div class="pmeta">Épisodique · <span class="chip mj">MJ</span></div></div></div></div>
+      <div class="dim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="grp"><h4>Affichage</h4>
+          <span class="seg"><span>Grand</span><span class="on">Moyen</span><span>Liste</span></span></div>
+        <div class="grp"><h4>Trier par</h4>
+          <div class="opt"><span>Urgent d'abord</span><span class="radio on"></span></div>
+          <div class="opt"><span>Favoris d'abord</span><span class="radio"></span></div>
+          <div class="opt"><span>Prochaine séance</span><span class="radio"></span></div>
+          <div class="opt"><span>Alphabétique</span><span class="radio"></span></div>
+        </div>
+        <div class="grp"><h4>N'afficher que</h4>
+          <div class="chips"><span class="chip act">Tous</span><span class="chip info">MJ</span><span class="chip info">Joueur</span><span class="chip info">En cours</span></div>
+        </div>
+        <div class="opt"><span>Garder comme défaut <small>— sur tous mes appareils</small></span><span class="radio on"></span></div>
+        <div class="cta">Appliquer</div>
+      </div>
+      <p class="note" style="position:relative;z-index:2;color:#e8e8f0">Le plus épuré au repos, et le seul où tout tient au même endroit. <span class="cost">Coût :</span> l'état courant du tri n'est plus visible sans ouvrir la feuille.</p>
+    </div>
+  </div>
+</div>
+
+<h2>Ce que donnent les trois modes d'affichage</h2>
+<p class="why">Mêmes quatre parties, mêmes données. Le mode change la quantité d'information par partie et le nombre de parties visibles sans défiler. Les vignettes utilisent la famille « Blason » à titre d'exemple.</p>
+
+<div class="row">
+  <div class="col">
+    <h3>Grande vignette</h3>
+    <p class="sub" style="min-height:3em">Une partie fait presque un demi-écran. Le plus immersif, le plus reconnaissable. Au-delà de 6 parties, ça devient un couloir de défilement.</p>
+    <div class="phone">
+      <div class="hdr"><b>Mes parties</b><span>4</span></div>
+      <div class="card">
+        <div class="vg big"><div class="sig" style="width:46px;height:46px"></div><div class="mk">CK</div></div>
+        <div class="pad"><div class="pname">Les Cendres de Kavaan <span class="fav">★</span></div>
+          <div class="pmeta">Campagne · <span class="chip pj">Joueur</span> · <i>Ombreflèche</i></div>
+          <div class="todos"><span class="chip todo">Personnage à créer</span><span class="chip todo">Vote en cours</span></div></div>
+      </div>
+      <div class="card">
+        <div class="vg big" style="background:linear-gradient(160deg,#0f2416,#0d0a14)"><div class="sig" style="width:46px;height:46px"></div><div class="mk">CN</div></div>
+        <div class="pad"><div class="pname">Le Convoi du Nord</div>
+          <div class="pmeta">Campagne épisodique · <span class="chip mj">MJ</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <h3>Moyen</h3>
+    <p class="sub" style="min-height:3em">Vignette de 44 px à gauche, tout le reste à droite, y compris ce qu'il y a à faire en toutes lettres. Quatre à cinq parties par écran. Le compromis.</p>
+    <div class="phone">
+      <div class="hdr"><b>Mes parties</b><span>4</span></div>
+      <div class="sect hot">◆ Ça t'attend (2)</div>
+      <div class="card"><div class="mid-row"><div class="vg mid"><div class="sig"></div></div>
+        <div style="min-width:0;flex:1"><div class="pname ell">Les Cendres de Kavaan <span class="fav">★</span></div>
+        <div class="pmeta">Campagne · <span class="chip pj">Joueur</span></div>
+        <div class="todos"><span class="chip todo">Personnage à créer</span><span class="chip todo">Vote</span></div></div></div></div>
+      <div class="card"><div class="mid-row"><div class="vg mid" style="background:linear-gradient(160deg,#0f2416,#0d0a14)"><div class="sig"></div></div>
+        <div style="min-width:0;flex:1"><div class="pname ell">Le Convoi du Nord</div>
+        <div class="pmeta">Épisodique · <span class="chip mj">MJ</span></div>
+        <div class="todos"><span class="chip todo">Aucun scénario</span></div></div></div></div>
+      <div class="sect">En cours (1)</div>
+      <div class="card"><div class="mid-row"><div class="vg mid"><div class="sig"></div></div>
+        <div style="min-width:0;flex:1"><div class="pname ell">La Nuit des Lanternes</div>
+        <div class="pmeta">One-shot · <span class="chip pj">Joueur</span></div>
+        <div class="todos"><span class="chip info">12 août, soirée</span></div></div></div></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <h3>Liste</h3>
+    <p class="sub" style="min-height:3em">Une ligne, une puce d'urgence, un compte. Douze parties sans défiler. Fait pour retrouver, pas pour découvrir.</p>
+    <div class="phone">
+      <div class="hdr"><b>Mes parties</b><span>4</span></div>
+      <div class="card" style="padding:0">
+        <div class="list-row"><span class="dot" style="background:var(--status-mixed)"></span>
+          <span class="vg sm"><span class="sig"></span></span>
+          <span style="flex:1;min-width:0"><span class="pname ell" style="font-size:var(--text-base);display:block">Les Cendres de Kavaan ★</span>
+          <span class="pmeta ell" style="display:block">Joueur · 2 choses à faire</span></span>
+          <span class="chip todo">2</span></div>
+        <div class="list-row"><span class="dot" style="background:var(--status-mixed)"></span>
+          <span class="vg sm" style="background:linear-gradient(160deg,#0f2416,#0d0a14)"><span class="sig"></span></span>
+          <span style="flex:1;min-width:0"><span class="pname ell" style="font-size:var(--text-base);display:block">Le Convoi du Nord</span>
+          <span class="pmeta ell" style="display:block">MJ · 1 chose à faire</span></span>
+          <span class="chip todo">1</span></div>
+        <div class="list-row"><span class="dot" style="background:var(--accent-1)"></span>
+          <span class="vg sm"><span class="sig"></span></span>
+          <span style="flex:1;min-width:0"><span class="pname ell" style="font-size:var(--text-base);display:block">La Nuit des Lanternes</span>
+          <span class="pmeta ell" style="display:block">Joueur · 12 août</span></span></div>
+        <div class="list-row done" style="border-bottom:none"><span class="dot" style="background:var(--status-unknown)"></span>
+          <span class="vg sm" style="background:linear-gradient(160deg,#241808,#1a1008)"><span class="sig"></span></span>
+          <span style="flex:1;min-width:0"><span class="pname ell" style="font-size:var(--text-base);display:block">Le Serment de Rives-Basses</span>
+          <span class="pmeta ell" style="display:block">MJ · Terminée</span></span>
+          <span class="chip todo">1</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

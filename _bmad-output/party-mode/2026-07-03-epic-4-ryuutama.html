@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Party Mode — Epic 4 : Ryuutama — 2026-07-03</title>
+<style>
+  :root {
+    --bg: #0d0a14;
+    --surface: #1a1428;
+    --accent-1: #7ec8a4;
+    --accent-2: #9b6dff;
+    --text: #e8e8f0;
+    --muted: #7a7a8a;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+    line-height: 1.6;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin: 0 0 6px;
+  }
+  header p { color: var(--muted); font-size: 14px; margin: 0; }
+  .cast {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin: 24px 0 40px;
+  }
+  .cast span {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+  .turn {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 18px;
+    opacity: 0;
+    animation: fadeIn 0.6s ease forwards;
+  }
+  .turn:nth-child(1) { animation-delay: 0.05s; }
+  .icon {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .bubble {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    flex: 1;
+  }
+  .bubble .name {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+    display: block;
+  }
+  .bubble p { margin: 0; font-size: 14.5px; }
+  .bubble .stage {
+    color: var(--muted);
+    font-style: italic;
+    font-size: 13px;
+  }
+  .divider {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin: 32px 0;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .divider::before, .divider::after {
+    content: "";
+  }
+  footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  footer ul { padding-left: 18px; margin: 8px 0; }
+  .glow {
+    position: fixed;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 500px;
+    height: 300px;
+    background: radial-gradient(ellipse, rgba(155,109,255,0.15), transparent 70%);
+    pointer-events: none;
+    z-index: -1;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+<div class="glow"></div>
+
+<header>
+  <h1>La table s'est réunie</h1>
+  <p>jdr-master · Epic 4 : Personnages Ryuutama · 3 juillet 2026</p>
+</header>
+
+<div class="cast">
+  <span>📋 John — Product Manager</span>
+  <span>🏗️ Winston — Architecte</span>
+  <span>💻 Amelia — Dev Senior</span>
+  <span>🎨 Sally — UX Designer</span>
+  <span>📊 Mary — Analyste</span>
+  <span>📚 Paige — Rédactrice technique</span>
+</div>
+
+<div class="turn"><div class="icon">📋</div><div class="bubble"><span class="name">John</span><p>Pourquoi est-ce qu'on colle le portrait de personnage dans le même epic que "poser l'architecture plugin qui doit tenir trois systèmes de jeu" ?</p></div></div>
+<div class="turn"><div class="icon">🏗️</div><div class="bubble"><span class="name">Winston</span><p>Parce que c'est le même fichier, John. Une colonne de plus sur un modèle qu'on crée de toute façon.</p></div></div>
+<div class="turn"><div class="icon">🎨</div><div class="bubble"><span class="name">Sally</span><p>Le joueur ouvre la fiche, voit des initiales grises dans un rond, et referme l'appli. C'est <em>le</em> moment de la story.</p></div></div>
+<div class="turn"><div class="icon">💻</div><div class="bubble"><span class="name">Amelia</span><p><code>validate(data, mode: "strict" | "mj")</code> — le paramètre <code>mode</code> existe, rien ne l'exerce. Ça compile, ça passe en review. Et un jour, quelqu'un l'appelle en prod pour la première fois de l'histoire du projet.</p></div></div>
+
+<div class="divider">— le doublon de calcul —</div>
+
+<div class="turn"><div class="icon">💻</div><div class="bubble"><span class="name">Amelia</span><p>Deux implémentations de PV=VIG×2, une en Angular, une en Nest. Le jour où Ryuutama patch une règle, quelqu'un met à jour un seul des deux fichiers.</p></div></div>
+<div class="turn"><div class="icon">🏗️</div><div class="bubble"><span class="name">Winston</span><p>Le vrai mur, c'est le contenu homebrew — un accès base de données au milieu d'une fonction censée être pure...</p></div></div>
+<div class="turn"><div class="icon">🏗️</div><div class="bubble"><span class="name">Winston</span><p class="stage">(repense à voix haute)</p><p>...mais c'est exactement le même principe que le jet de dé qu'Incon vient de décrire. On passe le catalogue en paramètre. J'ai eu tort de présenter ça comme un risque à court terme.</p></div></div>
+<div class="turn"><div class="icon">📊</div><div class="bubble"><span class="name">Mary</span><p><code>packages/game-rules</code>. Une seule formule, deux consommateurs. Ça, c'est une réutilisabilité qu'on peut vérifier, pas juste espérer.</p></div></div>
+
+<div class="divider">— les trois PDF —</div>
+
+<div class="turn"><div class="icon">💻</div><div class="bubble"><span class="name">Amelia</span><p>Seul le fichier "edit" a de vrais champs de formulaire — 126, nommés. Les deux autres sont du visuel pur.</p></div></div>
+<div class="turn"><div class="icon">🎨</div><div class="bubble"><span class="name">Sally</span><p>Le menu déroulant "Classe" du PDF officiel propose 12 classes, pas 7. Exactement les 4 qu'on a mises de côté. La fiche a juste plus de place que ce qu'on implémente ce palier.</p></div></div>
+<div class="turn"><div class="icon">📋</div><div class="bubble"><span class="name">John</span><p>Éditable + 2 pages maintenant. Le 1 page, en suivi.</p></div></div>
+
+<div class="divider">— dernière ronde —</div>
+
+<div class="turn"><div class="icon">💻</div><div class="bubble"><span class="name">Amelia</span><p>"Un seul personnage par joueur et par partie" — c'est écrit en toutes lettres. Mais je cherche la contrainte qui l'empêche vraiment, et je ne la vois nulle part.</p></div></div>
+<div class="turn"><div class="icon">🏗️</div><div class="bubble"><span class="name">Winston</span><p class="stage">(grimace)</p><p>On vient de passer une session entière sur exactement ce genre de race condition côté vote. C'est le genre d'erreur qu'on ne devrait plus faire deux fois.</p></div></div>
+<div class="turn"><div class="icon">📊</div><div class="bubble"><span class="name">Mary</span><p>C'est un upload utilisateur, donc <code>docs/security.md</code> s'applique — validation stricte du type de fichier, pas juste l'extension.</p></div></div>
+
+<footer>
+  <strong>Ce qui reste sur la table :</strong>
+  <ul>
+    <li>Accessibilité clavier de l'outil de recadrage du portrait — non résolue, assumée en connaissance de cause.</li>
+    <li>Export PDF "1 page" — différé, noté en suivi.</li>
+  </ul>
+  <p>Cinq stories, dix-huit exigences fonctionnelles, deux bugs attrapés avant la première ligne de code.</p>
+</footer>
+
+</body>
+</html>

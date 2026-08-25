@@ -1,0 +1,18 @@
+[
+  { "key": "arbalete", "label": "Arbalète", "categoryId": "arc" },
+  { "key": "arc-court", "label": "Arc court", "categoryId": "arc" },
+  { "key": "arc-de-chasse", "label": "Arc de chasse", "categoryId": "arc" },
+  { "key": "dague", "label": "Dague", "categoryId": "epee-courte" },
+  { "key": "poignard", "label": "Poignard", "categoryId": "epee-courte" },
+  { "key": "wakizashi", "label": "Wakizashi", "categoryId": "epee-courte" },
+  { "key": "epee-large", "label": "Épée large", "categoryId": "epee-longue" },
+  { "key": "katana", "label": "Katana", "categoryId": "epee-longue" },
+  { "key": "rapiere", "label": "Rapière", "categoryId": "epee-longue" },
+  { "key": "hache-de-bataille", "label": "Hache de bataille", "categoryId": "hache" },
+  { "key": "hache-de-bucheron", "label": "Hache de bûcheron", "categoryId": "hache" },
+  { "key": "epieu", "label": "Épieu", "categoryId": "lance" },
+  { "key": "hallebarde", "label": "Hallebarde", "categoryId": "lance" },
+  { "key": "lance", "label": "Lance", "categoryId": "lance" },
+  { "key": "trident", "label": "Trident", "categoryId": "lance" },
+  { "key": "mains-nues", "label": "Mains nues", "categoryId": "mains-nues" }
+]

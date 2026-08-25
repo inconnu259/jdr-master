@@ -1,0 +1,74 @@
+[
+  {
+    "key": "encyclopedie",
+    "label": "Encyclopédie",
+    "race": "DRAGON_VERT",
+    "description": "L'encyclopédie recense toutes les lois fondamentales de l'univers. Le meneur utilise les règles du jeu telles quelles. Cet artefact est recommandé aux débutants."
+  },
+  {
+    "key": "lanterne",
+    "label": "Lanterne",
+    "race": "DRAGON_VERT",
+    "description": "La lanterne éclaire le chemin des voyageurs et les aide à avancer. En fin de séance, les points d'expérience que reçoivent les personnages sont doublés."
+  },
+  {
+    "key": "sextant",
+    "label": "Sextant",
+    "race": "DRAGON_VERT",
+    "description": "Le sextant permet de connaître sa situation, et donc de pouvoir continuer sa route seul sans se perdre. Le meneur peut créer et utiliser ses propres règles."
+  },
+  {
+    "key": "anneau",
+    "label": "Anneau",
+    "race": "DRAGON_BLEU",
+    "description": "L'anneau guide les voyageurs et renforce le lien inaliénable qui les unit. Ils sont membres de la même famille, maîtres et disciples, camarade de classe, etc."
+  },
+  {
+    "key": "cristal",
+    "label": "Cristal",
+    "race": "DRAGON_BLEU",
+    "description": "Le cristal luit comme la puissante destinée qui anime les voyageurs. Les membres du groupe ne meurent que s'ils descendent en dessous de -20 PV."
+  },
+  {
+    "key": "mascotte",
+    "label": "Mascotte",
+    "race": "DRAGON_BLEU",
+    "description": "La mascotte veille sur les voyageurs tout en restant à leurs côtés. Grâce à cet artefact, l'homme-dragon peut les accompagner sous sa forme d'avatar."
+  },
+  {
+    "key": "grand-arc",
+    "label": "Grand arc",
+    "race": "DRAGON_ROUGE",
+    "description": "Le grand arc force ses cibles à se déplacer constamment. En combat, on refait un test d'initiative à chaque fois que l'on cherche à éviter une attaque."
+  },
+  {
+    "key": "grande-epee",
+    "label": "Grande épée",
+    "race": "DRAGON_ROUGE",
+    "description": "La grande épée est gigantesque et, quel que soit le combat, frappe toujours juste. Vous pouvez inscrire deux fois plus d'objets sur l'œuf de bataille."
+  },
+  {
+    "key": "grande-lance",
+    "label": "Grande lance",
+    "race": "DRAGON_ROUGE",
+    "description": "La grande lance est le signe de ralliement de ceux qui vont au combat. Tous les voyageurs sont des soldats envoyés en mission ou travaillent pour l'armée."
+  },
+  {
+    "key": "coupe",
+    "label": "Coupe",
+    "race": "DRAGON_NOIR",
+    "description": "La coupe sert à entreposer le poison qui corrompt le cœur des voyageurs. Ces derniers ont tous un sombre secret."
+  },
+  {
+    "key": "dague",
+    "label": "Dague",
+    "race": "DRAGON_NOIR",
+    "description": "La dague tue sans faire de différence : jeunes, vieux, hommes, femmes, etc. Une fois par séance, vous pouvez faire mourir un PNJ sans raison apparente ni moyen de s'y opposer."
+  },
+  {
+    "key": "miroir",
+    "label": "Miroir",
+    "race": "DRAGON_NOIR",
+    "description": "Le miroir reflète les pires peurs des voyageurs. À chaque fois qu'ils sont effrayés, ils doivent faire immédiatement un test d'ESP + ESP de difficulté 6. En cas d'échec, ils subissent l'état Choc (4)."
+  }
+]

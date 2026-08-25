@@ -10,10 +10,146 @@
   }
 }
 
+/* Story 36.14, AC1 — la ligne de contrôles, désormais REPLIÉE : le bouton « Affichage », la
+   pastille de résumé, les deux modes (Destinée, composition), un ressort, puis la bascule de vues.
+   ⚠️ `align-items: center` remplace le `flex-start` de la story 36.9. Son motif — « la bande de
+   couches peut passer à deux lignes sur téléphone, et la chip du mode doit rester en tête » — a
+   disparu avec la bande elle-même : tous les éléments restants tiennent sur une ligne d'égale
+   hauteur, et `flex-start` les décalerait maintenant vers le haut sans raison.
+   `flex-wrap` est conservé comme filet de sécurité : l'AC exige une seule ligne AU REPOS, pas une
+   troncature à toute largeur. */
+.calendar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 16px;
+
+  /* 🚨 CONTAINER QUERY, et surtout PAS une media query — même raisonnement que la grille Semaine
+     (story 36.13). MESURÉ À L'ÉCRAN pendant cette story : en contexte de partie, le panneau MJ
+     prend la moitié de la largeur et cette barre ne fait plus que **380 px dans une fenêtre de
+     1725 px**. Une media query aurait affiché les libellés longs — « Vue mois / Vue semaine /
+     Vue agenda » pèsent 319 px à eux seuls — et la barre serait repassée à TROIS lignes, c'est-à-dire
+     précisément le défaut que cette story existe pour réparer (`deferred-work.md:66`).
+
+     ⚠️ À distinguer de la bascule menu/feuille du panneau, qui emploie bien une media query
+     (D-1) : celle-là gouverne un overlay ancré au viewport, celle-ci du contenu dans la colonne. */
+  container-type: inline-size;
+  container-name: calendar-bar;
+
+  app-destiny-control {
+    display: block;
+  }
+}
+
+/* Par défaut la forme longue, celle du contrat sur ordinateur. */
+.vt-short {
+  display: none;
+}
+
+/* Sous le seuil, la forme abrégée du contrat (`contrat-ui-calendrier.html:524` :
+   « Mois / Sem. / Agenda »). Seuil à 560 px : au-dessus, la barre au repos tient largement ; en
+   dessous — colonne MJ à 380 px, téléphone à 375 px — seule la forme courte la garde sur une ligne. */
+@container calendar-bar (max-width: 560px) {
+  .vt-long {
+    display: none;
+  }
+
+  .vt-short {
+    display: inline;
+  }
+}
+
+/* Le ressort du contrat (`contrat-ui-calendrier.html:66`) — pousse la bascule de vues à droite. */
+.controls-spacer {
+  flex: 1;
+}
+
+/* Le bouton qui ouvre le panneau. Même forme de pastille que les autres entrées de la barre :
+   trois contrôles voisins ne peuvent pas se ressembler « presque ». Teinte neutre — le contrat le
+   dessine en `mat-stroked mut`, atténué, parce qu'il n'annonce aucun état actif à lui seul. */
+.display-trigger {
+  border: 1px solid var(--mat-sys-outline, #999);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mat-sys-on-surface-variant, inherit);
+  padding: 0.25rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+
+  /* P-1 — panneau ouvert : le fond change ET la graisse aussi, jamais la couleur seule. */
+  &--on {
+    background: var(--mat-sys-secondary-container, #cce);
+    font-weight: 600;
+  }
+}
+
+/* La zone d'annonce reste dans le flux même vide : sans elle, l'apparition de la pastille
+   décalerait toute la barre d'un cran. */
+.display-summary-slot {
+  display: flex;
+  align-items: center;
+}
+
+/* AC4 — la pastille EST l'action de rétablissement. Accentuée, contrairement au déclencheur :
+   elle signale un écart, c'est une information, pas un simple accès. */
+.display-summary {
+  border: 1px solid var(--mat-sys-primary, #666);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--mat-sys-primary, inherit);
+  padding: 0.25rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 .view-toggle {
   display: flex;
   justify-content: center;
-  margin-bottom: 16px;
+}
+
+/* ── Story 36.14, AC2 — les deux enveloppes du panneau « Affichage » ──────────────────────── */
+
+/* Le fond, la bordure et l'ombre vivent ICI et non dans `CalendarDisplayPanel` : c'est ce qui
+   permet au même contenu de servir un menu ancré et une feuille montant du bas. */
+.display-surface {
+  background: var(--mat-sys-surface-container, #1a1428);
+  color: var(--mat-sys-on-surface, inherit);
+  box-sizing: border-box;
+  padding: 12px;
+}
+
+.display-surface--menu {
+  border: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.12));
+  border-radius: 14px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.65);
+}
+
+/* La feuille du bas — patron `ConstraintPanel`, déjà en place dans ce fichier : même
+   `position: fixed`, même étagement. Les coins ne sont arrondis qu'en haut : elle sort du bord. */
+.display-surface--sheet {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 200;
+  border-top: 1px solid var(--mat-sys-outline-variant, rgba(255, 255, 255, 0.12));
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -10px 36px rgba(0, 0, 0, 0.65);
+  max-height: 80vh;
+  overflow-y: auto;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+.display-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .calendar-error {
@@ -25,31 +161,21 @@
   margin-bottom: 12px;
 }
 
-.new-vote-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px;
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--mat-sys-outline-variant, #ccc);
-}
+/* Story 36.10, AC9 : les règles `.new-vote-form*` ont été retirées avec le sélecteur
+   « Planifier un vote pour : » qu'elles habillaient. */
 
-.new-vote-form__label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.75rem;
-  color: var(--mat-sys-on-surface-variant, #666);
-}
-
-.new-vote-form__select {
-  padding: 6px 8px;
-  border: 1px solid var(--mat-sys-outline, #999);
-  border-radius: 4px;
-  font-size: 0.875rem;
+/* Story 36.10, AC1 — l'armement du mode de composition. Même forme de chip que la Destinée
+   (`destiny-control.scss`) : ce sont deux entrées de mode, dans la même bande de contrôles, et
+   elles ne doivent pas se ressembler « presque ». Teinte primaire pour la distinguer du vote. */
+.compose-arm {
+  border: 1px solid var(--mat-sys-primary, #666);
+  border-radius: 999px;
   background: transparent;
-  color: inherit;
+  color: var(--mat-sys-primary, inherit);
+  padding: 0.25rem 0.75rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .poll-entry {
@@ -151,17 +277,7 @@
   min-width: 280px;
 }
 
-.see-slots-btn {
-  display: none;
-  margin-top: 16px;
-}
-
 @media (max-width: 767px) {
-  .see-slots-btn {
-    display: block;
-    width: 100%;
-  }
-
   .mj-results-panel {
     margin-top: 24px;
   }

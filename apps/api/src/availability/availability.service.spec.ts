@@ -72,7 +72,11 @@ function makeRecurring(
 }
 
 type MockTxClient = {
-  availabilityDeclaration: { create: jest.Mock; update: jest.Mock };
+  availabilityDeclaration: {
+    create: jest.Mock;
+    update: jest.Mock;
+    updateMany: jest.Mock;
+  };
 };
 
 function makeMockPrisma() {
@@ -90,9 +94,29 @@ function makeMockPrisma() {
     async () => [] as { partieId: string }[],
   );
   const mockPartieFindMany = jest.fn(async () => [] as { id: string }[]);
+  // AD-9 (Story 30.5) — getSeanceDerivedUnavailability() lit aussi partie.findMany (forme enrichie
+  // kind/mjId/memberships) et seance.findMany : vide par défaut, sans effet sur les tests existants.
+  const mockSeanceFindMany = jest.fn(() => Promise.resolve([] as object[]));
+  // GET /me/calendar (AD-18, Story 30.5) — couche `votes-en-cours` : vide par défaut.
+  const mockSessionPollFindMany = jest.fn(() =>
+    Promise.resolve([] as object[]),
+  );
+  // Story 36.6 — effectif de la troupe pour la couche `votes-en-cours` (AC9). Une SEULE requête
+  // groupée pour toutes mes parties (AD-3), jamais un count par partie. Vide par défaut : une
+  // partie absente de l'agrégat a 0 Membership, donc un effectif de 1 (le MJ).
+  const mockMembershipGroupBy = jest.fn(() =>
+    Promise.resolve([] as { partieId: string; _count: number }[]),
+  );
 
+  // Story 36.4 : la résolution « Remplacer » expire les déclarations en conflit À L'INTÉRIEUR de
+  // la transaction du lot (create() le fait hors transaction — ce n'est pas le modèle à suivre).
+  // Le client transactionnel doit donc exposer updateMany, ce qui n'était pas le cas avant.
   const tx: MockTxClient = {
-    availabilityDeclaration: { create: mockCreate, update: mockUpdate },
+    availabilityDeclaration: {
+      create: mockCreate,
+      update: mockUpdate,
+      updateMany: mockUpdateMany,
+    },
   };
   const mockPrisma = {
     availabilityDeclaration: {
@@ -101,8 +125,13 @@ function makeMockPrisma() {
       create: mockCreate,
       updateMany: mockUpdateMany,
     },
-    membership: { findMany: mockMembershipFindMany },
+    membership: {
+      findMany: mockMembershipFindMany,
+      groupBy: mockMembershipGroupBy,
+    },
     partie: { findMany: mockPartieFindMany },
+    seance: { findMany: mockSeanceFindMany },
+    sessionPoll: { findMany: mockSessionPollFindMany },
     $transaction: jest.fn(async (fn: (tx: MockTxClient) => Promise<unknown>) =>
       fn(tx),
     ),
@@ -115,7 +144,10 @@ function makeMockPrisma() {
     mockFindUnique,
     mockFindMany,
     mockMembershipFindMany,
+    mockMembershipGroupBy,
     mockPartieFindMany,
+    mockSeanceFindMany,
+    mockSessionPollFindMany,
   };
 }
 
@@ -621,6 +653,478 @@ describe('AvailabilityService.create — conflict detection', () => {
   });
 });
 
+// ─── createBatch — écriture groupée (Story 30.2) ─────────────────────────────
+
+/** La clause `where` du updateMany groupé du lot. `mock.calls` étant typé `any`, on caste le
+ *  tuple d'appel une fois ici plutôt qu'à chaque assertion (no-unsafe-member-access). */
+function updateManyWhere(mock: jest.Mock): {
+  id: { in: string[] };
+  userId: string;
+} {
+  return (
+    mock.mock.calls[0] as [{ where: { id: { in: string[] }; userId: string } }]
+  )[0].where;
+}
+
+describe('AvailabilityService.createBatch', () => {
+  let service: AvailabilityService;
+  let mockCreate: jest.Mock;
+  let mockFindMany: jest.Mock;
+  let mockUpdateMany: jest.Mock;
+  let mockPrisma: {
+    $transaction: jest.Mock;
+    availabilityDeclaration: { findMany: jest.Mock };
+  };
+  let mockMembershipFindMany: jest.Mock;
+  let mockPartieFindMany: jest.Mock;
+
+  const item = (
+    overrides: Partial<{
+      kind: 'UNAVAILABLE' | 'AVAILABLE';
+      recurKind: 'RECURRING' | 'PUNCTUAL';
+      dayOfWeek: number | null;
+      slot: DaySlot;
+      startDate: string | null;
+      endDate: string | null;
+      expiresAt: string;
+      conflictResolution: 'overwrite' | 'keep';
+    }> = {},
+  ) => ({
+    kind: 'AVAILABLE' as const,
+    recurKind: 'RECURRING' as const,
+    dayOfWeek: 3,
+    slot: 'EVENING' as DaySlot,
+    expiresAt: FUTURE.toISOString(),
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    const mocks = makeMockPrisma();
+    service = new AvailabilityService(
+      mocks.mockPrisma as unknown as PrismaService,
+      makeMockRealtimeEvents(),
+    );
+    mockCreate = mocks.mockCreate;
+    mockFindMany = mocks.mockFindMany;
+    mockUpdateMany = mocks.mockUpdateMany;
+    mockPrisma = mocks.mockPrisma;
+    mockMembershipFindMany = mocks.mockMembershipFindMany;
+    mockPartieFindMany = mocks.mockPartieFindMany;
+    mockFindMany.mockResolvedValue([]);
+  });
+
+  it('lot valide de N créneaux → N créations, 1 seule $transaction, 1 seul emitForUser', async () => {
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }]);
+    mockPartieFindMany.mockResolvedValue([]);
+
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING' }),
+      item({ dayOfWeek: 2, slot: 'AFTERNOON' }),
+      item({ dayOfWeek: 3, slot: 'EVENING' }),
+    ];
+    const result = await service.createBatch(USER_ID, items);
+
+    expect(result.created).toHaveLength(3);
+    expect(mockCreate).toHaveBeenCalledTimes(3);
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC6 : un lot de N créneaux ne provoque qu’une seule lecture findMany', async () => {
+    const items = [
+      item({ dayOfWeek: 1 }),
+      item({ dayOfWeek: 2 }),
+      item({ dayOfWeek: 3 }),
+      item({ dayOfWeek: 4 }),
+    ];
+    await service.createBatch(USER_ID, items);
+    expect(mockFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  // ⚠️ Story 36.4 — ce test CHANGE DE VÉRITÉ (il ne disparaît pas). Le lot sans résolution
+  // échoue toujours et n'écrit toujours rien, mais le 409 doit désormais ÉNUMÉRER TOUS les
+  // conflits : le dialogue de résolution les NOMME (AC2), il ne peut pas le faire à partir
+  // d'une seule entrée.
+  it('conflit externe sans résolution → 409, aucune création, le créneau fautif nommé', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        kind: 'UNAVAILABLE',
+        recurKind: 'RECURRING',
+        dayOfWeek: 3,
+        slot: 'EVENING',
+      }),
+    ]);
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING' }),
+      item({ dayOfWeek: 3, slot: 'EVENING' }), // conflit ici, index 1
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [expect.objectContaining({ batchIndex: 1 })],
+      },
+    });
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('AC9 : plusieurs créneaux en conflit → le 409 les énumère TOUS, dans l’ordre du lot', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        id: 'ex-lundi',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 1,
+        slot: 'MORNING',
+      }),
+      makePrismaDecl({
+        id: 'ex-mercredi',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 3,
+        slot: 'EVENING',
+      }),
+    ]);
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING' }), // conflit, index 0
+      item({ dayOfWeek: 2, slot: 'AFTERNOON' }), // sans conflit
+      item({ dayOfWeek: 3, slot: 'EVENING' }), // conflit, index 2
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [
+          expect.objectContaining({ batchIndex: 0, id: 'ex-lundi' }),
+          expect.objectContaining({ batchIndex: 2, id: 'ex-mercredi' }),
+        ],
+      },
+    });
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('AC9 : un créneau en conflit avec DEUX déclarations → les deux couples sont énumérés', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({ id: 'ex-a', kind: 'UNAVAILABLE', dayOfWeek: 3 }),
+      makePrismaDecl({
+        id: 'ex-b',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 3,
+        slot: 'FULL_DAY',
+      }),
+    ]);
+    const items = [item({ dayOfWeek: 3, slot: 'EVENING' })];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [
+          expect.objectContaining({ batchIndex: 0, id: 'ex-a' }),
+          expect.objectContaining({ batchIndex: 0, id: 'ex-b' }),
+        ],
+      },
+    });
+  });
+
+  it('AC4/AC8 : résolution « overwrite » → conflits expirés ET item créé, dans UNE seule transaction', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({ id: 'ex-1', kind: 'UNAVAILABLE', dayOfWeek: 3 }),
+    ]);
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING' }),
+      item({ dayOfWeek: 3, slot: 'EVENING', conflictResolution: 'overwrite' }),
+    ];
+
+    const result = await service.createBatch(USER_ID, items);
+
+    expect(result.created).toHaveLength(2);
+    expect(mockUpdateMany).toHaveBeenCalledTimes(1);
+    expect(updateManyWhere(mockUpdateMany)).toEqual({
+      id: { in: ['ex-1'] },
+      userId: USER_ID,
+    });
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC16 : « overwrite » borne toujours l’expiration à l’utilisateur de la session', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({ id: 'ex-1', kind: 'UNAVAILABLE', dayOfWeek: 3 }),
+    ]);
+    await service.createBatch(USER_ID, [
+      item({ dayOfWeek: 3, slot: 'EVENING', conflictResolution: 'overwrite' }),
+    ]);
+
+    expect(updateManyWhere(mockUpdateMany).userId).toBe(USER_ID);
+  });
+
+  it('AC8 : plusieurs « overwrite » dans le même lot → UN SEUL updateMany groupé', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        id: 'ex-1',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 1,
+        slot: 'MORNING',
+      }),
+      makePrismaDecl({
+        id: 'ex-2',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 3,
+        slot: 'EVENING',
+      }),
+    ]);
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING', conflictResolution: 'overwrite' }),
+      item({ dayOfWeek: 3, slot: 'EVENING', conflictResolution: 'overwrite' }),
+    ];
+
+    await service.createBatch(USER_ID, items);
+
+    expect(mockUpdateMany).toHaveBeenCalledTimes(1);
+    expect(updateManyWhere(mockUpdateMany).id.in).toEqual(
+      expect.arrayContaining(['ex-1', 'ex-2']),
+    );
+  });
+
+  it('AC6 : résolution « keep » → la découpe s’applique dans le lot, sans expirer l’existant', async () => {
+    // Existant PONCTUEL le 8 juillet ; l'item couvre le 6 → 10 : la découpe doit produire
+    // deux morceaux (6-7 et 9-10) autour du trou, exactement comme le chemin unitaire.
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        id: 'ex-trou',
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: new Date('2026-07-08T00:00:00Z'),
+        endDate: new Date('2026-07-08T00:00:00Z'),
+      }),
+    ]);
+    const items = [
+      item({
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: '2026-07-06',
+        endDate: '2026-07-10',
+        conflictResolution: 'keep',
+      }),
+    ];
+
+    const result = await service.createBatch(USER_ID, items);
+
+    expect(result.created).toHaveLength(2);
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC3 : résolutions MIXTES dans un même lot → chaque décision ne porte que sur son créneau', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        id: 'ex-1',
+        kind: 'UNAVAILABLE',
+        dayOfWeek: 1,
+        slot: 'MORNING',
+      }),
+      makePrismaDecl({
+        id: 'ex-2',
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: new Date('2026-07-08T00:00:00Z'),
+        endDate: new Date('2026-07-08T00:00:00Z'),
+      }),
+    ]);
+    const items = [
+      item({ dayOfWeek: 1, slot: 'MORNING', conflictResolution: 'overwrite' }),
+      item({
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: '2026-07-06',
+        endDate: '2026-07-10',
+        conflictResolution: 'keep',
+      }),
+    ];
+
+    await service.createBatch(USER_ID, items);
+
+    // Seul le conflit du créneau « overwrite » est expiré ; celui du créneau « keep » survit.
+    expect(updateManyWhere(mockUpdateMany).id.in).toEqual(['ex-1']);
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC10/AC12 : un créneau déjà déclaré peut être redéclaré en un seul appel résolu', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({ id: 'ex-1', kind: 'UNAVAILABLE', dayOfWeek: 3 }),
+    ]);
+    const result = await service.createBatch(USER_ID, [
+      item({ dayOfWeek: 3, slot: 'EVENING', conflictResolution: 'overwrite' }),
+    ]);
+
+    expect(result.created).toHaveLength(1);
+    expect(mockFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC14 : un conflit INTERNE reste non résoluble, même si les items portent une résolution', async () => {
+    const items = [
+      item({
+        dayOfWeek: 3,
+        slot: 'FULL_DAY',
+        kind: 'UNAVAILABLE',
+        conflictResolution: 'overwrite',
+      }),
+      item({
+        dayOfWeek: 3,
+        slot: 'MORNING',
+        kind: 'AVAILABLE',
+        conflictResolution: 'overwrite',
+      }),
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('un conflit INTERNE porte `internal: true` sur ses deux entrées (revue de code)', async () => {
+    const items = [
+      item({
+        dayOfWeek: 3,
+        slot: 'FULL_DAY',
+        kind: 'UNAVAILABLE',
+        conflictResolution: 'overwrite',
+      }),
+      item({
+        dayOfWeek: 3,
+        slot: 'MORNING',
+        kind: 'AVAILABLE',
+        conflictResolution: 'overwrite',
+      }),
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [
+          expect.objectContaining({ internal: true }),
+          expect.objectContaining({ internal: true }),
+        ],
+      },
+    });
+  });
+
+  it('un conflit EXTERNE ne porte jamais `internal: true` (revue de code)', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({ id: 'ex-1', kind: 'UNAVAILABLE', dayOfWeek: 3 }),
+    ]);
+    const items = [item({ dayOfWeek: 3, slot: 'EVENING' })];
+
+    try {
+      await service.createBatch(USER_ID, items);
+      throw new Error('expected createBatch to reject');
+    } catch (err) {
+      const conflicts = (
+        err as { response: { conflicts: Array<{ internal?: boolean }> } }
+      ).response.conflicts;
+      expect(conflicts[0].internal).toBeFalsy();
+    }
+  });
+
+  // Revue de code Story 36.4 : dans le même lot, un item `overwrite` et un item `keep`
+  // ciblent la MÊME déclaration persistée. Décision retenue : `overwrite` prime — la
+  // déclaration sera expirée au commit, le `keep` ne doit donc PAS creuser de trou à son sujet.
+  it('« overwrite » prime sur « keep » quand deux items du lot recouvrent la MÊME déclaration persistée', async () => {
+    mockFindMany.mockResolvedValue([
+      makePrismaDecl({
+        id: 'ex-partagee',
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'FULL_DAY',
+        startDate: new Date('2026-07-08T00:00:00Z'),
+        endDate: new Date('2026-07-08T00:00:00Z'),
+      }),
+    ]);
+    const items = [
+      // Item A : recouvre uniquement le 8 juillet, choisit « overwrite ».
+      item({
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'MORNING',
+        startDate: '2026-07-08',
+        endDate: '2026-07-08',
+        conflictResolution: 'overwrite',
+      }),
+      // Item B : recouvre une plage plus large incluant le 8 juillet, choisit « keep ».
+      item({
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'FULL_DAY',
+        startDate: '2026-07-06',
+        endDate: '2026-07-10',
+        conflictResolution: 'keep',
+      }),
+    ];
+
+    const result = await service.createBatch(USER_ID, items);
+
+    // La déclaration partagée est expirée (overwrite gagne)...
+    expect(updateManyWhere(mockUpdateMany).id.in).toEqual(['ex-partagee']);
+    // ...et l'item « keep » n'a PAS creusé de trou à son sujet : 1 pièce pour l'item A +
+    // 1 SEULE pièce continue pour l'item B (sans la correction, B produirait 2 pièces
+    // séparées par un trou injustifié autour du 8 juillet → 3 au total).
+    expect(result.created).toHaveLength(2);
+  });
+
+  it('conflit interne au lot (FULL_DAY vs MORNING, kinds opposés, même jour) → 409, aucune création', async () => {
+    const items = [
+      item({ dayOfWeek: 3, slot: 'FULL_DAY', kind: 'UNAVAILABLE' }),
+      item({ dayOfWeek: 3, slot: 'MORNING', kind: 'AVAILABLE' }),
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [
+          expect.objectContaining({ batchIndex: 0 }),
+          expect.objectContaining({ batchIndex: 1 }),
+        ],
+      },
+    });
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('expiresAt passé sur un élément → rejet du lot entier', async () => {
+    const items = [
+      item(),
+      item({ expiresAt: new Date('2020-01-01').toISOString() }),
+    ];
+    await expect(service.createBatch(USER_ID, items)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('lot vide (appel direct hors DTO) → rejeté par une garde défensive du service', async () => {
+    await expect(service.createBatch(USER_ID, [])).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockFindMany).not.toHaveBeenCalled();
+  });
+
+  it('conflit interne au lot : les deux entrées ont des id synthétiques distincts', async () => {
+    const items = [
+      item({ dayOfWeek: 3, slot: 'FULL_DAY', kind: 'UNAVAILABLE' }),
+      item({ dayOfWeek: 3, slot: 'MORNING', kind: 'AVAILABLE' }),
+    ];
+
+    await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
+      response: {
+        conflicts: [
+          expect.objectContaining({ id: 'batch-item-0' }),
+          expect.objectContaining({ id: 'batch-item-1' }),
+        ],
+      },
+    });
+  });
+});
+
 // ─── Émission temps réel (bug fix : calendrier MJ jamais notifié) ────────────
 
 describe('AvailabilityService — émission temps réel', () => {
@@ -684,6 +1188,34 @@ describe('AvailabilityService — émission temps réel', () => {
   it('create() sans aucune Partie associée → aucune émission', async () => {
     await service.create(USER_ID, baseDto);
     expect(mockEmit).not.toHaveBeenCalled();
+  });
+
+  it("deferred-work (2026-08-24) : create() n'échoue PAS si l'émission temps réel lève après le commit — la déclaration a déjà été écrite, un 500 ferait resoumettre une écriture déjà appliquée", async () => {
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }]);
+    mockEmit.mockImplementation(() => {
+      throw new Error('EventSource down');
+    });
+
+    await expect(service.create(USER_ID, baseDto)).resolves.toBeDefined();
+  });
+
+  it('createBatch() n’émet partieTopic qu’une seule fois, quelle que soit la taille du lot (AC7)', async () => {
+    mockMembershipFindMany.mockResolvedValue([
+      { partieId: 'p1' },
+      { partieId: 'p2' },
+    ]);
+    mockPartieFindMany.mockResolvedValue([]);
+
+    const items = [
+      { ...baseDto, dayOfWeek: 1, slot: 'MORNING' as DaySlot },
+      { ...baseDto, dayOfWeek: 2, slot: 'AFTERNOON' as DaySlot },
+      { ...baseDto, dayOfWeek: 3, slot: 'EVENING' as DaySlot },
+    ];
+    await service.createBatch(USER_ID, items);
+
+    expect(mockEmit).toHaveBeenCalledTimes(2);
+    expect(mockEmit).toHaveBeenCalledWith('partie:p1');
+    expect(mockEmit).toHaveBeenCalledWith('partie:p2');
   });
 
   it('update() émet partieTopic après la résolution complète de l’écriture', async () => {
@@ -906,5 +1438,1149 @@ describe('AvailabilityService.computeSlotStatus', () => {
     expect(service.computeSlotStatus(decls, outRange, 'MORNING', NOW)).toBe(
       'UNKNOWN',
     );
+  });
+});
+
+// ─── getActiveDeclarationsWithSeances / AD-9 (Story 30.5) ──────────────────────
+
+describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5)', () => {
+  let service: AvailabilityService;
+  let mockPartieFindMany: jest.Mock;
+  let mockSeanceFindMany: jest.Mock;
+  let mockDeclFindMany: jest.Mock;
+
+  beforeEach(() => {
+    const mocks = makeMockPrisma();
+    mockPartieFindMany = mocks.mockPartieFindMany;
+    mockSeanceFindMany = mocks.mockSeanceFindMany;
+    mockDeclFindMany = mocks.mockFindMany;
+    mockDeclFindMany.mockResolvedValue([]);
+    service = new AvailabilityService(
+      mocks.mockPrisma as unknown as PrismaService,
+      makeMockRealtimeEvents(),
+    );
+  });
+
+  it('renvoie un tableau vide par utilisateur quand aucune Partie n’est trouvée', async () => {
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(map.get('u1')).toEqual([]);
+  });
+
+  it('injecte une indisponibilité UNAVAILABLE synthétique pour un membre occupé par une séance datée d’une autre Partie (ONE_SHOT)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: {
+          chosenDate: new Date('2026-09-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    const entries = map.get('u1')!;
+    expect(entries).toHaveLength(1);
+    expect(entries[0]).toMatchObject({
+      kind: 'UNAVAILABLE',
+      recurKind: 'PUNCTUAL',
+      dayOfWeek: null,
+      slot: 'EVENING',
+    });
+    expect(entries[0].startDate?.toISOString().substring(0, 10)).toBe(
+      '2026-09-10',
+    );
+    expect(entries[0].endDate?.toISOString().substring(0, 10)).toBe(
+      '2026-09-10',
+    );
+  });
+
+  it('utilise dateValidee et FULL_DAY quand aucun poll n’est lié (AC5)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'CAMPAGNE_LINEAIRE',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: null,
+        dateValidee: new Date('2026-09-11T00:00:00Z'),
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(map.get('u1')![0].slot).toBe('FULL_DAY');
+  });
+
+  it('utilise FULL_DAY quand le poll lié n’a pas encore de chosenSlot (AC5)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: {
+          chosenDate: new Date('2026-09-16T00:00:00Z'),
+          chosenSlot: null,
+        },
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(map.get('u1')![0].slot).toBe('FULL_DAY');
+  });
+
+  it('CAMPAGNE_EPISODIQUE : seul un utilisateur inscrit à la séance est marqué occupé, pas tous les membres', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'CAMPAGNE_EPISODIQUE',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }, { userId: 'u2' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: null,
+        dateValidee: new Date('2026-09-12T00:00:00Z'),
+        inscriptions: [{ userId: 'u1' }],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1', 'u2']);
+    expect(map.get('u1')).toHaveLength(1);
+    expect(map.get('u2')).toHaveLength(0);
+  });
+
+  it('le MJ est toujours occupé par les séances de ses propres parties, y compris CAMPAGNE_EPISODIQUE sans y être inscrit', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'CAMPAGNE_EPISODIQUE',
+        mjId: 'mjB',
+        memberships: [],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: null,
+        dateValidee: new Date('2026-09-13T00:00:00Z'),
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['mjB']);
+    expect(map.get('mjB')).toHaveLength(1);
+  });
+
+  it('n’injecte rien pour une séance non datée (aucun poll.chosenDate ni dateValidee)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: null,
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(map.get('u1')).toEqual([]);
+  });
+
+  it('fusionne les entrées synthétiques avec les déclarations réelles existantes, sans les remplacer', async () => {
+    const realDecl: DeclarationLike & { userId: string } = {
+      userId: 'u1',
+      kind: 'AVAILABLE',
+      recurKind: 'RECURRING',
+      dayOfWeek: 1,
+      slot: 'MORNING',
+      startDate: null,
+      endDate: null,
+      expiresAt: FUTURE,
+    };
+    mockDeclFindMany.mockResolvedValue([realDecl]);
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: {
+          chosenDate: new Date('2026-09-14T00:00:00Z'),
+          chosenSlot: 'AFTERNOON',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(map.get('u1')).toHaveLength(2);
+  });
+
+  // ─── AC7 (Story 36.5) — la non-fuite, désormais testée avec une charge utile nommante ──
+  // deferred-work.md:9 notait qu'aucun test ne construisait le cas « créneau UNAVAILABLE dérivé
+  // d'une séance d'une AUTRE partie, sans nom ni id exposé ». La story 36.5 ajoute la donnée la
+  // plus indiscrète de l'application (« chez Marc, 20 h 30 ») : la lacune se referme ici.
+  it('AC7 : une séance d’une autre partie portant des informations pratiques ne les fait JAMAIS fuiter', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: {
+          chosenDate: new Date('2026-09-15T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+        // La séance porte tout ce qu'il ne faut pas laisser passer.
+        heureRdv: '20:30',
+        lieu: 'chez Marc',
+        notePratique: 'pensez aux dés',
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    const derived = map.get('u1')![0];
+
+    // L'entrée dérivée reste un STATUT DE CRÉNEAU : rien de nommant n'y transite.
+    expect(Object.keys(derived).sort()).toEqual(
+      [
+        'dayOfWeek',
+        'endDate',
+        'expiresAt',
+        'kind',
+        'recurKind',
+        'slot',
+        'startDate',
+      ].sort(),
+    );
+    // Ceinture et bretelles : aucune des trois valeurs, où que ce soit dans l'objet sérialisé.
+    const serialized = JSON.stringify(derived);
+    expect(serialized).not.toContain('20:30');
+    expect(serialized).not.toContain('chez Marc');
+    expect(serialized).not.toContain('pensez aux dés');
+    expect(serialized).not.toContain('partieB');
+  });
+
+  it('la sortie ne porte jamais d’identité de partie/scénario — seulement les champs DeclarationLike (non-fuite structurelle, AC3)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        poll: {
+          chosenDate: new Date('2026-09-15T00:00:00Z'),
+          chosenSlot: 'MORNING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        scenario: { partieId: 'partieB' },
+      },
+    ]);
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1']);
+    expect(Object.keys(map.get('u1')![0]).sort()).toEqual(
+      [
+        'dayOfWeek',
+        'endDate',
+        'expiresAt',
+        'kind',
+        'recurKind',
+        'slot',
+        'startDate',
+      ].sort(),
+    );
+  });
+
+  it('une seule requête partie.findMany et une seule seance.findMany, quel que soit le nombre d’utilisateurs (pas de N+1)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      {
+        id: 'partieB',
+        kind: 'ONE_SHOT',
+        mjId: 'mjB',
+        memberships: [{ userId: 'u1' }],
+      },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([]);
+
+    await service.getActiveDeclarationsWithSeances(['u1', 'u2', 'u3']);
+    expect(mockPartieFindMany).toHaveBeenCalledTimes(1);
+    expect(mockSeanceFindMany).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── getMyCalendar / GET /me/calendar (AD-18, Story 30.5) ──────────────────────
+
+describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
+  let service: AvailabilityService;
+  let mockPartieFindMany: jest.Mock;
+  let mockSeanceFindMany: jest.Mock;
+  let mockSessionPollFindMany: jest.Mock;
+  let mockMembershipGroupBy: jest.Mock;
+  let mockDeclFindMany: jest.Mock;
+
+  const myPartie = {
+    id: 'A',
+    name: 'Ma Partie',
+    kind: 'ONE_SHOT',
+    mjId: 'me',
+  };
+
+  beforeEach(() => {
+    const mocks = makeMockPrisma();
+    mockPartieFindMany = mocks.mockPartieFindMany;
+    mockSeanceFindMany = mocks.mockSeanceFindMany;
+    mockSessionPollFindMany = mocks.mockSessionPollFindMany;
+    mockMembershipGroupBy = mocks.mockMembershipGroupBy;
+    mockDeclFindMany = mocks.mockFindMany;
+    mockDeclFindMany.mockResolvedValue([]);
+    mockPartieFindMany.mockResolvedValue([myPartie]);
+    service = new AvailabilityService(
+      mocks.mockPrisma as unknown as PrismaService,
+      makeMockRealtimeEvents(),
+    );
+  });
+
+  it('renvoie les 5 couches, chacune un tableau vide par défaut (AC1, AC2)', async () => {
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result).toEqual({
+      'mes-indisponibilites': [],
+      'mes-disponibilites': [],
+      'mes-seances': [],
+      'votes-en-cours': [],
+      'inscriptions-ouvertes': [],
+    });
+  });
+
+  it("ne renvoie jamais la clé 'disponibilite-groupe' (AC2, encadré n°2)", async () => {
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(
+      Object.prototype.hasOwnProperty.call(result, 'disponibilite-groupe'),
+    ).toBe(false);
+  });
+
+  it('lève BadRequestException si from > to', async () => {
+    await expect(
+      service.getMyCalendar('me', '2026-10-31', '2026-10-01'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('lève BadRequestException si la plage dépasse 366 jours', async () => {
+    await expect(
+      service.getMyCalendar('me', '2024-01-01', '2025-12-31'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('mes séances portent explicitement mon identité de partie/scénario (AC4)', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'MORNING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Donjon Oublié' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['mes-seances']).toEqual([
+      {
+        seanceId: 'seance1',
+        partieId: 'A',
+        partieName: 'Ma Partie',
+        scenarioId: 'scenario1',
+        scenarioTitle: 'Le Donjon Oublié',
+        date: '2026-10-10',
+        slot: 'MORNING',
+        // Story 36.5 : toujours présents, à null quand la séance n'en porte pas — le client
+        // n'a jamais à distinguer « clé absente » de « valeur vide ».
+        heureRdv: null,
+        lieu: null,
+        notePratique: null,
+        // Story 36.16 : aucun `compteRendu` dans le mock → manquant.
+        compteRenduManquant: true,
+      },
+    ]);
+  });
+
+  // ─── Informations pratiques (Story 36.5, D-15 amendée) ────────────────────
+
+  it('AC6 : les informations pratiques transitent par GET /me/calendar', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        heureRdv: '20:30',
+        lieu: 'chez Marc',
+        notePratique: 'pensez aux dés',
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    expect(result['mes-seances'][0]).toMatchObject({
+      heureRdv: '20:30',
+      lieu: 'chez Marc',
+      notePratique: 'pensez aux dés',
+    });
+  });
+
+  // ─── compteRenduManquant (Story 36.16) ────────────────────────────────────
+
+  it('AC1 : compte-rendu non renseigné (null) → compteRenduManquant = true', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        compteRendu: null,
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    expect(result['mes-seances'][0]).toMatchObject({
+      compteRenduManquant: true,
+    });
+  });
+
+  it('AC1 : compte-rendu ne portant que des espaces → compteRenduManquant = true', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        compteRendu: '   ',
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    expect(result['mes-seances'][0]).toMatchObject({
+      compteRenduManquant: true,
+    });
+  });
+
+  it('AC2 : compte-rendu renseigné → compteRenduManquant = false', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        compteRendu: 'La troupe a repoussé les maraudeurs.',
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    expect(result['mes-seances'][0]).toMatchObject({
+      compteRenduManquant: false,
+    });
+  });
+
+  it('AC3 : une plage passée renvoie bien les séances qualifiantes, sans changement serveur supplémentaire', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-07-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        compteRendu: null,
+      },
+    ]);
+
+    // Plage explicitement PASSÉE, envoyée par l'appelant — aucune borne serveur ne l'empêche.
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-07-01',
+      '2026-07-31',
+    );
+
+    expect(result['mes-seances']).toHaveLength(1);
+    expect(result['mes-seances'][0]).toMatchObject({
+      date: '2026-07-10',
+      compteRenduManquant: true,
+    });
+  });
+
+  it('AC6 : aucun appel supplémentaire n’est émis pour les informations pratiques', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        heureRdv: '20:30',
+        lieu: 'chez Marc',
+        notePratique: null,
+      },
+    ]);
+
+    await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+
+    // Les scalaires de Seance sont déjà chargés : une seule lecture, comme avant la story.
+    expect(mockSeanceFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('AC4 : une séance n’ayant QU’UN lieu expose les deux autres champs à null', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Les Cendres d’Ashal' },
+        heureRdv: null,
+        lieu: 'en visio',
+        notePratique: null,
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    expect(result['mes-seances'][0]).toMatchObject({
+      heureRdv: null,
+      lieu: 'en visio',
+      notePratique: null,
+    });
+  });
+
+  it('AC2 : heureRdv ressort telle quelle, jamais convertie en date', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: 'EVENING',
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        heureRdv: '20:30',
+        lieu: null,
+        notePratique: null,
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+
+    const entry = result['mes-seances'][0];
+    expect(typeof entry.heureRdv).toBe('string');
+    expect(entry.heureRdv).toBe('20:30');
+    expect(entry.heureRdv).not.toBeInstanceOf(Date);
+  });
+
+  it('créneau sans chosenSlot sur le poll rattaché → FULL_DAY (AC5)', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: {
+          chosenDate: new Date('2026-10-10T00:00:00Z'),
+          chosenSlot: null,
+        },
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Donjon Oublié' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['mes-seances'][0].slot).toBe('FULL_DAY');
+  });
+
+  it('dateValidee sans poll lié → date lue, slot FULL_DAY (AC5)', async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: null,
+        dateValidee: new Date('2026-10-11T00:00:00Z'),
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Le Donjon Oublié' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['mes-seances'][0]).toMatchObject({
+      date: '2026-10-11',
+      slot: 'FULL_DAY',
+    });
+  });
+
+  it("une séance d'une partie dont je ne suis ni MJ ni membre n'apparaît dans aucune couche (AC7)", async () => {
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seanceEtrangere',
+        scenarioId: 'scenarioX',
+        poll: null,
+        dateValidee: new Date('2026-10-15T00:00:00Z'),
+        inscriptions: [],
+        inscriptionMin: 1,
+        inscriptionMax: 4,
+        // Partie 'Z' absente de myParties (mocké à [myPartie] seulement) — simule une ligne
+        // renvoyée par erreur (défense en profondeur, la requête réelle la filtrerait déjà).
+        scenario: { partieId: 'Z', title: 'Ne devrait jamais apparaître' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['mes-seances']).toEqual([]);
+    expect(result['inscriptions-ouvertes']).toEqual([]);
+  });
+
+  it("un SessionPoll d'une partie tierce n'apparaît jamais dans votes-en-cours (AC7, deferred-work — même garde que mes-seances/inscriptions-ouvertes ci-dessus, jusqu'ici sans test dédié)", async () => {
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'pollEtranger',
+        // Partie 'Z' absente de myParties (mocké à [myPartie] seulement) — simule une ligne
+        // renvoyée par erreur (défense en profondeur, la requête réelle la filtrerait déjà).
+        partieId: 'Z',
+        expiresAt: null,
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+    expect(result['votes-en-cours']).toEqual([]);
+  });
+
+  it('couche votes-en-cours : sondage OPEN avec une option dans la plage, identité de partie incluse, agrégats et ma réponse (Story 36.6)', async () => {
+    mockMembershipGroupBy.mockResolvedValue([{ partieId: 'A', _count: 3 }]);
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        expiresAt: new Date('2026-10-15T00:00:00Z'),
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [
+              { userId: 'me', answer: 'YES' },
+              { userId: 'u2', answer: 'YES' },
+              { userId: 'u3', answer: 'MAYBE' },
+            ],
+          },
+          {
+            id: 'o2',
+            date: new Date('2026-11-05T00:00:00Z'),
+            slot: 'MORNING',
+            votes: [{ userId: 'u2', answer: 'NO' }],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['votes-en-cours']).toEqual([
+      {
+        pollId: 'poll1',
+        partieId: 'A',
+        partieName: 'Ma Partie',
+        // AC9 — MJ + 3 Membership. Même effectif que `AggregatedSlotDto.total`.
+        membersCount: 4,
+        expiresAt: '2026-10-15T00:00:00.000Z',
+        options: [
+          {
+            optionId: 'o1',
+            date: '2026-10-20',
+            slot: 'EVENING',
+            yes: 2,
+            maybe: 1,
+            no: 0,
+            myAnswer: 'YES',
+          },
+          {
+            optionId: 'o2',
+            date: '2026-11-05',
+            slot: 'MORNING',
+            yes: 0,
+            maybe: 0,
+            no: 1,
+            myAnswer: null,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("couche votes-en-cours : expiresAt null (sondage créé avant l'introduction du champ) → propagé tel quel, jamais une erreur", async () => {
+    mockMembershipGroupBy.mockResolvedValue([{ partieId: 'A', _count: 3 }]);
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        expiresAt: null,
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['votes-en-cours'][0].expiresAt).toBeNull();
+  });
+
+  it('AC11 — aucune identité de votant tiers ne transite : ni userId, ni pseudo, ni displayName (AD-9/AD-2)', async () => {
+    mockMembershipGroupBy.mockResolvedValue([{ partieId: 'A', _count: 3 }]);
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [
+              { userId: 'me', answer: 'YES' },
+              { userId: 'secret-user', answer: 'NO' },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    const serialized = JSON.stringify(result['votes-en-cours']);
+    expect(serialized).not.toContain('secret-user');
+    expect(serialized).not.toContain('pseudo');
+    expect(serialized).not.toContain('displayName');
+    // Ma propre réponse, elle, est bien là — la seule information nominative autorisée.
+    expect(result['votes-en-cours'][0].options[0].myAnswer).toBe('YES');
+  });
+
+  it("AC11 — l'include des votes ne demande JAMAIS la relation user", async () => {
+    await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+    const calls = mockSessionPollFindMany.mock.calls as Array<
+      [{ include: unknown }]
+    >;
+    // Assertion structurelle plutôt qu'une recherche de sous-chaîne (revue de code du 36.6) :
+    // un `not.toContain('user')` ne détecterait pas une relation ajoutée sous une autre clé
+    // (`voter`, `author`, casse différente). Ici, la forme exacte de l'`include` est vérifiée —
+    // `votes: true` et rien de plus, jamais un `include: { user: … }` niché dessous.
+    expect(calls[0][0].include).toEqual({
+      options: { include: { votes: true } },
+    });
+  });
+
+  it("AC9 — une partie absente de l'agrégat de Membership a un effectif de 1 : le MJ, qui vote", async () => {
+    mockMembershipGroupBy.mockResolvedValue([]);
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['votes-en-cours'][0].membersCount).toBe(1);
+  });
+
+  it('une option sans aucune réponse porte trois compteurs à zéro et myAnswer null (jamais undefined)', async () => {
+    mockMembershipGroupBy.mockResolvedValue([{ partieId: 'A', _count: 3 }]);
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-10-20T00:00:00Z'),
+            slot: 'EVENING',
+            votes: [],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['votes-en-cours'][0].options[0]).toEqual({
+      optionId: 'o1',
+      date: '2026-10-20',
+      slot: 'EVENING',
+      yes: 0,
+      maybe: 0,
+      no: 0,
+      myAnswer: null,
+    });
+  });
+
+  it('couche votes-en-cours : sondage sans aucune option dans la plage est exclu', async () => {
+    mockSessionPollFindMany.mockResolvedValue([
+      {
+        id: 'poll1',
+        partieId: 'A',
+        options: [
+          {
+            id: 'o1',
+            date: new Date('2026-11-05T00:00:00Z'),
+            slot: 'MORNING',
+            votes: [],
+          },
+        ],
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['votes-en-cours']).toEqual([]);
+  });
+
+  it('couche inscriptions-ouvertes : séance CAMPAGNE_EPISODIQUE sans date validée et à capacité définie, non filtrée par plage', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', mjId: 'me' },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: null,
+        dateValidee: null,
+        inscriptions: [{ userId: 'me' }, { userId: 'other' }],
+        inscriptionMin: 2,
+        inscriptionMax: 5,
+        scenario: { partieId: 'A', title: 'Enquête épisodique' },
+      },
+    ]);
+
+    // Plage totalement hors du "futur" — n'a aucun effet, cette couche n'est pas filtrée par plage.
+    const result = await service.getMyCalendar(
+      'me',
+      '2020-01-01',
+      '2020-01-02',
+    );
+    expect(result['inscriptions-ouvertes']).toEqual([
+      {
+        seanceId: 'seance1',
+        partieId: 'A',
+        partieName: 'Ma Partie',
+        scenarioId: 'scenario1',
+        scenarioTitle: 'Enquête épisodique',
+        inscriptionMin: 2,
+        inscriptionMax: 5,
+        inscritsCount: 2,
+        jeSuisInscrit: true,
+      },
+    ]);
+  });
+
+  it('couche inscriptions-ouvertes : une séance dont la date est déjà validée est exclue (roster figé)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', mjId: 'me' },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: null,
+        dateValidee: new Date('2026-10-05T00:00:00Z'),
+        inscriptions: [],
+        inscriptionMin: 2,
+        inscriptionMax: 5,
+        scenario: { partieId: 'A', title: 'Enquête épisodique' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['inscriptions-ouvertes']).toEqual([]);
+  });
+
+  it('couche inscriptions-ouvertes : une séance sans capacité définie (inscriptionMax null) est exclue', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', mjId: 'me' },
+    ]);
+    mockSeanceFindMany.mockResolvedValue([
+      {
+        id: 'seance1',
+        scenarioId: 'scenario1',
+        poll: null,
+        dateValidee: null,
+        inscriptions: [],
+        inscriptionMin: null,
+        inscriptionMax: null,
+        scenario: { partieId: 'A', title: 'Enquête épisodique' },
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['inscriptions-ouvertes']).toEqual([]);
+  });
+
+  it('mes-indisponibilites/mes-disponibilites : déclarations réelles réparties par kind et filtrées par plage', async () => {
+    mockDeclFindMany.mockResolvedValue([
+      {
+        id: 'd1',
+        userId: 'me',
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: new Date('2026-10-15T00:00:00Z'),
+        endDate: new Date('2026-10-15T00:00:00Z'),
+        expiresAt: new Date('2026-10-16T00:00:00Z'),
+        createdAt: new Date('2026-09-01T00:00:00Z'),
+      },
+      {
+        id: 'd2',
+        userId: 'me',
+        kind: 'AVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'MORNING',
+        startDate: new Date('2026-12-01T00:00:00Z'), // hors plage [10-01, 10-31]
+        endDate: new Date('2026-12-01T00:00:00Z'),
+        expiresAt: new Date('2026-12-02T00:00:00Z'),
+        createdAt: new Date('2026-09-01T00:00:00Z'),
+      },
+    ]);
+
+    const result = await service.getMyCalendar(
+      'me',
+      '2026-10-01',
+      '2026-10-31',
+    );
+    expect(result['mes-indisponibilites']).toHaveLength(1);
+    expect(result['mes-indisponibilites'][0].id).toBe('d1');
+    expect(result['mes-disponibilites']).toEqual([]); // d2 est hors plage
+  });
+
+  it('aucune itération par partie : une seule requête pour chaque table, quel que soit le nombre de mes parties (AC1)', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      myPartie,
+      { id: 'B', name: 'Autre partie', kind: 'ONE_SHOT', mjId: 'me' },
+    ]);
+
+    await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+    expect(mockSeanceFindMany).toHaveBeenCalledTimes(1);
+    expect(mockSessionPollFindMany).toHaveBeenCalledTimes(1);
+    // Story 36.6, AC12 — l'effectif de la troupe est lui aussi obtenu par UNE seule requête
+    // groupée, jamais un membership.count par partie (AD-3). Garde renforcée, jamais affaiblie.
+    expect(mockMembershipGroupBy).toHaveBeenCalledTimes(1);
   });
 });

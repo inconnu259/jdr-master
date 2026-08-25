@@ -1,40 +1,151 @@
 <mat-card class="form-card">
-  <mat-card-title>{{ editId() ? theme.tone()['partie.edit_title'] : theme.tone()['partie.new_title'] }}</mat-card-title>
-  <form [formGroup]="form" (ngSubmit)="submit()">
-    <mat-form-field appearance="outline">
-      <mat-label>Nom</mat-label>
-      <input matInput formControlName="name" />
-    </mat-form-field>
+  <!-- Aucun titre ici : il vit dans le bandeau contextuel du Shell (Story 29.4). Le répéter
+       dans la carte est exactement le doublon retiré des cinq écrans par la Story 29.5. -->
 
-    <mat-form-field appearance="outline">
-      <mat-label>Système de jeu</mat-label>
-      <mat-select formControlName="gameSystemId">
-        @for (s of systems; track s.id) {
-          <mat-option [value]="s.id">{{ s.name }}</mat-option>
+  @if (courantChoice(); as choice) {
+    <!-- AC9 — arbitrage avant conversion : le serveur refuserait sans `courantScenarioId`.
+         Remplace le formulaire plutôt que de s'y ajouter : une seule décision à la fois. -->
+    <section class="courant-choice">
+      <h2 class="section-title">{{ theme.tone()['partie.courant_choice_title'] }}</h2>
+      <p class="section-help">{{ theme.tone()['partie.courant_choice_help'] }}</p>
+
+      <mat-radio-group
+        class="courant-options"
+        [value]="chosenCourantId()"
+        (change)="chosenCourantId.set($event.value)"
+        [attr.aria-label]="theme.tone()['partie.courant_choice_title']"
+      >
+        @for (s of choice.scenarios; track s.id) {
+          <mat-radio-button [value]="s.id">{{ s.title }}</mat-radio-button>
         }
-      </mat-select>
-    </mat-form-field>
+      </mat-radio-group>
 
-    <span class="lbl">Type</span>
-    <mat-button-toggle-group formControlName="kind" aria-label="Type" hideSingleSelectionIndicator>
-      <mat-button-toggle value="ONE_SHOT">One-shot</mat-button-toggle>
-      <mat-button-toggle value="CAMPAGNE_LINEAIRE">Campagne</mat-button-toggle>
-      <mat-button-toggle value="CAMPAGNE_EPISODIQUE">Campagne épisodique</mat-button-toggle>
-    </mat-button-toggle-group>
+      <div class="actions">
+        <button mat-button type="button" (click)="cancelCourantChoice()">
+          {{ theme.tone()['partie.cancel_btn'] }}
+        </button>
+        <button
+          mat-flat-button
+          type="button"
+          [disabled]="!chosenCourantId() || saving()"
+          (click)="confirmCourantChoice()"
+        >
+          {{ theme.tone()['partie.courant_choice_confirm'] }}
+        </button>
+      </div>
 
-    <mat-form-field appearance="outline">
-      <mat-label>Description (optionnel)</mat-label>
-      <textarea matInput formControlName="description" rows="3"></textarea>
-    </mat-form-field>
+      @if (error()) {
+        <p class="error" role="alert">{{ error() }}</p>
+      }
+    </section>
+  } @else {
+    <!-- Identité visuelle : présente dès la création (AC3), pas seulement à l'édition. -->
+    <section class="cover-section">
+      @if (pendingCoverPreview(); as preview) {
+        <img class="cover-preview cover-preview--file" [src]="preview" alt="" />
+      } @else {
+        <app-party-banner
+          class="cover-preview"
+          [partieId]="editId() ?? 'nouvelle-partie'"
+          [partieName]="editId() ? partieName() : form.controls.name.value"
+          [coverImageVersion]="coverImageVersion()"
+          mode="medium"
+        />
+      }
 
-    @if (error()) {
-      <p class="error">{{ error() }}</p>
+      <div class="cover-actions">
+        <label class="cover-upload-label">
+          {{
+            coverImageVersion() || pendingCoverFile()
+              ? theme.tone()['partie.cover_change']
+              : theme.tone()['partie.cover_add']
+          }}
+          <input
+            type="file"
+            [accept]="'image/jpeg,image/png,image/webp'"
+            [disabled]="coverSaving()"
+            (change)="onCoverFileSelected($event)"
+          />
+        </label>
+        @if (coverImageVersion() || pendingCoverFile()) {
+          <button mat-button type="button" [disabled]="coverSaving()" (click)="removeCoverImage()">
+            {{ theme.tone()['partie.cover_remove'] }}
+          </button>
+        }
+      </div>
+    </section>
+
+    <!-- AC13 — un état désactivé ne dit pas qu'il se passe quelque chose : le traitement serveur
+         (nettoyage EXIF + trois dérivées) peut prendre plusieurs secondes. -->
+    @if (coverSaving()) {
+      <mat-progress-bar mode="indeterminate" class="cover-progress" />
+      <p class="cover-status" aria-live="polite">{{ theme.tone()['partie.cover_uploading'] }}</p>
     }
-    <div class="actions">
-      <button mat-button type="button" (click)="cancel()">Annuler</button>
-      <button mat-flat-button type="submit" [disabled]="saving()">
-        {{ editId() ? theme.tone()['partie.save_btn'] : theme.tone()['nav.create_game'] }}
-      </button>
-    </div>
-  </form>
+    @if (coverError()) {
+      <p class="error" role="alert">{{ coverError() }}</p>
+    }
+
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <mat-form-field appearance="outline">
+        <mat-label>{{ theme.tone()['partie.name_label'] }}</mat-label>
+        <input matInput formControlName="name" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ theme.tone()['partie.system_label'] }}</mat-label>
+        <mat-select formControlName="gameSystemId">
+          @for (s of systems; track s.id) {
+            <mat-option [value]="s.id">{{ s.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <fieldset class="kind-field">
+        <legend class="lbl">{{ theme.tone()['partie.kind_label'] }}</legend>
+        <!-- Groupe vertical : « Campagne épisodique » ne tient pas sur une ligne de 375 px, et un
+             groupe horizontal y tronquait le libellé (AC1). -->
+        <mat-button-toggle-group
+          formControlName="kind"
+          class="kind-toggle"
+          [attr.aria-label]="theme.tone()['partie.kind_label']"
+          hideSingleSelectionIndicator
+          vertical
+        >
+          @for (option of kindAvailability(); track option.kind) {
+            <mat-button-toggle [value]="option.kind" [disabled]="option.disabled">
+              {{ theme.tone()['partie.kind_' + option.kind] }}
+            </mat-button-toggle>
+          }
+        </mat-button-toggle-group>
+
+        <!-- AC11 — la raison est visible sans action supplémentaire : jamais un bouton grisé muet. -->
+        @for (option of kindAvailability(); track option.kind) {
+          @if (option.reason) {
+            <p class="kind-reason">
+              <strong>{{ theme.tone()['partie.kind_' + option.kind] }}</strong> —
+              {{ option.reason }}
+            </p>
+          }
+        }
+      </fieldset>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ theme.tone()['partie.description_label'] }}</mat-label>
+        <textarea matInput formControlName="description" rows="3"></textarea>
+      </mat-form-field>
+
+      @if (error()) {
+        <p class="error" role="alert">{{ error() }}</p>
+      }
+
+      <div class="actions">
+        <button mat-button type="button" (click)="cancel()">
+          {{ theme.tone()['partie.cancel_btn'] }}
+        </button>
+        <button mat-flat-button type="submit" [disabled]="saving()">
+          {{ editId() ? theme.tone()['partie.save_btn'] : theme.tone()['nav.create_game'] }}
+        </button>
+      </div>
+    </form>
+  }
 </mat-card>

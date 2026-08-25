@@ -3,14 +3,24 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type {
+  AvailabilityDeclarationDto,
   AvailKind,
   ConflictInfo,
+  CreateAvailabilityBatchItem,
   DaySlot,
+  MeCalendarDto,
+  MyCalendarOpenInscriptionEntry,
+  MyCalendarPollEntry,
+  MyCalendarSeanceEntry,
+  RecurKind,
   SlotStatus,
+  VoteAnswer,
 } from '@master-jdr/shared';
+import { participantCount } from '../parties/participant-count.util';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   RealtimeEventsService,
@@ -29,6 +39,25 @@ export interface SplitResult {
   deleted: string[];
 }
 
+/** Ligne persistée retenue comme conflit : forme minimale suffisante pour la découpe et pour
+ *  toConflictInfo(), sans dépendance à @prisma/client (Story 36.4). */
+export interface ConflictRow extends DeclarationLike {
+  id: string;
+}
+
+/** `data` d'une création de déclaration, calculée mais pas encore écrite — ce que rend
+ *  buildHolePieces() pour que l'appelant l'écrive dans la transaction de son choix. */
+export interface AvailabilityCreateData {
+  userId: string;
+  kind: AvailKind;
+  recurKind: RecurKind;
+  dayOfWeek: number | null;
+  slot: DaySlot;
+  startDate: Date | null;
+  endDate: Date | null;
+  expiresAt: Date;
+}
+
 /** Forme minimale d'une déclaration suffisante pour computeSlotStatus (pas de dépendance à @prisma/client). */
 export interface DeclarationLike {
   kind: 'UNAVAILABLE' | 'AVAILABLE';
@@ -42,6 +71,8 @@ export interface DeclarationLike {
 
 @Injectable()
 export class AvailabilityService {
+  private readonly logger = new Logger(AvailabilityService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtimeEvents: RealtimeEventsService,
@@ -73,10 +104,20 @@ export class AvailabilityService {
     ];
   }
 
+  // Deferred-work (2026-08-24) : appelée après que la mutation DB a déjà été committée (les 6
+  // sites d'appel) — une erreur ici ne doit jamais faire croire au client que l'écriture a échoué
+  // (500) alors qu'elle a bien eu lieu, ce qui ferait resoumettre une requête déjà appliquée.
+  // Même garde que `PartiesService.emitPartieAndMembersSafe()`/`emitMembersOnlySafe()`.
   private async emitForUser(userId: string): Promise<void> {
-    const partieIds = await this.affectedPartieIds(userId);
-    for (const id of partieIds) {
-      this.realtimeEvents.emit(partieTopic(id));
+    try {
+      const partieIds = await this.affectedPartieIds(userId);
+      for (const id of partieIds) {
+        this.realtimeEvents.emit(partieTopic(id));
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Échec de l'émission temps réel après mutation d'une déclaration de dispo/indispo (userId=${userId}) : ${String(err)}`,
+      );
     }
   }
 
@@ -155,23 +196,256 @@ export class AvailabilityService {
       },
     });
 
-    return active.filter((existing) => {
-      if (existing.kind === dto.kind) return false;
-      if (!this.slotsConflict(existing.slot, dto.slot)) return false;
-      return this.dateRangesConflict(existing, dto);
-    });
+    return active.filter((existing) => this.conflictPredicate(existing, dto));
   }
 
-  /** Crée la déclaration en faisant des "trous" autour des conflits existants.
-   *  Pour RECURRING : découpe en pièces entre les conflits.
-   *  Pour PUNCTUAL : idem, avec un pas de 1 jour. */
+  /** Prédicat pur de conflit (kind opposé + slot + dates chevauchants), extrait pour
+   *  être appliqué en mémoire à un jeu de déclarations lu une seule fois (Story 30.2,
+   *  route groupée) sans dupliquer la logique de findConflictsForCreate (AC6). */
+  private conflictPredicate(
+    existing: {
+      kind: AvailKind;
+      slot: DaySlot;
+      recurKind: RecurKind;
+      dayOfWeek: number | null;
+      startDate: Date | null;
+      endDate: Date | null;
+      expiresAt: Date;
+    },
+    dto: CreateAvailabilityDto,
+  ): boolean {
+    if (existing.kind === dto.kind) return false;
+    if (!this.slotsConflict(existing.slot, dto.slot)) return false;
+    return this.dateRangesConflict(existing, dto);
+  }
+
+  /** Représente un élément de lot sous la forme Date attendue par conflictPredicate/
+   *  dateRangesConflict côté "existing" (les items de lot portent des dates en string). */
+  private batchItemAsExisting(item: CreateAvailabilityBatchItem) {
+    return {
+      kind: item.kind,
+      slot: item.slot,
+      recurKind: item.recurKind,
+      dayOfWeek: item.dayOfWeek ?? null,
+      startDate: item.startDate
+        ? new Date(item.startDate + 'T00:00:00Z')
+        : null,
+      endDate: item.endDate ? new Date(item.endDate + 'T00:00:00Z') : null,
+      expiresAt: new Date(item.expiresAt),
+    };
+  }
+
+  /** Un item de lot n'a pas d'id persisté ; on synthétise un id unique par index pour
+   *  qu'un client qui indexerait/dédoublonnerait par `id` ne fusionne pas deux entrées
+   *  distinctes d'un même conflit interne (voir revue de code Story 30.2). */
+  private batchItemToConflictInfo(
+    item: CreateAvailabilityBatchItem,
+    index: number,
+  ): ConflictInfo {
+    return {
+      id: `batch-item-${index}`,
+      kind: item.kind,
+      slot: item.slot,
+      recurKind: item.recurKind,
+      startDate: item.startDate ?? null,
+      endDate: item.endDate ?? null,
+      dayOfWeek: item.dayOfWeek ?? null,
+      internal: true,
+    };
+  }
+
+  /** Cherche la première paire d'éléments du lot qui se contredisent entre eux (AC5).
+   *  Aucune fonction existante ne les voit : le prédicat compare une création à des
+   *  lignes persistées, pas à un autre élément du même lot. */
+  private findInternalConflict(
+    items: CreateAvailabilityBatchItem[],
+  ): [number, number] | null {
+    for (let i = 0; i < items.length; i++) {
+      const existingShape = this.batchItemAsExisting(items[i]);
+      for (let j = i + 1; j < items.length; j++) {
+        if (this.conflictPredicate(existingShape, items[j])) {
+          return [i, j];
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Écriture groupée : une seule lecture des déclarations actives (AC7), conflits externes
+   *  puis internes détectés avant toute écriture, puis une unique $transaction pour toutes
+   *  les écritures (AC8) et une unique émission temps réel.
+   *
+   *  Story 36.4 / dérogation D-18 — RENVERSEMENT ASSUMÉ de l'AC2 de la story 30.2 et de la
+   *  phrase 3 d'AD-21 : un conflit avec une déclaration PERSISTÉE ne fait plus échouer le
+   *  lot dès lors que l'item porte une `conflictResolution`. Sans résolution, le lot échoue
+   *  toujours — mais le 409 énumère désormais TOUS les conflits (AC9), faute de quoi le
+   *  dialogue ne pourrait pas les NOMMER (AC2).
+   *
+   *  Deux invariants NON renversés :
+   *  - un conflit INTERNE au lot reste irrésoluble (AC14) : aucun des deux items n'est
+   *    « l'existant », « Remplacer » n'y a aucun sens ;
+   *  - create() n'est toujours PAS le modèle d'atomicité (story 30.2, encadré n°2) : il
+   *    expire les conflits HORS transaction. Ici l'expiration est dans la transaction.
+   *
+   *  ⚠️ `created` n'a PAS de correspondance positionnelle garantie avec `items` : un item
+   *  résolu `keep` peut produire 0 à N pièces (découpe), quand tout autre item en produit
+   *  exactement une. Aucun consommateur actuel n'indexe `created[i]` en le supposant aligné
+   *  sur `items[i]` — le client retrouve les créneaux via `batchIndex` sur le 409, pas via ce
+   *  retour de succès (revue de code Story 36.4). Voir `CreateAvailabilityBatchResult`
+   *  (`packages/shared`). */
+  async createBatch(
+    userId: string,
+    items: CreateAvailabilityBatchItem[],
+  ): Promise<{ created: object[] }> {
+    if (items.length === 0) {
+      throw new BadRequestException('Le lot ne peut pas être vide');
+    }
+
+    const now = new Date();
+    items.forEach((item, index) => {
+      if (new Date(item.expiresAt) <= now) {
+        throw new BadRequestException(
+          `expiresAt doit être une date dans le futur (élément ${index})`,
+        );
+      }
+    });
+
+    const active = await this.prisma.availabilityDeclaration.findMany({
+      where: { userId, expiresAt: { gt: now } },
+    });
+
+    // Un seul parcours : on résout les conflits de chaque item à partir de l'unique lecture
+    // ci-dessus (AC7 — jamais un findMany par item, ce serait le fan-out que le palier combat).
+    const conflictsByIndex = items.map((item) =>
+      active.filter((existing) => this.conflictPredicate(existing, item)),
+    );
+
+    // AC9 : on COLLECTE au lieu de s'arrêter au premier. Le dialogue nomme les créneaux, il
+    // ne peut pas le faire à partir d'une seule entrée. L'ordre suit celui du lot, le client
+    // s'en servant (via batchIndex) pour retrouver la cellule sélectionnée correspondante.
+    const unresolved: Array<ConflictInfo & { batchIndex: number }> = [];
+    conflictsByIndex.forEach((conflicts, index) => {
+      if (items[index].conflictResolution) return;
+      for (const conflict of conflicts) {
+        unresolved.push({
+          ...this.toConflictInfo(conflict),
+          batchIndex: index,
+        });
+      }
+    });
+    if (unresolved.length > 0) {
+      throw new ConflictException({ conflicts: unresolved });
+    }
+
+    const internalConflict = this.findInternalConflict(items);
+    if (internalConflict) {
+      const [i, j] = internalConflict;
+      throw new ConflictException({
+        conflicts: [
+          { ...this.batchItemToConflictInfo(items[i], i), batchIndex: i },
+          { ...this.batchItemToConflictInfo(items[j], j), batchIndex: j },
+        ],
+      });
+    }
+
+    // Tout se calcule AVANT d'ouvrir la transaction, pour la garder aussi courte que possible :
+    // elle reste séquentielle et le lot va jusqu'à 42 items, dont chacun peut produire
+    // plusieurs pièces de découpe (timeout par défaut de $transaction : 5 s).
+    //
+    // Deux passes : `toExpire` doit être connu en ENTIER avant de calculer les pièces « à
+    // trous » des items `keep`. Sans ça, un item `keep` recouvrant la MÊME déclaration
+    // persistée qu'un item `overwrite` du même lot creuserait un trou autour d'une ligne qui
+    // n'existera plus au commit (revue de code Story 36.4 — l'`overwrite` prime).
+    const toExpire: string[] = [];
+    items.forEach((item, index) => {
+      if (item.conflictResolution === 'overwrite') {
+        // Remplacer : n'expire que MES déclarations persistées. Une indisponibilité dérivée
+        // d'une séance n'est jamais lue ici (AD-9, jamais persistée), elle survit donc
+        // structurellement — il n'y a rien à coder pour cela (AC4/AC5).
+        toExpire.push(...conflictsByIndex[index].map((c) => c.id));
+      }
+    });
+    const expiredIds = new Set(toExpire);
+
+    const toCreate: AvailabilityCreateData[] = [];
+    items.forEach((item, index) => {
+      const conflicts = conflictsByIndex[index];
+      if (item.conflictResolution === 'keep' && conflicts.length > 0) {
+        // Conserver : l'existant gagne, le créneau est créé « à trous » autour de lui — la
+        // découpe de la story 1.7, appliquée dans le lot par la MÊME fonction (AC6).
+        // On exclut les conflits déjà voués à l'expiration par un AUTRE item `overwrite` du
+        // lot : ils n'existeront plus au commit, un trou à leur sujet serait injustifié.
+        const stillActive = conflicts.filter((c) => !expiredIds.has(c.id));
+        toCreate.push(...this.buildHolePieces(userId, item, stillActive));
+        return;
+      }
+      // `overwrite` : l'expiration a déjà été collectée dans la première passe ci-dessus.
+      toCreate.push({
+        userId,
+        kind: item.kind,
+        recurKind: item.recurKind,
+        dayOfWeek: item.dayOfWeek ?? null,
+        slot: item.slot,
+        startDate: item.startDate
+          ? new Date(item.startDate + 'T00:00:00Z')
+          : null,
+        endDate: item.endDate ? new Date(item.endDate + 'T00:00:00Z') : null,
+        expiresAt: new Date(item.expiresAt),
+      });
+    });
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      // Expirations d'abord, créations ensuite — et UN SEUL updateMany pour tout le lot,
+      // jamais un par item. `userId` borne l'écriture à l'appelant : les identifiants
+      // viennent déjà d'une lecture scopée, la clause est une seconde barrière (AC16).
+      if (toExpire.length > 0) {
+        await tx.availabilityDeclaration.updateMany({
+          where: { id: { in: toExpire }, userId },
+          data: { expiresAt: new Date() },
+        });
+      }
+      const results: object[] = [];
+      for (const data of toCreate) {
+        results.push(await tx.availabilityDeclaration.create({ data }));
+      }
+      return results;
+    });
+
+    await this.emitForUser(userId);
+    return { created };
+  }
+
+  /** Crée la déclaration en faisant des "trous" autour des conflits existants — chemin
+   *  unitaire (POST /availability, résolution `keep`). Ouvre sa propre transaction.
+   *
+   *  Story 36.4 : le CALCUL des pièces est extrait dans buildHolePieces() pour que la route
+   *  groupée puisse écrire les mêmes pièces dans SA transaction, sans imbriquer une seconde
+   *  $transaction et sans dupliquer la logique de découpe (AC6). */
   private async createWithHoles(
     userId: string,
     dto: CreateAvailabilityDto,
-    conflicts: Awaited<
-      ReturnType<typeof this.prisma.availabilityDeclaration.findMany>
-    >,
+    conflicts: ConflictRow[],
   ): Promise<object[]> {
+    const pieces = this.buildHolePieces(userId, dto, conflicts);
+    return this.prisma.$transaction(async (tx) => {
+      const results: object[] = [];
+      for (const data of pieces) {
+        results.push(await tx.availabilityDeclaration.create({ data }));
+      }
+      return results;
+    });
+  }
+
+  /** Calcul PUR des déclarations à créer « avec des trous » autour des conflits existants
+   *  (résolution `keep` / Conserver). N'écrit rien, ne lit rien : rend les `data` prêts à
+   *  être créés, que l'appelant écrit dans la transaction de son choix.
+   *  Pour RECURRING : découpe en pièces entre les conflits (pas de 7 jours).
+   *  Pour PUNCTUAL : idem, avec un pas de 1 jour. */
+  private buildHolePieces(
+    userId: string,
+    dto: CreateAvailabilityDto,
+    conflicts: ConflictRow[],
+  ): AvailabilityCreateData[] {
     const MS_1D = 24 * 60 * 60 * 1000;
     const MS_7D = 7 * MS_1D;
 
@@ -205,26 +479,16 @@ export class AvailabilityService {
         pieces.push({ startDate: currentStart, endDate: null });
       }
 
-      return this.prisma.$transaction(async (tx) => {
-        const results: object[] = [];
-        for (const piece of pieces) {
-          results.push(
-            await tx.availabilityDeclaration.create({
-              data: {
-                userId,
-                kind: dto.kind,
-                recurKind: 'RECURRING' as const,
-                dayOfWeek: dto.dayOfWeek!,
-                slot: dto.slot,
-                startDate: piece.startDate,
-                endDate: piece.endDate,
-                expiresAt: dtoExpires,
-              },
-            }),
-          );
-        }
-        return results;
-      });
+      return pieces.map((piece) => ({
+        userId,
+        kind: dto.kind,
+        recurKind: 'RECURRING' as const,
+        dayOfWeek: dto.dayOfWeek!,
+        slot: dto.slot,
+        startDate: piece.startDate,
+        endDate: piece.endDate,
+        expiresAt: dtoExpires,
+      }));
     }
 
     // PUNCTUAL : collecte tous les jours "trous" dans [dto.startDate, dto.endDate]
@@ -275,26 +539,16 @@ export class AvailabilityService {
     }
     if (cur <= dtoEnd) pieces2.push({ startDate: cur, endDate: dtoEnd });
 
-    return this.prisma.$transaction(async (tx) => {
-      const results: object[] = [];
-      for (const p of pieces2) {
-        results.push(
-          await tx.availabilityDeclaration.create({
-            data: {
-              userId,
-              kind: dto.kind,
-              recurKind: 'PUNCTUAL' as const,
-              dayOfWeek: null,
-              slot: dto.slot,
-              startDate: p.startDate,
-              endDate: p.endDate,
-              expiresAt: new Date(p.endDate.getTime() + 86_399_999),
-            },
-          }),
-        );
-      }
-      return results;
-    });
+    return pieces2.map((p) => ({
+      userId,
+      kind: dto.kind,
+      recurKind: 'PUNCTUAL' as const,
+      dayOfWeek: null,
+      slot: dto.slot,
+      startDate: p.startDate,
+      endDate: p.endDate,
+      expiresAt: new Date(p.endDate.getTime() + 86_399_999),
+    }));
   }
 
   private toConflictInfo(d: {
@@ -468,6 +722,471 @@ export class AvailabilityService {
       map.get(d.userId)?.push(d);
     }
     return map;
+  }
+
+  /**
+   * Même chose que `getActiveDeclarations`, augmentée des indisponibilités dérivées des séances
+   * datées de CHACUNE des parties (toutes, pas seulement celle consultée) des utilisateurs demandés
+   * (AD-9). Seul point d'entrée utilisé par `PartiesService.getAvailableSlots`/`getHeatmap` — les
+   * deux vues (MJ et joueur) partagent ainsi la même source de vérité (AC6, Story 30.5).
+   * `getActiveDeclarations` reste inchangée : elle ne renvoie que des déclarations réelles.
+   */
+  async getActiveDeclarationsWithSeances(
+    userIds: string[],
+  ): Promise<Map<string, DeclarationLike[]>> {
+    const map = await this.getActiveDeclarations(userIds);
+    if (userIds.length === 0) return map;
+
+    const derived = await this.getSeanceDerivedUnavailability(userIds);
+    for (const [userId, entries] of derived) {
+      if (entries.length === 0) continue;
+      map.set(userId, [...(map.get(userId) ?? []), ...entries]);
+    }
+    return map;
+  }
+
+  /**
+   * Résout, pour chaque utilisateur demandé, les créneaux occupés par une séance datée de
+   * N'IMPORTE LAQUELLE de ses parties (MJ ou membre) — pas seulement celle consultée par
+   * l'appelant. C'est la traduction structurelle d'AD-9 : la sortie est un `DeclarationLike`
+   * synthétique (`UNAVAILABLE`, `PUNCTUAL`), jamais une identité de partie/scénario — la non-fuite
+   * cross-partie découle directement de cette forme, aucun filtrage supplémentaire n'est requis.
+   *
+   * Participant d'une séance datée : ONE_SHOT/CAMPAGNE_LINEAIRE → tous les membres + le MJ (aucune
+   * présence individuelle dans ces kinds) ; CAMPAGNE_EPISODIQUE → le MJ + les seuls utilisateurs
+   * inscrits (`Inscription`) à CETTE séance — un joueur non inscrit n'est engagé sur rien.
+   *
+   * Deux requêtes Prisma au total, jamais une par utilisateur ni par partie (pas de N+1).
+   */
+  private async getSeanceDerivedUnavailability(
+    userIds: string[],
+  ): Promise<Map<string, DeclarationLike[]>> {
+    const map = new Map<string, DeclarationLike[]>();
+    for (const userId of userIds) map.set(userId, []);
+
+    const parties = await this.prisma.partie.findMany({
+      where: {
+        OR: [
+          { mjId: { in: userIds } },
+          { memberships: { some: { userId: { in: userIds } } } },
+        ],
+      },
+      select: {
+        id: true,
+        kind: true,
+        mjId: true,
+        memberships: { select: { userId: true } },
+      },
+    });
+    if (parties.length === 0) return map;
+
+    const partieIds = parties.map((p) => p.id);
+    const partieById = new Map(parties.map((p) => [p.id, p]));
+    const seances = await this.prisma.seance.findMany({
+      where: { scenario: { partieId: { in: partieIds } } },
+      include: {
+        poll: true,
+        inscriptions: { select: { userId: true } },
+        scenario: { select: { partieId: true } },
+      },
+    });
+
+    const requested = new Set(userIds);
+
+    for (const seance of seances) {
+      const date = seance.poll?.chosenDate ?? seance.dateValidee;
+      if (!date) continue;
+      const slot = seance.poll?.chosenSlot ?? 'FULL_DAY';
+
+      const partie = partieById.get(seance.scenario.partieId);
+      if (!partie) continue; // partie hors du périmètre résolu ci-dessus
+
+      const participantIds =
+        partie.kind === 'CAMPAGNE_EPISODIQUE'
+          ? new Set([partie.mjId, ...seance.inscriptions.map((i) => i.userId)])
+          : new Set([partie.mjId, ...partie.memberships.map((m) => m.userId)]);
+
+      const dayUtc = new Date(
+        Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+      );
+      const entry: DeclarationLike = {
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: slot,
+        startDate: dayUtc,
+        endDate: dayUtc,
+        expiresAt: new Date(dayUtc.getTime() + 86_399_999),
+      };
+
+      for (const userId of participantIds) {
+        // Copie par entrée : chaque utilisateur reçoit son propre objet, jamais une référence
+        // partagée avec les autres participants de la même séance.
+        if (requested.has(userId)) map.get(userId)!.push({ ...entry });
+      }
+    }
+
+    return map;
+  }
+
+  // ─── Calendrier personnel (GET /me/calendar, AD-18, Story 30.5) ────────────
+
+  private static readonly ME_CALENDAR_MAX_RANGE_DAYS = 366;
+
+  /**
+   * Endpoint unique du calendrier personnel (AD-18) : un seul appel pour toute la plage `[from,
+   * to]`, indexé par couche. `disponibilite-groupe` n'y figure JAMAIS (AD-16, AC5 Story 30.4) —
+   * elle n'a de sens que dans le calendrier d'une partie. Toutes les lectures sont groupées par
+   * `partieId: { in: [...] }`, jamais une itération par partie (AC1).
+   */
+  async getMyCalendar(
+    userId: string,
+    from: string,
+    to: string,
+  ): Promise<MeCalendarDto> {
+    const fromMs = this.parseDateOnly(from, false);
+    const toMs = this.parseDateOnly(to, true);
+    if (fromMs > toMs) {
+      throw new BadRequestException('from must be before or equal to to');
+    }
+    if (
+      toMs - fromMs >
+      AvailabilityService.ME_CALENDAR_MAX_RANGE_DAYS * 86_400_000
+    ) {
+      throw new BadRequestException(
+        `Date range cannot exceed ${AvailabilityService.ME_CALENDAR_MAX_RANGE_DAYS} days`,
+      );
+    }
+
+    const myParties = await this.prisma.partie.findMany({
+      where: { OR: [{ mjId: userId }, { memberships: { some: { userId } } }] },
+      select: { id: true, name: true, kind: true, mjId: true },
+    });
+    const partieIds = myParties.map((p) => p.id);
+    const partieById = new Map(myParties.map((p) => [p.id, p]));
+
+    const [declarations, seances, polls, membershipCounts] = await Promise.all([
+      this.prisma.availabilityDeclaration.findMany({
+        where: { userId, expiresAt: { gt: new Date() } },
+      }),
+      partieIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.seance.findMany({
+            where: { scenario: { partieId: { in: partieIds } } },
+            include: {
+              poll: true,
+              inscriptions: { select: { userId: true } },
+              scenario: { select: { partieId: true, title: true } },
+            },
+          }),
+      partieIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.sessionPoll.findMany({
+            where: { partieId: { in: partieIds }, status: 'OPEN' },
+            // Story 36.6 — `votes: true` et RIEN de plus. 🚨 Ne jamais y ajouter
+            // `include: { user: … }` : le calendrier personnel agrège des parties entre
+            // lesquelles aucune identité ne doit transiter (AD-9/AD-2). Les compteurs et ma
+            // seule réponse se déduisent de `userId` + `answer`, qui ne sortent jamais d'ici.
+            include: { options: { include: { votes: true } } },
+          }),
+      // Story 36.6 — l'effectif de chaque partie, en UNE requête groupée pour toutes mes parties
+      // (AD-3). Jamais un `membership.count` par partie : c'est exactement le fan-out que la
+      // garde anti-N+1 de la spec interdit.
+      partieIds.length === 0
+        ? Promise.resolve([])
+        : this.prisma.membership.groupBy({
+            by: ['partieId'],
+            where: { partieId: { in: partieIds } },
+            _count: true,
+          }),
+    ]);
+
+    // Le MJ n'a jamais de ligne `Membership` : une partie absente de l'agrégat a 0 membre, donc
+    // un effectif de 1. `participantCount()` est le point unique de cette formule.
+    const membershipCountByPartie = new Map<string, number>(
+      (membershipCounts as { partieId: string; _count: number }[]).map((m) => [
+        m.partieId,
+        m._count,
+      ]),
+    );
+
+    return {
+      'mes-indisponibilites': declarations
+        .filter(
+          (d) =>
+            d.kind === 'UNAVAILABLE' &&
+            this.declarationOverlapsRange(d, fromMs, toMs),
+        )
+        .map((d) => this.toAvailabilityDeclarationDto(d)),
+      'mes-disponibilites': declarations
+        .filter(
+          (d) =>
+            d.kind === 'AVAILABLE' &&
+            this.declarationOverlapsRange(d, fromMs, toMs),
+        )
+        .map((d) => this.toAvailabilityDeclarationDto(d)),
+      'mes-seances': this.buildMySeancesLayer(
+        seances,
+        partieById,
+        userId,
+        fromMs,
+        toMs,
+      ),
+      'votes-en-cours': this.buildOpenPollsLayer(
+        polls,
+        partieById,
+        fromMs,
+        toMs,
+        userId,
+        membershipCountByPartie,
+      ),
+      // Non filtrée par [from, to] (décision documentée, Story 30.5 Dev Notes) : une séance en
+      // attente d'inscriptions n'a pas encore de date propre à comparer.
+      'inscriptions-ouvertes': this.buildOpenInscriptionsLayer(
+        seances,
+        partieById,
+        userId,
+      ),
+    };
+  }
+
+  /** Parse une borne `YYYY-MM-DD` en timestamp UTC, début ou fin de journée. Rejette les dates
+   *  calendairement invalides (ex. `2026-02-30`) que `Date` accepterait sinon en les décalant
+   *  silencieusement au mois suivant. */
+  private parseDateOnly(value: string, endOfDay: boolean): number {
+    const iso = `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`;
+    const ms = new Date(iso).getTime();
+    if (
+      Number.isNaN(ms) ||
+      new Date(ms).toISOString().substring(0, 10) !== value
+    ) {
+      throw new BadRequestException(`Invalid date: ${value}`);
+    }
+    return ms;
+  }
+
+  /** PUNCTUAL : chevauchement direct des bornes. RECURRING : bornée par expiresAt à défaut
+   *  d'endDate — même convention que `dateRangesConflict`/`isInCoveredPeriod`, ET au moins une
+   *  date de la fenêtre d'intersection tombe sur `dayOfWeek` (sinon une règle "tous les lundis"
+   *  serait incluse pour une plage qui ne couvre aucun lundi). */
+  private declarationOverlapsRange(
+    d: {
+      recurKind: string;
+      dayOfWeek: number | null;
+      startDate: Date | null;
+      endDate: Date | null;
+      expiresAt: Date;
+    },
+    fromMs: number,
+    toMs: number,
+  ): boolean {
+    if (d.recurKind === 'PUNCTUAL') {
+      if (!d.startDate || !d.endDate) return false;
+      return d.startDate.getTime() <= toMs && d.endDate.getTime() >= fromMs;
+    }
+    const effStart = Math.max((d.startDate ?? new Date(0)).getTime(), fromMs);
+    const effEnd = Math.min((d.endDate ?? d.expiresAt).getTime(), toMs);
+    if (effStart > effEnd || d.dayOfWeek == null) return false;
+    for (let t = effStart; t <= effEnd; t += 86_400_000) {
+      if (new Date(t).getUTCDay() === d.dayOfWeek) return true;
+    }
+    return false;
+  }
+
+  private toAvailabilityDeclarationDto(d: {
+    id: string;
+    userId: string;
+    kind: string;
+    recurKind: string;
+    dayOfWeek: number | null;
+    slot: string;
+    startDate: Date | null;
+    endDate: Date | null;
+    expiresAt: Date;
+    createdAt: Date;
+  }): AvailabilityDeclarationDto {
+    return {
+      id: d.id,
+      userId: d.userId,
+      kind: d.kind as AvailKind,
+      recurKind: d.recurKind as RecurKind,
+      dayOfWeek: d.dayOfWeek,
+      slot: d.slot as DaySlot,
+      startDate: d.startDate?.toISOString().substring(0, 10) ?? null,
+      endDate: d.endDate?.toISOString().substring(0, 10) ?? null,
+      expiresAt: d.expiresAt.toISOString(),
+      createdAt: d.createdAt.toISOString(),
+    };
+  }
+
+  /** Mes séances datées, toutes mes parties confondues — identité de partie/scénario incluse,
+   *  ce sont mes propres parties (AC4 : la notion de partie tierce n'existe pas ici). Pour une
+   *  partie CAMPAGNE_EPISODIQUE, une séance n'est « mienne » que si j'y suis inscrit (ou MJ) —
+   *  même règle « participant » qu'`getSeanceDerivedUnavailability` (AD-9), sinon un membre non
+   *  inscrit verrait une séance à laquelle il ne participe pas listée comme sienne. */
+  private buildMySeancesLayer(
+    seances: Array<{
+      id: string;
+      scenarioId: string;
+      poll: { chosenDate: Date | null; chosenSlot: string | null } | null;
+      dateValidee: Date | null;
+      inscriptions: { userId: string }[];
+      scenario: { partieId: string; title: string };
+      // Story 36.5 — déjà chargés par le findMany (aucun `select` de scalaires), donc gratuits.
+      heureRdv?: string | null;
+      lieu?: string | null;
+      notePratique?: string | null;
+      // Story 36.16 — même raisonnement : déjà chargé par le findMany, aucun appel de plus.
+      compteRendu?: string | null;
+    }>,
+    partieById: Map<
+      string,
+      { id: string; name: string; kind: string; mjId: string }
+    >,
+    userId: string,
+    fromMs: number,
+    toMs: number,
+  ): MyCalendarSeanceEntry[] {
+    const entries: MyCalendarSeanceEntry[] = [];
+    for (const s of seances) {
+      const date = s.poll?.chosenDate ?? s.dateValidee;
+      if (!date) continue;
+      if (date.getTime() < fromMs || date.getTime() > toMs) continue;
+      const partie = partieById.get(s.scenario.partieId);
+      if (!partie) continue;
+      if (
+        partie.kind === 'CAMPAGNE_EPISODIQUE' &&
+        partie.mjId !== userId &&
+        !s.inscriptions.some((i) => i.userId === userId)
+      ) {
+        continue;
+      }
+      entries.push({
+        seanceId: s.id,
+        partieId: partie.id,
+        partieName: partie.name,
+        scenarioId: s.scenarioId,
+        scenarioTitle: s.scenario.title,
+        date: date.toISOString().substring(0, 10),
+        // AC5 : lu sur le sondage rattaché s'il existe, FULL_DAY à défaut — jamais une supposition
+        // locale à l'appelant.
+        slot: (s.poll?.chosenSlot ?? 'FULL_DAY') as DaySlot,
+        // Story 36.5 — transmis tels quels. `heureRdv` reste une CHAÎNE : rien ici ne la parse
+        // ni ne la compare, et elle n'entre pas dans le calcul de statut de créneau (AD-9).
+        heureRdv: s.heureRdv ?? null,
+        lieu: s.lieu ?? null,
+        notePratique: s.notePratique ?? null,
+        // Story 36.16 — même formule que `CalendarView.allCalendarEntries()` (front, ligne 535) :
+        // une chaîne vide ou uniquement des espaces compte comme manquant.
+        compteRenduManquant: !s.compteRendu?.trim(),
+      });
+    }
+    return entries;
+  }
+
+  /**
+   * Sondages de date ouverts sur mes parties, dont au moins une option tombe dans la plage.
+   *
+   * Story 36.6 — chaque option porte désormais son `optionId`, les trois compteurs de réponses et
+   * **ma seule** réponse ; l'entrée porte l'effectif de la troupe (le dénominateur de la piste).
+   *
+   * ⚠️ **Le filtre de plage reste au niveau du SONDAGE, et toutes ses options sont renvoyées**
+   * (comportement d'origine, délibérément conservé). Filtrer option par option aurait retiré de
+   * la charge utile des créneaux que le client sait déjà ne pas rendre — la grille ne dessine que
+   * les jours qu'elle affiche — mais aurait rendu `nextMeaningfulDate()` (le rail, story 36.1)
+   * aveugle à une option juste au-delà de la fenêtre chargée, qui est précisément ce qu'il
+   * cherche : le prochain jour porteur.
+   */
+  private buildOpenPollsLayer(
+    polls: Array<{
+      id: string;
+      partieId: string;
+      expiresAt: Date | null;
+      options: {
+        id: string;
+        date: Date;
+        slot: string;
+        votes?: { userId: string; answer: string }[];
+      }[];
+    }>,
+    partieById: Map<string, { id: string; name: string }>,
+    fromMs: number,
+    toMs: number,
+    userId: string,
+    membershipCountByPartie: Map<string, number>,
+  ): MyCalendarPollEntry[] {
+    const entries: MyCalendarPollEntry[] = [];
+    for (const poll of polls) {
+      const inRange = poll.options.some(
+        (o) => o.date.getTime() >= fromMs && o.date.getTime() <= toMs,
+      );
+      if (!inRange) continue;
+      const partie = partieById.get(poll.partieId);
+      if (!partie) continue;
+      entries.push({
+        pollId: poll.id,
+        partieId: partie.id,
+        partieName: partie.name,
+        membersCount: participantCount(
+          membershipCountByPartie.get(partie.id) ?? 0,
+        ),
+        expiresAt: poll.expiresAt?.toISOString() ?? null,
+        options: poll.options.map((o) => {
+          const votes = o.votes ?? [];
+          const mine = votes.find((v) => v.userId === userId);
+          return {
+            optionId: o.id,
+            date: o.date.toISOString().substring(0, 10),
+            slot: o.slot as DaySlot,
+            yes: votes.filter((v) => v.answer === 'YES').length,
+            maybe: votes.filter((v) => v.answer === 'MAYBE').length,
+            no: votes.filter((v) => v.answer === 'NO').length,
+            // `null`, jamais `undefined` : une seule représentation de « n'a pas répondu ».
+            myAnswer: mine ? (mine.answer as VoteAnswer) : null,
+          };
+        }),
+      });
+    }
+    return entries;
+  }
+
+  /** Séances à inscription ouverte de mes parties CAMPAGNE_EPISODIQUE — jamais filtrée par plage
+   *  (D-13, Story 30.5 Dev Notes) : une séance en attente d'inscriptions n'a pas encore de date. */
+  private buildOpenInscriptionsLayer(
+    seances: Array<{
+      id: string;
+      scenarioId: string;
+      poll: { chosenDate: Date | null } | null;
+      dateValidee: Date | null;
+      inscriptionMin: number | null;
+      inscriptionMax: number | null;
+      inscriptions: { userId: string }[];
+      scenario: { partieId: string; title: string };
+    }>,
+    partieById: Map<string, { id: string; name: string; kind: string }>,
+    userId: string,
+  ): MyCalendarOpenInscriptionEntry[] {
+    const entries: MyCalendarOpenInscriptionEntry[] = [];
+    for (const s of seances) {
+      if (s.inscriptionMax == null) continue;
+      // Date validée (via poll ou dateValidee) fige le roster (ScenariosService.inscrire()) —
+      // l'inscription n'est alors plus "ouverte".
+      if (s.poll?.chosenDate ?? s.dateValidee) continue;
+      const partie = partieById.get(s.scenario.partieId);
+      if (!partie || partie.kind !== 'CAMPAGNE_EPISODIQUE') continue;
+      entries.push({
+        seanceId: s.id,
+        partieId: partie.id,
+        partieName: partie.name,
+        scenarioId: s.scenarioId,
+        scenarioTitle: s.scenario.title,
+        inscriptionMin: s.inscriptionMin ?? 0,
+        inscriptionMax: s.inscriptionMax,
+        inscritsCount: s.inscriptions.length,
+        jeSuisInscrit: s.inscriptions.some((i) => i.userId === userId),
+      });
+    }
+    return entries;
   }
 
   /**

@@ -7,6 +7,7 @@ import type {
   CastVoteDto,
   ChooseDateDto,
   SessionPollDto,
+  SetPollOptionsDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
 
@@ -69,6 +70,39 @@ export class PollService {
   chooseDate(partieId: string, pollId: string, dto: ChooseDateDto): Promise<void> {
     return firstValueFrom(
       this.http.patch<void>(`${API_BASE}/parties/${partieId}/poll/${pollId}/choose`, dto, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  /** Retire ma réponse sur une option (Story 30.1, AD-10) — supprime la ligne côté serveur,
+   *  jamais une réponse vide. */
+  withdrawVote(partieId: string, pollId: string, optionId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(`${API_BASE}/parties/${partieId}/poll/${pollId}/vote/${optionId}`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  /**
+   * Story 36.10 (D-16) — remplace le jeu d'options d'un vote OUVERT par celui composé sur la
+   * grille. MJ seul, côté serveur.
+   *
+   * 🚨 `dto.options` est le jeu **complet** voulu, jamais un delta : ce qui n'y est pas est retiré,
+   * et le retrait d'une option supprime les réponses qu'elle portait. L'avertissement préalable
+   * (AC6) est de la responsabilité de l'appelant — ce service n'avertit pas, il écrit.
+   *
+   * ⚠️ Ne sert JAMAIS à créer un vote : un vote exige une `Seance`, donc
+   * `ScenariosService.createSeancePoll()`.
+   */
+  setPollOptions(
+    partieId: string,
+    pollId: string,
+    dto: SetPollOptionsDto,
+  ): Promise<SessionPollDto> {
+    return firstValueFrom(
+      this.http.put<SessionPollDto>(`${API_BASE}/parties/${partieId}/poll/${pollId}/options`, dto, {
         withCredentials: true,
       }),
     );

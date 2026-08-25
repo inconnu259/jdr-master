@@ -110,8 +110,13 @@ export function buildRosterRows(
       characterLabel: name,
       playerLabel: member.displayName,
       classLabel,
+      // Deferred-work (2026-08-25) : parenthèses vides si classLabel est vide (ex. "Alice —
+      // Fenn ()") — omises quand il n'y a rien à qualifier.
       ariaLabel: withRoleSuffix(
-        withLevelUpSuffix(`${member.displayName} — ${name} (${classLabel})`, pending),
+        withLevelUpSuffix(
+          `${member.displayName} — ${name}${classLabel ? ` (${classLabel})` : ''}`,
+          pending,
+        ),
         assignedRoleLabel,
         pending,
       ),

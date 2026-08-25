@@ -1,0 +1,27 @@
+<div class="poll-missing">
+  <h3 class="poll-missing__title">{{ theme.tone()['poll.status_title'] }}</h3>
+
+  <!-- AC7 — le compte vient du serveur (`membersCount`), la liste vient de `members()`. Les deux
+       cohabitent délibérément : le compte reste juste là où la liste est incomplète. -->
+  <p class="poll-missing__summary">{{ summary() }}</p>
+
+  @if (missing().length > 0) {
+    <p class="poll-missing__row poll-missing__row--missing">
+      <span class="poll-missing__prefix">{{ theme.tone()['poll.missing_prefix'] }}</span>
+      @for (m of missing(); track m.userId) {
+        <app-identity-label [playerName]="m.displayName" />
+      }
+    </p>
+  } @else {
+    <p class="poll-missing__row poll-missing__all">{{ theme.tone()['alert.all_responded'] }}</p>
+  }
+
+  @if (responded().length > 0) {
+    <p class="poll-missing__row">
+      <span class="poll-missing__prefix">{{ theme.tone()['poll.responded_prefix'] }}</span>
+      @for (m of responded(); track m.userId) {
+        <app-identity-label [playerName]="m.displayName" />
+      }
+    </p>
+  }
+</div>

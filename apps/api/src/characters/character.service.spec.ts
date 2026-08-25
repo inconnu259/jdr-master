@@ -45,8 +45,13 @@ jest.mock('node:crypto', () => {
 // sans effet de bord), seule stripImageMetadata est mockée. Un vrai sharp() sur JPEG_BUFFER
 // (signature magique seule, non décodable) ferait échouer tous les tests updatePortrait()
 // existants — cf. Story 16.2 Dev Notes.
-jest.mock('./image-mime.util', () => ({
-  ...jest.requireActual('./image-mime.util'),
+//
+// Story 29.12 (AD-17) : chemin mis à jour vers l'utilitaire extrait (`common/image-upload.util`),
+// après suppression de `./image-mime.util`. C'est CE mock qui devenait inopérant sans bruit si le
+// chemin n'était pas répercuté (AC7) — cf. le test dédié « le mock mocke encore » ci-dessous, qui
+// échouerait si `jest.mock` ci-dessous ne s'appliquait plus à rien.
+jest.mock('../common/image-upload.util', () => ({
+  ...jest.requireActual('../common/image-upload.util'),
   stripImageMetadata: jest.fn(),
 }));
 
@@ -58,7 +63,7 @@ import {
   resolveStartingEquipment,
 } from '@master-jdr/game-rules';
 import { mkdir, writeFile, unlink, readFile } from 'node:fs/promises';
-import { stripImageMetadata } from './image-mime.util';
+import { stripImageMetadata } from '../common/image-upload.util';
 import { CharacterService } from './character.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
@@ -108,6 +113,9 @@ function makePrisma() {
       findUnique: jest.fn(),
       findMany: jest.fn(),
     },
+    characterGroupRole: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     scenario: {
       findUnique: jest.fn(),
     },
@@ -128,6 +136,7 @@ function makePartiesService() {
   return {
     getOwned: jest.fn(),
     getViewable: jest.fn(),
+    notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -300,6 +309,23 @@ describe('CharacterService', () => {
     });
 
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+  });
+
+  it('create() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal PERSONNAGE_A_CREER)', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+    (computeDerived as jest.Mock).mockReturnValue({});
+    prisma.character.create.mockResolvedValue(makeCharacter());
+
+    await service.create('p1', 'u1', {
+      gameSystemId: 'ryuutama',
+      sheetData: validSheet(),
+    });
+
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
+      'p1',
+      'mj1',
+    );
   });
 
   it('create() gameSystemId non supporté → BadRequestException, validate/computeDerived non appelés', async () => {
@@ -931,6 +957,99 @@ describe('CharacterService', () => {
       expect(result.map((c) => c.id)).toEqual(['c1']);
       expect(result.some((c) => c.id === 'c2')).toBe(false);
     });
+
+    it('classLabel/typeLabel résolus depuis le contenu de jeu (Story 29.9)', async () => {
+      gameSystems.getContent.mockResolvedValue({
+        class: [{ key: 'chasseur', data: { label: 'Chasseur' } }],
+        type: [{ key: 'attaque', data: { label: 'Attaque' } }],
+      });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
+      ]);
+
+      const result = await service.findMine('u1');
+
+      expect(gameSystems.getContent).toHaveBeenCalledWith('ryuutama');
+      expect(result[0].classLabel).toBe('Chasseur');
+      expect(result[0].typeLabel).toBe('Attaque');
+    });
+
+    it('classId/typeId absent du catalogue (défensif) → classLabel/typeLabel null, jamais une chaîne vide trompeuse', async () => {
+      gameSystems.getContent.mockResolvedValue({ class: [], type: [] });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
+      ]);
+
+      const result = await service.findMine('u1');
+
+      expect(result[0].classLabel).toBeNull();
+      expect(result[0].typeLabel).toBeNull();
+    });
+
+    it('groupRoleLabel résolu depuis CharacterGroupRole + contenu groupRole, null si aucun rôle assigné', async () => {
+      gameSystems.getContent.mockResolvedValue({
+        class: [{ key: 'chasseur', data: { label: 'Chasseur' } }],
+        type: [{ key: 'attaque', data: { label: 'Attaque' } }],
+        groupRole: [{ key: 'chef', data: { label: 'Chef' } }],
+      });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
+        makeCharacter({ id: 'c2', userId: 'u1', partieId: 'p1' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
+      ]);
+      prisma.characterGroupRole.findMany.mockResolvedValue([
+        { characterId: 'c1', roleKey: 'chef' },
+      ]);
+
+      const result = await service.findMine('u1');
+
+      expect(prisma.characterGroupRole.findMany).toHaveBeenCalledWith({
+        where: { characterId: { in: ['c1', 'c2'] } },
+        select: { characterId: true, roleKey: true },
+      });
+      expect(result.find((c) => c.id === 'c1')?.groupRoleLabel).toBe('Chef');
+      expect(result.find((c) => c.id === 'c2')?.groupRoleLabel).toBeNull();
+    });
+
+    it('personnages de systèmes de jeu distincts → un seul getContent() par système, jamais par personnage', async () => {
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({
+          id: 'c1',
+          userId: 'u1',
+          partieId: 'p1',
+          gameSystemId: 'ryuutama',
+        }),
+        makeCharacter({
+          id: 'c2',
+          userId: 'u1',
+          partieId: 'p1',
+          gameSystemId: 'ryuutama',
+        }),
+        makeCharacter({
+          id: 'c3',
+          userId: 'u1',
+          partieId: 'p1',
+          gameSystemId: 'homme-dragon',
+        }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
+      ]);
+
+      await service.findMine('u1');
+
+      expect(gameSystems.getContent).toHaveBeenCalledTimes(2);
+      expect(gameSystems.getContent).toHaveBeenCalledWith('ryuutama');
+      expect(gameSystems.getContent).toHaveBeenCalledWith('homme-dragon');
+    });
   });
 
   describe('updatePortrait()', () => {
@@ -1024,6 +1143,27 @@ describe('CharacterService', () => {
         expect.stringContaining('fixed-uuid.jpg'),
         cleaned,
       );
+    });
+
+    it('AC7 : le jest.mock de stripImageMetadata cible bien le module courant, pas un chemin périmé (garde contre le refactor AD-17)', async () => {
+      // Si `jest.mock('../common/image-upload.util', ...)` ne ciblait plus le module réellement
+      // importé par `character.service.ts` (chemin périmé après un déplacement), stripImageMetadata
+      // serait la VRAIE fonction sharp() au moment de l'appel — appelée sur JPEG_BUFFER (signature
+      // magique seule, non décodable), elle rejetterait (cf. test suivant), et l'assertion
+      // `writeFile` ci-dessous ne serait jamais atteinte. La valeur mockée est délibérément
+      // impossible à produire par un vrai sharp() sur ce buffer, pour qu'aucune coïncidence ne
+      // puisse faire passer ce test si le mock devenait inopérant sans bruit (AC7).
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      prisma.character.updateMany.mockResolvedValue({ count: 1 });
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
+      const marker = Buffer.from(
+        'valeur-impossible-a-produire-par-un-vrai-sharp-sur-ce-buffer',
+      );
+      (stripImageMetadata as jest.Mock).mockResolvedValue(marker);
+
+      await service.updatePortrait('char1', 'u1', makeMulterFile(), null);
+
+      expect(writeFile).toHaveBeenCalledWith(expect.any(String), marker);
     });
 
     it('signature magique valide mais image indécodable par sharp → BadRequestException, aucune écriture disque (Story 16.2 AC3)', async () => {
@@ -2825,6 +2965,16 @@ describe('CharacterService', () => {
 
         await expect(
           service.updateContenant('char1', 'u1', 'missing', { weight: 1 }),
+        ).rejects.toThrow(NotFoundException);
+      });
+
+      it("un itemId valide mais appartenant à une autre catégorie (animaux) → NotFoundException, pour la bonne raison (deferred-work, gap de test comblé)", async () => {
+        prisma.character.findUnique.mockResolvedValue(
+          makeCharacterWithAnimaux([{ id: 'a1', name: 'Monture' }]),
+        );
+
+        await expect(
+          service.updateContenant('char1', 'u1', 'a1', { weight: 1 }),
         ).rejects.toThrow(NotFoundException);
       });
     });

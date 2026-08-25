@@ -1,35 +1,15 @@
 @if (partie(); as p) {
   <mat-card class="detail">
-    <mat-card-header>
-      <mat-card-title>{{ p.name }}</mat-card-title>
-      <mat-card-subtitle>{{ system(p.gameSystemId) }} · {{ kind(p.kind) }}</mat-card-subtitle>
-    </mat-card-header>
-
-    @if (homonymousWith() && !homonymyDismissed()) {
-      <div class="homonymy-warning" role="alert" aria-live="polite">
-        <mat-icon aria-hidden="true">info</mat-icon>
-        <span>{{ theme.tone()['identity.homonymy_warning'] }}</span>
-        <a routerLink="/account">{{ theme.tone()['identity.homonymy_change_cta'] }}</a>
-        <button type="button" mat-button (click)="dismissHomonymyWarning()">
-          {{ theme.tone()['identity.homonymy_ignore_cta'] }}
-        </button>
-      </div>
-    }
-
-    @if (!isDesktop() && isMj()) {
-      <app-roster-strip
-        [members]="members()"
-        [characters]="characters()"
-        [mjId]="p.mjId"
-        [hasFreeSlot]="hasFreeSlot"
-        [classLabelFor]="classLabelFor"
-        [roleLabelFor]="roleLabelFor"
-        (selectCharacter)="onSelectRosterCharacter($event)"
-        (openInvitations)="openInvitationsTab()"
-      />
-    }
-
+    <!-- Correction post-test 29.4 : titre ET système/type sont désormais portés par le bandeau
+         contextuel du Shell (ContextualNavService) — plus de mat-card-header ici, la sous-navigation
+         locale (onglets) suit directement le bandeau, avant l'avertissement d'homonymie et l'aperçu
+         de troupe mobile, comme la maquette validée (mockups/key-partie-detail-navigation-contextuelle.html). -->
     <div class="detail-body">
+      @if (p.status === 'TERMINEE') {
+        <p class="closed-banner">
+          <mat-icon aria-hidden="true">flag</mat-icon> {{ theme.tone()['partie.status_closed_label'] }}
+        </p>
+      }
       @if (isDesktop()) {
         <app-roster-rail
           [members]="members()"
@@ -134,7 +114,12 @@
             @if (campaignAnnouncements().length > 0) {
               <section class="announcements-feed">
                 @for (a of campaignAnnouncements(); track a.id) {
-                  <app-annonce-card [announcement]="a" [scopeLabel]="campaignScopeLabel()" />
+                  <app-annonce-card
+                    [announcement]="a"
+                    [scopeLabel]="campaignScopeLabel()"
+                    [unseen]="unseenAnnouncementIds().has(a.id)"
+                    (opened)="markAnnouncementOpened(a.id)"
+                  />
                 }
               </section>
             }
@@ -370,18 +355,49 @@
       </mat-tab-group>
     </mat-card-content>
     </div>
+
+    @if (homonymousWith() && !homonymyDismissed()) {
+      <div class="homonymy-warning" role="alert" aria-live="polite">
+        <mat-icon aria-hidden="true">info</mat-icon>
+        <span>{{ theme.tone()['identity.homonymy_warning'] }}</span>
+        <a routerLink="/account">{{ theme.tone()['identity.homonymy_change_cta'] }}</a>
+        <button type="button" mat-button (click)="dismissHomonymyWarning()">
+          {{ theme.tone()['identity.homonymy_ignore_cta'] }}
+        </button>
+      </div>
+    }
+
+    @if (!isDesktop() && isMj()) {
+      <app-roster-strip
+        [members]="members()"
+        [characters]="characters()"
+        [mjId]="p.mjId"
+        [hasFreeSlot]="hasFreeSlot"
+        [classLabelFor]="classLabelFor"
+        [roleLabelFor]="roleLabelFor"
+        (selectCharacter)="onSelectRosterCharacter($event)"
+        (openInvitations)="openInvitationsTab()"
+      />
+    }
+
     <mat-card-actions>
       @if (isMj()) {
         <a mat-button [routerLink]="['/parties', p.id, 'edit']">
           <mat-icon>edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
         </a>
+        @if (p.status !== 'TERMINEE') {
+          <button mat-button (click)="closeGame(p)">
+            <mat-icon>flag</mat-icon> {{ theme.tone()['partie.close_btn'] }}
+          </button>
+        } @else {
+          <button mat-button (click)="reopenGame(p)">
+            <mat-icon>replay</mat-icon> {{ theme.tone()['partie.reopen_btn'] }}
+          </button>
+        }
         <button mat-button (click)="confirmDelete(p)">
           <mat-icon>delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
         </button>
       }
-      <a mat-button routerLink="/">
-        <mat-icon>arrow_back</mat-icon> {{ theme.tone()['partie.back_btn'] }}
-      </a>
     </mat-card-actions>
   </mat-card>
 }

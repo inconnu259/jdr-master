@@ -1,0 +1,28 @@
+<!-- AC1 : barre PERSISTANTE — rendue tant que le mode dure, y compris à zéro créneau composé.
+     AC16 : `role="toolbar"` et un nom, comme `SelectionBar`. -->
+<div class="compose-bar" role="toolbar" aria-label="Composition des créneaux d'un vote">
+  <b class="compose-bar__target">{{ targetLabel() }}</b>
+
+  <!-- AC16 : le compte est annoncé à chaque bascule — un lecteur d'écran ne voit pas le liseré
+       d'une case composée. -->
+  <span class="compose-bar__count" aria-live="polite">{{ countLabel() }}</span>
+
+  @if (blockedReason()) {
+    <span class="compose-bar__blocked">{{ blockedReason() }}</span>
+  }
+
+  <span class="compose-bar__spacer"></span>
+
+  <button
+    mat-flat-button
+    type="button"
+    color="primary"
+    class="compose-bar__confirm"
+    [disabled]="busy() || !canConfirm()"
+    (click)="confirmed.emit()"
+  >
+    Valider
+  </button>
+  <!-- AC3 : l'autre sortie du mode. `Échap` fait exactement la même chose, depuis la grille. -->
+  <button mat-button type="button" [disabled]="busy()" (click)="cancelled.emit()">Annuler</button>
+</div>

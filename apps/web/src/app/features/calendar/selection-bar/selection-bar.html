@@ -1,0 +1,126 @@
+<div class="selection-bar" role="toolbar" aria-label="Actions sur la sélection">
+  <b class="selection-bar__count" aria-live="polite">
+    {{ count() }} {{ count() > 1 ? 'créneaux' : 'créneau' }} sélectionné{{ count() > 1 ? 's' : '' }}
+  </b>
+  @if (rangeLabel()) {
+    <span class="selection-bar__range">{{ rangeLabel() }}</span>
+  }
+
+  <!--
+    Portée (AC2) : UN SEUL arrêt de tabulation pour les quatre segments (AC13), navigation aux
+    flèches comme dans un radiogroup natif. Le segment retenu est marqué par `aria-checked` ET
+    par une différence de forme (fond + graisse + anneau), jamais par la seule couleur (AC14/P-1).
+  -->
+  <div
+    class="selection-bar__scope"
+    role="radiogroup"
+    aria-label="Portée de la sélection"
+    tabindex="0"
+    (keydown)="onScopeKeydown($event)"
+  >
+    @for (opt of SCOPE_OPTIONS; track opt.slot) {
+      <button
+        type="button"
+        class="scope-seg"
+        role="radio"
+        tabindex="-1"
+        [class.on]="scope() === opt.slot"
+        [attr.aria-checked]="scope() === opt.slot"
+        [attr.aria-label]="opt.fullLabel"
+        (click)="scopeChange.emit(opt.slot)"
+      >
+        {{ opt.label }}
+      </button>
+    }
+  </div>
+
+  <span class="selection-bar__spacer"></span>
+
+  <!-- Story 36.15, AC1 — le bouton *Sceller*, seulement quand la sélection correspond à une
+       option d'un vote OPEN dont l'utilisateur est MJ. Placé avant Disponible/Indisponible,
+       comme dans le contrat d'UI (`contrat-ui-calendrier.html:376`). Aucune écriture ici : le
+       clic route vers `CalendarView.onSealRequested()` (confirmation + appel), 36.12. -->
+  @if (sealCandidate(); as candidate) {
+    <button
+      mat-flat-button
+      type="button"
+      color="primary"
+      class="seal-btn"
+      [attr.aria-label]="sealAriaLabel(candidate)"
+      (click)="sealRequested.emit(candidate)"
+    >
+      {{ sealLabel() }}
+    </button>
+  }
+
+  <!--
+    Intention armée (AC6) : c'est ce que `Entrée` validera. Marquée par la FORME du bouton —
+    `mat-flat-button` (armé) contre `mat-stroked-button` (non armé) — et par `aria-pressed`,
+    jamais par la couleur seule (P-1). La couleur sémantique (primary/warn) reste affichée dans
+    les deux états, conformément au contrat d'UI. Un clic arme ET valide dans le même geste : le
+    chemin pointeur est identique à celui de la story 30.3.
+  -->
+  @if (armedKind() === 'AVAILABLE') {
+    <button
+      mat-flat-button
+      type="button"
+      color="primary"
+      class="kind-btn kind-btn--available"
+      aria-pressed="true"
+      (focus)="armedKindChange.emit('AVAILABLE')"
+      (click)="markAvailable.emit()"
+    >
+      Disponible
+    </button>
+  } @else {
+    <button
+      mat-stroked-button
+      type="button"
+      color="primary"
+      class="kind-btn kind-btn--available"
+      aria-pressed="false"
+      (focus)="armedKindChange.emit('AVAILABLE')"
+      (click)="markAvailable.emit()"
+    >
+      Disponible
+    </button>
+  }
+  @if (armedKind() === 'UNAVAILABLE') {
+    <button
+      mat-flat-button
+      type="button"
+      color="warn"
+      class="kind-btn kind-btn--unavailable"
+      aria-pressed="true"
+      (focus)="armedKindChange.emit('UNAVAILABLE')"
+      (click)="markUnavailable.emit()"
+    >
+      Indisponible
+    </button>
+  } @else {
+    <button
+      mat-stroked-button
+      type="button"
+      color="warn"
+      class="kind-btn kind-btn--unavailable"
+      aria-pressed="false"
+      (focus)="armedKindChange.emit('UNAVAILABLE')"
+      (click)="markUnavailable.emit()"
+    >
+      Indisponible
+    </button>
+  }
+
+  <!-- AC4 : SEUL chemin vers ConstraintPanel, donc vers la contrainte récurrente (story 1.7),
+       la modification, la suppression et la découpe. -->
+  <button mat-stroked-button type="button" class="other-btn" (click)="otherRequested.emit()">
+    Autre…
+  </button>
+  <button mat-button type="button" (click)="cancelled.emit()">Annuler</button>
+
+  <!-- AC14 : l'état de la barre en toutes lettres, pour qui ne la voit pas. -->
+  <span class="visually-hidden" aria-live="polite">
+    Portée : {{ scopeLabel() }}. Entrée validera :
+    {{ armedKind() === 'AVAILABLE' ? 'Disponible' : 'Indisponible' }}.
+  </span>
+</div>
