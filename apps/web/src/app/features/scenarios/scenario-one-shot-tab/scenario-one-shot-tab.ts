@@ -1,4 +1,13 @@
-import { Component, DestroyRef, OnInit, effect, inject, input, signal, untracked } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  OnInit,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import type { ScenarioDto } from '@master-jdr/shared';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';

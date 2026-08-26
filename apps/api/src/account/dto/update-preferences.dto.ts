@@ -1,10 +1,4 @@
-import {
-  ArrayMaxSize,
-  IsArray,
-  IsBoolean,
-  IsIn,
-  IsOptional,
-} from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional } from 'class-validator';
 import {
   CALENDAR_LAYER_KEYS,
   CHARACTER_SORTS,

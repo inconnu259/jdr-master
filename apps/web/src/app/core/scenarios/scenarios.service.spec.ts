@@ -14,7 +14,7 @@ describe('matchesPartie', () => {
     expect(matchesPartie({ partieId: 'p1' }, 'p1')).toBe(true);
   });
 
-  it("retourne false si change.partieId concerne une AUTRE Partie", () => {
+  it('retourne false si change.partieId concerne une AUTRE Partie', () => {
     expect(matchesPartie({ partieId: 'p2' }, 'p1')).toBe(false);
   });
 

@@ -62,10 +62,7 @@ export class CharactersController {
   ) {}
 
   @Get(':id')
-  findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.characters.findOne(id, user.id);
   }
 
@@ -81,10 +78,7 @@ export class CharactersController {
         `Export PDF non supporté pour le système de jeu "${character.gameSystemId}"`,
       );
     }
-    const pdfBytes = await this.ryuutamaPdf.fillCharacterPdf(
-      character,
-      query.format,
-    );
+    const pdfBytes = await this.ryuutamaPdf.fillCharacterPdf(character, query.format);
     return new StreamableFile(pdfBytes, {
       type: 'application/pdf',
       disposition: `attachment; filename="fiche-${id}-${query.format}.pdf"`,
@@ -184,10 +178,7 @@ export class CharactersController {
   }
 
   @Delete(':id/portrait')
-  removePortrait(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  removePortrait(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.characters.removePortrait(id, user.id);
   }
 
@@ -210,10 +201,7 @@ export class CharactersController {
   }
 
   @Get(':id/history')
-  history(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  history(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.characters.getHistory(id, user.id);
   }
 
@@ -309,14 +297,8 @@ export class CharactersController {
     @Body() dto: UpdateAnimalDto,
     @CurrentUser() user: AuthUser,
   ) {
-    if (
-      dto.name === undefined &&
-      dto.price === undefined &&
-      dto.effect === undefined
-    ) {
-      throw new BadRequestException(
-        'Au moins un champ (name, price ou effect) doit être fourni',
-      );
+    if (dto.name === undefined && dto.price === undefined && dto.effect === undefined) {
+      throw new BadRequestException('Au moins un champ (name, price ou effect) doit être fourni');
     }
     return this.characters.updateAnimal(id, user.id, itemId, dto);
   }
@@ -355,11 +337,7 @@ export class CharactersController {
     @Body() dto: SetJournalAutoAssociateDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return this.characters.setJournalAutoAssociate(
-      id,
-      user.id,
-      dto.journalAutoAssociate,
-    );
+    return this.characters.setJournalAutoAssociate(id, user.id, dto.journalAutoAssociate);
   }
 
   @Patch(':id/notes/:noteId/scenario')
@@ -373,10 +351,7 @@ export class CharactersController {
   }
 
   @Get(':id/notes')
-  getNotes(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  getNotes(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.characters.getNotes(id, user.id);
   }
 

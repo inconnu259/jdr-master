@@ -65,7 +65,9 @@ export class ClassStep {
   readonly specialtyTypeId = input<string | undefined>();
   readonly landscapes = input<ContentEntryDto[]>([]);
   readonly classChoices = input<Record<string, string> | undefined>();
-  readonly classCapabilities = input<{ type: string; params: Record<string, unknown> }[] | undefined>();
+  readonly classCapabilities = input<
+    { type: string; params: Record<string, unknown> }[] | undefined
+  >();
 
   readonly classIdChange = output<string>();
   readonly specialtyTypeIdChange = output<string>();

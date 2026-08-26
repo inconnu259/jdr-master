@@ -7,7 +7,13 @@ import {
 } from './poll.util';
 
 const members: PartieMemberDto[] = [
-  { userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays', email: 'alice@test.com', joinedAt: '' },
+  {
+    userId: 'u1',
+    pseudo: 'Alice',
+    displayName: 'Alice au pays',
+    email: 'alice@test.com',
+    joinedAt: '',
+  },
   { userId: 'u2', pseudo: 'Bob', displayName: 'Bobby', email: 'bob@test.com', joinedAt: '' },
 ];
 

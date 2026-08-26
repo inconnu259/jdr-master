@@ -4,11 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { RealtimeController } from './realtime.controller';
 import { PartiesService } from '../parties/parties.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-  userTopic,
-} from './realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from './realtime-events.service';
 
 function makeParties() {
   return { getViewable: jest.fn() };
@@ -48,9 +44,9 @@ describe('RealtimeController', () => {
     parties.getViewable.mockRejectedValue(new ForbiddenException());
     const subscribeSpy = jest.spyOn(realtimeEvents, 'subscribe');
 
-    await expect(
-      controller.partieEvents('p1', { id: 'stranger' } as any),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(controller.partieEvents('p1', { id: 'stranger' } as any)).rejects.toThrow(
+      ForbiddenException,
+    );
     expect(subscribeSpy).not.toHaveBeenCalled();
   });
 

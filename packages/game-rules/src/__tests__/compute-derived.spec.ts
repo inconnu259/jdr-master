@@ -10,12 +10,9 @@ describe('computeDerived', () => {
   };
   it('PV = VIG × 2', () => expect(computeDerived(base).PV).toBe(16));
   it('PE = ESP × 2', () => expect(computeDerived(base).PE).toBe(12));
-  it('Condition = VIG + ESP', () =>
-    expect(computeDerived(base).Condition).toBe(14));
-  it('Initiative = AGI + INT', () =>
-    expect(computeDerived(base).Initiative).toBe(10));
-  it('Encombrement = VIG + 3', () =>
-    expect(computeDerived(base).Encombrement).toBe(11));
+  it('Condition = VIG + ESP', () => expect(computeDerived(base).Condition).toBe(14));
+  it('Initiative = AGI + INT', () => expect(computeDerived(base).Initiative).toBe(10));
+  it('Encombrement = VIG + 3', () => expect(computeDerived(base).Encombrement).toBe(11));
 
   it('sans levelUps (régression) : PV/PE/Encombrement inchangés', () => {
     const derived = computeDerived({ ...base, levelUps: undefined });

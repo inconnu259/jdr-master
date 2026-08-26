@@ -10,11 +10,7 @@ import type { InviteLink, Prisma } from '@prisma/client';
 import type { InviteLinkPreviewDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-  userTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { CreateInviteLinkDto } from './dto/create-invite-link.dto';
 
 const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // +7 jours
@@ -34,9 +30,7 @@ export class InviteLinksService {
       ? new Date(dto.expiresAt)
       : new Date(Date.now() + DEFAULT_TTL_MS);
     if (expiresAt.getTime() <= Date.now()) {
-      throw new BadRequestException(
-        "La date d'expiration doit être dans le futur.",
-      );
+      throw new BadRequestException("La date d'expiration doit être dans le futur.");
     }
     const token = randomBytes(32).toString('base64url');
     return this.prisma.inviteLink.create({
@@ -91,9 +85,7 @@ export class InviteLinksService {
 
   /** Un utilisateur connecté rejoint une partie via un lien. */
   async join(token: string, userId: string) {
-    const link = await this.prisma.$transaction((tx) =>
-      this.consumeLink(tx, token, userId),
-    );
+    const link = await this.prisma.$transaction((tx) => this.consumeLink(tx, token, userId));
     // Bug fix : le MJ/les autres membres ne voyaient jamais apparaître le nouveau membre sans
     // recharger — émis après résolution complète de la transaction, jamais dans son callback.
     this.realtimeEvents.emit(partieTopic(link.partieId));
@@ -102,10 +94,7 @@ export class InviteLinksService {
     this.realtimeEvents.emit(userTopic(userId));
     // AUCUN_MEMBRE_INVITE (Story 29.7, AD-14) : le MJ doit voir ce signal se lever quand quelqu'un
     // rejoint par lien. En plus des émissions ci-dessus, jamais en remplacement.
-    await this.parties.notifyPartieSignalsChanged(
-      link.partieId,
-      link.partie.mjId,
-    );
+    await this.parties.notifyPartieSignalsChanged(link.partieId, link.partie.mjId);
     return { ok: true, partieId: link.partieId };
   }
 
@@ -132,8 +121,7 @@ export class InviteLinksService {
     const existing = await tx.membership.findUnique({
       where: { userId_partieId: { userId, partieId: link.partieId } },
     });
-    if (existing)
-      throw new ConflictException('Vous êtes déjà membre de cette partie.');
+    if (existing) throw new ConflictException('Vous êtes déjà membre de cette partie.');
 
     const claim = await tx.inviteLink.updateMany({
       where: {
@@ -144,8 +132,7 @@ export class InviteLinksService {
       },
       data: { usesCount: { increment: 1 } },
     });
-    if (claim.count === 0)
-      throw new ForbiddenException('Lien invalide ou quota atteint.');
+    if (claim.count === 0) throw new ForbiddenException('Lien invalide ou quota atteint.');
 
     await tx.membership.create({ data: { userId, partieId: link.partieId } });
     return link;
@@ -156,11 +143,7 @@ export class InviteLinksService {
    * nouveau (usage unique). Dédoublonnage pour l'invitation par e-mail (Story 5.2, FR-3) —
    * ne vérifie pas le rôle MJ ici, délégué à l'appelant (`InvitationsService.inviteByEmail`).
    */
-  async findOrCreateForEmail(
-    partieId: string,
-    mjId: string,
-    email: string,
-  ): Promise<InviteLink> {
+  async findOrCreateForEmail(partieId: string, mjId: string, email: string): Promise<InviteLink> {
     const existing = await this.prisma.inviteLink.findFirst({
       where: {
         partieId,
@@ -186,15 +169,12 @@ export class InviteLinksService {
   }
 
   /** État de validité d'un lien (révoqué / expiré / quota). */
-  private linkStatus(
-    link: Pick<InviteLink, 'revoked' | 'expiresAt' | 'maxUses' | 'usesCount'>,
-  ): {
+  private linkStatus(link: Pick<InviteLink, 'revoked' | 'expiresAt' | 'maxUses' | 'usesCount'>): {
     valid: boolean;
     reason?: string;
   } {
     if (link.revoked) return { valid: false, reason: 'Lien révoqué.' };
-    if (link.expiresAt.getTime() <= Date.now())
-      return { valid: false, reason: 'Lien expiré.' };
+    if (link.expiresAt.getTime() <= Date.now()) return { valid: false, reason: 'Lien expiré.' };
     if (link.maxUses != null && link.usesCount >= link.maxUses) {
       return { valid: false, reason: "Nombre maximum d'utilisations atteint." };
     }

@@ -22,10 +22,7 @@ const REALTIME_WILDCARD = '*';
 /** Vrai si `change` concerne exactement `partieId`, OU provient d'un événement temps réel
  *  générique (wildcard). Fonction pure, testable isolément — même convention que
  *  `matchingHandlers` (Story 18.2). */
-export function matchesPartie(
-  change: { partieId: string } | null,
-  partieId: string,
-): boolean {
+export function matchesPartie(change: { partieId: string } | null, partieId: string): boolean {
   return change !== null && (change.partieId === REALTIME_WILDCARD || change.partieId === partieId);
 }
 

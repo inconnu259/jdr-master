@@ -60,7 +60,7 @@ describe('validate (strict)', () => {
     expect(result.valid).toBe(false);
   });
 
-  it("attributs ne correspondant pas au pattern Polyvalent → valid: false, errors[0].field = attributes", () => {
+  it('attributs ne correspondant pas au pattern Polyvalent → valid: false, errors[0].field = attributes', () => {
     const data = {
       ...validSheet(),
       attributes: { AGI: 5, ESP: 5, INT: 5, VIG: 5 },
@@ -74,9 +74,7 @@ describe('validate (strict)', () => {
     const data = { ...validSheet(), weaponId: 'mains-nues' };
     const result = validate(data, 'strict', catalog());
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.field === 'weaponId'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.field === 'weaponId')).toBe(true);
   });
 
   describe('Règle 4 (Story 25.2) : arme libre (customWeapon), sibling exclusif de weaponId', () => {
@@ -190,9 +188,7 @@ describe('validate (strict)', () => {
     const data = { ...validSheet(), classId: 'artisan' };
     const result = validate(data, 'strict', catalog());
     expect(result.valid).toBe(false);
-    expect(
-      result.errors.some((e) => e.field === 'specialtyTypeId'),
-    ).toBe(true);
+    expect(result.errors.some((e) => e.field === 'specialtyTypeId')).toBe(true);
   });
 
   it('sheetData entièrement valide → valid: true, errors = []', () => {
@@ -213,7 +209,13 @@ describe('validate (strict)', () => {
   });
 
   it('catalog avec 2 patterns d’attributs → accepte le second pattern', () => {
-    const twoPatterns = { ...catalog(), attributePatterns: [[4, 6, 6, 8], [3, 3, 3, 3]] };
+    const twoPatterns = {
+      ...catalog(),
+      attributePatterns: [
+        [4, 6, 6, 8],
+        [3, 3, 3, 3],
+      ],
+    };
     const data = { ...validSheet(), attributes: { AGI: 3, ESP: 3, INT: 3, VIG: 3 } };
     const result = validate(data, 'strict', twoPatterns);
     expect(result.valid).toBe(true);
@@ -292,9 +294,7 @@ describe('validate (strict)', () => {
       const data = { ...validSheet(), classId: 'fermier' };
       const result = validate(data, 'strict', catalogWithRequiredChoices());
       expect(result.valid).toBe(false);
-      expect(
-        result.errors.some((e) => e.field === 'fermier-metier-appoint'),
-      ).toBe(true);
+      expect(result.errors.some((e) => e.field === 'fermier-metier-appoint')).toBe(true);
     });
 
     it('classe avec requiredChoices, classChoices renseigné → valid: true', () => {
@@ -312,9 +312,7 @@ describe('validate (strict)', () => {
       const data = {
         ...validSheet(),
         classId: 'meteomancien',
-        classCapabilities: [
-          { type: 'landscape' as const, params: { key: 'foret' } },
-        ],
+        classCapabilities: [{ type: 'landscape' as const, params: { key: 'foret' } }],
       };
       const result = validate(data, 'strict', catalogWithRequiredChoices());
       expect(result.valid).toBe(true);
@@ -326,7 +324,7 @@ describe('validate (strict)', () => {
       expect(result.valid).toBe(true);
     });
 
-    it('revue de code (2026-07-26) : classCapabilities non vide ne doit PAS contourner un choix eligible-talent/landscape-flavor d\'une AUTRE nature (Ermite)', () => {
+    it("revue de code (2026-07-26) : classCapabilities non vide ne doit PAS contourner un choix eligible-talent/landscape-flavor d'une AUTRE nature (Ermite)", () => {
       const data = {
         ...validSheet(),
         classId: 'ermite',
@@ -359,9 +357,7 @@ describe('validate (strict)', () => {
       const data = { ...validSheet(), classId: 'artisan' };
       const result = validate(data, 'strict', catalogWithRequiredChoices());
       expect(result.valid).toBe(false);
-      expect(
-        result.errors.some((e) => e.field === 'specialtyTypeId'),
-      ).toBe(true);
+      expect(result.errors.some((e) => e.field === 'specialtyTypeId')).toBe(true);
     });
   });
 
@@ -421,11 +417,7 @@ describe('validate (strict)', () => {
     it('typeId "magie" avec 3 sorts connus → valid: false (exactement 2 requis)', () => {
       const data = magieSheet({
         magicSeason: 'printemps',
-        knownRitualSpells: [
-          'benediction-main-rouge',
-          'cloche-alarme',
-          'eclatante-purete-cristal',
-        ],
+        knownRitualSpells: ['benediction-main-rouge', 'cloche-alarme', 'eclatante-purete-cristal'],
       });
       const result = validate(data, 'strict', catalogWithMagie());
       expect(result.valid).toBe(false);

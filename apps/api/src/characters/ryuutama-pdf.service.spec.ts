@@ -17,9 +17,7 @@ jest.mock('@master-jdr/game-rules', () => ({
         { field: 'PV max', value: String(derived.PV), kind: 'text' },
         { field: 'Classe 1', value: content.classLabel, kind: 'dropdown' },
       ];
-      for (const label of Object.values(
-        content.capabilityLabels?.landscape ?? {},
-      )) {
+      for (const label of Object.values(content.capabilityLabels?.landscape ?? {})) {
         fields.push({ field: label, value: '+2', kind: 'text' });
       }
       return fields;
@@ -40,9 +38,7 @@ jest.mock('@master-jdr/game-rules', () => ({
     ) => {
       const item = catalog.weaponItems.find((w) => w.key === weaponId);
       if (!item) return null;
-      const category = catalog.weaponCategories.find(
-        (c) => c.key === item.categoryId,
-      );
+      const category = catalog.weaponCategories.find((c) => c.key === item.categoryId);
       if (!category) return null;
       return {
         weaponLabel: item.label,
@@ -72,9 +68,7 @@ jest.mock('@master-jdr/game-rules', () => ({
       if (data.weaponId) {
         const item = catalog.weaponItems.find((w) => w.key === data.weaponId);
         if (!item) return null;
-        const category = catalog.weaponCategories.find(
-          (c) => c.key === item.categoryId,
-        );
+        const category = catalog.weaponCategories.find((c) => c.key === item.categoryId);
         if (!category) return null;
         return {
           weaponLabel: item.label,
@@ -104,12 +98,9 @@ jest.mock('@master-jdr/game-rules', () => ({
 
 import { readFile } from 'node:fs/promises';
 import { mapToPdfFields } from '@master-jdr/game-rules';
-import {
-  RyuutamaPdfService,
-  fitCentered,
-  computePdfCropDraw,
-} from './ryuutama-pdf.service';
+import { RyuutamaPdfService, fitCentered, computePdfCropDraw } from './ryuutama-pdf.service';
 import { GameSystemService } from '../game-systems/game-system.service';
+import { anyOf, objectLike } from '../common/test-utils/jest-typed';
 
 const mockSetText = jest.fn();
 const mockSetFontSize = jest.fn();
@@ -244,10 +235,7 @@ describe('RyuutamaPdfService', () => {
     mockEmbedPng.mockResolvedValue(mockEmbeddedImage);
     gameSystems = makeContentService();
     const module = await Test.createTestingModule({
-      providers: [
-        RyuutamaPdfService,
-        { provide: GameSystemService, useValue: gameSystems },
-      ],
+      providers: [RyuutamaPdfService, { provide: GameSystemService, useValue: gameSystems }],
     }).compile();
     service = module.get(RyuutamaPdfService);
   });
@@ -294,7 +282,7 @@ describe('RyuutamaPdfService', () => {
     expect(mapToPdfFields).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({
+      objectLike({
         weaponLabel: 'Fléau maison',
         weaponTouchFormula: 'AGI+INT-2',
         weaponDamageFormula: 'AGI',
@@ -304,15 +292,12 @@ describe('RyuutamaPdfService', () => {
   });
 
   it("résout ownerPseudo du CharacterDto et le transmet à mapToPdfFields (champ 'Joueur')", async () => {
-    await service.fillCharacterPdf(
-      makeCharacter({ ownerPseudo: 'bob' }),
-      'editable',
-    );
+    await service.fillCharacterPdf(makeCharacter({ ownerPseudo: 'bob' }), 'editable');
 
     expect(mapToPdfFields).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({ ownerPseudo: 'bob' }),
+      objectLike({ ownerPseudo: 'bob' }),
     );
   });
 
@@ -322,7 +307,7 @@ describe('RyuutamaPdfService', () => {
     expect(mapToPdfFields).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({
+      objectLike({
         weaponLabel: 'Arc de chasse',
         weaponTouchFormula: 'AGI+INT-2',
         weaponDamageFormula: 'AGI',
@@ -337,7 +322,7 @@ describe('RyuutamaPdfService', () => {
     expect(mapToPdfFields).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({
+      objectLike({
         capabilityLabels: {
           landscape: { foret: 'Forêt' },
           immunity: { blesse: 'Blessé' },
@@ -353,7 +338,7 @@ describe('RyuutamaPdfService', () => {
     expect(mapToPdfFields).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({ xp: 250 }),
+      objectLike({ xp: 250 }),
     );
   });
 
@@ -379,7 +364,7 @@ describe('RyuutamaPdfService', () => {
     expect(mapToPdfFields).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({
+      objectLike({
         secondaryClassLabel: 'Marchand',
       }),
     );
@@ -407,7 +392,7 @@ describe('RyuutamaPdfService', () => {
     expect(mapToPdfFields).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      expect.objectContaining({ landscapeDropdownValue: 'Forêt' }),
+      objectLike({ landscapeDropdownValue: 'Forêt' }),
     );
   });
 
@@ -464,9 +449,9 @@ describe('RyuutamaPdfService', () => {
       expect(mockEmbedPng).not.toHaveBeenCalled();
       expect(mockDrawImage).toHaveBeenCalledWith(
         mockEmbeddedImage,
-        expect.objectContaining({
-          x: expect.any(Number),
-          y: expect.any(Number),
+        objectLike({
+          x: anyOf(Number),
+          y: anyOf(Number),
         }),
       );
       // Image carrée (100x100) dans un cadre 188.18x136.48 => mise à l'échelle par la plus
@@ -490,9 +475,7 @@ describe('RyuutamaPdfService', () => {
         portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.jpg`,
       });
 
-      await expect(
-        service.fillCharacterPdf(character, 'editable'),
-      ).resolves.not.toThrow();
+      await expect(service.fillCharacterPdf(character, 'editable')).resolves.not.toThrow();
       expect(mockDrawImage).not.toHaveBeenCalled();
     });
 
@@ -508,9 +491,7 @@ describe('RyuutamaPdfService', () => {
         portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.jpg`,
       });
 
-      await expect(
-        service.fillCharacterPdf(character, 'editable'),
-      ).rejects.toThrow('sans page');
+      await expect(service.fillCharacterPdf(character, 'editable')).rejects.toThrow('sans page');
     });
 
     it('portrait PNG => embedPng puis drawImage', async () => {
@@ -526,9 +507,7 @@ describe('RyuutamaPdfService', () => {
 
       await service.fillCharacterPdf(character, 'editable');
 
-      expect(mockEmbedPng).toHaveBeenCalledWith(
-        Buffer.from([0x89, 0x50, 0x4e, 0x47]),
-      );
+      expect(mockEmbedPng).toHaveBeenCalledWith(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
       expect(mockEmbedJpg).not.toHaveBeenCalled();
       expect(mockDrawImage).toHaveBeenCalled();
     });
@@ -544,9 +523,9 @@ describe('RyuutamaPdfService', () => {
         portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.webp`,
       });
 
-      await expect(
-        service.fillCharacterPdf(character as any, 'editable'),
-      ).resolves.toBeInstanceOf(Buffer);
+      await expect(service.fillCharacterPdf(character as any, 'editable')).resolves.toBeInstanceOf(
+        Buffer,
+      );
       expect(mockEmbedJpg).not.toHaveBeenCalled();
       expect(mockEmbedPng).not.toHaveBeenCalled();
       expect(mockDrawImage).not.toHaveBeenCalled();
@@ -556,9 +535,9 @@ describe('RyuutamaPdfService', () => {
       const character = makeCharacter({
         portraitUrl: '/uploads/portraits/../../etc/passwd',
       });
-      await expect(
-        service.fillCharacterPdf(character as any, 'editable'),
-      ).resolves.toBeInstanceOf(Buffer);
+      await expect(service.fillCharacterPdf(character as any, 'editable')).resolves.toBeInstanceOf(
+        Buffer,
+      );
       expect(mockDrawImage).not.toHaveBeenCalled();
     });
 
@@ -574,9 +553,9 @@ describe('RyuutamaPdfService', () => {
         portraitUrl: `/uploads/portraits/${PORTRAIT_UUID}.jpg`,
       });
 
-      await expect(
-        service.fillCharacterPdf(character as any, 'editable'),
-      ).resolves.toBeInstanceOf(Buffer);
+      await expect(service.fillCharacterPdf(character as any, 'editable')).resolves.toBeInstanceOf(
+        Buffer,
+      );
       expect(mockDrawImage).not.toHaveBeenCalled();
     });
   });
@@ -610,11 +589,11 @@ describe('RyuutamaPdfService', () => {
       expect(mockPushOperators).toHaveBeenCalledWith('popGraphicsState');
       expect(mockDrawImage).toHaveBeenCalledWith(
         mockEmbeddedImage,
-        expect.objectContaining({
-          x: expect.any(Number),
-          y: expect.any(Number),
-          width: expect.any(Number),
-          height: expect.any(Number),
+        objectLike({
+          x: anyOf(Number),
+          y: anyOf(Number),
+          width: anyOf(Number),
+          height: anyOf(Number),
         }),
       );
     });
@@ -628,9 +607,9 @@ describe('RyuutamaPdfService', () => {
         pdfPortraitCropData: { scale: 1.5, offsetX: 10, offsetY: -10 },
       });
 
-      await expect(
-        service.fillCharacterPdf(character, 'editable'),
-      ).rejects.toThrow('drawImage failed unexpectedly');
+      await expect(service.fillCharacterPdf(character, 'editable')).rejects.toThrow(
+        'drawImage failed unexpectedly',
+      );
 
       expect(mockPushOperators).toHaveBeenCalledWith('popGraphicsState');
     });
@@ -653,9 +632,9 @@ describe('RyuutamaPdfService', () => {
         pdfPortraitCropData: { foo: 'bar' },
       });
 
-      await expect(
-        service.fillCharacterPdf(character as any, 'editable'),
-      ).resolves.toBeInstanceOf(Buffer);
+      await expect(service.fillCharacterPdf(character as any, 'editable')).resolves.toBeInstanceOf(
+        Buffer,
+      );
       expect(mockPushOperators).not.toHaveBeenCalled();
       expect(mockDrawImage).toHaveBeenCalled();
     });
@@ -665,14 +644,8 @@ describe('RyuutamaPdfService', () => {
       ['scale Infinity', { scale: Infinity, offsetX: 0, offsetY: 0 }],
       ['scale négatif', { scale: -1, offsetX: 0, offsetY: 0 }],
       ['scale hors bornes DTO (>3)', { scale: 10, offsetX: 0, offsetY: 0 }],
-      [
-        'offsetX hors bornes DTO (>100)',
-        { scale: 1, offsetX: 500, offsetY: 0 },
-      ],
-      [
-        'offsetY hors bornes DTO (<-100)',
-        { scale: 1, offsetX: 0, offsetY: -500 },
-      ],
+      ['offsetX hors bornes DTO (>100)', { scale: 1, offsetX: 500, offsetY: 0 }],
+      ['offsetY hors bornes DTO (<-100)', { scale: 1, offsetX: 0, offsetY: -500 }],
     ])(
       'pdfPortraitCropData avec %s (donnée legacy/corrompue) => dégradation gracieuse vers fitCentered, pas de géométrie invalide',
       async (_label, cropData) => {
@@ -681,9 +654,9 @@ describe('RyuutamaPdfService', () => {
           pdfPortraitCropData: cropData,
         });
 
-        await expect(
-          service.fillCharacterPdf(character, 'editable'),
-        ).resolves.toBeInstanceOf(Buffer);
+        await expect(service.fillCharacterPdf(character, 'editable')).resolves.toBeInstanceOf(
+          Buffer,
+        );
         expect(mockPushOperators).not.toHaveBeenCalled();
         expect(mockDrawImage).toHaveBeenCalled();
       },
@@ -694,15 +667,12 @@ describe('RyuutamaPdfService', () => {
     (readFile as jest.Mock).mockRejectedValue(new Error('ENOENT'));
     const gs = makeContentService();
     const module = await Test.createTestingModule({
-      providers: [
-        RyuutamaPdfService,
-        { provide: GameSystemService, useValue: gs },
-      ],
+      providers: [RyuutamaPdfService, { provide: GameSystemService, useValue: gs }],
     }).compile();
     const freshService = module.get(RyuutamaPdfService);
-    await expect(
-      freshService.fillCharacterPdf(makeCharacter() as any, 'editable'),
-    ).rejects.toThrow(/README/);
+    await expect(freshService.fillCharacterPdf(makeCharacter() as any, 'editable')).rejects.toThrow(
+      /README/,
+    );
   });
 });
 

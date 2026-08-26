@@ -14,10 +14,7 @@ describe('detectDocumentMime', () => {
   });
 
   it('détecte un texte brut sans byte NUL', () => {
-    const buffer = Buffer.from(
-      'Le marchand Ossian propose un pacte...',
-      'utf8',
-    );
+    const buffer = Buffer.from('Le marchand Ossian propose un pacte...', 'utf8');
     expect(detectDocumentMime(buffer)).toBe('text/plain');
   });
 
@@ -77,12 +74,8 @@ describe('extensionForDocumentMime / mimeForExtension', () => {
 
 describe('isValidDocumentFilename', () => {
   it('accepte un nom UUID v4 + extension connue', () => {
-    expect(
-      isValidDocumentFilename('550e8400-e29b-41d4-a716-446655440000.pdf'),
-    ).toBe(true);
-    expect(
-      isValidDocumentFilename('550e8400-e29b-41d4-a716-446655440000.txt'),
-    ).toBe(true);
+    expect(isValidDocumentFilename('550e8400-e29b-41d4-a716-446655440000.pdf')).toBe(true);
+    expect(isValidDocumentFilename('550e8400-e29b-41d4-a716-446655440000.txt')).toBe(true);
   });
 
   it('rejette une tentative de path traversal', () => {
@@ -90,9 +83,7 @@ describe('isValidDocumentFilename', () => {
   });
 
   it('rejette une extension non whitelistée', () => {
-    expect(
-      isValidDocumentFilename('550e8400-e29b-41d4-a716-446655440000.exe'),
-    ).toBe(false);
+    expect(isValidDocumentFilename('550e8400-e29b-41d4-a716-446655440000.exe')).toBe(false);
   });
 
   it('rejette un nom qui ne suit pas le format UUID', () => {

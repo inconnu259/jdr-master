@@ -9,6 +9,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
+import type { Partie } from '@prisma/client';
 import type {
   AggregatedSlotDto,
   AvailableSlotDto,
@@ -23,11 +24,7 @@ import type {
 import { checkPartieKindTransition } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-  userTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import {
   detectImageMime,
   extractUploadFilename,
@@ -42,10 +39,7 @@ import { UpdatePartieDto } from './dto/update-partie.dto';
 
 /** Traduit un code de refus de conversion (union fermée) en message destiné au MJ.
  *  NFR-4 : le message nomme la cause réelle et le nombre en jeu — jamais un texte générique. */
-function refusalMessage(
-  refusal: PartieKindTransitionRefusal,
-  scenarioCount: number,
-): string {
+function refusalMessage(refusal: PartieKindTransitionRefusal, scenarioCount: number): string {
   switch (refusal) {
     case 'PARTIE_CLOSED':
       return 'Cette partie est clôturée : rouvrez-la avant de changer son type';
@@ -56,9 +50,7 @@ function refusalMessage(
       // garde, un futur membre ajouté à `PartieKindTransitionRefusal` sans mettre à jour ce
       // `switch` retournerait silencieusement `undefined` au lieu d'échouer bruyamment.
       const exhaustive: never = refusal;
-      throw new Error(
-        `Motif de refus de conversion non géré : ${String(exhaustive)}`,
-      );
+      throw new Error(`Motif de refus de conversion non géré : ${String(exhaustive)}`);
     }
   }
 }
@@ -68,8 +60,7 @@ function refusalMessage(
 export const COVERS_DIR = join(UPLOADS_ROOT, 'covers');
 export const COVERS_URL_PREFIX = '/uploads/covers/';
 
-const INVALID_COVER_IMAGE_MESSAGE =
-  "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
+const INVALID_COVER_IMAGE_MESSAGE = "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
 
 /**
  * Dimensions cibles des dérivées (Story 29.12, AC9) — alignées sur le rendu réel de `PartyBanner`
@@ -77,10 +68,7 @@ const INVALID_COVER_IMAGE_MESSAGE =
  * les écrans à forte densité. Fixées côté serveur, jamais un `dpr` ni une largeur venus du client
  * (vecteur de déni de service par redimensionnement).
  */
-const COVER_DIMENSIONS: Record<
-  ListViewMode,
-  { width: number; height: number }
-> = {
+const COVER_DIMENSIONS: Record<ListViewMode, { width: number; height: number }> = {
   large: { width: 640, height: 248 },
   medium: { width: 88, height: 88 },
   compact: { width: 56, height: 56 },
@@ -114,16 +102,12 @@ export function coverImageVersion(coverImageUrl: string | null): string | null {
  * séance (cf. `create()` ci-dessous, `ScenariosService.addSeance`).
  */
 function toPartieDto(
-  partie: any,
+  partie: Partie,
   role: 'mj' | 'player',
   hasScenario: boolean,
   isFavorite: boolean,
 ): PartieDto {
-  const status: PartieStatus = partie.closedAt
-    ? 'TERMINEE'
-    : hasScenario
-      ? 'EN_COURS'
-      : 'A_VENIR';
+  const status: PartieStatus = partie.closedAt ? 'TERMINEE' : hasScenario ? 'EN_COURS' : 'A_VENIR';
   return {
     id: partie.id,
     name: partie.name,
@@ -131,8 +115,8 @@ function toPartieDto(
     gameSystemId: partie.gameSystemId,
     description: partie.description,
     mjId: partie.mjId,
-    createdAt: partie.createdAt,
-    nextSessionDate: partie.nextSessionDate,
+    createdAt: partie.createdAt.toISOString(),
+    nextSessionDate: partie.nextSessionDate?.toISOString() ?? null,
     nextSessionSlot: partie.nextSessionSlot,
     role,
     status,
@@ -191,9 +175,7 @@ export class PartiesService {
 
   /** Lecture en lot (AD-3) : une seule requête groupée pour dériver `status` de tout le tableau
    *  renvoyé — jamais un `scenario.count()` par partie dans une boucle (Story 29.6). */
-  private async hasScenarioByPartieId(
-    partieIds: string[],
-  ): Promise<Set<string>> {
+  private async hasScenarioByPartieId(partieIds: string[]): Promise<Set<string>> {
     if (partieIds.length === 0) return new Set();
     const counts = await this.prisma.scenario.groupBy({
       by: ['partieId'],
@@ -216,10 +198,7 @@ export class PartiesService {
 
   /** Lecture en lot (même discipline qu'AD-3/`hasScenarioByPartieId`, Story 29.8) : une seule
    *  requête groupée pour dériver `isFavorite` de tout le tableau renvoyé par `listForUser()`. */
-  private async favoritePartieIds(
-    userId: string,
-    partieIds: string[],
-  ): Promise<Set<string>> {
+  private async favoritePartieIds(userId: string, partieIds: string[]): Promise<Set<string>> {
     if (partieIds.length === 0) return new Set();
     const favorites = await this.prisma.partieFavorite.findMany({
       where: { userId, partieId: { in: partieIds } },
@@ -240,10 +219,7 @@ export class PartiesService {
   /**
    * `mj` = les parties que je maîtrise ; `player` = celles où je suis membre (via `Membership`).
    */
-  async listForUser(
-    userId: string,
-    role: 'mj' | 'player',
-  ): Promise<PartieDto[]> {
+  async listForUser(userId: string, role: 'mj' | 'player'): Promise<PartieDto[]> {
     if (role === 'player') {
       const memberships = await this.prisma.membership.findMany({
         where: { userId },
@@ -361,11 +337,7 @@ export class PartiesService {
     return { ok: true };
   }
 
-  async update(
-    id: string,
-    userId: string,
-    dto: UpdatePartieDto,
-  ): Promise<PartieDto> {
+  async update(id: string, userId: string, dto: UpdatePartieDto): Promise<PartieDto> {
     const partie = await this.getOwned(id, userId);
 
     // Story 29.14 : jusqu'ici `data: { ...dto }` écrivait `kind` sans aucune vérification, alors que
@@ -404,11 +376,7 @@ export class PartiesService {
    * La matrice vit dans `@master-jdr/shared` et non ici : le formulaire d'édition la consomme
    * aussi, pour désactiver les types inatteignables. Deux tables de règles divergeraient.
    */
-  async convertKind(
-    id: string,
-    userId: string,
-    dto: ConvertPartieKindDto,
-  ): Promise<PartieDto> {
+  async convertKind(id: string, userId: string, dto: ConvertPartieKindDto): Promise<PartieDto> {
     const partie = await this.getOwned(id, userId);
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -424,9 +392,7 @@ export class PartiesService {
       });
 
       if (!verdict.allowed) {
-        throw new BadRequestException(
-          refusalMessage(verdict.refusal, scenarioCount),
-        );
+        throw new BadRequestException(refusalMessage(verdict.refusal, scenarioCount));
       }
 
       // Le scénario qui reste Courant est validé avant toute écriture, lui aussi : il doit exister,
@@ -442,14 +408,10 @@ export class PartiesService {
           where: { id: dto.courantScenarioId },
         });
         if (!kept || kept.partieId !== id) {
-          throw new BadRequestException(
-            "Ce scénario n'appartient pas à cette partie",
-          );
+          throw new BadRequestException("Ce scénario n'appartient pas à cette partie");
         }
         if (kept.status !== 'COURANT') {
-          throw new BadRequestException(
-            'Le scénario désigné pour rester Courant ne l’est pas',
-          );
+          throw new BadRequestException('Le scénario désigné pour rester Courant ne l’est pas');
         }
         keptCourantId = kept.id;
       }
@@ -530,9 +492,7 @@ export class PartiesService {
 
           default: {
             const exhaustive: never = effect;
-            throw new Error(
-              `Effet de conversion non géré : ${String(exhaustive)}`,
-            );
+            throw new Error(`Effet de conversion non géré : ${String(exhaustive)}`);
           }
         }
       }
@@ -619,19 +579,14 @@ export class PartiesService {
   private async deleteCoverFiles(coverImageUrl: string): Promise<void> {
     const stem = this.coverStem(coverImageUrl);
     if (!stem) {
-      this.logger.warn(
-        `coverImageUrl inattendu, suppression ignorée : ${coverImageUrl}`,
-      );
+      this.logger.warn(`coverImageUrl inattendu, suppression ignorée : ${coverImageUrl}`);
       return;
     }
     const filenames = Object.values(this.coverDerivativeFilenames(stem));
     await Promise.all(
       filenames.map((filename) =>
         unlinkUploadFile(COVERS_DIR, filename).catch((e) => {
-          this.logger.warn(
-            `Échec de suppression de la couverture ${filename}`,
-            e as Error,
-          );
+          this.logger.warn(`Échec de suppression de la couverture ${filename}`, e as Error);
         }),
       ),
     );
@@ -643,11 +598,7 @@ export class PartiesService {
    * fichiers orphelins si une étape échoue après coup (patron `character.service.ts`). Au
    * remplacement d'une image existante, l'ancienne est supprimée (les 3 dérivées).
    */
-  async setCoverImage(
-    id: string,
-    userId: string,
-    file: Express.Multer.File,
-  ): Promise<PartieDto> {
+  async setCoverImage(id: string, userId: string, file: Express.Multer.File): Promise<PartieDto> {
     const partie = await this.getOwned(id, userId);
 
     const mime = detectImageMime(file.buffer);
@@ -681,11 +632,7 @@ export class PartiesService {
         written.push(filenames[mode]);
       }
     } catch (err) {
-      await Promise.all(
-        written.map((f) =>
-          unlinkUploadFile(COVERS_DIR, f).catch(() => undefined),
-        ),
-      );
+      await Promise.all(written.map((f) => unlinkUploadFile(COVERS_DIR, f).catch(() => undefined)));
       this.logger.warn(
         `Échec de génération des dérivées de couverture : ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -701,11 +648,7 @@ export class PartiesService {
     } catch (e) {
       // Les nouveaux fichiers ne sont référencés nulle part : DB en échec, nettoyage immédiat
       // plutôt que de laisser des fichiers orphelins sur disque (patron portrait).
-      await Promise.all(
-        written.map((f) =>
-          unlinkUploadFile(COVERS_DIR, f).catch(() => undefined),
-        ),
-      );
+      await Promise.all(written.map((f) => unlinkUploadFile(COVERS_DIR, f).catch(() => undefined)));
       throw e;
     }
 
@@ -778,9 +721,7 @@ export class PartiesService {
     if (!stem) return null;
 
     try {
-      const buffer = await readFile(
-        join(COVERS_DIR, this.coverDerivativeFilenames(stem)[mode]),
-      );
+      const buffer = await readFile(join(COVERS_DIR, this.coverDerivativeFilenames(stem)[mode]));
       return { buffer, mime: COVER_DERIVATIVE_MIME, version: stem };
     } catch {
       return null;
@@ -790,10 +731,7 @@ export class PartiesService {
   /** Double émission temps réel (AD-14) pour toute mutation partagée à l'échelle d'une Partie :
    *  `partie:{id}` pour l'écran de détail déjà connecté, `user:{id}` pour chaque membre (MJ inclus)
    *  afin que sa propre liste de parties (Dashboard) reflète le changement sans recharger. */
-  private async emitPartieAndMembers(
-    partieId: string,
-    mjId: string,
-  ): Promise<void> {
+  private async emitPartieAndMembers(partieId: string, mjId: string): Promise<void> {
     this.realtimeEvents.emit(partieTopic(partieId));
     const { participants } = await this.resolveParticipants(partieId, mjId);
     for (const p of participants) this.realtimeEvents.emit(userTopic(p.userId));
@@ -803,10 +741,7 @@ export class PartiesService {
    *  appelée après que la mutation DB a déjà été committée, une erreur ici ne doit jamais faire
    *  croire au client que la clôture/réouverture a échoué alors qu'elle a bien eu lieu (revue de
    *  code, Story 29.6). */
-  private async emitPartieAndMembersSafe(
-    partieId: string,
-    mjId: string,
-  ): Promise<void> {
+  private async emitPartieAndMembersSafe(partieId: string, mjId: string): Promise<void> {
     try {
       await this.emitPartieAndMembers(partieId, mjId);
     } catch (err) {
@@ -827,10 +762,7 @@ export class PartiesService {
   }
 
   /** Variante sans échec d'`emitMembersOnly` — même garde que `emitPartieAndMembersSafe`. */
-  private async emitMembersOnlySafe(
-    partieId: string,
-    mjId: string,
-  ): Promise<void> {
+  private async emitMembersOnlySafe(partieId: string, mjId: string): Promise<void> {
     try {
       await this.emitMembersOnly(partieId, mjId);
     } catch (err) {
@@ -846,10 +778,7 @@ export class PartiesService {
    *  déjà `PartiesService`). Ces appelants émettent **déjà** `partieTopic` eux-mêmes juste avant
    *  d'appeler cette méthode — elle n'émet donc que `userTopic` par membre (`emitMembersOnlySafe`),
    *  jamais `emitPartieAndMembersSafe` qui réémettrait `partieTopic` une seconde fois. */
-  async notifyPartieSignalsChanged(
-    partieId: string,
-    mjId: string,
-  ): Promise<void> {
+  async notifyPartieSignalsChanged(partieId: string, mjId: string): Promise<void> {
     await this.emitMembersOnlySafe(partieId, mjId);
   }
 
@@ -917,10 +846,7 @@ export class PartiesService {
     });
     if (!partie) throw new NotFoundException('Partie introuvable');
 
-    const { participants, memberships } = await this.resolveParticipants(
-      partieId,
-      partie.mjId,
-    );
+    const { participants, memberships } = await this.resolveParticipants(partieId, partie.mjId);
 
     const isMj = partie.mjId === userId;
     const isMember = memberships.some((m) => m.userId === userId);
@@ -934,9 +860,7 @@ export class PartiesService {
       await this.availability.getActiveDeclarationsWithSeances(participantIds);
 
     if (!!from !== !!to) {
-      throw new BadRequestException(
-        'from and to must both be provided together',
-      );
+      throw new BadRequestException('from and to must both be provided together');
     }
 
     const SLOTS = ['MORNING', 'AFTERNOON', 'EVENING'] as const;
@@ -945,8 +869,7 @@ export class PartiesService {
     if (from && to) {
       const fromMs = new Date(from + 'T00:00:00Z').getTime();
       const toMs = new Date(to + 'T00:00:00Z').getTime();
-      if (fromMs > toMs)
-        throw new BadRequestException('from must be before or equal to to');
+      if (fromMs > toMs) throw new BadRequestException('from must be before or equal to to');
       if (toMs - fromMs > 366 * 86_400_000)
         throw new BadRequestException('Date range cannot exceed 366 days');
       for (let ms = fromMs; ms <= toMs; ms += 86_400_000) {
@@ -971,11 +894,7 @@ export class PartiesService {
       }
     } else {
       const now = new Date();
-      const todayUtcMidnight = Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate(),
-      );
+      const todayUtcMidnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
       for (let d = 0; d < weeks * 7; d++) {
         const dateUtc = new Date(todayUtcMidnight + d * 86_400_000);
         for (const slot of SLOTS) {
@@ -1008,17 +927,14 @@ export class PartiesService {
     // Priorité : 0=tous dispos, 1=mixte sans refus, 2=tous inconnus, 3=au moins un refus
     const priority = (s: AvailableSlotDto): number => {
       const hasUnavail = s.members.some((m) => m.status === 'UNAVAILABLE');
-      const availCount = s.members.filter(
-        (m) => m.status === 'AVAILABLE',
-      ).length;
+      const availCount = s.members.filter((m) => m.status === 'AVAILABLE').length;
       if (hasUnavail) return 3;
       if (availCount === s.members.length) return 0;
       if (availCount > 0) return 1;
       return 2;
     };
 
-    const slotIdx = (s: AvailableSlotDto) =>
-      SLOTS.indexOf(s.slot as (typeof SLOTS)[number]);
+    const slotIdx = (s: AvailableSlotDto) => SLOTS.indexOf(s.slot as (typeof SLOTS)[number]);
 
     const sorted = [...filtered].sort((a, b) => {
       const pa = priority(a);
@@ -1058,10 +974,7 @@ export class PartiesService {
     });
     if (!partie) throw new NotFoundException('Partie introuvable');
 
-    const { participants, memberships } = await this.resolveParticipants(
-      partieId,
-      partie.mjId,
-    );
+    const { participants, memberships } = await this.resolveParticipants(partieId, partie.mjId);
 
     const isMj = partie.mjId === userId;
     const isMember = memberships.some((m) => m.userId === userId);
@@ -1077,8 +990,7 @@ export class PartiesService {
     const SLOTS = ['MORNING', 'AFTERNOON', 'EVENING'] as const;
     const fromMs = new Date(from + 'T00:00:00Z').getTime();
     const toMs = new Date(to + 'T00:00:00Z').getTime();
-    if (fromMs > toMs)
-      throw new BadRequestException('from must be before or equal to to');
+    if (fromMs > toMs) throw new BadRequestException('from must be before or equal to to');
     if (toMs - fromMs > 45 * 86_400_000)
       throw new BadRequestException('Date range must not exceed 45 days');
     const results: AggregatedSlotDto[] = [];
@@ -1088,11 +1000,7 @@ export class PartiesService {
       const dateStr = dateUtc.toISOString().substring(0, 10);
       for (const slot of SLOTS) {
         const statuses = participants.map((p) =>
-          this.availability.computeSlotStatus(
-            declarationsMap.get(p.userId) ?? [],
-            dateUtc,
-            slot,
-          ),
+          this.availability.computeSlotStatus(declarationsMap.get(p.userId) ?? [], dateUtc, slot),
         );
         results.push({
           date: dateStr,

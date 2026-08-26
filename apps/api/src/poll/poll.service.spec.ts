@@ -1,19 +1,17 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PollService } from './poll.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import { callArg, mockCalls } from '../common/test-utils/jest-typed';
 
+/**
+ * Mock construit sans annotation `: any` : l'inference donne un vrai type aux modeles et a leurs
+ * `jest.fn()`, ce qui type les assertions au lieu de les laisser passer en aveugle.
+ */
 function makePrisma() {
-  const prisma: any = {
+  const models = {
     sessionPoll: {
       findFirst: jest.fn(),
       updateMany: jest.fn(),
@@ -44,9 +42,13 @@ function makePrisma() {
       count: jest.fn().mockResolvedValue(0),
     },
   };
-  // $transaction exécute le callback avec le même mock en guise de `tx`
-  prisma.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(prisma));
-  return prisma;
+  // $transaction exécute le callback avec le même mock en guise de `tx`. Construit en deux temps :
+  // il doit référencer les modèles qui l'accompagnent, ce qu'un littéral unique ne permet pas
+  // sans retomber sur `any`.
+  return {
+    ...models,
+    $transaction: jest.fn((fn: (tx: typeof models) => unknown) => fn(models)),
+  };
 }
 
 function makePartiesService() {
@@ -136,15 +138,11 @@ describe('PollService', () => {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
     const after = Date.now();
-    const data = prisma.sessionPoll.create.mock.calls[0][0].data;
+    const data = callArg<{ data: { expiresAt: Date } }>(prisma.sessionPoll.create).data;
     expect(data.expiresAt).toBeInstanceOf(Date);
     const fourteenDaysMs = 14 * 24 * 60 * 60 * 1000;
-    expect(data.expiresAt.getTime()).toBeGreaterThanOrEqual(
-      before + fourteenDaysMs,
-    );
-    expect(data.expiresAt.getTime()).toBeLessThanOrEqual(
-      after + fourteenDaysMs,
-    );
+    expect(data.expiresAt.getTime()).toBeGreaterThanOrEqual(before + fourteenDaysMs);
+    expect(data.expiresAt.getTime()).toBeLessThanOrEqual(after + fourteenDaysMs);
   });
 
   it('create() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
@@ -160,10 +158,7 @@ describe('PollService', () => {
     await service.create('p1', 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-      'p1',
-      'mj1',
-    );
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
   });
 
   describe('membersCount — effectif de la troupe (Story 36.6, AC7/AC9)', () => {
@@ -216,10 +211,7 @@ describe('PollService', () => {
     // ce doublon serait passé — divergent de la clé normalisée qu'utilise setOptions().
     await expect(
       service.create('p1', 'mj1', {
-        options: [
-          opt('2026-08-01', 'MORNING'),
-          opt('2026-08-01T00:00:00.000Z', 'MORNING'),
-        ],
+        options: [opt('2026-08-01', 'MORNING'), opt('2026-08-01T00:00:00.000Z', 'MORNING')],
       }),
     ).rejects.toThrow(BadRequestException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -246,7 +238,7 @@ describe('PollService', () => {
       answer: 'NO',
     });
     expect(prisma.pollVote.upsert).toHaveBeenCalledTimes(2);
-    const calls = prisma.pollVote.upsert.mock.calls;
+    const calls = mockCalls<[{ where: unknown }]>(prisma.pollVote.upsert);
     expect(calls[0][0].where).toEqual({
       optionId_userId: { optionId: 'opt1', userId: 'u1' },
     });
@@ -290,10 +282,7 @@ describe('PollService', () => {
       optionId: 'opt1',
       answer: 'YES',
     });
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-      'p1',
-      'mj1',
-    );
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
   });
 
   describe('withdrawVote() (Story 30.1, AD-10)', () => {
@@ -321,7 +310,7 @@ describe('PollService', () => {
     it('AC3 — deux retraits par deux utilisateurs différents ne ciblent jamais le userId de l’autre', async () => {
       await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
       await service.withdrawVote('p1', 'poll1', 'opt1', 'u2');
-      const calls = prisma.pollVote.deleteMany.mock.calls;
+      const calls = mockCalls<[{ where: unknown }]>(prisma.pollVote.deleteMany);
       expect(calls[0][0].where).toEqual({ optionId: 'opt1', userId: 'u1' });
       expect(calls[1][0].where).toEqual({ optionId: 'opt1', userId: 'u2' });
     });
@@ -338,16 +327,12 @@ describe('PollService', () => {
 
     it('idempotent — un second retrait consécutif ne lève jamais (deleteMany tolère 0 ligne)', async () => {
       prisma.pollVote.deleteMany.mockResolvedValue({ count: 0 });
-      await expect(
-        service.withdrawVote('p1', 'poll1', 'opt1', 'u1'),
-      ).resolves.toBeUndefined();
+      await expect(service.withdrawVote('p1', 'poll1', 'opt1', 'u1')).resolves.toBeUndefined();
     });
 
     it('retrait sans avoir jamais voté (aucune ligne à supprimer) → résout normalement', async () => {
       prisma.pollVote.deleteMany.mockResolvedValue({ count: 0 });
-      await expect(
-        service.withdrawVote('p1', 'poll1', 'opt1', 'u1'),
-      ).resolves.toBeUndefined();
+      await expect(service.withdrawVote('p1', 'poll1', 'opt1', 'u1')).resolves.toBeUndefined();
     });
 
     it('sur un poll CLOSED → BadRequestException, aucune suppression', async () => {
@@ -356,17 +341,17 @@ describe('PollService', () => {
         partieId: 'p1',
         status: 'CLOSED',
       });
-      await expect(
-        service.withdrawVote('p1', 'poll1', 'opt1', 'u1'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.withdrawVote('p1', 'poll1', 'opt1', 'u1')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.pollVote.deleteMany).not.toHaveBeenCalled();
     });
 
     it("option inexistante ou n'appartenant pas à ce poll → BadRequestException", async () => {
       prisma.pollOption.findUnique.mockResolvedValue(null);
-      await expect(
-        service.withdrawVote('p1', 'poll1', 'opt-inconnu', 'u1'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.withdrawVote('p1', 'poll1', 'opt-inconnu', 'u1')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.pollVote.deleteMany).not.toHaveBeenCalled();
     });
 
@@ -382,18 +367,15 @@ describe('PollService', () => {
 
     it('notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
       await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-        'p1',
-        'mj1',
-      );
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
     });
   });
 
   it('choose() par non-MJ → ForbiddenException', async () => {
     parties.getOwned.mockRejectedValue(new ForbiddenException());
-    await expect(
-      service.choose('p1', 'poll1', 'joueur1', { optionId: 'opt1' }),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(service.choose('p1', 'poll1', 'joueur1', { optionId: 'opt1' })).rejects.toThrow(
+      ForbiddenException,
+    );
   });
 
   it('choose() → positionne chosenDate/chosenSlot, ferme le poll, met à jour Partie', async () => {
@@ -464,10 +446,7 @@ describe('PollService', () => {
     prisma.sessionPoll.update.mockResolvedValue({});
     prisma.partie.update.mockResolvedValue({});
     await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-      'p1',
-      'mj1',
-    );
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
   });
 
   it('choose() sur le même créneau déjà actif → ne remet PAS reminderSentAt à null', async () => {
@@ -534,10 +513,7 @@ describe('PollService', () => {
     });
     prisma.sessionPoll.update.mockResolvedValue({});
     await service.close('p1', 'poll1', 'mj1');
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-      'p1',
-      'mj1',
-    );
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
   });
 
   it('close() sur un poll déjà CLOSED → BadRequestException', async () => {
@@ -547,9 +523,7 @@ describe('PollService', () => {
       partieId: 'p1',
       status: 'CLOSED',
     });
-    await expect(service.close('p1', 'poll1', 'mj1')).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(service.close('p1', 'poll1', 'mj1')).rejects.toThrow(BadRequestException);
     expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
   });
 
@@ -665,9 +639,9 @@ describe('PollService', () => {
       const options = Array.from({ length: 41 }, (_, i) =>
         opt(`2026-09-${String(i + 1).padStart(2, '0')}`, 'EVENING'),
       );
-      await expect(
-        service.setOptions('p1', 'poll1', 'mj1', { options }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.setOptions('p1', 'poll1', 'mj1', { options })).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.pollOption.deleteMany).not.toHaveBeenCalled();
     });
 
@@ -684,19 +658,17 @@ describe('PollService', () => {
 
       // C créée — et C seule.
       expect(prisma.pollOption.createMany).toHaveBeenCalledTimes(1);
-      const created = prisma.pollOption.createMany.mock.calls[0][0].data;
+      const created = callArg<{ data: { pollId: string; slot: string; date: Date }[] }>(
+        prisma.pollOption.createMany,
+      ).data;
       expect(created).toHaveLength(1);
       expect(created[0]).toMatchObject({ pollId: 'poll1', slot: 'EVENING' });
       expect(created[0].date.toISOString()).toBe('2026-08-03T00:00:00.000Z');
 
       // 🚨 A conservée : aucune écriture ne la cible, d'aucune manière.
       expect(prisma.pollOption.update).not.toHaveBeenCalled();
-      expect(
-        JSON.stringify(prisma.pollOption.deleteMany.mock.calls),
-      ).not.toContain('optA');
-      expect(
-        JSON.stringify(prisma.pollOption.createMany.mock.calls),
-      ).not.toContain('2026-08-01');
+      expect(JSON.stringify(prisma.pollOption.deleteMany.mock.calls)).not.toContain('optA');
+      expect(JSON.stringify(prisma.pollOption.createMany.mock.calls)).not.toContain('2026-08-01');
     });
 
     it('→ jeu identique à l’existant : aucune suppression, aucune création (AC5)', async () => {
@@ -719,10 +691,7 @@ describe('PollService', () => {
         options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
       });
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-        'p1',
-        'mj1',
-      );
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
     });
 
     it('→ renvoie le DTO relu, avec membersCount (AC5)', async () => {

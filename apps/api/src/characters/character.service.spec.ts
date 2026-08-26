@@ -36,8 +36,7 @@ jest.mock('node:fs/promises', () => ({
 }));
 
 jest.mock('node:crypto', () => {
-  const actual =
-    jest.requireActual<typeof import('node:crypto')>('node:crypto');
+  const actual = jest.requireActual<typeof import('node:crypto')>('node:crypto');
   return { ...actual, randomUUID: jest.fn(() => 'fixed-uuid') };
 });
 
@@ -51,7 +50,9 @@ jest.mock('node:crypto', () => {
 // chemin n'était pas répercuté (AC7) — cf. le test dédié « le mock mocke encore » ci-dessous, qui
 // échouerait si `jest.mock` ci-dessous ne s'appliquait plus à rien.
 jest.mock('../common/image-upload.util', () => ({
-  ...jest.requireActual('../common/image-upload.util'),
+  ...jest.requireActual<typeof import('../common/image-upload.util')>(
+    '../common/image-upload.util',
+  ),
   stripImageMetadata: jest.fn(),
 }));
 
@@ -70,10 +71,30 @@ import { PartiesService } from '../parties/parties.service';
 import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { EmailService } from '../email/email.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import { anyOf, arrayLike, callArg, objectLike } from '../common/test-utils/jest-typed';
+
+/**
+ * Fiche telle que les assertions la relisent après écriture. Les sous-objets sont déclarés
+ * présents : chaque test vient de provoquer précisément l'écriture qu'il vérifie. C'est un type
+ * de test, jamais le contrat — celui-ci reste `RyuutamaSheetData` côté game-rules.
+ */
+type WrittenSheet = {
+  attributes: Record<string, number>;
+  equipment: {
+    individual: Record<string, unknown>[];
+    contenants: Record<string, unknown>[];
+    animaux: Record<string, unknown>[];
+  };
+  narrative: Record<string, unknown>;
+  levelUps: { capabilities: unknown[] }[];
+  [key: string]: unknown;
+};
+
+/** `data` du dernier appel enregistré par un mock d'écriture Prisma, fiche relue typée. */
+function writtenData(mock: jest.Mock): { sheetData: WrittenSheet } {
+  return callArg<{ data: { sheetData: WrittenSheet } }>(mock).data;
+}
 
 /** Nom de fichier légitime généré côté serveur (`randomUUID()` + extension) — cf. `image-mime.util.ts`. */
 const OLD_PORTRAIT_UUID = '11111111-1111-1111-1111-111111111111';
@@ -89,8 +110,12 @@ function makeMulterFile(buffer: Buffer = JPEG_BUFFER): Express.Multer.File {
   } as Express.Multer.File;
 }
 
+/**
+ * Mock construit sans annotation `: any` : l'inference donne un vrai type aux modeles et a leurs
+ * `jest.fn()`, ce qui type les assertions au lieu de les laisser passer en aveugle.
+ */
 function makePrisma() {
-  const prisma: any = {
+  const models = {
     character: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -128,8 +153,12 @@ function makePrisma() {
   };
   // Le client transactionnel réutilise les mêmes mocks (updateMany/snapshot.create) que le client
   // racine — suffisant pour asserter les appels ; le rollback réel n'est pas testé ici.
-  prisma.$transaction = jest.fn(async (cb: any) => cb(prisma));
-  return prisma;
+  // Construit en deux temps : `$transaction` doit référencer les modèles qui l'accompagnent, ce
+  // qu'un littéral unique ne permet pas sans retomber sur `any`.
+  return {
+    ...models,
+    $transaction: jest.fn(async (cb: (tx: typeof models) => unknown) => await cb(models)),
+  };
 }
 
 function makePartiesService() {
@@ -250,9 +279,7 @@ describe('CharacterService', () => {
     // Défaut passthrough : la plupart des tests updatePortrait() ne portent pas sur le
     // nettoyage EXIF lui-même — sans ce défaut, JPEG_BUFFER (magic bytes seuls) résoudrait
     // `undefined` (jest.fn() nu), cassant l'assertion writeFile(..., JPEG_BUFFER).
-    (stripImageMetadata as jest.Mock).mockImplementation((buf: Buffer) =>
-      Promise.resolve(buf),
-    );
+    (stripImageMetadata as jest.Mock).mockImplementation((buf: Buffer) => Promise.resolve(buf));
     const module = await Test.createTestingModule({
       providers: [
         CharacterService,
@@ -286,8 +313,8 @@ describe('CharacterService', () => {
     });
 
     expect(prisma.character.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
+      objectLike({
+        data: objectLike({
           gameSystemId: 'ryuutama',
           userId: 'u1',
           partieId: 'p1',
@@ -322,10 +349,7 @@ describe('CharacterService', () => {
       sheetData: validSheet(),
     });
 
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-      'p1',
-      'mj1',
-    );
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
   });
 
   it('create() gameSystemId non supporté → BadRequestException, validate/computeDerived non appelés', async () => {
@@ -356,7 +380,7 @@ describe('CharacterService', () => {
     await service.create('p1', 'u1', { gameSystemId: 'ryuutama', sheetData });
 
     expect(prisma.character.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ sheetData }) }),
+      objectLike({ data: objectLike({ sheetData }) }),
     );
   });
 
@@ -384,15 +408,15 @@ describe('CharacterService', () => {
 
       expect(resolveStartingEquipment).toHaveBeenCalledWith(
         [{ key: 'rations', quantity: 2 }],
-        expect.arrayContaining([
-          expect.objectContaining({
+        arrayLike([
+          objectLike({
             key: 'rations',
             priceGold: 10,
             nature: 'individual',
           }),
         ]),
       );
-      const created = prisma.character.create.mock.calls[0][0].data.sheetData;
+      const created = writtenData(prisma.character.create).sheetData;
       expect(created.equipment.individual).toEqual([
         {
           name: 'Rations',
@@ -517,7 +541,7 @@ describe('CharacterService', () => {
     await expect(
       service.create('p1', 'u1', {
         gameSystemId: 'ryuutama',
-        sheetData: { classId: '' } as any,
+        sheetData: { classId: '' },
       }),
     ).rejects.toThrow(BadRequestException);
     expect(prisma.character.create).not.toHaveBeenCalled();
@@ -563,16 +587,12 @@ describe('CharacterService', () => {
   it('findOne() par non-membre → ForbiddenException', async () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
     parties.getViewable.mockRejectedValue(new ForbiddenException());
-    await expect(service.findOne('char1', 'stranger')).rejects.toThrow(
-      ForbiddenException,
-    );
+    await expect(service.findOne('char1', 'stranger')).rejects.toThrow(ForbiddenException);
   });
 
   it('findOne() personnage introuvable → NotFoundException', async () => {
     prisma.character.findUnique.mockResolvedValue(null);
-    await expect(service.findOne('unknown', 'u1')).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(service.findOne('unknown', 'u1')).rejects.toThrow(NotFoundException);
   });
 
   it('findOne() résout ownerPseudo, ownerDisplayName et ownerIsMj (propriétaire = joueur)', async () => {
@@ -592,9 +612,7 @@ describe('CharacterService', () => {
   });
 
   it('findOne() résout ownerIsMj=true quand le propriétaire est le MJ de la partie', async () => {
-    prisma.character.findUnique.mockResolvedValue(
-      makeCharacter({ userId: 'mj1' }),
-    );
+    prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'mj1' }));
     users.findById.mockResolvedValue({
       id: 'mj1',
       pseudo: 'le-mj',
@@ -656,7 +674,7 @@ describe('CharacterService', () => {
         equipment: { individual: [], contenants: [], animaux: [] },
       },
       'strict',
-      expect.objectContaining({
+      objectLike({
         validClasses: ['chasseur'],
         validTypes: ['attaque'],
         validWeaponItems: ['arc-de-chasse'],
@@ -710,7 +728,7 @@ describe('CharacterService', () => {
         equipment: { individual: [], contenants: [], animaux: [] },
       },
       'strict',
-      expect.objectContaining({ attributePatterns: [[4, 6, 6, 8]] }),
+      objectLike({ attributePatterns: [[4, 6, 6, 8]] }),
     );
   });
 
@@ -752,7 +770,7 @@ describe('CharacterService', () => {
         equipment: { individual: [], contenants: [], animaux: [] },
       },
       'strict',
-      expect.objectContaining({
+      objectLike({
         validSeasons: ['printemps', 'ete'],
         validDebutantRitualSpells: ['benediction-main-rouge'],
       }),
@@ -805,11 +823,7 @@ describe('CharacterService', () => {
         where: { id: { in: ['u1', 'u2', 'mj1'] } },
         select: { id: true, pseudo: true, displayName: true },
       });
-      expect(result.map((c) => c.ownerPseudo)).toEqual([
-        'alice',
-        'bob',
-        'le-mj',
-      ]);
+      expect(result.map((c) => c.ownerPseudo)).toEqual(['alice', 'bob', 'le-mj']);
       expect(result.map((c) => c.ownerDisplayName)).toEqual([
         'Alice au pays',
         'Bobby',
@@ -820,9 +834,7 @@ describe('CharacterService', () => {
 
     it('joueur → ne reçoit que ses propres personnages', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
-      prisma.character.findMany.mockResolvedValue([
-        makeCharacter({ id: 'c1', userId: 'u1' }),
-      ]);
+      prisma.character.findMany.mockResolvedValue([makeCharacter({ id: 'c1', userId: 'u1' })]);
       prisma.user.findMany.mockResolvedValue([{ id: 'u1', pseudo: 'alice' }]);
 
       await service.findByPartie('p1', 'u1');
@@ -844,9 +856,7 @@ describe('CharacterService', () => {
 
     it('userId sans pseudo résolu (défensif) → ownerPseudo vide plutôt que de planter', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
-      prisma.character.findMany.mockResolvedValue([
-        makeCharacter({ id: 'c1', userId: 'orphan' }),
-      ]);
+      prisma.character.findMany.mockResolvedValue([makeCharacter({ id: 'c1', userId: 'orphan' })]);
       prisma.user.findMany.mockResolvedValue([]);
 
       const result = await service.findByPartie('p1', 'mj1');
@@ -885,15 +895,9 @@ describe('CharacterService', () => {
       });
       expect(users.findById).toHaveBeenCalledTimes(1);
       expect(users.findById).toHaveBeenCalledWith('u1');
-      expect(result.map((c) => c.partieName)).toEqual([
-        'La Forêt Noire',
-        'Le Donjon Oublié',
-      ]);
+      expect(result.map((c) => c.partieName)).toEqual(['La Forêt Noire', 'Le Donjon Oublié']);
       expect(result.map((c) => c.ownerPseudo)).toEqual(['alice', 'alice']);
-      expect(result.map((c) => c.ownerDisplayName)).toEqual([
-        'Alice au pays',
-        'Alice au pays',
-      ]);
+      expect(result.map((c) => c.ownerDisplayName)).toEqual(['Alice au pays', 'Alice au pays']);
     });
 
     it('isMj varie par Partie (MJ ici, joueur là) — jamais un calcul global', async () => {
@@ -939,12 +943,10 @@ describe('CharacterService', () => {
         makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
         makeCharacter({ id: 'c2', userId: 'u2', partieId: 'p2' }),
       ];
-      prisma.character.findMany.mockImplementation(({ where }) =>
+      prisma.character.findMany.mockImplementation(({ where }: { where: { userId: string } }) =>
         Promise.resolve(allCharacters.filter((c) => c.userId === where.userId)),
       );
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire', mjId: 'u1' }]);
       users.findById.mockResolvedValue({
         id: 'u1',
         pseudo: 'alice',
@@ -966,9 +968,7 @@ describe('CharacterService', () => {
       prisma.character.findMany.mockResolvedValue([
         makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
       ]);
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire', mjId: 'u1' }]);
 
       const result = await service.findMine('u1');
 
@@ -982,9 +982,7 @@ describe('CharacterService', () => {
       prisma.character.findMany.mockResolvedValue([
         makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
       ]);
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire', mjId: 'u1' }]);
 
       const result = await service.findMine('u1');
 
@@ -1002,9 +1000,7 @@ describe('CharacterService', () => {
         makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
         makeCharacter({ id: 'c2', userId: 'u1', partieId: 'p1' }),
       ]);
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire', mjId: 'u1' }]);
       prisma.characterGroupRole.findMany.mockResolvedValue([
         { characterId: 'c1', roleKey: 'chef' },
       ]);
@@ -1040,9 +1036,7 @@ describe('CharacterService', () => {
           gameSystemId: 'homme-dragon',
         }),
       ]);
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', mjId: 'u1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire', mjId: 'u1' }]);
 
       await service.findMine('u1');
 
@@ -1064,12 +1058,11 @@ describe('CharacterService', () => {
         }),
       );
 
-      const result = await service.updatePortrait(
-        'char1',
-        'u1',
-        makeMulterFile(),
-        { scale: 1.5, offsetX: 0, offsetY: 0 },
-      );
+      const result = await service.updatePortrait('char1', 'u1', makeMulterFile(), {
+        scale: 1.5,
+        offsetX: 0,
+        offsetY: 0,
+      });
 
       expect(mkdir).toHaveBeenCalled();
       expect(writeFile).toHaveBeenCalledWith(
@@ -1097,34 +1090,27 @@ describe('CharacterService', () => {
     });
 
     it('non-propriétaire (y compris le MJ) → ForbiddenException, aucune écriture disque', async () => {
-      prisma.character.findUnique.mockResolvedValue(
-        makeCharacter({ userId: 'owner' }),
-      );
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
-      await expect(
-        service.updatePortrait('char1', 'mj1', makeMulterFile(), null),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.updatePortrait('char1', 'mj1', makeMulterFile(), null)).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(writeFile).not.toHaveBeenCalled();
       expect(prisma.character.updateMany).not.toHaveBeenCalled();
     });
 
     it('personnage introuvable → NotFoundException', async () => {
       prisma.character.findUnique.mockResolvedValue(null);
-      await expect(
-        service.updatePortrait('unknown', 'u1', makeMulterFile(), null),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.updatePortrait('unknown', 'u1', makeMulterFile(), null)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('fichier non-image (octets magiques invalides) → BadRequestException, aucune écriture disque', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
 
       await expect(
-        service.updatePortrait(
-          'char1',
-          'u1',
-          makeMulterFile(Buffer.from('not an image')),
-          null,
-        ),
+        service.updatePortrait('char1', 'u1', makeMulterFile(Buffer.from('not an image')), null),
       ).rejects.toThrow(BadRequestException);
       expect(writeFile).not.toHaveBeenCalled();
     });
@@ -1139,10 +1125,7 @@ describe('CharacterService', () => {
       await service.updatePortrait('char1', 'u1', makeMulterFile(), null);
 
       expect(stripImageMetadata).toHaveBeenCalledWith(JPEG_BUFFER);
-      expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining('fixed-uuid.jpg'),
-        cleaned,
-      );
+      expect(writeFile).toHaveBeenCalledWith(expect.stringContaining('fixed-uuid.jpg'), cleaned);
     });
 
     it('AC7 : le jest.mock de stripImageMetadata cible bien le module courant, pas un chemin périmé (garde contre le refactor AD-17)', async () => {
@@ -1156,14 +1139,12 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
-      const marker = Buffer.from(
-        'valeur-impossible-a-produire-par-un-vrai-sharp-sur-ce-buffer',
-      );
+      const marker = Buffer.from('valeur-impossible-a-produire-par-un-vrai-sharp-sur-ce-buffer');
       (stripImageMetadata as jest.Mock).mockResolvedValue(marker);
 
       await service.updatePortrait('char1', 'u1', makeMulterFile(), null);
 
-      expect(writeFile).toHaveBeenCalledWith(expect.any(String), marker);
+      expect(writeFile).toHaveBeenCalledWith(anyOf(String), marker);
     });
 
     it('signature magique valide mais image indécodable par sharp → BadRequestException, aucune écriture disque (Story 16.2 AC3)', async () => {
@@ -1172,9 +1153,9 @@ describe('CharacterService', () => {
         new Error('Input buffer has corrupt header'),
       );
 
-      await expect(
-        service.updatePortrait('char1', 'u1', makeMulterFile(), null),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.updatePortrait('char1', 'u1', makeMulterFile(), null)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(writeFile).not.toHaveBeenCalled();
     });
 
@@ -1189,33 +1170,27 @@ describe('CharacterService', () => {
 
       await service.updatePortrait('char1', 'u1', makeMulterFile(), null);
 
-      expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining(`${OLD_PORTRAIT_UUID}.jpg`),
-      );
+      expect(unlink).toHaveBeenCalledWith(expect.stringContaining(`${OLD_PORTRAIT_UUID}.jpg`));
     });
 
     it('conflit de concurrence (updatedAt modifié entretemps) → ConflictException, le nouveau fichier écrit est nettoyé', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(
-        service.updatePortrait('char1', 'u1', makeMulterFile(), null),
-      ).rejects.toThrow(ConflictException);
-      expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining('fixed-uuid.jpg'),
+      await expect(service.updatePortrait('char1', 'u1', makeMulterFile(), null)).rejects.toThrow(
+        ConflictException,
       );
+      expect(unlink).toHaveBeenCalledWith(expect.stringContaining('fixed-uuid.jpg'));
     });
 
     it('échec de la mise à jour Prisma → le nouveau fichier écrit est nettoyé, erreur propagée', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       prisma.character.updateMany.mockRejectedValue(new Error('db down'));
 
-      await expect(
-        service.updatePortrait('char1', 'u1', makeMulterFile(), null),
-      ).rejects.toThrow('db down');
-      expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining('fixed-uuid.jpg'),
+      await expect(service.updatePortrait('char1', 'u1', makeMulterFile(), null)).rejects.toThrow(
+        'db down',
       );
+      expect(unlink).toHaveBeenCalledWith(expect.stringContaining('fixed-uuid.jpg'));
     });
 
     it('résout ownerPseudo/ownerIsMj sur le résultat retourné', async () => {
@@ -1229,12 +1204,7 @@ describe('CharacterService', () => {
       });
       prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
 
-      const result = await service.updatePortrait(
-        'char1',
-        'u1',
-        makeMulterFile(),
-        null,
-      );
+      const result = await service.updatePortrait('char1', 'u1', makeMulterFile(), null);
 
       expect(result.ownerPseudo).toBe('alice');
       expect(result.ownerDisplayName).toBe('Alice au pays');
@@ -1253,9 +1223,7 @@ describe('CharacterService', () => {
 
       await service.removePortrait('char1', 'u1');
 
-      expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining(`${OLD_PORTRAIT_UUID}.jpg`),
-      );
+      expect(unlink).toHaveBeenCalledWith(expect.stringContaining(`${OLD_PORTRAIT_UUID}.jpg`));
       expect(prisma.character.updateMany).toHaveBeenCalledWith({
         where: { id: 'char1', updatedAt: character.updatedAt },
         data: { portraitUrl: null, portraitCropData: Prisma.JsonNull },
@@ -1273,21 +1241,15 @@ describe('CharacterService', () => {
     });
 
     it('non-propriétaire → ForbiddenException', async () => {
-      prisma.character.findUnique.mockResolvedValue(
-        makeCharacter({ userId: 'owner' }),
-      );
-      await expect(service.removePortrait('char1', 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
+      await expect(service.removePortrait('char1', 'stranger')).rejects.toThrow(ForbiddenException);
     });
 
     it('conflit de concurrence (updatedAt modifié entretemps) → ConflictException', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.removePortrait('char1', 'u1')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.removePortrait('char1', 'u1')).rejects.toThrow(ConflictException);
     });
 
     it('résout ownerPseudo/ownerIsMj sur le résultat retourné', async () => {
@@ -1325,11 +1287,7 @@ describe('CharacterService', () => {
         makeCharacter({ pdfPortraitCropData: CROP_DATA }),
       );
 
-      const result = await service.updatePdfPortraitCrop(
-        'char1',
-        'u1',
-        CROP_DATA,
-      );
+      const result = await service.updatePdfPortraitCrop('char1', 'u1', CROP_DATA);
 
       expect(prisma.character.updateMany).toHaveBeenCalledWith({
         where: { id: 'char1', updatedAt: character.updatedAt },
@@ -1352,21 +1310,17 @@ describe('CharacterService', () => {
     });
 
     it('non-propriétaire → ForbiddenException', async () => {
-      prisma.character.findUnique.mockResolvedValue(
-        makeCharacter({ userId: 'owner' }),
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
+      await expect(service.updatePdfPortraitCrop('char1', 'stranger', CROP_DATA)).rejects.toThrow(
+        ForbiddenException,
       );
-      await expect(
-        service.updatePdfPortraitCrop('char1', 'stranger', CROP_DATA),
-      ).rejects.toThrow(ForbiddenException);
     });
 
     it('personnage sans portrait → BadRequestException', async () => {
-      prisma.character.findUnique.mockResolvedValue(
-        makeCharacter({ portraitUrl: null }),
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ portraitUrl: null }));
+      await expect(service.updatePdfPortraitCrop('char1', 'u1', CROP_DATA)).rejects.toThrow(
+        BadRequestException,
       );
-      await expect(
-        service.updatePdfPortraitCrop('char1', 'u1', CROP_DATA),
-      ).rejects.toThrow(BadRequestException);
       expect(prisma.character.updateMany).not.toHaveBeenCalled();
     });
 
@@ -1378,9 +1332,9 @@ describe('CharacterService', () => {
       );
       prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(
-        service.updatePdfPortraitCrop('char1', 'u1', CROP_DATA),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.updatePdfPortraitCrop('char1', 'u1', CROP_DATA)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('résout ownerPseudo/ownerIsMj sur le résultat retourné', async () => {
@@ -1397,11 +1351,7 @@ describe('CharacterService', () => {
       });
       prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
 
-      const result = await service.updatePdfPortraitCrop(
-        'char1',
-        'u1',
-        CROP_DATA,
-      );
+      const result = await service.updatePdfPortraitCrop('char1', 'u1', CROP_DATA);
 
       expect(result.ownerPseudo).toBe('alice');
       expect(result.ownerDisplayName).toBe('Alice au pays');
@@ -1460,25 +1410,19 @@ describe('CharacterService', () => {
       );
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.getPortraitFile('char1', 'stranger'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.getPortraitFile('char1', 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('personnage sans portrait → NotFoundException', async () => {
-      prisma.character.findUnique.mockResolvedValue(
-        makeCharacter({ portraitUrl: null }),
-      );
-      await expect(service.getPortraitFile('char1', 'u1')).rejects.toThrow(
-        NotFoundException,
-      );
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ portraitUrl: null }));
+      await expect(service.getPortraitFile('char1', 'u1')).rejects.toThrow(NotFoundException);
     });
 
     it('personnage introuvable → NotFoundException', async () => {
       prisma.character.findUnique.mockResolvedValue(null);
-      await expect(service.getPortraitFile('unknown', 'u1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getPortraitFile('unknown', 'u1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -1498,9 +1442,7 @@ describe('CharacterService', () => {
     });
 
     it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-      prisma.character.update.mockResolvedValue(
-        makeCharacter({ xp: 50, partieId: 'p1' }),
-      );
+      prisma.character.update.mockResolvedValue(makeCharacter({ xp: 50, partieId: 'p1' }));
       (pendingLevels as jest.Mock).mockReturnValue([]);
 
       await service.applyXpDelta('char1', 50);
@@ -1525,7 +1467,7 @@ describe('CharacterService', () => {
       expect(email.sendMail).toHaveBeenCalledWith(
         'level-up',
         'alice@example.com',
-        expect.objectContaining({ partieName: 'Les Brumes' }),
+        objectLike({ partieName: 'Les Brumes' }),
       );
     });
 
@@ -1583,21 +1525,17 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.setXp('char1', 'stranger', 500)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.setXp('char1', 'stranger', 500)).rejects.toThrow(ForbiddenException);
       expect(prisma.character.updateMany).not.toHaveBeenCalled();
     });
 
     it('MJ d’une AUTRE Partie → ForbiddenException (parties.getOwned rejette)', async () => {
-      prisma.character.findUnique.mockResolvedValue(
-        makeCharacter({ partieId: 'p1' }),
-      );
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ partieId: 'p1' }));
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.setXp('char1', 'mj-autre-partie', 500),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.setXp('char1', 'mj-autre-partie', 500)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('409 si updatedAt périmé', async () => {
@@ -1605,9 +1543,7 @@ describe('CharacterService', () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.setXp('char1', 'mj1', 500)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.setXp('char1', 'mj1', 500)).rejects.toThrow(ConflictException);
       expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
     });
 
@@ -1618,9 +1554,7 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(character);
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
-      prisma.character.findUniqueOrThrow.mockResolvedValue(
-        makeCharacter({ xp: 500 }),
-      );
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ xp: 500 }));
       (pendingLevels as jest.Mock).mockReturnValue([]);
 
       await service.setXp('char1', 'mj1', 500);
@@ -1630,7 +1564,7 @@ describe('CharacterService', () => {
         data: { xp: 500 },
       });
       expect(prisma.characterSnapshot.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+        data: objectLike({
           characterId: 'char1',
           trigger: 'MJ_EDIT',
           level: 1,
@@ -1666,9 +1600,7 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(character);
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
-      prisma.character.findUniqueOrThrow.mockResolvedValue(
-        makeCharacter({ xp: 500 }),
-      );
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ xp: 500 }));
       (pendingLevels as jest.Mock).mockReturnValue([]);
       users.findById.mockResolvedValue({
         id: 'u1',
@@ -1705,7 +1637,7 @@ describe('CharacterService', () => {
       expect(email.sendMail).toHaveBeenCalledWith(
         'level-up',
         'alice@example.com',
-        expect.objectContaining({ partieName: 'Les Brumes' }),
+        objectLike({ partieName: 'Les Brumes' }),
       );
     });
 
@@ -1713,9 +1645,7 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
-      prisma.character.findUniqueOrThrow.mockResolvedValue(
-        makeCharacter({ xp: 10 }),
-      );
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ xp: 10 }));
       (pendingLevels as jest.Mock).mockReturnValue([]);
 
       await service.setXp('char1', 'mj1', 10);
@@ -1727,9 +1657,7 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
-      prisma.character.findUniqueOrThrow.mockResolvedValue(
-        makeCharacter({ xp: 10 }),
-      );
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ xp: 10 }));
       (pendingLevels as jest.Mock).mockReturnValue([]);
       users.findById.mockResolvedValue({
         id: 'u1',
@@ -1814,7 +1742,7 @@ describe('CharacterService', () => {
           value: 'x',
         }),
       ).rejects.toThrow(BadRequestException);
-      expect(({} as any).polluted).toBeUndefined();
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     });
 
     it('path "equipment" (1 segment, hors equipment.individual.<index>) → BadRequestException, jamais de remplacement en bloc', async () => {
@@ -1825,9 +1753,7 @@ describe('CharacterService', () => {
         service.setSheetField('char1', 'mj1', {
           path: 'equipment',
           value: {
-            individual: [
-              { id: 'x', name: 'Injecté', weight: 0, addedBy: 'player' },
-            ],
+            individual: [{ id: 'x', name: 'Injecté', weight: 0, addedBy: 'player' }],
             contenants: [],
             animaux: [],
           },
@@ -1863,15 +1789,15 @@ describe('CharacterService', () => {
       });
 
       expect(prisma.character.updateMany).toHaveBeenCalledWith({
-        where: { id: 'char1', updatedAt: expect.any(Date) },
-        data: expect.objectContaining({
-          sheetData: expect.objectContaining({
+        where: { id: 'char1', updatedAt: anyOf(Date) },
+        data: objectLike({
+          sheetData: objectLike({
             fetiqueObject: 'Lanterne magique',
           }),
         }),
       });
       expect(prisma.characterSnapshot.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+        data: objectLike({
           characterId: 'char1',
           trigger: 'MJ_EDIT',
         }),
@@ -1883,9 +1809,7 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
-      prisma.character.findUniqueOrThrow.mockResolvedValue(
-        makeCharacter({ partieId: 'p1' }),
-      );
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ partieId: 'p1' }));
       (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
 
       await service.setSheetField('char1', 'mj1', {
@@ -1920,9 +1844,7 @@ describe('CharacterService', () => {
         sheetData: {
           ...validSheet(),
           equipment: {
-            individual: [
-              { id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' },
-            ],
+            individual: [{ id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' }],
             contenants: [],
             animaux: [],
           },
@@ -1938,8 +1860,7 @@ describe('CharacterService', () => {
         value: { name: 'Lettre scellée', weight: 0.1, addedBy: 'player' },
       });
 
-      const written =
-        prisma.character.updateMany.mock.calls[0][0].data.sheetData;
+      const written = writtenData(prisma.character.updateMany).sheetData;
       expect(written.equipment.individual[1]).toEqual({
         id: 'fixed-uuid',
         name: 'Lettre scellée',
@@ -1953,9 +1874,7 @@ describe('CharacterService', () => {
         sheetData: {
           ...validSheet(),
           equipment: {
-            individual: [
-              { id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' },
-            ],
+            individual: [{ id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' }],
             contenants: [],
             animaux: [],
           },
@@ -1976,8 +1895,7 @@ describe('CharacterService', () => {
         },
       });
 
-      const written =
-        prisma.character.updateMany.mock.calls[0][0].data.sheetData;
+      const written = writtenData(prisma.character.updateMany).sheetData;
       expect(written.equipment.individual[0]).toEqual({
         id: 'existing-1',
         name: 'Corde renforcée',
@@ -1991,9 +1909,7 @@ describe('CharacterService', () => {
         sheetData: {
           ...validSheet(),
           equipment: {
-            individual: [
-              { id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' },
-            ],
+            individual: [{ id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' }],
             contenants: [],
             animaux: [],
           },
@@ -2016,9 +1932,7 @@ describe('CharacterService', () => {
         sheetData: {
           ...validSheet(),
           equipment: {
-            individual: [
-              { id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' },
-            ],
+            individual: [{ id: 'existing-1', name: 'Corde', weight: 1, addedBy: 'player' }],
             contenants: [],
             animaux: [],
           },
@@ -2104,8 +2018,7 @@ describe('CharacterService', () => {
         value: { name: 'Coffre', weight: 5 },
       });
 
-      const written =
-        prisma.character.updateMany.mock.calls[0][0].data.sheetData;
+      const written = writtenData(prisma.character.updateMany).sheetData;
       expect(written.equipment.contenants[0]).toEqual({
         id: 'fixed-uuid',
         name: 'Coffre',
@@ -2131,8 +2044,7 @@ describe('CharacterService', () => {
         value: { name: 'Cheval' },
       });
 
-      const written =
-        prisma.character.updateMany.mock.calls[0][0].data.sheetData;
+      const written = writtenData(prisma.character.updateMany).sheetData;
       expect(written.equipment.animaux[0]).toEqual({
         id: 'fixed-uuid',
         name: 'Cheval',
@@ -2157,8 +2069,7 @@ describe('CharacterService', () => {
         value: { name: 'Cheval', weight: 999 },
       });
 
-      const written =
-        prisma.character.updateMany.mock.calls[0][0].data.sheetData;
+      const written = writtenData(prisma.character.updateMany).sheetData;
       expect(written.equipment.animaux[0]).not.toHaveProperty('weight');
     });
 
@@ -2178,9 +2089,7 @@ describe('CharacterService', () => {
 
   describe('updateNarrativeField()', () => {
     it('non-propriétaire (y compris MJ de la Partie) → ForbiddenException, aucune écriture', async () => {
-      prisma.character.findUnique.mockResolvedValue(
-        makeCharacter({ userId: 'owner' }),
-      );
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
       await expect(
         service.updateNarrativeField('char1', 'mj1', {
@@ -2204,7 +2113,7 @@ describe('CharacterService', () => {
         value: 'Venger son village',
       });
 
-      const data = prisma.character.updateMany.mock.calls[0][0].data;
+      const data = writtenData(prisma.character.updateMany);
       expect(data.sheetData.narrative).toEqual({
         sex: 'Homme',
         motivation: 'Venger son village',
@@ -2225,7 +2134,7 @@ describe('CharacterService', () => {
         value: null,
       });
 
-      const data = prisma.character.updateMany.mock.calls[0][0].data;
+      const data = writtenData(prisma.character.updateMany);
       expect(data.sheetData.narrative).toEqual({ sex: null });
     });
 
@@ -2241,7 +2150,7 @@ describe('CharacterService', () => {
         field: 'sex',
       } as any);
 
-      const data = prisma.character.updateMany.mock.calls[0][0].data;
+      const data = writtenData(prisma.character.updateMany);
       expect(data.sheetData.narrative.sex).toBeUndefined();
       // JSON.stringify (sérialisation Prisma) supprime les clés `undefined` — la valeur ne
       // "fantôme" pas côté base, cohérent avec le cas `value: null` testé ci-dessus.
@@ -2271,7 +2180,7 @@ describe('CharacterService', () => {
         value: 'Village de Ryu',
       });
 
-      const data = prisma.character.updateMany.mock.calls[0][0].data;
+      const data = writtenData(prisma.character.updateMany);
       expect(data.sheetData.narrative).toEqual({ homeTown: 'Village de Ryu' });
     });
   });
@@ -2287,9 +2196,9 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 0 }));
       (pendingLevels as jest.Mock).mockReturnValue([]);
 
-      await expect(
-        service.applyLevelUp('char1', 'u1', validDto as any),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.applyLevelUp('char1', 'u1', validDto as any)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.character.updateMany).not.toHaveBeenCalled();
     });
 
@@ -2339,16 +2248,14 @@ describe('CharacterService', () => {
         Encombrement: 12,
       });
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
-      prisma.character.findUniqueOrThrow.mockResolvedValue(
-        makeCharacter({ xp: 150 }),
-      );
+      prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ xp: 150 }));
 
       await service.applyLevelUp('char1', 'u1', validDto);
 
       expect(prisma.character.updateMany).toHaveBeenCalledWith({
         where: { id: 'char1', updatedAt: character.updatedAt },
-        data: expect.objectContaining({
-          sheetData: expect.objectContaining({
+        data: objectLike({
+          sheetData: objectLike({
             levelUps: [
               {
                 level: 2,
@@ -2361,7 +2268,7 @@ describe('CharacterService', () => {
         }),
       });
       expect(prisma.characterSnapshot.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
+        data: objectLike({
           characterId: 'char1',
           level: 2,
           trigger: 'LEVEL_UP',
@@ -2390,20 +2297,18 @@ describe('CharacterService', () => {
       (computeDerived as jest.Mock).mockReturnValue({});
       prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(
-        service.applyLevelUp('char1', 'u1', validDto as any),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.applyLevelUp('char1', 'u1', validDto as any)).rejects.toThrow(
+        ConflictException,
+      );
       expect(prisma.characterSnapshot.create).not.toHaveBeenCalled();
     });
 
     it('non-propriétaire → ForbiddenException', async () => {
-      prisma.character.findUnique.mockResolvedValue(
-        makeCharacter({ userId: 'owner', xp: 150 }),
-      );
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner', xp: 150 }));
 
-      await expect(
-        service.applyLevelUp('char1', 'stranger', validDto as any),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.applyLevelUp('char1', 'stranger', validDto as any)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
 
     it('niveau à deux capacités (4) → exige et applique les DEUX (Attribut ET immunité)', async () => {
@@ -2426,15 +2331,13 @@ describe('CharacterService', () => {
         ],
       });
 
-      const data = prisma.character.updateMany.mock.calls[0][0].data;
+      const data = writtenData(prisma.character.updateMany);
       expect(data.sheetData.attributes.VIG).toBe(10); // 8 + 2
       expect(data.sheetData.levelUps[0].capabilities).toHaveLength(2);
     });
 
     it("niveau à deux capacités : n'en fournir qu'une → BadRequestException", async () => {
-      prisma.character.findUnique.mockResolvedValue(
-        makeCharacter({ xp: 1200 }),
-      );
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ xp: 1200 }));
       (pendingLevels as jest.Mock).mockReturnValue([4]);
 
       await expect(
@@ -2515,16 +2418,12 @@ describe('CharacterService', () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.getHistory('char1', 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.getHistory('char1', 'stranger')).rejects.toThrow(ForbiddenException);
     });
 
     it('personnage introuvable → NotFoundException', async () => {
       prisma.character.findUnique.mockResolvedValue(null);
-      await expect(service.getHistory('unknown', 'u1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getHistory('unknown', 'u1')).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -2550,7 +2449,7 @@ describe('CharacterService', () => {
           weight: 1.2,
         });
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.individual).toEqual([
           { id: 'fixed-uuid', name: 'Cape', weight: 1.2, addedBy: 'player' },
         ]);
@@ -2578,7 +2477,7 @@ describe('CharacterService', () => {
 
         await service.addInventoryItem('char1', 'u1', { name: 'Sac' });
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.individual[0]).toEqual({
           id: 'fixed-uuid',
           name: 'Sac',
@@ -2598,14 +2497,12 @@ describe('CharacterService', () => {
           addedBy: 'mj',
         } as any);
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.individual[0].addedBy).toBe('player');
       });
 
       it('409 si updatedAt périmé', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithEquipment(),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacterWithEquipment());
         prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
         await expect(
@@ -2614,9 +2511,7 @@ describe('CharacterService', () => {
       });
 
       it('non-propriétaire → ForbiddenException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacter({ userId: 'owner' }),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
         await expect(
           service.addInventoryItem('char1', 'stranger', {
@@ -2644,7 +2539,7 @@ describe('CharacterService', () => {
 
         await service.addInventoryItem('char1', 'u1', { name: 'Cape' });
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.individual).toEqual([
           { id: 'fixed-uuid', name: 'Vieux sac', weight: 0, addedBy: 'player' },
           { id: 'fixed-uuid', name: 'Cape', weight: 0, addedBy: 'player' },
@@ -2665,7 +2560,7 @@ describe('CharacterService', () => {
           name: 'Cape usée',
         });
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.individual[0]).toEqual({
           id: 'item-1',
           name: 'Cape usée',
@@ -2686,7 +2581,7 @@ describe('CharacterService', () => {
           weight: 2,
         });
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.individual[0]).toEqual({
           id: 'item-1',
           name: 'Cape',
@@ -2708,7 +2603,7 @@ describe('CharacterService', () => {
           name: 'Sac usé',
         });
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.individual).toEqual([
           { id: 'item-1', name: 'Cape', weight: 1, addedBy: 'player' },
           { id: 'item-2', name: 'Sac usé', weight: 2, addedBy: 'player' },
@@ -2733,9 +2628,7 @@ describe('CharacterService', () => {
         // Simule : le personnage tel que relu par CETTE requête ne contient plus l'objet que le
         // client pensait éditer (retiré entretemps par une autre requête, déjà appliquée).
         prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithEquipment([
-            { id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' },
-          ]),
+          makeCharacterWithEquipment([{ id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' }]),
         );
 
         await expect(
@@ -2762,9 +2655,7 @@ describe('CharacterService', () => {
       });
 
       it('non-propriétaire → ForbiddenException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacter({ userId: 'owner' }),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
         await expect(
           service.updateInventoryItem('char1', 'stranger', 'item-1', {
@@ -2801,32 +2692,28 @@ describe('CharacterService', () => {
 
         await service.removeInventoryItem('char1', 'u1', 'item-1');
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.individual).toEqual([
           { id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' },
         ]);
       });
 
       it('itemId introuvable → NotFoundException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithEquipment([]),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacterWithEquipment([]));
 
-        await expect(
-          service.removeInventoryItem('char1', 'u1', 'item-inconnu'),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.removeInventoryItem('char1', 'u1', 'item-inconnu')).rejects.toThrow(
+          NotFoundException,
+        );
       });
 
       it("objet déjà retiré par une autre requête → NotFoundException, jamais suppression d'un autre objet", async () => {
         prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithEquipment([
-            { id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' },
-          ]),
+          makeCharacterWithEquipment([{ id: 'item-2', name: 'Sac', weight: 2, addedBy: 'player' }]),
         );
 
-        await expect(
-          service.removeInventoryItem('char1', 'u1', 'item-1'),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.removeInventoryItem('char1', 'u1', 'item-1')).rejects.toThrow(
+          NotFoundException,
+        );
         expect(prisma.character.updateMany).not.toHaveBeenCalled();
       });
 
@@ -2838,19 +2725,17 @@ describe('CharacterService', () => {
         );
         prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
-        await expect(
-          service.removeInventoryItem('char1', 'u1', 'item-1'),
-        ).rejects.toThrow(ConflictException);
+        await expect(service.removeInventoryItem('char1', 'u1', 'item-1')).rejects.toThrow(
+          ConflictException,
+        );
       });
 
       it('non-propriétaire → ForbiddenException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacter({ userId: 'owner' }),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
-        await expect(
-          service.removeInventoryItem('char1', 'stranger', 'item-1'),
-        ).rejects.toThrow(ForbiddenException);
+        await expect(service.removeInventoryItem('char1', 'stranger', 'item-1')).rejects.toThrow(
+          ForbiddenException,
+        );
       });
 
       it('n’appelle jamais characterSnapshot.create', async () => {
@@ -2899,7 +2784,7 @@ describe('CharacterService', () => {
           effect: 'Contient 10 objets',
         });
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.contenants).toEqual([
           {
             id: 'fixed-uuid',
@@ -2913,20 +2798,16 @@ describe('CharacterService', () => {
       });
 
       it('409 si updatedAt périmé', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithContenants(),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacterWithContenants());
         prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
-        await expect(
-          service.addContenant('char1', 'u1', { name: 'Sac' } as any),
-        ).rejects.toThrow(ConflictException);
+        await expect(service.addContenant('char1', 'u1', { name: 'Sac' } as any)).rejects.toThrow(
+          ConflictException,
+        );
       });
 
       it('non-propriétaire → ForbiddenException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacter({ userId: 'owner' }),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
         await expect(
           service.addContenant('char1', 'stranger', { name: 'Sac' } as any),
@@ -2948,7 +2829,7 @@ describe('CharacterService', () => {
           price: '2 po',
         });
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.contenants[0]).toEqual({
           id: 'c1',
           name: 'Sac',
@@ -2959,23 +2840,21 @@ describe('CharacterService', () => {
       });
 
       it('itemId introuvable → NotFoundException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithContenants(),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacterWithContenants());
 
         await expect(
           service.updateContenant('char1', 'u1', 'missing', { weight: 1 }),
         ).rejects.toThrow(NotFoundException);
       });
 
-      it("un itemId valide mais appartenant à une autre catégorie (animaux) → NotFoundException, pour la bonne raison (deferred-work, gap de test comblé)", async () => {
+      it('un itemId valide mais appartenant à une autre catégorie (animaux) → NotFoundException, pour la bonne raison (deferred-work, gap de test comblé)', async () => {
         prisma.character.findUnique.mockResolvedValue(
           makeCharacterWithAnimaux([{ id: 'a1', name: 'Monture' }]),
         );
 
-        await expect(
-          service.updateContenant('char1', 'u1', 'a1', { weight: 1 }),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.updateContenant('char1', 'u1', 'a1', { weight: 1 })).rejects.toThrow(
+          NotFoundException,
+        );
       });
     });
 
@@ -2990,18 +2869,16 @@ describe('CharacterService', () => {
 
         await service.removeContenant('char1', 'u1', 'c1');
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.contenants).toEqual([]);
       });
 
       it('itemId introuvable → NotFoundException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithContenants(),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacterWithContenants());
 
-        await expect(
-          service.removeContenant('char1', 'u1', 'missing'),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.removeContenant('char1', 'u1', 'missing')).rejects.toThrow(
+          NotFoundException,
+        );
       });
     });
 
@@ -3017,7 +2894,7 @@ describe('CharacterService', () => {
           price: '20 po',
         });
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.animaux).toEqual([
           {
             id: 'fixed-uuid',
@@ -3026,15 +2903,11 @@ describe('CharacterService', () => {
             addedBy: 'player',
           },
         ]);
-        expect(data.sheetData.equipment.animaux[0]).not.toHaveProperty(
-          'weight',
-        );
+        expect(data.sheetData.equipment.animaux[0]).not.toHaveProperty('weight');
       });
 
       it('non-propriétaire → ForbiddenException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacter({ userId: 'owner' }),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
         await expect(
           service.addAnimal('char1', 'stranger', { name: 'Cheval' } as any),
@@ -3055,7 +2928,7 @@ describe('CharacterService', () => {
           effect: 'Rapide',
         });
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.animaux[0]).toEqual({
           id: 'a1',
           name: 'Cheval',
@@ -3065,9 +2938,7 @@ describe('CharacterService', () => {
       });
 
       it('itemId introuvable → NotFoundException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithAnimaux(),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacterWithAnimaux());
 
         await expect(
           service.updateAnimal('char1', 'u1', 'missing', { effect: 'x' }),
@@ -3086,18 +2957,16 @@ describe('CharacterService', () => {
 
         await service.removeAnimal('char1', 'u1', 'a1');
 
-        const data = prisma.character.updateMany.mock.calls[0][0].data;
+        const data = writtenData(prisma.character.updateMany);
         expect(data.sheetData.equipment.animaux).toEqual([]);
       });
 
       it('itemId introuvable → NotFoundException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacterWithAnimaux(),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacterWithAnimaux());
 
-        await expect(
-          service.removeAnimal('char1', 'u1', 'missing'),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.removeAnimal('char1', 'u1', 'missing')).rejects.toThrow(
+          NotFoundException,
+        );
       });
     });
   });
@@ -3146,13 +3015,11 @@ describe('CharacterService', () => {
       });
 
       it('non-propriétaire → ForbiddenException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacter({ userId: 'owner' }),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
-        await expect(
-          service.addNote('char1', 'stranger', { text: 'x' } as any),
-        ).rejects.toThrow(ForbiddenException);
+        await expect(service.addNote('char1', 'stranger', { text: 'x' } as any)).rejects.toThrow(
+          ForbiddenException,
+        );
         expect(prisma.characterNote.create).not.toHaveBeenCalled();
       });
 
@@ -3169,19 +3036,10 @@ describe('CharacterService', () => {
     describe('toggleNoteShare()', () => {
       it('bascule shared de false à true', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        prisma.characterNote.findUnique.mockResolvedValue(
-          makeNote({ shared: false }),
-        );
-        prisma.characterNote.update.mockResolvedValue(
-          makeNote({ shared: true }),
-        );
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote({ shared: false }));
+        prisma.characterNote.update.mockResolvedValue(makeNote({ shared: true }));
 
-        const result = await service.toggleNoteShare(
-          'char1',
-          'u1',
-          'note-1',
-          true,
-        );
+        const result = await service.toggleNoteShare('char1', 'u1', 'note-1', true);
 
         expect(prisma.characterNote.update).toHaveBeenCalledWith({
           where: { id: 'note-1' },
@@ -3192,12 +3050,8 @@ describe('CharacterService', () => {
 
       it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        prisma.characterNote.findUnique.mockResolvedValue(
-          makeNote({ shared: false }),
-        );
-        prisma.characterNote.update.mockResolvedValue(
-          makeNote({ shared: true }),
-        );
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote({ shared: false }));
+        prisma.characterNote.update.mockResolvedValue(makeNote({ shared: true }));
 
         await service.toggleNoteShare('char1', 'u1', 'note-1', true);
 
@@ -3208,48 +3062,38 @@ describe('CharacterService', () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         prisma.characterNote.findUnique.mockResolvedValue(null);
 
-        await expect(
-          service.toggleNoteShare('char1', 'u1', 'note-inconnue', true),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.toggleNoteShare('char1', 'u1', 'note-inconnue', true)).rejects.toThrow(
+          NotFoundException,
+        );
         expect(prisma.characterNote.update).not.toHaveBeenCalled();
       });
 
       it('noteId appartient à un AUTRE personnage → NotFoundException (garde anti-énumération)', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        prisma.characterNote.findUnique.mockResolvedValue(
-          makeNote({ characterId: 'char-autre' }),
-        );
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote({ characterId: 'char-autre' }));
 
-        await expect(
-          service.toggleNoteShare('char1', 'u1', 'note-1', true),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.toggleNoteShare('char1', 'u1', 'note-1', true)).rejects.toThrow(
+          NotFoundException,
+        );
         expect(prisma.characterNote.update).not.toHaveBeenCalled();
       });
 
       it('non-propriétaire → ForbiddenException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacter({ userId: 'owner' }),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
-        await expect(
-          service.toggleNoteShare('char1', 'stranger', 'note-1', true),
-        ).rejects.toThrow(ForbiddenException);
+        await expect(service.toggleNoteShare('char1', 'stranger', 'note-1', true)).rejects.toThrow(
+          ForbiddenException,
+        );
       });
     });
 
     describe('setJournalAutoAssociate()', () => {
       it('propriétaire → écrit journalAutoAssociate et le reflète dans le CharacterDto', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        prisma.character.update.mockResolvedValue(
-          makeCharacter({ journalAutoAssociate: true }),
-        );
+        prisma.character.update.mockResolvedValue(makeCharacter({ journalAutoAssociate: true }));
         parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-        const result = await service.setJournalAutoAssociate(
-          'char1',
-          'u1',
-          true,
-        );
+        const result = await service.setJournalAutoAssociate('char1', 'u1', true);
 
         expect(prisma.character.update).toHaveBeenCalledWith({
           where: { id: 'char1' },
@@ -3260,9 +3104,7 @@ describe('CharacterService', () => {
 
       it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        prisma.character.update.mockResolvedValue(
-          makeCharacter({ journalAutoAssociate: true }),
-        );
+        prisma.character.update.mockResolvedValue(makeCharacter({ journalAutoAssociate: true }));
         parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
         await service.setJournalAutoAssociate('char1', 'u1', true);
@@ -3271,22 +3113,20 @@ describe('CharacterService', () => {
       });
 
       it('non-propriétaire → ForbiddenException, aucune écriture', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacter({ userId: 'owner' }),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
-        await expect(
-          service.setJournalAutoAssociate('char1', 'stranger', true),
-        ).rejects.toThrow(ForbiddenException);
+        await expect(service.setJournalAutoAssociate('char1', 'stranger', true)).rejects.toThrow(
+          ForbiddenException,
+        );
         expect(prisma.character.update).not.toHaveBeenCalled();
       });
 
       it('personnage introuvable → NotFoundException', async () => {
         prisma.character.findUnique.mockResolvedValue(null);
 
-        await expect(
-          service.setJournalAutoAssociate('char1', 'u1', true),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.setJournalAutoAssociate('char1', 'u1', true)).rejects.toThrow(
+          NotFoundException,
+        );
         expect(prisma.character.update).not.toHaveBeenCalled();
       });
     });
@@ -3302,16 +3142,9 @@ describe('CharacterService', () => {
         prisma.partie.findUnique.mockResolvedValue({
           kind: 'CAMPAGNE_LINEAIRE',
         });
-        prisma.characterNote.update.mockResolvedValue(
-          makeNote({ scenarioId: 'scenario1' }),
-        );
+        prisma.characterNote.update.mockResolvedValue(makeNote({ scenarioId: 'scenario1' }));
 
-        const result = await service.setNoteScenario(
-          'char1',
-          'u1',
-          'note-1',
-          'scenario1',
-        );
+        const result = await service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1');
 
         expect(prisma.characterNote.update).toHaveBeenCalledWith({
           where: { id: 'note-1' },
@@ -3330,9 +3163,7 @@ describe('CharacterService', () => {
         prisma.partie.findUnique.mockResolvedValue({
           kind: 'CAMPAGNE_LINEAIRE',
         });
-        prisma.characterNote.update.mockResolvedValue(
-          makeNote({ scenarioId: 'scenario1' }),
-        );
+        prisma.characterNote.update.mockResolvedValue(makeNote({ scenarioId: 'scenario1' }));
 
         await service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1');
 
@@ -3354,9 +3185,7 @@ describe('CharacterService', () => {
           scenarioId: 'scenario1',
           userId: 'u1',
         });
-        prisma.characterNote.update.mockResolvedValue(
-          makeNote({ scenarioId: 'scenario1' }),
-        );
+        prisma.characterNote.update.mockResolvedValue(makeNote({ scenarioId: 'scenario1' }));
 
         await service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1');
 
@@ -3383,9 +3212,9 @@ describe('CharacterService', () => {
         });
         prisma.scenarioParticipant.findUnique.mockResolvedValue(null);
 
-        await expect(
-          service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1'),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1')).rejects.toThrow(
+          BadRequestException,
+        );
         expect(prisma.characterNote.update).not.toHaveBeenCalled();
       });
 
@@ -3397,9 +3226,9 @@ describe('CharacterService', () => {
           partieId: 'partie-autre',
         });
 
-        await expect(
-          service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1'),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1')).rejects.toThrow(
+          BadRequestException,
+        );
         expect(prisma.characterNote.update).not.toHaveBeenCalled();
       });
 
@@ -3408,20 +3237,16 @@ describe('CharacterService', () => {
         prisma.characterNote.findUnique.mockResolvedValue(makeNote());
         prisma.scenario.findUnique.mockResolvedValue(null);
 
-        await expect(
-          service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1'),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1')).rejects.toThrow(
+          BadRequestException,
+        );
         expect(prisma.characterNote.update).not.toHaveBeenCalled();
       });
 
       it('scenarioId null → désassocie, aucune validation de scénario', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        prisma.characterNote.findUnique.mockResolvedValue(
-          makeNote({ scenarioId: 'scenario1' }),
-        );
-        prisma.characterNote.update.mockResolvedValue(
-          makeNote({ scenarioId: null }),
-        );
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote({ scenarioId: 'scenario1' }));
+        prisma.characterNote.update.mockResolvedValue(makeNote({ scenarioId: null }));
 
         await service.setNoteScenario('char1', 'u1', 'note-1', null);
 
@@ -3444,20 +3269,16 @@ describe('CharacterService', () => {
 
       it('noteId appartient à un AUTRE personnage → NotFoundException (garde anti-énumération)', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        prisma.characterNote.findUnique.mockResolvedValue(
-          makeNote({ characterId: 'char-autre' }),
-        );
+        prisma.characterNote.findUnique.mockResolvedValue(makeNote({ characterId: 'char-autre' }));
 
-        await expect(
-          service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1'),
-        ).rejects.toThrow(NotFoundException);
+        await expect(service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1')).rejects.toThrow(
+          NotFoundException,
+        );
         expect(prisma.characterNote.update).not.toHaveBeenCalled();
       });
 
       it('non-propriétaire → ForbiddenException', async () => {
-        prisma.character.findUnique.mockResolvedValue(
-          makeCharacter({ userId: 'owner' }),
-        );
+        prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'owner' }));
 
         await expect(
           service.setNoteScenario('char1', 'stranger', 'note-1', 'scenario1'),
@@ -3476,12 +3297,7 @@ describe('CharacterService', () => {
         });
         prisma.characterNote.findMany.mockResolvedValue([]);
 
-        await service.getRetrospectiveNotes(
-          'char1',
-          'scenario1',
-          WINDOW_START,
-          WINDOW_END,
-        );
+        await service.getRetrospectiveNotes('char1', 'scenario1', WINDOW_START, WINDOW_END);
 
         expect(prisma.characterNote.findMany).toHaveBeenCalledWith({
           where: {
@@ -3504,12 +3320,7 @@ describe('CharacterService', () => {
         });
         prisma.characterNote.findMany.mockResolvedValue([]);
 
-        await service.getRetrospectiveNotes(
-          'char1',
-          'scenario1',
-          WINDOW_START,
-          WINDOW_END,
-        );
+        await service.getRetrospectiveNotes('char1', 'scenario1', WINDOW_START, WINDOW_END);
 
         expect(prisma.characterNote.findMany).toHaveBeenCalledWith({
           where: {
@@ -3545,7 +3356,7 @@ describe('CharacterService', () => {
 
         await service.getRetrospectiveNotes('char1', 'scenario1', null, null);
 
-        const call = prisma.characterNote.findMany.mock.calls[0][0];
+        const call = callArg<{ where: { OR: unknown[] } }>(prisma.characterNote.findMany);
         expect(call.where.OR).toContainEqual({
           scenarioId: 'scenario1',
           shared: true,
@@ -3559,12 +3370,7 @@ describe('CharacterService', () => {
         });
         prisma.characterNote.findMany.mockResolvedValue([]);
 
-        const result = await service.getRetrospectiveNotes(
-          'char1',
-          'scenario1',
-          null,
-          null,
-        );
+        const result = await service.getRetrospectiveNotes('char1', 'scenario1', null, null);
 
         expect(result).toEqual([]);
       });
@@ -3577,12 +3383,7 @@ describe('CharacterService', () => {
           makeNote({ id: 'n1', scenarioId: 'scenario1' }),
         ]);
 
-        const result = await service.getRetrospectiveNotes(
-          'char1',
-          'scenario1',
-          null,
-          null,
-        );
+        const result = await service.getRetrospectiveNotes('char1', 'scenario1', null, null);
 
         expect(result).toEqual([
           {
@@ -3618,9 +3419,7 @@ describe('CharacterService', () => {
       it('MJ → toutes les entrées', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
-        prisma.characterNote.findMany.mockResolvedValue([
-          makeNote({ id: 'n1', shared: false }),
-        ]);
+        prisma.characterNote.findMany.mockResolvedValue([makeNote({ id: 'n1', shared: false })]);
 
         await service.getNotes('char1', 'mj1');
 
@@ -3647,17 +3446,13 @@ describe('CharacterService', () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-        await expect(service.getNotes('char1', 'stranger')).rejects.toThrow(
-          ForbiddenException,
-        );
+        await expect(service.getNotes('char1', 'stranger')).rejects.toThrow(ForbiddenException);
       });
 
       it('personnage introuvable → NotFoundException', async () => {
         prisma.character.findUnique.mockResolvedValue(null);
 
-        await expect(service.getNotes('unknown', 'u1')).rejects.toThrow(
-          NotFoundException,
-        );
+        await expect(service.getNotes('unknown', 'u1')).rejects.toThrow(NotFoundException);
       });
     });
   });

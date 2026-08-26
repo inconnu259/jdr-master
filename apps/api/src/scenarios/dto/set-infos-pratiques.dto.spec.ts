@@ -34,12 +34,9 @@ describe('SetInfosPratiquesDto (Story 36.5)', () => {
   // Le format est validé COTE SERVEUR, jamais seulement par le widget natif :
   // whitelist/forbidNonWhitelisted ne contrôlent pas la forme d'une chaîne.
 
-  it.each(['00:00', '09:05', '20:30', '23:59'])(
-    'heureRdv « %s » → valide',
-    async (heureRdv) => {
-      expect(await check({ ...empty, heureRdv })).toHaveLength(0);
-    },
-  );
+  it.each(['00:00', '09:05', '20:30', '23:59'])('heureRdv « %s » → valide', async (heureRdv) => {
+    expect(await check({ ...empty, heureRdv })).toHaveLength(0);
+  });
 
   it.each([
     ['24:00', 'heure hors bornes'],
@@ -68,9 +65,7 @@ describe('SetInfosPratiquesDto (Story 36.5)', () => {
   });
 
   it('notePratique à exactement la borne (200) → valide', async () => {
-    expect(
-      await check({ ...empty, notePratique: 'a'.repeat(200) }),
-    ).toHaveLength(0);
+    expect(await check({ ...empty, notePratique: 'a'.repeat(200) })).toHaveLength(0);
   });
 
   it('notePratique au-delà de la borne (201) → invalide', async () => {

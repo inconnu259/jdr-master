@@ -16,9 +16,7 @@ describe('participantCount (Story 36.6, AC9/AC10)', () => {
     // disponibilité du groupe afficheraient deux dénominateurs sur la MÊME case.
     const memberships = ['u1', 'u2', 'u3'];
     const resolveParticipantsLength = ['mj', ...memberships].length;
-    expect(participantCount(memberships.length)).toBe(
-      resolveParticipantsLength,
-    );
+    expect(participantCount(memberships.length)).toBe(resolveParticipantsLength);
   });
 
   it('ne renvoie jamais une valeur négative ni fractionnaire pour une entrée valide', () => {

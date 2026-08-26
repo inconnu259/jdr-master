@@ -34,9 +34,7 @@ export const routes: Routes = [
         // câblée par la story 29.3 (« navigation à quatre destinations »), séquencée après.
         path: 'characters',
         loadComponent: () =>
-          import('./features/characters/my-characters/my-characters').then(
-            (m) => m.MyCharacters,
-          ),
+          import('./features/characters/my-characters/my-characters').then((m) => m.MyCharacters),
       },
       { path: 'parties/new', component: PartieForm },
       { path: 'parties/:id', component: PartieDetail },

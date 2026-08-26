@@ -15,10 +15,7 @@ import { AnnouncementsService } from './announcements.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
 function makePrisma() {
   return {
@@ -29,7 +26,7 @@ function makePrisma() {
     user: {
       findUnique: jest.fn(),
     },
-  } as any;
+  };
 }
 
 function makePartiesService() {
@@ -125,9 +122,7 @@ describe('AnnouncementsService', () => {
     it('scenarioId valide de la Partie → Announcement créée avec ce scenarioId (AC2)', async () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       scenarios.verifyScenarioBelongsToPartie.mockResolvedValue(undefined);
-      prisma.announcement.create.mockResolvedValue(
-        makeAnnouncement({ scenarioId: 's1' }),
-      );
+      prisma.announcement.create.mockResolvedValue(makeAnnouncement({ scenarioId: 's1' }));
       prisma.user.findUnique.mockResolvedValue({
         pseudo: 'le-mj',
         displayName: 'Le Grand MJ',
@@ -138,10 +133,7 @@ describe('AnnouncementsService', () => {
         scenarioId: 's1',
       });
 
-      expect(scenarios.verifyScenarioBelongsToPartie).toHaveBeenCalledWith(
-        's1',
-        'p1',
-      );
+      expect(scenarios.verifyScenarioBelongsToPartie).toHaveBeenCalledWith('s1', 'p1');
       expect(prisma.announcement.create).toHaveBeenCalledWith({
         data: { partieId: 'p1', scenarioId: 's1', text: 'Une annonce scopée' },
       });
@@ -165,9 +157,7 @@ describe('AnnouncementsService', () => {
       // verifyScenarioBelongsToPartie ne valide jamais le statut (délégué à ScenariosService, AD-2) —
       // ce test documente que AnnouncementsService ne fait lui non plus aucune vérification de statut.
       scenarios.verifyScenarioBelongsToPartie.mockResolvedValue(undefined);
-      prisma.announcement.create.mockResolvedValue(
-        makeAnnouncement({ scenarioId: 's-brouillon' }),
-      );
+      prisma.announcement.create.mockResolvedValue(makeAnnouncement({ scenarioId: 's-brouillon' }));
       prisma.user.findUnique.mockResolvedValue({
         pseudo: 'le-mj',
         displayName: 'Le Grand MJ',
@@ -182,9 +172,9 @@ describe('AnnouncementsService', () => {
     it('non-MJ → ForbiddenException propagée par getOwned, aucune écriture (AC6)', async () => {
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.create('p1', 'stranger', { text: 'x' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.create('p1', 'stranger', { text: 'x' })).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(scenarios.verifyScenarioBelongsToPartie).not.toHaveBeenCalled();
       expect(prisma.announcement.create).not.toHaveBeenCalled();
     });
@@ -243,9 +233,7 @@ describe('AnnouncementsService', () => {
     it('non-membre → ForbiddenException propagée par getViewable, aucune lecture', async () => {
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.findAll('p1', 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.findAll('p1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.announcement.findMany).not.toHaveBeenCalled();
     });
   });

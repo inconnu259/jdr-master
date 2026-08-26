@@ -29,10 +29,7 @@ export class HommeDragonPdfService {
 
   constructor(private readonly gameSystems: GameSystemService) {}
 
-  async fillHommeDragonPdf(
-    hommeDragon: HommeDragonDto,
-    mjPseudo: string,
-  ): Promise<Buffer> {
+  async fillHommeDragonPdf(hommeDragon: HommeDragonDto, mjPseudo: string): Promise<Buffer> {
     const templateBytes = await this.loadTemplate();
     const eveilPowerLabels = await this.resolveEveilPowerLabels();
 
@@ -49,10 +46,7 @@ export class HommeDragonPdfService {
       try {
         form.getTextField(f.field).setText(f.value);
       } catch (e) {
-        this.logger.error(
-          `Échec du remplissage du champ PDF "${f.field}" (value=${f.value})`,
-          e,
-        );
+        this.logger.error(`Échec du remplissage du champ PDF "${f.field}" (value=${f.value})`, e);
         // Revue de code : deux causes distinctes partagent ce catch — champ AcroForm
         // introuvable/incompatible sur le template (getTextField) OU valeur contenant un
         // caractère non encodable en WinAnsi par pdf-lib (setText, ex. `WinAnsi cannot encode`,
@@ -72,10 +66,7 @@ export class HommeDragonPdfService {
     if (!this.templatePromise) {
       this.templatePromise = readFile(PDF_TEMPLATE_PATH).catch((e) => {
         this.templatePromise = null;
-        this.logger.error(
-          'Échec du chargement du template PDF Homme Dragon',
-          e,
-        );
+        this.logger.error('Échec du chargement du template PDF Homme Dragon', e);
         throw new Error(
           'Template PDF Homme Dragon introuvable. Consultez apps/api/game-systems/ryuutama/assets/README.md',
         );

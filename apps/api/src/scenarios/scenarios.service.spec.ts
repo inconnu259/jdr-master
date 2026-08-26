@@ -26,24 +26,15 @@ jest.mock('@master-jdr/game-rules', () => ({
   LEVEL_TABLE: [],
 }));
 
-import {
-  detectDocumentMime,
-  isStructurallyValidPdf,
-} from './document-mime.util';
-import {
-  deleteDocumentFile,
-  readDocumentFile,
-  writeDocumentFile,
-} from './document-storage.util';
+import { detectDocumentMime, isStructurallyValidPdf } from './document-mime.util';
+import { deleteDocumentFile, readDocumentFile, writeDocumentFile } from './document-storage.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { CharacterService } from '../characters/character.service';
 import { PollService } from '../poll/poll.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { ScenariosService } from './scenarios.service';
+import { anyOf, objectLike } from '../common/test-utils/jest-typed';
 
 function makePrisma() {
   const tx = {
@@ -139,9 +130,7 @@ function makeRealtimeEvents() {
 
 const VALID_SCENARIO_ID = '22222222-2222-4222-a222-222222222222';
 
-function makeFile(
-  overrides: Partial<Express.Multer.File> = {},
-): Express.Multer.File {
+function makeFile(overrides: Partial<Express.Multer.File> = {}): Express.Multer.File {
   return {
     buffer: Buffer.from('%PDF-1.4\n...'),
     originalname: 'lettre-ossian.pdf',
@@ -210,8 +199,8 @@ describe('ScenariosService', () => {
 
       expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
       expect(prisma.scenario.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
+        objectLike({
+          data: objectLike({
             partieId: 'p1',
             title: 'Le Marché aux Ombres',
             status: 'BROUILLON',
@@ -267,9 +256,9 @@ describe('ScenariosService', () => {
     it('non-MJ → 403 propagé par getOwned, aucune écriture (AC2)', async () => {
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.create('p1', 'stranger', { title: 'Test' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.create('p1', 'stranger', { title: 'Test' })).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.scenario.create).not.toHaveBeenCalled();
     });
 
@@ -280,9 +269,9 @@ describe('ScenariosService', () => {
         kind: 'ONE_SHOT',
       });
 
-      await expect(
-        service.create('p1', 'mj1', { title: 'Second scénario' }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.create('p1', 'mj1', { title: 'Second scénario' })).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.scenario.create).not.toHaveBeenCalled();
     });
 
@@ -375,9 +364,9 @@ describe('ScenariosService', () => {
 
       expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
       expect(prisma.scenario.update).toHaveBeenCalledWith(
-        expect.objectContaining({
+        objectLike({
           where: { id: 's1' },
-          data: expect.objectContaining({ title: 'Nouveau titre' }),
+          data: objectLike({ title: 'Nouveau titre' }),
         }),
       );
       expect(result.title).toBe('Nouveau titre');
@@ -470,9 +459,9 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.update('s1', 'stranger', { title: 'X' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.update('s1', 'stranger', { title: 'X' })).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.scenario.update).not.toHaveBeenCalled();
     });
   });
@@ -496,17 +485,12 @@ describe('ScenariosService', () => {
         createdAt: new Date('2026-07-12T00:00:00.000Z'),
       });
 
-      const result = await service.uploadDocument(
-        'p1',
-        'mj1',
-        makeFile(),
-        VALID_SCENARIO_ID,
-      );
+      const result = await service.uploadDocument('p1', 'mj1', makeFile(), VALID_SCENARIO_ID);
 
       expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
       expect(prisma.scenarioDocument.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
+        objectLike({
+          data: objectLike({
             partieId: 'p1',
             scenarioId: VALID_SCENARIO_ID,
           }),
@@ -550,8 +534,8 @@ describe('ScenariosService', () => {
 
       expect(prisma.scenario.findUnique).not.toHaveBeenCalled();
       expect(prisma.scenarioDocument.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ partieId: 'p1', scenarioId: null }),
+        objectLike({
+          data: objectLike({ partieId: 'p1', scenarioId: null }),
         }),
       );
       expect(result.scenarioId).toBeNull();
@@ -600,9 +584,9 @@ describe('ScenariosService', () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       (detectDocumentMime as jest.Mock).mockReturnValue(null);
 
-      await expect(
-        service.uploadDocument('p1', 'mj1', makeFile()),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.uploadDocument('p1', 'mj1', makeFile())).rejects.toThrow(
+        BadRequestException,
+      );
       expect(writeDocumentFile).not.toHaveBeenCalled();
       expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
     });
@@ -612,9 +596,9 @@ describe('ScenariosService', () => {
       (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
       (isStructurallyValidPdf as jest.Mock).mockResolvedValue(false);
 
-      await expect(
-        service.uploadDocument('p1', 'mj1', makeFile()),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.uploadDocument('p1', 'mj1', makeFile())).rejects.toThrow(
+        BadRequestException,
+      );
       expect(writeDocumentFile).not.toHaveBeenCalled();
       expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
     });
@@ -641,18 +625,18 @@ describe('ScenariosService', () => {
     it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.uploadDocument('p1', 'stranger', makeFile()),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.uploadDocument('p1', 'stranger', makeFile())).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
     });
 
     it('scenarioId malformé (pas un UUID) → rejet, aucune écriture', async () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-      await expect(
-        service.uploadDocument('p1', 'mj1', makeFile(), 'not-a-uuid'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.uploadDocument('p1', 'mj1', makeFile(), 'not-a-uuid')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.scenario.findUnique).not.toHaveBeenCalled();
       expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
     });
@@ -660,9 +644,9 @@ describe('ScenariosService', () => {
     it('scenarioId fourni en chaîne vide → rejet explicite, jamais traité comme absent', async () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-      await expect(
-        service.uploadDocument('p1', 'mj1', makeFile(), ''),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.uploadDocument('p1', 'mj1', makeFile(), '')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.scenarioDocument.create).not.toHaveBeenCalled();
     });
 
@@ -673,9 +657,7 @@ describe('ScenariosService', () => {
       const dbError = new Error('DB down');
       prisma.scenarioDocument.create.mockRejectedValue(dbError);
 
-      await expect(
-        service.uploadDocument('p1', 'mj1', makeFile()),
-      ).rejects.toThrow(dbError);
+      await expect(service.uploadDocument('p1', 'mj1', makeFile())).rejects.toThrow(dbError);
       expect(deleteDocumentFile).toHaveBeenCalledWith('uuid.pdf');
     });
   });
@@ -694,7 +676,7 @@ describe('ScenariosService', () => {
 
       expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
       expect(prisma.scenarioDocument.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
+        objectLike({
           where: {
             OR: [{ scenarioId: 's1' }, { partieId: 'p1', scenarioId: null }],
           },
@@ -726,9 +708,7 @@ describe('ScenariosService', () => {
 
     it('scénario introuvable → 404', async () => {
       prisma.scenario.findUnique.mockResolvedValue(null);
-      await expect(service.listDocuments('s1', 'u1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.listDocuments('s1', 'u1')).rejects.toThrow(NotFoundException);
     });
 
     it('non-membre → 403 propagé par getViewable', async () => {
@@ -739,9 +719,7 @@ describe('ScenariosService', () => {
       });
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.listDocuments('s1', 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.listDocuments('s1', 'stranger')).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -755,7 +733,7 @@ describe('ScenariosService', () => {
       expect(prisma.scenario.findUnique).not.toHaveBeenCalled();
       expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
       expect(prisma.scenarioDocument.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
+        objectLike({
           where: { partieId: 'p1', scenarioId: null },
         }),
       );
@@ -785,9 +763,7 @@ describe('ScenariosService', () => {
 
     it('document introuvable → 404', async () => {
       prisma.scenarioDocument.findUnique.mockResolvedValue(null);
-      await expect(service.getDocumentFile('d1', 'u1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getDocumentFile('d1', 'u1')).rejects.toThrow(NotFoundException);
     });
 
     it('fichier disque manquant → 404', async () => {
@@ -800,9 +776,7 @@ describe('ScenariosService', () => {
       parties.getViewable.mockResolvedValue({ id: 'p1' });
       (readDocumentFile as jest.Mock).mockResolvedValue(null);
 
-      await expect(service.getDocumentFile('d1', 'u1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getDocumentFile('d1', 'u1')).rejects.toThrow(NotFoundException);
     });
 
     it('non-membre → 403 propagé par getViewable', async () => {
@@ -814,9 +788,7 @@ describe('ScenariosService', () => {
       });
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.getDocumentFile('d1', 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.getDocumentFile('d1', 'stranger')).rejects.toThrow(ForbiddenException);
     });
   });
 
@@ -837,9 +809,7 @@ describe('ScenariosService', () => {
     it('non-MJ → 403 propagé par getOwned, aucune lecture', async () => {
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.listDrafts('p1', 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.listDrafts('p1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.scenario.findMany).not.toHaveBeenCalled();
     });
   });
@@ -854,7 +824,7 @@ describe('ScenariosService', () => {
       expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
       expect(parties.getOwned).not.toHaveBeenCalled();
       expect(prisma.scenario.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
+        objectLike({
           where: { partieId: 'p1' },
           orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         }),
@@ -867,9 +837,7 @@ describe('ScenariosService', () => {
 
       await service.findAllForPartie('p1', 'u1', { skip: 20, take: 10 });
 
-      expect(prisma.scenario.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: 20, take: 10 }),
-      );
+      expect(prisma.scenario.findMany).toHaveBeenCalledWith(objectLike({ skip: 20, take: 10 }));
     });
 
     it('skip/take absents → aucune limite appliquée (comportement par défaut inchangé)', async () => {
@@ -879,7 +847,7 @@ describe('ScenariosService', () => {
       await service.findAllForPartie('p1', 'u1');
 
       expect(prisma.scenario.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: undefined, take: undefined }),
+        objectLike({ skip: undefined, take: undefined }),
       );
     });
 
@@ -891,9 +859,9 @@ describe('ScenariosService', () => {
       await service.findAllForPartie('p1', 'u1');
 
       expect(prisma.seance.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          include: expect.objectContaining({
-            inscriptions: expect.objectContaining({
+        objectLike({
+          include: objectLike({
+            inscriptions: objectLike({
               orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
             }),
           }),
@@ -976,7 +944,7 @@ describe('ScenariosService', () => {
       });
     });
 
-    it("deferred-work (2026-08-24) : toSessionPollDto() porte displayName sur chaque vote — défaut pré-existant, PollVoteDto.displayName est requis mais poll était typé any (invisible au compilateur)", async () => {
+    it('deferred-work (2026-08-24) : toSessionPollDto() porte displayName sur chaque vote — défaut pré-existant, PollVoteDto.displayName est requis mais poll était typé any (invisible au compilateur)', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1' });
       prisma.membership.count.mockResolvedValue(1);
       prisma.scenario.findMany.mockResolvedValue([
@@ -1044,9 +1012,7 @@ describe('ScenariosService', () => {
     it('non-membre → 403 propagé par getViewable, aucune lecture', async () => {
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.findAllForPartie('p1', 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.findAllForPartie('p1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.scenario.findMany).not.toHaveBeenCalled();
     });
 
@@ -1155,9 +1121,7 @@ describe('ScenariosService', () => {
           id: 'p1',
           kind: 'CAMPAGNE_LINEAIRE',
         });
-        prisma.scenario.findMany.mockResolvedValue([
-          makeScenario({ status: 'COURANT' }),
-        ]);
+        prisma.scenario.findMany.mockResolvedValue([makeScenario({ status: 'COURANT' })]);
 
         const result = await service.findAllForPartie('p1', 'u1');
 
@@ -1171,9 +1135,7 @@ describe('ScenariosService', () => {
           id: 'p1',
           kind: 'CAMPAGNE_LINEAIRE',
         });
-        prisma.scenario.findMany.mockResolvedValue([
-          makeScenario({ status: 'PASSE' }),
-        ]);
+        prisma.scenario.findMany.mockResolvedValue([makeScenario({ status: 'PASSE' })]);
         characters.findAllByPartie.mockResolvedValue([
           { id: 'char1', userId: 'u1' },
           { id: 'char2', userId: 'u2' },
@@ -1203,21 +1165,11 @@ describe('ScenariosService', () => {
         const result = await service.findAllForPartie('p1', 'u1');
 
         expect(characters.findAllByPartie).toHaveBeenCalledWith('p1');
-        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith(
-          'char1',
-          's1',
-          null,
-          null,
-        );
-        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith(
-          'char2',
-          's1',
-          null,
-          null,
-        );
+        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith('char1', 's1', null, null);
+        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith('char2', 's1', null, null);
         expect(result[0].retrospectiveNotes).toEqual([
-          expect.objectContaining({ id: 'n1' }),
-          expect.objectContaining({ id: 'n2' }),
+          objectLike({ id: 'n1' }),
+          objectLike({ id: 'n2' }),
         ]);
       });
 
@@ -1226,9 +1178,7 @@ describe('ScenariosService', () => {
           id: 'p1',
           kind: 'CAMPAGNE_EPISODIQUE',
         });
-        prisma.scenario.findMany.mockResolvedValue([
-          makeScenario({ status: 'PASSE' }),
-        ]);
+        prisma.scenario.findMany.mockResolvedValue([makeScenario({ status: 'PASSE' })]);
         prisma.scenarioParticipant.findMany.mockResolvedValue([
           {
             scenarioId: 's1',
@@ -1245,12 +1195,7 @@ describe('ScenariosService', () => {
         await service.findAllForPartie('p1', 'u1');
 
         expect(characters.getRetrospectiveNotes).toHaveBeenCalledTimes(1);
-        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith(
-          'char1',
-          's1',
-          null,
-          null,
-        );
+        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith('char1', 's1', null, null);
       });
 
       it('fenêtre calculée à partir de poll.chosenDate/inscription.dateValidee mixtes (min/max)', async () => {
@@ -1258,9 +1203,7 @@ describe('ScenariosService', () => {
           id: 'p1',
           kind: 'CAMPAGNE_LINEAIRE',
         });
-        prisma.scenario.findMany.mockResolvedValue([
-          makeScenario({ status: 'PASSE' }),
-        ]);
+        prisma.scenario.findMany.mockResolvedValue([makeScenario({ status: 'PASSE' })]);
         prisma.seance.findMany.mockResolvedValue([
           {
             id: 'seance1',
@@ -1291,9 +1234,7 @@ describe('ScenariosService', () => {
             createdAt: new Date('2026-06-05'),
           },
         ]);
-        characters.findAllByPartie.mockResolvedValue([
-          { id: 'char1', userId: 'u1' },
-        ]);
+        characters.findAllByPartie.mockResolvedValue([{ id: 'char1', userId: 'u1' }]);
         characters.getRetrospectiveNotes.mockResolvedValue([]);
 
         await service.findAllForPartie('p1', 'u1');
@@ -1311,9 +1252,7 @@ describe('ScenariosService', () => {
           id: 'p1',
           kind: 'CAMPAGNE_LINEAIRE',
         });
-        prisma.scenario.findMany.mockResolvedValue([
-          makeScenario({ status: 'PASSE' }),
-        ]);
+        prisma.scenario.findMany.mockResolvedValue([makeScenario({ status: 'PASSE' })]);
         prisma.seance.findMany.mockResolvedValue([
           {
             id: 'seance1',
@@ -1324,19 +1263,12 @@ describe('ScenariosService', () => {
             createdAt: new Date('2026-06-01'),
           },
         ]);
-        characters.findAllByPartie.mockResolvedValue([
-          { id: 'char1', userId: 'u1' },
-        ]);
+        characters.findAllByPartie.mockResolvedValue([{ id: 'char1', userId: 'u1' }]);
         characters.getRetrospectiveNotes.mockResolvedValue([]);
 
         await service.findAllForPartie('p1', 'u1');
 
-        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith(
-          'char1',
-          's1',
-          null,
-          null,
-        );
+        expect(characters.getRetrospectiveNotes).toHaveBeenCalledWith('char1', 's1', null, null);
       });
     });
   });
@@ -1449,9 +1381,7 @@ describe('ScenariosService', () => {
       ]);
 
       await service.participate(VALID_SCENARIO_ID, 'u1');
-      await expect(
-        service.participate(VALID_SCENARIO_ID, 'u1'),
-      ).resolves.toBeDefined();
+      await expect(service.participate(VALID_SCENARIO_ID, 'u1')).resolves.toBeDefined();
       expect(prisma.scenarioParticipant.upsert).toHaveBeenCalledTimes(2);
     });
 
@@ -1465,9 +1395,9 @@ describe('ScenariosService', () => {
         });
         parties.getViewable.mockResolvedValue({ id: 'p1', kind });
 
-        await expect(
-          service.participate(VALID_SCENARIO_ID, 'u1'),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.participate(VALID_SCENARIO_ID, 'u1')).rejects.toThrow(
+          BadRequestException,
+        );
         expect(prisma.scenarioParticipant.upsert).not.toHaveBeenCalled();
       },
     );
@@ -1480,18 +1410,16 @@ describe('ScenariosService', () => {
       });
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.participate(VALID_SCENARIO_ID, 'stranger'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.participate(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.scenarioParticipant.upsert).not.toHaveBeenCalled();
     });
 
     it('scénario introuvable → 404', async () => {
       prisma.scenario.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.participate(VALID_SCENARIO_ID, 'u1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.participate(VALID_SCENARIO_ID, 'u1')).rejects.toThrow(NotFoundException);
       expect(prisma.scenarioParticipant.upsert).not.toHaveBeenCalled();
     });
   });
@@ -1521,7 +1449,7 @@ describe('ScenariosService', () => {
 
       expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
       expect(prisma.scenario.update).toHaveBeenCalledWith(
-        expect.objectContaining({
+        objectLike({
           where: { id: VALID_SCENARIO_ID },
           data: { status: 'A_VENIR' },
         }),
@@ -1627,9 +1555,7 @@ describe('ScenariosService', () => {
         });
         parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-        await expect(service.open(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
-          BadRequestException,
-        );
+        await expect(service.open(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(BadRequestException);
         expect(prisma.scenario.update).not.toHaveBeenCalled();
       },
     );
@@ -1637,9 +1563,7 @@ describe('ScenariosService', () => {
     it('scénario introuvable → 404', async () => {
       prisma.scenario.findUnique.mockResolvedValue(null);
 
-      await expect(service.open(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.open(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(NotFoundException);
       expect(prisma.scenario.update).not.toHaveBeenCalled();
     });
 
@@ -1651,9 +1575,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.open(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.open(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.scenario.update).not.toHaveBeenCalled();
     });
   });
@@ -1759,10 +1681,7 @@ describe('ScenariosService', () => {
 
       await service.markCourant(VALID_SCENARIO_ID, 'mj1');
 
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-        'p1',
-        'mj1',
-      );
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
     });
 
     it('CAMPAGNE_LINEAIRE, statut changé sous le nez du verrou (count 0) → 409, aucune écriture (AC1, TOCTOU)', async () => {
@@ -1779,9 +1698,9 @@ describe('ScenariosService', () => {
       prisma.tx.scenario.findFirst.mockResolvedValue(null);
       prisma.tx.scenario.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(
-        service.markCourant(VALID_SCENARIO_ID, 'mj1'),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.markCourant(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
+        ConflictException,
+      );
       expect(prisma.tx.scenario.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 
@@ -1802,9 +1721,9 @@ describe('ScenariosService', () => {
         status: 'COURANT',
       });
 
-      await expect(
-        service.markCourant(VALID_SCENARIO_ID, 'mj1'),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.markCourant(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
+        ConflictException,
+      );
       expect(prisma.tx.scenario.updateMany).not.toHaveBeenCalled();
     });
 
@@ -1888,9 +1807,9 @@ describe('ScenariosService', () => {
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(
-        service.markCourant(VALID_SCENARIO_ID, 'mj1'),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.markCourant(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
+        ConflictException,
+      );
       expect(prisma.scenario.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 
@@ -1939,9 +1858,9 @@ describe('ScenariosService', () => {
           kind: 'CAMPAGNE_LINEAIRE',
         });
 
-        await expect(
-          service.markCourant(VALID_SCENARIO_ID, 'mj1'),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.markCourant(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
+          BadRequestException,
+        );
         expect(prisma.$transaction).not.toHaveBeenCalled();
         expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
       },
@@ -1950,9 +1869,9 @@ describe('ScenariosService', () => {
     it('scénario introuvable → 404', async () => {
       prisma.scenario.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.markCourant(VALID_SCENARIO_ID, 'mj1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.markCourant(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
@@ -1964,9 +1883,9 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.markCourant(VALID_SCENARIO_ID, 'stranger'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.markCourant(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
     });
@@ -2004,7 +1923,7 @@ describe('ScenariosService', () => {
       expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
       expect(prisma.scenario.updateMany).toHaveBeenCalledWith({
         where: { id: VALID_SCENARIO_ID, status: 'COURANT' },
-        data: { status: 'PASSE', closedAt: expect.any(Date) },
+        data: { status: 'PASSE', closedAt: anyOf(Date) },
       });
       expect(result.status).toBe('PASSE');
       expect(result.closedAt).toEqual(closedAt.toISOString());
@@ -2067,10 +1986,7 @@ describe('ScenariosService', () => {
 
       await service.close(VALID_SCENARIO_ID, 'mj1');
 
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-        'p1',
-        'mj1',
-      );
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
     });
 
     it('CAMPAGNE_EPISODIQUE : participants restent peuplés dans le DTO retourné après close() (non-régression)', async () => {
@@ -2126,9 +2042,7 @@ describe('ScenariosService', () => {
           kind: 'CAMPAGNE_LINEAIRE',
         });
 
-        await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
-          BadRequestException,
-        );
+        await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(BadRequestException);
         expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
       },
     );
@@ -2136,9 +2050,7 @@ describe('ScenariosService', () => {
     it('scénario introuvable → 404', async () => {
       prisma.scenario.findUnique.mockResolvedValue(null);
 
-      await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(NotFoundException);
       expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
     });
 
@@ -2150,9 +2062,9 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.close(VALID_SCENARIO_ID, 'stranger'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.close(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
     });
 
@@ -2169,9 +2081,7 @@ describe('ScenariosService', () => {
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(ConflictException);
       expect(prisma.scenario.findUniqueOrThrow).not.toHaveBeenCalled();
     });
 
@@ -2427,9 +2337,7 @@ describe('ScenariosService', () => {
     it('scénario introuvable → 404', async () => {
       prisma.scenario.findUnique.mockResolvedValue(null);
 
-      await expect(service.addSeance(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.addSeance(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(NotFoundException);
       expect(prisma.seance.create).not.toHaveBeenCalled();
     });
 
@@ -2441,9 +2349,9 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.addSeance(VALID_SCENARIO_ID, 'stranger'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.addSeance(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.seance.create).not.toHaveBeenCalled();
     });
   });
@@ -2718,9 +2626,9 @@ describe('ScenariosService', () => {
         ),
       );
 
-      await expect(
-        service.deleteSeance(SECOND_SEANCE_ID, 'mj1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.seance.delete).not.toHaveBeenCalled();
     });
 
@@ -2729,15 +2637,13 @@ describe('ScenariosService', () => {
         id: SECOND_SEANCE_ID,
         scenarioId: VALID_SCENARIO_ID,
       });
-      const otherError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed.',
-        { code: 'P2002', clientVersion: '7.8.0' },
-      );
+      const otherError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed.', {
+        code: 'P2002',
+        clientVersion: '7.8.0',
+      });
       prisma.scenario.findUniqueOrThrow.mockRejectedValue(otherError);
 
-      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toBe(
-        otherError,
-      );
+      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toBe(otherError);
       expect(prisma.seance.delete).not.toHaveBeenCalled();
     });
 
@@ -2767,9 +2673,9 @@ describe('ScenariosService', () => {
         ),
       );
 
-      await expect(
-        service.deleteSeance(SECOND_SEANCE_ID, 'mj1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.sessionPoll.delete).not.toHaveBeenCalled();
     });
 
@@ -2792,15 +2698,13 @@ describe('ScenariosService', () => {
           createdAt: new Date('2026-07-01T00:00:00.000Z'),
         },
       ]);
-      const otherError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed.',
-        { code: 'P2002', clientVersion: '7.8.0' },
-      );
+      const otherError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed.', {
+        code: 'P2002',
+        clientVersion: '7.8.0',
+      });
       prisma.seance.delete.mockRejectedValue(otherError);
 
-      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toBe(
-        otherError,
-      );
+      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toBe(otherError);
     });
 
     it('séance liée à un vote (OPEN ou CLOSED) → le SessionPoll est supprimé avec elle (revue de code : plus d’orphelin)', async () => {
@@ -2877,18 +2781,18 @@ describe('ScenariosService', () => {
         },
       ]);
 
-      await expect(
-        service.deleteSeance(FIRST_SEANCE_ID, 'mj1'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.deleteSeance(FIRST_SEANCE_ID, 'mj1')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.seance.delete).not.toHaveBeenCalled();
     });
 
     it('séance introuvable → 404', async () => {
       prisma.seance.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.deleteSeance(SECOND_SEANCE_ID, 'mj1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.seance.delete).not.toHaveBeenCalled();
     });
 
@@ -2900,9 +2804,9 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.deleteSeance(SECOND_SEANCE_ID, 'stranger'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.seance.delete).not.toHaveBeenCalled();
     });
 
@@ -2911,18 +2815,16 @@ describe('ScenariosService', () => {
         id: SECOND_SEANCE_ID,
         scenarioId: VALID_SCENARIO_ID,
       });
-      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
-        mockScenario({ status: 'PASSE' }),
-      );
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getOwned.mockResolvedValue({
         id: 'p1',
         mjId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
-      await expect(
-        service.deleteSeance(SECOND_SEANCE_ID, 'mj1'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.seance.delete).not.toHaveBeenCalled();
     });
 
@@ -3112,9 +3014,9 @@ describe('ScenariosService', () => {
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
-      await expect(
-        service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(pollService.create).not.toHaveBeenCalled();
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
@@ -3125,18 +3027,16 @@ describe('ScenariosService', () => {
         scenarioId: VALID_SCENARIO_ID,
         pollId: null,
       });
-      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
-        mockScenario({ status: 'PASSE' }),
-      );
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getOwned.mockResolvedValue({
         id: 'p1',
         mjId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
-      await expect(
-        service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(pollService.create).not.toHaveBeenCalled();
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
@@ -3144,9 +3044,9 @@ describe('ScenariosService', () => {
     it('séance introuvable → 404', async () => {
       prisma.seance.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(pollService.create).not.toHaveBeenCalled();
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
@@ -3160,9 +3060,9 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.createSeancePoll(SEANCE_ID, 'stranger', OPTIONS),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.createSeancePoll(SEANCE_ID, 'stranger', OPTIONS)).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(pollService.create).not.toHaveBeenCalled();
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
@@ -3212,7 +3112,7 @@ describe('ScenariosService', () => {
       // Recalcul déclenché : Partie relue/réécrite via recalculateNextSession().
       expect(prisma.partie.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
-        data: expect.objectContaining({
+        data: objectLike({
           nextSessionDate: null,
           nextSessionSlot: null,
         }),
@@ -3306,27 +3206,21 @@ describe('ScenariosService', () => {
         scenarioId: VALID_SCENARIO_ID,
         pollId: 'poll1',
       });
-      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
-        mockScenario({ status: 'PASSE' }),
-      );
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getOwned.mockResolvedValue({
         id: 'p1',
         mjId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
-      await expect(service.resetSeanceDate(SEANCE_ID, 'mj1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.resetSeanceDate(SEANCE_ID, 'mj1')).rejects.toThrow(BadRequestException);
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
     it('séance introuvable → 404', async () => {
       prisma.seance.findUnique.mockResolvedValue(null);
 
-      await expect(service.resetSeanceDate(SEANCE_ID, 'mj1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.resetSeanceDate(SEANCE_ID, 'mj1')).rejects.toThrow(NotFoundException);
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
@@ -3339,9 +3233,9 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.resetSeanceDate(SEANCE_ID, 'stranger'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.resetSeanceDate(SEANCE_ID, 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
   });
@@ -3372,18 +3266,16 @@ describe('ScenariosService', () => {
         inscriptionMin: null,
         inscriptionMax: null,
       });
-      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
-        mockScenario({ status: 'PASSE' }),
-      );
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getOwned.mockResolvedValue({
         id: 'p1',
         mjId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
-      await expect(
-        service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
@@ -3481,9 +3373,9 @@ describe('ScenariosService', () => {
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
-      await expect(
-        service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
@@ -3501,18 +3393,18 @@ describe('ScenariosService', () => {
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
-      await expect(
-        service.setSeanceCapacity(SEANCE_ID, 'mj1', 6, 4),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.setSeanceCapacity(SEANCE_ID, 'mj1', 6, 4)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
     it('séance introuvable → 404', async () => {
       prisma.seance.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
@@ -3526,9 +3418,9 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.setSeanceCapacity(SEANCE_ID, 'stranger', 4, 6),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.setSeanceCapacity(SEANCE_ID, 'stranger', 4, 6)).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
   });
@@ -3567,9 +3459,7 @@ describe('ScenariosService', () => {
         ),
       );
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(NotFoundException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
@@ -3581,18 +3471,14 @@ describe('ScenariosService', () => {
         inscriptionMax: 6,
         dateValidee: null,
       });
-      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
-        mockScenario({ status: 'BROUILLON' }),
-      );
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'BROUILLON' }));
       parties.getViewable.mockResolvedValue({
         id: 'p1',
         mjId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
@@ -3605,18 +3491,14 @@ describe('ScenariosService', () => {
         inscriptionMax: 6,
         dateValidee: null,
       });
-      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
-        mockScenario({ status: 'PASSE' }),
-      );
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getViewable.mockResolvedValue({
         id: 'p1',
         mjId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
@@ -3704,9 +3586,7 @@ describe('ScenariosService', () => {
       });
       prisma.tx.inscription.count.mockResolvedValue(2);
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(ConflictException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
@@ -3758,9 +3638,7 @@ describe('ScenariosService', () => {
       });
       prisma.tx.inscription.count.mockResolvedValue(6);
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(ConflictException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
@@ -3779,9 +3657,7 @@ describe('ScenariosService', () => {
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
@@ -3800,9 +3676,7 @@ describe('ScenariosService', () => {
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
@@ -3822,9 +3696,7 @@ describe('ScenariosService', () => {
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
@@ -3852,9 +3724,7 @@ describe('ScenariosService', () => {
         poll: { chosenDate: new Date('2026-08-01T00:00:00.000Z') },
       });
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(ConflictException);
       expect(prisma.tx.inscription.count).not.toHaveBeenCalled();
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
@@ -3874,18 +3744,14 @@ describe('ScenariosService', () => {
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
     it('séance introuvable → 404', async () => {
       prisma.seance.findUnique.mockResolvedValue(null);
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(NotFoundException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
@@ -3899,9 +3765,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.inscrire(SEANCE_ID, 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.inscrire(SEANCE_ID, 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
   });
@@ -3984,9 +3848,7 @@ describe('ScenariosService', () => {
         id: SEANCE_ID,
         scenarioId: VALID_SCENARIO_ID,
       });
-      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
-        mockScenario({ status: 'PASSE' }),
-      );
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getViewable.mockResolvedValue({
         id: 'p1',
         mjId: 'mj1',
@@ -4019,9 +3881,7 @@ describe('ScenariosService', () => {
     it('séance introuvable → 404', async () => {
       prisma.seance.findUnique.mockResolvedValue(null);
 
-      await expect(service.desinscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.desinscrire(SEANCE_ID, 'u1')).rejects.toThrow(NotFoundException);
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
     });
 
@@ -4033,9 +3893,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.desinscrire(SEANCE_ID, 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.desinscrire(SEANCE_ID, 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
     });
 
@@ -4052,9 +3910,7 @@ describe('ScenariosService', () => {
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
-      await expect(service.desinscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.desinscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
     });
 
@@ -4072,9 +3928,7 @@ describe('ScenariosService', () => {
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
-      await expect(service.desinscrire(SEANCE_ID, 'u1')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.desinscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
     });
   });
@@ -4108,11 +3962,7 @@ describe('ScenariosService', () => {
         prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
         parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind });
 
-        await service.setCompteRendu(
-          SEANCE_ID,
-          'mj1',
-          'Les PJ ont vaincu le dragon.',
-        );
+        await service.setCompteRendu(SEANCE_ID, 'mj1', 'Les PJ ont vaincu le dragon.');
 
         expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
         expect(prisma.seance.update).toHaveBeenCalledWith({
@@ -4153,10 +4003,7 @@ describe('ScenariosService', () => {
 
       await service.setCompteRendu(SEANCE_ID, 'mj1', 'texte');
 
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-        'p1',
-        'mj1',
-      );
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
     });
 
     it('chaîne vide acceptée — efface un compte-rendu déjà rédigé', async () => {
@@ -4182,9 +4029,9 @@ describe('ScenariosService', () => {
     it('séance introuvable → 404', async () => {
       prisma.seance.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.setCompteRendu(SEANCE_ID, 'mj1', 'texte'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.setCompteRendu(SEANCE_ID, 'mj1', 'texte')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
@@ -4196,9 +4043,9 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.setCompteRendu(SEANCE_ID, 'stranger', 'texte'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.setCompteRendu(SEANCE_ID, 'stranger', 'texte')).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
   });
@@ -4299,18 +4146,18 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.setInfosPratiques(SEANCE_ID, 'stranger', PAYLOAD),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.setInfosPratiques(SEANCE_ID, 'stranger', PAYLOAD)).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
     it('séance introuvable → 404, aucune écriture', async () => {
       prisma.seance.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.setInfosPratiques('inconnue', 'mj1', PAYLOAD),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.setInfosPratiques('inconnue', 'mj1', PAYLOAD)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
@@ -4328,9 +4175,8 @@ describe('ScenariosService', () => {
 
       await service.setInfosPratiques(SEANCE_ID, 'mj1', PAYLOAD);
 
-      const written = (
-        prisma.seance.update.mock.calls[0] as [{ data: { heureRdv: unknown } }]
-      )[0].data;
+      const written = (prisma.seance.update.mock.calls[0] as [{ data: { heureRdv: unknown } }])[0]
+        .data;
       expect(typeof written.heureRdv).toBe('string');
       expect(written.heureRdv).toBe('20:30');
       expect(written.heureRdv).not.toBeInstanceOf(Date);
@@ -4404,16 +4250,11 @@ describe('ScenariosService', () => {
 
       await service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte');
 
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-        'p1',
-        'mj1',
-      );
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
     });
 
     it('chaîne vide acceptée — efface un résumé déjà rédigé', async () => {
-      prisma.scenario.findUnique.mockResolvedValue(
-        mockScenario({ resumeFin: 'Ancien résumé' }),
-      );
+      prisma.scenario.findUnique.mockResolvedValue(mockScenario({ resumeFin: 'Ancien résumé' }));
       prisma.scenario.update.mockResolvedValue(mockScenario({ resumeFin: '' }));
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
@@ -4431,12 +4272,8 @@ describe('ScenariosService', () => {
     });
 
     it('rédaction acceptée une seconde fois après une première écriture (AC3, non-régression)', async () => {
-      prisma.scenario.findUnique.mockResolvedValue(
-        mockScenario({ resumeFin: 'Premier jet' }),
-      );
-      prisma.scenario.update.mockResolvedValue(
-        mockScenario({ resumeFin: 'Version corrigée' }),
-      );
+      prisma.scenario.findUnique.mockResolvedValue(mockScenario({ resumeFin: 'Premier jet' }));
+      prisma.scenario.update.mockResolvedValue(mockScenario({ resumeFin: 'Version corrigée' }));
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
@@ -4462,9 +4299,9 @@ describe('ScenariosService', () => {
           kind: 'CAMPAGNE_LINEAIRE',
         });
 
-        await expect(
-          service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte'),
-        ).rejects.toThrow(BadRequestException);
+        await expect(service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte')).rejects.toThrow(
+          BadRequestException,
+        );
         expect(prisma.scenario.update).not.toHaveBeenCalled();
       },
     );
@@ -4472,9 +4309,9 @@ describe('ScenariosService', () => {
     it('scénario introuvable → 404', async () => {
       prisma.scenario.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte')).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.scenario.update).not.toHaveBeenCalled();
     });
 
@@ -4482,9 +4319,9 @@ describe('ScenariosService', () => {
       prisma.scenario.findUnique.mockResolvedValue(mockScenario());
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.setResumeFin(VALID_SCENARIO_ID, 'stranger', 'texte'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.setResumeFin(VALID_SCENARIO_ID, 'stranger', 'texte')).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.scenario.update).not.toHaveBeenCalled();
     });
   });
@@ -4531,9 +4368,9 @@ describe('ScenariosService', () => {
     it('scénario introuvable → 404', async () => {
       prisma.scenario.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.verifyScenarioBelongsToPartie(VALID_SCENARIO_ID, 'p1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.verifyScenarioBelongsToPartie(VALID_SCENARIO_ID, 'p1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('scénario appartenant à une autre Partie → 400 (AC3)', async () => {
@@ -4543,9 +4380,9 @@ describe('ScenariosService', () => {
         status: 'COURANT',
       });
 
-      await expect(
-        service.verifyScenarioBelongsToPartie(VALID_SCENARIO_ID, 'p1'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.verifyScenarioBelongsToPartie(VALID_SCENARIO_ID, 'p1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

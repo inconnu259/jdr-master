@@ -36,19 +36,12 @@ const EXTENSION_MIME: Record<string, DetectedImageMime> = {
  * falsifiables). Retourne `null` si le buffer ne correspond à aucun des 3 formats acceptés.
  */
 export function detectImageMime(buffer: Buffer): DetectedImageMime | null {
-  if (
-    buffer.length >= 3 &&
-    buffer[0] === 0xff &&
-    buffer[1] === 0xd8 &&
-    buffer[2] === 0xff
-  ) {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
     return 'image/jpeg';
   }
   if (
     buffer.length >= 8 &&
-    buffer
-      .subarray(0, 8)
-      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
   ) {
     return 'image/png';
   }
@@ -105,10 +98,7 @@ export function isValidUploadFilename(filename: string): boolean {
  * absente, ne porte pas le préfixe attendu, ou si le nom de fichier extrait n'a pas la forme
  * `<uuid>.<ext>` attendue (défense en profondeur).
  */
-export function extractUploadFilename(
-  fileUrl: string | null,
-  urlPrefix: string,
-): string | null {
+export function extractUploadFilename(fileUrl: string | null, urlPrefix: string): string | null {
   if (!fileUrl || !fileUrl.startsWith(urlPrefix)) return null;
   const filename = fileUrl.slice(urlPrefix.length);
   return isValidUploadFilename(filename) ? filename : null;
@@ -135,9 +125,6 @@ export async function writeUploadFile(
  * nom). Ne capture aucune erreur : l'appelant décide comment réagir (log + continuer, comme le
  * font `character.service.ts`/`parties.service.ts` pour un fichier orphelin déjà disparu).
  */
-export async function unlinkUploadFile(
-  dir: string,
-  filename: string,
-): Promise<void> {
+export async function unlinkUploadFile(dir: string, filename: string): Promise<void> {
   await unlink(join(dir, filename));
 }

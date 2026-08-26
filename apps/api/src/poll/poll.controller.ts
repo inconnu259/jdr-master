@@ -42,10 +42,7 @@ export class PollController {
   // 8.7) — un vote de date exige désormais toujours un lien vers une Séance.
 
   @Get()
-  findOpen(
-    @Param('id', ParseUUIDPipe) partieId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  findOpen(@Param('id', ParseUUIDPipe) partieId: string, @CurrentUser() user: AuthUser) {
     return this.poll.findOpen(partieId, user.id);
   }
 

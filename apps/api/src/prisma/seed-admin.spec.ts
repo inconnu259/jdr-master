@@ -72,8 +72,6 @@ describe('seedAdmin', () => {
       password: 'pw',
     });
 
-    expect(prisma.user.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ update: {} }),
-    );
+    expect(prisma.user.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: {} }));
   });
 });

@@ -1,17 +1,8 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-  OnApplicationBootstrap,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Prisma } from '@prisma/client';
-import type {
-  GameSystemDto,
-  GameSystemSchemaDto,
-  GameSystemContentDto,
-} from '@master-jdr/shared';
+import type { GameSystemDto, GameSystemSchemaDto, GameSystemContentDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { RYUUTAMA_ID } from './supported-game-systems';
@@ -243,9 +234,7 @@ export class GameSystemService implements OnApplicationBootstrap {
     // "introuvable" — ce n'est PAS une divergence avec findAll() (qui, lui, liste tout ce qui est
     // en base) : c'est une limitation connue et assumée tant que ce registre n'existe pas.
     if (id !== RYUUTAMA_ID) {
-      throw new NotFoundException(
-        'Aucun schéma implémenté pour ce système de jeu',
-      );
+      throw new NotFoundException('Aucun schéma implémenté pour ce système de jeu');
     }
     return {
       sheetSchema: {
@@ -307,10 +296,7 @@ export class GameSystemService implements OnApplicationBootstrap {
     }
 
     return readFile(join(ASSETS_DIR, asset.file)).catch((e) => {
-      this.logger.error(
-        `Échec du chargement de la fiche de référence "${key}" (${asset.file})`,
-        e,
-      );
+      this.logger.error(`Échec du chargement de la fiche de référence "${key}" (${asset.file})`, e);
       throw new Error(
         `Fiche de référence Ryuutama "${key}" introuvable sur le disque. Consultez apps/api/game-systems/ryuutama/assets/README.md`,
       );

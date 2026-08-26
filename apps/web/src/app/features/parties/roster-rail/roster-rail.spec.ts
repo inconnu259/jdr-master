@@ -201,10 +201,12 @@ describe('RosterRail', () => {
     expect(playerItem.querySelector('.roster-rail__role-badge')).toBeNull();
   });
 
-  it("aria-label inclut le rôle assigné quand présent et pas de montée de niveau en attente (Story 27.3)", () => {
+  it('aria-label inclut le rôle assigné quand présent et pas de montée de niveau en attente (Story 27.3)', () => {
     const fixture = setup(true, 'mj1', () => 'Cartographe');
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
-    expect(playerItem.getAttribute('aria-label')).toBe('Alice au pays — Fenn (Ménestrel) — rôle : Cartographe');
+    expect(playerItem.getAttribute('aria-label')).toBe(
+      'Alice au pays — Fenn (Ménestrel) — rôle : Cartographe',
+    );
   });
 
   it('joueur sans personnage sur sa propre ligne → clic émet createCharacter (pas selectCharacter)', () => {

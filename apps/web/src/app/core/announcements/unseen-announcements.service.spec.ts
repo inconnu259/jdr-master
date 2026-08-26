@@ -75,7 +75,7 @@ describe('UnseenAnnouncementsService', () => {
     expect(svc.count()).toBe(0);
   });
 
-  it("transition null → utilisateur déclenche un seul appel à getUnseenAnnouncements() (login())", async () => {
+  it('transition null → utilisateur déclenche un seul appel à getUnseenAnnouncements() (login())', async () => {
     const getUnseenAnnouncements = vi.fn().mockResolvedValue([makeAnnouncement('a1')]);
     const { svc, currentUserSignal, fixture } = await createHarness(getUnseenAnnouncements);
 
@@ -90,7 +90,7 @@ describe('UnseenAnnouncementsService', () => {
     expect(svc.unseenAnnouncements()).toEqual([makeAnnouncement('a1')]);
   });
 
-  it("transition null → utilisateur déclenche un seul appel même si currentUser() est réécrit plusieurs fois ensuite (ex. syncTheme après login())", async () => {
+  it('transition null → utilisateur déclenche un seul appel même si currentUser() est réécrit plusieurs fois ensuite (ex. syncTheme après login())', async () => {
     const getUnseenAnnouncements = vi.fn().mockResolvedValue([makeAnnouncement('a1')]);
     const { currentUserSignal, fixture } = await createHarness(getUnseenAnnouncements);
 

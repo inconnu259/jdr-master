@@ -75,9 +75,7 @@ describe('PartyCoverController — pipeline HTTP réel (Story 29.12, Task 9)', (
   it('AC4 : joueur non-MJ → refus (403) sur DELETE, le service reflète la garde getOwned', async () => {
     parties.removeCoverImage.mockRejectedValue(new ForbiddenException());
 
-    await request(app.getHttpServer())
-      .delete(`/parties/${VALID_ID}/cover`)
-      .expect(403);
+    await request(app.getHttpServer()).delete(`/parties/${VALID_ID}/cover`).expect(403);
   });
 
   it('AC8 : non-membre → refus (403) sur GET, le service reflète la garde getViewable', async () => {
@@ -116,9 +114,7 @@ describe('PartyCoverController — pipeline HTTP réel (Story 29.12, Task 9)', (
 
   it("fichier qui n'est pas une image (octets magiques invalides, même avec un Content-Type déclaré image/png) → 400", async () => {
     parties.setCoverImage.mockRejectedValue(
-      new BadRequestException(
-        "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide",
-      ),
+      new BadRequestException("Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide"),
     );
 
     await request(app.getHttpServer())

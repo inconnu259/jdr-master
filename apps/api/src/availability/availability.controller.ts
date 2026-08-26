@@ -1,13 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Patch,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -30,10 +21,7 @@ export class AvailabilityController {
   // Déclarée avant :id/split : "batch" n'est pas un :id donc aucune collision réelle,
   // mais on garde l'ordre explicite par prudence (Story 30.2, Task 6).
   @Post('batch')
-  createBatch(
-    @CurrentUser() user: AuthUser,
-    @Body() dto: CreateAvailabilityBatchDto,
-  ) {
+  createBatch(@CurrentUser() user: AuthUser, @Body() dto: CreateAvailabilityBatchDto) {
     return this.availability.createBatch(user.id, dto.items);
   }
 
@@ -48,13 +36,7 @@ export class AvailabilityController {
     @Param('id') id: string,
     @Body() dto: SplitOccurrenceDto,
   ) {
-    return this.availability.splitOccurrence(
-      id,
-      user.id,
-      dto.occurrence,
-      dto.action,
-      dto.dto,
-    );
+    return this.availability.splitOccurrence(id, user.id, dto.occurrence, dto.action, dto.dto);
   }
 
   @Patch(':id')

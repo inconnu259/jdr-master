@@ -1,9 +1,10 @@
 import { Transform } from 'class-transformer';
+import { trimIfString } from '../../common/dto/trim.transform';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 export class CreateCharacterNoteDto {
   @IsString()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(trimIfString)
   @IsNotEmpty()
   @MaxLength(5000)
   text!: string;

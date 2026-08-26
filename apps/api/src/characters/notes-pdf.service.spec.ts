@@ -14,6 +14,7 @@ jest.mock('@master-jdr/game-rules', () => ({
 import { readFile } from 'node:fs/promises';
 import { mapNotesToPdfFields } from '@master-jdr/game-rules';
 import { NotesPdfService } from './notes-pdf.service';
+import type { CharacterNoteDto } from '@master-jdr/shared';
 
 const mockSetText = jest.fn();
 const mockSave = jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3]));
@@ -29,7 +30,7 @@ jest.mock('pdf-lib', () => ({
   PDFDocument: { load: jest.fn(() => Promise.resolve(mockDoc)) },
 }));
 
-function makeNotes(overrides: Partial<Record<string, unknown>>[] = []) {
+function makeNotes(overrides: Partial<Record<string, unknown>>[] = []): CharacterNoteDto[] {
   const defaults = [
     {
       id: 'n1',
@@ -40,7 +41,7 @@ function makeNotes(overrides: Partial<Record<string, unknown>>[] = []) {
       createdAt: '2026-07-01T00:00:00.000Z',
     },
   ];
-  return (overrides.length ? overrides : defaults) as any;
+  return (overrides.length ? overrides : defaults) as unknown as CharacterNoteDto[];
 }
 
 describe('NotesPdfService', () => {
@@ -82,9 +83,7 @@ describe('NotesPdfService', () => {
     await service.fillNotesPdf(makeNotes());
 
     expect(mockMapFields).toHaveBeenCalledWith({
-      notes: [
-        { text: 'Première entrée', createdAt: '2026-07-01T00:00:00.000Z' },
-      ],
+      notes: [{ text: 'Première entrée', createdAt: '2026-07-01T00:00:00.000Z' }],
     });
   });
 
@@ -111,8 +110,6 @@ describe('NotesPdfService', () => {
       throw new Error('champ inconnu');
     });
 
-    await expect(service.fillNotesPdf(makeNotes())).rejects.toThrow(
-      /introuvable\/incompatible/,
-    );
+    await expect(service.fillNotesPdf(makeNotes())).rejects.toThrow(/introuvable\/incompatible/);
   });
 });

@@ -175,7 +175,7 @@ describe('ScenarioOneShotTab', () => {
       expect(fixture.nativeElement.textContent).not.toContain('Ouvrir aux joueurs');
     });
 
-    it("changed() pour une autre Partie ne déclenche AUCUN rechargement", async () => {
+    it('changed() pour une autre Partie ne déclenche AUCUN rechargement', async () => {
       const scenariosSvc = makeScenariosService([SCENARIO], []);
       const { fixture } = await createComponent([SCENARIO], [], scenariosSvc);
 
@@ -189,7 +189,7 @@ describe('ScenarioOneShotTab', () => {
       expect(scenariosSvc.listDrafts).toHaveBeenCalledTimes(1);
     });
 
-    it("garde firstRun : un changed() déjà non-nul pour cette Partie au montage ne déclenche PAS de refetch redondant", async () => {
+    it('garde firstRun : un changed() déjà non-nul pour cette Partie au montage ne déclenche PAS de refetch redondant', async () => {
       const scenariosSvc = makeScenariosService([SCENARIO], []);
       scenariosSvc.changed.set({ partieId: 'p1' });
       await createComponent([SCENARIO], [], scenariosSvc);

@@ -130,9 +130,9 @@ describe('AttributesStep', () => {
       selectPolyvalent(fixture); // reclic sur le même profil
       await fixture.whenStable();
 
-      expect(
-        (rows[0].querySelectorAll('.value-chip')[0] as HTMLButtonElement).classList,
-      ).toContain('value-chip--selected');
+      expect((rows[0].querySelectorAll('.value-chip')[0] as HTMLButtonElement).classList).toContain(
+        'value-chip--selected',
+      );
     });
 
     it('assigne les 4 valeurs du profil Spécialiste (dont les deux 4 et deux 8 distincts) → émet le résultat complet', async () => {
@@ -171,12 +171,12 @@ describe('AttributesStep', () => {
       expect(fixture.nativeElement.textContent).toContain('Patron choisi');
       expect(fixture.nativeElement.textContent).toContain('Spécialiste');
       const rows: NodeListOf<HTMLElement> = fixture.nativeElement.querySelectorAll('.attr-slot');
-      expect(
-        (rows[0].querySelectorAll('.value-chip')[0] as HTMLButtonElement).classList,
-      ).toContain('value-chip--selected');
-      expect(
-        (rows[3].querySelectorAll('.value-chip')[3] as HTMLButtonElement).classList,
-      ).toContain('value-chip--selected');
+      expect((rows[0].querySelectorAll('.value-chip')[0] as HTMLButtonElement).classList).toContain(
+        'value-chip--selected',
+      );
+      expect((rows[3].querySelectorAll('.value-chip')[3] as HTMLButtonElement).classList).toContain(
+        'value-chip--selected',
+      );
     });
 
     it('aucun profil ne correspond aux valeurs entrantes (donnée legacy/incohérente) → aucun profil pré-sélectionné, pas de crash', async () => {
@@ -281,7 +281,9 @@ describe('AttributesStep', () => {
       await fixture.whenStable();
 
       expect(agiChip0.classList.contains('value-chip--selected')).toBe(false);
-      expect((rows[1].querySelectorAll('.value-chip')[0] as HTMLButtonElement).disabled).toBe(false);
+      expect((rows[1].querySelectorAll('.value-chip')[0] as HTMLButtonElement).disabled).toBe(
+        false,
+      );
       expect(emitted.at(-1)).toBeNull();
     });
 

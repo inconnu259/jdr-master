@@ -3507,7 +3507,7 @@ describe('CalendarView — ce que l’Agenda reçoit (Story 36.11, AC14, D-3)', 
     expect(seances[0].compteRenduManquant).toBe(true);
   });
 
-  it("contexte personnel, sans query param `from` : la plage par défaut recule de 31 jours (deferred-work « C’est passé »)", async () => {
+  it('contexte personnel, sans query param `from` : la plage par défaut recule de 31 jours (deferred-work « C’est passé »)', async () => {
     const { fixture, availabilitySvc } = await createCalendarView({ mode: 'personal' });
     const comp = fixture.componentInstance as any;
     const expected = new Date();
@@ -3534,7 +3534,7 @@ describe('CalendarView — ce que l’Agenda reçoit (Story 36.11, AC14, D-3)', 
     expect(comp.fromDateStr()).toBe(today);
   });
 
-  it("contexte personnel : se connecte à userTopic(monId) au montage, se déconnecte au destroy (deferred-work, SSE calendrier personnel) — le calendrier personnel agrège plusieurs Parties, aucun partieTopic unique ne peut le couvrir", async () => {
+  it('contexte personnel : se connecte à userTopic(monId) au montage, se déconnecte au destroy (deferred-work, SSE calendrier personnel) — le calendrier personnel agrège plusieurs Parties, aucun partieTopic unique ne peut le couvrir', async () => {
     const authSvc = { currentUser: signal({ id: 'me1' }) } as any;
     const { fixture, realtimeSvc } = await createCalendarView({ mode: 'personal', authSvc });
 

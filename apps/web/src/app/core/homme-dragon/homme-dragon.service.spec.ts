@@ -76,7 +76,11 @@ describe('HommeDragonService', () => {
     expect(req.request.body).toEqual(dto);
     expect(req.request.withCredentials).toBe(true);
 
-    req.flush(makeDto({ sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grande-epee' }, nom: 'Ignis' } }));
+    req.flush(
+      makeDto({
+        sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grande-epee' }, nom: 'Ignis' },
+      }),
+    );
 
     await expect(promise).resolves.toBeDefined();
   });

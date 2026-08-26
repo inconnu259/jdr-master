@@ -8,11 +8,7 @@ import { MyPartySignalsController } from './my-party-signals.controller';
 
 @Module({
   imports: [AvailabilityModule],
-  controllers: [
-    PartiesController,
-    PartyCoverController,
-    MyPartySignalsController,
-  ],
+  controllers: [PartiesController, PartyCoverController, MyPartySignalsController],
   providers: [PartiesService, PartySignalsService],
   exports: [PartiesService], // réutilisé par InvitationsModule (vérifs MJ / appartenance)
 })

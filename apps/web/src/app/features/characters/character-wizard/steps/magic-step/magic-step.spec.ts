@@ -114,9 +114,8 @@ describe('MagicStep', () => {
     const emitted: string[][] = [];
     fixture.componentInstance.knownRitualSpellsChange.subscribe((v: string[]) => emitted.push(v));
 
-    const checkboxes: HTMLInputElement[] = fixture.nativeElement.querySelectorAll(
-      'input[type="checkbox"]',
-    );
+    const checkboxes: HTMLInputElement[] =
+      fixture.nativeElement.querySelectorAll('input[type="checkbox"]');
     checkboxes[1].click(); // cloche-alarme
 
     expect(emitted).toEqual([['benediction-main-rouge', 'cloche-alarme']]);
@@ -127,19 +126,15 @@ describe('MagicStep', () => {
     const fixture = TestBed.createComponent(MagicStep);
     fixture.componentRef.setInput('seasons', SEASONS);
     fixture.componentRef.setInput('spells', SPELLS);
-    fixture.componentRef.setInput('knownRitualSpells', [
-      'benediction-main-rouge',
-      'cloche-alarme',
-    ]);
+    fixture.componentRef.setInput('knownRitualSpells', ['benediction-main-rouge', 'cloche-alarme']);
     fixture.detectChanges();
     await fixture.whenStable();
 
     const emitted: string[][] = [];
     fixture.componentInstance.knownRitualSpellsChange.subscribe((v: string[]) => emitted.push(v));
 
-    const checkboxes: HTMLInputElement[] = fixture.nativeElement.querySelectorAll(
-      'input[type="checkbox"]',
-    );
+    const checkboxes: HTMLInputElement[] =
+      fixture.nativeElement.querySelectorAll('input[type="checkbox"]');
     checkboxes[0].click(); // décoche benediction-main-rouge
 
     expect(emitted).toEqual([['cloche-alarme']]);
@@ -150,16 +145,12 @@ describe('MagicStep', () => {
     const fixture = TestBed.createComponent(MagicStep);
     fixture.componentRef.setInput('seasons', SEASONS);
     fixture.componentRef.setInput('spells', SPELLS);
-    fixture.componentRef.setInput('knownRitualSpells', [
-      'benediction-main-rouge',
-      'cloche-alarme',
-    ]);
+    fixture.componentRef.setInput('knownRitualSpells', ['benediction-main-rouge', 'cloche-alarme']);
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const checkboxes: HTMLInputElement[] = fixture.nativeElement.querySelectorAll(
-      'input[type="checkbox"]',
-    );
+    const checkboxes: HTMLInputElement[] =
+      fixture.nativeElement.querySelectorAll('input[type="checkbox"]');
     expect(checkboxes[0].disabled).toBe(false); // déjà cochée, jamais désactivée
     expect(checkboxes[1].disabled).toBe(false); // déjà cochée, jamais désactivée
     expect(checkboxes[2].disabled).toBe(true); // non cochée, 2 déjà sélectionnés

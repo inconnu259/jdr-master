@@ -1,6 +1,7 @@
 import { NotificationsService } from './notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { anyOf, objectLike } from '../common/test-utils/jest-typed';
 
 describe('NotificationsService', () => {
   let service: NotificationsService;
@@ -40,17 +41,17 @@ describe('NotificationsService', () => {
     expect(email.sendMail).toHaveBeenCalledWith(
       'session-reminder',
       'mj@example.com',
-      expect.objectContaining({ partieName: 'La Nuit' }),
+      objectLike({ partieName: 'La Nuit' }),
     );
     expect(email.sendMail).toHaveBeenCalledWith(
       'session-reminder',
       'joueur@example.com',
-      expect.objectContaining({ partieName: 'La Nuit' }),
+      objectLike({ partieName: 'La Nuit' }),
     );
     expect(prisma.partie.update).toHaveBeenCalledTimes(1);
     expect(prisma.partie.update).toHaveBeenCalledWith({
       where: { id: 'p1' },
-      data: expect.objectContaining({ reminderSentAt: expect.any(Date) }),
+      data: objectLike({ reminderSentAt: anyOf(Date) }),
     });
   });
 
@@ -65,16 +66,14 @@ describe('NotificationsService', () => {
   it("un échec d'envoi pour un destinataire n'empêche pas les autres, et la partie est quand même marquée", async () => {
     const partie = makePartie();
     prisma.partie.findMany.mockResolvedValue([partie]);
-    email.sendMail
-      .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce({ ok: true });
+    email.sendMail.mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: true });
 
     await service.sendDueReminders();
 
     expect(email.sendMail).toHaveBeenCalledTimes(2);
     expect(prisma.partie.update).toHaveBeenCalledWith({
       where: { id: 'p1' },
-      data: expect.objectContaining({ reminderSentAt: expect.any(Date) }),
+      data: objectLike({ reminderSentAt: anyOf(Date) }),
     });
   });
 
@@ -94,11 +93,11 @@ describe('NotificationsService', () => {
     expect(prisma.partie.update).toHaveBeenCalledTimes(2);
     expect(prisma.partie.update).toHaveBeenCalledWith({
       where: { id: 'p1' },
-      data: expect.objectContaining({ reminderSentAt: expect.any(Date) }),
+      data: objectLike({ reminderSentAt: anyOf(Date) }),
     });
     expect(prisma.partie.update).toHaveBeenCalledWith({
       where: { id: 'p2' },
-      data: expect.objectContaining({ reminderSentAt: expect.any(Date) }),
+      data: objectLike({ reminderSentAt: anyOf(Date) }),
     });
   });
 

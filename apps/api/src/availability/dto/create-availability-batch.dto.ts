@@ -33,7 +33,7 @@ export class CreateAvailabilityBatchItemDto {
   recurKind!: RecurKind;
 
   /** Requis pour RECURRING (jour de la semaine 0=dim … 6=sam), ignoré pour PUNCTUAL. */
-  @ValidateIf((o) => o.recurKind === 'RECURRING')
+  @ValidateIf((o: CreateAvailabilityBatchItemDto) => o.recurKind === 'RECURRING')
   @IsInt()
   @Min(0)
   @Max(6)
@@ -43,12 +43,12 @@ export class CreateAvailabilityBatchItemDto {
   slot!: DaySlot;
 
   /** Requis pour PUNCTUAL, ignoré pour RECURRING. */
-  @ValidateIf((o) => o.recurKind === 'PUNCTUAL')
+  @ValidateIf((o: CreateAvailabilityBatchItemDto) => o.recurKind === 'PUNCTUAL')
   @IsDateString()
   startDate?: string | null;
 
   /** Requis pour PUNCTUAL, ignoré pour RECURRING. */
-  @ValidateIf((o) => o.recurKind === 'PUNCTUAL')
+  @ValidateIf((o: CreateAvailabilityBatchItemDto) => o.recurKind === 'PUNCTUAL')
   @IsDateString()
   endDate?: string | null;
 

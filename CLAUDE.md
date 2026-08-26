@@ -47,8 +47,9 @@ Docker nommés (cf. `docker-compose.yml`).
 - **Architecture plugin** : systèmes de jeu modulaires, fiche **pilotée par un schéma** (spec §5).
   Penser modularité multi-système et contenu data-driven dès qu'on touche aux systèmes.
 - **Sécurité** : checklist `docs/security.md` ; durcissement (argon2, throttler, Helmet,
-  validation) dès le palier auth. Aucune analyse statique automatisée en place (ni Semgrep,
-  ni CI) — la revue passe par `/security-review`.
+  validation) dès le palier auth. La CI (`.github/workflows/ci.yml`) fait tourner lint, types,
+  build et tests, mais **aucune analyse statique de sécurité** (pas de Semgrep) — cette revue-là
+  passe par `/security-review`.
 - **Langue du code** : ce dépôt déroge à la règle globale « code et commentaires en anglais ».
   Ici, commentaires et messages d'erreur sont **en français**, comme les ~5 200 lignes
   existantes. Ne pas introduire d'anglais, ne pas retraduire l'existant.

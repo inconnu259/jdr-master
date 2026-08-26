@@ -155,7 +155,7 @@ describe('ScenarioDrafts', () => {
       expect(comp.drafts()).toEqual([DRAFT_1]);
     });
 
-    it("changed() pour une autre Partie ne déclenche AUCUN rechargement", async () => {
+    it('changed() pour une autre Partie ne déclenche AUCUN rechargement', async () => {
       const scenariosSvc = makeScenariosService([DRAFT_1, DRAFT_2]);
       const { fixture } = await createComponent([DRAFT_1, DRAFT_2], { scenariosSvc });
 
@@ -169,7 +169,7 @@ describe('ScenarioDrafts', () => {
       expect(scenariosSvc.listDrafts).toHaveBeenCalledTimes(1);
     });
 
-    it("garde firstRun : un changed() déjà non-nul pour cette Partie au montage ne déclenche PAS de refetch redondant", async () => {
+    it('garde firstRun : un changed() déjà non-nul pour cette Partie au montage ne déclenche PAS de refetch redondant', async () => {
       const scenariosSvc = makeScenariosService([DRAFT_1, DRAFT_2]);
       scenariosSvc.changed.set({ partieId: 'p1' });
       await createComponent([DRAFT_1, DRAFT_2], { scenariosSvc });

@@ -16,12 +16,10 @@ describe('levelForXp', () => {
 describe('pendingLevels', () => {
   it('aucun niveau franchi (xp bas, appliedCount=0) → []', () =>
     expect(pendingLevels(50, 0)).toEqual([]));
-  it('1 niveau franchi non appliqué', () =>
-    expect(pendingLevels(150, 0)).toEqual([2]));
+  it('1 niveau franchi non appliqué', () => expect(pendingLevels(150, 0)).toEqual([2]));
   it('plusieurs niveaux franchis d’un coup', () =>
     expect(pendingLevels(1200, 0)).toEqual([2, 3, 4]));
-  it('appliedCount déjà à jour → []', () =>
-    expect(pendingLevels(150, 1)).toEqual([]));
+  it('appliedCount déjà à jour → []', () => expect(pendingLevels(150, 1)).toEqual([]));
   it('un niveau déjà appliqué, un nouveau en attente', () =>
     expect(pendingLevels(600, 1)).toEqual([3]));
 });

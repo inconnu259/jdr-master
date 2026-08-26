@@ -1,9 +1,4 @@
-import {
-  ArgumentsHost,
-  Catch,
-  ExceptionFilter,
-  HttpStatus,
-} from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, HttpStatus } from '@nestjs/common';
 import type { Response } from 'express';
 import { MulterError } from 'multer';
 
@@ -17,11 +12,7 @@ export class MulterExceptionFilter implements ExceptionFilter {
   catch(exception: MulterError, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
     const status =
-      exception.code === 'LIMIT_FILE_SIZE'
-        ? HttpStatus.PAYLOAD_TOO_LARGE
-        : HttpStatus.BAD_REQUEST;
-    response
-      .status(status)
-      .json({ statusCode: status, message: exception.message });
+      exception.code === 'LIMIT_FILE_SIZE' ? HttpStatus.PAYLOAD_TOO_LARGE : HttpStatus.BAD_REQUEST;
+    response.status(status).json({ statusCode: status, message: exception.message });
   }
 }

@@ -9,11 +9,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { InviteLinksService } from './invite-links.service';
 import { EmailService } from '../email/email.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-  userTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
+import { objectLike, stringLike } from '../common/test-utils/jest-typed';
 
 describe('InvitationsService', () => {
   let service: InvitationsService;
@@ -68,16 +65,12 @@ describe('InvitationsService', () => {
   });
 
   it('invite : refuse de s’inviter soi-même', async () => {
-    await expect(service.invite('p1', 'mj1', 'mj1')).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(service.invite('p1', 'mj1', 'mj1')).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('invite : 404 si destinataire inconnu', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
-    await expect(service.invite('p1', 'mj1', 'ghost')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(service.invite('p1', 'mj1', 'ghost')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('invite : 409 si déjà membre', async () => {
@@ -86,9 +79,7 @@ describe('InvitationsService', () => {
       userId: 'u',
       partieId: 'p1',
     });
-    await expect(service.invite('p1', 'mj1', 'u')).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(service.invite('p1', 'mj1', 'u')).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('invite : upsert PENDING si tout est ok', async () => {
@@ -98,8 +89,8 @@ describe('InvitationsService', () => {
     await service.invite('p1', 'mj1', 'u');
     expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
     expect(prisma.invitation.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        update: expect.objectContaining({ status: 'PENDING' }),
+      objectLike({
+        update: objectLike({ status: 'PENDING' }),
       }),
     );
   });
@@ -118,9 +109,7 @@ describe('InvitationsService', () => {
       inviteeUserId: 'autre',
       status: 'PENDING',
     });
-    await expect(service.accept('inv1', 'u')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(service.accept('inv1', 'u')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('accept : 409 si l’invitation n’est plus PENDING', async () => {
@@ -129,9 +118,7 @@ describe('InvitationsService', () => {
       inviteeUserId: 'u',
       status: 'ACCEPTED',
     });
-    await expect(service.accept('inv1', 'u')).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(service.accept('inv1', 'u')).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('accept : crée le membership et marque ACCEPTED (transaction)', async () => {
@@ -145,8 +132,8 @@ describe('InvitationsService', () => {
     expect(prisma.$transaction).toHaveBeenCalled();
     expect(prisma.membership.upsert).toHaveBeenCalled();
     expect(prisma.invitation.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ status: 'ACCEPTED' }),
+      objectLike({
+        data: objectLike({ status: 'ACCEPTED' }),
       }),
     );
     expect(res).toEqual({ ok: true, partieId: 'p1' });
@@ -183,10 +170,7 @@ describe('InvitationsService', () => {
       status: 'PENDING',
     });
     await service.accept('inv1', 'u');
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-      'p1',
-      'mj1',
-    );
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
   });
 
   it('revoke : 403 si ni inviteur ni MJ', async () => {
@@ -195,9 +179,7 @@ describe('InvitationsService', () => {
       inviterId: 'mj1',
       partie: { mjId: 'mj1' },
     });
-    await expect(service.revoke('inv1', 'intrus')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(service.revoke('inv1', 'intrus')).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('revoke : émet un événement temps réel scopé sur l’invité de l’invitation révoquée (Story 18.1, AC1)', async () => {
@@ -226,9 +208,9 @@ describe('InvitationsService', () => {
     expect(email.sendMail).toHaveBeenCalledWith(
       'invitation',
       'ami@example.com',
-      expect.objectContaining({
+      objectLike({
         partieName: 'La Forêt Ancienne',
-        link: expect.stringContaining('/'),
+        link: stringLike('/'),
       }),
     );
     expect(result).toEqual({ ok: true });
@@ -237,11 +219,7 @@ describe('InvitationsService', () => {
   it('inviteByEmail : adresse inconnue → génère/réutilise un InviteLink, envoie un e-mail avec le lien de jonction', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
 
-    const result = await service.inviteByEmail(
-      'p1',
-      'mj1',
-      'inconnu@example.com',
-    );
+    const result = await service.inviteByEmail('p1', 'mj1', 'inconnu@example.com');
 
     expect(inviteLinks.findOrCreateForEmail).toHaveBeenCalledWith(
       'p1',
@@ -251,9 +229,9 @@ describe('InvitationsService', () => {
     expect(email.sendMail).toHaveBeenCalledWith(
       'invitation',
       'inconnu@example.com',
-      expect.objectContaining({
+      objectLike({
         partieName: 'La Forêt Ancienne',
-        link: expect.stringContaining('/join/tok123'),
+        link: stringLike('/join/tok123'),
       }),
     );
     expect(result).toEqual({ ok: true });
@@ -263,11 +241,7 @@ describe('InvitationsService', () => {
     prisma.user.findUnique.mockResolvedValue(null);
     email.sendMail.mockResolvedValue({ ok: false });
 
-    const result = await service.inviteByEmail(
-      'p1',
-      'mj1',
-      'inconnu@example.com',
-    );
+    const result = await service.inviteByEmail('p1', 'mj1', 'inconnu@example.com');
 
     expect(result).toEqual({ ok: false });
   });
@@ -280,15 +254,7 @@ describe('InvitationsService', () => {
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: 'ami@example.com' },
     });
-    expect(inviteLinks.findOrCreateForEmail).toHaveBeenCalledWith(
-      'p1',
-      'mj1',
-      'ami@example.com',
-    );
-    expect(email.sendMail).toHaveBeenCalledWith(
-      'invitation',
-      'ami@example.com',
-      expect.anything(),
-    );
+    expect(inviteLinks.findOrCreateForEmail).toHaveBeenCalledWith('p1', 'mj1', 'ami@example.com');
+    expect(email.sendMail).toHaveBeenCalledWith('invitation', 'ami@example.com', expect.anything());
   });
 });

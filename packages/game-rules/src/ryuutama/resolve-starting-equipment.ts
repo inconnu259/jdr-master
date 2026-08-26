@@ -64,9 +64,19 @@ export function resolveStartingEquipment(
       if (entry.nature === 'animal') {
         animaux.push({ name: entry.label, price, effect: entry.effect });
       } else if (entry.nature === 'contenant') {
-        contenants.push({ name: entry.label, weight: entry.weight ?? 0, price, effect: entry.effect });
+        contenants.push({
+          name: entry.label,
+          weight: entry.weight ?? 0,
+          price,
+          effect: entry.effect,
+        });
       } else {
-        individual.push({ name: entry.label, weight: entry.weight ?? 0, price, effect: entry.effect });
+        individual.push({
+          name: entry.label,
+          weight: entry.weight ?? 0,
+          price,
+          effect: entry.effect,
+        });
       }
     }
   }

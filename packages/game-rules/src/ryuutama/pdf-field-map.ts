@@ -139,7 +139,14 @@ export function mapToPdfFields(
     0,
     6,
   );
-  const TALENT_FIELD_NAMES = ['talent 1', 'Talent 2', 'Talent 3', 'Talent 4', 'Talent 5', 'Talent 6'];
+  const TALENT_FIELD_NAMES = [
+    'talent 1',
+    'Talent 2',
+    'Talent 3',
+    'Talent 4',
+    'Talent 5',
+    'Talent 6',
+  ];
   const EFFET_FIELD_NAMES = ['Effet 1', 'Effet 2', 'Effet 3', 'Effet 4', 'Effet 5', 'Effet 6'];
   const talentFields: PdfFieldValue[] = talentSlots.flatMap((talent, i) => {
     const rows: PdfFieldValue[] = [
@@ -212,7 +219,11 @@ export function mapToPdfFields(
   ];
 
   if (content.landscapeDropdownValue) {
-    fields.push({ field: 'Paysage climat', value: content.landscapeDropdownValue, kind: 'dropdown' });
+    fields.push({
+      field: 'Paysage climat',
+      value: content.landscapeDropdownValue,
+      kind: 'dropdown',
+    });
   }
 
   // Capacités choisies via le LevelUpWizard (Story 6.3) — un champ par capacité résolue, aucun

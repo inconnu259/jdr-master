@@ -32,21 +32,11 @@ describe('CharacterRolesController', () => {
       assignedAt: '2026-01-01T00:00:00.000Z',
     });
 
-    const result = await controller.assign(
-      'p1',
-      'char1',
-      { id: 'mj1' } as any,
-      {
-        roleKey: 'cartographe',
-      },
-    );
+    const result = await controller.assign('p1', 'char1', { id: 'mj1' } as any, {
+      roleKey: 'cartographe',
+    });
 
-    expect(characterRoles.assign).toHaveBeenCalledWith(
-      'p1',
-      'mj1',
-      'char1',
-      'cartographe',
-    );
+    expect(characterRoles.assign).toHaveBeenCalledWith('p1', 'mj1', 'char1', 'cartographe');
     expect(result.roleKey).toBe('cartographe');
   });
 

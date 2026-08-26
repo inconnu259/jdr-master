@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Scenario, type ScenarioDocument } from '@prisma/client';
 import type {
   CharacterNoteDto,
   DaySlot,
@@ -20,21 +20,11 @@ import { PartiesService } from '../parties/parties.service';
 import { countParticipants } from '../parties/participant-count.util';
 import { CharacterService } from '../characters/character.service';
 import { PollService } from '../poll/poll.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CreateScenarioDto } from './dto/create-scenario.dto';
 import { UpdateScenarioDto } from './dto/update-scenario.dto';
-import {
-  detectDocumentMime,
-  isStructurallyValidPdf,
-} from './document-mime.util';
-import {
-  deleteDocumentFile,
-  readDocumentFile,
-  writeDocumentFile,
-} from './document-storage.util';
+import { detectDocumentMime, isStructurallyValidPdf } from './document-mime.util';
+import { deleteDocumentFile, readDocumentFile, writeDocumentFile } from './document-storage.util';
 
 @Injectable()
 export class ScenariosService {
@@ -46,11 +36,7 @@ export class ScenariosService {
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
-  async create(
-    partieId: string,
-    mjId: string,
-    dto: CreateScenarioDto,
-  ): Promise<ScenarioDto> {
+  async create(partieId: string, mjId: string, dto: CreateScenarioDto): Promise<ScenarioDto> {
     const partie = await this.parties.getOwned(partieId, mjId);
 
     // FR-1 (PRD §9) : une Partie ONE_SHOT a un unique scénario, créé automatiquement
@@ -79,11 +65,7 @@ export class ScenariosService {
     return toEnrichedDto(this.prisma, this.characters, scenario, partie.kind);
   }
 
-  async update(
-    scenarioId: string,
-    mjId: string,
-    dto: UpdateScenarioDto,
-  ): Promise<ScenarioDto> {
+  async update(scenarioId: string, mjId: string, dto: UpdateScenarioDto): Promise<ScenarioDto> {
     const scenario = await this.prisma.scenario.findUnique({
       where: { id: scenarioId },
     });
@@ -125,18 +107,14 @@ export class ScenariosService {
     // silencieusement comme "absent" (contrairement à un simple `if (scenarioId)`).
     if (scenarioId !== undefined) {
       if (!isUUID(scenarioId)) {
-        throw new BadRequestException(
-          'scenarioId doit être un UUID valide ou absent',
-        );
+        throw new BadRequestException('scenarioId doit être un UUID valide ou absent');
       }
       const scenario = await this.prisma.scenario.findUnique({
         where: { id: scenarioId },
       });
       if (!scenario) throw new NotFoundException('Scénario introuvable');
       if (scenario.partieId !== partieId) {
-        throw new BadRequestException(
-          "Ce scénario n'appartient pas à cette Partie",
-        );
+        throw new BadRequestException("Ce scénario n'appartient pas à cette Partie");
       }
       if (scenario.status === 'PASSE') {
         throw new BadRequestException(
@@ -147,14 +125,9 @@ export class ScenariosService {
 
     const mime = detectDocumentMime(file.buffer);
     if (!mime) {
-      throw new BadRequestException(
-        "Le fichier fourni n'est pas un PDF ou un texte valide",
-      );
+      throw new BadRequestException("Le fichier fourni n'est pas un PDF ou un texte valide");
     }
-    if (
-      mime === 'application/pdf' &&
-      !(await isStructurallyValidPdf(file.buffer))
-    ) {
+    if (mime === 'application/pdf' && !(await isStructurallyValidPdf(file.buffer))) {
       throw new BadRequestException(
         'Le fichier PDF fourni est corrompu ou structurellement invalide',
       );
@@ -181,10 +154,7 @@ export class ScenariosService {
     }
   }
 
-  async listDocuments(
-    scenarioId: string,
-    userId: string,
-  ): Promise<ScenarioDocumentDto[]> {
+  async listDocuments(scenarioId: string, userId: string): Promise<ScenarioDocumentDto[]> {
     const scenario = await this.prisma.scenario.findUnique({
       where: { id: scenarioId },
     });
@@ -200,10 +170,7 @@ export class ScenariosService {
     return documents.map(toDocumentDto);
   }
 
-  async listLibraryDocuments(
-    partieId: string,
-    userId: string,
-  ): Promise<ScenarioDocumentDto[]> {
+  async listLibraryDocuments(partieId: string, userId: string): Promise<ScenarioDocumentDto[]> {
     await this.parties.getViewable(partieId, userId);
 
     const documents = await this.prisma.scenarioDocument.findMany({
@@ -274,10 +241,7 @@ export class ScenariosService {
       where: { scenarioId: { in: scenarioIds } },
       include: { user: { select: { pseudo: true, displayName: true } } },
     });
-    const byScenario = new Map<
-      string,
-      { userId: string; pseudo: string; displayName: string }[]
-    >();
+    const byScenario = new Map<string, { userId: string; pseudo: string; displayName: string }[]>();
     for (const p of participants) {
       const list = byScenario.get(p.scenarioId) ?? [];
       list.push({
@@ -299,13 +263,7 @@ export class ScenariosService {
           seances,
           scenarioParticipants,
         );
-        return toDto(
-          s,
-          partie.kind,
-          scenarioParticipants,
-          seances,
-          retrospectiveNotes,
-        );
+        return toDto(s, partie.kind, scenarioParticipants, seances, retrospectiveNotes);
       }),
     );
   }
@@ -318,9 +276,7 @@ export class ScenariosService {
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status !== 'BROUILLON') {
-      throw new BadRequestException(
-        'Seul un scénario Brouillon peut être ouvert aux joueurs',
-      );
+      throw new BadRequestException('Seul un scénario Brouillon peut être ouvert aux joueurs');
     }
 
     const updated = await this.prisma.scenario.update({
@@ -347,9 +303,7 @@ export class ScenariosService {
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status !== 'A_VENIR') {
-      throw new BadRequestException(
-        'Seul un scénario À venir peut être marqué Courant',
-      );
+      throw new BadRequestException('Seul un scénario À venir peut être marqué Courant');
     }
 
     if (partie.kind === 'CAMPAGNE_LINEAIRE') {
@@ -359,9 +313,7 @@ export class ScenariosService {
           where: { partieId: partie.id, status: 'COURANT' },
         });
         if (existingCourant) {
-          throw new ConflictException(
-            'Un scénario est déjà marqué Courant sur cette Partie.',
-          );
+          throw new ConflictException('Un scénario est déjà marqué Courant sur cette Partie.');
         }
         // `status: 'A_VENIR'` dans le where empêche d'écraser un statut ayant changé
         // entre la lecture hors verrou plus haut et cette écriture sous verrou.
@@ -370,9 +322,7 @@ export class ScenariosService {
           data: { status: 'COURANT' },
         });
         if (count === 0) {
-          throw new ConflictException(
-            'Le statut du scénario a changé entretemps, réessayez.',
-          );
+          throw new ConflictException('Le statut du scénario a changé entretemps, réessayez.');
         }
         return tx.scenario.findUniqueOrThrow({ where: { id: scenarioId } });
       });
@@ -387,9 +337,7 @@ export class ScenariosService {
       data: { status: 'COURANT' },
     });
     if (count === 0) {
-      throw new ConflictException(
-        'Le statut du scénario a changé entretemps, réessayez.',
-      );
+      throw new ConflictException('Le statut du scénario a changé entretemps, réessayez.');
     }
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
@@ -412,9 +360,7 @@ export class ScenariosService {
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status !== 'COURANT') {
-      throw new BadRequestException(
-        'Seul un scénario Courant peut être clôturé',
-      );
+      throw new BadRequestException('Seul un scénario Courant peut être clôturé');
     }
 
     const { count } = await this.prisma.scenario.updateMany({
@@ -422,9 +368,7 @@ export class ScenariosService {
       data: { status: 'PASSE', closedAt: new Date() },
     });
     if (count === 0) {
-      throw new ConflictException(
-        'Le statut du scénario a changé entretemps, réessayez.',
-      );
+      throw new ConflictException('Le statut du scénario a changé entretemps, réessayez.');
     }
     const updated = await this.prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
@@ -474,9 +418,7 @@ export class ScenariosService {
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status === 'PASSE') {
-      throw new BadRequestException(
-        "Impossible d'ajouter une séance à un scénario clôturé",
-      );
+      throw new BadRequestException("Impossible d'ajouter une séance à un scénario clôturé");
     }
 
     await this.prisma.seance.create({ data: { scenarioId } });
@@ -518,8 +460,7 @@ export class ScenariosService {
     const nearest =
       seances
         .map((s): Candidate | null => {
-          if (s.poll?.chosenDate)
-            return { date: s.poll.chosenDate, slot: s.poll.chosenSlot };
+          if (s.poll?.chosenDate) return { date: s.poll.chosenDate, slot: s.poll.chosenSlot };
           if (s.dateValidee) return { date: s.dateValidee, slot: null };
           return null;
         })
@@ -530,8 +471,7 @@ export class ScenariosService {
       where: { id: partieId },
     });
     const unchanged =
-      (partie.nextSessionDate?.getTime() ?? null) ===
-        (nearest?.date.getTime() ?? null) &&
+      (partie.nextSessionDate?.getTime() ?? null) === (nearest?.date.getTime() ?? null) &&
       partie.nextSessionSlot === (nearest?.slot ?? null);
 
     await this.prisma.partie.update({
@@ -557,16 +497,11 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(
-      this.prisma,
-      seance.scenarioId,
-    );
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status === 'PASSE') {
-      throw new BadRequestException(
-        "Impossible de supprimer une séance d'un scénario clôturé",
-      );
+      throw new BadRequestException("Impossible de supprimer une séance d'un scénario clôturé");
     }
 
     const [firstSeance] = await this.prisma.seance.findMany({
@@ -575,9 +510,7 @@ export class ScenariosService {
       take: 1,
     });
     if (firstSeance?.id === seanceId) {
-      throw new BadRequestException(
-        "La première séance d'un scénario ne peut pas être supprimée",
-      );
+      throw new BadRequestException("La première séance d'un scénario ne peut pas être supprimée");
     }
 
     // Revue de code Story 8.8 (décision utilisateur) : sans Séance, un vote de date n'a plus de
@@ -631,10 +564,7 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(
-      this.prisma,
-      seance.scenarioId,
-    );
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     // Un scénario PASSE est figé (cohérent avec deleteSeance/resetSeanceDate) : pas de nouveau
@@ -646,9 +576,7 @@ export class ScenariosService {
     }
 
     if (seance.pollId) {
-      throw new BadRequestException(
-        'Cette séance est déjà liée à un vote de date',
-      );
+      throw new BadRequestException('Cette séance est déjà liée à un vote de date');
     }
 
     const poll = await this.pollService.create(scenario.partieId, mjId, {
@@ -678,10 +606,7 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(
-      this.prisma,
-      seance.scenarioId,
-    );
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status === 'PASSE') {
@@ -724,10 +649,7 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(
-      this.prisma,
-      seance.scenarioId,
-    );
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status === 'PASSE') {
@@ -741,9 +663,7 @@ export class ScenariosService {
       );
     }
     if (inscriptionMax < inscriptionMin) {
-      throw new BadRequestException(
-        'Le maximum doit être supérieur ou égal au minimum',
-      );
+      throw new BadRequestException('Le maximum doit être supérieur ou égal au minimum');
     }
 
     await this.prisma.seance.update({
@@ -769,10 +689,7 @@ export class ScenariosService {
       include: { poll: true },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(
-      this.prisma,
-      seance.scenarioId,
-    );
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
     const partie = await this.parties.getViewable(scenario.partieId, userId);
 
     if (scenario.status === 'BROUILLON' || scenario.status === 'PASSE') {
@@ -786,9 +703,7 @@ export class ScenariosService {
       );
     }
     if (seance.inscriptionMax == null) {
-      throw new BadRequestException(
-        "Cette séance n'a pas encore de capacité définie par le MJ",
-      );
+      throw new BadRequestException("Cette séance n'a pas encore de capacité définie par le MJ");
     }
     // Story 8.8 : la date peut désormais aussi provenir d'un vote (Décision 1) — Seance.dateValidee
     // seul ne suffit plus à détecter le gel du roster (gap trouvé en analyse : validerDate(), seule
@@ -822,9 +737,7 @@ export class ScenariosService {
       }
       const count = await tx.inscription.count({ where: { seanceId } });
       if (count >= locked.inscriptionMax!) {
-        throw new ConflictException(
-          'Cette séance a atteint son nombre maximal d’inscrits',
-        );
+        throw new ConflictException('Cette séance a atteint son nombre maximal d’inscrits');
       }
       await tx.inscription.create({ data: { seanceId, userId } });
     });
@@ -851,10 +764,7 @@ export class ScenariosService {
       include: { poll: true },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(
-      this.prisma,
-      seance.scenarioId,
-    );
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
     const partie = await this.parties.getViewable(scenario.partieId, userId);
 
     // Décision utilisateur (revue de code, 2026-07-14) : la date validée fige le roster — un
@@ -880,19 +790,12 @@ export class ScenariosService {
   // AD-1/AD-9 : compte-rendu = champ neutre de Seance, jamais restreint par kind ni par un
   // hypothétique statut (Seance n'en a aucun) — contrairement à setSeanceCapacity/inscrire/
   // validerDate (Story 8.3, réservés à CAMPAGNE_EPISODIQUE). Écriture MJ-only (getOwned).
-  async setCompteRendu(
-    seanceId: string,
-    mjId: string,
-    compteRendu: string,
-  ): Promise<ScenarioDto> {
+  async setCompteRendu(seanceId: string, mjId: string, compteRendu: string): Promise<ScenarioDto> {
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(
-      this.prisma,
-      seance.scenarioId,
-    );
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     await this.prisma.seance.update({
@@ -927,10 +830,7 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(
-      this.prisma,
-      seance.scenarioId,
-    );
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     // Un seul update pour les trois champs : ils sont saisis ensemble.
@@ -956,11 +856,7 @@ export class ScenariosService {
   // inversée par rapport à update() (scenarios.service.ts:76-80) : celle-ci rejette tant que le
   // scénario n'est pas encore PASSE, update() rejette une fois PASSE — les deux se complètent.
   // Aucune restriction de kind, rappelable à volonté après la première rédaction (AC3).
-  async setResumeFin(
-    scenarioId: string,
-    mjId: string,
-    resumeFin: string,
-  ): Promise<ScenarioDto> {
+  async setResumeFin(scenarioId: string, mjId: string, resumeFin: string): Promise<ScenarioDto> {
     const scenario = await this.prisma.scenario.findUnique({
       where: { id: scenarioId },
     });
@@ -989,18 +885,13 @@ export class ScenariosService {
    * par AnnouncementsService pour la portée d'une annonce. AUCUNE validation de statut ici
    * (contrairement à uploadDocument() qui bloque PASSE) : AD-2 est explicite, une annonce peut
    * viser un scénario BROUILLON/A_VENIR, seul le rendu frontend (Story 9.2) protège l'anti-spoil. */
-  async verifyScenarioBelongsToPartie(
-    scenarioId: string,
-    partieId: string,
-  ): Promise<void> {
+  async verifyScenarioBelongsToPartie(scenarioId: string, partieId: string): Promise<void> {
     const scenario = await this.prisma.scenario.findUnique({
       where: { id: scenarioId },
     });
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     if (scenario.partieId !== partieId) {
-      throw new BadRequestException(
-        "Ce scénario n'appartient pas à cette Partie",
-      );
+      throw new BadRequestException("Ce scénario n'appartient pas à cette Partie");
     }
   }
 
@@ -1025,7 +916,7 @@ export class ScenariosService {
   }
 }
 
-function toDocumentDto(document: any): ScenarioDocumentDto {
+function toDocumentDto(document: ScenarioDocument): ScenarioDocumentDto {
   return {
     id: document.id,
     partieId: document.partieId,
@@ -1037,7 +928,7 @@ function toDocumentDto(document: any): ScenarioDocumentDto {
 }
 
 function toDto(
-  scenario: any,
+  scenario: Scenario,
   partieKind?: PartieKind,
   participants?: { userId: string; pseudo: string; displayName: string }[],
   seances?: SeanceDto[],
@@ -1090,17 +981,17 @@ const SEANCE_INCLUDE = {
     },
   },
   inscriptions: {
-    orderBy: [
-      { createdAt: 'asc' },
-      { id: 'asc' },
-    ] as Prisma.InscriptionOrderByWithRelationInput[],
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] as Prisma.InscriptionOrderByWithRelationInput[],
     include: { user: { select: { pseudo: true } } },
   },
 } as const;
 
 /** Story 36.6 — `membersCount` arrive en paramètre : c'est une propriété de la PARTIE, calculée
  *  UNE fois par appel par `countParticipants()` (jamais une par séance ni par sondage, AD-3). */
-function toSessionPollDto(poll: any, membersCount: number): SessionPollDto {
+function toSessionPollDto(
+  poll: Prisma.SessionPollGetPayload<typeof SEANCE_INCLUDE.poll>,
+  membersCount: number,
+): SessionPollDto {
   return {
     id: poll.id,
     partieId: poll.partieId,
@@ -1110,11 +1001,11 @@ function toSessionPollDto(poll: any, membersCount: number): SessionPollDto {
     chosenDate: poll.chosenDate?.toISOString() ?? null,
     chosenSlot: poll.chosenSlot,
     membersCount,
-    options: (poll.options ?? []).map((opt: any) => ({
+    options: (poll.options ?? []).map((opt) => ({
       id: opt.id,
       date: opt.date.toISOString(),
       slot: opt.slot,
-      votes: (opt.votes ?? []).map((v: any) => ({
+      votes: (opt.votes ?? []).map((v) => ({
         userId: v.userId,
         pseudo: v.user.pseudo,
         displayName: v.user.displayName,
@@ -1132,7 +1023,10 @@ export interface SetInfosPratiquesPayload {
   notePratique: string | null;
 }
 
-function toSeanceDto(seance: any, membersCount: number): SeanceDto {
+function toSeanceDto(
+  seance: Prisma.SeanceGetPayload<{ include: typeof SEANCE_INCLUDE }>,
+  membersCount: number,
+): SeanceDto {
   return {
     id: seance.id,
     scenarioId: seance.scenarioId,
@@ -1142,13 +1036,11 @@ function toSeanceDto(seance: any, membersCount: number): SeanceDto {
         ? {
             min: seance.inscriptionMin ?? 0,
             max: seance.inscriptionMax,
-            inscrits: (seance.inscriptions ?? []).map((i: any) => ({
+            inscrits: (seance.inscriptions ?? []).map((i) => ({
               userId: i.userId,
               pseudo: i.user.pseudo,
             })),
-            dateValidee: seance.dateValidee
-              ? seance.dateValidee.toISOString()
-              : null,
+            dateValidee: seance.dateValidee ? seance.dateValidee.toISOString() : null,
           }
         : undefined,
     compteRendu: seance.compteRendu,
@@ -1165,19 +1057,13 @@ function toSeanceDto(seance: any, membersCount: number): SeanceDto {
 // non contrôlé si la clé étrangère se révèle orpheline (cas normalement impossible en usage
 // courant — findUniqueOrThrow() lève Prisma.PrismaClientKnownRequestError/P2025, vérifié
 // empiriquement contre la base de ce projet).
-async function resolveScenarioOrThrow(
-  prisma: PrismaService,
-  scenarioId: string,
-) {
+async function resolveScenarioOrThrow(prisma: PrismaService, scenarioId: string) {
   try {
     return await prisma.scenario.findUniqueOrThrow({
       where: { id: scenarioId },
     });
   } catch (e) {
-    if (
-      e instanceof Prisma.PrismaClientKnownRequestError &&
-      e.code === 'P2025'
-    ) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
       throw new NotFoundException('Scénario introuvable');
     }
     throw e;
@@ -1219,7 +1105,7 @@ async function loadSeances(
 async function toEnrichedDto(
   prisma: PrismaService,
   characters: CharacterService,
-  scenario: any,
+  scenario: Scenario,
   partieKind: PartieKind,
 ): Promise<ScenarioDto> {
   // Story 36.6 — l'effectif est dérivé de `scenario.partieId`, déjà chargé, plutôt que threadé
@@ -1270,30 +1156,18 @@ async function loadRetrospectiveNotes(
     .filter((d): d is string => d !== null)
     .map((d) => new Date(d));
   const windowStart =
-    dates.length > 0
-      ? new Date(Math.min(...dates.map((d) => d.getTime())))
-      : null;
-  const windowEnd =
-    dates.length > 0
-      ? new Date(Math.max(...dates.map((d) => d.getTime())))
-      : null;
+    dates.length > 0 ? new Date(Math.min(...dates.map((d) => d.getTime()))) : null;
+  const windowEnd = dates.length > 0 ? new Date(Math.max(...dates.map((d) => d.getTime()))) : null;
 
   const allCharacters = await characters.findAllByPartie(scenario.partieId);
   const relevantCharacters =
     partieKind === 'CAMPAGNE_EPISODIQUE'
-      ? allCharacters.filter((c) =>
-          (participants ?? []).some((p) => p.userId === c.userId),
-        )
+      ? allCharacters.filter((c) => (participants ?? []).some((p) => p.userId === c.userId))
       : allCharacters;
 
   const notesPerCharacter = await Promise.all(
     relevantCharacters.map((c) =>
-      characters.getRetrospectiveNotes(
-        c.id,
-        scenario.id,
-        windowStart,
-        windowEnd,
-      ),
+      characters.getRetrospectiveNotes(c.id, scenario.id, windowStart, windowEnd),
     ),
   );
   return notesPerCharacter.flat();

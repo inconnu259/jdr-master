@@ -31,10 +31,7 @@ export interface TopicHandler {
 }
 
 /** Pure, testable isolément — pas de couplage à Angular/EventSource. */
-export function matchingHandlers(
-  handlers: readonly TopicHandler[],
-  topic: string,
-): TopicHandler[] {
+export function matchingHandlers(handlers: readonly TopicHandler[], topic: string): TopicHandler[] {
   return handlers.filter((h) => topic.startsWith(h.prefix));
 }
 

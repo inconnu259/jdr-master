@@ -1,6 +1,10 @@
 jest.mock('node:crypto', () => ({ randomUUID: jest.fn(() => 'fixed-uuid') }));
 
 import { migrateEquipmentUnify } from './migrate-equipment-unify';
+import { callArg } from '../common/test-utils/jest-typed';
+
+/** Fiche écrite par la migration, telle que les assertions la relisent. */
+type WrittenSheet = { equipment: Record<string, unknown> };
 
 function makePrisma(characters: { id: string; sheetData: unknown }[]) {
   return {
@@ -19,9 +23,7 @@ describe('migrateEquipmentUnify', () => {
         sheetData: {
           classId: 'chasseur',
           equipment: {
-            individual: [
-              { id: 'i1', name: 'Corde', weight: 1, addedBy: 'player' },
-            ],
+            individual: [{ id: 'i1', name: 'Corde', weight: 1, addedBy: 'player' }],
             group: ['Tente', 'Briquet'],
           },
         },
@@ -72,7 +74,8 @@ describe('migrateEquipmentUnify', () => {
 
     await migrateEquipmentUnify(prisma);
 
-    const written = prisma.character.update.mock.calls[0][0].data.sheetData;
+    const written = callArg<{ data: { sheetData: WrittenSheet } }>(prisma.character.update).data
+      .sheetData;
     expect(written.equipment.individual).toEqual([
       { id: 'fixed-uuid', name: 'Sac', weight: 0, addedBy: 'player' },
     ]);
@@ -88,7 +91,8 @@ describe('migrateEquipmentUnify', () => {
 
     await migrateEquipmentUnify(prisma);
 
-    const written = prisma.character.update.mock.calls[0][0].data.sheetData;
+    const written = callArg<{ data: { sheetData: WrittenSheet } }>(prisma.character.update).data
+      .sheetData;
     expect(written.equipment).not.toHaveProperty('group');
   });
 
@@ -98,9 +102,7 @@ describe('migrateEquipmentUnify', () => {
         id: 'char4',
         sheetData: {
           equipment: {
-            individual: [
-              { id: 'i1', name: 'Cape', weight: 1.2, addedBy: 'player' },
-            ],
+            individual: [{ id: 'i1', name: 'Cape', weight: 1.2, addedBy: 'player' }],
             contenants: [],
             animaux: [],
           },
@@ -115,9 +117,7 @@ describe('migrateEquipmentUnify', () => {
   });
 
   it('sheetData sans equipment → normalisé sans crash (individual/contenants/animaux vides)', async () => {
-    const prisma = makePrisma([
-      { id: 'char5', sheetData: { classId: 'chasseur' } },
-    ]);
+    const prisma = makePrisma([{ id: 'char5', sheetData: { classId: 'chasseur' } }]);
 
     const migrated = await migrateEquipmentUnify(prisma);
 

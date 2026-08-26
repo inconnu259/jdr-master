@@ -46,7 +46,14 @@ const CONTENT: GameSystemContentDto = {
       key: 'fermier',
       data: {
         label: 'Fermier',
-        talents: [{ id: 'metier-d-appoint', name: "Métier d'appoint", effect: { description: '...', conditions: '-' }, attributes: [] }],
+        talents: [
+          {
+            id: 'metier-d-appoint',
+            name: "Métier d'appoint",
+            effect: { description: '...', conditions: '-' },
+            attributes: [],
+          },
+        ],
         requiredChoices: [
           {
             key: 'fermier-metier-appoint',
@@ -61,7 +68,14 @@ const CONTENT: GameSystemContentDto = {
       key: 'meteomancien',
       data: {
         label: 'Météomancien',
-        talents: [{ id: 'climatophile', name: 'Climatophile', effect: { description: '...', conditions: '-' }, attributes: [] }],
+        talents: [
+          {
+            id: 'climatophile',
+            name: 'Climatophile',
+            effect: { description: '...', conditions: '-' },
+            attributes: [],
+          },
+        ],
         requiredChoices: [
           {
             key: 'meteomancien-climatophile',
@@ -118,9 +132,7 @@ const CONTENT: GameSystemContentDto = {
   weaponCategory: [
     { key: 'arc', data: { label: 'Arc', touchFormula: 'AGI+INT-2', damageFormula: 'AGI' } },
   ],
-  weaponItem: [
-    { key: 'arc-de-chasse', data: { label: 'Arc de chasse', categoryId: 'arc' } },
-  ],
+  weaponItem: [{ key: 'arc-de-chasse', data: { label: 'Arc de chasse', categoryId: 'arc' } }],
   equipmentItem: [
     { key: 'rations', data: { label: 'Rations', priceGold: 10, nature: 'individual', weight: 1 } },
     {
@@ -381,7 +393,7 @@ describe('CharacterWizard', () => {
     expect(comp.canGoNext()).toBe(true);
   });
 
-  it("Story 25.2 : étape Arme favorite complète avec seulement customWeapon renseigné (arme libre)", async () => {
+  it('Story 25.2 : étape Arme favorite complète avec seulement customWeapon renseigné (arme libre)', async () => {
     const { fixture } = await createComponent();
     const comp = fixture.componentInstance as any;
 
@@ -414,7 +426,7 @@ describe('CharacterWizard', () => {
     expect(comp.sheetData().weaponId).toBeUndefined();
   });
 
-  it("Story 26.1 : étape Équipement — canGoNext() false tant que startingEquipment est vide, true sous le budget, false au-delà de 1000 Po", async () => {
+  it('Story 26.1 : étape Équipement — canGoNext() false tant que startingEquipment est vide, true sous le budget, false au-delà de 1000 Po', async () => {
     const { fixture } = await createComponent();
     const comp = fixture.componentInstance as any;
 

@@ -34,10 +34,7 @@ export class NotesPdfService {
       try {
         form.getTextField(f.field).setText(f.value);
       } catch (e) {
-        this.logger.error(
-          `Échec du remplissage du champ PDF "${f.field}" (value=${f.value})`,
-          e,
-        );
+        this.logger.error(`Échec du remplissage du champ PDF "${f.field}" (value=${f.value})`, e);
         // Deux causes distinctes partagent ce catch — champ AcroForm introuvable/incompatible sur
         // le template (getTextField) OU valeur contenant un caractère non encodable en WinAnsi par
         // pdf-lib (setText) — même convention que EquipmentPdfService (Story 11.1).
@@ -55,10 +52,7 @@ export class NotesPdfService {
     if (!this.templatePromise) {
       this.templatePromise = readFile(PDF_TEMPLATE_PATH).catch((e) => {
         this.templatePromise = null;
-        this.logger.error(
-          'Échec du chargement du template PDF notes Ryuutama',
-          e,
-        );
+        this.logger.error('Échec du chargement du template PDF notes Ryuutama', e);
         throw new Error(
           'Template PDF notes Ryuutama introuvable. Consultez apps/api/game-systems/ryuutama/assets/README.md',
         );

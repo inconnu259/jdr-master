@@ -1,4 +1,13 @@
-import { Component, OnInit, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -195,7 +204,9 @@ export class HommeDragonSheet implements OnInit {
 
   // — Choix d'un pouvoir d'éveil (Story 10.4) —
   protected readonly eveilPowerCatalog = signal<ContentEntryDto[]>([]);
-  protected readonly currentPendingLevel = computed(() => this.hommeDragon()?.pendingEveilLevels[0] ?? null);
+  protected readonly currentPendingLevel = computed(
+    () => this.hommeDragon()?.pendingEveilLevels[0] ?? null,
+  );
   /** Pool commun à toutes les races (décision utilisateur, Story 10.4) : le sélecteur propose tous
    * les pouvoirs du catalogue non encore choisis, pas un filtrage par niveau — un pouvoir d'éveil
    * n'est jamais lié à un niveau de déblocage précis. */
@@ -209,7 +220,7 @@ export class HommeDragonSheet implements OnInit {
 
   protected eveilPowerLabel(key: string): string {
     const entry = this.eveilPowerCatalog().find((e) => e.key === key);
-    return entry ? (entry.data as { label?: string }).label ?? key : key;
+    return entry ? ((entry.data as { label?: string }).label ?? key) : key;
   }
 
   protected async onChooseEveilPower(): Promise<void> {
@@ -252,7 +263,7 @@ export class HommeDragonSheet implements OnInit {
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch {
-      this.exportError.set('Impossible d\'exporter la fiche en PDF. Réessayez.');
+      this.exportError.set("Impossible d'exporter la fiche en PDF. Réessayez.");
     } finally {
       this.exporting.set(false);
     }

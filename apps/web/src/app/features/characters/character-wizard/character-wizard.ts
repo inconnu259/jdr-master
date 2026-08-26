@@ -53,10 +53,9 @@ const SUPPORTED_STEP_KEYS = new Set([
  * étapes (un filtre **statique**, jamais dépendant d'une donnée du personnage) : `steps()` est
  * donc désormais dérivé aussi de `sheetData().typeId`, recalculé à chaque changement de type.
  */
-const CONDITIONAL_STEP_VISIBILITY: Record<string, (data: Partial<RyuutamaSheetData>) => boolean> =
-  {
-    magic: (data) => data.typeId === 'magie',
-  };
+const CONDITIONAL_STEP_VISIBILITY: Record<string, (data: Partial<RyuutamaSheetData>) => boolean> = {
+  magic: (data) => data.typeId === 'magie',
+};
 
 interface CreationStep {
   key: string;
@@ -222,9 +221,7 @@ export class CharacterWizard implements OnInit {
   protected readonly landscapes = computed<ContentEntryDto[]>(
     () => this.content()?.['landscape'] ?? [],
   );
-  protected readonly seasons = computed<ContentEntryDto[]>(
-    () => this.content()?.['season'] ?? [],
-  );
+  protected readonly seasons = computed<ContentEntryDto[]>(() => this.content()?.['season'] ?? []);
   /** Catalogue de sorts complet — `MagicStep` filtre lui-même rituelle/débutant (Story 23.9). */
   protected readonly spells = computed<ContentEntryDto[]>(() => this.content()?.['spell'] ?? []);
   /** Équipement de départ (Story 26.1) — objets achetables et nécessaires pré-faits. */
@@ -254,8 +251,9 @@ export class CharacterWizard implements OnInit {
   /** `requiredChoices` de la classe sélectionnée (Story 23.8) — [] si la classe n'en a aucun. */
   private readonly selectedClassRequiredChoices = computed<RequiredChoiceLike[]>(() => {
     const entry = this.classes().find((c) => c.key === this.sheetData().classId);
-    return (entry?.data as { requiredChoices?: RequiredChoiceLike[] } | undefined)
-      ?.requiredChoices ?? [];
+    return (
+      (entry?.data as { requiredChoices?: RequiredChoiceLike[] } | undefined)?.requiredChoices ?? []
+    );
   });
 
   protected readonly canGoNext = computed(() => {
@@ -280,11 +278,12 @@ export class CharacterWizard implements OnInit {
       case 'attributes':
         return !!data.attributes;
       case 'weaponId':
-        return !!data.weaponId || !!(data.customWeapon?.name?.trim() && data.customWeapon?.categoryId);
+        return (
+          !!data.weaponId || !!(data.customWeapon?.name?.trim() && data.customWeapon?.categoryId)
+        );
       case 'equipment':
         return (
-          (data.startingEquipment?.length ?? 0) > 0 &&
-          this.startingEquipmentTotalGold() <= 1000
+          (data.startingEquipment?.length ?? 0) > 0 && this.startingEquipmentTotalGold() <= 1000
         );
       default:
         return true;
@@ -399,16 +398,22 @@ export class CharacterWizard implements OnInit {
   }
 
   protected onWeaponIdChange(weaponId: string | null): void {
-    this.sheetData.update((d) => ({ ...d, weaponId: weaponId ?? undefined, customWeapon: undefined }));
+    this.sheetData.update((d) => ({
+      ...d,
+      weaponId: weaponId ?? undefined,
+      customWeapon: undefined,
+    }));
   }
 
   /** Arme libre (Story 25.2) — sibling exclusif de `weaponId` : la renseigner efface toujours
    *  un `weaponId` précédemment choisi (défense en profondeur, `validate()` reste la source de
    *  vérité côté serveur). */
-  protected onCustomWeaponChange(
-    customWeapon: { name: string; categoryId: string } | null,
-  ): void {
-    this.sheetData.update((d) => ({ ...d, customWeapon: customWeapon ?? undefined, weaponId: undefined }));
+  protected onCustomWeaponChange(customWeapon: { name: string; categoryId: string } | null): void {
+    this.sheetData.update((d) => ({
+      ...d,
+      customWeapon: customWeapon ?? undefined,
+      weaponId: undefined,
+    }));
   }
 
   protected onStartingEquipmentChange(selection: { key: string; quantity: number }[]): void {

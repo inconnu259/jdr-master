@@ -11,8 +11,7 @@ jest.mock('node:fs/promises', () => ({
 // `dto.coverImageVersion` de façon trompeuse (défense en profondeur qui se retournerait contre le
 // test).
 jest.mock('node:crypto', () => {
-  const actual =
-    jest.requireActual<typeof import('node:crypto')>('node:crypto');
+  const actual = jest.requireActual<typeof import('node:crypto')>('node:crypto');
   return {
     ...actual,
     randomUUID: jest.fn(() => '99999999-9999-9999-9999-999999999999'),
@@ -23,7 +22,9 @@ jest.mock('node:crypto', () => {
 // restent réels (fonctions pures), seule stripImageMetadata est mockée (passthrough) pour éviter
 // qu'un vrai sharp() sur un buffer de test (signature magique seule) échoue.
 jest.mock('../common/image-upload.util', () => ({
-  ...jest.requireActual('../common/image-upload.util'),
+  ...jest.requireActual<typeof import('../common/image-upload.util')>(
+    '../common/image-upload.util',
+  ),
   stripImageMetadata: jest.fn((buf: Buffer) => Promise.resolve(buf)),
 }));
 
@@ -32,36 +33,36 @@ jest.mock('../common/image-upload.util', () => ({
 // stripImageMetadata, lui-même mocké en passthrough ci-dessus).
 const sharpResizeCalls: unknown[] = [];
 jest.mock('sharp', () => {
-  const chain: any = {};
-  chain.resize = jest.fn((opts: unknown) => {
+  // Construit en deux temps : `resize`/`webp` renvoient la chaîne qui les contient, ce qu'un
+  // littéral unique ne permet pas d'exprimer sans retomber sur `any`.
+  const chain: {
+    resize: jest.Mock;
+    webp: jest.Mock;
+    toBuffer: jest.Mock;
+  } = {
+    resize: jest.fn(),
+    webp: jest.fn(),
+    toBuffer: jest.fn().mockResolvedValue(Buffer.from('resized-webp-bytes')),
+  };
+  chain.resize.mockImplementation((opts: unknown) => {
     sharpResizeCalls.push(opts);
     return chain;
   });
-  chain.webp = jest.fn(() => chain);
-  chain.toBuffer = jest
-    .fn()
-    .mockResolvedValue(Buffer.from('resized-webp-bytes'));
+  chain.webp.mockImplementation(() => chain);
   return jest.fn(() => chain);
 });
 
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { readFile, unlink, writeFile } from 'node:fs/promises';
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
-import {
-  RealtimeEventsService,
-  partieTopic,
-  userTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
+import { anyOf, arrayLike, callArg, objectLike, stringLike } from '../common/test-utils/jest-typed';
 
 describe('PartiesService', () => {
   let service: PartiesService;
@@ -126,7 +127,7 @@ describe('PartiesService', () => {
     // ce reset, l'historique d'appels (writeFile/unlink) fuiterait d'un test à l'autre, faussant
     // les assertions `toHaveBeenCalledTimes`/`not.toHaveBeenCalled` des tests de couverture.
     jest.clearAllMocks();
-    const p: any = {
+    const p = {
       partie: {
         create: jest.fn(),
         findUnique: jest.fn(),
@@ -167,8 +168,10 @@ describe('PartiesService', () => {
       },
     };
     // $transaction exécute le callback avec le même mock en guise de `tx`
-    p.$transaction = jest.fn((fn: (tx: unknown) => unknown) => fn(p));
-    prisma = p;
+    prisma = {
+      ...p,
+      $transaction: jest.fn((fn: (tx: typeof p) => unknown) => fn(p)),
+    };
     avail = {
       getActiveDeclarations: jest.fn().mockResolvedValue(new Map()),
       // getAvailableSlots/getHeatmap appellent cette variante (AD-9, Story 30.5) — le mock reflète
@@ -192,7 +195,7 @@ describe('PartiesService', () => {
       gameSystemId: 'draconis',
     });
     expect(prisma.partie.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+      data: objectLike({
         mjId: 'mj1',
         name: 'La Nuit',
         description: null,
@@ -214,7 +217,7 @@ describe('PartiesService', () => {
       gameSystemId: partie.gameSystemId,
       description: partie.description,
       mjId: partie.mjId,
-      createdAt: partie.createdAt,
+      createdAt: partie.createdAt.toISOString(),
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
@@ -300,7 +303,7 @@ describe('PartiesService', () => {
         gameSystemId: partie.gameSystemId,
         description: partie.description,
         mjId: partie.mjId,
-        createdAt: partie.createdAt,
+        createdAt: partie.createdAt.toISOString(),
         nextSessionDate: null,
         nextSessionSlot: null,
         role: 'player',
@@ -310,7 +313,7 @@ describe('PartiesService', () => {
       },
     ]);
     expect(prisma.membership.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
+      objectLike({
         where: { userId: 'u' },
         include: { partie: true },
       }),
@@ -327,7 +330,7 @@ describe('PartiesService', () => {
         gameSystemId: partie.gameSystemId,
         description: partie.description,
         mjId: partie.mjId,
-        createdAt: partie.createdAt,
+        createdAt: partie.createdAt.toISOString(),
         nextSessionDate: null,
         nextSessionSlot: null,
         role: 'mj',
@@ -340,9 +343,7 @@ describe('PartiesService', () => {
 
   it('listForUser(mj) : status: EN_COURS quand scenario.groupBy renvoie un compte > 0 pour la partie (Story 29.6)', async () => {
     prisma.partie.findMany.mockResolvedValue([partie]);
-    prisma.scenario.groupBy.mockResolvedValue([
-      { partieId: 'p1', _count: { _all: 2 } },
-    ]);
+    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 2 } }]);
     const [dto] = await service.listForUser('mj1', 'mj');
     expect(dto.status).toBe('EN_COURS');
   });
@@ -351,9 +352,7 @@ describe('PartiesService', () => {
     prisma.partie.findMany.mockResolvedValue([
       { ...partie, closedAt: new Date('2026-08-01T00:00:00.000Z') },
     ]);
-    prisma.scenario.groupBy.mockResolvedValue([
-      { partieId: 'p1', _count: { _all: 3 } },
-    ]);
+    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 3 } }]);
     const [dto] = await service.listForUser('mj1', 'mj');
     expect(dto.status).toBe('TERMINEE');
   });
@@ -510,9 +509,7 @@ describe('PartiesService', () => {
 
   describe('coverImageVersion (Story 29.12, AD-19)', () => {
     it('sans couverture (coverImageUrl null) → coverImageVersion null', async () => {
-      prisma.partie.findMany.mockResolvedValue([
-        { ...partie, coverImageUrl: null },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ ...partie, coverImageUrl: null }]);
       const [dto] = await service.listForUser('mj1', 'mj');
       expect(dto.coverImageVersion).toBeNull();
     });
@@ -521,14 +518,11 @@ describe('PartiesService', () => {
       prisma.partie.findMany.mockResolvedValue([
         {
           ...partie,
-          coverImageUrl:
-            '/uploads/covers/11111111-1111-1111-1111-111111111111.webp',
+          coverImageUrl: '/uploads/covers/11111111-1111-1111-1111-111111111111.webp',
         },
       ]);
       const [dto] = await service.listForUser('mj1', 'mj');
-      expect(dto.coverImageVersion).toBe(
-        '11111111-1111-1111-1111-111111111111',
-      );
+      expect(dto.coverImageVersion).toBe('11111111-1111-1111-1111-111111111111');
     });
 
     it('coverImageUrl corrompu (mauvais préfixe ou format invalide) → coverImageVersion null, jamais une exception', async () => {
@@ -563,13 +557,11 @@ describe('PartiesService', () => {
       prisma.partie.findUnique.mockResolvedValue(partie);
       prisma.partie.update.mockResolvedValue({
         ...partie,
-        coverImageUrl:
-          '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+        coverImageUrl: '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
       });
       prisma.partie.findUniqueOrThrow.mockResolvedValue({
         ...partie,
-        coverImageUrl:
-          '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+        coverImageUrl: '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
       });
 
       const dto = await service.setCoverImage('p1', 'mj1', makeCoverFile());
@@ -577,32 +569,23 @@ describe('PartiesService', () => {
       expect(prisma.partie.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
         data: {
-          coverImageUrl:
-            '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
+          coverImageUrl: '/uploads/covers/99999999-9999-9999-9999-999999999999.webp',
         },
       });
       expect(writeFile).toHaveBeenCalledTimes(3);
       expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '99999999-9999-9999-9999-999999999999-large.webp',
-        ),
-        expect.any(Buffer),
+        stringLike('99999999-9999-9999-9999-999999999999-large.webp'),
+        anyOf(Buffer),
       );
       expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '99999999-9999-9999-9999-999999999999-medium.webp',
-        ),
-        expect.any(Buffer),
+        stringLike('99999999-9999-9999-9999-999999999999-medium.webp'),
+        anyOf(Buffer),
       );
       expect(writeFile).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '99999999-9999-9999-9999-999999999999-compact.webp',
-        ),
-        expect.any(Buffer),
+        stringLike('99999999-9999-9999-9999-999999999999-compact.webp'),
+        anyOf(Buffer),
       );
-      expect(dto.coverImageVersion).toBe(
-        '99999999-9999-9999-9999-999999999999',
-      );
+      expect(dto.coverImageVersion).toBe('99999999-9999-9999-9999-999999999999');
     });
 
     it('AC9 : chaque dérivée est redimensionnée pour son mode — dimensions distinctes par mode, jamais une largeur unique', async () => {
@@ -614,21 +597,17 @@ describe('PartiesService', () => {
       await service.setCoverImage('p1', 'mj1', makeCoverFile());
 
       expect(sharpResizeCalls).toContainEqual(
-        expect.objectContaining({ width: 640, height: 248, fit: 'cover' }),
+        objectLike({ width: 640, height: 248, fit: 'cover' }),
       );
-      expect(sharpResizeCalls).toContainEqual(
-        expect.objectContaining({ width: 88, height: 88, fit: 'cover' }),
-      );
-      expect(sharpResizeCalls).toContainEqual(
-        expect.objectContaining({ width: 56, height: 56, fit: 'cover' }),
-      );
+      expect(sharpResizeCalls).toContainEqual(objectLike({ width: 88, height: 88, fit: 'cover' }));
+      expect(sharpResizeCalls).toContainEqual(objectLike({ width: 56, height: 56, fit: 'cover' }));
     });
 
     it('AC4 : joueur non-MJ → ForbiddenException, aucune écriture disque', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
-      await expect(
-        service.setCoverImage('p1', 'autre', makeCoverFile()),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.setCoverImage('p1', 'autre', makeCoverFile())).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
       expect(writeFile).not.toHaveBeenCalled();
       expect(prisma.partie.update).not.toHaveBeenCalled();
     });
@@ -636,11 +615,7 @@ describe('PartiesService', () => {
     it('fichier non-image (octets magiques invalides) → BadRequestException, aucune écriture disque', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie);
       await expect(
-        service.setCoverImage(
-          'p1',
-          'mj1',
-          makeCoverFile(Buffer.from('not an image')),
-        ),
+        service.setCoverImage('p1', 'mj1', makeCoverFile(Buffer.from('not an image'))),
       ).rejects.toThrow(BadRequestException);
       expect(writeFile).not.toHaveBeenCalled();
     });
@@ -656,38 +631,24 @@ describe('PartiesService', () => {
 
       await service.setCoverImage('p1', 'mj1', makeCoverFile());
 
-      expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining(`${OLD_STEM}-large.webp`),
-      );
-      expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining(`${OLD_STEM}-medium.webp`),
-      );
-      expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining(`${OLD_STEM}-compact.webp`),
-      );
+      expect(unlink).toHaveBeenCalledWith(stringLike(`${OLD_STEM}-large.webp`));
+      expect(unlink).toHaveBeenCalledWith(stringLike(`${OLD_STEM}-medium.webp`));
+      expect(unlink).toHaveBeenCalledWith(stringLike(`${OLD_STEM}-compact.webp`));
     });
 
     it('échec DB après écriture disque → les dérivées fraîchement écrites sont nettoyées, erreur propagée', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie);
       prisma.partie.update.mockRejectedValue(new Error('db down'));
 
-      await expect(
-        service.setCoverImage('p1', 'mj1', makeCoverFile()),
-      ).rejects.toThrow('db down');
+      await expect(service.setCoverImage('p1', 'mj1', makeCoverFile())).rejects.toThrow('db down');
       expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '99999999-9999-9999-9999-999999999999-large.webp',
-        ),
+        stringLike('99999999-9999-9999-9999-999999999999-large.webp'),
       );
       expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '99999999-9999-9999-9999-999999999999-medium.webp',
-        ),
+        stringLike('99999999-9999-9999-9999-999999999999-medium.webp'),
       );
       expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining(
-          '99999999-9999-9999-9999-999999999999-compact.webp',
-        ),
+        stringLike('99999999-9999-9999-9999-999999999999-compact.webp'),
       );
     });
 
@@ -723,17 +684,15 @@ describe('PartiesService', () => {
         where: { id: 'p1' },
         data: { coverImageUrl: null },
       });
-      expect(unlink).toHaveBeenCalledWith(
-        expect.stringContaining(`${STEM}-large.webp`),
-      );
+      expect(unlink).toHaveBeenCalledWith(stringLike(`${STEM}-large.webp`));
       expect(dto.coverImageVersion).toBeNull();
     });
 
     it('AC4 : retrait par un joueur non-MJ → ForbiddenException, aucune écriture', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie);
-      await expect(
-        service.removeCoverImage('p1', 'autre'),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.removeCoverImage('p1', 'autre')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
       expect(prisma.partie.update).not.toHaveBeenCalled();
     });
 
@@ -754,15 +713,11 @@ describe('PartiesService', () => {
         ...partie,
         coverImageUrl: `/uploads/covers/${STEM}.webp`,
       });
-      (readFile as jest.Mock).mockResolvedValue(
-        Buffer.from('derivative-bytes'),
-      );
+      (readFile as jest.Mock).mockResolvedValue(Buffer.from('derivative-bytes'));
 
       const result = await service.getCoverFile('p1', 'mj1', 'medium');
 
-      expect(readFile).toHaveBeenCalledWith(
-        expect.stringContaining(`${STEM}-medium.webp`),
-      );
+      expect(readFile).toHaveBeenCalledWith(stringLike(`${STEM}-medium.webp`));
       expect(result).toEqual({
         buffer: Buffer.from('derivative-bytes'),
         mime: 'image/webp',
@@ -783,22 +738,19 @@ describe('PartiesService', () => {
     it('getCoverFile : coverImageUrl renseigné mais fichier absent du disque → null, jamais une exception (CAP-20)', async () => {
       prisma.partie.findUnique.mockResolvedValue({
         ...partie,
-        coverImageUrl:
-          '/uploads/covers/55555555-5555-5555-5555-555555555555.webp',
+        coverImageUrl: '/uploads/covers/55555555-5555-5555-5555-555555555555.webp',
       });
       (readFile as jest.Mock).mockRejectedValue(new Error('ENOENT'));
 
-      await expect(
-        service.getCoverFile('p1', 'mj1', 'large'),
-      ).resolves.toBeNull();
+      await expect(service.getCoverFile('p1', 'mj1', 'large')).resolves.toBeNull();
     });
 
     it('getCoverFile : non-membre et non-MJ → ForbiddenException (getViewable)', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
       prisma.membership.findUnique.mockResolvedValue(null);
-      await expect(
-        service.getCoverFile('p1', 'etranger', 'large'),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.getCoverFile('p1', 'etranger', 'large')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
     });
   });
 
@@ -820,9 +772,7 @@ describe('PartiesService', () => {
   it('getViewable : 403 si ni MJ ni membre', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.membership.findUnique.mockResolvedValue(null);
-    await expect(service.getViewable('p1', 'u')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(service.getViewable('p1', 'u')).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('findOneDto : retourne mjPseudo/mjDisplayName et role: mj pour le MJ (getViewable inchangée)', async () => {
@@ -839,7 +789,7 @@ describe('PartiesService', () => {
       gameSystemId: partie.gameSystemId,
       description: partie.description,
       mjId: partie.mjId,
-      createdAt: partie.createdAt,
+      createdAt: partie.createdAt.toISOString(),
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
@@ -874,7 +824,7 @@ describe('PartiesService', () => {
       gameSystemId: partie.gameSystemId,
       description: partie.description,
       mjId: partie.mjId,
-      createdAt: partie.createdAt,
+      createdAt: partie.createdAt.toISOString(),
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'player',
@@ -911,9 +861,7 @@ describe('PartiesService', () => {
   it('findOneDto : 403 si ni MJ ni membre (getViewable inchangée)', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.membership.findUnique.mockResolvedValue(null);
-    await expect(service.findOneDto('p1', 'u')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(service.findOneDto('p1', 'u')).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("findOneDto : renvoie la partie projetée (avec role), sans mjPseudo/mjDisplayName, si l'utilisateur MJ est introuvable (revue de code, pas de 500)", async () => {
@@ -927,7 +875,7 @@ describe('PartiesService', () => {
       gameSystemId: partie.gameSystemId,
       description: partie.description,
       mjId: partie.mjId,
-      createdAt: partie.createdAt,
+      createdAt: partie.createdAt.toISOString(),
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
@@ -935,7 +883,7 @@ describe('PartiesService', () => {
       isFavorite: false,
       coverImageVersion: null,
     });
-    expect((dto as any).mjPseudo).toBeUndefined();
+    expect((dto as Record<string, unknown>).mjPseudo).toBeUndefined();
   });
 
   it('removeMember : MJ uniquement, puis supprime le membership', async () => {
@@ -949,9 +897,9 @@ describe('PartiesService', () => {
 
   it('removeMember : 403 si pas le MJ (aucune suppression)', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
-    await expect(
-      service.removeMember('p1', 'autre', 'u'),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.removeMember('p1', 'autre', 'u')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
     expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
   });
 
@@ -978,16 +926,12 @@ describe('PartiesService', () => {
 
   it('getOwned : 404 si introuvable', async () => {
     prisma.partie.findUnique.mockResolvedValue(null);
-    await expect(service.getOwned('p1', 'mj1')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(service.getOwned('p1', 'mj1')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('getOwned : 403 si pas le MJ', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
-    await expect(service.getOwned('p1', 'autre')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(service.getOwned('p1', 'autre')).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('getOwned : renvoie la partie si MJ', async () => {
@@ -1013,7 +957,7 @@ describe('PartiesService', () => {
       gameSystemId: partie.gameSystemId,
       description: partie.description,
       mjId: partie.mjId,
-      createdAt: partie.createdAt,
+      createdAt: partie.createdAt.toISOString(),
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
@@ -1035,9 +979,7 @@ describe('PartiesService', () => {
 
     it('close() : MJ uniquement (403 sinon, aucun update)', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie);
-      await expect(service.close('p1', 'autre')).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(service.close('p1', 'autre')).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.partie.update).not.toHaveBeenCalled();
     });
 
@@ -1050,7 +992,7 @@ describe('PartiesService', () => {
       await service.close('p1', 'mj1');
       expect(prisma.partie.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
-        data: { closedAt: expect.any(Date) },
+        data: { closedAt: anyOf(Date) },
       });
     });
 
@@ -1100,9 +1042,7 @@ describe('PartiesService', () => {
 
     it('reopen() : MJ uniquement (403 sinon, aucun update)', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie);
-      await expect(service.reopen('p1', 'autre')).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(service.reopen('p1', 'autre')).rejects.toBeInstanceOf(ForbiddenException);
       expect(prisma.partie.update).not.toHaveBeenCalled();
     });
 
@@ -1164,9 +1104,7 @@ describe('PartiesService', () => {
 
     it("n'échoue jamais l'appelant si l'émission lève une exception (même garde que close()/reopen())", async () => {
       prisma.membership.findMany.mockRejectedValue(new Error('boom'));
-      await expect(
-        service.notifyPartieSignalsChanged('p1', 'mj1'),
-      ).resolves.toBeUndefined();
+      await expect(service.notifyPartieSignalsChanged('p1', 'mj1')).resolves.toBeUndefined();
     });
   });
 
@@ -1179,9 +1117,7 @@ describe('PartiesService', () => {
 
   it('remove : 403 si pas le MJ (et aucune suppression)', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
-    await expect(service.remove('p1', 'autre')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(service.remove('p1', 'autre')).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.partie.delete).not.toHaveBeenCalled();
   });
 
@@ -1224,9 +1160,9 @@ describe('PartiesService', () => {
     it('lève ForbiddenException si ni MJ ni membre (aucune requête membership)', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie);
       prisma.membership.findUnique.mockResolvedValue(null);
-      await expect(
-        service.listMembers('p1', 'stranger'),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.listMembers('p1', 'stranger')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
       expect(prisma.membership.findMany).not.toHaveBeenCalled();
     });
   });
@@ -1255,46 +1191,27 @@ describe('PartiesService', () => {
     it('appelle getActiveDeclarations une seule fois pour N membres (pas de N+1)', async () => {
       await service.getAvailableSlots('p1', 'mj1', 1);
       expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledTimes(1);
-      expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledWith([
-        'u1',
-        'u2',
-      ]);
+      expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledWith(['u1', 'u2']);
     });
 
     it('les créneaux avec membres non-MJ UNAVAILABLE sont classés en priorité 3 (fins de liste)', async () => {
       // Premier appel (u1 sur le 1er slot) = UNAVAILABLE ; tous les suivants = UNKNOWN
       // Avec 1 semaine = 21 créneaux, le créneau UNAVAILABLE (priorité 3) arrive en 21ème
       // position → exclu par slice(0, 20). Non hard-exclu : seulement de-priorisé.
-      avail.computeSlotStatus
-        .mockReturnValueOnce('UNAVAILABLE')
-        .mockReturnValue('UNKNOWN');
+      avail.computeSlotStatus.mockReturnValueOnce('UNAVAILABLE').mockReturnValue('UNKNOWN');
 
-      const results = (await service.getAvailableSlots(
-        'p1',
-        'mj1',
-        1,
-      )) as AvailableSlotDto[];
+      const results = (await service.getAvailableSlots('p1', 'mj1', 1)) as AvailableSlotDto[];
       expect(results.length).toBeLessThanOrEqual(20);
       // Le créneau UNAVAILABLE ne figure pas dans les 20 premiers (relégué en priorité 3)
-      expect(
-        results.every((r) =>
-          r.members.every((m) => m.status !== 'UNAVAILABLE'),
-        ),
-      ).toBe(true);
+      expect(results.every((r) => r.members.every((m) => m.status !== 'UNAVAILABLE'))).toBe(true);
     });
 
     it('inclut un créneau si tous les membres sont UNKNOWN', async () => {
       avail.computeSlotStatus.mockReturnValue('UNKNOWN');
 
-      const results = (await service.getAvailableSlots(
-        'p1',
-        'mj1',
-        1,
-      )) as AvailableSlotDto[];
+      const results = (await service.getAvailableSlots('p1', 'mj1', 1)) as AvailableSlotDto[];
       expect(results.length).toBeGreaterThan(0);
-      expect(results[0].members.every((m) => m.status === 'UNKNOWN')).toBe(
-        true,
-      );
+      expect(results[0].members.every((m) => m.status === 'UNKNOWN')).toBe(true);
     });
 
     it("n'inclut pas un membre retiré (absent de memberships) dans le calcul", async () => {
@@ -1302,14 +1219,10 @@ describe('PartiesService', () => {
       prisma.membership.findMany.mockResolvedValue([
         { userId: 'u1', user: { id: 'u1', pseudo: 'Alice' } },
       ]);
-      avail.getActiveDeclarationsWithSeances.mockResolvedValue(
-        new Map([['u1', []]]),
-      );
+      avail.getActiveDeclarationsWithSeances.mockResolvedValue(new Map([['u1', []]]));
 
       await service.getAvailableSlots('p1', 'mj1', 1);
-      expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledWith([
-        'u1',
-      ]);
+      expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledWith(['u1']);
     });
 
     it('renvoie au plus 20 créneaux (limite de résultats)', async () => {
@@ -1329,18 +1242,12 @@ describe('PartiesService', () => {
         if (callCount === 2) return 'UNAVAILABLE';
         return 'AVAILABLE';
       });
-      const results = (await service.getAvailableSlots(
-        'p1',
-        'mj1',
-        1,
-      )) as AvailableSlotDto[];
+      const results = (await service.getAvailableSlots('p1', 'mj1', 1)) as AvailableSlotDto[];
       expect(results.length).toBeGreaterThan(0);
       // Les 20 premiers résultats ne doivent PAS commencer par le créneau mixte (priorité 1)
       // avant un créneau all-AVAILABLE (priorité 0) — vérifier que le tri est respecté
       for (let i = 1; i < results.length; i++) {
-        const pa = results[i - 1].members.some(
-          (m) => m.status === 'UNAVAILABLE',
-        )
+        const pa = results[i - 1].members.some((m) => m.status === 'UNAVAILABLE')
           ? 3
           : results[i - 1].members.every((m) => m.status === 'AVAILABLE')
             ? 0
@@ -1388,11 +1295,7 @@ describe('PartiesService', () => {
           const isEven = callIdx++ % 2 === 0;
           return isEven ? 'AVAILABLE' : 'UNAVAILABLE'; // mj=AVAILABLE, u1=UNAVAILABLE
         });
-        const results = (await service.getAvailableSlots(
-          'p1',
-          'u1',
-          1,
-        )) as AggregatedSlotDto[];
+        const results = (await service.getAvailableSlots('p1', 'u1', 1)) as AggregatedSlotDto[];
         expect(results.length).toBeGreaterThan(0);
         // Au moins un créneau doit avoir unavailable > 0 (Q2B)
         expect(results.some((r) => r.unavailable > 0)).toBe(true);
@@ -1400,11 +1303,7 @@ describe('PartiesService', () => {
     });
 
     it('renvoie AvailableSlotDto[] (avec members) pour le MJ', async () => {
-      const results = (await service.getAvailableSlots(
-        'p1',
-        'mj1',
-        1,
-      )) as AvailableSlotDto[];
+      const results = (await service.getAvailableSlots('p1', 'mj1', 1)) as AvailableSlotDto[];
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]).toHaveProperty('members');
       expect(results[0].members[0]).toMatchObject({
@@ -1430,11 +1329,7 @@ describe('PartiesService', () => {
       );
       avail.computeSlotStatus.mockReturnValue('UNKNOWN');
 
-      const results = (await service.getAvailableSlots(
-        'p1',
-        'player1',
-        1,
-      )) as AggregatedSlotDto[];
+      const results = (await service.getAvailableSlots('p1', 'player1', 1)) as AggregatedSlotDto[];
       expect(results.length).toBeGreaterThan(0);
       expect(results[0]).toHaveProperty('available');
       expect(results[0]).toHaveProperty('unavailable');
@@ -1444,9 +1339,9 @@ describe('PartiesService', () => {
     });
 
     it('lève ForbiddenException si ni MJ ni membre', async () => {
-      await expect(
-        service.getAvailableSlots('p1', 'stranger', 1),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.getAvailableSlots('p1', 'stranger', 1)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
     });
 
     describe('filtrage from/to', () => {
@@ -1497,11 +1392,7 @@ describe('PartiesService', () => {
       });
 
       it('sans from/to, appel avec weeks fonctionne (rétrocompat)', async () => {
-        const results = (await service.getAvailableSlots(
-          'p1',
-          'mj1',
-          1,
-        )) as AvailableSlotDto[];
+        const results = (await service.getAvailableSlots('p1', 'mj1', 1)) as AvailableSlotDto[];
         expect(avail.getActiveDeclarationsWithSeances).toHaveBeenCalledTimes(1);
         expect(results.length).toBeGreaterThanOrEqual(0);
       });
@@ -1576,9 +1467,7 @@ describe('PartiesService', () => {
           ]),
         },
         user: {
-          findUnique: jest
-            .fn()
-            .mockResolvedValue({ id: 'mjA', pseudo: 'MJ', displayName: 'MJ' }),
+          findUnique: jest.fn().mockResolvedValue({ id: 'mjA', pseudo: 'MJ', displayName: 'MJ' }),
         },
         availabilityDeclaration: { findMany: jest.fn().mockResolvedValue([]) },
         seance: {
@@ -1611,9 +1500,7 @@ describe('PartiesService', () => {
         '2026-09-20',
       )) as AvailableSlotDto[];
       const eveningMj = mjResults.find((r) => r.slot === 'EVENING')!;
-      expect(eveningMj.members.find((m) => m.userId === 'u1')!.status).toBe(
-        'UNAVAILABLE',
-      );
+      expect(eveningMj.members.find((m) => m.userId === 'u1')!.status).toBe('UNAVAILABLE');
       const mjSerialized = JSON.stringify(mjResults);
       expect(mjSerialized).not.toContain('mjB');
       expect(mjSerialized).not.toContain('partieB');
@@ -1630,12 +1517,7 @@ describe('PartiesService', () => {
 
       // AC6 : getHeatmap (pas seulement la branche non-MJ de getAvailableSlots) doit s'accorder
       // avec la vue MJ sur le même créneau, sans nommer la Partie B non plus.
-      const heatmap = await svc.getHeatmap(
-        'A',
-        'u1',
-        '2026-09-20',
-        '2026-09-20',
-      );
+      const heatmap = await svc.getHeatmap('A', 'u1', '2026-09-20', '2026-09-20');
       const eveningHeatmap = heatmap.find((r) => r.slot === 'EVENING')!;
       expect(eveningHeatmap.unavailable).toBeGreaterThanOrEqual(1);
       expect(JSON.stringify(heatmap)).not.toContain('mjB');
@@ -1678,20 +1560,13 @@ describe('PartiesService', () => {
       // ci-dessus. Le mock rejoue donc l'ordre d'appel de `participants.map(...)`.
       let call = 0;
       const order = ['mj1', 'u1', 'u2'];
-      avail.computeSlotStatus.mockImplementation(
-        () => byUser[order[call++ % order.length]],
-      );
+      avail.computeSlotStatus.mockImplementation(() => byUser[order[call++ % order.length]]);
     }
 
     it('sert `members` au MJ, dans l’ordre fixe de la troupe, statut apparié à l’identité (AC4)', async () => {
       setupTroupe();
 
-      const heatmap = await service.getHeatmap(
-        'p1',
-        'mj1',
-        '2026-09-01',
-        '2026-09-01',
-      );
+      const heatmap = await service.getHeatmap('p1', 'mj1', '2026-09-01', '2026-09-01');
 
       const morning = heatmap.find((r) => r.slot === 'MORNING')!;
       expect(morning.members).toEqual([
@@ -1717,19 +1592,12 @@ describe('PartiesService', () => {
     it("n'expose AUCUNE identité à un joueur — la clé est ABSENTE, jamais un tableau vide (AC14)", async () => {
       setupTroupe();
 
-      const heatmap = await service.getHeatmap(
-        'p1',
-        'u1',
-        '2026-09-01',
-        '2026-09-01',
-      );
+      const heatmap = await service.getHeatmap('p1', 'u1', '2026-09-01', '2026-09-01');
 
       const morning = heatmap.find((r) => r.slot === 'MORNING')!;
       // `hasOwnProperty` et non `toBeUndefined()` : un `members: undefined` explicite passerait
       // la seconde assertion tout en sérialisant la clé dans certaines configurations.
-      expect(Object.prototype.hasOwnProperty.call(morning, 'members')).toBe(
-        false,
-      );
+      expect(Object.prototype.hasOwnProperty.call(morning, 'members')).toBe(false);
       const serialized = JSON.stringify(heatmap);
       expect(serialized).not.toContain('alice');
       expect(serialized).not.toContain('Alice');
@@ -1744,7 +1612,7 @@ describe('PartiesService', () => {
       // Revue de code : `userId` en départage — `joinedAt` seul ne garantit pas un ordre stable
       // si deux membres partagent le même timestamp (invitation groupée).
       expect(prisma.membership.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
+        objectLike({
           orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
         }),
       );
@@ -1766,7 +1634,7 @@ describe('PartiesService', () => {
     /** Pose le nombre de scénarios total et le nombre de COURANT vus par la conversion.
      *  Distingue les deux appels par leur clause `where`, plutôt que par leur ordre. */
     function setScenarioCounts(total: number, courant: number): void {
-      prisma.scenario.count.mockImplementation((args: any) =>
+      prisma.scenario.count.mockImplementation((args?: { where?: { status?: string } }) =>
         Promise.resolve(args?.where?.status === 'COURANT' ? courant : total),
       );
     }
@@ -1796,9 +1664,9 @@ describe('PartiesService', () => {
     });
 
     it('MJ uniquement : 403 pour un non-MJ, et aucune écriture', async () => {
-      await expect(
-        service.convertKind('p1', 'autre', { kind: 'ONE_SHOT' }),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.convertKind('p1', 'autre', { kind: 'ONE_SHOT' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
       expectNoWrites();
     });
 
@@ -1816,18 +1684,16 @@ describe('PartiesService', () => {
     it('AC10 — refus (3 scénarios → ONE_SHOT) : BadRequest levée AVANT toute écriture', async () => {
       setScenarioCounts(3, 0);
 
-      await expect(
-        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
       expectNoWrites();
     });
 
     it('AC6 — le message de refus nomme la cause réelle et le nombre en jeu', async () => {
       setScenarioCounts(3, 0);
 
-      await expect(
-        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
-      ).rejects.toThrow(/3/);
+      await expect(service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' })).rejects.toThrow(/3/);
     });
 
     it('Règle C — partie clôturée : refus avec un message distinct invitant à rouvrir', async () => {
@@ -1836,9 +1702,9 @@ describe('PartiesService', () => {
         closedAt: new Date(),
       });
 
-      await expect(
-        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
-      ).rejects.toThrow(/rouvr/i);
+      await expect(service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' })).rejects.toThrow(
+        /rouvr/i,
+      );
       expectNoWrites();
     });
 
@@ -1849,9 +1715,9 @@ describe('PartiesService', () => {
         closedAt: new Date(),
       });
 
-      await expect(
-        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
-      ).rejects.toThrow(/rouvr/i);
+      await expect(service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' })).rejects.toThrow(
+        /rouvr/i,
+      );
     });
 
     it('Cas 3 à 1 scénario : autorisée, écrit le kind et rien d’autre', async () => {
@@ -1882,18 +1748,15 @@ describe('PartiesService', () => {
 
     it('AC8 — cas 4 : inscrit chaque membre à chaque scénario existant', async () => {
       prisma.scenario.findMany.mockResolvedValue([{ id: 's1' }, { id: 's2' }]);
-      prisma.membership.findMany.mockResolvedValue([
-        { userId: 'u1' },
-        { userId: 'u2' },
-      ]);
+      prisma.membership.findMany.mockResolvedValue([{ userId: 'u1' }, { userId: 'u2' }]);
 
       await service.convertKind('p1', 'mj1', {
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
-      const call = prisma.scenarioParticipant.createMany.mock.calls[0][0];
+      const call = callArg<{ data: unknown[] }>(prisma.scenarioParticipant.createMany);
       expect(call.data).toEqual(
-        expect.arrayContaining([
+        arrayLike([
           { scenarioId: 's1', userId: 'u1' },
           { scenarioId: 's1', userId: 'u2' },
           { scenarioId: 's2', userId: 'u1' },
@@ -1910,7 +1773,7 @@ describe('PartiesService', () => {
       await service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_EPISODIQUE' });
 
       expect(prisma.scenarioParticipant.createMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skipDuplicates: true }),
+        objectLike({ skipDuplicates: true }),
       );
     });
 
@@ -1958,7 +1821,7 @@ describe('PartiesService', () => {
       });
 
       // Seul `status` est écrit : aucune suppression de séance, aucun champ de date touché.
-      expect(prisma.scenario.updateMany.mock.calls[0][0].data).toEqual({
+      expect(callArg<{ data: unknown }>(prisma.scenario.updateMany).data).toEqual({
         status: 'A_VENIR',
       });
       expect(prisma.seance.create).not.toHaveBeenCalled();
@@ -2041,9 +1904,9 @@ describe('PartiesService', () => {
     it('une émission qui échoue ne transforme pas un commit réussi en 500 (patron close()/reopen())', async () => {
       prisma.membership.findMany.mockRejectedValue(new Error('boom'));
 
-      await expect(
-        service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' }),
-      ).resolves.toMatchObject({ id: 'p1' });
+      await expect(service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' })).resolves.toMatchObject({
+        id: 'p1',
+      });
     });
 
     it("renvoie un PartieDto projeté avec role: 'mj' (AD-15)", async () => {
@@ -2065,9 +1928,9 @@ describe('PartiesService', () => {
     });
 
     it('un kind DIFFÉRENT est rejeté, sans écriture — la conversion a sa propre route', async () => {
-      await expect(
-        service.update('p1', 'mj1', { kind: 'ONE_SHOT' }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.update('p1', 'mj1', { kind: 'ONE_SHOT' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
       expect(prisma.partie.update).not.toHaveBeenCalled();
     });
 

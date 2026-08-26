@@ -41,12 +41,8 @@ describe('toAuthUser (Story 30.4)', () => {
         calendarLayersSetAt: new Date('2026-02-01T00:00:00.000Z'),
       }),
     );
-    expect(
-      (result as Record<string, unknown>).mustResetPassword,
-    ).toBeUndefined();
-    expect(
-      (result as Record<string, unknown>).calendarLayersSetAt,
-    ).toBeUndefined();
+    expect((result as Record<string, unknown>).mustResetPassword).toBeUndefined();
+    expect((result as Record<string, unknown>).calendarLayersSetAt).toBeUndefined();
   });
 
   it('accepte un enregistrement dont passwordHash a déjà été retiré (cas AuthService.validateUser())', () => {
@@ -58,9 +54,7 @@ describe('toAuthUser (Story 30.4)', () => {
 
   describe('defaultCalendarLayers (AD-16)', () => {
     it('jamais réglé (calendarLayersSetAt: null) → jeu par défaut, quel que soit le contenu de calendarLayers', () => {
-      const result = toAuthUser(
-        makeUser({ calendarLayersSetAt: null, calendarLayers: [] }),
-      );
+      const result = toAuthUser(makeUser({ calendarLayersSetAt: null, calendarLayers: [] }));
       expect(result.defaultCalendarLayers).toEqual(DEFAULT_CALENDAR_LAYER_KEYS);
     });
 
@@ -84,10 +78,7 @@ describe('toAuthUser (Story 30.4)', () => {
           ],
         }),
       );
-      expect(result.defaultCalendarLayers).toEqual([
-        'mes-seances',
-        'votes-en-cours',
-      ]);
+      expect(result.defaultCalendarLayers).toEqual(['mes-seances', 'votes-en-cours']);
     });
   });
 });

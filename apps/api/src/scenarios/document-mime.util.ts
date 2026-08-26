@@ -17,13 +17,8 @@ const TEXT_SNIFF_WINDOW = 8000;
  * de byte NUL, un fichier binaire mal étiqueté `.txt` en contient presque toujours un
  * rapidement — on inspecte les 8000 premiers octets.
  */
-export function detectDocumentMime(
-  buffer: Buffer,
-): DetectedDocumentMime | null {
-  if (
-    buffer.length >= 5 &&
-    buffer.subarray(0, 5).toString('ascii') === '%PDF-'
-  ) {
+export function detectDocumentMime(buffer: Buffer): DetectedDocumentMime | null {
+  if (buffer.length >= 5 && buffer.subarray(0, 5).toString('ascii') === '%PDF-') {
     return 'application/pdf';
   }
   const window = buffer.subarray(0, TEXT_SNIFF_WINDOW);

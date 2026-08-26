@@ -24,17 +24,11 @@ describe('writeDocumentFile', () => {
     const filename = await writeDocumentFile(buffer, 'application/pdf');
     expect(filename).toBe('11111111-1111-1111-1111-111111111111.pdf');
     expect(mkdir).toHaveBeenCalledWith(DOCUMENTS_DIR, { recursive: true });
-    expect(writeFile).toHaveBeenCalledWith(
-      expect.stringContaining(filename),
-      buffer,
-    );
+    expect(writeFile).toHaveBeenCalledWith(expect.stringContaining(filename), buffer);
   });
 
   it('écrit un texte sous un nom uuid.txt', async () => {
-    const filename = await writeDocumentFile(
-      Buffer.from('texte'),
-      'text/plain',
-    );
+    const filename = await writeDocumentFile(Buffer.from('texte'), 'text/plain');
     expect(filename).toBe('11111111-1111-1111-1111-111111111111.txt');
   });
 });
@@ -50,9 +44,7 @@ describe('readDocumentFile', () => {
 
   it('lit le fichier et retourne le buffer + mime déduit de l’extension', async () => {
     (readFile as jest.Mock).mockResolvedValue(Buffer.from('bytes'));
-    const result = await readDocumentFile(
-      '11111111-1111-1111-1111-111111111111.pdf',
-    );
+    const result = await readDocumentFile('11111111-1111-1111-1111-111111111111.pdf');
     expect(result).toEqual({
       buffer: Buffer.from('bytes'),
       mime: 'application/pdf',
@@ -61,9 +53,7 @@ describe('readDocumentFile', () => {
 
   it('retourne null si le fichier est introuvable sur disque (jamais une exception)', async () => {
     (readFile as jest.Mock).mockRejectedValue(new Error('ENOENT'));
-    const result = await readDocumentFile(
-      '11111111-1111-1111-1111-111111111111.txt',
-    );
+    const result = await readDocumentFile('11111111-1111-1111-1111-111111111111.txt');
     expect(result).toBeNull();
   });
 });

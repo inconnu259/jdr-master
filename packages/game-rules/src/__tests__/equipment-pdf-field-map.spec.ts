@@ -12,12 +12,15 @@ function makeInput(overrides: Partial<EquipmentPdfInput> = {}): EquipmentPdfInpu
   };
 }
 
-function field(fields: ReturnType<typeof mapEquipmentToPdfFields>, name: string): string | undefined {
+function field(
+  fields: ReturnType<typeof mapEquipmentToPdfFields>,
+  name: string,
+): string | undefined {
   return fields.find((f) => f.field === name)?.value;
 }
 
 describe('mapEquipmentToPdfFields', () => {
-  it('champs d\'en-tête mappés correctement', () => {
+  it("champs d'en-tête mappés correctement", () => {
     const fields = mapEquipmentToPdfFields(makeInput());
     expect(field(fields, 'joueur')).toBe('Alice');
     expect(field(fields, 'voyageur')).toBe('Miren');
@@ -40,7 +43,7 @@ describe('mapEquipmentToPdfFields', () => {
     expect(field(fields, 'encombrement')).toBe('6');
   });
 
-  it('individual rempli dans l\'ordre (Objet/Prix/Enc), Effets vide au-delà des 5 premiers', () => {
+  it("individual rempli dans l'ordre (Objet/Prix/Enc), Effets vide au-delà des 5 premiers", () => {
     const fields = mapEquipmentToPdfFields(
       makeInput({
         equipment: {
@@ -63,7 +66,7 @@ describe('mapEquipmentToPdfFields', () => {
     expect(field(fields, 'EffetsRow2')).toBe('');
   });
 
-  it('remplit les 21 emplacements dans l\'ordre exact du template (Bloc A puis Bloc B), Prix rempli partout', () => {
+  it("remplit les 21 emplacements dans l'ordre exact du template (Bloc A puis Bloc B), Prix rempli partout", () => {
     const individual = Array.from({ length: 21 }, (_, i) => ({
       name: `Objet${i + 1}`,
       weight: i,
@@ -83,7 +86,9 @@ describe('mapEquipmentToPdfFields', () => {
   it('plus de 21 objets individual : les excédentaires sont omis sans erreur', () => {
     const individual = Array.from({ length: 25 }, (_, i) => ({ name: `Objet${i + 1}`, weight: i }));
     expect(() =>
-      mapEquipmentToPdfFields(makeInput({ equipment: { individual, contenants: [], animaux: [] } })),
+      mapEquipmentToPdfFields(
+        makeInput({ equipment: { individual, contenants: [], animaux: [] } }),
+      ),
     ).not.toThrow();
     const fields = mapEquipmentToPdfFields(
       makeInput({ equipment: { individual, contenants: [], animaux: [] } }),
@@ -133,7 +138,9 @@ describe('mapEquipmentToPdfFields', () => {
       { name: 'D', weight: 1 },
     ];
     expect(() =>
-      mapEquipmentToPdfFields(makeInput({ equipment: { individual: [], contenants, animaux: [] } })),
+      mapEquipmentToPdfFields(
+        makeInput({ equipment: { individual: [], contenants, animaux: [] } }),
+      ),
     ).not.toThrow();
     const fields = mapEquipmentToPdfFields(
       makeInput({ equipment: { individual: [], contenants, animaux: [] } }),
@@ -148,10 +155,7 @@ describe('mapEquipmentToPdfFields', () => {
         equipment: {
           individual: [],
           contenants: [],
-          animaux: [
-            { name: 'Cheval', price: '50po', effect: 'Rapide' },
-            { name: 'Chien' },
-          ],
+          animaux: [{ name: 'Cheval', price: '50po', effect: 'Rapide' }, { name: 'Chien' }],
         },
       }),
     );
@@ -166,7 +170,9 @@ describe('mapEquipmentToPdfFields', () => {
   it('plus de 3 animaux : les excédentaires sont omis sans erreur', () => {
     const animaux = [{ name: 'A' }, { name: 'B' }, { name: 'C' }, { name: 'D' }];
     expect(() =>
-      mapEquipmentToPdfFields(makeInput({ equipment: { individual: [], contenants: [], animaux } })),
+      mapEquipmentToPdfFields(
+        makeInput({ equipment: { individual: [], contenants: [], animaux } }),
+      ),
     ).not.toThrow();
     const fields = mapEquipmentToPdfFields(
       makeInput({ equipment: { individual: [], contenants: [], animaux } }),
@@ -175,7 +181,7 @@ describe('mapEquipmentToPdfFields', () => {
     expect(fields.some((f) => f.value === 'D')).toBe(false);
   });
 
-  it('Po n\'est jamais présent dans le résultat (hors scope monnaie)', () => {
+  it("Po n'est jamais présent dans le résultat (hors scope monnaie)", () => {
     const fields = mapEquipmentToPdfFields(makeInput());
     expect(field(fields, 'Po')).toBeUndefined();
   });

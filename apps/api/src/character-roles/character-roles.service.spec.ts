@@ -1,16 +1,9 @@
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { GameSystemService } from '../game-systems/game-system.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CharacterRolesService } from './character-roles.service';
 
 function makePrisma() {
@@ -26,12 +19,8 @@ function makePrisma() {
 
 function makeParties() {
   return {
-    getOwned: jest
-      .fn()
-      .mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' }),
-    getViewable: jest
-      .fn()
-      .mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' }),
+    getOwned: jest.fn().mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' }),
+    getViewable: jest.fn().mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' }),
   };
 }
 
@@ -112,16 +101,16 @@ describe('CharacterRolesService', () => {
     it('non-MJ → parties.getOwned rejette, propagation, aucune écriture', async () => {
       parties.getOwned.mockRejectedValue(new Error('forbidden'));
 
-      await expect(
-        service.assign('p1', 'stranger', 'char1', 'cartographe'),
-      ).rejects.toThrow('forbidden');
+      await expect(service.assign('p1', 'stranger', 'char1', 'cartographe')).rejects.toThrow(
+        'forbidden',
+      );
       expect(prisma.characterGroupRole.create).not.toHaveBeenCalled();
     });
 
     it('roleKey inconnu du catalogue groupRole → BadRequestException, aucune écriture', async () => {
-      await expect(
-        service.assign('p1', 'mj1', 'char1', 'roleKey-inexistant'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.assign('p1', 'mj1', 'char1', 'roleKey-inexistant')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.characterGroupRole.create).not.toHaveBeenCalled();
     });
 
@@ -130,18 +119,18 @@ describe('CharacterRolesService', () => {
         partieId: 'autre-partie',
       });
 
-      await expect(
-        service.assign('p1', 'mj1', 'char1', 'cartographe'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.assign('p1', 'mj1', 'char1', 'cartographe')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.characterGroupRole.create).not.toHaveBeenCalled();
     });
 
     it('characterId introuvable → BadRequestException, aucune écriture', async () => {
       prisma.character.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.assign('p1', 'mj1', 'char1', 'cartographe'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.assign('p1', 'mj1', 'char1', 'cartographe')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.characterGroupRole.create).not.toHaveBeenCalled();
     });
 
@@ -149,18 +138,16 @@ describe('CharacterRolesService', () => {
       prisma.character.findUnique.mockResolvedValue({ partieId: 'p1' });
       prisma.characterGroupRole.create.mockRejectedValue({ code: 'P2002' });
 
-      await expect(
-        service.assign('p1', 'mj1', 'char1', 'cartographe'),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.assign('p1', 'mj1', 'char1', 'cartographe')).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('characterId portant déjà un rôle différent (P2002, 2e contrainte) → ConflictException (même chemin de gestion)', async () => {
       prisma.character.findUnique.mockResolvedValue({ partieId: 'p1' });
       prisma.characterGroupRole.create.mockRejectedValue({ code: 'P2002' });
 
-      await expect(
-        service.assign('p1', 'mj1', 'char1', 'chef'),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.assign('p1', 'mj1', 'char1', 'chef')).rejects.toThrow(ConflictException);
     });
 
     it('erreur Prisma non-P2002 → propagée telle quelle', async () => {
@@ -168,27 +155,25 @@ describe('CharacterRolesService', () => {
       const dbError = new Error('DB down');
       prisma.characterGroupRole.create.mockRejectedValue(dbError);
 
-      await expect(
-        service.assign('p1', 'mj1', 'char1', 'cartographe'),
-      ).rejects.toThrow('DB down');
+      await expect(service.assign('p1', 'mj1', 'char1', 'cartographe')).rejects.toThrow('DB down');
     });
 
     it('personnage supprimé entre la vérification et le create (P2003) → BadRequestException', async () => {
       prisma.character.findUnique.mockResolvedValue({ partieId: 'p1' });
       prisma.characterGroupRole.create.mockRejectedValue({ code: 'P2003' });
 
-      await expect(
-        service.assign('p1', 'mj1', 'char1', 'cartographe'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.assign('p1', 'mj1', 'char1', 'cartographe')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('catalogue groupRole vide pour ce système de jeu → BadRequestException explicite', async () => {
       gameSystems.getContent.mockResolvedValue({ groupRole: [] });
       prisma.character.findUnique.mockResolvedValue({ partieId: 'p1' });
 
-      await expect(
-        service.assign('p1', 'mj1', 'char1', 'cartographe'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.assign('p1', 'mj1', 'char1', 'cartographe')).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.characterGroupRole.create).not.toHaveBeenCalled();
     });
   });
@@ -209,18 +194,14 @@ describe('CharacterRolesService', () => {
     it('aucun rôle assigné (count 0) → NotFoundException, emit non appelé', async () => {
       prisma.characterGroupRole.deleteMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.unassign('p1', 'mj1', 'char1')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.unassign('p1', 'mj1', 'char1')).rejects.toThrow(NotFoundException);
       expect(realtimeEvents.emit).not.toHaveBeenCalled();
     });
 
     it('non-MJ → parties.getOwned rejette, aucune écriture', async () => {
       parties.getOwned.mockRejectedValue(new Error('forbidden'));
 
-      await expect(service.unassign('p1', 'stranger', 'char1')).rejects.toThrow(
-        'forbidden',
-      );
+      await expect(service.unassign('p1', 'stranger', 'char1')).rejects.toThrow('forbidden');
       expect(prisma.characterGroupRole.deleteMany).not.toHaveBeenCalled();
     });
   });
@@ -250,9 +231,7 @@ describe('CharacterRolesService', () => {
     it('non-membre → getViewable rejette, propagation', async () => {
       parties.getViewable.mockRejectedValue(new Error('forbidden'));
 
-      await expect(service.listForPartie('p1', 'stranger')).rejects.toThrow(
-        'forbidden',
-      );
+      await expect(service.listForPartie('p1', 'stranger')).rejects.toThrow('forbidden');
     });
   });
 });

@@ -31,7 +31,11 @@ interface RyuutamaSheetData {
   attributes: RyuutamaAttributes;
   weaponId: string;
   // Modèle d'inventaire unifié (Story 14.1) — individual/contenants/animaux, plus de `group`.
-  equipment?: { individual: InventoryItem[]; contenants: InventoryItem[]; animaux: Omit<InventoryItem, 'weight'>[] };
+  equipment?: {
+    individual: InventoryItem[];
+    contenants: InventoryItem[];
+    animaux: Omit<InventoryItem, 'weight'>[];
+  };
   narrative?: { name?: string };
 }
 function computeDerived(sheetData: RyuutamaSheetData) {
@@ -238,7 +242,7 @@ async function main() {
       },
       {
         characterId: roland.id,
-        text: "Roland a soigné les rescapés cachés par Ossian, in extremis.",
+        text: 'Roland a soigné les rescapés cachés par Ossian, in extremis.',
         shared: true,
         createdAt: new Date('2026-06-14T18:00:00.000Z'), // dans la fenêtre → association auto (journalAutoAssociate=true)
       },
@@ -285,7 +289,7 @@ async function main() {
   const oneShotDocFilename = await writeDocumentFile(
     Buffer.from(
       "Journal de bord de l'Aurore (transcription) : \"...le chargement d'assurance " +
-        "doit disparaître avant l'inspection du port...\" — signé Ossian.",
+        'doit disparaître avant l\'inspection du port..." — signé Ossian.',
       'utf-8',
     ),
     'text/plain',
@@ -298,7 +302,7 @@ async function main() {
       originalName: 'journal-de-bord-aurore.txt',
       sizeBytes: Buffer.byteLength(
         "Journal de bord de l'Aurore (transcription) : \"...le chargement d'assurance " +
-          "doit disparaître avant l'inspection du port...\" — signé Ossian.",
+          'doit disparaître avant l\'inspection du port..." — signé Ossian.',
         'utf-8',
       ),
     },
@@ -402,8 +406,16 @@ async function main() {
   });
   await prisma.characterNote.createMany({
     data: [
-      { characterId: liora.id, text: "Le marchand qu'on a relâché savait déjà nos noms...", shared: false },
-      { characterId: garrick.id, text: 'La carte trouvée mène plus loin au nord que prévu.', shared: true },
+      {
+        characterId: liora.id,
+        text: "Le marchand qu'on a relâché savait déjà nos noms...",
+        shared: false,
+      },
+      {
+        characterId: garrick.id,
+        text: 'La carte trouvée mène plus loin au nord que prévu.',
+        shared: true,
+      },
     ],
   });
 
@@ -415,7 +427,7 @@ async function main() {
       gameSystemId: RYUUTAMA_ID,
       sheetData: {
         race: 'DRAGON_BLEU' satisfies HommeDragonRace,
-        artefact: { key: 'anneau', nom: "Anneau des routes liées" },
+        artefact: { key: 'anneau', nom: 'Anneau des routes liées' },
         nom: 'Kaien',
         apparence: 'Un anneau de brume bleutée qui suit la caravane à distance.',
         vocation: 'Tisser des liens entre les voyageurs du Nord.',
@@ -449,7 +461,7 @@ async function main() {
     data: [
       {
         partieId: lineaire.id,
-        text: 'Prochaine séance décalée d\'une semaine, merci de répondre au sondage en cours.',
+        text: "Prochaine séance décalée d'une semaine, merci de répondre au sondage en cours.",
       },
       {
         partieId: lineaire.id,
@@ -555,7 +567,11 @@ async function main() {
         shared: true,
         scenarioId: bijou.id,
       },
-      { characterId: sable.id, text: 'Sable garde le silence sur ce que la servante lui a confié.', shared: false },
+      {
+        characterId: sable.id,
+        text: 'Sable garde le silence sur ce que la servante lui a confié.',
+        shared: false,
+      },
     ],
   });
 
@@ -586,7 +602,7 @@ async function main() {
       name: 'Les Veilleurs du Pont',
       kind: 'CAMPAGNE_LINEAIRE',
       gameSystemId: RYUUTAMA_ID,
-      description: "Une garnison isolée surveille un pont que plus personne ne devrait franchir.",
+      description: 'Une garnison isolée surveille un pont que plus personne ne devrait franchir.',
       mjId: diane.id,
     },
   });

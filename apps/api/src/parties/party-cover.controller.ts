@@ -93,10 +93,7 @@ export class PartyCoverController {
   }
 
   @Delete(':id/cover')
-  removeCover(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  removeCover(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: AuthUser) {
     return this.parties.removeCoverImage(id, user.id);
   }
 }

@@ -23,8 +23,7 @@ export function validate(
   mode: 'strict' | 'mj',
   catalog: RyuutamaCatalog,
 ): ValidationResult {
-  const { validClasses, validTypes, validWeaponItems, attributePatterns } =
-    catalog;
+  const { validClasses, validTypes, validWeaponItems, attributePatterns } = catalog;
   const errors: ValidationError[] = [];
 
   // Règle 1 : exactement 1 classe parmi celles seedées en base
@@ -48,13 +47,9 @@ export function validate(
   if (!attrs) {
     errors.push({ field: 'attributes', message: 'Les attributs sont requis' });
   } else {
-    const values = [attrs.AGI, attrs.ESP, attrs.INT, attrs.VIG].sort(
-      (a, b) => a - b,
-    );
+    const values = [attrs.AGI, attrs.ESP, attrs.INT, attrs.VIG].sort((a, b) => a - b);
     const matches = attributePatterns.some(
-      (pattern) =>
-        values.length === pattern.length &&
-        values.every((v, i) => v === pattern[i]),
+      (pattern) => values.length === pattern.length && values.every((v, i) => v === pattern[i]),
     );
     if (!matches) {
       errors.push({
@@ -89,9 +84,7 @@ export function validate(
     // une exception non interceptée (500) plutôt qu'une erreur de validation propre (400) si `name`
     // n'est pas une chaîne (même piège que `knownRitualSpells`, Règle 7, corrigé en revue de code).
     const isValidName =
-      typeof name === 'string' &&
-      !!name.trim() &&
-      name.length <= CUSTOM_WEAPON_NAME_MAX_LENGTH;
+      typeof name === 'string' && !!name.trim() && name.length <= CUSTOM_WEAPON_NAME_MAX_LENGTH;
     const isValidCategory =
       typeof categoryId === 'string' &&
       categoryId !== NO_CUSTOM_WEAPON_CATEGORY &&
@@ -115,8 +108,7 @@ export function validate(
   if (data.classId === 'artisan' && !data.specialtyTypeId?.trim()) {
     errors.push({
       field: 'specialtyTypeId',
-      message:
-        "Le type d'objet de spécialité est obligatoire pour la classe Artisan",
+      message: "Le type d'objet de spécialité est obligatoire pour la classe Artisan",
     });
   }
 
@@ -129,9 +121,7 @@ export function validate(
   // n'importe quel autre choix manquant de la même classe (ex. l'Ermite, qui n'a aucun choix
   // "landscape-capability" mais deux choix "eligible-talent"/"landscape-flavor" à ne jamais
   // pouvoir contourner ainsi).
-  const requiredChoices = data.classId
-    ? catalog.requiredChoicesByClass?.[data.classId]
-    : undefined;
+  const requiredChoices = data.classId ? catalog.requiredChoicesByClass?.[data.classId] : undefined;
   if (requiredChoices) {
     for (const choice of requiredChoices) {
       const answered =
@@ -175,17 +165,10 @@ export function validate(
       : undefined;
     const validRitualSpells = catalog.validDebutantRitualSpells ?? [];
     const hasNoDuplicates =
-      !!knownRitualSpells &&
-      new Set(knownRitualSpells).size === knownRitualSpells.length;
+      !!knownRitualSpells && new Set(knownRitualSpells).size === knownRitualSpells.length;
     const allValid =
-      !!knownRitualSpells &&
-      knownRitualSpells.every((key) => validRitualSpells.includes(key));
-    if (
-      !knownRitualSpells ||
-      knownRitualSpells.length !== 2 ||
-      !hasNoDuplicates ||
-      !allValid
-    ) {
+      !!knownRitualSpells && knownRitualSpells.every((key) => validRitualSpells.includes(key));
+    if (!knownRitualSpells || knownRitualSpells.length !== 2 || !hasNoDuplicates || !allValid) {
       errors.push({
         field: 'knownRitualSpells',
         message:

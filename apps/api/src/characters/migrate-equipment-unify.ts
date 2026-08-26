@@ -22,10 +22,7 @@ export interface EquipmentMigrationClient {
     findMany(args: {
       select: { id: true; sheetData: true };
     }): Promise<{ id: string; sheetData: unknown }[]>;
-    update(args: {
-      where: { id: string };
-      data: { sheetData: unknown };
-    }): Promise<unknown>;
+    update(args: { where: { id: string }; data: { sheetData: unknown } }): Promise<unknown>;
   };
 }
 
@@ -40,22 +37,18 @@ export interface EquipmentMigrationClient {
  * 'string'`), cette migration ajoute des clés qui n'existaient jamais avant elle (`contenants`/
  * `animaux`) — leur présence est un marqueur de migration fiable et suffisant.
  */
-export async function migrateEquipmentUnify(
-  prisma: EquipmentMigrationClient,
-): Promise<number> {
+export async function migrateEquipmentUnify(prisma: EquipmentMigrationClient): Promise<number> {
   const characters = await prisma.character.findMany({
     select: { id: true, sheetData: true },
   });
   let migrated = 0;
   for (const c of characters) {
-    const sheetData = c.sheetData as any;
-    const equipment = sheetData?.equipment;
+    // Colonne JSON héritée : forme non garantie, relue en `unknown` puis restreinte par les
+    // gardes ci-dessous — c'est le format d'AVANT migration qui est vérifié, jamais supposé.
+    const sheetData = (c.sheetData ?? {}) as Record<string, unknown>;
+    const equipment = sheetData.equipment as Record<string, unknown> | undefined;
 
-    if (
-      equipment &&
-      Array.isArray(equipment.contenants) &&
-      Array.isArray(equipment.animaux)
-    ) {
+    if (equipment && Array.isArray(equipment.contenants) && Array.isArray(equipment.animaux)) {
       continue; // déjà migré
     }
 
@@ -74,8 +67,10 @@ export async function migrateEquipmentUnify(
     }
 
     const individual = [
-      ...normalizeInventoryIndividual(equipment.individual),
-      ...(equipment.group ?? []).map((name: string) => ({
+      ...normalizeInventoryIndividual(
+        equipment.individual as (Record<string, unknown> | string)[] | undefined,
+      ),
+      ...((equipment.group ?? []) as string[]).map((name) => ({
         id: randomUUID(),
         name,
         weight: 0,

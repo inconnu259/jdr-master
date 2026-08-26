@@ -63,7 +63,7 @@ describe('AnnonceCard', () => {
     expect(fixture.nativeElement.textContent).toMatch(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
   });
 
-  it('Revue de code (2026-08-06) : le badge « MJ » est toujours affiché — l\'auteur d\'une annonce est toujours le MJ, identifiable sans recours au pseudo', async () => {
+  it("Revue de code (2026-08-06) : le badge « MJ » est toujours affiché — l'auteur d'une annonce est toujours le MJ, identifiable sans recours au pseudo", async () => {
     const fixture = await createComponent(makeAnnouncement(), 'Toute la campagne');
 
     const badge = fixture.nativeElement.querySelector('.annonce-card__mj-badge');

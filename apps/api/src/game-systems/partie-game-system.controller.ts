@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  StreamableFile,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, StreamableFile, UseGuards } from '@nestjs/common';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -23,12 +16,7 @@ export class PartieGameSystemController {
     @Param('key') key: string,
     @CurrentUser() user: AuthUser,
   ): Promise<StreamableFile> {
-    const buffer = await this.gameSystems.getAssetFile(
-      partieId,
-      systemId,
-      key,
-      user.id,
-    );
+    const buffer = await this.gameSystems.getAssetFile(partieId, systemId, key, user.id);
     return new StreamableFile(buffer, {
       type: 'application/pdf',
       disposition: `attachment; filename="${key}.pdf"`,

@@ -1,10 +1,7 @@
-import {
-  ExecutionContext,
-  INestApplication,
-  ValidationPipe,
-} from '@nestjs/common';
+import { ExecutionContext, INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import type { Request } from 'express';
 
 // AccountController -> AccountService -> toDto() (AnnouncementsService, Story 29.13, AD-17) ->
 // transitivement CharacterService -> @master-jdr/game-rules (ESM, non transformé par ts-jest).
@@ -60,7 +57,7 @@ describe('AccountController', () => {
       displayName: 'Nouveau nom',
     });
 
-    const req = { user: { id: 'u1' } } as any;
+    const req = { user: { id: 'u1' } } as unknown as Request;
     const result = await controller.updateDisplayName(req, {
       displayName: 'Nouveau nom',
     });
@@ -75,7 +72,7 @@ describe('AccountController', () => {
       theme: 'foret-ancienne',
     });
 
-    const req = { user: { id: 'u1' } } as any;
+    const req = { user: { id: 'u1' } } as unknown as Request;
     const result = await controller.updateTheme(req, {
       theme: 'foret-ancienne',
     });
@@ -87,35 +84,26 @@ describe('AccountController', () => {
   it("changePassword() lit l'id et le sid depuis la session (req.user/req.sessionID), jamais depuis le corps", async () => {
     auth.changePassword.mockResolvedValue({ ok: true });
 
-    const req = { user: { id: 'u1' }, sessionID: 'sess-1' } as any;
+    const req = { user: { id: 'u1' }, sessionID: 'sess-1' } as unknown as Request;
     const result = await controller.changePassword(req, {
       currentPassword: 'oldpw',
       newPassword: 'newpassword123',
     });
 
-    expect(auth.changePassword).toHaveBeenCalledWith(
-      'u1',
-      'oldpw',
-      'newpassword123',
-      'sess-1',
-    );
+    expect(auth.changePassword).toHaveBeenCalledWith('u1', 'oldpw', 'newpassword123', 'sess-1');
     expect(result).toEqual({ ok: true });
   });
 
   it("requestEmailChange() lit l'id depuis la session (req.user), jamais depuis le corps", async () => {
     auth.requestEmailChange.mockResolvedValue({ ok: true });
 
-    const req = { user: { id: 'u1' } } as any;
+    const req = { user: { id: 'u1' } } as unknown as Request;
     const result = await controller.requestEmailChange(req, {
       currentPassword: 'oldpw',
       newEmail: 'new@b.c',
     });
 
-    expect(auth.requestEmailChange).toHaveBeenCalledWith(
-      'u1',
-      'oldpw',
-      'new@b.c',
-    );
+    expect(auth.requestEmailChange).toHaveBeenCalledWith('u1', 'oldpw', 'new@b.c');
     expect(result).toEqual({ ok: true });
   });
 
@@ -125,7 +113,7 @@ describe('AccountController', () => {
       partiesSort: 'date',
     });
 
-    const req = { user: { id: 'u1' } } as any;
+    const req = { user: { id: 'u1' } } as unknown as Request;
     const result = await controller.updatePreferences(req, {
       partiesSort: 'date',
     });
@@ -139,7 +127,7 @@ describe('AccountController', () => {
   it("addFavorite() lit l'id depuis la session et le partieId depuis l'URL", async () => {
     account.addFavorite.mockResolvedValue({ ok: true });
 
-    const req = { user: { id: 'u1' } } as any;
+    const req = { user: { id: 'u1' } } as unknown as Request;
     const result = await controller.addFavorite(req, 'p1');
 
     expect(account.addFavorite).toHaveBeenCalledWith('u1', 'p1');
@@ -149,7 +137,7 @@ describe('AccountController', () => {
   it("removeFavorite() lit l'id depuis la session et le partieId depuis l'URL", async () => {
     account.removeFavorite.mockResolvedValue({ ok: true });
 
-    const req = { user: { id: 'u1' } } as any;
+    const req = { user: { id: 'u1' } } as unknown as Request;
     const result = await controller.removeFavorite(req, 'p1');
 
     expect(account.removeFavorite).toHaveBeenCalledWith('u1', 'p1');
@@ -159,7 +147,7 @@ describe('AccountController', () => {
   it("getUnseenAnnouncements() lit l'id depuis la session (req.user) (Story 29.13)", async () => {
     account.getUnseenAnnouncements.mockResolvedValue([]);
 
-    const req = { user: { id: 'u1' } } as any;
+    const req = { user: { id: 'u1' } } as unknown as Request;
     const result = await controller.getUnseenAnnouncements(req);
 
     expect(account.getUnseenAnnouncements).toHaveBeenCalledWith('u1');
@@ -169,7 +157,7 @@ describe('AccountController', () => {
   it("markAnnouncementRead() lit l'id depuis la session et l'announcementId depuis l'URL (Story 29.13)", async () => {
     account.markAnnouncementRead.mockResolvedValue({ ok: true });
 
-    const req = { user: { id: 'u1' } } as any;
+    const req = { user: { id: 'u1' } } as unknown as Request;
     const result = await controller.markAnnouncementRead(req, 'a1');
 
     expect(account.markAnnouncementRead).toHaveBeenCalledWith('u1', 'a1');
@@ -190,7 +178,9 @@ describe('AccountController', () => {
         .overrideGuard(AuthenticatedGuard)
         .useValue({
           canActivate: (context: ExecutionContext) => {
-            const req = context.switchToHttp().getRequest();
+            const req = context
+              .switchToHttp()
+              .getRequest<{ user: { id: string }; sessionID: string }>();
             req.user = { id: 'u1' };
             req.sessionID = 'sess-1';
             return true;
@@ -246,10 +236,7 @@ describe('AccountController', () => {
         .patch('/me/display-name')
         .send({ displayName: '  Nom valide  ' })
         .expect(200);
-      expect(account.updateDisplayName).toHaveBeenCalledWith(
-        'u1',
-        'Nom valide',
-      );
+      expect(account.updateDisplayName).toHaveBeenCalledWith('u1', 'Nom valide');
     });
 
     it('un id glissé dans le corps est rejeté (forbidNonWhitelisted) — jamais transmis au service', async () => {
@@ -269,10 +256,7 @@ describe('AccountController', () => {
         .patch('/me/display-name')
         .send({ displayName: 'Nom valide' })
         .expect(200);
-      expect(account.updateDisplayName).toHaveBeenCalledWith(
-        'u1',
-        'Nom valide',
-      );
+      expect(account.updateDisplayName).toHaveBeenCalledWith('u1', 'Nom valide');
     });
 
     it('theme hors de THEMES → 400, service jamais appelé', async () => {
@@ -295,7 +279,7 @@ describe('AccountController', () => {
       expect(account.updateTheme).not.toHaveBeenCalled();
     });
 
-    it("deferred-work (2026-08-24) : PATCH /me/preferences — id glissé dans le corps → 400 forbidNonWhitelisted, service jamais appelé", async () => {
+    it('deferred-work (2026-08-24) : PATCH /me/preferences — id glissé dans le corps → 400 forbidNonWhitelisted, service jamais appelé', async () => {
       account.updatePreferences.mockResolvedValue({ hideFinishedParties: true });
       await request(app.getHttpServer())
         .patch('/me/preferences')
@@ -313,10 +297,7 @@ describe('AccountController', () => {
         .patch('/me/theme')
         .send({ theme: 'medieval-steampunk' })
         .expect(200);
-      expect(account.updateTheme).toHaveBeenCalledWith(
-        'u1',
-        'medieval-steampunk',
-      );
+      expect(account.updateTheme).toHaveBeenCalledWith('u1', 'medieval-steampunk');
     });
 
     it('newPassword < 8 caractères → 400, service jamais appelé', async () => {
@@ -353,12 +334,7 @@ describe('AccountController', () => {
         .patch('/me/password')
         .send({ currentPassword: 'oldpw', newPassword: 'newpassword123' })
         .expect(200);
-      expect(auth.changePassword).toHaveBeenCalledWith(
-        'u1',
-        'oldpw',
-        'newpassword123',
-        'sess-1',
-      );
+      expect(auth.changePassword).toHaveBeenCalledWith('u1', 'oldpw', 'newpassword123', 'sess-1');
     });
 
     it('newEmail invalide → 400, service jamais appelé', async () => {
@@ -395,11 +371,7 @@ describe('AccountController', () => {
         .patch('/me/email')
         .send({ currentPassword: 'oldpw', newEmail: 'new@example.com' })
         .expect(200);
-      expect(auth.requestEmailChange).toHaveBeenCalledWith(
-        'u1',
-        'oldpw',
-        'new@example.com',
-      );
+      expect(auth.requestEmailChange).toHaveBeenCalledWith('u1', 'oldpw', 'new@example.com');
     });
 
     it('partiesSort hors union fermée → 400, service jamais appelé (AC4, Story 29.8)', async () => {
@@ -434,10 +406,7 @@ describe('AccountController', () => {
 
     it('corps vide (aucun champ) → 200, patch vide transmis', async () => {
       account.updatePreferences.mockResolvedValue({ id: 'u1' });
-      await request(app.getHttpServer())
-        .patch('/me/preferences')
-        .send({})
-        .expect(200);
+      await request(app.getHttpServer()).patch('/me/preferences').send({}).expect(200);
       expect(account.updatePreferences).toHaveBeenCalledWith('u1', {});
     });
 
@@ -474,10 +443,7 @@ describe('AccountController', () => {
         charactersViewMode: 'large',
         charactersSort: 'niveau',
       };
-      await request(app.getHttpServer())
-        .patch('/me/preferences')
-        .send(body)
-        .expect(200);
+      await request(app.getHttpServer()).patch('/me/preferences').send(body).expect(200);
       expect(account.updatePreferences).toHaveBeenCalledWith('u1', body);
     });
 
@@ -495,17 +461,13 @@ describe('AccountController', () => {
 
     it('GET /me/unseen-announcements → 200 (Story 29.13)', async () => {
       account.getUnseenAnnouncements.mockResolvedValue([]);
-      await request(app.getHttpServer())
-        .get('/me/unseen-announcements')
-        .expect(200);
+      await request(app.getHttpServer()).get('/me/unseen-announcements').expect(200);
       expect(account.getUnseenAnnouncements).toHaveBeenCalledWith('u1');
     });
 
     it('PUT /me/announcements-read/:announcementId → 200, corps vide accepté (Story 29.13)', async () => {
       account.markAnnouncementRead.mockResolvedValue({ ok: true });
-      await request(app.getHttpServer())
-        .put('/me/announcements-read/a1')
-        .expect(200);
+      await request(app.getHttpServer()).put('/me/announcements-read/a1').expect(200);
       expect(account.markAnnouncementRead).toHaveBeenCalledWith('u1', 'a1');
     });
   });

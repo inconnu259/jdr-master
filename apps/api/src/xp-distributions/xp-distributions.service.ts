@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { XpDistributionDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
@@ -29,9 +30,7 @@ export class XpDistributionsService {
       where: { id: { in: characterIds } },
       select: { id: true, partieId: true },
     });
-    const partieIdByCharacterId = new Map(
-      characters.map((c) => [c.id, c.partieId]),
-    );
+    const partieIdByCharacterId = new Map(characters.map((c) => [c.id, c.partieId]));
     for (const id of characterIds) {
       if (partieIdByCharacterId.get(id) !== partieId) {
         throw new BadRequestException(
@@ -115,13 +114,15 @@ const ENTRIES_WITH_OWNER_INCLUDE = {
   },
 } as const;
 
-function toDto(distribution: any): XpDistributionDto {
+function toDto(
+  distribution: Prisma.XpDistributionGetPayload<{ include: typeof ENTRIES_WITH_OWNER_INCLUDE }>,
+): XpDistributionDto {
   return {
     id: distribution.id,
     partieId: distribution.partieId,
     note: distribution.note ?? undefined,
     createdAt: distribution.createdAt.toISOString(),
-    entries: distribution.entries.map((e: any) => ({
+    entries: distribution.entries.map((e) => ({
       characterId: e.characterId,
       amount: e.amount,
       isBonus: e.isBonus,

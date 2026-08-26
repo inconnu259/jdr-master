@@ -29,9 +29,7 @@ export class NotificationsService {
   @Cron(CronExpression.EVERY_HOUR)
   async sendDueReminders(): Promise<void> {
     if (this.isRunning) {
-      this.logger.warn(
-        'sendDueReminders ignoré : une exécution précédente est encore en cours',
-      );
+      this.logger.warn('sendDueReminders ignoré : une exécution précédente est encore en cours');
       return;
     }
     this.isRunning = true;
@@ -60,26 +58,14 @@ export class NotificationsService {
     });
 
     for (const partie of dueParties) {
-      const allRecipients = [
-        partie.mj,
-        ...partie.memberships.map((m) => m.user),
-      ];
-      const recipients = [
-        ...new Map(allRecipients.map((r) => [r.id, r])).values(),
-      ];
+      const allRecipients = [partie.mj, ...partie.memberships.map((m) => m.user)];
+      const recipients = [...new Map(allRecipients.map((r) => [r.id, r])).values()];
       for (const recipient of recipients) {
-        const result = await this.email.sendMail(
-          'session-reminder',
-          recipient.email,
-          {
-            partieName: partie.name,
-            sessionDate: this.formatSessionDate(
-              partie.nextSessionDate!,
-              partie.nextSessionSlot,
-            ),
-            link: `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${partie.id}`,
-          },
-        );
+        const result = await this.email.sendMail('session-reminder', recipient.email, {
+          partieName: partie.name,
+          sessionDate: this.formatSessionDate(partie.nextSessionDate!, partie.nextSessionSlot),
+          link: `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${partie.id}`,
+        });
         if (!result.ok) {
           this.logger.error(
             `Échec d'envoi du rappel de séance à ${recipient.email} (partie ${partie.id})`,

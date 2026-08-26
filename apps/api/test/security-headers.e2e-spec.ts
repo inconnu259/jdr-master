@@ -34,9 +34,7 @@ describe('En-têtes de sécurité (e2e, Story 16.1 AC2)', () => {
   });
 
   it('inclut X-Content-Type-Options: nosniff sur toute réponse (posé globalement par helmet())', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect('X-Content-Type-Options', 'nosniff');
+    return request(app.getHttpServer()).get('/').expect('X-Content-Type-Options', 'nosniff');
   });
 
   afterEach(async () => {

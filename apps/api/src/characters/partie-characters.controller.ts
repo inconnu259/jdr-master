@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -28,10 +20,7 @@ export class PartieCharactersController {
   }
 
   @Get()
-  findByPartie(
-    @Param('id', ParseUUIDPipe) partieId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  findByPartie(@Param('id', ParseUUIDPipe) partieId: string, @CurrentUser() user: AuthUser) {
     return this.characters.findByPartie(partieId, user.id);
   }
 }

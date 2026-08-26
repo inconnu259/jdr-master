@@ -57,7 +57,10 @@ describe('validateHommeDragon', () => {
   });
 
   it('race invalide (hors des 4 races connues) → valid: false', () => {
-    const data = { ...validSheet(), race: 'DRAGON_ROSE' as unknown as HommeDragonSheetData['race'] };
+    const data = {
+      ...validSheet(),
+      race: 'DRAGON_ROSE' as unknown as HommeDragonSheetData['race'],
+    };
     const result = validateHommeDragon(data, catalog());
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => e.field === 'race')).toBe(true);
@@ -79,14 +82,20 @@ describe('validateHommeDragon', () => {
   });
 
   it('artefact absent → valid: false, errors[0].field = artefact.key', () => {
-    const data = { ...validSheet(), artefact: undefined as unknown as HommeDragonSheetData['artefact'] };
+    const data = {
+      ...validSheet(),
+      artefact: undefined as unknown as HommeDragonSheetData['artefact'],
+    };
     const result = validateHommeDragon(data, catalog());
     expect(result.valid).toBe(false);
     expect(result.errors.some((e) => e.field === 'artefact.key')).toBe(true);
   });
 
   it('nom+inscription personnalisés sur artefact → toujours valide (texte libre, non contraint)', () => {
-    const data = { ...validSheet(), artefact: { key: 'grand-arc', nom: 'Le Perceur', inscription: 'Pour Ignis' } };
+    const data = {
+      ...validSheet(),
+      artefact: { key: 'grand-arc', nom: 'Le Perceur', inscription: 'Pour Ignis' },
+    };
     const result = validateHommeDragon(data, catalog());
     expect(result.valid).toBe(true);
   });

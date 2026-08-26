@@ -1,18 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { AnnouncementDto } from '@master-jdr/shared';
+import type { Announcement } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 
 /** Exporté pour réutilisation par `AccountService.getUnseenAnnouncements()` (Story 29.13, AD-17 :
  *  extraction, jamais duplication). */
 export function toDto(
-  announcement: any,
+  announcement: Announcement,
   mj: { pseudo: string; displayName: string },
 ): AnnouncementDto {
   return {
@@ -43,10 +41,7 @@ export class AnnouncementsService {
     await this.parties.getOwned(partieId, mjId);
 
     if (dto.scenarioId !== undefined) {
-      await this.scenarios.verifyScenarioBelongsToPartie(
-        dto.scenarioId,
-        partieId,
-      );
+      await this.scenarios.verifyScenarioBelongsToPartie(dto.scenarioId, partieId);
     }
 
     // L'auteur est toujours le MJ de la Partie (seul autorisé à publier, cf. getOwned ci-dessus) —
