@@ -79,6 +79,10 @@ export class ScenarioEditor implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
   private readonly route = inject(ActivatedRoute);
 
+  // L'alias est nécessaire, pas une négligence : le nom `scenario` est déjà pris par le signal
+  // local mutable déclaré plus bas (copie de travail rafraîchie par le temps réel). L'API
+  // publique du composant reste `[scenario]`, l'entrée brute s'appelle `scenarioInput`.
+  // eslint-disable-next-line @angular-eslint/no-input-rename
   readonly scenarioInput = input.required<ScenarioDto>({ alias: 'scenario' });
 
   // Requêtes par nom de ref plutôt que refs de template croisant les blocs `@if` (les pencils

@@ -1,0 +1,54 @@
+name: CodeQL
+
+# Analyse statique de sécurité. CodeQL est l'analyseur natif de GitHub : gratuit sur un dépôt
+# public, aucune action tierce à auditer — cohérent avec la règle absolue du projet sur la
+# supply-chain (cf. CLAUDE.md). Il remplace le Semgrep que la doc annonçait sans qu'il existe.
+#
+# Les résultats arrivent dans l'onglet Security du dépôt, et les nouvelles alertes sont annotées
+# directement sur les PR concernées.
+#
+# ⚠️ Ce workflow n'est PAS un check requis pour merger : il n'entre pas dans la porte `ci-ok`
+# de ci.yml. C'est délibéré — une analyse de sécurité informe une revue humaine, elle ne devrait
+# pas bloquer une PR sur un faux positif. Si tu veux l'imposer, ajoute `CodeQL` aux checks requis
+# du ruleset.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    # Lundi 04:12 UTC. Un passage périodique attrape les alertes issues de NOUVELLES règles
+    # CodeQL sur du code inchangé — ce qu'un déclenchement sur push ne verra jamais.
+    - cron: '12 4 * * 1'
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyse
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write # écrire les alertes dans l'onglet Security
+      actions: read
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (2026-07-16)
+
+      # `javascript-typescript` couvre l'API Nest et le front Angular d'un seul passage.
+      # Pas de build à fournir : c'est un langage interprété, CodeQL analyse les sources.
+      - name: Initialiser CodeQL
+        uses: github/codeql-action/init@42947a340483f03ba47bb1a039b2c519aab3df85 # v3 (2026-08-21)
+        with:
+          languages: javascript-typescript
+          # `security-and-quality` ajoute aux règles de sécurité celles de qualité/maintenabilité.
+          # Passer à `security-extended` (ou `security-and-quality` seul) si le bruit gêne.
+          queries: security-and-quality
+
+      - name: Analyser
+        uses: github/codeql-action/analyze@42947a340483f03ba47bb1a039b2c519aab3df85 # v3 (2026-08-21)
+        with:
+          category: '/language:javascript-typescript'

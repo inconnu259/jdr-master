@@ -213,7 +213,11 @@ export class SeanceList {
   /** Aucun état à mettre à jour — sert uniquement à déclencher un cycle de détection de
    *  changements zoneless sur `(input)`, pour que le bouton `[disabled]` (qui lit `minInput.value`/
    *  `maxInput.value` directement) reflète l'état courant des champs au fil de la saisie. */
-  protected onCapacityFormInput(): void {}
+  protected onCapacityFormInput(): void {
+    // Volontairement vide : cf. commentaire ci-dessus. Le corps porte ce commentaire parce que
+    // `no-empty-function` accepte une fonction dont le corps est commenté — et qu'il ne faut
+    // surtout pas « réparer » ce no-op en lui inventant un effet.
+  }
 
   protected async onSetCapacity(seanceId: string, min: number, max: number): Promise<void> {
     if (this.pollActionPending()) return;
