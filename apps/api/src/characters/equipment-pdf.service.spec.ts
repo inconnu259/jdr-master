@@ -1,3 +1,4 @@
+import type { CharacterDto } from '@master-jdr/shared';
 import { Test } from '@nestjs/testing';
 
 jest.mock('node:fs/promises', () => ({
@@ -30,12 +31,16 @@ jest.mock('pdf-lib', () => ({
   PDFDocument: { load: jest.fn(() => Promise.resolve(mockDoc)) },
 }));
 
-function makeCharacter(overrides: Record<string, unknown> = {}) {
-  return {
+function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
+  const base: CharacterDto = {
     id: 'c1',
     userId: 'u1',
     partieId: 'p1',
     gameSystemId: 'ryuutama',
+    portraitUrl: null,
+    portraitCropData: null,
+    pdfPortraitCropData: null,
+    ownerDisplayName: 'Miren',
     sheetData: {
       narrative: { name: 'Miren' },
       equipment: {
@@ -61,8 +66,8 @@ function makeCharacter(overrides: Record<string, unknown> = {}) {
     xp: 0,
     level: 1,
     journalAutoAssociate: false,
-    ...overrides,
   };
+  return Object.assign(base, overrides);
 }
 
 describe('EquipmentPdfService', () => {

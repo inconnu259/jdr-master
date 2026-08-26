@@ -10,8 +10,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { anyOf, arrayLike, objectLike } from '../common/test-utils/jest-typed';
 
-function makeMockRealtimeEvents() {
-  return { emit: jest.fn() };
+/**
+ * Mock partiel : ces tests n'exercent que `emit`, jamais `subscribe`/`events$`. Le type
+ * d'intersection sert les deux besoins — il satisfait le constructeur d'`AvailabilityService`
+ * (qui attend un `RealtimeEventsService`) tout en gardant `emit` typé `jest.Mock` pour les
+ * assertions (cf. `ReturnType<typeof makeMockRealtimeEvents>` plus bas). Le cast est confiné
+ * ici, dans le même esprit que `common/test-utils/jest-typed`.
+ */
+function makeMockRealtimeEvents(): RealtimeEventsService & { emit: jest.Mock } {
+  return { emit: jest.fn() } as unknown as RealtimeEventsService & { emit: jest.Mock };
 }
 
 // Dates de référence (UTC) :
@@ -1085,7 +1092,7 @@ describe('AvailabilityService — émission temps réel', () => {
     mockEmit = mockRealtimeEvents.emit;
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
-      mockRealtimeEvents as unknown as RealtimeEventsService,
+      mockRealtimeEvents,
     );
     mockMembershipFindMany = mocks.mockMembershipFindMany;
     mockPartieFindMany = mocks.mockPartieFindMany;

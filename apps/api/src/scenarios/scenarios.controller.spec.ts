@@ -2,6 +2,7 @@ import { ExecutionContext, INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import type { AuthUser } from '@master-jdr/shared';
+import { makeAuthUser } from '../common/test-utils/fixtures';
 
 // ScenariosService importe désormais CharacterService (Story 8.6), qui importe transitivement
 // @master-jdr/game-rules (ESM, non transformé par ts-jest) — même mock que
@@ -52,13 +53,12 @@ describe('ScenariosController', () => {
   let controller: ScenariosController;
   let scenarios: ReturnType<typeof makeScenariosService>;
 
-  const user: AuthUser = {
+  const user: AuthUser = makeAuthUser({
     id: 'mj1',
     email: 'mj@test.fr',
     pseudo: 'MJ',
-    role: 'USER',
-    createdAt: '2026-07-01T00:00:00.000Z',
-  };
+    displayName: 'MJ',
+  });
 
   beforeEach(async () => {
     scenarios = makeScenariosService();

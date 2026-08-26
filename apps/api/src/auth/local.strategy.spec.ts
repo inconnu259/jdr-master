@@ -48,7 +48,7 @@ describe('LocalStrategy', () => {
     expect(result).toMatchObject({ id: 'u1', email: 'a@b.c' });
     // AC8 : defaultCalendarLayers toujours résolu, jamais undefined.
     expect(result.defaultCalendarLayers).toEqual(DEFAULT_CALENDAR_LAYER_KEYS);
-    expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
+    expect((result as unknown as Record<string, unknown>).passwordHash).toBeUndefined();
   });
 
   it('Story 28.6 : mustResetPassword: true → connexion refusée avec un message dédié, même mot de passe correct', async () => {

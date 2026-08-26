@@ -883,7 +883,7 @@ describe('PartiesService', () => {
       isFavorite: false,
       coverImageVersion: null,
     });
-    expect((dto as Record<string, unknown>).mjPseudo).toBeUndefined();
+    expect((dto as unknown as Record<string, unknown>).mjPseudo).toBeUndefined();
   });
 
   it('removeMember : MJ uniquement, puis supprime le membership', async () => {

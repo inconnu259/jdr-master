@@ -68,7 +68,7 @@ describe('AccountService', () => {
         data: { displayName: 'Alice au pays' },
         include: { calendarLayers: true },
       });
-      expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
+      expect((result as unknown as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ id: 'u1', displayName: 'Alice au pays' });
     });
 
@@ -136,7 +136,7 @@ describe('AccountService', () => {
         data: { theme: 'foret-ancienne' },
         include: { calendarLayers: true },
       });
-      expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
+      expect((result as unknown as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ id: 'u1', theme: 'foret-ancienne' });
     });
 
@@ -189,7 +189,7 @@ describe('AccountService', () => {
         data: { partiesSort: 'date' },
         include: { calendarLayers: true },
       });
-      expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
+      expect((result as unknown as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ partiesSort: 'date' });
     });
 

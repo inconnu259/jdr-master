@@ -21,7 +21,7 @@ import { DEFAULT_CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
 // d'atteindre `LocalStrategy` (le hash ne doit jamais transiter au-delà de la vérification du mot
 // de passe), les autres appelants (register(), account.service.ts, session.serializer.ts) passent
 // l'enregistrement Prisma complet — les deux formes doivent être acceptées.
-type UserForAuth = Omit<User, 'passwordHash'> &
+export type UserForAuth = Omit<User, 'passwordHash'> &
   Partial<Pick<User, 'passwordHash'>> & { calendarLayers: UserCalendarLayer[] };
 
 export function toAuthUser(user: UserForAuth): AuthUser {

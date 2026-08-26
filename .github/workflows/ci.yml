@@ -30,16 +30,11 @@ env:
 jobs:
   # ── Lint, types, builds ────────────────────────────────────────────────────
   #
-  # Deux limites de couverture à connaître :
-  #   · `pnpm --filter api typecheck` s'appuie sur tsconfig.build.json, qui exclut `test/` et
-  #     `**/*spec.ts` — les ~60 fichiers de specs de l'API ne sont donc pas type-vérifiés.
-  #     `apps/api/tsconfig.check.json` existe et les couvre (`tsc -p tsconfig.check.json`), mais
-  #     il remonte 101 erreurs de typage de mocks : chantier à part, pas encore branché ici.
-  #   · Le front n'a aucun script `typecheck` : c'est `pnpm --filter web build` qui tient ce
-  #     rôle, via la vérification de types d'`ng build`.
+  # Une seule limite de couverture à connaître : le front n'a aucun script `typecheck` — c'est
+  # `pnpm --filter web build` qui tient ce rôle, via la vérification de types d'`ng build`.
   #
-  # Les scripts sous `apps/api/prisma/` (seed, seed-demo, migrate-*) sont, eux, bien couverts :
-  # le typecheck les inclut déjà, et le glob eslint a été élargi à `prisma/`.
+  # Côté API tout est couvert : `typecheck` s'appuie sur `tsconfig.check.json` (source + specs +
+  # scripts `prisma/`, cf. le commentaire du fichier) et le glob eslint inclut `prisma/`.
   types-build:
     name: Lint · types · builds
     runs-on: ubuntu-latest
@@ -178,7 +173,12 @@ jobs:
     needs: [types-build, unit, e2e]
     runs-on: ubuntu-latest
     steps:
-      - name: Échouer si un job amont a échoué ou été annulé
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      # `skipped` compte comme un échec : un job sauté n'a rien vérifié, et laisser la porte
+      # passer au vert dans ce cas donnerait un merge autorisé sur des contrôles jamais exécutés.
+      - name: Échouer si un job amont a échoué, été annulé ou sauté
+        if: >-
+          contains(needs.*.result, 'failure')
+          || contains(needs.*.result, 'cancelled')
+          || contains(needs.*.result, 'skipped')
         run: exit 1
       - run: echo "Tous les jobs ont réussi."

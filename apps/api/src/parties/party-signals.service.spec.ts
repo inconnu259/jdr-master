@@ -15,7 +15,7 @@ describe('PartySignalsService', () => {
   let parties: { listForUser: jest.Mock };
 
   function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
-    return {
+    const base: PartieDto = {
       id: 'p1',
       name: 'La Nuit',
       kind: 'ONE_SHOT',
@@ -27,8 +27,10 @@ describe('PartySignalsService', () => {
       nextSessionSlot: null,
       role: 'mj',
       status: 'EN_COURS',
-      ...overrides,
+      isFavorite: false,
+      coverImageVersion: null,
     };
+    return Object.assign(base, overrides);
   }
 
   beforeEach(() => {

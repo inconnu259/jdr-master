@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import type { AuthUser } from '@master-jdr/shared';
+import { makeAuthUser } from '../common/test-utils/fixtures';
 import { MyPartySignalsController } from './my-party-signals.controller';
 import { PartySignalsService } from './party-signals.service';
 
@@ -7,13 +8,7 @@ describe('MyPartySignalsController', () => {
   let controller: MyPartySignalsController;
   let signals: { getSignals: jest.Mock };
 
-  const user: AuthUser = {
-    id: 'u1',
-    email: 'u1@test.fr',
-    pseudo: 'U1',
-    role: 'USER',
-    createdAt: '2026-07-01T00:00:00.000Z',
-  };
+  const user: AuthUser = makeAuthUser();
 
   beforeEach(async () => {
     signals = { getSignals: jest.fn() };

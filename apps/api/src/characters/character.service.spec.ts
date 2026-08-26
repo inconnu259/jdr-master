@@ -1742,7 +1742,7 @@ describe('CharacterService', () => {
           value: 'x',
         }),
       ).rejects.toThrow(BadRequestException);
-      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+      expect(({} as unknown as Record<string, unknown>).polluted).toBeUndefined();
     });
 
     it('path "equipment" (1 segment, hors equipment.individual.<index>) → BadRequestException, jamais de remplacement en bloc', async () => {

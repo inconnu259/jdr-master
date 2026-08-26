@@ -64,7 +64,9 @@ function makePrisma() {
     user: {
       findUniqueOrThrow: jest.fn(),
     },
-    $transaction: jest.fn((cb: (tx: typeof tx) => unknown) => cb(tx)),
+    // Parametre renomme : nomme `tx`, il masquait la variable `tx` ci-dessus et rendait
+    // `typeof tx` circulaire (TS2502).
+    $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
     tx,
   };
 }

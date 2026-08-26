@@ -13,6 +13,7 @@ jest.mock('@master-jdr/shared', () => ({
 }));
 
 import type { AuthUser } from '@master-jdr/shared';
+import { makeAuthUser } from '../common/test-utils/fixtures';
 import { PartiesController } from './parties.controller';
 import { PartiesService } from './parties.service';
 
@@ -40,13 +41,12 @@ describe('PartiesController', () => {
   let controller: PartiesController;
   let parties: ReturnType<typeof makePartiesService>;
 
-  const user: AuthUser = {
+  const user: AuthUser = makeAuthUser({
     id: 'mj1',
     email: 'mj@test.fr',
     pseudo: 'MJ',
-    role: 'USER',
-    createdAt: '2026-07-01T00:00:00.000Z',
-  };
+    displayName: 'MJ',
+  });
 
   beforeEach(async () => {
     parties = makePartiesService();
