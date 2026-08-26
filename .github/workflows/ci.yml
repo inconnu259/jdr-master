@@ -28,20 +28,19 @@ env:
   DATABASE_URL: postgresql://unused:unused@localhost:5432/unused?schema=public
 
 jobs:
-  # ── Types et build API ─────────────────────────────────────────────────────
+  # ── Lint API, types, builds ────────────────────────────────────────────────
   #
-  # DÉLIBÉRÉMENT ABSENTS de cette CI, parce qu'ils échouent aujourd'hui sur de la dette
-  # préexistante — les ajouter rendrait chaque PR rouge, y compris celles qui réparent :
-  #   · `pnpm --filter web lint`  → 16 erreurs restantes (dont no-empty-function)
-  #   · `pnpm --filter web build` → bundle initial 1.49 MB pour un budget d'erreur de 1 MB
-  #                                 (angular.json). `ng serve` n'applique pas les budgets,
-  #                                 d'où un build prod cassé sans que personne le voie.
-  # Chacun est un chantier à part. À rebrancher ici dès qu'il est vert.
+  # SEUL MANQUE DÉLIBÉRÉ : `pnpm --filter web lint`, qui reste à 16 erreurs (dont
+  # no-empty-function). L'ajouter maintenant rendrait chaque PR rouge, y compris celles qui
+  # réparent. À brancher ici dès qu'il est vert.
   #
-  # Noter aussi que `typecheck` s'appuie sur tsconfig.build.json, qui exclut `test/` et
-  # `**/*spec.ts` : les fichiers de test ne sont pas type-vérifiés.
+  # Deux limites de couverture à connaître :
+  #   · `pnpm --filter api typecheck` s'appuie sur tsconfig.build.json, qui exclut `test/` et
+  #     `**/*spec.ts` — les fichiers de test de l'API ne sont donc pas type-vérifiés.
+  #   · Le front n'a aucun script `typecheck` : c'est `pnpm --filter web build` qui tient ce
+  #     rôle, via la vérification de types d'`ng build`.
   types-build:
-    name: Types · build API
+    name: Lint · types · builds
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +62,10 @@ jobs:
       - run: pnpm --filter api lint:check
       - run: pnpm --filter api typecheck
       - run: pnpm --filter api build
+
+      # Le front n'a pas de script `typecheck` : c'est `ng build` qui type-vérifie le code
+      # Angular. Sans cette étape, une erreur de typage côté web passerait la CI sans broncher.
+      - run: pnpm --filter web build
 
   # ── Tests unitaires (api, web, game-rules) ─────────────────────────────────
   # Malgré son nom, ce job a besoin d'un Postgres : deux specs d'intégration vivent dans
