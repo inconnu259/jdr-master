@@ -1,0 +1,9 @@
+// Cible du `typecheck` : tout le code TypeScript de l'API, tests compris.
+//
+// `tsconfig.build.json` sert au build (`nest build`) et exclut délibérément `test/` et
+// `**/*spec.ts` — normal pour produire `dist/`, mais ça laissait les ~60 fichiers de specs et les
+// e2e totalement hors type-vérification. Ce fichier-ci ne retire que ce qui n'est pas du source.
+{
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", "dist"]
+}

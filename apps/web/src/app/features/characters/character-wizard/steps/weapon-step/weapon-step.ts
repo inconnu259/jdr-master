@@ -15,7 +15,10 @@ import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.direct
 type WeaponCategoryData = WeaponCategoryContentData & { description: string };
 type WeaponItemData = WeaponItemContentData;
 
-type CustomWeapon = { name: string; categoryId: string };
+interface CustomWeapon {
+  name: string;
+  categoryId: string;
+}
 
 /** Catégorie sans arme précise à choisir : sélectionner la catégorie sélectionne directement
  * l'unique weaponItem qui lui est rattaché (aucune étape 2). */

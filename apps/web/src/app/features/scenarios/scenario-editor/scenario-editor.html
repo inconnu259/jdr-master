@@ -168,8 +168,12 @@
         @for (doc of ownDocuments(); track doc.id) {
           <li
             class="document-row"
+            role="button"
+            tabindex="0"
             [class.disabled]="downloadPending()"
             (click)="downloadDocument(doc)"
+            (keydown.enter)="downloadDocument(doc)"
+            (keydown.space)="$event.preventDefault(); downloadDocument(doc)"
           >
             <mat-icon>description</mat-icon>
             {{ doc.originalName }} ({{ doc.sizeBytes }} o)
@@ -190,8 +194,12 @@
         @for (doc of libraryDocuments(); track doc.id) {
           <li
             class="document-row library-tag"
+            role="button"
+            tabindex="0"
             [class.disabled]="downloadPending()"
             (click)="downloadDocument(doc)"
+            (keydown.enter)="downloadDocument(doc)"
+            (keydown.space)="$event.preventDefault(); downloadDocument(doc)"
           >
             <mat-icon>description</mat-icon>
             {{ doc.originalName }} ({{ doc.sizeBytes }} o) — bibliothèque campagne

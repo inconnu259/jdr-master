@@ -1,0 +1,61 @@
+name: Audit des dépendances
+
+# Remplace la tâche manuelle « ≈ hebdo : pnpm audit » de docs/checklist.md.
+#
+# Workflow SÉPARÉ de ci.yml, et volontairement pas dans la porte `ci-ok`, pour une raison
+# précise : une CVE publiée dans la nuit sur une dépendance transitive bloquerait sinon toutes
+# les PR en cours, y compris celles qui n'ont rien à voir — et parfois sans correctif disponible.
+# Une vulnérabilité n'est pas une régression introduite par la PR qu'elle bloque.
+#
+# Deux déclencheurs, chacun pour une raison :
+#   · hebdomadaire — la veille de fond, à la cadence prévue par la checklist ;
+#   · sur changement du lockfile — le moment où l'audit est réellement actionnable (typiquement
+#     une PR Dependabot : on veut savoir si elle corrige ou introduit quelque chose).
+
+on:
+  schedule:
+    # Lundi 06:17 UTC.
+    - cron: '17 6 * * 1'
+  pull_request:
+    paths:
+      - 'pnpm-lock.yaml'
+      - '**/package.json'
+  workflow_dispatch: # relance à la demande depuis l'onglet Actions
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: pnpm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (2026-07-16)
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 (2026-03-11)
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (2025-04-02)
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+
+      # `--ignore-scripts` : un audit n'a aucun besoin d'exécuter les scripts de build des
+      # dépendances (argon2, prisma, esbuild…). C'est précisément la surface d'attaque que la
+      # règle absolue de CLAUDE.md cherche à éviter — inutile de l'ouvrir pour lire un rapport.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Seuil `high` : `low`/`moderate` sur des dépendances de dev produisent trop de bruit pour
+      # un signal exploitable.
+      #
+      # ⚠️ CE JOB EST ROUGE DEPUIS SA CRÉATION, et c'est délibéré : au 2026-08-26 le dépôt compte
+      # 51 vulnérabilités connues (25 hautes + 1 critique), dont 20 sur le périmètre production.
+      # L'arriéré est réel, pas un faux positif. Ne PAS « réparer » ce rouge en abaissant le seuil
+      # ni en ajoutant `|| true` : un check vert qui ne vérifie rien est précisément ce que ce
+      # dépôt a déjà connu avec le Semgrep annoncé dans la doc mais jamais installé. Le rouge
+      # disparaîtra quand les vulnérabilités seront triées, pas avant.
+      - name: pnpm audit (seuil high)
+        run: pnpm audit --audit-level=high

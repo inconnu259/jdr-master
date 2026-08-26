@@ -11,7 +11,14 @@
   } @else {
     <ul>
       @for (draft of drafts(); track draft.id) {
-        <li class="draft-row" (click)="openScenario(draft)">
+        <li
+          class="draft-row"
+          role="button"
+          tabindex="0"
+          (click)="openScenario(draft)"
+          (keydown.enter)="openScenario(draft)"
+          (keydown.space)="$event.preventDefault(); openScenario(draft)"
+        >
           <span>{{ draft.title }}</span>
           <button mat-button type="button" (click)="openToPlayers(draft, $event)">
             Ouvrir aux joueurs

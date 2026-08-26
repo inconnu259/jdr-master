@@ -103,7 +103,7 @@ export class ClassStep {
         return data.talents
           .filter((t) => (t.attributes?.length ?? 0) > 0)
           .map((t) => ({
-            key: `${entry.key}:${this.talentIdOf(t, data)}`,
+            key: `${entry.key}:${this.talentIdOf(t)}`,
             label: `${t.name} (${data.label})`,
           }));
       }),
@@ -116,7 +116,7 @@ export class ClassStep {
     })),
   );
 
-  private talentIdOf(talent: ClassTalent, data: ClassData): string {
+  private talentIdOf(talent: ClassTalent): string {
     // `id` n'est pas typé dans `ClassTalent` (non nécessaire aux autres usages du composant),
     // mais est bien présent sur le contenu seedé depuis la Story 23.4.
     return (talent as unknown as { id: string }).id ?? talent.name;

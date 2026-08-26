@@ -37,7 +37,26 @@ module.exports = defineConfig([
       // s'appuient largement sur `as any`/`: any` dans ce monorepo ; désactivé plutôt que
       // truffé de eslint-disable sur chaque cast.
       '@typescript-eslint/no-explicit-any': 'off',
+      // La convention `_param` = « volontairement non utilisé » est déjà appliquée dans le code
+      // (ex. `onPollCreated(_poll)` dans calendar-view) ; sans ce réglage eslint la signalait
+      // comme une erreur, ce qui poussait à supprimer un paramètre imposé par une signature.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
       'prettier/prettier': ['error', { endOfLine: 'auto' }],
+    },
+  },
+  {
+    // Un stub vide est idiomatique dans un test : remplacer une méthode par un no-op pour
+    // neutraliser un effet de bord. Exiger un corps n'apporterait que du bruit.
+    files: ['**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/no-empty-function': 'off',
     },
   },
   {

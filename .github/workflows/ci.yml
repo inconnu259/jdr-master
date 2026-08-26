@@ -28,26 +28,28 @@ env:
   DATABASE_URL: postgresql://unused:unused@localhost:5432/unused?schema=public
 
 jobs:
-  # ── Lint API, types, builds ────────────────────────────────────────────────
-  #
-  # SEUL MANQUE DÉLIBÉRÉ : `pnpm --filter web lint`, qui reste à 16 erreurs (dont
-  # no-empty-function). L'ajouter maintenant rendrait chaque PR rouge, y compris celles qui
-  # réparent. À brancher ici dès qu'il est vert.
+  # ── Lint, types, builds ────────────────────────────────────────────────────
   #
   # Deux limites de couverture à connaître :
   #   · `pnpm --filter api typecheck` s'appuie sur tsconfig.build.json, qui exclut `test/` et
-  #     `**/*spec.ts` — les fichiers de test de l'API ne sont donc pas type-vérifiés.
+  #     `**/*spec.ts` — les ~60 fichiers de specs de l'API ne sont donc pas type-vérifiés.
+  #     `apps/api/tsconfig.check.json` existe et les couvre (`tsc -p tsconfig.check.json`), mais
+  #     il remonte 101 erreurs de typage de mocks : chantier à part, pas encore branché ici.
   #   · Le front n'a aucun script `typecheck` : c'est `pnpm --filter web build` qui tient ce
   #     rôle, via la vérification de types d'`ng build`.
+  #
+  # Les scripts sous `apps/api/prisma/` (seed, seed-demo, migrate-*) sont, eux, bien couverts :
+  # le typecheck les inclut déjà, et le glob eslint a été élargi à `prisma/`.
   types-build:
     name: Lint · types · builds
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (2026-07-16)
 
-      - uses: pnpm/action-setup@v4 # version lue dans packageManager (package.json)
+      # Version de pnpm lue dans `packageManager` (package.json), pas ici.
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 (2026-03-11)
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (2025-04-02)
         with:
           node-version-file: .tool-versions
           cache: pnpm
@@ -60,6 +62,9 @@ jobs:
       # `lint:check`, PAS `lint` : ce dernier contient `--fix` et corrigerait silencieusement
       # les violations auto-corrigeables avant de rapporter un succès — un garde-fou en trompe-l'œil.
       - run: pnpm --filter api lint:check
+      # `ng lint` ne contient pas `--fix` (contrairement au script `lint` de l'API) : il vérifie
+      # sans réécrire, donc utilisable tel quel en CI.
+      - run: pnpm --filter web lint
       - run: pnpm --filter api typecheck
       - run: pnpm --filter api build
 
@@ -90,14 +95,20 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
+      # Sans ce service, `email.integration.spec.ts` se sautait lui-même et affichait PASS sans
+      # rien tester (`if (!reachable) return`) — un test qui mentait. Il envoie un vrai e-mail
+      # puis le relit via l'API HTTP de Mailpit ; vérifié en local, il passe en ~450 ms.
+      mailpit:
+        image: axllent/mailpit
+        ports: ['1025:1025', '8025:8025']
 
     env:
       DATABASE_URL: postgresql://jdr:jdr@localhost:5432/jdr_test?schema=public
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (2026-07-16)
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 (2026-03-11)
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (2025-04-02)
         with:
           node-version-file: .tool-versions
           cache: pnpm
@@ -111,9 +122,9 @@ jobs:
       # `pnpm -r test` : jest (api), ng test/vitest (web), vitest (game-rules).
       # packages/shared n'a pas de script test et est simplement ignoré.
       #
-      # Note : `email.integration.spec.ts` se saute lui-même si Mailpit est injoignable
-      # (`if (!reachable) return`) et affiche donc PASS sans rien tester ici. Ajouter un
-      # service mailpit (axllent/mailpit, ports 1025/8025) le ferait réellement tourner.
+      # Les deux specs d'intégration tournent pour de vrai ici : `notifications` contre le
+      # service postgres, `email` contre le service mailpit (`MAILPIT_API` se construit depuis
+      # `MAIL_HOST`, défini à `localhost` au niveau workflow — où les services sont joignables).
       - run: pnpm test
 
   # ── Tests e2e (Postgres réel) ──────────────────────────────────────────────
@@ -143,9 +154,9 @@ jobs:
       WEB_ORIGIN: http://localhost:4200
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4 (2026-07-16)
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4 (2026-03-11)
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4 (2025-04-02)
         with:
           node-version-file: .tool-versions
           cache: pnpm
