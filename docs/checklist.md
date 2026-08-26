@@ -20,7 +20,8 @@
 
 ## Tâches sensibles (auth, données, upload, autorisation)
 - [ ] Dérouler la checklist de **`docs/security.md`** pour la couche concernée.
-      (La CI couvre lint/types/build/tests, pas la sécurité : aucun Semgrep. Revue manuelle.)
+      (La CI couvre les types + build API et tous les tests, pas le lint ni la sécurité :
+      aucun Semgrep. Revue manuelle.)
 
 ## Nouveau composant affichant des données de Partie (ou de l'utilisateur)
 - [ ] **Évaluer le besoin de câblage temps réel (SSE)** : ce composant a-t-il besoin de refléter

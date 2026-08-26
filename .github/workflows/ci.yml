@@ -32,9 +32,7 @@ jobs:
   #
   # DÉLIBÉRÉMENT ABSENTS de cette CI, parce qu'ils échouent aujourd'hui sur de la dette
   # préexistante — les ajouter rendrait chaque PR rouge, y compris celles qui réparent :
-  #   · `pnpm --filter api lint`  → 1758 erreurs (surtout no-unsafe-*, alors que tsc passe :
-  #                                 eslint ne résout pas les types Prisma, cause à investiguer)
-  #   · `pnpm --filter web lint`  → 145 erreurs, dont 130 corrigeables par `ng lint --fix`
+  #   · `pnpm --filter web lint`  → 16 erreurs restantes (dont no-empty-function)
   #   · `pnpm --filter web build` → bundle initial 1.49 MB pour un budget d'erreur de 1 MB
   #                                 (angular.json). `ng serve` n'applique pas les budgets,
   #                                 d'où un build prod cassé sans que personne le voie.
@@ -60,6 +58,9 @@ jobs:
       # Le client Prisma est généré, pas versionné : sans lui, tsc et eslint typé échouent.
       - run: pnpm --filter api exec prisma generate
 
+      # `lint:check`, PAS `lint` : ce dernier contient `--fix` et corrigerait silencieusement
+      # les violations auto-corrigeables avant de rapporter un succès — un garde-fou en trompe-l'œil.
+      - run: pnpm --filter api lint:check
       - run: pnpm --filter api typecheck
       - run: pnpm --filter api build
 
