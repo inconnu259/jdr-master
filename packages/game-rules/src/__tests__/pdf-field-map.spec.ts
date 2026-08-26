@@ -3,15 +3,7 @@ import { mapToPdfFields } from '../ryuutama/pdf-field-map';
 import { computeDerived } from '../ryuutama/compute-derived';
 import type { RyuutamaSheetData } from '../ryuutama/types';
 
-const CLASSES = [
-  'artisan',
-  'chasseur',
-  'fermier',
-  'guerisseur',
-  'marchand',
-  'menestrel',
-  'noble',
-];
+const CLASSES = ['artisan', 'chasseur', 'fermier', 'guerisseur', 'marchand', 'menestrel', 'noble'];
 const TYPES = ['attaque', 'technique', 'magie'];
 const WEAPONS = ['arc', 'epee-courte', 'epee-longue', 'hache', 'lance'];
 const WEAPON_PDF_OPTIONS: Record<string, string> = {
@@ -99,9 +91,7 @@ describe('mapToPdfFields', () => {
     const fields = mapToPdfFields(data, derived, content);
     expect(fields.find((f) => f.field === 'PV max')?.value).toBe(String(derived.PV));
     expect(fields.find((f) => f.field === 'PE max')?.value).toBe(String(derived.PE));
-    expect(fields.find((f) => f.field === 'Initiative')?.value).toBe(
-      String(derived.Initiative),
-    );
+    expect(fields.find((f) => f.field === 'Initiative')?.value).toBe(String(derived.Initiative));
   });
 
   it("ne mappe pas 'Condition' : aucun champ correspondant sur le template officiel", () => {
@@ -129,7 +119,11 @@ describe('mapToPdfFields', () => {
 
   it('attributs manquants => valeurs par défaut à 0, pas de crash', () => {
     const data = baseData({ attributes: undefined as any });
-    const fields = mapToPdfFields(data, computeDerived({ ...data, attributes: { AGI: 0, ESP: 0, INT: 0, VIG: 0 } }), content);
+    const fields = mapToPdfFields(
+      data,
+      computeDerived({ ...data, attributes: { AGI: 0, ESP: 0, INT: 0, VIG: 0 } }),
+      content,
+    );
     expect(fields.find((f) => f.field === 'AGI')?.value).toBe('0');
     expect(fields.find((f) => f.field === 'VIG')?.value).toBe('0');
   });
@@ -172,9 +166,7 @@ describe('mapToPdfFields', () => {
       },
     });
     const fields = mapToPdfFields(data, computeDerived(data), content);
-    expect(fields.find((f) => f.field === 'Objet fétiche')?.value).toBe(
-      'Une pierre porte-bonheur',
-    );
+    expect(fields.find((f) => f.field === 'Objet fétiche')?.value).toBe('Une pierre porte-bonheur');
     expect(fields.find((f) => f.field === 'Notes')?.value).toBe('grand sac à dos, tente');
   });
 
@@ -182,17 +174,15 @@ describe('mapToPdfFields', () => {
     const data = baseData({ narrative: undefined });
     const fields = mapToPdfFields(data, computeDerived(data), content);
     expect(fields.find((f) => f.field === 'Nom')?.value).toBe('');
-    expect(fields.find((f) => f.field === 'Village natal et raisons du départ')?.value).toBe(
-      '',
-    );
+    expect(fields.find((f) => f.field === 'Village natal et raisons du départ')?.value).toBe('');
   });
 
   it('village natal et motivation combinés avec un séparateur, un seul si l’autre est absent', () => {
     const data = baseData({ narrative: { homeTown: 'Norn' } });
     const fields = mapToPdfFields(data, computeDerived(data), content);
-    expect(
-      fields.find((f) => f.field === 'Village natal et raisons du départ')?.value,
-    ).toBe('Norn');
+    expect(fields.find((f) => f.field === 'Village natal et raisons du départ')?.value).toBe(
+      'Norn',
+    );
   });
 
   it('mappe le pseudo du propriétaire sur le champ "Joueur" (Story 4.6)', () => {
@@ -313,8 +303,18 @@ describe('mapToPdfFields', () => {
     it('avec 2 entrées levelUps → Niveau = 3, jamais dérivé de xp', () => {
       const data = baseData({
         levelUps: [
-          { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
-          { level: 3, pvAllocated: 1, peAllocated: 2, capabilities: [{ type: 'landscape', params: {} }] },
+          {
+            level: 2,
+            pvAllocated: 2,
+            peAllocated: 1,
+            capabilities: [{ type: 'attribute', params: {} }],
+          },
+          {
+            level: 3,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'landscape', params: {} }],
+          },
         ],
       });
       const fields = mapToPdfFields(data, computeDerived(data), content);
@@ -379,12 +379,27 @@ describe('mapToPdfFields', () => {
       expect(classe2?.kind).toBe('dropdown');
     });
 
-    it("capacités type/dragon-protection/legendary-journey → aucun champ supplémentaire (pas de destination PDF)", () => {
+    it('capacités type/dragon-protection/legendary-journey → aucun champ supplémentaire (pas de destination PDF)', () => {
       const data = baseData({
         levelUps: [
-          { level: 6, pvAllocated: 1, peAllocated: 2, capabilities: [{ type: 'type', params: { key: 'technique' } }] },
-          { level: 9, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'dragon-protection', params: { key: 'ete' } }] },
-          { level: 10, pvAllocated: 1, peAllocated: 2, capabilities: [{ type: 'legendary-journey', params: {} }] },
+          {
+            level: 6,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'type', params: { key: 'technique' } }],
+          },
+          {
+            level: 9,
+            pvAllocated: 2,
+            peAllocated: 1,
+            capabilities: [{ type: 'dragon-protection', params: { key: 'ete' } }],
+          },
+          {
+            level: 10,
+            pvAllocated: 1,
+            peAllocated: 2,
+            capabilities: [{ type: 'legendary-journey', params: {} }],
+          },
         ],
       });
       const before = mapToPdfFields(baseData(), computeDerived(baseData()), capabilityContent);

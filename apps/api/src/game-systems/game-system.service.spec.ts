@@ -85,9 +85,7 @@ describe('GameSystemService', () => {
   });
 
   it('getContent("unknown") → NotFoundException', async () => {
-    await expect(service.getContent('unknown')).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(service.getContent('unknown')).rejects.toThrow(NotFoundException);
     expect(prisma.contentType.findMany).not.toHaveBeenCalled();
   });
 
@@ -119,9 +117,7 @@ describe('GameSystemService', () => {
 
     it('id absent de la base → NotFoundException "introuvable" (distinct du cas ci-dessous)', async () => {
       prisma.gameSystem.findUnique.mockResolvedValue(null);
-      await expect(service.getSchema('ryuutama')).rejects.toThrow(
-        'Système de jeu introuvable',
-      );
+      await expect(service.getSchema('ryuutama')).rejects.toThrow('Système de jeu introuvable');
     });
 
     it('id présent en base mais aucun schéma codé → NotFoundException "aucun schéma implémenté" (pas confondu avec "introuvable")', async () => {
@@ -144,12 +140,7 @@ describe('GameSystemService', () => {
     it('clé "member" (journal) + membre viewable → fichier retourné, getViewable appelé (pas getOwned)', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-      const result = await service.getAssetFile(
-        'p1',
-        'ryuutama',
-        'journal',
-        'u1',
-      );
+      const result = await service.getAssetFile('p1', 'ryuutama', 'journal', 'u1');
 
       expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
       expect(parties.getOwned).not.toHaveBeenCalled();
@@ -159,21 +150,16 @@ describe('GameSystemService', () => {
     it('clé "member" (carte) + non-membre → l\'erreur de getViewable est propagée', async () => {
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.getAssetFile('p1', 'ryuutama', 'carte', 'stranger'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.getAssetFile('p1', 'ryuutama', 'carte', 'stranger')).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(mockReadFile).not.toHaveBeenCalled();
     });
 
     it('clé "mj" (monde) + MJ → fichier retourné, getOwned appelé (pas getViewable)', async () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-      const result = await service.getAssetFile(
-        'p1',
-        'ryuutama',
-        'monde',
-        'mj1',
-      );
+      const result = await service.getAssetFile('p1', 'ryuutama', 'monde', 'mj1');
 
       expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
       expect(parties.getViewable).not.toHaveBeenCalled();
@@ -183,16 +169,16 @@ describe('GameSystemService', () => {
     it('clé "mj" (structure) + joueur non-MJ → l\'erreur de getOwned est propagée', async () => {
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.getAssetFile('p1', 'ryuutama', 'structure', 'player1'),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.getAssetFile('p1', 'ryuutama', 'structure', 'player1')).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(mockReadFile).not.toHaveBeenCalled();
     });
 
     it("clé inconnue → NotFoundException explicite, aucune vérification d'accès déclenchée", async () => {
-      await expect(
-        service.getAssetFile('p1', 'ryuutama', 'inexistante', 'u1'),
-      ).rejects.toThrow('Fiche introuvable');
+      await expect(service.getAssetFile('p1', 'ryuutama', 'inexistante', 'u1')).rejects.toThrow(
+        'Fiche introuvable',
+      );
       expect(parties.getViewable).not.toHaveBeenCalled();
       expect(parties.getOwned).not.toHaveBeenCalled();
     });
@@ -200,9 +186,9 @@ describe('GameSystemService', () => {
     it.each(['__proto__', 'constructor', 'toString', 'hasOwnProperty'])(
       'clé "%s" (propriété héritée d\'Object) → NotFoundException explicite, jamais un crash ni un accès accordé (revue de code)',
       async (key) => {
-        await expect(
-          service.getAssetFile('p1', 'ryuutama', key, 'u1'),
-        ).rejects.toThrow('Fiche introuvable');
+        await expect(service.getAssetFile('p1', 'ryuutama', key, 'u1')).rejects.toThrow(
+          'Fiche introuvable',
+        );
         expect(parties.getViewable).not.toHaveBeenCalled();
         expect(parties.getOwned).not.toHaveBeenCalled();
         expect(mockReadFile).not.toHaveBeenCalled();
@@ -210,9 +196,9 @@ describe('GameSystemService', () => {
     );
 
     it('systemId inconnu → NotFoundException, aucune résolution de clé tentée', async () => {
-      await expect(
-        service.getAssetFile('p1', 'conte-de-minuit', 'journal', 'u1'),
-      ).rejects.toThrow('Système de jeu introuvable');
+      await expect(service.getAssetFile('p1', 'conte-de-minuit', 'journal', 'u1')).rejects.toThrow(
+        'Système de jeu introuvable',
+      );
       expect(parties.getViewable).not.toHaveBeenCalled();
     });
 
@@ -220,9 +206,9 @@ describe('GameSystemService', () => {
       parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       mockReadFile.mockRejectedValue(new Error('ENOENT'));
 
-      await expect(
-        service.getAssetFile('p1', 'ryuutama', 'journal', 'u1'),
-      ).rejects.toThrow(/introuvable sur le disque/);
+      await expect(service.getAssetFile('p1', 'ryuutama', 'journal', 'u1')).rejects.toThrow(
+        /introuvable sur le disque/,
+      );
     });
 
     describe('fiches réservées au MJ (Story 12.2)', () => {
@@ -242,12 +228,7 @@ describe('GameSystemService', () => {
         async (key) => {
           parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
 
-          const result = await service.getAssetFile(
-            'p1',
-            'ryuutama',
-            key,
-            'mj1',
-          );
+          const result = await service.getAssetFile('p1', 'ryuutama', key, 'mj1');
 
           expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
           expect(parties.getViewable).not.toHaveBeenCalled();
@@ -260,9 +241,9 @@ describe('GameSystemService', () => {
         async (key) => {
           parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-          await expect(
-            service.getAssetFile('p1', 'ryuutama', key, 'player1'),
-          ).rejects.toThrow(ForbiddenException);
+          await expect(service.getAssetFile('p1', 'ryuutama', key, 'player1')).rejects.toThrow(
+            ForbiddenException,
+          );
           expect(mockReadFile).not.toHaveBeenCalled();
         },
       );
@@ -293,9 +274,9 @@ describe('GameSystemService', () => {
         'structure',
       ];
       for (const key of keys) {
-        await expect(
-          service.getAssetFile('p1', 'ryuutama', key, 'u1'),
-        ).resolves.toEqual(Buffer.from('pdf-bytes'));
+        await expect(service.getAssetFile('p1', 'ryuutama', key, 'u1')).resolves.toEqual(
+          Buffer.from('pdf-bytes'),
+        );
       }
     });
   });

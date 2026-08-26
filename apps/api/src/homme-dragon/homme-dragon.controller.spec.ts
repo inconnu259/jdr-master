@@ -7,6 +7,11 @@ import { Test } from '@nestjs/testing';
 import { HommeDragonController } from './homme-dragon.controller';
 import { HommeDragonService } from './homme-dragon.service';
 import { HommeDragonPdfService } from './homme-dragon.pdf.service';
+import type {
+  CreateHommeDragonDto,
+  HommeDragonDto,
+  UpdateHommeDragonDto,
+} from '@master-jdr/shared';
 
 function makeService() {
   return {
@@ -47,7 +52,7 @@ describe('HommeDragonController', () => {
       race: 'DRAGON_ROUGE',
       artefact: { key: 'grand-arc' },
       nom: 'Ignis',
-    } as any;
+    } as unknown as CreateHommeDragonDto;
     controller.create('p1', { id: 'mj1' } as any, dto);
     expect(service.create).toHaveBeenCalledWith('p1', 'mj1', dto);
   });
@@ -58,20 +63,20 @@ describe('HommeDragonController', () => {
   });
 
   it('PATCH délègue à update() avec partieId/user.id/dto', () => {
-    const dto = { demeure: 'Une auberge' } as any;
+    const dto = { demeure: 'Une auberge' } as UpdateHommeDragonDto;
     controller.update('p1', { id: 'mj1' } as any, dto);
     expect(service.update).toHaveBeenCalledWith('p1', 'mj1', dto);
   });
 
   it('POST eveil-power délègue à chooseEveilPower() avec partieId/user.id/dto', () => {
-    const dto = { level: 2, key: 'escorte-du-dragon' } as any;
+    const dto = { level: 2, key: 'escorte-du-dragon' };
     controller.chooseEveilPower('p1', { id: 'mj1' } as any, dto);
     expect(service.chooseEveilPower).toHaveBeenCalledWith('p1', 'mj1', dto);
   });
 
   describe('exportPdf()', () => {
     it('résout la fiche/le pseudo MJ puis délègue à fillHommeDragonPdf()', async () => {
-      const hommeDragon = { userId: 'mj1' } as any;
+      const hommeDragon = { userId: 'mj1' } as unknown as HommeDragonDto;
       service.findOne.mockResolvedValue(hommeDragon);
       service.getOwnerPseudo.mockResolvedValue('admin');
       pdfService.fillHommeDragonPdf.mockResolvedValue(Buffer.from('pdf'));
@@ -80,19 +85,16 @@ describe('HommeDragonController', () => {
 
       expect(service.findOne).toHaveBeenCalledWith('p1', 'u1');
       expect(service.getOwnerPseudo).toHaveBeenCalledWith('mj1');
-      expect(pdfService.fillHommeDragonPdf).toHaveBeenCalledWith(
-        hommeDragon,
-        'admin',
-      );
+      expect(pdfService.fillHommeDragonPdf).toHaveBeenCalledWith(hommeDragon, 'admin');
       expect(result.getStream()).toBeDefined();
     });
 
     it('aucune fiche existante → NotFoundException, jamais un PDF vide', async () => {
       service.findOne.mockResolvedValue(null);
 
-      await expect(
-        controller.exportPdf('p1', { id: 'u1' } as any),
-      ).rejects.toThrow(NotFoundException);
+      await expect(controller.exportPdf('p1', { id: 'u1' } as any)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(pdfService.fillHommeDragonPdf).not.toHaveBeenCalled();
     });
   });

@@ -238,7 +238,10 @@ describe('PollStatusPanel', () => {
       options: [
         {
           ...fakePoll.options[0],
-          votes: [...fakePoll.options[0].votes, { userId: 'u4', pseudo: 'Dana', displayName: 'Dana', answer: 'YES' }],
+          votes: [
+            ...fakePoll.options[0].votes,
+            { userId: 'u4', pseudo: 'Dana', displayName: 'Dana', answer: 'YES' },
+          ],
         },
         fakePoll.options[1],
       ],

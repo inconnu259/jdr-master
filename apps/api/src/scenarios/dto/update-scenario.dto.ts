@@ -14,7 +14,7 @@ export class UpdateScenarioDto {
   // ValidateIf (pas IsOptional) : `title` est NOT NULL en base — IsOptional sauterait aussi la
   // validation pour `null` (pas seulement `undefined`), laissant passer un title:null qui
   // crasherait ensuite sur la contrainte Prisma au lieu d'un 400 propre.
-  @ValidateIf((o) => o.title !== undefined)
+  @ValidateIf((o: UpdateScenarioDto) => o.title !== undefined)
   @IsString()
   @MinLength(1)
   @MaxLength(120)

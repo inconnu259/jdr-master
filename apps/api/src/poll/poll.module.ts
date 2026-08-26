@@ -10,11 +10,7 @@ import { PollService } from './poll.service';
   // PollController a maintenant besoin de ScenariosService.recalculateNextSession() après
   // PollService.choose() (P2-AD-2 : PollService lui-même reste générique, c'est le contrôleur qui
   // orchestre l'appel cross-module, pas le service).
-  imports: [
-    PartiesModule,
-    AvailabilityModule,
-    forwardRef(() => ScenariosModule),
-  ],
+  imports: [PartiesModule, AvailabilityModule, forwardRef(() => ScenariosModule)],
   controllers: [PollController],
   providers: [PollService],
   // Story 8.7 : ScenariosService orchestre la création d'un poll lié à une séance via

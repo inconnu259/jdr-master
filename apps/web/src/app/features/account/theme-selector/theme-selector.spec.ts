@@ -48,7 +48,9 @@ describe('ThemeSelector', () => {
     const { el } = await createFixture(themeSvc, accountSvc);
 
     const options = Array.from(el.querySelectorAll<HTMLButtonElement>('.theme-option'));
-    const foretOption = options.find((o) => o.querySelector('.name')?.textContent?.trim() === 'Forêt Ancienne');
+    const foretOption = options.find(
+      (o) => o.querySelector('.name')?.textContent?.trim() === 'Forêt Ancienne',
+    );
     foretOption!.click();
 
     expect(themeSvc.setTheme).toHaveBeenCalledWith('foret-ancienne');

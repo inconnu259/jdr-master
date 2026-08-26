@@ -96,7 +96,10 @@ async function createComponent(
     changed: signal<{ partieId: string } | null>(initialChanged),
   };
   const characterSvc = { listByPartie: vi.fn().mockResolvedValue(characters) };
-  const partiesSvc = { members: vi.fn().mockResolvedValue([]), get: vi.fn().mockResolvedValue(partie) };
+  const partiesSvc = {
+    members: vi.fn().mockResolvedValue([]),
+    get: vi.fn().mockResolvedValue(partie),
+  };
   const pollSvc = { chooseDate: vi.fn(), closePoll: vi.fn() };
   const announcementsSvc = { listAll: vi.fn().mockResolvedValue(announcements) };
   const realtimeSvc = { connect: vi.fn(), disconnect: vi.fn() };
@@ -721,7 +724,11 @@ describe('ScenarioEditor', () => {
       const characterSvc = { listByPartie: vi.fn().mockRejectedValue(new Error('réseau')) };
       const scenariosSvc = {
         listAll: vi.fn().mockResolvedValue([
-          { ...SCENARIO, status: 'COURANT', participants: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' }] },
+          {
+            ...SCENARIO,
+            status: 'COURANT',
+            participants: [{ userId: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' }],
+          },
         ]),
         listDocuments: vi.fn().mockResolvedValue([]),
         update: vi.fn(),
@@ -768,7 +775,9 @@ describe('ScenarioEditor', () => {
       fixture.detectChanges();
 
       const comp = fixture.componentInstance as any;
-      expect(comp.participantsLoadError()).toBe('Impossible de charger les participants. Réessayez.');
+      expect(comp.participantsLoadError()).toBe(
+        'Impossible de charger les participants. Réessayez.',
+      );
       expect(fixture.nativeElement.textContent).toContain(
         'Impossible de charger les participants. Réessayez.',
       );
@@ -993,10 +1002,7 @@ describe('ScenarioEditor', () => {
 
       await comp.submitResumeFin();
 
-      expect(scenariosSvc.setResumeFin).toHaveBeenCalledWith(
-        's1',
-        'Les PJ ont vaincu le dragon.',
-      );
+      expect(scenariosSvc.setResumeFin).toHaveBeenCalledWith('s1', 'Les PJ ont vaincu le dragon.');
       expect(comp.scenario().resumeFin).toBe('Les PJ ont vaincu le dragon.');
     });
 
@@ -1307,12 +1313,9 @@ describe('ScenarioEditor', () => {
       // tempête de requêtes — SeanceList est monté une fois par Séance affichée, donc N instances
       // sans garde multiplieraient les refetch inutiles), ce cas déclencherait un ou plusieurs
       // refetch en plus de celui déjà fait par ngOnInit().
-      const { scenariosSvc } = await createComponent(
-        SCENARIO,
-        [],
-        [],
-        { partieId: SCENARIO.partieId },
-      );
+      const { scenariosSvc } = await createComponent(SCENARIO, [], [], {
+        partieId: SCENARIO.partieId,
+      });
 
       // 1 seul appel (celui de ngOnInit() de ScenarioEditor) : le garde firstRun de SeanceList
       // neutralise désormais aussi sa première exécution. Un second appel signalerait qu'un des
@@ -1351,7 +1354,9 @@ describe('ScenarioEditor', () => {
       const { fixture, scenariosSvc } = await createComponent();
       const comp = fixture.componentInstance as any;
       comp.descriptionDraft.set('brouillon en cours');
-      scenariosSvc.listAll.mockResolvedValue([{ ...SCENARIO, resumeFin: 'Résumé ajouté ailleurs' }]);
+      scenariosSvc.listAll.mockResolvedValue([
+        { ...SCENARIO, resumeFin: 'Résumé ajouté ailleurs' },
+      ]);
 
       scenariosSvc.changed.set({ partieId: SCENARIO.partieId });
       fixture.detectChanges();

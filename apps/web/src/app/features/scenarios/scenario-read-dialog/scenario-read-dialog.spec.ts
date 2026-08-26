@@ -818,7 +818,7 @@ describe('ScenarioReadDialog', () => {
       expect(markAnnouncementRead).toHaveBeenCalledWith('ann-scenario');
     });
 
-    it("Story 29.13 (AC2/AC6) : une annonce non affichée (A_VENIR, anti-spoil) ne déclenche jamais markRead(), même en tentant un clic", async () => {
+    it('Story 29.13 (AC2/AC6) : une annonce non affichée (A_VENIR, anti-spoil) ne déclenche jamais markRead(), même en tentant un clic', async () => {
       const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
       const { fixture } = await createComponent(
         { ...BASE, status: 'A_VENIR' },
@@ -833,7 +833,7 @@ describe('ScenarioReadDialog', () => {
       expect(markAnnouncementRead).not.toHaveBeenCalled();
     });
 
-    it("AC6 : jamais affichée quand le statut est A_VENIR/BROUILLON, même si la donnée est présente", async () => {
+    it('AC6 : jamais affichée quand le statut est A_VENIR/BROUILLON, même si la donnée est présente', async () => {
       const { fixture } = await createComponent(
         { ...BASE, status: 'A_VENIR' },
         {
@@ -898,7 +898,9 @@ describe('ScenarioReadDialog', () => {
   describe('Câblage temps réel (Story 19.2)', () => {
     it('une notification ScenariosService.changed() recharge le scénario affiché (AC1)', async () => {
       const { fixture, scenariosSvc } = await createComponent({ ...BASE, status: 'COURANT' });
-      scenariosSvc.listAll.mockResolvedValue([{ ...BASE, status: 'COURANT', title: 'Titre mis à jour ailleurs' }]);
+      scenariosSvc.listAll.mockResolvedValue([
+        { ...BASE, status: 'COURANT', title: 'Titre mis à jour ailleurs' },
+      ]);
 
       scenariosSvc.changed.set({ partieId: BASE.partieId });
       fixture.detectChanges();

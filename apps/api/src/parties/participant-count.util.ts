@@ -44,7 +44,5 @@ export async function countParticipants(
   prisma: MembershipCounter,
   partieId: string,
 ): Promise<number> {
-  return participantCount(
-    await prisma.membership.count({ where: { partieId } }),
-  );
+  return participantCount(await prisma.membership.count({ where: { partieId } }));
 }

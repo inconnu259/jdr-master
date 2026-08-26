@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 // HommeDragonService importe validateHommeDragon/computeHommeDragonDerived/levelForScenariosPasse
@@ -46,10 +42,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import { objectLike } from '../common/test-utils/jest-typed';
 
 const mockValidate = validateHommeDragon as jest.Mock;
 
@@ -70,9 +64,9 @@ function makePrisma() {
     user: {
       findUniqueOrThrow: jest.fn(),
     },
-    $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(tx)),
+    $transaction: jest.fn((cb: (tx: typeof tx) => unknown) => cb(tx)),
     tx,
-  } as any;
+  };
 }
 
 function makePartiesService() {
@@ -216,7 +210,7 @@ describe('HommeDragonService', () => {
           userId: 'mj1',
           partieId: 'p1',
           gameSystemId: 'ryuutama',
-          sheetData: expect.objectContaining({
+          sheetData: objectLike({
             race: 'DRAGON_ROUGE',
             nom: 'Ignis',
           }),
@@ -250,10 +244,7 @@ describe('HommeDragonService', () => {
 
       await service.create('p1', 'mj1', dto);
 
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-        'p1',
-        'mj1',
-      );
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
     });
 
     it('mondesProteges non fourni → pré-rempli avec partie.name en défense de profondeur', async () => {
@@ -268,8 +259,8 @@ describe('HommeDragonService', () => {
       await service.create('p1', 'mj1', dto);
 
       expect(prisma.hommeDragon.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          sheetData: expect.objectContaining({ mondesProteges: 'Ma Campagne' }),
+        data: objectLike({
+          sheetData: objectLike({ mondesProteges: 'Ma Campagne' }),
         }),
       });
     });
@@ -289,8 +280,8 @@ describe('HommeDragonService', () => {
       });
 
       expect(prisma.hommeDragon.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          sheetData: expect.objectContaining({ mondesProteges: 'Monde perso' }),
+        data: objectLike({
+          sheetData: objectLike({ mondesProteges: 'Monde perso' }),
         }),
       });
     });
@@ -307,9 +298,7 @@ describe('HommeDragonService', () => {
         errors: [{ field: 'artefact.key', message: 'invalide' }],
       });
 
-      await expect(service.create('p1', 'mj1', dto)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.create('p1', 'mj1', dto)).rejects.toThrow(BadRequestException);
       expect(prisma.hommeDragon.create).not.toHaveBeenCalled();
     });
 
@@ -321,9 +310,7 @@ describe('HommeDragonService', () => {
         name: 'X',
       });
 
-      await expect(service.create('p1', 'mj1', dto)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.create('p1', 'mj1', dto)).rejects.toThrow(BadRequestException);
       expect(prisma.hommeDragon.create).not.toHaveBeenCalled();
     });
 
@@ -344,9 +331,7 @@ describe('HommeDragonService', () => {
     it('non-MJ → ForbiddenException propagée par getOwned, aucune écriture (AC3)', async () => {
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.create('p1', 'stranger', dto)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.create('p1', 'stranger', dto)).rejects.toThrow(ForbiddenException);
       expect(prisma.hommeDragon.create).not.toHaveBeenCalled();
     });
   });
@@ -382,7 +367,7 @@ describe('HommeDragonService', () => {
           },
         },
         data: {
-          sheetData: expect.objectContaining({
+          sheetData: objectLike({
             artefact: { key: 'grande-epee' },
           }),
         },
@@ -416,9 +401,9 @@ describe('HommeDragonService', () => {
         errors: [{ field: 'artefact.key', message: 'invalide' }],
       });
 
-      await expect(
-        service.update('p1', 'mj1', { artefact: { key: 'lanterne' } }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.update('p1', 'mj1', { artefact: { key: 'lanterne' } })).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.hommeDragon.update).not.toHaveBeenCalled();
     });
 
@@ -435,9 +420,9 @@ describe('HommeDragonService', () => {
 
       expect(mockValidate).toHaveBeenCalled();
       expect(prisma.hommeDragon.update).toHaveBeenCalledWith(
-        expect.objectContaining({
+        objectLike({
           data: {
-            sheetData: expect.objectContaining({ demeure: 'Une auberge' }),
+            sheetData: objectLike({ demeure: 'Une auberge' }),
           },
         }),
       );
@@ -455,9 +440,7 @@ describe('HommeDragonService', () => {
         errors: [{ field: 'nom', message: 'Le nom est obligatoire' }],
       });
 
-      await expect(service.update('p1', 'mj1', { nom: '' })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.update('p1', 'mj1', { nom: '' })).rejects.toThrow(BadRequestException);
       expect(prisma.hommeDragon.update).not.toHaveBeenCalled();
     });
 
@@ -485,9 +468,9 @@ describe('HommeDragonService', () => {
       await service.update('p1', 'mj1', { artefact: { key: 'grande-epee' } });
 
       expect(prisma.hommeDragon.update).toHaveBeenCalledWith(
-        expect.objectContaining({
+        objectLike({
           data: {
-            sheetData: expect.objectContaining({
+            sheetData: objectLike({
               artefact: {
                 key: 'grande-epee',
                 nom: 'Le Perceur',
@@ -506,9 +489,9 @@ describe('HommeDragonService', () => {
         gameSystemId: 'draconis',
       });
 
-      await expect(
-        service.update('p1', 'mj1', { demeure: 'x' }),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.update('p1', 'mj1', { demeure: 'x' })).rejects.toThrow(
+        BadRequestException,
+      );
       expect(prisma.hommeDragon.findUnique).not.toHaveBeenCalled();
     });
 
@@ -520,18 +503,18 @@ describe('HommeDragonService', () => {
       });
       prisma.hommeDragon.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.update('p1', 'mj1', { demeure: 'x' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.update('p1', 'mj1', { demeure: 'x' })).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.hommeDragon.update).not.toHaveBeenCalled();
     });
 
     it('non-MJ → ForbiddenException propagée par getOwned, aucune écriture (AC3)', async () => {
       parties.getOwned.mockRejectedValue(new ForbiddenException());
 
-      await expect(
-        service.update('p1', 'stranger', { demeure: 'x' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.update('p1', 'stranger', { demeure: 'x' })).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(prisma.hommeDragon.update).not.toHaveBeenCalled();
     });
   });
@@ -603,9 +586,7 @@ describe('HommeDragonService', () => {
     it('non-membre → ForbiddenException propagée par getViewable', async () => {
       parties.getViewable.mockRejectedValue(new ForbiddenException());
 
-      await expect(service.findOne('p1', 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.findOne('p1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.hommeDragon.findUnique).not.toHaveBeenCalled();
     });
   });
@@ -728,9 +709,7 @@ describe('HommeDragonService', () => {
         gameSystemId: 'ryuutama',
       });
       parties.listMembers.mockResolvedValue(makeMembers());
-      scenarios.findAllForPartie.mockResolvedValue([
-        makeScenarioDto({ participants: undefined }),
-      ]);
+      scenarios.findAllForPartie.mockResolvedValue([makeScenarioDto({ participants: undefined })]);
       prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
 
       const result = await service.findOne('p1', 'mj1');
@@ -817,23 +796,20 @@ describe('HommeDragonService', () => {
       [3, 3, 5],
       [7, 4, 5],
       [12, 5, 10],
-    ])(
-      'findOne() : %i scénarios PASSE → niveau %i, PS %i (AC2)',
-      async (count, level, PS) => {
-        parties.getViewable.mockResolvedValue({
-          id: 'p1',
-          mjId: 'mj1',
-          gameSystemId: 'ryuutama',
-        });
-        parties.listMembers.mockResolvedValue([]);
-        scenarios.findAllForPartie.mockResolvedValue(makePasseScenarios(count));
-        prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
+    ])('findOne() : %i scénarios PASSE → niveau %i, PS %i (AC2)', async (count, level, PS) => {
+      parties.getViewable.mockResolvedValue({
+        id: 'p1',
+        mjId: 'mj1',
+        gameSystemId: 'ryuutama',
+      });
+      parties.listMembers.mockResolvedValue([]);
+      scenarios.findAllForPartie.mockResolvedValue(makePasseScenarios(count));
+      prisma.hommeDragon.findUnique.mockResolvedValue(makeHommeDragon());
 
-        const result = await service.findOne('p1', 'mj1');
+      const result = await service.findOne('p1', 'mj1');
 
-        expect(result?.derived).toEqual({ level, PS });
-      },
-    );
+      expect(result?.derived).toEqual({ level, PS });
+    });
 
     it('create() retourne aussi derived peuplé (AC3)', async () => {
       parties.getOwned.mockResolvedValue({
@@ -946,9 +922,7 @@ describe('HommeDragonService', () => {
 
       const result = await service.findOne('p1', 'mj1');
 
-      expect(result?.eveilPowers).toEqual([
-        { level: 2, key: 'escorte-du-dragon' },
-      ]);
+      expect(result?.eveilPowers).toEqual([{ level: 2, key: 'escorte-du-dragon' }]);
       expect(result?.pendingEveilLevels).toEqual([]);
     });
 
@@ -1014,7 +988,7 @@ describe('HommeDragonService', () => {
             },
           },
           data: {
-            sheetData: expect.objectContaining({
+            sheetData: objectLike({
               eveilPowers: [
                 { level: 2, key: 'escorte-du-dragon' },
                 { level: 3, key: 'couche-du-dragon' },

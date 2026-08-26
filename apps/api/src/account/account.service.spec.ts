@@ -14,6 +14,7 @@ jest.mock('@master-jdr/game-rules', () => ({
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountService } from './account.service';
+import { anyOf } from '../common/test-utils/jest-typed';
 
 // Champs requis par toAuthUser() (Story 30.4) — fusionnés dans chaque mock de retour
 // `prisma.user.update()` qui ne les fournit pas déjà explicitement.
@@ -97,21 +98,19 @@ describe('AccountService', () => {
         ),
       );
 
-      await expect(
-        service.updateDisplayName('deleted-user', 'Nom'),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.updateDisplayName('deleted-user', 'Nom')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it('erreur Prisma non-P2025 → propagée telle quelle', async () => {
-      const otherError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed.',
-        { code: 'P2002', clientVersion: '7.8.0' },
-      );
+      const otherError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed.', {
+        code: 'P2002',
+        clientVersion: '7.8.0',
+      });
       prisma.user.update.mockRejectedValue(otherError);
 
-      await expect(service.updateDisplayName('u1', 'Nom')).rejects.toBe(
-        otherError,
-      );
+      await expect(service.updateDisplayName('u1', 'Nom')).rejects.toBe(otherError);
     });
   });
 
@@ -149,21 +148,19 @@ describe('AccountService', () => {
         ),
       );
 
-      await expect(
-        service.updateTheme('deleted-user', 'grimoire-emeraude'),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.updateTheme('deleted-user', 'grimoire-emeraude')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it('erreur Prisma non-P2025 → propagée telle quelle', async () => {
-      const otherError = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed.',
-        { code: 'P2002', clientVersion: '7.8.0' },
-      );
+      const otherError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed.', {
+        code: 'P2002',
+        clientVersion: '7.8.0',
+      });
       prisma.user.update.mockRejectedValue(otherError);
 
-      await expect(service.updateTheme('u1', 'grimoire-emeraude')).rejects.toBe(
-        otherError,
-      );
+      await expect(service.updateTheme('u1', 'grimoire-emeraude')).rejects.toBe(otherError);
     });
   });
 
@@ -295,9 +292,7 @@ describe('AccountService', () => {
             ...AUTH_USER_BASE_FIELDS,
             id: 'u1',
             calendarLayersSetAt: new Date('2026-02-01T00:00:00.000Z'),
-            calendarLayers: [
-              { id: 'l1', userId: 'u1', layerKey: 'mes-seances' },
-            ],
+            calendarLayers: [{ id: 'l1', userId: 'u1', layerKey: 'mes-seances' }],
           },
         ]);
 
@@ -313,7 +308,7 @@ describe('AccountService', () => {
         });
         expect(prisma.user.update).toHaveBeenCalledWith({
           where: { id: 'u1' },
-          data: { calendarLayersSetAt: expect.any(Date) },
+          data: { calendarLayersSetAt: anyOf(Date) },
           include: { calendarLayers: true },
         });
         expect(result.defaultCalendarLayers).toEqual(['mes-seances']);
@@ -349,9 +344,7 @@ describe('AccountService', () => {
             ...AUTH_USER_BASE_FIELDS,
             id: 'u1',
             calendarLayersSetAt: new Date('2026-02-01T00:00:00.000Z'),
-            calendarLayers: [
-              { id: 'l1', userId: 'u1', layerKey: 'mes-seances' },
-            ],
+            calendarLayers: [{ id: 'l1', userId: 'u1', layerKey: 'mes-seances' }],
           },
         ]);
 
@@ -384,7 +377,7 @@ describe('AccountService', () => {
 
         expect(prisma.user.update).toHaveBeenCalledWith({
           where: { id: 'u1' },
-          data: { partiesSort: 'date', calendarLayersSetAt: expect.any(Date) },
+          data: { partiesSort: 'date', calendarLayersSetAt: anyOf(Date) },
           include: { calendarLayers: true },
         });
       });
@@ -422,18 +415,13 @@ describe('AccountService', () => {
 
     it('partieId inexistant (P2003, FK invalide) → NotFoundException', async () => {
       prisma.partieFavorite.create.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError(
-          'Foreign key constraint failed.',
-          {
-            code: 'P2003',
-            clientVersion: '7.8.0',
-          },
-        ),
+        new Prisma.PrismaClientKnownRequestError('Foreign key constraint failed.', {
+          code: 'P2003',
+          clientVersion: '7.8.0',
+        }),
       );
 
-      await expect(
-        service.addFavorite('u1', 'inconnue'),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.addFavorite('u1', 'inconnue')).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('erreur Prisma non P2002/P2003 → propagée telle quelle', async () => {
@@ -583,15 +571,15 @@ describe('AccountService', () => {
 
     it('announcementId inexistant (P2003, FK invalide) → NotFoundException', async () => {
       prisma.announcementRead.create.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError(
-          'Foreign key constraint failed.',
-          { code: 'P2003', clientVersion: '7.8.0' },
-        ),
+        new Prisma.PrismaClientKnownRequestError('Foreign key constraint failed.', {
+          code: 'P2003',
+          clientVersion: '7.8.0',
+        }),
       );
 
-      await expect(
-        service.markAnnouncementRead('u1', 'inconnue'),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.markAnnouncementRead('u1', 'inconnue')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it('erreur Prisma non P2002/P2003 → propagée telle quelle', async () => {
@@ -601,9 +589,7 @@ describe('AccountService', () => {
       });
       prisma.announcementRead.create.mockRejectedValue(otherError);
 
-      await expect(service.markAnnouncementRead('u1', 'a1')).rejects.toBe(
-        otherError,
-      );
+      await expect(service.markAnnouncementRead('u1', 'a1')).rejects.toBe(otherError);
     });
   });
 });

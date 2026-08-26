@@ -8,9 +8,10 @@ import type { DaySlot } from '@master-jdr/shared';
 import { AvailabilityService, DeclarationLike } from './availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
+import { anyOf, arrayLike, objectLike } from '../common/test-utils/jest-typed';
 
 function makeMockRealtimeEvents() {
-  return { emit: jest.fn() } as unknown as RealtimeEventsService;
+  return { emit: jest.fn() };
 }
 
 // Dates de référence (UTC) :
@@ -80,27 +81,22 @@ type MockTxClient = {
 };
 
 function makeMockPrisma() {
-  const mockCreate = jest.fn(async ({ data }: { data: object }) => ({
-    id: 'new-' + Math.random(),
-    ...data,
-  }));
-  const mockUpdate = jest.fn(async () => ({}));
-  const mockUpdateMany = jest.fn(async () => ({ count: 0 }));
+  const mockCreate = jest.fn(({ data }: { data: object }) =>
+    Promise.resolve({ id: 'new-' + Math.random(), ...data }),
+  );
+  const mockUpdate = jest.fn(() => Promise.resolve({}));
+  const mockUpdateMany = jest.fn(() => Promise.resolve({ count: 0 }));
   const mockFindUnique = jest.fn();
-  const mockFindMany = jest.fn(async () => [] as object[]);
+  const mockFindMany = jest.fn(() => Promise.resolve([] as object[]));
   // Story bug-fix temps réel : affectedPartieIds() interroge membership/partie — vides par défaut
   // (aucun effet sur les tests existants, qui n'assertent pas sur les topics émis).
-  const mockMembershipFindMany = jest.fn(
-    async () => [] as { partieId: string }[],
-  );
-  const mockPartieFindMany = jest.fn(async () => [] as { id: string }[]);
+  const mockMembershipFindMany = jest.fn(() => Promise.resolve([] as { partieId: string }[]));
+  const mockPartieFindMany = jest.fn(() => Promise.resolve([] as { id: string }[]));
   // AD-9 (Story 30.5) — getSeanceDerivedUnavailability() lit aussi partie.findMany (forme enrichie
   // kind/mjId/memberships) et seance.findMany : vide par défaut, sans effet sur les tests existants.
   const mockSeanceFindMany = jest.fn(() => Promise.resolve([] as object[]));
   // GET /me/calendar (AD-18, Story 30.5) — couche `votes-en-cours` : vide par défaut.
-  const mockSessionPollFindMany = jest.fn(() =>
-    Promise.resolve([] as object[]),
-  );
+  const mockSessionPollFindMany = jest.fn(() => Promise.resolve([] as object[]));
   // Story 36.6 — effectif de la troupe pour la couche `votes-en-cours` (AC9). Une SEULE requête
   // groupée pour toutes mes parties (AD-3), jamais un count par partie. Vide par défaut : une
   // partie absente de l'agrégat a 0 Membership, donc un effectif de 1 (le MJ).
@@ -132,9 +128,7 @@ function makeMockPrisma() {
     partie: { findMany: mockPartieFindMany },
     seance: { findMany: mockSeanceFindMany },
     sessionPoll: { findMany: mockSessionPollFindMany },
-    $transaction: jest.fn(async (fn: (tx: MockTxClient) => Promise<unknown>) =>
-      fn(tx),
-    ),
+    $transaction: jest.fn(async (fn: (tx: MockTxClient) => Promise<unknown>) => fn(tx)),
   };
   return {
     mockPrisma,
@@ -169,9 +163,7 @@ describe('AvailabilityService.splitOccurrence', () => {
   });
 
   it('normal split : crée R1, Rmod, R2 et soft-delete R', async () => {
-    mockFindUnique.mockResolvedValue(
-      makeRecurring({ startDate: WED1, endDate: null }),
-    );
+    mockFindUnique.mockResolvedValue(makeRecurring({ startDate: WED1, endDate: null }));
     const { created, deleted } = await service.splitOccurrence(
       DECL_ID,
       USER_ID,
@@ -180,9 +172,7 @@ describe('AvailabilityService.splitOccurrence', () => {
     );
     expect(deleted).toEqual([DECL_ID]);
     expect(mockCreate).toHaveBeenCalledTimes(3);
-    const calls = mockCreate.mock.calls as [
-      { data: Record<string, unknown> },
-    ][];
+    const calls = mockCreate.mock.calls as [{ data: Record<string, unknown> }][];
     const [r1, rmod, r2] = calls.map((c) => c[0].data);
     expect(r1.recurKind).toBe('RECURRING');
     expect(r1.endDate).toEqual(new Date('2026-06-24T00:00:00Z'));
@@ -193,20 +183,16 @@ describe('AvailabilityService.splitOccurrence', () => {
     expect(r2.startDate).toEqual(new Date('2026-07-08T00:00:00Z'));
     expect(mockUpdate).toHaveBeenCalledWith({
       where: { id: DECL_ID },
-      data: expect.objectContaining({ expiresAt: expect.any(Date) }),
+      data: objectLike({ expiresAt: anyOf(Date) }),
     });
     expect(created).toHaveLength(3);
   });
 
   it('left-edge (D == startDate) : pas de R1, seulement Rmod + R2', async () => {
-    mockFindUnique.mockResolvedValue(
-      makeRecurring({ startDate: WED2, endDate: null }),
-    );
+    mockFindUnique.mockResolvedValue(makeRecurring({ startDate: WED2, endDate: null }));
     await service.splitOccurrence(DECL_ID, USER_ID, '2026-07-01', 'delete');
     expect(mockCreate).toHaveBeenCalledTimes(2);
-    const calls = mockCreate.mock.calls as [
-      { data: Record<string, unknown> },
-    ][];
+    const calls = mockCreate.mock.calls as [{ data: Record<string, unknown> }][];
     const [rmod, r2] = calls.map((c) => c[0].data);
     expect(rmod.recurKind).toBe('PUNCTUAL');
     expect(r2.recurKind).toBe('RECURRING');
@@ -224,47 +210,33 @@ describe('AvailabilityService.splitOccurrence', () => {
     );
     await service.splitOccurrence(DECL_ID, USER_ID, '2026-07-01', 'delete');
     expect(mockCreate).toHaveBeenCalledTimes(2);
-    const calls = mockCreate.mock.calls as [
-      { data: Record<string, unknown> },
-    ][];
+    const calls = mockCreate.mock.calls as [{ data: Record<string, unknown> }][];
     const [r1, rmod] = calls.map((c) => c[0].data);
     expect(r1.recurKind).toBe('RECURRING');
     expect(rmod.recurKind).toBe('PUNCTUAL');
   });
 
   it('occurrence unique (startDate == endDate == D) : seulement Rmod remplace R', async () => {
-    mockFindUnique.mockResolvedValue(
-      makeRecurring({ startDate: WED2, endDate: WED2 }),
-    );
+    mockFindUnique.mockResolvedValue(makeRecurring({ startDate: WED2, endDate: WED2 }));
     await service.splitOccurrence(DECL_ID, USER_ID, '2026-07-01', 'delete');
     expect(mockCreate).toHaveBeenCalledTimes(1);
-    const calls = mockCreate.mock.calls as [
-      { data: Record<string, unknown> },
-    ][];
+    const calls = mockCreate.mock.calls as [{ data: Record<string, unknown> }][];
     const [rmod] = calls.map((c) => c[0].data);
     expect(rmod.recurKind).toBe('PUNCTUAL');
   });
 
   it('action delete : Rmod a le kind opposé (UNAVAILABLE → AVAILABLE)', async () => {
-    mockFindUnique.mockResolvedValue(
-      makeRecurring({ kind: 'UNAVAILABLE', startDate: WED1 }),
-    );
+    mockFindUnique.mockResolvedValue(makeRecurring({ kind: 'UNAVAILABLE', startDate: WED1 }));
     await service.splitOccurrence(DECL_ID, USER_ID, '2026-07-01', 'delete');
-    const calls = mockCreate.mock.calls as [
-      { data: Record<string, unknown> },
-    ][];
+    const calls = mockCreate.mock.calls as [{ data: Record<string, unknown> }][];
     const rmodCall = calls.find((c) => c[0].data.recurKind === 'PUNCTUAL');
     expect(rmodCall![0].data.kind).toBe('AVAILABLE');
   });
 
   it('action delete : Rmod a le kind opposé (AVAILABLE → UNAVAILABLE)', async () => {
-    mockFindUnique.mockResolvedValue(
-      makeRecurring({ kind: 'AVAILABLE', startDate: WED1 }),
-    );
+    mockFindUnique.mockResolvedValue(makeRecurring({ kind: 'AVAILABLE', startDate: WED1 }));
     await service.splitOccurrence(DECL_ID, USER_ID, '2026-07-01', 'delete');
-    const calls = mockCreate.mock.calls as [
-      { data: Record<string, unknown> },
-    ][];
+    const calls = mockCreate.mock.calls as [{ data: Record<string, unknown> }][];
     const rmodCall = calls.find((c) => c[0].data.recurKind === 'PUNCTUAL');
     expect(rmodCall![0].data.kind).toBe('UNAVAILABLE');
   });
@@ -275,9 +247,7 @@ describe('AvailabilityService.splitOccurrence', () => {
       kind: 'AVAILABLE',
       slot: 'MORNING',
     });
-    const calls = mockCreate.mock.calls as [
-      { data: Record<string, unknown> },
-    ][];
+    const calls = mockCreate.mock.calls as [{ data: Record<string, unknown> }][];
     const rmodCall = calls.find((c) => c[0].data.recurKind === 'PUNCTUAL');
     expect(rmodCall![0].data.kind).toBe('AVAILABLE');
     expect(rmodCall![0].data.slot).toBe('MORNING');
@@ -293,13 +263,7 @@ describe('AvailabilityService.splitOccurrence', () => {
   it('400 si action=modify sans dto', async () => {
     mockFindUnique.mockResolvedValue(makeRecurring({ startDate: WED1 }));
     await expect(
-      service.splitOccurrence(
-        DECL_ID,
-        USER_ID,
-        '2026-07-01',
-        'modify',
-        undefined,
-      ),
+      service.splitOccurrence(DECL_ID, USER_ID, '2026-07-01', 'modify', undefined),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -375,9 +339,7 @@ describe('AvailabilityService.findConflictsForCreate', () => {
   });
 
   it('slot différent (MORNING vs EVENING) → pas de conflit', async () => {
-    mockFindMany.mockResolvedValue([
-      makePrismaDecl({ kind: 'UNAVAILABLE', slot: 'MORNING' }),
-    ]);
+    mockFindMany.mockResolvedValue([makePrismaDecl({ kind: 'UNAVAILABLE', slot: 'MORNING' })]);
     const dto = {
       kind: 'AVAILABLE' as const,
       recurKind: 'RECURRING' as const,
@@ -389,9 +351,7 @@ describe('AvailabilityService.findConflictsForCreate', () => {
   });
 
   it('FULL_DAY vs EVENING → conflit (FULL_DAY couvre tous les slots)', async () => {
-    mockFindMany.mockResolvedValue([
-      makePrismaDecl({ kind: 'UNAVAILABLE', slot: 'FULL_DAY' }),
-    ]);
+    mockFindMany.mockResolvedValue([makePrismaDecl({ kind: 'UNAVAILABLE', slot: 'FULL_DAY' })]);
     const dto = {
       kind: 'AVAILABLE' as const,
       recurKind: 'RECURRING' as const,
@@ -553,8 +513,8 @@ describe('AvailabilityService.findConflictsForCreate', () => {
     };
     await service.findConflictsForCreate(USER_ID, dto, 'skip-me');
     expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ NOT: { id: 'skip-me' } }),
+      objectLike({
+        where: objectLike({ NOT: { id: 'skip-me' } }),
       }),
     );
   });
@@ -605,9 +565,7 @@ describe('AvailabilityService.create — conflict detection', () => {
         dayOfWeek: 3,
       }),
     ]);
-    await expect(service.create(USER_ID, baseDto)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(service.create(USER_ID, baseDto)).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('conflictResolution=overwrite → soft-delete les conflits puis crée', async () => {
@@ -624,8 +582,8 @@ describe('AvailabilityService.create — conflict detection', () => {
       conflictResolution: 'overwrite',
     });
     expect(mockUpdateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ id: { in: ['conflict-1'] } }),
+      objectLike({
+        where: objectLike({ id: { in: ['conflict-1'] } }),
       }),
     );
     expect(mockCreate).toHaveBeenCalledTimes(1);
@@ -661,9 +619,7 @@ function updateManyWhere(mock: jest.Mock): {
   id: { in: string[] };
   userId: string;
 } {
-  return (
-    mock.mock.calls[0] as [{ where: { id: { in: string[] }; userId: string } }]
-  )[0].where;
+  return (mock.mock.calls[0] as [{ where: { id: { in: string[] }; userId: string } }])[0].where;
 }
 
 describe('AvailabilityService.createBatch', () => {
@@ -760,7 +716,7 @@ describe('AvailabilityService.createBatch', () => {
 
     await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
       response: {
-        conflicts: [expect.objectContaining({ batchIndex: 1 })],
+        conflicts: [objectLike({ batchIndex: 1 })],
       },
     });
     expect(mockCreate).not.toHaveBeenCalled();
@@ -790,8 +746,8 @@ describe('AvailabilityService.createBatch', () => {
     await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
       response: {
         conflicts: [
-          expect.objectContaining({ batchIndex: 0, id: 'ex-lundi' }),
-          expect.objectContaining({ batchIndex: 2, id: 'ex-mercredi' }),
+          objectLike({ batchIndex: 0, id: 'ex-lundi' }),
+          objectLike({ batchIndex: 2, id: 'ex-mercredi' }),
         ],
       },
     });
@@ -813,8 +769,8 @@ describe('AvailabilityService.createBatch', () => {
     await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
       response: {
         conflicts: [
-          expect.objectContaining({ batchIndex: 0, id: 'ex-a' }),
-          expect.objectContaining({ batchIndex: 0, id: 'ex-b' }),
+          objectLike({ batchIndex: 0, id: 'ex-a' }),
+          objectLike({ batchIndex: 0, id: 'ex-b' }),
         ],
       },
     });
@@ -874,9 +830,7 @@ describe('AvailabilityService.createBatch', () => {
     await service.createBatch(USER_ID, items);
 
     expect(mockUpdateMany).toHaveBeenCalledTimes(1);
-    expect(updateManyWhere(mockUpdateMany).id.in).toEqual(
-      expect.arrayContaining(['ex-1', 'ex-2']),
-    );
+    expect(updateManyWhere(mockUpdateMany).id.in).toEqual(arrayLike(['ex-1', 'ex-2']));
   });
 
   it('AC6 : résolution « keep » → la découpe s’applique dans le lot, sans expirer l’existant', async () => {
@@ -976,9 +930,7 @@ describe('AvailabilityService.createBatch', () => {
       }),
     ];
 
-    await expect(service.createBatch(USER_ID, items)).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(service.createBatch(USER_ID, items)).rejects.toBeInstanceOf(ConflictException);
     expect(mockCreate).not.toHaveBeenCalled();
     expect(mockUpdateMany).not.toHaveBeenCalled();
   });
@@ -1001,10 +953,7 @@ describe('AvailabilityService.createBatch', () => {
 
     await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
       response: {
-        conflicts: [
-          expect.objectContaining({ internal: true }),
-          expect.objectContaining({ internal: true }),
-        ],
+        conflicts: [objectLike({ internal: true }), objectLike({ internal: true })],
       },
     });
   });
@@ -1019,9 +968,8 @@ describe('AvailabilityService.createBatch', () => {
       await service.createBatch(USER_ID, items);
       throw new Error('expected createBatch to reject');
     } catch (err) {
-      const conflicts = (
-        err as { response: { conflicts: Array<{ internal?: boolean }> } }
-      ).response.conflicts;
+      const conflicts = (err as { response: { conflicts: Array<{ internal?: boolean }> } }).response
+        .conflicts;
       expect(conflicts[0].internal).toBeFalsy();
     }
   });
@@ -1080,30 +1028,20 @@ describe('AvailabilityService.createBatch', () => {
 
     await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
       response: {
-        conflicts: [
-          expect.objectContaining({ batchIndex: 0 }),
-          expect.objectContaining({ batchIndex: 1 }),
-        ],
+        conflicts: [objectLike({ batchIndex: 0 }), objectLike({ batchIndex: 1 })],
       },
     });
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
   it('expiresAt passé sur un élément → rejet du lot entier', async () => {
-    const items = [
-      item(),
-      item({ expiresAt: new Date('2020-01-01').toISOString() }),
-    ];
-    await expect(service.createBatch(USER_ID, items)).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    const items = [item(), item({ expiresAt: new Date('2020-01-01').toISOString() })];
+    await expect(service.createBatch(USER_ID, items)).rejects.toBeInstanceOf(BadRequestException);
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
   it('lot vide (appel direct hors DTO) → rejeté par une garde défensive du service', async () => {
-    await expect(service.createBatch(USER_ID, [])).rejects.toBeInstanceOf(
-      BadRequestException,
-    );
+    await expect(service.createBatch(USER_ID, [])).rejects.toBeInstanceOf(BadRequestException);
     expect(mockCreate).not.toHaveBeenCalled();
     expect(mockFindMany).not.toHaveBeenCalled();
   });
@@ -1116,10 +1054,7 @@ describe('AvailabilityService.createBatch', () => {
 
     await expect(service.createBatch(USER_ID, items)).rejects.toMatchObject({
       response: {
-        conflicts: [
-          expect.objectContaining({ id: 'batch-item-0' }),
-          expect.objectContaining({ id: 'batch-item-1' }),
-        ],
+        conflicts: [objectLike({ id: 'batch-item-0' }), objectLike({ id: 'batch-item-1' })],
       },
     });
   });
@@ -1129,7 +1064,7 @@ describe('AvailabilityService.createBatch', () => {
 
 describe('AvailabilityService — émission temps réel', () => {
   let service: AvailabilityService;
-  let mockRealtimeEvents: RealtimeEventsService;
+  let mockRealtimeEvents: ReturnType<typeof makeMockRealtimeEvents>;
   let mockEmit: jest.Mock;
   let mockMembershipFindMany: jest.Mock;
   let mockPartieFindMany: jest.Mock;
@@ -1147,10 +1082,10 @@ describe('AvailabilityService — émission temps réel', () => {
   beforeEach(() => {
     const mocks = makeMockPrisma();
     mockRealtimeEvents = makeMockRealtimeEvents();
-    mockEmit = mockRealtimeEvents.emit as jest.Mock;
+    mockEmit = mockRealtimeEvents.emit;
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
-      mockRealtimeEvents,
+      mockRealtimeEvents as unknown as RealtimeEventsService,
     );
     mockMembershipFindMany = mocks.mockMembershipFindMany;
     mockPartieFindMany = mocks.mockPartieFindMany;
@@ -1161,10 +1096,7 @@ describe('AvailabilityService — émission temps réel', () => {
   });
 
   it('create() émet partieTopic pour chaque Partie où l’utilisateur est membre ou MJ', async () => {
-    mockMembershipFindMany.mockResolvedValue([
-      { partieId: 'p1' },
-      { partieId: 'p2' },
-    ]);
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }, { partieId: 'p2' }]);
     mockPartieFindMany.mockResolvedValue([{ id: 'p3' }]);
 
     await service.create(USER_ID, baseDto);
@@ -1200,10 +1132,7 @@ describe('AvailabilityService — émission temps réel', () => {
   });
 
   it('createBatch() n’émet partieTopic qu’une seule fois, quelle que soit la taille du lot (AC7)', async () => {
-    mockMembershipFindMany.mockResolvedValue([
-      { partieId: 'p1' },
-      { partieId: 'p2' },
-    ]);
+    mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }, { partieId: 'p2' }]);
     mockPartieFindMany.mockResolvedValue([]);
 
     const items = [
@@ -1238,9 +1167,7 @@ describe('AvailabilityService — émission temps réel', () => {
 
   it('splitOccurrence() émet partieTopic après la transaction', async () => {
     mockMembershipFindMany.mockResolvedValue([{ partieId: 'p1' }]);
-    mockFindUnique.mockResolvedValue(
-      makeRecurring({ startDate: WED1, endDate: null }),
-    );
+    mockFindUnique.mockResolvedValue(makeRecurring({ startDate: WED1, endDate: null }));
 
     await service.splitOccurrence(DECL_ID, USER_ID, '2026-07-01', 'delete');
 
@@ -1254,28 +1181,17 @@ describe('AvailabilityService.computeSlotStatus', () => {
   let service: AvailabilityService;
 
   beforeEach(() => {
-    service = new AvailabilityService(
-      {} as PrismaService,
-      {} as RealtimeEventsService,
-    );
+    service = new AvailabilityService({} as PrismaService, {} as RealtimeEventsService);
   });
 
   it('déclaration UNAVAILABLE sur le bon créneau → UNAVAILABLE', () => {
-    const decls = [
-      makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'EVENING' }),
-    ];
-    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe(
-      'UNAVAILABLE',
-    );
+    const decls = [makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'EVENING' })];
+    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe('UNAVAILABLE');
   });
 
   it('déclaration AVAILABLE explicite sur le bon créneau → AVAILABLE', () => {
-    const decls = [
-      makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'MORNING' }),
-    ];
-    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe(
-      'AVAILABLE',
-    );
+    const decls = [makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'MORNING' })];
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('AVAILABLE');
   });
 
   it('UNAVAILABLE prime sur AVAILABLE sur le même créneau', () => {
@@ -1283,18 +1199,12 @@ describe('AvailabilityService.computeSlotStatus', () => {
       makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'EVENING' }),
       makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'EVENING' }),
     ];
-    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe(
-      'UNAVAILABLE',
-    );
+    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe('UNAVAILABLE');
   });
 
   it('date dans la période couverte, slot non couvert → UNKNOWN', () => {
-    const decls = [
-      makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'EVENING' }),
-    ];
-    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe(
-      'UNKNOWN',
-    );
+    const decls = [makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'EVENING' })];
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('UNKNOWN');
   });
 
   it('date hors de la période couverte, pas de déclaration → UNKNOWN', () => {
@@ -1307,40 +1217,24 @@ describe('AvailabilityService.computeSlotStatus', () => {
         endDate: new Date('2026-07-10'),
       }),
     ];
-    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe(
-      'UNKNOWN',
-    );
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('UNKNOWN');
   });
 
   it('déclaration expirée ignorée → UNKNOWN', () => {
     const expired = makeDecl({ expiresAt: new Date('2026-01-01') });
-    expect(service.computeSlotStatus([expired], WED, 'EVENING', NOW)).toBe(
-      'UNKNOWN',
-    );
+    expect(service.computeSlotStatus([expired], WED, 'EVENING', NOW)).toBe('UNKNOWN');
   });
 
   it('déclaration RECURRING : ne correspond pas à un autre jour de la semaine', () => {
-    const decls = [
-      makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'EVENING' }),
-    ];
-    expect(service.computeSlotStatus(decls, THU, 'EVENING', NOW)).toBe(
-      'AVAILABLE',
-    );
+    const decls = [makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'EVENING' })];
+    expect(service.computeSlotStatus(decls, THU, 'EVENING', NOW)).toBe('AVAILABLE');
   });
 
   it('déclaration FULL_DAY UNAVAILABLE couvre tous les slots', () => {
-    const decls = [
-      makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'FULL_DAY' }),
-    ];
-    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe(
-      'UNAVAILABLE',
-    );
-    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe(
-      'UNAVAILABLE',
-    );
-    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe(
-      'UNAVAILABLE',
-    );
+    const decls = [makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'FULL_DAY' })];
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('UNAVAILABLE');
+    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe('UNAVAILABLE');
+    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe('UNAVAILABLE');
   });
 
   it('déclaration MORNING AVAILABLE ne doit pas rendre AFTERNOON AVAILABLE (régression bug FULL_DAY→MORNING)', () => {
@@ -1354,66 +1248,36 @@ describe('AvailabilityService.computeSlotStatus', () => {
         endDate: WED,
       }),
     ];
-    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe(
-      'AVAILABLE',
-    );
-    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe(
-      'UNKNOWN',
-    );
-    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe(
-      'UNKNOWN',
-    );
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('AVAILABLE');
+    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe('UNKNOWN');
+    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe('UNKNOWN');
   });
 
   it('déclaration MORNING UNAVAILABLE ne couvre pas AFTERNOON → UNKNOWN', () => {
-    const decls = [
-      makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'MORNING' }),
-    ];
-    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe(
-      'UNAVAILABLE',
-    );
-    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe(
-      'UNKNOWN',
-    );
+    const decls = [makeDecl({ kind: 'UNAVAILABLE', dayOfWeek: 3, slot: 'MORNING' })];
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('UNAVAILABLE');
+    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe('UNKNOWN');
   });
 
   it('déclaration FULL_DAY AVAILABLE couvre tous les slots', () => {
-    const decls = [
-      makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'FULL_DAY' }),
-    ];
-    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe(
-      'AVAILABLE',
-    );
-    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe(
-      'AVAILABLE',
-    );
-    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe(
-      'AVAILABLE',
-    );
+    const decls = [makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'FULL_DAY' })];
+    expect(service.computeSlotStatus(decls, WED, 'MORNING', NOW)).toBe('AVAILABLE');
+    expect(service.computeSlotStatus(decls, WED, 'AFTERNOON', NOW)).toBe('AVAILABLE');
+    expect(service.computeSlotStatus(decls, WED, 'EVENING', NOW)).toBe('AVAILABLE');
   });
 
   it('RECURRING MORNING : inférence cross-day sur même slot → AVAILABLE', () => {
     // Jeudi n'est pas le jour de la semaine de la déclaration (mercredi=3)
     // mais le jeudi est dans la période couverte ET le slot correspond → AVAILABLE via isInCoveredPeriod
-    const decls = [
-      makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'MORNING' }),
-    ];
-    expect(service.computeSlotStatus(decls, THU, 'MORNING', NOW)).toBe(
-      'AVAILABLE',
-    );
+    const decls = [makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'MORNING' })];
+    expect(service.computeSlotStatus(decls, THU, 'MORNING', NOW)).toBe('AVAILABLE');
   });
 
   it('RECURRING MORNING : inférence cross-day bloquée sur slot différent → UNKNOWN', () => {
     // Même période couverte, mais AFTERNOON ne correspond pas au slot MORNING → pas d'inférence
-    const decls = [
-      makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'MORNING' }),
-    ];
-    expect(service.computeSlotStatus(decls, THU, 'AFTERNOON', NOW)).toBe(
-      'UNKNOWN',
-    );
-    expect(service.computeSlotStatus(decls, THU, 'EVENING', NOW)).toBe(
-      'UNKNOWN',
-    );
+    const decls = [makeDecl({ kind: 'AVAILABLE', dayOfWeek: 3, slot: 'MORNING' })];
+    expect(service.computeSlotStatus(decls, THU, 'AFTERNOON', NOW)).toBe('UNKNOWN');
+    expect(service.computeSlotStatus(decls, THU, 'EVENING', NOW)).toBe('UNKNOWN');
   });
 
   it('PUNCTUAL sur plage de dates : slot couvert dans la plage → AVAILABLE, hors plage → UNKNOWN', () => {
@@ -1429,15 +1293,9 @@ describe('AvailabilityService.computeSlotStatus', () => {
         endDate: new Date('2026-07-10T00:00:00Z'),
       }),
     ];
-    expect(service.computeSlotStatus(decls, inRange, 'MORNING', NOW)).toBe(
-      'AVAILABLE',
-    );
-    expect(service.computeSlotStatus(decls, inRange, 'AFTERNOON', NOW)).toBe(
-      'UNKNOWN',
-    );
-    expect(service.computeSlotStatus(decls, outRange, 'MORNING', NOW)).toBe(
-      'UNKNOWN',
-    );
+    expect(service.computeSlotStatus(decls, inRange, 'MORNING', NOW)).toBe('AVAILABLE');
+    expect(service.computeSlotStatus(decls, inRange, 'AFTERNOON', NOW)).toBe('UNKNOWN');
+    expect(service.computeSlotStatus(decls, outRange, 'MORNING', NOW)).toBe('UNKNOWN');
   });
 });
 
@@ -1497,12 +1355,8 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       dayOfWeek: null,
       slot: 'EVENING',
     });
-    expect(entries[0].startDate?.toISOString().substring(0, 10)).toBe(
-      '2026-09-10',
-    );
-    expect(entries[0].endDate?.toISOString().substring(0, 10)).toBe(
-      '2026-09-10',
-    );
+    expect(entries[0].startDate?.toISOString().substring(0, 10)).toBe('2026-09-10');
+    expect(entries[0].endDate?.toISOString().substring(0, 10)).toBe('2026-09-10');
   });
 
   it('utilise dateValidee et FULL_DAY quand aucun poll n’est lié (AC5)', async () => {
@@ -1696,15 +1550,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
 
     // L'entrée dérivée reste un STATUT DE CRÉNEAU : rien de nommant n'y transite.
     expect(Object.keys(derived).sort()).toEqual(
-      [
-        'dayOfWeek',
-        'endDate',
-        'expiresAt',
-        'kind',
-        'recurKind',
-        'slot',
-        'startDate',
-      ].sort(),
+      ['dayOfWeek', 'endDate', 'expiresAt', 'kind', 'recurKind', 'slot', 'startDate'].sort(),
     );
     // Ceinture et bretelles : aucune des trois valeurs, où que ce soit dans l'objet sérialisé.
     const serialized = JSON.stringify(derived);
@@ -1738,15 +1584,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
 
     const map = await service.getActiveDeclarationsWithSeances(['u1']);
     expect(Object.keys(map.get('u1')![0]).sort()).toEqual(
-      [
-        'dayOfWeek',
-        'endDate',
-        'expiresAt',
-        'kind',
-        'recurKind',
-        'slot',
-        'startDate',
-      ].sort(),
+      ['dayOfWeek', 'endDate', 'expiresAt', 'kind', 'recurKind', 'slot', 'startDate'].sort(),
     );
   });
 
@@ -1800,11 +1638,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
   });
 
   it('renvoie les 5 couches, chacune un tableau vide par défaut (AC1, AC2)', async () => {
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result).toEqual({
       'mes-indisponibilites': [],
       'mes-disponibilites': [],
@@ -1815,26 +1649,20 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
   });
 
   it("ne renvoie jamais la clé 'disponibilite-groupe' (AC2, encadré n°2)", async () => {
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
-    expect(
-      Object.prototype.hasOwnProperty.call(result, 'disponibilite-groupe'),
-    ).toBe(false);
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+    expect(Object.prototype.hasOwnProperty.call(result, 'disponibilite-groupe')).toBe(false);
   });
 
   it('lève BadRequestException si from > to', async () => {
-    await expect(
-      service.getMyCalendar('me', '2026-10-31', '2026-10-01'),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.getMyCalendar('me', '2026-10-31', '2026-10-01')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('lève BadRequestException si la plage dépasse 366 jours', async () => {
-    await expect(
-      service.getMyCalendar('me', '2024-01-01', '2025-12-31'),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.getMyCalendar('me', '2024-01-01', '2025-12-31')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('mes séances portent explicitement mon identité de partie/scénario (AC4)', async () => {
@@ -1854,11 +1682,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['mes-seances']).toEqual([
       {
         seanceId: 'seance1',
@@ -1901,11 +1725,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
 
     expect(result['mes-seances'][0]).toMatchObject({
       heureRdv: '20:30',
@@ -1934,11 +1754,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
 
     expect(result['mes-seances'][0]).toMatchObject({
       compteRenduManquant: true,
@@ -1963,11 +1779,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
 
     expect(result['mes-seances'][0]).toMatchObject({
       compteRenduManquant: true,
@@ -1992,11 +1804,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
 
     expect(result['mes-seances'][0]).toMatchObject({
       compteRenduManquant: false,
@@ -2022,11 +1830,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     ]);
 
     // Plage explicitement PASSÉE, envoyée par l'appelant — aucune borne serveur ne l'empêche.
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-07-01',
-      '2026-07-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-07-01', '2026-07-31');
 
     expect(result['mes-seances']).toHaveLength(1);
     expect(result['mes-seances'][0]).toMatchObject({
@@ -2081,11 +1885,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
 
     expect(result['mes-seances'][0]).toMatchObject({
       heureRdv: null,
@@ -2114,11 +1914,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
 
     const entry = result['mes-seances'][0];
     expect(typeof entry.heureRdv).toBe('string');
@@ -2143,11 +1939,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['mes-seances'][0].slot).toBe('FULL_DAY');
   });
 
@@ -2165,11 +1957,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['mes-seances'][0]).toMatchObject({
       date: '2026-10-11',
       slot: 'FULL_DAY',
@@ -2192,11 +1980,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['mes-seances']).toEqual([]);
     expect(result['inscriptions-ouvertes']).toEqual([]);
   });
@@ -2252,11 +2036,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['votes-en-cours']).toEqual([
       {
         pollId: 'poll1',
@@ -2307,11 +2087,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['votes-en-cours'][0].expiresAt).toBeNull();
   });
 
@@ -2335,11 +2111,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     const serialized = JSON.stringify(result['votes-en-cours']);
     expect(serialized).not.toContain('secret-user');
     expect(serialized).not.toContain('pseudo');
@@ -2350,9 +2122,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
 
   it("AC11 — l'include des votes ne demande JAMAIS la relation user", async () => {
     await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
-    const calls = mockSessionPollFindMany.mock.calls as Array<
-      [{ include: unknown }]
-    >;
+    const calls = mockSessionPollFindMany.mock.calls as Array<[{ include: unknown }]>;
     // Assertion structurelle plutôt qu'une recherche de sous-chaîne (revue de code du 36.6) :
     // un `not.toContain('user')` ne détecterait pas une relation ajoutée sous une autre clé
     // (`voter`, `author`, casse différente). Ici, la forme exacte de l'`include` est vérifiée —
@@ -2379,11 +2149,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['votes-en-cours'][0].membersCount).toBe(1);
   });
 
@@ -2404,11 +2170,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['votes-en-cours'][0].options[0]).toEqual({
       optionId: 'o1',
       date: '2026-10-20',
@@ -2436,11 +2198,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['votes-en-cours']).toEqual([]);
   });
 
@@ -2462,11 +2220,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     ]);
 
     // Plage totalement hors du "futur" — n'a aucun effet, cette couche n'est pas filtrée par plage.
-    const result = await service.getMyCalendar(
-      'me',
-      '2020-01-01',
-      '2020-01-02',
-    );
+    const result = await service.getMyCalendar('me', '2020-01-01', '2020-01-02');
     expect(result['inscriptions-ouvertes']).toEqual([
       {
         seanceId: 'seance1',
@@ -2499,11 +2253,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['inscriptions-ouvertes']).toEqual([]);
   });
 
@@ -2524,11 +2274,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['inscriptions-ouvertes']).toEqual([]);
   });
 
@@ -2560,11 +2306,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       },
     ]);
 
-    const result = await service.getMyCalendar(
-      'me',
-      '2026-10-01',
-      '2026-10-31',
-    );
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
     expect(result['mes-indisponibilites']).toHaveLength(1);
     expect(result['mes-indisponibilites'][0].id).toBe('d1');
     expect(result['mes-disponibilites']).toEqual([]); // d2 est hors plage

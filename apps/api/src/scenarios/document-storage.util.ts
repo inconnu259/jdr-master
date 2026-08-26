@@ -59,9 +59,6 @@ export async function deleteDocumentFile(filename: string): Promise<void> {
   try {
     await unlink(join(DOCUMENTS_DIR, filename));
   } catch (e) {
-    logger.warn(
-      `Échec de suppression du document orphelin ${filename}`,
-      e as Error,
-    );
+    logger.warn(`Échec de suppression du document orphelin ${filename}`, e as Error);
   }
 }

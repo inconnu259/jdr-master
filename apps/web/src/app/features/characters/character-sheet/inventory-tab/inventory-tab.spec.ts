@@ -374,10 +374,7 @@ describe('InventoryTab', () => {
       const fixture = TestBed.createComponent(InventoryTab);
       fixture.componentRef.setInput(
         'character',
-        makeCharacterWithItems(
-          [],
-          [{ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' }],
-        ),
+        makeCharacterWithItems([], [{ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' }]),
       );
       fixture.componentRef.setInput('isOwner', true);
       fixture.detectChanges();
@@ -400,10 +397,7 @@ describe('InventoryTab', () => {
       const fixture = TestBed.createComponent(InventoryTab);
       fixture.componentRef.setInput(
         'character',
-        makeCharacterWithItems(
-          [],
-          [{ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' }],
-        ),
+        makeCharacterWithItems([], [{ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' }]),
       );
       fixture.componentRef.setInput('isOwner', false);
       fixture.componentRef.setInput('viewerIsMj', true);
@@ -428,10 +422,7 @@ describe('InventoryTab', () => {
       const fixture = TestBed.createComponent(InventoryTab);
       fixture.componentRef.setInput(
         'character',
-        makeCharacterWithItems(
-          [],
-          [{ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' }],
-        ),
+        makeCharacterWithItems([], [{ id: 'cont-1', name: 'Sac', weight: 2, addedBy: 'player' }]),
       );
       fixture.componentRef.setInput('isOwner', true);
       fixture.detectChanges();
@@ -498,7 +489,11 @@ describe('InventoryTab', () => {
     });
 
     it('ajout appelle characterSvc.addAnimal sans jamais de champ weight', async () => {
-      const updated = makeCharacterWithItems([], [], [{ id: 'ani-1', name: 'Cheval', addedBy: 'player' }]);
+      const updated = makeCharacterWithItems(
+        [],
+        [],
+        [{ id: 'ani-1', name: 'Cheval', addedBy: 'player' }],
+      );
       const characterSvc = { addAnimal: vi.fn().mockResolvedValue(updated) };
       const fixture = await createComponent(characterSvc);
       const comp = fixture.componentInstance as any;

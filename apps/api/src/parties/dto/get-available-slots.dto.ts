@@ -1,12 +1,5 @@
 import { Type } from 'class-transformer';
-import {
-  IsDateString,
-  IsInt,
-  IsOptional,
-  Matches,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsDateString, IsInt, IsOptional, Matches, Max, Min } from 'class-validator';
 
 export class GetAvailableSlotsDto {
   @IsOptional()

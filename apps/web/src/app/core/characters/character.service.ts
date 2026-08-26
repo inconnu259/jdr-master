@@ -236,11 +236,7 @@ export class CharacterService {
     );
   }
 
-  updateContenant(
-    id: string,
-    itemId: string,
-    dto: UpdateContenantDto,
-  ): Promise<CharacterDto> {
+  updateContenant(id: string, itemId: string, dto: UpdateContenantDto): Promise<CharacterDto> {
     return firstValueFrom(
       this.http.patch<CharacterDto>(`${API_BASE}/characters/${id}/contenants/${itemId}`, dto, {
         withCredentials: true,

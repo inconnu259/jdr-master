@@ -1,11 +1,7 @@
 import { IsIn, IsOptional, IsUUID } from 'class-validator';
 import type { PartieKind } from '@master-jdr/shared';
 
-const PARTIE_KINDS: PartieKind[] = [
-  'ONE_SHOT',
-  'CAMPAGNE_LINEAIRE',
-  'CAMPAGNE_EPISODIQUE',
-];
+const PARTIE_KINDS: PartieKind[] = ['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'];
 
 /**
  * Conversion du type d'une partie (Story 29.14) — `PATCH /parties/:id/kind`.

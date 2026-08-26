@@ -1,16 +1,10 @@
 import { Transform } from 'class-transformer';
-import {
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsString,
-  MaxLength,
-  Min,
-} from 'class-validator';
+import { trimIfString } from '../../common/dto/trim.transform';
+import { IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateInventoryItemDto {
   @IsString()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(trimIfString)
   @IsNotEmpty()
   @MaxLength(200)
   name!: string;
@@ -22,13 +16,13 @@ export class CreateInventoryItemDto {
 
   @IsOptional()
   @IsString()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(trimIfString)
   @MaxLength(50)
   price?: string;
 
   @IsOptional()
   @IsString()
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(trimIfString)
   @MaxLength(300)
   effect?: string;
 }

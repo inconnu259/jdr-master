@@ -7,7 +7,7 @@ function field(fields: ReturnType<typeof mapNotesToPdfFields>, name: string): st
 }
 
 describe('mapNotesToPdfFields', () => {
-  it('notes mappées dans l\'ordre reçu (date + texte)', () => {
+  it("notes mappées dans l'ordre reçu (date + texte)", () => {
     const input: NotesPdfInput = {
       notes: [
         { text: 'Deuxième entrée du journal', createdAt: '2026-07-02T10:00:00.000Z' },

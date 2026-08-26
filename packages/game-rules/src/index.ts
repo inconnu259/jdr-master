@@ -22,10 +22,7 @@ export type {
   RyuutamaCatalog,
   InventoryItem,
 } from './ryuutama/types.ts';
-export type {
-  RyuutamaPdfContent,
-  PdfFieldValue,
-} from './ryuutama/pdf-field-map.ts';
+export type { RyuutamaPdfContent, PdfFieldValue } from './ryuutama/pdf-field-map.ts';
 export type { CapabilityType } from './ryuutama/leveling.ts';
 export type {
   HommeDragonRace,

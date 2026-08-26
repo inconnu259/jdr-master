@@ -63,10 +63,7 @@ export class ScenariosController {
   }
 
   @Get('parties/:id/scenarios/drafts')
-  listDrafts(
-    @Param('id', ParseUUIDPipe) partieId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  listDrafts(@Param('id', ParseUUIDPipe) partieId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.listDrafts(partieId, user.id);
   }
 
@@ -80,26 +77,17 @@ export class ScenariosController {
   }
 
   @Patch('scenarios/:id/open')
-  open(
-    @Param('id', ParseUUIDPipe) scenarioId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  open(@Param('id', ParseUUIDPipe) scenarioId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.open(scenarioId, user.id);
   }
 
   @Patch('scenarios/:id/courant')
-  markCourant(
-    @Param('id', ParseUUIDPipe) scenarioId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  markCourant(@Param('id', ParseUUIDPipe) scenarioId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.markCourant(scenarioId, user.id);
   }
 
   @Patch('scenarios/:id/passe')
-  close(
-    @Param('id', ParseUUIDPipe) scenarioId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  close(@Param('id', ParseUUIDPipe) scenarioId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.close(scenarioId, user.id);
   }
 
@@ -113,26 +101,17 @@ export class ScenariosController {
   }
 
   @Post('scenarios/:id/participate')
-  participate(
-    @Param('id', ParseUUIDPipe) scenarioId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  participate(@Param('id', ParseUUIDPipe) scenarioId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.participate(scenarioId, user.id);
   }
 
   @Post('scenarios/:id/seances')
-  addSeance(
-    @Param('id', ParseUUIDPipe) scenarioId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  addSeance(@Param('id', ParseUUIDPipe) scenarioId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.addSeance(scenarioId, user.id);
   }
 
   @Delete('scenarios/seances/:id')
-  deleteSeance(
-    @Param('id', ParseUUIDPipe) seanceId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  deleteSeance(@Param('id', ParseUUIDPipe) seanceId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.deleteSeance(seanceId, user.id);
   }
 
@@ -146,10 +125,7 @@ export class ScenariosController {
   }
 
   @Patch('scenarios/seances/:id/reset-date')
-  resetSeanceDate(
-    @Param('id', ParseUUIDPipe) seanceId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  resetSeanceDate(@Param('id', ParseUUIDPipe) seanceId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.resetSeanceDate(seanceId, user.id);
   }
 
@@ -168,18 +144,12 @@ export class ScenariosController {
   }
 
   @Post('scenarios/seances/:id/inscription')
-  inscrire(
-    @Param('id', ParseUUIDPipe) seanceId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  inscrire(@Param('id', ParseUUIDPipe) seanceId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.inscrire(seanceId, user.id);
   }
 
   @Delete('scenarios/seances/:id/inscription')
-  desinscrire(
-    @Param('id', ParseUUIDPipe) seanceId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  desinscrire(@Param('id', ParseUUIDPipe) seanceId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.desinscrire(seanceId, user.id);
   }
 
@@ -228,10 +198,7 @@ export class ScenariosController {
   }
 
   @Get('scenarios/:id/documents')
-  listDocuments(
-    @Param('id', ParseUUIDPipe) scenarioId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  listDocuments(@Param('id', ParseUUIDPipe) scenarioId: string, @CurrentUser() user: AuthUser) {
     return this.scenarios.listDocuments(scenarioId, user.id);
   }
 

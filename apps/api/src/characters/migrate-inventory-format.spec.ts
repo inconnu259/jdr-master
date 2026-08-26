@@ -1,6 +1,9 @@
 jest.mock('node:crypto', () => ({ randomUUID: jest.fn(() => 'fixed-uuid') }));
 
 import { migrateInventoryFormat } from './migrate-inventory-format';
+import { callArg } from '../common/test-utils/jest-typed';
+/** Fiche écrite par la migration, telle que les assertions la relisent. */
+type WrittenSheet = { equipment: Record<string, unknown> };
 
 function makePrisma(characters: { id: string; sheetData: unknown }[]) {
   return {
@@ -82,9 +85,7 @@ describe('migrateInventoryFormat', () => {
   });
 
   it('sheetData sans equipment → ignoré, pas de crash', async () => {
-    const prisma = makePrisma([
-      { id: 'char4', sheetData: { classId: 'chasseur' } },
-    ]);
+    const prisma = makePrisma([{ id: 'char4', sheetData: { classId: 'chasseur' } }]);
 
     const migrated = await migrateInventoryFormat(prisma);
 
@@ -130,7 +131,7 @@ describe('migrateInventoryFormat', () => {
 
     await migrateInventoryFormat(prisma);
 
-    const call = prisma.character.update.mock.calls[0][0];
+    const call = callArg<{ data: { sheetData: WrittenSheet } }>(prisma.character.update);
     expect(call.data.sheetData.equipment.group).toEqual(['Tente', 'Briquet']);
   });
 });

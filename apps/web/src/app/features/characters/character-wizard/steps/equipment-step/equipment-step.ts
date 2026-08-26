@@ -74,7 +74,10 @@ export class EquipmentStep {
         const entry = this.itemEntries().find((e) => e.key === s.key);
         return entry ? { key: s.key, quantity: s.quantity, entry } : null;
       })
-      .filter((line): line is { key: string; quantity: number; entry: EquipmentItemEntry } => line !== null),
+      .filter(
+        (line): line is { key: string; quantity: number; entry: EquipmentItemEntry } =>
+          line !== null,
+      ),
   );
 
   protected readonly totalSpent = computed(() =>

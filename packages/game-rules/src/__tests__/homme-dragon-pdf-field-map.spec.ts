@@ -18,7 +18,10 @@ function makeDto(overrides: Partial<HommeDragonPdfInput> = {}): HommeDragonPdfIn
   };
 }
 
-function field(fields: ReturnType<typeof mapHommeDragonToPdfFields>, name: string): string | undefined {
+function field(
+  fields: ReturnType<typeof mapHommeDragonToPdfFields>,
+  name: string,
+): string | undefined {
   return fields.find((f) => f.field === name)?.value;
 }
 
@@ -62,7 +65,7 @@ describe('mapHommeDragonToPdfFields', () => {
     expect(field(fields, 'souffle_max')).toBe('5');
   });
 
-  it('cree_le formaté en fr-FR (JJ/MM/AAAA), jamais l\'ordre ISO', () => {
+  it("cree_le formaté en fr-FR (JJ/MM/AAAA), jamais l'ordre ISO", () => {
     const dto = makeDto({ createdAt: '2026-07-01T00:00:00.000Z' });
 
     const fields = mapHommeDragonToPdfFields(dto, CONTENT);
@@ -70,10 +73,14 @@ describe('mapHommeDragonToPdfFields', () => {
     expect(field(fields, 'cree_le')).toBe('01/07/2026');
   });
 
-  it('date_sc_N formatée en fr-FR (JJ/MM/AAAA), jamais l\'ordre ISO', () => {
+  it("date_sc_N formatée en fr-FR (JJ/MM/AAAA), jamais l'ordre ISO", () => {
     const dto = makeDto({
       historique: [
-        { scenarioTitle: 'Premier scénario', date: '2026-07-10T00:00:00.000Z', participants: ['alice'] },
+        {
+          scenarioTitle: 'Premier scénario',
+          date: '2026-07-10T00:00:00.000Z',
+          participants: ['alice'],
+        },
       ],
     });
 
@@ -82,7 +89,7 @@ describe('mapHommeDragonToPdfFields', () => {
     expect(field(fields, 'date_sc_1')).toBe('10/07/2026');
   });
 
-  it("artefact sans nom personnalisé → fallback sur la clé", () => {
+  it('artefact sans nom personnalisé → fallback sur la clé', () => {
     const dto = makeDto({
       sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' },
     });
@@ -124,20 +131,34 @@ describe('mapHommeDragonToPdfFields', () => {
     expect(field(fields, 'apparence_caractere')).toBe('Grand et ailé\n\nCalme et protecteur');
   });
 
-  it("apparence_caractere : un seul des deux renseigné → celui-là seul, pas de séparateur orphelin", () => {
+  it('apparence_caractere : un seul des deux renseigné → celui-là seul, pas de séparateur orphelin', () => {
     const dto1 = makeDto({
-      sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis', apparence: 'Grand et ailé' },
+      sheetData: {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc' },
+        nom: 'Ignis',
+        apparence: 'Grand et ailé',
+      },
     });
     const dto2 = makeDto({
-      sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis', caractere: 'Calme' },
+      sheetData: {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc' },
+        nom: 'Ignis',
+        caractere: 'Calme',
+      },
     });
 
-    expect(field(mapHommeDragonToPdfFields(dto1, CONTENT), 'apparence_caractere')).toBe('Grand et ailé');
+    expect(field(mapHommeDragonToPdfFields(dto1, CONTENT), 'apparence_caractere')).toBe(
+      'Grand et ailé',
+    );
     expect(field(mapHommeDragonToPdfFields(dto2, CONTENT), 'apparence_caractere')).toBe('Calme');
   });
 
   it('apparence_caractere : aucun des deux renseigné → chaîne vide', () => {
-    const dto = makeDto({ sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' } });
+    const dto = makeDto({
+      sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' },
+    });
 
     expect(field(mapHommeDragonToPdfFields(dto, CONTENT), 'apparence_caractere')).toBe('');
   });
@@ -187,8 +208,16 @@ describe('mapHommeDragonToPdfFields', () => {
   it('historique : mappé dans son ordre chronologique (sc1 = le plus ancien)', () => {
     const dto = makeDto({
       historique: [
-        { scenarioTitle: 'Premier scénario', date: '2026-01-01T00:00:00.000Z', participants: ['alice', 'bob'] },
-        { scenarioTitle: 'Second scénario', date: '2026-02-01T00:00:00.000Z', participants: ['alice'] },
+        {
+          scenarioTitle: 'Premier scénario',
+          date: '2026-01-01T00:00:00.000Z',
+          participants: ['alice', 'bob'],
+        },
+        {
+          scenarioTitle: 'Second scénario',
+          date: '2026-02-01T00:00:00.000Z',
+          participants: ['alice'],
+        },
       ],
     });
 
@@ -226,7 +255,7 @@ describe('mapHommeDragonToPdfFields', () => {
     }
   });
 
-  it("eveil_1..4 mappés par NIVEAU (2/3/4/5), pas par ordre du tableau eveilPowers[]", () => {
+  it('eveil_1..4 mappés par NIVEAU (2/3/4/5), pas par ordre du tableau eveilPowers[]', () => {
     // Remplissage hors-ordre : niveau 3 choisi avant niveau 2 (permis par l'API depuis la
     // revue de code de la Story 10.4) — eveil_1 doit quand même refléter le niveau 2.
     const dto = makeDto({

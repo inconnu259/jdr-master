@@ -236,7 +236,9 @@ describe('ClassStep', () => {
     expect(fixture.nativeElement.textContent).toContain(
       "Les chasseurs savent remonter les traces d'un type de monstre particulier.",
     );
-    expect(fixture.nativeElement.textContent).toContain('Nourrit le groupe selon le résultat du test');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Nourrit le groupe selon le résultat du test',
+    );
     expect(fixture.nativeElement.textContent).toContain('Transforme une dépouille');
     expect(fixture.nativeElement.textContent).toContain('Découvre un monstre');
   });
@@ -305,9 +307,8 @@ describe('ClassStep', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const select: HTMLSelectElement = fixture.nativeElement.querySelector(
-        '#fermier-metier-appoint',
-      );
+      const select: HTMLSelectElement =
+        fixture.nativeElement.querySelector('#fermier-metier-appoint');
       expect(select).toBeTruthy();
       const optionValues = Array.from(select.querySelectorAll('option')).map(
         (o: HTMLOptionElement) => o.value,
@@ -329,9 +330,8 @@ describe('ClassStep', () => {
       fixture.componentInstance.classChoiceChange.subscribe((p: { key: string; value: string }) =>
         emitted.push(p),
       );
-      const select: HTMLSelectElement = fixture.nativeElement.querySelector(
-        '#fermier-metier-appoint',
-      );
+      const select: HTMLSelectElement =
+        fixture.nativeElement.querySelector('#fermier-metier-appoint');
       select.value = 'guerisseur:soins';
       select.dispatchEvent(new Event('change'));
       fixture.detectChanges();
@@ -348,11 +348,9 @@ describe('ClassStep', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      const select: HTMLSelectElement = fixture.nativeElement.querySelector(
-        '#ermite-metamorphose',
-      );
-      const labels = Array.from(select.querySelectorAll('option')).map(
-        (o: HTMLOptionElement) => o.textContent?.trim(),
+      const select: HTMLSelectElement = fixture.nativeElement.querySelector('#ermite-metamorphose');
+      const labels = Array.from(select.querySelectorAll('option')).map((o: HTMLOptionElement) =>
+        o.textContent?.trim(),
       );
       expect(labels).toContain('Forêt');
       expect(labels).toContain('Montagne');

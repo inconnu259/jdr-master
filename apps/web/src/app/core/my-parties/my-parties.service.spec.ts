@@ -12,7 +12,9 @@ describe('MyPartiesService', () => {
     mjResult = [];
     playerResult = [];
     const partiesMock = {
-      list: vi.fn((kind: 'mj' | 'player') => Promise.resolve(kind === 'mj' ? mjResult : playerResult)),
+      list: vi.fn((kind: 'mj' | 'player') =>
+        Promise.resolve(kind === 'mj' ? mjResult : playerResult),
+      ),
     };
     TestBed.configureTestingModule({
       providers: [{ provide: PartiesService, useValue: partiesMock }],
@@ -78,24 +80,28 @@ describe('MyPartiesService', () => {
   });
 
   describe('bug fix critique : garde de concurrence + jamais de vidage sur échec transitoire', () => {
-    it("refreshMjParties() : un échec réseau conserve le dernier état connu bon (jamais de .set([]))", async () => {
+    it('refreshMjParties() : un échec réseau conserve le dernier état connu bon (jamais de .set([]))', async () => {
       mjResult = [{ id: 'p-mj' }];
       await service.refreshMjParties();
       expect(service.mjParties()).toEqual([{ id: 'p-mj' }]);
 
-      const partiesMock = TestBed.inject(PartiesService) as unknown as { list: ReturnType<typeof vi.fn> };
+      const partiesMock = TestBed.inject(PartiesService) as unknown as {
+        list: ReturnType<typeof vi.fn>;
+      };
       partiesMock.list.mockRejectedValueOnce(new Error('network down'));
       await service.refreshMjParties();
 
       expect(service.mjParties()).toEqual([{ id: 'p-mj' }]);
     });
 
-    it("refreshPlayerParties() : un échec réseau conserve le dernier état connu bon (jamais de .set([]))", async () => {
+    it('refreshPlayerParties() : un échec réseau conserve le dernier état connu bon (jamais de .set([]))', async () => {
       playerResult = [{ id: 'p-player' }];
       await service.refreshPlayerParties();
       expect(service.playerParties()).toEqual([{ id: 'p-player' }]);
 
-      const partiesMock = TestBed.inject(PartiesService) as unknown as { list: ReturnType<typeof vi.fn> };
+      const partiesMock = TestBed.inject(PartiesService) as unknown as {
+        list: ReturnType<typeof vi.fn>;
+      };
       partiesMock.list.mockRejectedValueOnce(new Error('network down'));
       await service.refreshPlayerParties();
 
@@ -103,7 +109,9 @@ describe('MyPartiesService', () => {
     });
 
     it("refreshPlayerParties() : une réponse obsolète (résolue en désordre) n'écrase jamais un état plus frais", async () => {
-      const partiesMock = TestBed.inject(PartiesService) as unknown as { list: ReturnType<typeof vi.fn> };
+      const partiesMock = TestBed.inject(PartiesService) as unknown as {
+        list: ReturnType<typeof vi.fn>;
+      };
       let resolveFirst!: (v: unknown[]) => void;
       let resolveSecond!: (v: unknown[]) => void;
       partiesMock.list

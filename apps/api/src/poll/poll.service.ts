@@ -1,19 +1,13 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { DaySlot, SessionPollDto } from '@master-jdr/shared';
 import { PartiesService } from '../parties/parties.service';
 import { countParticipants } from '../parties/participant-count.util';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CastVoteDto } from './dto/cast-vote.dto';
 import { ChooseDateDto } from './dto/choose-date.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
+import { Prisma } from '@prisma/client';
 import { SetPollOptionsDto } from './dto/set-poll-options.dto';
 
 const DEFAULT_POLL_TTL_MS = 14 * 24 * 60 * 60 * 1000; // défaut 14 jours
@@ -36,11 +30,7 @@ export class PollService {
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
-  async create(
-    partieId: string,
-    userId: string,
-    dto: CreatePollDto,
-  ): Promise<SessionPollDto> {
+  async create(partieId: string, userId: string, dto: CreatePollDto): Promise<SessionPollDto> {
     await this.parties.getOwned(partieId, userId);
 
     // Revue de code (Story 36.10) — clé normalisée par `optionKey()`, la MÊME que celle de
@@ -50,10 +40,7 @@ export class PollService {
     const seen = new Set<string>();
     for (const o of dto.options) {
       const key = optionKey(new Date(o.date), o.slot);
-      if (seen.has(key))
-        throw new BadRequestException(
-          'Options dupliquées (même date et créneau)',
-        );
+      if (seen.has(key)) throw new BadRequestException('Options dupliquées (même date et créneau)');
       seen.add(key);
     }
 
@@ -71,7 +58,7 @@ export class PollService {
           options: {
             create: dto.options.map((o) => ({
               date: new Date(o.date),
-              slot: o.slot as any,
+              slot: o.slot,
             })),
           },
         },
@@ -85,18 +72,13 @@ export class PollService {
     return toDto(poll, await countParticipants(this.prisma, partieId));
   }
 
-  async findOpen(
-    partieId: string,
-    userId: string,
-  ): Promise<SessionPollDto | null> {
+  async findOpen(partieId: string, userId: string): Promise<SessionPollDto | null> {
     await this.parties.getViewable(partieId, userId);
     const poll = await this.prisma.sessionPoll.findFirst({
       where: { partieId, status: 'OPEN' },
       include: POLL_INCLUDE,
     });
-    return poll
-      ? toDto(poll, await countParticipants(this.prisma, partieId))
-      : null;
+    return poll ? toDto(poll, await countParticipants(this.prisma, partieId)) : null;
   }
 
   async castVote(
@@ -120,12 +102,12 @@ export class PollService {
     }
     await this.prisma.pollVote.upsert({
       where: { optionId_userId: { optionId: dto.optionId, userId } },
-      update: { answer: dto.answer as any },
+      update: { answer: dto.answer },
       create: {
         pollId,
         optionId: dto.optionId,
         userId,
-        answer: dto.answer as any,
+        answer: dto.answer,
       },
     });
     this.realtimeEvents.emit(partieTopic(partieId));
@@ -180,15 +162,12 @@ export class PollService {
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
-    if (!poll || poll.partieId !== partieId)
-      throw new NotFoundException('Poll introuvable');
-    if (poll.status !== 'OPEN')
-      throw new BadRequestException('Le poll est déjà fermé');
+    if (!poll || poll.partieId !== partieId) throw new NotFoundException('Poll introuvable');
+    if (poll.status !== 'OPEN') throw new BadRequestException('Le poll est déjà fermé');
     const option = await this.prisma.pollOption.findUnique({
       where: { id: dto.optionId },
     });
-    if (!option || option.pollId !== pollId)
-      throw new NotFoundException('Option introuvable');
+    if (!option || option.pollId !== pollId) throw new NotFoundException('Option introuvable');
     await this.prisma.sessionPoll.update({
       where: { id: pollId },
       data: {
@@ -243,10 +222,8 @@ export class PollService {
     });
     // Le poll doit appartenir à la partie de l'URL : sans cette vérification, un MJ pourrait
     // muter le vote d'une AUTRE partie en forgeant un pollId (même garde que castVote/choose).
-    if (!poll || poll.partieId !== partieId)
-      throw new NotFoundException('Poll introuvable');
-    if (poll.status !== 'OPEN')
-      throw new BadRequestException('Le poll est déjà fermé');
+    if (!poll || poll.partieId !== partieId) throw new NotFoundException('Poll introuvable');
+    if (poll.status !== 'OPEN') throw new BadRequestException('Le poll est déjà fermé');
 
     // Bornes redites ici, en plus du DTO : le service est appelable sans passer par le pipe de
     // validation (tests, orchestration cross-module), et c'est lui qui porte l'invariant.
@@ -258,9 +235,7 @@ export class PollService {
       const date = new Date(o.date);
       const key = optionKey(date, o.slot);
       if (wanted.has(key))
-        throw new BadRequestException(
-          'Options dupliquées (même date et créneau)',
-        );
+        throw new BadRequestException('Options dupliquées (même date et créneau)');
       wanted.set(key, { date, slot: o.slot });
     }
 
@@ -311,10 +286,8 @@ export class PollService {
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
-    if (!poll || poll.partieId !== partieId)
-      throw new NotFoundException('Poll introuvable');
-    if (poll.status !== 'OPEN')
-      throw new BadRequestException('Le poll est déjà fermé');
+    if (!poll || poll.partieId !== partieId) throw new NotFoundException('Poll introuvable');
+    if (poll.status !== 'OPEN') throw new BadRequestException('Le poll est déjà fermé');
     await this.prisma.sessionPoll.update({
       where: { id: pollId },
       data: { status: 'CLOSED' },
@@ -338,7 +311,10 @@ function optionKey(date: Date, slot: string): string {
 
 /** Story 36.6 — `membersCount` est passé en paramètre (jamais dérivé de `poll`) : c'est une
  *  propriété de la PARTIE, et le point unique qui la calcule est `countParticipants()`. */
-function toDto(poll: any, membersCount: number): SessionPollDto {
+function toDto(
+  poll: Prisma.SessionPollGetPayload<{ include: typeof POLL_INCLUDE }>,
+  membersCount: number,
+): SessionPollDto {
   return {
     id: poll.id,
     partieId: poll.partieId,
@@ -348,11 +324,11 @@ function toDto(poll: any, membersCount: number): SessionPollDto {
     chosenDate: poll.chosenDate?.toISOString() ?? null,
     chosenSlot: poll.chosenSlot,
     membersCount,
-    options: (poll.options ?? []).map((opt: any) => ({
+    options: (poll.options ?? []).map((opt) => ({
       id: opt.id,
       date: opt.date.toISOString(),
       slot: opt.slot,
-      votes: (opt.votes ?? []).map((v: any) => ({
+      votes: (opt.votes ?? []).map((v) => ({
         userId: v.userId,
         pseudo: v.user.pseudo,
         displayName: v.user.displayName,

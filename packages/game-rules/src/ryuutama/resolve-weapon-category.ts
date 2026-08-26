@@ -75,9 +75,7 @@ export function resolveWeapon(
 ): ResolvedWeapon | null {
   if (data.weaponId) return resolveWeaponCategory(data.weaponId, catalog);
   if (data.customWeapon) {
-    const category = catalog.weaponCategories.find(
-      (c) => c.key === data.customWeapon!.categoryId,
-    );
+    const category = catalog.weaponCategories.find((c) => c.key === data.customWeapon!.categoryId);
     if (!category) return null;
     return {
       weaponLabel: data.customWeapon.name,

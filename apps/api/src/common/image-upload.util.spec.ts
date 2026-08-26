@@ -5,8 +5,7 @@ jest.mock('node:fs/promises', () => ({
 }));
 
 jest.mock('node:crypto', () => {
-  const actual =
-    jest.requireActual<typeof import('node:crypto')>('node:crypto');
+  const actual = jest.requireActual<typeof import('node:crypto')>('node:crypto');
   return { ...actual, randomUUID: jest.fn(() => 'fixed-uuid') };
 });
 
@@ -24,9 +23,7 @@ import {
 } from './image-upload.util';
 
 const JPEG_HEADER = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
-const PNG_HEADER = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00,
-]);
+const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
 const WEBP_HEADER = Buffer.concat([
   Buffer.from('RIFF', 'ascii'),
   Buffer.from([0x00, 0x00, 0x00, 0x00]),
@@ -152,9 +149,7 @@ describe('mimeForExtension', () => {
 
 describe('isValidUploadFilename', () => {
   it('accepte un nom de fichier UUID + extension connue (format généré par randomUUID())', () => {
-    expect(
-      isValidUploadFilename('11111111-1111-1111-1111-111111111111.jpg'),
-    ).toBe(true);
+    expect(isValidUploadFilename('11111111-1111-1111-1111-111111111111.jpg')).toBe(true);
   });
 
   it('rejette un chemin contenant un traversal (../)', () => {
@@ -166,9 +161,7 @@ describe('isValidUploadFilename', () => {
   });
 
   it('rejette une extension non supportée', () => {
-    expect(
-      isValidUploadFilename('11111111-1111-1111-1111-111111111111.exe'),
-    ).toBe(false);
+    expect(isValidUploadFilename('11111111-1111-1111-1111-111111111111.exe')).toBe(false);
   });
 });
 
@@ -190,9 +183,7 @@ describe('extractUploadFilename', () => {
   });
 
   it('retourne null pour un nom de fichier ne respectant pas le format UUID (défense path traversal)', () => {
-    expect(
-      extractUploadFilename(`${PREFIX}../../etc/passwd`, PREFIX),
-    ).toBeNull();
+    expect(extractUploadFilename(`${PREFIX}../../etc/passwd`, PREFIX)).toBeNull();
   });
 });
 
@@ -200,11 +191,7 @@ describe('writeUploadFile', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('crée le dossier, écrit le buffer sous un nom <uuid>.<ext> et retourne ce nom', async () => {
-    const filename = await writeUploadFile(
-      '/uploads/covers',
-      Buffer.from('bytes'),
-      'image/webp',
-    );
+    const filename = await writeUploadFile('/uploads/covers', Buffer.from('bytes'), 'image/webp');
 
     expect(filename).toBe('fixed-uuid.webp');
     expect(mkdir).toHaveBeenCalledWith('/uploads/covers', { recursive: true });
@@ -220,15 +207,11 @@ describe('unlinkUploadFile', () => {
 
   it('supprime le fichier nommé dans le dossier donné', async () => {
     await unlinkUploadFile('/uploads/covers', 'fixed-uuid.webp');
-    expect(unlink).toHaveBeenCalledWith(
-      expect.stringContaining('fixed-uuid.webp'),
-    );
+    expect(unlink).toHaveBeenCalledWith(expect.stringContaining('fixed-uuid.webp'));
   });
 
   it("propage l'erreur si la suppression échoue (l'appelant décide comment réagir)", async () => {
     (unlink as jest.Mock).mockRejectedValueOnce(new Error('ENOENT'));
-    await expect(
-      unlinkUploadFile('/uploads/covers', 'missing.webp'),
-    ).rejects.toThrow('ENOENT');
+    await expect(unlinkUploadFile('/uploads/covers', 'missing.webp')).rejects.toThrow('ENOENT');
   });
 });

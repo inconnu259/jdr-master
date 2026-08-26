@@ -592,11 +592,7 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
     create();
     const icons = Array.from(el.querySelectorAll('.row-label .slot-icon'));
     expect(icons).toHaveLength(3);
-    expect(icons.map((i) => i.getAttribute('aria-label'))).toEqual([
-      'Matin',
-      'Après-midi',
-      'Soir',
-    ]);
+    expect(icons.map((i) => i.getAttribute('aria-label'))).toEqual(['Matin', 'Après-midi', 'Soir']);
     expect(icons.some((i) => i.getAttribute('aria-hidden') === 'true')).toBe(false);
   });
 

@@ -1,4 +1,13 @@
-import { Component, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { Router } from '@angular/router';
 import type {
@@ -277,7 +286,10 @@ export class SeanceList {
   // destructive, même style que la suppression de séance à date validée, Story 8.7 revue).
   protected async onResetSeanceDate(seanceId: string): Promise<void> {
     if (this.pollActionPending()) return;
-    if (!window.confirm('Réinitialiser la date de cette séance ? Un nouveau vote pourra être lancé.')) return;
+    if (
+      !window.confirm('Réinitialiser la date de cette séance ? Un nouveau vote pourra être lancé.')
+    )
+      return;
     this.pollActionPending.set(true);
     this.error.set(null);
     try {

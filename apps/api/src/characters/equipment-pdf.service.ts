@@ -3,10 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import type { CharacterDto } from '@master-jdr/shared';
-import {
-  mapEquipmentToPdfFields,
-  type RyuutamaSheetData,
-} from '@master-jdr/game-rules';
+import { mapEquipmentToPdfFields, type RyuutamaSheetData } from '@master-jdr/game-rules';
 
 const PDF_TEMPLATE_PATH = join(
   process.cwd(),
@@ -66,10 +63,7 @@ export class EquipmentPdfService {
       try {
         form.getTextField(f.field).setText(f.value);
       } catch (e) {
-        this.logger.error(
-          `Échec du remplissage du champ PDF "${f.field}" (value=${f.value})`,
-          e,
-        );
+        this.logger.error(`Échec du remplissage du champ PDF "${f.field}" (value=${f.value})`, e);
         // Deux causes distinctes partagent ce catch — champ AcroForm introuvable/incompatible sur
         // le template (getTextField) OU valeur contenant un caractère non encodable en WinAnsi par
         // pdf-lib (setText) — même convention que HommeDragonPdfService (Story 10.5, revue de code).
@@ -87,10 +81,7 @@ export class EquipmentPdfService {
     if (!this.templatePromise) {
       this.templatePromise = readFile(PDF_TEMPLATE_PATH).catch((e) => {
         this.templatePromise = null;
-        this.logger.error(
-          'Échec du chargement du template PDF équipement Ryuutama',
-          e,
-        );
+        this.logger.error('Échec du chargement du template PDF équipement Ryuutama', e);
         throw new Error(
           'Template PDF équipement Ryuutama introuvable. Consultez apps/api/game-systems/ryuutama/assets/README.md',
         );

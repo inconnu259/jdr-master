@@ -6,12 +6,10 @@ import {
 } from '@nestjs/common';
 import type { CharacterGroupRoleDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { hasPrismaErrorCode } from '../common/prisma-error.util';
 import { PartiesService } from '../parties/parties.service';
 import { GameSystemService } from '../game-systems/game-system.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
 function toDto(role: {
   id: string;
@@ -54,18 +52,12 @@ export class CharacterRolesService {
     const partie = await this.parties.getOwned(partieId, mjId);
 
     const content = await this.gameSystems.getContent(partie.gameSystemId);
-    const validRoleKeys = (content['groupRole'] ?? []).map(
-      (entry) => entry.key,
-    );
+    const validRoleKeys = (content['groupRole'] ?? []).map((entry) => entry.key);
     if (validRoleKeys.length === 0) {
-      throw new BadRequestException(
-        "Aucun rôle de groupe n'est disponible pour ce système de jeu",
-      );
+      throw new BadRequestException("Aucun rôle de groupe n'est disponible pour ce système de jeu");
     }
     if (!validRoleKeys.includes(roleKey)) {
-      throw new BadRequestException(
-        `Rôle invalide. Rôles acceptés : ${validRoleKeys.join(', ')}`,
-      );
+      throw new BadRequestException(`Rôle invalide. Rôles acceptés : ${validRoleKeys.join(', ')}`);
     }
 
     // Vérification explicite d'appartenance AVANT toute écriture (AC3) — jamais une confiance
@@ -75,9 +67,7 @@ export class CharacterRolesService {
       select: { partieId: true },
     });
     if (!character || character.partieId !== partieId) {
-      throw new BadRequestException(
-        "Ce personnage n'appartient pas à cette Partie",
-      );
+      throw new BadRequestException("Ce personnage n'appartient pas à cette Partie");
     }
 
     try {
@@ -88,31 +78,25 @@ export class CharacterRolesService {
       // pouvant encore lever après coup.
       this.realtimeEvents.emit(partieTopic(partieId));
       return toDto(role);
-    } catch (e: any) {
+    } catch (e) {
       // Couvre les DEUX contraintes d'unicité (@@unique([partieId, roleKey]) ET
       // @@unique([partieId, characterId])) — même erreur Prisma P2002, même philosophie « jamais
       // d'éviction silencieuse », un seul chemin de rejet explicite (AC4).
-      if (e?.code === 'P2002') {
+      if (hasPrismaErrorCode(e, 'P2002')) {
         throw new ConflictException(
           'Ce rôle est déjà attribué, ou ce personnage porte déjà un rôle — retirez-le explicitement avant de réassigner',
         );
       }
       // Personnage supprimé entre la vérification d'appartenance et l'écriture (contrainte FK) —
       // même message que la vérification d'appartenance ci-dessus, jamais un 500 brut.
-      if (e?.code === 'P2003') {
-        throw new BadRequestException(
-          "Ce personnage n'appartient pas à cette Partie",
-        );
+      if (hasPrismaErrorCode(e, 'P2003')) {
+        throw new BadRequestException("Ce personnage n'appartient pas à cette Partie");
       }
       throw e;
     }
   }
 
-  async unassign(
-    partieId: string,
-    mjId: string,
-    characterId: string,
-  ): Promise<void> {
+  async unassign(partieId: string, mjId: string, characterId: string): Promise<void> {
     await this.parties.getOwned(partieId, mjId);
 
     const result = await this.prisma.characterGroupRole.deleteMany({
@@ -124,10 +108,7 @@ export class CharacterRolesService {
     this.realtimeEvents.emit(partieTopic(partieId));
   }
 
-  async listForPartie(
-    partieId: string,
-    userId: string,
-  ): Promise<CharacterGroupRoleDto[]> {
+  async listForPartie(partieId: string, userId: string): Promise<CharacterGroupRoleDto[]> {
     await this.parties.getViewable(partieId, userId);
     const roles = await this.prisma.characterGroupRole.findMany({
       where: { partieId },

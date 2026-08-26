@@ -73,7 +73,11 @@ describe('IdentityLabel', () => {
   });
 
   it('mode single-player + ambiguous=true + pseudo fourni : pseudo visible en complément (AC3)', async () => {
-    const fixture = await createComponent({ playerName: 'Incon', ambiguous: true, pseudo: 'incon259' });
+    const fixture = await createComponent({
+      playerName: 'Incon',
+      ambiguous: true,
+      pseudo: 'incon259',
+    });
     const el = fixture.nativeElement;
     const pseudoEl = el.querySelector('.identity-label__pseudo');
     expect(pseudoEl).not.toBeNull();
@@ -81,7 +85,11 @@ describe('IdentityLabel', () => {
   });
 
   it("Revue de code : mode single-player + ambiguous=true + pseudo fourni → l'aria-label inclut le pseudo (le lecteur d'écran doit pouvoir distinguer deux entrées homonymes)", async () => {
-    const fixture = await createComponent({ playerName: 'Même Nom', ambiguous: true, pseudo: 'incon259' });
+    const fixture = await createComponent({
+      playerName: 'Même Nom',
+      ambiguous: true,
+      pseudo: 'incon259',
+    });
     const el = fixture.nativeElement;
     const wrapper = el.querySelector('.identity-label--single');
     expect(wrapper.getAttribute('aria-label')).toBe('Joueur Même Nom (incon259)');

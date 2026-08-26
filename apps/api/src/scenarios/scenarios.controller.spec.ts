@@ -135,11 +135,7 @@ describe('ScenariosController', () => {
       { date: '2026-08-02T00:00:00.000Z', slot: 'AFTERNOON' as const },
     ];
     await controller.createSeancePoll('seance1', user, { options });
-    expect(scenarios.createSeancePoll).toHaveBeenCalledWith(
-      'seance1',
-      'mj1',
-      options,
-    );
+    expect(scenarios.createSeancePoll).toHaveBeenCalledWith('seance1', 'mj1', options);
   });
 
   it('resetSeanceDate() route seanceId/user vers ScenariosService.resetSeanceDate', async () => {
@@ -152,12 +148,7 @@ describe('ScenariosController', () => {
       inscriptionMin: 4,
       inscriptionMax: 6,
     });
-    expect(scenarios.setSeanceCapacity).toHaveBeenCalledWith(
-      'seance1',
-      'mj1',
-      4,
-      6,
-    );
+    expect(scenarios.setSeanceCapacity).toHaveBeenCalledWith('seance1', 'mj1', 4, 6);
   });
 
   it('inscrire() route seanceId/user vers ScenariosService.inscrire', async () => {
@@ -172,11 +163,7 @@ describe('ScenariosController', () => {
 
   it('setCompteRendu() route seanceId/user/compteRendu vers ScenariosService.setCompteRendu', async () => {
     await controller.setCompteRendu('seance1', user, { compteRendu: 'texte' });
-    expect(scenarios.setCompteRendu).toHaveBeenCalledWith(
-      'seance1',
-      'mj1',
-      'texte',
-    );
+    expect(scenarios.setCompteRendu).toHaveBeenCalledWith('seance1', 'mj1', 'texte');
   });
 
   it('setInfosPratiques() route seanceId/user/dto vers ScenariosService.setInfosPratiques (Story 36.5)', async () => {
@@ -186,31 +173,18 @@ describe('ScenariosController', () => {
       notePratique: 'pensez aux dés',
     };
     await controller.setInfosPratiques('seance1', user, dto);
-    expect(scenarios.setInfosPratiques).toHaveBeenCalledWith(
-      'seance1',
-      'mj1',
-      dto,
-    );
+    expect(scenarios.setInfosPratiques).toHaveBeenCalledWith('seance1', 'mj1', dto);
   });
 
   it('setResumeFin() route scenarioId/user/resumeFin vers ScenariosService.setResumeFin', async () => {
     await controller.setResumeFin('scenario1', user, { resumeFin: 'texte' });
-    expect(scenarios.setResumeFin).toHaveBeenCalledWith(
-      'scenario1',
-      'mj1',
-      'texte',
-    );
+    expect(scenarios.setResumeFin).toHaveBeenCalledWith('scenario1', 'mj1', 'texte');
   });
 
   it('uploadDocument() route partieId/user/file/scenarioId vers ScenariosService.uploadDocument', async () => {
     const file = { buffer: Buffer.from('x') } as Express.Multer.File;
     await controller.uploadDocument('p1', file, 's1', user);
-    expect(scenarios.uploadDocument).toHaveBeenCalledWith(
-      'p1',
-      'mj1',
-      file,
-      's1',
-    );
+    expect(scenarios.uploadDocument).toHaveBeenCalledWith('p1', 'mj1', file, 's1');
   });
 
   it('listDocuments() route scenarioId/user vers ScenariosService.listDocuments', async () => {

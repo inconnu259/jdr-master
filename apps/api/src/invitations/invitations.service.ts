@@ -10,11 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { InviteLinksService } from './invite-links.service';
 import { EmailService } from '../email/email.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-  userTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 
 @Injectable()
 export class InvitationsService {
@@ -30,9 +26,7 @@ export class InvitationsService {
   async invite(partieId: string, inviterId: string, inviteeUserId: string) {
     await this.parties.getOwned(partieId, inviterId); // MJ uniquement
     if (inviteeUserId === inviterId) {
-      throw new BadRequestException(
-        'Vous ne pouvez pas vous inviter vous-même.',
-      );
+      throw new BadRequestException('Vous ne pouvez pas vous inviter vous-même.');
     }
     const invitee = await this.prisma.user.findUnique({
       where: { id: inviteeUserId },
@@ -42,10 +36,7 @@ export class InvitationsService {
     const alreadyMember = await this.prisma.membership.findUnique({
       where: { userId_partieId: { userId: inviteeUserId, partieId } },
     });
-    if (alreadyMember)
-      throw new ConflictException(
-        'Cet utilisateur est déjà membre de la partie.',
-      );
+    if (alreadyMember) throw new ConflictException('Cet utilisateur est déjà membre de la partie.');
 
     const invitation = await this.prisma.invitation.upsert({
       where: { partieId_inviteeUserId: { partieId, inviteeUserId } },
@@ -130,8 +121,7 @@ export class InvitationsService {
       include: { partie: { select: { mjId: true } } },
     });
     if (!inv) throw new NotFoundException('Invitation introuvable');
-    if (inv.inviterId !== userId && inv.partie.mjId !== userId)
-      throw new ForbiddenException();
+    if (inv.inviterId !== userId && inv.partie.mjId !== userId) throw new ForbiddenException();
     await this.prisma.invitation.update({
       where: { id: invitationId },
       data: { status: 'REVOKED', respondedAt: new Date() },
@@ -162,11 +152,7 @@ export class InvitationsService {
       await this.invite(partieId, inviterId, user.id);
       link = `${origin}/`;
     } else {
-      const inviteLink = await this.inviteLinks.findOrCreateForEmail(
-        partieId,
-        inviterId,
-        email,
-      );
+      const inviteLink = await this.inviteLinks.findOrCreateForEmail(partieId, inviterId, email);
       link = `${origin}/join/${inviteLink.token}`;
     }
 
@@ -181,10 +167,8 @@ export class InvitationsService {
     const inv = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
     });
-    if (!inv || inv.inviteeUserId !== userId)
-      throw new NotFoundException('Invitation introuvable');
-    if (inv.status !== 'PENDING')
-      throw new ConflictException('Invitation déjà traitée.');
+    if (!inv || inv.inviteeUserId !== userId) throw new NotFoundException('Invitation introuvable');
+    if (inv.status !== 'PENDING') throw new ConflictException('Invitation déjà traitée.');
     return inv;
   }
 }

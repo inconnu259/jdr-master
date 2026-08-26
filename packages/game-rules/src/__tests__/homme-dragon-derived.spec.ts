@@ -9,13 +9,16 @@ describe('levelForScenariosPasse', () => {
   it('0 scénario Passé → niveau 1', () => expect(levelForScenariosPasse(0)).toBe(1));
 
   it('1 scénario Passé → niveau 2', () => expect(levelForScenariosPasse(1)).toBe(2));
-  it('2 scénarios Passé → niveau 2 (pas encore 3)', () => expect(levelForScenariosPasse(2)).toBe(2));
+  it('2 scénarios Passé → niveau 2 (pas encore 3)', () =>
+    expect(levelForScenariosPasse(2)).toBe(2));
 
   it('3 scénarios Passé → niveau 3', () => expect(levelForScenariosPasse(3)).toBe(3));
-  it('6 scénarios Passé → niveau 3 (pas encore 4)', () => expect(levelForScenariosPasse(6)).toBe(3));
+  it('6 scénarios Passé → niveau 3 (pas encore 4)', () =>
+    expect(levelForScenariosPasse(6)).toBe(3));
 
   it('7 scénarios Passé → niveau 4', () => expect(levelForScenariosPasse(7)).toBe(4));
-  it('11 scénarios Passé → niveau 4 (pas encore 5)', () => expect(levelForScenariosPasse(11)).toBe(4));
+  it('11 scénarios Passé → niveau 4 (pas encore 5)', () =>
+    expect(levelForScenariosPasse(11)).toBe(4));
 
   it('12 scénarios Passé → niveau 5', () => expect(levelForScenariosPasse(12)).toBe(5));
   it('50 scénarios Passé → niveau 5 (plafond)', () => expect(levelForScenariosPasse(50)).toBe(5));
@@ -40,7 +43,7 @@ describe('pendingEveilLevels', () => {
     expect(pendingEveilLevels(1, [])).toEqual([]);
   });
 
-  it('niveau 3, aucun choix fait → 2 et 3 en attente (AC3 — plusieurs seuils franchis d\'un coup)', () => {
+  it("niveau 3, aucun choix fait → 2 et 3 en attente (AC3 — plusieurs seuils franchis d'un coup)", () => {
     expect(pendingEveilLevels(3, [])).toEqual([2, 3]);
   });
 

@@ -787,7 +787,9 @@ describe('SeanceList', () => {
 
       await comp.onDeleteSeance(SEANCE_2);
 
-      expect(confirmSpy).toHaveBeenCalledWith('Supprimer cette séance ? Cette action est définitive.');
+      expect(confirmSpy).toHaveBeenCalledWith(
+        'Supprimer cette séance ? Cette action est définitive.',
+      );
     });
 
     it('séance épisodique avec date validée (inscription.dateValidee) → confirmation renforcée (revue de code)', async () => {

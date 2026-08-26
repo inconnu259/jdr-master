@@ -13,22 +13,15 @@ import { NotificationsService } from './notifications.service';
 // EmailService est remplacé par un espion pour éviter un envoi réseau réel.
 class FakeEmailService {
   calls: { to: string; data: Record<string, unknown> }[] = [];
-  async sendMail(
-    _template: string,
-    to: string,
-    data: Record<string, unknown>,
-  ): Promise<{ ok: boolean }> {
+  sendMail(_template: string, to: string, data: Record<string, unknown>): Promise<{ ok: boolean }> {
     this.calls.push({ to, data });
-    return { ok: true };
+    return Promise.resolve({ ok: true });
   }
 }
 
 @Module({
   imports: [PrismaModule],
-  providers: [
-    NotificationsService,
-    { provide: EmailService, useClass: FakeEmailService },
-  ],
+  providers: [NotificationsService, { provide: EmailService, useClass: FakeEmailService }],
 })
 class TestAppModule {}
 

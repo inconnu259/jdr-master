@@ -65,7 +65,13 @@ function wrapPollsAsScenarios(polls: SessionPollDto[]): any[] {
     createdAt: '',
     closedAt: null,
     seances: [
-      { id: `seance-${poll.id}`, scenarioId: `s-${poll.id}`, compteRendu: null, createdAt: '', poll },
+      {
+        id: `seance-${poll.id}`,
+        scenarioId: `s-${poll.id}`,
+        compteRendu: null,
+        createdAt: '',
+        poll,
+      },
     ],
   }));
 }
@@ -108,9 +114,7 @@ describe('OpenPollsService', () => {
 
   it('count() reflète le nombre de parties avec un poll OPEN', async () => {
     const listAll = vi.fn((id: string) =>
-      id === 'p1'
-        ? Promise.resolve(wrapPollsAsScenarios([makePoll('p1')]))
-        : Promise.resolve([]),
+      id === 'p1' ? Promise.resolve(wrapPollsAsScenarios([makePoll('p1')])) : Promise.resolve([]),
     );
     const { svc } = await createHarness([makeParty('p1'), makeParty('p2')], listAll);
 
@@ -129,10 +133,7 @@ describe('OpenPollsService', () => {
 
   it('openPolls se vide quand playerParties() passe de non-vide à vide (dernière partie quittée)', async () => {
     const listAll = vi.fn().mockResolvedValue(wrapPollsAsScenarios([makePoll('p1')]));
-    const { svc, playerPartiesSignal, fixture } = await createHarness(
-      [makeParty('p1')],
-      listAll,
-    );
+    const { svc, playerPartiesSignal, fixture } = await createHarness([makeParty('p1')], listAll);
 
     expect(svc.count()).toBe(1);
 

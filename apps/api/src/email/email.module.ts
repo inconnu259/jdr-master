@@ -11,10 +11,8 @@ function readMailConfig() {
   const host = process.env.MAIL_HOST;
   const from = process.env.MAIL_FROM;
   const port = Number(process.env.MAIL_PORT);
-  if (!host)
-    throw new Error('MAIL_HOST est requis (variable manquante ou vide)');
-  if (!from)
-    throw new Error('MAIL_FROM est requis (variable manquante ou vide)');
+  if (!host) throw new Error('MAIL_HOST est requis (variable manquante ou vide)');
+  if (!from) throw new Error('MAIL_FROM est requis (variable manquante ou vide)');
   if (!Number.isInteger(port) || port <= 0) {
     throw new Error(`MAIL_PORT invalide : "${process.env.MAIL_PORT}"`);
   }

@@ -33,10 +33,7 @@ export class PartiesController {
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query('role') role?: string) {
-    return this.parties.listForUser(
-      user.id,
-      role === 'player' ? 'player' : 'mj',
-    );
+    return this.parties.listForUser(user.id, role === 'player' ? 'player' : 'mj');
   }
 
   @Get(':id')
@@ -55,21 +52,11 @@ export class PartiesController {
     @Param('id') id: string,
     @Query() q: GetAvailableSlotsDto,
   ) {
-    return this.parties.getAvailableSlots(
-      id,
-      user.id,
-      q.weeks ?? DEFAULT_WEEKS,
-      q.from,
-      q.to,
-    );
+    return this.parties.getAvailableSlots(id, user.id, q.weeks ?? DEFAULT_WEEKS, q.from, q.to);
   }
 
   @Get(':id/heatmap')
-  getHeatmap(
-    @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-    @Query() q: GetHeatmapDto,
-  ) {
+  getHeatmap(@CurrentUser() user: AuthUser, @Param('id') id: string, @Query() q: GetHeatmapDto) {
     return this.parties.getHeatmap(id, user.id, q.from, q.to);
   }
 
@@ -83,11 +70,7 @@ export class PartiesController {
   }
 
   @Patch(':id')
-  update(
-    @CurrentUser() user: AuthUser,
-    @Param('id') id: string,
-    @Body() dto: UpdatePartieDto,
-  ) {
+  update(@CurrentUser() user: AuthUser, @Param('id') id: string, @Body() dto: UpdatePartieDto) {
     return this.parties.update(id, user.id, dto);
   }
 

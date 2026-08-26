@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Logger,
-} from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
 // `CharacterService` (importé ci-dessous comme token DI) importe `@master-jdr/game-rules`
@@ -19,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { CharacterService } from '../characters/character.service';
 import { XpDistributionsService } from './xp-distributions.service';
+import { objectLike } from '../common/test-utils/jest-typed';
 
 function makePrisma() {
   return {
@@ -126,8 +123,8 @@ describe('XpDistributionsService', () => {
       });
 
       expect(prisma.xpDistribution.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
+        objectLike({
+          data: objectLike({
             partieId: 'p1',
             mjId: 'mj1',
             note: 'Bien joué',
@@ -164,9 +161,7 @@ describe('XpDistributionsService', () => {
 
     it('montant + bonus du même personnage agrégés en un seul appel applyXpDelta (évite un double e-mail level-up)', async () => {
       parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
-      prisma.character.findMany.mockResolvedValue([
-        { id: 'c1', partieId: 'p1' },
-      ]);
+      prisma.character.findMany.mockResolvedValue([{ id: 'c1', partieId: 'p1' }]);
       prisma.xpDistribution.create.mockResolvedValue({
         id: 'd1',
         partieId: 'p1',
@@ -231,12 +226,8 @@ describe('XpDistributionsService', () => {
           },
         ],
       });
-      characters.applyXpDelta.mockRejectedValueOnce(
-        new Error('personnage supprimé'),
-      );
-      const loggerSpy = jest
-        .spyOn(Logger.prototype, 'error')
-        .mockImplementation(() => undefined);
+      characters.applyXpDelta.mockRejectedValueOnce(new Error('personnage supprimé'));
+      const loggerSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
       const result = await service.createDistribution('p1', 'mj1', {
         entries: [
@@ -256,9 +247,7 @@ describe('XpDistributionsService', () => {
   describe('listForPartie()', () => {
     it('non-MJ → 403', async () => {
       parties.getOwned.mockRejectedValue(new ForbiddenException());
-      await expect(service.listForPartie('p1', 'stranger')).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(service.listForPartie('p1', 'stranger')).rejects.toThrow(ForbiddenException);
     });
 
     it('trie par createdAt desc avec tie-breaker id (déterministe, Story 17.1)', async () => {
@@ -268,7 +257,7 @@ describe('XpDistributionsService', () => {
       await service.listForPartie('p1', 'mj1');
 
       expect(prisma.xpDistribution.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
+        objectLike({
           where: { partieId: 'p1' },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
           include: {
@@ -322,7 +311,7 @@ describe('XpDistributionsService', () => {
       await service.listForPartie('p1', 'mj1', { skip: 20, take: 10 });
 
       expect(prisma.xpDistribution.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: 20, take: 10 }),
+        objectLike({ skip: 20, take: 10 }),
       );
     });
 
@@ -333,7 +322,7 @@ describe('XpDistributionsService', () => {
       await service.listForPartie('p1', 'mj1');
 
       expect(prisma.xpDistribution.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ skip: undefined, take: undefined }),
+        objectLike({ skip: undefined, take: undefined }),
       );
     });
   });

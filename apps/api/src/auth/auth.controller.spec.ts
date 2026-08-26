@@ -55,8 +55,9 @@ describe('AuthController', () => {
           },
         },
       } as unknown as Request;
-      auth.forgetSession.mockImplementation(async () => {
+      auth.forgetSession.mockImplementation(() => {
         callOrder.push('forgetSession');
+        return Promise.resolve();
       });
 
       const result = await controller.logout(req);

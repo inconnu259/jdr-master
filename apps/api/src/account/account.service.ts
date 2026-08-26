@@ -21,10 +21,7 @@ export class AccountService {
     } catch (e) {
       // Session référant un compte supprimé entre-temps (cas normalement impossible en usage
       // courant) — jamais un 500 brut, même pattern que resolveScenarioOrThrow().
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2025'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
         throw new NotFoundException('Compte introuvable');
       }
       throw e;
@@ -42,10 +39,7 @@ export class AccountService {
         include: { calendarLayers: true },
       });
     } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2025'
-      ) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
         throw new NotFoundException('Compte introuvable');
       }
       throw e;
@@ -108,8 +102,7 @@ export class AccountService {
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError) {
         if (e.code === 'P2002') return { ok: true };
-        if (e.code === 'P2003')
-          throw new NotFoundException('Partie introuvable');
+        if (e.code === 'P2003') throw new NotFoundException('Partie introuvable');
       }
       throw e;
     }
@@ -117,10 +110,7 @@ export class AccountService {
   }
 
   /** Idempotent par nature (`deleteMany` ne lève jamais si 0 ligne). */
-  async removeFavorite(
-    userId: string,
-    partieId: string,
-  ): Promise<{ ok: true }> {
+  async removeFavorite(userId: string, partieId: string): Promise<{ ok: true }> {
     await this.prisma.partieFavorite.deleteMany({
       where: { userId, partieId },
     });
@@ -149,10 +139,7 @@ export class AccountService {
   }
 
   /** Idempotent (sémantique PUT), même pattern que addFavorite(). */
-  async markAnnouncementRead(
-    userId: string,
-    announcementId: string,
-  ): Promise<{ ok: true }> {
+  async markAnnouncementRead(userId: string, announcementId: string): Promise<{ ok: true }> {
     try {
       await this.prisma.announcementRead.create({
         data: { userId, announcementId },
@@ -160,8 +147,7 @@ export class AccountService {
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError) {
         if (e.code === 'P2002') return { ok: true };
-        if (e.code === 'P2003')
-          throw new NotFoundException('Annonce introuvable');
+        if (e.code === 'P2003') throw new NotFoundException('Annonce introuvable');
       }
       throw e;
     }

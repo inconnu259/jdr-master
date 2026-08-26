@@ -106,10 +106,7 @@ export function computePdfCropDraw(
   frameHeight: number,
   cropData: PdfPortraitCropData,
 ): { x: number; y: number; width: number; height: number } {
-  const containScale = Math.min(
-    frameWidth / imageWidth,
-    frameHeight / imageHeight,
-  );
+  const containScale = Math.min(frameWidth / imageWidth, frameHeight / imageHeight);
   const totalScale = containScale * cropData.scale;
   const width = imageWidth * totalScale;
   const height = imageHeight * totalScale;
@@ -141,17 +138,8 @@ export function computePdfCropDraw(
 }
 
 /** Un nombre fini dans `[min, max]` — rejette `NaN`/`Infinity` en plus des valeurs hors bornes. */
-function isFiniteInRange(
-  value: unknown,
-  min: number,
-  max: number,
-): value is number {
-  return (
-    typeof value === 'number' &&
-    Number.isFinite(value) &&
-    value >= min &&
-    value <= max
-  );
+function isFiniteInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 }
 
 /**
@@ -192,9 +180,7 @@ interface LabelledContentData {
 }
 
 /** Construit une map `key → label` depuis une liste d'entrées de contenu seedé (`ContentEntryDto[]`). */
-function labelMap(
-  entries: { key: string; data: unknown }[] | undefined,
-): Record<string, string> {
+function labelMap(entries: { key: string; data: unknown }[] | undefined): Record<string, string> {
   const map: Record<string, string> = {};
   for (const entry of entries ?? []) {
     const label = (entry.data as LabelledContentData | undefined)?.label;
@@ -210,18 +196,11 @@ export class RyuutamaPdfService {
 
   constructor(private readonly gameSystems: GameSystemService) {}
 
-  async fillCharacterPdf(
-    character: CharacterDto,
-    format: PdfExportFormat,
-  ): Promise<Buffer> {
+  async fillCharacterPdf(character: CharacterDto, format: PdfExportFormat): Promise<Buffer> {
     const templateBytes = await this.loadTemplate();
     const sheetData = character.sheetData as unknown as RyuutamaSheetData;
     const derived = character.derived;
-    const content = await this.resolveContent(
-      sheetData,
-      character.ownerPseudo,
-      character.xp,
-    );
+    const content = await this.resolveContent(sheetData, character.ownerPseudo, character.xp);
 
     const fields = mapToPdfFields(sheetData, derived, content);
     // Champs auto-size du template officiel (résistances par terrain, statuts d'immunité) :
@@ -256,11 +235,7 @@ export class RyuutamaPdfService {
         );
       }
     }
-    await this.embedPortrait(
-      doc,
-      character.portraitUrl,
-      character.pdfPortraitCropData,
-    );
+    await this.embedPortrait(doc, character.portraitUrl, character.pdfPortraitCropData);
 
     if (format === '2pages') {
       form.flatten();
@@ -330,9 +305,7 @@ export class RyuutamaPdfService {
     const pages = doc.getPages();
     const page = pages[0];
     if (!page) {
-      throw new Error(
-        'Template PDF Ryuutama sans page — fichier corrompu ou mal chargé.',
-      );
+      throw new Error('Template PDF Ryuutama sans page — fichier corrompu ou mal chargé.');
     }
     const cropData = parsePdfPortraitCropData(pdfPortraitCropData);
     if (cropData) {
@@ -391,9 +364,7 @@ export class RyuutamaPdfService {
     xp: number,
   ): Promise<RyuutamaPdfContent> {
     const content = await this.gameSystems.getContent(RYUUTAMA_ID);
-    const classEntry = content['class']?.find(
-      (c) => c.key === sheetData.classId,
-    );
+    const classEntry = content['class']?.find((c) => c.key === sheetData.classId);
     const typeEntry = content['type']?.find((t) => t.key === sheetData.typeId);
     const classData = classEntry?.data as ClassContentData | undefined;
     const typeData = typeEntry?.data as TypeContentData | undefined;
@@ -421,20 +392,21 @@ export class RyuutamaPdfService {
     const capabilities = levelUps.flatMap((e) => e.capabilities);
     // Classe secondaire (capacité 'class', niveau 5) — un seul choix possible par LEVEL_TABLE,
     // pas de boucle nécessaire (contrairement au paysage/climat, obtenu jusqu'à 2 fois).
-    const secondaryClassKey = capabilities.find((c) => c.type === 'class')
-      ?.params['key'] as string | undefined;
-    const secondaryClassData = content['class']?.find(
-      (c) => c.key === secondaryClassKey,
-    )?.data as ClassContentData | undefined;
+    const secondaryClassKey = capabilities.find((c) => c.type === 'class')?.params['key'] as
+      | string
+      | undefined;
+    const secondaryClassData = content['class']?.find((c) => c.key === secondaryClassKey)?.data as
+      | ClassContentData
+      | undefined;
 
     // Paysage/climat résumé (dropdown "Paysage climat") : un seul champ pour jusqu'à 2 obtenus
     // (niveaux 3 et 7) — le premier obtenu, faute de pouvoir en représenter deux sur ce dropdown
     // (les 22 champs de résistance individuels, eux, couvrent chaque paysage obtenu séparément).
-    const landscapeKey = capabilities.find((c) => c.type === 'landscape')
-      ?.params['key'] as string | undefined;
-    const landscapeDropdownValue = content['landscape']?.find(
-      (l) => l.key === landscapeKey,
-    )?.data as { label?: string } | undefined;
+    const landscapeKey = capabilities.find((c) => c.type === 'landscape')?.params['key'] as
+      | string
+      | undefined;
+    const landscapeDropdownValue = content['landscape']?.find((l) => l.key === landscapeKey)
+      ?.data as { label?: string } | undefined;
 
     return {
       classLabel: classData?.label ?? '',

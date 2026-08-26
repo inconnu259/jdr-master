@@ -10,12 +10,21 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 const CATALOG: GameSystemContentDto = {
   hommeDragonArtefact: [
-    { key: 'encyclopedie', data: { key: 'encyclopedie', label: 'Encyclopédie', race: 'DRAGON_VERT' } },
+    {
+      key: 'encyclopedie',
+      data: { key: 'encyclopedie', label: 'Encyclopédie', race: 'DRAGON_VERT' },
+    },
     { key: 'lanterne', data: { key: 'lanterne', label: 'Lanterne', race: 'DRAGON_VERT' } },
     { key: 'sextant', data: { key: 'sextant', label: 'Sextant', race: 'DRAGON_VERT' } },
     { key: 'grand-arc', data: { key: 'grand-arc', label: 'Grand arc', race: 'DRAGON_ROUGE' } },
-    { key: 'grande-epee', data: { key: 'grande-epee', label: 'Grande épée', race: 'DRAGON_ROUGE' } },
-    { key: 'grande-lance', data: { key: 'grande-lance', label: 'Grande lance', race: 'DRAGON_ROUGE' } },
+    {
+      key: 'grande-epee',
+      data: { key: 'grande-epee', label: 'Grande épée', race: 'DRAGON_ROUGE' },
+    },
+    {
+      key: 'grande-lance',
+      data: { key: 'grande-lance', label: 'Grande lance', race: 'DRAGON_ROUGE' },
+    },
   ],
   eveilPower: [
     { key: 'escorte-du-dragon', data: { key: 'escorte-du-dragon', label: 'Escorte du dragon' } },
@@ -110,7 +119,7 @@ describe('HommeDragonSheet', () => {
     vi.unstubAllGlobals();
   });
 
-  it("aucun Homme Dragon existant → formulaire de création affiché, mondesProteges pré-rempli avec le nom de la Partie (AC1)", async () => {
+  it('aucun Homme Dragon existant → formulaire de création affiché, mondesProteges pré-rempli avec le nom de la Partie (AC1)', async () => {
     const { fixture } = await createComponent();
     const component = fixture.componentInstance;
 
@@ -217,7 +226,9 @@ describe('HommeDragonSheet', () => {
   it("changement d'artefact (AC4) appelle update() et met à jour la fiche affichée", async () => {
     const hommeDragonSvc = makeHommeDragonService(makeDto());
     hommeDragonSvc.update.mockResolvedValue(
-      makeDto({ sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grande-epee' }, nom: 'Ignis' } }),
+      makeDto({
+        sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grande-epee' }, nom: 'Ignis' },
+      }),
     );
     const { fixture } = await createComponent(hommeDragonSvc);
     const component = fixture.componentInstance;
@@ -282,17 +293,19 @@ describe('HommeDragonSheet', () => {
   });
 
   it('voyageursProteges vide → état vide, pas de liste', async () => {
-    const { fixture } = await createComponent(makeHommeDragonService(makeDto({ voyageursProteges: [] })));
+    const { fixture } = await createComponent(
+      makeHommeDragonService(makeDto({ voyageursProteges: [] })),
+    );
 
     expect(fixture.debugElement.query(By.css('.homme-dragon-sheet__voyageurs ul'))).toBeFalsy();
-    expect((fixture.nativeElement.textContent as string)).toContain('Aucun voyageur');
+    expect(fixture.nativeElement.textContent as string).toContain('Aucun voyageur');
   });
 
   it('historique vide → état vide, pas de liste (AC2)', async () => {
     const { fixture } = await createComponent(makeHommeDragonService(makeDto({ historique: [] })));
 
     expect(fixture.debugElement.query(By.css('.homme-dragon-sheet__historique ul'))).toBeFalsy();
-    expect((fixture.nativeElement.textContent as string)).toContain('Aucun scénario joué');
+    expect(fixture.nativeElement.textContent as string).toContain('Aucun scénario joué');
   });
 
   it('niveau et Points de Souffle affichés sur la fiche existante (AC1, AC2, Story 10.3)', async () => {
@@ -305,7 +318,7 @@ describe('HommeDragonSheet', () => {
     expect(text).toContain('Points de Souffle : 5');
   });
 
-  it("aucun élément interactif dans la section niveau/PS — lecture seule, aucun forçage possible (AC4)", async () => {
+  it('aucun élément interactif dans la section niveau/PS — lecture seule, aucun forçage possible (AC4)', async () => {
     const { fixture } = await createComponent(makeHommeDragonService(makeDto()));
 
     const section = fixture.debugElement.query(By.css('.homme-dragon-sheet__derived'));
@@ -321,7 +334,9 @@ describe('HommeDragonSheet', () => {
     const prompt = fixture.debugElement.query(By.css('.homme-dragon-sheet__eveil-prompt'));
     expect(prompt).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain('Niveau 2 atteint');
-    const options = prompt.queryAll(By.css('option')).map((o) => o.nativeElement.textContent.trim());
+    const options = prompt
+      .queryAll(By.css('option'))
+      .map((o) => o.nativeElement.textContent.trim());
     expect(options).toContain('Escorte du dragon');
     expect(options).toContain('Couche du dragon');
   });
@@ -352,7 +367,9 @@ describe('HommeDragonSheet', () => {
       level: 2,
       key: 'escorte-du-dragon',
     });
-    expect(component['hommeDragon']()?.eveilPowers).toEqual([{ level: 2, key: 'escorte-du-dragon' }]);
+    expect(component['hommeDragon']()?.eveilPowers).toEqual([
+      { level: 2, key: 'escorte-du-dragon' },
+    ]);
     expect(component['selectedEveilPowerKey']()).toBeNull();
   });
 
@@ -376,7 +393,7 @@ describe('HommeDragonSheet', () => {
     expect(fixture.nativeElement.textContent).toContain('Niveau 3 atteint');
   });
 
-  it("eveilPowers non vide → liste affichée avec les libellés résolus, pas les clés", async () => {
+  it('eveilPowers non vide → liste affichée avec les libellés résolus, pas les clés', async () => {
     const { fixture } = await createComponent(
       makeHommeDragonService(makeDto({ eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }] })),
     );
@@ -413,7 +430,7 @@ describe('HommeDragonSheet', () => {
     expect(component['exporting']()).toBe(false);
   });
 
-  it("échec de exportPdf() → exportError() renseigné, formulaire non cassé", async () => {
+  it('échec de exportPdf() → exportError() renseigné, formulaire non cassé', async () => {
     const hommeDragonSvc = makeHommeDragonService(makeDto());
     hommeDragonSvc.exportPdf.mockRejectedValue(new Error('network down'));
     const { fixture } = await createComponent(hommeDragonSvc);

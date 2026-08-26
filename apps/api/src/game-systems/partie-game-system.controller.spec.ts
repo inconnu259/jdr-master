@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  NotFoundException,
-  StreamableFile,
-} from '@nestjs/common';
+import { ForbiddenException, NotFoundException, StreamableFile } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PartieGameSystemController } from './partie-game-system.controller';
 import { GameSystemService } from './game-system.service';
@@ -33,19 +29,12 @@ describe('PartieGameSystemController', () => {
       id: 'u1',
     } as any);
 
-    expect(gameSystems.getAssetFile).toHaveBeenCalledWith(
-      'p1',
-      'ryuutama',
-      'journal',
-      'u1',
-    );
+    expect(gameSystems.getAssetFile).toHaveBeenCalledWith('p1', 'ryuutama', 'journal', 'u1');
     expect(result).toBeInstanceOf(StreamableFile);
   });
 
   it('propage sans les intercepter les exceptions levées par getAssetFile() (404 clé inconnue)', async () => {
-    gameSystems.getAssetFile.mockRejectedValue(
-      new NotFoundException('Fiche introuvable'),
-    );
+    gameSystems.getAssetFile.mockRejectedValue(new NotFoundException('Fiche introuvable'));
 
     await expect(
       controller.getAsset('p1', 'ryuutama', 'inexistante', { id: 'u1' } as any),

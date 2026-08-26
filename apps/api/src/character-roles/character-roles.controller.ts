@@ -26,12 +26,7 @@ export class CharacterRolesController {
     @CurrentUser() user: AuthUser,
     @Body() dto: AssignGroupRoleDto,
   ) {
-    return this.characterRoles.assign(
-      partieId,
-      user.id,
-      characterId,
-      dto.roleKey,
-    );
+    return this.characterRoles.assign(partieId, user.id, characterId, dto.roleKey);
   }
 
   @Delete('parties/:id/characters/:characterId/role')
@@ -44,10 +39,7 @@ export class CharacterRolesController {
   }
 
   @Get('parties/:id/character-roles')
-  listForPartie(
-    @Param('id', ParseUUIDPipe) partieId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  listForPartie(@Param('id', ParseUUIDPipe) partieId: string, @CurrentUser() user: AuthUser) {
     return this.characterRoles.listForPartie(partieId, user.id);
   }
 }

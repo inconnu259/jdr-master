@@ -106,10 +106,7 @@ describe('CharactersController', () => {
     } as any);
 
     expect(characters.findOne).toHaveBeenCalledWith('char1', 'u1');
-    expect(ryuutamaPdf.fillCharacterPdf).toHaveBeenCalledWith(
-      character,
-      'editable',
-    );
+    expect(ryuutamaPdf.fillCharacterPdf).toHaveBeenCalledWith(character, 'editable');
     expect(result).toBeInstanceOf(StreamableFile);
   });
 
@@ -138,10 +135,7 @@ describe('CharactersController', () => {
       id: 'u1',
     } as any);
 
-    expect(ryuutamaPdf.fillCharacterPdf).toHaveBeenCalledWith(
-      character,
-      '2pages',
-    );
+    expect(ryuutamaPdf.fillCharacterPdf).toHaveBeenCalledWith(character, '2pages');
   });
 
   it("exportPdf() rejette un personnage d'un autre système de jeu que Ryuutama (BadRequestException)", async () => {
@@ -191,18 +185,18 @@ describe('CharactersController', () => {
     };
     characters.findOne.mockResolvedValue(character);
 
-    await expect(
-      controller.exportEquipmentPdf('char1', { id: 'u1' } as any),
-    ).rejects.toThrow(BadRequestException);
+    await expect(controller.exportEquipmentPdf('char1', { id: 'u1' } as any)).rejects.toThrow(
+      BadRequestException,
+    );
     expect(equipmentPdf.fillEquipmentPdf).not.toHaveBeenCalled();
   });
 
   it('exportEquipmentPdf() propage le 403 de findOne (accès refusé)', async () => {
     characters.findOne.mockRejectedValue(new ForbiddenException());
 
-    await expect(
-      controller.exportEquipmentPdf('char1', { id: 'stranger' } as any),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(controller.exportEquipmentPdf('char1', { id: 'stranger' } as any)).rejects.toThrow(
+      ForbiddenException,
+    );
     expect(equipmentPdf.fillEquipmentPdf).not.toHaveBeenCalled();
   });
 
@@ -269,9 +263,9 @@ describe('CharactersController', () => {
     };
     characters.findOne.mockResolvedValue(character);
 
-    await expect(
-      controller.exportNotesPdf('char1', { id: 'u1' } as any),
-    ).rejects.toThrow(BadRequestException);
+    await expect(controller.exportNotesPdf('char1', { id: 'u1' } as any)).rejects.toThrow(
+      BadRequestException,
+    );
     expect(characters.getNotes).not.toHaveBeenCalled();
     expect(notesPdf.fillNotesPdf).not.toHaveBeenCalled();
   });
@@ -279,9 +273,9 @@ describe('CharactersController', () => {
   it('exportNotesPdf() propage le 403 de findOne (accès refusé)', async () => {
     characters.findOne.mockRejectedValue(new ForbiddenException());
 
-    await expect(
-      controller.exportNotesPdf('char1', { id: 'stranger' } as any),
-    ).rejects.toThrow(ForbiddenException);
+    await expect(controller.exportNotesPdf('char1', { id: 'stranger' } as any)).rejects.toThrow(
+      ForbiddenException,
+    );
     expect(notesPdf.fillNotesPdf).not.toHaveBeenCalled();
   });
 
@@ -340,16 +334,11 @@ describe('CharactersController', () => {
       { id: 'u1' } as any,
     );
 
-    expect(characters.updatePortrait).toHaveBeenCalledWith(
-      'char1',
-      'u1',
-      file,
-      {
-        scale: 1.2,
-        offsetX: 0,
-        offsetY: 0,
-      },
-    );
+    expect(characters.updatePortrait).toHaveBeenCalledWith('char1', 'u1', file, {
+      scale: 1.2,
+      offsetX: 0,
+      offsetY: 0,
+    });
   });
 
   it('updatePortrait() cropData JSON invalide → BadRequestException', async () => {
@@ -371,12 +360,7 @@ describe('CharactersController', () => {
       id: 'u1',
     } as any);
 
-    expect(characters.updatePortrait).toHaveBeenCalledWith(
-      'char1',
-      'u1',
-      file,
-      null,
-    );
+    expect(characters.updatePortrait).toHaveBeenCalledWith('char1', 'u1', file, null);
   });
 
   it('updatePortrait() cropData hors bornes (scale > 3) → BadRequestException', async () => {
@@ -429,11 +413,7 @@ describe('CharactersController', () => {
       id: 'u1',
     } as any);
 
-    expect(characters.updatePdfPortraitCrop).toHaveBeenCalledWith(
-      'char1',
-      'u1',
-      cropData,
-    );
+    expect(characters.updatePdfPortraitCrop).toHaveBeenCalledWith('char1', 'u1', cropData);
   });
 
   it('getPortrait() délègue à CharacterService et retourne un StreamableFile', async () => {
@@ -482,11 +462,9 @@ describe('CharactersController', () => {
   it('removeInventoryItem() délègue à CharacterService avec itemId (UUID)', async () => {
     characters.removeInventoryItem.mockResolvedValue({ id: 'char1' });
 
-    await controller.removeInventoryItem(
-      'char1',
-      '22222222-2222-2222-2222-222222222222',
-      { id: 'u1' } as any,
-    );
+    await controller.removeInventoryItem('char1', '22222222-2222-2222-2222-222222222222', {
+      id: 'u1',
+    } as any);
 
     expect(characters.removeInventoryItem).toHaveBeenCalledWith(
       'char1',
@@ -529,11 +507,9 @@ describe('CharactersController', () => {
   it('removeContenant() délègue à CharacterService avec itemId (UUID)', async () => {
     characters.removeContenant.mockResolvedValue({ id: 'char1' });
 
-    await controller.removeContenant(
-      'char1',
-      '22222222-2222-2222-2222-222222222222',
-      { id: 'u1' } as any,
-    );
+    await controller.removeContenant('char1', '22222222-2222-2222-2222-222222222222', {
+      id: 'u1',
+    } as any);
 
     expect(characters.removeContenant).toHaveBeenCalledWith(
       'char1',
@@ -575,11 +551,9 @@ describe('CharactersController', () => {
   it('removeAnimal() délègue à CharacterService avec itemId (UUID)', async () => {
     characters.removeAnimal.mockResolvedValue({ id: 'char1' });
 
-    await controller.removeAnimal(
-      'char1',
-      '22222222-2222-2222-2222-222222222222',
-      { id: 'u1' } as any,
-    );
+    await controller.removeAnimal('char1', '22222222-2222-2222-2222-222222222222', {
+      id: 'u1',
+    } as any);
 
     expect(characters.removeAnimal).toHaveBeenCalledWith(
       'char1',
@@ -627,17 +601,11 @@ describe('CharactersController', () => {
       journalAutoAssociate: true,
     });
 
-    await controller.setJournalAutoAssociate(
-      'char1',
-      { journalAutoAssociate: true },
-      { id: 'u1' } as any,
-    );
+    await controller.setJournalAutoAssociate('char1', { journalAutoAssociate: true }, {
+      id: 'u1',
+    } as any);
 
-    expect(characters.setJournalAutoAssociate).toHaveBeenCalledWith(
-      'char1',
-      'u1',
-      true,
-    );
+    expect(characters.setJournalAutoAssociate).toHaveBeenCalledWith('char1', 'u1', true);
   });
 
   it('setNoteScenario() délègue à CharacterService', async () => {
@@ -683,11 +651,9 @@ describe('CharactersController', () => {
       warnings: [],
     });
 
-    await controller.setSheetField(
-      'char1',
-      { path: 'fetiqueObject', value: 'Lanterne' },
-      { id: 'mj1' } as any,
-    );
+    await controller.setSheetField('char1', { path: 'fetiqueObject', value: 'Lanterne' }, {
+      id: 'mj1',
+    } as any);
 
     expect(characters.setSheetField).toHaveBeenCalledWith('char1', 'mj1', {
       path: 'fetiqueObject',
@@ -704,14 +670,10 @@ describe('CharactersController', () => {
       { id: 'u1' } as any,
     );
 
-    expect(characters.updateNarrativeField).toHaveBeenCalledWith(
-      'char1',
-      'u1',
-      {
-        field: 'motivation',
-        value: 'Venger son village',
-      },
-    );
+    expect(characters.updateNarrativeField).toHaveBeenCalledWith('char1', 'u1', {
+      field: 'motivation',
+      value: 'Venger son village',
+    });
   });
 
   describe('validation HTTP réelle (ValidationPipe global)', () => {
@@ -811,9 +773,7 @@ describe('CharactersController', () => {
 
     it('PATCH pdf-portrait-crop avec scale hors bornes (>3) → 400 via le pipeline HTTP réel', async () => {
       await request(app.getHttpServer())
-        .patch(
-          '/characters/11111111-1111-1111-1111-111111111111/pdf-portrait-crop',
-        )
+        .patch('/characters/11111111-1111-1111-1111-111111111111/pdf-portrait-crop')
         .send({ scale: 5, offsetX: 0, offsetY: 0 })
         .expect(400);
 
@@ -827,9 +787,7 @@ describe('CharactersController', () => {
       });
 
       await request(app.getHttpServer())
-        .patch(
-          '/characters/11111111-1111-1111-1111-111111111111/pdf-portrait-crop',
-        )
+        .patch('/characters/11111111-1111-1111-1111-111111111111/pdf-portrait-crop')
         .send({ scale: 1.5, offsetX: 10, offsetY: -10 })
         .expect(200);
 
@@ -842,9 +800,7 @@ describe('CharactersController', () => {
 
     it('POST inventory-items avec addedBy dans le body → 400 (ValidationPipe whitelist, AD-3)', async () => {
       await request(app.getHttpServer())
-        .post(
-          '/characters/11111111-1111-1111-1111-111111111111/inventory-items',
-        )
+        .post('/characters/11111111-1111-1111-1111-111111111111/inventory-items')
         .send({ name: 'Objet suspect', weight: 1, addedBy: 'mj' })
         .expect(400);
 
@@ -857,9 +813,7 @@ describe('CharactersController', () => {
       });
 
       await request(app.getHttpServer())
-        .post(
-          '/characters/11111111-1111-1111-1111-111111111111/inventory-items',
-        )
+        .post('/characters/11111111-1111-1111-1111-111111111111/inventory-items')
         .send({ name: 'Sac' })
         .expect(201);
 
@@ -872,9 +826,7 @@ describe('CharactersController', () => {
 
     it('POST inventory-items sans name → 400 (class-validator)', async () => {
       await request(app.getHttpServer())
-        .post(
-          '/characters/11111111-1111-1111-1111-111111111111/inventory-items',
-        )
+        .post('/characters/11111111-1111-1111-1111-111111111111/inventory-items')
         .send({ weight: 1 })
         .expect(400);
 
@@ -894,9 +846,7 @@ describe('CharactersController', () => {
 
     it('PATCH inventory-items/:itemId avec itemId non UUID → 400 (ParseUUIDPipe)', async () => {
       await request(app.getHttpServer())
-        .patch(
-          '/characters/11111111-1111-1111-1111-111111111111/inventory-items/abc',
-        )
+        .patch('/characters/11111111-1111-1111-1111-111111111111/inventory-items/abc')
         .send({ weight: 2 })
         .expect(400);
 
@@ -1099,9 +1049,7 @@ describe('CharactersController', () => {
 
     it('PATCH narrative-field avec field hors liste autorisée (ex. "xp") → 400', async () => {
       await request(app.getHttpServer())
-        .patch(
-          '/characters/11111111-1111-1111-1111-111111111111/narrative-field',
-        )
+        .patch('/characters/11111111-1111-1111-1111-111111111111/narrative-field')
         .send({ field: 'xp', value: 999 })
         .expect(400);
 
@@ -1110,9 +1058,7 @@ describe('CharactersController', () => {
 
     it('PATCH narrative-field avec field hors liste autorisée (ex. "classId") → 400', async () => {
       await request(app.getHttpServer())
-        .patch(
-          '/characters/11111111-1111-1111-1111-111111111111/narrative-field',
-        )
+        .patch('/characters/11111111-1111-1111-1111-111111111111/narrative-field')
         .send({ field: 'classId', value: 'chasseur' })
         .expect(400);
 
@@ -1121,9 +1067,7 @@ describe('CharactersController', () => {
 
     it('PATCH narrative-field avec un champ supplémentaire non déclaré → 400 (whitelist)', async () => {
       await request(app.getHttpServer())
-        .patch(
-          '/characters/11111111-1111-1111-1111-111111111111/narrative-field',
-        )
+        .patch('/characters/11111111-1111-1111-1111-111111111111/narrative-field')
         .send({ field: 'motivation', value: 'x', extra: 'intrus' })
         .expect(400);
 
@@ -1136,9 +1080,7 @@ describe('CharactersController', () => {
       });
 
       await request(app.getHttpServer())
-        .patch(
-          '/characters/11111111-1111-1111-1111-111111111111/narrative-field',
-        )
+        .patch('/characters/11111111-1111-1111-1111-111111111111/narrative-field')
         .send({ field: 'motivation', value: 'Venger son village' })
         .expect(200);
 

@@ -1,6 +1,7 @@
 import { DEFAULT_CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
 import { SessionSerializer } from './session.serializer';
 import { UsersService } from '../users/users.service';
+import { callArg } from '../common/test-utils/jest-typed';
 
 function makeUser(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -50,7 +51,7 @@ describe('SessionSerializer (GET /auth/me)', () => {
     users.findByIdWithCalendarLayers.mockResolvedValue(makeUser());
     const done = jest.fn();
     await serializer.deserializeUser('u1', done);
-    const [, user] = done.mock.calls[0];
+    const user = callArg<{ defaultCalendarLayers: string[]; passwordHash?: string }>(done, 0, 1);
     expect(user.defaultCalendarLayers).toEqual(DEFAULT_CALENDAR_LAYER_KEYS);
     expect(user.passwordHash).toBeUndefined();
   });
@@ -64,7 +65,7 @@ describe('SessionSerializer (GET /auth/me)', () => {
     );
     const done = jest.fn();
     await serializer.deserializeUser('u1', done);
-    const [, user] = done.mock.calls[0];
+    const user = callArg<{ defaultCalendarLayers: string[]; passwordHash?: string }>(done, 0, 1);
     expect(user.defaultCalendarLayers).toEqual(['mes-seances']);
   });
 });

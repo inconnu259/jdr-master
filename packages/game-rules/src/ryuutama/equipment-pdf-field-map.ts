@@ -123,7 +123,11 @@ export function mapEquipmentToPdfFields(input: EquipmentPdfInput): PdfFieldValue
     fields.push(
       { field: objetField, value: item?.name ?? '', kind: 'text' },
       { field: prixField, value: item?.price ?? '', kind: 'text' },
-      { field: encField, value: isValidWeight(item?.weight) ? String(item.weight) : '', kind: 'text' },
+      {
+        field: encField,
+        value: isValidWeight(item?.weight) ? String(item.weight) : '',
+        kind: 'text',
+      },
     );
   }
 
@@ -138,7 +142,11 @@ export function mapEquipmentToPdfFields(input: EquipmentPdfInput): PdfFieldValue
     fields.push(
       { field: objetField, value: item?.name ?? '', kind: 'text' },
       { field: prixField, value: item?.price ?? '', kind: 'text' },
-      { field: encField, value: isValidWeight(item?.weight) ? String(item.weight) : '', kind: 'text' },
+      {
+        field: encField,
+        value: isValidWeight(item?.weight) ? String(item.weight) : '',
+        kind: 'text',
+      },
       { field: effetsField, value: item?.effect ?? '', kind: 'text' },
     );
   }

@@ -87,9 +87,7 @@ export class AttributesStep {
         }
         const sortedIncoming = [...incomingValues].sort((a, b) => a - b);
         const matchedEntry = patterns.find((p) => {
-          const sortedPattern = [...(p.data as AttributePatternData).values].sort(
-            (a, b) => a - b,
-          );
+          const sortedPattern = [...(p.data as AttributePatternData).values].sort((a, b) => a - b);
           return (
             sortedPattern.length === sortedIncoming.length &&
             sortedPattern.every((v, i) => v === sortedIncoming[i])

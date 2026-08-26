@@ -1,9 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type {
-  PartieDto,
-  PartySignalCode,
-  PartySignalsDto,
-} from '@master-jdr/shared';
+import type { PartieDto, PartySignalCode, PartySignalsDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from './parties.service';
 
@@ -75,10 +71,7 @@ export class PartySignalsService {
         where: {
           compteRendu: null,
           scenario: { partieId: { in: mjPartieIds } },
-          OR: [
-            { dateValidee: { not: null } },
-            { poll: { chosenDate: { not: null } } },
-          ],
+          OR: [{ dateValidee: { not: null } }, { poll: { chosenDate: { not: null } } }],
         },
         select: { scenario: { select: { partieId: true } } },
       }),
@@ -96,16 +89,10 @@ export class PartySignalsService {
     ]);
 
     const characterPartieIds = new Set(charactersOwned.map((c) => c.partieId));
-    const hommeDragonPartieIds = new Set(
-      hommeDragonsOwned.map((h) => h.partieId),
-    );
+    const hommeDragonPartieIds = new Set(hommeDragonsOwned.map((h) => h.partieId));
     const partiesWithMembers = new Set(membershipCounts.map((m) => m.partieId));
-    const partiesWithCourantScenario = new Set(
-      courantScenarios.map((s) => s.partieId),
-    );
-    const partiesMissingResume = new Set(
-      scenariosMissingResume.map((s) => s.partieId),
-    );
+    const partiesWithCourantScenario = new Set(courantScenarios.map((s) => s.partieId));
+    const partiesMissingResume = new Set(scenariosMissingResume.map((s) => s.partieId));
     const partiesMissingCompteRendu = new Set(
       seancesMissingCompteRendu.map((s) => s.scenario.partieId),
     );
@@ -118,10 +105,7 @@ export class PartySignalsService {
 
     const now = Date.now();
 
-    const computeSignals = (
-      partie: PartieDto,
-      role: 'mj' | 'player',
-    ): PartySignalCode[] => {
+    const computeSignals = (partie: PartieDto, role: 'mj' | 'player'): PartySignalCode[] => {
       const signals: PartySignalCode[] = [];
       // Deferred-work (2026-08-25) : `Partie.nextSessionDate` n'est jamais effacé après la date
       // passée (AD-3 interdit de le recalculer depuis les séances ici — c'est un champ matérialisé,
@@ -129,8 +113,7 @@ export class PartySignalsService {
       // recalculée depuis désynchronise ces deux signaux si on la traite comme "connue" ; on la
       // lit donc comme absente ici, sans jamais réécrire le champ.
       const hasFutureSessionDate =
-        !!partie.nextSessionDate &&
-        new Date(partie.nextSessionDate).getTime() > now;
+        !!partie.nextSessionDate && new Date(partie.nextSessionDate).getTime() > now;
 
       // AC5 : une partie clôturée ne porte jamais un signal d'action, seuls les signaux de fin
       // subsistent — appliqué en premier, avant toute autre dérivation. Les deux signaux de fin
@@ -147,27 +130,21 @@ export class PartySignalsService {
       }
 
       if (role === 'player') {
-        if (!characterPartieIds.has(partie.id))
-          signals.push('PERSONNAGE_A_CREER');
+        if (!characterPartieIds.has(partie.id)) signals.push('PERSONNAGE_A_CREER');
         const openPollsHere = openPollsByPartie.get(partie.id) ?? [];
         const hasUnanswered = openPollsHere.some((poll) =>
           poll.options.some((opt) => opt.votes.length === 0),
         );
         if (hasUnanswered) signals.push('VOTE_EN_COURS_SANS_REPONSE');
       } else {
-        if (!hommeDragonPartieIds.has(partie.id))
-          signals.push('HOMME_DRAGON_A_CREER');
-        if (!partiesWithMembers.has(partie.id))
-          signals.push('AUCUN_MEMBRE_INVITE');
-        if (!partiesWithCourantScenario.has(partie.id))
-          signals.push('AUCUN_SCENARIO_EN_COURS');
+        if (!hommeDragonPartieIds.has(partie.id)) signals.push('HOMME_DRAGON_A_CREER');
+        if (!partiesWithMembers.has(partie.id)) signals.push('AUCUN_MEMBRE_INVITE');
+        if (!partiesWithCourantScenario.has(partie.id)) signals.push('AUCUN_SCENARIO_EN_COURS');
         if (!hasFutureSessionDate && !openPollsByPartie.has(partie.id)) {
           signals.push('AUCUNE_DATE_NI_VOTE');
         }
-        if (partiesMissingResume.has(partie.id))
-          signals.push('RAPPORT_FIN_MANQUANT');
-        if (partiesMissingCompteRendu.has(partie.id))
-          signals.push('COMPTE_RENDU_NON_REDIGE');
+        if (partiesMissingResume.has(partie.id)) signals.push('RAPPORT_FIN_MANQUANT');
+        if (partiesMissingCompteRendu.has(partie.id)) signals.push('COMPTE_RENDU_NON_REDIGE');
       }
 
       if (hasFutureSessionDate) signals.push('PROCHAINE_SEANCE_CONNUE');

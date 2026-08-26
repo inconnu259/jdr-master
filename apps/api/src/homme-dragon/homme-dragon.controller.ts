@@ -37,10 +37,7 @@ export class HommeDragonController {
   }
 
   @Get()
-  findOne(
-    @Param('id', ParseUUIDPipe) partieId: string,
-    @CurrentUser() user: AuthUser,
-  ) {
+  findOne(@Param('id', ParseUUIDPipe) partieId: string, @CurrentUser() user: AuthUser) {
     return this.hommeDragon.findOne(partieId, user.id);
   }
 
@@ -70,10 +67,7 @@ export class HommeDragonController {
     const hommeDragon = await this.hommeDragon.findOne(partieId, user.id);
     if (!hommeDragon) throw new NotFoundException('Homme Dragon introuvable');
     const mjPseudo = await this.hommeDragon.getOwnerPseudo(hommeDragon.userId);
-    const pdfBytes = await this.hommeDragonPdf.fillHommeDragonPdf(
-      hommeDragon,
-      mjPseudo,
-    );
+    const pdfBytes = await this.hommeDragonPdf.fillHommeDragonPdf(hommeDragon, mjPseudo);
     return new StreamableFile(pdfBytes, {
       type: 'application/pdf',
       disposition: `attachment; filename="homme-dragon-${partieId}.pdf"`,

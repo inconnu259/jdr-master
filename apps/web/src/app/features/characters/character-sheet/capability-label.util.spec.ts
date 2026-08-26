@@ -160,7 +160,12 @@ describe('capabilityDescription', () => {
 describe('getFlatCapabilities (Story 23.8 : fusion de classCapabilities)', () => {
   it('sheetData.classCapabilities absent → seules les capacités de levelUps[] sont retournées', () => {
     const levelUps: LevelUpEntry[] = [
-      { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+      {
+        level: 2,
+        pvAllocated: 2,
+        peAllocated: 1,
+        capabilities: [{ type: 'attribute', params: {} }],
+      },
     ];
     const character: CharacterDto = makeCharacterDto({ sheetData: { levelUps } });
     expect(getFlatCapabilities(character)).toEqual([
@@ -170,7 +175,12 @@ describe('getFlatCapabilities (Story 23.8 : fusion de classCapabilities)', () =>
 
   it('classCapabilities présent → fusionné avec level: 1 conventionnel, sans toucher levelUps[]', () => {
     const levelUps: LevelUpEntry[] = [
-      { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+      {
+        level: 2,
+        pvAllocated: 2,
+        peAllocated: 1,
+        capabilities: [{ type: 'attribute', params: {} }],
+      },
     ];
     const classCapabilities = [{ type: 'landscape', params: { key: 'foret' } }];
     const character: CharacterDto = makeCharacterDto({
@@ -198,7 +208,12 @@ describe('getFlatCapabilities (Story 23.8 : fusion de classCapabilities)', () =>
 
   it('Historique (getLevelUpEntryForSnapshot) non affecté par classCapabilities — lit exclusivement levelUps[]', () => {
     const levelUps: LevelUpEntry[] = [
-      { level: 2, pvAllocated: 2, peAllocated: 1, capabilities: [{ type: 'attribute', params: {} }] },
+      {
+        level: 2,
+        pvAllocated: 2,
+        peAllocated: 1,
+        capabilities: [{ type: 'attribute', params: {} }],
+      },
     ];
     const snapshot: CharacterSnapshotDto = {
       id: 's1',

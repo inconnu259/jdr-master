@@ -190,7 +190,7 @@ export class ScenarioReadDialog implements OnInit {
       try {
         this.ownNotes.set(await this.characterSvc.getNotes(owner.id));
       } catch {
-        this.journalError.set("Impossible de charger votre journal.");
+        this.journalError.set('Impossible de charger votre journal.');
       }
     }
 
@@ -268,7 +268,7 @@ export class ScenarioReadDialog implements OnInit {
       this.ownNotes.update((list) => list.map((n) => (n.id === updated.id ? updated : n)));
     } catch (err) {
       this.journalError.set(
-        extractErrorMessage(err, "Impossible de mettre à jour cette association."),
+        extractErrorMessage(err, 'Impossible de mettre à jour cette association.'),
       );
     }
   }

@@ -111,7 +111,7 @@ describe('AnnouncementFormComponent', () => {
     expect(component['isValid']()).toBe(true);
   });
 
-  it("AC1 : soumission sans scénario sélectionné appelle create() avec scenarioId undefined", async () => {
+  it('AC1 : soumission sans scénario sélectionné appelle create() avec scenarioId undefined', async () => {
     const announcementsSvc = makeAnnouncementsService();
     const { fixture } = await createComponent([], announcementsSvc);
     const component = fixture.componentInstance;
@@ -215,7 +215,11 @@ describe('AnnouncementFormComponent', () => {
         listAll: vi.fn().mockRejectedValueOnce(new Error('network')),
         changed: signal<{ partieId: string } | null>(null),
       };
-      const { fixture } = await createComponent([], makeAnnouncementsService(), scenariosSvc as any);
+      const { fixture } = await createComponent(
+        [],
+        makeAnnouncementsService(),
+        scenariosSvc as any,
+      );
       const comp = fixture.componentInstance as any;
       expect(comp.error()).toBeTruthy();
 
@@ -256,7 +260,11 @@ describe('AnnouncementFormComponent', () => {
       const scenariosSvc = makeScenariosService([]);
       const { fixture } = await createComponent([], makeAnnouncementsService(), scenariosSvc);
 
-      const nowCourant = makeScenario({ id: 's-nouveau', title: 'Nouveau chapitre', status: 'COURANT' });
+      const nowCourant = makeScenario({
+        id: 's-nouveau',
+        title: 'Nouveau chapitre',
+        status: 'COURANT',
+      });
       scenariosSvc.listAll.mockResolvedValue([nowCourant]);
 
       scenariosSvc.changed.set({ partieId: 'p1' });
@@ -273,7 +281,7 @@ describe('AnnouncementFormComponent', () => {
       expect(optionTexts).toContain('Nouveau chapitre');
     });
 
-    it("changed() pour une autre Partie ne déclenche AUCUN rechargement", async () => {
+    it('changed() pour une autre Partie ne déclenche AUCUN rechargement', async () => {
       const scenariosSvc = makeScenariosService([]);
       const { fixture } = await createComponent([], makeAnnouncementsService(), scenariosSvc);
 
@@ -287,7 +295,7 @@ describe('AnnouncementFormComponent', () => {
       expect(scenariosSvc.listAll).toHaveBeenCalledTimes(1);
     });
 
-    it("garde firstRun : un changed() déjà non-nul pour cette Partie au montage ne déclenche PAS de refetch redondant", async () => {
+    it('garde firstRun : un changed() déjà non-nul pour cette Partie au montage ne déclenche PAS de refetch redondant', async () => {
       const scenariosSvc = makeScenariosService([]);
       scenariosSvc.changed.set({ partieId: 'p1' });
       await createComponent([], makeAnnouncementsService(), scenariosSvc);

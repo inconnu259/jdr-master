@@ -73,8 +73,8 @@ describe('EquipmentStep', () => {
     fixture.detectChanges();
 
     const emitted: { key: string; quantity: number }[][] = [];
-    fixture.componentInstance.selectionChange.subscribe(
-      (s: { key: string; quantity: number }[]) => emitted.push(s),
+    fixture.componentInstance.selectionChange.subscribe((s: { key: string; quantity: number }[]) =>
+      emitted.push(s),
     );
 
     buttons[0].click(); // Nécessaire pré-fait
@@ -104,12 +104,13 @@ describe('EquipmentStep', () => {
     fixture.detectChanges();
 
     const emitted: { key: string; quantity: number }[][] = [];
-    fixture.componentInstance.selectionChange.subscribe(
-      (s: { key: string; quantity: number }[]) => emitted.push(s),
+    fixture.componentInstance.selectionChange.subscribe((s: { key: string; quantity: number }[]) =>
+      emitted.push(s),
     );
 
-    const addButtons: HTMLButtonElement[] =
-      fixture.nativeElement.querySelectorAll('.equipment-step__catalog-item button');
+    const addButtons: HTMLButtonElement[] = fixture.nativeElement.querySelectorAll(
+      '.equipment-step__catalog-item button',
+    );
     addButtons[0].click(); // Rations
     fixture.detectChanges();
     // Composant contrôlé (pas d'état interne) : simule le parent qui refléterait l'émission dans
@@ -119,10 +120,7 @@ describe('EquipmentStep', () => {
     addButtons[0].click(); // Rations encore
     fixture.detectChanges();
 
-    expect(emitted).toEqual([
-      [{ key: 'rations', quantity: 1 }],
-      [{ key: 'rations', quantity: 2 }],
-    ]);
+    expect(emitted).toEqual([[{ key: 'rations', quantity: 1 }], [{ key: 'rations', quantity: 2 }]]);
   });
 
   it('retirer un objet du panier décrémente la quantité (0 → disparaît de la sélection)', async () => {
@@ -138,8 +136,8 @@ describe('EquipmentStep', () => {
     expect(fixture.nativeElement.querySelector('.equipment-step__cart')).not.toBeNull();
 
     const emitted: { key: string; quantity: number }[][] = [];
-    fixture.componentInstance.selectionChange.subscribe(
-      (s: { key: string; quantity: number }[]) => emitted.push(s),
+    fixture.componentInstance.selectionChange.subscribe((s: { key: string; quantity: number }[]) =>
+      emitted.push(s),
     );
 
     const removeButton: HTMLButtonElement = fixture.nativeElement.querySelector(
@@ -181,8 +179,8 @@ describe('EquipmentStep', () => {
     await fixture.whenStable();
 
     const emitted: { key: string; quantity: number }[][] = [];
-    fixture.componentInstance.selectionChange.subscribe(
-      (s: { key: string; quantity: number }[]) => emitted.push(s),
+    fixture.componentInstance.selectionChange.subscribe((s: { key: string; quantity: number }[]) =>
+      emitted.push(s),
     );
 
     const buttons: HTMLButtonElement[] = fixture.nativeElement.querySelectorAll(

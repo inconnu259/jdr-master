@@ -1,14 +1,4 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Patch,
-  Put,
-  Req,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Put, Req, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
@@ -30,10 +20,7 @@ export class AccountController {
 
   @Patch('display-name')
   updateDisplayName(@Req() req: Request, @Body() dto: UpdateDisplayNameDto) {
-    return this.account.updateDisplayName(
-      (req.user as { id: string }).id,
-      dto.displayName,
-    );
+    return this.account.updateDisplayName((req.user as { id: string }).id, dto.displayName);
   }
 
   @Patch('theme')
@@ -53,10 +40,7 @@ export class AccountController {
 
   @Delete('favorites/:partieId')
   removeFavorite(@Req() req: Request, @Param('partieId') partieId: string) {
-    return this.account.removeFavorite(
-      (req.user as { id: string }).id,
-      partieId,
-    );
+    return this.account.removeFavorite((req.user as { id: string }).id, partieId);
   }
 
   @Get('unseen-announcements')
@@ -65,14 +49,8 @@ export class AccountController {
   }
 
   @Put('announcements-read/:announcementId')
-  markAnnouncementRead(
-    @Req() req: Request,
-    @Param('announcementId') announcementId: string,
-  ) {
-    return this.account.markAnnouncementRead(
-      (req.user as { id: string }).id,
-      announcementId,
-    );
+  markAnnouncementRead(@Req() req: Request, @Param('announcementId') announcementId: string) {
+    return this.account.markAnnouncementRead((req.user as { id: string }).id, announcementId);
   }
 
   @Throttle({ default: { ttl: 60_000, limit: 5 } })

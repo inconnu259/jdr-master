@@ -63,7 +63,7 @@ describe('WeaponStep', () => {
     return Array.from(grids(fixture)[1]?.querySelectorAll('button') ?? []);
   }
 
-  it("étape 1 : choisir une catégorie affiche sa description et les armes précises de cette catégorie (étape 2)", async () => {
+  it('étape 1 : choisir une catégorie affiche sa description et les armes précises de cette catégorie (étape 2)', async () => {
     const fixture = setup();
     await fixture.whenStable();
 
@@ -81,7 +81,7 @@ describe('WeaponStep', () => {
     expect(items[2].textContent).toContain('Créer une arme libre');
   });
 
-  it("étape 2 : choisir une arme précise émet weaponIdChange et affiche Toucher/Dégâts résolus par catégorie", async () => {
+  it('étape 2 : choisir une arme précise émet weaponIdChange et affiche Toucher/Dégâts résolus par catégorie', async () => {
     const fixture = setup();
     await fixture.whenStable();
 

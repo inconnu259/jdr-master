@@ -61,9 +61,7 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
       };
       expect(search.messages.length).toBeGreaterThan(0);
 
-      const messageRes = await fetch(
-        `${MAILPIT_API}/api/v1/message/${search.messages[0].ID}`,
-      );
+      const messageRes = await fetch(`${MAILPIT_API}/api/v1/message/${search.messages[0].ID}`);
       const message = (await messageRes.json()) as {
         Subject: string;
         HTML: string;

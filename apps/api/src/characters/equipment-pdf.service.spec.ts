@@ -14,6 +14,7 @@ jest.mock('@master-jdr/game-rules', () => ({
 import { readFile } from 'node:fs/promises';
 import { mapEquipmentToPdfFields } from '@master-jdr/game-rules';
 import { EquipmentPdfService } from './equipment-pdf.service';
+import { Logger } from '@nestjs/common';
 
 const mockSetText = jest.fn();
 const mockSave = jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3]));
@@ -47,9 +48,7 @@ function makeCharacter(overrides: Record<string, unknown> = {}) {
             addedBy: 'player',
           },
         ],
-        contenants: [
-          { id: 'c1', name: 'Sac à dos', weight: 3, addedBy: 'player' },
-        ],
+        contenants: [{ id: 'c1', name: 'Sac à dos', weight: 3, addedBy: 'player' }],
         animaux: [{ id: 'a1', name: 'Cheval', addedBy: 'player' }],
       },
     },
@@ -63,7 +62,7 @@ function makeCharacter(overrides: Record<string, unknown> = {}) {
     level: 1,
     journalAutoAssociate: false,
     ...overrides,
-  } as any;
+  };
 }
 
 describe('EquipmentPdfService', () => {
@@ -109,12 +108,8 @@ describe('EquipmentPdfService', () => {
       characterName: 'Miren',
       encombrementLimit: 11,
       equipment: {
-        individual: [
-          { name: 'Corde', weight: 2, price: '5po', effect: undefined },
-        ],
-        contenants: [
-          { name: 'Sac à dos', weight: 3, price: undefined, effect: undefined },
-        ],
+        individual: [{ name: 'Corde', weight: 2, price: '5po', effect: undefined }],
+        contenants: [{ name: 'Sac à dos', weight: 3, price: undefined, effect: undefined }],
         animaux: [{ name: 'Cheval', price: undefined, effect: undefined }],
       },
     });
@@ -138,8 +133,10 @@ describe('EquipmentPdfService', () => {
     );
   });
 
-  it("un equipment.group legacy (donnée pré-migration Story 14.1 non migrée) → avertissement loggé, aucun crash (deferred-work, garde-fou ajouté)", async () => {
-    const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+  it('un equipment.group legacy (donnée pré-migration Story 14.1 non migrée) → avertissement loggé, aucun crash (deferred-work, garde-fou ajouté)', async () => {
+    const warnSpy = jest
+      .spyOn((service as unknown as { logger: Logger }).logger, 'warn')
+      .mockImplementation();
     const character = makeCharacter({
       sheetData: {
         narrative: { name: 'Miren' },
@@ -158,7 +155,9 @@ describe('EquipmentPdfService', () => {
   });
 
   it('equipment sans group (cas normal) → aucun avertissement', async () => {
-    const warnSpy = jest.spyOn((service as any).logger, 'warn').mockImplementation();
+    const warnSpy = jest
+      .spyOn((service as unknown as { logger: Logger }).logger, 'warn')
+      .mockImplementation();
 
     await service.fillEquipmentPdf(makeCharacter());
 

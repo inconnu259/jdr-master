@@ -62,7 +62,7 @@ function makeHommeDragon(overrides: Record<string, unknown> = {}) {
     eveilPowers: [],
     pendingEveilLevels: [],
     ...overrides,
-  } as any;
+  };
 }
 
 describe('HommeDragonPdfService', () => {
@@ -82,10 +82,7 @@ describe('HommeDragonPdfService', () => {
     ]);
 
     const module = await Test.createTestingModule({
-      providers: [
-        HommeDragonPdfService,
-        { provide: GameSystemService, useValue: gameSystems },
-      ],
+      providers: [HommeDragonPdfService, { provide: GameSystemService, useValue: gameSystems }],
     }).compile();
     service = module.get(HommeDragonPdfService);
   });
@@ -122,9 +119,9 @@ describe('HommeDragonPdfService', () => {
   it('template introuvable → erreur explicite pointant vers le README', async () => {
     mockReadFile.mockRejectedValue(new Error('ENOENT'));
 
-    await expect(
-      service.fillHommeDragonPdf(makeHommeDragon(), 'admin'),
-    ).rejects.toThrow('Template PDF Homme Dragon introuvable');
+    await expect(service.fillHommeDragonPdf(makeHommeDragon(), 'admin')).rejects.toThrow(
+      'Template PDF Homme Dragon introuvable',
+    );
   });
 
   it('échec de setText sur un champ → erreur explicite, pas un crash silencieux', async () => {
@@ -132,8 +129,8 @@ describe('HommeDragonPdfService', () => {
       throw new Error('champ inconnu');
     });
 
-    await expect(
-      service.fillHommeDragonPdf(makeHommeDragon(), 'admin'),
-    ).rejects.toThrow(/introuvable\/incompatible/);
+    await expect(service.fillHommeDragonPdf(makeHommeDragon(), 'admin')).rejects.toThrow(
+      /introuvable\/incompatible/,
+    );
   });
 });

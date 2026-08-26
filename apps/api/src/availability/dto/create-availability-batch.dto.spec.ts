@@ -23,9 +23,7 @@ describe('CreateAvailabilityBatchDto', () => {
     const dto = plainToInstance(CreateAvailabilityBatchDto, { items: [] });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'items')).toBe(true);
-    const messages = Object.values(
-      errors.find((e) => e.property === 'items')!.constraints ?? {},
-    );
+    const messages = Object.values(errors.find((e) => e.property === 'items')!.constraints ?? {});
     expect(messages).toContain('Le lot ne peut pas être vide');
   });
 
@@ -35,9 +33,7 @@ describe('CreateAvailabilityBatchDto', () => {
     });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'items')).toBe(true);
-    const messages = Object.values(
-      errors.find((e) => e.property === 'items')!.constraints ?? {},
-    );
+    const messages = Object.values(errors.find((e) => e.property === 'items')!.constraints ?? {});
     expect(messages).toContain('Le lot dépasse le plafond de 42 créneaux');
   });
 
@@ -88,15 +84,12 @@ describe('CreateAvailabilityBatchDto — conflictResolution (Story 36.4)', () =>
     expect(await validate(dto)).toHaveLength(0);
   });
 
-  it.each(['overwrite', 'keep'])(
-    'conflictResolution « %s » → valide',
-    async (resolution) => {
-      const dto = plainToInstance(CreateAvailabilityBatchDto, {
-        items: [{ ...validItem, conflictResolution: resolution }],
-      });
-      expect(await validate(dto)).toHaveLength(0);
-    },
-  );
+  it.each(['overwrite', 'keep'])('conflictResolution « %s » → valide', async (resolution) => {
+    const dto = plainToInstance(CreateAvailabilityBatchDto, {
+      items: [{ ...validItem, conflictResolution: resolution }],
+    });
+    expect(await validate(dto)).toHaveLength(0);
+  });
 
   it('AC16 : une valeur hors union fermée est refusée (jamais une chaîne libre)', async () => {
     const dto = plainToInstance(CreateAvailabilityBatchDto, {

@@ -65,11 +65,26 @@ describe('matchingHandlers', () => {
 describe('RealtimeService', () => {
   let service: RealtimeService;
   let originalEventSource: unknown;
-  let partiesSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
-  let scenariosSvc: { notifyRealtimeChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<{ partieId: string } | null>> };
-  let charactersSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
-  let hommeDragonSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
-  let invitationsSvc: { notifyChanged: ReturnType<typeof vi.fn>; changed: ReturnType<typeof signal<number>> };
+  let partiesSvc: {
+    notifyChanged: ReturnType<typeof vi.fn>;
+    changed: ReturnType<typeof signal<number>>;
+  };
+  let scenariosSvc: {
+    notifyRealtimeChanged: ReturnType<typeof vi.fn>;
+    changed: ReturnType<typeof signal<{ partieId: string } | null>>;
+  };
+  let charactersSvc: {
+    notifyChanged: ReturnType<typeof vi.fn>;
+    changed: ReturnType<typeof signal<number>>;
+  };
+  let hommeDragonSvc: {
+    notifyChanged: ReturnType<typeof vi.fn>;
+    changed: ReturnType<typeof signal<number>>;
+  };
+  let invitationsSvc: {
+    notifyChanged: ReturnType<typeof vi.fn>;
+    changed: ReturnType<typeof signal<number>>;
+  };
   let openPollsSvc: { notifyChanged: ReturnType<typeof vi.fn> };
   let myPartiesSvc: { notifyChanged: ReturnType<typeof vi.fn> };
   let availabilitySvc: { notifyChanged: ReturnType<typeof vi.fn> };

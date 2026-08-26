@@ -9,9 +9,12 @@ import {
 import { extname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Character } from '@prisma/client';
+import { hasPrismaErrorCode } from '../common/prisma-error.util';
 import type {
   CharacterDto,
+  DerivedStats,
+  SheetData,
   CharacterNoteDto,
   CharacterSnapshotDto,
   MyCharacterDto,
@@ -33,10 +36,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { EmailService } from '../email/email.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { SUPPORTED_GAME_SYSTEMS } from '../game-systems/supported-game-systems';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import type { CreateLevelUpDto } from './dto/create-level-up.dto';
@@ -89,8 +89,7 @@ function resolveContentLabel(
   return data?.label ?? null;
 }
 
-const INVALID_PORTRAIT_IMAGE_MESSAGE =
-  "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
+const INVALID_PORTRAIT_IMAGE_MESSAGE = "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
 
 export const PORTRAITS_DIR = join(UPLOADS_ROOT, 'portraits');
 export const PORTRAITS_URL_PREFIX = '/uploads/portraits/';
@@ -100,9 +99,7 @@ export const PORTRAITS_URL_PREFIX = '/uploads/portraits/';
  * `unlink`/`readFile` avec un chemin non validé — défense en profondeur contre un path traversal
  * (AD-17, `extractUploadFilename` générique paramétré par le préfixe du domaine portrait).
  */
-export function extractPortraitFilename(
-  portraitUrl: string | null,
-): string | null {
+export function extractPortraitFilename(portraitUrl: string | null): string | null {
   return extractUploadFilename(portraitUrl, PORTRAITS_URL_PREFIX);
 }
 
@@ -141,9 +138,7 @@ export async function readPortraitFile(
  * méthode du service normalise donc systématiquement avant de lire/écrire — jamais de tableau
  * mixte persisté, quel que soit l'état d'entrée.
  */
-type InventoryItemEntry = NonNullable<
-  RyuutamaSheetData['equipment']
->['individual'][number];
+type InventoryItemEntry = NonNullable<RyuutamaSheetData['equipment']>['individual'][number];
 
 function normalizeInventoryIndividual(
   individual: (InventoryItemEntry | string)[] | undefined,
@@ -162,41 +157,30 @@ function normalizeInventoryIndividual(
  * `setSheetField` (AD-6) — mécanisme générique volontairement minimal, pas de validation de
  * forme ici (délégué à `validate('mj', ...)`, consultatif, cf. AD-7).
  */
-const FORBIDDEN_PATH_SEGMENTS = new Set([
-  '__proto__',
-  'constructor',
-  'prototype',
-]);
+const FORBIDDEN_PATH_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
 
-function setByPath(
-  obj: Record<string, unknown>,
-  path: string,
-  value: unknown,
-): void {
+function setByPath(obj: Record<string, unknown>, path: string, value: unknown): void {
   const segments = path.split('.');
   if (segments.some((seg) => FORBIDDEN_PATH_SEGMENTS.has(seg))) {
     throw new BadRequestException('Segment de chemin interdit');
   }
-  let cursor: any = obj;
+  let cursor: unknown = obj;
   for (let i = 0; i < segments.length - 1; i++) {
     const seg = segments[i];
     if (typeof cursor !== 'object' || cursor === null) {
-      throw new BadRequestException(
-        'Le chemin ne correspond pas à la structure de la fiche',
-      );
+      throw new BadRequestException('Le chemin ne correspond pas à la structure de la fiche');
     }
-    if (cursor[seg] === undefined || cursor[seg] === null) {
+    const node = cursor as Record<string, unknown>;
+    if (node[seg] === undefined || node[seg] === null) {
       const nextSeg = segments[i + 1];
-      cursor[seg] = /^\d+$/.test(nextSeg) ? [] : {};
+      node[seg] = /^\d+$/.test(nextSeg) ? [] : {};
     }
-    cursor = cursor[seg];
+    cursor = node[seg];
   }
   if (typeof cursor !== 'object' || cursor === null) {
-    throw new BadRequestException(
-      'Le chemin ne correspond pas à la structure de la fiche',
-    );
+    throw new BadRequestException('Le chemin ne correspond pas à la structure de la fiche');
   }
-  cursor[segments[segments.length - 1]] = value;
+  (cursor as Record<string, unknown>)[segments[segments.length - 1]] = value;
 }
 
 @Injectable()
@@ -212,17 +196,11 @@ export class CharacterService {
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
-  async create(
-    partieId: string,
-    userId: string,
-    dto: CreateCharacterDto,
-  ): Promise<CharacterDto> {
+  async create(partieId: string, userId: string, dto: CreateCharacterDto): Promise<CharacterDto> {
     const partie = await this.parties.getViewable(partieId, userId);
 
     if (!SUPPORTED_GAME_SYSTEMS.includes(dto.gameSystemId)) {
-      throw new BadRequestException(
-        `Système de jeu non supporté : ${dto.gameSystemId}`,
-      );
+      throw new BadRequestException(`Système de jeu non supporté : ${dto.gameSystemId}`);
     }
 
     const catalog = await this.buildRyuutamaCatalog(dto.gameSystemId);
@@ -238,20 +216,12 @@ export class CharacterService {
     // ne garde que `null`/`undefined` ; toute autre valeur non-tableau (objet, string, nombre)
     // doit être rejetée explicitement, sinon `resolveStartingEquipment()` planterait sur une
     // valeur non-itérable (revue de code).
-    if (
-      sheetData.startingEquipment !== undefined &&
-      !Array.isArray(sheetData.startingEquipment)
-    ) {
-      throw new BadRequestException(
-        'startingEquipment doit être un tableau de { key, quantity }',
-      );
+    if (sheetData.startingEquipment !== undefined && !Array.isArray(sheetData.startingEquipment)) {
+      throw new BadRequestException('startingEquipment doit être un tableau de { key, quantity }');
     }
     const equipmentCatalog = await this.buildEquipmentCatalog(dto.gameSystemId);
     const { individual, contenants, animaux, totalPriceGold, unresolvedKeys } =
-      resolveStartingEquipment(
-        sheetData.startingEquipment ?? [],
-        equipmentCatalog,
-      );
+      resolveStartingEquipment(sheetData.startingEquipment ?? [], equipmentCatalog);
     if (unresolvedKeys.length > 0) {
       throw new BadRequestException(
         `Sélection d'équipement invalide. Clés inconnues : ${unresolvedKeys.join(', ')}`,
@@ -294,10 +264,10 @@ export class CharacterService {
       const character = await this.prisma.character.create({
         data: {
           gameSystemId: dto.gameSystemId,
-          sheetData: dto.sheetData as any,
+          sheetData: dto.sheetData as unknown as Prisma.InputJsonValue,
           userId,
           partieId,
-          derived: derived as any,
+          derived: derived as unknown as Prisma.InputJsonValue,
         },
       });
       // Émis juste après l'écriture réussie, avant tout appel pouvant lever (users.findById) —
@@ -310,18 +280,10 @@ export class CharacterService {
       const owner = await this.users.findById(userId);
       // Le créateur est toujours le propriétaire ici — ownerIsMj et viewerIsMj coïncident.
       const isMj = partie.mjId === userId;
-      return toDto(
-        character,
-        owner?.pseudo ?? '',
-        owner?.displayName ?? '',
-        isMj,
-        isMj,
-      );
-    } catch (e: any) {
-      if (e?.code === 'P2002') {
-        throw new ConflictException(
-          'Vous avez déjà un personnage sur cette partie',
-        );
+      return toDto(character, owner?.pseudo ?? '', owner?.displayName ?? '', isMj, isMj);
+    } catch (e) {
+      if (hasPrismaErrorCode(e, 'P2002')) {
+        throw new ConflictException('Vous avez déjà un personnage sur cette partie');
       }
       throw e;
     }
@@ -332,12 +294,9 @@ export class CharacterService {
    * (`GameSystemService.getContent`), pour que `validate()` ne code plus en dur ses propres
    * listes déconnectées du contenu seed.
    */
-  private async buildRyuutamaCatalog(
-    gameSystemId: string,
-  ): Promise<RyuutamaCatalog> {
+  private async buildRyuutamaCatalog(gameSystemId: string): Promise<RyuutamaCatalog> {
     const content = await this.gameSystems.getContent(gameSystemId);
-    const keysOf = (typeKey: string) =>
-      (content[typeKey] ?? []).map((entry) => entry.key);
+    const keysOf = (typeKey: string) => (content[typeKey] ?? []).map((entry) => entry.key);
     // `entry.data` vient de `ContentEntry.data` (Json, aucune contrainte de forme en base) — la
     // garde vérifie que `values` est un tableau ET que chaque élément est bien un nombre, pas
     // seulement `Array.isArray()` (qui laisserait passer ex. ["8","4","6","6"] et produirait un
@@ -349,14 +308,10 @@ export class CharacterService {
       .filter(isNumberArray)
       .map((values) => [...values].sort((a, b) => a - b));
 
-    const requiredChoicesByClass: Record<
-      string,
-      { key: string; kind: string }[]
-    > = {};
+    const requiredChoicesByClass: Record<string, { key: string; kind: string }[]> = {};
     for (const entry of content['class'] ?? []) {
-      const requiredChoices = (
-        entry.data as { requiredChoices?: { key: string; kind: string }[] }
-      ).requiredChoices;
+      const requiredChoices = (entry.data as { requiredChoices?: { key: string; kind: string }[] })
+        .requiredChoices;
       if (requiredChoices?.length) {
         requiredChoicesByClass[entry.key] = requiredChoices.map((c) => ({
           key: c.key,
@@ -390,9 +345,7 @@ export class CharacterService {
    * `buildRyuutamaCatalog()` (utilisé par `validate()`, aussi appelé en mode `'mj'` permissif pour
    * `setSheetField` où le budget ne doit jamais être revérifié).
    */
-  private async buildEquipmentCatalog(
-    gameSystemId: string,
-  ): Promise<EquipmentCatalogEntry[]> {
+  private async buildEquipmentCatalog(gameSystemId: string): Promise<EquipmentCatalogEntry[]> {
     const content = await this.gameSystems.getContent(gameSystemId);
     return (content['equipmentItem'] ?? []).map((entry) => ({
       key: entry.key,
@@ -438,10 +391,7 @@ export class CharacterService {
     );
   }
 
-  async findByPartie(
-    partieId: string,
-    userId: string,
-  ): Promise<CharacterDto[]> {
+  async findByPartie(partieId: string, userId: string): Promise<CharacterDto[]> {
     const partie = await this.parties.getViewable(partieId, userId);
     const characters =
       partie.mjId === userId
@@ -479,9 +429,7 @@ export class CharacterService {
    * pas de restriction — nécessaire pour agréger le journal de TOUS les participants, pas
    * seulement celui du viewer courant (cf. `[ASSUMPTION]` Dev Notes Story 8.6, Task 6).
    */
-  async findAllByPartie(
-    partieId: string,
-  ): Promise<{ id: string; userId: string }[]> {
+  async findAllByPartie(partieId: string): Promise<{ id: string; userId: string }[]> {
     return this.prisma.character.findMany({
       where: { partieId },
       select: { id: true, userId: true },
@@ -523,15 +471,11 @@ export class CharacterService {
         select: { characterId: true, roleKey: true },
       }),
       Promise.all(
-        gameSystemIds.map(
-          async (id) => [id, await this.gameSystems.getContent(id)] as const,
-        ),
+        gameSystemIds.map(async (id) => [id, await this.gameSystems.getContent(id)] as const),
       ),
     ]);
     const partieById = new Map(parties.map((p) => [p.id, p]));
-    const roleKeyByCharacterId = new Map(
-      groupRoles.map((r) => [r.characterId, r.roleKey]),
-    );
+    const roleKeyByCharacterId = new Map(groupRoles.map((r) => [r.characterId, r.roleKey]));
     const contentByGameSystemId = new Map(contentEntries);
 
     return characters.map((c) => {
@@ -544,11 +488,7 @@ export class CharacterService {
         partieName: partie?.name ?? '',
         classLabel: resolveContentLabel(content, 'class', sheetData?.classId),
         typeLabel: resolveContentLabel(content, 'type', sheetData?.typeId),
-        groupRoleLabel: resolveContentLabel(
-          content,
-          'groupRole',
-          roleKeyByCharacterId.get(c.id),
-        ),
+        groupRoleLabel: resolveContentLabel(content, 'groupRole', roleKeyByCharacterId.get(c.id)),
       };
     });
   }
@@ -592,13 +532,11 @@ export class CharacterService {
         where: { id, updatedAt: character.updatedAt },
         data: {
           portraitUrl: `${PORTRAITS_URL_PREFIX}${filename}`,
-          portraitCropData: (cropData ?? null) as any,
+          portraitCropData: (cropData ?? null) as unknown as Prisma.InputJsonValue,
         },
       });
       if (result.count === 0) {
-        throw new ConflictException(
-          'Le personnage a été modifié entretemps, réessayez.',
-        );
+        throw new ConflictException('Le personnage a été modifié entretemps, réessayez.');
       }
     } catch (e) {
       // Le nouveau fichier n'est référencé nulle part : DB en conflit ou en échec, on
@@ -616,13 +554,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(
-      updated,
-      owner.pseudo,
-      owner.displayName,
-      owner.isMj,
-      owner.isMj,
-    ); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   async removePortrait(id: string, userId: string): Promise<CharacterDto> {
@@ -633,9 +565,7 @@ export class CharacterService {
       data: { portraitUrl: null, portraitCropData: Prisma.JsonNull },
     });
     if (result.count === 0) {
-      throw new ConflictException(
-        'Le personnage a été modifié entretemps, réessayez.',
-      );
+      throw new ConflictException('Le personnage a été modifié entretemps, réessayez.');
     }
 
     if (character.portraitUrl) {
@@ -647,13 +577,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(
-      updated,
-      owner.pseudo,
-      owner.displayName,
-      owner.isMj,
-      owner.isMj,
-    ); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -667,19 +591,15 @@ export class CharacterService {
   ): Promise<CharacterDto> {
     const character = await this.getOwnCharacterOrThrow(id, userId);
     if (!character.portraitUrl) {
-      throw new BadRequestException(
-        "Ce personnage n'a pas de portrait à recadrer",
-      );
+      throw new BadRequestException("Ce personnage n'a pas de portrait à recadrer");
     }
 
     const result = await this.prisma.character.updateMany({
       where: { id, updatedAt: character.updatedAt },
-      data: { pdfPortraitCropData: cropData as any },
+      data: { pdfPortraitCropData: cropData as unknown as Prisma.InputJsonValue },
     });
     if (result.count === 0) {
-      throw new ConflictException(
-        'Le personnage a été modifié entretemps, réessayez.',
-      );
+      throw new ConflictException('Le personnage a été modifié entretemps, réessayez.');
     }
 
     const updated = await this.prisma.character.findUniqueOrThrow({
@@ -687,13 +607,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(
-      updated,
-      owner.pseudo,
-      owner.displayName,
-      owner.isMj,
-      owner.isMj,
-    ); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -715,8 +629,7 @@ export class CharacterService {
     }
 
     const portrait = await readPortraitFile(character.portraitUrl);
-    if (!portrait)
-      throw new NotFoundException("Ce personnage n'a pas de portrait");
+    if (!portrait) throw new NotFoundException("Ce personnage n'a pas de portrait");
     return portrait;
   }
 
@@ -765,9 +678,7 @@ export class CharacterService {
     ]);
     if (!owner) return;
 
-    const narrative = (sheetData as any)?.narrative as
-      | { name?: string }
-      | undefined;
+    const narrative = sheetData.narrative;
     const characterName = narrative?.name?.trim() || 'Personnage sans nom';
     const link = `${process.env.WEB_ORIGIN ?? 'http://localhost:4200'}/parties/${updated.partieId}/characters/${updated.id}`;
 
@@ -799,11 +710,7 @@ export class CharacterService {
       throw new BadRequestException('Aucun niveau en attente');
     }
 
-    if (
-      dto.pvAllocated + dto.peAllocated !== 3 ||
-      dto.pvAllocated < 0 ||
-      dto.peAllocated < 0
-    ) {
+    if (dto.pvAllocated + dto.peAllocated !== 3 || dto.pvAllocated < 0 || dto.peAllocated < 0) {
       throw new BadRequestException(
         'La répartition doit totaliser exactement 3 points entre PV et PE',
       );
@@ -811,8 +718,7 @@ export class CharacterService {
 
     const nextLevel = pending[0];
     const expectedCapabilities =
-      LEVEL_TABLE.find((entry) => entry.level === nextLevel)?.capabilities ??
-      [];
+      LEVEL_TABLE.find((entry) => entry.level === nextLevel)?.capabilities ?? [];
 
     // Aux niveaux 4/6/10, deux capacités sont octroyées CONJOINTEMENT (Attribut ET spéciale),
     // jamais un choix exclusif — l'ensemble des types fourni doit correspondre exactement à
@@ -833,18 +739,14 @@ export class CharacterService {
     const needsContent = dto.capabilities.some(
       (c) => c.type !== 'attribute' && c.type !== 'legendary-journey',
     );
-    const content = needsContent
-      ? await this.gameSystems.getContent(character.gameSystemId)
-      : null;
+    const content = needsContent ? await this.gameSystems.getContent(character.gameSystemId) : null;
     for (const cap of dto.capabilities) {
       if (cap.type === 'attribute') {
         const attribute = (cap.params as { attribute?: string }).attribute;
         if (
           !attribute ||
           !['AGI', 'ESP', 'INT', 'VIG'].includes(attribute) ||
-          sheetData.attributes[
-            attribute as keyof typeof sheetData.attributes
-          ] >= 12
+          sheetData.attributes[attribute as keyof typeof sheetData.attributes] >= 12
         ) {
           throw new BadRequestException('Attribut invalide ou déjà au maximum');
         }
@@ -854,13 +756,9 @@ export class CharacterService {
         const contentKey = CONTENT_KEY_BY_CAPABILITY[cap.type];
         const key = (cap.params as { key?: string }).key;
         const known =
-          !!contentKey &&
-          !!key &&
-          (content?.[contentKey] ?? []).some((e) => e.key === key);
+          !!contentKey && !!key && (content?.[contentKey] ?? []).some((e) => e.key === key);
         if (!known) {
-          throw new BadRequestException(
-            `Choix de capacité invalide pour le type ${cap.type}`,
-          );
+          throw new BadRequestException(`Choix de capacité invalide pour le type ${cap.type}`);
         }
       }
     }
@@ -869,8 +767,7 @@ export class CharacterService {
     for (const cap of dto.capabilities) {
       if (cap.type === 'attribute') {
         const attribute = (cap.params as { attribute?: string }).attribute!;
-        sheetData.attributes[attribute as keyof typeof sheetData.attributes] +=
-          2;
+        sheetData.attributes[attribute as keyof typeof sheetData.attributes] += 2;
       }
     }
 
@@ -893,18 +790,19 @@ export class CharacterService {
     await this.prisma.$transaction(async (tx) => {
       const result = await tx.character.updateMany({
         where: { id: characterId, updatedAt: character.updatedAt },
-        data: { sheetData: sheetData as any, derived: derived as any },
+        data: {
+          sheetData: sheetData as unknown as Prisma.InputJsonValue,
+          derived: derived as unknown as Prisma.InputJsonValue,
+        },
       });
       if (result.count === 0) {
-        throw new ConflictException(
-          'Le personnage a été modifié entretemps, réessayez.',
-        );
+        throw new ConflictException('Le personnage a été modifié entretemps, réessayez.');
       }
       await tx.characterSnapshot.create({
         data: {
           characterId,
-          sheetData: sheetData as any,
-          derived: derived as any,
+          sheetData: sheetData as unknown as Prisma.InputJsonValue,
+          derived: derived as unknown as Prisma.InputJsonValue,
           level: nextLevel,
           trigger: 'LEVEL_UP',
         },
@@ -916,13 +814,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(
-      updated,
-      owner.pseudo,
-      owner.displayName,
-      owner.isMj,
-      owner.isMj,
-    ); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -934,11 +826,7 @@ export class CharacterService {
    * `notifyPendingLevelUp` qu'`applyXpDelta` (AD-6) : le MJ ne peut jamais faire sauter un
    * niveau silencieusement, le joueur voit toujours sa `LevelUpBanner` et reçoit le même e-mail.
    */
-  async setXp(
-    characterId: string,
-    userId: string,
-    value: number,
-  ): Promise<CharacterDto> {
+  async setXp(characterId: string, userId: string, value: number): Promise<CharacterDto> {
     const character = await this.prisma.character.findUnique({
       where: { id: characterId },
     });
@@ -953,15 +841,13 @@ export class CharacterService {
         data: { xp: value },
       });
       if (result.count === 0) {
-        throw new ConflictException(
-          'Le personnage a été modifié entretemps, réessayez.',
-        );
+        throw new ConflictException('Le personnage a été modifié entretemps, réessayez.');
       }
       await tx.characterSnapshot.create({
         data: {
           characterId,
-          sheetData: character.sheetData as any,
-          derived: character.derived as any,
+          sheetData: character.sheetData as Prisma.InputJsonValue,
+          derived: character.derived as Prisma.InputJsonValue,
           level: 1 + (sheetData.levelUps?.length ?? 0),
           trigger: 'MJ_EDIT',
         },
@@ -1028,9 +914,7 @@ export class CharacterService {
         );
       }
       if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-        throw new BadRequestException(
-          'La valeur doit être un objet { name, weight }',
-        );
+        throw new BadRequestException('La valeur doit être un objet { name, weight }');
       }
       const index = Number(segments[2]);
       const list =
@@ -1044,9 +928,7 @@ export class CharacterService {
       if (index < list.length) {
         const expectedId = (value as Record<string, unknown>)['id'];
         if (typeof expectedId !== 'string' || expectedId !== list[index].id) {
-          throw new ConflictException(
-            "L'objet visé n'existe plus à cet emplacement, réessayez.",
-          );
+          throw new ConflictException("L'objet visé n'existe plus à cet emplacement, réessayez.");
         }
         id = list[index].id;
       } else {
@@ -1066,11 +948,7 @@ export class CharacterService {
       effectivePath = `equipment.${category}.${index}`;
     }
 
-    setByPath(
-      sheetData as unknown as Record<string, unknown>,
-      effectivePath,
-      value,
-    );
+    setByPath(sheetData as unknown as Record<string, unknown>, effectivePath, value);
     const derived = computeDerived(sheetData);
     const catalog = await this.buildRyuutamaCatalog(character.gameSystemId);
     const result = validate(sheetData, 'mj', catalog);
@@ -1078,18 +956,19 @@ export class CharacterService {
     await this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.character.updateMany({
         where: { id: characterId, updatedAt: character.updatedAt },
-        data: { sheetData: sheetData as any, derived: derived as any },
+        data: {
+          sheetData: sheetData as unknown as Prisma.InputJsonValue,
+          derived: derived as unknown as Prisma.InputJsonValue,
+        },
       });
       if (updateResult.count === 0) {
-        throw new ConflictException(
-          'Le personnage a été modifié entretemps, réessayez.',
-        );
+        throw new ConflictException('Le personnage a été modifié entretemps, réessayez.');
       }
       await tx.characterSnapshot.create({
         data: {
           characterId,
-          sheetData: sheetData as any,
-          derived: derived as any,
+          sheetData: sheetData as unknown as Prisma.InputJsonValue,
+          derived: derived as unknown as Prisma.InputJsonValue,
           level: 1 + (sheetData.levelUps?.length ?? 0),
           trigger: 'MJ_EDIT',
         },
@@ -1102,13 +981,7 @@ export class CharacterService {
     const owner = await this.resolveOwnerInfo(updated.userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
     return {
-      character: toDto(
-        updated,
-        owner.pseudo,
-        owner.displayName,
-        owner.isMj,
-        true,
-      ),
+      character: toDto(updated, owner.pseudo, owner.displayName, owner.isMj, true),
       warnings: result.errors.map((e) => e.message),
     };
   }
@@ -1117,10 +990,7 @@ export class CharacterService {
    * Historique des instantanés d'un personnage : accès PROPRIÉTAIRE OU MJ (AD-8, même pattern
    * que `findOne`), pas `getOwnCharacterOrThrow` qui est propriétaire-seul.
    */
-  async getHistory(
-    characterId: string,
-    userId: string,
-  ): Promise<CharacterSnapshotDto[]> {
+  async getHistory(characterId: string, userId: string): Promise<CharacterSnapshotDto[]> {
     const character = await this.prisma.character.findUnique({
       where: { id: characterId },
     });
@@ -1136,8 +1006,8 @@ export class CharacterService {
     return snapshots.map((s) => ({
       id: s.id,
       characterId: s.characterId,
-      sheetData: s.sheetData as any,
-      derived: s.derived as any,
+      sheetData: s.sheetData as unknown as SheetData,
+      derived: s.derived as unknown as DerivedStats,
       level: s.level,
       trigger: s.trigger,
       note: s.note ?? undefined,
@@ -1176,12 +1046,7 @@ export class CharacterService {
       },
     ];
     sheetData.equipment = { ...equipment, individual };
-    return this.writeInventoryChange(
-      characterId,
-      character.updatedAt,
-      sheetData,
-      userId,
-    );
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
   }
 
   /**
@@ -1199,12 +1064,9 @@ export class CharacterService {
   ): Promise<CharacterDto> {
     const character = await this.getOwnCharacterOrThrow(characterId, userId);
     const sheetData = character.sheetData as unknown as RyuutamaSheetData;
-    const individual = normalizeInventoryIndividual(
-      sheetData.equipment?.individual,
-    );
+    const individual = normalizeInventoryIndividual(sheetData.equipment?.individual);
     const index = individual.findIndex((i) => i.id === itemId);
-    if (index === -1)
-      throw new NotFoundException("Objet d'inventaire introuvable");
+    if (index === -1) throw new NotFoundException("Objet d'inventaire introuvable");
 
     const updated = [...individual];
     updated[index] = {
@@ -1215,12 +1077,7 @@ export class CharacterService {
       effect: dto.effect ?? updated[index].effect,
     };
     sheetData.equipment = { ...sheetData.equipment!, individual: updated };
-    return this.writeInventoryChange(
-      characterId,
-      character.updatedAt,
-      sheetData,
-      userId,
-    );
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
   }
 
   /** Retire un objet existant de l'inventaire individuel — mêmes règles que `updateInventoryItem`. */
@@ -1231,20 +1088,13 @@ export class CharacterService {
   ): Promise<CharacterDto> {
     const character = await this.getOwnCharacterOrThrow(characterId, userId);
     const sheetData = character.sheetData as unknown as RyuutamaSheetData;
-    const individual = normalizeInventoryIndividual(
-      sheetData.equipment?.individual,
-    );
+    const individual = normalizeInventoryIndividual(sheetData.equipment?.individual);
     if (!individual.some((i) => i.id === itemId)) {
       throw new NotFoundException("Objet d'inventaire introuvable");
     }
     const updated = individual.filter((i) => i.id !== itemId);
     sheetData.equipment = { ...sheetData.equipment!, individual: updated };
-    return this.writeInventoryChange(
-      characterId,
-      character.updatedAt,
-      sheetData,
-      userId,
-    );
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
   }
 
   /**
@@ -1275,12 +1125,7 @@ export class CharacterService {
       },
     ];
     sheetData.equipment = { ...equipment, contenants };
-    return this.writeInventoryChange(
-      characterId,
-      character.updatedAt,
-      sheetData,
-      userId,
-    );
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
   }
 
   /** Modifie un contenant existant — mêmes règles que `updateInventoryItem`. */
@@ -1305,12 +1150,7 @@ export class CharacterService {
       effect: dto.effect ?? updated[index].effect,
     };
     sheetData.equipment = { ...sheetData.equipment!, contenants: updated };
-    return this.writeInventoryChange(
-      characterId,
-      character.updatedAt,
-      sheetData,
-      userId,
-    );
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
   }
 
   /** Retire un contenant existant — mêmes règles que `removeInventoryItem`. */
@@ -1327,12 +1167,7 @@ export class CharacterService {
     }
     const updated = contenants.filter((c) => c.id !== itemId);
     sheetData.equipment = { ...sheetData.equipment!, contenants: updated };
-    return this.writeInventoryChange(
-      characterId,
-      character.updatedAt,
-      sheetData,
-      userId,
-    );
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
   }
 
   /**
@@ -1362,12 +1197,7 @@ export class CharacterService {
       },
     ];
     sheetData.equipment = { ...equipment, animaux };
-    return this.writeInventoryChange(
-      characterId,
-      character.updatedAt,
-      sheetData,
-      userId,
-    );
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
   }
 
   /** Modifie un animal existant — mêmes règles que `updateInventoryItem`, jamais de `weight`. */
@@ -1391,20 +1221,11 @@ export class CharacterService {
       effect: dto.effect ?? updated[index].effect,
     };
     sheetData.equipment = { ...sheetData.equipment!, animaux: updated };
-    return this.writeInventoryChange(
-      characterId,
-      character.updatedAt,
-      sheetData,
-      userId,
-    );
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
   }
 
   /** Retire un animal existant — mêmes règles que `removeInventoryItem`. */
-  async removeAnimal(
-    characterId: string,
-    userId: string,
-    itemId: string,
-  ): Promise<CharacterDto> {
+  async removeAnimal(characterId: string, userId: string, itemId: string): Promise<CharacterDto> {
     const character = await this.getOwnCharacterOrThrow(characterId, userId);
     const sheetData = character.sheetData as unknown as RyuutamaSheetData;
     const animaux = sheetData.equipment?.animaux ?? [];
@@ -1413,12 +1234,7 @@ export class CharacterService {
     }
     const updated = animaux.filter((a) => a.id !== itemId);
     sheetData.equipment = { ...sheetData.equipment!, animaux: updated };
-    return this.writeInventoryChange(
-      characterId,
-      character.updatedAt,
-      sheetData,
-      userId,
-    );
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
   }
 
   /**
@@ -1437,12 +1253,7 @@ export class CharacterService {
     const character = await this.getOwnCharacterOrThrow(characterId, userId);
     const sheetData = character.sheetData as unknown as RyuutamaSheetData;
     sheetData.narrative = { ...sheetData.narrative, [dto.field]: dto.value };
-    return this.writeInventoryChange(
-      characterId,
-      character.updatedAt,
-      sheetData,
-      userId,
-    );
+    return this.writeInventoryChange(characterId, character.updatedAt, sheetData, userId);
   }
 
   /**
@@ -1457,25 +1268,17 @@ export class CharacterService {
   ): Promise<CharacterDto> {
     const result = await this.prisma.character.updateMany({
       where: { id: characterId, updatedAt: expectedUpdatedAt },
-      data: { sheetData: sheetData as any },
+      data: { sheetData: sheetData as unknown as Prisma.InputJsonValue },
     });
     if (result.count === 0) {
-      throw new ConflictException(
-        'Le personnage a été modifié entretemps, réessayez.',
-      );
+      throw new ConflictException('Le personnage a été modifié entretemps, réessayez.');
     }
     const updated = await this.prisma.character.findUniqueOrThrow({
       where: { id: characterId },
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(
-      updated,
-      owner.pseudo,
-      owner.displayName,
-      owner.isMj,
-      owner.isMj,
-    ); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -1545,13 +1348,7 @@ export class CharacterService {
     });
     const owner = await this.resolveOwnerInfo(userId, updated.partieId);
     this.realtimeEvents.emit(partieTopic(updated.partieId));
-    return toDto(
-      updated,
-      owner.pseudo,
-      owner.displayName,
-      owner.isMj,
-      owner.isMj,
-    ); // mutation propriétaire-seul : viewer === propriétaire
+    return toDto(updated, owner.pseudo, owner.displayName, owner.isMj, owner.isMj); // mutation propriétaire-seul : viewer === propriétaire
   }
 
   /**
@@ -1586,9 +1383,7 @@ export class CharacterService {
         where: { id: scenarioId },
       });
       if (!scenario || scenario.partieId !== character.partieId) {
-        throw new BadRequestException(
-          "Ce scénario n'appartient pas à la Partie de ce personnage",
-        );
+        throw new BadRequestException("Ce scénario n'appartient pas à la Partie de ce personnage");
       }
       const partie = await this.prisma.partie.findUnique({
         where: { id: scenario.partieId },
@@ -1601,9 +1396,7 @@ export class CharacterService {
           },
         });
         if (!participation) {
-          throw new BadRequestException(
-            'Ce personnage ne participe pas à ce scénario',
-          );
+          throw new BadRequestException('Ce personnage ne participe pas à ce scénario');
         }
       }
     }
@@ -1646,9 +1439,7 @@ export class CharacterService {
       select: { journalAutoAssociate: true },
     });
     const autoEligible =
-      !!character?.journalAutoAssociate &&
-      windowStart !== null &&
-      windowEnd !== null;
+      !!character?.journalAutoAssociate && windowStart !== null && windowEnd !== null;
 
     const notes = await this.prisma.characterNote.findMany({
       where: {
@@ -1676,10 +1467,7 @@ export class CharacterService {
    * ni `getOwnCharacterOrThrow` (propriétaire seul) ni `findOne` (renvoie un `CharacterDto`, pas
    * ce dont on a besoin ici) — check inline dédié, même esprit que `getHistory`/`getPortraitFile`.
    */
-  async getNotes(
-    characterId: string,
-    userId: string,
-  ): Promise<CharacterNoteDto[]> {
+  async getNotes(characterId: string, userId: string): Promise<CharacterNoteDto[]> {
     const character = await this.prisma.character.findUnique({
       where: { id: characterId },
     });
@@ -1732,9 +1520,7 @@ export class CharacterService {
   private async deletePortraitFile(portraitUrl: string): Promise<void> {
     const filename = extractPortraitFilename(portraitUrl);
     if (!filename) {
-      this.logger.warn(
-        `portraitUrl inattendu, suppression ignorée : ${portraitUrl}`,
-      );
+      this.logger.warn(`portraitUrl inattendu, suppression ignorée : ${portraitUrl}`);
       return;
     }
     await this.unlinkPortraitFile(filename);
@@ -1744,28 +1530,28 @@ export class CharacterService {
     try {
       await unlinkUploadFile(PORTRAITS_DIR, filename);
     } catch (e) {
-      this.logger.warn(
-        `Échec de suppression du portrait ${filename}`,
-        e as Error,
-      );
+      this.logger.warn(`Échec de suppression du portrait ${filename}`, e as Error);
     }
   }
 }
 
 function toDto(
-  character: any,
+  character: Character,
   ownerPseudo: string,
   ownerDisplayName: string,
   ownerIsMj: boolean,
   viewerIsMj: boolean,
 ): CharacterDto {
+  // `sheetData`/`derived` sont des colonnes JSON : Prisma les rend en `JsonValue`, sans forme
+  // garantie. La relecture vers les types du contrat se fait ici, au seul point de sortie.
+  const sheetData = (character.sheetData ?? {}) as SheetData;
   return {
     id: character.id,
     userId: character.userId,
     partieId: character.partieId,
     gameSystemId: character.gameSystemId,
-    sheetData: character.sheetData,
-    derived: character.derived,
+    sheetData,
+    derived: character.derived as unknown as DerivedStats,
     portraitUrl: character.portraitUrl ?? null,
     portraitCropData: character.portraitCropData ?? null,
     pdfPortraitCropData: character.pdfPortraitCropData ?? null,
@@ -1779,8 +1565,7 @@ function toDto(
     // Niveau réellement appliqué (nombre de montées de niveau validées + 1), PAS le niveau
     // potentiel dérivé de l'xp (`levelForXp`) — sinon la fiche afficherait un niveau non encore
     // acquis tant que le joueur n'a pas traité son `LevelUpBanner` (cf. `pendingLevels`).
-    level:
-      1 + ((character.sheetData?.levelUps?.length as number | undefined) ?? 0),
+    level: 1 + ((sheetData as { levelUps?: unknown[] }).levelUps?.length ?? 0),
     journalAutoAssociate: character.journalAutoAssociate ?? false,
   };
 }

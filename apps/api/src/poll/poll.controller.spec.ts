@@ -57,24 +57,21 @@ describe('PollController', () => {
     });
     expect(scenarios.recalculateNextSession).toHaveBeenCalledWith('p1');
     const chooseCall = poll.choose.mock.invocationCallOrder[0];
-    const recalcCall =
-      scenarios.recalculateNextSession.mock.invocationCallOrder[0];
+    const recalcCall = scenarios.recalculateNextSession.mock.invocationCallOrder[0];
     expect(chooseCall).toBeLessThan(recalcCall);
   });
 
   it('choose() : si PollService.choose() échoue, ScenariosService.recalculateNextSession() jamais appelé', async () => {
     poll.choose.mockRejectedValue(new Error('poll fermé'));
 
-    await expect(
-      controller.choose('p1', 'poll1', user, { optionId: 'opt1' }),
-    ).rejects.toThrow('poll fermé');
+    await expect(controller.choose('p1', 'poll1', user, { optionId: 'opt1' })).rejects.toThrow(
+      'poll fermé',
+    );
     expect(scenarios.recalculateNextSession).not.toHaveBeenCalled();
   });
 
   it('choose() : si ScenariosService.recalculateNextSession() échoue après un choose() déjà réussi, l’erreur est absorbée (revue de code)', async () => {
-    scenarios.recalculateNextSession.mockRejectedValue(
-      new Error('partie introuvable'),
-    );
+    scenarios.recalculateNextSession.mockRejectedValue(new Error('partie introuvable'));
 
     await expect(
       controller.choose('p1', 'poll1', user, { optionId: 'opt1' }),
@@ -102,12 +99,7 @@ describe('PollController', () => {
 
   it('withdrawVote() route vers PollService.withdrawVote() (Story 30.1)', async () => {
     await controller.withdrawVote('p1', 'poll1', 'opt1', user);
-    expect(poll.withdrawVote).toHaveBeenCalledWith(
-      'p1',
-      'poll1',
-      'opt1',
-      'mj1',
-    );
+    expect(poll.withdrawVote).toHaveBeenCalledWith('p1', 'poll1', 'opt1', 'mj1');
   });
 
   it('close() route vers PollService.close()', async () => {

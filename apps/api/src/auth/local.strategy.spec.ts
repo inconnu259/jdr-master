@@ -36,9 +36,7 @@ describe('LocalStrategy', () => {
   it('identifiants invalides (validateUser → null) → UnauthorizedException', async () => {
     authService.validateUser.mockResolvedValue(null);
 
-    await expect(strategy.validate('a@b.c', 'wrong')).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    await expect(strategy.validate('a@b.c', 'wrong')).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it("compte valide sans mustResetPassword → renvoie l'utilisateur converti en AuthUser (Story 30.4), attaché à req.user", async () => {

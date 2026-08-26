@@ -80,5 +80,4 @@ describe('TypeStep', () => {
 
     expect(fixture.nativeElement.querySelector('.type-step__advantage-description')).toBeNull();
   });
-
 });

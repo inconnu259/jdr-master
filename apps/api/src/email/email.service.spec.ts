@@ -55,9 +55,7 @@ describe('EmailService', () => {
   it("catch une erreur d'envoi, la logge, et renvoie { ok: false } sans relancer", async () => {
     const error = new Error('ECONNREFUSED');
     mailer.sendMail.mockRejectedValue(error);
-    const loggerSpy = jest
-      .spyOn(Logger.prototype, 'error')
-      .mockImplementation(() => undefined);
+    const loggerSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
     const result = await service.sendMail('invitation', 'ami@example.com', {});
 

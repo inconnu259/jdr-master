@@ -7,11 +7,8 @@ import {
 import { InviteLinksService } from './invite-links.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
-import {
-  RealtimeEventsService,
-  partieTopic,
-  userTopic,
-} from '../realtime/realtime-events.service';
+import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
+import { anyOf } from '../common/test-utils/jest-typed';
 
 const future = () => new Date(Date.now() + 60_000);
 const past = () => new Date(Date.now() - 60_000);
@@ -51,9 +48,7 @@ describe('InviteLinksService', () => {
   });
 
   it('create : MJ requis, token généré, expiration par défaut +7j', async () => {
-    prisma.inviteLink.create.mockImplementation(({ data }) =>
-      Promise.resolve(data),
-    );
+    prisma.inviteLink.create.mockImplementation(({ data }) => Promise.resolve(data));
     const before = Date.now();
     const link = (await service.create('p1', 'mj1', {})) as {
       token: string;
@@ -61,9 +56,7 @@ describe('InviteLinksService', () => {
     };
     expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
     expect(link.token).toHaveLength(43); // 32 octets en base64url
-    expect(link.expiresAt.getTime()).toBeGreaterThan(
-      before + 6 * 24 * 3600 * 1000,
-    );
+    expect(link.expiresAt.getTime()).toBeGreaterThan(before + 6 * 24 * 3600 * 1000);
   });
 
   it('create : refuse une expiration passée', async () => {
@@ -74,9 +67,7 @@ describe('InviteLinksService', () => {
 
   it('preview : 404 si le token est inconnu', async () => {
     prisma.inviteLink.findUnique.mockResolvedValue(null);
-    await expect(service.preview('xxx')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(service.preview('xxx')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('preview : valide si non révoqué/expiré et quota ok', async () => {
@@ -110,11 +101,7 @@ describe('InviteLinksService', () => {
 
   // --- consumeLink (cœur du join + register) ---
 
-  const makeTx = (
-    link: unknown,
-    existingMember: unknown = null,
-    claimCount = 1,
-  ) => ({
+  const makeTx = (link: unknown, existingMember: unknown = null, claimCount = 1) => ({
     inviteLink: {
       findUnique: jest.fn().mockResolvedValue(link),
       updateMany: jest.fn().mockResolvedValue({ count: claimCount }),
@@ -127,9 +114,9 @@ describe('InviteLinksService', () => {
 
   it('consumeLink : 404 si lien inconnu', async () => {
     const tx = makeTx(null);
-    await expect(
-      service.consumeLink(tx as never, 'tok', 'u'),
-    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.consumeLink(tx as never, 'tok', 'u')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('consumeLink : 403 si révoqué', async () => {
@@ -142,9 +129,9 @@ describe('InviteLinksService', () => {
       partieId: 'p1',
       partie: { mjId: 'mj1' },
     });
-    await expect(
-      service.consumeLink(tx as never, 'tok', 'u'),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.consumeLink(tx as never, 'tok', 'u')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it('consumeLink : 409 si l’utilisateur est le MJ', async () => {
@@ -157,9 +144,9 @@ describe('InviteLinksService', () => {
       partieId: 'p1',
       partie: { mjId: 'mj1' },
     });
-    await expect(
-      service.consumeLink(tx as never, 'tok', 'mj1'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.consumeLink(tx as never, 'tok', 'mj1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 
   it('consumeLink : 409 si déjà membre', async () => {
@@ -175,9 +162,9 @@ describe('InviteLinksService', () => {
       },
       { userId: 'u', partieId: 'p1' },
     );
-    await expect(
-      service.consumeLink(tx as never, 'tok', 'u'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.consumeLink(tx as never, 'tok', 'u')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
   });
 
   it('consumeLink : 403 si le quota est épuisé (claim atomique = 0)', async () => {
@@ -194,9 +181,9 @@ describe('InviteLinksService', () => {
       null,
       0,
     );
-    await expect(
-      service.consumeLink(tx as never, 'tok', 'u'),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.consumeLink(tx as never, 'tok', 'u')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
   });
 
   it('consumeLink : crée le membership et incrémente quand tout est ok', async () => {
@@ -245,30 +232,25 @@ describe('InviteLinksService', () => {
       partie: { mjId: 'mj1' },
     } as never);
     await service.join('tok', 'u');
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith(
-      'p1',
-      'mj1',
-    );
+    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
   });
 
   // --- findOrCreateForEmail (Story 5.2) ---
 
   it('findOrCreateForEmail : crée un nouveau lien usage unique si aucun n’existe', async () => {
     prisma.inviteLink.findFirst.mockResolvedValue(null);
-    prisma.inviteLink.create.mockImplementation(({ data }) =>
-      Promise.resolve(data),
-    );
-    const link = (await service.findOrCreateForEmail(
-      'p1',
-      'mj1',
-      'ami@example.com',
-    )) as { token: string; maxUses: number; targetEmail: string };
+    prisma.inviteLink.create.mockImplementation(({ data }) => Promise.resolve(data));
+    const link = (await service.findOrCreateForEmail('p1', 'mj1', 'ami@example.com')) as {
+      token: string;
+      maxUses: number;
+      targetEmail: string;
+    };
     expect(prisma.inviteLink.findFirst).toHaveBeenCalledWith({
       where: {
         partieId: 'p1',
         targetEmail: 'ami@example.com',
         revoked: false,
-        expiresAt: { gt: expect.any(Date) },
+        expiresAt: { gt: anyOf(Date) },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -284,11 +266,7 @@ describe('InviteLinksService', () => {
       targetEmail: 'ami@example.com',
     };
     prisma.inviteLink.findFirst.mockResolvedValue(existing);
-    const link = await service.findOrCreateForEmail(
-      'p1',
-      'mj1',
-      'ami@example.com',
-    );
+    const link = await service.findOrCreateForEmail('p1', 'mj1', 'ami@example.com');
     expect(link).toBe(existing);
     expect(prisma.inviteLink.create).not.toHaveBeenCalled();
   });
