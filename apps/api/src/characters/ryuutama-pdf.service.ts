@@ -393,18 +393,15 @@ export class RyuutamaPdfService {
     // Classe secondaire (capacité 'class', niveau 5) — un seul choix possible par LEVEL_TABLE,
     // pas de boucle nécessaire (contrairement au paysage/climat, obtenu jusqu'à 2 fois).
     const secondaryClassKey = capabilities.find((c) => c.type === 'class')?.params['key'] as
-      | string
-      | undefined;
+      string | undefined;
     const secondaryClassData = content['class']?.find((c) => c.key === secondaryClassKey)?.data as
-      | ClassContentData
-      | undefined;
+      ClassContentData | undefined;
 
     // Paysage/climat résumé (dropdown "Paysage climat") : un seul champ pour jusqu'à 2 obtenus
     // (niveaux 3 et 7) — le premier obtenu, faute de pouvoir en représenter deux sur ce dropdown
     // (les 22 champs de résistance individuels, eux, couvrent chaque paysage obtenu séparément).
     const landscapeKey = capabilities.find((c) => c.type === 'landscape')?.params['key'] as
-      | string
-      | undefined;
+      string | undefined;
     const landscapeDropdownValue = content['landscape']?.find((l) => l.key === landscapeKey)
       ?.data as { label?: string } | undefined;
 

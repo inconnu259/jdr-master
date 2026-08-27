@@ -2034,8 +2034,7 @@ describe('PartieDetail — clôture explicite (Story 29.6)', () => {
 
     const buttons = Array.from(el.querySelectorAll('mat-card-actions button'));
     const closeBtn = buttons.find((b) => b.textContent?.includes('Clore le grimoire')) as
-      | HTMLButtonElement
-      | undefined;
+      HTMLButtonElement | undefined;
     expect(closeBtn).toBeTruthy();
     closeBtn!.click();
     await Promise.resolve();
@@ -2057,8 +2056,7 @@ describe('PartieDetail — clôture explicite (Story 29.6)', () => {
 
     const buttons = Array.from(el.querySelectorAll('mat-card-actions button'));
     const reopenBtn = buttons.find((b) => b.textContent?.includes('Rouvrir le grimoire')) as
-      | HTMLButtonElement
-      | undefined;
+      HTMLButtonElement | undefined;
     expect(reopenBtn).toBeTruthy();
     reopenBtn!.click();
     await Promise.resolve();
