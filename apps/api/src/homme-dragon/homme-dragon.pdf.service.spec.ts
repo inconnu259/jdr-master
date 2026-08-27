@@ -1,3 +1,4 @@
+import type { HommeDragonDto } from '@master-jdr/shared';
 import { Test } from '@nestjs/testing';
 
 jest.mock('node:fs/promises', () => ({
@@ -43,8 +44,8 @@ function makeGameSystems() {
   };
 }
 
-function makeHommeDragon(overrides: Record<string, unknown> = {}) {
-  return {
+function makeHommeDragon(overrides: Partial<HommeDragonDto> = {}): HommeDragonDto {
+  const base: HommeDragonDto = {
     id: 'hd1',
     userId: 'mj1',
     partieId: 'p1',
@@ -61,8 +62,8 @@ function makeHommeDragon(overrides: Record<string, unknown> = {}) {
     derived: { level: 3, PS: 5 },
     eveilPowers: [],
     pendingEveilLevels: [],
-    ...overrides,
   };
+  return Object.assign(base, overrides);
 }
 
 describe('HommeDragonPdfService', () => {

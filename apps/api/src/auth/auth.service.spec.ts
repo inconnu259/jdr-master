@@ -155,7 +155,7 @@ describe('AuthService', () => {
         email: 'a@b.c',
         pseudo: 'alice',
       });
-      expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
+      expect((result as unknown as Record<string, unknown>).passwordHash).toBeUndefined();
     });
 
     it("renvoie l'utilisateur sans le hash si mot de passe correct, via le pseudo", async () => {
@@ -183,7 +183,7 @@ describe('AuthService', () => {
         token: 'tok',
       });
       expect(inviteLinks.consumeLink).toHaveBeenCalledWith(tx, 'tok', 'u1');
-      expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
+      expect((result as unknown as Record<string, unknown>).passwordHash).toBeUndefined();
       expect(result).toMatchObject({ pseudo: 'alice' });
     });
 

@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { callArg, mockCalls } from '../common/test-utils/jest-typed';
+import type { DaySlot } from '@master-jdr/shared';
 
 /**
  * Mock construit sans annotation `: any` : l'inference donne un vrai type aux modeles et a leurs
@@ -63,7 +64,7 @@ function makeRealtimeEvents() {
   return { emit: jest.fn() };
 }
 
-function opt(date: string, slot: string) {
+function opt(date: string, slot: DaySlot) {
   return { date, slot };
 }
 

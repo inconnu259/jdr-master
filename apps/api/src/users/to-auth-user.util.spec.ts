@@ -1,7 +1,7 @@
 import { DEFAULT_CALENDAR_LAYER_KEYS } from '@master-jdr/shared';
-import { toAuthUser } from './to-auth-user.util';
+import { toAuthUser, type UserForAuth } from './to-auth-user.util';
 
-function makeUser(overrides: Partial<Record<string, unknown>> = {}) {
+function makeUser(overrides: Partial<UserForAuth> = {}): UserForAuth {
   return {
     id: 'u1',
     email: 'a@b.c',
@@ -26,7 +26,7 @@ function makeUser(overrides: Partial<Record<string, unknown>> = {}) {
 describe('toAuthUser (Story 30.4)', () => {
   it('retire toujours passwordHash', () => {
     const result = toAuthUser(makeUser());
-    expect((result as Record<string, unknown>).passwordHash).toBeUndefined();
+    expect((result as unknown as Record<string, unknown>).passwordHash).toBeUndefined();
   });
 
   it('convertit createdAt (Date) en chaîne ISO', () => {
@@ -41,13 +41,13 @@ describe('toAuthUser (Story 30.4)', () => {
         calendarLayersSetAt: new Date('2026-02-01T00:00:00.000Z'),
       }),
     );
-    expect((result as Record<string, unknown>).mustResetPassword).toBeUndefined();
-    expect((result as Record<string, unknown>).calendarLayersSetAt).toBeUndefined();
+    expect((result as unknown as Record<string, unknown>).mustResetPassword).toBeUndefined();
+    expect((result as unknown as Record<string, unknown>).calendarLayersSetAt).toBeUndefined();
   });
 
   it('accepte un enregistrement dont passwordHash a déjà été retiré (cas AuthService.validateUser())', () => {
     const user = makeUser();
-    delete (user as Record<string, unknown>).passwordHash;
+    delete (user as unknown as Record<string, unknown>).passwordHash;
     const result = toAuthUser(user);
     expect(result.id).toBe('u1');
   });

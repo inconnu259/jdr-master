@@ -1,3 +1,4 @@
+import type { CharacterDto } from '@master-jdr/shared';
 import { Test } from '@nestjs/testing';
 
 jest.mock('node:fs/promises', () => ({
@@ -185,8 +186,8 @@ function makeContentService() {
   };
 }
 
-function makeCharacter(overrides: Record<string, unknown> = {}) {
-  return {
+function makeCharacter(overrides: Partial<CharacterDto> = {}): CharacterDto {
+  const base: CharacterDto = {
     id: 'char1',
     userId: 'u1',
     partieId: 'p1',
@@ -212,8 +213,12 @@ function makeCharacter(overrides: Record<string, unknown> = {}) {
     ownerPseudo: 'alice',
     ownerIsMj: false,
     xp: 0,
-    ...overrides,
+    ownerDisplayName: 'Alice',
+    viewerIsMj: false,
+    journalAutoAssociate: false,
+    level: 1,
   };
+  return Object.assign(base, overrides);
 }
 
 describe('RyuutamaPdfService', () => {

@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { HommeDragonController } from './homme-dragon.controller';
 import { HommeDragonService } from './homme-dragon.service';
 import { HommeDragonPdfService } from './homme-dragon.pdf.service';
+import type { ChooseEveilPowerDto } from './dto/choose-eveil-power.dto';
 import type {
   CreateHommeDragonDto,
   HommeDragonDto,
@@ -69,7 +70,7 @@ describe('HommeDragonController', () => {
   });
 
   it('POST eveil-power délègue à chooseEveilPower() avec partieId/user.id/dto', () => {
-    const dto = { level: 2, key: 'escorte-du-dragon' };
+    const dto: ChooseEveilPowerDto = { level: 2, key: 'escorte-du-dragon' };
     controller.chooseEveilPower('p1', { id: 'mj1' } as any, dto);
     expect(service.chooseEveilPower).toHaveBeenCalledWith('p1', 'mj1', dto);
   });
