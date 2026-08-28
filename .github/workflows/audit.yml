@@ -51,11 +51,14 @@ jobs:
       # Seuil `high` : `low`/`moderate` sur des dépendances de dev produisent trop de bruit pour
       # un signal exploitable.
       #
-      # ⚠️ CE JOB EST ROUGE DEPUIS SA CRÉATION, et c'est délibéré : au 2026-08-26 le dépôt compte
-      # 51 vulnérabilités connues (25 hautes + 1 critique), dont 20 sur le périmètre production.
-      # L'arriéré est réel, pas un faux positif. Ne PAS « réparer » ce rouge en abaissant le seuil
-      # ni en ajoutant `|| true` : un check vert qui ne vérifie rien est précisément ce que ce
-      # dépôt a déjà connu avec le Semgrep annoncé dans la doc mais jamais installé. Le rouge
-      # disparaîtra quand les vulnérabilités seront triées, pas avant.
+      # Les 7 advisories résiduelles sont écartées UNE PAR UNE dans `pnpm-workspace.yaml`
+      # (`auditConfig.ignoreGhsas`), avec la raison écrite à côté de chaque identifiant et la
+      # condition de retrait. La sortie de `pnpm audit` continue de les afficher, marquées
+      # « ignored » — le vert reste donc informatif.
+      #
+      # ⚠️ Ne JAMAIS « réparer » un rouge futur en abaissant ce seuil ni en ajoutant `|| true` :
+      # ça masquerait aussi les vulnérabilités corrigeables. Une nouvelle vulnérabilité doit
+      # échouer, être analysée, puis corrigée — ou écartée explicitement par identifiant si et
+      # seulement si l'amont l'épingle et qu'aucun update ne peut la déplacer.
       - name: pnpm audit (seuil high)
         run: pnpm audit --audit-level=high

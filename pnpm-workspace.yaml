@@ -13,3 +13,43 @@ allowBuilds:
   msgpackr-extract: true
   prisma: true
   unrs-resolver: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Vulnérabilités écartées de `pnpm audit` — voir docs/security.md § Dépendances
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Exclusion PAR IDENTIFIANT, jamais par abaissement du seuil : tout ce qui n'est pas listé ici
+# continue de faire échouer le workflow d'audit. Si l'un de ces paquets reçoit demain une AUTRE
+# vulnérabilité, elle passera au rouge.
+#
+# Les trois paquets concernés sont bloqués par des ÉPINGLAGES EXACTS en amont — aucune plage
+# semver à satisfaire, donc aucun `pnpm update` ne peut les déplacer. Les corriger exigerait un
+# `pnpm.overrides` imposant une version majeure non testée à un appelant qui ne l'attend pas :
+# refusé, le risque de casse silencieuse dépasse le gain (code inatteignable).
+#
+# CONDITION DE RETRAIT de chaque ligne : que l'amont publie le correctif. Vérifier à chaque PR
+# Dependabot touchant `prisma` ou `@nestjs-modules/mailer`.
+auditConfig:
+  ignoreGhsas:
+    # ── deepmerge-ts (via @prisma/client > prisma > @prisma/config) ──
+    # `@prisma/config@7.10.0` épingle `deepmerge-ts: "7.1.5"` à la version exacte. Épuisement de
+    # pile sur objets récursifs, dans le chargeur de config du CLI Prisma — pas du client runtime.
+    # Correctif attendu avec Prisma 8 (aujourd'hui en release candidate).
+    - GHSA-ggr8-5vv4-36mx
+
+    # ── linkify-it (via @nestjs-modules/mailer > preview-email > mailparser) ──
+    # `preview-email@3.3.0` épingle `mailparser: "3.9.8"` à la version exacte ; `mailparser@3.9.16`
+    # embarque déjà le `linkify-it@5.0.2` corrigé, mais reste inatteignable. DoS par complexité
+    # quadratique, dans un analyseur d'e-mails que cette API n'appelle jamais (l'adaptateur en
+    # service est HandlebarsAdapter, `preview-email` est un peer OPTIONNEL non utilisé).
+    - GHSA-22p9-wv53-3rq4
+    - GHSA-v245-v573-v5vm
+
+    # ── nodemailer 8.0.5 (même chaîne, tiré par mailparser pour son décodage MIME) ──
+    # L'envoi d'e-mails réel de l'application passe par la dépendance DIRECTE `nodemailer@9.0.5`,
+    # corrigée. Cette copie 8.0.5 n'envoie jamais rien — les 4 advisories visent des chemins
+    # d'envoi (en-têtes List-*, jsonTransport, TLS OAuth2) que `mailparser` n'emprunte pas.
+    - GHSA-268h-hp4c-crq3
+    - GHSA-wqvq-jvpq-h66f
+    - GHSA-r7g4-qg5f-qqm2
+    - GHSA-p6gq-j5cr-w38f

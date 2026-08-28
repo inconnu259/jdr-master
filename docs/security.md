@@ -70,8 +70,22 @@ build, ni au typecheck — il casserait à l'exécution, et pour `deepmerge-ts` 
 chargeur de config utilisé par `prisma generate` et `migrate deploy`. Aucun gain de sécurité
 réel (code inatteignable) contre un risque de casse silencieuse.
 
+**Pourquoi aucun update ne peut les déplacer** — vérifié le 2026-08-27, les trois sont bloquées
+par des épinglages **exacts** en amont, sans plage semver à satisfaire :
+
+- `@prisma/config@7.10.0` déclare `deepmerge-ts: "7.1.5"` (version exacte) ;
+- `preview-email@3.3.0` — déjà la dernière — déclare `mailparser: "3.9.8"` (version exacte), alors
+  que `mailparser@3.9.16` embarque le `linkify-it@5.0.2` corrigé et un `nodemailer` récent.
+
+**Écartées explicitement de l'audit.** `pnpm-workspace.yaml` → `auditConfig.ignoreGhsas` liste les
+7 identifiants GHSA **un par un**, chacun commenté avec sa raison et sa condition de retrait.
+Jamais par abaissement du seuil : tout ce qui n'est pas listé continue de faire échouer le
+workflow, et si l'un de ces paquets reçoit une AUTRE vulnérabilité elle passera au rouge.
+`pnpm audit` continue d'ailleurs de les afficher, marquées « ignored ».
+
 **Ce qui les résoudra** : un bump amont de `@nestjs-modules/mailer` et de `prisma`. Dependabot
-ouvrira la PR, le workflow d'audit tournera dessus, la ligne disparaîtra d'elle-même.
+ouvrira la PR, le workflow d'audit tournera dessus — à ce moment-là, retirer les identifiants
+concernés de la liste et vérifier que l'audit reste vert sans eux.
 
 **Piste de fond** : `@nestjs-modules/mailer` tire `mjml` et `preview-email` dont ce projet
 n'utilise rien (l'adaptateur en service est `HandlebarsAdapter`). Passer à `nodemailer` en direct
