@@ -18,10 +18,7 @@ export interface RequiredChoiceOption {
 }
 
 export type RequiredChoiceKind =
-  | 'eligible-talent'
-  | 'landscape-flavor'
-  | 'closed-list'
-  | 'landscape-capability';
+  'eligible-talent' | 'landscape-flavor' | 'closed-list' | 'landscape-capability';
 
 export interface RequiredChoice {
   key: string;

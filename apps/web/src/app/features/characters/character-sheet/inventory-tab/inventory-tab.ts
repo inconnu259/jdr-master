@@ -27,22 +27,19 @@ export class InventoryTab {
   protected readonly individual = computed<InventoryItemView[]>(
     () =>
       ((this.character().sheetData as any)?.equipment?.individual as
-        | InventoryItemView[]
-        | undefined) ?? [],
+        InventoryItemView[] | undefined) ?? [],
   );
 
   protected readonly contenants = computed<InventoryItemView[]>(
     () =>
       ((this.character().sheetData as any)?.equipment?.contenants as
-        | InventoryItemView[]
-        | undefined) ?? [],
+        InventoryItemView[] | undefined) ?? [],
   );
 
   protected readonly animaux = computed<InventoryItemView[]>(
     () =>
       ((this.character().sheetData as any)?.equipment?.animaux as
-        | InventoryItemView[]
-        | undefined) ?? [],
+        InventoryItemView[] | undefined) ?? [],
   );
 
   /** Poids total = objets + contenants — les animaux n'ont jamais de poids (FR8). */

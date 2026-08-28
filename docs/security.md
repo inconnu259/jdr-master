@@ -44,9 +44,52 @@ isolation des données par utilisateur/partie (un joueur ne voit que ses persos)
 - [ ] **Validation des variables d'env** au démarrage (échec rapide si manquant).
 
 ### Dépendances
-- [ ] **`pnpm audit`** régulier (via Docker).
-- [ ] **Renovate** ou **Dependabot** : PR de mise à jour automatiques.
+- [x] **`pnpm audit`** automatisé — `.github/workflows/audit.yml` : hebdomadaire, plus à chaque PR
+      touchant `pnpm-lock.yaml` ou un `package.json`. Seuil `high`. **Hors de la porte `ci-ok`** :
+      une CVE publiée dans la nuit ne doit pas bloquer une PR sans rapport.
+- [x] **Dependabot** actif (activé côté GitHub, pas de fichier dans le dépôt).
 - [ ] (Option) **Socket** : détection de paquets malveillants.
+
+#### Tri des vulnérabilités résiduelles (2026-08-27)
+
+Un `pnpm update` (dans les plages semver existantes, aucun majeur déplacé) a ramené l'audit de
+**51 advisories / 18 paquets / 1 critique** à **7 advisories / 3 paquets / 0 critique**.
+
+Les 3 restants sont **tous transitifs** et **aucun n'est atteignable par le code applicatif** :
+
+| Paquet | Gravité | Chaîne | Pourquoi on ne corrige pas |
+|---|---|---|---|
+| `linkify-it` | high | `@nestjs-modules/mailer > preview-email > mailparser` | `preview-email` est l'outil d'aperçu d'e-mails dans un navigateur ; jamais invoqué par l'API |
+| `nodemailer` | moderate | `@nestjs-modules/mailer > preview-email > mailparser` | idem — la dépendance *directe* `nodemailer` est déjà en 9.x, seule la copie transitive sous `preview-email` reste en 8.x |
+| `deepmerge-ts` | high | `@prisma/client > prisma > @prisma/config` | chargeur de config du **CLI** Prisma, pas du client runtime |
+
+**Ne pas les forcer par un `pnpm.overrides`.** Les trois exigent un changement de version
+**majeure**, c'est-à-dire une API incompatible livrée à un appelant qui ne l'attend pas
+(`preview-email`, `@prisma/config`). Un override ne serait vérifié ni à l'installation, ni au
+build, ni au typecheck — il casserait à l'exécution, et pour `deepmerge-ts` cela viserait le
+chargeur de config utilisé par `prisma generate` et `migrate deploy`. Aucun gain de sécurité
+réel (code inatteignable) contre un risque de casse silencieuse.
+
+**Pourquoi aucun update ne peut les déplacer** — vérifié le 2026-08-27, les trois sont bloquées
+par des épinglages **exacts** en amont, sans plage semver à satisfaire :
+
+- `@prisma/config@7.10.0` déclare `deepmerge-ts: "7.1.5"` (version exacte) ;
+- `preview-email@3.3.0` — déjà la dernière — déclare `mailparser: "3.9.8"` (version exacte), alors
+  que `mailparser@3.9.16` embarque le `linkify-it@5.0.2` corrigé et un `nodemailer` récent.
+
+**Écartées explicitement de l'audit.** `pnpm-workspace.yaml` → `auditConfig.ignoreGhsas` liste les
+7 identifiants GHSA **un par un**, chacun commenté avec sa raison et sa condition de retrait.
+Jamais par abaissement du seuil : tout ce qui n'est pas listé continue de faire échouer le
+workflow, et si l'un de ces paquets reçoit une AUTRE vulnérabilité elle passera au rouge.
+`pnpm audit` continue d'ailleurs de les afficher, marquées « ignored ».
+
+**Ce qui les résoudra** : un bump amont de `@nestjs-modules/mailer` et de `prisma`. Dependabot
+ouvrira la PR, le workflow d'audit tournera dessus — à ce moment-là, retirer les identifiants
+concernés de la liste et vérifier que l'audit reste vert sans eux.
+
+**Piste de fond** : `@nestjs-modules/mailer` tire `mjml` et `preview-email` dont ce projet
+n'utilise rien (l'adaptateur en service est `HandlebarsAdapter`). Passer à `nodemailer` en direct
+supprimerait la racine de la majorité de ces chaînes. Chantier à chiffrer, non planifié.
 
 ### Conteneurs (Docker)
 - [ ] Image **slim**, exécution en **utilisateur non-root**.
@@ -59,12 +102,17 @@ isolation des données par utilisateur/partie (un joueur ne voit que ses persos)
 
 ## Outils & quand les utiliser
 
-| Outil | Quoi | Quand |
-|---|---|---|
-| **Semgrep** (plugin Claude Code) | SAST + supply-chain + secrets, scan **après chaque édition** | en continu |
-| **`/security-review`** (skill) | revue sécu du diff par l'IA | **fin de chaque palier** |
-| **CI** : CodeQL/Semgrep, Gitleaks, Trivy, Dependabot, action `claude-code-security-review` | barrières automatiques | sur chaque PR (repo GitHub) |
+| Outil | Quoi | Quand | En place ? |
+|---|---|---|---|
+| **CodeQL** (`.github/workflows/codeql.yml`) | analyse statique de sécurité, native GitHub | PR, push `master`, hebdo | ✅ |
+| **`pnpm audit`** (`.github/workflows/audit.yml`) | CVE des dépendances, seuil `high` | hebdo + changement de lockfile | ✅ |
+| **Dependabot** | PR de mise à jour | en continu | ✅ (côté GitHub) |
+| **`/security-review`** (skill) | revue sécu du diff par l'IA | **fin de chaque palier** | ✅ (manuel) |
+| Gitleaks, Trivy, Socket | secrets, CVE d'images, paquets malveillants | — | ❌ non installés |
+
+⚠️ **Semgrep n'est pas installé** et ne l'a jamais été, contrairement à ce que ce document et
+`CLAUDE.md` ont longtemps affirmé. L'analyse statique de sécurité est assurée par **CodeQL**.
 
 ## Réflexe par tâche
 Toute tâche touchant **auth / données / upload / autorisation** → lancer **`/security-review`** avant de clore,
-et vérifier les items de couche concernés ci-dessus. (Semgrep, lui, scanne déjà en continu.)
+et vérifier les items de couche concernés ci-dessus. (CodeQL tourne sur chaque PR, mais il ne remplace pas cette revue.)

@@ -67,10 +67,7 @@ interface ClassTalentFull {
 }
 
 export type RequiredChoiceKind =
-  | 'eligible-talent'
-  | 'landscape-flavor'
-  | 'closed-list'
-  | 'landscape-capability';
+  'eligible-talent' | 'landscape-flavor' | 'closed-list' | 'landscape-capability';
 
 interface RequiredChoiceOption {
   value: string;
@@ -364,8 +361,7 @@ export class CharacterSheet implements OnInit {
   protected readonly weaponData = computed<ResolvedWeapon | null>(() => {
     const weaponId = this.sheetData()['weaponId'] as string | undefined;
     const customWeapon = this.sheetData()['customWeapon'] as
-      | { name: string; categoryId: string }
-      | undefined;
+      { name: string; categoryId: string } | undefined;
     if (!weaponId && !customWeapon) return null;
     const weaponItems: WeaponItemEntry[] = (this.content()?.['weaponItem'] ?? []).map((entry) => ({
       key: entry.key,
@@ -438,8 +434,7 @@ export class CharacterSheet implements OnInit {
     const c = this.character();
     if (!c) return null;
     const key = getCapabilitiesByType(c, 'class')[0]?.capability.params['key'] as
-      | string
-      | undefined;
+      string | undefined;
     return findContentEntry<ClassData>(this.content(), 'class', key);
   });
 

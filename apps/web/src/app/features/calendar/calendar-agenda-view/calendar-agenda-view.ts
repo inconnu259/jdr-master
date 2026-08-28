@@ -482,9 +482,10 @@ export class CalendarAgendaView {
     const rest = names.length - MAX_LISTED_MISSING;
     return this.theme
       .tone()
-      [
-        'calendar.agenda.missing_voters'
-      ].replace('{names}', rest > 0 ? `${listed} et ${rest} autre${rest > 1 ? 's' : ''}` : listed);
+      ['calendar.agenda.missing_voters'].replace(
+        '{names}',
+        rest > 0 ? `${listed} et ${rest} autre${rest > 1 ? 's' : ''}` : listed,
+      );
   }
 
   /** AC8 — l'intention du lecteur prime ; à défaut, la maturité décide (« d'office » = par

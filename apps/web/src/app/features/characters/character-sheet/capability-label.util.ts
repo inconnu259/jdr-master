@@ -37,8 +37,7 @@ function getClassCapabilities(
 ): { type: string; params: Record<string, unknown> }[] {
   return (
     ((character.sheetData as any)?.classCapabilities as
-      | { type: string; params: Record<string, unknown> }[]
-      | undefined) ?? []
+      { type: string; params: Record<string, unknown> }[] | undefined) ?? []
   );
 }
 
