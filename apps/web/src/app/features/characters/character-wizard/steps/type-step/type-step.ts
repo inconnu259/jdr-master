@@ -1,6 +1,11 @@
 import { Component, computed, inject, input, output } from '@angular/core';
 import type { ContentEntryDto } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../../../core/theme/theme-tone.service';
+import { DetailSurface } from '../../../../../shared/detail-surface/detail-surface';
+import {
+  createDetailSurfaceHost,
+  detailContent,
+} from '../../../../../shared/detail-surface/detail-surface-host';
 import { ChoiceCard, type ChoiceCardOption } from '../../choice-card/choice-card';
 import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.directive';
 
@@ -18,7 +23,7 @@ interface TypeData {
 @Component({
   selector: 'app-type-step',
   standalone: true,
-  imports: [ChoiceCard, RadioGroupNavDirective],
+  imports: [ChoiceCard, RadioGroupNavDirective, DetailSurface],
   templateUrl: './type-step.html',
   styleUrl: './type-step.scss',
 })
@@ -29,6 +34,11 @@ export class TypeStep {
   readonly typeIdChange = output<string>();
 
   protected readonly theme = inject(ThemeToneService);
+
+  /** Aide contextuelle sur les termes de règle (FR-19) — même surface partagée que la fiche. */
+  protected readonly detail = createDetailSurfaceHost();
+  /** Règle AC3 : pas de texte au catalogue ⇒ pas de déclencheur. */
+  protected readonly help = detailContent;
 
   protected readonly options = computed<ChoiceCardOption[]>(() =>
     this.types().map((entry) => {

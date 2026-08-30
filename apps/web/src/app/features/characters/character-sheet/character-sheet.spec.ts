@@ -1141,7 +1141,10 @@ describe('CharacterSheet', () => {
     });
     const { fixture } = await createComponent(characterSvc);
 
-    const text = fixture.nativeElement.textContent;
+    // Story 31.3 — le nom de la classe secondaire est désormais porté par son propre déclencheur
+    // quand le catalogue lui donne une description ; le titre est donc lu en espaces normalisés
+    // (le navigateur les replie, `textContent` non).
+    const text = (fixture.nativeElement.textContent as string).replace(/\s+/g, ' ');
     expect(text).toContain('Classe secondaire : Marchand');
     expect(text).toContain('Négociation');
 
@@ -1190,7 +1193,7 @@ describe('CharacterSheet', () => {
     });
     const { fixture } = await createComponent(characterSvc);
 
-    const text = fixture.nativeElement.textContent;
+    const text = (fixture.nativeElement.textContent as string).replace(/\s+/g, ' ');
     expect(text).toContain('Type secondaire : Magie');
     expect(text).toContain('Incantation');
   });
@@ -2028,6 +2031,194 @@ describe('CharacterSheet', () => {
       const activeTab = fixture.nativeElement.querySelector('[role="tab"][aria-selected="true"]');
       expect(activeTab).not.toBeNull();
       expect(activeTab.querySelector('.mdc-tab-indicator')).not.toBeNull();
+    });
+  });
+
+  // ── Story 31.3 — aide contextuelle sur les termes de règle (FR-19) ──────────────────────────
+
+  describe('aide contextuelle sur les termes de règle', () => {
+    /** Même contenu que `CONTENT`, mais les termes portent le texte explicatif du catalogue. */
+    const CONTENT_WITH_HELP: GameSystemContentDto = {
+      ...CONTENT,
+      class: [
+        {
+          key: 'menestrel',
+          data: {
+            label: 'Ménestrel',
+            description: 'Le ménestrel voyage de village en village et connaît mille histoires.',
+            talents: [{ name: 'Légendes', effect: { description: '...', conditions: '-' } }],
+          },
+        },
+      ],
+      type: [
+        {
+          key: 'technique',
+          data: {
+            label: 'Technique',
+            description: 'Le technique résout les difficultés par la précision du geste.',
+            advantages: [{ name: 'Précision', effect: '+2' }],
+          },
+        },
+      ],
+      weaponCategory: [
+        {
+          key: 'lance',
+          data: {
+            label: 'Lance',
+            description: 'Arme d’hast tenue à deux mains, allonge supérieure.',
+            touchFormula: 'VIG+AGI',
+            damageFormula: 'VIG+1',
+          },
+        },
+      ],
+    };
+
+    function withHelp() {
+      return createComponent(
+        makeCharacterService({
+          getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_WITH_HELP),
+        }),
+      );
+    }
+
+    function triggerNamed(fixture: ComponentFixture<CharacterSheet>, name: string) {
+      const triggers: HTMLButtonElement[] = Array.from(
+        fixture.nativeElement.querySelectorAll('.sheet__detail-trigger'),
+      );
+      return triggers.find((b) => b.textContent?.trim() === name);
+    }
+
+    function panelText(fixture: ComponentFixture<CharacterSheet>) {
+      const panel = fixture.nativeElement.querySelector('.detail-surface-panel');
+      return {
+        title: panel?.querySelector('.detail-surface-title')?.textContent ?? '',
+        body: panel?.querySelector('.detail-surface-body')?.textContent ?? '',
+      };
+    }
+
+    it('AC1 — activer la classe ouvre sa description de catalogue dans la surface', async () => {
+      const { fixture } = await withHelp();
+      triggerNamed(fixture, 'Ménestrel')!.click();
+      fixture.detectChanges();
+
+      expect(panelText(fixture).title).toContain('Ménestrel');
+      expect(panelText(fixture).body).toContain('de village en village');
+    });
+
+    it('AC1 — activer le type/voie ouvre sa description de catalogue', async () => {
+      const { fixture } = await withHelp();
+      triggerNamed(fixture, 'Technique')!.click();
+      fixture.detectChanges();
+
+      expect(panelText(fixture).title).toContain('Technique');
+      expect(panelText(fixture).body).toContain('précision du geste');
+    });
+
+    it('AC1 — activer la catégorie d’arme ouvre sa description (absente de ResolvedWeapon)', async () => {
+      const { fixture } = await withHelp();
+      triggerNamed(fixture, 'Lance')!.click();
+      fixture.detectChanges();
+
+      expect(panelText(fixture).title).toContain('Lance');
+      expect(panelText(fixture).body).toContain('Arme d’hast');
+    });
+
+    it('[Review][Patch] le nom d’arme se rend sans espace parasite autour des parenthèses', async () => {
+      // Régression : un @if/@else scindant littéralement "(" et ")" autour du bloc de contrôle
+      // rendait " Lance ( Lance ) " au lieu de "Lance (Lance)". La parenthèse doit rester à
+      // l'intérieur de chaque branche — ce test verrouille l'absence d'espace À L'INTÉRIEUR des
+      // parenthèses (le seul qui ne se referme pas par la fusion d'espaces du navigateur).
+      const { fixture } = await withHelp();
+      const text = fixture.nativeElement.querySelector('.sheet__weapon-name')!
+        .textContent as string;
+      expect(text).not.toContain('( ');
+      expect(text).not.toContain(' )');
+      expect(text.replace(/\s+/g, ' ').trim()).toContain('Lance (Lance)');
+    });
+
+    it('AC2 — le texte vient du catalogue : sans entrée de contenu, aucun texte n’apparaît', async () => {
+      // Le service de thème du harnais ne porte AUCUN texte de règle (P8-AD-9) : si l’aide
+      // s’affichait malgré un catalogue muet, c’est qu’elle aurait été écrite en dur quelque part.
+      const { fixture } = await createComponent();
+      expect(triggerNamed(fixture, 'Ménestrel')).toBeUndefined();
+      expect(fixture.nativeElement.textContent).not.toContain('de village en village');
+    });
+
+    it('AC3 — un terme sans texte au catalogue ne rend AUCUN déclencheur', async () => {
+      const { fixture } = await createComponent();
+
+      expect(triggerNamed(fixture, 'Ménestrel')).toBeUndefined();
+      expect(triggerNamed(fixture, 'Technique')).toBeUndefined();
+      expect(triggerNamed(fixture, 'Lance')).toBeUndefined();
+      // ...et le libellé reste bien affiché, seul le geste disparaît.
+      const text = (fixture.nativeElement.textContent as string).replace(/\s+/g, ' ');
+      expect(text).toContain('Vocation — Ménestrel');
+      expect(text).toContain('Voie — Technique');
+    });
+
+    it('AC3 — la spécialité (texte libre du joueur) n’est jamais un déclencheur', async () => {
+      const artisan: GameSystemContentDto = {
+        ...CONTENT_WITH_HELP,
+        class: [
+          {
+            key: 'artisan',
+            data: {
+              label: 'Artisan',
+              description: 'L’artisan façonne et répare.',
+              requiresSpecialty: true,
+              specialtyLabel: 'Type d’objet de spécialité',
+              talents: [],
+            },
+          },
+        ],
+      };
+      const character = {
+        ...CHARACTER,
+        sheetData: { ...CHARACTER.sheetData, classId: 'artisan', specialtyTypeId: 'poterie' },
+      };
+      const { fixture } = await createComponent(
+        makeCharacterService({
+          get: vi.fn().mockResolvedValue(character),
+          getGameSystemContent: vi.fn().mockResolvedValue(artisan),
+        }),
+      );
+
+      expect(fixture.nativeElement.textContent).toContain('poterie');
+      expect(triggerNamed(fixture, 'poterie')).toBeUndefined();
+    });
+
+    it('AC4 — les déclencheurs de termes sont de vrais boutons, atteignables au clavier', async () => {
+      const { fixture } = await withHelp();
+      const trigger = triggerNamed(fixture, 'Ménestrel')!;
+
+      expect(trigger.tagName).toBe('BUTTON');
+      expect(trigger.getAttribute('type')).toBe('button');
+      expect(trigger.tabIndex).not.toBe(-1);
+    });
+
+    it('AC5 — activer un second terme remplace le contenu, sans empiler de panneau', async () => {
+      const { fixture } = await withHelp();
+      triggerNamed(fixture, 'Ménestrel')!.click();
+      fixture.detectChanges();
+      triggerNamed(fixture, 'Technique')!.click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelectorAll('.detail-surface-panel').length).toBe(1);
+      expect(panelText(fixture).title).toContain('Technique');
+    });
+
+    it('AC6 — fermer rend le focus au déclencheur du terme', async () => {
+      const { fixture } = await withHelp();
+      const trigger = triggerNamed(fixture, 'Ménestrel')!;
+      trigger.focus();
+      trigger.click();
+      fixture.detectChanges();
+
+      (fixture.nativeElement.querySelector('.detail-surface-close') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.detail-surface-panel')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
     });
   });
 });

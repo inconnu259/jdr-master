@@ -224,23 +224,41 @@ describe('ClassStep', () => {
     expect(fixture.nativeElement.textContent).toContain('Chasse');
     expect(fixture.nativeElement.textContent).toContain('Transformation');
     expect(fixture.nativeElement.textContent).toContain('Traque');
+    // La description de la CLASSE reste en ligne : c'est elle qui sert à choisir (Story 31.3).
     expect(fixture.nativeElement.textContent).toContain(
       'Les chasseurs abattent leurs proies grâce à leurs connaissances et à leur technique.',
     );
-    expect(fixture.nativeElement.textContent).toContain(
+
+    // Story 31.3 — le texte de chaque TALENT a quitté la ligne : il s'ouvre dans la surface de
+    // détail au clic sur son nom (AC1), effet mécanique et texte d'ambiance réunis.
+    const talentTrigger = (name: string) =>
+      (
+        Array.from(
+          fixture.nativeElement.querySelectorAll('.class-step__detail-trigger'),
+        ) as HTMLButtonElement[]
+      ).find((b) => b.textContent?.trim() === name)!;
+
+    talentTrigger('Chasse').click();
+    fixture.detectChanges();
+    const body = () =>
+      fixture.nativeElement.querySelector('.detail-surface-body').textContent as string;
+    expect(body()).toContain('Nourrit le groupe selon le résultat du test');
+    expect(body()).toContain(
       'Les chasseurs se sont fait une spécialité de ramener des animaux sauvages pour nourrir leurs compagnons.',
     );
-    expect(fixture.nativeElement.textContent).toContain(
-      'Les chasseurs savent utiliser les dépouilles des monstres.',
-    );
-    expect(fixture.nativeElement.textContent).toContain(
+
+    talentTrigger('Transformation').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.detail-surface-panel').length).toBe(1);
+    expect(body()).toContain('Transforme une dépouille');
+    expect(body()).toContain('Les chasseurs savent utiliser les dépouilles des monstres.');
+
+    talentTrigger('Traque').click();
+    fixture.detectChanges();
+    expect(body()).toContain('Découvre un monstre');
+    expect(body()).toContain(
       "Les chasseurs savent remonter les traces d'un type de monstre particulier.",
     );
-    expect(fixture.nativeElement.textContent).toContain(
-      'Nourrit le groupe selon le résultat du test',
-    );
-    expect(fixture.nativeElement.textContent).toContain('Transforme une dépouille');
-    expect(fixture.nativeElement.textContent).toContain('Découvre un monstre');
   });
 
   it("sélection d'une classe → affiche les occupations et actions en texte de référence pur", async () => {
@@ -428,6 +446,131 @@ describe('ClassStep', () => {
       const select: HTMLSelectElement = fixture.nativeElement.querySelector('#choix-inconnu');
       expect(select).toBeTruthy();
       expect(select.querySelectorAll('option')).toHaveLength(1); // seulement "-- Choisir --"
+    });
+  });
+
+  // ── Story 31.3 — aide contextuelle sur les termes de règle (FR-19) ──────────────────────────
+
+  describe('aide contextuelle', () => {
+    function mount(classes: ContentEntryDto[], classId: string) {
+      TestBed.configureTestingModule({ imports: [ClassStep] });
+      const fixture = TestBed.createComponent(ClassStep);
+      fixture.componentRef.setInput('classes', classes);
+      fixture.componentRef.setInput('classId', classId);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    const triggers = (fixture: { nativeElement: HTMLElement }) =>
+      Array.from(
+        fixture.nativeElement.querySelectorAll('.class-step__detail-trigger'),
+      ) as HTMLButtonElement[];
+
+    const named = (fixture: { nativeElement: HTMLElement }, name: string) =>
+      triggers(fixture).find((b) => b.textContent?.trim() === name);
+
+    it('AC1 — une option de classe ouvre le texte de son talent parent (résolu par talentId)', () => {
+      const fixture = mount(CLASSES_WITH_CHOICES, 'fermier');
+
+      const trigger = named(fixture, "Talent emprunté (Métier d'appoint)")!;
+      expect(trigger).toBeDefined();
+      trigger.click();
+      fixture.detectChanges();
+
+      const panel = fixture.nativeElement.querySelector('.detail-surface-panel')!;
+      expect(panel.querySelector('.detail-surface-title')!.textContent).toContain(
+        'Talent emprunté',
+      );
+      expect(panel.querySelector('.detail-surface-body')!.textContent).toContain(
+        'Emprunte un talent.',
+      );
+    });
+
+    it("[Review][Patch] le déclencheur d'une option de classe n'est pas imbriqué dans un <label for>", () => {
+      // Un <button> imbriqué dans <label [for]="choice.key"> est un anti-pattern HTML (renvoi de
+      // clic natif vers le <select> associé imprévisible selon le navigateur) — le déclencheur
+      // vit désormais dans un <span id>, associé au <select> par aria-labelledby.
+      const fixture = mount(CLASSES_WITH_CHOICES, 'fermier');
+      const trigger = named(fixture, "Talent emprunté (Métier d'appoint)")!;
+
+      expect(trigger.closest('label')).toBeNull();
+
+      const select = fixture.nativeElement.querySelector(
+        '#fermier-metier-appoint',
+      ) as HTMLSelectElement;
+      expect(select.getAttribute('aria-labelledby')).toBe('fermier-metier-appoint-label');
+    });
+
+    it('AC2 — le texte affiché vient du catalogue fourni en entrée, jamais du registre de thèmes', () => {
+      // Aucun ThemeToneService n'est fourni au harnais : si un texte de règle en venait, le test
+      // ne pourrait pas passer avec ce seul contenu injecté.
+      const fixture = mount(CLASSES, 'chasseur');
+      named(fixture, 'Chasse')!.click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.detail-surface-body')!.textContent).toContain(
+        'Nourrit le groupe selon le résultat du test',
+      );
+    });
+
+    it('AC3 — un talent sans aucun texte ne rend AUCUN déclencheur', () => {
+      const muet: ContentEntryDto[] = [
+        {
+          key: 'muet',
+          data: {
+            label: 'Muet',
+            description: 'Classe de test.',
+            occupations: [],
+            actions: [],
+            talents: [
+              {
+                name: 'Sans texte',
+                effect: { description: '   ', conditions: '-' },
+                description: '',
+              },
+            ],
+          },
+        },
+      ];
+      const fixture = mount(muet, 'muet');
+
+      expect(named(fixture, 'Sans texte')).toBeUndefined();
+      // ...mais le nom du talent reste affiché : seul le geste disparaît.
+      expect(fixture.nativeElement.textContent).toContain('Sans texte');
+    });
+
+    it('AC5 — activer un second terme remplace le contenu, sans empiler de panneau', () => {
+      const fixture = mount(CLASSES, 'chasseur');
+      named(fixture, 'Chasse')!.click();
+      fixture.detectChanges();
+      named(fixture, 'Traque')!.click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelectorAll('.detail-surface-panel').length).toBe(1);
+      expect(fixture.nativeElement.querySelector('.detail-surface-title')!.textContent).toContain(
+        'Traque',
+      );
+    });
+
+    it('AC6 — fermer rend le focus au déclencheur', () => {
+      const fixture = mount(CLASSES, 'chasseur');
+      const trigger = named(fixture, 'Chasse')!;
+      trigger.focus();
+      trigger.click();
+      fixture.detectChanges();
+
+      (fixture.nativeElement.querySelector('.detail-surface-close') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('.detail-surface-panel')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it('AC4 — aucun déclencheur d’aide n’est posé DANS une carte-radio (nav clavier intacte)', () => {
+      const fixture = mount(CLASSES, 'chasseur');
+      const radiogroup = fixture.nativeElement.querySelector('[role="radiogroup"]')!;
+      expect(radiogroup.querySelectorAll('.class-step__detail-trigger').length).toBe(0);
+      expect(triggers(fixture).length).toBeGreaterThan(0);
     });
   });
 });

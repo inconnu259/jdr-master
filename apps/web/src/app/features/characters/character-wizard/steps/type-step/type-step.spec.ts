@@ -80,4 +80,73 @@ describe('TypeStep', () => {
 
     expect(fixture.nativeElement.querySelector('.type-step__advantage-description')).toBeNull();
   });
+
+  // ── Story 31.3 — aide contextuelle sur les termes de règle (FR-19) ──────────────────────────
+
+  describe('aide contextuelle', () => {
+    function mount(types: ContentEntryDto[], typeId: string) {
+      TestBed.configureTestingModule({ imports: [TypeStep] });
+      const fixture = TestBed.createComponent(TypeStep);
+      fixture.componentRef.setInput('types', types);
+      fixture.componentRef.setInput('typeId', typeId);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    const named = (fixture: { nativeElement: HTMLElement }, name: string) =>
+      (
+        Array.from(
+          fixture.nativeElement.querySelectorAll('.type-step__detail-trigger'),
+        ) as HTMLButtonElement[]
+      ).find((b) => b.textContent?.trim() === name);
+
+    it('AC1 — activer un avantage ouvre son effet dans la surface', () => {
+      const fixture = mount(TYPES, 'technique');
+      named(fixture, 'Vitesse')!.click();
+      fixture.detectChanges();
+
+      const panel = fixture.nativeElement.querySelector('.detail-surface-panel')!;
+      expect(panel.querySelector('.detail-surface-title')!.textContent).toContain('Vitesse');
+      expect(panel.querySelector('.detail-surface-body')!.textContent).toContain(
+        "+1 à l'initiative",
+      );
+    });
+
+    it('la description du TYPE reste en ligne : elle sert à choisir', () => {
+      const fixture = mount(TYPES, 'technique');
+      expect(fixture.nativeElement.textContent).toContain(
+        "Le personnage est capable d'analyser rapidement une situation.",
+      );
+    });
+
+    it('AC3 — un avantage sans effet ne rend AUCUN déclencheur', () => {
+      const muet: ContentEntryDto[] = [
+        {
+          key: 'muet',
+          data: {
+            label: 'Muet',
+            description: 'Type de test.',
+            advantages: [{ name: 'Vide', effect: '  ' }],
+          },
+        },
+      ];
+      const fixture = mount(muet, 'muet');
+
+      expect(named(fixture, 'Vide')).toBeUndefined();
+      expect(fixture.nativeElement.textContent).toContain('Vide');
+    });
+
+    it('AC5 — activer un second avantage remplace le contenu, sans empiler', () => {
+      const fixture = mount(TYPES, 'technique');
+      named(fixture, 'Vitesse')!.click();
+      fixture.detectChanges();
+      named(fixture, 'Bagages')!.click();
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelectorAll('.detail-surface-panel').length).toBe(1);
+      expect(fixture.nativeElement.querySelector('.detail-surface-title')!.textContent).toContain(
+        'Bagages',
+      );
+    });
+  });
 });

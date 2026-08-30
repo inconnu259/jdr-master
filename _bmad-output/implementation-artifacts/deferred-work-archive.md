@@ -1089,3 +1089,8 @@ Item déjà résolu entre-temps (retiré sans action) : le correctif `allowImpor
 ## Deferred from: code review of 36-12-lagenda-du-mj-options-depliees-et-scellement (2026-08-23)
 
 - ⛔ ACCEPTÉ (même traitement que les autres cas sans date de l'Agenda) — **`nearestDate` retombe silencieusement sur `''` si toutes les options d'un groupe de vote sont sans date** — le groupe est alors trié en fin de section comme une entrée « sans date », même traitement que les autres cas sans date de l'Agenda ; cas dégradé non testé explicitement pour un groupe de vote. [apps/web/src/app/features/calendar/agenda-badge.utils.ts:groupVoteEntries]
+
+
+## Deferred from: code review of 31-2-surface-de-detail-adaptative — résolu par la 31-3 (2026-08-29)
+
+- ✅ **RÉSOLU (2026-08-29, story 31-3-aide-contextuelle-sur-les-termes-de-jeu)** — AC6 « focus revient au déclencheur » vivait entièrement dans `CharacterSheet` (champ privé `detailTrigger`), pas dans le composant partagé `DetailSurface`, contredisant la justification d'auto-suffisance donnée par la 31.2. Extrait dans `createDetailSurfaceHost()` (`apps/web/src/app/shared/detail-surface/detail-surface-host.ts`), fonction appelée en contexte d'injection portant l'état, le jeton d'ouverture et le retour de focus (avec repli `isConnected`). `CharacterSheet` migré dessus à comportement constant (ses 110 tests préexistants passent sans modification) ; `class-step` et `type-step` (31.3) consomment directement le même mécanisme, sans réimplémentation. [apps/web/src/app/shared/detail-surface/detail-surface-host.ts]

@@ -1,5 +1,5 @@
 # generated: 2026-06-27
-# last_updated: 2026-08-23
+# last_updated: 2026-08-28
 # project: jdr-master
 # project_key: JDR
 # tracking_system: local
@@ -1397,8 +1397,11 @@ development_status:
     title: "Surface de détail adaptative"
 
   31-3-aide-contextuelle-sur-les-termes-de-jeu:
-    status: backlog
+    status: done
     epic: epic-31
+    last_updated: "2026-08-29"
+    review_note: "REVUE DE CODE (bmad-code-review) le 2026-08-29, 4 couches paralleles (Blind Hunter, Edge Case Hunter, Verification Gap, Acceptance Auditor). 0 decision-needed, 4 patch corriges (bouton imbrique dans <label for> associe a un <select> -> <span id>+aria-labelledby ; espaces parasites dans le nom d'arme (@if/@else scinde autour de parentheses litterales) ; 2 declencheurs sur 6 affichant le libelle brut au lieu de h.title ; repli 'Detail' duplique et code en dur dans detailContent(), retire), 2 defer (garde AC3 non appliquee aux declencheurs FR-20 preexistants ; absence de semantique ARIA de divulgation -- tous deux herites tels quels de la 31.2, non introduits par cette story), 9 rejetes comme bruit. 2 tests de non-regression ajoutes. Post-patch : web 117 fichiers / 2283 tests verts (+2), lint 0 = baseline exactement. Item deferred-work.md de la 31.2 (retour de focus hors du composant partage) archive comme resolu par cette story."
+    note: "IMPLEMENTEE (bmad-dev-story) le 2026-08-29. Option A tranchee par l'utilisateur : la plomberie de la surface de detail (etat, jeton d'ouverture, retour du focus) est extraite dans createDetailSurfaceHost() (apps/web/src/app/shared/detail-surface/detail-surface-host.ts) et CharacterSheet y est migre a comportement constant — ses 110 tests preexistants passent sans modification, et l'item deferred-work.md:15 [P:MOYENNE] qui nommait cette story est ferme (la 31.4 herite du mecanisme). Perimetre tranche par l'utilisateur : fiche = classe + classe secondaire + Type/Voie + type secondaire + option de classe + categorie d'arme ; assistant = description en ligne (elle sert a choisir), termes derriere la surface (talents de classe + option de classe via le talent parent resolu par talentId, avantages de type). weapon-step volontairement non touche (sa description est celle de la chose qu'on choisit, donc couverte par l'arbitrage 'description en ligne'). AC7 tenu : uniquement apps/web/, aucun apps/api/, packages/shared/, packages/game-rules/, JSON de seed ni migration. 2 ECARTS DE BASELINE constates a la mesure : le HEAD annonce par la story (7d6fc2f) n'existait plus (historique de fix/ci-env reecrit en 1a0c7d2), et la baseline de lint n'etait pas 145 mais 0 (nettoyee par da81651) — barre de sortie plus stricte que prevu, tenue. 2 tests preexistants mis a jour (pas supprimes) : espace de rendu sur les titres de classe/type secondaires, et 4 assertions de class-step.spec.ts portant sur des textes de talents devenus non-inline. Resultat : 117 fichiers / 2281 tests verts (+25), lint 0 = baseline exactement, build dev propre. ⚠️ VERIFICATION VISUELLE REELLE (Task 6) DECLAREE FAITE PAR L'UTILISATEUR, PAS PAR L'AGENT : l'extension Chrome est restee injoignable cote agent toute la session ; le navigateur interne n'a pas ete utilise en remplacement (interdit par la story). Point d'attention pour la revue : c'est cette verification qui avait trouve les defauts reels des stories 31.1 et 31.2.
     title: "Aide contextuelle sur les termes de jeu"
 
   31-4-refonte-du-parcours-de-creation-de-personnage:

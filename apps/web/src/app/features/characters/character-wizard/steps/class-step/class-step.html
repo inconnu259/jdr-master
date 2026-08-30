@@ -23,8 +23,15 @@
       <ul>
         @for (talent of data.talents; track talent.name) {
           <li>
-            <strong>{{ talent.name }}</strong> — {{ talent.effect.description }}
-            <p class="class-step__talent-description">{{ talent.description }}</p>
+            @if (talentHelp(talent); as h) {
+              <button
+                type="button"
+                class="class-step__detail-trigger"
+                (click)="detail.open(h.title, h.body, $event)"
+              >{{ talent.name }}</button>
+            } @else {
+              <strong>{{ talent.name }}</strong>
+            }
           </li>
         }
       </ul>
@@ -65,9 +72,24 @@
       <div class="class-step__required-choices">
         @for (choice of choices; track choice.key) {
           <div class="class-step__required-choice">
-            <label [for]="choice.key">{{ choice.label }}</label>
+            @if (choiceHelp(choice); as h) {
+              <!-- [Review][Patch] Pas de <label for> ici : un <button> imbriqué dans un <label>
+                   associé à un autre contrôle est un anti-pattern HTML (renvoi de clic natif
+                   imprévisible d'un navigateur à l'autre) — <span id> + aria-labelledby porte la
+                   même association sans nester d'élément interactif dans le label. -->
+              <span [id]="choice.key + '-label'">
+                <button
+                  type="button"
+                  class="class-step__detail-trigger"
+                  (click)="detail.open(h.title, h.body, $event)"
+                >{{ choice.label }}</button>
+              </span>
+            } @else {
+              <label [for]="choice.key">{{ choice.label }}</label>
+            }
             <select
               [id]="choice.key"
+              [attr.aria-labelledby]="choiceHelp(choice) ? choice.key + '-label' : null"
               [ngModel]="valueForChoice(choice)"
               (ngModelChange)="onChoiceInput(choice, $event)"
             >
@@ -80,5 +102,14 @@
         }
       </div>
     }
+  }
+
+  @if (detail.selected(); as d) {
+    <app-detail-surface
+      [title]="d.title"
+      [body]="d.body"
+      [openToken]="detail.openToken()"
+      (closed)="detail.close()"
+    />
   }
 </div>

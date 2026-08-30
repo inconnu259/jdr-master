@@ -22,9 +22,28 @@
       <h3>Avantages de {{ data.label }}</h3>
       <ul>
         @for (adv of data.advantages; track adv.name) {
-          <li><strong>{{ adv.name }}</strong> — {{ adv.effect }}</li>
+          <li>
+            @if (help(adv.name, adv.effect); as h) {
+              <button
+                type="button"
+                class="type-step__detail-trigger"
+                (click)="detail.open(h.title, h.body, $event)"
+              >{{ adv.name }}</button>
+            } @else {
+              <strong>{{ adv.name }}</strong>
+            }
+          </li>
         }
       </ul>
     </div>
+  }
+
+  @if (detail.selected(); as d) {
+    <app-detail-surface
+      [title]="d.title"
+      [body]="d.body"
+      [openToken]="detail.openToken()"
+      (closed)="detail.close()"
+    />
   }
 </div>

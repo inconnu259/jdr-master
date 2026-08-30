@@ -19,3 +19,21 @@
   }
 
 }
+
+// Déclencheur d'aide sur un terme de règle — même patron que `.sheet__detail-trigger`.
+.type-step__detail-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
+  }
+}

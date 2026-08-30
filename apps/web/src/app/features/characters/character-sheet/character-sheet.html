@@ -214,7 +214,18 @@
         </section>
 
         <section class="sheet__card">
-          <h2 class="sheet__card-title">Vocation — {{ classData()?.label }}</h2>
+          <h2 class="sheet__card-title">
+            Vocation —
+            @if (help(classData()?.label, classData()?.description); as h) {
+              <button
+                type="button"
+                class="sheet__detail-trigger"
+                (click)="detail.open(h.title, h.body, $event)"
+              >{{ h.title }}</button>
+            } @else {
+              {{ classData()?.label }}
+            }
+          </h2>
           @if (specialtyTypeId()) {
             <p class="sheet__detail">Spécialité : {{ specialtyTypeId() }}</p>
           }
@@ -224,20 +235,31 @@
                 <button
                   type="button"
                   class="sheet__detail-trigger"
-                  (click)="openDetail(talent.name, talent.effect.description, $event)"
+                  (click)="detail.open(talent.name, talent.effect.description, $event)"
                 >{{ talent.name }}</button>
               </li>
             }
           </ul>
           @if (secondaryClass(); as secondary) {
-            <h3 class="sheet__card-subtitle">Classe secondaire : {{ secondary.label }}</h3>
+            <h3 class="sheet__card-subtitle">
+              Classe secondaire :
+              @if (help(secondary.label, secondary.description); as h) {
+                <button
+                  type="button"
+                  class="sheet__detail-trigger"
+                  (click)="detail.open(h.title, h.body, $event)"
+                >{{ h.title }}</button>
+              } @else {
+                {{ secondary.label }}
+              }
+            </h3>
             <ul class="sheet__talent-list">
               @for (talent of secondary.talents; track talent.name) {
                 <li>
                   <button
                     type="button"
                     class="sheet__detail-trigger"
-                    (click)="openDetail(talent.name, talent.effect.description, $event)"
+                    (click)="detail.open(talent.name, talent.effect.description, $event)"
                   >{{ talent.name }}</button>
                 </li>
               }
@@ -247,8 +269,16 @@
             <h3 class="sheet__card-subtitle">{{ choice.label }}</h3>
             @if (choice.kind === 'eligible-talent') {
               <p class="sheet__detail">
-                <strong>{{ choice.talentName }}</strong> ({{ choice.originClassLabel }}) —
-                {{ choice.talentEffectDescription }} — malus {{ choice.malus }}
+                @if (help(choice.talentName, choice.talentEffectDescription); as h) {
+                  <button
+                    type="button"
+                    class="sheet__detail-trigger"
+                    (click)="detail.open(h.title, h.body, $event)"
+                  >{{ h.title }}</button>
+                } @else {
+                  <strong>{{ choice.talentName }}</strong>
+                }
+                ({{ choice.originClassLabel }}) — malus {{ choice.malus }}
               </p>
             } @else {
               <p class="sheet__detail">{{ choice.valueLabel }}</p>
@@ -257,27 +287,49 @@
         </section>
 
         <section class="sheet__card">
-          <h2 class="sheet__card-title">Voie — {{ typeData()?.label }}</h2>
+          <h2 class="sheet__card-title">
+            Voie —
+            @if (help(typeData()?.label, typeData()?.description); as h) {
+              <button
+                type="button"
+                class="sheet__detail-trigger"
+                (click)="detail.open(h.title, h.body, $event)"
+              >{{ h.title }}</button>
+            } @else {
+              {{ typeData()?.label }}
+            }
+          </h2>
           <ul class="sheet__talent-list">
             @for (advantage of typeData()?.advantages ?? []; track advantage.name) {
               <li>
                 <button
                   type="button"
                   class="sheet__detail-trigger"
-                  (click)="openDetail(advantage.name, advantage.effect, $event)"
+                  (click)="detail.open(advantage.name, advantage.effect, $event)"
                 >{{ advantage.name }}</button>
               </li>
             }
           </ul>
           @if (secondaryType(); as secondary) {
-            <h3 class="sheet__card-subtitle">Type secondaire : {{ secondary.label }}</h3>
+            <h3 class="sheet__card-subtitle">
+              Type secondaire :
+              @if (help(secondary.label, secondary.description); as h) {
+                <button
+                  type="button"
+                  class="sheet__detail-trigger"
+                  (click)="detail.open(h.title, h.body, $event)"
+                >{{ h.title }}</button>
+              } @else {
+                {{ secondary.label }}
+              }
+            </h3>
             <ul class="sheet__talent-list">
               @for (advantage of secondary.advantages; track advantage.name) {
                 <li>
                   <button
                     type="button"
                     class="sheet__detail-trigger"
-                    (click)="openDetail(advantage.name, advantage.effect, $event)"
+                    (click)="detail.open(advantage.name, advantage.effect, $event)"
                   >{{ advantage.name }}</button>
                 </li>
               }
@@ -296,7 +348,7 @@
                   <button
                     type="button"
                     class="sheet__detail-trigger"
-                    (click)="openDetail(spell.name, spell.description, $event)"
+                    (click)="detail.open(spell.name, spell.description, $event)"
                   >{{ spell.name }}</button>
                   <span class="sheet__detail">{{ spell.peCost }} PE</span>
                 </li>
@@ -368,7 +420,22 @@
           <div class="sheet__weapon-row">
             @if (weaponData(); as weapon) {
               @if (!weaponPencil()?.editing()) {
-                <span class="sheet__weapon-name">{{ weapon.weaponLabel }} ({{ weapon.categoryLabel }})</span>
+                <!-- [Review][Patch] La parenthèse fermante/ouvrante reste À L'INTÉRIEUR de chaque
+                     branche @if/@else (jamais scindée autour du bloc) — un texte littéral coupé
+                     de part et d'autre d'un bloc de contrôle @if/@else rend avec des espaces
+                     parasites (constaté : " Lance ( Lance ) " au lieu de "Lance (Lance)"). -->
+                <span class="sheet__weapon-name">
+                  {{ weapon.weaponLabel }}
+                  @if (help(weapon.categoryLabel, weaponCategoryDescription()); as h) {
+                    (<button
+                      type="button"
+                      class="sheet__detail-trigger"
+                      (click)="detail.open(h.title, h.body, $event)"
+                    >{{ h.title }}</button>)
+                  } @else {
+                    ({{ weapon.categoryLabel }})
+                  }
+                </span>
               }
               <div class="sheet__pill-grid">
                 <span class="stat-pill">Toucher {{ weapon.touchFormula }}</span>
@@ -518,12 +585,12 @@
       }
     </mat-tab-group>
 
-    @if (selectedDetail(); as d) {
+    @if (detail.selected(); as d) {
       <app-detail-surface
         [title]="d.title"
         [body]="d.body"
-        [openToken]="detailOpenToken()"
-        (closed)="closeDetail()"
+        [openToken]="detail.openToken()"
+        (closed)="detail.close()"
       />
     }
   </article>

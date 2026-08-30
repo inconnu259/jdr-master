@@ -2,6 +2,12 @@ import { Component, computed, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { ContentEntryDto } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../../../core/theme/theme-tone.service';
+import { DetailSurface } from '../../../../../shared/detail-surface/detail-surface';
+import {
+  createDetailSurfaceHost,
+  detailContent,
+  type DetailSurfaceContent,
+} from '../../../../../shared/detail-surface/detail-surface-host';
 import { ChoiceCard, type ChoiceCardOption } from '../../choice-card/choice-card';
 import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.directive';
 
@@ -52,7 +58,7 @@ export interface ClassCapabilityPatch {
 @Component({
   selector: 'app-class-step',
   standalone: true,
-  imports: [FormsModule, ChoiceCard, RadioGroupNavDirective],
+  imports: [FormsModule, ChoiceCard, RadioGroupNavDirective, DetailSurface],
   templateUrl: './class-step.html',
   styleUrl: './class-step.scss',
 })
@@ -72,6 +78,31 @@ export class ClassStep {
   readonly classCapabilityChange = output<ClassCapabilityPatch>();
 
   protected readonly theme = inject(ThemeToneService);
+
+  /** Aide contextuelle sur les termes de règle (FR-19) — même surface partagée que la fiche. */
+  protected readonly detail = createDetailSurfaceHost();
+
+  /** Le talent porte deux champs distincts : l'effet mécanique et le texte d'ambiance. Les deux
+   *  forment le texte d'aide, séparés par une ligne vide (`white-space: pre-line` côté surface). */
+  private talentText(talent: ClassTalent | undefined): string {
+    return [talent?.effect?.description, talent?.description]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  protected talentHelp(talent: ClassTalent): DetailSurfaceContent | null {
+    return detailContent(talent.name, this.talentText(talent));
+  }
+
+  /** Un choix de classe n'a pas d'entrée de catalogue propre : son texte est celui du talent
+   *  parent, désigné par `talentId`. Sans talent résolu, aucun déclencheur (AC3). */
+  protected choiceHelp(choice: RequiredChoice): DetailSurfaceContent | null {
+    const talent = (this.selectedClassData()?.talents ?? []).find(
+      (t) => this.talentIdOf(t) === choice.talentId,
+    );
+    return detailContent(choice.label, this.talentText(talent));
+  }
 
   protected readonly options = computed<ChoiceCardOption[]>(() =>
     this.classes().map((entry) => {
