@@ -2,7 +2,7 @@
 title: "Palier 9 — Refonte UI & lisibilité de l'état"
 status: final
 created: 2026-08-01
-updated: 2026-08-17
+updated: 2026-09-21
 ---
 
 # PRD — Palier 9 : Refonte UI & lisibilité de l'état
@@ -16,6 +16,8 @@ Périmètre : l'application Ryuutama existante, sur desktop **et** mobile. Publi
 **Mise à jour du 2026-08-05.** Ce PRD a été révisé après les runs d'architecture et d'UX, qui ont tranché la plupart de ses points ouverts et fait apparaître trois exigences absentes. Les contrats produits par ces runs le complètent et ne sont pas recopiés ici : `architecture/architecture-jdr-master-2026-08-04/ARCHITECTURE-SPINE.md` pour les invariants techniques, `ux-designs/ux-jdr-master-2026-08-04/DESIGN.md` et `EXPERIENCE.md` pour l'identité visuelle et le comportement.
 
 **Mise à jour du 2026-08-17 — retour d'usage sur le calendrier.** L'épic 30 a livré ; l'utilisateur l'a utilisé et a rapporté que **le calendrier ne répond toujours pas aux questions qu'on lui pose**. Neuf exigences neuves en découlent (FR-49 → FR-57, §4.7 bis), quatre dérogations serveur (D-15 → D-18) et quatre questions ouvertes (Q-19 → Q-22). Le périmètre est très majoritairement de l'interface ; les quatre dérogations ont été vérifiées dans le code et arbitrées une par une. Ces exigences forment un épic distinct, ordonnancé **juste après l'épic 30** — les épics 31 à 35 existant déjà au backlog, c'est un choix d'ordre, pas de numérotation.
+
+**Mise à jour du 2026-09-21 — retour d'usage sur la création de personnage.** En testant le parcours refondu (story 31.4), l'utilisateur a jugé son *point d'entrée* peu évident : il faut deviner que l'initiale du roster est cliquable. Trois exigences neuves en découlent (FR-58 → FR-60) et deux dérogations serveur (D-19, D-20) ; aucune question ouverte. Le parcours de création lui-même (FR-21) n'est pas touché : seuls changent **où l'on y entre** et **pour quels systèmes de jeu**. Deux épics sont concernés : le 29, rouvert, et le 33. Les arbitrages sont dans `sprint-change-proposal-2026-09-20.md` et ne sont pas recopiés ici.
 
 ## 1. Contexte & problème
 
@@ -123,8 +125,16 @@ Créer une partie **reste possible pour tout utilisateur connecté** ; c'est sa 
 - **Aucune restriction n'est ajoutée.** Il n'existe pas de rôle MJ global dans le modèle : `GlobalRole` vaut `USER` ou `ADMIN`, et l'on devient MJ *d'une partie* en la créant. L'entrée de menu vers la création est aujourd'hui ouverte à tous et le reste.
 - **Mise en avant conditionnelle :** l'appel à l'action visible (bouton proéminent) n'apparaît que si l'utilisateur est déjà MJ d'au moins une partie. Pour les autres, la création reste accessible via le menu, sans occuper d'espace.
 - Les options **d'une partie donnée** continuent de dépendre du rôle sur cette partie — évalué par partie, jamais globalement.
+- **Précisé le 2026-09-21 (FR-60).** « Aucune restriction » porte sur **qui** peut créer une partie, et cela ne change pas. FR-60 restreint **le système de jeu** que l'on peut choisir, pas l'utilisateur.
 
 > **Note.** Cette exigence corrige une incohérence existante : l'entrée de menu est ouverte à tous, tandis que le bouton du tableau de bord est masqué hors « mode MJ ». La suppression de la bascule (FR-7) impose de trancher cette règle explicitement.
+
+#### FR-60 : Seuls les systèmes disposant d'un module peuvent être choisis pour une nouvelle partie
+Le formulaire de création de partie ne propose que les systèmes de jeu que l'application sait réellement faire jouer, et le serveur refuse les autres avec un message explicite — le formulaire n'est pas la seule barrière.
+- **Constat.** Aujourd'hui trois systèmes sur quatre (Draconis, Conte de Minuit, Esteren) sont proposés alors qu'ils n'ont aucun module : seul Ryuutama en a un. Sur une telle partie, la création de personnage échoue et l'utilisateur voit une erreur trompeuse.
+- **Une seule source de vérité.** Le formulaire, la validation serveur et les points d'entrée de création (FR-58) lisent le même signal « ce système a un module ». Un système qui reçoit son module devient proposé sans qu'on touche une autre liste.
+- **Les parties déjà créées ne sont pas migrées.** Elles restent consultables, inchangées, sans entrée de création de personnage ; le parcours de création y affiche un message explicite (correctif séparé, déjà ouvert).
+- **Prérequis serveur :** D-19.
 
 #### FR-10 : Filtres et tris sur la liste des parties
 L'utilisateur peut filtrer et trier ses parties.
@@ -189,6 +199,7 @@ L'utilisateur peut consulter la liste de tous ses personnages, avec recherche, d
 - On bascule de l'une à l'autre ; l'entrée par défaut reste la partie.
 - **Tranché (Q-8 close).** Ce ne sont plus deux vues entre lesquelles on bascule, mais **deux destinations de la navigation principale** (FR-48).
 - **Prérequis :** aucun endpoint ne liste aujourd'hui les personnages d'un utilisateur toutes parties confondues (voir D-10).
+- **Amendé le 2026-09-21 (FR-58, FR-59).** « Jamais mélangées » reste vrai **de la liste** : elle ne mêle toujours pas parties et personnages, et ne contient que ceux de l'utilisateur. Deux ajouts l'entourent. La **section de création** de FR-58 est un bloc distinct, placé au-dessus de la liste, qui ne contient aucune carte de personnage. Les **Hommes Dragons** des MJ rejoignent la liste elle-même (FR-59), reconnaissables comme tels.
 
 #### FR-17 : Correction de la pastille de montée de niveau
 Sur la fiche de personnage, l'indicateur de montée de niveau disponible retrouve un placement correct, près du nom du personnage.
@@ -210,6 +221,14 @@ Les éléments dotés d'un texte descriptif (avantages, talents…) sont consult
 
 #### FR-21 : Refonte du parcours de création de personnage
 Le parcours de création est retravaillé pour améliorer sa lisibilité et réduire les gestes inutiles.
+
+#### FR-58 : Un point d'entrée explicite pour créer son personnage
+Un joueur qui n'a pas encore de personnage sur une partie voit **où le créer**, sans avoir à le deviner.
+- **Sur la partie.** Un bouton explicite « Créer mon personnage » figure sur l'écran de la partie, sur téléphone comme sur ordinateur, sans changer d'onglet ni défiler. Le slot d'initiale du roster garde son comportement, mais n'est plus le seul point d'entrée.
+- **Dans « Personnages » (FR-16).** Une section placée au-dessus de la liste propose une entrée par partie où le joueur n'a pas encore de personnage : « Créer un personnage pour *<nom de l'aventure>* ». Elle n'existe pas quand il n'y a rien à proposer — jamais un bloc vide — et l'entrée d'une partie disparaît dès que le personnage est créé.
+- **Jamais un refus.** L'entrée n'est offerte que si le joueur n'est pas MJ de la partie, n'y a pas déjà de personnage, que le système de jeu dispose d'un module (FR-60), et que la partie n'est pas terminée (arbitré au run UX du 2026-09-21 : une aventure close n'accueille plus de personnage). Elle ne mène donc jamais à un « vous avez déjà un personnage » ni à une erreur de schéma.
+- **Un MJ n'a pas de personnage joueur sur sa partie.** Tranché le 2026-09-20. Son entrée de création est celle de son Homme Dragon (FR-59). Le serveur l'autoriserait techniquement ; c'est un choix produit de ne pas l'exposer.
+- **Une seule règle** décide de l'affichage de l'entrée sur la partie comme dans « Personnages » : elle s'écrit une fois.
 
 #### FR-22 : Consultation limitée des fiches des compagnons
 Un joueur peut consulter la fiche des autres personnages de sa partie, restreinte aux champs non verrouillés par le MJ (FR-23).
@@ -243,6 +262,14 @@ Le MJ retrouve sur la fiche les souffles dont **son** Homme Dragon dispose, chac
 
 #### FR-27 : Export amélioré
 L'export PDF de la fiche Homme Dragon est mis au niveau de celui des fiches de personnage joueur.
+
+#### FR-59 : Les Hommes Dragons dans « Personnages », avec leur création
+Le MJ retrouve ses Hommes Dragons là où les joueurs retrouvent leurs personnages, et peut en créer un depuis la section de création de FR-58.
+- **Dans la liste.** Chaque Homme Dragon apparaît avec la partie dont il provient ; sa nature (Homme Dragon, et non personnage joueur) se lit sans l'ouvrir, et pas par la couleur seule (P-1). La recherche, le tri et le mode d'affichage s'appliquent à lui comme aux personnages ; son nom suit la convention de FR-14. On y ouvre sa fiche.
+- **Dans la section de création.** Une entrée « Créer un Homme Dragon pour *<nom de l'aventure>* » par aventure Ryuutama dont l'utilisateur est MJ et où il n'en a pas encore. **Un Homme Dragon est propre à une aventure** : un MJ en a un *par aventure*, pas un seul au total.
+- **Jamais chez les joueurs.** L'Homme Dragon du MJ n'apparaît pas dans « Personnages » des autres membres de la partie.
+- **Prérequis serveur :** D-20. Les consommateurs existants de la liste des personnages n'en sont pas affectés.
+- La fiche Homme Dragon n'a pas de route propre aujourd'hui ; la façon de l'ouvrir depuis « Personnages » relève de la story, pas du PRD.
 
 ### 4.6 Vue de partie, scénarios & chronologie
 
@@ -409,7 +436,7 @@ Les textes de thème sont réorganisés pour être relisibles thème par thème,
 
 ## 5. Dérogations serveur actées
 
-Le principe du palier est de ne pas toucher au serveur. **Dix-huit cas** sont recensés ici pour qu'aucun ne passe inaperçu (P-5). D-8 à D-10 ont été découvertes lors de la revue du PRD ; **D-11 à D-13 sont issues du run d'UX** et **D-14 de la revue d'architecture**, toutes inscrites le 2026-08-05. **D-15 à D-18 sont issues du retour d'usage du 2026-08-17**, toutes vérifiées dans le code avant inscription et arbitrées une par une avec l'utilisateur.
+Le principe du palier est de ne pas toucher au serveur. **Vingt cas** sont recensés ici pour qu'aucun ne passe inaperçu (P-5). D-8 à D-10 ont été découvertes lors de la revue du PRD ; **D-11 à D-13 sont issues du run d'UX** et **D-14 de la revue d'architecture**, toutes inscrites le 2026-08-05. **D-15 à D-18 sont issues du retour d'usage du 2026-08-17**, toutes vérifiées dans le code avant inscription et arbitrées une par une avec l'utilisateur. **D-19 et D-20 sont issues du retour d'usage du 2026-09-20**, vérifiées dans le code et arbitrées avec l'utilisateur le jour même.
 
 Une ligne porte une ampleur **nulle à ce stade** — D-12. Elles restent au tableau pour que le sujet demeure visible au découpage en épics, mais **elles ne demandent aucun travail** tant que le constat qui les accompagne tient. Ne pas les implémenter par réflexe de complétude.
 
@@ -436,7 +463,9 @@ Une ligne porte une ampleur **nulle à ce stade** — D-12. Elles restent au tab
 
 **Précision sur D-2.** Le pseudo étant devenu immuable (FR-4), cette dérogation ne porte **pas** sa modification. Elle couvre l'ajout d'un champ « nom affiché », le changement d'e-mail et le changement de mot de passe en session.
 
-**Ne nécessitent aucun changement serveur**, vérification faite : la liste unifiée des parties (le front appelle conditionnellement les listes par rôle existantes), la création de partie (FR-9 — aucune restriction ajoutée, seule la mise en avant change), les **modes d'affichage** (FR-45, pur front plus deux préférences de compte déjà prévues par D-1), et la **bannière générée** (FR-47 — calculée à l'affichage à partir de l'identifiant de la partie, rien n'est stocké).
+**Ne nécessitent aucun changement serveur**, vérification faite : la liste unifiée des parties (le front appelle conditionnellement les listes par rôle existantes), la création de partie (FR-9 — aucune restriction ajoutée sur **qui** crée, seule la mise en avant change ; le choix du **système de jeu** est en revanche restreint par FR-60, voir D-19), les **modes d'affichage** (FR-45, pur front plus deux préférences de compte déjà prévues par D-1), et la **bannière générée** (FR-47 — calculée à l'affichage à partir de l'identifiant de la partie, rien n'est stocké).
+| D-19 | **Validation du système de jeu à la création d'une partie** — le serveur refuse un système sans module, avec un message explicite | FR-60 | Faible — validation d'entrée seule, aucune migration ; les parties existantes ne sont pas touchées. Des tests utilisent aujourd'hui Draconis comme donnée de départ : à vérifier, pas à présumer | ✅ actée |
+| D-20 | **Lecture agrégée des Hommes Dragons de l'utilisateur**, toutes parties confondues | FR-59 | Modérée — aucune migration ; une lecture par utilisateur, jamais une requête par partie (le fan-out proscrit par FR-12). La liste des personnages et son contrat ne changent pas pour leurs consommateurs. Forme (route dédiée ou extension de la lecture existante) laissée à la story | ✅ actée |
 
 ## 6. Hors périmètre
 
@@ -445,6 +474,8 @@ Une ligne porte une ampleur **nulle à ce stade** — D-12. Elles restent au tab
 - **Conformité d'accessibilité formelle** (navigation clavier, lecteurs d'écran, audit WCAG AA). Écartée : coût élevé, invérifiable dans le contexte actuel, aucune obligation. Voir P-2.
 - **Ouverture de l'inscription libre.** La création de compte reste sur invitation. Remettre cette règle en cause serait un changement métier, pas une refonte d'UI.
 - **Refonte de la direction artistique.** La DA est validée (§2).
+- **Un même Homme Dragon réutilisé sur plusieurs aventures.** Facultatif, précisé le 2026-09-20. Un Homme Dragon est aujourd'hui propre à une partie ; le partager changerait le modèle, donc une story à part dans l'épic 33, non planifiée. FR-59 ne l'anticipe pas et ne doit pas la rendre plus difficile : la lecture agrégée porte sur « les Hommes Dragons dont l'utilisateur est propriétaire ».
+- **Modules des systèmes de jeu manquants** (Draconis, Conte de Minuit, Esteren). FR-60 empêche d'y créer une partie ; leur donner un module est un chantier de contenu à part, au backlog.
 - **Thème dédié à l'accessibilité.** Le run d'UX a relevé, dans les trois thèmes, des couleurs de statut qui se rapprochent en vision dichromatique. Plutôt que de raboter les trois univers pour un cas aujourd'hui théorique — un seul utilisateur, qui distingue les couleurs —, la réponse retenue est un **quatrième thème** conçu pour cela. Reporté : le mécanisme de thème existe déjà, l'ajout est un travail de contenu, à faire le jour où un joueur concerné rejoint une partie.
 
 ## 7. Points ouverts
@@ -491,5 +522,7 @@ Pas de métriques chiffrées — projet personnel, un seul utilisateur réel auj
 - Il comprend l'état d'un scénario et l'enchaînement d'une chronologie en les regardant.
 - Aucune évolution serveur n'a été faite sans avoir été discutée au préalable.
 - **Ajouté le 2026-08-17.** En ouvrant son calendrier, il voit sa prochaine séance **sans la chercher** — et il sait, sans cliquer, si un vote l'attend et si un créneau est encore libre. Signal d'échec symétrique : si un filtre reste à l'écran sans produire de différence visible, la reprise a échoué.
+
+- **Ajouté le 2026-09-21.** Un joueur qui rejoint une partie sait **sans deviner** où créer son personnage, et un MJ Ryuutama retrouve ses Hommes Dragons là où il cherche ses personnages. Signal d'échec : si l'on doit encore expliquer que l'initiale du roster est cliquable, ou qu'un bouton de création mène à une erreur, la reprise a échoué.
 
 **Signal d'échec à surveiller :** si la refonte ajoute des écrans et des options sans réduire le nombre de gestes pour les parcours courants (voter une date, déclarer une dispo, retrouver son personnage), le palier aura manqué sa cible — quelle que soit la qualité visuelle du résultat.

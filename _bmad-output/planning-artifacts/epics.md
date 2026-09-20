@@ -1114,6 +1114,10 @@ So that je sache tout de suite par où commencer, sans deviner qu'une initiale e
 **When** j'ouvre son détail
 **Then** aucun bouton de création n'est proposé
 
+**Given** la partie est terminée
+**When** j'ouvre son détail
+**Then** aucun bouton de création n'est proposé — une aventure close n'accueille plus de personnage (arbitré au run UX du 2026-09-21 ; le serveur, lui, ne l'interdit pas)
+
 **Given** je suis MJ de la partie
 **When** j'ouvre son détail
 **Then** aucun bouton de personnage joueur n'est proposé
@@ -1128,7 +1132,9 @@ So that je sache tout de suite par où commencer, sans deviner qu'une initiale e
 **Then** c'est un vrai lien ou bouton, atteignable au clavier, dont la cible mesure au moins 44 × 44 px
 **And** son libellé vient de la micro-copie de thème, jamais codé en dur
 
-*Règle écrite une seule fois :* « puis-je créer un personnage sur cette partie ? » (non-MJ · aucun personnage · système avec module) est un prédicat partagé avec la story 29.16.
+*Règle écrite une seule fois :* « puis-je créer un personnage sur cette partie ? » (non-MJ · aucun personnage · système avec module · partie non terminée) est un prédicat partagé avec la story 29.16.
+
+*Contrat UX :* `ux-designs/ux-jdr-master-2026-09-21/` (DESIGN.md, EXPERIENCE.md, planche `mockups/contrat-ui-entree-creation.html`) — un bloc d'invitation en tête de l'onglet Détails plutôt qu'un simple bouton, libellé thématisé `character.create_cta`, slot du rail conservé avec libellé accessible.
 
 ### Story 29.16 : Créer un personnage depuis « Personnages »
 
@@ -1160,9 +1166,9 @@ So that la création soit là où je cherche mes personnages.
 **When** je reviens sur « Personnages »
 **Then** l'entrée de cette partie a disparu et mon personnage figure dans la liste
 
-**Given** une partie dont le système n'a pas de module, ou dont je suis le MJ
+**Given** une partie dont le système n'a pas de module, qui est terminée, ou dont je suis le MJ
 **When** la section est calculée
-**Then** elle n'y figure pas
+**Then** elle n'y figure pas (sauf, pour le MJ, l'entrée Homme Dragon de la story 33.5)
 
 **Given** cette section
 **When** elle est rendue
@@ -1170,6 +1176,8 @@ So that la création soit là où je cherche mes personnages.
 **And** elle réutilise le prédicat et la micro-copie de la story 29.15
 
 *Temps réel :* à évaluer à la création de la story (canal `user:{id}`, `docs/checklist.md`) — le minimum requis est le rafraîchissement au retour de navigation.
+
+*Contrat UX :* `ux-designs/ux-jdr-master-2026-09-21/` — section « À forger » au-dessus de la barre de contrôles (hors masquage au défilement), lignes en bordure pointillée (jamais des cartes), trois lignes puis « Voir les N autres », message de liste vide `my_characters.empty_with_entries` quand la section est affichée. ⚠️ amende le contrat du Palier 9 sur ce point (voir EXPERIENCE.md du delta).
 
 ### Story 29.17 : Seuls les systèmes jouables sont proposés à la création d'une partie
 

@@ -134,3 +134,26 @@ La rédaction d'origine interdisait « tout champ d'heure ». Elle confondait de
 6. Les trois champs sont **facultatifs**.
 
 Trois champs, un point d'écriture MJ dans la chronologie du scénario, une lecture sur le créneau et dans l'Agenda.
+
+## 6. Retour d'usage du 2026-09-20 : point d'entrée de la création (FR-58 → FR-60)
+
+Constaté dans le code le 2026-09-20 ; ces éléments détaillent D-19 et D-20 sans encombrer le PRD.
+
+### 6.1 Pourquoi trois systèmes sur quatre mènent à une erreur
+
+- La constante partagée des systèmes de jeu propose **quatre** systèmes au formulaire de création de partie, et le DTO de création les accepte tous.
+- **Seul Ryuutama a un module** : le schéma de fiche d'un autre système lève une 404. Une partie Draconis se crée donc sans problème, puis échoue à la première création de personnage.
+- La liste des systèmes servie par l'API reflète **ce qui est en base**, pas les modules disponibles : elle ne peut pas servir de signal.
+
+### 6.2 Choix : un indicateur sur la constante partagée (D-19)
+
+Un indicateur booléen porté par la constante partagée des systèmes, vrai pour Ryuutama seul, devient la source de vérité unique : validation du DTO, formulaire de création de partie, et points d'entrée de création (FR-58) le lisent, **sans appel réseau**.
+
+**Alternative écartée : lire la liste des systèmes servie par l'API.** Elle liste tout ce qui est en base ; il aurait fallu l'enrichir côté API pour un résultat équivalent à une constante déjà partagée avec le front.
+
+### 6.3 Modèle de l'Homme Dragon (D-20)
+
+- L'Homme Dragon **n'est pas un personnage dans le modèle** : c'est une table distincte, unique par utilisateur, partie et système, et absente de la liste des personnages de l'utilisateur.
+- Sa fiche n'a **pas de route propre** : elle est incrustée dans l'écran de la partie, pour le MJ Ryuutama. L'ouvrir depuis « Personnages » exige soit une route dédiée, soit une navigation vers l'écran de la partie — à trancher à la création de la story.
+- **Choix ouvert, laissé à la story :** endpoint dédié ou extension de la lecture existante. Contrainte ferme : ne pas casser le contrat de la liste des personnages ni ses consommateurs (écran « Personnages », tableau de bord, tris).
+- **Le serveur autoriserait un MJ à créer un personnage joueur sur sa propre partie.** Ne pas l'exposer est un choix produit (FR-58), pas une contrainte technique.
