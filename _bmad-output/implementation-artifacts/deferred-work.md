@@ -19,3 +19,9 @@ Registre des items de dette technique/UX identifiés en cours de développement 
 
 - [P:BASSE] Garde AC3 (« pas de texte au catalogue ⇒ pas de déclencheur ») non appliquée aux déclencheurs FR-20 préexistants (talents/avantages/sorts de la fiche) — comportement hérité tel quel de la 31.2, non touché par le diff de la 31.3, hors périmètre de son AC3 (qui ne vise que les nouveaux termes FR-19). En pratique inoffensif : ces catalogues (`class`, `type`, `spell`) exigent un texte non vide au seed. [apps/web/src/app/features/characters/character-sheet/character-sheet.html:227,240,299]
 - [P:BASSE] Aucune sémantique ARIA de divulgation (`aria-haspopup`/`aria-expanded`) sur les déclencheurs de terme — pattern hérité tel quel de `.sheet__detail-trigger` (31.2), reproduit à l'identique par la 31.3 sur les nouveaux emplacements (`class-step`, `type-step`) ; pas une régression introduite par cette story, mais jamais corrigé depuis. [apps/web/src/app/shared/detail-surface/detail-surface.html]
+
+## Deferred from: code review of 31-4-refonte-du-parcours-de-creation-de-personnage (2026-09-20)
+
+- [P:BASSE] La surface de détail modale (desktop) ne verrouille pas le défilement de la page derrière le voile — conséquence du passage en modal (31.4) ; la feuille mobile se comporte pareil depuis la 31.2.
+- [P:BASSE] L'option de classe est structurée (tableau + récit) dans l'assistant mais en `body` simple sur la fiche (`ClassChoiceDisplay` ne porte que l'effet résolu du talent parent) — à unifier si la fiche reçoit le talent parent complet.
+

@@ -4,6 +4,7 @@
   <div class="wizard__loading">Chargement de l'assistant…</div>
 } @else {
   <div class="wizard">
+    <div class="wizard__head">
     <div class="wizard__nav">
       <button
         type="button"
@@ -17,17 +18,30 @@
       </span>
       <button
         type="button"
-        class="wizard__nav-btn"
+        class="wizard__nav-btn wizard__nav-next"
         [disabled]="!canGoNext() || isLastStep() || submitting()"
         (click)="goNext()"
         aria-label="Étape suivante"
       >❯</button>
+      <!-- Téléphone : le récapitulatif ne tient pas en colonne — un bouton l'ouvre en feuille. -->
+      <button
+        #recapBtn
+        type="button"
+        class="wizard__recap-btn"
+        (click)="openRecap()"
+      >
+        {{ theme.tone()['character.recap_button'] }}
+        @if (cartCount() > 0) {
+          <span class="wizard__recap-badge" aria-hidden="true">{{ cartCount() }}</span>
+        }
+      </button>
     </div>
     <div class="wizard__progress-track">
       <div
         class="wizard__progress-fill"
         [style.width.%]="((currentStepIndex() + 1) / steps().length) * 100"
       ></div>
+    </div>
     </div>
 
     <div class="wizard__body">
@@ -134,22 +148,30 @@
         </div>
       </div>
 
-      <div class="wizard__summary">
-        <div class="wizard__summary-header">
-          <span class="wizard__summary-name">{{ sheetData().narrative?.name || 'Voyageur' }}</span>
-        </div>
-        @if (derived(); as stats) {
-          <div class="wizard__derived-badges">
-            <span class="stat-pill">PV {{ stats.PV }}</span>
-            <span class="stat-pill">PE {{ stats.PE }}</span>
-            <span class="stat-pill">Condition {{ stats.Condition }}</span>
-            <span class="stat-pill">Initiative {{ stats.Initiative }}</span>
-            <span class="stat-pill">Encombrement max {{ stats.Encombrement }}</span>
-          </div>
-        } @else {
-          <p class="wizard__summary-hint">Les statistiques dérivées apparaîtront une fois les attributs assignés.</p>
-        }
-      </div>
+      <aside class="wizard__summary" aria-label="Récapitulatif du voyageur">
+        <app-wizard-summary
+          [sheetData]="sheetData()"
+          [derived]="derived()"
+          [content]="content()"
+          (equipmentChange)="onStartingEquipmentChange($event)"
+        />
+      </aside>
     </div>
+
+    @if (recapOpen()) {
+      <app-detail-surface
+        [title]="theme.tone()['character.recap_title']"
+        [custom]="true"
+        [openToken]="1"
+        (closed)="closeRecap()"
+      >
+        <app-wizard-summary
+          [sheetData]="sheetData()"
+          [derived]="derived()"
+          [content]="content()"
+          (equipmentChange)="onStartingEquipmentChange($event)"
+        />
+      </app-detail-surface>
+    }
   </div>
 }

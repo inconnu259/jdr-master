@@ -8,6 +8,11 @@ import {
   type WeaponItemContentData,
   type WeaponCategoryContentData,
 } from '@master-jdr/game-rules';
+import { DetailSurface } from '../../../../../shared/detail-surface/detail-surface';
+import {
+  createDetailSurfaceHost,
+  detailContent,
+} from '../../../../../shared/detail-surface/detail-surface-host';
 import { ChoiceCard, type ChoiceCardOption } from '../../choice-card/choice-card';
 import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.directive';
 
@@ -30,7 +35,7 @@ const CUSTOM_WEAPON_KEY = '__custom__';
 @Component({
   selector: 'app-weapon-step',
   standalone: true,
-  imports: [ChoiceCard, RadioGroupNavDirective, FormsModule],
+  imports: [ChoiceCard, RadioGroupNavDirective, FormsModule, DetailSurface],
   templateUrl: './weapon-step.html',
   styleUrl: './weapon-step.scss',
 })
@@ -41,6 +46,9 @@ export class WeaponStep {
   readonly customWeapon = input<CustomWeapon | undefined>();
 
   readonly weaponIdChange = output<string | null>();
+
+  /** Description de la catégorie d'arme : derrière la surface de détail (revue de code 31.4, AC2). */
+  protected readonly detail = createDetailSurfaceHost();
   readonly customWeaponChange = output<CustomWeapon | null>();
 
   /** État UI de saisie de l'arme libre — le parent ne reçoit que `customWeaponChange`
@@ -68,7 +76,7 @@ export class WeaponStep {
       return {
         key: entry.key,
         label: data.label,
-        detail: `Toucher ${data.touchFormula}, Dégâts ${data.damageFormula}`,
+        detail: `Toucher ${data.touchFormula} · Dégâts ${data.damageFormula}`,
       };
     }),
   );
@@ -88,6 +96,12 @@ export class WeaponStep {
   protected readonly selectedCategoryData = computed<WeaponCategoryData | null>(() => {
     const entry = this.weaponCategories().find((c) => c.key === this.selectedCategoryKey());
     return entry ? (entry.data as WeaponCategoryData) : null;
+  });
+
+  /** Aide de la catégorie sélectionnée, ou `null` sans texte au catalogue (pas de texte ⇒ pas d'aide). */
+  protected readonly categoryHelp = computed(() => {
+    const data = this.selectedCategoryData();
+    return detailContent(data?.label, data?.description);
   });
 
   protected readonly resolvedWeapon = computed(() =>

@@ -184,6 +184,13 @@ function makeThemeService() {
     tone: () => ({
       'character.create_cta': 'Créer un voyageur',
       'character.step_portrait_intro': 'Ajoute un portrait si tu le souhaites.',
+      'character.recap_button': 'Récap',
+      'character.recap_title': 'Récapitulatif',
+      'character.recap_cart_title': 'Panier',
+      'character.recap_remove': 'Retirer',
+      'character.recap_total': 'Total',
+      'character.recap_empty_hint':
+        'Les statistiques dérivées apparaîtront une fois les attributs assignés.',
     }),
   };
 }
@@ -812,5 +819,150 @@ describe('CharacterWizard', () => {
     const before = comp.currentStepIndex();
     comp.goNext();
     expect(comp.currentStepIndex()).toBe(before);
+  });
+});
+
+// ── Système de jeu sans module (ex. Draconis) : message explicite, pas « vérifiez votre connexion » ──
+
+describe('CharacterWizard — système sans module', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  async function mountWith(opts: {
+    schemaError: unknown;
+    partiesGet?: ReturnType<typeof vi.fn>;
+    gameSystemIdParam?: string | null;
+  }) {
+    const characterSvc = {
+      getGameSystemSchema: vi.fn().mockRejectedValue(opts.schemaError),
+      getGameSystemContent: vi.fn().mockRejectedValue(opts.schemaError),
+      create: vi.fn(),
+    };
+    await TestBed.configureTestingModule({
+      imports: [CharacterWizard],
+      providers: [
+        provideAnimationsAsync(),
+        { provide: CharacterService, useValue: characterSvc },
+        {
+          provide: PartiesService,
+          useValue: {
+            get: opts.partiesGet ?? vi.fn().mockResolvedValue({ gameSystemId: 'draconis' }),
+          },
+        },
+        { provide: ThemeToneService, useValue: makeThemeService() },
+        { provide: MatSnackBar, useValue: { open: vi.fn() } },
+        { provide: Router, useValue: { navigate: vi.fn() } },
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              paramMap: { get: () => 'p1' },
+              queryParamMap: { get: () => opts.gameSystemIdParam ?? null },
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(CharacterWizard);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('404 sur le schéma → message explicite « pas encore d’assistant de création »', async () => {
+    const fixture = await mountWith({
+      schemaError: new HttpErrorResponse({ status: 404, statusText: 'Not Found' }),
+      gameSystemIdParam: 'draconis',
+    });
+    const message = (fixture.componentInstance as any).loadError() as string;
+    expect(message).toContain("pas encore d'assistant de création");
+    expect(message).not.toContain('connexion');
+    expect(fixture.nativeElement.textContent).toContain(message);
+  });
+
+  it('autre erreur HTTP (500) → le message générique reste', async () => {
+    const fixture = await mountWith({
+      schemaError: new HttpErrorResponse({ status: 500, statusText: 'Server Error' }),
+      gameSystemIdParam: 'ryuutama',
+    });
+    expect((fixture.componentInstance as any).loadError()).toContain('Vérifiez votre connexion');
+  });
+
+  it('404 de la PARTIE (pas du système) → message générique, pas « système sans module »', async () => {
+    const fixture = await mountWith({
+      schemaError: new Error('inutilisé'),
+      partiesGet: vi.fn().mockRejectedValue(new HttpErrorResponse({ status: 404 })),
+      gameSystemIdParam: null,
+    });
+    const message = (fixture.componentInstance as any).loadError() as string;
+    expect(message).not.toContain("pas encore d'assistant");
+    expect(message).toContain('Impossible de charger');
+  });
+});
+
+// ── Story 31.4 : récapitulatif du voyageur (colonne de droite / feuille « Récap ») ──────────────
+
+describe('CharacterWizard — récapitulatif et désélection (Story 31.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('le récapitulatif est rendu dans la colonne de droite et se remplit avec la classe choisie', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    comp.updateSheetData({ classId: 'chasseur' });
+    fixture.detectChanges();
+    const aside = fixture.nativeElement.querySelector('.wizard__summary') as HTMLElement;
+    expect(aside.querySelector('app-wizard-summary')).not.toBeNull();
+    expect(aside.textContent).toContain('Classe');
+  });
+
+  it('le bouton « Récap » ouvre la feuille (même récapitulatif) et Fermer ramène le focus au bouton', async () => {
+    const { fixture } = await createComponent();
+    const el = fixture.nativeElement as HTMLElement;
+    const btn = el.querySelector<HTMLButtonElement>('.wizard__recap-btn')!;
+    expect(el.querySelector('.detail-surface-panel')).toBeNull();
+
+    btn.click();
+    fixture.detectChanges();
+    const panel = el.querySelector('.detail-surface-panel')!;
+    expect(panel.querySelector('app-wizard-summary')).not.toBeNull();
+    expect(panel.textContent).not.toContain('Aucune description disponible');
+
+    (panel.querySelector('.detail-surface-close') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    await Promise.resolve();
+    expect(el.querySelector('.detail-surface-panel')).toBeNull();
+    expect(document.activeElement).toBe(btn);
+  });
+
+  it('la pastille du bouton « Récap » compte les exemplaires d’équipement choisis', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.wizard__recap-badge')).toBeNull();
+    comp.onStartingEquipmentChange([
+      { key: 'corde', quantity: 2 },
+      { key: 'rations', quantity: 4 },
+    ]);
+    fixture.detectChanges();
+    expect(el.querySelector('.wizard__recap-badge')!.textContent).toContain('6');
+  });
+
+  it('désélectionner la classe (classId undefined) efface spécialité et choix obligatoires, et re-bloque « Suivant »', async () => {
+    const { fixture } = await createComponent();
+    const comp = fixture.componentInstance as any;
+    comp.updateSheetData({ classId: 'artisan' });
+    comp.updateSheetData({ specialtyTypeId: 'Cordonnerie' });
+    comp.onClassChoiceChange({ key: 'x', value: 'y' });
+    expect(comp.canGoNext()).toBe(true);
+
+    comp.updateSheetData({ classId: undefined });
+    expect(comp.sheetData().classId).toBeUndefined();
+    expect(comp.sheetData().specialtyTypeId).toBeUndefined();
+    expect(comp.sheetData().classChoices).toBeUndefined();
+    expect(comp.canGoNext()).toBe(false);
   });
 });

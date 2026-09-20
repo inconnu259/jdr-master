@@ -6,23 +6,20 @@
 // z-index 199/200 : même paire déjà utilisée par .constraint-backdrop/app-constraint-panel
 // (calendrier) et .sheet-menu-backdrop/.sheet-menu-surface (fiche, story 31.1) — TROISIÈME
 // consommateur du même motif en dur, jamais centralisé en jeton nommé (dette déjà consignée,
-// hors périmètre de cette story).
-// 🚨 Trouvé à la vérification visuelle (Task 4) : un voile plein écran BLOQUE LES CLICS sur les
-// autres déclencheurs de la fiche pendant que le panneau est ouvert — le premier clic sur un
-// second talent le referme au lieu de le remplacer (AC4 cassé, un panneau latéral desktop ne doit
-// PAS désactiver le reste de la fiche, qui doit rester « entièrement visible » ET interactive,
-// AC2). Masqué à partir du seuil desktop : la fermeture au clic extérieur (et l'assombrissement)
-// ne concernent que la feuille mobile (AC3), où le contenu recouvert n'est de toute façon pas
-// interagissable pendant que la feuille est ouverte.
+// hors périmètre).
+//
+// ⚠️ Story 31.4 (DESIGN §7.2, contrat UI ux-jdr-master-2026-08-31) : à ≥ 1024px la surface n'est
+// plus un panneau latéral sans voile mais une FENÊTRE CENTRÉE MODALE — le voile est affiché sur
+// toute la page. Décision de l'utilisateur (2026-09-20), qui inverse celle de la revue de la 31.2
+// (voile masqué pour laisser la fiche interactive). Un voile plein écran recouvre désormais les
+// déclencheurs : plus de « remplacement en place », on ferme puis on active le suivant.
 .detail-surface-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.32);
+  // 🚨 Trouvé à l'écran (31.4, Task 9) : à .32 le voile ne se distinguait pas d'une page déjà
+  // sombre — aligné sur `{colors.overlay}` (.55) du DESIGN.
+  background: rgba(0, 0, 0, 0.55);
   z-index: 199;
-
-  @media (min-width: 1024px) {
-    display: none;
-  }
 }
 
 .detail-surface-panel {
@@ -31,7 +28,13 @@
   left: 0;
   right: 0;
   z-index: 200;
-  background: var(--mat-sys-surface);
+  // Trouvé à l'écran (31.4) : la largeur mesurée était 610px (560 + padding) — `border-box` pour tenir
+  // les 560px du contrat.
+  box-sizing: border-box;
+  // 🚨 Trouvé à l'écran (31.4, Task 9) : sur `surface` la fenêtre se confondait avec la page sombre
+  // derrière elle — fond `surface-container-high` (planche : `surface-high`) + filet.
+  background: var(--mat-sys-surface-container-high, var(--mat-sys-surface));
+  border: 1px solid var(--mat-sys-outline-variant);
   color: var(--mat-sys-on-surface);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.18);
@@ -41,14 +44,19 @@
   animation: detailSurfaceSlideUp 0.25s ease-out;
 
   @media (min-width: 1024px) {
-    top: 64px;
-    bottom: 0;
-    left: auto;
-    right: 0;
-    width: 320px;
-    border-radius: 0;
-    max-height: none;
-    animation: detailSurfaceSlideIn 0.25s ease-out;
+    // `translate`/`scale` (propriétés individuelles) plutôt que `transform` : l'animation ne
+    // doit pas écraser le centrage.
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    translate: -50% -50%;
+    width: min(560px, calc(100vw - 32px));
+    max-height: 80vh;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+    padding: 24px;
+    animation: detailSurfaceFadeIn 0.2s ease-out;
   }
 }
 
@@ -61,12 +69,14 @@
   }
 }
 
-@keyframes detailSurfaceSlideIn {
+@keyframes detailSurfaceFadeIn {
   from {
-    transform: translateX(100%);
+    opacity: 0;
+    scale: 0.97;
   }
   to {
-    transform: translateX(0);
+    opacity: 1;
+    scale: 1;
   }
 }
 
@@ -74,6 +84,8 @@
   position: absolute;
   top: 8px;
   right: 8px;
+  min-width: 32px;
+  min-height: 32px;
   background: none;
   border: none;
   font-size: 1.1rem;
@@ -93,4 +105,58 @@
   margin: 0;
   white-space: pre-line;
   line-height: 1.5;
+}
+
+// Tableau mécanique (DESIGN §7.2) : deux colonnes libellé / valeur, filets entre les lignes.
+.detail-surface-rows {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 12px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+
+  th,
+  td {
+    padding: 6px 0;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    width: 34%;
+    padding-right: 8px;
+    font-weight: 500;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  tr + tr th,
+  tr + tr td {
+    border-top: 1px solid var(--mat-sys-outline-variant);
+  }
+}
+
+// Récit d'ambiance : après le tableau, en italique atténué.
+.detail-surface-narrative {
+  margin: 0;
+  font-style: italic;
+  line-height: 1.5;
+  white-space: pre-line;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+// Divulgation du récit (mobile uniquement — le gabarit ne la rend pas à ≥ 1024px). Cible ≥ 44px.
+.detail-surface-disclosure {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--mat-sys-primary);
+  cursor: pointer;
+  text-align: left;
 }

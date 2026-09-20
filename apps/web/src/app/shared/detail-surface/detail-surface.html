@@ -2,9 +2,9 @@
 <div
   class="detail-surface-panel"
   role="dialog"
-  [attr.aria-modal]="isDesktop() ? null : 'true'"
+  aria-modal="true"
   [attr.aria-label]="title() || 'Détail'"
-  [cdkTrapFocus]="!isDesktop()"
+  cdkTrapFocus
   (keydown)="onKeydown($event)"
 >
   <button
@@ -15,5 +15,37 @@
     aria-label="Fermer"
   >✕</button>
   <h2 class="detail-surface-title">{{ title() || 'Détail' }}</h2>
-  <p class="detail-surface-body">{{ body() || 'Aucune description disponible.' }}</p>
+  @if (isStructured()) {
+    @if (hasRows()) {
+      <table class="detail-surface-rows">
+        <tbody>
+          @for (row of rows(); track row.label) {
+            <tr>
+              <th scope="row">{{ row.label }}</th>
+              <td>{{ row.value }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+    @if (narrative()) {
+      @if (hasRows() && !isDesktop()) {
+        <button
+          type="button"
+          class="detail-surface-disclosure"
+          [attr.aria-expanded]="narrativeOpen()"
+          [attr.aria-controls]="narrativeOpen() ? 'detail-surface-narrative' : null"
+          (click)="toggleNarrative()"
+        >{{ narrativeOpen() ? '▾ ' + theme.tone()['detail.narrative_hide'] : '▸ ' + theme.tone()['detail.narrative_show'] }}</button>
+        @if (narrativeOpen()) {
+          <p id="detail-surface-narrative" class="detail-surface-narrative">{{ narrative() }}</p>
+        }
+      } @else {
+        <p id="detail-surface-narrative" class="detail-surface-narrative">{{ narrative() }}</p>
+      }
+    }
+  } @else if (!custom()) {
+    <p class="detail-surface-body">{{ body() || 'Aucune description disponible.' }}</p>
+  }
+  <ng-content />
 </div>

@@ -1,8 +1,18 @@
+:host {
+  display: block;
+}
+
 .choice-card {
+  // 🚨 Trouvé à l'écran (31.4, Task 9) : un bouton garde une largeur « au contenu » — les cartes à
+  // libellé court (profils d'attributs) rétrécissaient et se dispersaient dans la grille.
+  width: 100%;
+  box-sizing: border-box;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.75rem 1rem;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0.125rem;
+  padding: 0.5rem 0.75rem;
   min-height: 44px;
   border: 1px solid var(--mat-sys-outline-variant, #ccc);
   border-radius: 8px;
@@ -10,7 +20,7 @@
   color: var(--mat-sys-on-surface, #1a1428);
   cursor: pointer;
   font: inherit;
-  text-align: center;
+  text-align: left;
   transition:
     border-color 0.15s,
     background-color 0.15s;
@@ -25,7 +35,54 @@
     color: var(--mat-sys-on-primary-container, #2a1a4a);
   }
 
+  &--selected &__detail {
+    color: inherit;
+  }
+
+  // Carte déployée : en-tête d'un bloc à deux parties (avec `app-choice-detail`) — coins bas droits,
+  // pas de filet bas, libellé à gauche et indication à droite.
+  &--expanded {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border-bottom-color: transparent;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  &__hint {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-align: right;
+    color: inherit;
+    opacity: 0.85;
+  }
+
+  &--center {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+
   &__label {
     font-weight: 500;
+  }
+
+  // Sous-titre descriptif (Story 31.4, DESIGN §7.1) : 2 lignes maximum, coupé par une ellipse.
+  // Contraste 12px MESURÉ (AC13, 2026-09-20) : `on-surface-variant` sur `surface-container` =
+  // 5,92 / 6,34 / 5,74:1 (grimoire / forêt / steampunk) ✓ ; mais sur le fond SÉLECTIONNÉ
+  // (`primary-container`) il tombe à 3,42 / 4,36 / 4,48:1 ✗ — d'où `color: inherit` ci-dessous
+  // (`on-primary-container` : 6,41 / 7,57 / 5,81:1).
+  &__detail {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    font-weight: 400;
+    color: var(--mat-sys-on-surface-variant, #555);
   }
 }

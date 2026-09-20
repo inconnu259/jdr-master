@@ -6,7 +6,9 @@ import {
   createDetailSurfaceHost,
   detailContent,
 } from '../../../../../shared/detail-surface/detail-surface-host';
+import { firstSentence } from '../../choice-card/card-subtitle';
 import { ChoiceCard, type ChoiceCardOption } from '../../choice-card/choice-card';
+import { ChoiceDetail } from '../../choice-card/choice-detail';
 import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.directive';
 
 interface TypeAdvantage {
@@ -23,7 +25,7 @@ interface TypeData {
 @Component({
   selector: 'app-type-step',
   standalone: true,
-  imports: [ChoiceCard, RadioGroupNavDirective, DetailSurface],
+  imports: [ChoiceCard, ChoiceDetail, RadioGroupNavDirective, DetailSurface],
   templateUrl: './type-step.html',
   styleUrl: './type-step.scss',
 })
@@ -31,7 +33,8 @@ export class TypeStep {
   readonly types = input.required<ContentEntryDto[]>();
   readonly typeId = input<string | undefined>();
 
-  readonly typeIdChange = output<string>();
+  /** `undefined` = le type est DÉSÉLECTIONNÉ (re-toucher la carte déployée, piste B). */
+  readonly typeIdChange = output<string | undefined>();
 
   protected readonly theme = inject(ThemeToneService);
 
@@ -46,7 +49,7 @@ export class TypeStep {
       return {
         key: entry.key,
         label: data.label,
-        detail: data.advantages.map((a) => a.name).join(', '),
+        detail: firstSentence(data.description),
       };
     }),
   );
@@ -56,7 +59,8 @@ export class TypeStep {
     return entry ? (entry.data as TypeData) : null;
   });
 
+  /** Re-toucher le type déjà choisi le désélectionne : la carte déployée se referme. */
   protected onSelect(key: string): void {
-    this.typeIdChange.emit(key);
+    this.typeIdChange.emit(key === this.typeId() ? undefined : key);
   }
 }

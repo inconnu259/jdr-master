@@ -1,8 +1,19 @@
 import { ElementRef, type Signal, inject, signal } from '@angular/core';
 
+/** Une ligne du tableau mécanique (Story 31.4, DESIGN §7.2) : libellé d'interface + valeur. */
+export interface DetailRow {
+  label: string;
+  value: string;
+}
+
 export interface DetailSurfaceContent {
   title: string;
+  /** Corps de texte simple — utilisé quand le terme n'a pas de données structurées. */
   body: string;
+  /** Tableau mécanique (Story 31.4) — vide/absent pour un terme sans donnée structurée. */
+  rows?: DetailRow[];
+  /** Récit d'ambiance, rendu après le tableau (replié par défaut sur mobile). */
+  narrative?: string;
 }
 
 /**
@@ -32,6 +43,8 @@ export interface DetailSurfaceHost {
   /** À passer tel quel à `DetailSurface.openToken`. */
   readonly openToken: Signal<number>;
   open(title: string, body: string, event: Event): void;
+  /** Ouvre un contenu déjà structuré (`talentDetail()`…) — même plomberie que `open()`. */
+  openContent(content: DetailSurfaceContent, event: Event): void;
   close(): void;
 }
 
@@ -53,19 +66,22 @@ export function createDetailSurfaceHost(): DetailSurfaceHost {
   const openToken = signal(0);
   let trigger: HTMLElement | null = null;
 
+  const openContent = (content: DetailSurfaceContent, event: Event): void => {
+    trigger = event.currentTarget as HTMLElement;
+    // Un seul emplacement, jamais une pile : pas d'empilement de panneaux ni de voiles.
+    selected.set(content);
+    // Le jeton doit changer même pour deux déclencheurs au titre ET au corps identiques :
+    // l'égalité de valeur des signaux empêcherait sinon le focus de rentrer dans le panneau.
+    openToken.update((n) => n + 1);
+  };
+
   return {
     selected: selected.asReadonly(),
     openToken: openToken.asReadonly(),
 
-    open(title: string, body: string, event: Event): void {
-      trigger = event.currentTarget as HTMLElement;
-      // Remplacement en place : le composant n'est jamais démonté/remonté tant que `selected`
-      // ne repasse pas à `null`, donc pas d'empilement de panneaux ni de voiles.
-      selected.set({ title, body });
-      // Le jeton doit changer même pour deux déclencheurs au titre ET au corps identiques :
-      // l'égalité de valeur des signaux empêcherait sinon le focus de rentrer dans le panneau.
-      openToken.update((n) => n + 1);
-    },
+    open: (title: string, body: string, event: Event): void => openContent({ title, body }, event),
+
+    openContent,
 
     close(): void {
       selected.set(null);

@@ -133,4 +133,19 @@ describe('createDetailSurfaceHost (Story 31.3)', () => {
     expect(document.activeElement).toBe(fixture.nativeElement);
     expect((fixture.nativeElement as HTMLElement).getAttribute('tabindex')).toBe('-1');
   });
+
+  it('AC9 (31.4) — openContent() ouvre un contenu structuré avec la même plomberie (jeton, focus)', async () => {
+    const fixture = await createHost();
+    const host = (
+      fixture.componentInstance as unknown as { detail: ReturnType<typeof createDetailSurfaceHost> }
+    ).detail;
+    const trigger = click(fixture, '.t1');
+    const before = host.openToken();
+    host.openContent(
+      { title: 'Création', body: '', rows: [{ label: 'Effet', value: 'x' }], narrative: 'récit' },
+      { currentTarget: trigger } as unknown as Event,
+    );
+    expect(host.selected()?.rows?.length).toBe(1);
+    expect(host.openToken()).toBe(before + 1);
+  });
 });

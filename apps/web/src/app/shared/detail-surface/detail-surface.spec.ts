@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { BreakpointObserver } from '@angular/cdk/layout';
@@ -11,12 +11,18 @@ import { DetailSurface } from './detail-surface';
   template: `<app-detail-surface
     [title]="title"
     [body]="body"
+    [rows]="rows"
+    [narrative]="narrative"
+    [openToken]="token()"
     (closed)="closedCount = closedCount + 1"
   />`,
 })
 class HostComponent {
   title = 'Frappe précise';
   body = "Ce talent octroie +2 aux tests d'attaque au corps à corps.";
+  rows: { label: string; value: string }[] = [];
+  narrative = '';
+  token = signal(1);
   closedCount = 0;
 }
 
@@ -32,7 +38,10 @@ function makeBreakpointObserver(desktop: boolean) {
 /** `desktop` par défaut à `false` (mobile) — c'est aussi ce que jsdom renvoie nativement pour
  *  toute media query (`matches: false`), donc c'est la valeur qui aurait été utilisée même sans
  *  mock explicite ; le fournir rend l'intention lisible et permet le cas `desktop: true`. */
-async function createHost(desktop = false): Promise<{ fixture: ComponentFixture<HostComponent> }> {
+async function createHost(
+  desktop = false,
+  setup?: (host: HostComponent) => void,
+): Promise<{ fixture: ComponentFixture<HostComponent> }> {
   await TestBed.configureTestingModule({
     imports: [HostComponent],
     providers: [
@@ -41,6 +50,7 @@ async function createHost(desktop = false): Promise<{ fixture: ComponentFixture<
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(HostComponent);
+  setup?.(fixture.componentInstance);
   fixture.detectChanges();
   for (let i = 0; i < 10; i++) {
     await Promise.resolve();
@@ -61,32 +71,104 @@ describe('DetailSurface (Story 31.2)', () => {
     );
   });
 
-  it('AC6 — porte role="dialog" toujours, aria-modal="true" en mobile (feuille) uniquement', async () => {
-    const { fixture } = await createHost(false);
-    const panel: HTMLElement = fixture.nativeElement.querySelector('.detail-surface-panel');
-    expect(panel.getAttribute('role')).toBe('dialog');
-    expect(panel.getAttribute('aria-modal')).toBe('true');
+  // ⚠️ Story 31.4 (AC10) — INVERSION assumée d'une décision de la revue de la 31.2 : la surface
+  // desktop était non modale (panneau latéral, `aria-modal` absent, voile masqué). Elle est
+  // désormais une fenêtre centrée MODALE sur toutes les tailles.
+  for (const desktop of [false, true]) {
+    it(`AC10 (31.4) — role="dialog" et aria-modal="true" ${desktop ? 'en desktop (fenêtre centrée)' : 'en mobile (feuille)'}`, async () => {
+      const { fixture } = await createHost(desktop);
+      const panel: HTMLElement = fixture.nativeElement.querySelector('.detail-surface-panel');
+      expect(panel.getAttribute('role')).toBe('dialog');
+      expect(panel.getAttribute('aria-modal')).toBe('true');
+      expect(fixture.nativeElement.querySelector('.detail-surface-backdrop')).not.toBeNull();
+    });
+  }
+
+  describe('corps structuré (Story 31.4, AC9)', () => {
+    const structured = (h: HostComponent) => {
+      h.body = '';
+      h.rows = [
+        { label: 'Attributs', value: 'VIG · AGI' },
+        { label: 'Effet', value: 'Fabrique un objet' },
+      ];
+      h.narrative = 'Les artisans gagnent leur vie en créant des objets.';
+    };
+
+    it('AC9 — affiche un tableau libellé/valeur, une ligne par donnée', async () => {
+      const { fixture } = await createHost(false, structured);
+      const rows = fixture.nativeElement.querySelectorAll('.detail-surface-rows tr');
+      expect(rows.length).toBe(2);
+      expect(rows[0].querySelector('th').textContent).toContain('Attributs');
+      expect(rows[0].querySelector('td').textContent).toContain('VIG · AGI');
+      expect(fixture.nativeElement.querySelector('.detail-surface-body')).toBeNull();
+    });
+
+    it('AC9 — MOBILE : le récit est replié par défaut, la divulgation le déplie et le replie', async () => {
+      const { fixture } = await createHost(false, structured);
+      const el: HTMLElement = fixture.nativeElement;
+      const btn = el.querySelector<HTMLButtonElement>('.detail-surface-disclosure')!;
+      expect(btn.getAttribute('aria-expanded')).toBe('false');
+      expect(btn.textContent).toContain('Lire le récit');
+      expect(el.querySelector('.detail-surface-narrative')).toBeNull();
+
+      btn.click();
+      fixture.detectChanges();
+      expect(btn.getAttribute('aria-expanded')).toBe('true');
+      expect(btn.textContent).toContain('Masquer le récit');
+      expect(el.querySelector('.detail-surface-narrative')?.textContent).toContain('Les artisans');
+
+      btn.click();
+      fixture.detectChanges();
+      expect(el.querySelector('.detail-surface-narrative')).toBeNull();
+    });
+
+    it('AC9 — DESKTOP : le récit est déployé, sans divulgation', async () => {
+      const { fixture } = await createHost(true, structured);
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.querySelector('.detail-surface-disclosure')).toBeNull();
+      expect(el.querySelector('.detail-surface-narrative')?.textContent).toContain('Les artisans');
+    });
+
+    it('AC9 — sans tableau, le récit est le seul contenu : affiché directement, même en mobile', async () => {
+      const { fixture } = await createHost(false, (h) => {
+        h.body = '';
+        h.rows = [];
+        h.narrative = 'Un récit seul.';
+      });
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.querySelector('.detail-surface-disclosure')).toBeNull();
+      expect(el.querySelector('.detail-surface-narrative')?.textContent).toContain(
+        'Un récit seul.',
+      );
+    });
+
+    it('AC9 — le récit est replié à CHAQUE ouverture (jeton), jamais hérité du terme précédent', async () => {
+      const { fixture } = await createHost(false, structured);
+      const el: HTMLElement = fixture.nativeElement;
+      el.querySelector<HTMLButtonElement>('.detail-surface-disclosure')!.click();
+      fixture.detectChanges();
+      expect(el.querySelector('.detail-surface-narrative')).not.toBeNull();
+
+      fixture.componentInstance.token.set(2);
+      fixture.detectChanges();
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+      expect(el.querySelector('.detail-surface-narrative')).toBeNull();
+    });
+
+    it('un terme sans donnée structurée garde le corps de texte simple', async () => {
+      const { fixture } = await createHost();
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.querySelector('.detail-surface-rows')).toBeNull();
+      expect(el.querySelector('.detail-surface-body')?.textContent).toContain('octroie +2');
+    });
   });
 
-  // 🚨 Trouvé en revue de code : le backdrop est déjà désactivé en desktop (CSS) pour laisser le
-  // reste de la fiche interactif (AC2/AC4), mais `aria-modal`/`cdkTrapFocus` restaient actifs sans
-  // condition — un utilisateur clavier restait piégé dans le panneau même en desktop, alors qu'un
-  // utilisateur souris pouvait librement cliquer un autre déclencheur. Corrigé : les deux suivent
-  // désormais `isDesktop()`, comme le backdrop.
-  it('AC2/AC4 (revue de code) — pas de aria-modal en desktop (panneau latéral) : le reste de la fiche doit rester atteignable', async () => {
-    const { fixture } = await createHost(true);
-    const panel: HTMLElement = fixture.nativeElement.querySelector('.detail-surface-panel');
-    expect(panel.getAttribute('role')).toBe('dialog');
-    expect(panel.hasAttribute('aria-modal')).toBe(false);
-  });
-
-  // `[cdkTrapFocus]="!isDesktop()"` (binding dynamique, pas un attribut statique) ne se reflète
-  // plus dans le DOM comme un attribut inspectable (`hasAttribute('cdktrapfocus')` — ça
-  // fonctionnait tant que c'était écrit `cdkTrapFocus` sans binding). Le comportement RÉEL du
-  // piège (Tab reste dans le panneau en mobile, en sort librement en desktop) relève du CDK
-  // `A11yModule`, non simulable de façon fiable en jsdom (même famille de limite que la capture de
-  // focus ci-dessous) — vérifié par la vérification visuelle (Task 4 de la story, revue de code
-  // sur ce point précis à refaire au prochain passage manuel).
+  // Le piège de focus (`cdkTrapFocus`, désormais inconditionnel — 31.4) relève du CDK `A11yModule`,
+  // non simulable de façon fiable en jsdom (même famille de limite que la capture de focus
+  // ci-dessous) : vérifié par la vérification visuelle réelle (Task 9 de la story 31.4).
 
   // 🚨 Trouvé à la vérification visuelle (Task 4) : `cdkTrapFocusAutoCapture` ne capture le focus
   // qu'au MONTAGE — un remplacement de contenu en place (AC4, la surface reste montée) ne
@@ -141,5 +223,36 @@ describe('DetailSurface (Story 31.2)', () => {
     panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     fixture.detectChanges();
     expect((fixture.componentInstance as HostComponent).closedCount).toBe(0);
+  });
+});
+
+// ── Story 31.4 : contenu projeté (feuille « Récap » du wizard) ──────────────────────────────────
+
+@Component({
+  standalone: true,
+  imports: [DetailSurface],
+  template: `<app-detail-surface title="Récapitulatif" [custom]="true"
+    ><p class="projected">Contenu projeté</p></app-detail-surface
+  >`,
+})
+class ProjectedHost {}
+
+describe('DetailSurface — contenu projeté (Story 31.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('affiche le contenu projeté, sans corps de texte ni repli « Aucune description disponible »', async () => {
+    await TestBed.configureTestingModule({
+      imports: [ProjectedHost],
+      providers: [
+        provideNoopAnimations(),
+        { provide: BreakpointObserver, useValue: makeBreakpointObserver(false) },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProjectedHost);
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    expect(el.querySelector('.projected')?.textContent).toContain('Contenu projeté');
+    expect(el.querySelector('.detail-surface-body')).toBeNull();
+    expect(el.textContent).not.toContain('Aucune description disponible');
   });
 });

@@ -210,8 +210,8 @@ describe('ClassStep', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    const emitted: string[] = [];
-    fixture.componentInstance.classIdChange.subscribe((k: string) => emitted.push(k));
+    const emitted: (string | undefined)[] = [];
+    fixture.componentInstance.classIdChange.subscribe((k) => emitted.push(k));
 
     const buttons: HTMLButtonElement[] = fixture.nativeElement.querySelectorAll('button');
     buttons[0].click();
@@ -224,7 +224,9 @@ describe('ClassStep', () => {
     expect(fixture.nativeElement.textContent).toContain('Chasse');
     expect(fixture.nativeElement.textContent).toContain('Transformation');
     expect(fixture.nativeElement.textContent).toContain('Traque');
-    // La description de la CLASSE reste en ligne : c'est elle qui sert à choisir (Story 31.3).
+    // Décision de l'utilisateur (2026-09-20) : le détail de la classe est affiché DIRECTEMENT (le
+    // bouton « Voir le détail de… » a été retiré) ; la carte en porte aussi la première phrase (AC7).
+    expect(fixture.nativeElement.querySelector('.class-step__description')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain(
       'Les chasseurs abattent leurs proies grâce à leurs connaissances et à leur technique.',
     );
@@ -240,8 +242,17 @@ describe('ClassStep', () => {
 
     talentTrigger('Chasse').click();
     fixture.detectChanges();
-    const body = () =>
-      fixture.nativeElement.querySelector('.detail-surface-body').textContent as string;
+    // Story 31.4 (AC9) : tableau mécanique + récit. Sur mobile (défaut de jsdom) le récit est
+    // replié derrière une divulgation : on la déplie pour lire le panneau entier.
+    const body = () => {
+      const panel = fixture.nativeElement.querySelector('.detail-surface-panel') as HTMLElement;
+      const disclosure = panel.querySelector<HTMLButtonElement>('.detail-surface-disclosure');
+      if (disclosure?.getAttribute('aria-expanded') === 'false') {
+        disclosure.click();
+        fixture.detectChanges();
+      }
+      return panel.textContent as string;
+    };
     expect(body()).toContain('Nourrit le groupe selon le résultat du test');
     expect(body()).toContain(
       'Les chasseurs se sont fait une spécialité de ramener des animaux sauvages pour nourrir leurs compagnons.',
@@ -268,6 +279,11 @@ describe('ClassStep', () => {
     fixture.componentRef.setInput('classId', 'chasseur');
     fixture.detectChanges();
     await fixture.whenStable();
+
+    // Piste B (31.4) : occupations et actions sont REPLIÉES par défaut, à un geste.
+    expect(fixture.nativeElement.querySelector('.class-step__occupations')).toBeNull();
+    fixture.nativeElement.querySelector('.choice-detail__disclosure').click();
+    fixture.detectChanges();
 
     const text = fixture.nativeElement.textContent;
     expect(text).toContain('Barbare');
@@ -481,7 +497,13 @@ describe('ClassStep', () => {
       expect(panel.querySelector('.detail-surface-title')!.textContent).toContain(
         'Talent emprunté',
       );
-      expect(panel.querySelector('.detail-surface-body')!.textContent).toContain(
+      // Effet mécanique dans le tableau ; récit (« Emprunte un talent. ») replié sur mobile.
+      expect(panel.querySelector('.detail-surface-rows')!.textContent).toContain('Talent emprunté');
+      (panel as HTMLElement)
+        .querySelector<HTMLButtonElement>('.detail-surface-disclosure')!
+        .click();
+      fixture.detectChanges();
+      expect(panel.querySelector('.detail-surface-narrative')!.textContent).toContain(
         'Emprunte un talent.',
       );
     });
@@ -508,7 +530,7 @@ describe('ClassStep', () => {
       named(fixture, 'Chasse')!.click();
       fixture.detectChanges();
 
-      expect(fixture.nativeElement.querySelector('.detail-surface-body')!.textContent).toContain(
+      expect(fixture.nativeElement.querySelector('.detail-surface-rows')!.textContent).toContain(
         'Nourrit le groupe selon le résultat du test',
       );
     });
@@ -568,9 +590,164 @@ describe('ClassStep', () => {
 
     it('AC4 — aucun déclencheur d’aide n’est posé DANS une carte-radio (nav clavier intacte)', () => {
       const fixture = mount(CLASSES, 'chasseur');
-      const radiogroup = fixture.nativeElement.querySelector('[role="radiogroup"]')!;
-      expect(radiogroup.querySelectorAll('.class-step__detail-trigger').length).toBe(0);
+      // Piste B (31.4) : le détail est un groupe VOISIN du radio dans le radiogroup — jamais un
+      // enfant du bouton radio (un `<button role="radio">` ne doit contenir aucun autre contrôle).
+      const radios = Array.from(
+        fixture.nativeElement.querySelectorAll('[role="radio"]'),
+      ) as HTMLElement[];
+      for (const radio of radios) {
+        expect(radio.querySelector('button, input, select, a')).toBeNull();
+      }
       expect(triggers(fixture).length).toBeGreaterThan(0);
     });
+  });
+});
+
+// ── Story 31.4 — sous-titre de carte et description complète par la surface (AC7, AC8) ─────────
+
+describe('ClassStep — contrat UI 31.4', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function mount(classes: ContentEntryDto[], classId?: string) {
+    TestBed.configureTestingModule({ imports: [ClassStep] });
+    const fixture = TestBed.createComponent(ClassStep);
+    fixture.componentRef.setInput('classes', classes);
+    if (classId) fixture.componentRef.setInput('classId', classId);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  it('AC7 — chaque carte porte la première phrase de la description de sa classe en sous-titre', () => {
+    const fixture = mount(CLASSES);
+    const details = Array.from(
+      fixture.nativeElement.querySelectorAll('.choice-card__detail'),
+    ) as HTMLElement[];
+    expect(details.map((d) => d.textContent)).toContain(
+      'Les chasseurs abattent leurs proies grâce à leurs connaissances et à leur technique.',
+    );
+  });
+
+  it('AC7 — une classe sans description ⇒ carte compacte, aucun sous-titre', () => {
+    const sansTexte: ContentEntryDto[] = [
+      {
+        key: 'muet',
+        data: { label: 'Muet', occupations: [], actions: [], talents: [] },
+      },
+    ];
+    const fixture = mount(sansTexte);
+    expect(fixture.nativeElement.querySelector('.choice-card__detail')).toBeNull();
+  });
+
+  // ⚠️ Décision de l'utilisateur, 2026-09-20 (revue de code) : le déclencheur « Voir le détail de… »
+  // ne sert à rien — le détail est affiché DIRECTEMENT. (Inverse l'AC8 initial ; la mise en page du
+  // bloc de détail fait l'objet d'une refonte séparée.)
+  it('AC8 (révisé) — la description de la classe sélectionnée est affichée directement, sans bouton intermédiaire', () => {
+    const fixture = mount(CLASSES, 'chasseur');
+    expect(fixture.nativeElement.querySelector('.class-step__detail-cta')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.class-step__description').textContent).toContain(
+      'Les chasseurs abattent leurs proies',
+    );
+  });
+
+  it('AC8 (révisé) — pas de classe sélectionnée ⇒ aucun bloc de détail', () => {
+    const fixture = mount(CLASSES);
+    expect(fixture.nativeElement.querySelector('.class-step__description')).toBeNull();
+  });
+
+  it('AC7 — sélectionner une carte reste un choix radio simple (aucun bouton imbriqué)', () => {
+    const fixture = mount(CLASSES);
+    const cards = fixture.nativeElement.querySelectorAll('[role="radiogroup"] button');
+    for (const card of Array.from(cards) as HTMLElement[]) {
+      expect(card.querySelector('button')).toBeNull();
+    }
+  });
+});
+
+// ── Story 31.4 — piste B : la carte choisie se déploie en place ─────────────────────────────────
+
+describe('ClassStep — carte déployée (piste B)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  function mount(classes: ContentEntryDto[], classId?: string) {
+    TestBed.configureTestingModule({ imports: [ClassStep] });
+    const fixture = TestBed.createComponent(ClassStep);
+    fixture.componentRef.setInput('classes', classes);
+    fixture.componentRef.setInput('landscapes', LANDSCAPES);
+    if (classId) fixture.componentRef.setInput('classId', classId);
+    fixture.detectChanges();
+    return fixture;
+  }
+  const root = (f: { nativeElement: HTMLElement }) => f.nativeElement;
+
+  it('la classe choisie est déployée EN PLACE : détail dans la grille, plus de bloc séparé dessous', () => {
+    const fixture = mount(CLASSES, 'chasseur');
+    const grid = root(fixture).querySelector('.class-step__grid')!;
+    const expanded = grid.querySelector('.class-step__expanded')!;
+    expect(expanded).not.toBeNull();
+    expect(expanded.querySelector('app-choice-detail')).not.toBeNull();
+    expect(expanded.textContent).toContain('Les chasseurs abattent leurs proies');
+    // les autres classes restent de simples cartes
+    expect(grid.querySelectorAll('.class-step__expanded').length).toBe(1);
+    expect(grid.querySelectorAll('[role="radio"]').length).toBe(CLASSES.length);
+  });
+
+  it('aucune classe choisie ⇒ aucune carte déployée', () => {
+    const fixture = mount(CLASSES);
+    expect(root(fixture).querySelector('.class-step__expanded')).toBeNull();
+  });
+
+  it('re-toucher la classe déjà choisie la DÉSÉLECTIONNE (émet undefined)', () => {
+    const fixture = mount(CLASSES, 'chasseur');
+    const emitted: (string | undefined)[] = [];
+    fixture.componentInstance.classIdChange.subscribe((k) => emitted.push(k));
+    const selected = root(fixture).querySelector<HTMLButtonElement>(
+      '.class-step__expanded [role="radio"]',
+    )!;
+    expect(selected.getAttribute('aria-checked')).toBe('true');
+    selected.click();
+    expect(emitted).toEqual([undefined]);
+  });
+
+  it('toucher une AUTRE classe la sélectionne (émet sa clé)', () => {
+    const fixture = mount(CLASSES, 'chasseur');
+    const emitted: (string | undefined)[] = [];
+    fixture.componentInstance.classIdChange.subscribe((k) => emitted.push(k));
+    const other = Array.from(
+      root(fixture).querySelectorAll<HTMLButtonElement>('[role="radio"]'),
+    ).find((b) => b.getAttribute('aria-checked') === 'false')!;
+    other.click();
+    expect(emitted).toEqual(['artisan']);
+  });
+
+  it('un choix OBLIGATOIRE (métier d’appoint) est visible d’emblée, occupations et actions repliées', () => {
+    const fixture = mount(CLASSES_WITH_CHOICES, 'fermier');
+    const must = root(fixture).querySelector('.class-step__required-choice')!;
+    expect(must).not.toBeNull();
+    expect(must.textContent).toContain('Obligatoire');
+    expect(root(fixture).querySelector('#fermier-metier-appoint')).not.toBeNull();
+    expect(root(fixture).querySelector('.class-step__occupations')).toBeNull();
+    // le choix n'est PAS dans la zone repliable
+    const disclosure = root(fixture).querySelector('.choice-detail__disclosure')!;
+    expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('la spécialité obligatoire de l’Artisan est visible d’emblée', () => {
+    const fixture = mount(CLASSES, 'artisan');
+    const must = root(fixture).querySelector('.class-step__specialty')!;
+    expect(must.textContent).toContain('Obligatoire');
+    expect(root(fixture).querySelector('#specialtyTypeId')).not.toBeNull();
+  });
+
+  it('la divulgation déplie occupations et actions, et se replie de nouveau à un autre choix de classe', () => {
+    const fixture = mount(CLASSES, 'chasseur');
+    const btn = () => root(fixture).querySelector<HTMLButtonElement>('.choice-detail__disclosure')!;
+    btn().click();
+    fixture.detectChanges();
+    expect(btn().getAttribute('aria-expanded')).toBe('true');
+    expect(root(fixture).querySelector('.class-step__occupations')).not.toBeNull();
+
+    fixture.componentRef.setInput('classId', 'artisan');
+    fixture.detectChanges();
+    expect(btn().getAttribute('aria-expanded')).toBe('false');
   });
 });

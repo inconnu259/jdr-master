@@ -102,6 +102,7 @@
         <div class="wizard__content-choice-list">
           @for (option of contentOptionsForSpecialType(); track option.key) {
             <app-choice-card
+              align="center"
               [option]="option"
               [selected]="selectedContentKey() === option.key"
               (selectedOption)="selectContentKey($event)"

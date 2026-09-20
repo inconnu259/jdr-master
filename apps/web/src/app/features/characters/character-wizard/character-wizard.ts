@@ -1,4 +1,4 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -20,6 +20,8 @@ import { WeaponStep } from './steps/weapon-step/weapon-step';
 import { FetishStep } from './steps/fetish-step/fetish-step';
 import { EquipmentStep } from './steps/equipment-step/equipment-step';
 import { NarrativeStep } from './steps/narrative-step/narrative-step';
+import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
+import { WizardSummary } from './wizard-summary/wizard-summary';
 import {
   PortraitCropper,
   type PortraitCropData,
@@ -112,6 +114,8 @@ interface ServerValidationError {
     EquipmentStep,
     NarrativeStep,
     PortraitCropper,
+    WizardSummary,
+    DetailSurface,
   ],
   templateUrl: './character-wizard.html',
   styleUrl: './character-wizard.scss',
@@ -175,6 +179,14 @@ export class CharacterWizard implements OnInit {
     startingEquipment: [],
   });
   protected readonly submitting = signal(false);
+
+  /** Feuille « Récap » (téléphone, Story 31.4) : le récapitulatif de la colonne de droite y est rendu. */
+  protected readonly recapOpen = signal(false);
+  private readonly recapButton = viewChild<ElementRef<HTMLButtonElement>>('recapBtn');
+  /** Nombre d'exemplaires d'équipement choisis — pastille du bouton « Récap ». */
+  protected readonly cartCount = computed(() =>
+    (this.sheetData().startingEquipment ?? []).reduce((n, s) => n + s.quantity, 0),
+  );
   protected readonly stepErrors = signal<Record<string, string[]>>({});
 
   /** Portrait : hors `sheetData` (vit sur `Character.portraitUrl`/`portraitCropData`, uploadé après création). */
@@ -294,12 +306,16 @@ export class CharacterWizard implements OnInit {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) return;
     this.partieId = id;
+    // Vrai seulement pendant le chargement du schéma/contenu : un 404 y signifie « ce système n'a
+    // pas de module », alors qu'un 404 de `partiesSvc.get()` signifie « partie introuvable ».
+    let loadingGameSystem = false;
     try {
       // `partie-detail.ts` passe déjà `gameSystemId` en query param (il l'a chargé juste avant) —
       // évite un aller-retour réseau redondant. Repli sur un fetch de la partie uniquement pour
       // une navigation directe (lien partagé, rechargement de page) où le paramètre est absent.
       const gameSystemIdParam = this.route.snapshot.queryParamMap.get('gameSystemId');
       this.gameSystemId = gameSystemIdParam ?? (await this.partiesSvc.get(id)).gameSystemId;
+      loadingGameSystem = true;
       const [schema, content] = await Promise.all([
         this.characterSvc.getGameSystemSchema(this.gameSystemId),
         this.characterSvc.getGameSystemContent(this.gameSystemId),
@@ -308,11 +324,27 @@ export class CharacterWizard implements OnInit {
       this.allStepsRaw.set(allSteps.filter((s) => SUPPORTED_STEP_KEYS.has(s.key)));
       this.content.set(content);
       this.currentStepKeyTracked.set(this.steps()[0]?.key ?? '');
-    } catch {
+    } catch (err) {
+      // Un système de jeu déclaré mais sans module (ex. Draconis, prévu au Palier 12) répond 404 :
+      // dire la vraie cause plutôt qu'un « vérifiez votre connexion » trompeur.
+      if (loadingGameSystem && err instanceof HttpErrorResponse && err.status === 404) {
+        this.loadError.set("Ce système de jeu n'a pas encore d'assistant de création.");
+        return;
+      }
       this.loadError.set(
         "Impossible de charger l'assistant de création. Vérifiez votre connexion et réessayez.",
       );
     }
+  }
+
+  protected openRecap(): void {
+    this.recapOpen.set(true);
+  }
+
+  protected closeRecap(): void {
+    this.recapOpen.set(false);
+    // Le focus revient au bouton d'origine (patron des autres surfaces flottantes).
+    queueMicrotask(() => this.recapButton()?.nativeElement.focus());
   }
 
   protected goNext(): void {

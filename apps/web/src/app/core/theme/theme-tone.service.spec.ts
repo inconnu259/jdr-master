@@ -196,3 +196,64 @@ describe('TONE_MAP — les clés du menu de la fiche (story 31.1) existent dans 
     });
   }
 });
+
+// Story 31.4 — micro-copie du wizard de création et de la surface de détail. `TONE_MAP` garantit
+// la présence des trois thèmes, PAS celle d'une clé dans chacun : une clé oubliée compile et rend
+// `undefined` à l'écran. Seul ce test de parité l'attrape.
+describe('Tones — surface de détail et wizard de création (Story 31.4)', () => {
+  const WIZARD_KEYS = [
+    'detail.row_attributes',
+    'detail.row_difficulty',
+    'detail.row_effect',
+    'detail.row_conditions',
+    'detail.narrative_show',
+    'detail.narrative_hide',
+    'character.equipment_group_individual',
+    'character.equipment_group_contenant',
+    'character.equipment_group_animal',
+    'character.equipment_search_label',
+    'character.equipment_search_placeholder',
+    'character.equipment_search_empty',
+    'character.equipment_budget',
+    'character.equipment_over_budget',
+    'character.choice_deselect_hint',
+    'character.choice_talents_label',
+    'character.choice_advantages_label',
+    'character.choice_required_flag',
+    'character.choice_reference_toggle',
+    'character.equipment_group_toggle',
+    'character.equipment_filter_all',
+    'character.equipment_filter_mine',
+    'character.equipment_qty_less',
+    'character.equipment_qty_more',
+    'character.recap_button',
+    'character.recap_title',
+    'character.recap_cart_title',
+    'character.recap_remove',
+    'character.recap_total',
+    'character.recap_empty_hint',
+  ];
+  const PLACEHOLDERS: Record<string, string[]> = {
+    'character.equipment_budget': ['{spent}', '{total}'],
+    'character.equipment_over_budget': ['{n}'],
+    'character.equipment_group_toggle': ['{group}', '{n}'],
+    'character.equipment_qty_less': ['{name}'],
+    'character.equipment_qty_more': ['{name}'],
+  };
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${WIZARD_KEYS.length} clés, toutes non vides`, () => {
+      for (const key of WIZARD_KEYS) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+      }
+    });
+
+    it(`${theme} garde les gabarits à trou du wizard`, () => {
+      for (const [key, tokens] of Object.entries(PLACEHOLDERS)) {
+        for (const token of tokens) {
+          expect(TONE_MAP[theme][key], `${theme} / ${key}`).toContain(token);
+        }
+      }
+    });
+  }
+});

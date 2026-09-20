@@ -40,7 +40,11 @@ export class AttributesStep {
   protected readonly patternOptions = computed<ChoiceCardOption[]>(() =>
     this.patterns().map((entry) => {
       const data = entry.data as AttributePatternData;
-      return { key: entry.key, label: data.label, detail: data.values.join(', ') };
+      return {
+        key: entry.key,
+        label: data.label,
+        detail: [...data.values].sort((a, b) => b - a).join(' · '),
+      };
     }),
   );
 
@@ -125,20 +129,60 @@ export class AttributesStep {
     this.attributesChange.emit(null);
   }
 
-  protected isChipUsedElsewhere(attr: AttrKey, chipIndex: number): boolean {
-    return Object.entries(this.assignment()).some(([a, idx]) => a !== attr && idx === chipIndex);
+  /** Valeurs DISTINCTES du profil, par ordre décroissant (Story 31.4, DESIGN §7.3) : une seule puce
+   *  par valeur — plus de deux « 6 » visuellement identiques mais distincts. */
+  protected readonly distinctValues = computed(() =>
+    [...new Set(this.values())].sort((a, b) => b - a),
+  );
+
+  /** Nombre d'attributs déjà assignés — pour le résumé « n valeurs sur 4 placées ». */
+  protected readonly placedCount = computed(
+    () => Object.values(this.assignment()).filter((i) => i !== undefined).length,
+  );
+
+  private valueOf(attr: AttrKey): number | undefined {
+    const idx = this.assignment()[attr];
+    return idx === undefined ? undefined : this.values()[idx];
   }
 
-  protected isChipSelected(attr: AttrKey, chipIndex: number): boolean {
-    return this.assignment()[attr] === chipIndex;
+  /** Exemplaires de `value` encore à placer : occurrences dans le profil − indices déjà assignés. */
+  protected remaining(value: number): number {
+    const total = this.values().filter((v) => v === value).length;
+    const used = Object.values(this.assignment()).filter(
+      (i) => i !== undefined && this.values()[i] === value,
+    ).length;
+    return total - used;
   }
 
-  protected selectChip(attr: AttrKey, chipIndex: number): void {
-    if (this.isChipUsedElsewhere(attr, chipIndex)) return;
+  /** Le badge « ×N » n'existe que pour une valeur présente plusieurs fois dans le profil, et
+   *  disparaît quand elle est épuisée. */
+  protected showCount(value: number): boolean {
+    return this.values().filter((v) => v === value).length > 1 && this.remaining(value) > 0;
+  }
 
-    // Recliquer sur le chip déjà sélectionné pour cet attribut le désélectionne (bouton bascule) :
-    // libère la valeur pour les autres attributs et redevient incomplet (next désactivé).
-    if (this.isChipSelected(attr, chipIndex)) {
+  protected isChipSelected(attr: AttrKey, value: number): boolean {
+    return this.valueOf(attr) === value;
+  }
+
+  /** Épuisée = plus aucun exemplaire à placer ET pas sélectionnée dans CETTE rangée (on peut
+   *  toujours reprendre sa propre valeur pour la retirer). */
+  protected isChipExhausted(attr: AttrKey, value: number): boolean {
+    return !this.isChipSelected(attr, value) && this.remaining(value) === 0;
+  }
+
+  /** Nom accessible : la valeur, plus le compteur quand il existe (« 6, encore 2 à placer »). */
+  protected chipLabel(value: number): string {
+    return this.showCount(value)
+      ? `${value}, encore ${this.remaining(value)} à placer`
+      : `${value}`;
+  }
+
+  protected selectChip(attr: AttrKey, value: number): void {
+    if (this.isChipExhausted(attr, value)) return;
+
+    // Recliquer sur la valeur déjà sélectionnée pour cet attribut la désélectionne (bouton bascule) :
+    // libère l'exemplaire pour les autres attributs et redevient incomplet (next désactivé).
+    if (this.isChipSelected(attr, value)) {
       const rest = { ...this.assignment() };
       delete rest[attr];
       this.assignment.set(rest);
@@ -146,7 +190,17 @@ export class AttributesStep {
       return;
     }
 
-    const next = { ...this.assignment(), [attr]: chipIndex };
+    // L'état interne reste indexé par emplacement du profil (resynchronisation inchangée) : on
+    // prend le plus petit index libre portant cette valeur, l'ancien index de cette rangée étant
+    // libéré par le remplacement.
+    const usedByOthers = new Set(
+      Object.entries(this.assignment())
+        .filter(([a, idx]) => a !== attr && idx !== undefined)
+        .map(([, idx]) => idx as number),
+    );
+    const index = this.values().findIndex((v, i) => v === value && !usedByOthers.has(i));
+    if (index < 0) return;
+    const next = { ...this.assignment(), [attr]: index };
     this.assignment.set(next);
     this.emitIfComplete(next);
   }

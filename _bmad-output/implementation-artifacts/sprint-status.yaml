@@ -1,5 +1,5 @@
 # generated: 2026-06-27
-# last_updated: 2026-08-28
+# last_updated: 2026-09-20
 # project: jdr-master
 # project_key: JDR
 # tracking_system: local
@@ -1090,7 +1090,7 @@ development_status:
 
   # ── Epic 29 : Navigation et listes — Palier 9 ──
   epic-29:
-    status: done
+    status: in-progress
     title: "Navigation et listes"
     note: "Le plus gros épic du palier. La story 29-0 l'ouvre : elle porte les trois palettes de statut, prérequis de 29-5, 29-9 et 32-3. Porte AD-11, AD-15, AD-3, AD-17 et AD-19."
 
@@ -1189,6 +1189,24 @@ development_status:
     title: "Refonte des écrans de création et d'édition de partie"
     last_updated: "2026-08-14"
     note: "Porte Q-1, retenue dans le palier 9 le 2026-08-05. Story créée le 2026-08-13 (bmad-create-story). Q-1 ARBITRÉE avec l'utilisateur au démarrage, comme l'exigeaient le SPEC, le PRD et la spine : périmètre « Mise en forme + parcours » (hiérarchie mobile-first des deux écrans, même grammaire création/édition, dépôt de couverture possible dès la création, libellés thématisés) + les 3 items différés de la revue 29.12 (indicateur de chargement du dépôt, validation cliente taille/type, erreurs véridiques NFR-4). Rapatriement des actions de gestion (Clôturer/Rouvrir/Supprimer, invitations) ÉCARTÉ pour recouvrement avec l'épic 32 (32.1/32.2 refont ce terrain). CETTE STORY EST D'ABORD UNE GARDE DE DONNÉES, ensuite une refonte visuelle : trou trouvé en analyse et signalé explicitement à l'utilisateur (NFR-5), qui a autorisé le changement serveur — PartiesService.update() fait `data: { ...dto }` et UpdatePartieDto accepte les 3 PartieKind, donc les 6 transitions de type passent sans aucune vérification ni réparation, alors que le kind gouverne des invariants dans 4 services. Trois transitions produisent un état que le code déclare impossible, dont une IRRÉCUPÉRABLE par l'interface (campagne sans scénario convertie en one-shot : ScenariosService.create() refuse d'en créer un, la création auto n'ayant lieu qu'à PartiesService.create()). Matrice des 6 transitions arrêtée puis AMENDÉE par l'utilisateur sur 3 points : (a) cas 3 et 5 (→ ONE_SHOT) — à 0 scénario on en CRÉE un (titre = nom de la partie, BROUILLON + séance, patron PartiesService.create()) au lieu de refuser, refus conservé seulement à partir de 2 scénarios ; (b) cas 6 (EPISODIQUE → LINEAIRE) — autorisée même à plusieurs COURANT, le MJ désignant celui qui reste Courant, les autres repassant A_VENIR avec séances/votes/dates intacts, au lieu d'un refus. Question de l'utilisateur « un scénario futur peut-il être daté ? » vérifiée dans le code et non à l'estime : seul le statut PASSE bloque addSeance() (scenarios.service.ts:466) et createSeancePoll() (:616), et le schéma décrit A_VENIR comme « titre+date seuls » — aucun problème de spec, l'organisation prévisionnelle est déjà supportée. 3 règles transverses : (A) rien n'est jamais effacé, les ScenarioParticipant/Inscription/capacités restent dormants en quittant l'épisodique (comportement actuel, rend la conversion réversible), le semis des cas 2/4 étant un upsert idempotent ; (B) le serveur est l'autorité et le formulaire l'écho, tous deux consommant LA MÊME fonction pure de @master-jdr/shared — jamais deux tables de règles (AD-17) ; (C) aucune conversion sur une partie clôturée. Réparation des cas 2/4 (semis des membres actuels comme participants) fondée sur un commentaire existant du code et non sur une supposition : homme-dragon.service.ts:378-379 écrit que pour ONE_SHOT/CAMPAGNE_LINEAIRE « tous les membres actuels sont réputés participer ». Décision d'architecture tranchée dans la story : route dédiée PATCH /parties/:id/kind plutôt qu'un élargissement d'UpdatePartieDto (la conversion est une opération à effets avec un paramètre transitoire courantScenarioId, pas une édition de champ) ; update() rejette un kind DIFFÉRENT mais reste tolérant à un kind identique, sans quoi le formulaire et partie-form.spec.ts:91 cassent. Pièges consignés : ne pas injecter ScenariosService dans PartiesService (cycle — ScenariosService injecte déjà PartiesService, la conversion lit Scenario via prisma comme le fait déjà hasScenario()) ; la transition COURANT → A_VENIR n'existe nulle part et reste INTERNE à la transaction, aucune route « démarquer » (l'épic 32 refait la chronologie) ; le refus doit précéder toute écriture (AC10) ; bannerParams() strictement intouché (dérogation 29.11 close depuis 29.12) ; 3ᵉ thème toujours nommé medieval-steampunk, renommage réservé à 35.1. Aucun champ Prisma ajouté ni retiré. Baseline : API 54/54 suites (1133/1133 tests), Web 95/95 fichiers (1409/1409 tests) ; build web en échec sur le seul budget de bundle pré-existant (~1,28 Mo, constant depuis 29.4)."
+
+  29-15-un-bouton-clair-pour-creer-son-personnage-depuis-la-partie:
+    status: backlog
+    epic: epic-29
+    title: "Un bouton clair pour créer son personnage depuis la partie"
+    note: "Ajoutée le 2026-09-20 (sprint change, sprint-change-proposal-2026-09-20.md) : l'épic 29 est rouvert. Front seul. Lit l'indicateur de module posé par 29-17. Un MJ n'a pas de personnage joueur (son entrée est l'Homme Dragon, 33-5). Passe bmad-ux conseillée avant create-story."
+
+  29-16-creer-un-personnage-depuis-personnages:
+    status: backlog
+    epic: epic-29
+    title: "Créer un personnage depuis « Personnages »"
+    note: "Ajoutée le 2026-09-20. Front seul. Section DISTINCTE au-dessus de la liste (29.2 inchangée : la liste ne contient que les personnages de l'utilisateur). Réutilise le prédicat et la micro-copie de 29-15. Passe bmad-ux conseillée."
+
+  29-17-seuls-les-systemes-jouables-sont-proposes-a-la-creation-dune-partie:
+    status: backlog
+    epic: epic-29
+    title: "Seuls les systèmes jouables sont proposés à la création d'une partie"
+    note: "Ajoutée le 2026-09-20. À FAIRE EN PREMIER des trois (ordre de travail 29-17 → 29-15 → 29-16) : pose l'indicateur de module sur GAME_SYSTEMS (packages/shared), restreint CreatePartieDto et partie-form. Aucune migration ; les parties déjà créées sur un système sans module ne sont pas touchées. Vérifier les specs API qui utilisent 'draconis' en fixture."
 
   epic-29-retrospective:
     status: optional
@@ -1400,13 +1418,15 @@ development_status:
     status: done
     epic: epic-31
     last_updated: "2026-08-29"
-    review_note: "REVUE DE CODE (bmad-code-review) le 2026-08-29, 4 couches paralleles (Blind Hunter, Edge Case Hunter, Verification Gap, Acceptance Auditor). 0 decision-needed, 4 patch corriges (bouton imbrique dans <label for> associe a un <select> -> <span id>+aria-labelledby ; espaces parasites dans le nom d'arme (@if/@else scinde autour de parentheses litterales) ; 2 declencheurs sur 6 affichant le libelle brut au lieu de h.title ; repli 'Detail' duplique et code en dur dans detailContent(), retire), 2 defer (garde AC3 non appliquee aux declencheurs FR-20 preexistants ; absence de semantique ARIA de divulgation -- tous deux herites tels quels de la 31.2, non introduits par cette story), 9 rejetes comme bruit. 2 tests de non-regression ajoutes. Post-patch : web 117 fichiers / 2283 tests verts (+2), lint 0 = baseline exactement. Item deferred-work.md de la 31.2 (retour de focus hors du composant partage) archive comme resolu par cette story."
-    note: "IMPLEMENTEE (bmad-dev-story) le 2026-08-29. Option A tranchee par l'utilisateur : la plomberie de la surface de detail (etat, jeton d'ouverture, retour du focus) est extraite dans createDetailSurfaceHost() (apps/web/src/app/shared/detail-surface/detail-surface-host.ts) et CharacterSheet y est migre a comportement constant — ses 110 tests preexistants passent sans modification, et l'item deferred-work.md:15 [P:MOYENNE] qui nommait cette story est ferme (la 31.4 herite du mecanisme). Perimetre tranche par l'utilisateur : fiche = classe + classe secondaire + Type/Voie + type secondaire + option de classe + categorie d'arme ; assistant = description en ligne (elle sert a choisir), termes derriere la surface (talents de classe + option de classe via le talent parent resolu par talentId, avantages de type). weapon-step volontairement non touche (sa description est celle de la chose qu'on choisit, donc couverte par l'arbitrage 'description en ligne'). AC7 tenu : uniquement apps/web/, aucun apps/api/, packages/shared/, packages/game-rules/, JSON de seed ni migration. 2 ECARTS DE BASELINE constates a la mesure : le HEAD annonce par la story (7d6fc2f) n'existait plus (historique de fix/ci-env reecrit en 1a0c7d2), et la baseline de lint n'etait pas 145 mais 0 (nettoyee par da81651) — barre de sortie plus stricte que prevu, tenue. 2 tests preexistants mis a jour (pas supprimes) : espace de rendu sur les titres de classe/type secondaires, et 4 assertions de class-step.spec.ts portant sur des textes de talents devenus non-inline. Resultat : 117 fichiers / 2281 tests verts (+25), lint 0 = baseline exactement, build dev propre. ⚠️ VERIFICATION VISUELLE REELLE (Task 6) DECLAREE FAITE PAR L'UTILISATEUR, PAS PAR L'AGENT : l'extension Chrome est restee injoignable cote agent toute la session ; le navigateur interne n'a pas ete utilise en remplacement (interdit par la story). Point d'attention pour la revue : c'est cette verification qui avait trouve les defauts reels des stories 31.1 et 31.2.
+    review_note: "REVUE DE CODE (bmad-code-revi ew) le 2026-08-29, 4 couches paralleles (Blind Hunter, Edge Case Hunter, Verification Gap, Acceptance Auditor). 0 decision-needed, 4 patch corriges (bouton imbrique dans <label for> associe a un <select> -> <span id>+aria-labelledby ; espaces parasites dans le nom d'arme (@if/@else scinde autour de parentheses litterales) ; 2 declencheurs sur 6 affichant le libelle brut au lieu de h.title ; repli 'Detail' duplique et code en dur dans detailContent(), retire), 2 defer (garde AC3 non appliquee aux declencheurs FR-20 preexistants ; absence de semantique ARIA de divulgation -- tous deux herites tels quels de la 31.2, non introduits par cette story), 9 rejetes comme bruit. 2 tests de non-regression ajoutes. Post-patch : web 117 fichiers / 2283 tests verts (+2), lint 0 = baseline exactement. Item deferred-work.md de la 31.2 (retour de focus hors du composant partage) archive comme resolu par cette story."
+    note: "IMPLEMENTEE (bmad-dev-story) le 2026-08-29. Option A tranchee par l'utilisateur : la plomberie de la surface de detail (etat, jeton d'ouverture, retour du focus) est extraite dans createDetailSurfaceHost() (apps/web/src/app/shared/detail-surface/detail-surface-host.ts) et CharacterSheet y est migre a comportement constant — ses 110 tests preexistants passent sans modification, et l'item deferred-work.md:15 [P:MOYENNE] qui nommait cette story est ferme (la 31.4 herite du mecanisme). Perimetre tranche par l'utilisateur : fiche = classe + classe secondaire + Type/Voie + type secondaire + option de classe + categorie d'arme ; assistant = description en ligne (elle sert a choisir), termes derriere la surface (talents de classe + option de classe via le talent parent resolu par talentId, avantages de type). weapon-step volontairement non touche (sa description est celle de la chose qu'on choisit, donc couverte par l'arbitrage 'description en ligne'). AC7 tenu : uniquement apps/web/, aucun apps/api/, packages/shared/, packages/game-rules/, JSON de seed ni migration. 2 ECARTS DE BASELINE constates a la mesure : le HEAD annonce par la story (7d6fc2f) n'existait plus (historique de fix/ci-env reecrit en 1a0c7d2), et la baseline de lint n'etait pas 145 mais 0 (nettoyee par da81651) — barre de sortie plus stricte que prevu, tenue. 2 tests preexistants mis a jour (pas supprimes) : espace de rendu sur les titres de classe/type secondaires, et 4 assertions de class-step.spec.ts portant sur des textes de talents devenus non-inline. Resultat : 117 fichiers / 2281 tests verts (+25), lint 0 = baseline exactement, build dev propre. ⚠️ VERIFICATION VISUELLE REELLE (Task 6) DECLAREE FAITE PAR L'UTILISATEUR, PAS PAR L'AGENT : l'extension Chrome est restee injoignable cote agent toute la session ; le navigateur interne n'a pas ete utilise en remplacement (interdit par la story). Point d'attention pour la revue : c'est cette verification qui avait trouve les defauts reels des stories 31.1 et 31.2."
     title: "Aide contextuelle sur les termes de jeu"
 
   31-4-refonte-du-parcours-de-creation-de-personnage:
-    status: backlog
+    status: done
     epic: epic-31
+    last_updated: "2026-09-21"
+    review_note: "REVUE DE CODE (bmad-code-review) le 2026-09-20, trois passes menees par l agent (sans sous-agents) : 2 decisions (descriptions arme/sorts derriere la surface ; bouton Voir le detail supprime) et 4 patch tous traites, 2 defer (defilement de la page derriere la modale ; option de classe structuree seulement dans l assistant). Lot d usage du 2026-09-20/21 (AC14-AC20 : piste B, recapitulatif du voyageur, equipement repliable) sans seconde revue, sur decision de l utilisateur, mais teste manuellement par lui. Donnee de test laissee en base : personnage TEST 31.4 (a supprimer) id a2375a73-8407-4066-856d-23efd54a6bfd, a purger a la reinitialisation de la base."
     title: "Refonte du parcours de création de personnage"
 
   31-5-consultation-des-fiches-des-compagnons:
@@ -1485,6 +1505,12 @@ development_status:
     status: backlog
     epic: epic-33
     title: "Export PDF au niveau des fiches joueur"
+
+  33-5-mes-hommes-dragons-dans-personnages:
+    status: backlog
+    epic: epic-33
+    title: "Mes Hommes Dragons dans « Personnages »"
+    note: "Ajoutée le 2026-09-20 (sprint change). Seule story de l'épic à toucher une lecture API agrégée (l'Homme Dragon n'est pas dans GET /me/characters, dont le DTO doit rester inchangé). Un Homme Dragon PAR AVENTURE ; le réutiliser sur plusieurs aventures est une piste ultérieure, non planifiée. Réutilise la section de création de 29-16."
 
   epic-33-retrospective:
     status: optional

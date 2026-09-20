@@ -9,8 +9,8 @@ inputDocuments:
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-08-04/EXPERIENCE.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-20260626/DESIGN.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-08-04/mockups/contrat-ui-calendrier.html'
-lastUpdated: '2026-08-17'
-lastChange: "Ajout de l'Epic 36 « Calendrier — lisibilité » (FR-49 → FR-57, D-15 → D-18) et de ses 14 stories, ordonnancé après l'épic 30. Ajout EN PLACE — les épics 1 à 35 sont intacts."
+lastUpdated: '2026-09-20'
+lastChange: "2026-09-20 (sprint change) : épic 29 rouvert — stories 29.15, 29.16, 29.17 ; story 33.5 ; FR-58 → FR-60 (voir sprint-change-proposal-2026-09-20.md). Précédemment : ajout de l'Epic 36 « Calendrier — lisibilité » (FR-49 → FR-57, D-15 → D-18) et de ses 14 stories, ordonnancé après l'épic 30. Ajout EN PLACE — les épics 1 à 35 sont intacts."
 epic36StepsCompleted: ['step-01-validate-prerequisites', 'step-02-design-epics', 'step-03-create-stories']
 ---
 
@@ -46,6 +46,9 @@ Ce document décompose en stories implémentables les exigences du Palier 9 — 
 - FR-45 : Modes d'affichage de la liste
 - FR-47 : Identité visuelle d'une partie
 - FR-48 : Navigation principale à quatre destinations
+- FR-58 : Point d'entrée explicite de création d'un personnage — sur la partie, et dans « Personnages »
+- FR-59 : Les Hommes Dragons des MJ figurent dans « Personnages », avec leur création
+- FR-60 : Seuls les systèmes de jeu disposant d'un module peuvent être choisis pour une nouvelle partie
 - FR-13 : Notification éphémère d'annonce à la connexion
 
 **§4.3 — Identité : joueur vs personnage**
@@ -238,6 +241,9 @@ Chaque exigence est rattachée à la ou aux stories qui la portent.
 | FR-46 | 30.4 · 30.5 · 30.6 | Modèle, endpoint, puis interface |
 | FR-47 | 29.10 · 29.12 | Bannière générative, puis image de couverture |
 | FR-48 | 29.3 | Navigation à quatre destinations |
+| FR-58 | 29.15 · 29.16 | Point d'entrée de création d'un personnage |
+| FR-59 | 33.5 | Hommes Dragons dans Personnages |
+| FR-60 | 29.17 | Systèmes jouables seuls proposés |
 | *(Q-1)* | 29.14 | Refonte des écrans de création et d'édition de partie |
 
 ### Exigences d'UX sans ancrage FR
@@ -264,7 +270,7 @@ L'utilisateur dispose enfin d'un endroit où vivre : il gère son profil, sécur
 
 L'utilisateur atteint ses parties et ses personnages sans passer par un mode, et voit d'un coup d'œil lesquelles réclament quelque chose de lui. La navigation se restructure en quatre destinations, les listes gagnent leurs modes d'affichage, leurs tris, leurs favoris et leur signalétique d'état.
 
-**FRs covered:** FR-7, FR-8, FR-9, FR-10, FR-11, FR-12, FR-13, FR-16, FR-44, FR-45, FR-47, FR-48 · plus la refonte des écrans de création et d'édition de partie (Q-1)
+**FRs covered:** FR-7, FR-8, FR-9, FR-10, FR-11, FR-12, FR-13, FR-16, FR-44, FR-45, FR-47, FR-48, FR-58, FR-60 · plus la refonte des écrans de création et d'édition de partie (Q-1)
 
 **Notes d'implémentation :** le plus gros épic du palier, mais un seul écran-famille et un seul jeu de fichiers. Porte `AD-11` (`ModeService` → `MyPartiesService`, câblage SSE conservé à l'identique), `AD-15` (projection explicite de `PartieDto`), `AD-3` (appel unique de signaux), `AD-17` et `AD-19` (image de couverture et bannière générative).
 
@@ -273,6 +279,8 @@ L'utilisateur atteint ses parties et ses personnages sans passer par un mode, et
 **Séquencement à connaître :** la barre de navigation (29.3) livre une destination « Calendrier » qui pointe sur le calendrier **existant** jusqu'à ce que l'épic 30 le refonde. C'est voulu — l'épic 29 ne dépend d'aucun épic suivant.
 
 **Stories 29.4 et 29.5 insérées après correct-course (sprint change, 2026-08-08)**, à l'usage de la barre livrée par 29.3 : le bandeau du haut restait vide sur tous les écrans, et aucun écran ne signalait localement « où je suis, qu'est-ce que je peux faire ici » au-delà des 4 destinations globales. Numérotées 29.4/29.5 pour rester juste après leur prérequis direct (29.3) — les neuf stories suivantes ont glissé d'autant (anciennes 29.4–29.12 → 29.6–29.14). 29.4 pose le mécanisme générique (titre contextuel + sous-navigation locale, appliqué à l'écran Partie qui a déjà la structure d'onglets nécessaire) ; 29.5 l'applique à la fiche personnage, qui n'a aujourd'hui aucune structure de section et doit d'abord être découpée. Aucune des deux ne remplace la barre à 4 destinations (FR-48) : elle reste seule responsable de l'accès global en un geste, la sous-navigation locale s'y ajoute sans jamais la masquer.
+
+**Épic rouvert le 2026-09-20 (sprint change, `sprint-change-proposal-2026-09-20.md`)** : l'usage réel a montré que le point d'entrée de création d'un *personnage* n'était pas évident (une initiale cliquable dans le roster desktop, un onglet sur mobile). 29.17 restreint la création de partie aux systèmes ayant un module (aujourd'hui Ryuutama seul) et pose l'indicateur que lisent 29.15 (bouton explicite sur la partie) et 29.16 (section de création au-dessus de la liste de « Personnages »). Ordre de travail recommandé : **29.17 → 29.15 → 29.16**. La liste de 29.2 reste celle des seuls personnages de l'utilisateur : la section de 29.16 est un bloc distinct, jamais fait de cartes de personnages.
 
 ### Epic 30 : Calendrier
 
@@ -302,9 +310,11 @@ Le contenu d'une partie cesse d'être un fouillis : l'action immédiate, la cons
 
 Le MJ crée et consulte son Homme Dragon avec le même soin qu'une fiche de personnage joueur : formulaire guidé, fiche refondue, export au même niveau.
 
-**FRs covered:** FR-24, FR-25, FR-26, FR-27
+**FRs covered:** FR-24, FR-25, FR-26, FR-27, FR-59
 
 **Notes d'implémentation :** **Q-13 tranchée le 2026-08-05 — l'épic n'est plus bloqué.** Les six souffles seedés sont les communs ; ceux propres à chaque race (vert, bleu, rouge, noir) n'existent nulle part. FR-26 se décompose en deux morceaux portés par la story 33.2 : seeder les souffles par race sur le mécanisme du catalogue d'artefacts, puis présenter ceux dont ce dragon dispose. Aucun suivi de consommation.
+
+**Story 33.5 ajoutée le 2026-09-20 (sprint change)** : l'Homme Dragon rejoint « Personnages » et s'y crée, une entrée par aventure. Seule story de l'épic à toucher une lecture API agrégée ; elle ne doit pas figer « un par partie » dans son contrat (un même Homme Dragon réutilisé sur plusieurs aventures est une piste ultérieure, non planifiée).
 
 ### Epic 34 : Entrée dans l'application
 
@@ -1083,6 +1093,115 @@ So that le premier geste que je fais ne soit pas le plus négligé.
 **Then** la question a été reposée à l'utilisateur et l'arbitrage est consigné ici
 **And** aucun champ n'est ajouté ni retiré du modèle sans cette décision
 
+### Story 29.15 : Un bouton clair pour créer son personnage depuis la partie
+
+As a joueur qui rejoint une partie,
+I want un bouton explicite « Créer mon personnage » sur l'écran de la partie,
+So that je sache tout de suite par où commencer, sans deviner qu'une initiale est cliquable.
+
+**Acceptance Criteria:**
+
+**Given** je suis joueur d'une partie dont le système de jeu dispose d'un module, et je n'y ai pas encore de personnage
+**When** j'ouvre le détail de la partie, sur téléphone comme sur ordinateur
+**Then** un bouton « Créer mon personnage » est visible, sans changer d'onglet ni défiler
+**And** il ouvre l'assistant de création de cette partie
+
+**Given** j'ai déjà un personnage sur cette partie
+**When** j'ouvre son détail
+**Then** le bouton n'est pas affiché — il ne mène jamais à un refus « vous avez déjà un personnage »
+
+**Given** la partie utilise un système de jeu sans module (indicateur de la story 29.17)
+**When** j'ouvre son détail
+**Then** aucun bouton de création n'est proposé
+
+**Given** je suis MJ de la partie
+**When** j'ouvre son détail
+**Then** aucun bouton de personnage joueur n'est proposé
+**And** l'entrée de création du MJ est celle de son Homme Dragon (story 33.5) — un MJ n'a pas de personnage joueur, et a un Homme Dragon par aventure
+
+**Given** le slot d'initiale du roster sur ordinateur
+**When** il reste affiché
+**Then** il conserve son comportement, mais n'est plus le seul point d'entrée
+
+**Given** le bouton
+**When** il est rendu
+**Then** c'est un vrai lien ou bouton, atteignable au clavier, dont la cible mesure au moins 44 × 44 px
+**And** son libellé vient de la micro-copie de thème, jamais codé en dur
+
+*Règle écrite une seule fois :* « puis-je créer un personnage sur cette partie ? » (non-MJ · aucun personnage · système avec module) est un prédicat partagé avec la story 29.16.
+
+### Story 29.16 : Créer un personnage depuis « Personnages »
+
+As a joueur,
+I want retrouver, en haut de mes personnages, les aventures où il me reste à créer le mien,
+So that la création soit là où je cherche mes personnages.
+
+**Acceptance Criteria:**
+
+**Given** je suis joueur de parties où je n'ai pas encore de personnage, et dont le système dispose d'un module
+**When** j'ouvre « Personnages »
+**Then** une section placée au-dessus de la liste propose une entrée par partie : « Créer un personnage pour *<nom de l'aventure>* »
+
+**Given** une entrée de cette section
+**When** je l'active
+**Then** j'arrive sur l'assistant de création de cette partie
+
+**Given** je n'ai aucune partie sans personnage
+**When** j'ouvre « Personnages »
+**Then** la section n'est pas rendue — jamais un bloc vide
+
+**Given** cette section et la liste
+**When** l'écran s'affiche
+**Then** la section est visuellement distincte et ne contient aucune carte de personnage
+**And** la liste ne contient toujours que mes personnages (story 29.2 inchangée)
+**And** la recherche, le tri et le mode d'affichage de la liste ne la masquent ni ne la réordonnent
+
+**Given** je viens de créer mon personnage sur une partie
+**When** je reviens sur « Personnages »
+**Then** l'entrée de cette partie a disparu et mon personnage figure dans la liste
+
+**Given** une partie dont le système n'a pas de module, ou dont je suis le MJ
+**When** la section est calculée
+**Then** elle n'y figure pas
+
+**Given** cette section
+**When** elle est rendue
+**Then** chaque entrée est un vrai lien, atteignable au clavier, cible d'au moins 44 × 44 px
+**And** elle réutilise le prédicat et la micro-copie de la story 29.15
+
+*Temps réel :* à évaluer à la création de la story (canal `user:{id}`, `docs/checklist.md`) — le minimum requis est le rafraîchissement au retour de navigation.
+
+### Story 29.17 : Seuls les systèmes jouables sont proposés à la création d'une partie
+
+As a MJ qui crée une partie,
+I want ne choisir qu'un système de jeu que l'application sait réellement faire jouer,
+So that je ne crée pas une partie où personne ne pourra ensuite créer de personnage.
+
+**Acceptance Criteria:**
+
+**Given** le formulaire de création d'une partie
+**When** je choisis le système de jeu
+**Then** seuls les systèmes disposant d'un module sont proposés
+
+**Given** une requête de création de partie portant un système sans module
+**When** l'API la reçoit
+**Then** elle la refuse avec un message explicite — le formulaire n'est pas la seule barrière
+
+**Given** des parties déjà créées sur un système sans module
+**When** je les ouvre
+**Then** elles restent consultables et inchangées, sans migration
+**And** aucune entrée de création de personnage n'y est offerte
+
+**Given** l'indicateur de module sur les systèmes de jeu
+**When** un nouveau système reçoit son module
+**Then** il suffit d'y basculer l'indicateur pour qu'il devienne proposé — aucune autre liste à mettre à jour
+
+**Given** un système sans module
+**When** l'indicateur est lu par les stories 29.15 et 29.16
+**Then** c'est la même source que celle du formulaire et du DTO
+
+*Note :* le message d'erreur explicite du wizard sur un système sans module (correctif séparé, déjà ouvert) reste nécessaire — il protège les parties déjà créées.
+
 ---
 
 ## Epic 30 : Calendrier
@@ -1734,6 +1853,48 @@ So that ma fiche imprimée soit utilisable à la table.
 **When** ils sont remplis
 **Then** la valeur maximale reflète le niveau de l'Homme Dragon
 **And** aucun champ ne prétend suivre une consommation que l'application ne suit pas
+
+### Story 33.5 : Mes Hommes Dragons dans « Personnages »
+
+As a MJ,
+I want retrouver mon Homme Dragon dans « Personnages » et pouvoir l'y créer,
+So that mon dragon soit aussi facile à atteindre que les personnages de mes joueurs.
+
+**Acceptance Criteria:**
+
+**Given** je suis MJ de parties Ryuutama où j'ai créé un Homme Dragon
+**When** j'ouvre « Personnages »
+**Then** chacun apparaît dans la liste, avec la partie dont il provient
+**And** sa nature (Homme Dragon, et non personnage joueur) se lit sans l'ouvrir
+
+**Given** un Homme Dragon listé
+**When** je l'ouvre
+**Then** j'arrive sur sa fiche
+
+**Given** une aventure Ryuutama dont je suis MJ et où je n'ai pas encore d'Homme Dragon (un par aventure — le même dragon utilisé sur plusieurs aventures est hors périmètre)
+**When** j'ouvre « Personnages »
+**Then** la section de création de la story 29.16 propose « Créer un Homme Dragon pour *<nom de l'aventure>* »
+**And** elle m'amène sur le parcours de création de l'Homme Dragon
+
+**Given** la liste contenant des Hommes Dragons
+**When** j'utilise la recherche, le tri ou le mode d'affichage
+**Then** ils s'appliquent aux Hommes Dragons comme aux personnages
+**And** leur nom suit la convention d'identité de l'épic 28
+
+**Given** une partie dont je ne suis pas le MJ
+**When** « Personnages » est calculé
+**Then** l'Homme Dragon de son MJ n'y figure jamais
+
+**Given** cette lecture agrégée
+**When** elle est servie
+**Then** elle ne déclenche pas de requête par partie
+**And** `GET /me/characters` et son DTO sont inchangés pour leurs consommateurs existants
+
+*À trancher à la création de la story :* endpoint dédié ou extension de la lecture existante ; route propre pour la fiche Homme Dragon ou navigation vers la partie (elle n'a pas de route aujourd'hui).
+
+*Hors périmètre, à ouvrir séparément :* réutiliser **le même Homme Dragon sur plusieurs aventures** (facultatif). Aujourd'hui un Homme Dragon est propre à une aventure ; le partager suppose un changement de modèle, donc une story à part dans l'épic 33 — non créée par cette passe.
+
+*Séquencement :* indépendante de 33.1 (fiche refondue) et de 33.3 (formulaire guidé) — ils enrichissent ce vers quoi elle mène, sans en être un prérequis.
 
 ---
 

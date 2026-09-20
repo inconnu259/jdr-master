@@ -923,7 +923,8 @@ describe('CharacterSheet', () => {
       const panel = fixture.nativeElement.querySelector('.detail-surface-panel');
       expect(panel).not.toBeNull();
       expect(panel.querySelector('.detail-surface-title').textContent).toContain('Légendes');
-      expect(panel.querySelector('.detail-surface-body').textContent).toContain('...');
+      // Story 31.4 — un talent s'ouvre en tableau mécanique (Effet, …) puis récit (AC9).
+      expect(panel.querySelector('.detail-surface-rows').textContent).toContain('...');
     });
 
     it('AC1 — activer un avantage ouvre la surface (champ `effect`, pas `effect.description`)', async () => {
@@ -937,7 +938,10 @@ describe('CharacterSheet', () => {
       expect(panel.querySelector('.detail-surface-body').textContent).toContain('+2');
     });
 
-    it('AC4 — activer un second élément PENDANT que la surface est ouverte remplace le contenu, sans empiler', async () => {
+    // ⚠️ Story 31.4 (AC10) : la surface est désormais modale sur desktop aussi — son voile recouvre
+    // les déclencheurs, un utilisateur ne peut plus activer un second terme sans fermer le premier.
+    // Ce test ne vérifie donc plus un geste réel mais l'invariant qui reste : jamais deux panneaux.
+    it('AC10 (31.4) — un seul terme ouvert à la fois : jamais deux panneaux empilés', async () => {
       const { fixture } = await createComponent();
 
       detailTriggerNamed(fixture, 'Légendes').click();
@@ -1157,7 +1161,7 @@ describe('CharacterSheet', () => {
     negociationBtn!.click();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('.detail-surface-body').textContent).toContain(
+    expect(fixture.nativeElement.querySelector('.detail-surface-rows').textContent).toContain(
       'Baisse un prix',
     );
   });

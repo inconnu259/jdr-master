@@ -71,9 +71,18 @@ describe('WeaponStep', () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
-    expect(fixture.nativeElement.textContent).toContain(
+    // Revue de code 31.4 (AC2, décision utilisateur) : la description de la catégorie n'est plus en
+    // ligne — une pastille ⓘ l'ouvre dans la surface de détail.
+    expect(fixture.nativeElement.textContent).not.toContain(
       'Distance, mais difficiles à utiliser. Deux mains.',
     );
+    const trigger = fixture.nativeElement.querySelector('.weapon-step__detail-trigger');
+    expect(trigger.textContent).toContain('Arc');
+    trigger.click();
+    fixture.detectChanges();
+    expect(
+      fixture.nativeElement.querySelector('.detail-surface-panel .detail-surface-body').textContent,
+    ).toContain('Distance, mais difficiles à utiliser. Deux mains.');
     const items = itemButtons(fixture);
     expect(items.length).toBe(3);
     expect(items[0].textContent).toContain('Arc de chasse');

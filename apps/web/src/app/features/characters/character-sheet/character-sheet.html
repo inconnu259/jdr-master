@@ -232,11 +232,15 @@
           <ul class="sheet__talent-list">
             @for (talent of classData()?.talents ?? []; track talent.name) {
               <li>
-                <button
-                  type="button"
-                  class="sheet__detail-trigger"
-                  (click)="detail.open(talent.name, talent.effect.description, $event)"
-                >{{ talent.name }}</button>
+                @if (talentHelp(talent); as h) {
+                  <button
+                    type="button"
+                    class="sheet__detail-trigger"
+                    (click)="detail.openContent(h, $event)"
+                  >{{ talent.name }}</button>
+                } @else {
+                  <strong>{{ talent.name }}</strong>
+                }
               </li>
             }
           </ul>
@@ -256,11 +260,15 @@
             <ul class="sheet__talent-list">
               @for (talent of secondary.talents; track talent.name) {
                 <li>
-                  <button
-                    type="button"
-                    class="sheet__detail-trigger"
-                    (click)="detail.open(talent.name, talent.effect.description, $event)"
-                  >{{ talent.name }}</button>
+                  @if (talentHelp(talent); as h) {
+                    <button
+                      type="button"
+                      class="sheet__detail-trigger"
+                      (click)="detail.openContent(h, $event)"
+                    >{{ talent.name }}</button>
+                  } @else {
+                    <strong>{{ talent.name }}</strong>
+                  }
                 </li>
               }
             </ul>
@@ -589,6 +597,8 @@
       <app-detail-surface
         [title]="d.title"
         [body]="d.body"
+        [rows]="d.rows ?? []"
+        [narrative]="d.narrative ?? ''"
         [openToken]="detail.openToken()"
         (closed)="detail.close()"
       />

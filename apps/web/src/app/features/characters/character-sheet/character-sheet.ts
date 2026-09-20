@@ -34,6 +34,7 @@ import {
   createDetailSurfaceHost,
   detailContent,
 } from '../../../shared/detail-surface/detail-surface-host';
+import { talentDetail } from '../../../shared/detail-surface/talent-detail';
 import { CharacterAvatar } from '../character-avatar/character-avatar';
 import { PortraitPanel } from '../portrait-panel/portrait-panel';
 import {
@@ -68,6 +69,10 @@ interface ClassTalentFull {
   id?: string;
   name: string;
   effect: { description: string; conditions: string };
+  /** Données structurées du catalogue, lues pour le tableau de la surface de détail (31.4). */
+  attributes?: string[];
+  difficulty?: string;
+  description?: string;
 }
 
 export type RequiredChoiceKind =
@@ -233,6 +238,17 @@ export class CharacterSheet implements OnInit {
 
   /** Règle AC3 partagée avec l'assistant : pas de texte au catalogue ⇒ pas de déclencheur. */
   protected readonly help = detailContent;
+
+  /** Tableau mécanique + récit d'un talent (31.4, DESIGN §7.2) — même fonction que l'assistant. */
+  protected talentHelp(talent: ClassTalentFull) {
+    const tone = this.theme.tone();
+    return talentDetail(talent, {
+      attributes: tone['detail.row_attributes'],
+      difficulty: tone['detail.row_difficulty'],
+      effect: tone['detail.row_effect'],
+      conditions: tone['detail.row_conditions'],
+    });
+  }
 
   // Requêtes par nom de ref plutôt que refs de template croisant les blocs `@if` (les pencils
   // sont déclarés dans des blocs conditionnels distincts de ceux qui masquent l'affichage
