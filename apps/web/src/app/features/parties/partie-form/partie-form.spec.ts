@@ -100,6 +100,37 @@ describe('PartieForm', () => {
     expect(toggles).toHaveLength(3);
   });
 
+  describe('systèmes de jeu proposés (Story 29.17)', () => {
+    it('AC1 — création : seuls les systèmes avec module de création de personnage sont proposés', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      expect(comp.systems().map((s: { id: string }) => s.id)).toEqual(['ryuutama']);
+    });
+
+    it('défaut du formulaire de création : le premier système avec module (jamais draconis)', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      expect(comp.form.value.gameSystemId).toBe('ryuutama');
+    });
+
+    it('édition d’une partie déjà sur un système sans module : ce système reste visible/sélectionné', async () => {
+      const { fixture } = await createComponent('p1', { partie: { gameSystemId: 'draconis' } });
+      const comp = fixture.componentInstance as any;
+      expect(comp.systems().map((s: { id: string }) => s.id)).toEqual(
+        expect.arrayContaining(['ryuutama', 'draconis']),
+      );
+      expect(comp.form.value.gameSystemId).toBe('draconis');
+    });
+
+    it("édition d’une partie déjà sur un système sans module : aucun AUTRE système sans module ne devient choisissable", async () => {
+      const { fixture } = await createComponent('p1', { partie: { gameSystemId: 'draconis' } });
+      const comp = fixture.componentInstance as any;
+      const ids = comp.systems().map((s: { id: string }) => s.id);
+      expect(ids).not.toContain('conte-de-minuit');
+      expect(ids).not.toContain('esteren');
+    });
+  });
+
   it.each(['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as PartieKind[])(
     'création : soumettre avec kind=%s appelle create() avec ce kind exact',
     async (kind) => {

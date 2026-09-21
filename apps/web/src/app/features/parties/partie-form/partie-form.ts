@@ -9,8 +9,13 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRadioModule } from '@angular/material/radio';
-import { GAME_SYSTEMS, checkPartieKindTransition } from '@master-jdr/shared';
-import type { PartieKind, PartieKindTransitionRefusal, ScenarioDto } from '@master-jdr/shared';
+import { GAME_SYSTEMS, checkPartieKindTransition, gameSystemHasModule } from '@master-jdr/shared';
+import type {
+  GameSystemId,
+  PartieKind,
+  PartieKindTransitionRefusal,
+  ScenarioDto,
+} from '@master-jdr/shared';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
@@ -29,6 +34,13 @@ const KIND_OPTIONS: readonly FormKind[] = [
 
 /** Formats acceptés par le contrôleur de couverture (`party-cover.controller.ts`). */
 const ACCEPTED_COVER_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+
+/** Premier système avec module de création de personnage jouable (Story 29.17) — défaut du
+ *  formulaire de création. Dérivé de `GAME_SYSTEMS`, jamais un id en dur : le jour où un autre
+ *  système reçoit son module, ce défaut suit sans y toucher. Secours sur le premier système de la
+ *  liste si aucun n'a de module (état transitoire uniquement, `GAME_SYSTEMS` n'est jamais vide). */
+const DEFAULT_GAME_SYSTEM_ID: GameSystemId =
+  GAME_SYSTEMS.find((s) => s.module)?.id ?? GAME_SYSTEMS[0].id;
 
 /**
  * Plafond de dépôt appliqué AVANT tout envoi réseau (Story 29.14, AC14).
@@ -74,7 +86,6 @@ export class PartieForm implements OnInit {
   private readonly route = inject(ActivatedRoute);
 
   protected readonly theme = inject(ThemeToneService);
-  protected readonly systems = GAME_SYSTEMS;
   protected readonly kindOptions = KIND_OPTIONS;
   protected readonly editId = signal<string | null>(null);
   protected readonly saving = signal(false);
@@ -97,14 +108,29 @@ export class PartieForm implements OnInit {
   /** Type de la partie tel qu'enregistré (édition) — référence pour savoir si le MJ demande une
    *  conversion, et pour évaluer la matrice. */
   private readonly savedKind = signal<FormKind | null>(null);
+  /** Système de jeu tel qu'enregistré (édition) — `null` en création. Permet de garder ce système
+   *  visible/sélectionnable dans `systems` même sans module (Story 29.17) : aucune migration,
+   *  aucune perte de valeur pour une partie déjà créée sur ce système. */
+  private readonly savedGameSystemId = signal<GameSystemId | null>(null);
   private readonly partieClosed = signal(false);
   private readonly partieScenarios = signal<ScenarioDto[]>([]);
   protected readonly courantChoice = signal<CourantChoice | null>(null);
   protected readonly chosenCourantId = signal<string | null>(null);
 
+  /**
+   * Systèmes proposés au choix (Story 29.17, AC1) : uniquement ceux avec module, plus le système
+   * déjà enregistré de la partie en édition — même s'il n'a pas de module — pour qu'il reste
+   * visible/sélectionnable au chargement (aucun AUTRE système sans module ne devient choisissable).
+   * `gameSystemHasModule()` reste l'unique source de vérité de l'éligibilité (story 29.15).
+   */
+  protected readonly systems = computed(() => {
+    const saved = this.savedGameSystemId();
+    return GAME_SYSTEMS.filter((s) => gameSystemHasModule(s.id) || s.id === saved);
+  });
+
   protected readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(120)]],
-    gameSystemId: ['draconis', [Validators.required]],
+    gameSystemId: [DEFAULT_GAME_SYSTEM_ID, [Validators.required]],
     kind: ['ONE_SHOT' as FormKind, [Validators.required]],
     description: [''],
   });
@@ -159,10 +185,11 @@ export class PartieForm implements OnInit {
     this.partieName.set(p.name);
     this.coverImageVersion.set(p.coverImageVersion);
     this.savedKind.set(p.kind);
+    this.savedGameSystemId.set(p.gameSystemId as GameSystemId);
     this.partieClosed.set(p.status === 'TERMINEE');
     this.form.patchValue({
       name: p.name,
-      gameSystemId: p.gameSystemId,
+      gameSystemId: p.gameSystemId as GameSystemId,
       kind: p.kind,
       description: p.description ?? '',
     });

@@ -192,7 +192,7 @@ describe('PartiesService', () => {
     await service.create('mj1', {
       name: 'La Nuit',
       kind: 'ONE_SHOT',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(prisma.partie.create).toHaveBeenCalledWith({
       data: objectLike({
@@ -208,7 +208,7 @@ describe('PartiesService', () => {
     const dto = await service.create('mj1', {
       name: 'La Nuit',
       kind: 'ONE_SHOT',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(dto).toEqual({
       id: partie.id,
@@ -232,7 +232,7 @@ describe('PartiesService', () => {
     await service.create('mj1', {
       name: 'La Nuit',
       kind: 'ONE_SHOT',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(prisma.scenario.count).not.toHaveBeenCalled();
     expect(prisma.scenario.groupBy).not.toHaveBeenCalled();
@@ -246,7 +246,7 @@ describe('PartiesService', () => {
     const dto = await service.create('mj1', {
       name: 'Les Chroniques',
       kind: 'CAMPAGNE_LINEAIRE',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(dto.status).toBe('A_VENIR');
     expect(prisma.scenario.count).not.toHaveBeenCalled();
@@ -258,7 +258,7 @@ describe('PartiesService', () => {
     await service.create('mj1', {
       name: 'La Nuit',
       kind: 'ONE_SHOT',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.scenario.create).toHaveBeenCalledWith({
@@ -281,16 +281,31 @@ describe('PartiesService', () => {
     await service.create('mj1', {
       name: 'Les Chroniques',
       kind: 'CAMPAGNE_LINEAIRE',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(prisma.scenario.create).not.toHaveBeenCalled();
 
     await service.create('mj1', {
       name: 'Agence',
       kind: 'CAMPAGNE_EPISODIQUE',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(prisma.scenario.create).not.toHaveBeenCalled();
+  });
+
+  it('create() refuse un gameSystemId sans module, avant toute écriture (Story 29.17, AC2)', async () => {
+    const promise = service.create('mj1', {
+      name: 'La Nuit',
+      kind: 'ONE_SHOT',
+      gameSystemId: 'draconis',
+    });
+    await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+    // AC2 : message explicite — pas seulement le type d'exception (revue de code).
+    await expect(promise).rejects.toThrow(
+      'Ce système de jeu ne propose pas encore de création de personnage jouable',
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.partie.create).not.toHaveBeenCalled();
   });
 
   it('listForUser(player) renvoie les parties des memberships, projetées avec role: player', async () => {
@@ -403,7 +418,7 @@ describe('PartiesService', () => {
       const dto = await service.create('mj1', {
         name: 'La Nuit',
         kind: 'ONE_SHOT',
-        gameSystemId: 'draconis',
+        gameSystemId: 'ryuutama',
       });
       expect(dto.isFavorite).toBe(false);
       expect(prisma.partieFavorite.findUnique).not.toHaveBeenCalled();
@@ -1950,6 +1965,53 @@ describe('PartiesService', () => {
         where: { id: 'p1' },
         data: { name: 'Nouveau nom' },
       });
+    });
+  });
+
+  describe('update() — garde gameSystemId sans module (Story 29.17, AC3/AC4)', () => {
+    // `partie` (fixture module-level) porte déjà gameSystemId: 'draconis', sans module — sert ici de
+    // partie déjà enregistrée sur un système sans module, même patron que le `kind` ci-dessus.
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue(partie);
+    });
+
+    it('un gameSystemId DIFFÉRENT vers un système sans module est rejeté, sans écriture (AC4)', async () => {
+      const promise = service.update('p1', 'mj1', { gameSystemId: 'conte-de-minuit' });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      // AC4 : message explicite — pas seulement le type d'exception (revue de code).
+      await expect(promise).rejects.toThrow(
+        'Ce système de jeu ne propose pas encore de création de personnage jouable',
+      );
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('un gameSystemId IDENTIQUE (déjà sans module) reste accepté — aucune migration (AC3)', async () => {
+      await expect(
+        service.update('p1', 'mj1', { name: 'Nouveau nom', gameSystemId: 'draconis' }),
+      ).resolves.toBeDefined();
+      // AC3 : gameSystemId inchangé doit vraiment atteindre l'écriture tel quel — pas seulement
+      // « update() a été appelé » (revue de code : un régression qui le dropperait/muterait
+      // passerait sinon inaperçue malgré le nom du test).
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom', gameSystemId: 'draconis' },
+      });
+    });
+
+    it('sans gameSystemId du tout : enregistrement normal, sans toucher au système existant', async () => {
+      await service.update('p1', 'mj1', { name: 'Nouveau nom' });
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom' },
+      });
+    });
+
+    it('un changement vers un système AVEC module reste accepté', async () => {
+      await expect(
+        service.update('p1', 'mj1', { gameSystemId: 'ryuutama' }),
+      ).resolves.toBeDefined();
+      expect(prisma.partie.update).toHaveBeenCalled();
     });
   });
 });

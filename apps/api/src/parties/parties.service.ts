@@ -18,10 +18,14 @@ import type {
   PartieKindTransitionRefusal,
   PartieStatus,
 } from '@master-jdr/shared';
-// Seul import RUNTIME de `@master-jdr/shared` dans ce service : la matrice de conversion (Story
-// 29.14), partagée avec le formulaire d'édition. Impose `jest.mock('@master-jdr/shared')` dans les
-// specs de ce service — le paquet est ESM, que le runner Jest de l'API ne sait pas charger.
-import { checkPartieKindTransition } from '@master-jdr/shared';
+// Imports RUNTIME de `@master-jdr/shared` dans ce service : la matrice de conversion (Story 29.14,
+// partagée avec le formulaire d'édition) et le prédicat d'éligibilité du module de personnage
+// (Story 29.15/29.17, même source que `PartieForm`). `apps/api/package.json` (`transformIgnorePatterns`)
+// laisse déjà ts-jest transformer `@master-jdr/*` : `parties.service.spec.ts` n'a donc besoin
+// d'AUCUN `jest.mock('@master-jdr/shared')` pour ces deux imports (la vraie matrice/le vrai
+// prédicat y sont exercés). Ce mock n'est requis que côté `parties.controller.spec.ts`, pour une
+// tout autre raison : les DTO évaluent `@IsIn(GAME_SYSTEM_IDS)` au chargement de la classe.
+import { checkPartieKindTransition, gameSystemHasModule } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
@@ -61,6 +65,11 @@ export const COVERS_DIR = join(UPLOADS_ROOT, 'covers');
 export const COVERS_URL_PREFIX = '/uploads/covers/';
 
 const INVALID_COVER_IMAGE_MESSAGE = "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
+
+/** Story 29.17, AC2/AC4 : message de refus explicite quand la création ou le changement de
+ *  système de jeu cible un système sans module de création de personnage jouable. */
+const GAME_SYSTEM_WITHOUT_MODULE_MESSAGE =
+  'Ce système de jeu ne propose pas encore de création de personnage jouable';
 
 /**
  * Dimensions cibles des dérivées (Story 29.12, AC9) — alignées sur le rendu réel de `PartyBanner`
@@ -136,6 +145,11 @@ export class PartiesService {
   ) {}
 
   async create(mjId: string, dto: CreatePartieDto): Promise<PartieDto> {
+    // Story 29.17, AC2 : refus AVANT toute écriture — même discipline que la garde `kind` de
+    // `convertKind()` (aucune trace en base d'une partie sur un système sans module).
+    if (!gameSystemHasModule(dto.gameSystemId)) {
+      throw new BadRequestException(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
+    }
     return this.prisma.$transaction(async (tx) => {
       const partie = await tx.partie.create({
         data: {
@@ -350,6 +364,16 @@ export class PartiesService {
       throw new BadRequestException(
         'Le type de partie ne se change pas par cette route — utiliser la conversion dédiée',
       );
+    }
+
+    // Story 29.17, AC4 : même patron que la garde `kind` ci-dessus — un CHANGEMENT vers un système
+    // sans module est refusé, mais renvoyer la valeur déjà enregistrée (même sans module, AC3) reste
+    // accepté : sans cette distinction, chaque sauvegarde d'une partie existante sur un système sans
+    // module casserait.
+    if (dto.gameSystemId !== undefined && dto.gameSystemId !== partie.gameSystemId) {
+      if (!gameSystemHasModule(dto.gameSystemId)) {
+        throw new BadRequestException(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
+      }
     }
 
     const updated = await this.prisma.partie.update({
