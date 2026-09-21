@@ -95,15 +95,26 @@ export interface HealthStatus {
   timestamp: string;
 }
 
-/** Systèmes de jeu proposés (liste constante — le moteur de règles viendra au Palier 2). */
+/** Systèmes de jeu proposés (liste constante — le moteur de règles viendra au Palier 2).
+ *  `module` (Story 29.15) : miroir exact de `SUPPORTED_GAME_SYSTEMS` côté API
+ *  (`apps/api/src/game-systems/supported-game-systems.ts`) — source unique consommée à la fois par
+ *  le web (bouton de création, onglet par défaut, tooltip du slot roster) et par l'API
+ *  (`party-signals.service.ts`, garde du signal `PERSONNAGE_A_CREER`). Ne porte pas la validation
+ *  serveur de la création de partie (story 29.17, hors périmètre). */
 export const GAME_SYSTEMS = [
-  { id: 'draconis', name: 'Draconis' },
-  { id: 'conte-de-minuit', name: 'Conte de Minuit' },
-  { id: 'ryuutama', name: 'Ryuutama' },
-  { id: 'esteren', name: 'Esteren' },
+  { id: 'draconis', name: 'Draconis', module: false },
+  { id: 'conte-de-minuit', name: 'Conte de Minuit', module: false },
+  { id: 'ryuutama', name: 'Ryuutama', module: true },
+  { id: 'esteren', name: 'Esteren', module: false },
 ] as const;
 
 export type GameSystemId = (typeof GAME_SYSTEMS)[number]['id'];
+
+/** Un système de jeu propose-t-il un module de création de personnage jouable ? Tolère un `id`
+ *  inconnu (jamais d'exception) → `false`, même discipline défensive que `gameSystemName()`. */
+export function gameSystemHasModule(id: string): boolean {
+  return GAME_SYSTEMS.some((g) => g.id === id && g.module);
+}
 
 /** Type d'une partie. En 1b l'UI n'expose que ONE_SHOT + CAMPAGNE_LINEAIRE (libellé « Campagne »). */
 export type PartieKind = 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE' | 'CAMPAGNE_EPISODIQUE';

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { gameSystemHasModule } from '@master-jdr/shared';
 import type { PartieDto, PartySignalCode, PartySignalsDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from './parties.service';
@@ -130,7 +131,12 @@ export class PartySignalsService {
       }
 
       if (role === 'player') {
-        if (!characterPartieIds.has(partie.id)) signals.push('PERSONNAGE_A_CREER');
+        // Story 29.15 : un système sans module de création de personnage ne doit jamais émettre
+        // ce signal, même sans Character — même source (`gameSystemHasModule`) que le bouton/onglet
+        // par défaut côté web, pour ne jamais diverger.
+        if (!characterPartieIds.has(partie.id) && gameSystemHasModule(partie.gameSystemId)) {
+          signals.push('PERSONNAGE_A_CREER');
+        }
         const openPollsHere = openPollsByPartie.get(partie.id) ?? [];
         const hasUnanswered = openPollsHere.some((poll) =>
           poll.options.some((opt) => opt.votes.length === 0),

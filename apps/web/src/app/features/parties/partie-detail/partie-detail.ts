@@ -23,6 +23,7 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { gameSystemHasModule } from '@master-jdr/shared';
 import type {
   AnnouncementDto,
   CharacterDto,
@@ -138,6 +139,13 @@ export class PartieDetail implements OnInit {
   protected readonly activePolls = signal<SessionPollDto[]>([]);
   protected readonly links = signal<InviteLinkDto[]>([]);
   protected readonly characters = signal<CharacterDto[]>([]);
+  // Revue de code (Story 29.15) : `characters()` démarre à `[]` et n'est peuplé que tardivement
+  // dans `ngOnInit()` (après `loadMembers`/`loadActivePolls`/`announcements`), alors que `partie()`
+  // (qui déclenche le rendu du tab group) l'est bien plus tôt. Sans ce garde, un joueur ayant déjà
+  // un personnage atterrissait brièvement sur "Ma fiche" (CTA de création visible) avant d'être
+  // basculé silencieusement vers "Détails" une fois `characters()` chargé — flicker/redirection non
+  // désirée. `canCreateCharacter` exige désormais ce signal avant de statuer.
+  protected readonly charactersLoaded = signal(false);
   protected readonly xpDistributions = signal<XpDistributionDto[]>([]);
   protected readonly showXpPanel = signal(false);
   protected readonly showAnnouncementForm = signal(false);
@@ -188,6 +196,22 @@ export class PartieDetail implements OnInit {
   });
 
   protected readonly characterName = characterName;
+
+  /** Prédicat unique (Story 29.15) : pas MJ · aucun personnage sur cette partie · système avec
+   *  module · partie non terminée. Réutilisé tel quel par la visibilité du bouton de création,
+   *  l'onglet par défaut et le tooltip du slot roster — jamais réécrit ailleurs (réutilisé tel
+   *  quel par la story 29.16). */
+  protected readonly canCreateCharacter = computed(() => {
+    const p = this.partie();
+    return (
+      !!p &&
+      this.charactersLoaded() &&
+      !this.isMj() &&
+      this.myCharacters().length === 0 &&
+      gameSystemHasModule(p.gameSystemId) &&
+      p.status !== 'TERMINEE'
+    );
+  });
 
   /** `isMatched` est synchrone — évite un flash d'un rendu desktop sur un premier chargement mobile. */
   protected readonly isDesktop = toSignal(
@@ -256,8 +280,10 @@ export class PartieDetail implements OnInit {
     this.homonymyDismissed.set(true);
   }
 
-  /** Onglet "Ma fiche" (joueur mobile) sélectionné par défaut ; sinon "Détails" (index 0). */
-  protected readonly defaultTabIndex = computed(() => (!this.isMj() && !this.isDesktop() ? 1 : 0));
+  /** Onglet "Ma fiche" sélectionné par défaut quand il reste à créer son personnage (même prédicat
+   *  que le bouton, desktop et mobile confondus, Story 29.15) ; sinon "Détails" (index 0) — le MJ
+   *  n'a jamais cet onglet, donc toujours "Détails" par défaut. */
+  protected readonly defaultTabIndex = computed(() => (this.canCreateCharacter() ? 1 : 0));
 
   private readonly manualTabIndex = signal<number | null>(null);
 
@@ -265,9 +291,11 @@ export class PartieDetail implements OnInit {
     () => this.manualTabIndex() ?? this.defaultTabIndex(),
   );
 
-  /** Combinaison qui détermine l'ensemble des onglets rendus — un changement invalide toute sélection manuelle
-   *  antérieure (ex. joueur mobile sur "Ma fiche" qui redimensionne vers desktop, où cet onglet n'existe pas). */
-  private readonly tabSetKey = computed(() => `${this.isMj()}-${this.isDesktop()}`);
+  /** Détermine l'ensemble des onglets rendus — un changement invalide toute sélection manuelle
+   *  antérieure. Ne dépend plus de l'appareil (Story 29.15) : l'onglet "Ma fiche" se rend
+   *  désormais pour tout joueur non-MJ, desktop compris — seul le rôle MJ/joueur fait varier le
+   *  jeu d'onglets. */
+  private readonly tabSetKey = computed(() => `${this.isMj()}`);
 
   protected onTabIndexChange(index: number): void {
     this.manualTabIndex.set(index);
@@ -284,8 +312,12 @@ export class PartieDetail implements OnInit {
   }
 
   /** Slot "créer mon personnage" du roster desktop (joueur sans personnage sur cette partie) —
-   *  seul point d'entrée équivalent au CTA de l'onglet "Ma fiche" (mobile) sur cette vue. */
+   *  seul point d'entrée équivalent au CTA de l'onglet "Ma fiche" (mobile) sur cette vue. Revue de
+   *  code (Story 29.15) : le slot reste toujours visible (initiale/avatar + aria-label
+   *  `roster.create_slot_label`) mais ne doit naviguer que dans les mêmes conditions que ce CTA —
+   *  même prédicat `canCreateCharacter()`, jamais réécrit ailleurs. */
   protected createCharacter(p: PartieDto): void {
+    if (!this.canCreateCharacter()) return;
     void this.router.navigate(['/parties', p.id, 'characters', 'new'], {
       queryParams: { gameSystemId: p.gameSystemId },
     });
@@ -438,7 +470,8 @@ export class PartieDetail implements OnInit {
     // Story 29.13 (révision du 2026-08-13, retour utilisateur) : clic sur le bandeau du Shell —
     // force l'onglet "Détails" (0, où vivent les annonces de campagne) puis défile jusqu'à
     // l'annonce visée dès qu'elle apparaît dans campaignAnnouncements(). Après `tabSetKey()`
-    // (qui remet `manualTabIndex` à `null` à chaque changement MJ/desktop) pour ne pas être écrasé.
+    // (qui remet `manualTabIndex` à `null` uniquement sur un changement de rôle MJ/joueur — plus sur
+    // un changement d'appareil/breakpoint desktop-mobile depuis Story 29.15) pour ne pas être écrasé.
     effect(() => {
       const id = this.pendingScrollAnnouncementId;
       if (!id) return;
@@ -541,6 +574,7 @@ export class PartieDetail implements OnInit {
     await this.loadActivePolls(id);
     this.announcements.set(await this.announcementsSvc.listAll(id).catch(() => []));
     this.characters.set(await this.characterSvc.listByPartie(id).catch(() => []));
+    this.charactersLoaded.set(true);
     this.characterRoles.set(await this.characterRolesSvc.listForPartie(id).catch(() => []));
     this.gameSystemContent.set(
       await this.characterSvc.getGameSystemContent(this.partie()!.gameSystemId).catch(() => null),

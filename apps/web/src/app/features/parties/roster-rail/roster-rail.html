@@ -17,6 +17,7 @@
       [class.roster-rail__item--create]="!row.character && row.isSelf"
       [attr.data-user-id]="row.member.userId"
       [attr.aria-label]="row.ariaLabel"
+      [title]="row.ariaLabel"
       role="button"
       [attr.tabindex]="row.character || row.isSelf ? 0 : -1"
       (click)="selectRow(row)"

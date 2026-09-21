@@ -80,9 +80,13 @@ describe('PartySignalsService', () => {
     expect(map['p1']).toEqual({ role: 'mj', status: 'EN_COURS', signals: [] });
   });
 
-  it('PERSONNAGE_A_CREER (joueur) : actif si aucun Character pour cette partie', async () => {
+  it('PERSONNAGE_A_CREER (joueur) : actif si aucun Character pour cette partie sur un système avec module', async () => {
     parties.listForUser.mockImplementation((_u: string, role: string) =>
-      Promise.resolve(role === 'player' ? [makePartie({ id: 'p1', role: 'player' })] : []),
+      Promise.resolve(
+        role === 'player'
+          ? [makePartie({ id: 'p1', role: 'player', gameSystemId: 'ryuutama' })]
+          : [],
+      ),
     );
     prisma.character.findMany.mockResolvedValue([]);
     const map = await service.getSignals('u1');
@@ -91,9 +95,26 @@ describe('PartySignalsService', () => {
 
   it('PERSONNAGE_A_CREER : absent si un Character existe déjà pour cette partie', async () => {
     parties.listForUser.mockImplementation((_u: string, role: string) =>
-      Promise.resolve(role === 'player' ? [makePartie({ id: 'p1', role: 'player' })] : []),
+      Promise.resolve(
+        role === 'player'
+          ? [makePartie({ id: 'p1', role: 'player', gameSystemId: 'ryuutama' })]
+          : [],
+      ),
     );
     prisma.character.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+    const map = await service.getSignals('u1');
+    expect(map['p1'].signals).not.toContain('PERSONNAGE_A_CREER');
+  });
+
+  it('PERSONNAGE_A_CREER : jamais émis sur un système sans module, même sans aucun Character (Story 29.15)', async () => {
+    parties.listForUser.mockImplementation((_u: string, role: string) =>
+      Promise.resolve(
+        role === 'player'
+          ? [makePartie({ id: 'p1', role: 'player', gameSystemId: 'draconis' })]
+          : [],
+      ),
+    );
+    prisma.character.findMany.mockResolvedValue([]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).not.toContain('PERSONNAGE_A_CREER');
   });

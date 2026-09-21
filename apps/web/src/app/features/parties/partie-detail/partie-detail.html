@@ -227,19 +227,21 @@
             }
         </mat-tab>
 
-        @if (!isMj() && !isDesktop()) {
+        @if (!isMj()) {
           <mat-tab [label]="theme.tone()['character.my_sheet_tab_label']">
             <section class="my-sheet-tab">
               @if (myCharacters().length === 0) {
-                <p class="muted">Aucun personnage créé sur cette partie pour l'instant.</p>
-                <a
-                  mat-flat-button
-                  color="primary"
-                  [routerLink]="['/parties', p.id, 'characters', 'new']"
-                  [queryParams]="{ gameSystemId: p.gameSystemId }"
-                >
-                  {{ theme.tone()['character.create_cta'] }}
-                </a>
+                <p class="muted">{{ theme.tone()['character.no_character_yet'] }}</p>
+                @if (canCreateCharacter()) {
+                  <a
+                    mat-flat-button
+                    color="primary"
+                    [routerLink]="['/parties', p.id, 'characters', 'new']"
+                    [queryParams]="{ gameSystemId: p.gameSystemId }"
+                  >
+                    {{ theme.tone()['character.create_cta'] }}
+                  </a>
+                }
               } @else {
                 @for (character of myCharacters(); track character.id) {
                   <app-character-summary-card

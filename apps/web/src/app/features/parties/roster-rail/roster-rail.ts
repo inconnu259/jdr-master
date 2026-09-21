@@ -41,6 +41,7 @@ export class RosterRail {
       this.mjId(),
       this.classLabelFor(),
       this.roleLabelFor(),
+      this.theme.tone()['roster.create_slot_label'],
       this.currentUserId(),
     ),
   );

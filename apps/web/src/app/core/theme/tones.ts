@@ -251,6 +251,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.owner_badge_mj': 'Maître',
     'character.level_badge': 'Niv. {n}',
     'character.my_sheet_tab_label': 'Ma fiche',
+    /* — état vide "Ma fiche" (Story 29.15) — */
+    'character.no_character_yet': 'Aucun personnage créé sur cette partie pour l’instant.',
     /* — Homme Dragon (Epic 10, Story 10.1) — */
     'homme-dragon.create_cta': 'Créer mon Homme Dragon',
     'homme-dragon.race_label': 'Race',
@@ -262,6 +264,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'roster.collapse_label': 'Replier la troupe',
     'roster.expand_label': 'Déplier la troupe',
     'roster.levelup_badge': 'Montée de niveau disponible',
+    /* — slot d'initiale « créer mon personnage » (Story 29.15) — */
+    'roster.create_slot_label': 'créer mon personnage',
     /* — évolution du personnage (Story 6.2) — */
     'evolution.xp_distribute_cta': "Distribuer de l'XP",
     'evolution.xp_panel_title': "Distribution d'XP",
@@ -641,6 +645,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.owner_badge_mj': 'Guide',
     'character.level_badge': 'Niv. {n}',
     'character.my_sheet_tab_label': 'Ma fiche',
+    /* — état vide "Ma fiche" (Story 29.15) — */
+    'character.no_character_yet': 'Aucun compagnon de route éveillé sur cette partie pour l’instant.',
     /* — Homme Dragon (Epic 10, Story 10.1) — */
     'homme-dragon.create_cta': 'Éveiller mon Homme Dragon',
     'homme-dragon.race_label': 'Lignée',
@@ -652,6 +658,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'roster.collapse_label': 'Replier le cercle',
     'roster.expand_label': 'Déplier le cercle',
     'roster.levelup_badge': 'Prêt à grandir',
+    /* — slot d'initiale « créer mon personnage » (Story 29.15) — */
+    'roster.create_slot_label': 'éveiller mon compagnon de route',
     /* — évolution du personnage (Story 6.2) — */
     'evolution.xp_distribute_cta': 'Partager les récits',
     'evolution.xp_panel_title': 'Partage des récits',
@@ -1020,6 +1028,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.owner_badge_mj': 'Ingénieur',
     'character.level_badge': 'Niv. {n}',
     'character.my_sheet_tab_label': 'Ma fiche',
+    /* — état vide "Ma fiche" (Story 29.15) — */
+    'character.no_character_yet': 'Aucun automate-voyageur assemblé sur cette partie pour l’instant.',
     /* — Homme Dragon (Epic 10, Story 10.1) — */
     'homme-dragon.create_cta': 'Assembler mon Homme Dragon',
     'homme-dragon.race_label': 'Modèle',
@@ -1031,6 +1041,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'roster.collapse_label': "Replier l'équipage",
     'roster.expand_label': "Déplier l'équipage",
     'roster.levelup_badge': 'Calibrage niveau disponible',
+    /* — slot d'initiale « créer mon personnage » (Story 29.15) — */
+    'roster.create_slot_label': 'assembler mon automate-voyageur',
     /* — évolution du personnage (Story 6.2) — */
     'evolution.xp_distribute_cta': "Distribuer les crédits d'expérience",
     'evolution.xp_panel_title': "Distribution de crédits d'expérience",

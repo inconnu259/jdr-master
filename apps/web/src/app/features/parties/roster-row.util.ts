@@ -54,6 +54,9 @@ export function buildRosterRows(
   mjId: string,
   classLabelFor: (c: CharacterDto) => string,
   roleLabelFor: (c: CharacterDto) => string | null,
+  /** Libellé thématisé (Story 29.15, `roster.create_slot_label`) du slot d'initiale — jamais codé
+   *  en dur, seule source pour l'aria-label/tooltip du slot vide de l'utilisateur courant. */
+  createSlotLabel: string,
   currentUserId?: string,
 ): RosterRow[] {
   return members.map((member) => {
@@ -91,7 +94,7 @@ export function buildRosterRows(
         playerLabel: member.displayName,
         classLabel: '',
         ariaLabel: isSelf
-          ? `${member.displayName} — créer mon personnage`
+          ? `${member.displayName} — ${createSlotLabel}`
           : `${member.displayName} — aucun personnage créé`,
         hasPendingLevelUp: false,
         isSelf,
