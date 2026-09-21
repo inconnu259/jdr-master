@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { Prisma, type Character } from '@prisma/client';
 import { hasPrismaErrorCode } from '../common/prisma-error.util';
+import { gameSystemHasModule } from '@master-jdr/shared';
 import type {
   CharacterDto,
   DerivedStats,
@@ -37,7 +38,6 @@ import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { EmailService } from '../email/email.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
-import { SUPPORTED_GAME_SYSTEMS } from '../game-systems/supported-game-systems';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import type { CreateLevelUpDto } from './dto/create-level-up.dto';
 import type { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
@@ -199,7 +199,10 @@ export class CharacterService {
   async create(partieId: string, userId: string, dto: CreateCharacterDto): Promise<CharacterDto> {
     const partie = await this.parties.getViewable(partieId, userId);
 
-    if (!SUPPORTED_GAME_SYSTEMS.includes(dto.gameSystemId)) {
+    // Revue de code (Story 29.17) : lit gameSystemHasModule() (packages/shared), la même source
+    // que PartiesService.create()/update() et PartieForm — plus SUPPORTED_GAME_SYSTEMS, une liste
+    // séparée qui pouvait diverger silencieusement (risque déjà consigné dans deferred-work.md).
+    if (!gameSystemHasModule(dto.gameSystemId)) {
       throw new BadRequestException(`Système de jeu non supporté : ${dto.gameSystemId}`);
     }
 

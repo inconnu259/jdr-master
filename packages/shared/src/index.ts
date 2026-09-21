@@ -96,11 +96,12 @@ export interface HealthStatus {
 }
 
 /** Systèmes de jeu proposés (liste constante — le moteur de règles viendra au Palier 2).
- *  `module` (Story 29.15) : miroir exact de `SUPPORTED_GAME_SYSTEMS` côté API
- *  (`apps/api/src/game-systems/supported-game-systems.ts`) — source unique consommée à la fois par
- *  le web (bouton de création, onglet par défaut, tooltip du slot roster, liste proposée par
- *  `PartieForm`) et par l'API (`party-signals.service.ts`, garde du signal `PERSONNAGE_A_CREER` ;
- *  `PartiesService.create()`/`update()`, garde d'éligibilité — story 29.17). */
+ *  `module` (Story 29.15, consolidé en 29.17) : source UNIQUE d'éligibilité, lue via
+ *  `gameSystemHasModule()` ci-dessous — plus aucune liste parallèle côté API depuis que
+ *  `CharacterService.create()` a cessé de lire `SUPPORTED_GAME_SYSTEMS` (revue de code, story
+ *  29.17). Consommée par le web (bouton de création, onglet par défaut, tooltip du slot roster,
+ *  liste proposée par `PartieForm`) et par l'API (`party-signals.service.ts`, garde du signal
+ *  `PERSONNAGE_A_CREER` ; `PartiesService.create()`/`update()` ; `CharacterService.create()`). */
 export const GAME_SYSTEMS = [
   { id: 'draconis', name: 'Draconis', module: false },
   { id: 'conte-de-minuit', name: 'Conte de Minuit', module: false },

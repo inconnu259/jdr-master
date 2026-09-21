@@ -120,6 +120,20 @@ Revue indépendante hors du cycle interne de `bmad-build` (Adversarial / Edge-Ca
 
 Revérifié après correctifs : `parties.service.spec.ts` 123/124 (le seul échec est le même défaut préexistant de fixture de date, sans rapport) ; suite web complète 2408/2410 (mêmes 2 échecs préexistants sans rapport).
 
+### 2026-09-22 — Passe `/bmad-code-review` (8 angles, high effort, sur `f00ca80..fd4fbe3`)
+
+Revue indépendante (Adversarial, Edge-Case Hunter, Cross-file Tracer, Reuse, Simplification, Efficiency, Altitude, Conventions — 1 vérificateur par candidat retenu, recall-biased). 7 findings survivent à la vérification (5 CONFIRMED, 2 PLAUSIBLE) ; 6 corrigés après approbation utilisateur, 1 explicitement laissé de côté :
+
+- **Corrigé** — `CharacterService.create()` filtrait encore sur `SUPPORTED_GAME_SYSTEMS` (liste séparée), pas sur `gameSystemHasModule()` — risque de divergence déjà consigné dans `deferred-work.md` lors de la revue de 29-15, qui nommait explicitement cette story comme le point de correction naturel. `SUPPORTED_GAME_SYSTEMS` et son test de parité supprimés (plus qu'une seule source d'éligibilité) ; `RYUUTAMA_ID` conservé (largement utilisé ailleurs).
+- **Corrigé** — Repli « aucun système avec module » dupliqué entre `DEFAULT_GAME_SYSTEM_ID` et `systems()` (web), synchronisés à la main. Factorisé en une constante unique `MODULE_ELIGIBLE_GAME_SYSTEMS`.
+- **Corrigé** — Garde `gameSystemHasModule()` copiée-collée dans `create()`/`update()`. Factorisée en `PartiesService.assertGameSystemHasModule()`.
+- **Corrigé** — Un `gameSystemId` persisté absent de `GAME_SYSTEMS` (décalage frontend/données, non atteignable aujourd'hui via l'app) disparaissait silencieusement du `<mat-select>`. `savedGameSystemId` re-typé `string` (plus de cast `as GameSystemId` non vérifié — résout du même coup le finding du cast dupliqué), `systems()` synthétise une entrée minimale plutôt que de faire disparaître la valeur ; nouveau test dédié.
+- **Corrigé** — Deux niveaux de validation de `gameSystemId` (`@IsIn` du DTO, `gameSystemHasModule()` du service) sans point unique documentant ce qui est réellement accepté. Vérifié qu'aucune infrastructure de validateur partagé n'existe dans ce projet (pas de factorisation triviale possible) ; documenté par un commentaire à chaque décorateur plutôt que construit.
+- **Corrigé** — Cast `as GameSystemId` dupliqué deux fois dans `ngOnInit()`. Résolu par le même changement de typage que ci-dessus (plus de cast du tout, aux deux endroits).
+- **Laissé de côté, consigné dans `deferred-work.md`** — `update()` lit la partie hors transaction (TOCTOU) avant d'évaluer ses gardes puis d'écrire séparément. Vérifié réel et pré-existant : `convertKind()` (story 29.14), donné en exemple du « bon » patron dans les commentaires de ce fichier, a la même faille — ses règles évaluent aussi un instantané lu avant la transaction. Décision explicite avec l'utilisateur : corriger `update()` seul dupliquerait la logique d'ownership de `getOwned()` et créerait une incohérence avec les autres appelants qui garderaient la faille ; une correction cohérente exige de revoir `getOwned()` et tous ses appelants ensemble, hors périmètre de cette story.
+
+Revérifié après correctifs : suite web complète 2409/2411 (+1 nouveau test, mêmes 2 échecs préexistants sans rapport) ; suite API complète 1348/1350 (mêmes 2 échecs préexistants sans rapport).
+
 ## Design Notes
 
 `gameSystemHasModule()` encode déjà tout le prédicat requis (story 29.15) — cette story ne fait que le brancher à deux nouveaux points de contrôle (formulaire, service). La garde `update()` reproduit exactement le patron déjà établi pour `kind` dans la même méthode (`parties.service.ts:349-353`, Story 29.14) : refuser un CHANGEMENT, tolérer un envoi qui renvoie la valeur déjà enregistrée — sans quoi chaque sauvegarde d'une partie existante sur un système sans module casserait, ce qui contredirait directement AC3.

@@ -129,6 +129,16 @@ describe('PartieForm', () => {
       expect(ids).not.toContain('conte-de-minuit');
       expect(ids).not.toContain('esteren');
     });
+
+    it("édition d'une partie dont le gameSystemId ne correspond à AUCUN GAME_SYSTEMS connu : reste visible plutôt que disparaître du menu (revue de code)", async () => {
+      const { fixture } = await createComponent('p1', {
+        partie: { gameSystemId: 'systeme-disparu' },
+      });
+      const comp = fixture.componentInstance as any;
+      const ids = comp.systems().map((s: { id: string }) => s.id);
+      expect(ids).toContain('systeme-disparu');
+      expect(comp.form.value.gameSystemId).toBe('systeme-disparu');
+    });
   });
 
   it.each(['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as PartieKind[])(

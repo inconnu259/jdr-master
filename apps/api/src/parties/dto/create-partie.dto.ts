@@ -11,6 +11,11 @@ export class CreatePartieDto {
   @MaxLength(120)
   name!: string;
 
+  // N'atteste que « id connu » (tous les GAME_SYSTEMS, avec ou sans module) — la règle « a un
+  // module de création de personnage » est appliquée séparément par PartiesService.create() via
+  // gameSystemHasModule() (Story 29.17). Aucun ValidatorConstraint partagé n'existe dans ce projet
+  // pour unifier les deux niveaux ; un futur point d'entrée acceptant gameSystemId doit reproduire
+  // la vérification du service, ce décorateur seul ne l'empêche pas (revue de code).
   @IsIn(GAME_SYSTEM_IDS)
   gameSystemId!: string;
 

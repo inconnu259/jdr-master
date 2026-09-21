@@ -145,12 +145,19 @@ export class PartiesService {
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
+  /** Story 29.17, AC2/AC4 : refus explicite partagé par `create()` et `update()` — un seul endroit
+   *  à faire évoluer si la règle change (revue de code : les deux étaient des blocs copiés-collés
+   *  indépendants, jamais comparés par aucun test). */
+  private assertGameSystemHasModule(gameSystemId: string): void {
+    if (!gameSystemHasModule(gameSystemId)) {
+      throw new BadRequestException(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
+    }
+  }
+
   async create(mjId: string, dto: CreatePartieDto): Promise<PartieDto> {
     // Story 29.17, AC2 : refus AVANT toute écriture — même discipline que la garde `kind` de
     // `convertKind()` (aucune trace en base d'une partie sur un système sans module).
-    if (!gameSystemHasModule(dto.gameSystemId)) {
-      throw new BadRequestException(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
-    }
+    this.assertGameSystemHasModule(dto.gameSystemId);
     return this.prisma.$transaction(async (tx) => {
       const partie = await tx.partie.create({
         data: {
@@ -372,9 +379,7 @@ export class PartiesService {
     // accepté : sans cette distinction, chaque sauvegarde d'une partie existante sur un système sans
     // module casserait.
     if (dto.gameSystemId !== undefined && dto.gameSystemId !== partie.gameSystemId) {
-      if (!gameSystemHasModule(dto.gameSystemId)) {
-        throw new BadRequestException(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
-      }
+      this.assertGameSystemHasModule(dto.gameSystemId);
     }
 
     const updated = await this.prisma.partie.update({
