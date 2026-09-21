@@ -19,6 +19,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
@@ -90,6 +91,7 @@ const MJ_INVITATIONS_TAB_INDEX = 1;
     MatInputModule,
     MatListModule,
     MatTabsModule,
+    MatProgressSpinnerModule,
     CharacterSummaryCard,
     RosterRail,
     RosterStrip,
@@ -372,9 +374,28 @@ export class PartieDetail implements OnInit {
       if (this.isMj()) void this.loadXpDistributions();
     });
 
+    // Revue de code (bmad-review, 2026-09-21) : `tabSettled` figé une seule fois par « session » de
+    // rôle MJ/joueur (réarmé par tabSetKey ci-dessous), pas suivi en continu. Sans ce gel,
+    // `defaultTabIndex()` restant réactif à `canCreateCharacter()`, un joueur déjà en train de lire
+    // « Détails » pouvait être basculé vers « Ma fiche » sans avoir rien demandé dès que
+    // `charactersLoaded()` passait à `true` (ou plus tard, si `canCreateCharacter()` change encore
+    // en cours de visite, ex. personnage créé ailleurs et rechargé par le signal temps réel) — AC1
+    // ne couvre que l'atterrissage initial, pas une bascule surprise ultérieure.
+    let tabSettled = false;
     effect(() => {
       this.tabSetKey();
-      untracked(() => this.manualTabIndex.set(null));
+      untracked(() => {
+        this.manualTabIndex.set(null);
+        tabSettled = false;
+      });
+    });
+
+    effect(() => {
+      if (tabSettled || !this.charactersLoaded()) return;
+      tabSettled = true;
+      untracked(() => {
+        if (this.manualTabIndex() === null) this.manualTabIndex.set(this.defaultTabIndex());
+      });
     });
 
     // Story 18.3 : remplace le patch visibilitychange (retour de focus d'onglet, bug-fix

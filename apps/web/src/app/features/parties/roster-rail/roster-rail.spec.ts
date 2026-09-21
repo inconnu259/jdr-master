@@ -31,6 +31,10 @@ describe('RosterRail', () => {
     hasFreeSlot = true,
     currentUserId = 'mj1',
     roleLabelFor: (c: unknown) => string | null = () => null,
+    // Revue de code (bmad-review, 2026-09-21) : `true` par défaut pour préserver le comportement
+    // historique de ces tests (écrits avant que le slot de création ne soit gardé par
+    // `canCreateCharacter()` côté parent) — les tests dédiés à ce gate passent `false` eux-mêmes.
+    canCreateCharacter = true,
   ) {
     TestBed.configureTestingModule({ imports: [RosterRail] });
     const fixture = TestBed.createComponent(RosterRail);
@@ -38,6 +42,7 @@ describe('RosterRail', () => {
     fixture.componentRef.setInput('characters', CHARACTERS);
     fixture.componentRef.setInput('mjId', 'mj1');
     fixture.componentRef.setInput('currentUserId', currentUserId);
+    fixture.componentRef.setInput('canCreateCharacter', canCreateCharacter);
     fixture.componentRef.setInput('hasFreeSlot', hasFreeSlot);
     fixture.componentRef.setInput('classLabelFor', () => 'Ménestrel');
     fixture.componentRef.setInput('roleLabelFor', roleLabelFor);
@@ -224,6 +229,23 @@ describe('RosterRail', () => {
 
     expect(createEmitted).toBe(true);
     expect(selectEmitted).toBeUndefined();
+  });
+
+  it("joueur sans personnage sur sa propre ligne mais canCreateCharacter=false (chargement en cours ou système sans module/partie clôturée) → slot non actionnable, aria-label générique, clic n'émet rien (bmad-review, 2026-09-21)", () => {
+    const fixture = setup(true, 'u1', () => null, false);
+    fixture.componentRef.setInput('characters', []);
+    fixture.detectChanges();
+    let createEmitted = false;
+    fixture.componentInstance.createCharacter.subscribe(() => (createEmitted = true));
+
+    const ownItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    expect(ownItem.getAttribute('tabindex')).toBe('-1');
+    expect(ownItem.classList.contains('roster-rail__item--create')).toBe(false);
+    expect(ownItem.querySelector('.roster-rail__create-badge')).toBeNull();
+    expect(ownItem.getAttribute('aria-label')).toBe('Alice au pays — aucun personnage créé');
+    ownItem.click();
+
+    expect(createEmitted).toBe(false);
   });
 
   it("un membre SANS personnage qui n'est pas l'utilisateur courant reste non cliquable (tabindex -1), aucun événement émis", () => {

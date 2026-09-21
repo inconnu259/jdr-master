@@ -23,6 +23,13 @@ export interface RosterRow {
    *  réel — la priorité d'affichage avec hasPendingLevelUp est une règle de template (Story 27.3),
    *  jamais encodée ici. */
   assignedRoleLabel: string | null;
+  /** Revue de code (bmad-review, 2026-09-21) : `isSelf && !character` seul ne suffit pas à garder
+   *  le slot — il vaut aussi `true` pendant le chargement de `characters()` (avant que
+   *  `canCreateCharacter()` ne sache vraiment répondre) et sur un système sans module/une partie
+   *  clôturée, deux cas où l'ancien code laissait un slot focusable/cliquable promettre une action
+   *  que le clic n'exécutait pas. `canCreate` est la seule source pour l'aria-label, le `tabindex`
+   *  et le routage du clic du slot de création — jamais `isSelf` seul. */
+  canCreate: boolean;
 }
 
 function hasPendingLevelUp(character: CharacterDto | null): boolean {
@@ -57,6 +64,10 @@ export function buildRosterRows(
   /** Libellé thématisé (Story 29.15, `roster.create_slot_label`) du slot d'initiale — jamais codé
    *  en dur, seule source pour l'aria-label/tooltip du slot vide de l'utilisateur courant. */
   createSlotLabel: string,
+  /** Revue de code (bmad-review, 2026-09-21) : valeur de `canCreateCharacter()` du composant
+   *  appelant — `false` tant que `characters()` n'a pas fini de charger, pas seulement quand la
+   *  création est réellement impossible. Seule source de `RosterRow.canCreate`. */
+  createEligible: boolean,
   currentUserId?: string,
 ): RosterRow[] {
   return members.map((member) => {
@@ -82,9 +93,11 @@ export function buildRosterRows(
         hasPendingLevelUp: pending,
         isSelf,
         assignedRoleLabel,
+        canCreate: false,
       };
     }
     if (!character) {
+      const canCreate = isSelf && createEligible;
       return {
         member,
         isMj,
@@ -93,12 +106,13 @@ export function buildRosterRows(
         characterLabel: null,
         playerLabel: member.displayName,
         classLabel: '',
-        ariaLabel: isSelf
+        ariaLabel: canCreate
           ? `${member.displayName} — ${createSlotLabel}`
           : `${member.displayName} — aucun personnage créé`,
         hasPendingLevelUp: false,
         isSelf,
         assignedRoleLabel: null,
+        canCreate,
       };
     }
     const name = characterName(character);
@@ -126,6 +140,7 @@ export function buildRosterRows(
       hasPendingLevelUp: pending,
       isSelf,
       assignedRoleLabel,
+      canCreate: false,
     };
   });
 }

@@ -16,6 +16,7 @@
           [characters]="characters()"
           [mjId]="p.mjId"
           [currentUserId]="auth.currentUser()?.id ?? ''"
+          [canCreateCharacter]="canCreateCharacter()"
           [hasFreeSlot]="isMj() && hasFreeSlot"
           [classLabelFor]="classLabelFor"
           [roleLabelFor]="roleLabelFor"
@@ -230,7 +231,13 @@
         @if (!isMj()) {
           <mat-tab [label]="theme.tone()['character.my_sheet_tab_label']">
             <section class="my-sheet-tab">
-              @if (myCharacters().length === 0) {
+              @if (!charactersLoaded()) {
+                <!-- Revue de code (bmad-review, 2026-09-21) : pendant le chargement, ni le message
+                     « aucun personnage » ni son absence de bouton ne doivent apparaître — l'un et
+                     l'autre sont indiscernables de l'état « on ne peut jamais créer ici » tant que
+                     characters()/canCreateCharacter() ne sont pas connus. -->
+                <mat-progress-spinner mode="indeterminate" diameter="32" />
+              } @else if (myCharacters().length === 0) {
                 <p class="muted">{{ theme.tone()['character.no_character_yet'] }}</p>
                 @if (canCreateCharacter()) {
                   <a

@@ -37,7 +37,13 @@ export class RosterStrip {
       this.classLabelFor(),
       this.roleLabelFor(),
       this.theme.tone()['roster.create_slot_label'],
-      this.mjId(),
+      // Revue de code (bmad-review, 2026-09-21) : RosterStrip est MJ-only (cf. docstring) — jamais
+      // de slot de création à ce jour, donc toujours inéligible. `currentUserId` reste `undefined`
+      // (pas `this.mjId()`, bug corrigé : ça rendait `isSelf` vrai pour la ligne du MJ lui-même,
+      // sans conséquence aujourd'hui car sa branche `isMj` court-circuite avant `canCreate`, mais
+      // une mine pour un futur slot joueur bâti sur ce composant).
+      false,
+      undefined,
     ),
   );
 

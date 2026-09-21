@@ -893,6 +893,184 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     expect(slot!.getAttribute('aria-label')).toBe(`Alice au pays — ${expected}`);
     expect(slot!.getAttribute('title')).toBe(`Alice au pays — ${expected}`);
   });
+
+  it("système sans module → slot roster de l'utilisateur courant non actionnable (tabindex -1, aria-label générique, pas le libellé de création) (bmad-review, 2026-09-21)", async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis', status: 'EN_COURS' });
+    const members: PartieMemberDto[] = [
+      {
+        userId: MJ_ID,
+        pseudo: 'Sylas',
+        displayName: 'Sylas',
+        email: 'sylas@test.com',
+        joinedAt: '',
+      },
+      {
+        userId: PLAYER_ID,
+        pseudo: 'Alice',
+        displayName: 'Alice au pays',
+        email: 'alice@test.com',
+        joinedAt: '',
+      },
+    ];
+    const { el } = await createFixture(partie, PLAYER_ID, { members, desktop: true });
+
+    const slot = el.querySelector<HTMLElement>(`[data-user-id="${PLAYER_ID}"]`);
+    expect(slot).toBeTruthy();
+    expect(slot!.getAttribute('tabindex')).toBe('-1');
+    expect(slot!.getAttribute('aria-label')).toBe('Alice au pays — aucun personnage créé');
+    expect(slot!.querySelector('.roster-rail__create-badge')).toBeNull();
+  });
+
+  it("échec réseau de listByPartie() → charactersLoaded() devient quand même true, canCreateCharacter()/l'atterrissage se résolvent normalement (bmad-review, 2026-09-21)", async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const { fixture, el } = await createFixture(partie, PLAYER_ID, {
+      desktop: true,
+      noopAnimations: true,
+      charactersPromise: Promise.reject(new Error('network down')),
+    });
+
+    const comp = fixture.componentInstance as unknown as {
+      selectedTabIndex: () => number;
+      charactersLoaded: () => boolean;
+    };
+    expect(comp.charactersLoaded()).toBe(true);
+    expect(comp.selectedTabIndex()).toBe(1);
+    const activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
+    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
+    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeTruthy();
+  });
+
+  it("navigation manuelle vers « Ma fiche » pendant le chargement de characters() → indicateur de chargement, jamais le message vide ni le bouton, indiscernables de l'état « on ne peut jamais créer ici » (bmad-review, 2026-09-21)", async () => {
+    let resolveCharacters!: (chars: CharacterDto[]) => void;
+    const charactersPromise = new Promise<CharacterDto[]>((resolve) => {
+      resolveCharacters = resolve;
+    });
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const { fixture, el } = await createFixture(partie, PLAYER_ID, {
+      desktop: true,
+      noopAnimations: true,
+      charactersPromise,
+    });
+
+    // MatTabGroup ne rend le corps que de l'onglet actif (cf. Implementation Notes de la story
+    // 29.15) — pendant le chargement, l'atterrissage par défaut reste « Détails », donc le corps de
+    // « Ma fiche » n'existe pas encore tant que rien ne le sélectionne. On reproduit ici exactement
+    // le cas visé (navigation manuelle du joueur avant la fin du chargement), pas l'atterrissage
+    // automatique (déjà couvert par les tests de flicker ci-dessus).
+    const maFicheTab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
+      (t) => t.textContent?.trim() === 'Ma fiche',
+    );
+    maFicheTab?.click();
+    fixture.detectChanges();
+
+    expect(el.querySelector('.my-sheet-tab mat-progress-spinner')).toBeTruthy();
+    expect(el.querySelector('.my-sheet-tab .muted')).toBeNull();
+    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeNull();
+
+    resolveCharacters([]);
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('.my-sheet-tab mat-progress-spinner')).toBeNull();
+    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeTruthy();
+  });
+
+  it("un personnage créé ailleurs et rechargé via le signal temps réel ne fait plus basculer l'onglet hors de « Ma fiche » une fois l'atterrissage stabilisé (bmad-review, 2026-09-21 : gel tabSettled)", async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const changed = signal(0);
+    const newCharacter = makeCharacterDto({ id: 'char-x', userId: PLAYER_ID, partieId: partie.id });
+    let callCount = 0;
+    const listByPartie = vi.fn().mockImplementation(() => {
+      callCount++;
+      return Promise.resolve(callCount === 1 ? [] : [newCharacter]);
+    });
+
+    await TestBed.configureTestingModule({
+      imports: [PartieDetail],
+      providers: [
+        provideRouter([]),
+        provideNoopAnimations(),
+        {
+          provide: ActivatedRoute,
+          useValue: {
+            snapshot: {
+              paramMap: { get: () => partie.id },
+              queryParamMap: { get: () => null },
+            },
+          },
+        },
+        { provide: AuthService, useValue: makeAuthService(PLAYER_ID) },
+        { provide: PartiesService, useValue: makePartiesService(partie, [], []) },
+        { provide: BreakpointObserver, useValue: makeBreakpointObserver(true) },
+        {
+          provide: MyPartiesService,
+          useValue: { refreshMjParties: vi.fn(), playerParties: signal([]) },
+        },
+        { provide: AvailabilityService, useValue: { notifyChanged: vi.fn() } },
+        {
+          provide: CharacterService,
+          useValue: {
+            listByPartie,
+            getGameSystemContent: vi.fn().mockResolvedValue(null),
+            changed,
+          },
+        },
+        { provide: ThemeToneService, useValue: makeToneService() },
+        { provide: ScenariosService, useValue: makeScenariosService() },
+        {
+          provide: AnnouncementsService,
+          useValue: { create: vi.fn(), listAll: vi.fn().mockResolvedValue([]), changed: signal(0) },
+        },
+        {
+          provide: UnseenAnnouncementsService,
+          useValue: { unseenAnnouncements: signal([]), markRead: vi.fn() },
+        },
+        {
+          provide: HommeDragonService,
+          useValue: {
+            findOne: vi.fn().mockResolvedValue(null),
+            create: vi.fn(),
+            update: vi.fn(),
+            changed: signal(0),
+          },
+        },
+        {
+          provide: CharacterRolesService,
+          useValue: { listForPartie: vi.fn().mockResolvedValue([]), changed: signal(0) },
+        },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(PartieDetail);
+    fixture.detectChanges();
+    for (let i = 0; i < 15; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+
+    let activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
+    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
+
+    // Signal temps réel : characterSvc.changed() déclenche reloadCharacters(), qui révèle
+    // désormais un personnage — canCreateCharacter() bascule à `false`, mais l'onglet ne doit
+    // plus bouger (déjà stabilisé une fois, cf. l'effet `tabSettled` de partie-detail.ts).
+    changed.update((v) => v + 1);
+    await Promise.resolve();
+    await Promise.resolve();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
+    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
+  });
 });
 
 // ─── Onglet Invitations & liens révoqués (Story 6.1) ──────────────────────
