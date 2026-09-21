@@ -271,3 +271,37 @@ describe("Tones — bouton clair pour créer son personnage depuis la partie (St
     });
   }
 });
+
+// Story 29.16 — la section « À forger » de l'écran Personnages. Même garde de parité que
+// ci-dessus : une clé posée dans un seul thème rendrait `undefined` à l'écran dans les deux
+// autres, invisible à tout test de composant (ils tournent sur le thème par défaut).
+describe('Tones — section de création depuis « Personnages » (Story 29.16)', () => {
+  const KEYS = [
+    'my_characters.create_title',
+    'my_characters.create_entry',
+    'my_characters.create_more',
+    'my_characters.create_more_one',
+    'my_characters.create_less',
+    'my_characters.empty_with_entries',
+  ];
+  const PLACEHOLDERS: Record<string, string[]> = {
+    'my_characters.create_entry': ['{partie}'],
+    'my_characters.create_more': ['{n}'],
+  };
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${KEYS.length} clés, toutes non vides`, () => {
+      for (const key of KEYS) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+      }
+    });
+
+    it(`${theme} garde les gabarits à trou de la section de création`, () => {
+      for (const [key, tokens] of Object.entries(PLACEHOLDERS)) {
+        for (const token of tokens) {
+          expect(TONE_MAP[theme][key], `${theme} / ${key}`).toContain(token);
+        }
+      }
+    });
+  }
+});

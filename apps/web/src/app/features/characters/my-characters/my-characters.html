@@ -1,3 +1,5 @@
+<app-character-creation-entries [entries]="creationEntries()" />
+
 <app-list-control-bar
   [viewMode]="charactersViewMode()"
   [sortOptions]="sortOptionsForBar()"
@@ -11,7 +13,7 @@
 />
 
 @if (all().length === 0) {
-  <p class="empty">{{ theme.tone()['my_characters.empty'] }}</p>
+  <p class="empty">{{ theme.tone()[emptyMessageKey()] }}</p>
 } @else if (filtered().length === 0) {
   <p class="empty">{{ theme.tone()['my_characters.no_match'] }}</p>
 } @else {

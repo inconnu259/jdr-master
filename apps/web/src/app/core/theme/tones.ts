@@ -68,6 +68,13 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'my_characters.sort_niveau': 'Niveau',
     'my_characters.sort_partie': 'Partie',
     'my_characters.sort_nom': 'Nom',
+    /* — section de création (Story 29.16) — */
+    'my_characters.create_title': 'À forger',
+    'my_characters.create_entry': 'Créer un voyageur pour {partie}',
+    'my_characters.create_more': 'Voir les {n} autres',
+    'my_characters.create_more_one': 'Voir l’autre',
+    'my_characters.create_less': 'Voir moins',
+    'my_characters.empty_with_entries': 'Nul voyageur forgé pour l’instant.',
     /* — partie-form — */
     'partie.new_title': 'Nouvelle quête',
     'partie.edit_title': 'Retranscrire le parchemin',
@@ -461,6 +468,13 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'my_characters.sort_niveau': 'Niveau',
     'my_characters.sort_partie': 'Sentier',
     'my_characters.sort_nom': 'Nom',
+    /* — section de création (Story 29.16) — */
+    'my_characters.create_title': 'À éveiller',
+    'my_characters.create_entry': 'Éveiller un compagnon de route pour {partie}',
+    'my_characters.create_more': 'Voir les {n} autres',
+    'my_characters.create_more_one': 'Voir l’autre',
+    'my_characters.create_less': 'Voir moins',
+    'my_characters.empty_with_entries': 'Aucun compagnon éveillé pour l’instant.',
     /* — partie-form — */
     'partie.new_title': 'Nouveau sentier',
     'partie.edit_title': 'Rebattre le sentier',
@@ -848,6 +862,13 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'my_characters.sort_niveau': 'Niveau',
     'my_characters.sort_partie': 'Mission',
     'my_characters.sort_nom': 'Nom',
+    /* — section de création (Story 29.16) — */
+    'my_characters.create_title': 'À assembler',
+    'my_characters.create_entry': 'Assembler un automate-voyageur pour {partie}',
+    'my_characters.create_more': 'Voir les {n} autres',
+    'my_characters.create_more_one': 'Voir l’autre',
+    'my_characters.create_less': 'Voir moins',
+    'my_characters.empty_with_entries': 'Aucun automate assemblé pour l’instant.',
     /* — partie-form — */
     'partie.new_title': 'Nouvelle mission',
     'partie.edit_title': 'Recalibrer la mission',

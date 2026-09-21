@@ -3,7 +3,7 @@ import { provideRouter, Router } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { signal } from '@angular/core';
 import { vi } from 'vitest';
-import type { AuthUser, MyCharacterDto } from '@master-jdr/shared';
+import type { AuthUser, MyCharacterDto, PartieDto, PartySignalsDto } from '@master-jdr/shared';
 import { MyCharacters } from './my-characters';
 import { CharacterService } from '../../../core/characters/character.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
@@ -12,6 +12,8 @@ import { makeCharacterDto } from '../../../core/characters/character-dto.fixture
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { AccountService } from '../../../core/account/account.service';
+import { PartySignalsService } from '../../../core/parties/party-signals.service';
+import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 
 function makeMyCharacter(overrides: Partial<MyCharacterDto> = {}): MyCharacterDto {
   return {
@@ -21,6 +23,25 @@ function makeMyCharacter(overrides: Partial<MyCharacterDto> = {}): MyCharacterDt
     classLabel: null,
     typeLabel: null,
     groupRoleLabel: null,
+    ...overrides,
+  };
+}
+
+function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
+  return {
+    id: 'p1',
+    name: 'La Forêt Noire',
+    kind: 'ONE_SHOT',
+    gameSystemId: 'ryuutama',
+    description: null,
+    mjId: 'mj1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    nextSessionDate: null,
+    nextSessionSlot: null,
+    role: 'player',
+    status: 'EN_COURS',
+    isFavorite: false,
+    coverImageVersion: null,
     ...overrides,
   };
 }
@@ -48,15 +69,29 @@ function makeAccountService() {
   return { updatePreferences: vi.fn().mockResolvedValue(undefined) };
 }
 
+function makePartySignalsService(signalsMap: Map<string, PartySignalsDto> = new Map()) {
+  return {
+    signals: signal(signalsMap),
+    refresh: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function makeMyPartiesService(parties: PartieDto[] = []) {
+  return { allParties: signal(parties) };
+}
+
 async function createFixture(
   list: MyCharacterDto[] = [],
   authUserOverrides: Partial<AuthUser> = {},
   accountSvc = makeAccountService(),
+  options: { partySignalsSvc?: ReturnType<typeof makePartySignalsService>; parties?: PartieDto[] } = {},
 ) {
   const characterService = {
     listMine: vi.fn().mockResolvedValue(list),
   };
   const authSvc = { currentUser: signal(makeAuthUser(authUserOverrides)) };
+  const partySignalsSvc = options.partySignalsSvc ?? makePartySignalsService();
+  const myPartiesSvc = makeMyPartiesService(options.parties ?? []);
   await TestBed.configureTestingModule({
     imports: [MyCharacters],
     providers: [
@@ -66,6 +101,8 @@ async function createFixture(
       { provide: ThemeToneService, useValue: { tone: signal(TONE_MAP['grimoire-emeraude']) } },
       { provide: AuthService, useValue: authSvc },
       { provide: AccountService, useValue: accountSvc },
+      { provide: PartySignalsService, useValue: partySignalsSvc },
+      { provide: MyPartiesService, useValue: myPartiesSvc },
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(MyCharacters);
@@ -74,7 +111,7 @@ async function createFixture(
     await Promise.resolve();
     fixture.detectChanges();
   }
-  return { fixture, characterService, authSvc, accountSvc };
+  return { fixture, characterService, authSvc, accountSvc, partySignalsSvc, myPartiesSvc };
 }
 
 describe('MyCharacters (Story 29.2)', () => {
@@ -253,5 +290,128 @@ describe('MyCharacters — bandeau contextuel (Story 29.4)', () => {
 
     const contextualNav = TestBed.inject(ContextualNavService);
     expect(contextualNav.title()).toBe(TONE_MAP['grimoire-emeraude']['my_characters.title']);
+  });
+});
+
+describe('MyCharacters — section de création « À forger » (Story 29.16)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('ngOnInit() appelle partySignalsService.refresh() (rafraîchit les signaux à l’activation de la route)', async () => {
+    const { partySignalsSvc } = await createFixture([]);
+
+    expect(partySignalsSvc.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('aucun signal PERSONNAGE_A_CREER → section absente (ni titre ni cadre)', async () => {
+    const { fixture } = await createFixture(
+      [],
+      {},
+      makeAccountService(),
+      { parties: [makePartie({ id: 'p1' })] },
+    );
+
+    expect(fixture.nativeElement.querySelector('.character-creation-entries')).toBeNull();
+  });
+
+  it('un signal PERSONNAGE_A_CREER pour une partie → une ligne, croisée avec allParties() pour nom et gameSystemId', async () => {
+    const signalsMap = new Map<string, PartySignalsDto>([
+      ['p1', { role: 'player', status: 'EN_COURS', signals: ['PERSONNAGE_A_CREER'] }],
+    ]);
+    const { fixture } = await createFixture(
+      [],
+      {},
+      makeAccountService(),
+      {
+        partySignalsSvc: makePartySignalsService(signalsMap),
+        parties: [makePartie({ id: 'p1', name: 'Le Convoi du Nord', gameSystemId: 'ryuutama' })],
+      },
+    );
+
+    const row: HTMLAnchorElement = fixture.nativeElement.querySelector(
+      '.character-creation-entries__row',
+    );
+    expect(row).not.toBeNull();
+    expect(row.textContent).toContain('Créer un voyageur pour Le Convoi du Nord');
+    expect(row.getAttribute('href')).toContain('/parties/p1/characters/new');
+    expect(row.getAttribute('href')).toContain('gameSystemId=ryuutama');
+  });
+
+  it('une partie sans signal PERSONNAGE_A_CREER (MJ, système sans module, terminée…) ne produit aucune ligne', async () => {
+    const signalsMap = new Map<string, PartySignalsDto>([
+      ['p1', { role: 'mj', status: 'EN_COURS', signals: ['AUCUN_MEMBRE_INVITE'] }],
+    ]);
+    const { fixture } = await createFixture(
+      [],
+      {},
+      makeAccountService(),
+      {
+        partySignalsSvc: makePartySignalsService(signalsMap),
+        parties: [makePartie({ id: 'p1' })],
+      },
+    );
+
+    expect(fixture.nativeElement.querySelector('.character-creation-entries')).toBeNull();
+  });
+
+  it('section rendue + liste de personnages vide → message my_characters.empty_with_entries (pas my_characters.empty)', async () => {
+    const signalsMap = new Map<string, PartySignalsDto>([
+      ['p1', { role: 'player', status: 'EN_COURS', signals: ['PERSONNAGE_A_CREER'] }],
+    ]);
+    const { fixture } = await createFixture(
+      [],
+      {},
+      makeAccountService(),
+      {
+        partySignalsSvc: makePartySignalsService(signalsMap),
+        parties: [makePartie({ id: 'p1' })],
+      },
+    );
+
+    const empty = fixture.nativeElement.querySelector('.empty');
+    expect(empty.textContent.trim()).toBe(
+      TONE_MAP['grimoire-emeraude']['my_characters.empty_with_entries'],
+    );
+  });
+
+  it('liste de personnages vide sans aucune ligne éligible → message my_characters.empty d’origine', async () => {
+    const { fixture } = await createFixture([]);
+
+    const empty = fixture.nativeElement.querySelector('.empty');
+    expect(empty.textContent.trim()).toBe(TONE_MAP['grimoire-emeraude']['my_characters.empty']);
+  });
+
+  it('refresh() encore en vol : reste sur my_characters.empty (pas de clignotement) même si listMine() a déjà résolu et qu’une ligne serait éligible', async () => {
+    let resolveRefresh!: () => void;
+    const pendingRefresh = new Promise<void>((resolve) => {
+      resolveRefresh = resolve;
+    });
+    const signalsMap = new Map<string, PartySignalsDto>([
+      ['p1', { role: 'player', status: 'EN_COURS', signals: ['PERSONNAGE_A_CREER'] }],
+    ]);
+    const partySignalsSvc = {
+      signals: signal(signalsMap),
+      refresh: vi.fn().mockReturnValue(pendingRefresh),
+    };
+    const { fixture } = await createFixture([], {}, makeAccountService(), {
+      partySignalsSvc,
+      parties: [makePartie({ id: 'p1' })],
+    });
+
+    // listMine() (résolu par createFixture) est déjà arrivé, mais refresh() est toujours en vol.
+    expect(fixture.nativeElement.querySelector('.empty').textContent.trim()).toBe(
+      TONE_MAP['grimoire-emeraude']['my_characters.empty'],
+    );
+
+    resolveRefresh();
+    // Même patron que createFixture() ci-dessus : plusieurs tours de microtâches plutôt qu'un
+    // nombre codé en dur, insensible à la profondeur exacte de la chaîne `.finally()`.
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+
+    expect(fixture.nativeElement.querySelector('.empty').textContent.trim()).toBe(
+      TONE_MAP['grimoire-emeraude']['my_characters.empty_with_entries'],
+    );
   });
 });

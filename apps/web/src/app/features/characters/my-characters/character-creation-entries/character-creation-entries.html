@@ -1,0 +1,28 @@
+@if (entries().length > 0) {
+  <section class="character-creation-entries">
+    <h2 class="character-creation-entries__title">{{ theme.tone()['my_characters.create_title'] }}</h2>
+    <div class="character-creation-entries__grid">
+      @for (entry of visibleEntries(); track entry.partieId) {
+        <a
+          class="character-creation-entries__row"
+          [routerLink]="['/parties', entry.partieId, 'characters', 'new']"
+          [queryParams]="{ gameSystemId: entry.gameSystemId }"
+        >
+          <span class="character-creation-entries__badge" aria-hidden="true">+</span>
+          <span class="character-creation-entries__label">{{ entryLabel(entry) }}</span>
+          <span class="character-creation-entries__chevron" aria-hidden="true">›</span>
+        </a>
+      }
+    </div>
+    @if (entries().length > 3) {
+      <button
+        type="button"
+        class="character-creation-entries__toggle"
+        [attr.aria-expanded]="expanded()"
+        (click)="toggle()"
+      >
+        {{ expanded() ? theme.tone()['my_characters.create_less'] : moreLabel() }}
+      </button>
+    }
+  </section>
+}

@@ -25,8 +25,11 @@ export class PartySignalsService {
 
   /** Même patron anti-course que `MyPartiesService.refreshMjParties()` : une réponse obsolète ne
    *  peut jamais écraser un état plus frais, un échec réseau transitoire garde le dernier état
-   *  connu bon plutôt que de vider la carte. */
-  private async refresh(): Promise<void> {
+   *  connu bon plutôt que de vider la carte. Public (Story 29.16) : `MyCharacters.ngOnInit()`
+   *  l'appelle directement à l'activation de la route, en plus de `notifyChanged()` sur l'événement
+   *  SSE `user:{id}` — l'écran a besoin d'un signal frais dès l'arrivée, pas seulement en cours de
+   *  session. */
+  async refresh(): Promise<void> {
     const seq = ++this.seq;
     let map: Record<string, PartySignalsDto> | undefined;
     try {
