@@ -67,8 +67,9 @@ export const COVERS_URL_PREFIX = '/uploads/covers/';
 const INVALID_COVER_IMAGE_MESSAGE = "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
 
 /** Story 29.17, AC2/AC4 : message de refus explicite quand la création ou le changement de
- *  système de jeu cible un système sans module de création de personnage jouable. */
-const GAME_SYSTEM_WITHOUT_MODULE_MESSAGE =
+ *  système de jeu cible un système sans module de création de personnage jouable. Exportée pour
+ *  que les specs l'importent plutôt que de retaper le texte en dur (revue de code). */
+export const GAME_SYSTEM_WITHOUT_MODULE_MESSAGE =
   'Ce système de jeu ne propose pas encore de création de personnage jouable';
 
 /**

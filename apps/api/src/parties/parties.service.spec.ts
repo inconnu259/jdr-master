@@ -59,7 +59,7 @@ import { readFile, unlink, writeFile } from 'node:fs/promises';
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { PartiesService } from './parties.service';
+import { GAME_SYSTEM_WITHOUT_MODULE_MESSAGE, PartiesService } from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { anyOf, arrayLike, callArg, objectLike, stringLike } from '../common/test-utils/jest-typed';
@@ -301,9 +301,7 @@ describe('PartiesService', () => {
     });
     await expect(promise).rejects.toBeInstanceOf(BadRequestException);
     // AC2 : message explicite — pas seulement le type d'exception (revue de code).
-    await expect(promise).rejects.toThrow(
-      'Ce système de jeu ne propose pas encore de création de personnage jouable',
-    );
+    await expect(promise).rejects.toThrow(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.partie.create).not.toHaveBeenCalled();
   });
@@ -1980,9 +1978,18 @@ describe('PartiesService', () => {
       const promise = service.update('p1', 'mj1', { gameSystemId: 'conte-de-minuit' });
       await expect(promise).rejects.toBeInstanceOf(BadRequestException);
       // AC4 : message explicite — pas seulement le type d'exception (revue de code).
-      await expect(promise).rejects.toThrow(
-        'Ce système de jeu ne propose pas encore de création de personnage jouable',
-      );
+      await expect(promise).rejects.toThrow(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('un gameSystemId DIFFÉRENT vers un système sans module est rejeté même en partant d’un système AVEC module (AC4)', async () => {
+      // Contrairement au cas ci-dessus (source déjà sans module), celui-ci part d'une partie sur
+      // ryuutama (avec module) — la garde ne compare que la cible, jamais la source, donc les deux
+      // sens doivent être refusés de la même façon (revue de code).
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, gameSystemId: 'ryuutama' });
+      const promise = service.update('p1', 'mj1', { gameSystemId: 'draconis' });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      await expect(promise).rejects.toThrow(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
       expect(prisma.partie.update).not.toHaveBeenCalled();
     });
 
@@ -2011,7 +2018,12 @@ describe('PartiesService', () => {
       await expect(
         service.update('p1', 'mj1', { gameSystemId: 'ryuutama' }),
       ).resolves.toBeDefined();
-      expect(prisma.partie.update).toHaveBeenCalled();
+      // Même exigence que sur le cas « identique » ci-dessus : vérifier le payload écrit, pas
+      // seulement que update() a été appelé (revue de code).
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { gameSystemId: 'ryuutama' },
+      });
     });
   });
 });

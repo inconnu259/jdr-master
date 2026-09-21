@@ -108,6 +108,18 @@ context: []
   - `[low]` `[reject]` Blind Hunter : la section Verification de cette spec rapporte des comptes de tests sans log CI joint, seulement en prose. Rejeté d'office — le correctif consisterait à éditer cette spec elle-même.
   - `[low]` `[reject]` Edge Case Hunter (claim) : la case à cocher des Tasks dit avoir ajusté les fixtures de `parties.controller.spec.ts`, alors que le diff ne touche pas ce fichier. Rejeté d'office — le correctif consisterait à éditer cette spec elle-même ; au demeurant déjà expliqué et justifié dans Implementation Notes (le service y est entièrement mocké, la fixture ne traverse jamais la vraie garde).
 
+### 2026-09-21 — Passe de correctifs externe (`/bmad-review`, après commit `2d0fe1d`)
+
+Revue indépendante hors du cycle interne de `bmad-build` (Adversarial / Edge-Case Hunter / Verification Gap, sur le commit déjà livré). 11 findings au total (Adversarial : 10, Edge-Case Hunter : 1, Verification Gap : aucun). 4 retenus et corrigés après vérification directe du code, présentés à l'utilisateur puis approuvés :
+- Test `update()` « changement vers un système AVEC module » : ne vérifiait que `toHaveBeenCalled()`, jamais le payload — même trou que celui déjà corrigé lors de la revue interne sur le test voisin. Corrigé : assertion étendue au payload complet.
+- `GAME_SYSTEM_WITHOUT_MODULE_MESSAGE` non exportée, retapée en dur dans 2 assertions de test. Corrigé : exportée depuis `parties.service.ts`, importée dans les specs.
+- Repli manquant dans `systems()` (web) pour l'état transitoire « aucun système n'a de module » — `DEFAULT_GAME_SYSTEM_ID` a un repli sur `GAME_SYSTEMS[0]`, `systems()` non, ce qui aurait produit un menu vide avec un contrôle prérempli. Vérifié réel mais inatteignable aujourd'hui (Ryuutama garde toujours son module). Corrigé : repli aligné.
+- Aucun test ne couvrait le sens « système AVEC module → système SANS module » dans `update()` (seul « sans module → X » était testé). Vérifié par lecture directe que la garde ne compare que la cible, jamais la source — donc déjà correcte pour les deux sens par construction, pas un bug vivant. Ajouté quand même comme filet de régression, coût marginal.
+
+7 autres findings évalués et non retenus (TOCTOU hors transaction sur `update()` — patron préexistant depuis la story 29.14, pas causé par celle-ci ; absence de test e2e à travers le pipeline HTTP réel — contraire à la convention déjà établie dans ce fichier ; absence de garde contre un futur 2ᵉ système avec module qui orphelinerait des personnages — explicitement hors périmètre aujourd'hui par l'AC5 elle-même ; scintillement de chargement en édition — préexistant sur `name`/`kind`, non spécifique à cette story ; absence de test web sur l'affichage réel du message serveur — mécanisme déjà couvert ailleurs (`convertKind()`) ; tests n'inspectant pas le DOM rendu — risque théorique). Détail dans la réponse à l'utilisateur de cette session, non redupliqué ici.
+
+Revérifié après correctifs : `parties.service.spec.ts` 123/124 (le seul échec est le même défaut préexistant de fixture de date, sans rapport) ; suite web complète 2408/2410 (mêmes 2 échecs préexistants sans rapport).
+
 ## Design Notes
 
 `gameSystemHasModule()` encode déjà tout le prédicat requis (story 29.15) — cette story ne fait que le brancher à deux nouveaux points de contrôle (formulaire, service). La garde `update()` reproduit exactement le patron déjà établi pour `kind` dans la même méthode (`parties.service.ts:349-353`, Story 29.14) : refuser un CHANGEMENT, tolérer un envoi qui renvoie la valeur déjà enregistrée — sans quoi chaque sauvegarde d'une partie existante sur un système sans module casserait, ce qui contredirait directement AC3.

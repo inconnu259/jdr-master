@@ -122,10 +122,15 @@ export class PartieForm implements OnInit {
    * déjà enregistré de la partie en édition — même s'il n'a pas de module — pour qu'il reste
    * visible/sélectionnable au chargement (aucun AUTRE système sans module ne devient choisissable).
    * `gameSystemHasModule()` reste l'unique source de vérité de l'éligibilité (story 29.15).
+   *
+   * Repli aligné sur `DEFAULT_GAME_SYSTEM_ID` (revue de code) : si aucun système n'a de module (état
+   * transitoire uniquement), inclure le premier système de la liste plutôt que rendre un menu vide
+   * pendant que le formulaire y présélectionne déjà une valeur.
    */
   protected readonly systems = computed(() => {
     const saved = this.savedGameSystemId();
-    return GAME_SYSTEMS.filter((s) => gameSystemHasModule(s.id) || s.id === saved);
+    const filtered = GAME_SYSTEMS.filter((s) => gameSystemHasModule(s.id) || s.id === saved);
+    return filtered.length > 0 ? filtered : [GAME_SYSTEMS[0]];
   });
 
   protected readonly form = this.fb.nonNullable.group({
