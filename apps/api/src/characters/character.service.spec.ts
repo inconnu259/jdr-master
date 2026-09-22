@@ -920,33 +920,64 @@ describe('CharacterService', () => {
       expect(result.map((c) => c.ownerIsMj)).toEqual([false, false, true]);
     });
 
-    it('joueur → ne reçoit que ses propres personnages', async () => {
+    it('joueur → reçoit tous les personnages de la Partie (Story 31.5), pas seulement les siens', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
-      prisma.character.findMany.mockResolvedValue([makeCharacter({ id: 'c1', userId: 'u1' })]);
-      prisma.user.findMany.mockResolvedValue([{ id: 'u1', pseudo: 'alice' }]);
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1' }),
+        makeCharacter({ id: 'c2', userId: 'u2' }),
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        { id: 'u1', pseudo: 'alice' },
+        { id: 'u2', pseudo: 'bob' },
+      ]);
 
-      await service.findByPartie('p1', 'u1');
+      const result = await service.findByPartie('p1', 'u1');
 
       expect(prisma.character.findMany).toHaveBeenCalledWith({
-        where: { partieId: 'p1', userId: 'u1' },
+        where: { partieId: 'p1' },
       });
+      expect(result.map((c) => c.id)).toEqual(['c1', 'c2']);
     });
 
-    it("cadenas de visibilité configurés sur la Partie (Story 31.6, revue de code) : findByPartie() renvoie quand même la fiche complète, pour le MJ comme pour un joueur qui ne voit que la sienne — aucun masque n'est jamais calculé ici", async () => {
+    it("cadenas de visibilité (Story 31.6) : appliqué à tout personnage d'autrui pour un joueur — y compris celui du MJ — jamais au sien ni à aucun personnage quand le viewer est le MJ", async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
       prisma.partieVisibilityLock.findMany.mockResolvedValue([
         { fieldKey: 'classId', subField: null },
       ]);
-      prisma.character.findMany.mockResolvedValue([makeCharacter({ id: 'c1', userId: 'u1' })]);
-      prisma.user.findMany.mockResolvedValue([{ id: 'u1', pseudo: 'alice' }]);
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1' }),
+        makeCharacter({ id: 'c2', userId: 'u2' }),
+        makeCharacter({ id: 'c3', userId: 'mj1' }),
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        { id: 'u1', pseudo: 'alice' },
+        { id: 'u2', pseudo: 'bob' },
+        { id: 'mj1', pseudo: 'le-mj' },
+      ]);
 
-      const asMj = await service.findByPartie('p1', 'mj1');
       const asOwner = await service.findByPartie('p1', 'u1');
+      const byId = new Map(asOwner.map((c) => [c.id, c]));
 
-      for (const result of [asMj, asOwner]) {
-        expect((result[0].sheetData as { classId?: string }).classId).toBe('chasseur');
-        expect(result[0].hiddenFields).toEqual([]);
+      // Son propre personnage : jamais masqué.
+      expect((byId.get('c1')!.sheetData as { classId?: string }).classId).toBe('chasseur');
+      expect(byId.get('c1')!.hiddenFields).toEqual([]);
+      // Personnage d'un autre joueur : masqué.
+      expect((byId.get('c2')!.sheetData as { classId?: string }).classId).toBeUndefined();
+      expect(byId.get('c2')!.hiddenFields).toEqual(['classId']);
+      // Personnage du MJ, vu par un joueur (qui n'est ni son propriétaire ni le MJ) : masqué aussi.
+      expect((byId.get('c3')!.sheetData as { classId?: string }).classId).toBeUndefined();
+      expect(byId.get('c3')!.hiddenFields).toEqual(['classId']);
+      // Résolu une seule fois pour toute la liste (pas de N+1) malgré 2 personnages masqués.
+      expect(prisma.partieVisibilityLock.findMany).toHaveBeenCalledTimes(1);
+
+      prisma.partieVisibilityLock.findMany.mockClear();
+      const asMj = await service.findByPartie('p1', 'mj1');
+
+      for (const c of asMj) {
+        expect((c.sheetData as { classId?: string }).classId).toBe('chasseur');
+        expect(c.hiddenFields).toEqual([]);
       }
+      // Le MJ voit tout sans jamais résoudre les verrous.
       expect(prisma.partieVisibilityLock.findMany).not.toHaveBeenCalled();
     });
 

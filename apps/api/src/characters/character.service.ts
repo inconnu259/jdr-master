@@ -416,12 +416,10 @@ export class CharacterService {
 
   async findByPartie(partieId: string, userId: string): Promise<CharacterDto[]> {
     const partie = await this.parties.getViewable(partieId, userId);
-    const characters =
-      partie.mjId === userId
-        ? await this.prisma.character.findMany({ where: { partieId } })
-        : await this.prisma.character.findMany({
-            where: { partieId, userId },
-          });
+    // Story 31.5 : tout membre valide de la Partie (contrôle d'appartenance déjà effectué par
+    // `getViewable` ci-dessus) voit désormais tous les personnages, pas seulement le sien
+    // (Intent, "Approach") — plus de restriction `userId` dans le `where` selon le rôle.
+    const characters = await this.prisma.character.findMany({ where: { partieId } });
     if (characters.length === 0) return [];
 
     // Résolution en lot (pas de N+1) — même pattern que PartiesService.resolveParticipants.
@@ -433,30 +431,38 @@ export class CharacterService {
     const ownerById = new Map(owners.map((o) => [o.id, o]));
 
     const viewerIsMj = partie.mjId === userId;
-    // Story 31.6 : aucun masque à calculer ici. Un non-MJ ne reçoit, par le `where` ci-dessus, QUE
-    // ses propres personnages (owner === viewer) ; le MJ voit toujours tout. Dans les deux
-    // branches le lecteur est donc toujours le propriétaire ou le MJ — les deux rôles qui voient
-    // toujours la fiche entière (Intent, "Always") — sans requête supplémentaire sur ce point
-    // d'entrée. Un fellow player consultant le personnage D'UN AUTRE passe par `findOne` (Story
-    // 6.5), seul point qui applique réellement le masque.
-    return characters.map((c) =>
-      toDto(
+    // Story 31.6 : le masque de visibilité s'applique à chaque personnage d'autrui pour un
+    // lecteur qui n'est ni son propriétaire ni le MJ — jamais au sien ni à ceux vus par le MJ
+    // (Intent, "Always"), même règle que `findOne` (L.392-395). Résolu au plus une fois pour toute
+    // la liste (pas de N+1) : jamais si le viewer est le MJ (toujours `isOwnerOrMj`), ni si tous
+    // les personnages retournés appartiennent déjà au viewer (personne d'autre à masquer), sinon
+    // une seule requête pour tous les personnages d'autrui.
+    const hasOtherOwnerCharacter = characters.some((c) => c.userId !== userId);
+    const lockedPaths =
+      viewerIsMj || !hasOtherOwnerCharacter
+        ? new Set<string>()
+        : await this.resolveLockedPaths(partieId);
+    return characters.map((c) => {
+      const isOwnerOrMj = c.userId === userId || viewerIsMj;
+      return toDto(
         c,
         ownerById.get(c.userId)?.pseudo ?? '',
         ownerById.get(c.userId)?.displayName ?? '',
         c.userId === partie.mjId,
         viewerIsMj,
-      ),
-    );
+        isOwnerOrMj ? new Set<string>() : lockedPaths,
+      );
+    });
   }
 
   /**
    * Liste tous les personnages d'une Partie, sans notion de viewer (Story 8.6) — usage interne
    * cross-module uniquement (`ScenariosService.loadRetrospectiveNotes`), déjà en aval d'un
    * `getViewable`/`getOwned` réussi sur la Partie côté appelant. Contrairement à `findByPartie`
-   * (scope au viewer : MJ voit tout, joueur seulement son propre personnage), cette méthode n'a
-   * pas de restriction — nécessaire pour agréger le journal de TOUS les participants, pas
-   * seulement celui du viewer courant (cf. `[ASSUMPTION]` Dev Notes Story 8.6, Task 6).
+   * (scopé au viewer : tout membre valide voit tous les personnages, avec masquage par champ
+   * selon le cadenas de visibilité — Story 31.5/31.6), cette méthode n'a ni notion de viewer ni
+   * masquage — nécessaire pour agréger le journal de TOUS les participants, pas seulement celui
+   * du viewer courant (cf. `[ASSUMPTION]` Dev Notes Story 8.6, Task 6).
    */
   async findAllByPartie(partieId: string): Promise<{ id: string; userId: string }[]> {
     return this.prisma.character.findMany({

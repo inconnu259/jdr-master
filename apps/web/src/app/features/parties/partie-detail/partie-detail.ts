@@ -182,7 +182,6 @@ export class PartieDetail implements OnInit {
   protected readonly inviteEmail = signal('');
   protected readonly invitingByEmail = signal(false);
   protected readonly inviteEmailError = signal<string | null>(null);
-  protected readonly showTroupe = signal(false);
   protected readonly referenceAssetError = signal<string | null>(null);
   protected readonly downloadingReferenceAsset = signal(false);
   protected readonly prepAssetError = signal<string | null>(null);
@@ -585,7 +584,6 @@ export class PartieDetail implements OnInit {
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) return;
-    this.showTroupe.set(false);
     this.partie.set(await this.parties.get(id));
     const me = this.auth.currentUser();
     if (me) {

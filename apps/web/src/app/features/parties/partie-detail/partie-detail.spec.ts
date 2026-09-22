@@ -1,4 +1,5 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { PartieDetail } from './partie-detail';
 import { ActivatedRoute } from '@angular/router';
 import { provideRouter } from '@angular/router';
@@ -547,6 +548,21 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     expect(el.querySelector('app-roster-rail')).toBeNull();
   });
 
+  it('mobile + joueur (non-MJ) → affiche aussi app-roster-strip, pas app-roster-rail (Story 31.5 : roster mobile ouvert à tout membre)', async () => {
+    const { el } = await createFixture(makePartie(), PLAYER_ID, { members, desktop: false });
+    expect(el.querySelector('app-roster-strip')).not.toBeNull();
+    expect(el.querySelector('app-roster-rail')).toBeNull();
+  });
+
+  it('mobile + joueur (non-MJ) → le slot "+ Inviter" du roster-strip est désactivé (hasFreeSlot=false, réservé au MJ)', async () => {
+    const { fixture } = await createFixture(makePartie(), PLAYER_ID, { members, desktop: false });
+
+    const rosterStrip = fixture.debugElement.query(By.css('app-roster-strip'))
+      ?.componentInstance as { hasFreeSlot: () => boolean } | undefined;
+
+    expect(rosterStrip?.hasFreeSlot()).toBe(false);
+  });
+
   it("mobile + joueur sans personnage sur un système avec module → l'onglet Ma fiche est sélectionné par défaut (Story 29.15)", async () => {
     const { el } = await createFixture(makePartie({ gameSystemId: 'ryuutama' }), PLAYER_ID, {
       members,
@@ -554,7 +570,6 @@ describe('PartieDetail — roster (Story 6.1)', () => {
       noopAnimations: true,
     });
     expect(el.querySelector('app-roster-rail')).toBeNull();
-    expect(el.querySelector('app-roster-strip')).toBeNull();
 
     const activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
     expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
@@ -2271,56 +2286,8 @@ describe("PartieDetail — alerte d'homonymie", () => {
 
 // ─── Pseudo en complément dans les écrans sans personnage (Story 28.3, AC3) ────
 
-describe('PartieDetail — pseudo en complément (Troupe + gestion des membres)', () => {
+describe('PartieDetail — pseudo en complément (gestion des membres)', () => {
   afterEach(() => TestBed.resetTestingModule());
-
-  it('Troupe mobile : deux membres homonymes → pseudo affiché en complément pour chacun', async () => {
-    // Revue de code : le MJ n'est jamais un `Membership` (cf. Découverte story 28.3) — il
-    // n'apparaît donc jamais dans `members()`. Ce test doit utiliser deux joueurs réels, une
-    // fixture qui y placerait le MJ testerait un état que le backend ne peut pas produire.
-    const members: PartieMemberDto[] = [
-      {
-        userId: PLAYER_ID,
-        pseudo: 'Alice',
-        displayName: 'Même Nom',
-        email: 'alice@test.com',
-        joinedAt: '',
-      },
-      {
-        userId: 'other-player',
-        pseudo: 'Bob',
-        displayName: 'Même Nom',
-        email: 'bob@test.com',
-        joinedAt: '',
-      },
-    ];
-    const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
-      members,
-      desktop: false,
-      noopAnimations: true,
-    });
-
-    // Clic explicite sur "Détails" (où vit la Troupe) — indépendant de l'onglet par défaut réel
-    // (ici "Détails" déjà, `draconis` n'a pas de module — Story 29.15), la Troupe n'a jamais vécu
-    // ailleurs.
-    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
-    const detailsTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Détails');
-    detailsTab?.click();
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const component = fixture.componentInstance as unknown as {
-      showTroupe: WritableSignal<boolean>;
-    };
-    component.showTroupe.set(true);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const pseudos = el.querySelectorAll('.troupe-toggle .identity-label__pseudo');
-    expect(pseudos.length, el.querySelector('.troupe-toggle')?.outerHTML ?? 'NO SECTION').toBe(2);
-  });
 
   it('gestion des membres (onglet Invitations) : membres homonymes → pseudo affiché', async () => {
     // Revue de code : le MJ n'apparaît jamais dans `members()` — seuls des joueurs réels ici.
@@ -2350,49 +2317,6 @@ describe('PartieDetail — pseudo en complément (Troupe + gestion des membres)'
 
     const pseudos = el.querySelectorAll('.invite .identity-label__pseudo');
     expect(pseudos.length).toBe(2);
-  });
-
-  it('aucune collision entre membres → aucun pseudo affiché', async () => {
-    // Revue de code : le MJ n'apparaît jamais dans `members()` — seuls des joueurs réels ici.
-    const members: PartieMemberDto[] = [
-      {
-        userId: PLAYER_ID,
-        pseudo: 'Alice',
-        displayName: 'Alice au pays',
-        email: 'alice@test.com',
-        joinedAt: '',
-      },
-      {
-        userId: 'other-player',
-        pseudo: 'Bob',
-        displayName: 'Bob',
-        email: 'bob@test.com',
-        joinedAt: '',
-      },
-    ];
-    const { fixture, el } = await createFixture(makePartie(), PLAYER_ID, {
-      members,
-      desktop: false,
-      noopAnimations: true,
-    });
-
-    const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
-    const detailsTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Détails');
-    detailsTab?.click();
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    const component = fixture.componentInstance as unknown as {
-      showTroupe: WritableSignal<boolean>;
-    };
-    component.showTroupe.set(true);
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
-    expect(el.querySelector('.troupe-toggle')).toBeTruthy();
-    expect(el.querySelector('.troupe-toggle .identity-label__pseudo')).toBeNull();
   });
 
   it("Revue de code (2026-08-06) : le badge « MJ » est toujours affiché sur l'auteur d'une annonce campagne", async () => {

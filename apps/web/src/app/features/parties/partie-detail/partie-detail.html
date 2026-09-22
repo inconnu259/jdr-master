@@ -56,27 +56,6 @@
               }
             </section>
 
-            @if (!isDesktop() && !isMj()) {
-              <section class="troupe-toggle">
-                <button type="button" mat-button (click)="showTroupe.set(!showTroupe())">
-                  {{ showTroupe() ? theme.tone()['partie.hide_troupe'] : theme.tone()['partie.show_troupe'] }}
-                </button>
-                @if (showTroupe()) {
-                  <mat-list>
-                    @for (m of members(); track m.userId) {
-                      <mat-list-item>
-                        <app-identity-label
-                          [playerName]="m.displayName"
-                          [pseudo]="m.pseudo"
-                          [ambiguous]="isMemberAmbiguous(m.userId)"
-                        />
-                      </mat-list-item>
-                    }
-                  </mat-list>
-                }
-              </section>
-            }
-
             @if (notice()) {
               <p class="notice">{{ notice() }}</p>
             }
@@ -376,12 +355,12 @@
       </div>
     }
 
-    @if (!isDesktop() && isMj()) {
+    @if (!isDesktop()) {
       <app-roster-strip
         [members]="members()"
         [characters]="characters()"
         [mjId]="p.mjId"
-        [hasFreeSlot]="hasFreeSlot"
+        [hasFreeSlot]="isMj() && hasFreeSlot"
         [classLabelFor]="classLabelFor"
         [roleLabelFor]="roleLabelFor"
         (selectCharacter)="onSelectRosterCharacter($event)"

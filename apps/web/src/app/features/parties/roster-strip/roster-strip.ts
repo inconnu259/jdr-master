@@ -6,8 +6,8 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { buildRosterRows, type RosterRow } from '../roster-row.util';
 
 /**
- * Bandeau horizontal scrollable (mobile <768px, MJ uniquement) listant la troupe —
- * pendant mobile de `RosterRail`. Cf. EXPERIENCE.md §2, DESIGN.md §7 RosterStrip.
+ * Bandeau horizontal scrollable (mobile <768px, ouvert à tout membre de la Partie) listant la
+ * troupe — pendant mobile de `RosterRail`. Cf. EXPERIENCE.md §2, DESIGN.md §7 RosterStrip.
  */
 @Component({
   selector: 'app-roster-strip',
@@ -37,11 +37,13 @@ export class RosterStrip {
       this.classLabelFor(),
       this.roleLabelFor(),
       this.theme.tone()['roster.create_slot_label'],
-      // Revue de code (bmad-review, 2026-09-21) : RosterStrip est MJ-only (cf. docstring) — jamais
-      // de slot de création à ce jour, donc toujours inéligible. `currentUserId` reste `undefined`
-      // (pas `this.mjId()`, bug corrigé : ça rendait `isSelf` vrai pour la ligne du MJ lui-même,
-      // sans conséquence aujourd'hui car sa branche `isMj` court-circuite avant `canCreate`, mais
-      // une mine pour un futur slot joueur bâti sur ce composant).
+      // Revue de code (bmad-review, 2026-09-21) : aucun appelant ne câble aujourd'hui de slot de
+      // création sur RosterStrip (le composant est ouvert à tout membre, cf. docstring, mais ne
+      // reçoit ni condition d'éligibilité ni identité courante) — toujours inéligible pour
+      // l'instant. `currentUserId` reste `undefined` (pas `this.mjId()`, bug corrigé : ça rendait
+      // `isSelf` vrai pour la ligne du MJ lui-même, sans conséquence aujourd'hui car sa branche
+      // `isMj` court-circuite avant `canCreate`, mais une mine pour un futur slot de création bâti
+      // sur ce composant).
       false,
       undefined,
     ),
