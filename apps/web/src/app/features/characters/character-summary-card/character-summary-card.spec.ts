@@ -29,6 +29,17 @@ describe('CharacterSummaryCard', () => {
     expect(text).toContain('Encombrement max 11');
   });
 
+  it('derived absent (cadenas de visibilité, Story 31.6) : aucun badge PV/PE/Initiative/Encombrement, aucune erreur', async () => {
+    const masked: CharacterDto = { ...CHARACTER, derived: undefined as never, hiddenFields: ['derived'] };
+    TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
+    const fixture = TestBed.createComponent(CharacterSummaryCard);
+    fixture.componentRef.setInput('character', masked);
+    expect(() => fixture.detectChanges()).not.toThrow();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('.character-summary-card__badges')).toBeNull();
+  });
+
   it('émet selected() au clic', async () => {
     TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
     const fixture = TestBed.createComponent(CharacterSummaryCard);

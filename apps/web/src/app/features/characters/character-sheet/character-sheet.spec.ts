@@ -1300,6 +1300,15 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.textContent).toContain('XP 250');
   });
 
+  it('derived absent (fiche d’un compagnon dont les attributs sont verrouillés, Story 31.6) : message de statistiques masquées, aucune erreur', async () => {
+    const masked = { ...CHARACTER, derived: undefined as never, hiddenFields: ['attributes', 'derived'] };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(masked) });
+    const { fixture } = await createComponent(characterSvc);
+
+    expect(fixture.nativeElement.textContent).toContain('Statistiques masquées par le MJ');
+    expect(fixture.nativeElement.textContent).not.toContain('PV undefined');
+  });
+
   it('section Inventaire visible pour le propriétaire', async () => {
     const { fixture } = await createComponent();
     // Story 29.5 : Équipement est désormais l'onglet d'index 1 de la sous-navigation locale.

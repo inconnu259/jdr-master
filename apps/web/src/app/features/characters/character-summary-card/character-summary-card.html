@@ -60,7 +60,7 @@
       }
     }
   </div>
-  @if (showStats()) {
+  @if (showStats() && character().derived) {
     <div class="character-summary-card__badges">
       <span class="stat-pill">PV {{ character().derived.PV }}</span>
       <span class="stat-pill">PE {{ character().derived.PE }}</span>

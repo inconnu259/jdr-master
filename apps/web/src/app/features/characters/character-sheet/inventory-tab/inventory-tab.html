@@ -1,5 +1,7 @@
 <div class="inventory-tab">
-  <app-encumbrance-bar [totalWeight]="totalWeight()" [limit]="character().derived.Encombrement" />
+  @if (character().derived) {
+    <app-encumbrance-bar [totalWeight]="totalWeight()" [limit]="character().derived.Encombrement" />
+  }
 
   <section class="inventory-tab__section">
     <h3>Objets</h3>

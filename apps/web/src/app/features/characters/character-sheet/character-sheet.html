@@ -411,11 +411,15 @@
         <section class="sheet__card">
           <h2 class="sheet__card-title">Statistiques dérivées</h2>
           <div class="sheet__pill-grid">
-            <span class="stat-pill">PV {{ c.derived.PV }}</span>
-            <span class="stat-pill">PE {{ c.derived.PE }}</span>
-            <span class="stat-pill">Condition {{ c.derived.Condition }}</span>
-            <span class="stat-pill">Initiative {{ c.derived.Initiative }}</span>
-            <span class="stat-pill">Encombrement max {{ c.derived.Encombrement }}</span>
+            @if (c.derived) {
+              <span class="stat-pill">PV {{ c.derived.PV }}</span>
+              <span class="stat-pill">PE {{ c.derived.PE }}</span>
+              <span class="stat-pill">Condition {{ c.derived.Condition }}</span>
+              <span class="stat-pill">Initiative {{ c.derived.Initiative }}</span>
+              <span class="stat-pill">Encombrement max {{ c.derived.Encombrement }}</span>
+            } @else {
+              <span class="stat-pill">{{ theme.tone()['evolution.derived_hidden'] }}</span>
+            }
             <span class="stat-pill"
               >XP {{ !xpPencil()?.editing() ? c.xp : '' }}
               @if (viewerIsMj()) {

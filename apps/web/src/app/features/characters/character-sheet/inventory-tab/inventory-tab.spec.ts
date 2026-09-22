@@ -55,6 +55,25 @@ describe('InventoryTab', () => {
     expect(el.textContent).toContain('4.2'); // 1.2 + 3
   });
 
+  it('derived absent (attributs verrouillés, Story 31.6) : EncumbranceBar omis, aucune erreur', async () => {
+    const characterSvc = { addInventoryItem: vi.fn() };
+    await TestBed.configureTestingModule({
+      imports: [InventoryTab],
+      providers: [{ provide: CharacterService, useValue: characterSvc }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(InventoryTab);
+    fixture.componentRef.setInput('character', {
+      ...makeCharacterWithItems([]),
+      derived: undefined as never,
+      hiddenFields: ['attributes', 'derived'],
+    });
+    fixture.componentRef.setInput('isOwner', true);
+    expect(() => fixture.detectChanges()).not.toThrow();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('app-encumbrance-bar')).toBeNull();
+  });
+
   it('formulaire d’ajout absent si isOwner=false', async () => {
     const fixture = await createComponent({ addInventoryItem: vi.fn() }, false);
     expect(fixture.nativeElement.querySelector('.inventory-tab__add-form')).toBeNull();
