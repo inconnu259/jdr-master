@@ -520,7 +520,7 @@ development_status:
   epic-36-retrospective: optional
 
   # ── Epic 31 : Fiche de personnage — Palier 9 ──
-  epic-31: in-progress
+  epic-31: done
 
   31-1-exports-regroupes-dans-le-menu-de-la-fiche: done
 
@@ -530,7 +530,7 @@ development_status:
 
   31-4-refonte-du-parcours-de-creation-de-personnage: done
 
-  31-5-consultation-des-fiches-des-compagnons: review
+  31-5-consultation-des-fiches-des-compagnons: done
 
   31-6-cadenas-de-visibilite-modele-et-filtrage-serveur: done
 
