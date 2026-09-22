@@ -1365,6 +1365,163 @@ describe('PartieDetail — invitations', () => {
   });
 });
 
+describe('PartieDetail — autocomplétion des invitations (Story 32.1)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    TestBed.resetTestingModule();
+  });
+
+  /** Même discipline de vidage de microtâches que `createFixture()` (ngOnInit enchaîne plusieurs
+   *  `await` sur des mocks) — nécessaire ici aussi pour laisser l'`effect()` de debounce et la
+   *  promesse de `runSearch()` (mock résolu) se propager jusqu'aux signaux `results`/`search`. */
+  async function flush(fixture: ComponentFixture<PartieDetail>): Promise<void> {
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+    fixture.detectChanges();
+  }
+
+  it("sous le seuil minimal (1 caractère) : aucune requête HTTP n'est émise, results vidé", async () => {
+    const { fixture } = await createFixture(makePartie(), MJ_ID);
+    vi.useFakeTimers();
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      searchUsers: ReturnType<typeof vi.fn>;
+    };
+    parties.searchUsers.mockClear();
+
+    fixture.componentInstance['search'].set('a');
+    await flush(fixture);
+    vi.advanceTimersByTime(1000);
+    await flush(fixture);
+
+    expect(parties.searchUsers).not.toHaveBeenCalled();
+    expect(fixture.componentInstance['results']()).toEqual([]);
+  });
+
+  it('au-dessus du seuil (2 caractères) : la recherche se déclenche automatiquement 500 ms après la frappe', async () => {
+    const { fixture } = await createFixture(makePartie(), MJ_ID);
+    vi.useFakeTimers();
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      searchUsers: ReturnType<typeof vi.fn>;
+    };
+    parties.searchUsers.mockClear();
+    parties.searchUsers.mockResolvedValue([{ id: 'u9', pseudo: 'Zed' }]);
+
+    fixture.componentInstance['search'].set('ze');
+    await flush(fixture);
+    expect(parties.searchUsers).not.toHaveBeenCalled(); // pas encore écoulé les 500 ms
+
+    vi.advanceTimersByTime(499);
+    await flush(fixture);
+    expect(parties.searchUsers).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    await flush(fixture);
+
+    expect(parties.searchUsers).toHaveBeenCalledWith('ze');
+    expect(fixture.componentInstance['results']()).toEqual([{ id: 'u9', pseudo: 'Zed' }]);
+  });
+
+  it("une nouvelle frappe avant l'expiration du délai réarme le debounce (un seul appel, avec la dernière valeur)", async () => {
+    const { fixture } = await createFixture(makePartie(), MJ_ID);
+    vi.useFakeTimers();
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      searchUsers: ReturnType<typeof vi.fn>;
+    };
+    parties.searchUsers.mockClear();
+
+    fixture.componentInstance['search'].set('al');
+    await flush(fixture);
+    vi.advanceTimersByTime(300);
+    await flush(fixture);
+    fixture.componentInstance['search'].set('ali');
+    await flush(fixture);
+    vi.advanceTimersByTime(500);
+    await flush(fixture);
+
+    expect(parties.searchUsers).toHaveBeenCalledTimes(1);
+    expect(parties.searchUsers).toHaveBeenCalledWith('ali');
+  });
+
+  it("déclenchement manuel (runSearch(), bouton/(keyup.enter)) avec une saisie d'1 caractère : aucun appel réseau, results vidé", async () => {
+    const { fixture } = await createFixture(makePartie(), MJ_ID);
+    vi.useFakeTimers();
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      searchUsers: ReturnType<typeof vi.fn>;
+    };
+    parties.searchUsers.mockClear();
+
+    fixture.componentInstance['search'].set('a');
+    await flush(fixture);
+    await fixture.componentInstance['runSearch']();
+    await flush(fixture);
+
+    expect(parties.searchUsers).not.toHaveBeenCalled();
+    expect(fixture.componentInstance['results']()).toEqual([]);
+  });
+
+  it('un déclenchement manuel annule le minuteur de debounce en attente (pas de second appel redondant ~500 ms plus tard)', async () => {
+    const { fixture } = await createFixture(makePartie(), MJ_ID);
+    vi.useFakeTimers();
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      searchUsers: ReturnType<typeof vi.fn>;
+    };
+    parties.searchUsers.mockClear();
+    parties.searchUsers.mockResolvedValue([]);
+
+    fixture.componentInstance['search'].set('al');
+    await flush(fixture);
+    await fixture.componentInstance['runSearch']();
+    await flush(fixture);
+    expect(parties.searchUsers).toHaveBeenCalledTimes(1);
+
+    // Le minuteur programmé par l'effect() de debounce doit avoir été annulé par runSearch() —
+    // sans ce nettoyage, un second appel redondant partait ~500 ms plus tard.
+    vi.advanceTimersByTime(500);
+    await flush(fixture);
+
+    expect(parties.searchUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it("une réponse plus ancienne ne doit jamais écraser des résultats plus récents (Story 32.1, revue de code)", async () => {
+    const { fixture } = await createFixture(makePartie(), MJ_ID);
+    vi.useFakeTimers();
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      searchUsers: ReturnType<typeof vi.fn>;
+    };
+    parties.searchUsers.mockClear();
+
+    let resolveStale!: (v: { id: string; pseudo: string }[]) => void;
+    const stale = new Promise<{ id: string; pseudo: string }[]>((res) => {
+      resolveStale = res;
+    });
+    parties.searchUsers.mockImplementationOnce(() => stale);
+
+    fixture.componentInstance['search'].set('al');
+    await flush(fixture);
+    vi.advanceTimersByTime(500);
+    await flush(fixture);
+    expect(parties.searchUsers).toHaveBeenCalledWith('al');
+
+    // Avant que la réponse (périmée) de 'al' ne résolve, l'utilisateur tape 'ali' et déclenche
+    // manuellement une recherche fraîche, qui résout immédiatement.
+    parties.searchUsers.mockResolvedValueOnce([{ id: 'fresh', pseudo: 'Alice' }]);
+    fixture.componentInstance['search'].set('ali');
+    await flush(fixture);
+    await fixture.componentInstance['runSearch']();
+    await flush(fixture);
+    expect(fixture.componentInstance['results']()).toEqual([{ id: 'fresh', pseudo: 'Alice' }]);
+
+    // La réponse périmée ('al') résout après coup : elle ne doit jamais écraser les résultats frais.
+    resolveStale([{ id: 'stale', pseudo: 'Alan' }]);
+    await flush(fixture);
+
+    expect(fixture.componentInstance['results']()).toEqual([{ id: 'fresh', pseudo: 'Alice' }]);
+  });
+});
+
 describe('PartieDetail — invitation par e-mail', () => {
   afterEach(() => TestBed.resetTestingModule());
 

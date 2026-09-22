@@ -539,9 +539,9 @@ development_status:
   epic-31-retrospective: optional
 
   # ── Epic 32 : Vue de partie et chronologie — Palier 9 ──
-  epic-32: backlog
+  epic-32: in-progress
 
-  32-1-autocompletion-des-invitations: backlog
+  32-1-autocompletion-des-invitations: review
 
   32-2-reorganisation-de-la-vue-de-partie: backlog
 

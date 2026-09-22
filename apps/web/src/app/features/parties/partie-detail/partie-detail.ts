@@ -78,6 +78,14 @@ import { IdentityLabel } from '../../../shared/identity/identity-label';
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
 const MJ_INVITATIONS_TAB_INDEX = 1;
 
+/** Story 32.1 : longueur minimale de saisie avant d'interroger `GET /users/search` (autocomplétion
+ *  par pseudo) — en dessous, aucune requête HTTP n'est émise (décidé par l'utilisateur, 2026-09-22). */
+const SEARCH_MIN_LENGTH = 2;
+
+/** Story 32.1 : délai de debounce (ms) avant de déclencher automatiquement `runSearch()` au fil de
+ *  la frappe — pas de lib de debounce, un simple `setTimeout` suffit à l'échelle actuelle. */
+const SEARCH_DEBOUNCE_MS = 500;
+
 @Component({
   selector: 'app-partie-detail',
   imports: [
@@ -178,6 +186,9 @@ export class PartieDetail implements OnInit {
   protected readonly gameSystemContent = signal<GameSystemContentDto | null>(null);
   protected readonly search = signal('');
   protected readonly results = signal<UserSearchResultDto[]>([]);
+  // Story 32.1 : minuteur du debounce d'autocomplétion — annulé/réarmé à chaque frappe, jamais lu
+  // ailleurs qu'ici et dans le nettoyage à la destruction du composant.
+  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly notice = signal<string | null>(null);
   protected readonly inviteEmail = signal('');
   protected readonly invitingByEmail = signal(false);
@@ -423,6 +434,30 @@ export class PartieDetail implements OnInit {
       this.realtime.connect(partieTopic(id));
       this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(id)));
     }
+
+    // Story 32.1 : déclenchement automatique de la recherche d'invitation au fil de la frappe,
+    // debounced à 500 ms, sous garde de longueur minimale (2 caractères) — le bouton/(keyup.enter)
+    // restent un déclenchement manuel de secours (runSearch() applique la même garde).
+    effect(() => {
+      const q = this.search();
+      untracked(() => {
+        if (this.searchDebounceTimer !== null) {
+          clearTimeout(this.searchDebounceTimer);
+          this.searchDebounceTimer = null;
+        }
+        if (q.trim().length < SEARCH_MIN_LENGTH) {
+          this.results.set([]);
+          return;
+        }
+        this.searchDebounceTimer = setTimeout(() => {
+          this.searchDebounceTimer = null;
+          void this.runSearch();
+        }, SEARCH_DEBOUNCE_MS);
+      });
+    });
+    this.destroyRef.onDestroy(() => {
+      if (this.searchDebounceTimer !== null) clearTimeout(this.searchDebounceTimer);
+    });
     // Garde firstRun (même piège que partout ailleurs, cf. l'effect characterSvc.changed() juste
     // en dessous) : le signal peut déjà porter une valeur avant le montage — sans cette garde,
     // refreshPartie()/loadMembers() étaient rechargés une seconde fois inutilement au montage, en
@@ -618,13 +653,25 @@ export class PartieDetail implements OnInit {
   }
 
   async runSearch(): Promise<void> {
+    // Revue de code (Story 32.1) : un déclenchement manuel (bouton/(keyup.enter)) n'annulait jamais
+    // le minuteur du debounce — un `runSearch()` redondant pouvait alors partir ~500 ms plus tard.
+    if (this.searchDebounceTimer !== null) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
     const q = this.search().trim();
     this.notice.set(null);
-    if (!q) {
+    // Story 32.1 : garde de longueur minimale avant tout appel réseau — s'applique aussi bien au
+    // déclenchement automatique (debounce) qu'au bouton/(keyup.enter) manuel de secours.
+    if (q.length < SEARCH_MIN_LENGTH) {
       this.results.set([]);
       return;
     }
     const found = await this.parties.searchUsers(q);
+    // Revue de code (Story 32.1) : une réponse plus ancienne peut résoudre après une plus récente
+    // (double déclenchement manuel/auto rapproché) — n'applique le résultat que si la saisie n'a pas
+    // changé depuis l'appel, sinon une réponse périmée écraserait des résultats déjà plus frais.
+    if (this.search().trim() !== q) return;
     // On masque le MJ et les membres déjà présents.
     const memberIds = new Set(this.members().map((m) => m.userId));
     this.results.set(found.filter((u) => u.id !== this.partie()?.mjId && !memberIds.has(u.id)));
