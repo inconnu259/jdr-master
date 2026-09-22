@@ -1068,9 +1068,8 @@ export class PartiesService {
   /**
    * Remplace l'ensemble complet des chemins de fiche verrouillés (cadenas de visibilité, Story
    * 31.6) pour une Partie — MJ SEUL (`getOwned`, réutilisé tel quel, même garde que les autres
-   * mutations de Partie ci-dessus). Aucun écran MJ dans cette story (31.7, hors périmètre) : ce
-   * point d'entrée existe pour que 31.7 s'appuie sur un mécanisme déjà fonctionnel (décision
-   * utilisateur 2026-09-22).
+   * mutations de Partie ci-dessus). Consommé par l'écran de configuration des cadenas (Story 31.7,
+   * `VisibilityLocks`), qui s'appuie sur ce mécanisme déjà fonctionnel sans le modifier.
    *
    * Jeu DÉCLARATIF COMPLET, comme `PollService.setOptions()` (Story 36.10, D-16, même transaction
    * delete-tout-puis-recrée) : ce qui n'est pas dans `dto.paths` est retiré. Contrairement au vote
@@ -1110,5 +1109,20 @@ export class PartiesService {
     this.realtimeEvents.emit(partieTopic(partieId));
 
     return locks;
+  }
+
+  /**
+   * Lecture symétrique à `setVisibilityLocks()` ci-dessus (Story 31.7) — même garde MJ-only
+   * (`getOwned()`), même forme `{fieldKey, subField}[]`. Alimente l'écran de configuration des
+   * cadenas : un joueur atteignant directement cette route se voit refuser l'accès (403/404),
+   * jamais une liste vide qui laisserait croire qu'aucun cadenas n'est posé.
+   */
+  async getVisibilityLocks(
+    partieId: string,
+    userId: string,
+  ): Promise<{ fieldKey: string; subField: string | null }[]> {
+    await this.getOwned(partieId, userId);
+    const locks = await this.prisma.partieVisibilityLock.findMany({ where: { partieId } });
+    return locks.map((l) => ({ fieldKey: l.fieldKey, subField: l.subField }));
   }
 }

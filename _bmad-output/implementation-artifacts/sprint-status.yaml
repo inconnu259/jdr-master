@@ -1,5 +1,5 @@
 # generated: 2026-06-27
-# last_updated: 2026-09-20
+# last_updated: 2026-09-22
 # project: jdr-master
 # project_key: JDR
 # tracking_system: local
@@ -534,7 +534,7 @@ development_status:
 
   31-6-cadenas-de-visibilite-modele-et-filtrage-serveur: done
 
-  31-7-ecran-de-configuration-des-cadenas: backlog
+  31-7-ecran-de-configuration-des-cadenas: review
 
   epic-31-retrospective: optional
 

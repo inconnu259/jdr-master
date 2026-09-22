@@ -104,9 +104,9 @@ export class PartiesController {
   }
 
   /**
-   * Cadenas de visibilité (Story 31.6) — MJ-only, sans écran (31.7, hors périmètre). PUT et non
-   * PATCH : le corps décrit l'ÉTAT COMPLET des chemins verrouillés voulus, jamais un delta (même
-   * patron que `PUT /parties/:id/poll/:pollId/options`, Story 36.10/D-16).
+   * Cadenas de visibilité (Story 31.6) — MJ-only. PUT et non PATCH : le corps décrit l'ÉTAT
+   * COMPLET des chemins verrouillés voulus, jamais un delta (même patron que
+   * `PUT /parties/:id/poll/:pollId/options`, Story 36.10/D-16).
    */
   @Put(':id/visibility-locks')
   setVisibilityLocks(
@@ -115,5 +115,12 @@ export class PartiesController {
     @Body() dto: SetVisibilityLocksDto,
   ) {
     return this.parties.setVisibilityLocks(id, user.id, dto);
+  }
+
+  /** Lecture symétrique au PUT ci-dessus (Story 31.7) — même garde MJ-only (`getOwned()`) : un
+   *  non-MJ atteignant l'URL directement se voit refuser l'accès (403/404), jamais une liste vide. */
+  @Get(':id/visibility-locks')
+  getVisibilityLocks(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.parties.getVisibilityLocks(id, user.id);
   }
 }

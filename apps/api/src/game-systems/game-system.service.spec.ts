@@ -167,6 +167,44 @@ describe('GameSystemService', () => {
       expect(sheetSchema.equipment.lockableFields).toBeUndefined();
       expect(sheetSchema.narrative.lockableFields).toBeUndefined();
     });
+
+    it('déclare un `label` sur chaque clé et `lockableFieldLabels` sur attributes (Story 31.7) — écran schema-driven, aucun libellé en dur côté écran', async () => {
+      prisma.gameSystem.findUnique.mockResolvedValue({
+        id: 'ryuutama',
+        name: 'Ryuutama',
+        version: '1.0.0',
+      });
+      const schema = await service.getSchema('ryuutama');
+      const sheetSchema = schema.sheetSchema as Record<
+        string,
+        { label?: string; lockableFieldLabels?: Record<string, string> }
+      >;
+      const expectedLabels: Record<string, string> = {
+        classId: 'Classe',
+        specialtyTypeId: 'Spécialité',
+        typeId: 'Type',
+        attributes: 'Attributs',
+        weaponId: 'Arme favorite',
+        customWeapon: 'Arme personnalisée',
+        fetiqueObject: 'Objet fétiche',
+        equipment: 'Équipement',
+        startingEquipment: 'Équipement de départ',
+        narrative: 'Narratif',
+      };
+      for (const [key, label] of Object.entries(expectedLabels)) {
+        expect(sheetSchema[key].label).toBe(label);
+      }
+      expect(sheetSchema.attributes.lockableFieldLabels).toEqual({
+        AGI: 'AGI',
+        ESP: 'ESP',
+        INT: 'INT',
+        VIG: 'VIG',
+      });
+      // Seul `attributes` a des sous-champs déclarés — aucune autre clé n'a de libellés de sous-champ.
+      expect(sheetSchema.customWeapon.lockableFieldLabels).toBeUndefined();
+      expect(sheetSchema.equipment.lockableFieldLabels).toBeUndefined();
+      expect(sheetSchema.narrative.lockableFieldLabels).toBeUndefined();
+    });
   });
 
   describe('getAssetFile', () => {

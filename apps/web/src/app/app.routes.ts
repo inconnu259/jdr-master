@@ -79,6 +79,15 @@ export const routes: Routes = [
           import('./features/parties/partie-detail/partie-detail').then((m) => m.PartieDetail),
       },
       { path: 'parties/:id/edit', loadComponent: partieForm },
+      {
+        // Story 31.7 : MJ-only sans garde de route dédiée — la garde vient du backend
+        // (`getOwned()` sur GET/PUT visibility-locks, cf. Design Notes du spec).
+        path: 'parties/:id/visibility',
+        loadComponent: () =>
+          import('./features/parties/visibility-locks/visibility-locks').then(
+            (m) => m.VisibilityLocks,
+          ),
+      },
       { path: 'parties/:id/calendar', loadComponent: calendarView, data: { mode: 'mj' } },
       {
         path: 'parties/:id/guild-calendar',

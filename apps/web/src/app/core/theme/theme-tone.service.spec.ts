@@ -320,3 +320,13 @@ describe('Tones — section de création depuis « Personnages » (Story 29.16)'
     });
   }
 });
+
+// Story 31.7 — bouton MJ-only "Confidentialité" vers l'écran de configuration des cadenas.
+// Même garde de parité que ci-dessus.
+describe('Tones — bouton "Confidentialité" de PartieDetail (Story 31.7)', () => {
+  for (const theme of THEMES) {
+    it(`${theme} porte la clé partie.visibility_btn, non vide`, () => {
+      expect(TONE_MAP[theme]['partie.visibility_btn']).toBeTruthy();
+    });
+  }
+});

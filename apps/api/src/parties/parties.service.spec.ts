@@ -2096,6 +2096,49 @@ describe('PartiesService', () => {
       expect(result).toEqual([{ fieldKey: 'classId', subField: null }]);
     });
   });
+
+  describe('getVisibilityLocks() — Story 31.7, lecture symétrique au PUT', () => {
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+    });
+
+    it('MJ seul : joueur non-MJ → ForbiddenException, aucune lecture de verrou', async () => {
+      await expect(service.getVisibilityLocks('p1', 'joueur1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.partieVisibilityLock.findMany).not.toHaveBeenCalled();
+    });
+
+    it('partie introuvable → NotFoundException (même garde getOwned() que le PUT)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(null);
+      await expect(service.getVisibilityLocks('p1', 'mj1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('MJ : lit les verrous persistés pour cette partie, même forme {fieldKey, subField}[]', async () => {
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { partieId: 'p1', fieldKey: 'classId', subField: null },
+        { partieId: 'p1', fieldKey: 'attributes', subField: 'AGI' },
+      ]);
+
+      const result = await service.getVisibilityLocks('p1', 'mj1');
+
+      expect(prisma.partieVisibilityLock.findMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+      });
+      expect(result).toEqual([
+        { fieldKey: 'classId', subField: null },
+        { fieldKey: 'attributes', subField: 'AGI' },
+      ]);
+    });
+
+    it('aucun verrou posé → tableau vide (pas une erreur)', async () => {
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([]);
+      const result = await service.getVisibilityLocks('p1', 'mj1');
+      expect(result).toEqual([]);
+    });
+  });
 });
 
 describe('GetAvailableSlotsDto', () => {

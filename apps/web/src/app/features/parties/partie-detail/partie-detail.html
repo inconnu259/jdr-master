@@ -380,6 +380,9 @@
         <a mat-button [routerLink]="['/parties', p.id, 'edit']">
           <mat-icon>edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
         </a>
+        <a mat-button [routerLink]="['/parties', p.id, 'visibility']">
+          <mat-icon>lock</mat-icon> {{ theme.tone()['partie.visibility_btn'] }}
+        </a>
         @if (p.status !== 'TERMINEE') {
           <button mat-button (click)="closeGame(p)">
             <mat-icon>flag</mat-icon> {{ theme.tone()['partie.close_btn'] }}

@@ -1106,10 +1106,32 @@ export interface CreateCharacterDto {
   sheetData: SheetData;
 }
 
+/** Description d'une clé de `sheetSchema` (Story 31.6/31.7) — `lockable`/`lockableFields`
+ *  déclarent ce que l'écran de configuration des cadenas (31.7) peut proposer à la coche, sans
+ *  aucune liste écrite en dur côté écran. `label`/`lockableFieldLabels` portent les libellés
+ *  affichés (mêmes textes que `creationSteps`/la fiche personnage, jamais un nouveau libellé
+ *  inventé pour cet écran). */
+export interface SheetSchemaFieldDto {
+  type: string;
+  optional?: boolean;
+  fields?: string[];
+  lockable?: boolean;
+  lockableFields?: string[];
+  label: string;
+  lockableFieldLabels?: Record<string, string>;
+}
+
 /** Réponse de GET /game-systems/:id/schema. */
 export interface GameSystemSchemaDto {
-  sheetSchema: unknown;
+  sheetSchema: Record<string, SheetSchemaFieldDto>;
   creationSteps: unknown[];
+}
+
+/** Un chemin verrouillé (Story 31.6/31.7) — miroir du retour de `setVisibilityLocks()`/
+ *  `getVisibilityLocks()` côté API, jamais réimporté depuis `apps/api`. */
+export interface VisibilityLockPathDto {
+  fieldKey: string;
+  subField: string | null;
 }
 
 /** Entrée de contenu générique d'un système de jeu (ex: une classe, un type, une arme). */

@@ -246,22 +246,50 @@ export class GameSystemService implements OnApplicationBootstrap {
       // ci-dessous (décision utilisateur 2026-09-22) — `classChoices`/`classCapabilities`/
       // `magicSeason`/`knownRitualSpells`/`levelUps` restent hors périmètre (lacune préexistante
       // du schéma, non traitée ici).
+      // Story 31.7 : `label`/`lockableFieldLabels` reprennent les libellés déjà établis ailleurs
+      // (`creationSteps` ci-dessous, `character-sheet.html`, `wizard-summary.ts` pour
+      // `specialtyTypeId` → "Spécialité") — seuls `customWeapon`/`startingEquipment` n'ont pas
+      // d'équivalent affiché ailleurs et gagnent donc ici leur premier libellé français (décision
+      // utilisateur 2026-09-22, cf. Code Map du spec). Dans tous les cas, l'écran de configuration
+      // des cadenas ne fait qu'afficher ce que ce schéma déclare (AC1, aucune liste en dur).
       sheetSchema: {
-        classId: { type: 'string', lockable: true },
-        specialtyTypeId: { type: 'string', optional: true, lockable: true },
-        typeId: { type: 'string', lockable: true },
+        classId: { type: 'string', lockable: true, label: 'Classe' },
+        specialtyTypeId: {
+          type: 'string',
+          optional: true,
+          lockable: true,
+          label: 'Spécialité',
+        },
+        typeId: { type: 'string', lockable: true, label: 'Type' },
         attributes: {
           type: 'object',
           fields: ['AGI', 'ESP', 'INT', 'VIG'],
           lockable: true,
           lockableFields: ['AGI', 'ESP', 'INT', 'VIG'],
+          label: 'Attributs',
+          lockableFieldLabels: { AGI: 'AGI', ESP: 'ESP', INT: 'INT', VIG: 'VIG' },
         },
-        weaponId: { type: 'string', optional: true, lockable: true },
-        customWeapon: { type: 'object', optional: true, lockable: true },
-        fetiqueObject: { type: 'string', optional: true, lockable: true },
-        equipment: { type: 'object', optional: true, lockable: true },
-        startingEquipment: { type: 'array', optional: true, lockable: true },
-        narrative: { type: 'object', optional: true, lockable: true },
+        weaponId: { type: 'string', optional: true, lockable: true, label: 'Arme favorite' },
+        customWeapon: {
+          type: 'object',
+          optional: true,
+          lockable: true,
+          label: 'Arme personnalisée',
+        },
+        fetiqueObject: {
+          type: 'string',
+          optional: true,
+          lockable: true,
+          label: 'Objet fétiche',
+        },
+        equipment: { type: 'object', optional: true, lockable: true, label: 'Équipement' },
+        startingEquipment: {
+          type: 'array',
+          optional: true,
+          lockable: true,
+          label: 'Équipement de départ',
+        },
+        narrative: { type: 'object', optional: true, lockable: true, label: 'Narratif' },
       },
       creationSteps: [
         { key: 'classId', label: 'Classe' },
