@@ -75,4 +75,38 @@ describe('SetVisibilityLocksDto', () => {
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === 'paths')).toBe(true);
   });
+
+  it("rejette un subField sur une clé qui n'en déclare aucun (revue de code : narrative.name aurait retiré le nom du personnage)", async () => {
+    const dto = plainToInstance(SetVisibilityLocksDto, {
+      paths: [{ fieldKey: 'narrative', subField: 'name' }],
+    });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'paths')).toBe(true);
+  });
+
+  it('rejette un subField sur une clé objet sans lockableFields (equipment.individual)', async () => {
+    const dto = plainToInstance(SetVisibilityLocksDto, {
+      paths: [{ fieldKey: 'equipment', subField: 'individual' }],
+    });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'paths')).toBe(true);
+  });
+
+  it("rejette un subField inconnu sur une clé qui déclare pourtant une liste (attributes.foo)", async () => {
+    const dto = plainToInstance(SetVisibilityLocksDto, {
+      paths: [{ fieldKey: 'attributes', subField: 'foo' }],
+    });
+    const errors = await validate(dto);
+    expect(errors.some((e) => e.property === 'paths')).toBe(true);
+  });
+
+  it('accepte chacun des 4 sous-champs déclarés pour attributes', async () => {
+    for (const subField of ['AGI', 'ESP', 'INT', 'VIG']) {
+      const dto = plainToInstance(SetVisibilityLocksDto, {
+        paths: [{ fieldKey: 'attributes', subField }],
+      });
+      const errors = await validate(dto);
+      expect(errors).toHaveLength(0);
+    }
+  });
 });

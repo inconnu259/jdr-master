@@ -7,7 +7,11 @@ import {
   IsString,
   Matches,
   MaxLength,
+  Validate,
   ValidateNested,
+  ValidatorConstraint,
+  type ValidationArguments,
+  type ValidatorConstraintInterface,
 } from 'class-validator';
 
 // Autorise les identifiants de sous-clé (camelCase alphanumérique) — jamais une chaîne libre.
@@ -40,6 +44,36 @@ const LOCKABLE_FIELD_KEYS = [
   'narrative',
 ] as const;
 
+/**
+ * Sous-champs verrouillables par clé (revue de code du 2026-09-22, story 31.6) — miroir de
+ * `lockableFields` dans `sheetSchema` (`GameSystemService.getSchema`), même raison de duplication
+ * figée que `LOCKABLE_FIELD_KEYS` ci-dessus (cycle de modules `PartiesModule`↔`GameSystemModule`).
+ * Une clé ABSENTE de cette table n'a AUCUN sous-champ verrouillable (verrouillable en bloc
+ * seulement) : sans ce garde-fou, `{fieldKey:'narrative', subField:'name'}` était accepté et
+ * retirait réellement le NOM du personnage, alors que le schéma ne déclare aucun sous-champ
+ * verrouillable pour `narrative` — même défaut que celui déjà corrigé pour `fieldKey` (`levelUps`),
+ * jamais étendu à `subField`.
+ */
+const LOCKABLE_SUB_FIELDS: Partial<Record<(typeof LOCKABLE_FIELD_KEYS)[number], readonly string[]>> =
+  {
+    attributes: ['AGI', 'ESP', 'INT', 'VIG'],
+  };
+
+@ValidatorConstraint({ name: 'subFieldMatchesFieldKey', async: false })
+class SubFieldMatchesFieldKeyConstraint implements ValidatorConstraintInterface {
+  validate(subField: unknown, args: ValidationArguments): boolean {
+    if (subField === undefined) return true;
+    const fieldKey = (args.object as VisibilityLockPathInput).fieldKey;
+    const allowed = LOCKABLE_SUB_FIELDS[fieldKey as (typeof LOCKABLE_FIELD_KEYS)[number]];
+    return Array.isArray(allowed) && allowed.includes(subField as string);
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    const fieldKey = (args.object as VisibilityLockPathInput).fieldKey;
+    return `subField invalide pour fieldKey "${fieldKey}"`;
+  }
+}
+
 class VisibilityLockPathInput {
   @IsIn(LOCKABLE_FIELD_KEYS)
   @MaxLength(64)
@@ -49,6 +83,7 @@ class VisibilityLockPathInput {
   @IsString()
   @Matches(FIELD_KEY_PATTERN)
   @MaxLength(64)
+  @Validate(SubFieldMatchesFieldKeyConstraint)
   subField?: string;
 }
 
@@ -57,11 +92,8 @@ class VisibilityLockPathInput {
  * (même patron que `SetPollOptionsDto`, Story 36.10/D-16) : ce qui n'est pas dans `paths` est
  * retiré par `PartiesService.setVisibilityLocks()`.
  *
- * `subField` reste validé par forme seulement (`FIELD_KEY_PATTERN`), pas par une liste figée : les
- * sous-champs valides varient selon `fieldKey` (seul `attributes` en déclare aujourd'hui, cf.
- * `lockableFields` dans `GameSystemService.getSchema`) — un `subField` qui ne correspond à rien de
- * réel reste inerte en lecture (`CharacterService.toDto()` ne retire que ce qui existe dans
- * `sheetData`), même raisonnement que pour `fieldKey` avant ce correctif.
+ * `subField` est validé contre `LOCKABLE_SUB_FIELDS` (voir ci-dessus) : un sous-champ qui n'est pas
+ * déclaré pour ce `fieldKey` est rejeté à l'entrée, jamais silencieusement inerte.
  */
 export class SetVisibilityLocksDto {
   @IsArray()
