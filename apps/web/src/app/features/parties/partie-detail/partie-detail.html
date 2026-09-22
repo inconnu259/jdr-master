@@ -29,182 +29,230 @@
     <mat-card-content>
       <mat-tab-group [selectedIndex]="selectedTabIndex()" (selectedIndexChange)="onTabIndexChange($event)">
         <mat-tab label="Détails">
-            @if (p.description) {
-              <p>{{ p.description }}</p>
-            } @else {
-              <p class="muted">{{ theme.tone()['partie.no_description'] }}</p>
-            }
+            <!-- Story 32.2 : l'onglet Détails est regroupé en trois zones -- Action, Consultation,
+                 Référence, dans cet ordre -- plutôt que juxtaposé sans hiérarchie. Chaque bloc garde
+                 exactement sa condition d'affichage et son comportement interne d'avant cette story ;
+                 seuls sa position et son regroupement visuel changent. Patron de décision documentée
+                 bloc par bloc comme la Story 36.11 (calendar-agenda-view). Zone Action en tête pour
+                 rester visible sans défilement sur mobile (seuil unique du projet, 1024px, déjà
+                 utilisé par isDesktop() dans ce composant). -->
 
-            <section class="scheduling-widget">
-              <h3>{{ theme.tone()['partie.scheduling_title'] }}</h3>
-              @if (nextSessionLabel()) {
-                <p class="next-session-date">{{ nextSessionLabel() }}</p>
-              } @else {
-                <p class="muted">{{ theme.tone()['partie.no_session'] }}</p>
-              }
-              @if (activePolls().length > 0) {
-                <p class="poll-status-line">{{ pollStatusLabel() }}</p>
-              }
+            <section class="details-zone details-zone--action">
+              <h3 class="details-zone__title">{{ theme.tone()['partie.details_zone_action'] }}</h3>
+
+              <!-- Widget séance : CTA (vote/oracle des créneaux) et contexte de date (prochaine
+                   séance, statut du vote) restent un bloc unique -- scinder romprait le contexte
+                   sans bénéfice net (Design Notes de la story) -- Action. -->
+              <section class="scheduling-widget">
+                <h4>{{ theme.tone()['partie.scheduling_title'] }}</h4>
+                @if (nextSessionLabel()) {
+                  <p class="next-session-date">{{ nextSessionLabel() }}</p>
+                } @else {
+                  <p class="muted">{{ theme.tone()['partie.no_session'] }}</p>
+                }
+                @if (activePolls().length > 0) {
+                  <p class="poll-status-line">{{ pollStatusLabel() }}</p>
+                }
+                @if (isMj()) {
+                  <a mat-flat-button color="primary" [routerLink]="['/parties', p.id, 'calendar']">
+                    {{ theme.tone()['cta.find_date'] }}
+                  </a>
+                } @else {
+                  <a mat-stroked-button [routerLink]="['/parties', p.id, 'guild-calendar']">
+                    {{ activePolls().length > 0 ? theme.tone()['poll.vote_pending'] : theme.tone()['cta.guild_calendar'] }}
+                  </a>
+                }
+              </section>
+
               @if (isMj()) {
-                <a mat-flat-button color="primary" [routerLink]="['/parties', p.id, 'calendar']">
-                  {{ theme.tone()['cta.find_date'] }}
-                </a>
-              } @else {
-                <a mat-stroked-button [routerLink]="['/parties', p.id, 'guild-calendar']">
-                  {{ activePolls().length > 0 ? theme.tone()['poll.vote_pending'] : theme.tone()['cta.guild_calendar'] }}
-                </a>
+                <!-- Distribution d'XP : déclenchée depuis cet écran -- Action. L'historique
+                     (app-xp-history) est un journal en lecture seule, extrait vers la zone
+                     Consultation ci-dessous (Story 32.2). -->
+                <section class="xp-section">
+                  <button type="button" mat-stroked-button (click)="showXpPanel.set(!showXpPanel())">
+                    {{ theme.tone()['evolution.xp_distribute_cta'] }}
+                  </button>
+                  @if (showXpPanel()) {
+                    <app-xp-distribution-panel
+                      [partieId]="p.id"
+                      [characters]="characters()"
+                      (distributed)="onXpDistributed()"
+                    />
+                  }
+                </section>
+              }
+
+              @if (isMj()) {
+                <!-- Publication d'annonce : action MJ déclenchée depuis cet écran -- Action. Le fil
+                     de lecture des annonces publiées (campaignAnnouncements) vit en zone
+                     Consultation, avec le bandeau transitoire ci-dessous. -->
+                <section class="announcement-section">
+                  <button
+                    type="button"
+                    mat-stroked-button
+                    (click)="showAnnouncementForm.set(!showAnnouncementForm())"
+                  >
+                    {{ theme.tone()['announcement.publish_cta'] }}
+                  </button>
+                  @if (showAnnouncementForm()) {
+                    <app-announcement-form [partieId]="p.id" (published)="onAnnouncementPublished()" />
+                  }
+                </section>
               }
             </section>
 
-            @if (notice()) {
-              <p class="notice">{{ notice() }}</p>
-            }
+            @if (hasConsultationContent()) {
+              <!-- Revue de code (Story 32.2) : garde nécessaire -- sans elle, un joueur sans
+                   notice() ni annonce de campagne (isMj() faux ⇒ pas d'historique d'XP non plus)
+                   verrait un titre de zone Consultation vide, sur le modèle du garde-fou déjà
+                   appliqué à la zone Référence (Ryuutama/non-Ryuutama). -->
+              <section class="details-zone details-zone--consultation">
+                <h3 class="details-zone__title">{{ theme.tone()['partie.details_zone_consultation'] }}</h3>
 
-            @if (isMj()) {
-              <section class="xp-section">
-                <button type="button" mat-stroked-button (click)="showXpPanel.set(!showXpPanel())">
-                  {{ theme.tone()['evolution.xp_distribute_cta'] }}
-                </button>
-                @if (showXpPanel()) {
-                  <app-xp-distribution-panel
-                    [partieId]="p.id"
-                    [characters]="characters()"
-                    (distributed)="onXpDistributed()"
-                  />
+                <!-- Bandeau d'annonce transitoire (confirmation d'action) : lecture seule, pas une
+                     action en soi -- Consultation. -->
+                @if (notice()) {
+                  <p class="notice">{{ notice() }}</p>
                 }
-                <app-xp-history [distributions]="xpDistributions()" [characters]="characters()" />
-              </section>
-            }
 
-            @if (isMj()) {
-              <section class="announcement-section">
-                <button
-                  type="button"
-                  mat-stroked-button
-                  (click)="showAnnouncementForm.set(!showAnnouncementForm())"
-                >
-                  {{ theme.tone()['announcement.publish_cta'] }}
-                </button>
-                @if (showAnnouncementForm()) {
-                  <app-announcement-form [partieId]="p.id" (published)="onAnnouncementPublished()" />
+                @if (isMj()) {
+                  <!-- Historique des distributions d'XP : journal en lecture seule -- extrait de la
+                       zone Action (Story 32.2), c'est une consultation, pas une action. -->
+                  <app-xp-history [distributions]="xpDistributions()" [characters]="characters()" />
                 }
-              </section>
-            }
 
-            @if (campaignAnnouncements().length > 0) {
-              <section class="announcements-feed">
-                @for (a of campaignAnnouncements(); track a.id) {
-                  <app-annonce-card
-                    [announcement]="a"
-                    [scopeLabel]="campaignScopeLabel()"
-                    [unseen]="unseenAnnouncementIds().has(a.id)"
-                    (opened)="markAnnouncementOpened(a.id)"
-                  />
+                @if (campaignAnnouncements().length > 0) {
+                  <!-- Fil d'annonces de campagne : flux en lecture seule -- Consultation. -->
+                  <section class="announcements-feed">
+                    @for (a of campaignAnnouncements(); track a.id) {
+                      <app-annonce-card
+                        [announcement]="a"
+                        [scopeLabel]="campaignScopeLabel()"
+                        [unseen]="unseenAnnouncementIds().has(a.id)"
+                        (opened)="markAnnouncementOpened(a.id)"
+                      />
+                    }
+                  </section>
                 }
               </section>
             }
 
-            @if (p.gameSystemId === 'ryuutama') {
-              <section class="reference-sheets">
-                <h3>{{ theme.tone()['partie.reference_sheets_title'] }}</h3>
-                <div class="reference-sheets__links">
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingReferenceAsset()"
-                    (click)="downloadAsset('journal', 'reference')"
-                  >
-                    {{ theme.tone()['partie.asset_journal_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingReferenceAsset()"
-                    (click)="downloadAsset('carte', 'reference')"
-                  >
-                    {{ theme.tone()['partie.asset_carte_cta'] }}
-                  </button>
-                </div>
-                @if (referenceAssetError(); as error) {
-                  <p class="reference-sheets__error">{{ error }}</p>
-                }
-              </section>
-            }
+            <section class="details-zone details-zone--reference">
+              <h3 class="details-zone__title">{{ theme.tone()['partie.details_zone_reference'] }}</h3>
 
-            @if (isMj() && p.gameSystemId === 'ryuutama') {
-              <section class="prep-sheets">
-                <h3>{{ theme.tone()['partie.prep_sheets_title'] }}</h3>
-                <div class="prep-sheets__links">
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('monde', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_monde_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('monstre', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_monstre_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('ville', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_ville_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('objectif-chasse', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_objectif_chasse_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('objectif-quete', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_objectif_quete_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('objectif-voyage', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_objectif_voyage_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('oeuf-de-bataille', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_oeuf_de_bataille_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('structure', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_structure_cta'] }}
-                  </button>
-                </div>
-                @if (prepAssetError(); as error) {
-                  <p class="prep-sheets__error">{{ error }}</p>
-                }
-              </section>
-            }
+              <!-- Description de la partie : document statique de support -- Référence. -->
+              @if (p.description) {
+                <p>{{ p.description }}</p>
+              } @else {
+                <p class="muted">{{ theme.tone()['partie.no_description'] }}</p>
+              }
+
+              @if (p.gameSystemId === 'ryuutama') {
+                <!-- Fiches de référence Ryuutama (journal/carte) : documents statiques de support,
+                     consultés au besoin -- Référence. -->
+                <section class="reference-sheets">
+                  <h4>{{ theme.tone()['partie.reference_sheets_title'] }}</h4>
+                  <div class="reference-sheets__links">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="downloadingReferenceAsset()"
+                      (click)="downloadAsset('journal', 'reference')"
+                    >
+                      {{ theme.tone()['partie.asset_journal_cta'] }}
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="downloadingReferenceAsset()"
+                      (click)="downloadAsset('carte', 'reference')"
+                    >
+                      {{ theme.tone()['partie.asset_carte_cta'] }}
+                    </button>
+                  </div>
+                  @if (referenceAssetError(); as error) {
+                    <p class="reference-sheets__error">{{ error }}</p>
+                  }
+                </section>
+              }
+
+              @if (isMj() && p.gameSystemId === 'ryuutama') {
+                <!-- Fiches de préparation MJ (monde, monstres, structure...) : documents statiques
+                     de support, consultés au besoin -- Référence. -->
+                <section class="prep-sheets">
+                  <h4>{{ theme.tone()['partie.prep_sheets_title'] }}</h4>
+                  <div class="prep-sheets__links">
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="downloadingPrepAsset()"
+                      (click)="downloadAsset('monde', 'prep')"
+                    >
+                      {{ theme.tone()['partie.asset_monde_cta'] }}
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="downloadingPrepAsset()"
+                      (click)="downloadAsset('monstre', 'prep')"
+                    >
+                      {{ theme.tone()['partie.asset_monstre_cta'] }}
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="downloadingPrepAsset()"
+                      (click)="downloadAsset('ville', 'prep')"
+                    >
+                      {{ theme.tone()['partie.asset_ville_cta'] }}
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="downloadingPrepAsset()"
+                      (click)="downloadAsset('objectif-chasse', 'prep')"
+                    >
+                      {{ theme.tone()['partie.asset_objectif_chasse_cta'] }}
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="downloadingPrepAsset()"
+                      (click)="downloadAsset('objectif-quete', 'prep')"
+                    >
+                      {{ theme.tone()['partie.asset_objectif_quete_cta'] }}
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="downloadingPrepAsset()"
+                      (click)="downloadAsset('objectif-voyage', 'prep')"
+                    >
+                      {{ theme.tone()['partie.asset_objectif_voyage_cta'] }}
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="downloadingPrepAsset()"
+                      (click)="downloadAsset('oeuf-de-bataille', 'prep')"
+                    >
+                      {{ theme.tone()['partie.asset_oeuf_de_bataille_cta'] }}
+                    </button>
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      [disabled]="downloadingPrepAsset()"
+                      (click)="downloadAsset('structure', 'prep')"
+                    >
+                      {{ theme.tone()['partie.asset_structure_cta'] }}
+                    </button>
+                  </div>
+                  @if (prepAssetError(); as error) {
+                    <p class="prep-sheets__error">{{ error }}</p>
+                  }
+                </section>
+              }
+            </section>
         </mat-tab>
 
         @if (!isMj()) {

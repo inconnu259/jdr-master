@@ -343,3 +343,23 @@ describe('Tones — statistiques dérivées masquées sur CharacterSheet (correc
     });
   }
 });
+
+// Story 32.2 — les trois titres de zone de l'onglet Détails (Action/Consultation/Référence). Même
+// garde de parité que ci-dessus (36.11/36.14/31.1) : une clé posée dans un seul thème rendrait
+// `undefined` à l'écran dans les deux autres, invisible à tout test de composant (ils tournent tous
+// sur le thème par défaut).
+describe('Tones — zones de l’onglet Détails de PartieDetail (Story 32.2)', () => {
+  const KEYS = [
+    'partie.details_zone_action',
+    'partie.details_zone_consultation',
+    'partie.details_zone_reference',
+  ];
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${KEYS.length} clés, toutes non vides`, () => {
+      for (const key of KEYS) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+      }
+    });
+  }
+});

@@ -139,6 +139,13 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.asset_objectif_voyage_cta': 'Objectif — Voyage',
     'partie.asset_oeuf_de_bataille_cta': 'Œuf de bataille',
     'partie.asset_structure_cta': 'Structure',
+    /* — zones de l'onglet Détails (Story 32.2) — noms CONTRACTUELS, identiques dans les trois
+       thèmes (même principe que cta.destiny_mode, Story 36.9) : ce sont les trois catégories que
+       l'épic nomme explicitement (Action/Consultation/Référence), pas un intitulé libre à décliner
+       par thème. La clé existe pour qu'un thème futur puisse malgré tout les teinter. */
+    'partie.details_zone_action': 'Action',
+    'partie.details_zone_consultation': 'Consultation',
+    'partie.details_zone_reference': 'Référence',
     'partie.notice_copy': 'Parchemin copié dans la besace.',
     'partie.edit_btn': 'Retranscrire',
     'partie.visibility_btn': 'Sceller des secrets',
@@ -544,6 +551,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.asset_objectif_voyage_cta': 'Objectif — Voyage',
     'partie.asset_oeuf_de_bataille_cta': 'Œuf de bataille',
     'partie.asset_structure_cta': 'Structure',
+    /* — zones de l'onglet Détails (Story 32.2) — noms CONTRACTUELS, identiques dans les trois
+       thèmes (même principe que cta.destiny_mode, Story 36.9). */
+    'partie.details_zone_action': 'Action',
+    'partie.details_zone_consultation': 'Consultation',
+    'partie.details_zone_reference': 'Référence',
     'partie.notice_copy': 'Laissez-passer copié dans la gibecière.',
     'partie.edit_btn': 'Rebattre',
     'partie.visibility_btn': 'Voiler des secrets',
@@ -944,6 +956,11 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.asset_objectif_voyage_cta': 'Objectif — Voyage',
     'partie.asset_oeuf_de_bataille_cta': 'Œuf de bataille',
     'partie.asset_structure_cta': 'Structure',
+    /* — zones de l'onglet Détails (Story 32.2) — noms CONTRACTUELS, identiques dans les trois
+       thèmes (même principe que cta.destiny_mode, Story 36.9). */
+    'partie.details_zone_action': 'Action',
+    'partie.details_zone_consultation': 'Consultation',
+    'partie.details_zone_reference': 'Référence',
     'partie.notice_copy': 'Badge copié dans le carnet de bord.',
     'partie.edit_btn': 'Recalibrer',
     'partie.visibility_btn': 'Verrouiller les plans',

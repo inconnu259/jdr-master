@@ -2778,3 +2778,151 @@ describe('PartieDetail — clôture explicite (Story 29.6)', () => {
     expect(el.querySelector('.closed-banner')).toBeFalsy();
   });
 });
+
+// ─── Story 32.2 : regroupement de l'onglet Détails en trois zones (Action/Consultation/Référence) ───
+
+describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const ZONE_ACTION = '.details-zone--action';
+  const ZONE_CONSULTATION = '.details-zone--consultation';
+  const ZONE_REFERENCE = '.details-zone--reference';
+
+  it('les trois titres de zone (Action/Consultation/Référence) sont rendus, thématisés via theme.tone()', async () => {
+    const { el } = await createFixture(makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }), MJ_ID);
+
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(el.querySelector(`${ZONE_ACTION} .details-zone__title`)?.textContent?.trim()).toBe(
+      tone['partie.details_zone_action'],
+    );
+    expect(
+      el.querySelector(`${ZONE_CONSULTATION} .details-zone__title`)?.textContent?.trim(),
+    ).toBe(tone['partie.details_zone_consultation']);
+    expect(el.querySelector(`${ZONE_REFERENCE} .details-zone__title`)?.textContent?.trim()).toBe(
+      tone['partie.details_zone_reference'],
+    );
+  });
+
+  // Revue de code (Story 32.2) : l'ordre des zones est posé une fois pour toutes par le template
+  // (aucune logique ne le fait dépendre d'isDesktop()) — un seul test paramétré sur desktop/mobile
+  // documente que ce même ordre statique tient dans les deux gabarits, sans prétendre vérifier une
+  // garantie mobile-spécifique qui n'existe pas dans le code (AC3 porte sur le CSS, pas sur l'ordre
+  // DOM, qui est identique quel que soit isDesktop()).
+  it.each([true, false])(
+    'la zone Action précède la zone Consultation, elle-même avant la zone Référence, dans le flux du DOM (desktop=%s)',
+    async (desktop) => {
+      const { el } = await createFixture(makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }), MJ_ID, {
+        desktop,
+      });
+
+      const zones = Array.from(el.querySelectorAll('.details-zone'));
+      expect(zones.length).toBe(3);
+      const classNames = zones.map((z) => z.className);
+      const actionIndex = classNames.findIndex((c) => c.includes('details-zone--action'));
+      const consultationIndex = classNames.findIndex((c) => c.includes('details-zone--consultation'));
+      const referenceIndex = classNames.findIndex((c) => c.includes('details-zone--reference'));
+
+      expect(actionIndex).toBe(0);
+      expect(actionIndex).toBeLessThan(consultationIndex);
+      expect(consultationIndex).toBeLessThan(referenceIndex);
+    },
+  );
+
+  it('MJ, système Ryuutama : la zone Action porte le widget séance, la distribution d’XP et la publication d’annonce', async () => {
+    const { el } = await createFixture(makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }), MJ_ID);
+
+    const action = el.querySelector(ZONE_ACTION)!;
+    expect(action.querySelector('.scheduling-widget')).toBeTruthy();
+    expect(action.querySelector('.xp-section')).toBeTruthy();
+    expect(action.querySelector('.announcement-section')).toBeTruthy();
+    // L'historique d'XP n'est plus dans la zone Action (extrait vers Consultation).
+    expect(action.querySelector('app-xp-history')).toBeNull();
+  });
+
+  it('MJ, système Ryuutama : la zone Consultation porte le fil d’annonces et l’historique d’XP (extrait de la zone Action)', async () => {
+    const announcements = [makeAnnouncementDto({ id: 'ann-1', scenarioId: null })];
+    const { el } = await createFixture(
+      makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', kind: 'CAMPAGNE_LINEAIRE' }),
+      MJ_ID,
+      { announcements },
+    );
+
+    const consultation = el.querySelector(ZONE_CONSULTATION)!;
+    expect(consultation.querySelector('.announcements-feed')).toBeTruthy();
+    expect(consultation.querySelector('app-xp-history')).toBeTruthy();
+  });
+
+  it('MJ, système Ryuutama : la zone Référence porte la description, les fiches de référence et les fiches de préparation', async () => {
+    const { el } = await createFixture(
+      makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', description: 'Un récit à découvrir' }),
+      MJ_ID,
+    );
+
+    const reference = el.querySelector(ZONE_REFERENCE)!;
+    expect(reference.textContent).toContain('Un récit à découvrir');
+    expect(reference.querySelector('.reference-sheets')).toBeTruthy();
+    expect(reference.querySelector('.prep-sheets')).toBeTruthy();
+  });
+
+  it('Joueur (non-MJ) : la zone Action est réduite au widget séance, aucun bloc MJ-only dans Consultation/Référence', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+
+    const action = el.querySelector(ZONE_ACTION)!;
+    expect(action.querySelector('.scheduling-widget')).toBeTruthy();
+    expect(action.querySelector('.xp-section')).toBeNull();
+    expect(action.querySelector('.announcement-section')).toBeNull();
+
+    // Revue de code (Story 32.2) : sans annonce de campagne ni bandeau transitoire, un joueur non-MJ
+    // n'a aucun contenu de zone Consultation (isMj() faux ⇒ pas d'historique d'XP non plus) — la
+    // zone entière est absente (hasConsultationContent()), pas seulement vide de bloc MJ-only.
+    expect(el.querySelector(ZONE_CONSULTATION)).toBeNull();
+
+    const reference = el.querySelector(ZONE_REFERENCE)!;
+    // Les fiches de référence Ryuutama restent visibles au joueur (pas MJ-only) ; seules les fiches
+    // de préparation sont MJ-only.
+    expect(reference.querySelector('.reference-sheets')).toBeTruthy();
+    expect(reference.querySelector('.prep-sheets')).toBeNull();
+  });
+
+  it('Système non-Ryuutama : les fiches de référence/préparation sont absentes de la zone Référence, les zones Action/Consultation restent intactes', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const { el } = await createFixture(partie, MJ_ID);
+
+    const reference = el.querySelector(ZONE_REFERENCE)!;
+    expect(reference.querySelector('.reference-sheets')).toBeNull();
+    expect(reference.querySelector('.prep-sheets')).toBeNull();
+
+    const action = el.querySelector(ZONE_ACTION)!;
+    expect(action.querySelector('.scheduling-widget')).toBeTruthy();
+    expect(action.querySelector('.xp-section')).toBeTruthy();
+    expect(action.querySelector('.announcement-section')).toBeTruthy();
+  });
+
+  it('Vote de date en cours : le lien de vote reste dans le widget séance de la zone Action, inchangé', async () => {
+    const partie = makePartie({ mjId: MJ_ID });
+    const poll: SessionPollDto = {
+      id: 'poll1',
+      partieId: 'party-1',
+      status: 'OPEN',
+      scenarioRef: null,
+      expiresAt: null,
+      chosenDate: null,
+      chosenSlot: null,
+      membersCount: 2,
+      options: [
+        {
+          id: 'opt1',
+          date: '2026-08-01T00:00:00.000Z',
+          slot: 'MORNING',
+          votes: [],
+        },
+      ],
+    };
+    const { el } = await createFixture(partie, PLAYER_ID, { poll });
+
+    const link = el.querySelector(`${ZONE_ACTION} .scheduling-widget a[mat-stroked-button]`);
+    expect(link).toBeTruthy();
+    expect(link!.textContent).toContain('Vote de date en cours');
+  });
+});

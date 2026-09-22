@@ -46,6 +46,16 @@ Registre des items de dette technique/UX identifiés en cours de développement 
 - [P:BASSE] `PartieDetail.classLabel()` (roster/cartes de compagnons) renvoie une chaîne vide quand `classId` est verrouillé, sans distinction avec « pas de classe choisie » — même défaut de fond que celui corrigé pour Attributs/Équipement, sur un point d'entrée non audité par ce correctif. [apps/web/src/app/features/parties/partie-detail/partie-detail.ts:340-344]
 - [P:BASSE] `equipment-pdf.service.ts` affiche `0` pour `limite_enc` quand `derived` est masqué, alors que `ryuutama-pdf.service.ts` omet purement les champs concernés pour le même état — déjà noté dans les Implementation Notes du spec 31.6 comme « à harmoniser si besoin lors de la 31.7 », jamais repris depuis. [apps/api/src/characters/equipment-pdf.service.ts:37, packages/game-rules/src/ryuutama/ryuutama-pdf.service.ts]
 
+## Deferred from: bmad-build review of 32-2-reorganisation-de-la-vue-de-partie (2026-09-22)
+
+- [P:BASSE] Le bandeau transitoire `notice()` n'est déclenché que par les 3 actions de l'onglet
+  Invitations (inviter, inviter par e-mail, copier un lien) mais s'affiche dans l'onglet Détails — un
+  onglet différent de celui où l'action a lieu, donc rarement visible au moment où il compte (défaut
+  préexistant, non introduit par la 32.2, qui n'a fait que déplacer sa position à l'intérieur de
+  l'onglet Détails, de la zone Action vers la zone Consultation). Corriger le fond exigerait de revoir
+  où ce bandeau vit (mécanisme partagé/toast plutôt qu'un `<p>` local à un onglet précis) — hors
+  périmètre de cette story. [apps/web/src/app/features/parties/partie-detail/partie-detail.html:109-111, apps/web/src/app/features/parties/partie-detail/partie-detail.ts:663,685,698,739]
+
 ## Deferred from: bmad-build review of spec-31-7-ecran-de-configuration-des-cadenas (2026-09-22)
 
 - [P:MOYENNE] Nouvelle occurrence confirmée par la revue de la story 31.7 : `SetVisibilityLocksDto.LOCKABLE_FIELD_KEYS`/`LOCKABLE_SUB_FIELDS` (déjà signalé `P:BASSE` ci-dessus lors de la revue de la 31.6) restent une liste Ryuutama figée, dupliquée manuellement du littéral `sheetSchema`. La 31.7 en fait le premier consommateur réel qui dérive ses cases à cocher *uniquement* de `sheetSchema` (AC1) — toute future clé `lockable` ajoutée au schéma sans mise à jour correspondante de cette liste ferait apparaître une case dans l'écran MJ dont l'enregistrement échouerait côté serveur (validation DTO), sans message clair pour expliquer pourquoi. Vérifié sans conséquence aujourd'hui (les 10 clés des deux côtés sont identiques), mais le risque n'est plus seulement architectural depuis cette story : il est maintenant atteignable par un MJ via l'écran. [apps/api/src/parties/dto/set-visibility-locks.dto.ts, apps/api/src/game-systems/game-system.service.ts:249-296, apps/web/src/app/features/parties/visibility-locks/visibility-locks.ts]

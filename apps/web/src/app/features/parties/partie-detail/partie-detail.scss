@@ -89,6 +89,35 @@ mat-tab-group {
   align-items: flex-start;
 }
 
+// Story 32.2 : trois zones (Action/Consultation/Référence) dans l'onglet Détails -- pur
+// regroupement visuel, aucun nouveau composant partagé (cf. les contraintes de la story).
+// Espacement vertical entre zones et entre blocs d'une même zone, dans le même esprit que
+// .scheduling-widget/.reference-sheets/.prep-sheets ci-dessous (margin-top, pas de nouvelle
+// dépendance CSS).
+.details-zone {
+  margin-top: 1.5rem;
+
+  &:first-child {
+    margin-top: 0;
+  }
+
+  &__title {
+    margin: 0 0 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--mat-sys-on-surface-variant, #666);
+  }
+
+  // Les blocs internes (scheduling-widget, xp-section, announcement-section, app-xp-history,
+  // announcements-feed, reference-sheets, prep-sheets...) gardent leur propre `margin-top` -- cette
+  // règle évite seulement un double espacement entre le titre de zone et le premier bloc.
+  > .details-zone__title + * {
+    margin-top: 0;
+  }
+}
+
 .muted {
   color: var(--mat-sys-on-surface-variant, #666);
 }
@@ -101,7 +130,9 @@ mat-tab-group {
   border: 1px solid var(--mat-sys-outline-variant, #ccc);
   border-radius: 0.5rem;
 
-  h3 {
+  // Story 32.2 (revue de code) : démoté de h3 à h4 -- le nouveau titre de zone (.details-zone__title)
+  // est désormais le h3 qui regroupe ce bloc, ce h4 reste son enfant dans le plan de titres.
+  h4 {
     margin: 0 0 0.5rem;
     font-size: 0.9rem;
     text-transform: uppercase;
@@ -126,7 +157,8 @@ mat-tab-group {
 .reference-sheets {
   margin-top: 1rem;
 
-  h3 {
+  // Story 32.2 (revue de code) : démoté de h3 à h4, même raison que .scheduling-widget ci-dessus.
+  h4 {
     margin: 0 0 0.5rem;
     font-size: 0.9rem;
     text-transform: uppercase;
@@ -148,7 +180,8 @@ mat-tab-group {
 .prep-sheets {
   margin-top: 1rem;
 
-  h3 {
+  // Story 32.2 (revue de code) : démoté de h3 à h4, même raison que .scheduling-widget ci-dessus.
+  h4 {
     margin: 0 0 0.5rem;
     font-size: 0.9rem;
     text-transform: uppercase;

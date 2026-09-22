@@ -201,6 +201,13 @@ export class PartieDetail implements OnInit {
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
   protected readonly isMj = computed(() => this.partie()?.mjId === this.auth.currentUser()?.id);
 
+  /** Story 32.2 (revue de code) : la zone Consultation de l'onglet Détails ne doit jamais se rendre
+   *  avec un titre de zone et aucun contenu — un joueur sans annonce de campagne ni bandeau
+   *  transitoire n'a ni `notice()`, ni `isMj()` (historique d'XP), ni `campaignAnnouncements()`. */
+  protected readonly hasConsultationContent = computed(
+    () => !!this.notice() || this.isMj() || this.campaignAnnouncements().length > 0,
+  );
+
   /** Personnages de l'utilisateur courant sur cette partie (pas ceux des autres joueurs). */
   protected readonly myCharacters = computed(() => {
     const userId = this.auth.currentUser()?.id;
