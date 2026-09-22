@@ -150,6 +150,11 @@ function makePrisma() {
     user: {
       findMany: jest.fn().mockResolvedValue([]),
     },
+    // Story 31.6 : défaut « rien de verrouillé » (Partie neuve, cf. I/O Matrix du spec) — les
+    // tests dédiés au cadenas de visibilité reconfigurent explicitement ce mock.
+    partieVisibilityLock: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
   // Le client transactionnel réutilise les mêmes mocks (updateMany/snapshot.create) que le client
   // racine — suffisant pour asserter les appels ; le rollback réel n'est pas testé ici.
@@ -655,6 +660,89 @@ describe('CharacterService', () => {
 
     expect(result.viewerIsMj).toBe(false);
     expect(result.ownerIsMj).toBe(false);
+  });
+
+  describe('findOne() — cadenas de visibilité (Story 31.6)', () => {
+    it('Partie neuve, aucune configuration : rien de verrouillé, hiddenFields vide', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      const result = await service.findOne('char1', 'joueur-tiers');
+
+      expect(result.hiddenFields).toEqual([]);
+      expect((result.sheetData as { classId?: string }).classId).toBe('chasseur');
+      expect(result.derived).toEqual(makeCharacter().derived);
+    });
+
+    it('clé simple verrouillée (classId) : absente de sheetData, listée dans hiddenFields, reste inchangé', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { fieldKey: 'classId', subField: null },
+      ]);
+
+      const result = await service.findOne('char1', 'joueur-tiers');
+
+      expect((result.sheetData as { classId?: string }).classId).toBeUndefined();
+      expect(result.hiddenFields).toEqual(['classId']);
+      expect((result.sheetData as { typeId?: string }).typeId).toBe('attaque');
+      expect(result.derived).toEqual(makeCharacter().derived);
+      // AC3 : « absente de la réponse (jamais vide ou nulle) » — pas seulement `undefined` côté
+      // objet JS, la clé doit disparaître de la charge JSON réellement envoyée (`JSON.stringify`
+      // omet une propriété `undefined`, `Object.hasOwn` la retrouverait pourtant après `delete`).
+      expect(JSON.parse(JSON.stringify(result)).sheetData).not.toHaveProperty('classId');
+    });
+
+    it('sous-champ verrouillé (attributes.AGI) : derived retiré en entier, seul AGI absent des autres sous-champs', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { fieldKey: 'attributes', subField: 'AGI' },
+      ]);
+
+      const result = await service.findOne('char1', 'joueur-tiers');
+
+      const attributes = (result.sheetData as { attributes?: Record<string, number> }).attributes;
+      expect(attributes?.AGI).toBeUndefined();
+      expect(attributes?.ESP).toBe(6);
+      expect(attributes?.INT).toBe(6);
+      expect(attributes?.VIG).toBe(8);
+      expect(result.derived).toBeUndefined();
+      expect(result.hiddenFields).toEqual(['attributes.AGI', 'derived']);
+      // AC3/AC4 : `derived` doit disparaître de la charge JSON, pas juste être `undefined` côté objet.
+      const serialized = JSON.parse(JSON.stringify(result));
+      expect(serialized).not.toHaveProperty('derived');
+      expect(serialized.sheetData).not.toHaveProperty(['attributes', 'AGI']);
+    });
+
+    it('le propriétaire voit la fiche entière malgré des verrous configurés (mask jamais résolu)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'u1' }));
+      prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { fieldKey: 'classId', subField: null },
+      ]);
+
+      const result = await service.findOne('char1', 'u1');
+
+      expect(result.hiddenFields).toEqual([]);
+      expect((result.sheetData as { classId?: string }).classId).toBe('chasseur');
+      // Aucune requête DB pour le masque sur le chemin le plus fréquent (revue de code).
+      expect(prisma.partieVisibilityLock.findMany).not.toHaveBeenCalled();
+    });
+
+    it('le MJ voit la fiche entière malgré des verrous configurés (mask jamais résolu)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'u1' }));
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { fieldKey: 'classId', subField: null },
+      ]);
+
+      const result = await service.findOne('char1', 'mj1');
+
+      expect(result.hiddenFields).toEqual([]);
+      expect((result.sheetData as { classId?: string }).classId).toBe('chasseur');
+      expect(prisma.partieVisibilityLock.findMany).not.toHaveBeenCalled();
+    });
   });
 
   it('create() utilise validate et computeDerived de @master-jdr/game-rules', async () => {

@@ -39,6 +39,7 @@ import {
 import { UPLOADS_ROOT } from '../common/uploads-root';
 import { ConvertPartieKindDto } from './dto/convert-partie-kind.dto';
 import { CreatePartieDto } from './dto/create-partie.dto';
+import { SetVisibilityLocksDto } from './dto/set-visibility-locks.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
 /** Traduit un code de refus de conversion (union fermée) en message destiné au MJ.
@@ -1062,5 +1063,52 @@ export class PartiesService {
     }
 
     return results;
+  }
+
+  /**
+   * Remplace l'ensemble complet des chemins de fiche verrouillés (cadenas de visibilité, Story
+   * 31.6) pour une Partie — MJ SEUL (`getOwned`, réutilisé tel quel, même garde que les autres
+   * mutations de Partie ci-dessus). Aucun écran MJ dans cette story (31.7, hors périmètre) : ce
+   * point d'entrée existe pour que 31.7 s'appuie sur un mécanisme déjà fonctionnel (décision
+   * utilisateur 2026-09-22).
+   *
+   * Jeu DÉCLARATIF COMPLET, comme `PollService.setOptions()` (Story 36.10, D-16, même transaction
+   * delete-tout-puis-recrée) : ce qui n'est pas dans `dto.paths` est retiré. Contrairement au vote
+   * (`PollOption` porte des `PollVote` en cascade, jamais recréables à l'identique), une ligne de
+   * `PartieVisibilityLock` ne porte aucune donnée dérivée — un remplacement intégral est sans
+   * risque, pas besoin de diff conserver/créer/retirer.
+   */
+  async setVisibilityLocks(
+    partieId: string,
+    userId: string,
+    dto: SetVisibilityLocksDto,
+  ): Promise<{ fieldKey: string; subField: string | null }[]> {
+    await this.getOwned(partieId, userId);
+
+    const wanted = new Map<string, { fieldKey: string; subField: string | null }>();
+    for (const p of dto.paths) {
+      const subField = p.subField ?? null;
+      // Séparateur `.` sûr : `fieldKey`/`subField` sont validés par `FIELD_KEY_PATTERN`
+      // (`set-visibility-locks.dto.ts`, alphanumérique sans point) — aucune collision possible
+      // entre deux chemins distincts.
+      const key = `${p.fieldKey}.${subField ?? ''}`;
+      if (wanted.has(key)) {
+        throw new BadRequestException('Chemins verrouillés dupliqués');
+      }
+      wanted.set(key, { fieldKey: p.fieldKey, subField });
+    }
+    const locks = [...wanted.values()];
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.partieVisibilityLock.deleteMany({ where: { partieId } });
+      if (locks.length > 0) {
+        await tx.partieVisibilityLock.createMany({
+          data: locks.map((l) => ({ partieId, fieldKey: l.fieldKey, subField: l.subField })),
+        });
+      }
+    });
+    this.realtimeEvents.emit(partieTopic(partieId));
+
+    return locks;
   }
 }

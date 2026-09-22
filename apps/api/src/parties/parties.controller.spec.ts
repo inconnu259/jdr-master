@@ -34,6 +34,7 @@ function makePartiesService() {
     close: jest.fn(),
     reopen: jest.fn(),
     remove: jest.fn(),
+    setVisibilityLocks: jest.fn(),
   };
 }
 
@@ -129,5 +130,11 @@ describe('PartiesController', () => {
   it('remove() route id/user vers PartiesService.remove', async () => {
     await controller.remove(user, 'p1');
     expect(parties.remove).toHaveBeenCalledWith('p1', 'mj1');
+  });
+
+  it('setVisibilityLocks() route id/user/dto vers PartiesService.setVisibilityLocks (Story 31.6)', async () => {
+    const dto = { paths: [{ fieldKey: 'classId' }, { fieldKey: 'attributes', subField: 'AGI' }] };
+    await controller.setVisibilityLocks(user, 'p1', dto);
+    expect(parties.setVisibilityLocks).toHaveBeenCalledWith('p1', 'mj1', dto);
   });
 });

@@ -130,6 +130,43 @@ describe('GameSystemService', () => {
         'Aucun schéma implémenté pour ce système de jeu',
       );
     });
+
+    it('déclare `lockable` sur les 10 clés (Story 31.6) et `lockableFields` sur attributes, mirroir de `fields`', async () => {
+      prisma.gameSystem.findUnique.mockResolvedValue({
+        id: 'ryuutama',
+        name: 'Ryuutama',
+        version: '1.0.0',
+      });
+      const schema = await service.getSchema('ryuutama');
+      const sheetSchema = schema.sheetSchema as Record<
+        string,
+        { lockable?: boolean; lockableFields?: string[]; fields?: string[] }
+      >;
+      const lockableKeys = [
+        'classId',
+        'specialtyTypeId',
+        'typeId',
+        'attributes',
+        'weaponId',
+        'customWeapon',
+        'fetiqueObject',
+        'equipment',
+        'startingEquipment',
+        'narrative',
+      ];
+      for (const key of lockableKeys) {
+        expect(sheetSchema[key]?.lockable).toBe(true);
+      }
+      // Hors périmètre (décision utilisateur 2026-09-22) : ces clés existent mais ne sont PAS
+      // déclarées `lockable` — la lacune reste préexistante, jamais comblée par cette story.
+      expect(sheetSchema).not.toHaveProperty('levelUps');
+
+      expect(sheetSchema.attributes.lockableFields).toEqual(sheetSchema.attributes.fields);
+      // Aucune autre clé objet n'a de sous-champs déclarés ici (pas de `fields` à mirroir).
+      expect(sheetSchema.customWeapon.lockableFields).toBeUndefined();
+      expect(sheetSchema.equipment.lockableFields).toBeUndefined();
+      expect(sheetSchema.narrative.lockableFields).toBeUndefined();
+    });
   });
 
   describe('getAssetFile', () => {

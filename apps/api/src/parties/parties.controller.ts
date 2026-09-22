@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -17,6 +18,7 @@ import { ConvertPartieKindDto } from './dto/convert-partie-kind.dto';
 import { CreatePartieDto } from './dto/create-partie.dto';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
 import { GetHeatmapDto } from './dto/get-heatmap.dto';
+import { SetVisibilityLocksDto } from './dto/set-visibility-locks.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
 const DEFAULT_WEEKS = 8;
@@ -99,5 +101,19 @@ export class PartiesController {
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.parties.remove(id, user.id);
+  }
+
+  /**
+   * Cadenas de visibilité (Story 31.6) — MJ-only, sans écran (31.7, hors périmètre). PUT et non
+   * PATCH : le corps décrit l'ÉTAT COMPLET des chemins verrouillés voulus, jamais un delta (même
+   * patron que `PUT /parties/:id/poll/:pollId/options`, Story 36.10/D-16).
+   */
+  @Put(':id/visibility-locks')
+  setVisibilityLocks(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SetVisibilityLocksDto,
+  ) {
+    return this.parties.setVisibilityLocks(id, user.id, dto);
   }
 }

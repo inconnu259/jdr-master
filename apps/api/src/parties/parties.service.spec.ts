@@ -101,6 +101,11 @@ describe('PartiesService', () => {
       findUnique: jest.Mock;
       findMany: jest.Mock;
     };
+    partieVisibilityLock: {
+      findMany: jest.Mock;
+      deleteMany: jest.Mock;
+      createMany: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
   let avail: {
@@ -165,6 +170,12 @@ describe('PartiesService', () => {
       partieFavorite: {
         findUnique: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
+      },
+      // Story 31.6 — les tests dédiés au cadenas de visibilité reconfigurent explicitement.
+      partieVisibilityLock: {
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
     };
     // $transaction exécute le callback avec le même mock en guise de `tx`
@@ -2024,6 +2035,65 @@ describe('PartiesService', () => {
         where: { id: 'p1' },
         data: { gameSystemId: 'ryuutama' },
       });
+    });
+  });
+
+  describe('setVisibilityLocks() — Story 31.6, cadenas de visibilité', () => {
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+    });
+
+    it('MJ seul : joueur non-MJ → ForbiddenException, aucune écriture', async () => {
+      await expect(
+        service.setVisibilityLocks('p1', 'joueur1', { paths: [{ fieldKey: 'classId' }] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('MJ : remplace intégralement les verrous existants (deleteMany puis createMany, une seule transaction)', async () => {
+      await service.setVisibilityLocks('p1', 'mj1', {
+        paths: [{ fieldKey: 'classId' }, { fieldKey: 'attributes', subField: 'AGI' }],
+      });
+
+      expect(prisma.partieVisibilityLock.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+      });
+      expect(prisma.partieVisibilityLock.createMany).toHaveBeenCalledWith({
+        data: [
+          { partieId: 'p1', fieldKey: 'classId', subField: null },
+          { partieId: 'p1', fieldKey: 'attributes', subField: 'AGI' },
+        ],
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('jeu vide : deleteMany appelé, createMany jamais (aucune ligne à créer)', async () => {
+      await service.setVisibilityLocks('p1', 'mj1', { paths: [] });
+
+      expect(prisma.partieVisibilityLock.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+      });
+      expect(prisma.partieVisibilityLock.createMany).not.toHaveBeenCalled();
+    });
+
+    it('chemins dupliqués (même fieldKey+subField) → BadRequestException, aucune écriture', async () => {
+      await expect(
+        service.setVisibilityLocks('p1', 'mj1', {
+          paths: [
+            { fieldKey: 'attributes', subField: 'AGI' },
+            { fieldKey: 'attributes', subField: 'AGI' },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('renvoie le jeu de verrous persisté', async () => {
+      const result = await service.setVisibilityLocks('p1', 'mj1', {
+        paths: [{ fieldKey: 'classId' }],
+      });
+      expect(result).toEqual([{ fieldKey: 'classId', subField: null }]);
     });
   });
 });

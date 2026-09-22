@@ -881,6 +881,22 @@ export interface CharacterDto {
    * de niveau sans que `level` n'augmente tant que le joueur n'a pas validé le `LevelUpWizard`.
    */
   level: number;
+  /**
+   * Chemins de fiche retirés de cette réponse par le cadenas de visibilité (Story 31.6) — chemin
+   * pointé simple (`"classId"`) ou sous-champ (`"attributes.AGI"`), plus `"derived"` quand
+   * `derived` est retiré en entier (dépendance à `attributes`/`levelUps` verrouillée). Toujours
+   * renvoyé par l'API (tableau vide pour le propriétaire de la fiche et pour le MJ, qui voient
+   * toujours tout — ou quand rien n'est configuré pour la Partie). `sheetData`/`derived` restent
+   * typés pleins ci-dessus (contrat DTO existant) : une clé retirée est simplement absente à
+   * l'exécution (jamais vide ni nulle), signalée ici.
+   *
+   * Optionnel dans CE TYPE (pas côté API, qui le peuple systématiquement) : `apps/web/**` est hors
+   * périmètre de la Story 31.6 (aucune modification, cf. spec) et
+   * `apps/web/src/app/core/characters/character-dto.fixture.ts` construit un `CharacterDto`
+   * littéral sans ce champ — le marquer requis casserait sa compilation sans qu'aucune story
+   * n'ait mandat de la corriger ici.
+   */
+  hiddenFields?: string[];
 }
 
 /** Personnage enrichi du nom de sa Partie d'origine — forme de réponse propre à `GET /me/characters`

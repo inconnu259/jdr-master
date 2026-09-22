@@ -85,6 +85,25 @@ model Partie {
   hommeDragons        HommeDragon[]
   characterGroupRoles CharacterGroupRole[]
   favorites           PartieFavorite[]
+  visibilityLocks     PartieVisibilityLock[]
+}
+
+/// Une clé de fiche verrouillée (anti-spoil) pour une Partie (Story 31.6) — état multi-valué, donc
+/// relationnel (AD-1/AD-16, même convention que `UserCalendarLayer`), jamais un JSON fourre-tout.
+/// Une ligne = une clé (ou sous-clé) effectivement retirée de la fiche pour tout lecteur qui n'est
+/// ni le propriétaire du personnage ni le MJ de la Partie. `fieldKey` référence une clé déclarée
+/// `lockable` dans `sheetSchema` (`GameSystemService.getSchema`) ; `subField` (optionnel) cible un
+/// sous-champ d'une clé objet déclarant `lockableFields` (ex. `fieldKey="attributes"`,
+/// `subField="AGI"`). `subField` null = la clé entière est verrouillée. Écriture MJ-only,
+/// déclarative et complète (`PartiesService.setVisibilityLocks`), jamais un delta.
+model PartieVisibilityLock {
+  id       String  @id @default(uuid())
+  partieId String
+  partie   Partie  @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  fieldKey String
+  subField String?
+
+  @@unique([partieId, fieldKey, subField])
 }
 
 /// Une partie marquée favorite par un utilisateur (Story 29.8) — état multi-valué, donc relationnel

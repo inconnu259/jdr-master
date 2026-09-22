@@ -237,20 +237,31 @@ export class GameSystemService implements OnApplicationBootstrap {
       throw new NotFoundException('Aucun schéma implémenté pour ce système de jeu');
     }
     return {
+      // Story 31.6 : `lockable` déclare, par clé, si le MJ peut la verrouiller (anti-spoil) pour
+      // un lecteur qui n'est ni le propriétaire ni le MJ — propriété DISTINCTE de `fields`
+      // (qui décrit déjà la composition d'une clé objet, ex. `attributes`). `lockableFields`
+      // mirroir `fields` UNIQUEMENT là où `fields` existe déjà (`attributes`) : les autres clés
+      // objet (`customWeapon`/`equipment`/`narrative`) n'ont pas de sous-champs déclarés ici et
+      // restent verrouillables en bloc seulement. Périmètre resserré aux 10 clés déjà déclarées
+      // ci-dessous (décision utilisateur 2026-09-22) — `classChoices`/`classCapabilities`/
+      // `magicSeason`/`knownRitualSpells`/`levelUps` restent hors périmètre (lacune préexistante
+      // du schéma, non traitée ici).
       sheetSchema: {
-        classId: { type: 'string' },
-        specialtyTypeId: { type: 'string', optional: true },
-        typeId: { type: 'string' },
+        classId: { type: 'string', lockable: true },
+        specialtyTypeId: { type: 'string', optional: true, lockable: true },
+        typeId: { type: 'string', lockable: true },
         attributes: {
           type: 'object',
           fields: ['AGI', 'ESP', 'INT', 'VIG'],
+          lockable: true,
+          lockableFields: ['AGI', 'ESP', 'INT', 'VIG'],
         },
-        weaponId: { type: 'string', optional: true },
-        customWeapon: { type: 'object', optional: true },
-        fetiqueObject: { type: 'string', optional: true },
-        equipment: { type: 'object', optional: true },
-        startingEquipment: { type: 'array', optional: true },
-        narrative: { type: 'object', optional: true },
+        weaponId: { type: 'string', optional: true, lockable: true },
+        customWeapon: { type: 'object', optional: true, lockable: true },
+        fetiqueObject: { type: 'string', optional: true, lockable: true },
+        equipment: { type: 'object', optional: true, lockable: true },
+        startingEquipment: { type: 'array', optional: true, lockable: true },
+        narrative: { type: 'object', optional: true, lockable: true },
       },
       creationSteps: [
         { key: 'classId', label: 'Classe' },
