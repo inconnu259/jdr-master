@@ -257,8 +257,10 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_error': "Le parchemin n'a pas pu être copié. Réessayez.",
     'character.owner_badge_mj': 'Maître',
     'character.level_badge': 'Niv. {n}',
-    'character.my_sheet_tab_label': 'Ma fiche',
-    /* — état vide "Ma fiche" (Story 29.15) — */
+    'character.party_sheets_tab_label': 'Fiches',
+    /* — bouton retour vers la partie depuis la fiche d'un personnage — */
+    'character.back_to_partie_cta': 'Retour à la partie',
+    /* — état vide "Fiches" (Story 29.15) — */
     'character.no_character_yet': 'Aucun personnage créé sur cette partie pour l’instant.',
     /* — Homme Dragon (Epic 10, Story 10.1) — */
     'homme-dragon.create_cta': 'Créer mon Homme Dragon',
@@ -658,9 +660,12 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_error': "L'écureuil s'est perdu en chemin. Réessayez.",
     'character.owner_badge_mj': 'Guide',
     'character.level_badge': 'Niv. {n}',
-    'character.my_sheet_tab_label': 'Ma fiche',
-    /* — état vide "Ma fiche" (Story 29.15) — */
-    'character.no_character_yet': 'Aucun compagnon de route éveillé sur cette partie pour l’instant.',
+    'character.party_sheets_tab_label': 'Fiches',
+    /* — bouton retour vers la partie depuis la fiche d'un personnage — */
+    'character.back_to_partie_cta': 'Retour à la partie',
+    /* — état vide "Fiches" (Story 29.15) — */
+    'character.no_character_yet':
+      'Aucun compagnon de route éveillé sur cette partie pour l’instant.',
     /* — Homme Dragon (Epic 10, Story 10.1) — */
     'homme-dragon.create_cta': 'Éveiller mon Homme Dragon',
     'homme-dragon.race_label': 'Lignée',
@@ -1048,9 +1053,12 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_error': "Échec de l'impression pneumatique. Réessayez.",
     'character.owner_badge_mj': 'Ingénieur',
     'character.level_badge': 'Niv. {n}',
-    'character.my_sheet_tab_label': 'Ma fiche',
-    /* — état vide "Ma fiche" (Story 29.15) — */
-    'character.no_character_yet': 'Aucun automate-voyageur assemblé sur cette partie pour l’instant.',
+    'character.party_sheets_tab_label': 'Fiches',
+    /* — bouton retour vers la partie depuis la fiche d'un personnage — */
+    'character.back_to_partie_cta': 'Retour à la partie',
+    /* — état vide "Fiches" (Story 29.15) — */
+    'character.no_character_yet':
+      'Aucun automate-voyageur assemblé sur cette partie pour l’instant.',
     /* — Homme Dragon (Epic 10, Story 10.1) — */
     'homme-dragon.create_cta': 'Assembler mon Homme Dragon',
     'homme-dragon.race_label': 'Modèle',

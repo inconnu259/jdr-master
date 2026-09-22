@@ -1,6 +1,14 @@
 @if (loadError(); as error) {
+  @if (partieId) {
+    <a mat-button [routerLink]="['/parties', partieId]">
+      <mat-icon>arrow_back</mat-icon> {{ theme.tone()['character.back_to_partie_cta'] }}
+    </a>
+  }
   <p class="sheet__load-error">{{ error }}</p>
 } @else if (character(); as c) {
+  <a mat-button [routerLink]="['/parties', c.partieId]">
+    <mat-icon>arrow_back</mat-icon> {{ theme.tone()['character.back_to_partie_cta'] }}
+  </a>
   <article class="sheet">
     <header class="sheet__header">
       <app-character-avatar

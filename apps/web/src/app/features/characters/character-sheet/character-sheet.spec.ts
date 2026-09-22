@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, provideRouter } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
@@ -116,6 +116,9 @@ async function createComponent(
     imports: [CharacterSheet],
     providers: [
       provideNoopAnimations(),
+      // Requis par RouterLink (lien « Retour à la partie ») — pas de navigation réelle testée ici,
+      // même patron que scenario-detail.spec.ts.
+      provideRouter([]),
       { provide: CharacterService, useValue: characterSvc },
       { provide: MatDialog, useValue: dialog },
       { provide: AuthService, useValue: auth },
@@ -220,6 +223,17 @@ describe('CharacterSheet', () => {
     expect(text).not.toContain('technique');
   });
 
+  it('affiche un lien « Retour à la partie » vers /parties/:partieId (spec fiches-personnages-partie-et-retour)', async () => {
+    const { fixture } = await createComponent(makeCharacterService(), 'char1', null, 'u1', 'p1');
+
+    const link: HTMLAnchorElement | null = fixture.nativeElement.querySelector('a[mat-button]');
+    expect(link).toBeTruthy();
+    expect(link!.textContent).toContain('Retour à la partie');
+    // RouterLink résout `href` depuis `c.partieId` — CHARACTER n'en porte pas dans sa fixture
+    // littérale, mais `makeCharacterDto()` (base de CHARACTER) le fixe à 'p1' par défaut.
+    expect(link!.getAttribute('href')).toBe('/parties/p1');
+  });
+
   it('Story 25.2 : personnage avec customWeapon (arme libre) affiche le nom libre + formules de la catégorie référencée', async () => {
     const character = makeCharacterDto({
       sheetData: {
@@ -300,6 +314,18 @@ describe('CharacterSheet', () => {
     const comp = fixture.componentInstance as any;
     expect(comp.loadError()).toBe("Vous n'avez pas accès à cette fiche.");
     expect(fixture.nativeElement.textContent).toContain("Vous n'avez pas accès à cette fiche.");
+  });
+
+  it('échec de chargement (403) → lien « Retour à la partie » affiché malgré tout, pas seulement dans la branche succès (spec fiches-personnages-partie-et-retour)', async () => {
+    const characterSvc = makeCharacterService({
+      get: vi.fn().mockRejectedValue(new HttpErrorResponse({ status: 403 })),
+    });
+    const { fixture } = await createComponent(characterSvc, 'char1', null, 'u1', 'p1');
+
+    const link: HTMLAnchorElement | null = fixture.nativeElement.querySelector('a[mat-button]');
+    expect(link).toBeTruthy();
+    expect(link!.textContent).toContain('Retour à la partie');
+    expect(link!.getAttribute('href')).toBe('/parties/p1');
   });
 
   it('erreur réseau générique → message affiché, pas de plantage', async () => {

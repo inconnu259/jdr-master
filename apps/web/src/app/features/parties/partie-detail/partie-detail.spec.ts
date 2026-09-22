@@ -246,7 +246,9 @@ async function createFixture(
         useValue: {
           listByPartie: vi
             .fn()
-            .mockImplementation(() => options.charactersPromise ?? Promise.resolve(options.characters ?? [])),
+            .mockImplementation(
+              () => options.charactersPromise ?? Promise.resolve(options.characters ?? []),
+            ),
           getGameSystemContent: vi.fn().mockResolvedValue({
             class: [{ key: 'menestrel', data: { label: 'Ménestrel' } }],
           }),
@@ -520,6 +522,173 @@ describe('PartieDetail — chargement des personnages', () => {
   });
 });
 
+// ─── Onglet « Fiches » générique : tous les personnages, le sien en tête (spec
+//     fiches-personnages-partie-et-retour) ──────────────────────────────────
+
+describe('PartieDetail — onglet « Fiches » générique (spec fiches-personnages-partie-et-retour)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  /** Sélectionne l'onglet « Fiches » (rendu en index 1 pour tout joueur non-MJ) — même patron que
+   *  les tests d'atterrissage ci-dessus (Story 29.15). */
+  function clickFichesTab(el: HTMLElement, fixture: ComponentFixture<PartieDetail>): void {
+    const tab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
+      (t) => t.textContent?.trim() === 'Fiches',
+    );
+    tab?.click();
+    fixture.detectChanges();
+  }
+
+  /** `.character-summary-card__name` porte aussi le badge de niveau imbriqué — on le retire avant
+   *  de lire le texte pour ne pas dépendre du whitespace exact entre les deux noeuds. */
+  function cardName(nameEl: Element): string {
+    const clone = nameEl.cloneNode(true) as HTMLElement;
+    clone.querySelector('.character-summary-card__level')?.remove();
+    return clone.textContent?.trim() ?? '';
+  }
+
+  it('le libellé de l’onglet est désormais « Fiches » (plus « Ma fiche »)', async () => {
+    const { el } = await createFixture(makePartie({ gameSystemId: 'ryuutama' }), PLAYER_ID, {
+      desktop: true,
+      noopAnimations: true,
+    });
+
+    const tabLabels = Array.from(el.querySelectorAll('div[role="tab"]')).map((t) =>
+      t.textContent?.trim(),
+    );
+    expect(tabLabels).toContain('Fiches');
+    expect(tabLabels).not.toContain('Ma fiche');
+  });
+
+  it('liste tous les personnages de la partie, le sien en tête, avec le niveau visible sur chacun (AC1)', async () => {
+    const mine = makeCharacterDto({
+      id: 'mine',
+      userId: PLAYER_ID,
+      partieId: 'party-1',
+      level: 3,
+      sheetData: { narrative: { name: 'Fenn' } },
+    });
+    const other1 = makeCharacterDto({
+      id: 'other1',
+      userId: 'other-1',
+      partieId: 'party-1',
+      level: 2,
+      sheetData: { narrative: { name: 'Bram' } },
+    });
+    const other2 = makeCharacterDto({
+      id: 'other2',
+      userId: 'other-2',
+      partieId: 'party-1',
+      level: 5,
+      sheetData: { narrative: { name: 'Iris' } },
+    });
+
+    // Ordre de chargement volontairement différent de l'ordre attendu à l'écran : la partition
+    // « soi d'abord » doit reposer sur charactersSelfFirst(), pas sur l'ordre de characters().
+    const { fixture, el } = await createFixture(
+      makePartie({ gameSystemId: 'ryuutama' }),
+      PLAYER_ID,
+      { desktop: true, noopAnimations: true, characters: [other1, mine, other2] },
+    );
+
+    clickFichesTab(el, fixture);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const names = Array.from(
+      el.querySelectorAll(
+        '.party-sheets-tab app-character-summary-card .character-summary-card__name',
+      ),
+    ).map(cardName);
+    expect(names).toEqual(['Fenn', 'Bram', 'Iris']);
+
+    const levels = Array.from(
+      el.querySelectorAll(
+        '.party-sheets-tab app-character-summary-card .character-summary-card__level',
+      ),
+    ).map((n) => n.textContent?.trim());
+    expect(levels).toEqual(['Niv. 3', 'Niv. 2', 'Niv. 5']);
+  });
+
+  it('joueur sans personnage personnel, d’autres joueurs en ont → message + CTA de création ET la liste des autres personnages en dessous (I/O Matrix, cas 2)', async () => {
+    const other1 = makeCharacterDto({
+      id: 'other1',
+      userId: 'other-1',
+      partieId: 'party-1',
+      level: 1,
+      sheetData: { narrative: { name: 'Bram' } },
+    });
+    const other2 = makeCharacterDto({
+      id: 'other2',
+      userId: 'other-2',
+      partieId: 'party-1',
+      level: 4,
+      sheetData: { narrative: { name: 'Iris' } },
+    });
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+
+    const { fixture, el } = await createFixture(partie, PLAYER_ID, {
+      desktop: true,
+      noopAnimations: true,
+      characters: [other1, other2],
+    });
+
+    // Atterrissage automatique sur « Fiches » (canCreateCharacter() = true, Story 29.15) — pas de
+    // clic explicite nécessaire, mais on le fait quand même pour ne pas dépendre de ce détail.
+    clickFichesTab(el, fixture);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('.party-sheets-tab .muted')?.textContent?.trim()).toBeTruthy();
+    expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeTruthy();
+
+    const names = Array.from(
+      el.querySelectorAll(
+        '.party-sheets-tab app-character-summary-card .character-summary-card__name',
+      ),
+    ).map(cardName);
+    expect(names).toEqual(['Bram', 'Iris']);
+  });
+
+  it('joueur sans personnage personnel, personne d’autre n’en a → message + CTA seulement, aucune carte (I/O Matrix, cas 3)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+
+    const { fixture, el } = await createFixture(partie, PLAYER_ID, {
+      desktop: true,
+      noopAnimations: true,
+      characters: [],
+    });
+
+    clickFichesTab(el, fixture);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(el.querySelector('.party-sheets-tab .muted')?.textContent?.trim()).toBeTruthy();
+    expect(el.querySelector('.party-sheets-tab app-character-summary-card')).toBeNull();
+  });
+
+  it('passe [showOwnerInfo]="true" à app-character-summary-card sur cette liste — exception délibérée et scopée à cet onglet « Fiches » (retour utilisateur : le nom du joueur propriétaire clarifie la liste quand plusieurs compagnons sont affichés) ; la règle générale « jamais pour un joueur » de showOwnerInfo reste inchangée ailleurs (roster, MyCharacters…)', async () => {
+    const mine = makeCharacterDto({
+      id: 'mine',
+      userId: PLAYER_ID,
+      partieId: 'party-1',
+      sheetData: { narrative: { name: 'Fenn' } },
+    });
+    const { fixture, el } = await createFixture(
+      makePartie({ gameSystemId: 'ryuutama' }),
+      PLAYER_ID,
+      { desktop: true, noopAnimations: true, characters: [mine] },
+    );
+
+    clickFichesTab(el, fixture);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const card = fixture.debugElement.query(By.css('.party-sheets-tab app-character-summary-card'))
+      ?.componentInstance as { showOwnerInfo: () => boolean } | undefined;
+    expect(card?.showOwnerInfo()).toBe(true);
+  });
+});
+
 // ─── Nouvelle disposition de la page Partie (Story 6.1) ───────────────────
 
 describe('PartieDetail — roster (Story 6.1)', () => {
@@ -572,7 +741,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     expect(el.querySelector('app-roster-rail')).toBeNull();
 
     const activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
+    expect(activeTab?.textContent?.trim()).toBe('Fiches');
   });
 
   it('desktop + joueur → l\'onglet "Ma fiche" est désormais rendu aussi sur desktop (Story 29.15, unification desktop/mobile)', async () => {
@@ -580,10 +749,10 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     const tabLabels = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
       t.textContent?.trim(),
     );
-    expect(tabLabels).toContain('Ma fiche');
+    expect(tabLabels).toContain('Fiches');
   });
 
-  it("desktop + joueur sans personnage, système sans module → clic sur sa propre ligne du roster ne navigue plus (Story 29.15, revue de code : slot gardé par canCreateCharacter(), plus de cul-de-sac)", async () => {
+  it('desktop + joueur sans personnage, système sans module → clic sur sa propre ligne du roster ne navigue plus (Story 29.15, revue de code : slot gardé par canCreateCharacter(), plus de cul-de-sac)', async () => {
     const partie = makePartie({ gameSystemId: 'draconis' });
     const { el } = await createFixture(partie, PLAYER_ID, { members, desktop: true });
     const router = TestBed.inject((await import('@angular/router')).Router);
@@ -612,13 +781,17 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     });
   });
 
-  it("joueur ayant déjà un personnage sur cette partie → pas de flicker vers « Ma fiche » pendant le chargement de characters() (Story 29.15, revue de code : charactersLoaded)", async () => {
+  it('joueur ayant déjà un personnage sur cette partie → pas de flicker vers « Ma fiche » pendant le chargement de characters() (Story 29.15, revue de code : charactersLoaded)', async () => {
     let resolveCharacters!: (chars: CharacterDto[]) => void;
     const charactersPromise = new Promise<CharacterDto[]>((resolve) => {
       resolveCharacters = resolve;
     });
     const partie = makePartie({ gameSystemId: 'ryuutama' });
-    const existingCharacter = makeCharacterDto({ id: 'char-1', userId: PLAYER_ID, partieId: partie.id });
+    const existingCharacter = makeCharacterDto({
+      id: 'char-1',
+      userId: PLAYER_ID,
+      partieId: partie.id,
+    });
 
     const { fixture, el } = await createFixture(partie, PLAYER_ID, {
       members,
@@ -676,7 +849,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     // characters() révèle qu'il n'a aucun personnage sur cette partie : atterrit désormais sur
     // « Ma fiche ».
     activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
+    expect(activeTab?.textContent?.trim()).toBe('Fiches');
 
     // Un rendu supplémentaire (ex. re-détection de changements) ne doit jamais le faire basculer
     // ailleurs une fois genuinely atterri sur « Ma fiche ».
@@ -684,7 +857,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
+    expect(activeTab?.textContent?.trim()).toBe('Fiches');
   });
 
   it("conserve la sélection manuelle d'onglet à travers un redimensionnement (Story 29.15 : « Ma fiche » se rend aussi sur desktop, ne disparaît plus)", async () => {
@@ -783,8 +956,8 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     const comp = fixture.componentInstance as unknown as { selectedTabIndex: () => number };
     expect(comp.selectedTabIndex()).toBe(1);
     const activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
-    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeTruthy();
+    expect(activeTab?.textContent?.trim()).toBe('Fiches');
+    expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeTruthy();
   });
 
   it('mobile, même joueur → atterrissage identique aux deux gabarits (AC2)', async () => {
@@ -796,14 +969,14 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
 
     const comp = fixture.componentInstance as unknown as { selectedTabIndex: () => number };
     expect(comp.selectedTabIndex()).toBe(1);
-    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeTruthy();
+    expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeTruthy();
   });
 
   it('le bouton de création est un vrai lien <a> — atteignable au clavier (AC3)', async () => {
     const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const { el } = await createFixture(partie, PLAYER_ID, { desktop: true, noopAnimations: true });
 
-    const cta = el.querySelector<HTMLAnchorElement>('.my-sheet-tab a[mat-flat-button]');
+    const cta = el.querySelector<HTMLAnchorElement>('.party-sheets-tab a[mat-flat-button]');
     expect(cta).toBeTruthy();
     expect(cta!.tagName).toBe('A');
   });
@@ -821,14 +994,14 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     expect(comp.selectedTabIndex()).toBe(0);
 
     const maFicheTab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
-      (t) => t.textContent?.trim() === 'Ma fiche',
+      (t) => t.textContent?.trim() === 'Fiches',
     );
     maFicheTab?.click();
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeFalsy();
+    expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeFalsy();
   });
 
   it('système sans module → onglet par défaut "Détails" ; bouton absent de "Ma fiche" même sans personnage (gating corrigé)', async () => {
@@ -842,15 +1015,15 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     expect(comp.selectedTabIndex()).toBe(0);
 
     const maFicheTab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
-      (t) => t.textContent?.trim() === 'Ma fiche',
+      (t) => t.textContent?.trim() === 'Fiches',
     );
     maFicheTab?.click();
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeFalsy();
-    expect(el.querySelector('.my-sheet-tab .muted')?.textContent?.trim()).toBeTruthy();
+    expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeFalsy();
+    expect(el.querySelector('.party-sheets-tab .muted')?.textContent?.trim()).toBeTruthy();
   });
 
   it('partie terminée → onglet par défaut "Détails" ; bouton absent de "Ma fiche" même sans personnage (gating corrigé)', async () => {
@@ -864,14 +1037,14 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     expect(comp.selectedTabIndex()).toBe(0);
 
     const maFicheTab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
-      (t) => t.textContent?.trim() === 'Ma fiche',
+      (t) => t.textContent?.trim() === 'Fiches',
     );
     maFicheTab?.click();
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeFalsy();
+    expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeFalsy();
   });
 
   it('le MJ reste sur "Détails" par défaut, même sur un système avec module et une partie ouverte (inchangé)', async () => {
@@ -951,8 +1124,8 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     expect(comp.charactersLoaded()).toBe(true);
     expect(comp.selectedTabIndex()).toBe(1);
     const activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
-    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeTruthy();
+    expect(activeTab?.textContent?.trim()).toBe('Fiches');
+    expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeTruthy();
   });
 
   it("navigation manuelle vers « Ma fiche » pendant le chargement de characters() → indicateur de chargement, jamais le message vide ni le bouton, indiscernables de l'état « on ne peut jamais créer ici » (bmad-review, 2026-09-21)", async () => {
@@ -973,14 +1146,14 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     // le cas visé (navigation manuelle du joueur avant la fin du chargement), pas l'atterrissage
     // automatique (déjà couvert par les tests de flicker ci-dessus).
     const maFicheTab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
-      (t) => t.textContent?.trim() === 'Ma fiche',
+      (t) => t.textContent?.trim() === 'Fiches',
     );
     maFicheTab?.click();
     fixture.detectChanges();
 
-    expect(el.querySelector('.my-sheet-tab mat-progress-spinner')).toBeTruthy();
-    expect(el.querySelector('.my-sheet-tab .muted')).toBeNull();
-    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeNull();
+    expect(el.querySelector('.party-sheets-tab mat-progress-spinner')).toBeTruthy();
+    expect(el.querySelector('.party-sheets-tab .muted')).toBeNull();
+    expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeNull();
 
     resolveCharacters([]);
     await Promise.resolve();
@@ -989,8 +1162,8 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(el.querySelector('.my-sheet-tab mat-progress-spinner')).toBeNull();
-    expect(el.querySelector('.my-sheet-tab a[mat-flat-button]')).toBeTruthy();
+    expect(el.querySelector('.party-sheets-tab mat-progress-spinner')).toBeNull();
+    expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeTruthy();
   });
 
   it("un personnage créé ailleurs et rechargé via le signal temps réel ne fait plus basculer l'onglet hors de « Ma fiche » une fois l'atterrissage stabilisé (bmad-review, 2026-09-21 : gel tabSettled)", async () => {
@@ -1071,7 +1244,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     const el: HTMLElement = fixture.nativeElement;
 
     let activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
+    expect(activeTab?.textContent?.trim()).toBe('Fiches');
 
     // Signal temps réel : characterSvc.changed() déclenche reloadCharacters(), qui révèle
     // désormais un personnage — canCreateCharacter() bascule à `false`, mais l'onglet ne doit
@@ -1084,7 +1257,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     fixture.detectChanges();
 
     activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Ma fiche');
+    expect(activeTab?.textContent?.trim()).toBe('Fiches');
   });
 });
 

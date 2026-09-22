@@ -13,8 +13,9 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs/operators';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
 import {
@@ -169,7 +170,9 @@ interface NarrativeFields {
   standalone: true,
   imports: [
     CharacterAvatar,
+    RouterLink,
     MatButtonModule,
+    MatIconModule,
     MatTabsModule,
     PortraitPanel,
     LevelUpBanner,
@@ -267,6 +270,14 @@ export class CharacterSheet implements OnInit {
   protected readonly homeTownPencil = viewChild<FieldEditPencil>('homeTownPencil');
   protected readonly motivationPencil = viewChild<FieldEditPencil>('motivationPencil');
   protected readonly personalityPencil = viewChild<FieldEditPencil>('personalityPencil');
+
+  /** Id de la partie lu depuis la route (une seule fois, comme `characterId` plus bas) — exposé
+   *  pour le lien « Retour à la partie », utilisé à la fois par la branche succès (`c.partieId`,
+   *  déjà en place) et par la branche d'erreur (`loadError()`), qui n'a elle aucune donnée
+   *  personnage chargée pour le déduire. Sans ça, un échec de chargement (403, erreur réseau)
+   *  laissait l'utilisateur sans moyen de revenir à sa partie autre que le bouton retour du
+   *  navigateur. */
+  protected readonly partieId = this.route.snapshot.paramMap.get('id');
 
   protected readonly character = signal<CharacterDto | null>(null);
   protected readonly content = signal<GameSystemContentDto | null>(null);
@@ -624,7 +635,7 @@ export class CharacterSheet implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    const partieId = this.route.snapshot.paramMap.get('id');
+    const partieId = this.partieId;
     if (partieId) {
       this.realtime.connect(partieTopic(partieId));
       this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(partieId)));

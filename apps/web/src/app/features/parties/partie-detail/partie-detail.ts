@@ -196,6 +196,18 @@ export class PartieDetail implements OnInit {
     return this.characters().filter((c) => c.userId === userId);
   });
 
+  /** Story « Fiches » : tous les personnages de la partie, le sien en tête — alimente l'onglet
+   *  générique (distinct de `myCharacters`, toujours utilisé par `canCreateCharacter`). Revue de
+   *  code : partitionne `characters()` à partir des ids déjà présents dans `myCharacters()` plutôt
+   *  que de refiltrer indépendamment sur `userId` — une seule définition de « mine », jamais deux
+   *  risquant de diverger si l'une change sans l'autre. */
+  protected readonly charactersSelfFirst = computed(() => {
+    const mine = this.myCharacters();
+    const mineIds = new Set(mine.map((c) => c.id));
+    const others = this.characters().filter((c) => !mineIds.has(c.id));
+    return [...mine, ...others];
+  });
+
   protected readonly characterName = characterName;
 
   /** Prédicat unique (Story 29.15) : pas MJ · aucun personnage sur cette partie · système avec

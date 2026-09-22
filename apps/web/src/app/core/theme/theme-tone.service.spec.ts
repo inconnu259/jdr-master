@@ -260,8 +260,23 @@ describe('Tones — surface de détail et wizard de création (Story 31.4)', () 
 
 // Story 29.15 — l'onglet "Ma fiche" (état vide) et le slot d'initiale du roster (tooltip
 // accessible) gagnent chacun une nouvelle clé thématisée. Même garde de parité que ci-dessus.
-describe("Tones — bouton clair pour créer son personnage depuis la partie (Story 29.15)", () => {
+describe('Tones — bouton clair pour créer son personnage depuis la partie (Story 29.15)', () => {
   const KEYS = ['character.no_character_yet', 'roster.create_slot_label'];
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${KEYS.length} clés, toutes non vides`, () => {
+      for (const key of KEYS) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+      }
+    });
+  }
+});
+
+// Spec fiches-personnages-partie-et-retour — libellé de l'onglet « Fiches » (renommé depuis
+// « Ma fiche ») et bouton retour de la fiche vers la partie. Même garde de parité que ci-dessus :
+// une clé posée dans un seul thème rendrait `undefined` à l'écran dans les deux autres.
+describe('Tones — onglet « Fiches » et bouton retour (spec fiches-personnages-partie-et-retour)', () => {
+  const KEYS = ['character.party_sheets_tab_label', 'character.back_to_partie_cta'];
 
   for (const theme of THEMES) {
     it(`${theme} porte les ${KEYS.length} clés, toutes non vides`, () => {

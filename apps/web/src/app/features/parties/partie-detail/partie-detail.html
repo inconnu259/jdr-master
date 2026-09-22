@@ -208,31 +208,38 @@
         </mat-tab>
 
         @if (!isMj()) {
-          <mat-tab [label]="theme.tone()['character.my_sheet_tab_label']">
-            <section class="my-sheet-tab">
+          <mat-tab [label]="theme.tone()['character.party_sheets_tab_label']">
+            <section class="party-sheets-tab">
               @if (!charactersLoaded()) {
                 <!-- Revue de code (bmad-review, 2026-09-21) : pendant le chargement, ni le message
                      « aucun personnage » ni son absence de bouton ne doivent apparaître — l'un et
                      l'autre sont indiscernables de l'état « on ne peut jamais créer ici » tant que
                      characters()/canCreateCharacter() ne sont pas connus. -->
                 <mat-progress-spinner mode="indeterminate" diameter="32" />
-              } @else if (myCharacters().length === 0) {
-                <p class="muted">{{ theme.tone()['character.no_character_yet'] }}</p>
-                @if (canCreateCharacter()) {
-                  <a
-                    mat-flat-button
-                    color="primary"
-                    [routerLink]="['/parties', p.id, 'characters', 'new']"
-                    [queryParams]="{ gameSystemId: p.gameSystemId }"
-                  >
-                    {{ theme.tone()['character.create_cta'] }}
-                  </a>
-                }
               } @else {
-                @for (character of myCharacters(); track character.id) {
+                <!-- Story « Fiches » (retour utilisateur) : le message « aucun personnage » (basé
+                     sur myCharacters(), l'absence de personnage PERSONNEL) et la liste générique
+                     (basée sur charactersSelfFirst(), tous les personnages de la partie) sont deux
+                     blocs indépendants qui cohabitent -- un joueur sans personnage sur une partie
+                     où d'autres en ont voit le message/CTA ET la liste des autres en dessous. -->
+                @if (myCharacters().length === 0) {
+                  <p class="muted">{{ theme.tone()['character.no_character_yet'] }}</p>
+                  @if (canCreateCharacter()) {
+                    <a
+                      mat-flat-button
+                      color="primary"
+                      [routerLink]="['/parties', p.id, 'characters', 'new']"
+                      [queryParams]="{ gameSystemId: p.gameSystemId }"
+                    >
+                      {{ theme.tone()['character.create_cta'] }}
+                    </a>
+                  }
+                }
+                @for (character of charactersSelfFirst(); track character.id) {
                   <app-character-summary-card
                     [character]="character"
                     [className]="classLabel(character)"
+                    [showOwnerInfo]="true"
                     (selected)="openCharacterSheet(p.id, character.id)"
                   />
                 }
