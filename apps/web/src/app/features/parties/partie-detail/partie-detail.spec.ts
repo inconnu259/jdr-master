@@ -32,6 +32,7 @@ import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-a
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
 import { MatDialog } from '@angular/material/dialog';
+import { MatTabGroup } from '@angular/material/tabs';
 import { TONE_MAP } from '../../../core/theme/tones';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 
@@ -2924,5 +2925,146 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
     const link = el.querySelector(`${ZONE_ACTION} .scheduling-widget a[mat-stroked-button]`);
     expect(link).toBeTruthy();
     expect(link!.textContent).toContain('Vote de date en cours');
+  });
+});
+
+// ─── Retouche UX de PartieDetail (scroll, aération, fiches de téléchargement, 2026-09-23) ────────
+
+describe('PartieDetail — défilement de page unique (dynamicHeight)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it("mat-tab-group porte dynamicHeight (API publique Material) -- l'overflow interne par défaut du corps d'onglet est neutralisé, la molette défile toute la page", async () => {
+    const { fixture } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
+
+    const tabGroup = fixture.debugElement.query(By.directive(MatTabGroup))
+      ?.componentInstance as MatTabGroup | undefined;
+    expect(tabGroup).toBeTruthy();
+    expect(tabGroup!.dynamicHeight).toBe(true);
+  });
+});
+
+describe('PartieDetail — grimoires de référence/préparation repliés par défaut (retouche UX 2026-09-23)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('à l’affichage initial de l’onglet Détails, les deux grimoires (référence, préparation MJ) sont repliés', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { el } = await createFixture(partie, MJ_ID);
+
+    const referenceDetails = el.querySelector<HTMLDetailsElement>('.reference-sheets details.download-sheet');
+    const prepDetails = el.querySelector<HTMLDetailsElement>('.prep-sheets details.download-sheet');
+    expect(referenceDetails).toBeTruthy();
+    expect(prepDetails).toBeTruthy();
+    expect(referenceDetails!.open).toBe(false);
+    expect(prepDetails!.open).toBe(false);
+  });
+
+  it('un joueur (non-MJ) voit aussi le grimoire de référence replié par défaut (les fiches de préparation restent MJ-only, inchangé)', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { el } = await createFixture(partie, PLAYER_ID);
+
+    const referenceDetails = el.querySelector<HTMLDetailsElement>('.reference-sheets details.download-sheet');
+    expect(referenceDetails).toBeTruthy();
+    expect(referenceDetails!.open).toBe(false);
+    expect(el.querySelector('.prep-sheets')).toBeNull();
+  });
+
+  it('clic sur le résumé « Grimoires de référence » déplie la fiche -- les puces (icône+libellé) deviennent visibles', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { fixture, el } = await createFixture(partie, MJ_ID);
+
+    const details = el.querySelector<HTMLDetailsElement>('.reference-sheets details.download-sheet')!;
+    const summary = details.querySelector<HTMLElement>('summary')!;
+    expect(details.open).toBe(false);
+
+    summary.click();
+    fixture.detectChanges();
+
+    expect(details.open).toBe(true);
+    const chips = details.querySelectorAll('.reference-sheets__links .dl-chip');
+    expect(chips.length).toBe(2);
+    expect(chips[0].textContent).toContain(
+      TONE_MAP['grimoire-emeraude']['partie.asset_journal_cta'],
+    );
+  });
+
+  it('clic sur le résumé « Grimoires de préparation (MJ) » déplie la fiche -- les 8 puces deviennent visibles', async () => {
+    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const { fixture, el } = await createFixture(partie, MJ_ID);
+
+    const details = el.querySelector<HTMLDetailsElement>('.prep-sheets details.download-sheet')!;
+    const summary = details.querySelector<HTMLElement>('summary')!;
+    expect(details.open).toBe(false);
+
+    summary.click();
+    fixture.detectChanges();
+
+    expect(details.open).toBe(true);
+    expect(details.querySelectorAll('.prep-sheets__links .dl-chip').length).toBe(8);
+  });
+});
+
+describe('PartieDetail — barre d’icônes partagée (retouche UX 2026-09-23)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('MJ : les déclencheurs "Distribuer de l’XP" et "Proclamer une annonce" partagent la même barre d’icônes', async () => {
+    const { el } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
+
+    const bar = el.querySelector('.details-zone--action .icon-bar');
+    expect(bar).toBeTruthy();
+    expect(bar!.querySelector('.xp-section button')).toBeTruthy();
+    expect(bar!.querySelector('.announcement-section button')).toBeTruthy();
+  });
+
+  it('le pied de carte (Retranscrire/Sceller/Clore/Supprimer) est une barre d’icônes -- "Supprimer" porte la classe de couleur destructrice', async () => {
+    const { el } = await createFixture(makePartie({ mjId: MJ_ID, status: 'EN_COURS' }), MJ_ID);
+
+    const actions = el.querySelector('mat-card-actions.icon-bar');
+    expect(actions).toBeTruthy();
+
+    // Vérification visuelle réelle (bmad-build, 2026-09-23) : `color="warn"` sur `mat-button` n'a
+    // aucun effet en theming M3 (documenté par Angular Material — « supported in M2 themes only »).
+    // La classe `icon-bar__btn--danger` référence directement `--mat-sys-error` (patron déjà en
+    // place ailleurs dans ce composant, `.notice.error`) ; c'est elle que ce test vérifie, pas
+    // l'attribut `color` désormais retiré du bouton.
+    const deleteButton = Array.from(el.querySelectorAll('mat-card-actions.icon-bar button')).find((b) =>
+      b.textContent?.includes(TONE_MAP['grimoire-emeraude']['partie.delete_btn']),
+    );
+    expect(deleteButton).toBeTruthy();
+    expect(deleteButton!.classList.contains('icon-bar__btn--danger')).toBe(true);
+  });
+});
+
+describe('PartieDetail — patron de carte à liseré, revue de code (retouche UX 2026-09-23)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('MJ, système Ryuutama : app-xp-history et chaque app-annonce-card reçoivent les classes de carte de la zone Consultation', async () => {
+    const announcements = [makeAnnouncementDto({ id: 'ann-1', scenarioId: null })];
+    const { el } = await createFixture(
+      makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', kind: 'CAMPAGNE_LINEAIRE' }),
+      MJ_ID,
+      { announcements },
+    );
+
+    const xpHistory = el.querySelector('app-xp-history');
+    expect(xpHistory).toBeTruthy();
+    expect(xpHistory!.classList.contains('zone-card')).toBe(true);
+    expect(xpHistory!.classList.contains('zone-card--consultation')).toBe(true);
+
+    const annonceCard = el.querySelector('app-annonce-card');
+    expect(annonceCard).toBeTruthy();
+    expect(annonceCard!.classList.contains('zone-card')).toBe(true);
+    expect(annonceCard!.classList.contains('zone-card--consultation')).toBe(true);
+    expect(annonceCard!.classList.contains('zone-card--flush')).toBe(true);
+  });
+
+  it('la description de la partie (zone Référence) reçoit le même patron de carte à liseré que les deux autres zones', async () => {
+    const { el } = await createFixture(
+      makePartie({ mjId: MJ_ID, description: 'Un récit à découvrir' }),
+      MJ_ID,
+    );
+
+    const reference = el.querySelector('.details-zone--reference .zone-card--reference');
+    expect(reference).toBeTruthy();
+    expect(reference!.textContent).toContain('Un récit à découvrir');
   });
 });

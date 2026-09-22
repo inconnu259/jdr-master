@@ -27,7 +27,16 @@
       }
 
     <mat-card-content>
-      <mat-tab-group [selectedIndex]="selectedTabIndex()" (selectedIndexChange)="onTabIndexChange($event)">
+      <!-- Retouche UX (2026-09-23) : dynamicHeight (API publique Angular Material, cf.
+           EXPERIENCE.md du delta) -- neutralise l'overflow interne par défaut du corps d'onglet
+           (mat-mdc-tab-body-content) pour que la molette fasse défiler toute la page, pied de
+           carte compris, plutôt qu'un scroll interne isolé à l'onglet actif. Même correctif sur
+           l'unique autre consommateur de mat-tab-group de l'app (character-sheet.html). -->
+      <mat-tab-group
+        dynamicHeight
+        [selectedIndex]="selectedTabIndex()"
+        (selectedIndexChange)="onTabIndexChange($event)"
+      >
         <mat-tab label="Détails">
             <!-- Story 32.2 : l'onglet Détails est regroupé en trois zones -- Action, Consultation,
                  Référence, dans cet ordre -- plutôt que juxtaposé sans hiérarchie. Chaque bloc garde
@@ -65,39 +74,53 @@
               </section>
 
               @if (isMj()) {
-                <!-- Distribution d'XP : déclenchée depuis cet écran -- Action. L'historique
-                     (app-xp-history) est un journal en lecture seule, extrait vers la zone
-                     Consultation ci-dessous (Story 32.2). -->
-                <section class="xp-section">
-                  <button type="button" mat-stroked-button (click)="showXpPanel.set(!showXpPanel())">
-                    {{ theme.tone()['evolution.xp_distribute_cta'] }}
-                  </button>
-                  @if (showXpPanel()) {
-                    <app-xp-distribution-panel
-                      [partieId]="p.id"
-                      [characters]="characters()"
-                      (distributed)="onXpDistributed()"
-                    />
-                  }
-                </section>
-              }
+                <!-- Retouche UX (2026-09-23) : les deux déclencheurs MJ (XP/annonce) partagent
+                     désormais le même patron de barre d'icônes que le pied de carte (DESIGN.md
+                     §3/§4, EXPERIENCE.md « Barre d'icônes partagée ») -- .xp-section/
+                     .announcement-section restent des conteneurs distincts (sélecteurs déjà
+                     couverts par les tests existants), seul leur bouton rejoint la barre commune ;
+                     chaque panneau garde sa propre condition d'affichage, inchangée. -->
+                <div class="icon-bar">
+                  <section class="xp-section">
+                    <button
+                      type="button"
+                      mat-stroked-button
+                      class="icon-bar__btn"
+                      (click)="showXpPanel.set(!showXpPanel())"
+                    >
+                      <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+                      {{ theme.tone()['evolution.xp_distribute_cta'] }}
+                    </button>
+                  </section>
 
-              @if (isMj()) {
-                <!-- Publication d'annonce : action MJ déclenchée depuis cet écran -- Action. Le fil
-                     de lecture des annonces publiées (campaignAnnouncements) vit en zone
-                     Consultation, avec le bandeau transitoire ci-dessous. -->
-                <section class="announcement-section">
-                  <button
-                    type="button"
-                    mat-stroked-button
-                    (click)="showAnnouncementForm.set(!showAnnouncementForm())"
-                  >
-                    {{ theme.tone()['announcement.publish_cta'] }}
-                  </button>
-                  @if (showAnnouncementForm()) {
-                    <app-announcement-form [partieId]="p.id" (published)="onAnnouncementPublished()" />
-                  }
-                </section>
+                  <!-- Publication d'annonce : action MJ déclenchée depuis cet écran -- Action. Le fil
+                       de lecture des annonces publiées (campaignAnnouncements) vit en zone
+                       Consultation, avec le bandeau transitoire ci-dessous. -->
+                  <section class="announcement-section">
+                    <button
+                      type="button"
+                      mat-stroked-button
+                      class="icon-bar__btn"
+                      (click)="showAnnouncementForm.set(!showAnnouncementForm())"
+                    >
+                      <mat-icon aria-hidden="true">campaign</mat-icon>
+                      {{ theme.tone()['announcement.publish_cta'] }}
+                    </button>
+                  </section>
+                </div>
+
+                <!-- Distribution d'XP : l'historique (app-xp-history) est un journal en lecture
+                     seule, extrait vers la zone Consultation ci-dessous (Story 32.2). -->
+                @if (showXpPanel()) {
+                  <app-xp-distribution-panel
+                    [partieId]="p.id"
+                    [characters]="characters()"
+                    (distributed)="onXpDistributed()"
+                  />
+                }
+                @if (showAnnouncementForm()) {
+                  <app-announcement-form [partieId]="p.id" (published)="onAnnouncementPublished()" />
+                }
               }
             </section>
 
@@ -117,15 +140,25 @@
 
                 @if (isMj()) {
                   <!-- Historique des distributions d'XP : journal en lecture seule -- extrait de la
-                       zone Action (Story 32.2), c'est une consultation, pas une action. -->
-                  <app-xp-history [distributions]="xpDistributions()" [characters]="characters()" />
+                       zone Action (Story 32.2), c'est une consultation, pas une action. Retouche UX
+                       (2026-09-23) : patron de carte à liseré (DESIGN.md §2/§4) appliqué au composant
+                       lui-même depuis ce template -- app-xp-history n'a pas sa propre carte. -->
+                  <app-xp-history
+                    class="zone-card zone-card--consultation"
+                    [distributions]="xpDistributions()"
+                    [characters]="characters()"
+                  />
                 }
 
                 @if (campaignAnnouncements().length > 0) {
-                  <!-- Fil d'annonces de campagne : flux en lecture seule -- Consultation. -->
+                  <!-- Fil d'annonces de campagne : flux en lecture seule -- Consultation. Retouche UX
+                       (2026-09-23) : chaque annonce est déjà sa propre carte (app-annonce-card) --
+                       on ajoute seulement le liseré de zone partagé, sans dupliquer son fond/bordure
+                       (cf. .zone-card--flush dans partie-detail.scss). -->
                   <section class="announcements-feed">
                     @for (a of campaignAnnouncements(); track a.id) {
                       <app-annonce-card
+                        class="zone-card zone-card--consultation zone-card--flush"
                         [announcement]="a"
                         [scopeLabel]="campaignScopeLabel()"
                         [unseen]="unseenAnnouncementIds().has(a.id)"
@@ -140,116 +173,154 @@
             <section class="details-zone details-zone--reference">
               <h3 class="details-zone__title">{{ theme.tone()['partie.details_zone_reference'] }}</h3>
 
-              <!-- Description de la partie : document statique de support -- Référence. -->
-              @if (p.description) {
-                <p>{{ p.description }}</p>
-              } @else {
-                <p class="muted">{{ theme.tone()['partie.no_description'] }}</p>
-              }
+              <!-- Description de la partie : document statique de support -- Référence. Revue de
+                   code (retouche UX 2026-09-23) : rejoint le patron de carte à liseré des deux
+                   autres zones (DESIGN.md §1, liseré neutre) -- jusqu'ici seule Référence n'avait
+                   aucune carte, la classe .zone-card--reference restait posée mais inutilisée. -->
+              <div class="zone-card zone-card--reference">
+                @if (p.description) {
+                  <p>{{ p.description }}</p>
+                } @else {
+                  <p class="muted">{{ theme.tone()['partie.no_description'] }}</p>
+                }
+              </div>
 
               @if (p.gameSystemId === 'ryuutama') {
                 <!-- Fiches de référence Ryuutama (journal/carte) : documents statiques de support,
-                     consultés au besoin -- Référence. -->
+                     consultés au besoin -- Référence. Retouche UX (2026-09-23) : repliées par défaut
+                     (<details>/<summary> natifs, DESIGN.md §2/§4 -- pas de MatExpansionModule),
+                     puces icône+libellé compactes au lieu de boutons pleine largeur. -->
                 <section class="reference-sheets">
-                  <h4>{{ theme.tone()['partie.reference_sheets_title'] }}</h4>
-                  <div class="reference-sheets__links">
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [disabled]="downloadingReferenceAsset()"
-                      (click)="downloadAsset('journal', 'reference')"
-                    >
-                      {{ theme.tone()['partie.asset_journal_cta'] }}
-                    </button>
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [disabled]="downloadingReferenceAsset()"
-                      (click)="downloadAsset('carte', 'reference')"
-                    >
-                      {{ theme.tone()['partie.asset_carte_cta'] }}
-                    </button>
-                  </div>
-                  @if (referenceAssetError(); as error) {
-                    <p class="reference-sheets__error">{{ error }}</p>
-                  }
+                  <details class="download-sheet">
+                    <summary>
+                      <mat-icon aria-hidden="true" class="download-sheet__chevron">chevron_right</mat-icon>
+                      <h4 class="download-sheet__title">{{ theme.tone()['partie.reference_sheets_title'] }}</h4>
+                    </summary>
+                    <div class="reference-sheets__links">
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingReferenceAsset()"
+                        (click)="downloadAsset('journal', 'reference')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_journal_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingReferenceAsset()"
+                        (click)="downloadAsset('carte', 'reference')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_carte_cta'] }}
+                      </button>
+                    </div>
+                    @if (referenceAssetError(); as error) {
+                      <p class="reference-sheets__error">{{ error }}</p>
+                    }
+                  </details>
                 </section>
               }
 
               @if (isMj() && p.gameSystemId === 'ryuutama') {
                 <!-- Fiches de préparation MJ (monde, monstres, structure...) : documents statiques
-                     de support, consultés au besoin -- Référence. -->
+                     de support, consultés au besoin -- Référence. Retouche UX (2026-09-23) : même
+                     patron replié par défaut + puces compactes que .reference-sheets ci-dessus. -->
                 <section class="prep-sheets">
-                  <h4>{{ theme.tone()['partie.prep_sheets_title'] }}</h4>
-                  <div class="prep-sheets__links">
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [disabled]="downloadingPrepAsset()"
-                      (click)="downloadAsset('monde', 'prep')"
-                    >
-                      {{ theme.tone()['partie.asset_monde_cta'] }}
-                    </button>
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [disabled]="downloadingPrepAsset()"
-                      (click)="downloadAsset('monstre', 'prep')"
-                    >
-                      {{ theme.tone()['partie.asset_monstre_cta'] }}
-                    </button>
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [disabled]="downloadingPrepAsset()"
-                      (click)="downloadAsset('ville', 'prep')"
-                    >
-                      {{ theme.tone()['partie.asset_ville_cta'] }}
-                    </button>
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [disabled]="downloadingPrepAsset()"
-                      (click)="downloadAsset('objectif-chasse', 'prep')"
-                    >
-                      {{ theme.tone()['partie.asset_objectif_chasse_cta'] }}
-                    </button>
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [disabled]="downloadingPrepAsset()"
-                      (click)="downloadAsset('objectif-quete', 'prep')"
-                    >
-                      {{ theme.tone()['partie.asset_objectif_quete_cta'] }}
-                    </button>
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [disabled]="downloadingPrepAsset()"
-                      (click)="downloadAsset('objectif-voyage', 'prep')"
-                    >
-                      {{ theme.tone()['partie.asset_objectif_voyage_cta'] }}
-                    </button>
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [disabled]="downloadingPrepAsset()"
-                      (click)="downloadAsset('oeuf-de-bataille', 'prep')"
-                    >
-                      {{ theme.tone()['partie.asset_oeuf_de_bataille_cta'] }}
-                    </button>
-                    <button
-                      mat-stroked-button
-                      type="button"
-                      [disabled]="downloadingPrepAsset()"
-                      (click)="downloadAsset('structure', 'prep')"
-                    >
-                      {{ theme.tone()['partie.asset_structure_cta'] }}
-                    </button>
-                  </div>
-                  @if (prepAssetError(); as error) {
-                    <p class="prep-sheets__error">{{ error }}</p>
-                  }
+                  <details class="download-sheet">
+                    <summary>
+                      <mat-icon aria-hidden="true" class="download-sheet__chevron">chevron_right</mat-icon>
+                      <h4 class="download-sheet__title">{{ theme.tone()['partie.prep_sheets_title'] }}</h4>
+                    </summary>
+                    <div class="prep-sheets__links">
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('monde', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_monde_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('monstre', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_monstre_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('ville', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_ville_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('objectif-chasse', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_objectif_chasse_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('objectif-quete', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_objectif_quete_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('objectif-voyage', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_objectif_voyage_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('oeuf-de-bataille', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_oeuf_de_bataille_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('structure', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_structure_cta'] }}
+                      </button>
+                    </div>
+                    @if (prepAssetError(); as error) {
+                      <p class="prep-sheets__error">{{ error }}</p>
+                    }
+                  </details>
                 </section>
               }
             </section>
@@ -423,25 +494,31 @@
       />
     }
 
-    <mat-card-actions>
+    <!-- Retouche UX (2026-09-23) : même patron de barre d'icônes que les déclencheurs XP/annonce de
+         la zone Action (DESIGN.md §3/§4). Revue de code : « Supprimer » (delete_btn) devait passer
+         en color="warn" -- vérification visuelle réelle a montré que cet attribut Material n'a
+         AUCUN EFFET en theming M3 (documenté par Angular Material, « supported in M2 themes only »)
+         -- la teinte destructrice passe donc par la classe icon-bar__btn--danger, qui référence
+         --mat-sys-error directement (cf. partie-detail.scss). -->
+    <mat-card-actions class="icon-bar">
       @if (isMj()) {
-        <a mat-button [routerLink]="['/parties', p.id, 'edit']">
-          <mat-icon>edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
+        <a mat-button class="icon-bar__btn" [routerLink]="['/parties', p.id, 'edit']">
+          <mat-icon aria-hidden="true">edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
         </a>
-        <a mat-button [routerLink]="['/parties', p.id, 'visibility']">
-          <mat-icon>lock</mat-icon> {{ theme.tone()['partie.visibility_btn'] }}
+        <a mat-button class="icon-bar__btn" [routerLink]="['/parties', p.id, 'visibility']">
+          <mat-icon aria-hidden="true">lock</mat-icon> {{ theme.tone()['partie.visibility_btn'] }}
         </a>
         @if (p.status !== 'TERMINEE') {
-          <button mat-button (click)="closeGame(p)">
-            <mat-icon>flag</mat-icon> {{ theme.tone()['partie.close_btn'] }}
+          <button mat-button class="icon-bar__btn" (click)="closeGame(p)">
+            <mat-icon aria-hidden="true">flag</mat-icon> {{ theme.tone()['partie.close_btn'] }}
           </button>
         } @else {
-          <button mat-button (click)="reopenGame(p)">
-            <mat-icon>replay</mat-icon> {{ theme.tone()['partie.reopen_btn'] }}
+          <button mat-button class="icon-bar__btn" (click)="reopenGame(p)">
+            <mat-icon aria-hidden="true">replay</mat-icon> {{ theme.tone()['partie.reopen_btn'] }}
           </button>
         }
-        <button mat-button (click)="confirmDelete(p)">
-          <mat-icon>delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
+        <button mat-button class="icon-bar__btn icon-bar__btn--danger" (click)="confirmDelete(p)">
+          <mat-icon aria-hidden="true">delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
         </button>
       }
     </mat-card-actions>

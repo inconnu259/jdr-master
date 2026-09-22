@@ -143,8 +143,11 @@
 
     <!-- Story 29.5 : sous-navigation locale, même patron que PartieDetail (29.4) — mat-tab-group
          piloté par selectedTabIndex()/onTabIndexChange() purement local, aucune route Angular
-         enfant (cf. story 29.5, Décision d'implémentation). -->
+         enfant (cf. story 29.5, Décision d'implémentation). Retouche UX (2026-09-23) : dynamicHeight
+         (API publique Material, même correctif que partie-detail.html) -- neutralise l'overflow
+         interne par défaut du corps d'onglet pour que la molette fasse défiler toute la page. -->
     <mat-tab-group
+      dynamicHeight
       [selectedIndex]="selectedTabIndex()"
       (selectedIndexChange)="onTabIndexChange($event)"
     >

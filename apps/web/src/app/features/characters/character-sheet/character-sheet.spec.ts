@@ -3,6 +3,8 @@ import { signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
+import { MatTabGroup } from '@angular/material/tabs';
+import { By } from '@angular/platform-browser';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of, Subject } from 'rxjs';
@@ -2110,6 +2112,17 @@ describe('CharacterSheet', () => {
       const activeTab = fixture.nativeElement.querySelector('[role="tab"][aria-selected="true"]');
       expect(activeTab).not.toBeNull();
       expect(activeTab.querySelector('.mdc-tab-indicator')).not.toBeNull();
+    });
+
+    // Retouche UX de PartieDetail (2026-09-23) : même correctif dynamicHeight que partie-detail.html
+    // -- non-régression sur ce 2ᵉ (et dernier) consommateur de mat-tab-group de l'app.
+    it("mat-tab-group porte dynamicHeight -- la molette défile toute la page plutôt qu'un scroll interne à l'onglet actif", async () => {
+      const { fixture } = await createComponent();
+
+      const tabGroup = fixture.debugElement.query(By.directive(MatTabGroup))
+        ?.componentInstance as MatTabGroup | undefined;
+      expect(tabGroup).toBeTruthy();
+      expect(tabGroup!.dynamicHeight).toBe(true);
     });
   });
 
