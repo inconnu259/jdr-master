@@ -74,7 +74,7 @@ describe('InventoryTab', () => {
     expect(fixture.nativeElement.querySelector('app-encumbrance-bar')).toBeNull();
   });
 
-  it('equipment verrouillé (bug fix, hiddenFields) : « Masqué par le MJ » dans les 3 sous-sections, jamais « vide »', async () => {
+  it('equipment verrouillé (correctif, hiddenFields) : « Masqué par le MJ » sur la barre d’encombrement + les 3 sous-sections, jamais « vide »', async () => {
     const characterSvc = { addInventoryItem: vi.fn() };
     await TestBed.configureTestingModule({
       imports: [InventoryTab],
@@ -90,10 +90,30 @@ describe('InventoryTab', () => {
     await fixture.whenStable();
 
     const text = fixture.nativeElement.textContent;
-    expect((text.match(/Masqué par le MJ/g) ?? []).length).toBe(3);
+    expect((text.match(/Masqué par le MJ/g) ?? []).length).toBe(4);
+    expect(fixture.nativeElement.querySelector('app-encumbrance-bar')).toBeNull();
     expect(text).not.toContain("Aucun objet dans l'inventaire");
     expect(text).not.toContain('Aucun contenant pour le moment');
     expect(text).not.toContain('Aucun animal pour le moment');
+  });
+
+  it('correctif de revue : equipment SEUL verrouillé (attributes/derived visibles) — la barre d’encombrement affiche « Masqué par le MJ », jamais « 0 / limite »', async () => {
+    const characterSvc = { addInventoryItem: vi.fn() };
+    await TestBed.configureTestingModule({
+      imports: [InventoryTab],
+      providers: [{ provide: CharacterService, useValue: characterSvc }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(InventoryTab);
+    fixture.componentRef.setInput('character', {
+      ...makeCharacterWithItems([]),
+      hiddenFields: ['equipment'],
+    });
+    fixture.componentRef.setInput('isOwner', false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(fixture.nativeElement.querySelector('app-encumbrance-bar')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Masqué par le MJ');
   });
 
   it('equipment non verrouillé et vide : messages « vide » habituels conservés', async () => {

@@ -27,7 +27,7 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 import type { CharacterDto, GameSystemContentDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
-import { characterName, findContentEntry } from '../../../core/characters/character.util';
+import { characterName, findContentEntry, isFieldHidden } from '../../../core/characters/character.util';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
 import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
@@ -562,11 +562,12 @@ export class CharacterSheet implements OnInit {
   /** Chemins retirés par le cadenas de visibilité pour ce lecteur (Story 31.6/31.7) — vide pour le
    *  propriétaire/MJ (jamais masqués) ou une Partie sans configuration. Sert uniquement à distinguer
    *  « masqué par le MJ » de « non renseigné » là où une section entière disparaîtrait sinon
-   *  silencieusement (bug fix, session bmad-build 2026-09-22) — pas une refonte de chaque section. */
-  protected readonly hiddenFields = computed(() => new Set(this.character()?.hiddenFields ?? []));
-
+   *  silencieusement (correctif de revue, session bmad-build 2026-09-22) — pas une refonte de chaque
+   *  section. Délègue à `isFieldHidden()` (`character.util.ts`), partagée avec `InventoryTab` — une
+   *  seule vérification `hiddenFields`, jamais deux implémentations indépendantes. */
   protected isHidden(path: string): boolean {
-    return this.hiddenFields().has(path);
+    const c = this.character();
+    return !!c && isFieldHidden(c, path);
   }
 
   protected readonly attributes = computed<{
@@ -580,10 +581,22 @@ export class CharacterSheet implements OnInit {
       null,
   );
 
-  /** Nom du pattern d'attributs dont les valeurs (triées) correspondent à celles du personnage. */
+  /** Nom du pattern d'attributs dont les valeurs (triées) correspondent à celles du personnage.
+   *  Correctif de revue (session bmad-build 2026-09-22) : si un seul sous-champ est verrouillé
+   *  (ex. `attributes.AGI`), la valeur manquante ne doit jamais entrer dans la comparaison — sans
+   *  cette garde, `undefined` comparé numériquement (`NaN`) rendait la détection du patron
+   *  imprévisible au lieu de simplement l'écarter. */
   protected readonly attributePatternLabel = computed<string | null>(() => {
     const attrs = this.attributes();
-    if (!attrs) return null;
+    const c = this.character();
+    if (!attrs || !c) return null;
+    if (
+      ['attributes', 'attributes.AGI', 'attributes.ESP', 'attributes.INT', 'attributes.VIG'].some(
+        (path) => isFieldHidden(c, path),
+      )
+    ) {
+      return null;
+    }
     const sortedOwn = [attrs.AGI, attrs.ESP, attrs.INT, attrs.VIG].sort((a, b) => a - b);
     const patterns = this.content()?.['attributePattern'] ?? [];
     for (const p of patterns) {

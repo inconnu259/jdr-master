@@ -2,6 +2,7 @@ import { Component, computed, inject, input, output, signal } from '@angular/cor
 import { MatButtonModule } from '@angular/material/button';
 import type { CharacterDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../../core/characters/character.service';
+import { isFieldHidden } from '../../../../core/characters/character.util';
 import { ThemeToneService } from '../../../../core/theme/theme-tone.service';
 import { EncumbranceBar } from './encumbrance-bar';
 import { InventoryItemRow, type InventoryItemView } from './inventory-item-row';
@@ -22,12 +23,11 @@ export class InventoryTab {
   readonly viewerIsMj = input(false);
   readonly characterUpdated = output<CharacterDto>();
 
-  /** Bug fix (session bmad-build, 2026-09-22) : `equipment` retiré par un cadenas de visibilité
-   *  (Story 31.6/31.7) ne doit jamais être confondu avec un inventaire réellement vide — sinon un
-   *  fellow player verrait « La besace est vide » alors que le MJ a simplement masqué son contenu. */
-  protected readonly equipmentHidden = computed(
-    () => this.character().hiddenFields?.includes('equipment') ?? false,
-  );
+  /** Correctif de revue (session bmad-build, 2026-09-22) : `equipment` retiré par un cadenas de
+   *  visibilité (Story 31.6/31.7) ne doit jamais être confondu avec un inventaire réellement vide —
+   *  sinon un coéquipier verrait « La besace est vide » alors que le MJ a simplement masqué son
+   *  contenu. Délègue à `isFieldHidden()` (`character.util.ts`), partagée avec `CharacterSheet`. */
+  protected readonly equipmentHidden = computed(() => isFieldHidden(this.character(), 'equipment'));
 
   /** `equipment.*` n'est pas exposé par `CharacterDto` (type `SheetData` générique côté
    *  `packages/shared`) — même stratégie de cast que `capability-label.util.ts` pour `levelUps`. */

@@ -331,9 +331,9 @@ describe('Tones — bouton "Confidentialité" de PartieDetail (Story 31.7)', () 
   }
 });
 
-// Bug fix (session bmad-build, 2026-09-22) : message affiché sur CharacterSheet quand `derived`
-// est masqué par un cadenas de visibilité (Story 31.6) — même garde de parité que ci-dessus.
-describe('Tones — statistiques dérivées masquées sur CharacterSheet (bug fix Story 31.6/31.7)', () => {
+// Correctif de revue (session bmad-build, 2026-09-22) : message affiché sur CharacterSheet quand
+// `derived` est masqué par un cadenas de visibilité (Story 31.6) — même garde de parité que ci-dessus.
+describe('Tones — statistiques dérivées masquées sur CharacterSheet (correctif Story 31.6/31.7)', () => {
   for (const theme of THEMES) {
     it(`${theme} porte la clé evolution.derived_hidden, non vide`, () => {
       expect(TONE_MAP[theme]['evolution.derived_hidden']).toBeTruthy();

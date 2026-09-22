@@ -1309,7 +1309,7 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.textContent).not.toContain('PV undefined');
   });
 
-  it('attributes verrouillés en bloc (bug fix, hiddenFields) : « Masqué par le MJ » à la place de la grille, jamais une grille vide silencieuse', async () => {
+  it('attributes verrouillés en bloc (correctif, hiddenFields) : « Masqué par le MJ » à la place de la grille, jamais une grille vide silencieuse', async () => {
     const masked = { ...CHARACTER, derived: undefined as never, hiddenFields: ['attributes', 'derived'] };
     const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(masked) });
     const { fixture } = await createComponent(characterSvc);
@@ -1320,7 +1320,7 @@ describe('CharacterSheet', () => {
     );
   });
 
-  it('un seul sous-champ verrouillé (attributes.AGI, bug fix) : la grille reste affichée, seule la case AGI porte « Masqué par le MJ »', async () => {
+  it('un seul sous-champ verrouillé (attributes.AGI, correctif) : la grille reste affichée, seule la case AGI porte « Masqué par le MJ »', async () => {
     const masked = { ...CHARACTER, hiddenFields: ['attributes.AGI'] };
     const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(masked) });
     const { fixture } = await createComponent(characterSvc);
@@ -2045,6 +2045,24 @@ describe('CharacterSheet', () => {
       const { fixture } = await createComponent(characterSvc);
 
       expect(fixture.nativeElement.textContent).toContain('patron Équilibré');
+    });
+
+    it('correctif de revue : un seul sous-champ verrouillé (attributes.ESP) supprime le suffixe « patron », jamais un rapprochement erroné', async () => {
+      const character = makeCharacterDto({
+        sheetData: {
+          ...CHARACTER.sheetData,
+          attributes: { AGI: 4, ESP: 4, INT: 8, VIG: 8 },
+        },
+        hiddenFields: ['attributes.ESP'],
+      });
+      const characterSvc = makeCharacterService({
+        get: vi.fn().mockResolvedValue(character),
+        getGameSystemContent: vi.fn().mockResolvedValue(CONTENT_24_1),
+      });
+      const { fixture } = await createComponent(characterSvc);
+
+      expect(fixture.nativeElement.textContent).not.toContain('patron Spécialiste');
+      expect(fixture.nativeElement.textContent).not.toContain('patron ');
     });
   });
 

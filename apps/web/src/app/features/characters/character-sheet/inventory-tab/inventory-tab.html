@@ -1,5 +1,7 @@
 <div class="inventory-tab">
-  @if (character().derived) {
+  @if (equipmentHidden()) {
+    <p class="inventory-tab__empty">{{ theme.tone()['evolution.hidden_marker'] }}</p>
+  } @else if (character().derived) {
     <app-encumbrance-bar [totalWeight]="totalWeight()" [limit]="character().derived.Encombrement" />
   }
 

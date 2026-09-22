@@ -265,8 +265,8 @@
   background: rgba(0, 0, 0, 0.45);
 }
 
-// Bug fix (session bmad-build, 2026-09-22) : indication qu'une section est masquée par un cadenas
-// de visibilité (Story 31.6/31.7), distincte d'une section vide — même style que
+// Correctif de revue (session bmad-build, 2026-09-22) : indication qu'une section est masquée par
+// un cadenas de visibilité (Story 31.6/31.7), distincte d'une section vide — même style que
 // `.inventory-tab__empty`.
 .sheet__masked-note {
   color: var(--mat-sys-on-surface-variant, #888);
