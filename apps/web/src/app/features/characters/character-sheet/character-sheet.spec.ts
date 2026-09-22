@@ -1309,6 +1309,28 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.textContent).not.toContain('PV undefined');
   });
 
+  it('attributes verrouillés en bloc (bug fix, hiddenFields) : « Masqué par le MJ » à la place de la grille, jamais une grille vide silencieuse', async () => {
+    const masked = { ...CHARACTER, derived: undefined as never, hiddenFields: ['attributes', 'derived'] };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(masked) });
+    const { fixture } = await createComponent(characterSvc);
+
+    expect(fixture.nativeElement.querySelector('.sheet__attr-grid')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.sheet__masked-note')?.textContent).toContain(
+      'Masqué par le MJ',
+    );
+  });
+
+  it('un seul sous-champ verrouillé (attributes.AGI, bug fix) : la grille reste affichée, seule la case AGI porte « Masqué par le MJ »', async () => {
+    const masked = { ...CHARACTER, hiddenFields: ['attributes.AGI'] };
+    const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(masked) });
+    const { fixture } = await createComponent(characterSvc);
+
+    expect(fixture.nativeElement.querySelector('.sheet__attr-grid')).not.toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('VIG');
+    expect(fixture.nativeElement.textContent).toContain('8'); // VIG toujours visible
+    expect(fixture.nativeElement.textContent).toContain('Masqué par le MJ');
+  });
+
   it('section Inventaire visible pour le propriétaire', async () => {
     const { fixture } = await createComponent();
     // Story 29.5 : Équipement est désormais l'onglet d'index 1 de la sous-navigation locale.

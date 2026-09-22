@@ -559,6 +559,16 @@ export class CharacterSheet implements OnInit {
       .filter((label): label is string => !!label);
   });
 
+  /** Chemins retirés par le cadenas de visibilité pour ce lecteur (Story 31.6/31.7) — vide pour le
+   *  propriétaire/MJ (jamais masqués) ou une Partie sans configuration. Sert uniquement à distinguer
+   *  « masqué par le MJ » de « non renseigné » là où une section entière disparaîtrait sinon
+   *  silencieusement (bug fix, session bmad-build 2026-09-22) — pas une refonte de chaque section. */
+  protected readonly hiddenFields = computed(() => new Set(this.character()?.hiddenFields ?? []));
+
+  protected isHidden(path: string): boolean {
+    return this.hiddenFields().has(path);
+  }
+
   protected readonly attributes = computed<{
     AGI: number;
     ESP: number;

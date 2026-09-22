@@ -155,11 +155,15 @@
           <h2 class="sheet__card-title">
             Attributs{{ attributePatternLabel() ? ' — patron ' + attributePatternLabel() : '' }}
           </h2>
-          @if (attributes(); as attrs) {
+          @if (isHidden('attributes')) {
+            <p class="sheet__masked-note">{{ theme.tone()['evolution.hidden_marker'] }}</p>
+          } @else if (attributes(); as attrs) {
             <div class="sheet__attr-grid">
               <div class="sheet__attr-box">
                 <span class="sheet__attr-key">VIG</span>
-                @if (!vigPencil()?.editing()) {
+                @if (isHidden('attributes.VIG')) {
+                  <span class="sheet__attr-val">{{ theme.tone()['evolution.hidden_marker'] }}</span>
+                } @else if (!vigPencil()?.editing()) {
                   <span class="sheet__attr-val">{{ attrs.VIG }}</span>
                 }
                 @if (viewerIsMj()) {
@@ -174,7 +178,9 @@
               </div>
               <div class="sheet__attr-box">
                 <span class="sheet__attr-key">AGI</span>
-                @if (!agiPencil()?.editing()) {
+                @if (isHidden('attributes.AGI')) {
+                  <span class="sheet__attr-val">{{ theme.tone()['evolution.hidden_marker'] }}</span>
+                } @else if (!agiPencil()?.editing()) {
                   <span class="sheet__attr-val">{{ attrs.AGI }}</span>
                 }
                 @if (viewerIsMj()) {
@@ -189,7 +195,9 @@
               </div>
               <div class="sheet__attr-box">
                 <span class="sheet__attr-key">INT</span>
-                @if (!intPencil()?.editing()) {
+                @if (isHidden('attributes.INT')) {
+                  <span class="sheet__attr-val">{{ theme.tone()['evolution.hidden_marker'] }}</span>
+                } @else if (!intPencil()?.editing()) {
                   <span class="sheet__attr-val">{{ attrs.INT }}</span>
                 }
                 @if (viewerIsMj()) {
@@ -204,7 +212,9 @@
               </div>
               <div class="sheet__attr-box">
                 <span class="sheet__attr-key">ESP</span>
-                @if (!espPencil()?.editing()) {
+                @if (isHidden('attributes.ESP')) {
+                  <span class="sheet__attr-val">{{ theme.tone()['evolution.hidden_marker'] }}</span>
+                } @else if (!espPencil()?.editing()) {
                   <span class="sheet__attr-val">{{ attrs.ESP }}</span>
                 }
                 @if (viewerIsMj()) {

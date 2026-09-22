@@ -74,6 +74,34 @@ describe('InventoryTab', () => {
     expect(fixture.nativeElement.querySelector('app-encumbrance-bar')).toBeNull();
   });
 
+  it('equipment verrouillé (bug fix, hiddenFields) : « Masqué par le MJ » dans les 3 sous-sections, jamais « vide »', async () => {
+    const characterSvc = { addInventoryItem: vi.fn() };
+    await TestBed.configureTestingModule({
+      imports: [InventoryTab],
+      providers: [{ provide: CharacterService, useValue: characterSvc }],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(InventoryTab);
+    fixture.componentRef.setInput('character', {
+      ...makeCharacterWithItems([]),
+      hiddenFields: ['attributes', 'equipment', 'derived'],
+    });
+    fixture.componentRef.setInput('isOwner', false);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const text = fixture.nativeElement.textContent;
+    expect((text.match(/Masqué par le MJ/g) ?? []).length).toBe(3);
+    expect(text).not.toContain("Aucun objet dans l'inventaire");
+    expect(text).not.toContain('Aucun contenant pour le moment');
+    expect(text).not.toContain('Aucun animal pour le moment');
+  });
+
+  it('equipment non verrouillé et vide : messages « vide » habituels conservés', async () => {
+    const fixture = await createComponent({ addInventoryItem: vi.fn() });
+    const text = fixture.nativeElement.textContent;
+    expect(text).not.toContain('Masqué par le MJ');
+  });
+
   it('formulaire d’ajout absent si isOwner=false', async () => {
     const fixture = await createComponent({ addInventoryItem: vi.fn() }, false);
     expect(fixture.nativeElement.querySelector('.inventory-tab__add-form')).toBeNull();

@@ -303,6 +303,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.immunity_section_title': 'Immunités',
     'evolution.other_capabilities_title': 'Autres capacités',
     'evolution.derived_hidden': 'Statistiques masquées par le MJ',
+    'evolution.hidden_marker': 'Masqué par le MJ',
     /* — inventaire chiffré (Story 6.4) — */
     'evolution.inventory_section_title': 'Inventaire',
     'evolution.inventory_add_cta': '+ Ajouter un objet',
@@ -709,6 +710,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.immunity_section_title': 'Immunités du cercle',
     'evolution.other_capabilities_title': 'Dons du voyage',
     'evolution.derived_hidden': 'Statistiques voilées par le Guide',
+    'evolution.hidden_marker': 'Voilé par le Guide',
     'evolution.inventory_section_title': 'Besace',
     'evolution.inventory_add_cta': '+ Glisser un objet dans la besace',
     'evolution.inventory_empty': 'La besace est vide pour le moment.',
@@ -1104,6 +1106,7 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'evolution.immunity_section_title': 'Modules d’immunité',
     'evolution.other_capabilities_title': 'Modules installés',
     'evolution.derived_hidden': 'Statistiques verrouillées par le MJ',
+    'evolution.hidden_marker': 'Verrouillé par le MJ',
     'evolution.inventory_section_title': 'Compartiment de fret',
     'evolution.inventory_add_cta': '+ Charger un composant',
     'evolution.inventory_empty': 'Aucun composant chargé pour le moment.',

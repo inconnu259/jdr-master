@@ -5,7 +5,9 @@
 
   <section class="inventory-tab__section">
     <h3>Objets</h3>
-    @if (individual().length === 0) {
+    @if (equipmentHidden()) {
+      <p class="inventory-tab__empty">{{ theme.tone()['evolution.hidden_marker'] }}</p>
+    } @else if (individual().length === 0) {
       <p class="inventory-tab__empty">{{ theme.tone()['evolution.inventory_empty'] }}</p>
     } @else {
       <ul class="inventory-tab__list">
@@ -131,7 +133,9 @@
 
   <section class="inventory-tab__section">
     <h3>Contenants</h3>
-    @if (contenants().length === 0) {
+    @if (equipmentHidden()) {
+      <p class="inventory-tab__empty">{{ theme.tone()['evolution.hidden_marker'] }}</p>
+    } @else if (contenants().length === 0) {
       <p class="inventory-tab__empty">Aucun contenant pour le moment.</p>
     } @else {
       <ul class="inventory-tab__list">
@@ -264,7 +268,9 @@
 
   <section class="inventory-tab__section">
     <h3>Animaux</h3>
-    @if (animaux().length === 0) {
+    @if (equipmentHidden()) {
+      <p class="inventory-tab__empty">{{ theme.tone()['evolution.hidden_marker'] }}</p>
+    } @else if (animaux().length === 0) {
       <p class="inventory-tab__empty">Aucun animal pour le moment.</p>
     } @else {
       <ul class="inventory-tab__list">

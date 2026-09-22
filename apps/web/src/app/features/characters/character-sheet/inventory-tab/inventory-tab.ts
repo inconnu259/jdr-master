@@ -22,6 +22,13 @@ export class InventoryTab {
   readonly viewerIsMj = input(false);
   readonly characterUpdated = output<CharacterDto>();
 
+  /** Bug fix (session bmad-build, 2026-09-22) : `equipment` retiré par un cadenas de visibilité
+   *  (Story 31.6/31.7) ne doit jamais être confondu avec un inventaire réellement vide — sinon un
+   *  fellow player verrait « La besace est vide » alors que le MJ a simplement masqué son contenu. */
+  protected readonly equipmentHidden = computed(
+    () => this.character().hiddenFields?.includes('equipment') ?? false,
+  );
+
   /** `equipment.*` n'est pas exposé par `CharacterDto` (type `SheetData` générique côté
    *  `packages/shared`) — même stratégie de cast que `capability-label.util.ts` pour `levelUps`. */
   protected readonly individual = computed<InventoryItemView[]>(

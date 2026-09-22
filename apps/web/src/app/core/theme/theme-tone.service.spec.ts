@@ -338,5 +338,8 @@ describe('Tones — statistiques dérivées masquées sur CharacterSheet (bug fi
     it(`${theme} porte la clé evolution.derived_hidden, non vide`, () => {
       expect(TONE_MAP[theme]['evolution.derived_hidden']).toBeTruthy();
     });
+    it(`${theme} porte la clé evolution.hidden_marker, non vide`, () => {
+      expect(TONE_MAP[theme]['evolution.hidden_marker']).toBeTruthy();
+    });
   }
 });
