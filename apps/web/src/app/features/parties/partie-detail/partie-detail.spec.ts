@@ -1956,7 +1956,7 @@ describe('PartieDetail — arrivée depuis le bandeau du Shell (Story 29.13, ré
 describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('Partie ONE_SHOT + MJ → onglet "Scénario" (singulier), app-scenario-one-shot-tab, jamais app-scenario-drafts', async () => {
+  it('Partie ONE_SHOT + MJ → onglet "Scénario" (singulier), app-scenario-one-shot-tab, jamais app-scenario-list', async () => {
     const partie = makePartie({ mjId: MJ_ID, kind: 'ONE_SHOT' });
     const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
 
@@ -1969,10 +1969,10 @@ describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
     fixture.detectChanges();
 
     expect(el.querySelector('app-scenario-one-shot-tab')).toBeTruthy();
-    expect(el.querySelector('app-scenario-drafts')).toBeNull();
+    expect(el.querySelector('app-scenario-list')).toBeNull();
   });
 
-  it('Partie CAMPAGNE_LINEAIRE + MJ → onglet "Scénarios" (pluriel), app-scenario-drafts, jamais app-scenario-one-shot-tab', async () => {
+  it('Partie CAMPAGNE_LINEAIRE + MJ → onglet "Scénarios" (pluriel), app-scenario-list, jamais app-scenario-one-shot-tab', async () => {
     const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
 
@@ -1984,14 +1984,14 @@ describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(el.querySelector('app-scenario-drafts')).toBeTruthy();
+    expect(el.querySelector('app-scenario-list')).toBeTruthy();
     expect(el.querySelector('app-scenario-one-shot-tab')).toBeNull();
   });
 
   it('joueur (non-MJ) → aucun des deux onglets Scénario(s), quel que soit le kind', async () => {
     const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const { el } = await createFixture(partie, PLAYER_ID);
-    expect(el.querySelector('app-scenario-drafts')).toBeNull();
+    expect(el.querySelector('app-scenario-list')).toBeNull();
     expect(el.querySelector('app-scenario-one-shot-tab')).toBeNull();
   });
 });

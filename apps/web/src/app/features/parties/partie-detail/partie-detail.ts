@@ -66,7 +66,7 @@ import { RosterRail } from '../roster-rail/roster-rail';
 import { RosterStrip } from '../roster-strip/roster-strip';
 import { XpDistributionPanel } from '../xp-distribution-panel/xp-distribution-panel';
 import { XpHistory } from '../xp-history/xp-history';
-import { ScenarioDrafts } from '../../scenarios/scenario-drafts/scenario-drafts';
+import { ScenarioList } from '../../scenarios/scenario-list/scenario-list';
 import { ScenarioOneShotTab } from '../../scenarios/scenario-one-shot-tab/scenario-one-shot-tab';
 import { ScenarioTimeline } from '../../scenarios/scenario-timeline/scenario-timeline';
 import { AnnouncementFormComponent } from '../../announcements/announcement-form/announcement-form';
@@ -108,7 +108,7 @@ const SEARCH_DEBOUNCE_MS = 500;
     RosterStrip,
     XpDistributionPanel,
     XpHistory,
-    ScenarioDrafts,
+    ScenarioList,
     ScenarioOneShotTab,
     ScenarioTimeline,
     AnnouncementFormComponent,
@@ -507,7 +507,7 @@ export class PartieDetail implements OnInit {
     // Bug fix (temps réel, production) : un nouveau sondage de date créé sur une Séance pendant
     // que cette page est déjà ouverte n'apparaissait jamais dans le widget "Vote ouvert"
     // (activePolls n'était chargé qu'une fois dans ngOnInit). Même garde `matchesPartie` que
-    // CalendarView/ScenarioEditor/ScenarioDrafts pour ce même signal.
+    // CalendarView/ScenarioEditor/ScenarioList pour ce même signal.
     let firstRunScenarios = true;
     effect(() => {
       const change = this.scenariosSvc.changed();

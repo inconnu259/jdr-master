@@ -88,7 +88,7 @@ export class ScenarioOneShotTab implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
-    // Revue de code : capturer partieId() une seule fois ici (comme ScenarioDrafts/PartieDetail),
+    // Revue de code : capturer partieId() une seule fois ici (comme ScenarioList/PartieDetail),
     // plutôt que de relire le signal à la destruction — si l'input venait à changer sans
     // réinstanciation du composant, disconnect() fermerait alors la mauvaise connexion.
     const partieId = this.partieId();

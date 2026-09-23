@@ -115,7 +115,7 @@ export class ScenarioTimeline {
     });
 
     // Recharge au montage ET à chaque mutation notifiée par ScenariosService (create/update/open
-    // déclenchés depuis un autre onglet Angular Material de la même page, ex. ScenarioDrafts — pas
+    // déclenchés depuis un autre onglet Angular Material de la même page, ex. ScenarioList — pas
     // un onglet navigateur, qu'un simple signal ne peut pas synchroniser) — évite d'exiger un F5
     // pour voir un scénario nouvellement créé ou ouvert aux joueurs apparaître ici. Story 17.3 (AC1) :
     // ignore les mutations notifiées pour une autre Partie — ne recharge que si la Partie affichée
@@ -183,7 +183,7 @@ export class ScenarioTimeline {
       this.dragMoved = false;
       return;
     }
-    // MJ + BROUILLON/A_VENIR/COURANT : direction la fiche d'édition (comme depuis ScenarioDrafts),
+    // MJ + BROUILLON/A_VENIR/COURANT : direction la fiche d'édition (comme depuis ScenarioList),
     // jamais le dialogue anti-spoil lecture seule — le MJ est l'auteur du scénario, il n'a rien à se
     // cacher à lui-même ; A_VENIR porte le CTA « Marquer comme Courant » (Story 7.6, AC8), COURANT
     // porte le CTA « Clôturer le scénario » (Story 7.7, AC6). PASSE reste ouvert via

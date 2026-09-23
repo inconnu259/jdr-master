@@ -17,7 +17,7 @@ export class ScenarioDetail implements OnInit {
   private readonly scenarios = inject(ScenariosService);
 
   // Transmis par l'état de navigation quand disponible (ScenarioForm après création,
-  // ScenarioDrafts/ScenarioTimeline au clic sur une ligne, qui l'ont déjà en mémoire) — évite un
+  // ScenarioList/ScenarioTimeline au clic sur une ligne, qui l'ont déjà en mémoire) — évite un
   // aller-retour réseau dans le cas courant. `extras.state` n'est lisible que pendant la navigation
   // en cours, donc capturé ici en constructeur.
   private readonly navigationScenario = inject(Router).getCurrentNavigation()?.extras.state?.[

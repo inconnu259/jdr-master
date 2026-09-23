@@ -464,7 +464,7 @@
         }
         @if (isMj() && p.kind !== 'ONE_SHOT') {
           <mat-tab label="Scénarios">
-            <app-scenario-drafts [partieId]="p.id" />
+            <app-scenario-list [partieId]="p.id" />
           </mat-tab>
         }
         @if (p.kind !== 'ONE_SHOT') {

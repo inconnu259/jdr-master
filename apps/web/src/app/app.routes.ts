@@ -111,9 +111,7 @@ export const routes: Routes = [
       {
         path: 'parties/:id/scenarios/drafts',
         loadComponent: () =>
-          import('./features/scenarios/scenario-drafts/scenario-drafts').then(
-            (m) => m.ScenarioDrafts,
-          ),
+          import('./features/scenarios/scenario-list/scenario-list').then((m) => m.ScenarioList),
       },
       {
         path: 'parties/:id/scenarios/new',
