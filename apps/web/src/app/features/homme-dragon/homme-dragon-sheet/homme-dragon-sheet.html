@@ -4,7 +4,7 @@
   } @else if (hommeDragon() === undefined) {
     <p class="muted">Chargement...</p>
   } @else if (hommeDragon() === null) {
-    <form class="homme-dragon-sheet__create-form">
+    <form class="homme-dragon-sheet__create-form homme-dragon-sheet__card">
       <label>
         {{ theme.tone()['homme-dragon.race_label'] }}
         <select
@@ -85,127 +85,186 @@
         <p class="notice">{{ theme.tone()['homme-dragon.created_notice'] }}</p>
       }
 
-      <h3>{{ hommeDragon()!.sheetData.nom }}</h3>
-      <p>{{ theme.tone()['homme-dragon.race_label'] }} : {{ raceLabel(hommeDragon()!.sheetData.race) }}</p>
-
-      <button mat-stroked-button type="button" [disabled]="exporting()" (click)="onExportPdf()">
-        Exporter en PDF
-      </button>
+      <header class="homme-dragon-sheet__header">
+        <div class="homme-dragon-sheet__header-info">
+          <h1 class="homme-dragon-sheet__name">{{ displayName() }}</h1>
+          <p class="homme-dragon-sheet__meta">
+            {{ theme.tone()['homme-dragon.race_label'] }} : {{ raceLabel(hommeDragon()!.sheetData.race) }}
+          </p>
+        </div>
+        <button mat-stroked-button type="button" [disabled]="exporting()" (click)="onExportPdf()">
+          Exporter en PDF
+        </button>
+      </header>
       @if (exportError()) {
         <p class="error">{{ exportError() }}</p>
       }
 
-      @if (!editingArtefact()) {
-        <p>
-          {{ theme.tone()['homme-dragon.artefact_label'] }} :
-          {{ hommeDragon()!.sheetData.artefact.nom || hommeDragon()!.sheetData.artefact.key }}
-          <button mat-button type="button" (click)="openArtefactEdit()">Modifier</button>
-        </p>
-      } @else {
-        <div class="homme-dragon-sheet__artefact-edit">
-          <select [ngModel]="editArtefactKey()" name="editArtefact" (ngModelChange)="editArtefactKey.set($event)">
-            @for (a of artefactsForExistingRace(); track a.key) {
-              <option [ngValue]="a.key">{{ $any(a.data).label }}</option>
+      <div class="homme-dragon-sheet__body">
+        <div class="homme-dragon-sheet__column">
+          <section class="homme-dragon-sheet__card">
+            <h2 class="homme-dragon-sheet__card-title">{{ theme.tone()['homme-dragon.artefact_label'] }}</h2>
+            @if (!editingArtefact()) {
+              <p>
+                @if (artefactDetail(); as d) {
+                  <button
+                    type="button"
+                    class="homme-dragon-sheet__detail-trigger"
+                    (click)="detail.open(d.title, d.body, $event)"
+                  >{{ d.title }}</button>
+                } @else {
+                  {{ artefactLabel() }}
+                }
+                <button mat-button type="button" (click)="openArtefactEdit()">Modifier</button>
+              </p>
+            } @else {
+              <div class="homme-dragon-sheet__artefact-edit">
+                <select [ngModel]="editArtefactKey()" name="editArtefact" (ngModelChange)="editArtefactKey.set($event)">
+                  @for (a of artefactsForExistingRace(); track a.key) {
+                    <option [ngValue]="a.key">{{ $any(a.data).label }}</option>
+                  }
+                </select>
+                <button mat-flat-button color="primary" type="button" [disabled]="updating()" (click)="onArtefactSubmit()">
+                  Confirmer
+                </button>
+                <button mat-button type="button" (click)="editingArtefact.set(false)">Annuler</button>
+                @if (updateError()) {
+                  <p class="error">{{ updateError() }}</p>
+                }
+              </div>
             }
-          </select>
-          <button mat-flat-button color="primary" type="button" [disabled]="updating()" (click)="onArtefactSubmit()">
-            Confirmer
-          </button>
-          <button mat-button type="button" (click)="editingArtefact.set(false)">Annuler</button>
-          @if (updateError()) {
-            <p class="error">{{ updateError() }}</p>
+          </section>
+
+          @if (
+            hommeDragon()!.sheetData.apparence ||
+            hommeDragon()!.sheetData.caractere ||
+            hommeDragon()!.sheetData.vocation ||
+            hommeDragon()!.sheetData.demeure ||
+            hommeDragon()!.sheetData.avatar ||
+            hommeDragon()!.sheetData.mondesProteges
+          ) {
+            <section class="homme-dragon-sheet__card">
+              <h2 class="homme-dragon-sheet__card-title">Présentation</h2>
+              @if (hommeDragon()!.sheetData.apparence) {
+                <p class="homme-dragon-sheet__detail">Apparence : {{ hommeDragon()!.sheetData.apparence }}</p>
+              }
+              @if (hommeDragon()!.sheetData.caractere) {
+                <p class="homme-dragon-sheet__detail">Caractère : {{ hommeDragon()!.sheetData.caractere }}</p>
+              }
+              @if (hommeDragon()!.sheetData.vocation) {
+                <p class="homme-dragon-sheet__detail">Vocation : {{ hommeDragon()!.sheetData.vocation }}</p>
+              }
+              @if (hommeDragon()!.sheetData.demeure) {
+                <p class="homme-dragon-sheet__detail">Demeure : {{ hommeDragon()!.sheetData.demeure }}</p>
+              }
+              @if (hommeDragon()!.sheetData.avatar) {
+                <p class="homme-dragon-sheet__detail">Avatar : {{ hommeDragon()!.sheetData.avatar }}</p>
+              }
+              @if (hommeDragon()!.sheetData.mondesProteges) {
+                <p class="homme-dragon-sheet__detail">Mondes protégés : {{ hommeDragon()!.sheetData.mondesProteges }}</p>
+              }
+            </section>
+          }
+
+          @if (currentPendingLevel()) {
+            <section class="homme-dragon-sheet__card homme-dragon-sheet__eveil-prompt">
+              <h2 class="homme-dragon-sheet__card-title">Pouvoir d'éveil à choisir</h2>
+              <p>Niveau {{ currentPendingLevel() }} atteint — choisissez un pouvoir d'éveil parmi ceux restants :</p>
+              @if (eveilPowersForCurrentLevel().length === 0) {
+                <p class="muted">Aucun pouvoir d'éveil disponible.</p>
+              } @else {
+                <select [ngModel]="selectedEveilPowerKey()" name="eveilPower" (ngModelChange)="selectedEveilPowerKey.set($event)">
+                  <option [ngValue]="null" disabled>—</option>
+                  @for (p of eveilPowersForCurrentLevel(); track p.key) {
+                    <option [ngValue]="p.key">{{ eveilPowerLabel(p.key) }}</option>
+                  }
+                </select>
+                <button
+                  mat-flat-button
+                  color="primary"
+                  type="button"
+                  [disabled]="!selectedEveilPowerKey() || choosingEveilPower()"
+                  (click)="onChooseEveilPower()"
+                >
+                  Confirmer
+                </button>
+              }
+              @if (eveilPowerError()) {
+                <p class="error">{{ eveilPowerError() }}</p>
+              }
+            </section>
+          }
+
+          @if (hommeDragon()!.eveilPowers.length > 0) {
+            <section class="homme-dragon-sheet__card homme-dragon-sheet__eveil-powers">
+              <h2 class="homme-dragon-sheet__card-title">Pouvoirs d'éveil</h2>
+              <ul class="homme-dragon-sheet__talent-list">
+                @for (ep of hommeDragon()!.eveilPowers; track ep.level) {
+                  <li>
+                    Niveau {{ ep.level }} :
+                    @if (eveilPowerDetail(ep.key); as d) {
+                      <button
+                        type="button"
+                        class="homme-dragon-sheet__detail-trigger"
+                        (click)="detail.open(d.title, d.body, $event)"
+                      >{{ d.title }}</button>
+                    } @else {
+                      {{ eveilPowerLabel(ep.key) }}
+                    }
+                  </li>
+                }
+              </ul>
+            </section>
           }
         </div>
-      }
 
-      @if (hommeDragon()!.sheetData.apparence) {
-        <p>Apparence : {{ hommeDragon()!.sheetData.apparence }}</p>
-      }
-      @if (hommeDragon()!.sheetData.caractere) {
-        <p>Caractère : {{ hommeDragon()!.sheetData.caractere }}</p>
-      }
-      @if (hommeDragon()!.sheetData.vocation) {
-        <p>Vocation : {{ hommeDragon()!.sheetData.vocation }}</p>
-      }
-      @if (hommeDragon()!.sheetData.demeure) {
-        <p>Demeure : {{ hommeDragon()!.sheetData.demeure }}</p>
-      }
-      @if (hommeDragon()!.sheetData.avatar) {
-        <p>Avatar : {{ hommeDragon()!.sheetData.avatar }}</p>
-      }
-      @if (hommeDragon()!.sheetData.mondesProteges) {
-        <p>Mondes protégés : {{ hommeDragon()!.sheetData.mondesProteges }}</p>
-      }
+        <div class="homme-dragon-sheet__column">
+          <section class="homme-dragon-sheet__card homme-dragon-sheet__derived">
+            <h2 class="homme-dragon-sheet__card-title">Statistiques dérivées</h2>
+            <div class="homme-dragon-sheet__pill-grid">
+              <span class="stat-pill">Niveau : {{ hommeDragon()!.derived.level }}</span>
+              <span class="stat-pill">Points de Souffle : {{ hommeDragon()!.derived.PS }}</span>
+            </div>
+          </section>
 
-      @if (currentPendingLevel()) {
-        <section class="homme-dragon-sheet__eveil-prompt">
-          <p>Niveau {{ currentPendingLevel() }} atteint — choisissez un pouvoir d'éveil parmi ceux restants :</p>
-          @if (eveilPowersForCurrentLevel().length === 0) {
-            <p class="muted">Aucun pouvoir d'éveil disponible.</p>
-          } @else {
-            <select [ngModel]="selectedEveilPowerKey()" name="eveilPower" (ngModelChange)="selectedEveilPowerKey.set($event)">
-              <option [ngValue]="null" disabled>—</option>
-              @for (p of eveilPowersForCurrentLevel(); track p.key) {
-                <option [ngValue]="p.key">{{ eveilPowerLabel(p.key) }}</option>
-              }
-            </select>
-            <button
-              mat-flat-button
-              color="primary"
-              type="button"
-              [disabled]="!selectedEveilPowerKey() || choosingEveilPower()"
-              (click)="onChooseEveilPower()"
-            >
-              Confirmer
-            </button>
-          }
-          @if (eveilPowerError()) {
-            <p class="error">{{ eveilPowerError() }}</p>
-          }
-        </section>
-      }
-
-      @if (hommeDragon()!.eveilPowers.length > 0) {
-        <section class="homme-dragon-sheet__eveil-powers">
-          <h4>Pouvoirs d'éveil</h4>
-          <ul>
-            @for (ep of hommeDragon()!.eveilPowers; track ep.level) {
-              <li>Niveau {{ ep.level }} : {{ eveilPowerLabel(ep.key) }}</li>
+          <section class="homme-dragon-sheet__card homme-dragon-sheet__voyageurs">
+            <h2 class="homme-dragon-sheet__card-title">Voyageurs protégés</h2>
+            @if (hommeDragon()!.voyageursProteges.length === 0) {
+              <p class="muted">Aucun voyageur pour l'instant.</p>
+            } @else {
+              <ul>
+                @for (v of hommeDragon()!.voyageursProteges; track v.userId) {
+                  <li>{{ v.pseudo }}</li>
+                }
+              </ul>
             }
-          </ul>
-        </section>
-      }
+          </section>
 
-      <section class="homme-dragon-sheet__derived">
-        <p>Niveau : {{ hommeDragon()!.derived.level }}</p>
-        <p>Points de Souffle : {{ hommeDragon()!.derived.PS }}</p>
-      </section>
-
-      <section class="homme-dragon-sheet__voyageurs">
-        <h4>Voyageurs protégés</h4>
-        @if (hommeDragon()!.voyageursProteges.length === 0) {
-          <p class="muted">Aucun voyageur pour l'instant.</p>
-        } @else {
-          <ul>
-            @for (v of hommeDragon()!.voyageursProteges; track v.userId) {
-              <li>{{ v.pseudo }}</li>
+          <section class="homme-dragon-sheet__card homme-dragon-sheet__historique">
+            <h2 class="homme-dragon-sheet__card-title">Historique</h2>
+            @if (hommeDragon()!.historique.length === 0) {
+              <p class="muted">Aucun scénario joué pour l'instant.</p>
+            } @else {
+              <ul>
+                @for (h of hommeDragon()!.historique; track h.scenarioTitle + h.date) {
+                  <li>{{ h.scenarioTitle }} — {{ h.date | date: 'longDate' }} — {{ h.participants.join(', ') }}</li>
+                }
+              </ul>
             }
-          </ul>
-        }
-      </section>
-
-      <section class="homme-dragon-sheet__historique">
-        <h4>Historique</h4>
-        @if (hommeDragon()!.historique.length === 0) {
-          <p class="muted">Aucun scénario joué pour l'instant.</p>
-        } @else {
-          <ul>
-            @for (h of hommeDragon()!.historique; track h.scenarioTitle + h.date) {
-              <li>{{ h.scenarioTitle }} — {{ h.date | date: 'longDate' }} — {{ h.participants.join(', ') }}</li>
-            }
-          </ul>
-        }
-      </section>
+          </section>
+        </div>
+      </div>
     </div>
+  }
+
+  @if (detail.selected(); as d) {
+    <app-detail-surface
+      [title]="d.title"
+      [body]="d.body"
+      [rows]="d.rows ?? []"
+      [narrative]="d.narrative ?? ''"
+      [openToken]="detail.openToken()"
+      (closed)="detail.close()"
+    />
   }
 </div>

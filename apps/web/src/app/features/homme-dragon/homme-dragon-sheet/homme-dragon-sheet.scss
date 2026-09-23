@@ -1,0 +1,176 @@
+// Story 33.1 — refonte de la fiche Homme Dragon sur le motif de `character-sheet.scss` (cartes
+// `sheet__card`, espacements, seuil 768px pour le passage à deux colonnes). Classes préfixées
+// `homme-dragon-sheet__` (composant distinct, styles Angular encapsulés — pas de partage de
+// classe avec `CharacterSheet`).
+
+.error {
+  color: var(--mat-sys-error, #c00);
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant, #888);
+  font-style: italic;
+}
+
+.notice {
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: var(--mat-sys-secondary-container, #e0dbef);
+  color: var(--mat-sys-on-secondary-container, #2a1a4a);
+  font-size: 0.9rem;
+}
+
+.homme-dragon-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  &__header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  &__name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  &__meta {
+    font-size: 0.85rem;
+    color: var(--mat-sys-on-surface-variant, #555);
+    margin: 0;
+  }
+
+  &__fiche {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  &__create-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      font-size: 0.85rem;
+    }
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  &__column {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  &__card {
+    background: var(--mat-sys-surface-container-high, #f0ebe3);
+    border-radius: 10px;
+    padding: 1rem 1.125rem;
+  }
+
+  &__card-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--mat-sys-on-surface-variant, #555);
+    margin: 0 0 0.75rem;
+  }
+
+  &__detail {
+    display: block;
+    font-size: 0.9rem;
+    margin: 0.25rem 0 0;
+  }
+
+  &__talent-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  &__pill-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
+  &__artefact-edit {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}
+
+.stat-pill {
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--mat-sys-secondary-container, #e0dbef);
+  color: var(--mat-sys-on-secondary-container, #2a1a4a);
+}
+
+// Story 33.1 — déclencheur de la surface de détail (artefact, pouvoir d'éveil). Même reset que
+// `.sheet__detail-trigger` (character-sheet.scss) : reprend exactement l'apparence du texte
+// inerte qu'il remplace (élément interactif réel, visuellement identique).
+.homme-dragon-sheet__detail-trigger {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
+  }
+}
+
+/* ─── Desktop/tablette (≥768px) : 2 colonnes, même seuil que character-sheet.scss ─── */
+@media (min-width: 768px) {
+  .homme-dragon-sheet {
+    padding: 1.5rem;
+
+    &__body {
+      flex-direction: row;
+      align-items: flex-start;
+    }
+
+    &__column {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+}

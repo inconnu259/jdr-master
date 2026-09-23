@@ -15,6 +15,12 @@ import type { ContentEntryDto, HommeDragonDto, HommeDragonRace } from '@master-j
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
+import {
+  createDetailSurfaceHost,
+  detailContent,
+  type DetailSurfaceContent,
+} from '../../../shared/detail-surface/detail-surface-host';
 
 const RACES: HommeDragonRace[] = ['DRAGON_VERT', 'DRAGON_BLEU', 'DRAGON_ROUGE', 'DRAGON_NOIR'];
 
@@ -33,8 +39,9 @@ const RACE_LABELS: Record<HommeDragonRace, string> = {
  */
 @Component({
   selector: 'app-homme-dragon-sheet',
-  imports: [FormsModule, MatButtonModule, DatePipe],
+  imports: [FormsModule, MatButtonModule, DatePipe, DetailSurface],
   templateUrl: './homme-dragon-sheet.html',
+  styleUrl: './homme-dragon-sheet.scss',
 })
 export class HommeDragonSheet implements OnInit {
   readonly partieId = input.required<string>();
@@ -48,10 +55,22 @@ export class HommeDragonSheet implements OnInit {
   protected readonly races = RACES;
   protected readonly raceLabel = (race: HommeDragonRace): string => RACE_LABELS[race];
 
+  /**
+   * Surface de détail (Story 33.1) — même plomberie que `CharacterSheet` : un seul emplacement
+   * ouvert à la fois, le jeton d'ouverture et le retour du focus vivent dans le host partagé.
+   */
+  protected readonly detail = createDetailSurfaceHost();
+
   /** `undefined` = chargement en cours, `null` = pas encore créé, sinon la fiche existante. */
   protected readonly hommeDragon = signal<HommeDragonDto | null | undefined>(undefined);
   protected readonly artefactCatalog = signal<ContentEntryDto[]>([]);
   protected readonly loadError = signal<string | null>(null);
+
+  /** Nom affiché sur la fiche — même convention de repli que `characterName()`
+   *  (`character.util.ts`) : valeur normalisée ou libellé de repli en français si absente. */
+  protected readonly displayName = computed<string>(
+    () => this.hommeDragon()?.sheetData.nom?.trim() || 'Homme Dragon sans nom',
+  );
 
   // — Formulaire de création —
   protected readonly race = signal<HommeDragonRace | null>(null);
@@ -88,6 +107,29 @@ export class HommeDragonSheet implements OnInit {
     return this.artefactCatalog().filter(
       (e) => (e.data as { race?: string }).race === hd.sheetData.race,
     );
+  });
+
+  /** Libellé affiché de l'artefact courant : `nom` personnalisé par le MJ en priorité, sinon le
+   *  `label` du catalogue `hommeDragonArtefact`, sinon la clé brute en dernier repli. */
+  protected readonly artefactLabel = computed<string>(() => {
+    const hd = this.hommeDragon();
+    if (!hd) return '';
+    const art = hd.sheetData.artefact;
+    const catalogData = this.artefactCatalog().find((e) => e.key === art.key)?.data as
+      { label?: string } | undefined;
+    return art.nom?.trim() || catalogData?.label || art.key;
+  });
+
+  /** Contenu de la surface de détail pour l'artefact courant (Story 33.1) — `null` quand ni
+   *  l'`inscription` du MJ ni la `description` du catalogue ne sont disponibles (pas de
+   *  déclencheur dans ce cas, cf. `detailContent()`). */
+  protected readonly artefactDetail = computed<DetailSurfaceContent | null>(() => {
+    const hd = this.hommeDragon();
+    if (!hd) return null;
+    const art = hd.sheetData.artefact;
+    const catalogData = this.artefactCatalog().find((e) => e.key === art.key)?.data as
+      { description?: string } | undefined;
+    return detailContent(this.artefactLabel(), art.inscription?.trim() || catalogData?.description);
   });
 
   constructor() {
@@ -221,6 +263,14 @@ export class HommeDragonSheet implements OnInit {
   protected eveilPowerLabel(key: string): string {
     const entry = this.eveilPowerCatalog().find((e) => e.key === key);
     return entry ? ((entry.data as { label?: string }).label ?? key) : key;
+  }
+
+  /** Contenu de la surface de détail d'un pouvoir d'éveil déjà choisi (Story 33.1) — `null` quand
+   *  le catalogue ne porte pas de `description` pour cette clé (pas de déclencheur dans ce cas). */
+  protected eveilPowerDetail(key: string): DetailSurfaceContent | null {
+    const entry = this.eveilPowerCatalog().find((e) => e.key === key);
+    const description = (entry?.data as { description?: string } | undefined)?.description;
+    return detailContent(this.eveilPowerLabel(key), description);
   }
 
   protected async onChooseEveilPower(): Promise<void> {

@@ -1,6 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { provideNoopAnimations } from '@angular/platform-browser/animations';
+import { of } from 'rxjs';
 import { vi } from 'vitest';
 import type { GameSystemContentDto, HommeDragonDto } from '@master-jdr/shared';
 import { HommeDragonSheet } from './homme-dragon-sheet';
@@ -16,7 +19,15 @@ const CATALOG: GameSystemContentDto = {
     },
     { key: 'lanterne', data: { key: 'lanterne', label: 'Lanterne', race: 'DRAGON_VERT' } },
     { key: 'sextant', data: { key: 'sextant', label: 'Sextant', race: 'DRAGON_VERT' } },
-    { key: 'grand-arc', data: { key: 'grand-arc', label: 'Grand arc', race: 'DRAGON_ROUGE' } },
+    {
+      key: 'grand-arc',
+      data: {
+        key: 'grand-arc',
+        label: 'Grand arc',
+        race: 'DRAGON_ROUGE',
+        description: 'Le grand arc force ses cibles à se déplacer constamment.',
+      },
+    },
     {
       key: 'grande-epee',
       data: { key: 'grande-epee', label: 'Grande épée', race: 'DRAGON_ROUGE' },
@@ -27,10 +38,27 @@ const CATALOG: GameSystemContentDto = {
     },
   ],
   eveilPower: [
-    { key: 'escorte-du-dragon', data: { key: 'escorte-du-dragon', label: 'Escorte du dragon' } },
+    {
+      key: 'escorte-du-dragon',
+      data: {
+        key: 'escorte-du-dragon',
+        label: 'Escorte du dragon',
+        description: "L'homme-dragon guide les voyageurs perdus.",
+      },
+    },
     { key: 'couche-du-dragon', data: { key: 'couche-du-dragon', label: 'Couche du dragon' } },
   ],
 };
+
+/** Story 33.1 — même patron que `character-sheet.spec.ts`/`detail-surface.spec.ts` : jsdom
+ *  n'implémente pas `matchMedia`, `BreakpointObserver` doit donc être mocké dès que
+ *  `<app-detail-surface>` est effectivement monté (ouverture d'une surface de détail). */
+function makeBreakpointObserver(desktop = false) {
+  return {
+    isMatched: () => desktop,
+    observe: () => of({ matches: desktop, breakpoints: {} }),
+  };
+}
 
 function makeDto(overrides: Partial<HommeDragonDto> = {}): HommeDragonDto {
   return {
@@ -84,6 +112,7 @@ function makeThemeService() {
 async function createComponent(
   hommeDragonSvc = makeHommeDragonService(null),
   characterSvc = makeCharacterService(),
+  desktop = false,
 ) {
   await TestBed.configureTestingModule({
     imports: [HommeDragonSheet],
@@ -91,6 +120,8 @@ async function createComponent(
       { provide: HommeDragonService, useValue: hommeDragonSvc },
       { provide: CharacterService, useValue: characterSvc },
       { provide: ThemeToneService, useValue: makeThemeService() },
+      { provide: BreakpointObserver, useValue: makeBreakpointObserver(desktop) },
+      provideNoopAnimations(),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(HommeDragonSheet);
@@ -221,6 +252,46 @@ describe('HommeDragonSheet', () => {
     expect(component['hommeDragon']()).toEqual(makeDto());
     expect(fixture.debugElement.query(By.css('.homme-dragon-sheet__create-form'))).toBeFalsy();
     expect(fixture.nativeElement.textContent).toContain('Ignis');
+  });
+
+  it('champs libres (apparence, caractère, vocation, demeure, avatar, mondesProteges) affichés sur la fiche existante (Story 33.1)', async () => {
+    const { fixture } = await createComponent(
+      makeHommeDragonService(
+        makeDto({
+          sheetData: {
+            race: 'DRAGON_ROUGE',
+            artefact: { key: 'grand-arc' },
+            nom: 'Ignis',
+            apparence: 'Écailles cuivrées',
+            caractere: 'Bourru mais loyal',
+            vocation: 'Guide de caravane',
+            demeure: 'Une grotte au bord du fleuve',
+            avatar: 'Vieil homme à la barbe rousse',
+            mondesProteges: 'Terra Nova',
+          },
+        }),
+      ),
+    );
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Écailles cuivrées');
+    expect(text).toContain('Bourru mais loyal');
+    expect(text).toContain('Guide de caravane');
+    expect(text).toContain('Une grotte au bord du fleuve');
+    expect(text).toContain('Vieil homme à la barbe rousse');
+    expect(text).toContain('Terra Nova');
+  });
+
+  it('nom absent → repli affiché, même convention que characterName() (Story 33.1)', async () => {
+    const { fixture } = await createComponent(
+      makeHommeDragonService(
+        makeDto({ sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: '' } }),
+      ),
+    );
+    const component = fixture.componentInstance;
+
+    expect(component['displayName']()).toBe('Homme Dragon sans nom');
+    expect(fixture.nativeElement.textContent).toContain('Homme Dragon sans nom');
   });
 
   it("changement d'artefact (AC4) appelle update() et met à jour la fiche affichée", async () => {
@@ -440,6 +511,131 @@ describe('HommeDragonSheet', () => {
 
     expect(component['exportError']()).toBeTruthy();
     expect(component['exporting']()).toBe(false);
+  });
+
+  describe('Surface de détail (Story 33.1)', () => {
+    it('artefact sans nom/inscription personnalisés → le déclencheur affiche le label/description du catalogue (desktop)', async () => {
+      const { fixture } = await createComponent(
+        makeHommeDragonService(
+          makeDto({
+            sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' },
+          }),
+        ),
+        makeCharacterService(),
+        true,
+      );
+      const component = fixture.componentInstance;
+
+      const trigger = fixture.debugElement
+        .queryAll(By.css('.homme-dragon-sheet__detail-trigger'))
+        .find((el) => (el.nativeElement.textContent as string).includes('Grand arc'));
+      expect(trigger).toBeTruthy();
+
+      trigger!.triggerEventHandler('click', new MouseEvent('click'));
+      fixture.detectChanges();
+
+      expect(component['detail'].selected()).toEqual({
+        title: 'Grand arc',
+        body: 'Le grand arc force ses cibles à se déplacer constamment.',
+      });
+    });
+
+    it('artefact avec nom/inscription personnalisés du MJ → le déclencheur utilise ces valeurs en priorité', async () => {
+      const { fixture } = await createComponent(
+        makeHommeDragonService(
+          makeDto({
+            sheetData: {
+              race: 'DRAGON_ROUGE',
+              artefact: {
+                key: 'grand-arc',
+                nom: 'Arc de braise',
+                inscription: 'Gravé par un ancien voyageur.',
+              },
+              nom: 'Ignis',
+            },
+          }),
+        ),
+      );
+      const component = fixture.componentInstance;
+
+      const trigger = fixture.debugElement
+        .queryAll(By.css('.homme-dragon-sheet__detail-trigger'))
+        .find((el) => (el.nativeElement.textContent as string).includes('Arc de braise'));
+      expect(trigger).toBeTruthy();
+
+      trigger!.triggerEventHandler('click', new MouseEvent('click'));
+      fixture.detectChanges();
+
+      expect(component['detail'].selected()).toEqual({
+        title: 'Arc de braise',
+        body: 'Gravé par un ancien voyageur.',
+      });
+    });
+
+    it('artefact sans description au catalogue et sans inscription → aucun déclencheur, texte simple', async () => {
+      const { fixture } = await createComponent(
+        makeHommeDragonService(
+          makeDto({
+            sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grande-epee' }, nom: 'Ignis' },
+          }),
+        ),
+      );
+
+      const trigger = fixture.debugElement
+        .queryAll(By.css('.homme-dragon-sheet__detail-trigger'))
+        .find((el) => (el.nativeElement.textContent as string).includes('Grande épée'));
+      expect(trigger).toBeFalsy();
+      expect(fixture.nativeElement.textContent).toContain('Grande épée');
+    });
+
+    it("pouvoir d'éveil choisi avec description au catalogue → s'ouvre via DetailSurface (AC de la story)", async () => {
+      const { fixture } = await createComponent(
+        makeHommeDragonService(makeDto({ eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }] })),
+      );
+      const component = fixture.componentInstance;
+
+      const section = fixture.debugElement.query(By.css('.homme-dragon-sheet__eveil-powers'));
+      const trigger = section.query(By.css('.homme-dragon-sheet__detail-trigger'));
+      expect(trigger).toBeTruthy();
+      expect((trigger.nativeElement.textContent as string).trim()).toBe('Escorte du dragon');
+
+      trigger.triggerEventHandler('click', new MouseEvent('click'));
+      fixture.detectChanges();
+
+      expect(component['detail'].selected()).toEqual({
+        title: 'Escorte du dragon',
+        body: "L'homme-dragon guide les voyageurs perdus.",
+      });
+    });
+
+    it("pouvoir d'éveil choisi sans description au catalogue → pas de déclencheur, libellé affiché en texte simple", async () => {
+      const { fixture } = await createComponent(
+        makeHommeDragonService(makeDto({ eveilPowers: [{ level: 2, key: 'couche-du-dragon' }] })),
+      );
+
+      const section = fixture.debugElement.query(By.css('.homme-dragon-sheet__eveil-powers'));
+      expect(section.query(By.css('.homme-dragon-sheet__detail-trigger'))).toBeFalsy();
+      expect(section.nativeElement.textContent as string).toContain('Couche du dragon');
+    });
+
+    it('fermeture de la surface de détail via detail.close() vide le contenu sélectionné', async () => {
+      const { fixture } = await createComponent(
+        makeHommeDragonService(makeDto({ eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }] })),
+      );
+      const component = fixture.componentInstance;
+
+      const trigger = fixture.debugElement.query(
+        By.css('.homme-dragon-sheet__eveil-powers .homme-dragon-sheet__detail-trigger'),
+      );
+      trigger.triggerEventHandler('click', new MouseEvent('click'));
+      fixture.detectChanges();
+      expect(component['detail'].selected()).toBeTruthy();
+
+      component['detail'].close();
+      fixture.detectChanges();
+
+      expect(component['detail'].selected()).toBeNull();
+    });
   });
 
   describe('Câblage temps réel (Story 20.2)', () => {

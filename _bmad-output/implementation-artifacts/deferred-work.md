@@ -141,3 +141,8 @@ Registre des items de dette technique/UX identifiés en cours de développement 
   ~4,4:1 en Medieval Steampunk. Le correctif est une affaire de **palette** et reste attribué à
   l'epic 35 ; noté ici parce que la surface exposée à ce plafond grandit.
   [apps/web/src/app/features/scenarios/scenario-timeline/scenario-timeline.scss, apps/web/src/styles.scss]
+
+## Deferred from: bmad-review (Blind Hunter) of 33-1-fiche-homme-dragon-refondue (2026-09-23)
+
+- [P:BASSE] La commande de vérification suggérée par le gabarit de spec (`pnpm vitest run <fichier>`) échoue dans ce dépôt — `apps/web` teste via le builder Angular `ng test`, pas un `vitest.config.ts` autonome (confirmé sur la story 33.1 : `pnpm vitest run` plante sur `window is not defined`). Rien dans l'outillage BMAD (gabarit de spec, `docs/checklist.md`) ne documente la bonne commande (`docker compose exec web pnpm exec ng test web --watch=false --include "<fichier>"`), donc chaque nouvelle story redécouvre le même échec. Pas un défaut du code de cette story — un correctif de doc/gabarit BMAD, hors périmètre d'un `bmad-build`.
+  [_bmad/scripts/render_skill.py, docs/checklist.md]
