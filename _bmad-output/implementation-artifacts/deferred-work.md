@@ -113,3 +113,31 @@ Registre des items de dette technique/UX identifiés en cours de développement 
   mutualisé les fonctions pures (`core/status/status-badge.model.ts`) mais pas le rendu. Deux feuilles
   à tenir d'accord quand la palette bouge. Migration à faire quand l'Agenda sera retouché.
   [apps/web/src/app/features/calendar/calendar-agenda-view/calendar-agenda-view.scss, apps/web/src/app/shared/status-badge/status-badge.scss]
+- [P:MOYENNE] La bande d'état (`StateRail`, 4 px) reste non livrée. La story 32.3 l'avait explicitement
+  renvoyée « à la story 32.4, quand les cartes seront refaites » ; la 32.4 a refondu la chronologie
+  avec une **pastille de nœud** (ancrage sur la ligne) et n'a introduit aucune bande — la story 32.2
+  interdit par ailleurs d'ajouter un liseré concurrent de ses trois liserés de zone. Aucun composant
+  `StateRail` n'existe donc nulle part dans `apps/web`. À trancher explicitement : soit la pastille
+  de nœud + le badge suffisent et la bande est abandonnée, soit elle reste à concevoir pour les
+  cartes de partie (où la maquette `signaletique-etats.html` §3 la montre).
+  [_bmad-output/implementation-artifacts/spec-32-3-etats-de-scenario-et-de-seance.md:31, _bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-08-04/mockups/signaletique-etats.html]
+- [P:MOYENNE] La cascade de résolution de la date effective d'une séance
+  (`poll.chosenDate ?? dateValidee ?? inscription.dateValidee`) existe maintenant en quatre copies :
+  `SeanceList.resolvedDate()`, `status-derivation.dateKeyOf()`, `ScenarioTimeline.seanceIso()` (story
+  32.4) — et deux variantes de `CalendarView` qui oublient encore la racine ajoutée en 32.3. Tant
+  qu'elle n'est pas extraite dans un helper partagé, « une seule cascade pour toute l'app » ne tient
+  que par copier-coller, et la divergence de `CalendarView` en est la preuve.
+  [apps/web/src/app/features/scenarios/seance-list/seance-list.ts:181, apps/web/src/app/core/status/status-derivation.ts:109, apps/web/src/app/features/scenarios/scenario-timeline/scenario-timeline.ts:56, apps/web/src/app/features/calendar/calendar-view/calendar-view.ts:481,511]
+- [P:BASSE] Les séances sont numérotées et affichées dans leur ordre de **création**
+  (`orderBy: { createdAt: 'asc' }` côté serveur, `$index + 1` côté gabarit), jamais dans l'ordre de
+  leurs dates : une séance créée après coup mais datée plus tôt s'affiche « Séance 2 · 12 juin » sous
+  « Séance 1 · 3 juil. ». La story 32.4 a corrigé l'ordre au niveau du **nœud** et laissé celui des
+  lignes de séance intact, volontairement — trier ici seulement ferait diverger la chronologie de
+  `SeanceList`, qui numérote de la même façon. À décider une fois pour toutes, sur les deux surfaces
+  ensemble : où la numérotation des séances est-elle définie ?
+  [apps/api/src/scenarios/scenarios.service.ts:1091, apps/web/src/app/features/scenarios/seance-list/seance-list.html:8, apps/web/src/app/features/scenarios/scenario-timeline/scenario-timeline.html]
+- [P:BASSE] La story 32.4 ajoute du petit texte (plage de dates d'un nœud à 0,75 rem, libellé de
+  séance à 0,8125 rem) sur `--jdr-text-muted`, jeton dont le dépôt a déjà consigné qu'il plafonne à
+  ~4,4:1 en Medieval Steampunk. Le correctif est une affaire de **palette** et reste attribué à
+  l'epic 35 ; noté ici parce que la surface exposée à ce plafond grandit.
+  [apps/web/src/app/features/scenarios/scenario-timeline/scenario-timeline.scss, apps/web/src/styles.scss]
