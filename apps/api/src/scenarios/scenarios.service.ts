@@ -1027,6 +1027,15 @@ function toSeanceDto(
   seance: Prisma.SeanceGetPayload<{ include: typeof SEANCE_INCLUDE }>,
   membersCount: number,
 ): SeanceDto {
+  // Story 32.3 — la date EFFECTIVE remonte à la racine. Même résolution que partout ailleurs
+  // (`recalculateNextSession()`, `availability.service.ts`, `CalendarView`) : le vote scellé
+  // d'abord, la colonne héritée ensuite. Sans ce champ, une séance datée dont `inscriptionMax`
+  // est nul n'exposait aucune date — le bloc `inscription` était son seul porteur.
+  const dateEffective = seance.poll?.chosenDate ?? seance.dateValidee ?? null;
+  // Le créneau n'existe QUE sur le vote : `Seance.dateValidee` n'en a pas (cf. `recalculateNext
+  // Session()`, qui pose `slot: null` sur cette branche). Ne jamais prêter le créneau d'un vote
+  // non scellé à une date héritée.
+  const slotEffectif = seance.poll?.chosenDate ? seance.poll.chosenSlot : null;
   return {
     id: seance.id,
     scenarioId: seance.scenarioId,
@@ -1043,6 +1052,8 @@ function toSeanceDto(
             dateValidee: seance.dateValidee ? seance.dateValidee.toISOString() : null,
           }
         : undefined,
+    dateValidee: dateEffective ? dateEffective.toISOString() : null,
+    slotValidee: slotEffectif,
     compteRendu: seance.compteRendu,
     // Story 36.5 — rendus tels quels. `heureRdv` reste une CHAÎNE : aucun new Date(), aucun
     // formatage, aucun tri. Le client l'affiche, il ne la calcule pas.

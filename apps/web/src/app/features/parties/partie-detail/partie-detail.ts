@@ -53,7 +53,10 @@ import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.se
 import { ambiguousUserIds } from '../../../shared/identity/identity-ambiguity.util';
 import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
-import { getRespondedCount } from '../../../core/poll/poll.util';
+import { getRespondedCount, hasUnansweredOptions } from '../../../core/poll/poll.util';
+import { seanceState, type StatusBadgeState } from '../../../core/status/status-derivation';
+import { toDateKey } from '../../calendar/day-detail.utils';
+import { StatusBadge } from '../../../shared/status-badge/status-badge';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
@@ -112,6 +115,7 @@ const SEARCH_DEBOUNCE_MS = 500;
     AnnonceCard,
     HommeDragonSheet,
     IdentityLabel,
+    StatusBadge,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -607,6 +611,48 @@ export class PartieDetail implements OnInit {
     } catch {
       return null;
     }
+  });
+
+  /** Jour courant figé à la construction — même raison que `CalendarView.todayKey` et
+   *  `SeanceList.todayKey` : une seule source de « aujourd'hui » par écran. */
+  private readonly todayKey = toDateKey(new Date());
+
+  /**
+   * Story 32.3 — l'état du widget « Prochaine séance », porté par le badge partagé.
+   *
+   * Le widget n'a JAMAIS de `SeanceDto` : il ne connaît que la date agrégée au niveau de la Partie
+   * (`nextSessionDate`/`nextSessionSlot`, posées par `recalculateNextSession()`) et les votes
+   * actifs. C'est exactement pour ce cas que `seanceState()` prend une forme structurelle plutôt
+   * que le DTO complet — fabriquer ici une fausse séance aurait été pire.
+   *
+   * 🚨 **Une date déjà passée n'est pas remontée.** `recalculateNextSession()` ne retient que le
+   * futur, mais un recalcul en retard (SSE manqué) pourrait laisser une date périmée : sans ce
+   * filtre, un widget intitulé « Prochaine séance » afficherait « À débriefer », un état qui
+   * appartient à la LISTE des séances, pas à lui.
+   *
+   * 🚨 **Le vote retenu est celui qui attend MA réponse**, s'il y en a un. Avec plusieurs votes
+   * actifs, prendre le premier venu masquerait l'appel à l'action — exactement ce que la story
+   * cherche à rendre visible.
+   */
+  protected readonly nextSessionBadge = computed<StatusBadgeState>(() => {
+    const p = this.partie();
+    const me = this.auth.currentUser()?.id;
+    const polls = this.activePolls();
+    const pending = me ? polls.find((poll) => hasUnansweredOptions(poll, me)) : undefined;
+    const dateKey = p?.nextSessionDate ? p.nextSessionDate.substring(0, 10) : null;
+    const scheduled = dateKey && dateKey >= this.todayKey ? p!.nextSessionDate : null;
+    return seanceState(
+      {
+        // 🚨 Un vote n'est retenu QUE tant que la prochaine séance n'a pas de date : `activePolls()`
+        // est scopé à la PARTIE, pas à une séance. Avec une date confirmée, transmettre un vote
+        // ouvert ailleurs ferait afficher « Réponds au vote » sous la date d'une AUTRE séance.
+        poll: scheduled ? undefined : (pending ?? polls[0]),
+        dateValidee: scheduled,
+        slotValidee: p?.nextSessionSlot ?? null,
+      },
+      me,
+      this.todayKey,
+    );
   });
 
   protected readonly system = gameSystemName;

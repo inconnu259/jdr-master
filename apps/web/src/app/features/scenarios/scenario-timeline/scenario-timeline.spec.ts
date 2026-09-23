@@ -320,6 +320,38 @@ describe('ScenarioTimeline', () => {
     ).toBe(false);
   });
 
+  // Story 32.3 — le badge partagé s'affiche sur la chronologie sans rien changer au masquage
+  // anti-spoil, qui reste entièrement porté par `buildNodes()`.
+  describe('Badges d’état (Story 32.3)', () => {
+    function badgeTexts(fixture: { nativeElement: HTMLElement }): string[] {
+      return [...fixture.nativeElement.querySelectorAll('.status-badge')].map((n) =>
+        (n.textContent ?? '').trim(),
+      );
+    }
+
+    it('MJ → un badge par scénario, « Brouillon » compris, et « Courant » jamais « En cours »', async () => {
+      const { fixture } = await createComponent([A_VENIR, BROUILLON, COURANT_1, PASSE], {
+        isMj: true,
+      });
+      const texts = badgeTexts(fixture);
+      expect(texts).toContain('Brouillon');
+      expect(texts).toContain('À venir');
+      expect(texts).toContain('Courant');
+      expect(texts).toContain('Passé');
+      expect(texts).not.toContain('En cours');
+    });
+
+    it('🚨 joueur → AUCUN badge « Brouillon », ni le moindre badge en trop', async () => {
+      const { fixture } = await createComponent([A_VENIR, BROUILLON, COURANT_1, PASSE]);
+      const texts = badgeTexts(fixture);
+      expect(texts).not.toContain('Brouillon');
+      // Rien ne doit trahir l'existence du brouillon : pas même un badge vide ou un espace
+      // réservé. Trois scénarios visibles = trois badges, jamais quatre.
+      expect(texts.length).toBe(3);
+      expect(fixture.nativeElement.querySelector('.status-badge--draft')).toBeNull();
+    });
+  });
+
   it('MJ + clic sur un BROUILLON → navigue vers la fiche d’édition, n’ouvre pas ScenarioReadDialog', async () => {
     const { fixture, dialog, router } = await createComponent([BROUILLON], { isMj: true });
     const comp = fixture.componentInstance as any;
@@ -600,6 +632,10 @@ describe('ScenarioTimeline', () => {
           {
             id: 'seance1',
             scenarioId: 's-avec-seances',
+            // Story 32.3 — date effective à la racine du DTO ; ici elle double `poll.chosenDate`,
+            // comme le fait le serveur.
+            dateValidee: '2026-08-15T00:00:00.000Z',
+            slotValidee: 'AFTERNOON',
             compteRendu: null,
             heureRdv: null,
             lieu: null,
@@ -633,6 +669,8 @@ describe('ScenarioTimeline', () => {
           {
             id: 'seance1',
             scenarioId: 's-non-datee',
+            dateValidee: null,
+            slotValidee: null,
             compteRendu: null,
             heureRdv: null,
             lieu: null,
@@ -659,6 +697,8 @@ describe('ScenarioTimeline', () => {
           {
             id: 'seance1',
             scenarioId: 's-mobile',
+            dateValidee: null,
+            slotValidee: null,
             compteRendu: null,
             heureRdv: null,
             lieu: null,

@@ -147,7 +147,10 @@ describe('ScenarioReadDialog', () => {
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Une enquête discrète.');
     expect(text).toContain('3 h');
-    expect(text).toContain('En cours');
+    // Story 32.3 — « Courant », plus « En cours » : ce dernier reste réservé au VOTE (« Vote en
+    // cours »), et le bouton voisin de `scenario-editor` dit déjà « Marquer comme Courant ».
+    expect(text).toContain('Courant');
+    expect(text).not.toContain('En cours');
     expect(text).not.toContain('Résumé de fin');
   });
 
@@ -653,6 +656,8 @@ describe('ScenarioReadDialog', () => {
             {
               id: 'seance1',
               scenarioId: 's1',
+              dateValidee: null,
+              slotValidee: null,
               compteRendu: null,
               heureRdv: null,
               lieu: null,

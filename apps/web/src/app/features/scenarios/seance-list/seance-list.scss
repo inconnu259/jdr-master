@@ -10,6 +10,16 @@
   gap: 0.5rem;
 }
 
+/* Story 32.3 — le badge d'état rejoint le titre. `<h3>` étant un bloc, sans cette règle le badge
+   tombait à la ligne ; c'est le seul ajustement de mise en page de la story (la refonte des
+   cartes reste à la 32.4). */
+.seance-row__header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .seance-row__title {
   margin: 0;
   font-size: 1rem;

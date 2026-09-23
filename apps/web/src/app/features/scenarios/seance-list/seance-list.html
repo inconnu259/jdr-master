@@ -6,6 +6,10 @@
     <div class="seance-row">
       <div class="seance-row__header">
         <h3 class="seance-row__title">Séance {{ i + 1 }}</h3>
+        <!-- Story 32.3 — un seul emplacement pour les six états de séance : l'en-tête, commun à
+             TOUTES les branches (linéaire/épisodique, MJ/joueur) rendues en dessous. Le poser
+             dans chaque branche aurait multiplié les conditions d'affichage sans rien ajouter. -->
+        <app-status-badge [state]="seanceBadge(seance)" />
         @if (isMj() && i > 0) {
           <button
             mat-stroked-button
@@ -66,15 +70,8 @@
                 </button>
               }
             </div>
-          } @else if (seance.poll?.chosenDate || seance.inscription.dateValidee) {
-            <p class="seance-row__chosen-date">
-              Date retenue :
-              {{
-                seance.poll?.chosenDate
-                  ? formatChosenDate(seance.poll!)
-                  : formatValidatedDate(seance.inscription.dateValidee!)
-              }}
-            </p>
+          } @else if (resolvedDate(seance)) {
+            <p class="seance-row__chosen-date">Date retenue : {{ formatSeanceDate(seance) }}</p>
             <button
               mat-stroked-button
               color="warn"
@@ -141,15 +138,8 @@
               Réinitialiser la date
             </button>
           }
-        } @else if (seance.inscription && (seance.poll?.chosenDate || seance.inscription.dateValidee)) {
-          <p class="seance-row__chosen-date">
-            Date retenue :
-            {{
-              seance.poll?.chosenDate
-                ? formatChosenDate(seance.poll!)
-                : formatValidatedDate(seance.inscription.dateValidee!)
-            }}
-          </p>
+        } @else if (seance.inscription && resolvedDate(seance)) {
+          <p class="seance-row__chosen-date">Date retenue : {{ formatSeanceDate(seance) }}</p>
         } @else if (seance.inscription) {
           <app-fill-indicator
             [count]="seance.inscription.inscrits.length"
@@ -189,6 +179,11 @@
       } @else {
         @if (isMj()) {
           @if (!seance.poll) {
+            <!-- Story 32.3 — date héritée (`Seance.dateValidee`, sans vote ni inscription) : sans
+                 cette ligne, le badge annonçait « Programmée » sans qu'aucune date ne soit visible. -->
+            @if (resolvedDate(seance)) {
+              <p class="seance-row__chosen-date">Date retenue : {{ formatSeanceDate(seance) }}</p>
+            }
             <button
               mat-flat-button
               color="primary"
@@ -247,6 +242,10 @@
               }
             </p>
           }
+        } @else if (resolvedDate(seance)) {
+          <!-- Story 32.3 — même trou côté joueur : une séance datée par héritage n'affichait
+               aucune date, alors que son badge annonçait « Programmée ». -->
+          <p class="seance-row__chosen-date">Date retenue : {{ formatSeanceDate(seance) }}</p>
         }
       }
 

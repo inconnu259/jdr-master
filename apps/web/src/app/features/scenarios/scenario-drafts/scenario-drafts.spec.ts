@@ -74,6 +74,16 @@ describe('ScenarioDrafts', () => {
     expect(fixture.nativeElement.textContent).toContain('Les Ombres du Passé');
   });
 
+  // Story 32.3 — sans cette garde, supprimer le badge du gabarit laisserait toute la suite verte :
+  // les autres assertions de rendu ne regardent que les titres.
+  it('chaque ligne porte le badge « Brouillon » (Story 32.3)', async () => {
+    const { fixture } = await createComponent();
+    const badges = [...fixture.nativeElement.querySelectorAll('.status-badge')].map((n: Element) =>
+      (n.textContent ?? '').trim(),
+    );
+    expect(badges).toEqual(['Brouillon', 'Brouillon']);
+  });
+
   it('clic sur « + Nouveau scénario » → navigation vers scenarios/new', async () => {
     const { fixture, router } = await createComponent();
     const comp = fixture.componentInstance as any;

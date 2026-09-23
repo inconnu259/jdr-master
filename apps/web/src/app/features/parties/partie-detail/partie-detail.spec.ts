@@ -369,6 +369,47 @@ describe('PartieDetail — widget de planification', () => {
     const sectionPlayer = elPlayer.querySelector('.scheduling-widget');
     expect(sectionPlayer!.querySelector('a[mat-flat-button]')).toBeFalsy();
   });
+
+  // ─── Story 32.3 — le widget porte désormais un badge d'état ──────────────
+  //
+  // ⚠️ Le badge RÉSUME, il ne remplace rien : la ligne de date et la ligne de statut du vote
+  // restent exactement là où la story 32.2 les avait posées (vérifié explicitement ci-dessous).
+  function isoInDays(days: number): string {
+    const d = new Date();
+    d.setUTCHours(0, 0, 0, 0);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString();
+  }
+
+  function widgetBadge(el: HTMLElement): string {
+    return (el.querySelector('.scheduling-widget .status-badge')?.textContent ?? '').trim();
+  }
+
+  it('aucune séance à venir → badge « À planifier », sans effacer l’état vide existant', async () => {
+    const { el } = await createFixture(
+      makePartie({ nextSessionDate: null, nextSessionSlot: null }),
+      MJ_ID,
+    );
+    expect(widgetBadge(el)).toBe('À planifier');
+    expect(el.querySelector('.scheduling-widget .muted')).toBeTruthy();
+  });
+
+  it('séance à venir (> 7 j) → badge « Programmée », la ligne de date reste affichée', async () => {
+    const { el } = await createFixture(
+      makePartie({ nextSessionDate: isoInDays(10), nextSessionSlot: 'EVENING' }),
+      MJ_ID,
+    );
+    expect(widgetBadge(el)).toBe('Programmée');
+    expect(el.querySelector('.scheduling-widget .next-session-date')).toBeTruthy();
+  });
+
+  it('🚨 une date déjà passée ne fait jamais apparaître « À débriefer » ici (widget « Prochaine séance »)', async () => {
+    const { el } = await createFixture(
+      makePartie({ nextSessionDate: isoInDays(-10), nextSessionSlot: 'EVENING' }),
+      MJ_ID,
+    );
+    expect(widgetBadge(el)).toBe('À planifier');
+  });
 });
 
 // ─── Statut du vote (Story 3.5) ───────────────────────────────────────────
@@ -446,6 +487,45 @@ describe('PartieDetail — statut du vote', () => {
     const line = el.querySelector('.poll-status-line');
     expect(line).toBeTruthy();
     expect(line!.textContent).toContain('2 votes de date en cours');
+  });
+
+  // ─── Story 32.3 — le badge du widget suit le vote, et suit le LECTEUR ────
+  function widgetBadge(el: HTMLElement): string {
+    return (el.querySelector('.scheduling-widget .status-badge')?.textContent ?? '').trim();
+  }
+
+  it('vote ouvert auquel je n’ai pas répondu → « Réponds au vote »', async () => {
+    // `makePoll([])` : personne n'a voté, donc le lecteur non plus.
+    const { el } = await createFixture(makePartie(), 'u1', { members, poll: makePoll([]) });
+    expect(widgetBadge(el)).toBe('Réponds au vote');
+  });
+
+  it('vote ouvert auquel j’ai répondu → « Vote en cours », libellé distinct du précédent', async () => {
+    const { el } = await createFixture(makePartie(), 'u1', { members, poll: makePoll(['u1']) });
+    expect(widgetBadge(el)).toBe('Vote en cours');
+  });
+
+  it('🚨 plusieurs votes : c’est celui qui attend MA réponse qui gagne le badge', async () => {
+    // `poll1` est déjà répondu, `poll2` ne l'est pas : prendre le premier venu masquerait
+    // l'appel à l'action — exactement ce que la story cherche à rendre visible.
+    const poll1 = { ...makePoll(['u1']), id: 'poll1', partieId: 'party-1' };
+    const poll2 = { ...makePoll([]), id: 'poll2', partieId: 'party-1' };
+    const { el } = await createFixture(makePartie(), 'u1', { members, polls: [poll1, poll2] });
+    expect(widgetBadge(el)).toBe('Réponds au vote');
+  });
+
+  it('🚨 date confirmée → « Programmée », même si un vote ouvert court sur une AUTRE séance', async () => {
+    // `activePolls()` est scopé à la PARTIE : sans cette garde, le widget annoncerait
+    // « Réponds au vote » juste au-dessus de la date confirmée d'une tout autre séance.
+    const future = new Date();
+    future.setUTCHours(0, 0, 0, 0);
+    future.setUTCDate(future.getUTCDate() + 10);
+    const { el } = await createFixture(
+      makePartie({ nextSessionDate: future.toISOString(), nextSessionSlot: 'EVENING' }),
+      'u1',
+      { members, poll: makePoll([]) },
+    );
+    expect(widgetBadge(el)).toBe('Programmée');
   });
 });
 

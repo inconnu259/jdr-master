@@ -53,7 +53,13 @@
                    séance, statut du vote) restent un bloc unique -- scinder romprait le contexte
                    sans bénéfice net (Design Notes de la story) -- Action. -->
               <section class="scheduling-widget">
-                <h4>{{ theme.tone()['partie.scheduling_title'] }}</h4>
+                <!-- Story 32.3 — le titre porte désormais l'état de la prochaine séance. Le
+                     libellé de date et la ligne de vote ci-dessous restent inchangés : le badge
+                     les résume, il ne les remplace pas. -->
+                <div class="scheduling-widget__header">
+                  <h4>{{ theme.tone()['partie.scheduling_title'] }}</h4>
+                  <app-status-badge [state]="nextSessionBadge()" />
+                </div>
                 @if (nextSessionLabel()) {
                   <p class="next-session-date">{{ nextSessionLabel() }}</p>
                 } @else {

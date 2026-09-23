@@ -371,6 +371,21 @@ export interface SeanceDto {
   poll?: SessionPollDto;
   /** Inscription à capacité limitée (CAMPAGNE_EPISODIQUE uniquement, Story 8.3) — peuplé seulement si `inscriptionMax` est défini sur la Seance (AD-4 : jamais en même temps que `poll`). */
   inscription?: SeanceInscriptionDto;
+  /**
+   * Story 32.3 — date EFFECTIVE de la séance, **à la racine**, résolue côté serveur :
+   * `poll.chosenDate` quand un vote a été scellé, sinon la colonne `Seance.dateValidee`.
+   *
+   * 🚨 **Pourquoi à la racine.** `dateValidee` ne vivait que dans le bloc `inscription`, lui-même
+   * peuplé seulement si `inscriptionMax != null` : une séance datée **sans vote ni inscription**
+   * (héritage `validerDate()`, campagne linéaire) n'exposait donc AUCUNE date exploitable, et son
+   * état (« Programmée », « À débriefer », « Jouée ») n'était pas dérivable. Ajout purement
+   * additif — `inscription.dateValidee` reste servi à l'identique, aucun site d'appel n'est touché.
+   */
+  dateValidee: string | null;
+  /** Créneau de `dateValidee`. Renseigné seulement quand la date vient d'un vote scellé
+   *  (`poll.chosenSlot`) : la colonne `Seance.dateValidee` n'a pas de créneau propre — même
+   *  convention que `recalculateNextSession()`, qui pose `slot: null` dans ce cas. */
+  slotValidee: DaySlot | null;
   compteRendu: string | null;
   /** Informations pratiques (Story 36.5, D-15 amendée le 2026-08-19) — trois champs
    *  facultatifs, séparés pour qu'on puisse en lâcher un quand la place manque.

@@ -213,7 +213,9 @@ export class ScenarioTimeline {
   // que SeanceList (poll.chosenDate ?? inscription.dateValidee), simple ajout de contenu, aucune
   // refonte visuelle du composant (hors scope explicite, cf. Dev Notes).
   protected seanceDateLabel(seance: SeanceDto): string {
-    const iso = seance.poll?.chosenDate ?? seance.inscription?.dateValidee ?? null;
+    // Story 32.3 — la RACINE du DTO s'intercale : sans elle, une séance datée par héritage (sans
+    // vote ni inscription) affichait « Date à définir » sous un badge « Programmée ».
+    const iso = seance.poll?.chosenDate ?? seance.dateValidee ?? seance.inscription?.dateValidee;
     if (!iso) return 'Date à définir';
     return new Intl.DateTimeFormat('fr-FR', {
       day: 'numeric',

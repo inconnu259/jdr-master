@@ -20,10 +20,12 @@ import type {
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { PollService } from '../../../core/poll/poll.service';
-import { composeSeanceInfo } from '../../calendar/day-detail.utils';
+import { composeSeanceInfo, toDateKey } from '../../calendar/day-detail.utils';
 import { PollStatusPanel } from '../../poll/poll-status/poll-status';
 import { PollResponseComponent } from '../../poll/poll-response/poll-response';
 import { FillIndicator } from '../fill-indicator/fill-indicator';
+import { StatusBadge } from '../../../shared/status-badge/status-badge';
+import { seanceState, type StatusBadgeState } from '../../../core/status/status-derivation';
 
 /** Même forme que côté serveur (`set-infos-pratiques.dto.ts`) : sert uniquement à détecter une
  *  valeur stockée hors app (écriture directe en base) que le widget natif `type="time"` rendrait
@@ -46,7 +48,7 @@ const SLOT_LABELS: Record<DaySlot, string> = {
  */
 @Component({
   selector: 'app-seance-list',
-  imports: [MatButtonModule, PollStatusPanel, PollResponseComponent, FillIndicator],
+  imports: [MatButtonModule, PollStatusPanel, PollResponseComponent, FillIndicator, StatusBadge],
   templateUrl: './seance-list.html',
   styleUrl: './seance-list.scss',
 })
@@ -146,6 +148,47 @@ export class SeanceList {
   protected readonly editingCapacitySeanceId = signal<string | null>(null);
 
   readonly SLOT_LABELS = SLOT_LABELS;
+
+  /**
+   * Story 32.3 — jour courant figé à la CONSTRUCTION, une seule fois pour toute la liste.
+   *
+   * 🚨 Même raison que `CalendarView.todayKey` : si chaque badge relisait l'horloge, deux séances
+   * rendues de part et d'autre de minuit ne compareraient plus au même « aujourd'hui », et
+   * l'intensité d'imminence deviendrait incohérente d'une ligne à l'autre.
+   */
+  private readonly todayKey = toDateKey(new Date());
+
+  /**
+   * L'état affiché d'une séance — dérivé, jamais servi (AD-20 : aucun champ `status` sur
+   * `SeanceDto`). Dépend du LECTEUR : un vote sans sa réponse appelle une action, le même vote
+   * une fois répondu se contente d'informer.
+   *
+   * ⚠️ Ce badge ne remplace RIEN : l'indicateur de remplissage, le panneau de vote et le
+   * compte-rendu restent exactement où ils étaient. Il les résume, il ne les supplante pas.
+   */
+  protected seanceBadge(seance: SeanceDto): StatusBadgeState {
+    return seanceState(seance, this.currentUserId(), this.todayKey);
+  }
+
+  /**
+   * Date effective de la séance, ou `null`.
+   *
+   * 🚨 La RACINE du DTO (story 32.3) prend le relais des deux sources historiques quand elles sont
+   * vides : c'est exactement le cas d'une séance linéaire datée par héritage, sans vote ni
+   * inscription, qui portait un badge « Programmée » avec aucune date à côté. Même résolution que
+   * `seanceState()`, pour que le badge et le texte ne puissent pas se contredire.
+   */
+  protected resolvedDate(seance: SeanceDto): string | null {
+    return seance.poll?.chosenDate ?? seance.dateValidee ?? seance.inscription?.dateValidee ?? null;
+  }
+
+  /** Libellé « Date retenue ». Le créneau n'existe que sur un vote scellé, d'où les deux mises en
+   *  forme — `formatChosenDate()` l'ajoute, `formatValidatedDate()` n'a rien à ajouter. */
+  protected formatSeanceDate(seance: SeanceDto): string {
+    return seance.poll?.chosenDate
+      ? this.formatChosenDate(seance.poll)
+      : this.formatValidatedDate(this.resolvedDate(seance)!);
+  }
 
   // Story 8.7, AC2/AC3 : point d'entrée unique — envoie le MJ sur le calendrier (mode MJ) avec
   // cette séance pré-sélectionnée/verrouillée, plutôt qu'un panneau de création dupliqué ici.
@@ -268,7 +311,7 @@ export class SeanceList {
   // suppression autorisée (décision utilisateur), mais le MJ doit être prévenu explicitement.
   protected async onDeleteSeance(seance: SeanceDto): Promise<void> {
     if (this.pollActionPending()) return;
-    const hasValidatedDate = !!(seance.inscription?.dateValidee ?? seance.poll?.chosenDate);
+    const hasValidatedDate = this.resolvedDate(seance) !== null;
     const message = hasValidatedDate
       ? 'Cette séance a une date validée. La supprimer quand même ? Cette action est définitive.'
       : 'Supprimer cette séance ? Cette action est définitive.';

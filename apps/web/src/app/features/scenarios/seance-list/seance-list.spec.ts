@@ -25,6 +25,9 @@ const POLL: SessionPollDto = {
 const SEANCE_NO_POLL: SeanceDto = {
   id: 'seance1',
   scenarioId: 's1',
+  // Story 32.3 — date effective servie à la RACINE du DTO (`poll.chosenDate` ?? `Seance.dateValidee`).
+  dateValidee: null,
+  slotValidee: null,
   compteRendu: null,
   heureRdv: null,
   lieu: null,
@@ -1067,5 +1070,115 @@ describe('SeanceList', () => {
       );
       expect(emitted).toEqual(updated);
     });
+  });
+});
+
+// ─── Story 32.3 — le badge d'état de séance ────────────────────────────────
+//
+// 🚨 Ces tests vivent volontairement au niveau de la SURFACE : la dérivation elle-même est
+// couverte ligne par ligne, et à jour figé, par `core/status/status-derivation.spec.ts`. Ici on
+// vérifie seulement que la bonne chose arrive à l'écran, pour un MJ COMME pour un joueur.
+//
+// Les décalages sont volontairement larges (± 10 jours) : `SeanceList` lit son « aujourd'hui »
+// depuis l'horloge réelle, et ces écarts restent du bon côté quel que soit le fuseau du runner.
+function isoInDays(days: number): string {
+  const d = new Date();
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString();
+}
+
+describe('SeanceList — badge d’état (Story 32.3)', () => {
+  function badges(fixture: { nativeElement: HTMLElement }): string[] {
+    return [...fixture.nativeElement.querySelectorAll('.status-badge')].map((n) =>
+      (n.textContent ?? '').trim(),
+    );
+  }
+
+  const OPEN_POLL: SessionPollDto = {
+    ...POLL,
+    options: [
+      { id: 'o1', date: isoInDays(10), slot: 'EVENING', votes: [] },
+      { id: 'o2', date: isoInDays(12), slot: 'EVENING', votes: [] },
+    ],
+  };
+
+  it('MJ — séance sans date ni vote → « À planifier »', async () => {
+    const { fixture } = await createComponent(
+      { ...SCENARIO, seances: [SEANCE_NO_POLL] },
+      { isMj: true },
+    );
+    expect(badges(fixture)).toEqual(['À planifier']);
+  });
+
+  it('joueur — séance sans date ni vote → le MÊME badge (l’état ne dépend pas du rôle)', async () => {
+    const { fixture } = await createComponent(
+      { ...SCENARIO, seances: [SEANCE_NO_POLL] },
+      { isMj: false },
+    );
+    expect(badges(fixture)).toEqual(['À planifier']);
+  });
+
+  it('joueur qui n’a pas répondu → « Réponds au vote »', async () => {
+    const seance: SeanceDto = { ...SEANCE_NO_POLL, poll: OPEN_POLL };
+    const { fixture } = await createComponent(
+      { ...SCENARIO, seances: [seance] },
+      { isMj: false, currentUserId: 'u1' },
+    );
+    expect(badges(fixture)).toEqual(['Réponds au vote']);
+  });
+
+  it('joueur qui a répondu à TOUTES les options → « Vote en cours », libellé distinct', async () => {
+    const vote = { userId: 'u1', pseudo: 'u1', displayName: 'u1', answer: 'YES' as const };
+    const seance: SeanceDto = {
+      ...SEANCE_NO_POLL,
+      poll: { ...OPEN_POLL, options: OPEN_POLL.options.map((o) => ({ ...o, votes: [vote] })) },
+    };
+    const { fixture } = await createComponent(
+      { ...SCENARIO, seances: [seance] },
+      { isMj: false, currentUserId: 'u1' },
+    );
+    expect(badges(fixture)).toEqual(['Vote en cours']);
+  });
+
+  it('séance datée dans le futur → « Programmée », teinte soon', async () => {
+    const seance: SeanceDto = { ...SEANCE_NO_POLL, dateValidee: isoInDays(10) };
+    const { fixture } = await createComponent({ ...SCENARIO, seances: [seance] }, { isMj: true });
+    expect(badges(fixture)).toEqual(['Programmée']);
+    expect(fixture.nativeElement.querySelector('.status-badge--soon')).toBeTruthy();
+  });
+
+  it('séance passée sans compte-rendu → « À débriefer » (ce qui réclame une action)', async () => {
+    const seance: SeanceDto = { ...SEANCE_NO_POLL, dateValidee: isoInDays(-10) };
+    const { fixture } = await createComponent({ ...SCENARIO, seances: [seance] }, { isMj: true });
+    expect(badges(fixture)).toEqual(['À débriefer']);
+    expect(fixture.nativeElement.querySelector('.status-badge--todo')).toBeTruthy();
+  });
+
+  it('séance passée avec compte-rendu → « Jouée », teinte done', async () => {
+    const seance: SeanceDto = {
+      ...SEANCE_NO_POLL,
+      dateValidee: isoInDays(-10),
+      compteRendu: 'On a survécu.',
+    };
+    const { fixture } = await createComponent({ ...SCENARIO, seances: [seance] }, { isMj: false });
+    expect(badges(fixture)).toEqual(['Jouée']);
+    expect(fixture.nativeElement.querySelector('.status-badge--done')).toBeTruthy();
+  });
+
+  it('⚠️ le badge n’évince rien : indicateur de remplissage, vote et compte-rendu restent rendus', async () => {
+    const seance: SeanceDto = {
+      ...SEANCE_NO_POLL,
+      inscription: { min: 2, max: 4, inscrits: [], dateValidee: null },
+    };
+    const { fixture } = await createComponent(
+      { ...SCENARIO, seances: [seance] },
+      { isMj: false, isEpisodique: true },
+    );
+    expect(badges(fixture)).toEqual(['Inscriptions ouvertes']);
+    expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
+    expect(fixture.nativeElement.textContent).toContain(
+      'Aucun compte-rendu pour cette séance pour le moment.',
+    );
   });
 });

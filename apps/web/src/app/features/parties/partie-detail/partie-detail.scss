@@ -221,6 +221,20 @@ mat-tab-group {
     color: var(--jdr-accent-2, #9b6dff);
   }
 
+  // Story 32.3 — le badge d'état rejoint le titre du widget. La marge basse du h4 est reprise par
+  // l'en-tête pour que l'espacement d'origine soit conservé au pixel près.
+  &__header {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+
+    h4 {
+      margin-bottom: 0;
+    }
+  }
+
   .next-session-date {
     font-weight: 600;
     margin: 0 0 0.75rem;

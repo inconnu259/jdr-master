@@ -20,6 +20,9 @@
           (keydown.space)="$event.preventDefault(); openScenario(draft)"
         >
           <span>{{ draft.title }}</span>
+          <!-- Story 32.3 — onglet MJ-only (`PartieDetail` ne le rend jamais à un joueur) : le
+               badge « Brouillon » ne peut donc atteindre personne d'autre. -->
+          <app-scenario-status-badge [status]="draft.status" />
           <button mat-button type="button" (click)="openToPlayers(draft, $event)">
             Ouvrir aux joueurs
           </button>

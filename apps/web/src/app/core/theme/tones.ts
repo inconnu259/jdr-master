@@ -146,6 +146,26 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.details_zone_action': 'Action',
     'partie.details_zone_consultation': 'Consultation',
     'partie.details_zone_reference': 'Référence',
+    /* — états de scénario et de séance (Story 32.3) — noms CONTRACTUELS, IDENTIQUES dans les trois
+       thèmes, exactement comme les trois zones ci-dessus et `cta.destiny_mode` (story 36.9) : ce
+       sont des noms d'état fixés par la conception, pas des intitulés à décliner par univers. La
+       clé existe pour qu'un thème futur puisse malgré tout les teinter.
+       🚨 « Courant », JAMAIS « En cours » : le bouton voisin de `scenario-editor` dit déjà
+       « Marquer comme Courant », et « en cours » reste réservé au VOTE — deux choses différentes
+       ne peuvent pas porter le même mot.
+       🚨 La paire vote répondu / non répondu porte DEUX libellés distincts (contrat EXPERIENCE.md
+       §5, déjà appliqué par l'Agenda) : la teinte ne doit jamais être la seule différence. */
+    'status.scenario_brouillon': 'Brouillon',
+    'status.scenario_a_venir': 'À venir',
+    'status.scenario_courant': 'Courant',
+    'status.scenario_passe': 'Passé',
+    'status.seance_a_planifier': 'À planifier',
+    'status.seance_answer_poll': 'Réponds au vote',
+    'status.seance_poll_open': 'Vote en cours',
+    'status.seance_inscriptions_ouvertes': 'Inscriptions ouvertes',
+    'status.seance_programmee': 'Programmée',
+    'status.seance_a_debriefer': 'À débriefer',
+    'status.seance_jouee': 'Jouée',
     'partie.notice_copy': 'Parchemin copié dans la besace.',
     'partie.edit_btn': 'Retranscrire',
     'partie.visibility_btn': 'Sceller des secrets',
@@ -556,6 +576,19 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.details_zone_action': 'Action',
     'partie.details_zone_consultation': 'Consultation',
     'partie.details_zone_reference': 'Référence',
+    /* — états de scénario et de séance (Story 32.3) — libellés CONTRACTUELS, identiques dans les
+       trois thèmes : cf. le commentaire complet dans `grimoire-emeraude`. */
+    'status.scenario_brouillon': 'Brouillon',
+    'status.scenario_a_venir': 'À venir',
+    'status.scenario_courant': 'Courant',
+    'status.scenario_passe': 'Passé',
+    'status.seance_a_planifier': 'À planifier',
+    'status.seance_answer_poll': 'Réponds au vote',
+    'status.seance_poll_open': 'Vote en cours',
+    'status.seance_inscriptions_ouvertes': 'Inscriptions ouvertes',
+    'status.seance_programmee': 'Programmée',
+    'status.seance_a_debriefer': 'À débriefer',
+    'status.seance_jouee': 'Jouée',
     'partie.notice_copy': 'Laissez-passer copié dans la gibecière.',
     'partie.edit_btn': 'Rebattre',
     'partie.visibility_btn': 'Voiler des secrets',
@@ -961,6 +994,19 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'partie.details_zone_action': 'Action',
     'partie.details_zone_consultation': 'Consultation',
     'partie.details_zone_reference': 'Référence',
+    /* — états de scénario et de séance (Story 32.3) — libellés CONTRACTUELS, identiques dans les
+       trois thèmes : cf. le commentaire complet dans `grimoire-emeraude`. */
+    'status.scenario_brouillon': 'Brouillon',
+    'status.scenario_a_venir': 'À venir',
+    'status.scenario_courant': 'Courant',
+    'status.scenario_passe': 'Passé',
+    'status.seance_a_planifier': 'À planifier',
+    'status.seance_answer_poll': 'Réponds au vote',
+    'status.seance_poll_open': 'Vote en cours',
+    'status.seance_inscriptions_ouvertes': 'Inscriptions ouvertes',
+    'status.seance_programmee': 'Programmée',
+    'status.seance_a_debriefer': 'À débriefer',
+    'status.seance_jouee': 'Jouée',
     'partie.notice_copy': 'Badge copié dans le carnet de bord.',
     'partie.edit_btn': 'Recalibrer',
     'partie.visibility_btn': 'Verrouiller les plans',

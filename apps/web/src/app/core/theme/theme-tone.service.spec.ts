@@ -363,3 +363,57 @@ describe('Tones — zones de l’onglet Détails de PartieDetail (Story 32.2)', 
     });
   }
 });
+
+// Story 32.3 — les libellés d'état de scénario et de séance. Même garde de parité que ci-dessus :
+// aucun test de composant ne tourne hors du thème par défaut, donc une clé oubliée dans deux
+// thèmes sur trois ne rendrait `undefined` qu'à l'écran.
+describe('Tones — états de scénario et de séance (Story 32.3)', () => {
+  const STATUS_KEYS = [
+    'status.scenario_brouillon',
+    'status.scenario_a_venir',
+    'status.scenario_courant',
+    'status.scenario_passe',
+    'status.seance_a_planifier',
+    'status.seance_answer_poll',
+    'status.seance_poll_open',
+    'status.seance_inscriptions_ouvertes',
+    'status.seance_programmee',
+    'status.seance_a_debriefer',
+    'status.seance_jouee',
+  ];
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${STATUS_KEYS.length} clés, toutes non vides`, () => {
+      for (const key of STATUS_KEYS) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+      }
+    });
+  }
+
+  // 🚨 Ce sont des noms d'état CONTRACTUELS : ils doivent être rigoureusement les mêmes dans les
+  // trois thèmes (Design Notes de la story). Une relecture éditoriale qui « thématiserait » l'un
+  // d'eux réintroduirait un troisième vocabulaire d'état — exactement ce que la spec interdit.
+  for (const key of STATUS_KEYS) {
+    it(`${key} est identique dans les trois thèmes`, () => {
+      const values = THEMES.map((t) => TONE_MAP[t][key]);
+      expect(new Set(values).size, `${key} → ${values.join(' / ')}`).toBe(1);
+    });
+  }
+
+  // 🚨 Deux libellés DISTINCTS pour le vote, lisibles sans la teinte : c'est la contrainte
+  // d'accessibilité explicite de la story (« deux teintes imposent deux libellés »).
+  for (const theme of THEMES) {
+    it(`${theme} distingue « réponds au vote » de « vote en cours »`, () => {
+      expect(TONE_MAP[theme]['status.seance_answer_poll']).not.toBe(
+        TONE_MAP[theme]['status.seance_poll_open'],
+      );
+    });
+  }
+
+  // « Courant », jamais « En cours » : « en cours » est réservé au vote.
+  for (const theme of THEMES) {
+    it(`${theme} nomme le scénario en cours « Courant »`, () => {
+      expect(TONE_MAP[theme]['status.scenario_courant']).toBe('Courant');
+    });
+  }
+});

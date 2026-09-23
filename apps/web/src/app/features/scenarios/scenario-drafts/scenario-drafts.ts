@@ -13,10 +13,11 @@ import { MatButtonModule } from '@angular/material/button';
 import type { ScenarioDto } from '@master-jdr/shared';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
+import { ScenarioStatusBadge } from '../scenario-status-badge/scenario-status-badge';
 
 @Component({
   selector: 'app-scenario-drafts',
-  imports: [MatButtonModule],
+  imports: [MatButtonModule, ScenarioStatusBadge],
   templateUrl: './scenario-drafts.html',
   styleUrl: './scenario-drafts.scss',
 })

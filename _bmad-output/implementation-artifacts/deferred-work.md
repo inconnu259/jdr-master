@@ -60,3 +60,56 @@ Registre des items de dette technique/UX identifiés en cours de développement 
 
 - [P:MOYENNE] Nouvelle occurrence confirmée par la revue de la story 31.7 : `SetVisibilityLocksDto.LOCKABLE_FIELD_KEYS`/`LOCKABLE_SUB_FIELDS` (déjà signalé `P:BASSE` ci-dessus lors de la revue de la 31.6) restent une liste Ryuutama figée, dupliquée manuellement du littéral `sheetSchema`. La 31.7 en fait le premier consommateur réel qui dérive ses cases à cocher *uniquement* de `sheetSchema` (AC1) — toute future clé `lockable` ajoutée au schéma sans mise à jour correspondante de cette liste ferait apparaître une case dans l'écran MJ dont l'enregistrement échouerait côté serveur (validation DTO), sans message clair pour expliquer pourquoi. Vérifié sans conséquence aujourd'hui (les 10 clés des deux côtés sont identiques), mais le risque n'est plus seulement architectural depuis cette story : il est maintenant atteignable par un MJ via l'écran. [apps/api/src/parties/dto/set-visibility-locks.dto.ts, apps/api/src/game-systems/game-system.service.ts:249-296, apps/web/src/app/features/parties/visibility-locks/visibility-locks.ts]
 
+## Deferred from: bmad-build planning of spec-32-3-etats-de-scenario-et-de-seance (2026-09-23)
+
+- [P:MOYENNE] La bande d'état verticale (`StateRail`, 4 px sur le bord gauche d'une carte), prescrite
+  par la conception comme « équivalent exact » du badge d'état (`DESIGN.md:205-207`), est exclue du
+  périmètre de la story 32.3 — décision utilisateur du 2026-09-23. Motif : la story 32.2 vient de
+  poser des liserés de zone de 3 px (Action/Consultation/Référence) qui classent la *nature* du
+  contenu et non un statut ; superposer une bande d'état sur les mêmes cartes créerait deux liserés
+  concurrents à arbitrer visuellement. À reprendre avec la story 32.4, qui refait les cartes de la
+  chronologie. [apps/web/src/app/shared/status-badge/ (à créer par 32.3), apps/web/src/app/features/parties/partie-detail/partie-detail.scss]
+
+## Deferred from: bmad-build implementation of spec-32-3-etats-de-scenario-et-de-seance (2026-09-23)
+
+- [P:MOYENNE] `docker compose exec web pnpm exec tsc --noEmit` **ne vérifie rien** : `apps/web/tsconfig.json`
+  porte `"files": []` + `references`, donc sans `-b` la commande sort 0 sans compiler une ligne. Elle
+  est pourtant citée comme preuve de typage front dans plusieurs specs du dépôt (32.2 et antérieures).
+  La vraie vérification de types du front est `pnpm build` (compilateur Angular). À trancher : soit
+  corriger la commande (`tsc -b`), soit remplacer toutes ses occurrences dans les specs par `pnpm build`.
+  Constaté pendant l'implémentation de la 32.3 — aucune story n'est en cause, le trou est ancien.
+  [apps/web/tsconfig.json]
+- [P:MOYENNE] Deux tests API échouent sur des **dates figées désormais échues**, même famille que les
+  deux échecs web connus de `calendar-view.spec.ts` : `party-signals.service.spec.ts:242`
+  (`nextSessionDate: '2026-09-01'`, attendu passé) et `parties.service.spec.ts:1527`
+  (`getAvailableSlots` sur `2026-09-20`, attend `UNAVAILABLE`, obtient `UNKNOWN`). Vérifié : aucun des
+  deux chemins ne passe par `toSeanceDto()`, ils échouaient donc déjà avant la story 32.3. Le remède
+  de fond est le même pour les quatre : figer l'horloge (`jest.useFakeTimers`/`vi.setSystemTime`) au
+  lieu de dater les fixtures en dur. **La CI est rouge tant que ce n'est pas fait.**
+  [apps/api/src/parties/party-signals.service.spec.ts:242, apps/api/src/parties/parties.service.spec.ts:1527, apps/web/src/app/features/calendar/calendar-view/calendar-view.spec.ts:1933,2077]
+
+## Deferred from: bmad-build review of spec-32-3-etats-de-scenario-et-de-seance (2026-09-23)
+
+- [P:MOYENNE] `loadRetrospectiveNotes()` calcule la fenêtre rétrospective d'un scénario clôturé avec
+  `s.poll?.chosenDate ?? s.inscription?.dateValidee` et ignore donc une séance datée par héritage
+  (`Seance.dateValidee` seul, campagne linéaire) : ses notes de personnage sortent de la fenêtre et
+  n'apparaissent pas dans la rétrospective. Défaut ANTÉRIEUR à la story 32.3, qui ne l'aggrave pas —
+  mais le correctif est devenu trivial depuis qu'elle expose la date effective (`?? s.dateValidee`).
+  [apps/api/src/scenarios/scenarios.service.ts:1165-1166]
+- [P:MOYENNE] `CalendarView.allCalendarEntries()` résout la date d'une séance par
+  `poll?.chosenDate ?? inscription?.dateValidee` et écarte l'entrée quand les deux manquent : une
+  séance datée par héritage n'apparaît ni dans le calendrier ni dans l'Agenda. Même racine que
+  l'entrée ci-dessus, même antériorité ; la story 32.3 n'a câblé aucun badge sur ces surfaces.
+  [apps/web/src/app/features/calendar/calendar-view/calendar-view.ts:481,511]
+- [P:BASSE] `todayKey` est figé à la construction dans `SeanceList` et `PartieDetail` (patron repris
+  de `CalendarView`) : un écran laissé ouvert au-delà de minuit continue d'afficher « demain soir » le
+  jour même et ne bascule jamais en « À débriefer ». S'y ajoute la dette UTC/local connue du projet —
+  `todayKey` est dérivé en heure locale alors que les clés de date viennent d'ISO UTC. Aucun des deux
+  n'est introduit par la story 32.3, qui applique le patron existant ; les corriger suppose de traiter
+  le changement de jour pour TOUS les écrans qui gèlent l'horloge.
+  [apps/web/src/app/features/scenarios/seance-list/seance-list.ts, apps/web/src/app/features/parties/partie-detail/partie-detail.ts, apps/web/src/app/features/calendar/calendar-view/calendar-view.ts]
+- [P:BASSE] La vue Agenda garde sa propre copie des quatre teintes de statut
+  (`calendar-agenda-view.scss:180-235`) au lieu de rendre `<app-status-badge>` : la story 32.3 a
+  mutualisé les fonctions pures (`core/status/status-badge.model.ts`) mais pas le rendu. Deux feuilles
+  à tenir d'accord quand la palette bouge. Migration à faire quand l'Agenda sera retouché.
+  [apps/web/src/app/features/calendar/calendar-agenda-view/calendar-agenda-view.scss, apps/web/src/app/shared/status-badge/status-badge.scss]
