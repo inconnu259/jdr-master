@@ -554,9 +554,9 @@ development_status:
   # ── Epic 33 : Homme Dragon — Palier 9 ──
   epic-33: in-progress
 
-  33-1-fiche-homme-dragon-refondue: review
+  33-1-fiche-homme-dragon-refondue: done
 
-  33-2-les-souffles-de-mon-dragon: backlog
+  33-2-les-souffles-de-mon-dragon: review
 
   33-3-formulaire-de-creation-guide: backlog
 

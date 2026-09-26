@@ -8,7 +8,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import type { ContentEntryDto, HommeDragonDto, HommeDragonRace } from '@master-jdr/shared';
@@ -31,6 +31,40 @@ const RACE_LABELS: Record<HommeDragonRace, string> = {
   DRAGON_NOIR: 'Dragon Noir',
 };
 
+/** Familles des souffles communs (Story 33.2), dans l'ordre du livre (`docs/dragons.md`,
+ *  « Souffles communs ») — libellé et consigne d'usage transcrits tels quels ; `consigne` est
+ *  `null` quand le livre n'en donne pas (souffles aidant les PNJ). */
+type SouffleFamille = 'temps' | 'destin' | 'pnj';
+
+const SOUFFLE_FAMILLES: SouffleFamille[] = ['temps', 'destin', 'pnj'];
+
+const SOUFFLE_FAMILLE_INFO: Record<SouffleFamille, { label: string; consigne: string | null }> = {
+  temps: {
+    label: 'Souffles manipulant le temps',
+    consigne: 'ne peuvent pas être mis en réserve, coûtent 2 PS',
+  },
+  destin: {
+    label: 'Souffles manipulant le destin',
+    consigne: 'à utiliser juste avant ou après un jet de dés',
+  },
+  pnj: { label: 'Souffles aidant les PNJ', consigne: null },
+};
+
+/** Niveau des « souffles multicolores » (`docs/dragons.md`, « Niveaux ») : à partir de là,
+ *  l'homme-dragon peut choisir des souffles appartenant à une autre race que la sienne. */
+const SOUFFLES_MULTICOLORES_LEVEL = 3;
+
+type SouffleData = {
+  label?: string;
+  description?: string;
+  ps?: number;
+  race?: string;
+  famille?: string;
+  reservable?: boolean;
+};
+
+const souffleData = (entry: ContentEntryDto): SouffleData => (entry.data ?? {}) as SouffleData;
+
 /**
  * Onglet « Homme Dragon » de `PartieDetail` (Story 10.1) — embarqué directement (pas de route
  * dédiée, un seul Homme Dragon par Partie, même schéma que `ScenarioOneShotTab`). Gère les deux
@@ -39,7 +73,7 @@ const RACE_LABELS: Record<HommeDragonRace, string> = {
  */
 @Component({
   selector: 'app-homme-dragon-sheet',
-  imports: [FormsModule, MatButtonModule, DatePipe, DetailSurface],
+  imports: [FormsModule, MatButtonModule, DatePipe, NgTemplateOutlet, DetailSurface],
   templateUrl: './homme-dragon-sheet.html',
   styleUrl: './homme-dragon-sheet.scss',
 })
@@ -174,6 +208,7 @@ export class HommeDragonSheet implements OnInit {
       this.hommeDragon.set(hommeDragon);
       this.artefactCatalog.set(content['hommeDragonArtefact'] ?? []);
       this.eveilPowerCatalog.set(content['eveilPower'] ?? []);
+      this.souffleCatalog.set(content['souffle'] ?? []);
       if (hommeDragon === null) {
         this.mondesProteges.set(this.partieName());
       }
@@ -288,6 +323,79 @@ export class HommeDragonSheet implements OnInit {
     } finally {
       this.choosingEveilPower.set(false);
     }
+  }
+
+  // — Souffles disponibles (Story 33.2) —
+  protected readonly souffleCatalog = signal<ContentEntryDto[]>([]);
+
+  // Lecture seule, catalogue `souffle` (`souffles.json`) UNIQUEMENT : les éveils
+  // (`eveilPowerCatalog`) ne sont jamais des souffles — la Q-13 qui les assimilait aux souffles
+  // communs reposait sur une confusion, levée le 2026-09-25 par `docs/dragons.md`. Indépendant du
+  // choix de pouvoir d'éveil au level-up ci-dessus (`eveilPowersForCurrentLevel`,
+  // `chooseEveilPower()`), que ces listes n'affectent jamais. Pas de réserve ni de décompte ici
+  // (story dédiée).
+
+  /** Souffles communs (sans `race`), groupés par famille dans l'ordre du livre. Une famille sans
+   *  entrée au catalogue n'est pas affichée ; une entrée commune sans famille connue non plus. */
+  protected readonly commonSouffleGroups = computed(() => {
+    const communs = this.souffleCatalog().filter((e) => !souffleData(e).race);
+    return SOUFFLE_FAMILLES.map((famille) => ({
+      famille,
+      ...SOUFFLE_FAMILLE_INFO[famille],
+      souffles: communs.filter((e) => souffleData(e).famille === famille),
+    })).filter((g) => g.souffles.length > 0);
+  });
+
+  /** Souffles propres à la race du dragon affiché — vide (sans erreur) si le catalogue n'en porte
+   *  aucun pour cette race. */
+  protected readonly raceSouffles = computed<ContentEntryDto[]>(() => {
+    const race = this.hommeDragon()?.sheetData.race;
+    if (!race) return [];
+    return this.souffleCatalog().filter((e) => souffleData(e).race === race);
+  });
+
+  /** Souffles des trois autres races, groupés par race (ordre de `RACES`) — uniquement à partir
+   *  du niveau des souffles multicolores, vide en dessous. */
+  protected readonly otherRaceSouffleGroups = computed(() => {
+    const hd = this.hommeDragon();
+    if (!hd || hd.derived.level < SOUFFLES_MULTICOLORES_LEVEL) return [];
+    return RACES.filter((r) => r !== hd.sheetData.race)
+      .map((race) => ({
+        race,
+        souffles: this.souffleCatalog().filter((e) => souffleData(e).race === race),
+      }))
+      .filter((g) => g.souffles.length > 0);
+  });
+
+  protected readonly hasSouffles = computed(
+    () =>
+      this.commonSouffleGroups().length > 0 ||
+      this.raceSouffles().length > 0 ||
+      this.otherRaceSouffleGroups().length > 0,
+  );
+
+  /** Libellé d'un souffle : `label` du catalogue, repli sur la clé brute si le catalogue est
+   *  incomplet — même patron que `artefactLabel()`/`eveilPowerLabel()`. */
+  protected souffleLabel(entry: ContentEntryDto): string {
+    return souffleData(entry).label || entry.key;
+  }
+
+  /** Coût affiché (« 1 PS », « 2 PS »…), `null` si `ps` est absent — pas de garde runtime sur la
+   *  complétude du catalogue (discipline de revue de contenu uniquement, cf. spec). */
+  protected souffleCost(entry: ContentEntryDto): string | null {
+    const ps = souffleData(entry).ps;
+    return typeof ps === 'number' ? `${ps} PS` : null;
+  }
+
+  /** `true` pour les souffles qui ne peuvent pas être mis en réserve (souffles du temps). */
+  protected souffleNonReservable(entry: ContentEntryDto): boolean {
+    return souffleData(entry).reservable === false;
+  }
+
+  /** Contenu de la surface de détail d'un souffle (même patron que `eveilPowerDetail()`) — `null`
+   *  quand le catalogue ne porte pas de `description` (pas de déclencheur dans ce cas). */
+  protected souffleDetail(entry: ContentEntryDto): DetailSurfaceContent | null {
+    return detailContent(this.souffleLabel(entry), souffleData(entry).description);
   }
 
   // — Export PDF (Story 10.5) —

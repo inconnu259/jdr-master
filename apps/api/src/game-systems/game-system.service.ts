@@ -106,6 +106,11 @@ const CONTENT_TYPES: ContentTypeSeed[] = [
     label: 'Rôle de groupe',
     file: 'group-roles.json',
   },
+  {
+    key: 'souffle',
+    label: 'Souffle (Homme Dragon)',
+    file: 'souffles.json',
+  },
 ];
 
 @Injectable()

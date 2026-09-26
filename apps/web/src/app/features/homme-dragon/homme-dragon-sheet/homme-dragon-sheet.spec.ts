@@ -1,5 +1,5 @@
-import { TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { DebugElement, signal } from '@angular/core';
 import { By } from '@angular/platform-browser';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
@@ -43,12 +43,59 @@ const CATALOG: GameSystemContentDto = {
       data: {
         key: 'escorte-du-dragon',
         label: 'Escorte du dragon',
+        ps: 2,
         description: "L'homme-dragon guide les voyageurs perdus.",
       },
     },
     { key: 'couche-du-dragon', data: { key: 'couche-du-dragon', label: 'Couche du dragon' } },
   ],
+  // Story 33.2 — même forme que `souffles.json` (21 souffles de `docs/dragons.md`), descriptions
+  // abrégées : le contenu exact est une affaire de revue de contenu, pas de ce test.
+  souffle: [
+    souffle('passe', 'Passé', { famille: 'temps', ps: 2, reservable: false }, 'Remonte le temps.'),
+    souffle('futur', 'Futur', { famille: 'temps', ps: 2, reservable: false }, 'Accélère le temps.'),
+    souffle('chance', 'Chance', { famille: 'destin' }, 'Réussite critique automatique.'),
+    souffle('malchance', 'Malchance', { famille: 'destin' }, 'Double 1 automatique.'),
+    souffle('ennemi-jure', 'Ennemi juré', { famille: 'pnj' }, 'Le monstre ajoute (niv. × 3) PV.'),
+    souffle('nuee-grouillante', 'Nuée grouillante', { famille: 'pnj' }, 'Un monstre unique.'),
+    souffle('guet-apens', 'Guet-apens', { famille: 'pnj' }, 'Attaques des PNJ réussies.'),
+    souffle('retrouvailles', 'Retrouvailles', { famille: 'pnj' }, "Le PNJ n'est pas mort."),
+    souffle('fuite', 'Fuite', { famille: 'pnj' }, 'Un PNJ réussit à fuir.'),
+    souffle('nostalgie', 'Nostalgie', { race: 'DRAGON_VERT' }, 'Guérit deux voyageurs.'),
+    souffle('route', 'Route', { race: 'DRAGON_VERT' }, 'Ignore les modificateurs de climat.'),
+    souffle('voyage', 'Voyage', { race: 'DRAGON_VERT' }, 'Prime de 300 Po × niveau.'),
+    souffle('amour', 'Amour', { race: 'DRAGON_BLEU' }, 'Un point de protection.'),
+    souffle('bonte', 'Bonté', { race: 'DRAGON_BLEU' }, "Un cran d'Esprit."),
+    souffle('emotion', 'Émotion', { race: 'DRAGON_BLEU' }, 'Cinq jetons au meneur.'),
+    souffle('defi', 'Défi', { race: 'DRAGON_ROUGE' }, 'Un cran de VIG face à un rival.'),
+    souffle('courage', 'Courage', { race: 'DRAGON_ROUGE' }, 'Un voyageur revient à la vie.'),
+    souffle('renaissance', 'Renaissance', { race: 'DRAGON_ROUGE' }, "Un cran d'attribut."),
+    souffle('massacre', 'Massacre', { race: 'DRAGON_NOIR' }, '2 PE par animal tué.'),
+    souffle('obeissance', 'Obéissance', { race: 'DRAGON_NOIR' }, 'Bonus au test de condition.'),
+    souffle('vengeance', 'Vengeance', { race: 'DRAGON_NOIR' }, 'Bonus au toucher.'),
+  ],
 };
+
+function souffle(
+  key: string,
+  label: string,
+  extra: { famille?: string; race?: string; ps?: number; reservable?: boolean },
+  description?: string,
+) {
+  return { key, data: { key, label, ps: 1, ...extra, ...(description ? { description } : {}) } };
+}
+
+const COMMON_SOUFFLE_LABELS = [
+  'Passé',
+  'Futur',
+  'Chance',
+  'Malchance',
+  'Ennemi juré',
+  'Nuée grouillante',
+  'Guet-apens',
+  'Retrouvailles',
+  'Fuite',
+];
 
 /** Story 33.1 — même patron que `character-sheet.spec.ts`/`detail-surface.spec.ts` : jsdom
  *  n'implémente pas `matchMedia`, `BreakpointObserver` doit donc être mocké dès que
@@ -94,8 +141,8 @@ function makeHommeDragonService(
   };
 }
 
-function makeCharacterService() {
-  return { getGameSystemContent: vi.fn().mockResolvedValue(CATALOG) };
+function makeCharacterService(catalog: GameSystemContentDto = CATALOG) {
+  return { getGameSystemContent: vi.fn().mockResolvedValue(catalog) };
 }
 
 function makeThemeService() {
@@ -635,6 +682,229 @@ describe('HommeDragonSheet', () => {
       fixture.detectChanges();
 
       expect(component['detail'].selected()).toBeNull();
+    });
+  });
+
+  describe('Souffles (Story 33.2)', () => {
+    function dragon(race: HommeDragonDto['sheetData']['race'], level: number) {
+      return makeHommeDragonService(
+        makeDto({
+          sheetData: { race, artefact: { key: 'grand-arc' }, nom: 'Ignis' },
+          derived: { level, PS: level >= 3 ? 5 : 3 },
+        }),
+      );
+    }
+
+    function souffleSection(fixture: ComponentFixture<HommeDragonSheet>): DebugElement {
+      return fixture.debugElement.query(By.css('.homme-dragon-sheet__souffles'));
+    }
+
+    /** Libellé d'un souffle listé : texte du déclencheur ou texte simple, sans le coût ni la
+     *  mention « non réservable ». */
+    function itemLabel(li: DebugElement): string {
+      return Array.from((li.nativeElement as HTMLElement).childNodes)
+        .filter(
+          (n) =>
+            n.nodeType === Node.TEXT_NODE ||
+            (n as HTMLElement).classList?.contains('homme-dragon-sheet__detail-trigger'),
+        )
+        .map((n) => n.textContent ?? '')
+        .join('')
+        .trim();
+    }
+
+    function souffleLabels(root: DebugElement): string[] {
+      return root.queryAll(By.css('li')).map(itemLabel);
+    }
+
+    function souffleItem(fixture: ComponentFixture<HommeDragonSheet>, label: string): DebugElement {
+      const li = souffleSection(fixture)
+        .queryAll(By.css('li'))
+        .find((el) => itemLabel(el) === label);
+      expect(li).toBeTruthy();
+      return li!;
+    }
+
+    it('Dragon Vert niveau 2 → 9 communs groupés par famille + Nostalgie, Route, Voyage ; aucune autre race, pas de bloc « autres races » (matrice)', async () => {
+      const { fixture } = await createComponent(dragon('DRAGON_VERT', 2));
+
+      const section = souffleSection(fixture);
+      expect(section).toBeTruthy();
+
+      const familles = section.queryAll(By.css('[data-famille]'));
+      expect(familles.map((g) => g.attributes['data-famille'])).toEqual(['temps', 'destin', 'pnj']);
+      expect(souffleLabels(familles[0])).toEqual(['Passé', 'Futur']);
+      expect(souffleLabels(familles[1])).toEqual(['Chance', 'Malchance']);
+      expect(souffleLabels(familles[2])).toEqual([
+        'Ennemi juré',
+        'Nuée grouillante',
+        'Guet-apens',
+        'Retrouvailles',
+        'Fuite',
+      ]);
+      expect(familles[0].nativeElement.textContent).toContain('Souffles manipulant le temps');
+      expect(familles[1].nativeElement.textContent).toContain('Souffles manipulant le destin');
+      expect(familles[1].nativeElement.textContent).toContain(
+        'à utiliser juste avant ou après un jet de dés',
+      );
+      expect(familles[2].nativeElement.textContent).toContain('Souffles aidant les PNJ');
+      expect(familles[2].query(By.css('.homme-dragon-sheet__souffle-consigne'))).toBeFalsy();
+
+      const race = section.query(By.css('.homme-dragon-sheet__souffles-race'));
+      expect(race.nativeElement.textContent).toContain('Souffles du Dragon Vert');
+      expect(souffleLabels(race)).toEqual(['Nostalgie', 'Route', 'Voyage']);
+
+      expect(souffleLabels(section)).toEqual([...COMMON_SOUFFLE_LABELS, 'Nostalgie', 'Route', 'Voyage']);
+      expect(section.query(By.css('details'))).toBeFalsy();
+      expect(section.nativeElement.textContent).not.toContain('Souffles des autres races');
+    });
+
+    it('Dragon Rouge niveau 3 → communs + Défi, Courage, Renaissance ; bloc replié avec les souffles vert, bleu et noir groupés par race (matrice)', async () => {
+      const { fixture } = await createComponent(dragon('DRAGON_ROUGE', 3));
+
+      const section = souffleSection(fixture);
+      expect(souffleLabels(section.query(By.css('.homme-dragon-sheet__souffles-race')))).toEqual([
+        'Défi',
+        'Courage',
+        'Renaissance',
+      ]);
+      const commons = section
+        .queryAll(By.css('[data-famille]'))
+        .flatMap((g) => souffleLabels(g));
+      expect(commons).toEqual(COMMON_SOUFFLE_LABELS);
+
+      const details = section.query(By.css('details.homme-dragon-sheet__souffles-autres-races'));
+      expect(details).toBeTruthy();
+      expect((details.nativeElement as HTMLDetailsElement).open).toBe(false);
+      expect(details.query(By.css('summary')).nativeElement.textContent.trim()).toBe(
+        'Souffles des autres races',
+      );
+      const groups = details.queryAll(By.css('[data-race]'));
+      expect(groups.map((g) => g.attributes['data-race'])).toEqual([
+        'DRAGON_VERT',
+        'DRAGON_BLEU',
+        'DRAGON_NOIR',
+      ]);
+      expect(souffleLabels(groups[0])).toEqual(['Nostalgie', 'Route', 'Voyage']);
+      expect(souffleLabels(groups[1])).toEqual(['Amour', 'Bonté', 'Émotion']);
+      expect(souffleLabels(groups[2])).toEqual(['Massacre', 'Obéissance', 'Vengeance']);
+      expect(souffleLabels(details)).not.toContain('Défi');
+    });
+
+    it('souffles du temps (Passé, Futur) → « 2 PS » et mention « non réservable » (matrice)', async () => {
+      const { fixture } = await createComponent(dragon('DRAGON_ROUGE', 1));
+
+      for (const label of ['Passé', 'Futur']) {
+        const li = souffleItem(fixture, label);
+        expect(li.query(By.css('.stat-pill')).nativeElement.textContent.trim()).toBe('2 PS');
+        expect(li.query(By.css('.homme-dragon-sheet__souffle-note')).nativeElement.textContent.trim()).toBe(
+          'non réservable',
+        );
+      }
+    });
+
+    it('autre souffle (Chance) → « 1 PS », sans mention « non réservable » (matrice)', async () => {
+      const { fixture } = await createComponent(dragon('DRAGON_ROUGE', 1));
+
+      const li = souffleItem(fixture, 'Chance');
+      expect(li.query(By.css('.stat-pill')).nativeElement.textContent.trim()).toBe('1 PS');
+      expect(li.query(By.css('.homme-dragon-sheet__souffle-note'))).toBeFalsy();
+      expect(li.nativeElement.textContent).not.toContain('non réservable');
+    });
+
+    it('race sans souffle au catalogue → communs seuls, aucune erreur (matrice)', async () => {
+      const catalog: GameSystemContentDto = {
+        ...CATALOG,
+        souffle: CATALOG['souffle'].filter(
+          (e) => (e.data as { race?: string }).race !== 'DRAGON_BLEU',
+        ),
+      };
+      const { fixture } = await createComponent(
+        dragon('DRAGON_BLEU', 1),
+        makeCharacterService(catalog),
+      );
+      const component = fixture.componentInstance;
+
+      const section = souffleSection(fixture);
+      expect(component['loadError']()).toBeNull();
+      expect(section.query(By.css('.homme-dragon-sheet__souffles-race'))).toBeFalsy();
+      expect(souffleLabels(section)).toEqual(COMMON_SOUFFLE_LABELS);
+    });
+
+    it('souffle sans description → libellé en texte simple, pas de déclencheur (matrice)', async () => {
+      const catalog: GameSystemContentDto = {
+        ...CATALOG,
+        souffle: CATALOG['souffle'].map((e) =>
+          e.key === 'defi' ? souffle('defi', 'Défi', { race: 'DRAGON_ROUGE' }) : e,
+        ),
+      };
+      const { fixture } = await createComponent(
+        dragon('DRAGON_ROUGE', 1),
+        makeCharacterService(catalog),
+      );
+
+      const li = souffleItem(fixture, 'Défi');
+      expect(li).toBeTruthy();
+      expect(li.query(By.css('.homme-dragon-sheet__detail-trigger'))).toBeFalsy();
+      expect(li.query(By.css('.stat-pill')).nativeElement.textContent.trim()).toBe('1 PS');
+    });
+
+    it('souffle sans libellé au catalogue → repli sur la clé brute', async () => {
+      const catalog: GameSystemContentDto = {
+        ...CATALOG,
+        souffle: [{ key: 'chance', data: { key: 'chance', famille: 'destin', ps: 1 } }],
+      };
+      const { fixture } = await createComponent(
+        dragon('DRAGON_ROUGE', 1),
+        makeCharacterService(catalog),
+      );
+
+      expect(souffleLabels(souffleSection(fixture))).toEqual(['chance']);
+    });
+
+    it('souffle affiché → sa description s’ouvre dans la surface de détail, sans quitter la fiche (AC3)', async () => {
+      const { fixture } = await createComponent(dragon('DRAGON_ROUGE', 1));
+      const component = fixture.componentInstance;
+
+      const trigger = souffleItem(fixture, 'Chance').query(
+        By.css('.homme-dragon-sheet__detail-trigger'),
+      );
+      expect(trigger).toBeTruthy();
+
+      trigger.triggerEventHandler('click', new MouseEvent('click'));
+      fixture.detectChanges();
+
+      expect(component['detail'].selected()).toEqual({
+        title: 'Chance',
+        body: 'Réussite critique automatique.',
+      });
+      expect(souffleSection(fixture)).toBeTruthy();
+    });
+
+    it("les pouvoirs d'éveil ne sont jamais listés parmi les souffles", async () => {
+      const { fixture } = await createComponent(dragon('DRAGON_ROUGE', 3));
+
+      const text = souffleSection(fixture).nativeElement.textContent as string;
+      expect(text).not.toContain('Escorte du dragon');
+      expect(text).not.toContain('Couche du dragon');
+    });
+
+    it("le mécanisme de choix de pouvoir d'éveil au level-up reste inchangé : aucun souffle n'y devient sélectionnable (AC4)", async () => {
+      const { fixture } = await createComponent(
+        makeHommeDragonService(makeDto({ pendingEveilLevels: [2] })),
+      );
+      const component = fixture.componentInstance;
+
+      const keys = component['eveilPowersForCurrentLevel']().map((e) => e.key);
+      expect(keys).toEqual(['escorte-du-dragon', 'couche-du-dragon']);
+      expect(keys).not.toContain('chance');
+      expect(keys).not.toContain('defi');
+      const options = fixture.debugElement
+        .query(By.css('.homme-dragon-sheet__eveil-prompt'))
+        .queryAll(By.css('option'))
+        .map((o) => (o.nativeElement.textContent as string).trim());
+      expect(options).not.toContain('Chance');
+      expect(options).not.toContain('Défi');
     });
   });
 

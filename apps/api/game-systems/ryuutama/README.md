@@ -1,7 +1,9 @@
 # Seed Ryuutama
 
-Ce dossier attend, dans un sous-dossier `data/` (gitignoré — contenu extrait du *Guide
-du Voyageur*, sous droits d'auteur, NFR4), les 4 fichiers JSON suivants. Sans ces
+Ce dossier attend, dans un sous-dossier `data/`, les fichiers JSON de contenu décrits
+ci-dessous. Depuis le 2026-09-25 (NFR4 révisée), ces fichiers sont **versionnés** : les textes
+y sont reformulés à partir du *Guide du Voyageur* (mécaniques conservées, formulation propre au
+projet) — le livre reste nécessaire pour jouer. Sans ces
 fichiers, le démarrage de l'API échoue au bootstrap avec un message d'erreur pointant
 vers ce README.
 

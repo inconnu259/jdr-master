@@ -1094,3 +1094,7 @@ Item déjà résolu entre-temps (retiré sans action) : le correctif `allowImpor
 ## Deferred from: code review of 31-2-surface-de-detail-adaptative — résolu par la 31-3 (2026-08-29)
 
 - ✅ **RÉSOLU (2026-08-29, story 31-3-aide-contextuelle-sur-les-termes-de-jeu)** — AC6 « focus revient au déclencheur » vivait entièrement dans `CharacterSheet` (champ privé `detailTrigger`), pas dans le composant partagé `DetailSurface`, contredisant la justification d'auto-suffisance donnée par la 31.2. Extrait dans `createDetailSurfaceHost()` (`apps/web/src/app/shared/detail-surface/detail-surface-host.ts`), fonction appelée en contexte d'injection portant l'état, le jeton d'ouverture et le retour de focus (avec repli `isConnected`). `CharacterSheet` migré dessus à comportement constant (ses 110 tests préexistants passent sans modification) ; `class-step` et `type-step` (31.3) consomment directement le même mécanisme, sans réimplémentation. [apps/web/src/app/shared/detail-surface/detail-surface-host.ts]
+
+## Décision du 2026-09-25 (bmad-build 33-2)
+
+- Niveau de l'Homme Dragon calculé par scénario `PASSE` et non par séance (`docs/dragons.md` dit « séances jouées ») — **conservé tel quel** : décision utilisateur, les scénarios correspondent aux séances telles que les groupes les jouent. [packages/game-rules/src/ryuutama/homme-dragon-derived.ts]

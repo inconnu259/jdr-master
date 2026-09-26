@@ -216,6 +216,67 @@
               </ul>
             </section>
           }
+
+          @if (hasSouffles()) {
+            <section class="homme-dragon-sheet__card homme-dragon-sheet__souffles">
+              <h2 class="homme-dragon-sheet__card-title">Souffles</h2>
+
+              @for (g of commonSouffleGroups(); track g.famille) {
+                <div class="homme-dragon-sheet__souffle-group" [attr.data-famille]="g.famille">
+                  <h3 class="homme-dragon-sheet__souffle-group-title">{{ g.label }}</h3>
+                  @if (g.consigne) {
+                    <p class="homme-dragon-sheet__souffle-consigne">{{ g.consigne }}</p>
+                  }
+                  <ng-container *ngTemplateOutlet="souffleList; context: { $implicit: g.souffles }" />
+                </div>
+              }
+
+              @if (raceSouffles().length > 0) {
+                <div class="homme-dragon-sheet__souffle-group homme-dragon-sheet__souffles-race">
+                  <h3 class="homme-dragon-sheet__souffle-group-title">
+                    Souffles du {{ raceLabel(hommeDragon()!.sheetData.race) }}
+                  </h3>
+                  <ng-container *ngTemplateOutlet="souffleList; context: { $implicit: raceSouffles() }" />
+                </div>
+              }
+
+              @if (otherRaceSouffleGroups().length > 0) {
+                <details class="homme-dragon-sheet__souffles-autres-races">
+                  <summary>Souffles des autres races</summary>
+                  @for (g of otherRaceSouffleGroups(); track g.race) {
+                    <div class="homme-dragon-sheet__souffle-group" [attr.data-race]="g.race">
+                      <h3 class="homme-dragon-sheet__souffle-group-title">Souffles du {{ raceLabel(g.race) }}</h3>
+                      <ng-container *ngTemplateOutlet="souffleList; context: { $implicit: g.souffles }" />
+                    </div>
+                  }
+                </details>
+              }
+            </section>
+          }
+
+          <ng-template #souffleList let-souffles>
+            <ul class="homme-dragon-sheet__talent-list">
+              @for (s of souffles; track s.key) {
+                <li>
+                  @if (souffleDetail(s); as d) {
+                    <button
+                      type="button"
+                      class="homme-dragon-sheet__detail-trigger"
+                      (click)="detail.open(d.title, d.body, $event)"
+                    >{{ d.title }}</button>
+                  } @else {
+                    {{ souffleLabel(s) }}
+                  }
+                  @if (souffleCost(s); as cost) {
+                    <span class="stat-pill">{{ cost }}</span>
+                  }
+                  @if (souffleNonReservable(s)) {
+                    <span class="homme-dragon-sheet__souffle-note">non réservable</span>
+                  }
+                </li>
+              }
+            </ul>
+          </ng-template>
         </div>
 
         <div class="homme-dragon-sheet__column">

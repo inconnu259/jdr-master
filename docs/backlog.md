@@ -48,11 +48,11 @@ But : un squelette qui démarre en une commande, base de la collaboration.
 - [x] Module **Ryuutama** : `sheetSchema`, `creationSteps`, `validate(strict)`, `computeDerived`.
 - [x] **Back-office de contenu (CRM)** : le contenu (classes, types, catégories d'armes, patterns
       d'attributs) est seedé en **base** au démarrage (`GameSystemService.onApplicationBootstrap` →
-      `ContentType`/`ContentEntry`, scope `BASE`) depuis des fichiers JSON **gitignorés**
+      `ContentType`/`ContentEntry`, scope `BASE`) depuis des fichiers JSON **versionnés** (textes reformulés, NFR4 révisée le 2026-09-25)
       (`apps/api/game-systems/ryuutama/data/*.json`) qui ne servent que de source de seed pour
       reconstruire la base proprement — **jamais lus directement par l'UI**, qui passe exclusivement par
-      `GET /game-systems/:id/content` (lecture DB). Respecte la raison légale (contenu propriétaire hors
-      repo). *(Nuance : `getSchema()` — structure de l'assistant de création, étapes/champs — reste codée
+      `GET /game-systems/:id/content` (lecture DB). Textes reformulés à partir du livre (mécaniques conservées) :
+      c'est ce qui permet de les versionner (NFR4 révisée le 2026-09-25). *(Nuance : `getSchema()` — structure de l'assistant de création, étapes/champs — reste codée
       en dur en TypeScript, pas encore pilotée par le catalogue ; à revoir si besoin lors du Palier 11.)*
 - [x] Front : **rendu de fiche** et **assistant de création pas à pas** pilotés par le schéma.
 - [x] Créer un personnage (guidé), le **rattacher** à une partie (neuf ou existant compatible).
@@ -216,7 +216,7 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 - [ ] Module **Draconis** : `sheetSchema`, `creationSteps`, `validate(strict)`, `computeDerived`
       (basé D&D 5e — SRD/Creative Commons si possible, cf. spec §9).
 - [ ] Contenu Draconis (classes, races, sorts, compétences…) seedé en base via le même mécanisme
-      CRM/JSON-gitignoré que Ryuutama (Palier 2).
+      CRM/JSON que Ryuutama (Palier 2).
 - [ ] Front : rendu de fiche + assistant de création pour Draconis (réutilise l'infra plugin existante).
 
 ---
