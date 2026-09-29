@@ -468,29 +468,194 @@ describe('HommeDragonSheet', () => {
     expect(component['choosingEveilPower']()).toBe(false);
   });
 
-  it('clic sur "Exporter en PDF" appelle exportPdf() avec le bon partieId et déclenche un téléchargement', async () => {
-    const hommeDragonSvc = makeHommeDragonService(makeDto());
-    hommeDragonSvc.exportPdf.mockResolvedValue(new Blob(['%PDF-1.6'], { type: 'application/pdf' }));
-    const { fixture } = await createComponent(hommeDragonSvc);
-    const component = fixture.componentInstance;
+  describe('Export PDF (menu à deux formats, Story 33.4)', () => {
+    it.each(['editable', '2pages'] as const)(
+      'onExportPdf("%s") appelle exportPdf() avec le partieId et le format, sans erreur',
+      async (format) => {
+        const hommeDragonSvc = makeHommeDragonService(makeDto());
+        hommeDragonSvc.exportPdf.mockResolvedValue(
+          new Blob(['%PDF-1.6'], { type: 'application/pdf' }),
+        );
+        const { fixture } = await createComponent(hommeDragonSvc);
+        const component = fixture.componentInstance;
 
-    await component['onExportPdf']();
+        await component['onExportPdf'](format);
 
-    expect(hommeDragonSvc.exportPdf).toHaveBeenCalledWith('p1');
-    expect(component['exportError']()).toBeNull();
-    expect(component['exporting']()).toBe(false);
-  });
+        expect(hommeDragonSvc.exportPdf).toHaveBeenCalledWith('p1', format);
+        expect(component['exportError']()).toBeNull();
+        expect(component['exporting']()).toBe(false);
+      },
+    );
 
-  it('échec de exportPdf() → exportError() renseigné, formulaire non cassé', async () => {
-    const hommeDragonSvc = makeHommeDragonService(makeDto());
-    hommeDragonSvc.exportPdf.mockRejectedValue(new Error('network down'));
-    const { fixture } = await createComponent(hommeDragonSvc);
-    const component = fixture.componentInstance;
+    it('nom de fichier téléchargé distinct par format', async () => {
+      const hommeDragonSvc = makeHommeDragonService(makeDto());
+      hommeDragonSvc.exportPdf.mockResolvedValue(new Blob(['%PDF-1.6']));
+      const names: string[] = [];
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+        this: HTMLAnchorElement,
+      ) {
+        names.push(this.download);
+      });
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const component = fixture.componentInstance;
 
-    await component['onExportPdf']();
+      await component['onExportPdf']('editable');
+      await component['onExportPdf']('2pages');
+      clickSpy.mockRestore();
 
-    expect(component['exportError']()).toBeTruthy();
-    expect(component['exporting']()).toBe(false);
+      expect(names).toEqual(['homme-dragon-Ignis-editable.pdf', 'homme-dragon-Ignis-2pages.pdf']);
+    });
+
+    it('échec de exportPdf() → exportError() renseigné, formulaire non cassé', async () => {
+      const hommeDragonSvc = makeHommeDragonService(makeDto());
+      hommeDragonSvc.exportPdf.mockRejectedValue(new Error('network down'));
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const component = fixture.componentInstance;
+
+      await component['onExportPdf']('editable');
+
+      expect(component['exportError']()).toBeTruthy();
+      expect(component['exporting']()).toBe(false);
+    });
+
+    it('le déclencheur ouvre un menu à deux entrées (éditable / 2 pages), accessible', async () => {
+      const { fixture } = await createComponent(makeHommeDragonService(makeDto()));
+      const el = fixture.nativeElement as HTMLElement;
+      const trigger = el.querySelector<HTMLButtonElement>('.homme-dragon-sheet__export-trigger')!;
+
+      expect(trigger.getAttribute('aria-haspopup')).toBe('menu');
+      expect(trigger.getAttribute('aria-expanded')).toBe('false');
+      expect(el.querySelector('[role="menu"]')).toBeNull();
+
+      trigger.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const menu = el.querySelector('[role="menu"]')!;
+      expect(menu.getAttribute('aria-label')).toBeTruthy();
+      expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      const items = Array.from(menu.querySelectorAll('[role="menuitem"]')).map((i) =>
+        i.textContent?.trim(),
+      );
+      expect(items).toEqual(['PDF éditable', 'PDF 2 pages (à imprimer)']);
+    });
+
+    it('choisir « 2 pages » dans le menu exporte en 2pages et referme le menu', async () => {
+      const hommeDragonSvc = makeHommeDragonService(makeDto());
+      hommeDragonSvc.exportPdf.mockResolvedValue(new Blob(['%PDF-1.6']));
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const el = fixture.nativeElement as HTMLElement;
+
+      el.querySelector<HTMLButtonElement>('.homme-dragon-sheet__export-trigger')!.click();
+      fixture.detectChanges();
+      const items = el.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+      items[1].click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(hommeDragonSvc.exportPdf).toHaveBeenCalledWith('p1', '2pages');
+      expect(el.querySelector('[role="menu"]')).toBeNull();
+    });
+
+    it('Échap referme le menu ; les flèches bouclent sur les entrées', async () => {
+      const { fixture } = await createComponent(makeHommeDragonService(makeDto()));
+      const el = fixture.nativeElement as HTMLElement;
+      el.querySelector<HTMLButtonElement>('.homme-dragon-sheet__export-trigger')!.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const menu = el.querySelector<HTMLElement>('[role="menu"]')!;
+      const items = menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+      items[0].focus();
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(items[1]);
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(items[0]);
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(document.activeElement).toBe(items[1]);
+
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      fixture.detectChanges();
+      expect(el.querySelector('[role="menu"]')).toBeNull();
+    });
+
+    async function openMenu(fixture: ComponentFixture<HommeDragonSheet>) {
+      const el = fixture.nativeElement as HTMLElement;
+      const trigger = el.querySelector<HTMLButtonElement>('.homme-dragon-sheet__export-trigger')!;
+      trigger.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      const menu = el.querySelector<HTMLElement>('[role="menu"]')!;
+      const items = menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+      return { el, trigger, menu, items };
+    }
+
+    const press = (menu: HTMLElement, key: string) =>
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+
+    it('le focus arrive sur la première entrée à l’ouverture, puis revient au déclencheur après Échap', async () => {
+      const { fixture } = await createComponent(makeHommeDragonService(makeDto()));
+      const { trigger, menu, items } = await openMenu(fixture);
+      expect(document.activeElement).toBe(items[0]);
+
+      press(menu, 'Escape');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it('après un export terminé, le focus est restitué au déclencheur (réactivé)', async () => {
+      const hommeDragonSvc = makeHommeDragonService(makeDto());
+      hommeDragonSvc.exportPdf.mockResolvedValue(new Blob(['%PDF-1.6']));
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const { trigger, items } = await openMenu(fixture);
+
+      items[0].click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(fixture.componentInstance['exporting']()).toBe(false);
+      expect(trigger.disabled).toBe(false);
+      expect(document.activeElement).toBe(trigger);
+    });
+
+    it('un clic sur le fond du menu le referme', async () => {
+      const { fixture } = await createComponent(makeHommeDragonService(makeDto()));
+      const { el } = await openMenu(fixture);
+
+      el.querySelector<HTMLElement>('.homme-dragon-sheet__export-backdrop')!.click();
+      fixture.detectChanges();
+
+      expect(el.querySelector('[role="menu"]')).toBeNull();
+    });
+
+    it('Début / Fin atteignent la première / dernière entrée', async () => {
+      const { fixture } = await createComponent(makeHommeDragonService(makeDto()));
+      const { menu, items } = await openMenu(fixture);
+
+      press(menu, 'End');
+      expect(document.activeElement).toBe(items[items.length - 1]);
+      press(menu, 'Home');
+      expect(document.activeElement).toBe(items[0]);
+    });
+
+    it('Tab referme le menu et le focus passe au déclencheur (Tab continue depuis lui)', async () => {
+      const { fixture } = await createComponent(makeHommeDragonService(makeDto()));
+      const { el, trigger, menu } = await openMenu(fixture);
+      const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+
+      menu.dispatchEvent(event);
+      // Synchrone : avant que l'item focalisé ne quitte le DOM.
+      expect(document.activeElement).toBe(trigger);
+      fixture.detectChanges();
+
+      expect(el.querySelector('[role="menu"]')).toBeNull();
+      expect(document.activeElement).toBe(trigger);
+      expect(event.defaultPrevented).toBe(false);
+    });
   });
 
   describe('Surface de détail (Story 33.1)', () => {

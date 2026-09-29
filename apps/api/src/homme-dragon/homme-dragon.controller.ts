@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import { HommeDragonPdfService } from './homme-dragon.pdf.service';
 import { CreateHommeDragonDto } from './dto/create-homme-dragon.dto';
 import { UpdateHommeDragonDto } from './dto/update-homme-dragon.dto';
 import { ChooseEveilPowerDto } from './dto/choose-eveil-power.dto';
+import { ExportHommeDragonPdfDto } from './dto/export-homme-dragon-pdf.dto';
 
 @UseGuards(AuthenticatedGuard)
 @Controller('parties/:id/homme-dragon')
@@ -62,15 +64,20 @@ export class HommeDragonController {
   @Get('export.pdf')
   async exportPdf(
     @Param('id', ParseUUIDPipe) partieId: string,
+    @Query() query: ExportHommeDragonPdfDto,
     @CurrentUser() user: AuthUser,
   ): Promise<StreamableFile> {
     const hommeDragon = await this.hommeDragon.findOne(partieId, user.id);
     if (!hommeDragon) throw new NotFoundException('Homme Dragon introuvable');
     const mjPseudo = await this.hommeDragon.getOwnerPseudo(hommeDragon.userId);
-    const pdfBytes = await this.hommeDragonPdf.fillHommeDragonPdf(hommeDragon, mjPseudo);
+    const pdfBytes = await this.hommeDragonPdf.fillHommeDragonPdf(
+      hommeDragon,
+      mjPseudo,
+      query.format,
+    );
     return new StreamableFile(pdfBytes, {
       type: 'application/pdf',
-      disposition: `attachment; filename="homme-dragon-${partieId}.pdf"`,
+      disposition: `attachment; filename="homme-dragon-${partieId}-${query.format}.pdf"`,
     });
   }
 }

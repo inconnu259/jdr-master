@@ -10,6 +10,10 @@ export {
   HOMME_DRAGON_LEVEL_THRESHOLDS,
 } from './ryuutama/homme-dragon-derived.ts';
 export { mapHommeDragonToPdfFields } from './ryuutama/homme-dragon-pdf-field-map.ts';
+export {
+  availableSouffles,
+  SOUFFLES_MULTICOLORES_LEVEL,
+} from './ryuutama/homme-dragon-souffles.ts';
 export { mapEquipmentToPdfFields } from './ryuutama/equipment-pdf-field-map.ts';
 export { mapNotesToPdfFields } from './ryuutama/notes-pdf-field-map.ts';
 export { resolveWeaponCategory, resolveWeapon } from './ryuutama/resolve-weapon-category.ts';
@@ -34,6 +38,13 @@ export type {
   HommeDragonPdfContent,
   HommeDragonPdfInput,
 } from './ryuutama/homme-dragon-pdf-field-map.ts';
+export type {
+  SouffleFamille,
+  SouffleCatalogEntry,
+  AvailableSouffle,
+  SouffleGroup,
+  SouffleGroupSection,
+} from './ryuutama/homme-dragon-souffles.ts';
 export type { EquipmentPdfInput } from './ryuutama/equipment-pdf-field-map.ts';
 export type {
   WeaponItemEntry,

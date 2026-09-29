@@ -89,7 +89,41 @@ describe('mapHommeDragonToPdfFields', () => {
     expect(field(fields, 'date_sc_1')).toBe('10/07/2026');
   });
 
-  it('artefact sans nom personnalisé → fallback sur la clé', () => {
+  it('artefact sans nom personnalisé → libellé du catalogue, jamais la clé', () => {
+    const dto = makeDto({
+      sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' },
+    });
+
+    const fields = mapHommeDragonToPdfFields(dto, { ...CONTENT, artefactLabel: 'Grand arc' });
+
+    expect(field(fields, 'artefact')).toBe('Grand arc');
+  });
+
+  it('artefact avec nom personnalisé → le nom du MJ prime sur le libellé du catalogue', () => {
+    const dto = makeDto({
+      sheetData: {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc', nom: 'Le Perceur' },
+        nom: 'Ignis',
+      },
+    });
+
+    const fields = mapHommeDragonToPdfFields(dto, { ...CONTENT, artefactLabel: 'Grand arc' });
+
+    expect(field(fields, 'artefact')).toBe('Le Perceur');
+  });
+
+  it('artefact sans nom (espaces seuls) → libellé du catalogue', () => {
+    const dto = makeDto({
+      sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc', nom: '   ' }, nom: 'Ignis' },
+    });
+
+    const fields = mapHommeDragonToPdfFields(dto, { ...CONTENT, artefactLabel: 'Grand arc' });
+
+    expect(field(fields, 'artefact')).toBe('Grand arc');
+  });
+
+  it('artefact inconnu du catalogue → repli sur la clé brute (dernier recours)', () => {
     const dto = makeDto({
       sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' },
     });
@@ -163,17 +197,28 @@ describe('mapHommeDragonToPdfFields', () => {
     expect(field(mapHommeDragonToPdfFields(dto, CONTENT), 'apparence_caractere')).toBe('');
   });
 
-  it('souffle_actuel et nombre_souffles égaux à souffle_max (AD-3/FR7 : aucun suivi de dépense)', () => {
-    const dto = makeDto({ derived: { level: 5, PS: 10 } });
+  it.each([
+    { level: 1, PS: 3, reserve: '0' },
+    { level: 3, PS: 5, reserve: '2' },
+    { level: 5, PS: 10, reserve: '4' },
+  ])(
+    'niveau $level : souffle_max = $PS, nombre_souffles = $reserve, souffle_actuel vide',
+    ({ level, PS, reserve }) => {
+      const fields = mapHommeDragonToPdfFields(makeDto({ derived: { level, PS } }), CONTENT);
 
-    const fields = mapHommeDragonToPdfFields(dto, CONTENT);
+      expect(field(fields, 'souffle_max')).toBe(String(PS));
+      expect(field(fields, 'nombre_souffles')).toBe(reserve);
+      expect(field(fields, 'souffle_actuel')).toBe('');
+    },
+  );
 
-    expect(field(fields, 'souffle_max')).toBe('10');
-    expect(field(fields, 'souffle_actuel')).toBe('10');
-    expect(field(fields, 'nombre_souffles')).toBe('10');
+  it('nombre_souffles ne descend jamais sous 0 (niveau anormal)', () => {
+    const fields = mapHommeDragonToPdfFields(makeDto({ derived: { level: 0, PS: 3 } }), CONTENT);
+
+    expect(field(fields, 'nombre_souffles')).toBe('0');
   });
 
-  it('souffle_1..4 jamais mappés (cases de suivi manuel, aucune donnée correspondante)', () => {
+  it('souffle_1..4 jamais mappés (cases de la réserve, réservées à la Story 33.6)', () => {
     const fields = mapHommeDragonToPdfFields(makeDto(), CONTENT);
 
     expect(fields.some((f) => f.field === 'souffle_1')).toBe(false);
@@ -182,20 +227,32 @@ describe('mapHommeDragonToPdfFields', () => {
     expect(fields.some((f) => f.field === 'souffle_4')).toBe(false);
   });
 
-  it('voyageursProteges : seuls les 2 premiers mappés (2 emplacements sur le template)', () => {
+  it("voyageursProteges : tous imprimés, répartis dans l'ordre sur les deux zones, un par ligne", () => {
     const dto = makeDto({
       voyageursProteges: [
         { userId: 'u1', pseudo: 'alice' },
         { userId: 'u2', pseudo: 'bob' },
         { userId: 'u3', pseudo: 'carla' },
+        { userId: 'u4', pseudo: 'dave' },
+        { userId: 'u5', pseudo: 'eve' },
       ],
     });
 
     const fields = mapHommeDragonToPdfFields(dto, CONTENT);
 
-    expect(field(fields, 'voyageurs_proteges_1')).toBe('alice');
-    expect(field(fields, 'voyageurs_proteges_2')).toBe('bob');
+    expect(field(fields, 'voyageurs_proteges_1')).toBe('alice\nbob\ncarla');
+    expect(field(fields, 'voyageurs_proteges_2')).toBe('dave\neve');
     expect(fields.some((f) => f.field === 'voyageurs_proteges_3')).toBe(false);
+  });
+
+  it('un seul voyageur → première zone seule, seconde vide', () => {
+    const fields = mapHommeDragonToPdfFields(
+      makeDto({ voyageursProteges: [{ userId: 'u1', pseudo: 'alice' }] }),
+      CONTENT,
+    );
+
+    expect(field(fields, 'voyageurs_proteges_1')).toBe('alice');
+    expect(field(fields, 'voyageurs_proteges_2')).toBe('');
   });
 
   it('voyageursProteges vide → champs vides, pas undefined', () => {

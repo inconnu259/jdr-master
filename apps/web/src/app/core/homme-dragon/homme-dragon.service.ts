@@ -63,9 +63,10 @@ export class HommeDragonService {
     );
   }
 
-  exportPdf(partieId: string): Promise<Blob> {
+  exportPdf(partieId: string, format: 'editable' | '2pages'): Promise<Blob> {
     return firstValueFrom(
       this.http.get(`${API_BASE}/parties/${partieId}/homme-dragon/export.pdf`, {
+        params: { format },
         responseType: 'blob',
         withCredentials: true,
       }),

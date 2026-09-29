@@ -74,3 +74,30 @@ s'intègre bien sur la page (XObject `/Image` présent dans les ressources), mai
 positionnement exact par rapport au titre/logo imprimé n'a pas été confirmé à l'œil. **Si un
 décalage est constaté à l'usage, ajuster ces 4 constantes** dans `ryuutama-pdf.service.ts`
 plutôt que de redécouvrir ces repères depuis zéro.
+
+## Ryuutama_fiche_homme-dragon_big_edit.pdf — souffles et pages ajoutées (Story 33.4)
+
+Export `GET /parties/:id/homme-dragon/export.pdf?format=editable|2pages` (`format` obligatoire, comme
+l'export joueur ; `2pages` aplatit le formulaire avec `form.flatten()`). Champs de souffle du
+gabarit :
+
+| Champ | Contenu |
+|---|---|
+| `souffle_max` | Points de Souffle max (`derived.PS`) |
+| `souffle_actuel` | **Vide** — case à remplir au stylo : l'application ne suit aucune consommation (épic 33) |
+| `nombre_souffles` | « Nombre Max : » de la réserve = `max(niveau − 1, 0)` (pas les PS) |
+| `souffle_1`..`souffle_4` | Les 4 cases de la réserve : **non remplies**, réservées à la réserve de souffles (Story 33.6) |
+
+Le gabarit ne peut pas contenir la liste des souffles : une ou plusieurs pages « Souffles de mon
+dragon » (A4 portrait, polices standard Helvetica, dessinées côté serveur dans
+`apps/api/src/homme-dragon/homme-dragon-souffles-pages.ts`) sont **ajoutées après** le gabarit,
+identiques dans les deux formats. Elles listent, lus du catalogue `souffle` uniquement (jamais des
+pouvoirs d'éveil, qui restent dans leur section du gabarit) : les souffles communs par famille, ceux
+de la race du dragon et, dès le niveau 3, ceux des autres races (« souffles multicolores »), chacun
+avec son coût en PS, la mention « ne peut pas être mis en réserve » le cas échéant et son effet. La
+règle de disponibilité est la fonction pure `availableSouffles()` (`packages/game-rules`). Catalogue
+`souffle` vide : aucune page ajoutée.
+
+Tout texte est assaini pour l'encodage WinAnsi (police standard de pdf-lib) : un glyphe non
+encodable est remplacé par `?`, jamais une erreur d'export. Les voyageurs protégés sont tous
+imprimés, répartis dans l'ordre sur les deux zones multilignes `voyageurs_proteges_1/2`.

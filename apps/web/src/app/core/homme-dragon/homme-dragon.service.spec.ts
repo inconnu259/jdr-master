@@ -99,6 +99,26 @@ describe('HommeDragonService', () => {
     await expect(promise).resolves.toBeDefined();
   });
 
+  it.each(['editable', '2pages'] as const)(
+    'exportPdf(partieId, "%s") → GET export.pdf?format=... en blob, withCredentials',
+    async (format) => {
+      const promise = service.exportPdf('p1', format);
+
+      const req = http.expectOne(
+        (r) =>
+          r.url === `${API_BASE}/parties/p1/homme-dragon/export.pdf` &&
+          r.params.get('format') === format,
+      );
+      expect(req.request.method).toBe('GET');
+      expect(req.request.responseType).toBe('blob');
+      expect(req.request.withCredentials).toBe(true);
+      const blob = new Blob(['%PDF-1.6'], { type: 'application/pdf' });
+      req.flush(blob);
+
+      await expect(promise).resolves.toEqual(blob);
+    },
+  );
+
   it('notifyChanged() incrémente changed() (Story 20.2, AC2)', () => {
     const before = service.changed();
     service.notifyChanged();

@@ -22,6 +22,10 @@ export interface HommeDragonPdfContent {
   mjPseudo: string;
   /** key → label du catalogue `eveilPower` — résout eveil_1..4 sans jamais afficher une clé technique brute. */
   eveilPowerLabels: Record<string, string>;
+  /** `label` du catalogue `hommeDragonArtefact` pour `sheetData.artefact.key` — imprimé quand le MJ
+   * n'a pas saisi de nom personnalisé. `undefined` si le catalogue ne connaît plus l'entrée : la
+   * clé brute sert alors de dernier repli. */
+  artefactLabel?: string;
 }
 
 const MAX_HISTORIQUE_ROWS = 12;
@@ -40,9 +44,17 @@ function formatDateFr(iso: string): string {
  * (`Ryuutama_fiche_homme-dragon_big_edit.pdf`, 63 champs réels, tous `PDFTextField` — vérifiés
  * via pdf-lib, pas devinés, cf. Story 10.5 Task 0).
  *
- * Champs du template volontairement non couverts (aucune donnée correspondante dans
- * `HommeDragonDto`) : `souffle_1`..`souffle_4` (cases de suivi manuel de la dépense de Points de
- * Souffle à la table — FR7 : l'app n'a aucun suivi de dépense/récupération en jeu).
+ * Champs de souffle (Story 33.4, qui renverse la décision « état plein » de la Story 10.5) :
+ * - `souffle_max` = PS max (`derived.PS`) ;
+ * - `souffle_actuel` reste VIDE : un champ « actuel » rempli laisserait croire à un suivi de
+ *   consommation que l'application n'a pas (épic 33 : aucun décompte en séance) — la case se
+ *   remplit au stylo à la table ;
+ * - `nombre_souffles` (« Nombre Max : » de la réserve) = capacité de réserve `max(niveau − 1, 0)`
+ *   (`docs/dragons.md`) — jamais les PS, comme l'ancien mapping le faisait à tort ;
+ * - `souffle_1`..`souffle_4` (les 4 cases de la réserve) restent volontairement non couverts :
+ *   réservés à la réserve de souffles de la Story 33.6, aucune donnée à lire aujourd'hui.
+ * Les souffles disponibles eux-mêmes ne tiennent pas dans le template : ils sont dessinés sur des
+ * pages ajoutées par `HommeDragonPdfService` (`availableSouffles()`).
  *
  * `eveil_1`..`eveil_4` sont mappés PAR NIVEAU (`eveil_1` = niveau 2, `eveil_2` = niveau 3,
  * `eveil_3` = niveau 4, `eveil_4` = niveau 5), jamais par position dans `eveilPowers[]` — la
@@ -57,7 +69,8 @@ function formatDateFr(iso: string): string {
  *
  * `monde_protege_1/2/3` : le template a 3 emplacements pour un seul champ `mondesProteges` (texte
  * libre) côté données — jamais découpé artificiellement, seul le premier est rempli.
- * `voyageurs_proteges_1/2` : seulement 2 emplacements, quel que soit le nombre réel de membres.
+ * `voyageurs_proteges_1/2` : deux zones multilignes — TOUS les voyageurs sont imprimés, répartis
+ * dans l'ordre (première moitié dans la zone 1, le reste dans la zone 2), un par ligne.
  */
 export function mapHommeDragonToPdfFields(
   dto: HommeDragonPdfInput,
@@ -71,26 +84,33 @@ export function mapHommeDragonToPdfFields(
 
   const recentHistorique = historique.slice(-MAX_HISTORIQUE_ROWS);
 
+  const artefactNom = sheetData.artefact.nom?.trim();
+  const artefactPrinted = artefactNom || content.artefactLabel || sheetData.artefact.key;
+
+  const pseudos = voyageursProteges.map((v) => v.pseudo);
+  const splitAt = Math.ceil(pseudos.length / 2);
+  const reserveCapacity = Math.max(derived.level - 1, 0);
+
   const fields: PdfFieldValue[] = [
     { field: 'nom', value: sheetData.nom, kind: 'text' },
     { field: 'couleur', value: content.raceLabel, kind: 'text' },
     { field: 'niveau', value: String(derived.level), kind: 'text' },
-    { field: 'artefact', value: sheetData.artefact.nom || sheetData.artefact.key, kind: 'text' },
+    { field: 'artefact', value: artefactPrinted, kind: 'text' },
     { field: 'inscription', value: sheetData.artefact.inscription ?? '', kind: 'text' },
     { field: 'avatar', value: sheetData.avatar ?? '', kind: 'text' },
     { field: 'meneur', value: content.mjPseudo, kind: 'text' },
     { field: 'cree_le', value: formatDateFr(dto.createdAt), kind: 'text' },
     { field: 'souffle_max', value: String(derived.PS), kind: 'text' },
-    { field: 'souffle_actuel', value: String(derived.PS), kind: 'text' },
-    { field: 'nombre_souffles', value: String(derived.PS), kind: 'text' },
+    { field: 'souffle_actuel', value: '', kind: 'text' },
+    { field: 'nombre_souffles', value: String(reserveCapacity), kind: 'text' },
     { field: 'apparence_caractere', value: apparenceCaractere, kind: 'text' },
     { field: 'vocation', value: sheetData.vocation ?? '', kind: 'text' },
     { field: 'demeure', value: sheetData.demeure ?? '', kind: 'text' },
     { field: 'monde_protege_1', value: sheetData.mondesProteges ?? '', kind: 'text' },
     { field: 'monde_protege_2', value: '', kind: 'text' },
     { field: 'monde_protege_3', value: '', kind: 'text' },
-    { field: 'voyageurs_proteges_1', value: voyageursProteges[0]?.pseudo ?? '', kind: 'text' },
-    { field: 'voyageurs_proteges_2', value: voyageursProteges[1]?.pseudo ?? '', kind: 'text' },
+    { field: 'voyageurs_proteges_1', value: pseudos.slice(0, splitAt).join('\n'), kind: 'text' },
+    { field: 'voyageurs_proteges_2', value: pseudos.slice(splitAt).join('\n'), kind: 'text' },
   ];
 
   for (let level = 2; level <= 5; level++) {

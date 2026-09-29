@@ -22,9 +22,47 @@
             {{ theme.tone()['homme-dragon.race_label'] }} : {{ raceLabel(hommeDragon()!.sheetData.race) }}
           </p>
         </div>
-        <button mat-stroked-button type="button" [disabled]="exporting()" (click)="onExportPdf()">
-          Exporter en PDF
-        </button>
+        <div class="homme-dragon-sheet__export">
+          <button
+            mat-stroked-button
+            type="button"
+            class="homme-dragon-sheet__export-trigger"
+            aria-haspopup="menu"
+            aria-controls="homme-dragon-export-menu"
+            [attr.aria-expanded]="exportMenuOpen()"
+            [disabled]="exporting()"
+            (click)="toggleExportMenu()"
+          >
+            Exporter en PDF <span aria-hidden="true">&#9662;</span>
+          </button>
+          @if (exportMenuOpen()) {
+            <div class="homme-dragon-sheet__export-backdrop" aria-hidden="true" (click)="closeExportMenu()"></div>
+            <div
+              id="homme-dragon-export-menu"
+              class="homme-dragon-sheet__export-menu"
+              role="menu"
+              aria-label="Format de l'export PDF"
+              (keydown)="onExportMenuKeydown($event)"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                class="homme-dragon-sheet__export-item"
+                (click)="onExportPdf('editable')"
+              >
+                PDF éditable
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                class="homme-dragon-sheet__export-item"
+                (click)="onExportPdf('2pages')"
+              >
+                PDF 2 pages (à imprimer)
+              </button>
+            </div>
+          }
+        </div>
       </header>
       @if (exportError()) {
         <p class="error">{{ exportError() }}</p>

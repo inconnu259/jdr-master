@@ -1,6 +1,9 @@
 import {
   Component,
+  ElementRef,
+  Injector,
   OnInit,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -349,16 +352,90 @@ export class HommeDragonSheet implements OnInit {
     return detailContent(this.souffleLabel(entry), souffleData(entry).description);
   }
 
-  // — Export PDF (Story 10.5) —
+  // — Export PDF (Story 10.5, deux formats Story 33.4) —
   protected readonly exporting = signal(false);
   protected readonly exportError = signal<string | null>(null);
+  protected readonly exportMenuOpen = signal(false);
 
-  protected async onExportPdf(): Promise<void> {
+  private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
+  private readonly injector = inject(Injector);
+
+  protected toggleExportMenu(): void {
+    if (this.exportMenuOpen()) {
+      this.closeExportMenu(true);
+      return;
+    }
+    this.exportMenuOpen.set(true);
+    // Le menu n'existe dans le DOM qu'après le prochain rendu : le focus va sur son premier item.
+    afterNextRender(() => this.exportMenuItems()[0]?.focus(), { injector: this.injector });
+  }
+
+  protected closeExportMenu(restoreFocus = false): void {
+    this.exportMenuOpen.set(false);
+    if (restoreFocus) this.restoreFocusToExportTrigger();
+  }
+
+  private exportTrigger(): HTMLButtonElement | null {
+    return this.host.nativeElement.querySelector<HTMLButtonElement>(
+      '.homme-dragon-sheet__export-trigger',
+    );
+  }
+
+  /** Après le prochain rendu (le déclencheur peut être désactivé tant que l'export court). */
+  private restoreFocusToExportTrigger(): void {
+    afterNextRender(() => this.exportTrigger()?.focus(), { injector: this.injector });
+  }
+
+  private exportMenuItems(): HTMLButtonElement[] {
+    return Array.from(
+      this.host.nativeElement.querySelectorAll<HTMLButtonElement>(
+        '.homme-dragon-sheet__export-item',
+      ),
+    );
+  }
+
+  /** Clavier du menu (patron WAI-ARIA « menu button ») : Échap referme et rend le focus au
+   *  déclencheur, flèches haut/bas bouclent sur les entrées, Début/Fin vont aux extrémités. */
+  protected onExportMenuKeydown(event: KeyboardEvent): void {
+    const items = this.exportMenuItems();
+    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+    const focusAt = (i: number) => {
+      event.preventDefault();
+      items[(i + items.length) % items.length]?.focus();
+    };
+    switch (event.key) {
+      case 'Escape':
+        event.preventDefault();
+        this.closeExportMenu(true);
+        break;
+      case 'ArrowDown':
+        focusAt(index + 1);
+        break;
+      case 'ArrowUp':
+        focusAt(index - 1);
+        break;
+      case 'Home':
+        focusAt(0);
+        break;
+      case 'End':
+        focusAt(items.length - 1);
+        break;
+      case 'Tab':
+        // Le focus passe au déclencheur AVANT la fermeture (l'item focalisé va disparaître du DOM) ;
+        // pas de preventDefault : Tab continue depuis le déclencheur.
+        this.exportTrigger()?.focus();
+        this.closeExportMenu();
+        break;
+    }
+  }
+
+  protected async onExportPdf(format: 'editable' | '2pages'): Promise<void> {
+    this.closeExportMenu();
     if (this.exporting()) return;
     this.exportError.set(null);
     this.exporting.set(true);
     try {
-      const blob = await this.hommeDragonSvc.exportPdf(this.partieId());
+      const blob = await this.hommeDragonSvc.exportPdf(this.partieId(), format);
       const url = URL.createObjectURL(blob);
       const safeName = (this.hommeDragon()?.sheetData.nom || 'homme-dragon').replace(
         /[^a-z0-9-_]+/gi,
@@ -366,7 +443,7 @@ export class HommeDragonSheet implements OnInit {
       );
       const link = document.createElement('a');
       link.href = url;
-      link.download = `homme-dragon-${safeName}.pdf`;
+      link.download = `homme-dragon-${safeName}-${format}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -375,6 +452,7 @@ export class HommeDragonSheet implements OnInit {
       this.exportError.set("Impossible d'exporter la fiche en PDF. Réessayez.");
     } finally {
       this.exporting.set(false);
+      this.restoreFocusToExportTrigger();
     }
   }
 }

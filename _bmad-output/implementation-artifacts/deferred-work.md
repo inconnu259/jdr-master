@@ -161,3 +161,15 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-33-2-les-souffles-de-mon-dragon.md`
   summary: Dans chaque famille de souffles, l'ordre affiché suit l'ordre renvoyé par la base, pas celui du livre (ex. « Aide aux PNJ » commence par Retrouvailles et Fuite).
   evidence: constaté au contrôle visuel du 2026-09-26 ; `ContentEntry` ne porte aucune position et `getContent()` ne trie pas selon le fichier JSON.
+
+## Deferred from: bmad-build de 33-4-export-pdf-au-niveau-des-fiches-joueur (2026-09-29)
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-33-4-export-pdf-au-niveau-des-fiches-joueur.md`
+  summary: Clause d'AC « la réserve par défaut est imprimée si elle existe » non traitée — aucune donnée de réserve n'existe encore (`souffle_1`..`souffle_4` restent vides).
+  evidence: la réserve de souffles est l'objet de la Story 33.6 ; à reprendre là (remplir les 4 cases, `nombre_souffles` restant `max(niveau − 1, 0)`).
+- source_spec: `_bmad-output/implementation-artifacts/spec-33-4-export-pdf-au-niveau-des-fiches-joueur.md`
+  summary: La règle de disponibilité des souffles (communs par famille, race, autres races dès le niveau 3) et les consignes de famille sont désormais dupliquées entre `packages/game-rules/src/ryuutama/homme-dragon-souffles.ts` (`availableSouffles()`, export PDF) et `homme-dragon-sheet.ts` (fiche web).
+  evidence: la spec 33.4 interdit de toucher la fiche web ; à faire converger en faisant consommer `availableSouffles()` par `homme-dragon-sheet.ts` (dont les libellés de race dupliquent aussi `RACE_LABELS`).
+- source_spec: `_bmad-output/implementation-artifacts/spec-33-4-export-pdf-au-niveau-des-fiches-joueur.md`
+  summary: Les pages de souffles ajoutées reprennent l'ordre du catalogue renvoyé par la base, pas celui du livre (même écart déjà consigné pour la fiche web).
+  evidence: `getContent()` ne trie pas selon le fichier JSON ; voir l'entrée de la story 33.2.
