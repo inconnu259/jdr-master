@@ -218,6 +218,15 @@ Ce palier est le premier depuis le Palier 1 dont le centre de gravité est le **
 - **Prevents:** un geste unique de l'utilisateur — glisser du mardi soir au vendredi soir — produisant N appels réseau ; sélectionner une semaine entière en déclencherait vingt-et-un, sous un limiteur de débit toujours actif, et c'est le motif de fan-out qui a déjà coûté deux bugs de production. Prévient aussi un état partiel indécidable : la moitié des créneaux enregistrés, l'autre non, sans que l'écran sache quoi afficher
 - **Rule:** `[ADOPTED]` La sélection multiple est envoyée en **un seul appel** portant l'ensemble des créneaux, jamais une itération côté client. L'écriture est **transactionnelle et tout-ou-rien** — même discipline que `AvailabilityService.create()`, qui enveloppe déjà ses écritures dans `$transaction`. Un conflit sur un seul créneau fait échouer l'ensemble avec un message qui le nomme ; l'utilisateur corrige et rejoue son geste, il ne se retrouve jamais avec une semaine à moitié déclarée. La détection de conflits existante (`findConflictsForCreate`) s'applique à chaque créneau du lot avant toute écriture.
 
+### AD-22 — Réserve de souffles : JSON sur la séance et dans la fiche, MJ seul
+
+- **Binds:** FR-61 · D-21 *(ajoutée le 2026-09-29, sprint change de l'épic 33 ; à valider au démarrage de la story 33.6)*
+- **Prevents:** un modèle relationnel pour une configuration écrite d'un bloc et jamais interrogée par valeur ; la recopie de la réserve par défaut dans chaque séance ; la fuite de la réserve vers les joueurs.
+- **Rule:** la réserve d'une séance est un champ JSON nullable sur `Seance` (`reserveSouffles`, liste `{ key, count }`) ; la réserve par défaut vit dans `HommeDragon.sheetData.reserveParDefaut` (même forme). Une séance sans réserve affiche la réserve par défaut, **résolue à la lecture** (AD-3 : rien n'est recopié).
+  **Lecture :** MJ seul — `reserveSouffles` n'apparaît **jamais** dans les DTO de séance servis aux joueurs (même principe que `sheetVisibility`, jamais dans `PartieDto`) ; le signal temps réel ne porte aucune donnée.
+  **Écriture :** MJ seul (`getOwned`), validation serveur des règles de composition à partir des catalogues `souffle` et `souffleRituel` : capacité niveau − 1, souffles `reservable: false` exclus, au plus un souffle d'une autre race à partir du niveau 3, souffles rituels admis au niveau 5 ; émission `partie:{id}` après écriture.
+  **Ne pas :** décompter quoi que ce soit ; recopier la réserve par défaut dans les séances.
+
 ```mermaid
 graph LR
   AppModule --> AccountModule
@@ -485,7 +494,8 @@ apps/web/src/app/
 
 | Sujet | Raison du report |
 | --- | --- |
-| ~~Q-13 — souffles et éveils (FR-26)~~ | **Close le 2026-08-05, plus différée.** Le constat de vérification initial était incomplet : le mécanisme existe bien de bout en bout, mais les six souffles seedés sont les **communs** ; ceux propres à chaque race de dragon (vert, bleu, rouge, noir) n'existent nulle part. FR-26 = les seeder sur le mécanisme du catalogue d'artefacts, puis présenter ceux dont le dragon dispose. Aucun suivi de consommation. **D-7 requalifiée « Faible — actée »**, aucun endpoint nouveau |
+| Modèle d'un Homme Dragon multi-aventures (FR-63, story 33.8) | Planifié le 2026-09-29 : change l'unicité `[userId, partieId, gameSystemId]`, le rattachement et le calcul du niveau (cumul des scénarios `PASSE` de plusieurs parties). **Une AD dédiée doit être ouverte avec `bmad-architecture` avant la story** |
+| ~~Q-13 — souffles et éveils (FR-26)~~ | **Close le 2026-08-05, corrigée le 2026-09-25.** Les six entrées seedées (`eveil-powers.json`) sont les **éveils**, pas des souffles. Les 21 souffles (9 communs, 12 de race) vivent dans un content-type `souffle` distinct, seedé par la story 33.2 sur le mécanisme de catalogue existant, sans endpoint nouveau. Aucun décompte pendant la séance ; la réserve préparée avant la séance relève d'**AD-22** |
 | Traitement visuel de la convention joueur/personnage (FR-14) | Reporté à la passe d'UI à la demande explicite de l'utilisateur — l'italique du PRD n'est qu'un exemple. AD-12 fixe le mécanisme précisément pour que ce choix se fasse ensuite en un seul endroit |
 | Q-1 — périmètre de la refonte création/édition de partie | Question à reposer à l'utilisateur au démarrage du chantier concerné (demande explicite du PRD) |
 | Q-5 — forme du regroupement des exports (FR-18) | Conception de l'écran ; aucune incidence de structure |

@@ -9,8 +9,8 @@ inputDocuments:
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-08-04/EXPERIENCE.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-20260626/DESIGN.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-08-04/mockups/contrat-ui-calendrier.html'
-lastUpdated: '2026-09-20'
-lastChange: "2026-09-20 (sprint change) : épic 29 rouvert — stories 29.15, 29.16, 29.17 ; story 33.5 ; FR-58 → FR-60 (voir sprint-change-proposal-2026-09-20.md). Précédemment : ajout de l'Epic 36 « Calendrier — lisibilité » (FR-49 → FR-57, D-15 → D-18) et de ses 14 stories, ordonnancé après l'épic 30. Ajout EN PLACE — les épics 1 à 35 sont intacts."
+lastUpdated: '2026-09-29'
+lastChange: "2026-09-29 (sprint change) : épic 33 — Q-13 corrigée (éveils ≠ souffles), stories 33.6, 33.7, 33.8 ; FR-61 → FR-63, D-21 (voir sprint-change-proposal-2026-09-26.md). Précédemment : 2026-09-20 (sprint change) : épic 29 rouvert — stories 29.15, 29.16, 29.17 ; story 33.5 ; FR-58 → FR-60 (voir sprint-change-proposal-2026-09-20.md). Précédemment : ajout de l'Epic 36 « Calendrier — lisibilité » (FR-49 → FR-57, D-15 → D-18) et de ses 14 stories, ordonnancé après l'épic 30. Ajout EN PLACE — les épics 1 à 35 sont intacts."
 epic36StepsCompleted: ['step-01-validate-prerequisites', 'step-02-design-epics', 'step-03-create-stories']
 ---
 
@@ -49,6 +49,9 @@ Ce document décompose en stories implémentables les exigences du Palier 9 — 
 - FR-58 : Point d'entrée explicite de création d'un personnage — sur la partie, et dans « Personnages »
 - FR-59 : Les Hommes Dragons des MJ figurent dans « Personnages », avec leur création
 - FR-60 : Seuls les systèmes de jeu disposant d'un module peuvent être choisis pour une nouvelle partie
+- FR-61 : Réserve de souffles préparée avant la séance (MJ seul)
+- FR-62 : Capacités de niveau de l'Homme Dragon (artefact cadeau, souffles rituels)
+- FR-63 : Un Homme Dragon pour plusieurs aventures (planifié)
 - FR-13 : Notification éphémère d'annonce à la connexion
 
 **§4.3 — Identité : joueur vs personnage**
@@ -71,8 +74,11 @@ Ce document décompose en stories implémentables les exigences du Palier 9 — 
 
 - FR-24 : Fiche Homme Dragon au niveau des fiches joueur
 - FR-25 : Formulaire de création guidé
-- FR-26 : Souffles propres à chaque race, seedés et affichés sur la fiche
+- FR-26 : Souffles communs et par race, seedés et affichés sur la fiche
 - FR-27 : Export amélioré
+- FR-61 : Réserve de souffles préparée avant la séance
+- FR-62 : Capacités de niveau de l'Homme Dragon
+- FR-63 : Un Homme Dragon pour plusieurs aventures
 
 **§4.6 — Vue de partie, scénarios & chronologie**
 
@@ -158,7 +164,7 @@ Ce document décompose en stories implémentables les exigences du Palier 9 — 
 **À ne pas implémenter**
 
 - **D-12** est d'ampleur nulle : elle figure au PRD pour rester visible, mais ne demande aucun travail tant que son constat tient. `AD-20` en fixe la condition de révision — le jour où l'on voudrait masquer l'identité des autres votants.
-- **D-7 n'est plus d'ampleur nulle.** Requalifiée « Faible — actée » le 2026-08-05 à la résolution de Q-13 : les six souffles seedés sont les **communs**, ceux propres à chaque race manquent entièrement. Elle est portée par la **story 33.2**, qui est à faire.
+- **D-7 n'est plus d'ampleur nulle.** Requalifiée « Faible — actée » le 2026-08-05, **corrigée le 2026-09-25** : les six entrées seedées étaient les **éveils** ; le catalogue manquant était celui de tous les souffles (9 communs, 12 de race), porté par la **story 33.2** (livrée). **D-21** (réserve de souffles, MJ seul) est portée par la **story 33.6**.
 - Aucun changement d'environnement, de déploiement ou d'exploitation — propriété du Palier 10.
 
 ### UX Design Requirements
@@ -218,7 +224,7 @@ Chaque exigence est rattachée à la ou aux stories qui la portent.
 | FR-23 | 31.6 · 31.7 | Filtrage serveur, puis écran de configuration |
 | FR-24 | 33.1 | Fiche Homme Dragon |
 | FR-25 | 33.3 | Création guidée |
-| FR-26 | 33.2 | Souffles par race, seedés et affichés |
+| FR-26 | 33.2 | Souffles communs et par race, seedés et affichés |
 | FR-27 | 33.4 | Export amélioré |
 | FR-28 | 32.2 | Vue de partie réorganisée |
 | FR-29 | 32.3 · 32.4 | États, puis chronologie |
@@ -244,6 +250,9 @@ Chaque exigence est rattachée à la ou aux stories qui la portent.
 | FR-58 | 29.15 · 29.16 | Point d'entrée de création d'un personnage |
 | FR-59 | 33.5 | Hommes Dragons dans Personnages |
 | FR-60 | 29.17 | Systèmes jouables seuls proposés |
+| FR-61 | 33.6 | Réserve de souffles |
+| FR-62 | 33.7 | Capacités de niveau |
+| FR-63 | 33.8 | Homme Dragon multi-aventures (planifié) |
 | *(Q-1)* | 29.14 | Refonte des écrans de création et d'édition de partie |
 
 ### Exigences d'UX sans ancrage FR
@@ -310,9 +319,11 @@ Le contenu d'une partie cesse d'être un fouillis : l'action immédiate, la cons
 
 Le MJ crée et consulte son Homme Dragon avec le même soin qu'une fiche de personnage joueur : formulaire guidé, fiche refondue, export au même niveau.
 
-**FRs covered:** FR-24, FR-25, FR-26, FR-27, FR-59
+**FRs covered:** FR-24, FR-25, FR-26, FR-27, FR-59, FR-61, FR-62, FR-63
 
-**Notes d'implémentation :** **Q-13 tranchée le 2026-08-05 — l'épic n'est plus bloqué.** Les six souffles seedés sont les communs ; ceux propres à chaque race (vert, bleu, rouge, noir) n'existent nulle part. FR-26 se décompose en deux morceaux portés par la story 33.2 : seeder les souffles par race sur le mécanisme du catalogue d'artefacts, puis présenter ceux dont ce dragon dispose. Aucun suivi de consommation.
+**Notes d'implémentation :** **Q-13 corrigée le 2026-09-25.** Les six entrées seedées sont les **éveils** ; les 21 souffles (9 communs, 12 de race) sont seedés et affichés par la story 33.2. Référence des règles : `docs/dragons.md`. Aucun décompte pendant la séance ; le niveau compte les scénarios `PASSE`.
+
+**Stories 33.6, 33.7 et 33.8 ajoutées le 2026-09-29 (sprint change)** : réserve de souffles préparée avant la séance (MJ seul, passe UX préalable), capacités de niveau (artefact cadeau, souffles rituels), et Homme Dragon multi-aventures (planifié, après passage architecture). Ordre : 33.3 → 33.4 → 33.5 → 33.7 → passe UX → 33.6 → 33.8.
 
 **Story 33.5 ajoutée le 2026-09-20 (sprint change)** : l'Homme Dragon rejoint « Personnages » et s'y crée, une entrée par aventure. Seule story de l'épic à toucher une lecture API agrégée ; elle ne doit pas figer « un par partie » dans son contrat (un même Homme Dragon réutilisé sur plusieurs aventures est une piste ultérieure, non planifiée).
 
@@ -1754,7 +1765,7 @@ So that je sache ce qui a été joué, ce qui se joue et ce qui vient.
 
 Le MJ crée et consulte son Homme Dragon avec le même soin qu'une fiche de personnage joueur, et retrouve en séance les souffles dont son dragon dispose sans rouvrir le livre.
 
-*Q-13 tranchée le 2026-08-05 : les six souffles seedés sont les communs ; ceux propres à chaque race n'existent nulle part dans l'application. Aucun suivi de consommation — la réserve constituée en début de séance est du suivi en jeu, reporté après la mise en production.*
+*Q-13 corrigée le 2026-09-25 : les six entrées seedées sont les éveils ; les 21 souffles (9 communs, 12 de race) sont seedés par la 33.2. Référence des règles : `docs/dragons.md`. Aucun décompte pendant la séance ; la réserve préparée avant la séance est portée par la 33.6. Le niveau compte les scénarios `PASSE` (décision du 2026-09-25).*
 
 ### Story 33.1 : Fiche Homme Dragon refondue
 
@@ -1798,6 +1809,7 @@ So that je les utilise sans interrompre la partie pour ouvrir le livre.
 **When** j'ouvre sa fiche
 **Then** j'y vois les souffles communs **et** ceux de sa race
 **And** je n'y vois pas ceux des trois autres races
+**And** à partir du niveau 3, les souffles des trois autres races sont aussi consultables, dans un bloc replié (souffles multicolores)
 
 **Given** un souffle affiché
 **When** je le regarde
@@ -1841,6 +1853,12 @@ So that je comprenne mes choix au lieu de les subir.
 **When** il est enregistré
 **Then** il est en tout point équivalent à celui que produisait l'ancien parcours
 
+**Given** une étape de choix ou un champ du parcours
+**When** il s'affiche
+**Then** son texte vient du catalogue (`homme-dragon-creation-intros.json`, `homme-dragon-races.json` enregistrés dans `CONTENT_TYPES`), préférences de la race comprises
+
+*UX de référence :* `_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-09-23/DESIGN.md` et `EXPERIENCE.md` (passe `bmad-ux` du 2026-09-23) — parcours en 5 écrans (Race, Artefact, Identité, Vie de l'Homme Dragon, Avatar), teinte de race par carte (liséré + gemme + lueur de coin, DESIGN.md §2/§7), rattrapage vers les champs Material déjà prévus par le spine de base. Mocks de référence : `mockups/key-race-step.html`, `mockups/key-identite-step.html`.
+
 ### Story 33.4 : Export PDF au niveau des fiches joueur
 
 As a MJ,
@@ -1855,7 +1873,8 @@ So that ma fiche imprimée soit utilisable à la table.
 
 **Given** les souffles disponibles pour mon dragon
 **When** l'export est produit
-**Then** ils y figurent avec leur coût
+**Then** ils y figurent avec leur coût, lus depuis le catalogue `souffle` (les éveils restent listés à part)
+**And** si une réserve par défaut existe (33.6), elle y est imprimée
 
 **Given** les champs de souffle du modèle de PDF
 **When** ils sont remplis
@@ -1893,18 +1912,97 @@ So that mon dragon soit aussi facile à atteindre que les personnages de mes jou
 **When** « Personnages » est calculé
 **Then** l'Homme Dragon de son MJ n'y figure jamais
 
-**Given** cette lecture agrégée
-**When** elle est servie
-**Then** elle ne déclenche pas de requête par partie
-**And** `GET /me/characters` et son DTO sont inchangés pour leurs consommateurs existants
+### Story 33.6 : Réserve de souffles
 
-*À trancher à la création de la story :* endpoint dédié ou extension de la lecture existante ; route propre pour la fiche Homme Dragon ou navigation vers la partie (elle n'a pas de route aujourd'hui).
+As a MJ qui prépare sa séance,
+I want composer la réserve de souffles de mon dragon pour cette séance, à partir d'une réserve par défaut,
+So that je l'annonce à mes joueurs sans la recalculer à chaque fois.
 
-*Hors périmètre, à ouvrir séparément :* réutiliser **le même Homme Dragon sur plusieurs aventures** (facultatif). Aujourd'hui un Homme Dragon est propre à une aventure ; le partager suppose un changement de modèle, donc une story à part dans l'épic 33 — non créée par cette passe.
+**Acceptance Criteria:**
 
-*Séquencement :* indépendante de 33.1 (fiche refondue) et de 33.3 (formulaire guidé) — ils enrichissent ce vers quoi elle mène, sans en être un prérequis.
+**Given** mon Homme Dragon est au niveau 1
+**When** j'ouvre une séance
+**Then** aucune réserve n'est proposée
 
----
+**Given** mon Homme Dragon est au niveau N ≥ 2
+**When** je compose une réserve (par défaut sur la fiche, ou pour une séance)
+**Then** elle compte au plus N − 1 emplacements, un même souffle pouvant en occuper plusieurs
+**And** les souffles du temps ne peuvent pas y être placés
+**And** à partir du niveau 3, au plus un souffle d'une autre race y figure ; avant, aucun
+
+**Given** une séance dont je n'ai pas composé la réserve
+**When** je l'ouvre
+**Then** elle affiche la réserve par défaut de la fiche
+**And** la modifier sur la séance ne change pas la réserve par défaut
+
+**Given** une réserve affichée
+**When** la séance a lieu
+**Then** l'application ne décompte rien
+
+**Given** un joueur de la partie ouvre la séance
+**When** elle s'affiche
+**Then** il n'y voit aucune réserve, et aucune réponse de l'API ne la lui transmet
+
+**Given** mon Homme Dragon est au niveau 5
+**When** je compose une réserve
+**Then** les souffles rituels peuvent y figurer, sans compter comme souffle d'une autre race
+
+**Given** la séance est ouverte sur un autre de mes appareils
+**When** je modifie la réserve
+**Then** cette vue se met à jour (signal temps réel de la partie)
+
+**Given** une réserve contenant un souffle retiré du catalogue
+**When** elle s'affiche
+**Then** elle reste lisible (repli sur la clé)
+
+*Décisions du 2026-09-29 :* réserve visible du MJ seul ; souffles rituels traités comme les autres souffles ; écran conçu par une passe `bmad-ux` avant la story. *Prérequis :* 33.7 (enregistre le catalogue des souffles rituels).
+
+### Story 33.7 : Capacités de niveau
+
+As a MJ,
+I want voir ce que mon dragon a gagné en montant de niveau et choisir son artefact cadeau,
+So that je sache ce dont il est capable sans rouvrir le livre.
+
+**Acceptance Criteria:**
+
+**Given** mon Homme Dragon au niveau N
+**When** j'ouvre sa fiche
+**Then** les capacités acquises jusqu'au niveau N sont listées avec leur description (catalogue `homme-dragon-level-capacities.json` enregistré dans `CONTENT_TYPES`)
+
+**Given** mon Homme Dragon atteint le niveau 4
+**When** je choisis son artefact cadeau
+**Then** seuls les artefacts des trois autres races me sont proposés
+**And** une fois enregistré, le choix ne peut plus être modifié
+**And** l'artefact cadeau apparaît sur la fiche à côté de l'artefact principal
+
+**Given** mon Homme Dragon atteint le niveau 5
+**When** j'ouvre sa fiche
+**Then** les souffles rituels (catalogue `souffles-rituels.json`, enregistré sous la clé `souffleRituel`) sont consultables, avec leur description et le même coût que les autres souffles (1 PS)
+
+**Given** un Homme Dragon sous le niveau 4
+**When** sa fiche s'affiche
+**Then** aucun choix d'artefact cadeau n'est proposé
+
+### Story 33.8 : Un Homme Dragon pour plusieurs aventures
+
+*Planifiée — après révision d'architecture (modèle multi-aventures).*
+
+As a MJ,
+I want que mon Homme Dragon suive plusieurs groupes et plusieurs mondes,
+So that son histoire et son niveau reflètent toutes les aventures qu'il a racontées.
+
+**Acceptance Criteria:**
+
+**Given** un Homme Dragon existant
+**When** je l'associe à une autre aventure Ryuutama dont je suis MJ
+**Then** il y apparaît comme Homme Dragon de cette aventure
+**And** son historique et son niveau cumulent les scénarios `PASSE` de toutes ses aventures
+
+**Given** les fiches existantes (un Homme Dragon par partie)
+**When** le nouveau modèle est livré
+**Then** chacune reste intacte et rattachée à sa partie
+
+*Prérequis :* décision d'architecture sur le modèle (unicité, rattachement, calcul du niveau), migration. Réserve de séance (33.6) : une séance reste dans une seule partie, donc un seul dragon — pas de conflit.
 
 ## Epic 34 : Entrée dans l'application
 

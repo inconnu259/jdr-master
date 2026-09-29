@@ -35,7 +35,7 @@ FR15: Une fois FR1 à FR14 implémentées, redemander explicitement à l'utilisa
 
 Aucune NFR nouvelle propre à ce palier. Contrainte permanente héritée et inchangée :
 
-NFR4 (héritée, inchangée) : le contenu Ryuutama reste gitignoré (droits d'auteur) et seedé depuis des fichiers JSON au démarrage de l'API (`GameSystemService.onApplicationBootstrap()`), jamais codé en dur, jamais lu directement par le frontend.
+NFR4 (héritée, inchangée) : le contenu Ryuutama reste gitignoré (droits d'auteur) et seedé depuis des fichiers JSON au démarrage de l'API (`GameSystemService.onApplicationBootstrap()`), jamais codé en dur, jamais lu directement par le frontend. *(NFR4 révisée le 2026-09-25 : contenu versionné, textes reformulés.)*
 
 ### Additional Requirements
 

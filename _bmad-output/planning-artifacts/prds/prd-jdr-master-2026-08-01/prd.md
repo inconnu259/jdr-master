@@ -248,6 +248,8 @@ Le MJ dispose d'un écran de configuration présentant une fiche type, où il ve
 
 **Description.** La section est rejetée en l'état par l'utilisateur. Elle n'a ni le soin ni la structure des fiches de personnage joueur, alors qu'elle remplit le même office pour le MJ.
 
+*Règles de référence : `docs/dragons.md`. Niveau : l'application compte les scénarios `PASSE` et non les séances jouées du livre (décision du 2026-09-25).*
+
 #### FR-24 : Fiche Homme Dragon au niveau des fiches joueur
 La fiche est refondue pour atteindre le même niveau de présentation et de lisibilité que celles des personnages joueurs.
 
@@ -256,12 +258,25 @@ La création passe par un véritable formulaire, accompagné de textes explicati
 
 #### FR-26 : Souffles disponibles sur la fiche de l'Homme Dragon
 Le MJ retrouve sur la fiche les souffles dont **son** Homme Dragon dispose, chacun avec son coût et sa description, pour les utiliser en séance sans rouvrir le livre.
-- **Q-13 tranchée le 2026-08-05.** Le constat de vérification initial était incomplet : les six souffles seedés existent bien de bout en bout, mais ce sont les **souffles communs**. Ceux qui sont **propres à chaque race de dragon** — vert, bleu, rouge, noir — n'existent nulle part dans l'application. Le mécanisme fonctionne, le contenu est incomplet.
+- **Q-13 tranchée le 2026-08-05, corrigée le 2026-09-25.** Les six entrées seedées (`eveil-powers.json`) sont les **éveils**, pas des souffles : la décision du 2026-08-05 les confondait. Les souffles — 9 **communs** en trois familles (temps, destin, aide aux PNJ) et 3 **propres à chaque race** — n'existaient nulle part ; ils sont seedés par la story 33.2 (`souffles.json`). Référence des règles : `docs/dragons.md`.
 - **Deux morceaux :** seeder les souffles par race, sur le modèle du catalogue d'artefacts qui porte déjà un identifiant de race ; puis présenter sur la fiche les souffles disponibles pour ce dragon — les communs plus ceux de sa race.
-- **Aucun suivi de consommation.** On reste du côté « outil entre les sessions » : la réserve de souffles constituée en début de séance relève du suivi en jeu, explicitement hors périmètre (§6), et reportée après la mise en production.
+- **Aucun suivi de consommation.** On reste du côté « outil entre les sessions » : rien n'est décompté pendant la séance. La **réserve** de souffles, préparée avant la séance, est portée par FR-61 (décision du 2026-09-29).
 
 #### FR-27 : Export amélioré
 L'export PDF de la fiche Homme Dragon est mis au niveau de celui des fiches de personnage joueur.
+
+#### FR-61 : Réserve de souffles préparée avant la séance
+Dès le niveau 2, le MJ compose sur la page d'une séance la réserve de son Homme Dragon pour cette séance ; une **réserve par défaut**, tenue sur la fiche, pré-remplit toute séance dont la réserve n'a pas été composée.
+- **Règles :** (niveau − 1) emplacements ; un même souffle peut y figurer en plusieurs exemplaires ; les souffles du temps n'y entrent jamais ; à partir du niveau 3, au plus **un** souffle d'une autre race. Communs et souffles de la race toujours autorisés ; souffles rituels admis au niveau 5, sans compter comme souffle d'une autre race.
+- **Aucun décompte :** la réserve est affichée, jamais consommée par l'application.
+- **MJ seul :** les joueurs ne la voient pas ; le meneur l'annonce en jeu.
+- **Prérequis serveur :** D-21.
+
+#### FR-62 : Capacités de niveau de l'Homme Dragon
+La fiche montre les capacités acquises selon le niveau (réserve, souffles multicolores, invitation au voyage, envol du dragon des saisons) avec leur texte ; au niveau 4, le MJ choisit une fois pour toutes un **artefact cadeau** d'une autre race ; au niveau 5, la mère-dragon accède aux **souffles rituels**, traités pour l'instant comme les autres souffles (décision du 2026-09-29).
+
+#### FR-63 : Un Homme Dragon pour plusieurs aventures
+Un même Homme Dragon peut suivre plusieurs groupes et plusieurs mondes : son historique et son niveau cumulent les aventures qu'il a racontées. Changement de modèle (unicité par partie aujourd'hui) — **planifié, après passage architecture** (story 33.8). FR-59 ne doit pas le rendre plus difficile (déjà exigé).
 
 #### FR-59 : Les Hommes Dragons dans « Personnages », avec leur création
 Le MJ retrouve ses Hommes Dragons là où les joueurs retrouvent leurs personnages, et peut en créer un depuis la section de création de FR-58.
@@ -448,7 +463,7 @@ Une ligne porte une ampleur **nulle à ce stade** — D-12. Elles restent au tab
 | D-4 | Filtrage serveur de la visibilité des champs de fiche | FR-23 | **Élevée** — touche tous les chemins de lecture d'une fiche, exports PDF compris | ✅ actée |
 | D-5 | Annulation d'une réponse de vote | FR-35 | Faible | ✅ actée |
 | D-6 | Exposition cross-partie des séances | FR-33, FR-46 | Modérée — porte une contrainte de sécurité | ✅ actée |
-| D-7 | Souffles propres à chaque race de dragon | FR-26 | **Faible** — contenu seedé par le mécanisme de catalogue existant, aucun endpoint nouveau (requalifiée le 2026-08-05, Q-13 tranchée) | ✅ actée |
+| D-7 | Souffles propres à chaque race de dragon | FR-26 | **Faible** — contenu seedé par le mécanisme de catalogue existant, aucun endpoint nouveau (requalifiée le 2026-08-05, Q-13 tranchée) | ✅ actée | *Corrigée le 2026-09-25 : le catalogue manquant était celui de tous les souffles, communs compris ; porté par un content-type `souffle` distinct des éveils.*
 | D-8 | Recherche **partielle sur le pseudo** — l'endpoint actuel ne fait qu'une égalité stricte | FR-30 | Faible — recherche et résultats limités au pseudo, aucun e-mail exposé | ✅ actée |
 | D-9 | Clôture explicite d'une partie — état absent du modèle | FR-44, FR-3, FR-10, FR-12 | Modérée — migration + action MJ | ✅ actée |
 | D-10 | Liste des personnages de l'utilisateur, toutes parties confondues | FR-16 | Faible — restreinte à ses propres personnages | ✅ actée |
@@ -466,15 +481,16 @@ Une ligne porte une ampleur **nulle à ce stade** — D-12. Elles restent au tab
 **Ne nécessitent aucun changement serveur**, vérification faite : la liste unifiée des parties (le front appelle conditionnellement les listes par rôle existantes), la création de partie (FR-9 — aucune restriction ajoutée sur **qui** crée, seule la mise en avant change ; le choix du **système de jeu** est en revanche restreint par FR-60, voir D-19), les **modes d'affichage** (FR-45, pur front plus deux préférences de compte déjà prévues par D-1), et la **bannière générée** (FR-47 — calculée à l'affichage à partir de l'identifiant de la partie, rien n'est stocké).
 | D-19 | **Validation du système de jeu à la création d'une partie** — le serveur refuse un système sans module, avec un message explicite | FR-60 | Faible — validation d'entrée seule, aucune migration ; les parties existantes ne sont pas touchées. Des tests utilisent aujourd'hui Draconis comme donnée de départ : à vérifier, pas à présumer | ✅ actée |
 | D-20 | **Lecture agrégée des Hommes Dragons de l'utilisateur**, toutes parties confondues | FR-59 | Modérée — aucune migration ; une lecture par utilisateur, jamais une requête par partie (le fan-out proscrit par FR-12). La liste des personnages et son contrat ne changent pas pour leurs consommateurs. Forme (route dédiée ou extension de la lecture existante) laissée à la story | ✅ actée |
+| D-21 | **Réserve de souffles** — réserve par séance et réserve par défaut de l'Homme Dragon, écrites et lues par le MJ seul | FR-61 | Modérée — un chemin d'écriture MJ neuf, validations de règles côté serveur (capacité, souffles du temps, souffle d'une autre race), jamais exposée aux joueurs, pas de lecture fan-out | ✅ actée (2026-09-29, AD-22) |
 
 ## 6. Hors périmètre
 
-- **Suivi en jeu** (état, blessures, fiche vivante pendant la session), **y compris la réserve de souffles constituée en début de séance** par l'Homme Dragon. Reporté après la mise en production à un palier ultérieur : cela change la nature de l'application, qui passerait d'un outil *entre* les sessions à un outil *pendant* la session. La forme souhaitée est déjà connue et volontairement simple — valeurs plafonnées non dépassables, valeur courante librement modifiable.
+- **Suivi en jeu** (état, blessures, fiche vivante pendant la session), **y compris la consommation des souffles et des PS de l'Homme Dragon pendant la séance** *(la réserve préparée avant la séance en est sortie le 2026-09-29 : FR-61)*. Reporté après la mise en production à un palier ultérieur : cela change la nature de l'application, qui passerait d'un outil *entre* les sessions à un outil *pendant* la session. La forme souhaitée est déjà connue et volontairement simple — valeurs plafonnées non dépassables, valeur courante librement modifiable.
 - **Mode tutoriel / onboarding guidé.** Reporté, à décider avec de vrais retours utilisateurs.
 - **Conformité d'accessibilité formelle** (navigation clavier, lecteurs d'écran, audit WCAG AA). Écartée : coût élevé, invérifiable dans le contexte actuel, aucune obligation. Voir P-2.
 - **Ouverture de l'inscription libre.** La création de compte reste sur invitation. Remettre cette règle en cause serait un changement métier, pas une refonte d'UI.
 - **Refonte de la direction artistique.** La DA est validée (§2).
-- **Un même Homme Dragon réutilisé sur plusieurs aventures.** Facultatif, précisé le 2026-09-20. Un Homme Dragon est aujourd'hui propre à une partie ; le partager changerait le modèle, donc une story à part dans l'épic 33, non planifiée. FR-59 ne l'anticipe pas et ne doit pas la rendre plus difficile : la lecture agrégée porte sur « les Hommes Dragons dont l'utilisateur est propriétaire ».
+- ~~**Un même Homme Dragon réutilisé sur plusieurs aventures.**~~ *Planifié le 2026-09-29 : FR-63, story 33.8.*
 - **Modules des systèmes de jeu manquants** (Draconis, Conte de Minuit, Esteren). FR-60 empêche d'y créer une partie ; leur donner un module est un chantier de contenu à part, au backlog.
 - **Thème dédié à l'accessibilité.** Le run d'UX a relevé, dans les trois thèmes, des couleurs de statut qui se rapprochent en vision dichromatique. Plutôt que de raboter les trois univers pour un cas aujourd'hui théorique — un seul utilisateur, qui distingue les couleurs —, la réponse retenue est un **quatrième thème** conçu pour cela. Reporté : le mécanisme de thème existe déjà, l'ajout est un travail de contenu, à faire le jour où un joueur concerné rejoint une partie.
 
@@ -498,7 +514,7 @@ Une ligne porte une ampleur **nulle à ce stade** — D-12. Elles restent au tab
 | Q-10 | *Close.* Définition de « partie terminée » — tranchée : champ explicite posé par le MJ (FR-44, D-9) | — |
 | Q-11 | *Close.* Signaux d'état de FR-12 — tranché : un appel unique renvoyant la carte des signaux de toutes les parties | — |
 | Q-12 | *Close.* Champs verrouillables (FR-23) — tranchée : l'unité de verrouillage est déclarée par le schéma du système de jeu, en bloc par clé, au sous-champ pour les clés qui le déclarent. Recadrage : préférence de jeu, rien de verrouillé par défaut | — |
-| Q-13 | *Close.* Souffles de l'Homme Dragon — tranchée : les six souffles seedés sont les **communs**, ceux propres à chaque race manquent entièrement. FR-26 = les seeder et présenter ceux dont ce dragon dispose. Aucun suivi de consommation | — |
+| Q-13 | *Close, corrigée le 2026-09-25.* Souffles de l'Homme Dragon — les six entrées seedées étaient les **éveils** ; les 21 souffles (9 communs, 12 de race) sont seedés par la 33.2. Réserve : FR-61. Aucun décompte pendant la séance | — |
 | Q-14 | Garde-fous de l'autocomplétion (D-8) : longueur minimale de saisie, plafond de résultats | Conception de l'écran d'invitation |
 | Q-15 | L'image de couverture (FR-47, D-11) remplace-t-elle la bannière générée dans **tous** les modes d'affichage ou seulement en grande vignette ? Et que devient l'animation du thème lorsqu'une image est fournie ? | Conception de l'écran de partie |
 | Q-16 | *Close le 2026-08-05.* Plancher d'accessibilité — formulation **validée par l'utilisateur** : les seuils chiffrés hérités passent de *critère de recette* à *valeur de conception par défaut*, conformément à P-2. Les règles de navigation clavier, d'ordre de focus et d'`aria-label` de la base **restent en vigueur**. Si un besoin réel apparaît, la réponse sera un **quatrième thème dédié**, comme prévu au §6 — jamais un rabotage des trois univers | — |
