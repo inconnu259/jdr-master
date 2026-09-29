@@ -111,6 +111,16 @@ const CONTENT_TYPES: ContentTypeSeed[] = [
     label: 'Souffle (Homme Dragon)',
     file: 'souffles.json',
   },
+  {
+    key: 'hommeDragonRace',
+    label: 'Race (Homme Dragon)',
+    file: 'homme-dragon-races.json',
+  },
+  {
+    key: 'hommeDragonCreationIntro',
+    label: "Texte d'aide de la création (Homme Dragon)",
+    file: 'homme-dragon-creation-intros.json',
+  },
 ];
 
 @Injectable()

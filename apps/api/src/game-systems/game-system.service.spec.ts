@@ -1,5 +1,7 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 jest.mock('node:fs/promises', () => ({
   readFile: jest.fn(),
@@ -52,6 +54,42 @@ describe('GameSystemService', () => {
       ],
     }).compile();
     service = module.get(GameSystemService);
+  });
+
+  it('seedRyuutama() enregistre hommeDragonRace et hommeDragonCreationIntro avec toutes leurs entrées (Story 33.3)', async () => {
+    // Vrai répertoire de données (cwd Jest = apps/api) : seul le module fs/promises est mocké
+    // dans ce fichier, on le redirige vers l'implémentation réelle pour ce test.
+    const actualFs = jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises');
+    mockReadFile.mockImplementation((path: string, enc: BufferEncoding) => actualFs.readFile(path, enc));
+    const contentTypeIds: Record<string, string> = {};
+    prisma.contentType.upsert.mockImplementation(({ create }: { create: { key: string } }) => {
+      contentTypeIds[create.key] = `ct-${create.key}`;
+      return Promise.resolve({ id: `ct-${create.key}` });
+    });
+
+    await service.seedRyuutama();
+
+    const dataDir = join(process.cwd(), 'game-systems/ryuutama/data');
+    const countEntries = (file: string): number =>
+      (JSON.parse(readFileSync(join(dataDir, file), 'utf-8')) as unknown[]).length;
+    const entryUpserts = (typeKey: string): unknown[] =>
+      prisma.contentEntry.upsert.mock.calls.filter(
+        ([arg]: [{ create: { contentTypeId: string } }]) =>
+          arg.create.contentTypeId === `ct-${typeKey}`,
+      );
+
+    for (const [typeKey, file] of [
+      ['hommeDragonRace', 'homme-dragon-races.json'],
+      ['hommeDragonCreationIntro', 'homme-dragon-creation-intros.json'],
+    ]) {
+      expect(prisma.contentType.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ gameSystemId: 'ryuutama', key: typeKey }),
+        }),
+      );
+      expect(entryUpserts(typeKey)).toHaveLength(countEntries(file));
+    }
+    expect(entryUpserts('hommeDragonRace')).toHaveLength(4);
   });
 
   it('getContent("ryuutama") → retourne le contenu groupé par clé de ContentType', async () => {

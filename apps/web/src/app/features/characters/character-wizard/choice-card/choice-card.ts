@@ -30,6 +30,16 @@ export class ChoiceCard {
   /** Indication affichée dans l'en-tête d'une carte déployée (ex. « Toucher pour désélectionner »). */
   readonly expandedHint = input<string>('');
 
+  /**
+   * Variante TEINTÉE (Story 33.3, DESIGN Homme Dragon §7) : liséré, lueur de coin et gemme
+   * décorative. Les couleurs ne sont PAS portées ici — le parent les fournit en variables CSS
+   * (`--h`, `--h-text`, `--g1`, `--g2`, `--glow`, `--hl`) sur un ancêtre. Faux par défaut : le rendu
+   * standard est inchangé.
+   */
+  readonly tint = input<boolean>(false);
+  /** Étiquette courte (contour teinté), rendue seulement sur une carte teintée. */
+  readonly badge = input<string>('');
+
   readonly selectedOption = output<string>();
 
   /** Identifiant du sous-titre, cible d'`aria-describedby` (unique par instance). */

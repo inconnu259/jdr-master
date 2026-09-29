@@ -69,6 +69,75 @@
     font-weight: 500;
   }
 
+  // Variante teintée (Story 33.3, DESIGN Homme Dragon §7) : liséré 2 px, lueur de coin au repos,
+  // gemme décorative et étiquette à contour. Palette fournie par le parent en variables CSS ;
+  // les repli neutres ci-dessous ne servent qu'à ne rien casser si elles manquent.
+  // Le padding perd 1 px par côté pour que le liséré de 2 px ne grossisse pas la carte.
+  &--tint {
+    position: relative;
+    overflow: hidden;
+    border: 2px solid var(--h, var(--mat-sys-outline-variant, #ccc));
+    padding: calc(0.5rem - 1px) calc(0.75rem - 1px);
+    gap: 0.375rem;
+
+    // Lueur de coin : disparaît à l'état sélectionné (le halo `primary` prend le relais).
+    &:not(.choice-card--selected)::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background: radial-gradient(
+        130px 100px at 10% -8%,
+        var(--glow, transparent) 0%,
+        transparent 70%
+      );
+    }
+
+    &.choice-card--selected {
+      border-color: var(--mat-sys-primary, #9b6dff);
+    }
+  }
+
+  &__head {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  // Gemme : décorative (aria-hidden) — le nom et l'étiquette portent seuls l'information.
+  &__gem {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 32% 28%, var(--hl, rgba(255, 255, 255, 0.85)) 0%, transparent 40%),
+      conic-gradient(from 200deg, var(--g1, #888), var(--g2, #ccc), var(--g1, #888));
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+  }
+
+  // Étiquette : contour teinté. Le TEXTE utilise `--h-text` (teinte éclaircie pour le rouge et le
+  // noir, dont la teinte de liséré tombe sous 4,5:1 sur les surfaces des 3 thèmes) ; à l'état
+  // sélectionné il hérite de `on-primary-container`, sur lequel aucune teinte ne tient 4,5:1.
+  &__badge {
+    position: relative;
+    display: inline-block;
+    padding: 2px 7px;
+    border: 1px solid var(--h, currentColor);
+    border-radius: 6px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--h-text, var(--h, inherit));
+  }
+
+  &--selected &__badge {
+    color: inherit;
+  }
+
   // Sous-titre descriptif (Story 31.4, DESIGN §7.1) : 2 lignes maximum, coupé par une ellipse.
   // Contraste 12px MESURÉ (AC13, 2026-09-20) : `on-surface-variant` sur `surface-container` =
   // 5,92 / 6,34 / 5,74:1 (grimoire / forêt / steampunk) ✓ ; mais sur le fond SÉLECTIONNÉ
@@ -84,5 +153,12 @@
     line-height: 1.35;
     font-weight: 400;
     color: var(--mat-sys-on-surface-variant, #555);
+  }
+
+  // Carte teintée : la description de race tient sur 3 lignes (DESIGN Homme Dragon, mock).
+  &--tint &__detail {
+    position: relative;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
   }
 }

@@ -15,6 +15,16 @@
     "text": "Donnez un nom à votre homme-dragon."
   },
   {
+    "key": "artefactNom",
+    "label": "Nom de l'artefact",
+    "text": "Donnez un nom à votre artefact : c'est ainsi que les voyageurs en parleront, et il figurera sur votre fiche. Ce nom est requis pour créer la fiche."
+  },
+  {
+    "key": "artefactInscription",
+    "label": "Inscription de l'artefact",
+    "text": "Facultatif : décrivez la gravure, la devise ou la marque que porte votre artefact. Elle s'affichera sur votre fiche."
+  },
+  {
     "key": "apparence",
     "label": "Apparence",
     "text": "Décrivez son allure, sa tenue, l'impression qu'il laisse à ceux qui le croisent. Un homme-dragon n'a pas d'âge : il peut aussi bien ressembler à un enfant qu'à un vieillard."

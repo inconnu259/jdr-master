@@ -4,13 +4,24 @@
   [class.choice-card--selected]="selected()"
   [class.choice-card--center]="align() === 'center'"
   [class.choice-card--expanded]="expanded()"
+  [class.choice-card--tint]="tint()"
   role="radio"
   [attr.aria-checked]="selected()"
   [attr.aria-label]="option().label"
   [attr.aria-describedby]="showDetail() ? detailId : null"
   (click)="onClick()"
 >
-  <span class="choice-card__label">{{ option().label }}</span>
+  @if (tint()) {
+    <span class="choice-card__head">
+      <span class="choice-card__gem" aria-hidden="true"></span>
+      <span class="choice-card__label">{{ option().label }}</span>
+    </span>
+    @if (badge()) {
+      <span class="choice-card__badge">{{ badge() }}</span>
+    }
+  } @else {
+    <span class="choice-card__label">{{ option().label }}</span>
+  }
   @if (expanded() && expandedHint()) {
     <span class="choice-card__hint">{{ expandedHint() }}</span>
   } @else if (showDetail(); as text) {

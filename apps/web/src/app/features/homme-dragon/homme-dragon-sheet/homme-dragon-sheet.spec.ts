@@ -7,6 +7,7 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 import type { GameSystemContentDto, HommeDragonDto } from '@master-jdr/shared';
 import { HommeDragonSheet } from './homme-dragon-sheet';
+import { HommeDragonCreationWizard } from '../homme-dragon-creation-wizard/homme-dragon-creation-wizard';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
@@ -197,99 +198,31 @@ describe('HommeDragonSheet', () => {
     vi.unstubAllGlobals();
   });
 
-  it('aucun Homme Dragon existant → formulaire de création affiché, mondesProteges pré-rempli avec le nom de la Partie (AC1)', async () => {
+  it('aucun Homme Dragon existant → parcours de création affiché, titre de la Partie transmis (AC1)', async () => {
     const { fixture } = await createComponent();
     const component = fixture.componentInstance;
 
     expect(component['hommeDragon']()).toBeNull();
-    expect(component['mondesProteges']()).toBe('Ma Campagne');
-    expect(fixture.debugElement.query(By.css('.homme-dragon-sheet__create-form'))).toBeTruthy();
+    const wizard = fixture.debugElement.query(By.directive(HommeDragonCreationWizard));
+    expect(wizard).toBeTruthy();
+    expect(wizard.componentInstance.partieId()).toBe('p1');
+    expect(wizard.componentInstance.partieName()).toBe('Ma Campagne');
   });
 
-  it('mondesProteges pré-rempli reste éditable', async () => {
+  it('fiche créée par le parcours → fiche affichée avec le bandeau « fiche créée » (Story 33.3)', async () => {
     const { fixture } = await createComponent();
     const component = fixture.componentInstance;
+    const wizard = fixture.debugElement.query(By.directive(HommeDragonCreationWizard));
 
-    component['mondesProteges'].set('Un autre monde');
-    expect(component['mondesProteges']()).toBe('Un autre monde');
-  });
-
-  it('artefacts proposés filtrés à la race sélectionnée (AC1)', async () => {
-    const { fixture } = await createComponent();
-    const component = fixture.componentInstance;
-
-    component['onRaceChange']('DRAGON_VERT');
+    wizard.componentInstance.created.emit(makeDto());
+    fixture.detectChanges();
+    await fixture.whenStable();
     fixture.detectChanges();
 
-    const keys = component['artefactsForRace']().map((a) => a.key);
-    expect(keys).toEqual(['encyclopedie', 'lanterne', 'sextant']);
-    expect(keys).not.toContain('grand-arc');
-  });
-
-  it('changement de race réinitialise l’artefact déjà choisi', async () => {
-    const { fixture } = await createComponent();
-    const component = fixture.componentInstance;
-
-    component['onRaceChange']('DRAGON_ROUGE');
-    component['artefactKey'].set('grand-arc');
-    component['onRaceChange']('DRAGON_VERT');
-
-    expect(component['artefactKey']()).toBeNull();
-  });
-
-  it('bouton de soumission désactivé tant que race/artefact/nom ne sont pas tous renseignés', async () => {
-    const { fixture } = await createComponent();
-    const component = fixture.componentInstance;
-
-    expect(component['isValid']()).toBe(false);
-    component['onRaceChange']('DRAGON_ROUGE');
-    expect(component['isValid']()).toBe(false);
-    component['artefactKey'].set('grand-arc');
-    expect(component['isValid']()).toBe(false);
-    component['nom'].set('Ignis');
-    expect(component['isValid']()).toBe(true);
-  });
-
-  it('soumission valide appelle create() avec le sheetData complet (AC1)', async () => {
-    const hommeDragonSvc = makeHommeDragonService(null);
-    hommeDragonSvc.create.mockResolvedValue(makeDto());
-    const { fixture } = await createComponent(hommeDragonSvc);
-    const component = fixture.componentInstance;
-
-    component['onRaceChange']('DRAGON_ROUGE');
-    component['artefactKey'].set('grand-arc');
-    component['nom'].set('Ignis');
-    await component['onSubmit']();
-
-    expect(hommeDragonSvc.create).toHaveBeenCalledWith('p1', {
-      race: 'DRAGON_ROUGE',
-      artefact: { key: 'grand-arc' },
-      nom: 'Ignis',
-      apparence: undefined,
-      caractere: undefined,
-      vocation: undefined,
-      demeure: undefined,
-      avatar: undefined,
-      mondesProteges: 'Ma Campagne',
-    });
     expect(component['hommeDragon']()).toEqual(makeDto());
     expect(component['justCreated']()).toBe(true);
-  });
-
-  it('création rejetée (409) → error() renseigné, formulaire non cassé', async () => {
-    const hommeDragonSvc = makeHommeDragonService(null);
-    hommeDragonSvc.create.mockRejectedValue(new Error('409'));
-    const { fixture } = await createComponent(hommeDragonSvc);
-    const component = fixture.componentInstance;
-
-    component['onRaceChange']('DRAGON_ROUGE');
-    component['artefactKey'].set('grand-arc');
-    component['nom'].set('Ignis');
-    await component['onSubmit']();
-
-    expect(component['createError']()).toBeTruthy();
-    expect(component['hommeDragon']()).toBeNull();
-    expect(component['creating']()).toBe(false);
+    expect(fixture.debugElement.query(By.directive(HommeDragonCreationWizard))).toBeFalsy();
+    expect(fixture.nativeElement.textContent).toContain('Votre Homme Dragon a pris vie.');
   });
 
   it('Homme Dragon déjà existant → fiche affichée directement, pas de formulaire de création', async () => {
@@ -297,7 +230,7 @@ describe('HommeDragonSheet', () => {
     const component = fixture.componentInstance;
 
     expect(component['hommeDragon']()).toEqual(makeDto());
-    expect(fixture.debugElement.query(By.css('.homme-dragon-sheet__create-form'))).toBeFalsy();
+    expect(fixture.debugElement.query(By.directive(HommeDragonCreationWizard))).toBeFalsy();
     expect(fixture.nativeElement.textContent).toContain('Ignis');
   });
 
@@ -374,7 +307,7 @@ describe('HommeDragonSheet', () => {
 
     expect(component['loadError']()).toBeTruthy();
     expect(component['hommeDragon']()).toBeUndefined();
-    expect(fixture.debugElement.query(By.css('.homme-dragon-sheet__create-form'))).toBeFalsy();
+    expect(fixture.debugElement.query(By.directive(HommeDragonCreationWizard))).toBeFalsy();
   });
 
   it("revue de code : ouvrir l'édition d'artefact referme le bandeau « fiche créée »", async () => {

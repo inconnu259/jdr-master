@@ -12,6 +12,8 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import type { ContentEntryDto, HommeDragonDto, HommeDragonRace } from '@master-jdr/shared';
+import { HommeDragonCreationWizard } from '../homme-dragon-creation-wizard/homme-dragon-creation-wizard';
+import { RACES, RACE_LABELS } from '../homme-dragon-races';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { CharacterService } from '../../../core/characters/character.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
@@ -21,15 +23,6 @@ import {
   detailContent,
   type DetailSurfaceContent,
 } from '../../../shared/detail-surface/detail-surface-host';
-
-const RACES: HommeDragonRace[] = ['DRAGON_VERT', 'DRAGON_BLEU', 'DRAGON_ROUGE', 'DRAGON_NOIR'];
-
-const RACE_LABELS: Record<HommeDragonRace, string> = {
-  DRAGON_VERT: 'Dragon Vert',
-  DRAGON_BLEU: 'Dragon Bleu',
-  DRAGON_ROUGE: 'Dragon Rouge',
-  DRAGON_NOIR: 'Dragon Noir',
-};
 
 /** Familles des souffles communs (Story 33.2), dans l'ordre du livre (`docs/dragons.md`,
  *  « Souffles communs ») — libellé et consigne d'usage transcrits tels quels ; `consigne` est
@@ -68,12 +61,19 @@ const souffleData = (entry: ContentEntryDto): SouffleData => (entry.data ?? {}) 
 /**
  * Onglet « Homme Dragon » de `PartieDetail` (Story 10.1) — embarqué directement (pas de route
  * dédiée, un seul Homme Dragon par Partie, même schéma que `ScenarioOneShotTab`). Gère les deux
- * états : formulaire de création si `findOne()` renvoie `null`, fiche + édition d'artefact sinon.
+ * états : parcours de création guidé si `findOne()` renvoie `null`, fiche + édition d'artefact sinon.
  * Historique/voyageurs protégés/niveau/PS/pouvoir d'éveil/export PDF : Stories 10.2-10.5.
  */
 @Component({
   selector: 'app-homme-dragon-sheet',
-  imports: [FormsModule, MatButtonModule, DatePipe, NgTemplateOutlet, DetailSurface],
+  imports: [
+    FormsModule,
+    MatButtonModule,
+    DatePipe,
+    NgTemplateOutlet,
+    DetailSurface,
+    HommeDragonCreationWizard,
+  ],
   templateUrl: './homme-dragon-sheet.html',
   styleUrl: './homme-dragon-sheet.scss',
 })
@@ -86,7 +86,6 @@ export class HommeDragonSheet implements OnInit {
   private readonly characterSvc = inject(CharacterService);
   protected readonly theme = inject(ThemeToneService);
 
-  protected readonly races = RACES;
   protected readonly raceLabel = (race: HommeDragonRace): string => RACE_LABELS[race];
 
   /**
@@ -106,28 +105,9 @@ export class HommeDragonSheet implements OnInit {
     () => this.hommeDragon()?.sheetData.nom?.trim() || 'Homme Dragon sans nom',
   );
 
-  // — Formulaire de création —
-  protected readonly race = signal<HommeDragonRace | null>(null);
-  protected readonly artefactKey = signal<string | null>(null);
-  protected readonly nom = signal('');
-  protected readonly apparence = signal('');
-  protected readonly caractere = signal('');
-  protected readonly vocation = signal('');
-  protected readonly demeure = signal('');
-  protected readonly avatar = signal('');
-  protected readonly mondesProteges = signal('');
-  protected readonly creating = signal(false);
-  protected readonly createError = signal<string | null>(null);
+  /** Posé à la création : affiche le bandeau « fiche créée » (le parcours guidé vit dans
+   *  `HommeDragonCreationWizard`, Story 33.3). */
   protected readonly justCreated = signal(false);
-
-  protected readonly artefactsForRace = computed(() => {
-    const r = this.race();
-    return this.artefactCatalog().filter((e) => (e.data as { race?: string }).race === r);
-  });
-
-  protected readonly isValid = computed(
-    () => !!this.race() && !!this.artefactKey() && this.nom().trim().length > 0,
-  );
 
   // — Édition de l'artefact (fiche existante) —
   protected readonly editingArtefact = signal(false);
@@ -209,9 +189,6 @@ export class HommeDragonSheet implements OnInit {
       this.artefactCatalog.set(content['hommeDragonArtefact'] ?? []);
       this.eveilPowerCatalog.set(content['eveilPower'] ?? []);
       this.souffleCatalog.set(content['souffle'] ?? []);
-      if (hommeDragon === null) {
-        this.mondesProteges.set(this.partieName());
-      }
     } catch {
       // Revue de code : ne plus forcer `hommeDragon` à `null` ici — cette valeur signifie « pas
       // encore créée » et affiche le formulaire de création. Une erreur réseau/serveur transitoire
@@ -221,35 +198,9 @@ export class HommeDragonSheet implements OnInit {
     }
   }
 
-  protected onRaceChange(race: HommeDragonRace): void {
-    this.race.set(race);
-    // Un changement de race invalide l'artefact déjà choisi (il appartenait à l'ancienne race).
-    this.artefactKey.set(null);
-  }
-
-  protected async onSubmit(): Promise<void> {
-    if (!this.isValid() || this.creating()) return;
-    this.creating.set(true);
-    this.createError.set(null);
-    try {
-      const created = await this.hommeDragonSvc.create(this.partieId(), {
-        race: this.race()!,
-        artefact: { key: this.artefactKey()! },
-        nom: this.nom().trim(),
-        apparence: this.apparence().trim() || undefined,
-        caractere: this.caractere().trim() || undefined,
-        vocation: this.vocation().trim() || undefined,
-        demeure: this.demeure().trim() || undefined,
-        avatar: this.avatar().trim() || undefined,
-        mondesProteges: this.mondesProteges().trim() || undefined,
-      });
-      this.hommeDragon.set(created);
-      this.justCreated.set(true);
-    } catch {
-      this.createError.set('Impossible de créer votre Homme Dragon. Réessayez.');
-    } finally {
-      this.creating.set(false);
-    }
+  protected onCreated(created: HommeDragonDto): void {
+    this.hommeDragon.set(created);
+    this.justCreated.set(true);
   }
 
   protected openArtefactEdit(): void {

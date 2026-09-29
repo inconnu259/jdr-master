@@ -78,6 +78,48 @@ describe('ChoiceCard', () => {
     expect(button.getAttribute('aria-checked')).toBe('false');
   });
 
+  it('rendu par défaut inchangé : ni gemme, ni étiquette, ni classe teintée', async () => {
+    TestBed.configureTestingModule({ imports: [ChoiceCard] });
+    const fixture = TestBed.createComponent(ChoiceCard);
+    fixture.componentRef.setInput('option', { key: 'chasseur', label: 'Chasseur' });
+    // L'étiquette fournie sans `tint` ne doit rien rendre.
+    fixture.componentRef.setInput('badge', 'Vert');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('button');
+    expect(button.classList).not.toContain('choice-card--tint');
+    expect(fixture.nativeElement.querySelector('.choice-card__gem')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.choice-card__badge')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.choice-card__head')).toBeNull();
+    expect(button.querySelector('.choice-card__label')!.textContent).toBe('Chasseur');
+  });
+
+  it('variante teintée : gemme décorative + étiquette, nom accessible = libellé seul', async () => {
+    TestBed.configureTestingModule({ imports: [ChoiceCard] });
+    const fixture = TestBed.createComponent(ChoiceCard);
+    fixture.componentRef.setInput('option', {
+      key: 'DRAGON_VERT',
+      label: 'Dragon Vert',
+      detail: 'Le goût du voyage.',
+    });
+    fixture.componentRef.setInput('tint', true);
+    fixture.componentRef.setInput('badge', 'Vert');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('button');
+    expect(button.classList).toContain('choice-card--tint');
+    expect(fixture.nativeElement.querySelector('.choice-card__gem').getAttribute('aria-hidden')).toBe(
+      'true',
+    );
+    expect(fixture.nativeElement.querySelector('.choice-card__badge').textContent).toContain('Vert');
+    expect(fixture.nativeElement.querySelector('.choice-card__detail').textContent).toContain(
+      'Le goût du voyage.',
+    );
+    expect(button.getAttribute('aria-label')).toBe('Dragon Vert');
+  });
+
   it('carte DÉPLOYÉE : pas de sous-titre, l’indication remplace, et le nom accessible reste le libellé', async () => {
     TestBed.configureTestingModule({ imports: [ChoiceCard] });
     const fixture = TestBed.createComponent(ChoiceCard);

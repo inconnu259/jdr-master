@@ -4,47 +4,58 @@
 
 ## Goal
 
-Le MJ crée et consulte son Homme Dragon avec le même soin qu'une fiche de personnage joueur : fiche refondue au niveau des fiches joueur, formulaire de création guidé, souffles disponibles visibles en séance, export PDF de qualité équivalente, et présence dans « Personnages » au même titre que les personnages joueurs. L'Homme Dragon fait aujourd'hui figure de parent pauvre de l'application (parcours pénible, fiche sans soin ni structure) alors qu'il remplit pour le MJ le même office qu'une fiche joueur. Story 33.1 (fiche refondue) est livrée ; les patrons qu'elle a établis font désormais référence pour le reste de l'épic (voir Technical Decisions).
+Le MJ crée et consulte son Homme Dragon avec le même soin qu'une fiche de personnage joueur, et retrouve en séance ce dont son dragon dispose sans rouvrir le livre : fiche refondue, formulaire de création guidé, souffles visibles, capacités de niveau, réserve de souffles préparée avant la séance, export PDF équivalent à celui des joueurs, présence dans « Personnages ». L'Homme Dragon était le parent pauvre de l'application alors qu'il remplit pour le MJ le même office qu'une fiche joueur. Stories 33.1 et 33.2 livrées ; les patrons qu'elles ont établis font référence pour la suite. 33.8 est planifiée, conditionnée à une décision d'architecture.
 
 ## Stories
 
-- Story 33.1 : Fiche Homme Dragon refondue
-- Story 33.2 : Les souffles de mon dragon
+- Story 33.1 : Fiche Homme Dragon refondue (livrée)
+- Story 33.2 : Les souffles de mon dragon (livrée)
 - Story 33.3 : Formulaire de création guidé
 - Story 33.4 : Export PDF au niveau des fiches joueur
 - Story 33.5 : Mes Hommes Dragons dans « Personnages »
+- Story 33.6 : Réserve de souffles
+- Story 33.7 : Capacités de niveau
+- Story 33.8 : Un Homme Dragon pour plusieurs aventures (planifiée)
+
+Ordre : 33.3 → 33.4 → 33.5 → 33.7 → passe UX → 33.6 → 33.8 (après décision d'architecture).
 
 ## Requirements & Constraints
 
-- La fiche doit atteindre le même niveau de présentation/lisibilité qu'une fiche joueur, y compris sur téléphone, sans information tronquée ni perdue par rapport à l'ancienne fiche.
-- Le catalogue de souffles distingue les **communs** (déjà seedés) des souffles **propres à chaque race** (vert, bleu, rouge, noir — absents à ce jour, bien que le mécanisme fonctionne). Un dragon d'une race donnée ne voit que les communs + ceux de sa race. Chaque souffle porte son coût et une description consultable sans quitter la fiche.
-- Aucun suivi de consommation des souffles ni des pouvoirs d'éveil : l'usage en séance n'est tracé nulle part (hors périmètre, reporté après mise en production — changerait la nature de l'app, d'outil *entre* séances à outil *pendant* la séance).
-- Le formulaire de création est un vrai parcours guidé (pas une saisie brute), texte explicatif à chaque étape de choix (race, artefact) ; les artefacts proposés dépendent de la race choisie. Le résultat reste strictement équivalent aux données produites par l'ancien parcours — aucun champ ajouté ni retiré, seul le regroupement change.
-- L'export PDF est mis au niveau de celui des fiches joueur, souffles inclus avec leur coût ; les champs de souffle du PDF reflètent une valeur maximale liée au niveau, sans jamais prétendre suivre une consommation non trackée.
-- Dans « Personnages », chaque Homme Dragon affiche la partie d'origine, sa nature se lisant sans ouvrir la fiche et sans reposer sur la seule couleur (principe transverse : toute info encodée par couleur est doublée d'un icône/libellé/typographie). Recherche, tri, mode d'affichage s'appliquent à lui comme aux personnages (tri « Niveau », qu'il n'a pas : passe en dernier). Il n'apparaît jamais chez les autres membres de la partie.
-- Un Homme Dragon est propre à une aventure : un MJ peut en avoir un par aventure Ryuutama, pas un seul au total. La section de création propose une entrée par aventure Ryuutama où le MJ n'en a pas encore.
-- Le nom affiché suit la convention unifiée joueur/personnage. Le terme « Homme Dragon » est un nom propre du système : il ne se thématise pas, identique dans les trois thèmes.
+- **Souffles vs éveils (corrigé le 2026-09-25).** Les six entrées de `eveil-powers.json` sont des **éveils**, pas des souffles. Les 21 souffles (9 communs en trois familles : temps, destin, aide aux PNJ ; 12 de race, 3 par race vert/bleu/rouge/noir) vivent dans un content-type `souffle` distinct, seedé par 33.2. Les éveils restent listés à part. Référence des règles : `docs/dragons.md`.
+- Un dragon voit les souffles communs + ceux de sa race ; dès le niveau 3, ceux des autres races sont consultables dans un bloc replié (multicolores). Chaque souffle porte son coût (PS) et une description consultable sans quitter la fiche.
+- **Niveau = nombre de scénarios `PASSE`** (et non les séances jouées du livre) — décision du 2026-09-25.
+- **Aucun décompte en séance** : ni souffles, ni PS, ni pouvoirs d'éveil ne sont suivis (suivi en jeu hors périmètre, reporté après la mise en production).
+- **Réserve (FR-61, réservée au MJ)** : inexistante au niveau 1 ; dès le niveau N ≥ 2, au plus N − 1 emplacements, un même souffle pouvant occuper plusieurs emplacements ; souffles du temps exclus ; dès le niveau 3, au plus un souffle d'une autre race ; au niveau 5, les souffles rituels sont admis et ne comptent pas comme « autre race ». Réserve par défaut sur la fiche, pré-remplissant toute séance non composée ; la modifier sur une séance ne touche pas le défaut. Les joueurs ne la voient jamais : aucune réponse d'API ne la leur transmet.
+- **Capacités de niveau (FR-62)** : la fiche liste les capacités acquises jusqu'au niveau N (catalogue `homme-dragon-level-capacities.json`). Niveau 4 : choix unique et définitif d'un **artefact cadeau** parmi ceux des trois autres races, affiché à côté de l'artefact principal ; rien avant le niveau 4. Niveau 5 : souffles rituels (`souffles-rituels.json`, clé `souffleRituel`) consultables, même coût que les autres souffles (1 PS), traités comme eux pour l'instant.
+- **Création (33.3)** : parcours guidé avec texte explicatif à chaque choix ; artefacts filtrés par la race ; résultat strictement équivalent à l'ancien parcours (aucun champ ajouté/retiré). Textes issus des catalogues `homme-dragon-creation-intros.json` et `homme-dragon-races.json` (à enregistrer dans `CONTENT_TYPES`), préférences de race incluses.
+- **PDF (33.4)** : niveau équivalent aux fiches joueur ; souffles lus depuis le catalogue `souffle` avec leur coût ; réserve par défaut imprimée si elle existe (33.6) ; champs de souffle du modèle remplis avec un maximum lié au niveau, sans jamais prétendre suivre une consommation.
+- **« Personnages » (33.5)** : chaque Homme Dragon apparaît avec sa partie d'origine, nature lisible sans ouvrir la fiche et sans reposer sur la seule couleur ; recherche, tri (« Niveau » : il n'en a pas, il passe en dernier) et mode d'affichage s'appliquent ; jamais visible des autres membres de la partie. Un Homme Dragon par aventure Ryuutama et non un seul au total ; entrée de création « Créer un Homme Dragon pour <aventure> » pour chaque aventure Ryuutama du MJ qui n'en a pas.
+- Nom affiché selon la convention unifiée joueur/personnage. « Homme Dragon » est un nom propre du système, jamais thématisé.
+- Contenu Ryuutama versionné, textes reformulés (mécaniques conservées). Champs libres du MJ en texte simple.
 
 ## Technical Decisions
 
-- L'Homme Dragon **n'est pas un personnage** dans le modèle de données : table distincte, unique par (utilisateur, partie, système), absente de la liste des personnages.
-- Sa fiche n'a **pas de route propre** aujourd'hui : incrustée dans l'écran de la partie côté MJ (story 33.1 n'y a pas touché). La façon de l'ouvrir depuis « Personnages » (route dédiée vs navigation vers l'onglet partie) est un choix laissé à la story 33.5.
-- Story 33.1 a établi les patrons de référence, réutilisés tel quel par les stories suivantes qui touchent la fiche ou l'export : structure en cartes façon `CharacterSheet`, surface de détail partagée (`DetailSurface`/`createDetailSurfaceHost()`) pour tout élément adossé à un catalogue avec description (artefact, pouvoir d'éveil — et par extension les souffles de 33.2), et repli de nom aligné sur `characterName()`. Les champs libres saisis par le MJ restent en texte simple, jamais dans la surface de détail.
-- Lister les Hommes Dragons dans « Personnages » : choix ouvert entre endpoint dédié et extension de la lecture existante — contrainte ferme, ne pas casser le contrat de la liste des personnages ni ses consommateurs (écran Personnages, tableau de bord, tris). Lecture agrégée par utilisateur, jamais une requête par partie.
-- Les souffles par race se seedent sur le même mécanisme que le catalogue d'artefacts, qui porte déjà un identifiant de race — aucun nouvel endpoint, complexité serveur faible.
-- Aucune garde runtime ne rejette un catalogue de souffles incomplet (même discipline que les rôles de groupe du palier 8) — la complétude par race se vérifie en revue de contenu. Un souffle retiré/renommé lors d'un re-seed ne doit pas casser la lisibilité des fiches existantes.
+- L'Homme Dragon **n'est pas un personnage** : table distincte, unique aujourd'hui par (utilisateur, partie, système), absente de la liste des personnages. Sa fiche n'a pas de route propre (incrustée dans l'écran de la partie côté MJ) ; la façon de l'ouvrir depuis « Personnages » est laissée à 33.5.
+- Patrons posés par 33.1, à réutiliser : cartes façon `CharacterSheet`, surface de détail partagée (`DetailSurface` / `createDetailSurfaceHost()`) pour tout élément de catalogue avec description (artefact, éveil, souffle), repli de nom aligné sur `characterName()`.
+- Les catalogues de contenu passent par le mécanisme existant (`CONTENT_TYPES`, seed) ; les souffles par race suivent celui des artefacts (race déjà portée), sans nouvel endpoint. Aucune garde runtime contre un catalogue incomplet (même discipline que les rôles de groupe du palier 8) : complétude vérifiée en revue de contenu. Un souffle retiré/renommé au re-seed ne casse pas les fiches ni les réserves existantes (repli lisible sur la clé).
+- **Lecture agrégée (33.5)** : une lecture par utilisateur, jamais une requête par partie (pas de fan-out) ; forme (endpoint dédié ou extension) libre, sans casser le contrat de la liste des personnages ni ses consommateurs (écran Personnages, tableau de bord, tris).
+- **AD-22 — Réserve de souffles (33.6, à valider au démarrage de la story)** : réserve de séance = champ JSON nullable `reserveSouffles` sur `Seance` (liste `{ key, count }`) ; réserve par défaut = `HommeDragon.sheetData.reserveParDefaut`, même forme ; réserve par défaut **résolue à la lecture**, jamais recopiée dans les séances. Lecture MJ seul : jamais dans les DTO de séance servis aux joueurs (même principe que `sheetVisibility`) ; le signal temps réel ne porte aucune donnée. Écriture MJ seul (`getOwned`) avec validation serveur des règles de composition à partir des catalogues `souffle` et `souffleRituel` (capacité, souffles `reservable: false` exclus, autre race, rituels) ; émission `partie:{id}` après écriture, vues câblées sur le signal `changed`/`notifyChanged()`.
+- **33.8** : change l'unicité, le rattachement et le calcul du niveau (cumul des scénarios `PASSE` de plusieurs parties) ; nécessite une AD dédiée (`bmad-architecture`) et une migration avant la story. Les fiches existantes restent intactes. Aucune story antérieure ne doit figer un contrat « un Homme Dragon par partie ».
+- Revues : `/security-review` prévue sur 33.6 (nouveau chemin d'écriture MJ) ; passer en mode plan avant 33.6 et 33.8.
 
 ## UX & Interaction Patterns
 
-- Un MJ n'a pas d'entrée de création de personnage joueur sur sa propre partie ; son entrée dans le bloc d'invitation et dans la section de création de « Personnages » est celle de son Homme Dragon (le serveur l'autoriserait, c'est un choix produit).
-- Dans la section de création de « Personnages », l'entrée Homme Dragon suit le patron des entrées personnage (ligne pleine, cible ≥44px, disparaît une fois créée, jamais de ligne vide affichée) avec son propre libellé, et mène au parcours de création dédié.
-- Dans la liste de « Personnages », l'Homme Dragon utilise la même carte que les personnages avec un marqueur de nature dédié (`NatureMarker`) : icône + mot en affichage moyen/grand, icône seule + `aria-label` en mode compact — contour en couleur d'accent, sans fond de statut.
-- Formulaire de création (33.3, delta UX du 2026-09-23) : parcours en **5 étapes** avec bandeau de progression et Précédent/Suivant — Race, Artefact (filtré par la race), Identité, Vie de l'Homme Dragon, Avatar — un seul groupe de champs visible à la fois. Étapes Race/Artefact en `ChoiceCard` (variant Homme Dragon : liséré + gemme + lueur de coin teintés par race, 4 races — vert/bleu/rouge/noir — teinte toujours doublée d'un texte, jamais seule) ; chaque option porte 1-2 phrases explicatives. Étapes à champs en Material (`mat-form-field appearance="outline"`), chacun avec une ligne d'aide sous le label — rattrapage limité à cette page, ne pas l'étendre ailleurs sans suivi dédié.
+- Le MJ n'a pas d'entrée de création de personnage joueur sur sa partie ; son entrée (bloc d'invitation, section de création de « Personnages ») est celle de son Homme Dragon. Cette entrée suit le patron des entrées personnage (ligne pleine, cible ≥44px, disparaît une fois créée) et mène au parcours dédié.
+- Liste « Personnages » : même carte que les personnages avec un marqueur de nature dédié (`NatureMarker`) : icône + mot en affichage moyen/grand, icône seule + `aria-label` en compact ; contour d'accent, sans fond de statut. Toute info encodée par couleur est doublée d'un icône/libellé.
+- Création (delta UX du 2026-09-23) : 5 étapes avec bandeau de progression et Précédent/Suivant — Race, Artefact (filtré), Identité, Vie de l'Homme Dragon, Avatar. Race/Artefact en `ChoiceCard` variante Homme Dragon (liséré + gemme + lueur de coin teintés par race, teinte toujours doublée d'un texte), 1-2 phrases par option. Étapes à champs en Material `appearance="outline"` avec ligne d'aide sous chaque label (rattrapage limité à cette page). Aucune fourche des composants du wizard de personnage, aucun second seuil desktop.
+- Écran de réserve (page de séance + réserve par défaut sur la fiche) : conçu par une passe `bmad-ux` **avant** 33.6. L'artefact cadeau (33.7) réutilise `ChoiceCard`, cartes et `DetailSurface` existants.
 
 ## Cross-Story Dependencies
 
-- Story 33.2 dépend du mécanisme du catalogue d'artefacts (race déjà portée par ce catalogue) pour seeder les souffles par race, et réutilise la surface de détail posée par 33.1 pour l'affichage des souffles.
-- Story 33.3 hérite des composants `ChoiceCard`/`DetailSurface`/`createDetailSurfaceHost()` du wizard de création de personnage — aucune fourche, aucun second seuil desktop introduit.
-- Story 33.5 dépend de la convention de nommage joueur/personnage (épic 28) et de la section de création de « Personnages » posée par la story 29.16 (épic 29) : elle y ajoute son entrée plutôt que de dupliquer le mécanisme.
-- Story 33.4 (export PDF) doit rester alignée sur le niveau atteint par la fiche refondue de 33.1 et sur les paliers de refonte parallèles des fiches joueur.
-- Un même Homme Dragon partagé entre plusieurs aventures est hors périmètre ; aucune story ne doit figer un contrat « un Homme Dragon par partie » qui rendrait cette évolution plus difficile plus tard.
+- 33.2 dépend du catalogue d'artefacts (race) et de `DetailSurface` de 33.1 ; elle a posé le content-type `souffle`.
+- 33.3 hérite de `ChoiceCard`/`DetailSurface` du wizard de personnage et consomme les deux catalogues de textes à enregistrer.
+- 33.4 lit le catalogue `souffle` (pas `eveilPower`), reste alignée sur la fiche de 33.1 et les refontes parallèles des fiches joueur ; imprime la réserve par défaut si 33.6 est livrée.
+- 33.5 dépend de la convention de nommage (épic 28) et de la section de création de la story 29.16 (épic 29) : elle y ajoute son entrée.
+- 33.6 dépend de 33.7 (enregistre le catalogue des souffles rituels) et de la passe UX ; s'appuie sur le niveau (scénarios `PASSE`), le temps réel de la partie et les séances (une séance appartient à une seule partie, donc un seul dragon — pas de conflit avec 33.8).
+- 33.7 : un champ `artefactCadeau` définitif, deux catalogues à enregistrer ; faible impact serveur.
+- 33.8 est en dernier, après l'AD multi-aventures ; elle ne doit pas être rendue plus difficile par 33.5 (contrat de lecture agrégée).
