@@ -51,12 +51,12 @@
                 [badge]="r.tag"
                 (selectedOption)="onRaceChange($event)"
               />
-              @if (r.detailContent; as content) {
+              @if (r.hasDetail) {
                 <button
                   type="button"
                   class="hdw__more"
                   [attr.aria-label]="'En savoir plus sur ' + r.option.label"
-                  (click)="detail.openContent(content, $event)"
+                  (click)="openRaceDetail(r.race, $event)"
                 >En savoir plus</button>
               }
             </div>
@@ -79,6 +79,7 @@
                 <app-choice-card
                   [option]="a.option"
                   [selected]="artefactKey() === a.option.key"
+                  [fullDetail]="isDesktop()"
                   (selectedOption)="artefactKey.set($event)"
                 />
                 @if (a.detailContent; as content) {
@@ -268,8 +269,47 @@
       [body]="d.body"
       [rows]="d.rows ?? []"
       [narrative]="d.narrative ?? ''"
+      [custom]="!!raceInfo()"
       [openToken]="detail.openToken()"
-      (closed)="detail.close()"
-    />
+      (closed)="onDetailClosed()"
+    >
+      @if (raceInfo(); as info) {
+        <div class="hdw__race-info">
+          <p class="hdw__race-info-text">{{ info.description }}</p>
+          @if (info.preferences) {
+            <section class="hdw__race-info-section">
+              <h3>Préférences</h3>
+              <p>{{ info.preferences }}</p>
+            </section>
+          }
+          @if (info.artefacts.length > 0) {
+            <section class="hdw__race-info-section">
+              <h3>Artefacts</h3>
+              <dl>
+                @for (a of info.artefacts; track a.key) {
+                  <dt>{{ a.label }}</dt>
+                  @if (a.description) {
+                    <dd>{{ a.description }}</dd>
+                  }
+                }
+              </dl>
+            </section>
+          }
+          @if (info.souffles.length > 0) {
+            <section class="hdw__race-info-section">
+              <h3>Souffles</h3>
+              <dl>
+                @for (sf of info.souffles; track sf.key) {
+                  <dt>{{ sf.label }}@if (sf.ps) { · {{ sf.ps }} PS }</dt>
+                  @if (sf.description) {
+                    <dd>{{ sf.description }}</dd>
+                  }
+                }
+              </dl>
+            </section>
+          }
+        </div>
+      }
+    </app-detail-surface>
   }
 </div>

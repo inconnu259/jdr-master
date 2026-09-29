@@ -120,6 +120,20 @@ describe('ChoiceCard', () => {
     expect(button.getAttribute('aria-label')).toBe('Dragon Vert');
   });
 
+  it('sous-titre complet : classe posée seulement si fullDetail est demandé', async () => {
+    TestBed.configureTestingModule({ imports: [ChoiceCard] });
+    const fixture = TestBed.createComponent(ChoiceCard);
+    fixture.componentRef.setInput('option', { key: 'a', label: 'A', detail: 'Un long texte.' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const button: HTMLButtonElement = fixture.nativeElement.querySelector('button');
+    expect(button.classList).not.toContain('choice-card--full-detail');
+
+    fixture.componentRef.setInput('fullDetail', true);
+    fixture.detectChanges();
+    expect(button.classList).toContain('choice-card--full-detail');
+  });
+
   it('carte DÉPLOYÉE : pas de sous-titre, l’indication remplace, et le nom accessible reste le libellé', async () => {
     TestBed.configureTestingModule({ imports: [ChoiceCard] });
     const fixture = TestBed.createComponent(ChoiceCard);

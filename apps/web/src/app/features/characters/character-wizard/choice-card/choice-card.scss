@@ -161,4 +161,12 @@
     -webkit-line-clamp: 3;
     line-clamp: 3;
   }
+
+  // Sous-titre complet (Story 33.3) : déclaré après les coupes ci-dessus pour les remplacer.
+  &--full-detail &__detail {
+    display: block;
+    overflow: visible;
+    -webkit-line-clamp: unset;
+    line-clamp: unset;
+  }
 }

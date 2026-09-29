@@ -1,4 +1,7 @@
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { map } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -10,7 +13,6 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
 import {
   createDetailSurfaceHost,
-  type DetailRow,
   type DetailSurfaceContent,
 } from '../../../shared/detail-surface/detail-surface-host';
 import {
@@ -47,6 +49,9 @@ const MAX_TEXT = 5000;
  */
 const INTRO_TRUNCATE_THRESHOLD = 180;
 
+/** Même seuil desktop unique que le reste de l'application (règle établie par la story 31.1). */
+const DESKTOP_QUERY = '(min-width: 1024px)';
+
 interface RaceData {
   label?: string;
   description?: string;
@@ -54,6 +59,12 @@ interface RaceData {
 }
 interface IntroData {
   text?: string;
+}
+interface SouffleData {
+  label?: string;
+  description?: string;
+  ps?: number;
+  race?: string;
 }
 interface ArtefactData {
   label?: string;
@@ -98,6 +109,16 @@ export class HommeDragonCreationWizard implements OnInit {
 
   /** Surface « En savoir plus » des cartes de race (même plomberie que la fiche). */
   protected readonly detail = createDetailSurfaceHost();
+  /** Race dont le « En savoir plus » est ouvert (contenu projeté dans la surface de détail). */
+  protected readonly detailRace = signal<HommeDragonRace | null>(null);
+
+  private readonly breakpointObserver = inject(BreakpointObserver);
+  /** Sur desktop, la place ne manque pas : descriptions d'artefact affichées en entier et intros
+   *  jamais tronquées (« En savoir plus » / « Lire la suite » n'y économiseraient rien). */
+  protected readonly isDesktop = toSignal(
+    this.breakpointObserver.observe(DESKTOP_QUERY).pipe(map((r) => r.matches)),
+    { initialValue: this.breakpointObserver.isMatched(DESKTOP_QUERY) },
+  );
 
   protected readonly maxNom = MAX_NOM;
   protected readonly maxArtefactText = MAX_ARTEFACT_TEXT;
@@ -107,6 +128,7 @@ export class HommeDragonCreationWizard implements OnInit {
   private readonly raceCatalog = signal<ContentEntryDto[]>([]);
   private readonly introCatalog = signal<ContentEntryDto[]>([]);
   private readonly artefactCatalog = signal<ContentEntryDto[]>([]);
+  private readonly souffleCatalog = signal<ContentEntryDto[]>([]);
 
   // — Saisies —
   protected readonly race = signal<HommeDragonRace | null>(null);
@@ -147,7 +169,7 @@ export class HommeDragonCreationWizard implements OnInit {
         label: RACE_LABELS[r],
         detail: data?.description?.trim() || undefined,
       };
-      return { race: r, option, tag: RACE_TAGS[r], detailContent: this.raceDetail(r) };
+      return { race: r, option, tag: RACE_TAGS[r], hasDetail: !!data?.description?.trim() };
     }),
   );
 
@@ -161,9 +183,9 @@ export class HommeDragonCreationWizard implements OnInit {
         const label = data.label?.trim() || e.key;
         const description = data.description?.trim() || undefined;
         const option: ChoiceCardOption = { key: e.key, label, detail: description };
-        const detailContent: DetailSurfaceContent | null = description
-          ? { title: label, body: description }
-          : null;
+        // Desktop : la description est déjà affichée en entier sur la carte, pas de déclencheur.
+        const detailContent: DetailSurfaceContent | null =
+          description && !this.isDesktop() ? { title: label, body: description } : null;
         return { option, detailContent };
       });
   });
@@ -196,8 +218,40 @@ export class HommeDragonCreationWizard implements OnInit {
     return key === 'race' || key === 'artefact' || key === 'avatar' ? this.help(key) : null;
   });
   protected readonly introTruncatable = computed(
-    () => (this.introText()?.length ?? 0) > INTRO_TRUNCATE_THRESHOLD,
+    () => !this.isDesktop() && (this.introText()?.length ?? 0) > INTRO_TRUNCATE_THRESHOLD,
   );
+
+  /** Contenu du « En savoir plus » de la race ouverte : description, préférences, puis les
+   *  artefacts et les souffles propres à cette race, pour aider à choisir (décision 2026-09-29). */
+  protected readonly raceInfo = computed(() => {
+    const race = this.detailRace();
+    if (!race) return null;
+    const data = this.raceData(race);
+    const preferences = (data?.preferences ?? []).map((p) => p.trim()).filter(Boolean);
+    const artefacts = this.artefactCatalog()
+      .filter((e) => (e.data as ArtefactData | null)?.race === race)
+      .map((e) => {
+        const a = (e.data ?? {}) as ArtefactData;
+        return { key: e.key, label: a.label?.trim() || e.key, description: a.description?.trim() ?? '' };
+      });
+    const souffles = this.souffleCatalog()
+      .filter((e) => (e.data as SouffleData | null)?.race === race)
+      .map((e) => {
+        const sf = (e.data ?? {}) as SouffleData;
+        return {
+          key: e.key,
+          label: sf.label?.trim() || e.key,
+          ps: sf.ps,
+          description: sf.description?.trim() ?? '',
+        };
+      });
+    return {
+      description: data?.description?.trim() ?? '',
+      preferences: preferences.join(', '),
+      artefacts,
+      souffles,
+    };
+  });
 
   async ngOnInit(): Promise<void> {
     this.mondesProteges.set(this.partieName());
@@ -206,6 +260,7 @@ export class HommeDragonCreationWizard implements OnInit {
       this.raceCatalog.set(content['hommeDragonRace'] ?? []);
       this.introCatalog.set(content['hommeDragonCreationIntro'] ?? []);
       this.artefactCatalog.set(content['hommeDragonArtefact'] ?? []);
+      this.souffleCatalog.set(content['souffle'] ?? []);
     } catch {
       // Non bloquant : le parcours reste complet, sans aide ni artefact proposé.
     }
@@ -221,15 +276,15 @@ export class HommeDragonCreationWizard implements OnInit {
     return this.raceCatalog().find((e) => e.key === race)?.data as RaceData | undefined;
   }
 
-  /** Contenu de « En savoir plus » : description puis préférences ; `null` sans description. */
-  private raceDetail(race: HommeDragonRace): DetailSurfaceContent | null {
-    const data = this.raceData(race);
-    const description = data?.description?.trim();
-    if (!description) return null;
-    const rows: DetailRow[] = [{ label: 'Description', value: description }];
-    const preferences = (data?.preferences ?? []).map((p) => p.trim()).filter(Boolean);
-    if (preferences.length > 0) rows.push({ label: 'Préférences', value: preferences.join(', ') });
-    return { title: RACE_LABELS[race], body: description, rows };
+  /** Ouvre le « En savoir plus » d'une race (contenu projeté, voir `raceInfo`). */
+  protected openRaceDetail(race: HommeDragonRace, event: Event): void {
+    this.detailRace.set(race);
+    this.detail.openContent({ title: RACE_LABELS[race], body: '' }, event);
+  }
+
+  protected onDetailClosed(): void {
+    this.detailRace.set(null);
+    this.detail.close();
   }
 
   protected onRaceChange(race: string): void {

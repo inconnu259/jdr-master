@@ -25,8 +25,8 @@ context:
 - Étapes : 1 Race (4 `ChoiceCard` teintées, DESIGN.md §2/§7) ; 2 Artefact (`ChoiceCard` de la race, sans teinte, + nom + inscription facultative) ; 3 Identité (nom requis, apparence, caractère) ; 4 Vie (vocation, demeure, mondes protégés, pré-rempli du titre de la partie) ; 5 Avatar. Suivant reste bloqué sans race (1), sans artefact **ou sans nom d'artefact** (2), sans nom du dragon (3). Précédent conserve les saisies ; changer de race réinitialise artefact, nom et inscription de l'artefact.
 - Décision 2026-09-29 (nom de l'artefact) : **obligatoire** à la création, tant que l'application n'a ni édition de fiche ni avertissement « fiche incomplète » ; le rendre facultatif viendra avec ce principe, plus tard. L'inscription reste facultative.
 - Décision 2026-09-29 (avatar) : l'étape Avatar est un **champ texte libre** (description de la forme d'avatar). Une image pourra s'y ajouter plus tard ; le texte restera dans tous les cas.
-- Décision 2026-09-29 (préférences de race) : la carte montre la description ; un déclencheur « En savoir plus » **hors** de la carte-radio ouvre `DetailSurface` (description + préférences). Jamais de puces sur la carte.
-- Décision 2026-09-29 (intros) : texte d'intro d'étape tronqué à 3 lignes au-delà d'un seuil de longueur, bouton « Lire la suite » / « Réduire » (`aria-expanded`). Le texte de l'étape Artefact garde sa règle « changeable entre deux séances, jamais en cours de jeu ».
+- Décision 2026-09-29 (préférences de race) : la carte montre la description ; un déclencheur « En savoir plus » **hors** de la carte-radio ouvre `DetailSurface` (description, préférences, puis artefacts et souffles propres à la race, pour aider à choisir — ajout du 2026-09-29). Jamais de puces sur la carte.
+- Décision 2026-09-29 (intros) : texte d'intro d'étape tronqué à 3 lignes au-delà d'un seuil de longueur, bouton « Lire la suite » / « Réduire » (`aria-expanded`), **sur mobile seulement** : sur desktop (≥ 1024 px) les intros ne sont jamais tronquées (ajustement du 2026-09-29). Sur desktop aussi, les descriptions d'artefact s'affichent en entier sur la carte, sans « En savoir plus » (conservé sur mobile). Le texte de l'étape Artefact garde sa règle « changeable entre deux séances, jamais en cours de jeu ».
 - Aide de chaque champ = texte du catalogue sous le label ; champs Material `appearance="outline"` (DESIGN.md §7). Deux entrées d'intro sont ajoutées au JSON pour les nouveaux champs : `artefactNom`, `artefactInscription`.
 - Longueurs max = celles de l'API (nom 120 ; nom et inscription d'artefact 200 ; autres 5000). Champs vides envoyés `undefined`, comme aujourd'hui.
 - Radiogroup + `RadioGroupNavDirective`, cibles 44 px, teinte de race toujours doublée du nom et d'une étiquette, contraste vérifié dans les 3 thèmes.
@@ -84,9 +84,12 @@ context:
 
 - Implémentation (2026-09-29) : catalogues enregistrés (`hommeDragonRace`, `hommeDragonCreationIntro`) + deux aides d'artefact, test de contrat API, `ChoiceCard` (entrées `tint` et `badge`), `HommeDragonCreationWizard` (5 étapes), fiche rebranchée. `RACES`/`RACE_LABELS` déplacés dans `homme-dragon-races.ts` (évite un import circulaire fiche ↔ wizard).
 - Écarts assumés : (1) le texte de l'étiquette de race utilise `--h-text` (rouge et noir éclaircis, `--h` mesuré à 2,0–4,5:1 sur les surfaces des 3 thèmes) ; le liséré garde `--h` — DESIGN.md §7 à répercuter par `bmad-ux`. (2) « En savoir plus » aussi sur les artefacts (leur description est coupée à 2 lignes sur la carte). (3) Barre Précédent/Suivant `sticky` et non fixe, car le parcours est embarqué dans l'onglet de la Partie.
+- Retours du 2026-09-29 appliqués : contenu projeté (`custom`) dans la surface de détail de race ; `isDesktop` via `BreakpointObserver` ; `ChoiceCard.fullDetail`. Web 93/93, build propre.
 - Vérification : web 77/77 (choice-card, radio nav, wizard 18, fiche 41) ; API `src/game-systems` 56/56 ; `pnpm build` web sans erreur ; API complète 1410/1412, les 2 échecs préexistants connus. Non faits : re-seed de l'API, contrôle visuel 375 px / 1024 px / 3 thèmes.
 
 ## Spec Change Log
+
+- 2026-09-29 (2) — retours de l'utilisateur après livraison. Modifié (bloc figé) : (a) le « En savoir plus » d'une race montre aussi ses artefacts et ses souffles, catalogue `souffle` chargé par le parcours ; (b) desktop seulement : descriptions d'artefact complètes sur la carte (sans coupe ni « En savoir plus »), intros non tronquées, donc plus de « Lire la suite » à l'étape Avatar. Mobile inchangé. État évité : un bouton qui n'économise aucune ligne et un choix de race pris sans voir ses artefacts ni ses souffles. KEEP : seuil desktop unique 1024 px, `ChoiceCard` non forké (entrée additive `fullDetail`).
 
 ## Review Triage Log
 

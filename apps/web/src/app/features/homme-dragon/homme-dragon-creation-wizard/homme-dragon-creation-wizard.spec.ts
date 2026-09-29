@@ -49,12 +49,27 @@ const CATALOG: GameSystemContentDto = {
     // Dragon noir : volontairement sans description.
     { key: 'DRAGON_NOIR', data: { key: 'DRAGON_NOIR', label: 'Dragon noir' } },
   ],
+  souffle: [
+    {
+      key: 'nostalgie',
+      data: {
+        key: 'nostalgie',
+        label: 'Nostalgie',
+        race: 'DRAGON_VERT',
+        ps: 1,
+        description: 'Fait resurgir un souvenir.',
+      },
+    },
+    { key: 'defi', data: { key: 'defi', label: 'Défi', race: 'DRAGON_ROUGE', ps: 1 } },
+    { key: 'chance', data: { key: 'chance', label: 'Chance', ps: 1, description: 'Commun.' } },
+  ],
   hommeDragonCreationIntro: [
     { key: 'race', data: { key: 'race', label: 'Choisir sa race', text: 'Intro race courte.' } },
     { key: 'artefact', data: { key: 'artefact', label: 'Artefact', text: LONG_INTRO } },
     { key: 'artefactNom', data: { key: 'artefactNom', label: 'Nom', text: 'Aide nom artefact.' } },
     { key: 'nom', data: { key: 'nom', label: 'Nom', text: 'Aide nom du dragon.' } },
     { key: 'apparence', data: { key: 'apparence', label: 'Apparence', text: 'Aide apparence.' } },
+    { key: 'avatar', data: { key: 'avatar', label: 'Avatar', text: LONG_INTRO } },
   ],
 };
 
@@ -87,6 +102,7 @@ async function settle(fixture: ComponentFixture<HommeDragonCreationWizard>): Pro
 async function createComponent(
   catalog: GameSystemContentDto | Error = CATALOG,
   create = vi.fn().mockResolvedValue(makeDto()),
+  desktop = false,
 ) {
   const characterSvc = {
     getGameSystemContent:
@@ -111,7 +127,10 @@ async function createComponent(
       },
       {
         provide: BreakpointObserver,
-        useValue: { isMatched: () => false, observe: () => of({ matches: false, breakpoints: {} }) },
+        useValue: {
+          isMatched: () => desktop,
+          observe: () => of({ matches: desktop, breakpoints: {} }),
+        },
       },
       provideNoopAnimations(),
     ],
@@ -199,6 +218,14 @@ describe('HommeDragonCreationWizard', () => {
     expect(panel.textContent).toContain('Dragon Vert');
     expect(panel.textContent).toContain('Le goût du voyage.');
     expect(panel.textContent).toContain('aventure, quête');
+    // Aide au choix : artefacts et souffles PROPRES à la race, pas ceux des autres.
+    expect(panel.textContent).toContain('Encyclopédie');
+    expect(panel.textContent).toContain('Les lois fondamentales de l’univers.');
+    expect(panel.textContent).toContain('Nostalgie · 1 PS');
+    expect(panel.textContent).toContain('Fait resurgir un souvenir.');
+    expect(panel.textContent).not.toContain('Grand arc');
+    expect(panel.textContent).not.toContain('Défi');
+    expect(panel.textContent).not.toContain('Chance');
     expect(component['race']()).toBeNull();
     expect(cards(fixture)[0].getAttribute('aria-checked')).toBe('false');
   });
@@ -524,5 +551,40 @@ describe('HommeDragonCreationWizard', () => {
     expect(component['isValid']()).toBe(false);
     await component['onSubmit']();
     expect(create).not.toHaveBeenCalled();
+  });
+  it('mobile : artefact avec description → « En savoir plus » et sous-titre coupé', async () => {
+    const { fixture } = await createComponent();
+    await click(fixture, cards(fixture)[0]);
+    await next(fixture);
+
+    expect(root(fixture).querySelectorAll('.hdw__more')).toHaveLength(1);
+    expect(root(fixture).querySelector('.choice-card--full-detail')).toBeNull();
+  });
+
+  it('desktop : artefacts affichés en entier, sans « En savoir plus »', async () => {
+    const { fixture } = await createComponent(CATALOG, undefined, true);
+    await click(fixture, cards(fixture)[0]);
+    await next(fixture);
+
+    expect(root(fixture).querySelector('.hdw__more')).toBeNull();
+    expect(root(fixture).querySelectorAll('.choice-card--full-detail')).toHaveLength(2);
+    expect(root(fixture).querySelector('.choice-card__detail')!.textContent).toContain(
+      'Les lois fondamentales de l’univers.',
+    );
+  });
+
+  it('desktop : les intros longues ne sont jamais tronquées (ni artefact, ni avatar)', async () => {
+    const { fixture, component } = await createComponent(CATALOG, undefined, true);
+    await click(fixture, cards(fixture)[0]);
+    await next(fixture);
+
+    expect(root(fixture).querySelector('.hdw__intro-text')!.textContent).toContain('long');
+    expect(root(fixture).querySelector('.hdw__intro-text--clamped')).toBeNull();
+    expect(root(fixture).querySelector('.hdw__intro-toggle')).toBeNull();
+
+    component['stepIndex'].set(4);
+    await settle(fixture);
+    expect(root(fixture).querySelector('.hdw__intro-text')!.textContent).toContain('long');
+    expect(root(fixture).querySelector('.hdw__intro-toggle')).toBeNull();
   });
 });

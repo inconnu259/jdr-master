@@ -37,6 +37,9 @@ export class ChoiceCard {
    * standard est inchangé.
    */
   readonly tint = input<boolean>(false);
+  /** Sous-titre affiché EN ENTIER (aucune coupe à 2/3 lignes) — pour les surfaces larges où la
+   *  place ne manque pas (Story 33.3, artefacts sur desktop). Faux par défaut. */
+  readonly fullDetail = input<boolean>(false);
   /** Étiquette courte (contour teinté), rendue seulement sur une carte teintée. */
   readonly badge = input<string>('');
 
