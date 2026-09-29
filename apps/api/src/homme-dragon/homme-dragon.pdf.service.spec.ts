@@ -30,6 +30,7 @@ const mockSave = jest.fn().mockResolvedValue(new Uint8Array([1, 2, 3]));
 const mockFlatten = jest.fn();
 const mockForm = {
   getTextField: jest.fn(() => ({ setText: mockSetText })),
+  getFields: jest.fn(() => []),
   flatten: mockFlatten,
 };
 const mockDoc = {

@@ -101,3 +101,9 @@ règle de disponibilité est la fonction pure `availableSouffles()` (`packages/g
 Tout texte est assaini pour l'encodage WinAnsi (police standard de pdf-lib) : un glyphe non
 encodable est remplacé par `?`, jamais une erreur d'export. Les voyageurs protégés sont tous
 imprimés, répartis dans l'ordre sur les deux zones multilignes `voyageurs_proteges_1/2`.
+
+Taille de police : tous les champs texte du gabarit sont ramenés à 10,5 pt (entre les 12 pt du
+gabarit et les 9 pt d'« Apparence - Caractère »), remplis ou non, pour que inscription, scénario et
+date ne débordent pas ; `apparence_caractere`, `voyageurs_proteges_*` et `voy_sc_*`, déjà plus
+petits, gardent leur taille. `nombre_souffles` n'a aucun `/DA` dans le gabarit : le service lui en
+donne un explicite (`/Helv 10.5 Tf`).

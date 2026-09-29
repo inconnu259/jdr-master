@@ -8,7 +8,7 @@ import { Test } from '@nestjs/testing';
 jest.mock('node:fs/promises', () => ({ readFile: jest.fn() }));
 
 import { readFile } from 'node:fs/promises';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PDFName } from 'pdf-lib';
 import { HommeDragonPdfService } from './homme-dragon.pdf.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 
@@ -61,6 +61,8 @@ async function makeTemplate(): Promise<Buffer> {
   for (const name of [...TEXT_FIELDS, ...MULTILINE_FIELDS]) {
     const field = form.createTextField(name);
     if (MULTILINE_FIELDS.includes(name)) field.enableMultiline();
+    // Comme dans le vrai gabarit : `nombre_souffles` n'a aucun /DA (taille auto).
+    if (name === 'nombre_souffles') field.acroField.dict.delete(PDFName.of('DA'));
     field.addToPage(page, { x: 20, y: (y -= 1), width: 200, height: 12 });
   }
   return Buffer.from(await doc.save());
@@ -119,6 +121,38 @@ describe('HommeDragonPdfService (pdf-lib réel)', () => {
     expect(form.getTextField('souffle_1').getText() ?? '').toBe('');
     expect(form.getFields().length).toBeGreaterThan(0);
     expect(doc.getPageCount()).toBeGreaterThanOrEqual(2);
+  });
+
+  it('police intermédiaire : 10,5 pt sur inscription, scénario et date ; zones déjà petites inchangées', async () => {
+    const dto = makeHommeDragon({
+      sheetData: {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc', inscription: 'Une inscription assez longue pour déborder' },
+        nom: 'Ignis',
+      },
+      historique: [
+        { scenarioTitle: 'La Route des Lanternes', date: '2026-06-12', participants: ['Ana'] },
+      ],
+    });
+    const doc = await load(await service.fillHommeDragonPdf(dto, 'admin', 'editable'));
+    const form = doc.getForm();
+    const da = (name: string) => form.getTextField(name).acroField.getDefaultAppearance() ?? '';
+
+    // eveil_1 reste vide : la taille s'applique aussi aux cases à remplir à la main.
+    for (const name of [
+      'inscription',
+      'sc1',
+      'date_sc_1',
+      'nom',
+      'eveil_1',
+      'souffle_1',
+      'nombre_souffles',
+    ]) {
+      expect(da(name)).toContain('10.5 Tf');
+    }
+    for (const name of ['voy_sc_1', 'voyageurs_proteges_1']) {
+      expect(da(name)).not.toContain('10.5 Tf');
+    }
   });
 
   it('niveau 1 : nombre_souffles = 0, souffle_max = 3', async () => {

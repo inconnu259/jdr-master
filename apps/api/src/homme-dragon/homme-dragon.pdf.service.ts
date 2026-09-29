@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { PDFDocument, StandardFonts } from 'pdf-lib';
+import { PDFDocument, PDFTextField, StandardFonts } from 'pdf-lib';
 import type { HommeDragonDto, HommeDragonRace } from '@master-jdr/shared';
 import { availableSouffles, mapHommeDragonToPdfFields } from '@master-jdr/game-rules';
 import type { SouffleCatalogEntry } from '@master-jdr/game-rules';
@@ -24,6 +24,15 @@ const RACE_LABELS: Record<HommeDragonRace, string> = {
   DRAGON_ROUGE: 'Dragon Rouge',
   DRAGON_NOIR: 'Dragon Noir',
 };
+
+/** Taille de police intermédiaire des champs du gabarit : le gabarit officiel met la plupart des
+ * champs à 12 pt (les textes longs — inscription, scénario, date — débordent) alors que
+ * « Apparence - Caractère » est à 9 pt ; 10,5 pt tient entre les deux. */
+const FIELD_FONT_SIZE = 10.5;
+
+/** Champs déjà plus petits dans le gabarit (zones multilignes et lignes « Voyageurs : ») : leur
+ * taille d'origine est conservée, elle est plus petite que `FIELD_FONT_SIZE`. */
+const KEEP_TEMPLATE_FONT_SIZE = /^(apparence_caractere|voyageurs_proteges_\d+|voy_sc_\d+)$/;
 
 @Injectable()
 export class HommeDragonPdfService {
@@ -52,6 +61,24 @@ export class HommeDragonPdfService {
     // Police par défaut des champs du formulaire (Helvetica, WinAnsi) : sert à remplacer tout
     // caractère non encodable — un nom ou un libellé exotique ne doit jamais faire échouer l'export.
     const fieldFont = await doc.embedFont(StandardFonts.Helvetica);
+    // Taille appliquée à TOUS les champs texte (remplis ou non) : en format éditable, ce que le MJ
+    // écrit à la main dans une case vide (éveil, cases de réserve…) garde la même taille.
+    for (const field of form.getFields()) {
+      if (!(field instanceof PDFTextField) || KEEP_TEMPLATE_FONT_SIZE.test(field.getName()))
+        continue;
+      try {
+        // `nombre_souffles` n'a aucun /DA dans le gabarit (taille auto, donc trop grande pour la
+        // case « Nombre Max ») : on lui en donne un explicite, avec la police du gabarit (`Helv`).
+        if (field.acroField.getDefaultAppearance() === undefined) {
+          field.acroField.setDefaultAppearance(`/Helv ${FIELD_FONT_SIZE} Tf 0 g`);
+        } else {
+          field.setFontSize(FIELD_FONT_SIZE);
+        }
+      } catch (e) {
+        // `setFontSize` lève si le champ n'a pas de taille dans son /DA : il garde alors sa taille.
+        this.logger.warn(`Taille de police non appliquée au champ PDF "${field.getName()}"`, e);
+      }
+    }
     for (const f of fields) {
       if (!f.value) continue;
       try {
