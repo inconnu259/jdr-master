@@ -27,6 +27,7 @@ function makeService() {
     update: jest.fn(),
     findOne: jest.fn(),
     chooseEveilPower: jest.fn(),
+    chooseArtefactCadeau: jest.fn(),
     getOwnerPseudo: jest.fn(),
   };
 }
@@ -80,6 +81,12 @@ describe('HommeDragonController', () => {
     const dto: ChooseEveilPowerDto = { level: 2, key: 'escorte-du-dragon' };
     controller.chooseEveilPower('p1', { id: 'mj1' } as any, dto);
     expect(service.chooseEveilPower).toHaveBeenCalledWith('p1', 'mj1', dto);
+  });
+
+  it('POST artefact-cadeau délègue à chooseArtefactCadeau() avec partieId/user.id/dto (Story 33.7)', () => {
+    const dto = { key: 'lanterne' };
+    controller.chooseArtefactCadeau('p1', { id: 'mj1' } as any, dto);
+    expect(service.chooseArtefactCadeau).toHaveBeenCalledWith('p1', 'mj1', dto);
   });
 
   describe('exportPdf()', () => {
@@ -168,6 +175,28 @@ describe('HommeDragonController', () => {
       await request(app.getHttpServer()).get(EXPORT_URL).query({ format: '1page' }).expect(400);
 
       expect(pdfService.fillHommeDragonPdf).not.toHaveBeenCalled();
+    });
+
+    it("PATCH avec artefactCadeau → 400 : le cadeau n'est jamais modifiable par PATCH (Story 33.7)", async () => {
+      await request(app.getHttpServer())
+        .patch('/parties/11111111-1111-1111-1111-111111111111/homme-dragon')
+        .send({ artefactCadeau: { key: 'lanterne' } })
+        .expect(400);
+
+      expect(service.update).not.toHaveBeenCalled();
+    });
+
+    it('POST artefact-cadeau sans clé → 400 ; avec clé → délègue au service', async () => {
+      const url = '/parties/11111111-1111-1111-1111-111111111111/homme-dragon/artefact-cadeau';
+      await request(app.getHttpServer()).post(url).send({}).expect(400);
+      expect(service.chooseArtefactCadeau).not.toHaveBeenCalled();
+
+      await request(app.getHttpServer()).post(url).send({ key: 'lanterne' }).expect(201);
+      expect(service.chooseArtefactCadeau).toHaveBeenCalledWith(
+        '11111111-1111-1111-1111-111111111111',
+        'u1',
+        { key: 'lanterne' },
+      );
     });
 
     it.each(['editable', '2pages'])('format=%s → 200 via le pipeline HTTP réel', async (format) => {

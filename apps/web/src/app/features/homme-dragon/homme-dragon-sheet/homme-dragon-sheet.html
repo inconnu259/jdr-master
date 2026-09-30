@@ -85,6 +85,23 @@
                 }
                 <button mat-button type="button" (click)="openArtefactEdit()">Modifier</button>
               </p>
+              @if (artefactCadeau(); as cadeau) {
+                <p class="homme-dragon-sheet__cadeau">
+                  <span class="homme-dragon-sheet__cadeau-label">Artefact cadeau :</span>
+                  @if (cadeau.detail; as d) {
+                    <button
+                      type="button"
+                      class="homme-dragon-sheet__detail-trigger"
+                      (click)="detail.open(d.title, d.body, $event)"
+                    >{{ d.title }}</button>
+                  } @else {
+                    {{ cadeau.label }}
+                  }
+                  @if (cadeau.raceLabel) {
+                    <span class="homme-dragon-sheet__souffle-note">({{ cadeau.raceLabel }})</span>
+                  }
+                </p>
+              }
             } @else {
               <div class="homme-dragon-sheet__artefact-edit">
                 <select [ngModel]="editArtefactKey()" name="editArtefact" (ngModelChange)="editArtefactKey.set($event)">
@@ -130,6 +147,94 @@
               }
               @if (hommeDragon()!.sheetData.mondesProteges) {
                 <p class="homme-dragon-sheet__detail">Mondes protégés : {{ hommeDragon()!.sheetData.mondesProteges }}</p>
+              }
+            </section>
+          }
+
+          @if (acquiredCapacities().length > 0) {
+            <section class="homme-dragon-sheet__card homme-dragon-sheet__capacities">
+              <h2 class="homme-dragon-sheet__card-title">Capacités de niveau</h2>
+              <ul class="homme-dragon-sheet__talent-list">
+                @for (c of acquiredCapacities(); track c.key) {
+                  <li class="homme-dragon-sheet__capacity">
+                    <span class="homme-dragon-sheet__capacity-name">{{ c.label }}</span>
+                    <span class="stat-pill">Niveau {{ c.level }}</span>
+                    @if (c.description) {
+                      <p class="homme-dragon-sheet__capacity-text">{{ c.description }}</p>
+                    }
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+
+          @if (canChooseCadeau()) {
+            <section class="homme-dragon-sheet__card homme-dragon-sheet__cadeau-prompt">
+              <h2 class="homme-dragon-sheet__card-title">Artefact cadeau à choisir</h2>
+              <p>
+                Niveau {{ artefactCadeauLevel }} atteint — les hommes-dragons des autres races vous offrent un
+                artefact. Choisissez-en un parmi ceux des trois autres races.
+              </p>
+              @if (cadeauOptions().length === 0) {
+                <p class="muted">Aucun artefact disponible.</p>
+              } @else if (!confirmingCadeau()) {
+                <div
+                  class="homme-dragon-sheet__cadeau-grid"
+                  role="radiogroup"
+                  aria-label="Artefact cadeau"
+                  appRadioGroupNav
+                >
+                  @for (o of cadeauOptions(); track o.option.key) {
+                    <div
+                      class="homme-dragon-sheet__cadeau-option"
+                      [class.homme-dragon-sheet__cadeau-option--vert]="o.race === 'DRAGON_VERT'"
+                      [class.homme-dragon-sheet__cadeau-option--bleu]="o.race === 'DRAGON_BLEU'"
+                      [class.homme-dragon-sheet__cadeau-option--rouge]="o.race === 'DRAGON_ROUGE'"
+                      [class.homme-dragon-sheet__cadeau-option--noir]="o.race === 'DRAGON_NOIR'"
+                    >
+                      <app-choice-card
+                        [option]="o.option"
+                        [selected]="selectedCadeauKey() === o.option.key"
+                        [tint]="true"
+                        [badge]="o.tag"
+                        [fullDetail]="true"
+                        (selectedOption)="selectCadeau($event)"
+                      />
+                    </div>
+                  }
+                </div>
+                <button
+                  mat-flat-button
+                  color="primary"
+                  type="button"
+                  class="homme-dragon-sheet__cadeau-next"
+                  [disabled]="!selectedCadeauKey()"
+                  (click)="askCadeauConfirmation()"
+                >
+                  Choisir cet artefact
+                </button>
+              } @else {
+                <div class="homme-dragon-sheet__cadeau-confirm" role="alertdialog" tabindex="-1" aria-labelledby="cadeau-confirm-title">
+                  <p id="cadeau-confirm-title">
+                    <strong>Ce choix est définitif.</strong> Offrir « {{ selectedCadeauLabel() }} » à
+                    l'Homme Dragon ? Il ne pourra plus être modifié.
+                  </p>
+                  <button
+                    mat-flat-button
+                    color="primary"
+                    type="button"
+                    [disabled]="choosingCadeau()"
+                    (click)="onConfirmCadeau()"
+                  >
+                    Confirmer ce choix définitif
+                  </button>
+                  <button mat-button type="button" [disabled]="choosingCadeau()" (click)="cancelCadeauConfirmation()">
+                    Revenir au choix
+                  </button>
+                </div>
+              }
+              @if (cadeauError()) {
+                <p class="error" role="alert">{{ cadeauError() }}</p>
               }
             </section>
           }
@@ -219,6 +324,16 @@
                   }
                 </details>
               }
+            </section>
+          }
+
+          @if (rituals().length > 0) {
+            <section class="homme-dragon-sheet__card homme-dragon-sheet__rituals">
+              <h2 class="homme-dragon-sheet__card-title">Souffles rituels</h2>
+              <p class="homme-dragon-sheet__souffle-consigne">
+                Mère-dragon : ces souffles sont consultables ici, sans réserve ni décompte.
+              </p>
+              <ng-container *ngTemplateOutlet="souffleList; context: { $implicit: rituals() }" />
             </section>
           }
 

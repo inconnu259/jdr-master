@@ -3,6 +3,8 @@
 // `homme-dragon-sheet__` (composant distinct, styles Angular encapsulés — pas de partage de
 // classe avec `CharacterSheet`).
 
+@use '../race-tint' as *;
+
 .error {
   color: var(--mat-sys-error, #c00);
   font-size: 0.85rem;
@@ -161,6 +163,73 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 0.5rem;
+  }
+
+  // Story 33.7 — capacités de niveau, artefact cadeau (affichage et choix) et souffles rituels.
+  &__capacity-name {
+    font-weight: 600;
+  }
+
+  &__capacity .stat-pill {
+    margin-left: 0.375rem;
+  }
+
+  &__capacity-text {
+    font-size: 0.85rem;
+    margin: 0.25rem 0 0.5rem;
+  }
+
+  &__cadeau {
+    margin: 0.25rem 0 0;
+  }
+
+  &__cadeau-label {
+    color: var(--mat-sys-on-surface-variant, #555);
+  }
+
+  &__cadeau-grid {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0.75rem 0;
+    grid-template-columns: 1fr;
+  }
+
+  &__cadeau-option {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  &__cadeau-option--vert {
+    @include race-tint(vert);
+  }
+
+  &__cadeau-option--bleu {
+    @include race-tint(bleu);
+  }
+
+  &__cadeau-option--rouge {
+    @include race-tint(rouge);
+  }
+
+  &__cadeau-option--noir {
+    @include race-tint(noir);
+  }
+
+  &__cadeau-next {
+    min-height: 44px;
+  }
+
+  &__cadeau-confirm {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  &__rituals .stat-pill {
+    margin-left: 0.375rem;
   }
 
   // Story 33.2 — section « Souffles » : un groupe par famille de souffles communs, un pour la race

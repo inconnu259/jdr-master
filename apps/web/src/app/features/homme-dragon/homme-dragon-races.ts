@@ -8,6 +8,14 @@ export const RACES: HommeDragonRace[] = [
   'DRAGON_NOIR',
 ];
 
+/** Étiquette courte de chaque carte de race (DESIGN Homme Dragon §7) : elle double la teinte. */
+export const RACE_TAGS: Record<HommeDragonRace, string> = {
+  DRAGON_VERT: 'Vert',
+  DRAGON_BLEU: 'Bleu',
+  DRAGON_ROUGE: 'Rouge',
+  DRAGON_NOIR: 'Noir',
+};
+
 export const RACE_LABELS: Record<HommeDragonRace, string> = {
   DRAGON_VERT: 'Dragon Vert',
   DRAGON_BLEU: 'Dragon Bleu',

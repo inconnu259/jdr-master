@@ -20,7 +20,7 @@ import {
   type ChoiceCardOption,
 } from '../../characters/character-wizard/choice-card/choice-card';
 import { RadioGroupNavDirective } from '../../characters/character-wizard/choice-card/radio-group-nav.directive';
-import { RACES, RACE_LABELS } from '../homme-dragon-races';
+import { RACES, RACE_LABELS, RACE_TAGS } from '../homme-dragon-races';
 
 type StepKey = 'race' | 'artefact' | 'identite' | 'vie' | 'avatar';
 
@@ -28,14 +28,6 @@ interface CreationStep {
   key: StepKey;
   label: string;
 }
-
-/** Étiquette courte de chaque carte de race (DESIGN Homme Dragon §7) : elle double la teinte. */
-const RACE_TAGS: Record<HommeDragonRace, string> = {
-  DRAGON_VERT: 'Vert',
-  DRAGON_BLEU: 'Bleu',
-  DRAGON_ROUGE: 'Rouge',
-  DRAGON_NOIR: 'Noir',
-};
 
 /** Longueurs maximales de l'API (`create-homme-dragon.dto.ts`). */
 const MAX_NOM = 120;

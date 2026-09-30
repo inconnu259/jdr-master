@@ -19,6 +19,7 @@ import { HommeDragonPdfService } from './homme-dragon.pdf.service';
 import { CreateHommeDragonDto } from './dto/create-homme-dragon.dto';
 import { UpdateHommeDragonDto } from './dto/update-homme-dragon.dto';
 import { ChooseEveilPowerDto } from './dto/choose-eveil-power.dto';
+import { ChooseArtefactCadeauDto } from './dto/choose-artefact-cadeau.dto';
 import { ExportHommeDragonPdfDto } from './dto/export-homme-dragon-pdf.dto';
 
 @UseGuards(AuthenticatedGuard)
@@ -59,6 +60,15 @@ export class HommeDragonController {
     @Body() dto: ChooseEveilPowerDto,
   ) {
     return this.hommeDragon.chooseEveilPower(partieId, user.id, dto);
+  }
+
+  @Post('artefact-cadeau')
+  chooseArtefactCadeau(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: ChooseArtefactCadeauDto,
+  ) {
+    return this.hommeDragon.chooseArtefactCadeau(partieId, user.id, dto);
   }
 
   @Get('export.pdf')

@@ -8,6 +8,8 @@ export {
   computeHommeDragonDerived,
   pendingEveilLevels,
   HOMME_DRAGON_LEVEL_THRESHOLDS,
+  ARTEFACT_CADEAU_LEVEL,
+  SOUFFLES_RITUELS_LEVEL,
 } from './ryuutama/homme-dragon-derived.ts';
 export { mapHommeDragonToPdfFields } from './ryuutama/homme-dragon-pdf-field-map.ts';
 export {

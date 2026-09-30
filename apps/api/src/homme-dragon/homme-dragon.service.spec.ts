@@ -9,6 +9,7 @@ import { Test } from '@nestjs/testing';
 // vérifient une vraie table de vérité niveau/PS, pas juste que la fonction est appelée.
 jest.mock('@master-jdr/game-rules', () => ({
   validateHommeDragon: jest.fn(),
+  ARTEFACT_CADEAU_LEVEL: 4,
   levelForScenariosPasse: (count: number) => {
     const thresholds = [
       { level: 2, scenariosPasse: 1 },
@@ -340,6 +341,36 @@ describe('HommeDragonService', () => {
   });
 
   describe('update()', () => {
+    it('update() conserve artefactCadeau et eveilPowers déjà enregistrés (Story 33.7)', async () => {
+      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' });
+      prisma.hommeDragon.findUnique.mockResolvedValue(
+        makeHommeDragon({
+          sheetData: {
+            race: 'DRAGON_ROUGE',
+            artefact: { key: 'grand-arc' },
+            nom: 'Ignis',
+            artefactCadeau: { key: 'lanterne' },
+            eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }],
+          },
+        }),
+      );
+      prisma.hommeDragon.update.mockResolvedValue(makeHommeDragon());
+
+      await service.update('p1', 'mj1', { demeure: 'x' });
+
+      expect(prisma.hommeDragon.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            sheetData: objectLike({
+              demeure: 'x',
+              artefactCadeau: { key: 'lanterne' },
+              eveilPowers: [{ level: 2, key: 'escorte-du-dragon' }],
+            }),
+          },
+        }),
+      );
+    });
+
     it("changement d'artefact accepté, aucun verrou optimiste (AD-2, AC4)", async () => {
       parties.getOwned.mockResolvedValue({
         id: 'p1',
@@ -519,6 +550,169 @@ describe('HommeDragonService', () => {
         ForbiddenException,
       );
       expect(prisma.hommeDragon.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('chooseArtefactCadeau() (Story 33.7)', () => {
+    const PARTIE = { id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' };
+
+    function makePasseScenariosFor(count: number) {
+      return Array.from({ length: count }, (_, i) =>
+        makeScenarioDto({ id: `s${i}`, status: 'PASSE', closedAt: '2026-07-10T00:00:00.000Z' }),
+      );
+    }
+
+    // Dragon rouge (grand-arc) au niveau demandé ; 7 scénarios PASSE = niveau 4.
+    function arrange(scenariosPasse: number, sheetData: Record<string, unknown> = {}) {
+      parties.getOwned.mockResolvedValue(PARTIE);
+      parties.listMembers.mockResolvedValue([]);
+      scenarios.findAllForPartie.mockResolvedValue(makePasseScenariosFor(scenariosPasse));
+      prisma.tx.hommeDragon.findUnique.mockResolvedValue(
+        makeHommeDragon({
+          sheetData: {
+            race: 'DRAGON_ROUGE',
+            artefact: { key: 'grand-arc' },
+            nom: 'Ignis',
+            ...sheetData,
+          },
+        }),
+      );
+      prisma.tx.hommeDragon.update.mockResolvedValue(makeHommeDragon());
+    }
+
+    it("niveau 4 + artefact d'une autre race → cadeau enregistré sous { key }, verrou de ligne pris", async () => {
+      arrange(7);
+
+      await service.chooseArtefactCadeau('p1', 'mj1', { key: 'lanterne' });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
+      expect(prisma.tx.hommeDragon.update).toHaveBeenCalledWith({
+        where: {
+          userId_partieId_gameSystemId: {
+            userId: 'mj1',
+            partieId: 'p1',
+            gameSystemId: 'ryuutama',
+          },
+        },
+        data: {
+          sheetData: objectLike({
+            race: 'DRAGON_ROUGE',
+            artefact: { key: 'grand-arc' },
+            artefactCadeau: { key: 'lanterne' },
+          }),
+        },
+      });
+    });
+
+    it('niveau 5 : toujours autorisé (niveau ≥ 4)', async () => {
+      arrange(12);
+      await service.chooseArtefactCadeau('p1', 'mj1', { key: 'lanterne' });
+      expect(prisma.tx.hommeDragon.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('émet un événement temps réel scopé sur la Partie après écriture', async () => {
+      arrange(7);
+      await service.chooseArtefactCadeau('p1', 'mj1', { key: 'lanterne' });
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it("ne mute jamais l'objet sheetData renvoyé par la lecture (copie, pas mutation en place)", async () => {
+      const originalSheetData = {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc' },
+        nom: 'Ignis',
+      };
+      arrange(7);
+      prisma.tx.hommeDragon.findUnique.mockResolvedValue(
+        makeHommeDragon({ sheetData: originalSheetData }),
+      );
+
+      await service.chooseArtefactCadeau('p1', 'mj1', { key: 'lanterne' });
+
+      expect(originalSheetData).not.toHaveProperty('artefactCadeau');
+    });
+
+    it('niveau 3 → BadRequestException, aucune écriture ni émission', async () => {
+      arrange(3);
+
+      await expect(service.chooseArtefactCadeau('p1', 'mj1', { key: 'lanterne' })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+
+    it('artefact de la race du dragon → BadRequestException, aucune écriture', async () => {
+      arrange(7);
+
+      await expect(service.chooseArtefactCadeau('p1', 'mj1', { key: 'grand-arc' })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+    });
+
+    it('clé absente du catalogue → BadRequestException, aucune écriture', async () => {
+      arrange(7);
+
+      await expect(
+        service.chooseArtefactCadeau('p1', 'mj1', { key: 'artefact-inconnu' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+    });
+
+    it('entrée de catalogue sans race → BadRequestException, aucune écriture', async () => {
+      arrange(7);
+      gameSystems.getContent.mockResolvedValue({
+        ...CATALOG_CONTENT,
+        hommeDragonArtefact: [
+          ...CATALOG_CONTENT.hommeDragonArtefact,
+          { key: 'sans-race', data: { key: 'sans-race', label: 'Sans race' } },
+        ],
+      });
+
+      await expect(service.chooseArtefactCadeau('p1', 'mj1', { key: 'sans-race' })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+    });
+
+    it('second choix (cadeau déjà présent) → BadRequestException, valeur inchangée', async () => {
+      arrange(7, { artefactCadeau: { key: 'lanterne' } });
+
+      await expect(service.chooseArtefactCadeau('p1', 'mj1', { key: 'lanterne' })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+    });
+
+    it('non-MJ → ForbiddenException propagée par getOwned, aucune écriture', async () => {
+      parties.getOwned.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        service.chooseArtefactCadeau('p1', 'stranger', { key: 'lanterne' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+    });
+
+    it('aucun Homme Dragon existant → NotFoundException', async () => {
+      arrange(7);
+      prisma.tx.hommeDragon.findUnique.mockResolvedValue(null);
+
+      await expect(service.chooseArtefactCadeau('p1', 'mj1', { key: 'lanterne' })).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
+    });
+
+    it('Partie hors Ryuutama → BadRequestException, aucune transaction', async () => {
+      parties.getOwned.mockResolvedValue({ ...PARTIE, gameSystemId: 'draconis' });
+
+      await expect(service.chooseArtefactCadeau('p1', 'mj1', { key: 'lanterne' })).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
 

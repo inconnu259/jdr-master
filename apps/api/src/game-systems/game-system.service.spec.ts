@@ -56,7 +56,7 @@ describe('GameSystemService', () => {
     service = module.get(GameSystemService);
   });
 
-  it('seedRyuutama() enregistre hommeDragonRace et hommeDragonCreationIntro avec toutes leurs entrées (Story 33.3)', async () => {
+  it('seedRyuutama() enregistre les catalogues Homme Dragon (races, textes de création, capacités de niveau, souffles rituels) avec toutes leurs entrées (Stories 33.3 et 33.7)', async () => {
     // Vrai répertoire de données (cwd Jest = apps/api) : seul le module fs/promises est mocké
     // dans ce fichier, on le redirige vers l'implémentation réelle pour ce test.
     const actualFs = jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises');
@@ -81,6 +81,8 @@ describe('GameSystemService', () => {
     for (const [typeKey, file] of [
       ['hommeDragonRace', 'homme-dragon-races.json'],
       ['hommeDragonCreationIntro', 'homme-dragon-creation-intros.json'],
+      ['hommeDragonLevelCapacity', 'homme-dragon-level-capacities.json'],
+      ['souffleRituel', 'souffles-rituels.json'],
     ]) {
       expect(prisma.contentType.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -90,6 +92,8 @@ describe('GameSystemService', () => {
       expect(entryUpserts(typeKey)).toHaveLength(countEntries(file));
     }
     expect(entryUpserts('hommeDragonRace')).toHaveLength(4);
+    expect(entryUpserts('hommeDragonLevelCapacity')).toHaveLength(6);
+    expect(entryUpserts('souffleRituel')).toHaveLength(6);
   });
 
   it('getContent("ryuutama") → retourne le contenu groupé par clé de ContentType', async () => {

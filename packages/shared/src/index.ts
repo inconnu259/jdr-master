@@ -1191,6 +1191,10 @@ export interface HommeDragonSheetData {
   /** Pouvoirs d'éveil choisis, un par niveau franchi (2-5) — jamais recalculé, c'est un choix
    * du MJ (Story 10.4). Absent sur les fiches créées avant cette story. */
   eveilPowers?: { level: number; key: string }[];
+  /** Artefact offert par les hommes-dragons des autres races au niveau 4 (Story 33.7) : choix
+   * unique et définitif du MJ, jamais d'artefact de la race du dragon. Le libellé se lit au
+   * catalogue `hommeDragonArtefact`. Absent tant que rien n'est choisi. */
+  artefactCadeau?: { key: string };
 }
 
 export interface HommeDragonDto {
@@ -1234,8 +1238,9 @@ export interface MyHommeDragonDto {
 /** Payload de création (POST /parties/:id/homme-dragon) — mêmes champs que la fiche, à plat. */
 export type CreateHommeDragonDto = HommeDragonSheetData;
 
-/** Payload de mise à jour (PATCH /parties/:id/homme-dragon) — race jamais éditable après création. */
-export type UpdateHommeDragonDto = Partial<Omit<HommeDragonSheetData, 'race'>>;
+/** Payload de mise à jour (PATCH /parties/:id/homme-dragon) — race jamais éditable après création,
+ * ni l'artefact cadeau (choix définitif via POST `artefact-cadeau`, Story 33.7). */
+export type UpdateHommeDragonDto = Partial<Omit<HommeDragonSheetData, 'race' | 'artefactCadeau'>>;
 
 /** Payload de choix d'un pouvoir d'éveil (POST /parties/:id/homme-dragon/eveil-power).
  * Décision utilisateur (Story 10.4) : le catalogue `eveilPower` est un pool commun à toutes les
@@ -1244,5 +1249,11 @@ export type UpdateHommeDragonDto = Partial<Omit<HommeDragonSheetData, 'race'>>;
  * pouvoir lui-même. */
 export interface ChooseEveilPowerDto {
   level: number;
+  key: string;
+}
+
+/** Payload du choix de l'artefact cadeau (POST /parties/:id/homme-dragon/artefact-cadeau,
+ * Story 33.7) — niveau ≥ 4, choix unique et définitif, artefact d'une autre race que le dragon. */
+export interface ChooseArtefactCadeauDto {
   key: string;
 }

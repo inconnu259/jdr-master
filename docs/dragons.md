@@ -214,12 +214,18 @@ jouées avec le même homme-dragon, car **son niveau dépend du nombre de séanc
 - **Augmentation du souffle** — nourris par ses récits, les dragons des saisons renforcent son essence : ses PS passent à 5 au niveau 3, puis à 10 au niveau 5.
 - **Souffles multicolores** — il peut choisir des souffles d'une autre race que la sienne, mais sa réserve ne peut en contenir qu'un seul.
 - **Artefact cadeau** — les hommes-dragons des autres races lui offrent un artefact : le meneur en choisit un d'une autre race et l'inscrit sur la fiche. Choix définitif.
+  Dans l'application : dès le niveau 4, la fiche propose les artefacts des trois autres races ; le
+  choix passe par une confirmation explicite, est enregistré une seule fois (`sheetData.artefactCadeau`)
+  et s'affiche ensuite sous l'artefact principal. Il n'est modifiable ni depuis la fiche ni par `PATCH`.
 - **Invitation au voyage** — nouvelle forme : un voyageur. Il s'incarne soit, pour un temps, dans un nouveau venu sans mémoire, soit dans un PNJ existant dont la personnalité fusionne avec la sienne. Ses souvenirs se brouillent, mais il garde ses PS, ses pouvoirs d'éveil, sa personnalité et ses goûts. Le meneur lui crée une fiche de voyageur d'un niveau de moins que la moyenne du groupe, et quelqu'un d'autre prend le rôle de meneur.
 - **Envol du dragon des saisons** — le dragon des saisons qu'il a nourri quitte le nid pour un autre monde, après avoir réenchanté celui-ci et laissé un œuf. L'homme-dragon devient une **mère-dragon** : il pourra apparaître dans un autre scénario du même meneur, y utiliser encore ses souffles et ses pouvoirs d'éveil, et accéder aux souffles rituels.
 
 ### Souffles rituels (mère-dragon)
 
-Le livre ne précise pas leur coût ; hypothèse retenue : même règle que les autres souffles.
+Le livre ne précise pas leur coût ; hypothèse retenue : même règle que les autres souffles, soit
+**1 PS** chacun (`ps: 1` dans `souffles-rituels.json`). Ils sont consultables sur la fiche dès le
+niveau 5, en lecture seule (ni réserve ni décompte pour l'instant) ; sans race ni famille, ils ne
+comptent jamais comme des souffles « d'une autre race ».
 
 | Souffle | Effet |
 | --- | --- |

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import type { HommeDragon } from '@prisma/client';
 import type {
+  ChooseArtefactCadeauDto as ChooseArtefactCadeauPayload,
   ChooseEveilPowerDto as ChooseEveilPowerPayload,
   CreateHommeDragonDto,
   HommeDragonDto,
@@ -14,6 +15,7 @@ import type {
   UpdateHommeDragonDto,
 } from '@master-jdr/shared';
 import {
+  ARTEFACT_CADEAU_LEVEL,
   validateHommeDragon,
   computeHommeDragonDerived,
   levelForScenariosPasse,
@@ -220,6 +222,86 @@ export class HommeDragonService {
       const sheetData = {
         ...existingSheetData,
         eveilPowers: [...appliedEveilPowers, { level: dto.level, key: dto.key }],
+      };
+      return tx.hommeDragon.update({
+        where: {
+          userId_partieId_gameSystemId: {
+            userId,
+            partieId,
+            gameSystemId: RYUUTAMA_ID,
+          },
+        },
+        data: { sheetData: sheetData },
+      });
+    });
+    this.realtimeEvents.emit(partieTopic(partieId));
+    return this.buildDto(updated, partieId, userId);
+  }
+
+  /**
+   * Choix de l'artefact cadeau du niveau 4 (Story 33.7) — MJ seul via `getOwned`, Ryuutama seul.
+   * Choix unique et définitif : refusé si le niveau est < 4, si un cadeau existe déjà, si la clé
+   * est absente du catalogue `hommeDragonArtefact` ou si l'artefact est de la race du dragon.
+   * Même mécanique que `chooseEveilPower()` : niveau recalculé côté serveur, verrou de ligne
+   * `SELECT ... FOR UPDATE` dans une transaction (deux appels concurrents ne peuvent pas
+   * s'écraser), `sheetData` copié plutôt que muté.
+   */
+  async chooseArtefactCadeau(
+    partieId: string,
+    userId: string,
+    dto: ChooseArtefactCadeauPayload,
+  ): Promise<HommeDragonDto> {
+    const partie = await this.parties.getOwned(partieId, userId);
+    if (partie.gameSystemId !== RYUUTAMA_ID) {
+      throw new BadRequestException(
+        `L'Homme Dragon n'existe que pour Ryuutama, pas pour "${partie.gameSystemId}"`,
+      );
+    }
+
+    const voyageurs = await this.computeVoyageursProteges(partieId, userId);
+    const historique = await this.computeHistorique(partieId, userId, voyageurs);
+    const level = levelForScenariosPasse(historique.length);
+    const catalog = await this.buildArtefactCatalog(partie.gameSystemId);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "HommeDragon" WHERE "userId" = ${userId} AND "partieId" = ${partieId} AND "gameSystemId" = ${RYUUTAMA_ID} FOR UPDATE`;
+
+      const existing = await tx.hommeDragon.findUnique({
+        where: {
+          userId_partieId_gameSystemId: {
+            userId,
+            partieId,
+            gameSystemId: RYUUTAMA_ID,
+          },
+        },
+      });
+      if (!existing) throw new NotFoundException('Homme Dragon introuvable');
+
+      const existingSheetData = existing.sheetData as unknown as HommeDragonSheetData;
+
+      if (level < ARTEFACT_CADEAU_LEVEL) {
+        throw new BadRequestException(
+          `L'artefact cadeau n'est disponible qu'à partir du niveau ${ARTEFACT_CADEAU_LEVEL}`,
+        );
+      }
+      if (existingSheetData.artefactCadeau) {
+        throw new BadRequestException("L'artefact cadeau a déjà été choisi");
+      }
+
+      const entry = catalog.find((e) => e.key === dto.key);
+      // Entrée sans race (mappée à '' par buildArtefactCatalog) : jamais un cadeau valide.
+      if (!entry || !entry.race) {
+        throw new BadRequestException('Artefact cadeau invalide');
+      }
+      if (entry.race === existingSheetData.race) {
+        throw new BadRequestException(
+          "L'artefact cadeau doit appartenir à une autre race que celle de l'Homme Dragon",
+        );
+      }
+
+      const sheetData = {
+        ...existingSheetData,
+        artefactCadeau: { key: dto.key },
       };
       return tx.hommeDragon.update({
         where: {

@@ -21,6 +21,9 @@ export interface HommeDragonSheetData {
   demeure?: string;
   avatar?: string;
   mondesProteges?: string;
+  eveilPowers?: { level: number; key: string }[];
+  /** Artefact cadeau du niveau 4 (Story 33.7) — choix définitif, jamais validé ici (règle serveur). */
+  artefactCadeau?: { key: string };
 }
 
 /** Entrée de catalogue `hommeDragonArtefact` dérivée du contenu seedé en base

@@ -176,3 +176,6 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-33-5-mes-hommes-dragons-dans-personnages.md`
   summary: La liste « Personnages » ne recharge pas les Hommes Dragons sur changement temps réel (seule la ligne de création suit le canal `user:{id}`).
   evidence: `MyCharacters` ne lit `GET /me/homme-dragons` qu'à `ngOnInit`, le bloc figé de la 33.5 excluant tout câblage temps réel neuf. Un dragon créé depuis un autre appareil fait disparaître la ligne « Créer un Homme Dragon » sans faire apparaître la carte avant rechargement ; à évaluer selon `docs/checklist.md` (effet sur `HommeDragonService.changed()` ou rechargement sur le signal `HOMME_DRAGON_A_CREER`).
+- source_spec: `_bmad-output/implementation-artifacts/spec-33-7-capacites-de-niveau.md`
+  summary: L'export PDF de l'Homme Dragon (33.4) n'imprime ni l'artefact cadeau ni les souffles rituels ; seul `sheetData.artefact` est imprimé.
+  evidence: `homme-dragon-pdf-field-map.ts` n'a aucun champ pour le cadeau et le gabarit PDF ne prévoit pas d'emplacement ; la spec 33.7 l'exclut, mais un MJ de niveau 4+ peut s'attendre à le retrouver sur l'export (décision produit + éventuel champ de gabarit à trancher).

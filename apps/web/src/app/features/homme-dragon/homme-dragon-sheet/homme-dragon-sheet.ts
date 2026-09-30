@@ -15,8 +15,14 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import type { ContentEntryDto, HommeDragonDto, HommeDragonRace } from '@master-jdr/shared';
+import { ARTEFACT_CADEAU_LEVEL, SOUFFLES_RITUELS_LEVEL } from '@master-jdr/game-rules';
 import { HommeDragonCreationWizard } from '../homme-dragon-creation-wizard/homme-dragon-creation-wizard';
-import { RACES, RACE_LABELS } from '../homme-dragon-races';
+import { RACES, RACE_LABELS, RACE_TAGS } from '../homme-dragon-races';
+import {
+  ChoiceCard,
+  type ChoiceCardOption,
+} from '../../characters/character-wizard/choice-card/choice-card';
+import { RadioGroupNavDirective } from '../../characters/character-wizard/choice-card/radio-group-nav.directive';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { hommeDragonName } from '../../../core/homme-dragon/homme-dragon.util';
 import { CharacterService } from '../../../core/characters/character.service';
@@ -62,6 +68,16 @@ type SouffleData = {
 
 const souffleData = (entry: ContentEntryDto): SouffleData => (entry.data ?? {}) as SouffleData;
 
+type LevelCapacityData = { label?: string; description?: string; level?: number };
+
+const levelCapacityData = (entry: ContentEntryDto): LevelCapacityData =>
+  (entry.data ?? {}) as LevelCapacityData;
+
+type ArtefactCatalogData = { label?: string; description?: string; race?: string };
+
+const artefactData = (entry: ContentEntryDto): ArtefactCatalogData =>
+  (entry.data ?? {}) as ArtefactCatalogData;
+
 /**
  * Onglet « Homme Dragon » de `PartieDetail` (Story 10.1) — embarqué directement (pas de route
  * dédiée, un seul Homme Dragon par Partie, même schéma que `ScenarioOneShotTab`). Gère les deux
@@ -77,6 +93,8 @@ const souffleData = (entry: ContentEntryDto): SouffleData => (entry.data ?? {}) 
     NgTemplateOutlet,
     DetailSurface,
     HommeDragonCreationWizard,
+    ChoiceCard,
+    RadioGroupNavDirective,
   ],
   templateUrl: './homme-dragon-sheet.html',
   styleUrl: './homme-dragon-sheet.scss',
@@ -193,6 +211,8 @@ export class HommeDragonSheet implements OnInit {
       this.artefactCatalog.set(content['hommeDragonArtefact'] ?? []);
       this.eveilPowerCatalog.set(content['eveilPower'] ?? []);
       this.souffleCatalog.set(content['souffle'] ?? []);
+      this.levelCapacityCatalog.set(content['hommeDragonLevelCapacity'] ?? []);
+      this.ritualCatalog.set(content['souffleRituel'] ?? []);
     } catch {
       // Revue de code : ne plus forcer `hommeDragon` à `null` ici — cette valeur signifie « pas
       // encore créée » et affiche le formulaire de création. Une erreur réseau/serveur transitoire
@@ -351,6 +371,149 @@ export class HommeDragonSheet implements OnInit {
    *  quand le catalogue ne porte pas de `description` (pas de déclencheur dans ce cas). */
   protected souffleDetail(entry: ContentEntryDto): DetailSurfaceContent | null {
     return detailContent(this.souffleLabel(entry), souffleData(entry).description);
+  }
+
+  // — Souffles rituels (Story 33.7) —
+  protected readonly ritualCatalog = signal<ContentEntryDto[]>([]);
+
+  /** Consultables à partir du niveau 5 (mère-dragon). Lecture seule : aucune réserve ni décompte
+   *  (33.6). Le catalogue `souffleRituel` est distinct de `souffle` : ses entrées n'ont ni race ni
+   *  famille, elles ne sont donc jamais classées « autre race ». Liste vide si le catalogue l'est. */
+  protected readonly rituals = computed<ContentEntryDto[]>(() => {
+    const hd = this.hommeDragon();
+    if (!hd || hd.derived.level < SOUFFLES_RITUELS_LEVEL) return [];
+    return this.ritualCatalog();
+  });
+
+  // — Capacités de niveau (Story 33.7) —
+  protected readonly levelCapacityCatalog = signal<ContentEntryDto[]>([]);
+
+  /** Capacités acquises (niveau de la capacité ≤ niveau du dragon), par niveau croissant puis dans
+   *  l'ordre du catalogue ; vide au niveau 1 (la carte est alors masquée). */
+  protected readonly acquiredCapacities = computed(() => {
+    const hd = this.hommeDragon();
+    if (!hd) return [];
+    return this.levelCapacityCatalog()
+      .map((entry, index) => ({ entry, index, data: levelCapacityData(entry) }))
+      .filter((c) => typeof c.data.level === 'number' && c.data.level <= hd.derived.level)
+      .sort((a, b) => (a.data.level as number) - (b.data.level as number) || a.index - b.index)
+      .map((c) => ({
+        key: c.entry.key,
+        level: c.data.level as number,
+        label: c.data.label?.trim() || c.entry.key,
+        description: c.data.description?.trim() ?? '',
+      }));
+  });
+
+  // — Artefact cadeau (Story 33.7) —
+  protected readonly artefactCadeauLevel = ARTEFACT_CADEAU_LEVEL;
+
+  /** Artefact cadeau déjà choisi : libellé lu au catalogue d'artefacts, repli sur la clé brute si
+   *  l'entrée a disparu du catalogue (jamais de fiche cassée). `null` tant que rien n'est choisi. */
+  protected readonly artefactCadeau = computed(() => {
+    const cadeau = this.hommeDragon()?.sheetData.artefactCadeau;
+    if (!cadeau) return null;
+    const entry = this.artefactCatalog().find((e) => e.key === cadeau.key);
+    const data = entry ? artefactData(entry) : {};
+    const label = data.label?.trim() || cadeau.key;
+    const race = data.race as HommeDragonRace | undefined;
+    return {
+      key: cadeau.key,
+      label,
+      raceLabel: race && RACE_LABELS[race] ? RACE_LABELS[race] : null,
+      detail: detailContent(label, data.description),
+    };
+  });
+
+  /** Choix ouvert : niveau atteint et rien de choisi. Rien avant le niveau 4. */
+  protected readonly canChooseCadeau = computed(() => {
+    const hd = this.hommeDragon();
+    return !!hd && hd.derived.level >= ARTEFACT_CADEAU_LEVEL && !hd.sheetData.artefactCadeau;
+  });
+
+  /** Artefacts des trois AUTRES races (jamais celui de la race du dragon), teinte de race doublée
+   *  d'un libellé de race. Même règle que le serveur (qui reste l'autorité). */
+  protected readonly cadeauOptions = computed(() => {
+    const race = this.hommeDragon()?.sheetData.race;
+    if (!race) return [];
+    return this.artefactCatalog()
+      .filter((e) => {
+        const r = artefactData(e).race as HommeDragonRace | undefined;
+        return !!r && r !== race && !!RACE_TAGS[r];
+      })
+      .map((e) => {
+        const data = artefactData(e);
+        const artefactRace = data.race as HommeDragonRace;
+        const option: ChoiceCardOption = {
+          key: e.key,
+          label: data.label?.trim() || e.key,
+          detail: data.description?.trim() || undefined,
+        };
+        return { option, race: artefactRace, tag: RACE_TAGS[artefactRace] };
+      });
+  });
+
+  protected readonly selectedCadeauKey = signal<string | null>(null);
+  /** Étape de confirmation explicite (« Ce choix est définitif ») avant l'envoi. */
+  protected readonly confirmingCadeau = signal(false);
+  protected readonly choosingCadeau = signal(false);
+  protected readonly cadeauError = signal<string | null>(null);
+
+  protected readonly selectedCadeauLabel = computed<string>(() => {
+    const key = this.selectedCadeauKey();
+    if (!key) return '';
+    return this.cadeauOptions().find((o) => o.option.key === key)?.option.label ?? key;
+  });
+
+  protected selectCadeau(key: string): void {
+    this.selectedCadeauKey.set(key);
+    this.cadeauError.set(null);
+  }
+
+  protected askCadeauConfirmation(): void {
+    if (!this.selectedCadeauKey()) return;
+    this.confirmingCadeau.set(true);
+    // Le bouton « Choisir cet artefact » (focalisé) va disparaître : le focus passe au bloc de
+    // confirmation une fois rendu.
+    afterNextRender(
+      () =>
+        this.host.nativeElement
+          .querySelector<HTMLElement>('.homme-dragon-sheet__cadeau-confirm')
+          ?.focus(),
+      { injector: this.injector },
+    );
+  }
+
+  protected cancelCadeauConfirmation(): void {
+    this.confirmingCadeau.set(false);
+    // Élément stable : le bouton « Choisir cet artefact » revient avec la grille.
+    afterNextRender(
+      () =>
+        this.host.nativeElement
+          .querySelector<HTMLElement>('.homme-dragon-sheet__cadeau-next')
+          ?.focus(),
+      { injector: this.injector },
+    );
+  }
+
+  protected async onConfirmCadeau(): Promise<void> {
+    const key = this.selectedCadeauKey();
+    if (!key || !this.confirmingCadeau() || this.choosingCadeau()) return;
+    this.choosingCadeau.set(true);
+    this.cadeauError.set(null);
+    try {
+      const updated = await this.hommeDragonSvc.chooseArtefactCadeau(this.partieId(), { key });
+      this.hommeDragon.set(updated);
+      this.selectedCadeauKey.set(null);
+      this.confirmingCadeau.set(false);
+    } catch {
+      this.cadeauError.set("Impossible d'enregistrer ce choix. Réessayez.");
+      // Retour à la sélection : le cadeau a pu être choisi ailleurs entre-temps (la fiche se
+      // rafraîchit alors d'elle-même par le signal `changed`).
+      this.confirmingCadeau.set(false);
+    } finally {
+      this.choosingCadeau.set(false);
+    }
   }
 
   // — Export PDF (Story 10.5, deux formats Story 33.4) —

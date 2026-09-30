@@ -2,6 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import type {
+  ChooseArtefactCadeauDto,
   ChooseEveilPowerDto,
   CreateHommeDragonDto,
   HommeDragonDto,
@@ -68,6 +69,17 @@ export class HommeDragonService {
     return firstValueFrom(
       this.http.post<HommeDragonDto>(
         `${API_BASE}/parties/${partieId}/homme-dragon/eveil-power`,
+        dto,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Choix unique et définitif de l'artefact cadeau du niveau 4 (Story 33.7). */
+  chooseArtefactCadeau(partieId: string, dto: ChooseArtefactCadeauDto): Promise<HommeDragonDto> {
+    return firstValueFrom(
+      this.http.post<HommeDragonDto>(
+        `${API_BASE}/parties/${partieId}/homme-dragon/artefact-cadeau`,
         dto,
         { withCredentials: true },
       ),

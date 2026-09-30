@@ -121,6 +121,20 @@ describe('HommeDragonService', () => {
     await expect(promise).resolves.toBeDefined();
   });
 
+  it('chooseArtefactCadeau() appelle POST /parties/:id/homme-dragon/artefact-cadeau avec le DTO, withCredentials (Story 33.7)', async () => {
+    const dto = { key: 'lanterne' };
+    const promise = service.chooseArtefactCadeau('p1', dto);
+
+    const req = http.expectOne(`${API_BASE}/parties/p1/homme-dragon/artefact-cadeau`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(dto);
+    expect(req.request.withCredentials).toBe(true);
+
+    req.flush(makeDto());
+
+    await expect(promise).resolves.toBeDefined();
+  });
+
   it.each(['editable', '2pages'] as const)(
     'exportPdf(partieId, "%s") → GET export.pdf?format=... en blob, withCredentials',
     async (format) => {

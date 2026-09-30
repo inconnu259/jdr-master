@@ -37,6 +37,38 @@ const CATALOG: GameSystemContentDto = {
       key: 'grande-lance',
       data: { key: 'grande-lance', label: 'Grande lance', race: 'DRAGON_ROUGE' },
     },
+    { key: 'anneau', data: { key: 'anneau', label: 'Anneau', race: 'DRAGON_BLEU' } },
+    { key: 'cristal', data: { key: 'cristal', label: 'Cristal', race: 'DRAGON_BLEU' } },
+    { key: 'mascotte', data: { key: 'mascotte', label: 'Mascotte', race: 'DRAGON_BLEU' } },
+    { key: 'coupe', data: { key: 'coupe', label: 'Coupe', race: 'DRAGON_NOIR' } },
+    { key: 'dague', data: { key: 'dague', label: 'Dague', race: 'DRAGON_NOIR' } },
+    {
+      key: 'miroir',
+      data: {
+        key: 'miroir',
+        label: 'Miroir',
+        race: 'DRAGON_NOIR',
+        description: 'Renvoie aux voyageurs leurs pires peurs.',
+      },
+    },
+  ],
+  // Story 33.7 — mêmes clés/niveaux que `homme-dragon-level-capacities.json`, textes abrégés.
+  hommeDragonLevelCapacity: [
+    { key: 'reserve', data: { key: 'reserve', label: 'Réserve de souffles', level: 2, description: 'Une réserve dès le niveau 2.' } },
+    { key: 'augmentation-du-souffle', data: { key: 'augmentation-du-souffle', label: 'Augmentation du souffle', level: 3, description: 'PS portés à 5.' } },
+    { key: 'souffles-multicolores', data: { key: 'souffles-multicolores', label: 'Souffles multicolores', level: 3, description: "Souffles d'une autre race." } },
+    { key: 'artefact-cadeau', data: { key: 'artefact-cadeau', label: 'Artefact cadeau', level: 4, description: 'Un artefact offert.' } },
+    { key: 'invitation-au-voyage', data: { key: 'invitation-au-voyage', label: 'Invitation au voyage', level: 4, description: 'Une nouvelle forme.' } },
+    { key: 'envol-du-dragon-des-saisons', data: { key: 'envol-du-dragon-des-saisons', label: 'Envol du dragon des saisons', level: 5, description: 'Mère-dragon.' } },
+  ],
+  // Story 33.7 — sans race, famille ni reservable, `ps: 1` (cf. `souffles-rituels.json`).
+  souffleRituel: [
+    { key: 'rituel-du-sommeil', data: { key: 'rituel-du-sommeil', label: 'Rituel du sommeil', ps: 1, description: 'Un joueur endormi paie.' } },
+    { key: 'rituel-du-tabou', data: { key: 'rituel-du-tabou', label: 'Rituel du tabou', ps: 1, description: 'Mots modernes interdits.' } },
+    { key: 'rituel-de-l-esprit-des-mots', data: { key: 'rituel-de-l-esprit-des-mots', label: "Rituel de l'esprit des mots", ps: 1, description: 'Une phrase se réalise.' } },
+    { key: 'rituel-de-la-guigne', data: { key: 'rituel-de-la-guigne', label: 'Rituel de la guigne', ps: 1, description: 'Peau de banane.' } },
+    { key: 'rituel-de-l-improvisation', data: { key: 'rituel-de-l-improvisation', label: "Rituel de l'improvisation", ps: 1, description: 'Scénario improvisé.' } },
+    { key: 'fete-des-poings', data: { key: 'fete-des-poings', label: 'Fête des poings', ps: 1, description: 'Pierre-papier-ciseaux.' } },
   ],
   eveilPower: [
     {
@@ -135,6 +167,7 @@ function makeHommeDragonService(
     create: vi.fn(),
     update: vi.fn(),
     chooseEveilPower: vi.fn(),
+    chooseArtefactCadeau: vi.fn(),
     exportPdf: vi.fn(),
     // Story 20.2 (Task 3) : HommeDragonSheet réagit désormais à ce signal (effect() du constructeur).
     changed: signal(0),
@@ -299,6 +332,7 @@ describe('HommeDragonSheet', () => {
       create: vi.fn(),
       update: vi.fn(),
       chooseEveilPower: vi.fn(),
+      chooseArtefactCadeau: vi.fn(),
       exportPdf: vi.fn(),
       changed: signal(0),
     };
@@ -1003,6 +1037,285 @@ describe('HommeDragonSheet', () => {
         .map((o) => (o.nativeElement.textContent as string).trim());
       expect(options).not.toContain('Chance');
       expect(options).not.toContain('Défi');
+    });
+  });
+
+  describe('Capacités de niveau (Story 33.7)', () => {
+    function dragon(
+      level: number,
+      sheetExtra: Partial<HommeDragonDto['sheetData']> = {},
+      race: HommeDragonDto['sheetData']['race'] = 'DRAGON_ROUGE',
+    ) {
+      return makeHommeDragonService(
+        makeDto({
+          sheetData: { race, artefact: { key: 'grand-arc' }, nom: 'Ignis', ...sheetExtra },
+          derived: { level, PS: level >= 5 ? 10 : level >= 3 ? 5 : 3 },
+        }),
+      );
+    }
+
+    const q = (fixture: ComponentFixture<HommeDragonSheet>, css: string) =>
+      fixture.debugElement.query(By.css(css));
+    const qa = (fixture: ComponentFixture<HommeDragonSheet>, css: string) =>
+      fixture.debugElement.queryAll(By.css(css));
+    const text = (fixture: ComponentFixture<HommeDragonSheet>) =>
+      fixture.nativeElement.textContent as string;
+
+    async function settle(fixture: ComponentFixture<HommeDragonSheet>) {
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+    }
+
+    it('niveau 1 → ni carte « Capacités », ni choix de cadeau, ni rituels (matrice)', async () => {
+      const { fixture } = await createComponent(dragon(1));
+
+      expect(q(fixture, '.homme-dragon-sheet__capacities')).toBeNull();
+      expect(q(fixture, '.homme-dragon-sheet__cadeau-prompt')).toBeNull();
+      expect(q(fixture, '.homme-dragon-sheet__rituals')).toBeNull();
+    });
+
+    it('niveau 3 → les 3 capacités des niveaux 2-3 listées avec leur description, aucun choix de cadeau (matrice)', async () => {
+      const { fixture } = await createComponent(dragon(3));
+
+      const items = qa(fixture, '.homme-dragon-sheet__capacity');
+      expect(items.map((li) => li.query(By.css('.homme-dragon-sheet__capacity-name')).nativeElement.textContent.trim())).toEqual([
+        'Réserve de souffles',
+        'Augmentation du souffle',
+        'Souffles multicolores',
+      ]);
+      expect(items[0].nativeElement.textContent).toContain('Une réserve dès le niveau 2.');
+      expect(items[2].nativeElement.textContent).toContain("Souffles d'une autre race.");
+      expect(items[1].query(By.css('.stat-pill')).nativeElement.textContent.trim()).toBe('Niveau 3');
+      expect(q(fixture, '.homme-dragon-sheet__cadeau-prompt')).toBeNull();
+    });
+
+    it('niveau 4, rien choisi (dragon rouge) → choix limité aux artefacts vert/bleu/noir, avec libellé de race', async () => {
+      const { fixture } = await createComponent(dragon(4));
+
+      const prompt = q(fixture, '.homme-dragon-sheet__cadeau-prompt');
+      expect(prompt).toBeTruthy();
+      const cards = prompt.queryAll(By.css('app-choice-card button.choice-card'));
+      const labels = cards.map((c) => (c.nativeElement.querySelector('.choice-card__label') as HTMLElement).textContent!.trim());
+      expect(labels.sort()).toEqual(
+        ['Anneau', 'Coupe', 'Cristal', 'Dague', 'Encyclopédie', 'Lanterne', 'Mascotte', 'Miroir', 'Sextant'].sort(),
+      );
+      expect(labels).not.toContain('Grand arc');
+      const badges = cards.map((c) => (c.nativeElement.querySelector('.choice-card__badge') as HTMLElement).textContent!.trim());
+      expect(new Set(badges)).toEqual(new Set(['Vert', 'Bleu', 'Noir']));
+    });
+
+    it('choix puis confirmation explicite « Ce choix est définitif » avant tout envoi, puis cadeau affiché sans sélecteur', async () => {
+      const hommeDragonSvc = dragon(4);
+      hommeDragonSvc.chooseArtefactCadeau.mockResolvedValue(
+        makeDto({
+          sheetData: {
+            race: 'DRAGON_ROUGE',
+            artefact: { key: 'grand-arc' },
+            nom: 'Ignis',
+            artefactCadeau: { key: 'lanterne' },
+          },
+          derived: { level: 4, PS: 5 },
+        }),
+      );
+      const { fixture } = await createComponent(hommeDragonSvc);
+
+      const card = qa(fixture, '.homme-dragon-sheet__cadeau-prompt button.choice-card').find((c) =>
+        (c.nativeElement as HTMLElement).textContent!.includes('Lanterne'),
+      )!;
+      card.nativeElement.click();
+      fixture.detectChanges();
+      (q(fixture, '.homme-dragon-sheet__cadeau-next').nativeElement as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      // Confirmation demandée, rien n'est encore envoyé.
+      expect(text(fixture)).toContain('Ce choix est définitif');
+      expect(text(fixture)).toContain('Lanterne');
+      expect(hommeDragonSvc.chooseArtefactCadeau).not.toHaveBeenCalled();
+
+      const confirm = qa(fixture, '.homme-dragon-sheet__cadeau-confirm button').find((b) =>
+        (b.nativeElement as HTMLElement).textContent!.includes('Confirmer'),
+      )!;
+      confirm.nativeElement.click();
+      await settle(fixture);
+
+      expect(hommeDragonSvc.chooseArtefactCadeau).toHaveBeenCalledWith('p1', { key: 'lanterne' });
+      expect(q(fixture, '.homme-dragon-sheet__cadeau-prompt')).toBeNull();
+      const shown = q(fixture, '.homme-dragon-sheet__cadeau').nativeElement as HTMLElement;
+      expect(shown.textContent).toContain('Artefact cadeau');
+      expect(shown.textContent).toContain('Lanterne');
+      expect(shown.textContent).toContain('Dragon Vert');
+    });
+
+    it('« Revenir au choix » annule la confirmation sans rien envoyer', async () => {
+      const hommeDragonSvc = dragon(4);
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const component = fixture.componentInstance;
+
+      component['selectCadeau']('miroir');
+      component['askCadeauConfirmation']();
+      fixture.detectChanges();
+      expect(q(fixture, '.homme-dragon-sheet__cadeau-confirm')).toBeTruthy();
+
+      const back = qa(fixture, '.homme-dragon-sheet__cadeau-confirm button').find((b) =>
+        (b.nativeElement as HTMLElement).textContent!.includes('Revenir'),
+      )!;
+      back.nativeElement.click();
+      fixture.detectChanges();
+
+      expect(hommeDragonSvc.chooseArtefactCadeau).not.toHaveBeenCalled();
+      expect(q(fixture, '.homme-dragon-sheet__cadeau-confirm')).toBeNull();
+      expect(q(fixture, '.homme-dragon-sheet__cadeau-grid')).toBeTruthy();
+    });
+
+    it("focus : la confirmation reçoit le focus, « Revenir au choix » le rend à « Choisir cet artefact » ; l'erreur est annoncée (role=alert)", async () => {
+      const hommeDragonSvc = dragon(4);
+      hommeDragonSvc.chooseArtefactCadeau.mockRejectedValue(new Error('400'));
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const component = fixture.componentInstance;
+      const confirmBlock = () =>
+        q(fixture, '.homme-dragon-sheet__cadeau-confirm')?.nativeElement as HTMLElement | undefined;
+
+      component['selectCadeau']('miroir');
+      component['askCadeauConfirmation']();
+      fixture.detectChanges();
+      await settle(fixture);
+      expect(document.activeElement).toBe(confirmBlock());
+
+      const back = qa(fixture, '.homme-dragon-sheet__cadeau-confirm button').find((b) =>
+        (b.nativeElement as HTMLElement).textContent!.includes('Revenir'),
+      )!;
+      back.nativeElement.click();
+      fixture.detectChanges();
+      await settle(fixture);
+      expect(document.activeElement).toBe(q(fixture, '.homme-dragon-sheet__cadeau-next').nativeElement);
+
+      component['askCadeauConfirmation']();
+      await component['onConfirmCadeau']();
+      fixture.detectChanges();
+      expect(q(fixture, '.homme-dragon-sheet__cadeau-prompt .error').attributes['role']).toBe('alert');
+    });
+
+    it("sans sélection, « Choisir cet artefact » est inactif ; confirmer sans passer par l'étape de confirmation n'envoie rien", async () => {
+      const hommeDragonSvc = dragon(4);
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const component = fixture.componentInstance;
+
+      expect((q(fixture, '.homme-dragon-sheet__cadeau-next').nativeElement as HTMLButtonElement).disabled).toBe(true);
+      component['selectCadeau']('miroir');
+      await component['onConfirmCadeau']();
+
+      expect(hommeDragonSvc.chooseArtefactCadeau).not.toHaveBeenCalled();
+    });
+
+    it("échec de l'enregistrement → message d'erreur, retour à la sélection", async () => {
+      const hommeDragonSvc = dragon(4);
+      hommeDragonSvc.chooseArtefactCadeau.mockRejectedValue(new Error('400'));
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const component = fixture.componentInstance;
+
+      component['selectCadeau']('miroir');
+      component['askCadeauConfirmation']();
+      await component['onConfirmCadeau']();
+      fixture.detectChanges();
+
+      expect(text(fixture)).toContain("Impossible d'enregistrer ce choix");
+      expect(component['confirmingCadeau']()).toBe(false);
+      expect(component['hommeDragon']()?.sheetData.artefactCadeau).toBeUndefined();
+    });
+
+    it('niveau 4, cadeau choisi → affiché sous l\'artefact principal, plus de sélecteur (matrice)', async () => {
+      const { fixture } = await createComponent(dragon(4, { artefactCadeau: { key: 'miroir' } }));
+
+      expect(q(fixture, '.homme-dragon-sheet__cadeau-prompt')).toBeNull();
+      expect(qa(fixture, 'app-choice-card')).toHaveLength(0);
+      const artefactCard = qa(fixture, '.homme-dragon-sheet__card')[0].nativeElement as HTMLElement;
+      expect(artefactCard.textContent).toContain('Grand arc');
+      expect(artefactCard.textContent).toContain('Artefact cadeau');
+      expect(artefactCard.textContent).toContain('Miroir');
+      expect(artefactCard.textContent).toContain('Dragon Noir');
+      // Définitif : aucun second bouton « Modifier » pour le cadeau.
+      expect(artefactCard.querySelectorAll('button:not(.homme-dragon-sheet__detail-trigger)')).toHaveLength(1);
+    });
+
+    it('entrée retirée du catalogue → libellé = clé brute (matrice)', async () => {
+      const { fixture } = await createComponent(
+        dragon(4, { artefactCadeau: { key: 'artefact-retire' } }),
+      );
+
+      const shown = q(fixture, '.homme-dragon-sheet__cadeau').nativeElement as HTMLElement;
+      expect(shown.textContent).toContain('artefact-retire');
+    });
+
+    it('niveau 5 → 6 rituels consultables à « 1 PS », sans mention de réserve ni « autre race » (matrice)', async () => {
+      const { fixture } = await createComponent(dragon(5));
+
+      const section = q(fixture, '.homme-dragon-sheet__rituals');
+      expect(section).toBeTruthy();
+      const items = section.queryAll(By.css('li'));
+      expect(items).toHaveLength(6);
+      for (const li of items) {
+        expect(li.query(By.css('.stat-pill')).nativeElement.textContent.trim()).toBe('1 PS');
+        expect(li.query(By.css('.homme-dragon-sheet__souffle-note'))).toBeNull();
+      }
+      expect(section.nativeElement.textContent).toContain('Rituel du sommeil');
+      expect(section.nativeElement.textContent).toContain('Fête des poings');
+      // Jamais classés parmi les souffles des autres races.
+      expect(q(fixture, '.homme-dragon-sheet__souffles-autres-races').nativeElement.textContent).not.toContain('Rituel');
+    });
+
+    it('rituels : description consultable via la surface de détail', async () => {
+      const { fixture } = await createComponent(dragon(5));
+
+      const trigger = qa(fixture, '.homme-dragon-sheet__rituals .homme-dragon-sheet__detail-trigger')[1];
+      (trigger.nativeElement as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(text(fixture)).toContain('Mots modernes interdits.');
+    });
+
+    it('rituels absents aux niveaux 1 à 4 (matrice)', async () => {
+      for (const level of [1, 4]) {
+        TestBed.resetTestingModule();
+        const { fixture } = await createComponent(dragon(level));
+        expect(q(fixture, '.homme-dragon-sheet__rituals')).toBeNull();
+      }
+    });
+
+    it('catalogues de capacités/rituels absents → cartes masquées, fiche intacte', async () => {
+      const { fixture } = await createComponent(
+        dragon(5),
+        makeCharacterService({ hommeDragonArtefact: CATALOG['hommeDragonArtefact'] }),
+      );
+
+      expect(q(fixture, '.homme-dragon-sheet__capacities')).toBeNull();
+      expect(q(fixture, '.homme-dragon-sheet__rituals')).toBeNull();
+      expect(text(fixture)).toContain('Ignis');
+    });
+
+    it('cadeau choisi depuis un autre appareil → fiche rafraîchie par le signal changed (matrice)', async () => {
+      const hommeDragonSvc = dragon(4);
+      const { fixture } = await createComponent(hommeDragonSvc);
+      expect(q(fixture, '.homme-dragon-sheet__cadeau-prompt')).toBeTruthy();
+      hommeDragonSvc.findOne.mockResolvedValue(
+        makeDto({
+          sheetData: {
+            race: 'DRAGON_ROUGE',
+            artefact: { key: 'grand-arc' },
+            nom: 'Ignis',
+            artefactCadeau: { key: 'lanterne' },
+          },
+          derived: { level: 4, PS: 5 },
+        }),
+      );
+
+      hommeDragonSvc.changed.update((v) => v + 1);
+      fixture.detectChanges();
+      await settle(fixture);
+
+      expect(q(fixture, '.homme-dragon-sheet__cadeau-prompt')).toBeNull();
+      expect((q(fixture, '.homme-dragon-sheet__cadeau').nativeElement as HTMLElement).textContent).toContain('Lanterne');
     });
   });
 
