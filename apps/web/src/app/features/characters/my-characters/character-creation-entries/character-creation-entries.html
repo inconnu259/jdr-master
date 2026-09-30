@@ -2,11 +2,11 @@
   <section class="character-creation-entries">
     <h2 class="character-creation-entries__title">{{ theme.tone()['my_characters.create_title'] }}</h2>
     <div class="character-creation-entries__grid">
-      @for (entry of visibleEntries(); track entry.partieId) {
+      @for (entry of visibleEntries(); track trackKey(entry)) {
         <a
           class="character-creation-entries__row"
-          [routerLink]="['/parties', entry.partieId, 'characters', 'new']"
-          [queryParams]="{ gameSystemId: entry.gameSystemId }"
+          [routerLink]="entryLink(entry)"
+          [queryParams]="entry.kind === 'hommeDragon' ? null : { gameSystemId: entry.gameSystemId }"
         >
           <span class="character-creation-entries__badge" aria-hidden="true">+</span>
           <span class="character-creation-entries__label">{{ entryLabel(entry) }}</span>

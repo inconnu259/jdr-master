@@ -6,6 +6,9 @@ import { ThemeToneService } from '../../../../core/theme/theme-tone.service';
  *  (`PartySignalsService`) et de `MyPartiesService.allParties()`, assemblé par `MyCharacters`.
  *  Jamais recalculé ici : ce composant ne fait qu'afficher et diviser en pages. */
 export interface CharacterCreationEntry {
+  /** Nature de la ligne (Story 33.5) : `character` (défaut) mène au wizard de personnage,
+   *  `hommeDragon` au parcours de création de l'Homme Dragon de la partie. */
+  kind?: 'character' | 'hommeDragon';
   partieId: string;
   gameSystemId: string;
   partieName: string;
@@ -52,8 +55,22 @@ export class CharacterCreationEntries {
    *  `MyCharacters.sortLabel()`, `my-characters.ts`) : une clé de thème manquante ne doit jamais
    *  faire planter le rendu, même si la parité ×3 thèmes est déjà couverte par un test dédié. */
   protected entryLabel(entry: CharacterCreationEntry): string {
-    const template = this.theme.tone()['my_characters.create_entry'] ?? '{partie}';
+    const key =
+      entry.kind === 'hommeDragon' ? 'my_characters.create_entry_hd' : 'my_characters.create_entry';
+    const template = this.theme.tone()[key] ?? '{partie}';
     return template.replace('{partie}', () => entry.partieName);
+  }
+
+  /** Cible de la ligne : wizard de personnage, ou fiche/parcours de création de l'Homme Dragon. */
+  protected entryLink(entry: CharacterCreationEntry): string[] {
+    return entry.kind === 'hommeDragon'
+      ? ['/parties', entry.partieId, 'homme-dragon']
+      : ['/parties', entry.partieId, 'characters', 'new'];
+  }
+
+  /** Les deux natures de ligne peuvent viser une même partie : la clé de suivi les distingue. */
+  protected trackKey(entry: CharacterCreationEntry): string {
+    return `${entry.kind ?? 'character'}:${entry.partieId}`;
   }
 
   /** Une seule partie masquée : gabarit singulier dédié (`create_more_one`, sans `{n}`) — « Voir

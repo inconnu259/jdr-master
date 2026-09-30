@@ -41,6 +41,28 @@ describe('HommeDragonService', () => {
 
   afterEach(() => http.verify());
 
+  it('listMine() appelle GET /me/homme-dragons avec withCredentials et rend le tableau', async () => {
+    const promise = service.listMine();
+
+    const req = http.expectOne(`${API_BASE}/me/homme-dragons`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.withCredentials).toBe(true);
+    const payload = [
+      {
+        id: 'hd1',
+        partieId: 'p1',
+        partieName: 'Le Convoi du Nord',
+        gameSystemId: 'ryuutama',
+        nom: 'Skarn',
+        race: 'DRAGON_VERT' as const,
+        createdAt: '2026-07-16T00:00:00.000Z',
+      },
+    ];
+    req.flush(payload);
+
+    await expect(promise).resolves.toEqual(payload);
+  });
+
   it('findOne() appelle GET /parties/:id/homme-dragon avec withCredentials', async () => {
     const promise = service.findOne('p1');
 

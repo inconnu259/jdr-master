@@ -50,6 +50,29 @@ describe('CharacterCreationEntries (Story 29.16)', () => {
     expect(rows[0].getAttribute('href')).toContain('gameSystemId=ryuutama');
   });
 
+  it('ligne d’Homme Dragon : libellé « Créer un Homme Dragon pour … », vrai lien vers la route de la fiche', async () => {
+    const { fixture } = await createFixture([
+      makeEntry({ kind: 'hommeDragon', partieId: 'p9', partieName: 'Le Convoi du Nord' }),
+    ]);
+
+    const rows: NodeListOf<HTMLAnchorElement> = fixture.nativeElement.querySelectorAll(
+      '.character-creation-entries__row',
+    );
+    expect(rows.length).toBe(1);
+    expect(rows[0].tagName).toBe('A');
+    expect(rows[0].textContent).toContain('Créer un Homme Dragon pour Le Convoi du Nord');
+    expect(rows[0].getAttribute('href')).toBe('/parties/p9/homme-dragon');
+  });
+
+  it('une ligne de personnage et une ligne d’Homme Dragon sur la même partie coexistent', async () => {
+    const { fixture } = await createFixture([
+      makeEntry({ partieId: 'p1' }),
+      makeEntry({ kind: 'hommeDragon', partieId: 'p1' }),
+    ]);
+
+    expect(fixture.nativeElement.querySelectorAll('.character-creation-entries__row').length).toBe(2);
+  });
+
   it('plusieurs entrées : chacune sa propre ligne, dans l’ordre reçu', async () => {
     const { fixture } = await createFixture([
       makeEntry({ partieId: 'p1', partieName: 'La Forêt Noire' }),

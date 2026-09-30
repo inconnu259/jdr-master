@@ -5,6 +5,7 @@ import type {
   ChooseEveilPowerDto,
   CreateHommeDragonDto,
   HommeDragonDto,
+  MyHommeDragonDto,
   UpdateHommeDragonDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
@@ -35,6 +36,16 @@ export class HommeDragonService {
     ).finally(() => this.inFlightFindOne.delete(partieId));
     this.inFlightFindOne.set(partieId, request);
     return request;
+  }
+
+  /** Mes Hommes Dragons pour « Personnages » (Story 33.5) — une seule lecture agrégée, jamais une
+   *  requête par partie. Tableau : on ne suppose pas « un par partie » (Story 33.8). */
+  listMine(): Promise<MyHommeDragonDto[]> {
+    return firstValueFrom(
+      this.http.get<MyHommeDragonDto[]>(`${API_BASE}/me/homme-dragons`, {
+        withCredentials: true,
+      }),
+    );
   }
 
   create(partieId: string, dto: CreateHommeDragonDto): Promise<HommeDragonDto> {

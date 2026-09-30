@@ -41,6 +41,11 @@
     color: var(--mat-sys-on-surface-variant, #555);
   }
 
+  // Marqueur de nature de l'Homme Dragon (Story 33.5), posé après le nom.
+  &__nature {
+    margin-left: 0.4rem;
+  }
+
   &__class,
   &__type,
   &__group-role {

@@ -1215,6 +1215,22 @@ export interface HommeDragonDto {
   pendingEveilLevels: number[];
 }
 
+/**
+ * Un Homme Dragon vu depuis « Personnages » (Story 33.5) — lecture agrégée `GET /me/homme-dragons`,
+ * volontairement légère : pas de `derived` ni de niveau (calcul par scénarios `PASSE`, fan-out
+ * par partie). Le contrat est un **tableau** : jamais « un par partie » figé (Story 33.8).
+ */
+export interface MyHommeDragonDto {
+  id: string;
+  partieId: string;
+  partieName: string;
+  gameSystemId: string;
+  nom: string;
+  race: HommeDragonRace;
+  avatar?: string;
+  createdAt: string;
+}
+
 /** Payload de création (POST /parties/:id/homme-dragon) — mêmes champs que la fiche, à plat. */
 export type CreateHommeDragonDto = HommeDragonSheetData;
 

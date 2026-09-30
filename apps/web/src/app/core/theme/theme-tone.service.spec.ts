@@ -321,6 +321,26 @@ describe('Tones — section de création depuis « Personnages » (Story 29.16)'
   }
 });
 
+// Story 33.5 — ligne de création de l'Homme Dragon et libellé du marqueur de nature. Même garde
+// de parité que ci-dessus ; « Homme Dragon » est un nom propre du système, jamais thématisé :
+// `character.nature_dragon` doit être strictement identique dans les trois thèmes.
+describe("Tones — Homme Dragon dans « Personnages » (Story 33.5)", () => {
+  for (const theme of THEMES) {
+    it(`${theme} porte my_characters.create_entry_hd (gabarit {partie}) et character.nature_dragon`, () => {
+      expect(TONE_MAP[theme]['my_characters.create_entry_hd'], `${theme} / create_entry_hd`).toBeTruthy();
+      expect(TONE_MAP[theme]['my_characters.create_entry_hd']).toContain('{partie}');
+      expect(TONE_MAP[theme]['my_characters.create_entry_hd']).toContain('Homme Dragon');
+      expect(TONE_MAP[theme]['character.nature_dragon'], `${theme} / nature_dragon`).toBeTruthy();
+    });
+  }
+
+  it('character.nature_dragon est identique dans les trois thèmes (nom propre, jamais thématisé)', () => {
+    const values = THEMES.map((theme) => TONE_MAP[theme]['character.nature_dragon']);
+    expect(new Set(values).size).toBe(1);
+    expect(values[0]).toBe('Homme Dragon');
+  });
+});
+
 // Story 31.7 — bouton MJ-only "Confidentialité" vers l'écran de configuration des cadenas.
 // Même garde de parité que ci-dessus.
 describe('Tones — bouton "Confidentialité" de PartieDetail (Story 31.7)', () => {

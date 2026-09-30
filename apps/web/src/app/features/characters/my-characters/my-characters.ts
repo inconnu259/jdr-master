@@ -1,11 +1,22 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
-import type { CharacterSort, ListViewMode, MyCharacterDto } from '@master-jdr/shared';
+import type {
+  CharacterSort,
+  ListViewMode,
+  MyCharacterDto,
+  MyHommeDragonDto,
+} from '@master-jdr/shared';
 import { CHARACTER_SORTS } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
-import { characterName } from '../../../core/characters/character.util';
-import { sortCharacters } from '../../../core/characters/character-sort';
+import {
+  filterMyItems,
+  mergeMyItems,
+  sortMyItems,
+  type MyListItem,
+} from '../../../core/characters/my-characters-items';
+import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
+import { RACE_LABELS } from '../../homme-dragon/homme-dragon-races';
 import { CharacterSummaryCard } from '../character-summary-card/character-summary-card';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { AuthService } from '../../../core/auth/auth.service';
@@ -30,6 +41,7 @@ import {
 })
 export class MyCharacters implements OnInit {
   private readonly characters = inject(CharacterService);
+  private readonly hommeDragonSvc = inject(HommeDragonService);
   private readonly router = inject(Router);
   protected readonly theme = inject(ThemeToneService);
   private readonly auth = inject(AuthService);
@@ -38,7 +50,18 @@ export class MyCharacters implements OnInit {
   private readonly partySignals = inject(PartySignalsService);
   private readonly myParties = inject(MyPartiesService);
 
-  protected readonly all = signal<MyCharacterDto[]>([]);
+  protected readonly allCharacters = signal<MyCharacterDto[]>([]);
+  /** Hommes Dragons du MJ (Story 33.5) — lecture agrégée `GET /me/homme-dragons`, fusionnée ici
+   *  avec les personnages. Vide pour un simple joueur : le serveur ne sert jamais le dragon d'un
+   *  MJ à un autre membre. */
+  protected readonly allHommesDragons = signal<MyHommeDragonDto[]>([]);
+  /** `true` si la lecture des Hommes Dragons a échoué : les personnages restent affichés, seul un
+   *  message discret le signale (jamais une page vide). */
+  protected readonly hommesDragonsError = signal(false);
+  protected readonly all = computed<MyListItem[]>(() =>
+    mergeMyItems(this.allCharacters(), this.allHommesDragons()),
+  );
+  protected readonly raceLabels = RACE_LABELS;
   protected readonly query = signal('');
 
   protected readonly sortOptions = CHARACTER_SORTS;
@@ -60,33 +83,40 @@ export class MyCharacters implements OnInit {
   protected readonly hasDeviatedFromDefault = false;
   protected readonly gridDensityClass = computed(() => `list--${this.charactersViewMode()}`);
 
-  // AC4 : filtrage en direct sur le nom du personnage — même convention d'identité que l'épic 28
-  // (characterName(), pas de réimplémentation locale du fallback « Personnage sans nom »).
-  private readonly searchFiltered = computed(() => {
-    const q = this.query().trim().toLowerCase();
-    const list = this.all();
-    if (!q) return list;
-    return list.filter((c) => characterName(c).toLowerCase().includes(q));
-  });
-  /** Tri (Task 4) appliqué après le filtrage par recherche existant, ne le remplace pas. */
+  // AC4 : filtrage en direct sur le nom affiché — même convention d'identité que l'épic 28
+  // (`itemName()` s'appuie sur characterName() / hommeDragonName(), pas de réimplémentation locale
+  // des replis « Personnage sans nom » / « Homme Dragon sans nom »).
+  private readonly searchFiltered = computed(() => filterMyItems(this.all(), this.query()));
+  /** Tri (Task 4) appliqué après le filtrage par recherche existant, ne le remplace pas. Au tri
+   *  « Niveau », les Hommes Dragons passent après tous les personnages (Story 33.5). */
   protected readonly filtered = computed(() =>
-    sortCharacters(this.searchFiltered(), this.charactersSort()),
+    sortMyItems(this.searchFiltered(), this.charactersSort()),
   );
 
   protected sortLabel(sort: CharacterSort): string {
     return this.theme.tone()[`my_characters.sort_${sort}`] ?? sort;
   }
 
-  /** Section « À forger » (Story 29.16) — croise le signal serveur `PERSONNAGE_A_CREER`
-   *  (`PartySignalsService.signals`, seule source de vérité de l'éligibilité, jamais recalculée
-   *  ici) avec `MyPartiesService.allParties()` pour retrouver nom et `gameSystemId`, absents du
-   *  DTO de signal. Ordre = ordre par défaut de `allParties()`, en une seule pile. */
+  /** Section « À forger » (Story 29.16, 33.5) — croise les signaux serveur `PERSONNAGE_A_CREER` et
+   *  `HOMME_DRAGON_A_CREER` (`PartySignalsService.signals`, seule source de vérité de
+   *  l'éligibilité, jamais recalculée ici) avec `MyPartiesService.allParties()` pour retrouver nom
+   *  et `gameSystemId`, absents du DTO de signal. Ordre = ordre par défaut de `allParties()`, en
+   *  une seule pile. Le signal `HOMME_DRAGON_A_CREER` n'est pas filtré par système côté serveur :
+   *  seule Ryuutama a un Homme Dragon, le filtre est donc ici. */
   protected readonly creationEntries = computed<CharacterCreationEntry[]>(() => {
     const signals = this.partySignals.signals();
-    return this.myParties
-      .allParties()
-      .filter((p) => signals.get(p.id)?.signals.includes('PERSONNAGE_A_CREER') ?? false)
-      .map((p) => ({ partieId: p.id, gameSystemId: p.gameSystemId, partieName: p.name }));
+    return this.myParties.allParties().flatMap((p): CharacterCreationEntry[] => {
+      const partieSignals = signals.get(p.id)?.signals ?? [];
+      const base = { partieId: p.id, gameSystemId: p.gameSystemId, partieName: p.name };
+      const entries: CharacterCreationEntry[] = [];
+      if (partieSignals.includes('PERSONNAGE_A_CREER')) {
+        entries.push({ ...base, kind: 'character' });
+      }
+      if (partieSignals.includes('HOMME_DRAGON_A_CREER') && p.gameSystemId === 'ryuutama') {
+        entries.push({ ...base, kind: 'hommeDragon' });
+      }
+      return entries;
+    });
   });
 
   /** Passe à `true` une fois le `refresh()` de `ngOnInit` résolu (succès ou échec) — évite que
@@ -108,14 +138,28 @@ export class MyCharacters implements OnInit {
     // par l'AC « retour du wizard après création » — `notifyChanged()` (SSE `user:{id}`) ne suffit
     // pas seul, l'utilisateur peut revenir avant tout événement temps réel.
     void this.partySignals.refresh().finally(() => this.creationDataLoaded.set(true));
-    try {
-      this.all.set(await this.characters.listMine());
-    } catch {
-      this.all.set([]);
+    // Deux lectures indépendantes, en parallèle (une seule requête chacune, jamais une par partie) :
+    // l'échec de l'une ne prive jamais l'écran de l'autre.
+    const [characters, hommesDragons] = await Promise.allSettled([
+      this.characters.listMine(),
+      this.hommeDragonSvc.listMine(),
+    ]);
+    this.allCharacters.set(characters.status === 'fulfilled' ? characters.value : []);
+    if (hommesDragons.status === 'fulfilled') {
+      this.allHommesDragons.set(hommesDragons.value);
+    } else {
+      this.allHommesDragons.set([]);
+      this.hommesDragonsError.set(true);
     }
   }
 
-  open(c: MyCharacterDto): void {
+  /** Personnage → sa fiche ; Homme Dragon → la route `parties/:id/homme-dragon` (Story 33.5). */
+  open(item: MyListItem): void {
+    if (item.kind === 'hommeDragon') {
+      void this.router.navigate(['/parties', item.hommeDragon.partieId, 'homme-dragon']);
+      return;
+    }
+    const c = item.character;
     void this.router.navigate(['/parties', c.partieId, 'characters', c.id]);
   }
 

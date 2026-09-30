@@ -75,6 +75,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'my_characters.create_more_one': 'Voir l’autre',
     'my_characters.create_less': 'Voir moins',
     'my_characters.empty_with_entries': 'Nul voyageur forgé pour l’instant.',
+    /* — ligne de création de l'Homme Dragon (Story 33.5) — */
+    'my_characters.create_entry_hd': 'Créer un Homme Dragon pour {partie}',
     /* — partie-form — */
     'partie.new_title': 'Nouvelle quête',
     'partie.edit_title': 'Retranscrire le parchemin',
@@ -284,6 +286,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_notes_cta': 'Exporter les notes en PDF',
     'character.export_error': "Le parchemin n'a pas pu être copié. Réessayez.",
     'character.owner_badge_mj': 'Maître',
+    /* « Homme Dragon » est un nom propre du système : jamais thématisé (Story 33.5). */
+    'character.nature_dragon': 'Homme Dragon',
     'character.level_badge': 'Niv. {n}',
     'character.party_sheets_tab_label': 'Fiches',
     /* — bouton retour vers la partie depuis la fiche d'un personnage — */
@@ -507,6 +511,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'my_characters.create_more_one': 'Voir l’autre',
     'my_characters.create_less': 'Voir moins',
     'my_characters.empty_with_entries': 'Aucun compagnon éveillé pour l’instant.',
+    /* — ligne de création de l'Homme Dragon (Story 33.5) — */
+    'my_characters.create_entry_hd': 'Créer un Homme Dragon pour {partie}',
     /* — partie-form — */
     'partie.new_title': 'Nouveau sentier',
     'partie.edit_title': 'Rebattre le sentier',
@@ -708,6 +714,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_notes_cta': 'Exporter les notes en PDF',
     'character.export_error': "L'écureuil s'est perdu en chemin. Réessayez.",
     'character.owner_badge_mj': 'Guide',
+    /* « Homme Dragon » est un nom propre du système : jamais thématisé (Story 33.5). */
+    'character.nature_dragon': 'Homme Dragon',
     'character.level_badge': 'Niv. {n}',
     'character.party_sheets_tab_label': 'Fiches',
     /* — bouton retour vers la partie depuis la fiche d'un personnage — */
@@ -925,6 +933,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'my_characters.create_more_one': 'Voir l’autre',
     'my_characters.create_less': 'Voir moins',
     'my_characters.empty_with_entries': 'Aucun automate assemblé pour l’instant.',
+    /* — ligne de création de l'Homme Dragon (Story 33.5) — */
+    'my_characters.create_entry_hd': 'Créer un Homme Dragon pour {partie}',
     /* — partie-form — */
     'partie.new_title': 'Nouvelle mission',
     'partie.edit_title': 'Recalibrer la mission',
@@ -1122,6 +1132,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'character.export_notes_cta': 'Exporter les notes en PDF',
     'character.export_error': "Échec de l'impression pneumatique. Réessayez.",
     'character.owner_badge_mj': 'Ingénieur',
+    /* « Homme Dragon » est un nom propre du système : jamais thématisé (Story 33.5). */
+    'character.nature_dragon': 'Homme Dragon',
     'character.level_badge': 'Niv. {n}',
     'character.party_sheets_tab_label': 'Fiches',
     /* — bouton retour vers la partie depuis la fiche d'un personnage — */

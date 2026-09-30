@@ -1,0 +1,13 @@
+<div class="homme-dragon-page">
+  @if (loading()) {
+    <mat-progress-spinner mode="indeterminate" diameter="32" />
+  } @else if (error()) {
+    <p class="homme-dragon-page__error" role="alert">{{ error() }}</p>
+    @if (partieId) {
+      <a class="homme-dragon-page__back" [routerLink]="['/parties', partieId]">Retour à la partie</a>
+    }
+  } @else if (partie(); as p) {
+    <a class="homme-dragon-page__back" [routerLink]="['/parties', p.id]">Retour à la partie</a>
+    <app-homme-dragon-sheet [partieId]="p.id" [partieName]="p.name" />
+  }
+</div>

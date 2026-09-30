@@ -10,6 +10,7 @@ import type {
   CreateHommeDragonDto,
   HommeDragonDto,
   HommeDragonSheetData,
+  MyHommeDragonDto,
   UpdateHommeDragonDto,
 } from '@master-jdr/shared';
 import {
@@ -269,6 +270,36 @@ export class HommeDragonService {
       },
     });
     return hommeDragon ? this.buildDto(hommeDragon, partieId, userId) : null;
+  }
+
+  /**
+   * Lecture agrégée pour « Personnages » (Story 33.5) : les Hommes Dragons de l'appelant, en une
+   * seule requête (jamais une requête par partie) et sans `buildDto` (qui calcule niveau,
+   * voyageurs et historique partie par partie). Scopé à l'appelant ET à ses parties dont il est
+   * encore MJ : un ancien MJ ne reçoit plus le dragon d'une partie qu'il ne mène plus, et aucun
+   * autre membre ne reçoit jamais celui du MJ. Retourne un tableau — jamais « un par partie »
+   * figé (Story 33.8).
+   */
+  async findMine(userId: string): Promise<MyHommeDragonDto[]> {
+    const rows = await this.prisma.hommeDragon.findMany({
+      where: { userId, partie: { mjId: userId } },
+      include: { partie: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((row) => {
+      // Colonne JSON : relecture vers le contrat au seul point de sortie (cf. buildDto).
+      const sheetData = row.sheetData as unknown as HommeDragonSheetData;
+      return {
+        id: row.id,
+        partieId: row.partie.id,
+        partieName: row.partie.name,
+        gameSystemId: row.gameSystemId,
+        nom: sheetData.nom ?? '',
+        race: sheetData.race,
+        ...(sheetData.avatar ? { avatar: sheetData.avatar } : {}),
+        createdAt: row.createdAt.toISOString(),
+      };
+    });
   }
 
   private async buildArtefactCatalog(

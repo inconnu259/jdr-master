@@ -3,9 +3,16 @@ import { provideRouter, Router } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { signal } from '@angular/core';
 import { vi } from 'vitest';
-import type { AuthUser, MyCharacterDto, PartieDto, PartySignalsDto } from '@master-jdr/shared';
+import type {
+  AuthUser,
+  MyCharacterDto,
+  MyHommeDragonDto,
+  PartieDto,
+  PartySignalsDto,
+} from '@master-jdr/shared';
 import { MyCharacters } from './my-characters';
 import { CharacterService } from '../../../core/characters/character.service';
+import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { TONE_MAP } from '../../../core/theme/tones';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
@@ -23,6 +30,19 @@ function makeMyCharacter(overrides: Partial<MyCharacterDto> = {}): MyCharacterDt
     classLabel: null,
     typeLabel: null,
     groupRoleLabel: null,
+    ...overrides,
+  };
+}
+
+function makeDragon(overrides: Partial<MyHommeDragonDto> = {}): MyHommeDragonDto {
+  return {
+    id: 'hd1',
+    partieId: 'p9',
+    partieName: 'Le Convoi du Nord',
+    gameSystemId: 'ryuutama',
+    nom: 'Skarn',
+    race: 'DRAGON_VERT',
+    createdAt: '2026-07-16T00:00:00.000Z',
     ...overrides,
   };
 }
@@ -84,10 +104,20 @@ async function createFixture(
   list: MyCharacterDto[] = [],
   authUserOverrides: Partial<AuthUser> = {},
   accountSvc = makeAccountService(),
-  options: { partySignalsSvc?: ReturnType<typeof makePartySignalsService>; parties?: PartieDto[] } = {},
+  options: {
+    partySignalsSvc?: ReturnType<typeof makePartySignalsService>;
+    parties?: PartieDto[];
+    hommesDragons?: MyHommeDragonDto[];
+    hommesDragonsRejects?: boolean;
+  } = {},
 ) {
   const characterService = {
     listMine: vi.fn().mockResolvedValue(list),
+  };
+  const hommeDragonSvc = {
+    listMine: options.hommesDragonsRejects
+      ? vi.fn().mockRejectedValue(new Error('500'))
+      : vi.fn().mockResolvedValue(options.hommesDragons ?? []),
   };
   const authSvc = { currentUser: signal(makeAuthUser(authUserOverrides)) };
   const partySignalsSvc = options.partySignalsSvc ?? makePartySignalsService();
@@ -98,6 +128,7 @@ async function createFixture(
       provideRouter([]),
       provideAnimationsAsync(),
       { provide: CharacterService, useValue: characterService },
+      { provide: HommeDragonService, useValue: hommeDragonSvc },
       { provide: ThemeToneService, useValue: { tone: signal(TONE_MAP['grimoire-emeraude']) } },
       { provide: AuthService, useValue: authSvc },
       { provide: AccountService, useValue: accountSvc },
@@ -111,7 +142,15 @@ async function createFixture(
     await Promise.resolve();
     fixture.detectChanges();
   }
-  return { fixture, characterService, authSvc, accountSvc, partySignalsSvc, myPartiesSvc };
+  return {
+    fixture,
+    characterService,
+    hommeDragonSvc,
+    authSvc,
+    accountSvc,
+    partySignalsSvc,
+    myPartiesSvc,
+  };
 }
 
 describe('MyCharacters (Story 29.2)', () => {
@@ -413,5 +452,225 @@ describe('MyCharacters — section de création « À forger » (Story 29.16)', 
     expect(fixture.nativeElement.querySelector('.empty').textContent.trim()).toBe(
       TONE_MAP['grimoire-emeraude']['my_characters.empty_with_entries'],
     );
+  });
+});
+
+describe('MyCharacters — Hommes Dragons (Story 33.5)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  // Nom seul : le marqueur « Homme Dragon » des cartes de dragon est lu à part, il ne doit pas
+  // se coller au nom.
+  const firstWords = (fixture: { nativeElement: HTMLElement }) =>
+    Array.from(fixture.nativeElement.querySelectorAll('.character-summary-card__name')).map(
+      (el) =>
+        el.querySelector('.identity-label__name')?.textContent?.trim() ??
+        el.textContent?.trim().split(/\s+/)[0],
+    );
+
+  it('une seule lecture /me/homme-dragons, en parallèle de celle des personnages', async () => {
+    const { hommeDragonSvc, characterService } = await createFixture([], {}, makeAccountService(), {
+      hommesDragons: [makeDragon()],
+    });
+
+    expect(hommeDragonSvc.listMine).toHaveBeenCalledTimes(1);
+    expect(characterService.listMine).toHaveBeenCalledTimes(1);
+  });
+
+  it('MJ avec 2 dragons : 2 cartes marquées « Homme Dragon », chacune avec sa partie', async () => {
+    const { fixture } = await createFixture([], {}, makeAccountService(), {
+      hommesDragons: [
+        makeDragon({ id: 'hd1', partieId: 'p1', partieName: 'Le Convoi du Nord', nom: 'Skarn' }),
+        makeDragon({ id: 'hd2', partieId: 'p2', partieName: 'Le Ballet des Braises', nom: 'Ignis' }),
+      ],
+    });
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelectorAll('.character-summary-card').length).toBe(2);
+    expect(el.querySelectorAll('.nature-marker').length).toBe(2);
+    const text = el.textContent ?? '';
+    expect(text).toContain('Le Convoi du Nord');
+    expect(text).toContain('Le Ballet des Braises');
+  });
+
+  it('dragons et personnages dans la même liste, même grille', async () => {
+    const { fixture } = await createFixture(
+      [makeMyCharacter({ id: 'c1', partieName: 'Abbaye' })],
+      {},
+      makeAccountService(),
+      { hommesDragons: [makeDragon({ partieName: 'Zéphyr' })] },
+    );
+
+    const cards = fixture.nativeElement.querySelectorAll('.list > app-character-summary-card');
+    expect(cards.length).toBe(2);
+    expect(fixture.nativeElement.querySelectorAll('.nature-marker').length).toBe(1);
+  });
+
+  it('un dragon seul suffit à ne pas afficher le message de liste vide', async () => {
+    const { fixture } = await createFixture([], {}, makeAccountService(), {
+      hommesDragons: [makeDragon()],
+    });
+
+    expect(fixture.nativeElement.querySelector('.empty')).toBeNull();
+  });
+
+  it('mode liste : marqueur en icône seule avec aria-label', async () => {
+    const { fixture } = await createFixture(
+      [],
+      { charactersViewMode: 'compact' },
+      makeAccountService(),
+      { hommesDragons: [makeDragon()] },
+    );
+    const marker = fixture.nativeElement.querySelector('.nature-marker');
+
+    expect(marker.getAttribute('aria-label')).toBe('Homme Dragon');
+    expect(fixture.nativeElement.querySelector('.nature-marker__label')).toBeNull();
+  });
+
+  it('recherche sur le nom du dragon : retenu ; personnage non correspondant : écarté', async () => {
+    const { fixture } = await createFixture(
+      [makeMyCharacter({ id: 'Fenn' })],
+      {},
+      makeAccountService(),
+      { hommesDragons: [makeDragon({ nom: 'Skarn' })] },
+    );
+    const input: HTMLInputElement = fixture.nativeElement.querySelector(
+      '.list-control-bar__search input',
+    );
+    input.value = 'skar';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(firstWords(fixture)).toEqual(['Skarn']);
+  });
+
+  it('tri « Niveau » : les dragons passent après tous les personnages', async () => {
+    const { fixture } = await createFixture(
+      [makeMyCharacter({ id: 'Bas', level: 1 }), makeMyCharacter({ id: 'Haut', level: 9 })],
+      { charactersSort: 'niveau' },
+      makeAccountService(),
+      { hommesDragons: [makeDragon({ nom: 'Skarn' })] },
+    );
+
+    expect(firstWords(fixture)).toEqual(['Haut', 'Bas', 'Skarn']);
+  });
+
+  it('tri « Nom » : les deux natures confondues', async () => {
+    const { fixture } = await createFixture(
+      [makeMyCharacter({ id: 'Zorn' })],
+      { charactersSort: 'nom' },
+      makeAccountService(),
+      { hommesDragons: [makeDragon({ nom: 'Ambre' })] },
+    );
+
+    expect(firstWords(fixture)).toEqual(['Ambre', 'Zorn']);
+  });
+
+  it('clic sur un dragon navigue vers /parties/:partieId/homme-dragon', async () => {
+    const { fixture } = await createFixture([], {}, makeAccountService(), {
+      hommesDragons: [makeDragon({ partieId: 'p9' })],
+    });
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    (fixture.nativeElement.querySelector('.character-summary-card') as HTMLButtonElement).click();
+
+    expect(navigateSpy).toHaveBeenCalledWith(['/parties', 'p9', 'homme-dragon']);
+  });
+
+  it('race inconnue (ligne ancienne) : la carte s’affiche sans libellé de race ni erreur', async () => {
+    const { fixture } = await createFixture([], {}, makeAccountService(), {
+      hommesDragons: [makeDragon({ race: 'DRAGON_INCONNU' as never })],
+    });
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelectorAll('.character-summary-card').length).toBe(1);
+    expect(el.querySelector('.character-summary-card__class')).toBeNull();
+  });
+
+  it('échec de la lecture des dragons : les personnages restent affichés, message discret, pas de page vide', async () => {
+    const { fixture } = await createFixture(
+      [makeMyCharacter({ id: 'c1' })],
+      {},
+      makeAccountService(),
+      { hommesDragonsRejects: true },
+    );
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelectorAll('.character-summary-card').length).toBe(1);
+    expect(el.querySelector('.notice[role="status"]')).not.toBeNull();
+  });
+
+  it('aucun échec → aucun message d’erreur', async () => {
+    const { fixture } = await createFixture([makeMyCharacter({ id: 'c1' })]);
+
+    expect(fixture.nativeElement.querySelector('.notice')).toBeNull();
+  });
+
+  describe('lignes « Créer un Homme Dragon pour … »', () => {
+    const signalsFor = (partieId: string, signals: PartySignalsDto['signals']) =>
+      makePartySignalsService(new Map([[partieId, { role: 'mj', status: 'EN_COURS', signals }]]));
+
+    it('partie Ryuutama dont je suis MJ avec le signal → ligne vers la route du dragon', async () => {
+      const { fixture } = await createFixture([], {}, makeAccountService(), {
+        partySignalsSvc: signalsFor('p1', ['HOMME_DRAGON_A_CREER']),
+        parties: [makePartie({ id: 'p1', name: 'Le Convoi du Nord', role: 'mj' })],
+      });
+
+      const row: HTMLAnchorElement = fixture.nativeElement.querySelector(
+        '.character-creation-entries__row',
+      );
+      expect(row.textContent).toContain('Créer un Homme Dragon pour Le Convoi du Nord');
+      expect(row.getAttribute('href')).toBe('/parties/p1/homme-dragon');
+    });
+
+    it('signal sur une partie non Ryuutama → aucune ligne', async () => {
+      const { fixture } = await createFixture([], {}, makeAccountService(), {
+        partySignalsSvc: signalsFor('p1', ['HOMME_DRAGON_A_CREER']),
+        parties: [makePartie({ id: 'p1', gameSystemId: 'draconis', role: 'mj' })],
+      });
+
+      expect(fixture.nativeElement.querySelector('.character-creation-entries')).toBeNull();
+    });
+
+    it('signal absent (dragon déjà créé, partie terminée) → aucune ligne', async () => {
+      const { fixture } = await createFixture([], {}, makeAccountService(), {
+        partySignalsSvc: signalsFor('p1', ['AUCUN_MEMBRE_INVITE']),
+        parties: [makePartie({ id: 'p1', role: 'mj' })],
+      });
+
+      expect(fixture.nativeElement.querySelector('.character-creation-entries')).toBeNull();
+    });
+
+    it('aucun élément mais une ligne de création → message empty_with_entries', async () => {
+      const { fixture } = await createFixture([], {}, makeAccountService(), {
+        partySignalsSvc: signalsFor('p1', ['HOMME_DRAGON_A_CREER']),
+        parties: [makePartie({ id: 'p1', role: 'mj' })],
+      });
+
+      expect(fixture.nativeElement.querySelector('.empty').textContent.trim()).toBe(
+        TONE_MAP['grimoire-emeraude']['my_characters.empty_with_entries'],
+      );
+    });
+
+    it('deux aventures Ryuutama sans dragon → deux lignes, une par aventure', async () => {
+      const { fixture } = await createFixture([], {}, makeAccountService(), {
+        partySignalsSvc: makePartySignalsService(
+          new Map<string, PartySignalsDto>([
+            ['p1', { role: 'mj', status: 'EN_COURS', signals: ['HOMME_DRAGON_A_CREER'] }],
+            ['p2', { role: 'mj', status: 'EN_COURS', signals: ['HOMME_DRAGON_A_CREER'] }],
+          ]),
+        ),
+        parties: [
+          makePartie({ id: 'p1', role: 'mj' }),
+          makePartie({ id: 'p2', name: 'Le Ballet des Braises', role: 'mj' }),
+        ],
+      });
+
+      expect(fixture.nativeElement.querySelectorAll('.character-creation-entries__row').length).toBe(
+        2,
+      );
+    });
   });
 });

@@ -173,3 +173,6 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-33-4-export-pdf-au-niveau-des-fiches-joueur.md`
   summary: Les pages de souffles ajoutées reprennent l'ordre du catalogue renvoyé par la base, pas celui du livre (même écart déjà consigné pour la fiche web).
   evidence: `getContent()` ne trie pas selon le fichier JSON ; voir l'entrée de la story 33.2.
+- source_spec: `_bmad-output/implementation-artifacts/spec-33-5-mes-hommes-dragons-dans-personnages.md`
+  summary: La liste « Personnages » ne recharge pas les Hommes Dragons sur changement temps réel (seule la ligne de création suit le canal `user:{id}`).
+  evidence: `MyCharacters` ne lit `GET /me/homme-dragons` qu'à `ngOnInit`, le bloc figé de la 33.5 excluant tout câblage temps réel neuf. Un dragon créé depuis un autre appareil fait disparaître la ligne « Créer un Homme Dragon » sans faire apparaître la carte avant rechargement ; à évaluer selon `docs/checklist.md` (effet sur `HommeDragonService.changed()` ou rechargement sur le signal `HOMME_DRAGON_A_CREER`).

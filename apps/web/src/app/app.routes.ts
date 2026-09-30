@@ -88,6 +88,15 @@ export const routes: Routes = [
             (m) => m.VisibilityLocks,
           ),
       },
+      {
+        // Story 33.5 : fiche (ou parcours de création) de l'Homme Dragon du MJ, atteinte depuis
+        // « Personnages ». Redirection hors MJ/Ryuutama dans la page ; le serveur reste l'autorité.
+        path: 'parties/:id/homme-dragon',
+        loadComponent: () =>
+          import('./features/homme-dragon/homme-dragon-page/homme-dragon-page').then(
+            (m) => m.HommeDragonPage,
+          ),
+      },
       { path: 'parties/:id/calendar', loadComponent: calendarView, data: { mode: 'mj' } },
       {
         path: 'parties/:id/guild-calendar',

@@ -18,6 +18,7 @@ import type { ContentEntryDto, HommeDragonDto, HommeDragonRace } from '@master-j
 import { HommeDragonCreationWizard } from '../homme-dragon-creation-wizard/homme-dragon-creation-wizard';
 import { RACES, RACE_LABELS } from '../homme-dragon-races';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
+import { hommeDragonName } from '../../../core/homme-dragon/homme-dragon.util';
 import { CharacterService } from '../../../core/characters/character.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
@@ -105,7 +106,7 @@ export class HommeDragonSheet implements OnInit {
   /** Nom affiché sur la fiche — même convention de repli que `characterName()`
    *  (`character.util.ts`) : valeur normalisée ou libellé de repli en français si absente. */
   protected readonly displayName = computed<string>(
-    () => this.hommeDragon()?.sheetData.nom?.trim() || 'Homme Dragon sans nom',
+    () => hommeDragonName(this.hommeDragon()?.sheetData.nom),
   );
 
   /** Posé à la création : affiche le bandeau « fiche créée » (le parcours guidé vit dans

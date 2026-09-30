@@ -60,6 +60,7 @@ function makePrisma() {
       create: jest.fn(),
       update: jest.fn(),
       findUnique: jest.fn(),
+      findMany: jest.fn(),
     },
     user: {
       findUniqueOrThrow: jest.fn(),
@@ -590,6 +591,89 @@ describe('HommeDragonService', () => {
 
       await expect(service.findOne('p1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.hommeDragon.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findMine() (Story 33.5)', () => {
+    function makeRow(overrides: Record<string, unknown> = {}) {
+      return {
+        ...makeHommeDragon(),
+        partie: { id: 'p1', name: 'Le Convoi du Nord' },
+        ...overrides,
+      };
+    }
+
+    it('une seule requête filtrée sur userId ET partie.mjId, triée createdAt desc, sans fan-out', async () => {
+      prisma.hommeDragon.findMany.mockResolvedValue([]);
+
+      await service.findMine('mj1');
+
+      expect(prisma.hommeDragon.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.hommeDragon.findMany).toHaveBeenCalledWith({
+        where: { userId: 'mj1', partie: { mjId: 'mj1' } },
+        include: { partie: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
+      });
+      // Pas de buildDto : ni voyageurs, ni historique de scénarios.
+      expect(parties.listMembers).not.toHaveBeenCalled();
+      expect(scenarios.findAllForPartie).not.toHaveBeenCalled();
+    });
+
+    it('aucun Homme Dragon → tableau vide', async () => {
+      prisma.hommeDragon.findMany.mockResolvedValue([]);
+
+      await expect(service.findMine('mj1')).resolves.toEqual([]);
+    });
+
+    it('projette la forme légère (sans derived ni niveau), partie incluse', async () => {
+      prisma.hommeDragon.findMany.mockResolvedValue([
+        makeRow({
+          sheetData: {
+            race: 'DRAGON_VERT',
+            artefact: { key: 'lanterne' },
+            nom: 'Skarn',
+            avatar: 'Écailles sombres',
+          },
+        }),
+      ]);
+
+      const result = await service.findMine('mj1');
+
+      expect(result).toEqual([
+        {
+          id: 'hd1',
+          partieId: 'p1',
+          partieName: 'Le Convoi du Nord',
+          gameSystemId: 'ryuutama',
+          nom: 'Skarn',
+          race: 'DRAGON_VERT',
+          avatar: 'Écailles sombres',
+          createdAt: '2026-07-16T00:00:00.000Z',
+        },
+      ]);
+      expect(result[0]).not.toHaveProperty('derived');
+    });
+
+    it("omet avatar quand la fiche n'en porte pas", async () => {
+      prisma.hommeDragon.findMany.mockResolvedValue([makeRow()]);
+
+      const [dragon] = await service.findMine('mj1');
+
+      expect(dragon).not.toHaveProperty('avatar');
+    });
+
+    it("plusieurs Hommes Dragons (deux parties) → un tableau, dans l'ordre rendu par Prisma", async () => {
+      prisma.hommeDragon.findMany.mockResolvedValue([
+        makeRow({ id: 'hd2', partie: { id: 'p2', name: 'Le Ballet des Braises' } }),
+        makeRow(),
+      ]);
+
+      const result = await service.findMine('mj1');
+
+      expect(result.map((d) => [d.id, d.partieId])).toEqual([
+        ['hd2', 'p2'],
+        ['hd1', 'p1'],
+      ]);
     });
   });
 
