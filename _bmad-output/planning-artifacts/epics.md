@@ -9,8 +9,8 @@ inputDocuments:
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-08-04/EXPERIENCE.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-20260626/DESIGN.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-08-04/mockups/contrat-ui-calendrier.html'
-lastUpdated: '2026-09-29'
-lastChange: "2026-09-29 (sprint change) : épic 33 — Q-13 corrigée (éveils ≠ souffles), stories 33.6, 33.7, 33.8 ; FR-61 → FR-63, D-21 (voir sprint-change-proposal-2026-09-26.md). Précédemment : 2026-09-20 (sprint change) : épic 29 rouvert — stories 29.15, 29.16, 29.17 ; story 33.5 ; FR-58 → FR-60 (voir sprint-change-proposal-2026-09-20.md). Précédemment : ajout de l'Epic 36 « Calendrier — lisibilité » (FR-49 → FR-57, D-15 → D-18) et de ses 14 stories, ordonnancé après l'épic 30. Ajout EN PLACE — les épics 1 à 35 sont intacts."
+lastUpdated: '2026-10-02'
+lastChange: "2026-10-02 (sprint change) : épic 33 — story 33.6 révisée : une seule réserve de souffles par Homme Dragon, portée par sa fiche (réserve par séance abandonnée), fiche et export PDF de l'Homme Dragon réservés au MJ ; FR-61, D-21, AD-22 (voir sprint-change-proposal-2026-10-02.md). Précédemment : 2026-09-29 (sprint change) : épic 33 — Q-13 corrigée (éveils ≠ souffles), stories 33.6, 33.7, 33.8 ; FR-61 → FR-63, D-21 (voir sprint-change-proposal-2026-09-26.md). Précédemment : 2026-09-20 (sprint change) : épic 29 rouvert — stories 29.15, 29.16, 29.17 ; story 33.5 ; FR-58 → FR-60 (voir sprint-change-proposal-2026-09-20.md). Précédemment : ajout de l'Epic 36 « Calendrier — lisibilité » (FR-49 → FR-57, D-15 → D-18) et de ses 14 stories, ordonnancé après l'épic 30. Ajout EN PLACE — les épics 1 à 35 sont intacts."
 epic36StepsCompleted: ['step-01-validate-prerequisites', 'step-02-design-epics', 'step-03-create-stories']
 ---
 
@@ -49,7 +49,7 @@ Ce document décompose en stories implémentables les exigences du Palier 9 — 
 - FR-58 : Point d'entrée explicite de création d'un personnage — sur la partie, et dans « Personnages »
 - FR-59 : Les Hommes Dragons des MJ figurent dans « Personnages », avec leur création
 - FR-60 : Seuls les systèmes de jeu disposant d'un module peuvent être choisis pour une nouvelle partie
-- FR-61 : Réserve de souffles préparée avant la séance (MJ seul)
+- FR-61 : Réserve de souffles de l'Homme Dragon, composée sur sa fiche (MJ seul)
 - FR-62 : Capacités de niveau de l'Homme Dragon (artefact cadeau, souffles rituels)
 - FR-63 : Un Homme Dragon pour plusieurs aventures (planifié)
 - FR-13 : Notification éphémère d'annonce à la connexion
@@ -76,7 +76,7 @@ Ce document décompose en stories implémentables les exigences du Palier 9 — 
 - FR-25 : Formulaire de création guidé
 - FR-26 : Souffles communs et par race, seedés et affichés sur la fiche
 - FR-27 : Export amélioré
-- FR-61 : Réserve de souffles préparée avant la séance
+- FR-61 : Réserve de souffles de l'Homme Dragon, composée sur sa fiche
 - FR-62 : Capacités de niveau de l'Homme Dragon
 - FR-63 : Un Homme Dragon pour plusieurs aventures
 
@@ -323,7 +323,7 @@ Le MJ crée et consulte son Homme Dragon avec le même soin qu'une fiche de pers
 
 **Notes d'implémentation :** **Q-13 corrigée le 2026-09-25.** Les six entrées seedées sont les **éveils** ; les 21 souffles (9 communs, 12 de race) sont seedés et affichés par la story 33.2. Référence des règles : `docs/dragons.md`. Aucun décompte pendant la séance ; le niveau compte les scénarios `PASSE`.
 
-**Stories 33.6, 33.7 et 33.8 ajoutées le 2026-09-29 (sprint change)** : réserve de souffles préparée avant la séance (MJ seul, passe UX préalable), capacités de niveau (artefact cadeau, souffles rituels), et Homme Dragon multi-aventures (planifié, après passage architecture). Ordre : 33.3 → 33.4 → 33.5 → 33.7 → passe UX → 33.6 → 33.8.
+**Stories 33.6, 33.7 et 33.8 ajoutées le 2026-09-29 (sprint change) ; 33.6 révisée le 2026-10-02** : réserve de souffles de l'Homme Dragon (une seule réserve, composée sur sa fiche, MJ seul ; passe UX faite le 2026-10-02), capacités de niveau (artefact cadeau, souffles rituels), et Homme Dragon multi-aventures (planifié, après passage architecture). Ordre : 33.3 → 33.4 → 33.5 → 33.7 → 33.6 → 33.8 (la passe UX de la 33.6 est faite).
 
 **Story 33.5 ajoutée le 2026-09-20 (sprint change)** : l'Homme Dragon rejoint « Personnages » et s'y crée, une entrée par aventure. Seule story de l'épic à toucher une lecture API agrégée ; elle ne doit pas figer « un par partie » dans son contrat (un même Homme Dragon réutilisé sur plusieurs aventures est une piste ultérieure, non planifiée).
 
@@ -1765,7 +1765,7 @@ So that je sache ce qui a été joué, ce qui se joue et ce qui vient.
 
 Le MJ crée et consulte son Homme Dragon avec le même soin qu'une fiche de personnage joueur, et retrouve en séance les souffles dont son dragon dispose sans rouvrir le livre.
 
-*Q-13 corrigée le 2026-09-25 : les six entrées seedées sont les éveils ; les 21 souffles (9 communs, 12 de race) sont seedés par la 33.2. Référence des règles : `docs/dragons.md`. Aucun décompte pendant la séance ; la réserve préparée avant la séance est portée par la 33.6. Le niveau compte les scénarios `PASSE` (décision du 2026-09-25).*
+*Q-13 corrigée le 2026-09-25 : les six entrées seedées sont les éveils ; les 21 souffles (9 communs, 12 de race) sont seedés par la 33.2. Référence des règles : `docs/dragons.md`. Aucun décompte pendant la séance ; la réserve de souffles de l'Homme Dragon, composée une fois sur sa fiche, est portée par la 33.6. Le niveau compte les scénarios `PASSE` (décision du 2026-09-25).*
 
 ### Story 33.1 : Fiche Homme Dragon refondue
 
@@ -1874,7 +1874,7 @@ So that ma fiche imprimée soit utilisable à la table.
 **Given** les souffles disponibles pour mon dragon
 **When** l'export est produit
 **Then** ils y figurent avec leur coût, lus depuis le catalogue `souffle` (les éveils restent listés à part)
-**And** si une réserve par défaut existe (33.6), elle y est imprimée
+**And** si une réserve existe (33.6), elle y est imprimée (cases `souffle_1`..`souffle_4`)
 
 **Given** les champs de souffle du modèle de PDF
 **When** ils sont remplis
@@ -1914,48 +1914,136 @@ So that mon dragon soit aussi facile à atteindre que les personnages de mes jou
 
 ### Story 33.6 : Réserve de souffles
 
-As a MJ qui prépare sa séance,
-I want composer la réserve de souffles de mon dragon pour cette séance, à partir d'une réserve par défaut,
-So that je l'annonce à mes joueurs sans la recalculer à chaque fois.
+As a MJ qui prépare ma séance,
+I want composer sur la fiche de mon Homme Dragon sa réserve de souffles, une seule fois,
+So that elle soit mémorisée et imprimée dans l'export PDF sans que je la refasse à chaque séance.
 
 **Acceptance Criteria:**
 
 **Given** mon Homme Dragon est au niveau 1
-**When** j'ouvre une séance
-**Then** aucune réserve n'est proposée
+**When** j'ouvre sa fiche
+**Then** la section « Réserve de souffles » affiche seulement la ligne d'information « La réserve de souffles s'ouvre au niveau 2. »
+**And** aucun emplacement, aucun composeur et aucun bouton n'est proposé
+**And** le serveur refuse toute écriture de réserve
 
-**Given** mon Homme Dragon est au niveau N ≥ 2
-**When** je compose une réserve (par défaut sur la fiche, ou pour une séance)
-**Then** elle compte au plus N − 1 emplacements, un même souffle pouvant en occuper plusieurs
-**And** les souffles du temps ne peuvent pas y être placés
-**And** à partir du niveau 3, au plus un souffle d'une autre race y figure ; avant, aucun
+**Given** mon Homme Dragon est au niveau N, de 2 à 5
+**When** j'ouvre sa fiche
+**Then** la section « Réserve de souffles » figure dans la colonne gauche, juste avant la carte « Souffles »
+**And** elle affiche N − 1 emplacements numérotés, tous visibles, vides ou remplis, sous le titre « Niveau N · N − 1 emplacements » (au singulier au niveau 2 : « Niveau 2 · 1 emplacement »)
+**And** il n'existe qu'une seule réserve par Homme Dragon : aucune réserve n'est attachée à une séance et aucun écran de séance n'est modifié
 
-**Given** une séance dont je n'ai pas composé la réserve
-**When** je l'ouvre
-**Then** elle affiche la réserve par défaut de la fiche
-**And** la modifier sur la séance ne change pas la réserve par défaut
+**Given** un emplacement vide
+**When** je le touche, choisis un souffle dans la fenêtre « Choisir un souffle pour l'emplacement N » puis valide « Mettre dans l'emplacement N »
+**Then** le souffle occupe cet emplacement, la fenêtre se ferme et la réserve est enregistrée
+**And** un même souffle commun ou de ma race peut occuper plusieurs emplacements, la fenêtre l'indiquant par le repère non bloquant « Déjà dans l'emplacement N »
+**And** sur un emplacement rempli, « Changer » rouvre la fenêtre et le souffle choisi remplace l'ancien
 
-**Given** une réserve affichée
-**When** la séance a lieu
-**Then** l'application ne décompte rien
+**Given** la fenêtre de choix ouverte
+**When** elle liste les souffles
+**Then** tous les souffles restent listés et consultables, par catégorie repliable (communs par famille, souffles de ma race, souffles des autres races, souffles rituels) : dépliées par défaut, sauf les catégories où rien n'est choisissable, repliées avec leur raison écrite à côté du titre
+**And** les souffles du temps (Passé, Futur) sont grisés avec la raison « Non réservable : souffle du temps », jamais masqués, et le serveur les refuse
+**And** une ligne grisée se consulte (sa description et sa raison s'affichent dans la zone de détail) mais ne se place pas : « Mettre dans l'emplacement N » reste visible, inactif, avec la raison liée
 
-**Given** un joueur de la partie ouvre la séance
-**When** elle s'affiche
-**Then** il n'y voit aucune réserve, et aucune réponse de l'API ne la lui transmet
+**Given** mon Homme Dragon est au niveau 2
+**When** j'ouvre la fenêtre de choix
+**Then** les souffles des autres races sont grisés avec une raison écrite et aucun ne peut être placé
+
+**Given** mon Homme Dragon est au niveau 3 ou plus
+**When** je place un souffle d'une autre race
+**Then** il n'occupe qu'un seul emplacement et le serveur refuse de le placer une seconde fois
+**And** les autres souffles d'une autre race sont grisés avec la raison « Un seul souffle d'une autre race », et le souffle placé indique « Déjà dans l'emplacement N »
+**And** l'emplacement qui le contient reste modifiable (« Changer », « Retirer »)
 
 **Given** mon Homme Dragon est au niveau 5
-**When** je compose une réserve
+**When** je compose la réserve
 **Then** les souffles rituels peuvent y figurer, sans compter comme souffle d'une autre race
+**And** avant le niveau 5, ils sont grisés avec la raison « Admis dès le niveau 5 » et le serveur les refuse
 
-**Given** la séance est ouverte sur un autre de mes appareils
-**When** je modifie la réserve
-**Then** cette vue se met à jour (signal temps réel de la partie)
+**Given** une demande d'écriture de la réserve, quel qu'en soit l'auteur
+**When** le serveur la reçoit
+**Then** seul le MJ de la partie est admis, pour Ryuutama uniquement
+**And** le niveau est recalculé côté serveur et toute la composition résultante est revalidée contre les catalogues `souffle` et `souffleRituel` : capacité N − 1, souffles du temps exclus, au plus un souffle d'une autre race (sur un seul emplacement) dès le niveau 3, rituels dès le niveau 5, souffle inconnu du catalogue refusé
+**And** une demande invalide est rejetée sans rien écrire
+**And** la réserve ne peut pas être écrite par la modification générale de la fiche
+
+**Given** un joueur de la partie (membre, non MJ)
+**When** il appelle la lecture de la fiche de l'Homme Dragon (`GET /parties/:id/homme-dragon`)
+**Then** le serveur la refuse (`403`), sans aucune donnée de la fiche ni de la réserve
+
+**Given** un joueur de la partie (membre, non MJ)
+**When** il appelle l'export PDF de la fiche de l'Homme Dragon
+**Then** le serveur le refuse (`403`) et ne produit aucun PDF
+
+**Given** un joueur de la partie
+**When** il parcourt l'application (partie, « Personnages »)
+**Then** il ne voit aucune fiche d'Homme Dragon ni section « Réserve de souffles » (garde web existante conservée)
+**And** le MJ continue de lire et d'exporter sa fiche comme avant, réserve comprise
+
+**Given** je choisis, change ou retire un souffle
+**When** le geste est fait
+**Then** il est enregistré immédiatement, sans bouton « Enregistrer »
+**And** un seul enregistrement est en vol : pendant l'attente, les boutons d'emplacement sont inactifs (`aria-disabled="true"`), la liste est `aria-busy="true"` et la mention devient « Enregistrement… »
+**And** à la réussite, la mention « Enregistrée automatiquement, utilisée pour l'export PDF. » s'affiche sous le titre de la section et la zone de statut annonce « Réserve enregistrée »
+
+**Given** l'enregistrement d'un geste échoue
+**When** l'échec est signalé
+**Then** le message « Impossible d'enregistrer la réserve. Réessayez. » s'affiche (`role="alert"`, ré-annoncé à chaque échec)
+**And** l'emplacement revient à son état précédent : rien n'est vidé ni écrasé
+**And** la mention d'enregistrement est masquée tant que l'erreur est affichée
+
+**Given** un emplacement rempli
+**When** je touche « Retirer »
+**Then** l'emplacement est vidé aussitôt, sans dialogue de confirmation
+**And** un bandeau « <Souffle> retiré de l'emplacement N. » accompagné d'un bouton « Annuler » reste affiché quelques secondes (durée à fixer à l'implémentation, 6 s en valeur d'exemple), le décompte étant suspendu tant que le focus ou le survol est sur le bandeau
+**And** si l'écriture du retrait échoue, l'emplacement revient à son état précédent et aucun bandeau n'apparaît
+
+**Given** le bandeau d'annulation affiché
+**When** j'active « Annuler » (inactif tant que l'écriture du retrait n'est pas terminée)
+**Then** le souffle retourne dans le même emplacement, le bandeau disparaît et la zone de statut annonce « <Souffle> remis dans l'emplacement N »
+**And** si l'annulation échoue, le message d'erreur habituel s'affiche et l'emplacement reste vide
+**And** le bandeau disparaît si l'emplacement est entre-temps occupé, et un nouveau retrait remplace le message (seul le dernier retrait est annulable)
+**And** aucun bouton « Vider la réserve » n'existe
+
+**Given** une réserve composée
+**When** la séance a lieu ou que j'exporte la fiche
+**Then** l'application ne décompte rien : aucun compteur « utilisé » ou « restant », aucun souffle marqué comme consommé
+
+**Given** une réserve composée au niveau N
+**When** mon Homme Dragon passe au niveau N + 1
+**Then** la réserve existante est conservée et le nouvel emplacement apparaît vide
 
 **Given** une réserve contenant un souffle retiré du catalogue
 **When** elle s'affiche
-**Then** elle reste lisible (repli sur la clé)
+**Then** la ligne reste lisible, son libellé étant la clé brute
+**And** elle reste retirable, et « Changer » reste possible
 
-*Décisions du 2026-09-29 :* réserve visible du MJ seul ; souffles rituels traités comme les autres souffles ; écran conçu par une passe `bmad-ux` avant la story. *Prérequis :* 33.7 (enregistre le catalogue des souffles rituels).
+**Given** une réserve composée
+**When** j'exporte la fiche en PDF, dans le format éditable comme dans le format 2 pages
+**Then** `souffle_1` à `souffle_4` portent le nom du souffle (sans son coût) de l'emplacement de même numéro
+**And** un emplacement vide, ou une réserve vide, laisse sa case vide
+**And** `nombre_souffles` reste égal à `max(niveau − 1, 0)` et `souffle_actuel` reste vide
+
+**Given** la fenêtre de choix, qui réutilise `DetailSurface`
+**When** `DetailSurface` est étendu (emplacements `header` et `footer` personnalisables, hauteur en `dvh` avec zone sûre, `max-height` propre de la zone de détail, bouton de fermeture de 44 px nommé « Fermer la fenêtre » ou « Fermer la feuille », largeur desktop adaptée par usage, `prefers-reduced-motion` respecté)
+**Then** la fenêtre est utilisable à 320 × 256 px CSS : en-tête et pied compacts, liste défilante visible, zone de détail à défilement propre
+**And** l'extension est rétro-compatible : tous les autres usages de `DetailSurface` sont re-vérifiés (specs relues, passe visuelle mobile et desktop : fermeture à 44 px, focus, mouvement réduit) sans régression
+
+**Given** une navigation au clavier dans la section et la fenêtre
+**When** je place ou change un souffle, je retire un souffle, j'annule la fenêtre (« Annuler », Échap ou ✕) ou j'annule un retrait
+**Then** une fois le rendu terminé, le focus est sur la cible prévue : « Changer » de l'emplacement après un placement ou un changement, « Choisir un souffle » de l'emplacement après un retrait, « Changer » de l'emplacement rétabli après l'annulation d'un retrait, le déclencheur d'origine après « Annuler », Échap ou ✕ ; jamais sur `<body>`
+**And** des tests clavier vérifient chacun de ces cas
+
+**Given** la section et la fenêtre de choix
+**When** je les parcours au clavier ou au lecteur d'écran
+**Then** chaque ligne de souffle est un `<button>` natif tabulable (Entrée ou Espace pour consulter, `aria-pressed` sur la ligne consultée) et chaque ligne grisée est `aria-disabled="true"` tout en restant focalisable
+**And** chaque en-tête de catégorie porte `aria-expanded` et `aria-controls`
+**And** une zone `role="status"` persistante annonce les placements, retraits, annulations et enregistrements
+
+**Given** mon Homme Dragon est au niveau 5
+**When** la carte « Souffles rituels » (33.7) s'affiche
+**Then** elle reste un catalogue de consultation, et sa consigne n'affirme plus « sans réserve ni décompte » : elle indique que ces souffles peuvent être placés dans la réserve, sans décompte
+
+*Décisions du 2026-10-02 (passe UX, `ux-designs/ux-jdr-master-2026-10-01/`) :* une seule réserve par Homme Dragon, sur sa fiche (la réserve par séance et la réserve par défaut du 2026-09-29 sont abandonnées) ; « Vider la réserve » retiré ; annulation temporaire du dernier retrait ; un souffle d'une autre race n'occupe qu'un emplacement ; niveau qui baisse : aucune règle spécifique ; `DetailSurface` étendu de façon rétro-compatible. *Décisions du 2026-09-29 conservées :* réserve visible du MJ seul ; souffles rituels admis dès le niveau 5. *Prérequis :* 33.7 (catalogue des souffles rituels : levé). *Hors AC :* le câblage temps réel multi-appareil de la fiche (signal `changed` / `notifyChanged()` de la partie, `RealtimeService`) est à évaluer à l'implémentation selon `docs/checklist.md`. *Option B2 (2026-10-02) :* la fiche de l'Homme Dragon et son export PDF sont réservés au MJ (la garde de lecture passe de `getViewable` à `getOwned`) ; les specs API qui supposaient la lecture par un membre sont à renverser (sprint change 2026-10-02, §4.9). *À la livraison :* tenir à jour le README du PDF, `docs/dragons.md` et `deferred-work.md`, et renverser les tests qui figent « `souffle_1`..`souffle_4` jamais remplis » (sprint change 2026-10-02, §4.5 et §4.6). *Recommandation :* exprimer les règles de composition (capacité, quota, rituels) en fonctions pures de `packages/game-rules`, partagées par la validation serveur et le grisage web, plutôt que de dupliquer une troisième fois la règle de disponibilité (cf. `deferred-work.md`). *Revues :* mode plan avant la story, puis `/security-review` et `/code-review`.
 
 ### Story 33.7 : Capacités de niveau
 
@@ -2002,7 +2090,7 @@ So that son histoire et son niveau reflètent toutes les aventures qu'il a racon
 **When** le nouveau modèle est livré
 **Then** chacune reste intacte et rattachée à sa partie
 
-*Prérequis :* décision d'architecture sur le modèle (unicité, rattachement, calcul du niveau), migration. Réserve de séance (33.6) : une séance reste dans une seule partie, donc un seul dragon — pas de conflit.
+*Prérequis :* décision d'architecture sur le modèle (unicité, rattachement, calcul du niveau), migration. Réserve de souffles (33.6) : elle est portée par la fiche (`sheetData`) et suit donc l'Homme Dragon d'une aventure à l'autre. L'AD du modèle multi-aventures confirme que `sheetData`, réserve comprise, reste attaché à l'Homme Dragon et non à l'aventure (la capacité de la réserve dépend du niveau, qui cumulera les scénarios `PASSE` de toutes ses aventures), et traite d'un même mouvement les routes d'écriture aujourd'hui scopées par partie (`eveil-power`, `artefact-cadeau`, réserve) ainsi que la garde « fiche et export PDF réservés au MJ » (sprint change du 2026-10-02).
 
 ## Epic 34 : Entrée dans l'application
 

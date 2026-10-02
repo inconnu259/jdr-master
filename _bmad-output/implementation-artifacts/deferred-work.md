@@ -167,6 +167,9 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-33-4-export-pdf-au-niveau-des-fiches-joueur.md`
   summary: Clause d'AC « la réserve par défaut est imprimée si elle existe » non traitée — aucune donnée de réserve n'existe encore (`souffle_1`..`souffle_4` restent vides).
   evidence: la réserve de souffles est l'objet de la Story 33.6 ; à reprendre là (remplir les 4 cases, `nombre_souffles` restant `max(niveau − 1, 0)`).
+- source_spec: `_bmad-output/planning-artifacts/sprint-change-proposal-2026-10-02.md`
+  summary: Mise à jour de l'entrée précédente (sprint change du 2026-10-02) : la « réserve par défaut » est abandonnée au profit d'une réserve unique portée par la fiche ; la clause se lit « si une réserve existe ».
+  evidence: la 33.6 remplit `souffle_1`..`souffle_4` avec le nom du souffle de l'emplacement de même numéro (cases vides si l'emplacement ou la réserve est vide), `nombre_souffles` restant `max(niveau − 1, 0)`. **Les deux entrées sont à clore par la livraison de la 33.6** (les déplacer dans `deferred-work-archive.md`).
 - source_spec: `_bmad-output/implementation-artifacts/spec-33-4-export-pdf-au-niveau-des-fiches-joueur.md`
   summary: La règle de disponibilité des souffles (communs par famille, race, autres races dès le niveau 3) et les consignes de famille sont désormais dupliquées entre `packages/game-rules/src/ryuutama/homme-dragon-souffles.ts` (`availableSouffles()`, export PDF) et `homme-dragon-sheet.ts` (fiche web).
   evidence: la spec 33.4 interdit de toucher la fiche web ; à faire converger en faisant consommer `availableSouffles()` par `homme-dragon-sheet.ts` (dont les libellés de race dupliquent aussi `RACE_LABELS`).
