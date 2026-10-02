@@ -218,13 +218,45 @@ describe('mapHommeDragonToPdfFields', () => {
     expect(field(fields, 'nombre_souffles')).toBe('0');
   });
 
-  it('souffle_1..4 jamais mappés (cases de la réserve, réservées à la Story 33.6)', () => {
-    const fields = mapHommeDragonToPdfFields(makeDto(), CONTENT);
+  it('souffle_1..4 : cases vides quand la réserve est absente ou vide', () => {
+    for (const reserve of [undefined, [], [null, null, null]]) {
+      const base = makeDto();
+      const fields = mapHommeDragonToPdfFields(
+        makeDto({ sheetData: { ...base.sheetData, reserve } }),
+        CONTENT,
+      );
 
-    expect(fields.some((f) => f.field === 'souffle_1')).toBe(false);
-    expect(fields.some((f) => f.field === 'souffle_2')).toBe(false);
-    expect(fields.some((f) => f.field === 'souffle_3')).toBe(false);
-    expect(fields.some((f) => f.field === 'souffle_4')).toBe(false);
+      for (const n of [1, 2, 3, 4]) expect(field(fields, `souffle_${n}`)).toBe('');
+    }
+  });
+
+  it("souffle_1..4 : le nom du souffle (sans coût) de l'emplacement de même numéro", () => {
+    const base = makeDto({ derived: { level: 4, PS: 5 } });
+    const fields = mapHommeDragonToPdfFields(
+      makeDto({
+        derived: base.derived,
+        sheetData: { ...base.sheetData, reserve: ['courage', 'rituel-du-tabou', null] },
+      }),
+      { ...CONTENT, reserveLabels: { courage: 'Courage', 'rituel-du-tabou': 'Rituel du tabou' } },
+    );
+
+    expect(field(fields, 'souffle_1')).toBe('Courage');
+    expect(field(fields, 'souffle_2')).toBe('Rituel du tabou');
+    expect(field(fields, 'souffle_3')).toBe('');
+    expect(field(fields, 'souffle_4')).toBe('');
+    // Rien n'est décompté.
+    expect(field(fields, 'nombre_souffles')).toBe('3');
+    expect(field(fields, 'souffle_actuel')).toBe('');
+  });
+
+  it('souffle_N : repli sur la clé brute si le souffle a quitté le catalogue', () => {
+    const base = makeDto();
+    const fields = mapHommeDragonToPdfFields(
+      makeDto({ sheetData: { ...base.sheetData, reserve: ['souffle-retire'] } }),
+      CONTENT,
+    );
+
+    expect(field(fields, 'souffle_1')).toBe('souffle-retire');
   });
 
   it("voyageursProteges : tous imprimés, répartis dans l'ordre sur les deux zones, un par ligne", () => {

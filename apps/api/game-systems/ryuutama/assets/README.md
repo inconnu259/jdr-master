@@ -77,7 +77,7 @@ plutôt que de redécouvrir ces repères depuis zéro.
 
 ## Ryuutama_fiche_homme-dragon_big_edit.pdf — souffles et pages ajoutées (Story 33.4)
 
-Export `GET /parties/:id/homme-dragon/export.pdf?format=editable|2pages` (`format` obligatoire, comme
+Export `GET /parties/:id/homme-dragon/export.pdf?format=editable|2pages` — **réservé au MJ de la partie** (`403` pour tout autre membre : la fiche porte la réserve de souffles, que les joueurs ne voient jamais) (`format` obligatoire, comme
 l'export joueur ; `2pages` aplatit le formulaire avec `form.flatten()`). Champs de souffle du
 gabarit :
 
@@ -86,7 +86,7 @@ gabarit :
 | `souffle_max` | Points de Souffle max (`derived.PS`) |
 | `souffle_actuel` | **Vide** — case à remplir au stylo : l'application ne suit aucune consommation (épic 33) |
 | `nombre_souffles` | « Nombre Max : » de la réserve = `max(niveau − 1, 0)` (pas les PS) |
-| `souffle_1`..`souffle_4` | Les 4 cases de la réserve : **non remplies**, réservées à la réserve de souffles (Story 33.6) |
+| `souffle_1`..`souffle_4` | Les 4 cases de la réserve (Story 33.6) : le **nom du souffle** (sans son coût) de l'emplacement de même numéro de `sheetData.reserve`, lu des catalogues `souffle` + `souffleRituel` (repli sur la clé brute si le souffle a quitté le catalogue) ; case **vide** si l'emplacement ou la réserve est vide. Aucun décompte : rien n'indique « utilisé » ni « restant » |
 
 Le gabarit ne peut pas contenir la liste des souffles : une ou plusieurs pages « Souffles de mon
 dragon » (A4 portrait, polices standard Helvetica, dessinées côté serveur dans

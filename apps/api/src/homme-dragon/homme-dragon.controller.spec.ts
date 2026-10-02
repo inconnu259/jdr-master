@@ -4,6 +4,7 @@ jest.mock('@master-jdr/game-rules', () => ({
 
 import {
   ExecutionContext,
+  ForbiddenException,
   INestApplication,
   NotFoundException,
   ValidationPipe,
@@ -28,6 +29,7 @@ function makeService() {
     findOne: jest.fn(),
     chooseEveilPower: jest.fn(),
     chooseArtefactCadeau: jest.fn(),
+    setReserveSlot: jest.fn(),
     getOwnerPseudo: jest.fn(),
   };
 }
@@ -75,6 +77,11 @@ describe('HommeDragonController', () => {
     const dto = { demeure: 'Une auberge' } as UpdateHommeDragonDto;
     controller.update('p1', { id: 'mj1' } as any, dto);
     expect(service.update).toHaveBeenCalledWith('p1', 'mj1', dto);
+  });
+
+  it('PUT reserve/:slot délègue à setReserveSlot() avec partieId/user.id/slot/dto', () => {
+    controller.setReserveSlot('p1', 3, { id: 'mj1' } as any, { key: 'chance' });
+    expect(service.setReserveSlot).toHaveBeenCalledWith('p1', 'mj1', 3, { key: 'chance' });
   });
 
   it('POST eveil-power délègue à chooseEveilPower() avec partieId/user.id/dto', () => {
@@ -186,6 +193,38 @@ describe('HommeDragonController', () => {
       expect(service.update).not.toHaveBeenCalled();
     });
 
+    it("PATCH avec reserve → 400 : la réserve n'est jamais écrite par le PATCH générique (Story 33.6)", async () => {
+      await request(app.getHttpServer())
+        .patch('/parties/11111111-1111-1111-1111-111111111111/homme-dragon')
+        .send({ reserve: ['chance'] })
+        .expect(400);
+
+      expect(service.update).not.toHaveBeenCalled();
+    });
+
+    it('PUT reserve/:slot : corps invalide → 400, rien délégué', async () => {
+      const url = '/parties/11111111-1111-1111-1111-111111111111/homme-dragon/reserve';
+      for (const body of [{}, { key: '' }, { key: 42 }, { key: 'chance', extra: 1 }]) {
+        await request(app.getHttpServer()).put(`${url}/1`).send(body).expect(400);
+      }
+      // Numéro d'emplacement non entier.
+      await request(app.getHttpServer()).put(`${url}/abc`).send({ key: 'chance' }).expect(400);
+      expect(service.setReserveSlot).not.toHaveBeenCalled();
+    });
+
+    it('PUT reserve/:slot : { key } place, { key: null } retire — numéro 1-based délégué au service', async () => {
+      const partieId = '11111111-1111-1111-1111-111111111111';
+      const url = `/parties/${partieId}/homme-dragon/reserve`;
+
+      await request(app.getHttpServer()).put(`${url}/2`).send({ key: 'chance' }).expect(200);
+      expect(service.setReserveSlot).toHaveBeenLastCalledWith(partieId, 'u1', 2, {
+        key: 'chance',
+      });
+
+      await request(app.getHttpServer()).put(`${url}/2`).send({ key: null }).expect(200);
+      expect(service.setReserveSlot).toHaveBeenLastCalledWith(partieId, 'u1', 2, { key: null });
+    });
+
     it('POST artefact-cadeau sans clé → 400 ; avec clé → délègue au service', async () => {
       const url = '/parties/11111111-1111-1111-1111-111111111111/homme-dragon/artefact-cadeau';
       await request(app.getHttpServer()).post(url).send({}).expect(400);
@@ -197,6 +236,20 @@ describe('HommeDragonController', () => {
         'u1',
         { key: 'lanterne' },
       );
+    });
+
+    it('joueur de la partie (non MJ) : GET fiche et export PDF → 403, aucune donnée ni PDF (Story 33.6)', async () => {
+      const partieUrl = '/parties/11111111-1111-1111-1111-111111111111/homme-dragon';
+      service.findOne.mockRejectedValue(new ForbiddenException());
+
+      await request(app.getHttpServer()).get(partieUrl).expect(403);
+      await request(app.getHttpServer())
+        .get(`${partieUrl}/export.pdf`)
+        .query({ format: 'editable' })
+        .expect(403);
+
+      expect(pdfService.fillHommeDragonPdf).not.toHaveBeenCalled();
+      expect(service.getOwnerPseudo).not.toHaveBeenCalled();
     });
 
     it.each(['editable', '2pages'])('format=%s → 200 via le pipeline HTTP réel', async (format) => {

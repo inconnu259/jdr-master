@@ -290,6 +290,16 @@
             </section>
           }
 
+          <!-- Story 33.6 : réserve de souffles (MJ seul — la fiche entière lui est réservée), juste
+               avant le catalogue de lecture « Souffles ». -->
+          <app-reserve-section
+            [partieId]="partieId()"
+            [hommeDragon]="hommeDragon()!"
+            [souffleCatalog]="souffleCatalog()"
+            [ritualCatalog]="ritualCatalog()"
+            (updated)="hommeDragon.set($event)"
+          />
+
           @if (hasSouffles()) {
             <section class="homme-dragon-sheet__card homme-dragon-sheet__souffles">
               <h2 class="homme-dragon-sheet__card-title">Souffles</h2>
@@ -331,7 +341,7 @@
             <section class="homme-dragon-sheet__card homme-dragon-sheet__rituals">
               <h2 class="homme-dragon-sheet__card-title">Souffles rituels</h2>
               <p class="homme-dragon-sheet__souffle-consigne">
-                Mère-dragon : ces souffles sont consultables ici, sans réserve ni décompte.
+                Mère-dragon : ces souffles peuvent être placés dans la réserve, sans décompte.
               </p>
               <ng-container *ngTemplateOutlet="souffleList; context: { $implicit: rituals() }" />
             </section>

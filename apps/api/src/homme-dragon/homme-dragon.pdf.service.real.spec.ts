@@ -100,6 +100,7 @@ describe('HommeDragonPdfService (pdf-lib réel)', () => {
     getContent = jest.fn().mockResolvedValue({
       hommeDragonArtefact: readCatalogue('homme-dragon-artefacts.json'),
       souffle: readCatalogue('souffles.json'),
+      souffleRituel: readCatalogue('souffles-rituels.json'),
     });
     const module = await Test.createTestingModule({
       providers: [HommeDragonPdfService, { provide: GameSystemService, useValue: { getContent } }],
@@ -118,7 +119,9 @@ describe('HommeDragonPdfService (pdf-lib réel)', () => {
     expect(form.getTextField('souffle_max').getText()).toBe('5');
     expect(form.getTextField('nombre_souffles').getText()).toBe('2');
     expect(form.getTextField('souffle_actuel').getText() ?? '').toBe('');
-    expect(form.getTextField('souffle_1').getText() ?? '').toBe('');
+    for (const n of [1, 2, 3, 4]) {
+      expect(form.getTextField(`souffle_${n}`).getText() ?? '').toBe('');
+    }
     expect(form.getFields().length).toBeGreaterThan(0);
     expect(doc.getPageCount()).toBeGreaterThanOrEqual(2);
   });
@@ -153,6 +156,70 @@ describe('HommeDragonPdfService (pdf-lib réel)', () => {
     for (const name of ['voy_sc_1', 'voyageurs_proteges_1']) {
       expect(da(name)).not.toContain('10.5 Tf');
     }
+  });
+
+  it('réserve de 2 sur 3 emplacements (niveau 4) : souffle_1 et souffle_2 portent le nom seul, souffle_3 vide, rien décompté', async () => {
+    const dto = makeHommeDragon({
+      derived: { level: 4, PS: 5 },
+      sheetData: {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc' },
+        nom: 'Ignis',
+        reserve: ['courage', 'chance', null],
+      },
+    });
+    const form = (await load(await service.fillHommeDragonPdf(dto, 'admin', 'editable'))).getForm();
+
+    expect(form.getTextField('souffle_1').getText()).toBe('Courage');
+    expect(form.getTextField('souffle_2').getText()).toBe('Chance');
+    expect(form.getTextField('souffle_3').getText() ?? '').toBe('');
+    expect(form.getTextField('souffle_4').getText() ?? '').toBe('');
+    expect(form.getTextField('nombre_souffles').getText()).toBe('3');
+    expect(form.getTextField('souffle_actuel').getText() ?? '').toBe('');
+  });
+
+  it('réserve avec un souffle rituel : libellé du catalogue `souffleRituel`', async () => {
+    const dto = makeHommeDragon({
+      derived: { level: 5, PS: 10 },
+      sheetData: {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc' },
+        nom: 'Ignis',
+        reserve: ['rituel-du-tabou'],
+      },
+    });
+    const form = (await load(await service.fillHommeDragonPdf(dto, 'admin', 'editable'))).getForm();
+
+    expect(form.getTextField('souffle_1').getText()).toBe('Rituel du tabou');
+  });
+
+  it('souffle retiré du catalogue : la clé brute est imprimée (la ligne reste lisible)', async () => {
+    const dto = makeHommeDragon({
+      sheetData: {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc' },
+        nom: 'Ignis',
+        reserve: ['souffle-retire'],
+      },
+    });
+    const form = (await load(await service.fillHommeDragonPdf(dto, 'admin', 'editable'))).getForm();
+
+    expect(form.getTextField('souffle_1').getText()).toBe('souffle-retire');
+  });
+
+  it("format '2pages' avec une réserve : export réussi, formulaire aplati", async () => {
+    const dto = makeHommeDragon({
+      derived: { level: 4, PS: 5 },
+      sheetData: {
+        race: 'DRAGON_ROUGE',
+        artefact: { key: 'grand-arc' },
+        nom: 'Ignis',
+        reserve: ['courage', 'chance'],
+      },
+    });
+    const doc = await load(await service.fillHommeDragonPdf(dto, 'admin', '2pages'));
+
+    expect(doc.getForm().getFields()).toHaveLength(0);
   });
 
   it('niveau 1 : nombre_souffles = 0, souffle_max = 3', async () => {

@@ -1,5 +1,6 @@
 import type { PdfFieldValue } from './pdf-field-map.ts';
 import type { HommeDragonSheetData } from './validate-homme-dragon.ts';
+import { reserveCapacity } from './homme-dragon-reserve.ts';
 
 /** Miroir local des champs de `HommeDragonDto` (`@master-jdr/shared`) nécessaires au mapping PDF
  * — jamais importé directement depuis `packages/shared` (frontière types-only, même convention
@@ -26,7 +27,14 @@ export interface HommeDragonPdfContent {
    * n'a pas saisi de nom personnalisé. `undefined` si le catalogue ne connaît plus l'entrée : la
    * clé brute sert alors de dernier repli. */
   artefactLabel?: string;
+  /** key → label des catalogues `souffle` + `souffleRituel` — résout `souffle_1..4` (réserve,
+   * Story 33.6). Une clé absente (souffle retiré du catalogue) s'imprime telle quelle : la ligne
+   * reste lisible, comme sur la fiche. */
+  reserveLabels?: Record<string, string>;
 }
+
+/** Nombre de cases `souffle_N` du gabarit officiel. */
+const PDF_RESERVE_BOXES = 4;
 
 const MAX_HISTORIQUE_ROWS = 12;
 
@@ -51,8 +59,9 @@ function formatDateFr(iso: string): string {
  *   remplit au stylo à la table ;
  * - `nombre_souffles` (« Nombre Max : » de la réserve) = capacité de réserve `max(niveau − 1, 0)`
  *   (`docs/dragons.md`) — jamais les PS, comme l'ancien mapping le faisait à tort ;
- * - `souffle_1`..`souffle_4` (les 4 cases de la réserve) restent volontairement non couverts :
- *   réservés à la réserve de souffles de la Story 33.6, aucune donnée à lire aujourd'hui.
+ * - `souffle_1`..`souffle_4` (les 4 cases de la réserve, Story 33.6) = le NOM du souffle (sans son
+ *   coût) de l'emplacement de même numéro dans `sheetData.reserve` ; case vide si l'emplacement
+ *   ou la réserve est vide. Rien n'est décompté : ni « utilisé » ni « restant ».
  * Les souffles disponibles eux-mêmes ne tiennent pas dans le template : ils sont dessinés sur des
  * pages ajoutées par `HommeDragonPdfService` (`availableSouffles()`).
  *
@@ -89,7 +98,7 @@ export function mapHommeDragonToPdfFields(
 
   const pseudos = voyageursProteges.map((v) => v.pseudo);
   const splitAt = Math.ceil(pseudos.length / 2);
-  const reserveCapacity = Math.max(derived.level - 1, 0);
+  const reserve = sheetData.reserve ?? [];
 
   const fields: PdfFieldValue[] = [
     { field: 'nom', value: sheetData.nom, kind: 'text' },
@@ -102,7 +111,7 @@ export function mapHommeDragonToPdfFields(
     { field: 'cree_le', value: formatDateFr(dto.createdAt), kind: 'text' },
     { field: 'souffle_max', value: String(derived.PS), kind: 'text' },
     { field: 'souffle_actuel', value: '', kind: 'text' },
-    { field: 'nombre_souffles', value: String(reserveCapacity), kind: 'text' },
+    { field: 'nombre_souffles', value: String(reserveCapacity(derived.level)), kind: 'text' },
     { field: 'apparence_caractere', value: apparenceCaractere, kind: 'text' },
     { field: 'vocation', value: sheetData.vocation ?? '', kind: 'text' },
     { field: 'demeure', value: sheetData.demeure ?? '', kind: 'text' },
@@ -112,6 +121,15 @@ export function mapHommeDragonToPdfFields(
     { field: 'voyageurs_proteges_1', value: pseudos.slice(0, splitAt).join('\n'), kind: 'text' },
     { field: 'voyageurs_proteges_2', value: pseudos.slice(splitAt).join('\n'), kind: 'text' },
   ];
+
+  for (let slot = 1; slot <= PDF_RESERVE_BOXES; slot++) {
+    const key = reserve[slot - 1];
+    fields.push({
+      field: `souffle_${slot}`,
+      value: key ? (content.reserveLabels?.[key] ?? key) : '',
+      kind: 'text',
+    });
+  }
 
   for (let level = 2; level <= 5; level++) {
     const key = eveilPowers.find((e) => e.level === level)?.key;

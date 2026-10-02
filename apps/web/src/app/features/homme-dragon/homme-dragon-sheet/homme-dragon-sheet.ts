@@ -17,6 +17,7 @@ import { MatButtonModule } from '@angular/material/button';
 import type { ContentEntryDto, HommeDragonDto, HommeDragonRace } from '@master-jdr/shared';
 import { ARTEFACT_CADEAU_LEVEL, SOUFFLES_RITUELS_LEVEL } from '@master-jdr/game-rules';
 import { HommeDragonCreationWizard } from '../homme-dragon-creation-wizard/homme-dragon-creation-wizard';
+import { ReserveSection } from '../reserve-section/reserve-section';
 import { RACES, RACE_LABELS, RACE_TAGS } from '../homme-dragon-races';
 import {
   ChoiceCard,
@@ -93,6 +94,7 @@ const artefactData = (entry: ContentEntryDto): ArtefactCatalogData =>
     NgTemplateOutlet,
     DetailSurface,
     HommeDragonCreationWizard,
+    ReserveSection,
     ChoiceCard,
     RadioGroupNavDirective,
   ],
@@ -195,7 +197,14 @@ export class HommeDragonSheet implements OnInit {
   private async refreshHommeDragon(): Promise<void> {
     if (this.hommeDragon() === undefined) return;
     try {
-      this.hommeDragon.set(await this.hommeDragonSvc.findOne(this.partieId()));
+      const fresh = await this.hommeDragonSvc.findOne(this.partieId());
+      // Story 33.6 : une lecture partie AVANT une écriture de la réserve (réponse déjà appliquée
+      // par `(updated)`) peut arriver APRÈS elle — elle ne doit pas la remplacer par une fiche
+      // plus ancienne. Le signal `changed` émis par l'écriture déclenche de toute façon une
+      // lecture plus récente.
+      const current = this.hommeDragon();
+      if (fresh && current && Date.parse(fresh.updatedAt) < Date.parse(current.updatedAt)) return;
+      this.hommeDragon.set(fresh);
     } catch {
       // non-bloquant — la fiche affichée reste telle quelle si le rafraîchissement échoue
     }
@@ -307,8 +316,8 @@ export class HommeDragonSheet implements OnInit {
   // (`eveilPowerCatalog`) ne sont jamais des souffles — la Q-13 qui les assimilait aux souffles
   // communs reposait sur une confusion, levée le 2026-09-25 par `docs/dragons.md`. Indépendant du
   // choix de pouvoir d'éveil au level-up ci-dessus (`eveilPowersForCurrentLevel`,
-  // `chooseEveilPower()`), que ces listes n'affectent jamais. Pas de réserve ni de décompte ici
-  // (story dédiée).
+  // `chooseEveilPower()`), que ces listes n'affectent jamais. Pas de décompte ici : la réserve de
+  // souffles vit dans sa propre section (`ReserveSection`, Story 33.6).
 
   /** Souffles communs (sans `race`), groupés par famille dans l'ordre du livre. Une famille sans
    *  entrée au catalogue n'est pas affichée ; une entrée commune sans famille connue non plus. */
@@ -376,8 +385,8 @@ export class HommeDragonSheet implements OnInit {
   // — Souffles rituels (Story 33.7) —
   protected readonly ritualCatalog = signal<ContentEntryDto[]>([]);
 
-  /** Consultables à partir du niveau 5 (mère-dragon). Lecture seule : aucune réserve ni décompte
-   *  (33.6). Le catalogue `souffleRituel` est distinct de `souffle` : ses entrées n'ont ni race ni
+  /** Consultables à partir du niveau 5 (mère-dragon) ; ils peuvent aussi être placés dans la
+   *  réserve (33.6, `ReserveSection`), sans décompte. Le catalogue `souffleRituel` est distinct de `souffle` : ses entrées n'ont ni race ni
    *  famille, elles ne sont donc jamais classées « autre race ». Liste vide si le catalogue l'est. */
   protected readonly rituals = computed<ContentEntryDto[]>(() => {
     const hd = this.hommeDragon();

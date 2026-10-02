@@ -54,6 +54,7 @@ export class HommeDragonPdfService {
       mjPseudo,
       eveilPowerLabels: catalogues.eveilPowerLabels,
       artefactLabel: catalogues.artefactLabel,
+      reserveLabels: catalogues.reserveLabels,
     });
 
     const doc = await PDFDocument.load(templateBytes);
@@ -123,11 +124,13 @@ export class HommeDragonPdfService {
 
   /** Catalogues Ryuutama utiles à l'export, résolus en un seul `getContent()` : libellés des
    * pouvoirs d'éveil, libellé de l'artefact, entrées `souffle` (jamais `eveilPower` pour ces
-   * dernières — éveils et souffles restent distincts). */
+   * dernières — éveils et souffles restent distincts) et table clé → libellé des souffles et des
+   * souffles rituels pour les cases de la réserve (`souffle_1..4`, Story 33.6). */
   private async resolveCatalogues(artefactKey: string): Promise<{
     eveilPowerLabels: Record<string, string>;
     artefactLabel: string | undefined;
     souffles: SouffleCatalogEntry[];
+    reserveLabels: Record<string, string>;
   }> {
     const content = await this.gameSystems.getContent(RYUUTAMA_ID);
     const eveilPowerLabels: Record<string, string> = {};
@@ -138,6 +141,11 @@ export class HommeDragonPdfService {
     const artefactEntry = (content['hommeDragonArtefact'] ?? []).find((e) => e.key === artefactKey);
     const artefactLabel =
       (artefactEntry?.data as { label?: string } | undefined)?.label || undefined;
-    return { eveilPowerLabels, artefactLabel, souffles: content['souffle'] ?? [] };
+    const reserveLabels: Record<string, string> = {};
+    for (const entry of [...(content['souffle'] ?? []), ...(content['souffleRituel'] ?? [])]) {
+      const label = (entry.data as { label?: string })?.label;
+      if (label) reserveLabels[entry.key] = label;
+    }
+    return { eveilPowerLabels, artefactLabel, souffles: content['souffle'] ?? [], reserveLabels };
   }
 }

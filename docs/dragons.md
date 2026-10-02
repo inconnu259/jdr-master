@@ -138,6 +138,13 @@ des situations et aident les personnages à avancer dans le scénario.
 - **Depuis la réserve (dès le niveau 2)** — la réserve contient **1 emplacement au niveau 2, puis un de plus à chaque niveau** (donc niveau − 1). Chaque souffle conservé se lance **une fois, gratuitement** ; ses effets durent en général jusqu'à la fin de la séance. La réserve est pleine au début de chaque séance : le meneur choisit les souffles qu'elle contient (communs ou de sa race) et leur nombre d'exemplaires, puis les annonce en expliquant leurs effets.
 - **En puisant dans son souffle (dès le niveau 1)** — lancer un souffle coûte **1 PS**. Les souffles accessibles sont les mêmes que ceux qu'il pourrait mettre en réserve.
 
+Dans l'application : la réserve se compose **une seule fois**, sur la fiche de l'homme-dragon (réservée
+au meneur), emplacement par emplacement, et s'enregistre à chaque geste (`sheetData.reserve`, liste
+positionnelle). Un souffle commun ou de la race peut occuper plusieurs emplacements ; les souffles du
+temps sont exclus ; un seul souffle d'une autre race, sur un seul emplacement, dès le niveau 3 ; les
+souffles rituels dès le niveau 5. La réserve alimente les cases `souffle_1`..`souffle_4` de l'export PDF
+et rien n'est décompté en séance.
+
 ### Souffles communs
 
 **Temps** — ne peuvent pas être mis en réserve, coûtent **2 PS**.
@@ -224,7 +231,7 @@ jouées avec le même homme-dragon, car **son niveau dépend du nombre de séanc
 
 Le livre ne précise pas leur coût ; hypothèse retenue : même règle que les autres souffles, soit
 **1 PS** chacun (`ps: 1` dans `souffles-rituels.json`). Ils sont consultables sur la fiche dès le
-niveau 5, en lecture seule (ni réserve ni décompte pour l'instant) ; sans race ni famille, ils ne
+niveau 5 et peuvent alors être placés dans la réserve (sans décompte) ; sans race ni famille, ils ne
 comptent jamais comme des souffles « d'une autre race ».
 
 | Souffle | Effet |

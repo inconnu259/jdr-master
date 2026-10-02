@@ -8,6 +8,7 @@ import type { HommeDragon } from '@prisma/client';
 import type {
   ChooseArtefactCadeauDto as ChooseArtefactCadeauPayload,
   ChooseEveilPowerDto as ChooseEveilPowerPayload,
+  SetReserveSlotDto as SetReserveSlotPayload,
   CreateHommeDragonDto,
   HommeDragonDto,
   HommeDragonSheetData,
@@ -20,6 +21,8 @@ import {
   computeHommeDragonDerived,
   levelForScenariosPasse,
   pendingEveilLevels,
+  reserveCapacity,
+  validateReserve,
   type HommeDragonArtefactCatalogEntry,
 } from '@master-jdr/game-rules';
 import { PrismaService } from '../prisma/prisma.service';
@@ -29,6 +32,9 @@ import { GameSystemService } from '../game-systems/game-system.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+
+/** Nombre maximal d'emplacements de la réserve (niveau 5 : 5 − 1) — borne dure du numéro d'emplacement. */
+const MAX_RESERVE_SLOTS = 4;
 
 @Injectable()
 export class HommeDragonService {
@@ -319,6 +325,92 @@ export class HommeDragonService {
   }
 
   /**
+   * Écriture d'UN emplacement de la réserve de souffles (Story 33.6, AD-22) — MJ seul via
+   * `getOwned`, Ryuutama seul. `slot` est 1-based ; `key: null` retire le souffle. Un seul
+   * emplacement par appel (écriture à chaque geste côté fiche) : le geste est appliqué à la liste
+   * LUE SOUS VERROU, puis toute la composition résultante est revalidée contre les catalogues
+   * `souffle` et `souffleRituel` (capacité, souffles du temps, autre race, rituels). Une demande
+   * invalide est rejetée (400) sans rien écrire. Niveau recalculé côté serveur (scénarios
+   * `PASSE`) ; au niveau 1 toute écriture est refusée. Aucune purge d'un surplus après une baisse
+   * de niveau : ce qui est inchangé est toléré. Même mécanique que `chooseArtefactCadeau()` :
+   * `SELECT ... FOR UPDATE` dans une transaction, `sheetData` copié plutôt que muté.
+   */
+  async setReserveSlot(
+    partieId: string,
+    userId: string,
+    slot: number,
+    dto: SetReserveSlotPayload,
+  ): Promise<HommeDragonDto> {
+    const partie = await this.parties.getOwned(partieId, userId);
+    if (partie.gameSystemId !== RYUUTAMA_ID) {
+      throw new BadRequestException(
+        `L'Homme Dragon n'existe que pour Ryuutama, pas pour "${partie.gameSystemId}"`,
+      );
+    }
+    if (!Number.isInteger(slot) || slot < 1 || slot > MAX_RESERVE_SLOTS) {
+      throw new BadRequestException(`Emplacement invalide (de 1 à ${MAX_RESERVE_SLOTS})`);
+    }
+
+    const voyageurs = await this.computeVoyageursProteges(partieId, userId);
+    const historique = await this.computeHistorique(partieId, userId, voyageurs);
+    const level = levelForScenariosPasse(historique.length);
+    // Niveau 1 : capacité 0, la réserve n'existe pas — toute écriture (même un retrait) est refusée.
+    if (reserveCapacity(level) < 1) {
+      throw new BadRequestException("La réserve de souffles s'ouvre au niveau 2");
+    }
+    const content = await this.gameSystems.getContent(partie.gameSystemId);
+    const catalogs = {
+      souffles: content['souffle'] ?? [],
+      rituels: content['souffleRituel'] ?? [],
+    };
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "HommeDragon" WHERE "userId" = ${userId} AND "partieId" = ${partieId} AND "gameSystemId" = ${RYUUTAMA_ID} FOR UPDATE`;
+
+      const existing = await tx.hommeDragon.findUnique({
+        where: {
+          userId_partieId_gameSystemId: {
+            userId,
+            partieId,
+            gameSystemId: RYUUTAMA_ID,
+          },
+        },
+      });
+      if (!existing) throw new NotFoundException('Homme Dragon introuvable');
+
+      const existingSheetData = existing.sheetData as unknown as HommeDragonSheetData;
+      const previous = existingSheetData.reserve ?? [];
+
+      // Geste appliqué à la liste lue sous verrou (copie, jamais de mutation de l'objet Prisma).
+      // Un retrait au-delà de la fin de la liste n'a rien à vider : la liste n'est pas allongée.
+      const reserve: (string | null)[] = Array.from(
+        { length: dto.key === null ? previous.length : Math.max(previous.length, slot) },
+        (_, i) => previous[i] ?? null,
+      );
+      if (slot <= reserve.length) reserve[slot - 1] = dto.key;
+
+      const result = validateReserve(reserve, level, existingSheetData.race, catalogs, previous);
+      if (!result.valid) {
+        throw new BadRequestException(result.errors);
+      }
+
+      const sheetData = { ...existingSheetData, reserve };
+      return tx.hommeDragon.update({
+        where: {
+          userId_partieId_gameSystemId: {
+            userId,
+            partieId,
+            gameSystemId: RYUUTAMA_ID,
+          },
+        },
+        data: { sheetData: sheetData },
+      });
+    });
+    this.realtimeEvents.emit(partieTopic(partieId));
+    return this.buildDto(updated, partieId, userId);
+  }
+
+  /**
    * `hommeDragon.userId` EST le MJ (contrainte unique `[userId, partieId, gameSystemId]`, toujours
    * créé par le MJ via `getOwned` — jamais un joueur). Utilisé pour l'export PDF (Story 10.5),
    * `HommeDragonDto` n'exposant pas le pseudo du propriétaire.
@@ -332,14 +424,16 @@ export class HommeDragonService {
   }
 
   /**
-   * Lecture ouverte à tout membre (NFR1) — cible toujours le Homme Dragon DU MJ de la Partie
-   * (`partie.mjId`), pas celui du `userId` courant : un joueur qui consulte n'en a pas le sien.
+   * Lecture réservée au MJ de la Partie (Story 33.6, option B2 du 2026-10-02 : elle remplace la
+   * lecture « par tout membre » du Palier 5 — la fiche porte la réserve de souffles, que les
+   * joueurs ne voient jamais). Un non-MJ reçoit `403` sans aucune donnée, `GET` comme export PDF
+   * (qui passe par cette méthode). Cible le Homme Dragon du MJ (`userId`).
    * `null` = pas encore créé, jamais un 404 (état normal, pas une erreur) — y compris si la Partie
    * a basculé hors Ryuutama depuis (revue de code : même raisonnement que `update()`, une fiche
    * orpheline n'est plus « la » fiche Homme Dragon de cette Partie).
    */
   async findOne(partieId: string, userId: string): Promise<HommeDragonDto | null> {
-    const partie = await this.parties.getViewable(partieId, userId);
+    const partie = await this.parties.getOwned(partieId, userId);
     if (partie.gameSystemId !== RYUUTAMA_ID) return null;
 
     const hommeDragon = await this.prisma.hommeDragon.findUnique({

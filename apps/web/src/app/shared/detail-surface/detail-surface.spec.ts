@@ -256,3 +256,164 @@ describe('DetailSurface — contenu projeté (Story 31.4)', () => {
     expect(el.textContent).not.toContain('Aucune description disponible');
   });
 });
+
+// ── Story 33.6 : extension rétro-compatible (en-tête / pied personnalisés, largeur, fermeture) ──
+
+@Component({
+  standalone: true,
+  imports: [DetailSurface],
+  template: `<app-detail-surface
+    title="Choisir un souffle pour l'emplacement 3"
+    [custom]="true"
+    [hasHeader]="true"
+    [hasFooter]="true"
+    [desktopWidth]="620"
+    describedBy="compteur"
+    [openToken]="1"
+    (closed)="closedCount = closedCount + 1"
+    ><div detail-header class="h">
+      <h2 id="t">Titre projeté</h2>
+      <span id="compteur">2 / 3</span>
+    </div>
+    <p class="body-projected">Corps projeté</p>
+    <div detail-footer class="f"><button type="button" class="f-btn">Valider</button></div>
+  </app-detail-surface>`,
+})
+class SlotsHost {
+  closedCount = 0;
+}
+
+@Component({
+  standalone: true,
+  imports: [DetailSurface],
+  template: `<app-detail-surface title="Portail" [portal]="true" body="Corps" [openToken]="1" />`,
+})
+class PortalHost {}
+
+describe('DetailSurface — extension rétro-compatible (Story 33.6)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  async function mount<T>(component: new () => T, desktop: boolean) {
+    await TestBed.configureTestingModule({
+      imports: [component],
+      providers: [
+        provideNoopAnimations(),
+        { provide: BreakpointObserver, useValue: makeBreakpointObserver(desktop) },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(component);
+    fixture.detectChanges();
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('sans slot : rendu inchangé (titre par défaut, pas de pied, pas de classe « split »)', async () => {
+    const { fixture } = await createHost();
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelector('.detail-surface-title')).not.toBeNull();
+    expect(el.querySelector('.detail-surface-header')).toBeNull();
+    expect(el.querySelector('.detail-surface-footer')).toBeNull();
+    expect(el.querySelector('.detail-surface-panel--split')).toBeNull();
+    const panel = el.querySelector('.detail-surface-panel') as HTMLElement;
+    expect(panel.getAttribute('aria-describedby')).toBeNull();
+    expect(panel.style.getPropertyValue('--detail-surface-width')).toBe('');
+  });
+
+  it('bouton de fermeture : « Fermer la feuille » en mobile, « Fermer la fenêtre » en desktop', async () => {
+    const mobile = (await createHost(false)).fixture.nativeElement as HTMLElement;
+    expect(mobile.querySelector('.detail-surface-close')?.getAttribute('aria-label')).toBe(
+      'Fermer la feuille',
+    );
+    TestBed.resetTestingModule();
+    const desktop = (await createHost(true)).fixture.nativeElement as HTMLElement;
+    expect(desktop.querySelector('.detail-surface-close')?.getAttribute('aria-label')).toBe(
+      'Fermer la fenêtre',
+    );
+  });
+
+  it('en-tête et pied projetés : titre par défaut remplacé, corps dans la zone défilante, pied épinglé', async () => {
+    const el = await mount(SlotsHost, false);
+
+    expect(el.querySelector('.detail-surface-title')).toBeNull();
+    expect(el.querySelector('.detail-surface-header #t')?.textContent).toBe('Titre projeté');
+    expect(el.querySelector('.detail-surface-content .body-projected')).not.toBeNull();
+    expect(el.querySelector('.detail-surface-footer .f-btn')?.textContent).toBe('Valider');
+    // Le pied est HORS de la zone qui défile.
+    expect(el.querySelector('.detail-surface-content .f-btn')).toBeNull();
+    expect(el.querySelector('.detail-surface-panel--split')).not.toBeNull();
+    // Contenu projeté : ni corps de texte ni repli « Aucune description disponible ».
+    expect(el.textContent).not.toContain('Aucune description disponible');
+  });
+
+  it('nom et description du dialogue : titre en aria-label, compteur en aria-describedby', async () => {
+    const el = await mount(SlotsHost, true);
+    const panel = el.querySelector('.detail-surface-panel') as HTMLElement;
+
+    expect(panel.getAttribute('aria-label')).toBe("Choisir un souffle pour l'emplacement 3");
+    expect(panel.getAttribute('aria-describedby')).toBe('compteur');
+    expect(el.querySelector('#compteur')?.textContent).toBe('2 / 3');
+  });
+
+  it('largeur par usage : exposée en variable CSS --detail-surface-width', async () => {
+    const el = await mount(SlotsHost, true);
+    const panel = el.querySelector('.detail-surface-panel') as HTMLElement;
+
+    expect(panel.style.getPropertyValue('--detail-surface-width')).toBe('620px');
+  });
+
+  it('Échap et le bouton de fermeture émettent closed avec en-tête et pied personnalisés', async () => {
+    await TestBed.configureTestingModule({
+      imports: [SlotsHost],
+      providers: [
+        provideNoopAnimations(),
+        { provide: BreakpointObserver, useValue: makeBreakpointObserver(false) },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(SlotsHost);
+    fixture.detectChanges();
+    const el: HTMLElement = fixture.nativeElement;
+    const panel = el.querySelector('.detail-surface-panel') as HTMLElement;
+
+    panel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    (el.querySelector('.detail-surface-close') as HTMLButtonElement).click();
+
+    expect(fixture.componentInstance.closedCount).toBe(2);
+  });
+
+  it("portal : l'hôte passe sous <body> après le premier rendu, le focus revient à la fenêtre, et il est retiré à la destruction", async () => {
+    await TestBed.configureTestingModule({
+      imports: [PortalHost],
+      providers: [
+        provideNoopAnimations(),
+        { provide: BreakpointObserver, useValue: makeBreakpointObserver(false) },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(PortalHost);
+    fixture.detectChanges();
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    const host = document.body.querySelector('app-detail-surface') as HTMLElement;
+
+    expect(host).not.toBeNull();
+    expect(host.parentElement).toBe(document.body);
+    expect(fixture.nativeElement.querySelector('app-detail-surface')).toBeNull();
+    expect(document.activeElement).toBe(host.querySelector('.detail-surface-close'));
+
+    fixture.destroy();
+    expect(document.body.querySelector('app-detail-surface')).toBeNull();
+  });
+
+  it("sans portal (défaut) : l'hôte reste à sa place dans le DOM", async () => {
+    const { fixture } = await createHost();
+    const host = (fixture.nativeElement as HTMLElement).querySelector('app-detail-surface');
+
+    expect(host).not.toBeNull();
+    expect(host!.parentElement).not.toBe(document.body);
+  });
+});

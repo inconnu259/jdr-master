@@ -1195,6 +1195,11 @@ export interface HommeDragonSheetData {
    * unique et définitif du MJ, jamais d'artefact de la race du dragon. Le libellé se lit au
    * catalogue `hommeDragonArtefact`. Absent tant que rien n'est choisi. */
   artefactCadeau?: { key: string };
+  /** Réserve de souffles du dragon (Story 33.6) : une seule par Homme Dragon, positionnelle
+   * (index = numéro d'emplacement − 1), clé d'un souffle du catalogue `souffle` ou `souffleRituel`,
+   * `null`/absent = emplacement vide. Écrite uniquement par `PUT …/reserve/:slot`, jamais par le
+   * `PATCH` générique ; lue par le MJ seul (la fiche entière lui est réservée). */
+  reserve?: (string | null)[];
 }
 
 export interface HommeDragonDto {
@@ -1239,8 +1244,11 @@ export interface MyHommeDragonDto {
 export type CreateHommeDragonDto = HommeDragonSheetData;
 
 /** Payload de mise à jour (PATCH /parties/:id/homme-dragon) — race jamais éditable après création,
- * ni l'artefact cadeau (choix définitif via POST `artefact-cadeau`, Story 33.7). */
-export type UpdateHommeDragonDto = Partial<Omit<HommeDragonSheetData, 'race' | 'artefactCadeau'>>;
+ * ni l'artefact cadeau (choix définitif via POST `artefact-cadeau`, Story 33.7), ni la réserve de
+ * souffles (route dédiée `PUT reserve/:slot`, Story 33.6). */
+export type UpdateHommeDragonDto = Partial<
+  Omit<HommeDragonSheetData, 'race' | 'artefactCadeau' | 'reserve'>
+>;
 
 /** Payload de choix d'un pouvoir d'éveil (POST /parties/:id/homme-dragon/eveil-power).
  * Décision utilisateur (Story 10.4) : le catalogue `eveilPower` est un pool commun à toutes les
@@ -1256,4 +1264,11 @@ export interface ChooseEveilPowerDto {
  * Story 33.7) — niveau ≥ 4, choix unique et définitif, artefact d'une autre race que le dragon. */
 export interface ChooseArtefactCadeauDto {
   key: string;
+}
+
+/** Payload de l'écriture d'un emplacement de la réserve (PUT /parties/:id/homme-dragon/reserve/:slot,
+ * Story 33.6) — `key: null` retire le souffle de l'emplacement. Un seul emplacement par appel ; le
+ * numéro d'emplacement (1-based) est dans l'URL. */
+export interface SetReserveSlotDto {
+  key: string | null;
 }

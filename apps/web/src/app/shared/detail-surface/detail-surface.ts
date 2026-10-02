@@ -1,6 +1,8 @@
 import {
   Component,
+  DestroyRef,
   ElementRef,
+  afterNextRender,
   computed,
   effect,
   inject,
@@ -32,6 +34,15 @@ import type { DetailRow } from './detail-surface-host';
  * Rendu pur : contenu déjà résolu par l'appelant, aucune connaissance de qui l'affiche. Corps soit
  * en texte simple (`body`), soit structuré : tableau mécanique (`rows`) puis récit (`narrative`),
  * ce dernier replié par défaut sur téléphone.
+ *
+ * Extension rétro-compatible (Story 33.6, fenêtre de choix de la réserve de souffles) : en-tête et
+ * pied PERSONNALISABLES par projection nommée (`[detail-header]`, `[detail-footer]`, activés par
+ * `hasHeader`/`hasFooter`), largeur desktop par usage (`desktopWidth`), `aria-describedby`
+ * optionnel. Dès qu'un slot est actif, le panneau devient une colonne : en-tête et pied restent
+ * épinglés, seul le corps défile (pied avec son propre `max-height`). Sans slot, le rendu est
+ * celui d'avant — seuls changent le bouton de fermeture (44 px, « Fermer la fenêtre » en desktop /
+ * « Fermer la feuille » en mobile), les hauteurs en `dvh` (zone sûre incluse) et le respect de
+ * `prefers-reduced-motion`.
  */
 @Component({
   selector: 'app-detail-surface',
@@ -57,6 +68,21 @@ export class DetailSurface {
   /** Contenu PROJETÉ par l'appelant (`<ng-content>`, ex. le récapitulatif du wizard) : ni corps de
    *  texte ni repli « Aucune description disponible ». */
   readonly custom = input<boolean>(false);
+  /** Story 33.6 — l'appelant projette son propre en-tête (`[detail-header]`, titre `h2` compris) à
+   *  la place du titre par défaut. `title()` reste le nom accessible du dialogue. */
+  readonly hasHeader = input<boolean>(false);
+  /** Story 33.6 — l'appelant projette un pied épinglé (`[detail-footer]`), hors de la zone qui défile. */
+  readonly hasFooter = input<boolean>(false);
+  /** Story 33.6 — largeur de la fenêtre desktop en px (≥ 1024 px) ; `null` = largeur par défaut
+   *  (560 px). Sans effet sur la feuille mobile. */
+  readonly desktopWidth = input<number | null>(null);
+  /** Story 33.6 — `id` de l'élément qui décrit le dialogue (`aria-describedby`), ex. un compteur. */
+  readonly describedBy = input<string | null>(null);
+  /** Story 33.6 — déplace l'hôte sous `<body>` après le premier rendu. Nécessaire quand la surface
+   *  s'ouvre depuis un contexte d'empilement plus bas que la barre de navigation basse du shell
+   *  (ex. un onglet Material, `z-index: 1`) : sans cela la barre (z-index 10) recouvre le bas de la
+   *  feuille, boutons du pied compris. Désactivé par défaut : les autres usages gardent leur DOM. */
+  readonly portal = input<boolean>(false);
   readonly closed = output<void>();
 
   protected readonly theme = inject(ThemeToneService);
@@ -79,6 +105,22 @@ export class DetailSurface {
   private readonly narrativeOpenedFor = signal<number | null>(null);
   protected readonly narrativeOpen = computed(() => this.narrativeOpenedFor() === this.openToken());
 
+  /** En-tête ou pied personnalisé : le panneau passe en colonne (corps seul défilant). */
+  protected readonly split = computed(() => this.hasHeader() || this.hasFooter());
+
+  /** Valeur de la variable CSS `--detail-surface-width` (lue à ≥ 1024 px uniquement). */
+  protected readonly widthVar = computed(() => {
+    const width = this.desktopWidth();
+    return width ? `${width}px` : null;
+  });
+
+  /** Même vocabulaire que la forme : fenêtre centrée en desktop, feuille basse en mobile. */
+  protected readonly closeLabel = computed(() =>
+    this.isDesktop() ? 'Fermer la fenêtre' : 'Fermer la feuille',
+  );
+
+  private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
+
   private readonly closeButton = viewChild<ElementRef<HTMLButtonElement>>('closeBtn');
 
   /**
@@ -90,6 +132,20 @@ export class DetailSurface {
     this.openToken();
     this.closeButton()?.nativeElement.focus();
   });
+
+  constructor() {
+    afterNextRender(() => {
+      const host = this.host.nativeElement;
+      if (!this.portal() || host.parentElement === document.body) return;
+      document.body.appendChild(host);
+      // Un nœud déplacé perd le focus : on le rend à la fenêtre (bouton de fermeture).
+      this.closeButton()?.nativeElement.focus();
+    });
+    // L'hôte déplacé n'est plus un descendant du composant parent : Angular ne le retirerait pas.
+    inject(DestroyRef).onDestroy(() => {
+      if (this.portal()) this.host.nativeElement.remove();
+    });
+  }
 
   /** Le tableau existe : le récit peut se replier derrière lui. Sans tableau, le récit est le seul
    *  contenu — le cacher derrière un bouton ne laisserait qu'un panneau vide. */

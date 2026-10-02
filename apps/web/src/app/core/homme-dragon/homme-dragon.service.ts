@@ -7,6 +7,7 @@ import type {
   CreateHommeDragonDto,
   HommeDragonDto,
   MyHommeDragonDto,
+  SetReserveSlotDto,
   UpdateHommeDragonDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
@@ -80,6 +81,20 @@ export class HommeDragonService {
     return firstValueFrom(
       this.http.post<HommeDragonDto>(
         `${API_BASE}/parties/${partieId}/homme-dragon/artefact-cadeau`,
+        dto,
+        { withCredentials: true },
+      ),
+    );
+  }
+
+  /** Écrit UN emplacement de la réserve de souffles (Story 33.6) — `slot` 1-based, `key: null`
+   *  retire le souffle. Renvoie la fiche entière à jour ; n'appelle PAS `notifyChanged()` : c'est
+   *  le signal SSE de la partie qui rafraîchit les autres vues (la section applique la réponse
+   *  directement). */
+  setReserveSlot(partieId: string, slot: number, dto: SetReserveSlotDto): Promise<HommeDragonDto> {
+    return firstValueFrom(
+      this.http.put<HommeDragonDto>(
+        `${API_BASE}/parties/${partieId}/homme-dragon/reserve/${slot}`,
         dto,
         { withCredentials: true },
       ),

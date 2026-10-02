@@ -57,6 +57,12 @@ function makeGameSystems() {
         { key: 'grand-arc', data: { key: 'grand-arc', label: 'Grand arc', race: 'DRAGON_ROUGE' } },
       ],
       souffle: [{ key: 'passe', data: { key: 'passe', label: 'Passé', famille: 'temps', ps: 2 } }],
+      souffleRituel: [
+        {
+          key: 'rituel-du-tabou',
+          data: { key: 'rituel-du-tabou', label: 'Rituel du tabou', ps: 1 },
+        },
+      ],
     }),
   };
 }
@@ -131,6 +137,17 @@ describe('HommeDragonPdfService', () => {
         raceLabel: 'Dragon Rouge',
         mjPseudo: 'admin',
         eveilPowerLabels: { 'escorte-du-dragon': 'Escorte du dragon' },
+      }),
+    );
+  });
+
+  it('résout les libellés de réserve depuis les catalogues `souffle` et `souffleRituel`', async () => {
+    await service.fillHommeDragonPdf(makeHommeDragon(), 'admin', 'editable');
+
+    expect(mockMapFields).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        reserveLabels: { passe: 'Passé', 'rituel-du-tabou': 'Rituel du tabou' },
       }),
     );
   });

@@ -168,6 +168,7 @@ function makeHommeDragonService(
     update: vi.fn(),
     chooseEveilPower: vi.fn(),
     chooseArtefactCadeau: vi.fn(),
+    setReserveSlot: vi.fn(),
     exportPdf: vi.fn(),
     // Story 20.2 (Task 3) : HommeDragonSheet réagit désormais à ce signal (effect() du constructeur).
     changed: signal(0),
@@ -333,6 +334,7 @@ describe('HommeDragonSheet', () => {
       update: vi.fn(),
       chooseEveilPower: vi.fn(),
       chooseArtefactCadeau: vi.fn(),
+      setReserveSlot: vi.fn(),
       exportPdf: vi.fn(),
       changed: signal(0),
     };
@@ -1248,7 +1250,7 @@ describe('HommeDragonSheet', () => {
       expect(shown.textContent).toContain('artefact-retire');
     });
 
-    it('niveau 5 → 6 rituels consultables à « 1 PS », sans mention de réserve ni « autre race » (matrice)', async () => {
+    it('niveau 5 → 6 rituels consultables à « 1 PS », consigne de réserve réécrite (placés dans la réserve, sans décompte), jamais « autre race » (matrice)', async () => {
       const { fixture } = await createComponent(dragon(5));
 
       const section = q(fixture, '.homme-dragon-sheet__rituals');
@@ -1261,6 +1263,11 @@ describe('HommeDragonSheet', () => {
       }
       expect(section.nativeElement.textContent).toContain('Rituel du sommeil');
       expect(section.nativeElement.textContent).toContain('Fête des poings');
+      // Story 33.6 : la consigne de lecture seule (« sans réserve ni décompte ») est réécrite.
+      expect(section.nativeElement.textContent).toContain(
+        'peuvent être placés dans la réserve, sans décompte',
+      );
+      expect(section.nativeElement.textContent).not.toContain('sans réserve ni décompte');
       // Jamais classés parmi les souffles des autres races.
       expect(q(fixture, '.homme-dragon-sheet__souffles-autres-races').nativeElement.textContent).not.toContain('Rituel');
     });
@@ -1316,6 +1323,103 @@ describe('HommeDragonSheet', () => {
 
       expect(q(fixture, '.homme-dragon-sheet__cadeau-prompt')).toBeNull();
       expect((q(fixture, '.homme-dragon-sheet__cadeau').nativeElement as HTMLElement).textContent).toContain('Lanterne');
+    });
+  });
+
+  describe('Réserve de souffles (Story 33.6)', () => {
+    function dragon(level: number, reserve?: (string | null)[]) {
+      return makeHommeDragonService(
+        makeDto({
+          sheetData: {
+            race: 'DRAGON_ROUGE',
+            artefact: { key: 'grand-arc' },
+            nom: 'Ignis',
+            ...(reserve ? { reserve } : {}),
+          },
+          derived: { level, PS: level >= 5 ? 10 : level >= 3 ? 5 : 3 },
+        }),
+      );
+    }
+
+    const q = (fixture: ComponentFixture<HommeDragonSheet>, css: string) =>
+      fixture.debugElement.query(By.css(css));
+    const text = (fixture: ComponentFixture<HommeDragonSheet>) =>
+      fixture.nativeElement.textContent as string;
+
+    it("niveau 1 → la section n'affiche que la ligne d'information, aucun emplacement", async () => {
+      const { fixture } = await createComponent(dragon(1));
+
+      const section = q(fixture, 'app-reserve-section');
+      expect(section).toBeTruthy();
+      expect(section.nativeElement.textContent).toContain(
+        "La réserve de souffles s'ouvre au niveau 2.",
+      );
+      expect(section.queryAll(By.css('button'))).toHaveLength(0);
+    });
+
+    it('niveau 4 → N − 1 emplacements, section juste AVANT la carte « Souffles » dans la colonne gauche', async () => {
+      const { fixture } = await createComponent(dragon(4, ['courage', null, null]));
+
+      const section = q(fixture, 'app-reserve-section').nativeElement as HTMLElement;
+      expect(section.textContent).toContain('Niveau 4 · 3 emplacements');
+      expect(section.querySelectorAll('.reserve__slot')).toHaveLength(3);
+      const souffles = q(fixture, '.homme-dragon-sheet__souffles').nativeElement as HTMLElement;
+      expect(section.parentElement).toBe(souffles.parentElement);
+      expect(section.nextElementSibling).toBe(souffles);
+      expect(text(fixture)).toContain('Courage');
+    });
+
+    it('un geste enregistré met la fiche à jour (réponse du serveur appliquée)', async () => {
+      const hommeDragonSvc = dragon(3, [null, null]);
+      const updated = makeDto({
+        sheetData: {
+          race: 'DRAGON_ROUGE',
+          artefact: { key: 'grand-arc' },
+          nom: 'Ignis',
+          reserve: ['chance', null],
+        },
+        derived: { level: 3, PS: 5 },
+        updatedAt: '2026-10-02T10:00:00.000Z',
+      });
+      hommeDragonSvc.setReserveSlot.mockResolvedValue(updated);
+      const { fixture } = await createComponent(hommeDragonSvc);
+
+      const pick = q(fixture, '[data-reserve-btn="pick"][data-slot="1"]')
+        .nativeElement as HTMLElement;
+      pick.click();
+      fixture.detectChanges();
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+      (q(fixture, '[aria-labelledby*="-chance-n"]').nativeElement as HTMLElement).click();
+      fixture.detectChanges();
+      (q(fixture, '.rp__btn--primary').nativeElement as HTMLElement).click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(hommeDragonSvc.setReserveSlot).toHaveBeenCalledWith('p1', 1, { key: 'chance' });
+      expect(fixture.componentInstance['hommeDragon']()).toEqual(updated);
+    });
+
+    it('une relecture de la fiche (signal changed) partie AVANT une écriture ne la remplace pas par une fiche plus ancienne', async () => {
+      const newer = makeDto({ updatedAt: '2026-10-02T10:00:00.000Z' });
+      const hommeDragonSvc = makeHommeDragonService(newer);
+      const { fixture } = await createComponent(hommeDragonSvc);
+      // La lecture déclenchée par `changed` renvoie une fiche plus ancienne que celle déjà affichée.
+      hommeDragonSvc.findOne.mockResolvedValue(makeDto({ updatedAt: '2026-10-01T10:00:00.000Z' }));
+
+      hommeDragonSvc.changed.update((v) => v + 1);
+      fixture.detectChanges();
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+
+      expect(fixture.componentInstance['hommeDragon']()?.updatedAt).toBe(
+        '2026-10-02T10:00:00.000Z',
+      );
     });
   });
 

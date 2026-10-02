@@ -4,9 +4,11 @@ import {
   Get,
   NotFoundException,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   StreamableFile,
   UseGuards,
@@ -20,6 +22,7 @@ import { CreateHommeDragonDto } from './dto/create-homme-dragon.dto';
 import { UpdateHommeDragonDto } from './dto/update-homme-dragon.dto';
 import { ChooseEveilPowerDto } from './dto/choose-eveil-power.dto';
 import { ChooseArtefactCadeauDto } from './dto/choose-artefact-cadeau.dto';
+import { SetReserveSlotDto } from './dto/set-reserve-slot.dto';
 import { ExportHommeDragonPdfDto } from './dto/export-homme-dragon-pdf.dto';
 
 @UseGuards(AuthenticatedGuard)
@@ -69,6 +72,18 @@ export class HommeDragonController {
     @Body() dto: ChooseArtefactCadeauDto,
   ) {
     return this.hommeDragon.chooseArtefactCadeau(partieId, user.id, dto);
+  }
+
+  /** Écriture d'un emplacement de la réserve de souffles (Story 33.6) : `slot` 1-based,
+   * `{ key: null }` retire le souffle. Jamais par le `PATCH` générique. */
+  @Put('reserve/:slot')
+  setReserveSlot(
+    @Param('id', ParseUUIDPipe) partieId: string,
+    @Param('slot', ParseIntPipe) slot: number,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SetReserveSlotDto,
+  ) {
+    return this.hommeDragon.setReserveSlot(partieId, user.id, slot, dto);
   }
 
   @Get('export.pdf')

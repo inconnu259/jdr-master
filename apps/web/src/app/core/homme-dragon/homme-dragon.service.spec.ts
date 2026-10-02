@@ -135,6 +135,22 @@ describe('HommeDragonService', () => {
     await expect(promise).resolves.toBeDefined();
   });
 
+  it.each([{ key: 'courage' }, { key: null }])(
+    'setReserveSlot() appelle PUT /parties/:id/homme-dragon/reserve/:slot avec le DTO, withCredentials (Story 33.6)',
+    async (dto) => {
+      const promise = service.setReserveSlot('p1', 2, dto);
+
+      const req = http.expectOne(`${API_BASE}/parties/p1/homme-dragon/reserve/2`);
+      expect(req.request.method).toBe('PUT');
+      expect(req.request.body).toEqual(dto);
+      expect(req.request.withCredentials).toBe(true);
+
+      req.flush(makeDto());
+
+      await expect(promise).resolves.toBeDefined();
+    },
+  );
+
   it.each(['editable', '2pages'] as const)(
     'exportPdf(partieId, "%s") → GET export.pdf?format=... en blob, withCredentials',
     async (format) => {
