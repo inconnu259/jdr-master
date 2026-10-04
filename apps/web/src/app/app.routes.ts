@@ -89,9 +89,20 @@ export const routes: Routes = [
           ),
       },
       {
-        // Story 33.5 : fiche (ou parcours de création) de l'Homme Dragon du MJ, atteinte depuis
-        // « Personnages ». Redirection hors MJ/Ryuutama dans la page ; le serveur reste l'autorité.
+        // Story 33.5 / 33.8 (AD-23) : parcours de création de l'Homme Dragon d'UNE aventure (création
+        // + association), atteint depuis « Personnages » ou l'onglet de la partie ; il navigue vers
+        // `/homme-dragons/:id` une fois la fiche créée. Redirection hors MJ/Ryuutama dans la page ;
+        // le serveur reste l'autorité.
         path: 'parties/:id/homme-dragon',
+        loadComponent: () =>
+          import('./features/homme-dragon/homme-dragon-creation-page/homme-dragon-creation-page').then(
+            (m) => m.HommeDragonCreationPage,
+          ),
+      },
+      {
+        // Story 33.8 (AD-23) : la fiche d'un Homme Dragon, par SON id — propriétaire seul (le
+        // serveur répond `404` pour un autre), y compris sans aucune aventure.
+        path: 'homme-dragons/:id',
         loadComponent: () =>
           import('./features/homme-dragon/homme-dragon-page/homme-dragon-page').then(
             (m) => m.HommeDragonPage,

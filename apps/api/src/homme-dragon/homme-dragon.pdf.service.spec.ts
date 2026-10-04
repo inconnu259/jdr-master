@@ -71,7 +71,6 @@ function makeHommeDragon(overrides: Partial<HommeDragonDto> = {}): HommeDragonDt
   const base: HommeDragonDto = {
     id: 'hd1',
     userId: 'mj1',
-    partieId: 'p1',
     gameSystemId: 'ryuutama',
     sheetData: {
       race: 'DRAGON_ROUGE',
@@ -80,7 +79,7 @@ function makeHommeDragon(overrides: Partial<HommeDragonDto> = {}): HommeDragonDt
     },
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-17T00:00:00.000Z',
-    voyageursProteges: [],
+    aventures: [],
     historique: [],
     derived: { level: 3, PS: 5 },
     eveilPowers: [],

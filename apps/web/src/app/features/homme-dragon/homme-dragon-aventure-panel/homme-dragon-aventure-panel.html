@@ -1,0 +1,65 @@
+<section class="aventure-panel">
+  @if (loadError()) {
+    <p class="error" role="alert">{{ loadError() }}</p>
+  } @else if (linked() === undefined) {
+    <p class="muted">Chargement...</p>
+  } @else if (linked(); as l) {
+    <h2 class="aventure-panel__title">Homme Dragon de cette aventure</h2>
+    <p class="aventure-panel__linked">
+      <a class="aventure-panel__link" [routerLink]="['/homme-dragons', l.id]">{{ linkedName() }}</a>
+    </p>
+    <p class="muted">Sa fiche, son niveau et son historique cumulent toutes ses aventures.</p>
+    <button
+      mat-stroked-button
+      type="button"
+      class="aventure-panel__dissociate"
+      [disabled]="busy()"
+      (click)="onDissociate()"
+    >
+      Dissocier
+    </button>
+  } @else {
+    <h2 class="aventure-panel__title">Aucun Homme Dragon pour cette aventure</h2>
+    <div class="aventure-panel__actions">
+      <a
+        mat-flat-button
+        color="primary"
+        class="aventure-panel__create"
+        [routerLink]="['/parties', partieId(), 'homme-dragon']"
+      >
+        Créer un Homme Dragon pour {{ partieName() }}
+      </a>
+    </div>
+    <div class="aventure-panel__associate">
+      @if (associable().length === 0) {
+        <p class="muted">Vous n'avez encore aucun autre Homme Dragon à associer.</p>
+      } @else {
+        <label for="aventure-panel-associate">Associer un existant</label>
+        <select
+          id="aventure-panel-associate"
+          name="associate"
+          [ngModel]="selectedId()"
+          (ngModelChange)="selectedId.set($event)"
+        >
+          <option [ngValue]="null" disabled>—</option>
+          @for (hd of associable(); track hd.id) {
+            <option [ngValue]="hd.id">{{ hd.label }}</option>
+          }
+        </select>
+        <button
+          mat-flat-button
+          color="primary"
+          type="button"
+          class="aventure-panel__associate-btn"
+          [disabled]="!selectedId() || busy()"
+          (click)="onAssociate()"
+        >
+          Associer
+        </button>
+      }
+    </div>
+  }
+  @if (actionError()) {
+    <p class="error" role="alert">{{ actionError() }}</p>
+  }
+</section>

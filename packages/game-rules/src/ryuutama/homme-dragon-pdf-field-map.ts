@@ -1,6 +1,10 @@
 import type { PdfFieldValue } from './pdf-field-map.ts';
 import type { HommeDragonSheetData } from './validate-homme-dragon.ts';
 import { reserveCapacity } from './homme-dragon-reserve.ts';
+import {
+  flattenVoyageursProteges,
+  type HommeDragonAventureVoyageurs,
+} from './homme-dragon-voyageurs.ts';
 
 /** Miroir local des champs de `HommeDragonDto` (`@master-jdr/shared`) nécessaires au mapping PDF
  * — jamais importé directement depuis `packages/shared` (frontière types-only, même convention
@@ -9,7 +13,9 @@ export interface HommeDragonPdfInput {
   sheetData: HommeDragonSheetData;
   createdAt: string;
   derived: { level: number; PS: number };
-  voyageursProteges: { userId: string; pseudo: string }[];
+  /** Aventures de l'Homme Dragon (AD-23) : leurs voyageurs sont aplatis et dédoublonnés pour le PDF
+   * par `flattenVoyageursProteges()`. */
+  aventures: HommeDragonAventureVoyageurs[];
   historique: { scenarioTitle: string; date: string; participants: string[] }[];
   eveilPowers: { level: number; key: string }[];
 }
@@ -78,14 +84,15 @@ function formatDateFr(iso: string): string {
  *
  * `monde_protege_1/2/3` : le template a 3 emplacements pour un seul champ `mondesProteges` (texte
  * libre) côté données — jamais découpé artificiellement, seul le premier est rempli.
- * `voyageurs_proteges_1/2` : deux zones multilignes — TOUS les voyageurs sont imprimés, répartis
- * dans l'ordre (première moitié dans la zone 1, le reste dans la zone 2), un par ligne.
+ * `voyageurs_proteges_1/2` : deux zones multilignes — TOUS les voyageurs de TOUTES les aventures
+ * sont imprimés, dédoublonnés (`flattenVoyageursProteges`, AD-23), répartis dans l'ordre (première
+ * moitié dans la zone 1, le reste dans la zone 2), un par ligne.
  */
 export function mapHommeDragonToPdfFields(
   dto: HommeDragonPdfInput,
   content: HommeDragonPdfContent,
 ): PdfFieldValue[] {
-  const { sheetData, derived, voyageursProteges, historique, eveilPowers } = dto;
+  const { sheetData, derived, aventures, historique, eveilPowers } = dto;
 
   const apparenceCaractere = [sheetData.apparence, sheetData.caractere]
     .filter((v): v is string => Boolean(v?.trim()))
@@ -96,7 +103,7 @@ export function mapHommeDragonToPdfFields(
   const artefactNom = sheetData.artefact.nom?.trim();
   const artefactPrinted = artefactNom || content.artefactLabel || sheetData.artefact.key;
 
-  const pseudos = voyageursProteges.map((v) => v.pseudo);
+  const pseudos = flattenVoyageursProteges(aventures).map((v) => v.pseudo);
   const splitAt = Math.ceil(pseudos.length / 2);
   const reserve = sheetData.reserve ?? [];
 

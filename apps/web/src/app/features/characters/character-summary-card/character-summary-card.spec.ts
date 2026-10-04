@@ -3,6 +3,7 @@ import type { CharacterDto, MyHommeDragonDto } from '@master-jdr/shared';
 import { CharacterSummaryCard } from './character-summary-card';
 import { API_BASE } from '../../../core/api-base';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
+import { hommeDragonAventuresLabel } from '../../../core/homme-dragon/homme-dragon.util';
 
 const CHARACTER: CharacterDto = makeCharacterDto({
   id: 'c1',
@@ -363,8 +364,7 @@ describe('CharacterSummaryCard', () => {
   describe('Homme Dragon (Story 33.5)', () => {
     const DRAGON: MyHommeDragonDto = {
       id: 'hd1',
-      partieId: 'p1',
-      partieName: 'Le Convoi du Nord',
+      aventures: [{ partieId: 'p1', nom: 'Le Convoi du Nord' }],
       gameSystemId: 'ryuutama',
       nom: 'Skarn',
       race: 'DRAGON_VERT',
@@ -376,7 +376,7 @@ describe('CharacterSummaryCard', () => {
       TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
       const fixture = TestBed.createComponent(CharacterSummaryCard);
       fixture.componentRef.setInput('hommeDragon', dragon);
-      fixture.componentRef.setInput('partieName', dragon.partieName);
+      fixture.componentRef.setInput('partieName', hommeDragonAventuresLabel(dragon.aventures));
       fixture.componentRef.setInput('showStats', false);
       if (density) fixture.componentRef.setInput('density', density);
       fixture.detectChanges();
@@ -393,6 +393,38 @@ describe('CharacterSummaryCard', () => {
       expect(el.querySelector('.character-summary-card__partie')?.textContent?.trim()).toBe(
         'Le Convoi du Nord',
       );
+    });
+
+    it('deux aventures : une seule carte, les noms joints, le texte complet porté par title (Story 33.8)', async () => {
+      const fixture = await renderDragon('medium', {
+        ...DRAGON,
+        aventures: [
+          { partieId: 'p1', nom: 'Les Vents du Nord' },
+          { partieId: 'p2', nom: "L'Archipel" },
+        ],
+      });
+      const partie = fixture.nativeElement.querySelector(
+        '.character-summary-card__partie',
+      ) as HTMLElement;
+
+      expect(partie.textContent?.trim()).toBe("Les Vents du Nord · L'Archipel");
+      expect(partie.getAttribute('title')).toBe("Les Vents du Nord · L'Archipel");
+    });
+
+    it('sans aventure : l’état se lit sans ouvrir la fiche (« Sans aventure », en texte)', async () => {
+      const fixture = await renderDragon('medium', { ...DRAGON, aventures: [] });
+
+      expect(
+        fixture.nativeElement.querySelector('.character-summary-card__partie')?.textContent?.trim(),
+      ).toBe('Sans aventure');
+    });
+
+    it('compact : sans aventure, la sous-ligne le dit aussi', async () => {
+      const fixture = await renderDragon('compact', { ...DRAGON, aventures: [] });
+
+      expect(
+        fixture.nativeElement.querySelector('.character-summary-card__compact-sub')?.textContent,
+      ).toContain('Sans aventure');
     });
 
     it('grand : même marqueur avec le mot', async () => {

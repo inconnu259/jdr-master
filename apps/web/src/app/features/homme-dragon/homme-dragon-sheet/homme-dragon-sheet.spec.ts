@@ -5,11 +5,20 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
-import type { GameSystemContentDto, HommeDragonDto } from '@master-jdr/shared';
+import { HttpErrorResponse } from '@angular/common/http';
+import { MatDialog } from '@angular/material/dialog';
+import { provideRouter } from '@angular/router';
+import type {
+  GameSystemContentDto,
+  HommeDragonDto,
+  PartieDto,
+  PartySignalsDto,
+} from '@master-jdr/shared';
 import { HommeDragonSheet } from './homme-dragon-sheet';
-import { HommeDragonCreationWizard } from '../homme-dragon-creation-wizard/homme-dragon-creation-wizard';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { CharacterService } from '../../../core/characters/character.service';
+import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
+import { PartySignalsService } from '../../../core/parties/party-signals.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 const CATALOG: GameSystemContentDto = {
@@ -144,12 +153,11 @@ function makeDto(overrides: Partial<HommeDragonDto> = {}): HommeDragonDto {
   return {
     id: 'hd1',
     userId: 'mj1',
-    partieId: 'p1',
     gameSystemId: 'ryuutama',
     sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' },
     createdAt: '2026-07-16T00:00:00.000Z',
     updatedAt: '2026-07-16T00:00:00.000Z',
-    voyageursProteges: [],
+    aventures: [],
     historique: [],
     derived: { level: 1, PS: 3 },
     eveilPowers: [],
@@ -159,12 +167,13 @@ function makeDto(overrides: Partial<HommeDragonDto> = {}): HommeDragonDto {
 }
 
 function makeHommeDragonService(
-  findOneResult: HommeDragonDto | null = null,
+  findOneResult: HommeDragonDto = makeDto(),
   overrides: Partial<{ changed: ReturnType<typeof signal<number>> }> = {},
 ) {
   return {
     findOne: vi.fn().mockResolvedValue(findOneResult),
-    create: vi.fn(),
+    link: vi.fn(),
+    unlink: vi.fn(),
     update: vi.fn(),
     chooseEveilPower: vi.fn(),
     chooseArtefactCadeau: vi.fn(),
@@ -173,6 +182,42 @@ function makeHommeDragonService(
     // Story 20.2 (Task 3) : HommeDragonSheet réagit désormais à ce signal (effect() du constructeur).
     changed: signal(0),
     ...overrides,
+  };
+}
+
+function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
+  return {
+    id: 'p1',
+    name: 'Les Vents du Nord',
+    kind: 'CAMPAGNE_LINEAIRE',
+    gameSystemId: 'ryuutama',
+    description: null,
+    mjId: 'mj1',
+    createdAt: '2026-07-01T00:00:00.000Z',
+    nextSessionDate: null,
+    nextSessionSlot: null,
+    role: 'mj',
+    status: 'EN_COURS',
+    isFavorite: false,
+    coverImageVersion: null,
+    ...overrides,
+  };
+}
+
+/** Signaux déjà calculés (`HOMME_DRAGON_A_CREER`) croisés avec mes parties : seule source des
+ *  aventures éligibles à « Ajouter une aventure » — aucun appel par partie (Story 33.8). */
+function makeAventureDeps(options: { eligible?: PartieDto[] } = {}) {
+  const eligible = options.eligible ?? [];
+  const signals = new Map<string, PartySignalsDto>(
+    eligible.map((p) => [
+      p.id,
+      { role: 'mj', status: 'EN_COURS', signals: ['HOMME_DRAGON_A_CREER'] } as PartySignalsDto,
+    ]),
+  );
+  return {
+    partySignals: { signals: signal(signals), refresh: vi.fn().mockResolvedValue(undefined) },
+    myParties: { mjParties: signal(eligible) },
+    dialog: { open: vi.fn().mockReturnValue({ afterClosed: () => of(true) }) },
   };
 }
 
@@ -192,23 +237,29 @@ function makeThemeService() {
 }
 
 async function createComponent(
-  hommeDragonSvc = makeHommeDragonService(null),
+  hommeDragonSvc = makeHommeDragonService(),
   characterSvc = makeCharacterService(),
   desktop = false,
+  deps = makeAventureDeps(),
+  showCreatedNotice = false,
 ) {
   await TestBed.configureTestingModule({
     imports: [HommeDragonSheet],
     providers: [
+      provideRouter([]),
       { provide: HommeDragonService, useValue: hommeDragonSvc },
       { provide: CharacterService, useValue: characterSvc },
       { provide: ThemeToneService, useValue: makeThemeService() },
       { provide: BreakpointObserver, useValue: makeBreakpointObserver(desktop) },
+      { provide: PartySignalsService, useValue: deps.partySignals },
+      { provide: MyPartiesService, useValue: deps.myParties },
+      { provide: MatDialog, useValue: deps.dialog },
       provideNoopAnimations(),
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(HommeDragonSheet);
-  fixture.componentRef.setInput('partieId', 'p1');
-  fixture.componentRef.setInput('partieName', 'Ma Campagne');
+  fixture.componentRef.setInput('hommeDragonId', 'hd1');
+  fixture.componentRef.setInput('showCreatedNotice', showCreatedNotice);
   fixture.detectChanges();
   for (let i = 0; i < 10; i++) {
     await Promise.resolve();
@@ -216,56 +267,67 @@ async function createComponent(
   }
   await fixture.whenStable();
   fixture.detectChanges();
-  return { fixture, hommeDragonSvc, characterSvc };
+  return { fixture, hommeDragonSvc, characterSvc, deps };
 }
 
 describe('HommeDragonSheet', () => {
+  // Seules les deux méthodes statiques sont remplacées : un `URL` global remplacé par un objet nu
+  // n'est plus constructible, ce que `provideRouter` (RouterLink, Story 33.8) exige.
+  const originalUrlMethods = {
+    createObjectURL: URL.createObjectURL,
+    revokeObjectURL: URL.revokeObjectURL,
+  };
+
   beforeEach(() => {
-    vi.stubGlobal('URL', {
-      ...URL,
-      createObjectURL: vi.fn(() => 'blob:mock-url'),
-      revokeObjectURL: vi.fn(),
-    });
+    URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+    URL.revokeObjectURL = vi.fn();
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
+    URL.createObjectURL = originalUrlMethods.createObjectURL;
+    URL.revokeObjectURL = originalUrlMethods.revokeObjectURL;
   });
 
-  it('aucun Homme Dragon existant → parcours de création affiché, titre de la Partie transmis (AC1)', async () => {
-    const { fixture } = await createComponent();
+  it('la fiche est lue PAR SON ID (AD-23) et affichée directement, sans parcours de création', async () => {
+    const { fixture, hommeDragonSvc } = await createComponent(makeHommeDragonService(makeDto()));
     const component = fixture.componentInstance;
 
-    expect(component['hommeDragon']()).toBeNull();
-    const wizard = fixture.debugElement.query(By.directive(HommeDragonCreationWizard));
-    expect(wizard).toBeTruthy();
-    expect(wizard.componentInstance.partieId()).toBe('p1');
-    expect(wizard.componentInstance.partieName()).toBe('Ma Campagne');
-  });
-
-  it('fiche créée par le parcours → fiche affichée avec le bandeau « fiche créée » (Story 33.3)', async () => {
-    const { fixture } = await createComponent();
-    const component = fixture.componentInstance;
-    const wizard = fixture.debugElement.query(By.directive(HommeDragonCreationWizard));
-
-    wizard.componentInstance.created.emit(makeDto());
-    fixture.detectChanges();
-    await fixture.whenStable();
-    fixture.detectChanges();
-
+    expect(hommeDragonSvc.findOne).toHaveBeenCalledWith('hd1');
     expect(component['hommeDragon']()).toEqual(makeDto());
-    expect(component['justCreated']()).toBe(true);
-    expect(fixture.debugElement.query(By.directive(HommeDragonCreationWizard))).toBeFalsy();
+    expect(fixture.nativeElement.textContent).toContain('Ignis');
+    expect(fixture.nativeElement.querySelector('app-homme-dragon-creation-wizard')).toBeNull();
+  });
+
+  it('Homme Dragon absent ou étranger (404) → « Homme Dragon introuvable », aucune fiche ni formulaire', async () => {
+    const hommeDragonSvc = makeHommeDragonService();
+    hommeDragonSvc.findOne.mockRejectedValue(
+      new HttpErrorResponse({ status: 404, statusText: 'Not Found' }),
+    );
+    const { fixture } = await createComponent(hommeDragonSvc);
+
+    expect(fixture.componentInstance['loadError']()).toBe('Homme Dragon introuvable.');
+    expect(fixture.nativeElement.querySelector('.error')?.textContent).toContain('introuvable');
+    expect(fixture.componentInstance['hommeDragon']()).toBeUndefined();
+  });
+
+  it('arrivée depuis la création → bandeau « fiche créée » affiché (Story 33.3)', async () => {
+    const { fixture } = await createComponent(
+      makeHommeDragonService(makeDto()),
+      makeCharacterService(),
+      false,
+      makeAventureDeps(),
+      true,
+    );
+
+    expect(fixture.componentInstance['justCreated']()).toBe(true);
     expect(fixture.nativeElement.textContent).toContain('Votre Homme Dragon a pris vie.');
   });
 
-  it('Homme Dragon déjà existant → fiche affichée directement, pas de formulaire de création', async () => {
+  it('sans l’indicateur de création → aucun bandeau', async () => {
     const { fixture } = await createComponent(makeHommeDragonService(makeDto()));
-    const component = fixture.componentInstance;
 
-    expect(component['hommeDragon']()).toEqual(makeDto());
-    expect(fixture.debugElement.query(By.directive(HommeDragonCreationWizard))).toBeFalsy();
-    expect(fixture.nativeElement.textContent).toContain('Ignis');
+    expect(fixture.componentInstance['justCreated']()).toBe(false);
+    expect(fixture.nativeElement.textContent).not.toContain('Votre Homme Dragon a pris vie.');
   });
 
   it('champs libres (apparence, caractère, vocation, demeure, avatar, mondesProteges) affichés sur la fiche existante (Story 33.1)', async () => {
@@ -322,7 +384,7 @@ describe('HommeDragonSheet', () => {
     component['editArtefactKey'].set('grande-epee');
     await component['onArtefactSubmit']();
 
-    expect(hommeDragonSvc.update).toHaveBeenCalledWith('p1', { artefact: { key: 'grande-epee' } });
+    expect(hommeDragonSvc.update).toHaveBeenCalledWith('hd1', { artefact: { key: 'grande-epee' } });
     expect(component['hommeDragon']()?.sheetData.artefact.key).toBe('grande-epee');
     expect(component['editingArtefact']()).toBe(false);
   });
@@ -330,7 +392,8 @@ describe('HommeDragonSheet', () => {
   it('revue de code : échec de findOne()/getGameSystemContent() au chargement → loadError() renseigné, jamais le formulaire de création (évite une double-création)', async () => {
     const hommeDragonSvc = {
       findOne: vi.fn().mockRejectedValue(new Error('network')),
-      create: vi.fn(),
+      link: vi.fn(),
+      unlink: vi.fn(),
       update: vi.fn(),
       chooseEveilPower: vi.fn(),
       chooseArtefactCadeau: vi.fn(),
@@ -342,50 +405,264 @@ describe('HommeDragonSheet', () => {
     const component = fixture.componentInstance;
 
     expect(component['loadError']()).toBeTruthy();
+    expect(component['loadError']()).toBe('Impossible de charger la fiche. Réessayez.');
     expect(component['hommeDragon']()).toBeUndefined();
-    expect(fixture.debugElement.query(By.directive(HommeDragonCreationWizard))).toBeFalsy();
+    expect(fixture.nativeElement.querySelector('app-homme-dragon-creation-wizard')).toBeNull();
   });
 
   it("revue de code : ouvrir l'édition d'artefact referme le bandeau « fiche créée »", async () => {
-    const hommeDragonSvc = makeHommeDragonService(makeDto());
-    const { fixture } = await createComponent(hommeDragonSvc);
+    const { fixture } = await createComponent(
+      makeHommeDragonService(makeDto()),
+      makeCharacterService(),
+      false,
+      makeAventureDeps(),
+      true,
+    );
     const component = fixture.componentInstance;
-    component['justCreated'].set(true);
+    expect(component['justCreated']()).toBe(true);
 
     component['openArtefactEdit']();
 
     expect(component['justCreated']()).toBe(false);
   });
 
-  it('voyageurs protégés et historique affichés sur la fiche existante (AC1, Story 10.2)', async () => {
-    const dto = makeDto({
-      voyageursProteges: [
-        { userId: 'u1', pseudo: 'alice' },
-        { userId: 'u2', pseudo: 'bob' },
-      ],
-      historique: [
-        {
-          scenarioTitle: 'Le Marché aux Ombres',
-          date: '2026-07-10T00:00:00.000Z',
-          participants: ['alice', 'bob'],
-        },
-      ],
+  describe('aventures et voyageurs protégés (Story 33.8, AD-23)', () => {
+    const member = (userId: string, displayName: string) => ({
+      userId,
+      pseudo: userId,
+      displayName,
     });
-    const { fixture } = await createComponent(makeHommeDragonService(dto));
+    const twoAventures = () =>
+      makeDto({
+        aventures: [
+          {
+            partieId: 'p1',
+            nom: 'Les Vents du Nord',
+            voyageurs: [member('alice', 'Alice'), member('bob', 'Bob')],
+          },
+          { partieId: 'p2', nom: "L'Archipel", voyageurs: [member('alice', 'Alice')] },
+        ],
+        historique: [
+          {
+            scenarioTitle: 'Le Marché aux Ombres',
+            date: '2026-07-10T00:00:00.000Z',
+            participants: ['alice', 'bob'],
+            partieId: 'p1',
+          },
+          {
+            scenarioTitle: 'La Marée Noire',
+            date: '2026-08-01T00:00:00.000Z',
+            participants: ['alice'],
+            partieId: 'p2',
+          },
+        ],
+      });
 
-    const text = fixture.nativeElement.textContent as string;
-    expect(text).toContain('alice');
-    expect(text).toContain('bob');
-    expect(text).toContain('Le Marché aux Ombres');
-  });
+    it('chaque aventure est listée avec ses voyageurs, un lien vers la partie et « Retirer »', async () => {
+      const { fixture } = await createComponent(makeHommeDragonService(twoAventures()));
+      const el: HTMLElement = fixture.nativeElement;
+      const items = el.querySelectorAll('.homme-dragon-sheet__aventure');
 
-  it('voyageursProteges vide → état vide, pas de liste', async () => {
-    const { fixture } = await createComponent(
-      makeHommeDragonService(makeDto({ voyageursProteges: [] })),
-    );
+      expect(items.length).toBe(2);
+      expect(items[0].textContent).toContain('Les Vents du Nord');
+      expect(items[0].textContent).toContain('Alice');
+      expect(items[0].textContent).toContain('Bob');
+      expect(items[1].textContent).toContain("L'Archipel");
+      expect(items[1].textContent).not.toContain('Bob');
+      expect(
+        (
+          items[0].querySelector('a.homme-dragon-sheet__aventure-name') as HTMLAnchorElement
+        ).getAttribute('href'),
+      ).toBe('/parties/p1');
+      expect(el.querySelectorAll('.homme-dragon-sheet__aventure-remove').length).toBe(2);
+    });
 
-    expect(fixture.debugElement.query(By.css('.homme-dragon-sheet__voyageurs ul'))).toBeFalsy();
-    expect(fixture.nativeElement.textContent as string).toContain('Aucun voyageur');
+    it('un voyageur partagé par deux aventures apparaît dans chacune (par aventure, jamais fusionné)', async () => {
+      const { fixture } = await createComponent(makeHommeDragonService(twoAventures()));
+      const items = fixture.nativeElement.querySelectorAll('.homme-dragon-sheet__aventure');
+
+      expect(items[0].textContent).toContain('Alice');
+      expect(items[1].textContent).toContain('Alice');
+    });
+
+    it('deux voyageurs homonymes dans une aventure : le pseudo les distingue', async () => {
+      const dto = makeDto({
+        aventures: [
+          {
+            partieId: 'p1',
+            nom: 'A',
+            voyageurs: [
+              { userId: 'u1', pseudo: 'pseudo-un', displayName: 'Même Nom' },
+              { userId: 'u2', pseudo: 'pseudo-deux', displayName: 'Même Nom' },
+            ],
+          },
+        ],
+      });
+      const { fixture } = await createComponent(makeHommeDragonService(dto));
+      const text = fixture.nativeElement.querySelector(
+        '.homme-dragon-sheet__voyageurs',
+      ).textContent;
+
+      expect(text).toContain('pseudo-un');
+      expect(text).toContain('pseudo-deux');
+    });
+
+    it('chaque entrée d’historique porte le nom de son aventure', async () => {
+      const { fixture } = await createComponent(makeHommeDragonService(twoAventures()));
+      const text = fixture.nativeElement.querySelector('.homme-dragon-sheet__historique')
+        .textContent as string;
+
+      expect(text).toContain('Le Marché aux Ombres');
+      expect(text).toContain('(Les Vents du Nord)');
+      expect(text).toContain('La Marée Noire');
+      expect(text).toContain("(L'Archipel)");
+    });
+
+    it('sans aucune aventure : la fiche s’ouvre normalement, section vide avec « Ajouter une aventure »', async () => {
+      const deps = makeAventureDeps({
+        eligible: [makePartie({ id: 'p9', name: 'Les Veilleurs' })],
+      });
+      const { fixture } = await createComponent(
+        makeHommeDragonService(makeDto({ aventures: [] })),
+        makeCharacterService(),
+        false,
+        deps,
+      );
+      const el: HTMLElement = fixture.nativeElement;
+
+      expect(el.querySelector('.homme-dragon-sheet__aventures')?.textContent).toContain(
+        "Aucune aventure pour l'instant",
+      );
+      expect(el.querySelector('.homme-dragon-sheet__aventure-add select')).not.toBeNull();
+      expect(el.querySelector('.homme-dragon-sheet__aventure-add')?.textContent).toContain(
+        'Ajouter une aventure',
+      );
+    });
+
+    it('« Ajouter une aventure » : options = parties Ryuutama sans Homme Dragon lues dans les signaux déjà calculés, aucun appel par partie', async () => {
+      const deps = makeAventureDeps({
+        eligible: [
+          makePartie({ id: 'p8', name: 'Les Veilleurs du Pont' }),
+          makePartie({ id: 'p9', name: 'Les Cendres' }),
+        ],
+      });
+      const { fixture, hommeDragonSvc } = await createComponent(
+        makeHommeDragonService(),
+        makeCharacterService(),
+        false,
+        deps,
+      );
+      const options = Array.from(
+        fixture.nativeElement.querySelectorAll('.homme-dragon-sheet__aventure-add option'),
+      ).map((o) => (o as HTMLElement).textContent?.trim());
+
+      expect(options).toEqual(['—', 'Les Veilleurs du Pont', 'Les Cendres']);
+      // Aucune lecture par partie : seule la fiche de l'Homme Dragon a été demandée.
+      expect(hommeDragonSvc.findOne).toHaveBeenCalledTimes(1);
+      expect(hommeDragonSvc.link).not.toHaveBeenCalled();
+    });
+
+    it('aucune aventure éligible → message, pas de sélecteur', async () => {
+      const { fixture } = await createComponent();
+      const add = fixture.nativeElement.querySelector('.homme-dragon-sheet__aventure-add');
+
+      expect(add.querySelector('select')).toBeNull();
+      expect(add.textContent).toContain('Aucune aventure Ryuutama sans Homme Dragon');
+    });
+
+    it('ajouter une aventure appelle link(partieId, id), met la fiche à jour et rafraîchit les signaux', async () => {
+      const deps = makeAventureDeps({ eligible: [makePartie({ id: 'p9', name: 'Les Cendres' })] });
+      const hommeDragonSvc = makeHommeDragonService(makeDto());
+      const linked = makeDto({
+        aventures: [{ partieId: 'p9', nom: 'Les Cendres', voyageurs: [] }],
+        derived: { level: 2, PS: 3 },
+      });
+      hommeDragonSvc.link.mockResolvedValue(linked);
+      const { fixture } = await createComponent(
+        hommeDragonSvc,
+        makeCharacterService(),
+        false,
+        deps,
+      );
+      const component = fixture.componentInstance;
+      deps.partySignals.refresh.mockClear();
+
+      component['selectedAventureId'].set('p9');
+      await component['onAddAventure']();
+      fixture.detectChanges();
+
+      expect(hommeDragonSvc.link).toHaveBeenCalledWith('p9', 'hd1');
+      expect(component['hommeDragon']()).toEqual(linked);
+      expect(component['selectedAventureId']()).toBeNull();
+      expect(deps.partySignals.refresh).toHaveBeenCalled();
+      expect(fixture.nativeElement.querySelectorAll('.homme-dragon-sheet__aventure').length).toBe(
+        1,
+      );
+      // Les signaux (mockés, non rafraîchis) proposent encore p9 : la partie tout juste liée est exclue.
+      expect(component['eligibleAventures']()).toEqual([]);
+      expect(
+        fixture.nativeElement.querySelector('.homme-dragon-sheet__aventure-add select'),
+      ).toBeNull();
+    });
+
+    it('échec de l’ajout (409, réseau) → message, la fiche reste telle quelle', async () => {
+      const hommeDragonSvc = makeHommeDragonService(makeDto());
+      hommeDragonSvc.link.mockRejectedValue(new Error('409'));
+      const { fixture } = await createComponent(hommeDragonSvc);
+      const component = fixture.componentInstance;
+
+      component['selectedAventureId'].set('p9');
+      await component['onAddAventure']();
+
+      expect(component['aventureError']()).toContain("Impossible d'ajouter");
+      expect(component['hommeDragon']()).toEqual(makeDto());
+    });
+
+    it('« Retirer » demande une confirmation courte AVANT toute dissociation (le niveau peut baisser)', async () => {
+      const deps = makeAventureDeps();
+      const hommeDragonSvc = makeHommeDragonService(twoAventures());
+      hommeDragonSvc.unlink.mockResolvedValue(
+        makeDto({ aventures: [twoAventures().aventures[1]], derived: { level: 2, PS: 3 } }),
+      );
+      const { fixture } = await createComponent(
+        hommeDragonSvc,
+        makeCharacterService(),
+        false,
+        deps,
+      );
+      const component = fixture.componentInstance;
+
+      await component['onRemoveAventure'](twoAventures().aventures[0]);
+
+      expect(deps.dialog.open).toHaveBeenCalledTimes(1);
+      const config = deps.dialog.open.mock.calls[0][1] as {
+        data: { message: string; confirmLabel: string };
+      };
+      expect(config.data.message).toContain('Les Vents du Nord');
+      expect(config.data.message).toContain('niveau');
+      expect(config.data.confirmLabel).toBe('Retirer');
+      expect(hommeDragonSvc.unlink).toHaveBeenCalledWith('p1', 'hd1');
+      expect(component['hommeDragon']()?.derived.level).toBe(2);
+      expect(deps.partySignals.refresh).toHaveBeenCalled();
+    });
+
+    it('confirmation refusée → aucun appel, rien changé', async () => {
+      const deps = makeAventureDeps();
+      deps.dialog.open.mockReturnValue({ afterClosed: () => of(false) });
+      const hommeDragonSvc = makeHommeDragonService(twoAventures());
+      const { fixture } = await createComponent(
+        hommeDragonSvc,
+        makeCharacterService(),
+        false,
+        deps,
+      );
+      const component = fixture.componentInstance;
+
+      await component['onRemoveAventure'](twoAventures().aventures[0]);
+
+      expect(hommeDragonSvc.unlink).not.toHaveBeenCalled();
+      expect(component['hommeDragon']()).toEqual(twoAventures());
+    });
   });
 
   it('historique vide → état vide, pas de liste (AC2)', async () => {
@@ -450,7 +727,7 @@ describe('HommeDragonSheet', () => {
     component['selectedEveilPowerKey'].set('escorte-du-dragon');
     await component['onChooseEveilPower']();
 
-    expect(hommeDragonSvc.chooseEveilPower).toHaveBeenCalledWith('p1', {
+    expect(hommeDragonSvc.chooseEveilPower).toHaveBeenCalledWith('hd1', {
       level: 2,
       key: 'escorte-du-dragon',
     });
@@ -506,7 +783,7 @@ describe('HommeDragonSheet', () => {
 
   describe('Export PDF (menu à deux formats, Story 33.4)', () => {
     it.each(['editable', '2pages'] as const)(
-      'onExportPdf("%s") appelle exportPdf() avec le partieId et le format, sans erreur',
+      'onExportPdf("%s") appelle exportPdf() avec l’id de l’Homme Dragon et le format, sans erreur',
       async (format) => {
         const hommeDragonSvc = makeHommeDragonService(makeDto());
         hommeDragonSvc.exportPdf.mockResolvedValue(
@@ -517,7 +794,7 @@ describe('HommeDragonSheet', () => {
 
         await component['onExportPdf'](format);
 
-        expect(hommeDragonSvc.exportPdf).toHaveBeenCalledWith('p1', format);
+        expect(hommeDragonSvc.exportPdf).toHaveBeenCalledWith('hd1', format);
         expect(component['exportError']()).toBeNull();
         expect(component['exporting']()).toBe(false);
       },
@@ -589,7 +866,7 @@ describe('HommeDragonSheet', () => {
       fixture.detectChanges();
       await fixture.whenStable();
 
-      expect(hommeDragonSvc.exportPdf).toHaveBeenCalledWith('p1', '2pages');
+      expect(hommeDragonSvc.exportPdf).toHaveBeenCalledWith('hd1', '2pages');
       expect(el.querySelector('[role="menu"]')).toBeNull();
     });
 
@@ -1142,7 +1419,7 @@ describe('HommeDragonSheet', () => {
       confirm.nativeElement.click();
       await settle(fixture);
 
-      expect(hommeDragonSvc.chooseArtefactCadeau).toHaveBeenCalledWith('p1', { key: 'lanterne' });
+      expect(hommeDragonSvc.chooseArtefactCadeau).toHaveBeenCalledWith('hd1', { key: 'lanterne' });
       expect(q(fixture, '.homme-dragon-sheet__cadeau-prompt')).toBeNull();
       const shown = q(fixture, '.homme-dragon-sheet__cadeau').nativeElement as HTMLElement;
       expect(shown.textContent).toContain('Artefact cadeau');
@@ -1399,7 +1676,7 @@ describe('HommeDragonSheet', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(hommeDragonSvc.setReserveSlot).toHaveBeenCalledWith('p1', 1, { key: 'chance' });
+      expect(hommeDragonSvc.setReserveSlot).toHaveBeenCalledWith('hd1', 1, { key: 'chance' });
       expect(fixture.componentInstance['hommeDragon']()).toEqual(updated);
     });
 
@@ -1475,24 +1752,28 @@ describe('HommeDragonSheet', () => {
     });
 
     it('un changed() survenant avant la résolution du fetch initial ne plante pas (garde if (hommeDragon() === undefined) return)', async () => {
-      let resolveFindOne!: (hd: HommeDragonDto | null) => void;
+      let resolveFindOne!: (hd: HommeDragonDto) => void;
       const hommeDragonSvc = makeHommeDragonService();
       hommeDragonSvc.findOne.mockReturnValue(
-        new Promise<HommeDragonDto | null>((resolve) => (resolveFindOne = resolve)),
+        new Promise<HommeDragonDto>((resolve) => (resolveFindOne = resolve)),
       );
       const characterSvc = makeCharacterService();
+      const deps = makeAventureDeps();
 
       await TestBed.configureTestingModule({
         imports: [HommeDragonSheet],
         providers: [
+          provideRouter([]),
           { provide: HommeDragonService, useValue: hommeDragonSvc },
           { provide: CharacterService, useValue: characterSvc },
           { provide: ThemeToneService, useValue: makeThemeService() },
+          { provide: PartySignalsService, useValue: deps.partySignals },
+          { provide: MyPartiesService, useValue: deps.myParties },
+          { provide: MatDialog, useValue: deps.dialog },
         ],
       }).compileComponents();
       const fixture = TestBed.createComponent(HommeDragonSheet);
-      fixture.componentRef.setInput('partieId', 'p1');
-      fixture.componentRef.setInput('partieName', 'Ma Campagne');
+      fixture.componentRef.setInput('hommeDragonId', 'hd1');
       fixture.detectChanges();
       // firstRun est consommé au premier flush de l'effect() — le fetch initial (findOne()) est
       // toujours en attente (resolveFindOne non appelé) à ce stade.

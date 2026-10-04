@@ -72,12 +72,11 @@ function makeHommeDragon(overrides: Partial<HommeDragonDto> = {}): HommeDragonDt
   return {
     id: 'hd1',
     userId: 'mj1',
-    partieId: 'p1',
     gameSystemId: 'ryuutama',
     sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis' },
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-17T00:00:00.000Z',
-    voyageursProteges: [],
+    aventures: [],
     historique: [],
     derived: { level: 3, PS: 5 },
     eveilPowers: [],
@@ -134,7 +133,12 @@ describe('HommeDragonPdfService (pdf-lib réel)', () => {
         nom: 'Ignis',
       },
       historique: [
-        { scenarioTitle: 'La Route des Lanternes', date: '2026-06-12', participants: ['Ana'] },
+        {
+          scenarioTitle: 'La Route des Lanternes',
+          date: '2026-06-12',
+          participants: ['Ana'],
+          partieId: 'p1',
+        },
       ],
     });
     const doc = await load(await service.fillHommeDragonPdf(dto, 'admin', 'editable'));
@@ -312,10 +316,17 @@ describe('HommeDragonPdfService (pdf-lib réel)', () => {
     const doc = await load(
       await service.fillHommeDragonPdf(
         makeHommeDragon({
-          voyageursProteges: ['a', 'b', 'c', 'd', 'e'].map((p) => ({
-            userId: `u${p}`,
-            pseudo: `pseudo-${p}`,
-          })),
+          aventures: [
+            {
+              partieId: 'p1',
+              nom: 'Aventure',
+              voyageurs: ['a', 'b', 'c', 'd', 'e'].map((p) => ({
+                userId: `u${p}`,
+                pseudo: `pseudo-${p}`,
+                displayName: `Nom ${p}`,
+              })),
+            },
+          ],
         }),
         'admin',
         'editable',
@@ -335,7 +346,13 @@ describe('HommeDragonPdfService (pdf-lib réel)', () => {
         artefact: { key: 'grand-arc', nom: 'Arc 龍' },
         nom: 'Ignis 🐉 Ω',
       },
-      voyageursProteges: [{ userId: 'u1', pseudo: 'Zoé ✨' }],
+      aventures: [
+        {
+          partieId: 'p1',
+          nom: 'Aventure',
+          voyageurs: [{ userId: 'u1', pseudo: 'Zoé ✨', displayName: 'Zoé' }],
+        },
+      ],
     });
 
     await expect(service.fillHommeDragonPdf(dto, 'admin', 'editable')).resolves.toBeInstanceOf(

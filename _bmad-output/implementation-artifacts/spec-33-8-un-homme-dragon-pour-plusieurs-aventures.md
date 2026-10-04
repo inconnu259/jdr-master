@@ -2,9 +2,10 @@
 title: 'Un Homme Dragon pour plusieurs aventures'
 type: 'feature'
 created: '2026-10-04'
-status: 'ready-for-dev'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
+baseline_commit: 'd85521acdc4be231df6a5397c7710dbd0e47c975'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-33-context.md'
   - '{project-root}/_bmad-output/planning-artifacts/architecture/architecture-jdr-master-2026-08-04/ARCHITECTURE-SPINE.md'
@@ -93,17 +94,17 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `apps/api/prisma/schema.prisma` + nouveau dossier de migration (`migration.sql` écrit à la main) -- lien, garde de doublons, rattrapage, contrôle, `DROP` -- modèle d'AD-23 sans perte de fiche
-- [ ] `packages/shared/src/index.ts` -- DTO (`aventures`, `historique.partieId`, `MyHommeDragonDto`, référence `{ id, nom }`), commentaires de routes -- contrat
-- [ ] `packages/game-rules/...` -- fonction d'aplatissement des voyageurs, mapper PDF et son spec -- PDF multi-aventures
-- [ ] `apps/api/src/scenarios/scenarios.service.ts` -- `findPasseForParties` + tests -- lecture en lot
-- [ ] `apps/api/src/homme-dragon/homme-dragon.service.ts` -- réécriture : bloc dérivé unique, écritures sous verrou (`PATCH` compris), `create` + lien, `link`, `unlink`, `findOne` par id, `findMine`, retrait de réserve à tout niveau -- AD-23
-- [ ] `apps/api/src/homme-dragon/*.controller.ts` + module + PDF -- contrôleur `homme-dragons/:id`, routes de lien, nom du fichier -- adressage
-- [ ] `apps/api/src/parties/parties.service.ts` + `party-signals.service.ts` -- remise à `NULL` au changement de système, émissions de `remove`, signal serveur Ryuutama -- invariants
-- [ ] `apps/api/prisma/seed-demo.ts` -- **revue complète** : trois Hommes Dragons créés avant les parties et liés par `hommeDragonId`, nouvelle partie *Les Annales de Brume* et ses onze scénarios `PASSE`, fiches valides aux niveaux 2, 5 et 1, en-tête, récapitulatif et cas de test mis à jour -- démo conforme à tout le modèle
-- [ ] `apps/web` (service, routes, temps réel, page, fiche avec section « Aventures », réserve, assistant, panneau d'aventure de `partie-detail`, confirmations, carte « Personnages » et tris) -- interface selon les décisions de l'utilisateur
-- [ ] Tests API, game-rules, web : renverser les `403`/« un par partie », couvrir la matrice (concurrence, migration, signal, temps réel, confirmations, tris) -- non-régression
-- [ ] `docs/backlog.md`, `docs/checklist.md`, `docs/dragons.md` -- alignement
+- [x] `apps/api/prisma/schema.prisma` + nouveau dossier de migration (`migration.sql` écrit à la main) -- lien, garde de doublons, rattrapage, contrôle, `DROP` -- modèle d'AD-23 sans perte de fiche
+- [x] `packages/shared/src/index.ts` -- DTO (`aventures`, `historique.partieId`, `MyHommeDragonDto`, référence `{ id, nom }`), commentaires de routes -- contrat
+- [x] `packages/game-rules/...` -- fonction d'aplatissement des voyageurs, mapper PDF et son spec -- PDF multi-aventures
+- [x] `apps/api/src/scenarios/scenarios.service.ts` -- `findPasseForParties` + tests -- lecture en lot
+- [x] `apps/api/src/homme-dragon/homme-dragon.service.ts` -- réécriture : bloc dérivé unique, écritures sous verrou (`PATCH` compris), `create` + lien, `link`, `unlink`, `findOne` par id, `findMine`, retrait de réserve à tout niveau -- AD-23
+- [x] `apps/api/src/homme-dragon/*.controller.ts` + module + PDF -- contrôleur `homme-dragons/:id`, routes de lien, nom du fichier -- adressage
+- [x] `apps/api/src/parties/parties.service.ts` + `party-signals.service.ts` -- remise à `NULL` au changement de système, émissions de `remove`, signal serveur Ryuutama -- invariants
+- [x] `apps/api/prisma/seed-demo.ts` -- **revue complète** : trois Hommes Dragons créés avant les parties et liés par `hommeDragonId`, nouvelle partie *Les Annales de Brume* et ses onze scénarios `PASSE`, fiches valides aux niveaux 2, 5 et 1, en-tête, récapitulatif et cas de test mis à jour -- démo conforme à tout le modèle
+- [x] `apps/web` (service, routes, temps réel, page, fiche avec section « Aventures », réserve, assistant, panneau d'aventure de `partie-detail`, confirmations, carte « Personnages » et tris) -- interface selon les décisions de l'utilisateur
+- [x] Tests API, game-rules, web : renverser les `403`/« un par partie », couvrir la matrice (concurrence, migration, signal, temps réel, confirmations, tris) -- non-régression
+- [x] `docs/backlog.md`, `docs/checklist.md`, `docs/dragons.md` -- alignement
 
 **Acceptance Criteria:**
 - Given un Homme Dragon et deux aventures Ryuutama dont je suis MJ, when je l'associe aux deux, then sa fiche affiche un niveau et un historique cumulés et les voyageurs par aventure.
@@ -114,9 +115,41 @@ context:
 
 ## Implementation Notes
 
+- **Diff vérifié par le chef de build** (depuis `d85521a`, relu en entier ; état final après la revue) : API 1549 tests passés / 2 échecs connus et datés (`parties.service.spec` `getAvailableSlots`, `party-signals.service.spec` `PROCHAINE_SEANCE_CONNUE`, non touchés par la story) ; typecheck API propre ; e2e 2/2 ; game-rules 234/234 ; web 2839 passés / 2 échecs hors story (`calendar-view.spec`, dates figées) ; `ng build` OK (avertissements de budget préexistants).
+- **Lint** : aucune erreur sur les lignes ajoutées (API : 13 erreurs préexistantes dans 7 fichiers non touchés ; web : 105 erreurs préexistantes, surtout `prettier`). Six erreurs `prettier` sur des lignes ajoutées dans deux specs web ont été corrigées à la main par le chef de build.
+- **Contrôleurs** : `homme-dragon.controller.ts` ne garde que les routes par partie (create, `GET` référence, `PUT`/`DELETE` lien) ; la fiche vit dans le nouveau `homme-dragons.controller.ts` (`HommeDragonSheetController`). Le `git mv` tenté par le sous-agent a été annulé (index propre, aucune écriture git conservée).
+- **Bug trouvé et corrigé** : le `ValidationPipe` (`transform: true`, cible ES2023) rend des DTO dont les champs optionnels absents valent `undefined` ; un `PATCH` partiel écrasait donc `nom` et les autres champs. `update()` ne fusionne plus que les champs fournis, avec un test.
+- **Seed** : *Les Annales de Brume* est créée à J−240 (avant son premier chapitre, J−216) ; c'est donc la première aventure de Kaien par `createdAt`. Les autres parties reçoivent un `createdAt` explicite pour un ordre d'aventures déterministe.
+- **Limite connue** : une partie clôturée (`TERMINEE`) n'émet jamais `HOMME_DRAGON_A_CREER` ; elle ne se rattache donc pas depuis « Ajouter une aventure » de la fiche, mais bien depuis son propre panneau d'aventure.
+- **Couverture de la matrice** : toutes les lignes ont un test automatisé, sauf les deux lignes **Migration** (doublons / orphelins) et la ligne **Seed**, vérifiées à la main par le sous-agent sur une base de test jetable (migration appliquée sur la base de dev : les 3 fiches existantes liées, aucune perdue ; seed sans erreur de contrainte ; trajets HTTP confirmés : niveaux 2/5/1, `404` uniforme, `409` de lien, dissociation 5→2 sans purge, création concurrente 201 + 409). La migration passe aussi en CI sur base vide (`migrate deploy`). Aucune base de test n'existe en local pour rejouer les cas de données.
+- **Revue du 2026-10-04** : 19 constats triés (voir le journal), cinq correctifs appliqués par le sous-agent d'implémentation puis revérifiés par le chef de build — perte du `nom`/`inscription` de l'artefact sur un `PATCH` partiel (le filtrage des `undefined` descend maintenant au niveau de l'artefact), assertion du `where` du comptage de niveau, câblage `justCreated` testé côté page, partie déjà liée exclue de « Ajouter une aventure », panneau d'aventure rechargé sur `HommeDragonService.changed()`. Trois reports dans `deferred-work.md`.
+- **Base de dev** : elle contient encore l'ancien jeu de démo (un Homme Dragon par partie, désormais lié par la migration). Le nouveau jeu n'apparaît qu'après `prisma migrate reset` puis `pnpm seed:demo` (non fait).
+
 ## Spec Change Log
 
 ## Review Triage Log
+
+Revue du 2026-10-04, première passe (Blind Hunter, Edge Case Hunter, Verification Gap). Constats dédoublonnés par cause ; le sigle indique la couche d'origine (B = blind, E = edge, V = verification-gap).
+
+- **[V] Le `where` de `scenario.count` (niveau lu sous verrou) n'est asserté par aucun test** — `medium`, patch : seul un nombre est stubbé ; retirer `status`, `closedAt` ou la relation `partie` ne casserait rien, et le niveau qui autorise les écritures divergerait de `historique.length`. Test ajouté.
+- **[V] Câblage `justCreated` (état de navigation → page → fiche) non testé côté page** — `low`, patch : chaque moitié n'est testée que contre le stub de l'autre ; le bandeau peut disparaître sans test rouge. Test ajouté.
+- **[V][B] Branches de données de la migration (doublon, orphelin, rattrapage) jamais exécutées par un test ; aucun test sur Postgres réel pour les verrous, l'`updateMany` conditionnel et la course create/link** — `medium`, defer : la CI ne migre qu'une base vide et aucun harnais d'intégration n'existe ; vérifié à la main par le sous-agent sur une base jetable, aucune production avant le Palier 10. Consigné dans `deferred-work.md`.
+- **[E][B] `PATCH { artefact: { key } }` efface le `nom` et l'`inscription` enregistrés** — `high`, patch : `provided.artefact` est une instance `ArtefactDto` dont les champs optionnels valent `undefined` (cible ES2023, vérifié) ; le correctif du premier niveau ne la filtre pas. Perte silencieuse du nom personnalisé de l'artefact.
+- **[E] « Ajouter une aventure » propose encore la partie qu'on vient de lier tant que les signaux ne sont pas rafraîchis** — `low`, patch : correction d'une ligne (exclure `aventures()`), sans surface publique.
+- **[B] Le panneau d'aventure ne se recharge pas quand le lien change ailleurs** — `medium`, patch : `CLAUDE.md` exige d'évaluer le câblage temps réel de tout composant affichant des données d'une partie ; sans cela « Dissocier » renvoie 404 et « Créer » un 409 après un parcours entier. Rechargement sur `HommeDragonService.changed()` (déjà câblé sur `user:`).
+- **[E][B] La migration rattrape sans condition de système (`gameSystemId = 'ryuutama'`)** — `low`, rejeté : une partie non Ryuutama portant un Homme Dragon est inatteignable, `assertGameSystemHasModule` refuse tout changement vers un système sans module (seule Ryuutama en a un) ; modifier une migration déjà appliquée sur la base de dev la désynchroniserait.
+- **[B] La migration échoue sans stratégie de reprise ni requête de diagnostic** — `low`, rejeté : décision de l'utilisateur (« on s'en fout, rien en prod ») ; l'échec explicite est le comportement voulu par AD-23.
+- **[E][B][V] Garde anti-réponse périmée (`updatedAt`) inopérante pour link/unlink** — `low`, rejeté : un `GET` antérieur doit se résoudre après la réponse du lien ; l'événement `user:` émis par link/unlink relance un rafraîchissement qui corrige l'état, et le correctif demande un jeton de version (plus qu'une correction directe).
+- **[E][B] « Ajouter une aventure » ne propose jamais une partie `TERMINEE`** — `medium`, defer : la source est le signal `HOMME_DRAGON_A_CREER`, qui exclut les parties terminées depuis la 29.7 (préexistant) et que l'intention figée de la spec désigne ; contournement : le panneau d'aventure de la partie elle-même. Consigné dans `deferred-work.md` (liste dédiée à envisager).
+- **[B][V] Les écritures de fiche n'émettent rien ; renommer une partie n'émet pas `user:` (noms d'aventures périmés jusqu'au rechargement)** — `low`, rejeté : décision AD-23 confirmée par l'utilisateur le 2026-10-04 (un `user:` par geste d'enregistrement automatique réveillerait liste, signaux, calendrier et invitations) ; la corriger éditerait l'intention figée.
+- **[E][B] Messages d'erreur génériques sur les actions de lien (409/404 « Réessayez »)** — `low`, rejeté : situations de course rares (autre onglet) et correction plus large (distinguer les codes, rafraîchir trois listes).
+- **[B] `PUT` de lien non idempotent (re-lier le même Homme Dragon donne 409)** — `low`, rejeté : le `409` « partie déjà pourvue » est dans l'intention figée de la spec.
+- **[E][B] `HommeDragonPage` lit l'id de route une fois ; `currentUser`/`currentNavigation` lus à l'initialisation** — `low`, rejeté : aucun parcours de l'interface ne va d'une fiche à une autre sans repasser par « Personnages » (le composant est alors détruit) ; même motif que `dashboard.ts` L434 pour `userTopic`.
+- **[E] Message 400/409 mal attribué si le système de la partie change entre `getOwned` et la transaction** — `low`, rejeté : fenêtre négligeable, le `409` reste sans écriture.
+- **[B] L'historique affiche des pseudos bruts (`participants.join`) au lieu de la convention joueur / personnage** — `low`, defer : préexistant (`participants` est un tableau de pseudos depuis la 10.2) et hors intention ; consigné. La clé de `@for` incluant `partieId` ne collisionne qu'avec deux scénarios de même titre et même date dans une aventure (rejeté).
+- **[B] La réponse d'écriture recalcule le bloc dérivé hors transaction** — `low`, rejeté : le niveau qui valide l'écriture est bien calculé sous verrou ; la réponse est cohérente à la lecture suivante, et la rendre atomique dépasse une correction directe.
+- **[B] Tests rouges laissés en l'état / affirmation « non touchés par la story » douteuse** — `false` : les deux échecs API (`getAvailableSlots`, `PROCHAINE_SEANCE_CONNUE`) et les deux échecs web (`calendar-view.spec`) dépendent de la date du jour, sont listés comme échecs connus dans la section Verification approuvée, et la phrase des notes vise ces tests, pas les fichiers ; la story n'ajoute que des tests verts dans ces deux fichiers.
+- **[B] Nom du PDF en UUID, cast `as string`, `remove` qui émet sans condition** — `low`, rejeté : le nom côté API est celui de l'ancienne route (id de partie) remplacé par l'id de l'Homme Dragon, le front gère déjà un nom lisible ; le cast suit un test de présence ; l'émission inconditionnelle est inoffensive.
 
 ## Design Notes
 

@@ -12,11 +12,19 @@ import {
   untracked,
 } from '@angular/core';
 import { DatePipe, NgTemplateOutlet } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
-import type { ContentEntryDto, HommeDragonDto, HommeDragonRace } from '@master-jdr/shared';
+import { MatDialog } from '@angular/material/dialog';
+import { RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
+import type {
+  ContentEntryDto,
+  HommeDragonAventureDto,
+  HommeDragonDto,
+  HommeDragonRace,
+} from '@master-jdr/shared';
 import { ARTEFACT_CADEAU_LEVEL, SOUFFLES_RITUELS_LEVEL } from '@master-jdr/game-rules';
-import { HommeDragonCreationWizard } from '../homme-dragon-creation-wizard/homme-dragon-creation-wizard';
 import { ReserveSection } from '../reserve-section/reserve-section';
 import { RACES, RACE_LABELS, RACE_TAGS } from '../homme-dragon-races';
 import {
@@ -27,7 +35,12 @@ import { RadioGroupNavDirective } from '../../characters/character-wizard/choice
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { hommeDragonName } from '../../../core/homme-dragon/homme-dragon.util';
 import { CharacterService } from '../../../core/characters/character.service';
+import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
+import { PartySignalsService } from '../../../core/parties/party-signals.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { ConfirmDialog } from '../../parties/confirm-dialog/confirm-dialog';
+import { IdentityLabel } from '../../../shared/identity/identity-label';
+import { ambiguousUserIds } from '../../../shared/identity/identity-ambiguity.util';
 import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
 import {
   createDetailSurfaceHost,
@@ -80,10 +93,12 @@ const artefactData = (entry: ContentEntryDto): ArtefactCatalogData =>
   (entry.data ?? {}) as ArtefactCatalogData;
 
 /**
- * Onglet « Homme Dragon » de `PartieDetail` (Story 10.1) — embarqué directement (pas de route
- * dédiée, un seul Homme Dragon par Partie, même schéma que `ScenarioOneShotTab`). Gère les deux
- * états : parcours de création guidé si `findOne()` renvoie `null`, fiche + édition d'artefact sinon.
- * Historique/voyageurs protégés/niveau/PS/pouvoir d'éveil/export PDF : Stories 10.2-10.5.
+ * Fiche d'un Homme Dragon (Story 10.1, refonte 33.1-33.7) — adressée par son `id` (AD-23, Story
+ * 33.8) : la page `/homme-dragons/:id` l'héberge, propriétaire seul. Un Homme Dragon suit 0..N
+ * aventures : niveau et historique cumulent les scénarios `PASSE` de toutes, les voyageurs
+ * protégés se lisent par aventure, et la section « Aventures » associe / dissocie (confirmation
+ * avant dissociation : le niveau peut baisser, rien n'est purgé). La création (parcours guidé)
+ * vit dans la page de création par partie, jamais ici.
  */
 @Component({
   selector: 'app-homme-dragon-sheet',
@@ -93,7 +108,8 @@ const artefactData = (entry: ContentEntryDto): ArtefactCatalogData =>
     DatePipe,
     NgTemplateOutlet,
     DetailSurface,
-    HommeDragonCreationWizard,
+    RouterLink,
+    IdentityLabel,
     ReserveSection,
     ChoiceCard,
     RadioGroupNavDirective,
@@ -102,12 +118,16 @@ const artefactData = (entry: ContentEntryDto): ArtefactCatalogData =>
   styleUrl: './homme-dragon-sheet.scss',
 })
 export class HommeDragonSheet implements OnInit {
-  readonly partieId = input.required<string>();
-  /** Titre de la Partie — pré-remplit `mondesProteges` à la création (AC1), éditable ensuite. */
-  readonly partieName = input.required<string>();
+  /** Identifiant de l'Homme Dragon (AD-23) — la fiche n'est plus rattachée à une partie. */
+  readonly hommeDragonId = input.required<string>();
+  /** `true` quand la page arrive du parcours de création : affiche le bandeau « fiche créée ». */
+  readonly showCreatedNotice = input(false);
 
   private readonly hommeDragonSvc = inject(HommeDragonService);
   private readonly characterSvc = inject(CharacterService);
+  private readonly dialog = inject(MatDialog);
+  private readonly partySignals = inject(PartySignalsService);
+  private readonly myParties = inject(MyPartiesService);
   protected readonly theme = inject(ThemeToneService);
 
   protected readonly raceLabel = (race: HommeDragonRace): string => RACE_LABELS[race];
@@ -118,20 +138,24 @@ export class HommeDragonSheet implements OnInit {
    */
   protected readonly detail = createDetailSurfaceHost();
 
-  /** `undefined` = chargement en cours, `null` = pas encore créé, sinon la fiche existante. */
-  protected readonly hommeDragon = signal<HommeDragonDto | null | undefined>(undefined);
+  /** `undefined` = chargement en cours, sinon la fiche (une fiche absente ou étrangère répond
+   *  `404` : message d'erreur, jamais de fiche vide). */
+  protected readonly hommeDragon = signal<HommeDragonDto | undefined>(undefined);
   protected readonly artefactCatalog = signal<ContentEntryDto[]>([]);
   protected readonly loadError = signal<string | null>(null);
 
   /** Nom affiché sur la fiche — même convention de repli que `characterName()`
    *  (`character.util.ts`) : valeur normalisée ou libellé de repli en français si absente. */
-  protected readonly displayName = computed<string>(
-    () => hommeDragonName(this.hommeDragon()?.sheetData.nom),
+  protected readonly displayName = computed<string>(() =>
+    hommeDragonName(this.hommeDragon()?.sheetData.nom),
   );
 
-  /** Posé à la création : affiche le bandeau « fiche créée » (le parcours guidé vit dans
-   *  `HommeDragonCreationWizard`, Story 33.3). */
-  protected readonly justCreated = signal(false);
+  /** Bandeau « fiche créée » (le parcours guidé vit dans `HommeDragonCreationWizard`, Story 33.3,
+   *  hébergé par la page de création) : refermé dès que le MJ interagit à nouveau avec la fiche. */
+  private readonly noticeDismissed = signal(false);
+  protected readonly justCreated = computed(
+    () => this.showCreatedNotice() && !this.noticeDismissed(),
+  );
 
   // — Édition de l'artefact (fiche existante) —
   protected readonly editingArtefact = signal(false);
@@ -190,20 +214,19 @@ export class HommeDragonSheet implements OnInit {
   }
 
   // Utilisée UNIQUEMENT par l'effect() ci-dessus — PAS par le fetch initial de ngOnInit(), qui
-  // reste ciblé par this.partieId() (jamais par une valeur dérivée de this.hommeDragon(), pas
+  // reste ciblé par this.hommeDragonId() (jamais par une valeur dérivée de this.hommeDragon(), pas
   // encore garantie peuplée au moment où ngOnInit() s'exécute, même piège de timing que
-  // Story 20.1). `hommeDragon() === undefined` signifie « chargement initial en cours » —
-  // distinct de `null` (« pas encore créé », un état stable, pas un signe qu'il faille attendre).
+  // Story 20.1). `hommeDragon() === undefined` signifie « chargement initial en cours ».
   private async refreshHommeDragon(): Promise<void> {
     if (this.hommeDragon() === undefined) return;
     try {
-      const fresh = await this.hommeDragonSvc.findOne(this.partieId());
+      const fresh = await this.hommeDragonSvc.findOne(this.hommeDragonId());
       // Story 33.6 : une lecture partie AVANT une écriture de la réserve (réponse déjà appliquée
       // par `(updated)`) peut arriver APRÈS elle — elle ne doit pas la remplacer par une fiche
       // plus ancienne. Le signal `changed` émis par l'écriture déclenche de toute façon une
       // lecture plus récente.
       const current = this.hommeDragon();
-      if (fresh && current && Date.parse(fresh.updatedAt) < Date.parse(current.updatedAt)) return;
+      if (current && Date.parse(fresh.updatedAt) < Date.parse(current.updatedAt)) return;
       this.hommeDragon.set(fresh);
     } catch {
       // non-bloquant — la fiche affichée reste telle quelle si le rafraîchissement échoue
@@ -211,9 +234,12 @@ export class HommeDragonSheet implements OnInit {
   }
 
   async ngOnInit(): Promise<void> {
+    // « Ajouter une aventure » lit les signaux déjà calculés (HOMME_DRAGON_A_CREER) — aucun appel
+    // par partie ; un rafraîchissement à l'ouverture garantit un état frais.
+    void this.partySignals.refresh();
     try {
       const [hommeDragon, content] = await Promise.all([
-        this.hommeDragonSvc.findOne(this.partieId()),
+        this.hommeDragonSvc.findOne(this.hommeDragonId()),
         this.characterSvc.getGameSystemContent('ryuutama'),
       ]);
       this.hommeDragon.set(hommeDragon);
@@ -222,18 +248,97 @@ export class HommeDragonSheet implements OnInit {
       this.souffleCatalog.set(content['souffle'] ?? []);
       this.levelCapacityCatalog.set(content['hommeDragonLevelCapacity'] ?? []);
       this.ritualCatalog.set(content['souffleRituel'] ?? []);
-    } catch {
-      // Revue de code : ne plus forcer `hommeDragon` à `null` ici — cette valeur signifie « pas
-      // encore créée » et affiche le formulaire de création. Une erreur réseau/serveur transitoire
-      // doit rester dans l'état `undefined` (indistinct du chargement) pour que le template affiche
-      // le message d'erreur au lieu du formulaire, même si le MJ a déjà une fiche existante.
-      this.loadError.set('Impossible de charger la fiche. Réessayez.');
+    } catch (e) {
+      // Un Homme Dragon absent ou étranger répond `404` (jamais `403`) : même message dans les
+      // deux cas, l'existence d'une fiche d'autrui ne fuit pas. Toute autre erreur (réseau,
+      // serveur) reste transitoire : même état `undefined` que le chargement, message distinct.
+      this.loadError.set(
+        e instanceof HttpErrorResponse && e.status === 404
+          ? 'Homme Dragon introuvable.'
+          : 'Impossible de charger la fiche. Réessayez.',
+      );
     }
   }
 
-  protected onCreated(created: HommeDragonDto): void {
-    this.hommeDragon.set(created);
-    this.justCreated.set(true);
+  // — Aventures (Story 33.8, AD-23) —
+
+  protected readonly aventures = computed<HommeDragonAventureDto[]>(
+    () => this.hommeDragon()?.aventures ?? [],
+  );
+
+  /** `userId` dont le nom affiché est partagé par plusieurs voyageurs d'une même aventure : le
+   *  pseudo les distingue (même motif que les autres écrans « sans personnage »). */
+  protected readonly ambiguousByAventure = computed(
+    () =>
+      new Map(this.aventures().map((a) => [a.partieId, ambiguousUserIds(a.voyageurs)] as const)),
+  );
+
+  protected isAmbiguous(partieId: string, userId: string): boolean {
+    return this.ambiguousByAventure().get(partieId)?.has(userId) ?? false;
+  }
+
+  /** Aventures éligibles à « Ajouter une aventure » : mes parties Ryuutama sans Homme Dragon, lues
+   *  dans les signaux DÉJÀ calculés (`HOMME_DRAGON_A_CREER`, serveur) croisés avec mes parties pour
+   *  le nom — aucun appel par partie. */
+  protected readonly eligibleAventures = computed(() => {
+    const signals = this.partySignals.signals();
+    // Une partie déjà liée à CET Homme Dragon n'est plus proposée, même si les signaux ne sont pas
+    // encore rafraîchis après le lien (re-lier donnerait un 409).
+    const linked = new Set(this.aventures().map((a) => a.partieId));
+    return this.myParties
+      .mjParties()
+      .filter((p) => !linked.has(p.id))
+      .filter((p) => signals.get(p.id)?.signals.includes('HOMME_DRAGON_A_CREER'))
+      .map((p) => ({ id: p.id, name: p.name }));
+  });
+
+  protected readonly selectedAventureId = signal<string | null>(null);
+  protected readonly aventureBusy = signal(false);
+  protected readonly aventureError = signal<string | null>(null);
+
+  /** Nom de l'aventure d'une entrée d'historique (`partieId`) ; vide si elle n'est plus liée. */
+  protected aventureName(partieId: string): string {
+    return this.aventures().find((a) => a.partieId === partieId)?.nom ?? '';
+  }
+
+  protected async onAddAventure(): Promise<void> {
+    const partieId = this.selectedAventureId();
+    if (!partieId || this.aventureBusy()) return;
+    this.aventureBusy.set(true);
+    this.aventureError.set(null);
+    try {
+      this.hommeDragon.set(await this.hommeDragonSvc.link(partieId, this.hommeDragonId()));
+      this.selectedAventureId.set(null);
+      void this.partySignals.refresh();
+    } catch {
+      this.aventureError.set("Impossible d'ajouter cette aventure. Réessayez.");
+    } finally {
+      this.aventureBusy.set(false);
+    }
+  }
+
+  /** Dissocier demande une confirmation courte : le niveau peut baisser (sans rien purger). */
+  protected async onRemoveAventure(aventure: HommeDragonAventureDto): Promise<void> {
+    if (this.aventureBusy()) return;
+    const ref = this.dialog.open(ConfirmDialog, {
+      data: {
+        message: `Retirer « ${aventure.nom} » ? Le niveau de l'Homme Dragon peut baisser ; sa fiche, sa réserve et ses choix sont conservés.`,
+        confirmLabel: 'Retirer',
+      },
+    });
+    if (!(await firstValueFrom(ref.afterClosed()))) return;
+    this.aventureBusy.set(true);
+    this.aventureError.set(null);
+    try {
+      this.hommeDragon.set(
+        await this.hommeDragonSvc.unlink(aventure.partieId, this.hommeDragonId()),
+      );
+      void this.partySignals.refresh();
+    } catch {
+      this.aventureError.set('Impossible de retirer cette aventure. Réessayez.');
+    } finally {
+      this.aventureBusy.set(false);
+    }
   }
 
   protected openArtefactEdit(): void {
@@ -242,7 +347,7 @@ export class HommeDragonSheet implements OnInit {
     this.editingArtefact.set(true);
     // Revue de code : le bandeau « fiche créée » restait affiché indéfiniment — le refermer dès
     // que le MJ interagit à nouveau avec la fiche (édition d'artefact), pas seulement à la création.
-    this.justCreated.set(false);
+    this.noticeDismissed.set(true);
   }
 
   protected async onArtefactSubmit(): Promise<void> {
@@ -251,7 +356,7 @@ export class HommeDragonSheet implements OnInit {
     this.updating.set(true);
     this.updateError.set(null);
     try {
-      const updated = await this.hommeDragonSvc.update(this.partieId(), {
+      const updated = await this.hommeDragonSvc.update(this.hommeDragonId(), {
         artefact: { key },
       });
       this.hommeDragon.set(updated);
@@ -299,7 +404,10 @@ export class HommeDragonSheet implements OnInit {
     this.choosingEveilPower.set(true);
     this.eveilPowerError.set(null);
     try {
-      const updated = await this.hommeDragonSvc.chooseEveilPower(this.partieId(), { level, key });
+      const updated = await this.hommeDragonSvc.chooseEveilPower(this.hommeDragonId(), {
+        level,
+        key,
+      });
       this.hommeDragon.set(updated);
       this.selectedEveilPowerKey.set(null);
     } catch {
@@ -511,7 +619,9 @@ export class HommeDragonSheet implements OnInit {
     this.choosingCadeau.set(true);
     this.cadeauError.set(null);
     try {
-      const updated = await this.hommeDragonSvc.chooseArtefactCadeau(this.partieId(), { key });
+      const updated = await this.hommeDragonSvc.chooseArtefactCadeau(this.hommeDragonId(), {
+        key,
+      });
       this.hommeDragon.set(updated);
       this.selectedCadeauKey.set(null);
       this.confirmingCadeau.set(false);
@@ -608,7 +718,7 @@ export class HommeDragonSheet implements OnInit {
     this.exportError.set(null);
     this.exporting.set(true);
     try {
-      const blob = await this.hommeDragonSvc.exportPdf(this.partieId(), format);
+      const blob = await this.hommeDragonSvc.exportPdf(this.hommeDragonId(), format);
       const url = URL.createObjectURL(blob);
       const safeName = (this.hommeDragon()?.sheetData.nom || 'homme-dragon').replace(
         /[^a-z0-9-_]+/gi,

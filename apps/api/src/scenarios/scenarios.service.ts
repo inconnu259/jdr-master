@@ -26,6 +26,23 @@ import { UpdateScenarioDto } from './dto/update-scenario.dto';
 import { detectDocumentMime, isStructurallyValidPdf } from './document-mime.util';
 import { deleteDocumentFile, readDocumentFile, writeDocumentFile } from './document-storage.util';
 
+/** Un participant ou un membre tel que renvoyé par la lecture en lot `findPasseForParties`. */
+export interface BatchParticipant {
+  userId: string;
+  pseudo: string;
+  displayName: string;
+}
+
+/** Un scénario `PASSE` renvoyé par la lecture en lot `findPasseForParties` (AD-23). */
+export interface PasseScenarioBatchItem {
+  id: string;
+  partieId: string;
+  title: string;
+  /** ISO — jamais nul (seuls les scénarios `PASSE` clos sont lus). */
+  closedAt: string;
+  participants: BatchParticipant[];
+}
+
 @Injectable()
 export class ScenariosService {
   constructor(
@@ -266,6 +283,82 @@ export class ScenariosService {
         return toDto(s, partie.kind, scenarioParticipants, seances, retrospectiveNotes);
       }),
     );
+  }
+
+  /**
+   * Lecture en lot, générique (AD-23) : les scénarios `PASSE` de N parties avec leurs participants,
+   * et les membres de chacune de ces parties — TROIS requêtes groupées (scénarios, inscrits,
+   * membres), jamais une boucle sur `findAllForPartie`. Ce service ne connaît pas les Hommes
+   * Dragons : l'appelant décide quelles parties lui importent et assume la garde d'accès
+   * (aucune ici — réservée aux services qui ont déjà établi que l'appelant peut tout lire).
+   *
+   * Règle de participation, identique à `findAllForPartie` (AD-4) : `CAMPAGNE_EPISODIQUE` →
+   * inscrits au scénario ; sinon tous les membres de la partie. Les scénarios sont triés par date
+   * de clôture puis id croissants. `kind` est lu par la relation `partie`, jamais par une requête
+   * dédiée. Les membres sont dans l'ordre d'arrivée (`joinedAt`, `userId`), MJ exclu.
+   */
+  async findPasseForParties(partieIds: string[]): Promise<{
+    scenarios: PasseScenarioBatchItem[];
+    membersByPartie: Map<string, BatchParticipant[]>;
+  }> {
+    const membersByPartie = new Map<string, BatchParticipant[]>();
+    if (partieIds.length === 0) return { scenarios: [], membersByPartie };
+
+    const [scenarios, memberships] = await Promise.all([
+      this.prisma.scenario.findMany({
+        where: { partieId: { in: partieIds }, status: 'PASSE', closedAt: { not: null } },
+        orderBy: [{ closedAt: 'asc' }, { id: 'asc' }],
+        select: {
+          id: true,
+          partieId: true,
+          title: true,
+          closedAt: true,
+          partie: { select: { kind: true } },
+        },
+      }),
+      this.prisma.membership.findMany({
+        where: { partieId: { in: partieIds } },
+        orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
+        include: { user: { select: { pseudo: true, displayName: true } } },
+      }),
+    ]);
+
+    for (const m of memberships) {
+      const list = membersByPartie.get(m.partieId) ?? [];
+      list.push({ userId: m.userId, pseudo: m.user.pseudo, displayName: m.user.displayName });
+      membersByPartie.set(m.partieId, list);
+    }
+
+    const episodicScenarioIds = scenarios
+      .filter((s) => s.partie.kind === 'CAMPAGNE_EPISODIQUE')
+      .map((s) => s.id);
+    const inscrits =
+      episodicScenarioIds.length === 0
+        ? []
+        : await this.prisma.scenarioParticipant.findMany({
+            where: { scenarioId: { in: episodicScenarioIds } },
+            include: { user: { select: { pseudo: true, displayName: true } } },
+          });
+    const inscritsByScenario = new Map<string, BatchParticipant[]>();
+    for (const p of inscrits) {
+      const list = inscritsByScenario.get(p.scenarioId) ?? [];
+      list.push({ userId: p.userId, pseudo: p.user.pseudo, displayName: p.user.displayName });
+      inscritsByScenario.set(p.scenarioId, list);
+    }
+
+    return {
+      scenarios: scenarios.map((s) => ({
+        id: s.id,
+        partieId: s.partieId,
+        title: s.title,
+        closedAt: (s.closedAt as Date).toISOString(),
+        participants:
+          s.partie.kind === 'CAMPAGNE_EPISODIQUE'
+            ? (inscritsByScenario.get(s.id) ?? [])
+            : (membersByPartie.get(s.partieId) ?? []),
+      })),
+      membersByPartie,
+    };
   }
 
   async open(scenarioId: string, mjId: string): Promise<ScenarioDto> {

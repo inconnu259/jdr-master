@@ -16,6 +16,7 @@ import {
   type MyListItem,
 } from '../../../core/characters/my-characters-items';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
+import { hommeDragonAventuresLabel } from '../../../core/homme-dragon/homme-dragon.util';
 import { RACE_LABELS } from '../../homme-dragon/homme-dragon-races';
 import { CharacterSummaryCard } from '../character-summary-card/character-summary-card';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
@@ -62,6 +63,9 @@ export class MyCharacters implements OnInit {
     mergeMyItems(this.allCharacters(), this.allHommesDragons()),
   );
   protected readonly raceLabels = RACE_LABELS;
+  /** Noms des aventures d'un Homme Dragon, joints pour la carte (« Les Vents du Nord · L'Archipel »)
+   *  ou « Sans aventure » (Story 33.8). */
+  protected readonly aventuresLabel = hommeDragonAventuresLabel;
   protected readonly query = signal('');
 
   protected readonly sortOptions = CHARACTER_SORTS;
@@ -101,8 +105,8 @@ export class MyCharacters implements OnInit {
    *  `HOMME_DRAGON_A_CREER` (`PartySignalsService.signals`, seule source de vérité de
    *  l'éligibilité, jamais recalculée ici) avec `MyPartiesService.allParties()` pour retrouver nom
    *  et `gameSystemId`, absents du DTO de signal. Ordre = ordre par défaut de `allParties()`, en
-   *  une seule pile. Le signal `HOMME_DRAGON_A_CREER` n'est pas filtré par système côté serveur :
-   *  seule Ryuutama a un Homme Dragon, le filtre est donc ici. */
+   *  une seule pile. Depuis AD-23, le signal `HOMME_DRAGON_A_CREER` est calculé côté serveur
+   *  (partie du MJ, Ryuutama, sans Homme Dragon lié) : aucun filtre de système ici. */
   protected readonly creationEntries = computed<CharacterCreationEntry[]>(() => {
     const signals = this.partySignals.signals();
     return this.myParties.allParties().flatMap((p): CharacterCreationEntry[] => {
@@ -112,7 +116,7 @@ export class MyCharacters implements OnInit {
       if (partieSignals.includes('PERSONNAGE_A_CREER')) {
         entries.push({ ...base, kind: 'character' });
       }
-      if (partieSignals.includes('HOMME_DRAGON_A_CREER') && p.gameSystemId === 'ryuutama') {
+      if (partieSignals.includes('HOMME_DRAGON_A_CREER')) {
         entries.push({ ...base, kind: 'hommeDragon' });
       }
       return entries;
@@ -153,10 +157,11 @@ export class MyCharacters implements OnInit {
     }
   }
 
-  /** Personnage → sa fiche ; Homme Dragon → la route `parties/:id/homme-dragon` (Story 33.5). */
+  /** Personnage → sa fiche ; Homme Dragon → sa fiche par son id, `/homme-dragons/:id` — y compris
+   *  sans aucune aventure (AD-23, Story 33.8). */
   open(item: MyListItem): void {
     if (item.kind === 'hommeDragon') {
-      void this.router.navigate(['/parties', item.hommeDragon.partieId, 'homme-dragon']);
+      void this.router.navigate(['/homme-dragons', item.hommeDragon.id]);
       return;
     }
     const c = item.character;

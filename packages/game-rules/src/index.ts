@@ -12,6 +12,7 @@ export {
   SOUFFLES_RITUELS_LEVEL,
 } from './ryuutama/homme-dragon-derived.ts';
 export { mapHommeDragonToPdfFields } from './ryuutama/homme-dragon-pdf-field-map.ts';
+export { flattenVoyageursProteges } from './ryuutama/homme-dragon-voyageurs.ts';
 export {
   availableSouffles,
   SOUFFLES_MULTICOLORES_LEVEL,
@@ -49,6 +50,10 @@ export type {
   HommeDragonArtefactCatalogEntry,
 } from './ryuutama/validate-homme-dragon.ts';
 export type { HommeDragonDerivedStats } from './ryuutama/homme-dragon-derived.ts';
+export type {
+  HommeDragonVoyageur,
+  HommeDragonAventureVoyageurs,
+} from './ryuutama/homme-dragon-voyageurs.ts';
 export type {
   HommeDragonPdfContent,
   HommeDragonPdfInput,

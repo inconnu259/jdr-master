@@ -1176,8 +1176,9 @@ export interface ResetPasswordDto {
 /** Race de l'Homme Dragon (Story 10.1) — fixée à la création, détermine les artefacts proposés. */
 export type HommeDragonRace = 'DRAGON_VERT' | 'DRAGON_BLEU' | 'DRAGON_ROUGE' | 'DRAGON_NOIR';
 
-/** Fiche du personnage du MJ pour Ryuutama (Story 10.1). Forme minimale — `derived`/
- * `voyageursProteges`/`historique` seront ajoutés par les Stories 10.2/10.3, pas encore calculés. */
+/** Fiche du personnage du MJ pour Ryuutama (Story 10.1) — la part saisie et persistée (`sheetData`).
+ * Niveau, PS, aventures, historique et éveils en attente sont calculés à la lecture
+ * (`HommeDragonDto`, AD-3), jamais stockés ici. */
 export interface HommeDragonSheetData {
   race: HommeDragonRace;
   artefact: { key: string; nom?: string; inscription?: string };
@@ -1202,20 +1203,45 @@ export interface HommeDragonSheetData {
   reserve?: (string | null)[];
 }
 
+/** Référence légère à un Homme Dragon : `{ id, nom }` (AD-23). Renvoyée par
+ * `GET /parties/:id/homme-dragon` (`null` si l'aventure n'en a pas) — ni race, ni niveau, ni réserve. */
+export interface HommeDragonRefDto {
+  id: string;
+  nom: string;
+}
+
+/** Un voyageur protégé d'une aventure (AD-23) — convention joueur / personnage : `pseudo` et
+ * `displayName` permettent au front d'afficher le nom selon la convention de l'application. */
+export interface HommeDragonVoyageurDto {
+  userId: string;
+  pseudo: string;
+  displayName: string;
+}
+
+/** Une aventure d'un Homme Dragon (AD-23) : une partie dont `hommeDragonId` est son id, avec les
+ * voyageurs protégés (membres de la partie hors MJ) — calculé à la lecture, jamais stocké. */
+export interface HommeDragonAventureDto {
+  partieId: string;
+  nom: string;
+  voyageurs: HommeDragonVoyageurDto[];
+}
+
 export interface HommeDragonDto {
   id: string;
   userId: string;
-  partieId: string;
   gameSystemId: string;
   sheetData: HommeDragonSheetData;
   createdAt: string;
   updatedAt: string;
-  /** Membres actuels de la Partie (hors MJ) — calculé à la lecture, jamais stocké (AD-3, Story 10.2). */
-  voyageursProteges: { userId: string; pseudo: string }[];
-  /** Scénarios `PASSE` de la Partie — calculé à la lecture, jamais stocké (AD-3, Story 10.2). */
-  historique: { scenarioTitle: string; date: string; participants: string[] }[];
+  /** Aventures de l'Homme Dragon (0..N, triées par `Partie.createdAt` puis `id`) avec leurs
+   * voyageurs protégés — calculé à la lecture, jamais stocké (AD-3, AD-23). Remplace le
+   * `partieId` et le `voyageursProteges` plat d'avant la Story 33.8. */
+  aventures: HommeDragonAventureDto[];
+  /** Scénarios `PASSE` de TOUTES les aventures, chacun avec sa `partieId`, triés par date de
+   * clôture puis id croissants — calculé à la lecture, jamais stocké (AD-3, AD-23). */
+  historique: { scenarioTitle: string; date: string; participants: string[]; partieId: string }[];
   /** Niveau (1-5) et Points de Souffle max — calculés à la lecture depuis le nombre de scénarios
-   * `PASSE`, jamais stockés (AD-3, Story 10.3). */
+   * `PASSE` cumulés sur toutes les aventures, jamais stockés (AD-3, Story 10.3, AD-23). */
   derived: { level: number; PS: number };
   /** Miroir de `sheetData.eveilPowers`, toujours un tableau (jamais `undefined`). */
   eveilPowers: { level: number; key: string }[];
@@ -1227,12 +1253,13 @@ export interface HommeDragonDto {
 /**
  * Un Homme Dragon vu depuis « Personnages » (Story 33.5) — lecture agrégée `GET /me/homme-dragons`,
  * volontairement légère : pas de `derived` ni de niveau (calcul par scénarios `PASSE`, fan-out
- * par partie). Le contrat est un **tableau** : jamais « un par partie » figé (Story 33.8).
+ * par partie). Une ligne par Homme Dragon, filtrée par propriétaire seul (AD-23) : `aventures`
+ * peut être vide (Homme Dragon sans aventure, atteignable par dissociation ou suppression de partie).
  */
 export interface MyHommeDragonDto {
   id: string;
-  partieId: string;
-  partieName: string;
+  /** Aventures de l'Homme Dragon, triées par `Partie.createdAt` puis `id` ; éventuellement vide. */
+  aventures: { partieId: string; nom: string }[];
   gameSystemId: string;
   nom: string;
   race: HommeDragonRace;
@@ -1240,17 +1267,17 @@ export interface MyHommeDragonDto {
   createdAt: string;
 }
 
-/** Payload de création (POST /parties/:id/homme-dragon) — mêmes champs que la fiche, à plat. */
+/** Payload de création (POST /parties/:id/homme-dragon, crée ET lie à la partie) — mêmes champs que la fiche, à plat. */
 export type CreateHommeDragonDto = HommeDragonSheetData;
 
-/** Payload de mise à jour (PATCH /parties/:id/homme-dragon) — race jamais éditable après création,
+/** Payload de mise à jour (PATCH /homme-dragons/:id) — race jamais éditable après création,
  * ni l'artefact cadeau (choix définitif via POST `artefact-cadeau`, Story 33.7), ni la réserve de
  * souffles (route dédiée `PUT reserve/:slot`, Story 33.6). */
 export type UpdateHommeDragonDto = Partial<
   Omit<HommeDragonSheetData, 'race' | 'artefactCadeau' | 'reserve'>
 >;
 
-/** Payload de choix d'un pouvoir d'éveil (POST /parties/:id/homme-dragon/eveil-power).
+/** Payload de choix d'un pouvoir d'éveil (POST /homme-dragons/:id/eveil-power).
  * Décision utilisateur (Story 10.4) : le catalogue `eveilPower` est un pool commun à toutes les
  * races, sans niveau de déblocage par pouvoir — `level` désigne ici le seuil de niveau franchi
  * pour lequel ce choix est fait (doit appartenir à `pendingEveilLevels`), pas un attribut du
@@ -1260,13 +1287,13 @@ export interface ChooseEveilPowerDto {
   key: string;
 }
 
-/** Payload du choix de l'artefact cadeau (POST /parties/:id/homme-dragon/artefact-cadeau,
+/** Payload du choix de l'artefact cadeau (POST /homme-dragons/:id/artefact-cadeau,
  * Story 33.7) — niveau ≥ 4, choix unique et définitif, artefact d'une autre race que le dragon. */
 export interface ChooseArtefactCadeauDto {
   key: string;
 }
 
-/** Payload de l'écriture d'un emplacement de la réserve (PUT /parties/:id/homme-dragon/reserve/:slot,
+/** Payload de l'écriture d'un emplacement de la réserve (PUT /homme-dragons/:id/reserve/:slot,
  * Story 33.6) — `key: null` retire le souffle de l'emplacement. Un seul emplacement par appel ; le
  * numéro d'emplacement (1-based) est dans l'URL. */
 export interface SetReserveSlotDto {

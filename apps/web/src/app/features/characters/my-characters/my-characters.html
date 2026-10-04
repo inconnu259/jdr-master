@@ -40,10 +40,11 @@
         />
       } @else {
         <!-- Homme Dragon (Story 33.5) : même carte et même grille, `NatureMarker` en plus ; la race
-             tient lieu de classe. Ni niveau ni statistiques. -->
+             tient lieu de classe. Ni niveau ni statistiques. Une seule carte par Homme Dragon,
+             avec les noms de toutes ses aventures (ou « Sans aventure », Story 33.8). -->
         <app-character-summary-card
           [hommeDragon]="item.hommeDragon"
-          [partieName]="item.hommeDragon.partieName"
+          [partieName]="aventuresLabel(item.hommeDragon.aventures)"
           [density]="charactersViewMode()"
           [className]="raceLabels[item.hommeDragon.race] ?? ''"
           [showStats]="false"

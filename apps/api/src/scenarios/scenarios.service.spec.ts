@@ -90,6 +90,7 @@ function makePrisma() {
     // soit un effectif de 1 (le MJ) : aucun effet sur les tests existants.
     membership: {
       count: jest.fn().mockResolvedValue(0),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     partie: {
       findUniqueOrThrow: jest.fn().mockResolvedValue({
@@ -811,6 +812,99 @@ describe('ScenariosService', () => {
 
       await expect(service.listDrafts('p1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.scenario.findMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findPasseForParties() (AD-23, lecture en lot)', () => {
+    const user = (userId: string) => ({ pseudo: userId, displayName: `Nom ${userId}` });
+    const passe = (id: string, partieId: string, kind: string, closedAt: string) => ({
+      id,
+      partieId,
+      title: `Scénario ${id}`,
+      closedAt: new Date(closedAt),
+      partie: { kind },
+    });
+
+    it('aucune partie → aucune requête', async () => {
+      const result = await service.findPasseForParties([]);
+
+      expect(result.scenarios).toEqual([]);
+      expect(result.membersByPartie.size).toBe(0);
+      expect(prisma.scenario.findMany).not.toHaveBeenCalled();
+      expect(prisma.membership.findMany).not.toHaveBeenCalled();
+      expect(prisma.scenarioParticipant.findMany).not.toHaveBeenCalled();
+    });
+
+    it('trois requêtes groupées pour N parties, jamais de garde d’accès ni de boucle par partie', async () => {
+      prisma.scenario.findMany.mockResolvedValue([
+        passe('s1', 'p1', 'ONE_SHOT', '2026-01-01T00:00:00.000Z'),
+        passe('s2', 'p2', 'CAMPAGNE_EPISODIQUE', '2026-02-01T00:00:00.000Z'),
+        passe('s3', 'p3', 'CAMPAGNE_LINEAIRE', '2026-03-01T00:00:00.000Z'),
+      ]);
+      prisma.membership.findMany.mockResolvedValue([]);
+
+      await service.findPasseForParties(['p1', 'p2', 'p3']);
+
+      expect(prisma.scenario.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.scenario.findMany).toHaveBeenCalledWith(
+        objectLike({
+          where: { partieId: { in: ['p1', 'p2', 'p3'] }, status: 'PASSE', closedAt: { not: null } },
+          orderBy: [{ closedAt: 'asc' }, { id: 'asc' }],
+        }),
+      );
+      expect(prisma.membership.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.scenarioParticipant.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.scenarioParticipant.findMany).toHaveBeenCalledWith(
+        objectLike({ where: { scenarioId: { in: ['s2'] } } }),
+      );
+      expect(parties.getViewable).not.toHaveBeenCalled();
+      expect(parties.getOwned).not.toHaveBeenCalled();
+    });
+
+    it('épisodique → inscrits du scénario ; sinon tous les membres de la partie', async () => {
+      prisma.scenario.findMany.mockResolvedValue([
+        passe('s1', 'p1', 'CAMPAGNE_LINEAIRE', '2026-01-01T00:00:00.000Z'),
+        passe('s2', 'p2', 'CAMPAGNE_EPISODIQUE', '2026-02-01T00:00:00.000Z'),
+      ]);
+      prisma.membership.findMany.mockResolvedValue([
+        { partieId: 'p1', userId: 'alice', user: user('alice') },
+        { partieId: 'p1', userId: 'bob', user: user('bob') },
+        { partieId: 'p2', userId: 'alice', user: user('alice') },
+        { partieId: 'p2', userId: 'carla', user: user('carla') },
+      ]);
+      prisma.scenarioParticipant.findMany.mockResolvedValue([
+        { scenarioId: 's2', userId: 'carla', user: user('carla') },
+      ]);
+
+      const { scenarios, membersByPartie } = await service.findPasseForParties(['p1', 'p2']);
+
+      expect(scenarios[0].participants.map((p) => p.pseudo)).toEqual(['alice', 'bob']);
+      expect(scenarios[1].participants.map((p) => p.pseudo)).toEqual(['carla']);
+      expect(membersByPartie.get('p2')?.map((m) => m.userId)).toEqual(['alice', 'carla']);
+    });
+
+    it('closedAt rendu en ISO, ordre du tri serveur conservé, partieId porté par chaque scénario', async () => {
+      prisma.scenario.findMany.mockResolvedValue([
+        passe('a', 'p2', 'ONE_SHOT', '2026-01-01T10:00:00.000Z'),
+        passe('b', 'p1', 'ONE_SHOT', '2026-01-02T10:00:00.000Z'),
+      ]);
+
+      const { scenarios } = await service.findPasseForParties(['p1', 'p2']);
+
+      expect(scenarios.map((s) => [s.id, s.partieId, s.closedAt])).toEqual([
+        ['a', 'p2', '2026-01-01T10:00:00.000Z'],
+        ['b', 'p1', '2026-01-02T10:00:00.000Z'],
+      ]);
+    });
+
+    it("aucun scénario épisodique → pas de requête d'inscrits", async () => {
+      prisma.scenario.findMany.mockResolvedValue([
+        passe('s1', 'p1', 'ONE_SHOT', '2026-01-01T00:00:00.000Z'),
+      ]);
+
+      await service.findPasseForParties(['p1']);
+
+      expect(prisma.scenarioParticipant.findMany).not.toHaveBeenCalled();
     });
   });
 

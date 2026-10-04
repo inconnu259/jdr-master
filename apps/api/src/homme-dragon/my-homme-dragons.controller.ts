@@ -6,8 +6,8 @@ import { HommeDragonService } from './homme-dragon.service';
 
 /**
  * `GET /me/homme-dragons` (Story 33.5) : contrôleur dédié, distinct de `HommeDragonController`
- * (`parties/:id/homme-dragon`, scopé à une seule partie) — même patron que `MyCharactersController`.
- * Restreint aux Hommes Dragons de l'appelant, sur les parties dont il est MJ.
+ * (routes par partie) et de `HommeDragonSheetController` (`homme-dragons/:id`, la fiche) — même patron que `MyCharactersController`.
+ * Une ligne par Homme Dragon de l'appelant, filtrée par propriétaire seul (AD-23) : un Homme Dragon sans aventure y reste visible.
  */
 @UseGuards(AuthenticatedGuard)
 @Controller('me/homme-dragons')

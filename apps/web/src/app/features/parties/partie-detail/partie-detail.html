@@ -453,7 +453,10 @@
 
         @if (isMj() && p.gameSystemId === 'ryuutama') {
           <mat-tab label="Homme Dragon">
-            <app-homme-dragon-sheet [partieId]="p.id" [partieName]="p.name" />
+            <!-- Story 33.8 (AD-23) : l'onglet est le panneau d'AVENTURE — le lien entre cette partie et
+                 un Homme Dragon (lien vers la fiche + « Dissocier », ou « Créer » / « Associer un
+                 existant »). La fiche vit sur /homme-dragons/:id. -->
+            <app-homme-dragon-aventure-panel [partieId]="p.id" [partieName]="p.name" />
           </mat-tab>
         }
 

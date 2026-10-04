@@ -75,7 +75,7 @@ import { AnnouncementsService } from '../../../core/announcements/announcements.
 import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
 import { scrollToAnnouncement } from '../../../core/announcements/scroll-to-announcement.util';
 import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
-import { HommeDragonSheet } from '../../homme-dragon/homme-dragon-sheet/homme-dragon-sheet';
+import { HommeDragonAventurePanel } from '../../homme-dragon/homme-dragon-aventure-panel/homme-dragon-aventure-panel';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
@@ -113,7 +113,7 @@ const SEARCH_DEBOUNCE_MS = 500;
     ScenarioTimeline,
     AnnouncementFormComponent,
     AnnonceCard,
-    HommeDragonSheet,
+    HommeDragonAventurePanel,
     IdentityLabel,
     StatusBadge,
   ],

@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { BreakpointObserver } from '@angular/cdk/layout';
@@ -324,8 +325,14 @@ export class HommeDragonCreationWizard implements OnInit {
         mondesProteges: this.mondesProteges().trim() || undefined,
       });
       this.created.emit(created);
-    } catch {
-      this.createError.set('Impossible de créer votre Homme Dragon. Réessayez.');
+    } catch (e) {
+      // AD-23 : `409` = l'aventure a reçu un Homme Dragon entre-temps (autre onglet) — la création a
+      // été annulée côté serveur, aucune fiche orpheline.
+      this.createError.set(
+        e instanceof HttpErrorResponse && e.status === 409
+          ? 'Cette aventure a déjà un Homme Dragon.'
+          : 'Impossible de créer votre Homme Dragon. Réessayez.',
+      );
     } finally {
       this.creating.set(false);
     }

@@ -20,8 +20,7 @@ function makeMyCharacter(overrides: Partial<MyCharacterDto> = {}): MyCharacterDt
 function makeDragon(overrides: Partial<MyHommeDragonDto> = {}): MyHommeDragonDto {
   return {
     id: 'hd1',
-    partieId: 'p1',
-    partieName: 'Le Convoi du Nord',
+    aventures: [{ partieId: 'p1', nom: 'Le Convoi du Nord' }],
     gameSystemId: 'ryuutama',
     nom: 'Skarn',
     race: 'DRAGON_VERT',
@@ -75,12 +74,12 @@ describe('my-characters-items (Story 33.5)', () => {
   });
 
   describe('sortMyItems', () => {
-    it('niveau : tous les personnages (plus haut niveau d’abord), puis les dragons par nom de partie', () => {
+    it('niveau : tous les personnages (plus haut niveau d’abord), puis les dragons par première aventure', () => {
       const items = mergeMyItems(
         [named('low', 'A', { level: 1 }), named('high', 'B', { level: 7 })],
         [
-          makeDragon({ id: 'hdZ', partieName: 'Zéphyr' }),
-          makeDragon({ id: 'hdA', partieName: 'Abbaye' }),
+          makeDragon({ id: 'hdZ', aventures: [{ partieId: 'pz', nom: 'Zéphyr' }] }),
+          makeDragon({ id: 'hdA', aventures: [{ partieId: 'pa', nom: 'Abbaye' }] }),
         ],
       );
 
@@ -90,10 +89,52 @@ describe('my-characters-items (Story 33.5)', () => {
     it('partie : les deux natures confondues, par nom de partie', () => {
       const items = mergeMyItems(
         [named('c1', 'Alma', { partieName: 'Zéphyr' })],
-        [makeDragon({ id: 'hd1', partieName: 'Abbaye' })],
+        [makeDragon({ id: 'hd1', aventures: [{ partieId: 'pa', nom: 'Abbaye' }] })],
       );
 
       expect(sortMyItems(items, 'partie').map((i) => i.id)).toEqual(['hd1', 'c1']);
+    });
+
+    it('partie : un Homme Dragon se range sur sa PREMIÈRE aventure, pas sur les suivantes', () => {
+      const items = mergeMyItems(
+        [named('c1', 'Alma', { partieName: 'Mistral' })],
+        [
+          makeDragon({
+            id: 'hdMulti',
+            aventures: [
+              { partieId: 'p1', nom: 'Zéphyr' },
+              { partieId: 'p2', nom: 'Abbaye' },
+            ],
+          }),
+        ],
+      );
+
+      // « Zéphyr » (première aventure) après « Mistral », bien que « Abbaye » le précède.
+      expect(sortMyItems(items, 'partie').map((i) => i.id)).toEqual(['c1', 'hdMulti']);
+    });
+
+    it('partie : les Hommes Dragons sans aventure viennent en dernier, après les personnages', () => {
+      const items = mergeMyItems(
+        [named('c1', 'Alma', { partieName: 'Zéphyr' })],
+        [
+          makeDragon({ id: 'hdSans', aventures: [] }),
+          makeDragon({ id: 'hdAvec', aventures: [{ partieId: 'p1', nom: 'Abbaye' }] }),
+        ],
+      );
+
+      expect(sortMyItems(items, 'partie').map((i) => i.id)).toEqual(['hdAvec', 'c1', 'hdSans']);
+    });
+
+    it('niveau : un Homme Dragon sans aventure passe après ceux qui en ont', () => {
+      const items = mergeMyItems(
+        [named('c1', 'Alma', { level: 1 })],
+        [
+          makeDragon({ id: 'hdSans', aventures: [] }),
+          makeDragon({ id: 'hdAvec', aventures: [{ partieId: 'p1', nom: 'Zéphyr' }] }),
+        ],
+      );
+
+      expect(sortMyItems(items, 'niveau').map((i) => i.id)).toEqual(['c1', 'hdAvec', 'hdSans']);
     });
 
     it('nom : les deux natures confondues, par nom affiché', () => {

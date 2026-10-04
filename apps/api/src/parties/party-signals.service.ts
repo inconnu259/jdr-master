@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { gameSystemHasModule } from '@master-jdr/shared';
 import type { PartieDto, PartySignalCode, PartySignalsDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
 import { PartiesService } from './parties.service';
 
 type OpenPollWithVotes = {
@@ -33,7 +34,7 @@ export class PartySignalsService {
 
     const [
       charactersOwned,
-      hommeDragonsOwned,
+      ryuutamaSansHommeDragon,
       membershipCounts,
       courantScenarios,
       scenariosMissingResume,
@@ -44,9 +45,18 @@ export class PartySignalsService {
         where: { userId, partieId: { in: playerPartieIds } },
         select: { partieId: true },
       }),
-      this.prisma.hommeDragon.findMany({
-        where: { userId, partieId: { in: mjPartieIds } },
-        select: { partieId: true },
+      // HOMME_DRAGON_A_CREER (AD-23) : partie dont l'utilisateur est MJ, Ryuutama, `hommeDragonId`
+      // nul. Le lien vit sur `Partie` : une seule requête sur les parties du MJ, sans requête par
+      // partie ni lecture des Hommes Dragons. Le filtre Ryuutama est ici, côté serveur — le front
+      // ne le recalcule plus.
+      this.prisma.partie.findMany({
+        where: {
+          id: { in: mjPartieIds },
+          mjId: userId,
+          gameSystemId: RYUUTAMA_ID,
+          hommeDragonId: null,
+        },
+        select: { id: true },
       }),
       this.prisma.membership.groupBy({
         by: ['partieId'],
@@ -90,7 +100,7 @@ export class PartySignalsService {
     ]);
 
     const characterPartieIds = new Set(charactersOwned.map((c) => c.partieId));
-    const hommeDragonPartieIds = new Set(hommeDragonsOwned.map((h) => h.partieId));
+    const hommeDragonACreerPartieIds = new Set(ryuutamaSansHommeDragon.map((p) => p.id));
     const partiesWithMembers = new Set(membershipCounts.map((m) => m.partieId));
     const partiesWithCourantScenario = new Set(courantScenarios.map((s) => s.partieId));
     const partiesMissingResume = new Set(scenariosMissingResume.map((s) => s.partieId));
@@ -143,7 +153,7 @@ export class PartySignalsService {
         );
         if (hasUnanswered) signals.push('VOTE_EN_COURS_SANS_REPONSE');
       } else {
-        if (!hommeDragonPartieIds.has(partie.id)) signals.push('HOMME_DRAGON_A_CREER');
+        if (hommeDragonACreerPartieIds.has(partie.id)) signals.push('HOMME_DRAGON_A_CREER');
         if (!partiesWithMembers.has(partie.id)) signals.push('AUCUN_MEMBRE_INVITE');
         if (!partiesWithCourantScenario.has(partie.id)) signals.push('AUCUN_SCENARIO_EN_COURS');
         if (!hasFutureSessionDate && !openPollsByPartie.has(partie.id)) {

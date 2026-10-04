@@ -379,15 +379,24 @@ export class PartiesService {
     // sans module est refusé, mais renvoyer la valeur déjà enregistrée (même sans module, AC3) reste
     // accepté : sans cette distinction, chaque sauvegarde d'une partie existante sur un système sans
     // module casserait.
-    if (dto.gameSystemId !== undefined && dto.gameSystemId !== partie.gameSystemId) {
-      this.assertGameSystemHasModule(dto.gameSystemId);
+    const systemChanged =
+      dto.gameSystemId !== undefined && dto.gameSystemId !== partie.gameSystemId;
+    if (systemChanged) {
+      this.assertGameSystemHasModule(dto.gameSystemId as string);
     }
 
+    // AD-23 : tout `UPDATE` qui change `gameSystemId` remet `hommeDragonId` à NULL DANS LA MÊME
+    // instruction — c'est ce qui rend « une aventure de H = une partie dont hommeDragonId = H.id »
+    // vrai par construction (un lien existant est toujours un lien Ryuutama du MJ). La fiche de
+    // l'Homme Dragon n'est pas touchée : seul le lien disparaît, le niveau est recalculé à la lecture.
     const updated = await this.prisma.partie.update({
       where: { id },
-      data: { ...dto },
+      data: { ...dto, ...(systemChanged ? { hommeDragonId: null } : {}) },
     });
     this.realtimeEvents.emit(partieTopic(id));
+    // Le changement de système fait apparaître ou disparaître HOMME_DRAGON_A_CREER (et le lien) :
+    // signaux du MJ et des membres, en plus de `partie:` ci-dessus (jamais en remplacement).
+    if (systemChanged) await this.notifyPartieSignalsChanged(id, userId);
     const [hasScenario, favorite] = await Promise.all([
       this.hasScenario(id),
       this.isFavorite(userId, id),
@@ -577,8 +586,12 @@ export class PartiesService {
   }
 
   async remove(id: string, userId: string) {
-    await this.getOwned(id, userId);
+    const partie = await this.getOwned(id, userId);
+    // AD-23 : si la partie portait un Homme Dragon, la FK `SetNull` ne fait que le délier — la
+    // fiche est conservée. Le signal HOMME_DRAGON_A_CREER du MJ n'est plus celui d'avant et sa liste
+    // « Personnages » change : `user:` au MJ (aucun canal `partie:`, la partie n'existe plus).
     await this.prisma.partie.delete({ where: { id } });
+    this.realtimeEvents.emit(userTopic(partie.mjId));
     return { ok: true };
   }
 

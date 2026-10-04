@@ -91,9 +91,13 @@ peut l'exporter en PDF (recoupe une partie du Palier 3).
 > structurées annexes). Ce qui est spécifique aux règles Ryuutama reste dans `packages/game-rules`,
 > ce qui est générique (mécanisme de fiche typée, plugin) doit rester réutilisable par d'autres systèmes.
 
-- [x] **Personnage du MJ (« Homme Dragon », Ryuutama)** : fiche distincte de celle du joueur (un seul
-      par Partie), avec sa propre progression (niveau fonction du nombre de scénarios `PASSE`, pas d'XP
-      distribuée) et son propre export PDF. *(Épic 10.)*
+- [x] **Personnage du MJ (« Homme Dragon », Ryuutama)** : fiche distincte de celle du joueur, avec sa
+      propre progression (niveau fonction du nombre de scénarios `PASSE`, pas d'XP distribuée) et son
+      propre export PDF. *(Épic 10.)* **Un même Homme Dragon peut suivre plusieurs aventures** (parties
+      Ryuutama dont on est MJ ; une aventure a au plus un Homme Dragon) : son niveau et son historique
+      cumulent les scénarios `PASSE` de toutes ses aventures, il se retrouve (avec ou sans aventure)
+      dans « Personnages », et se dissocie sans perdre la fiche. *(Épic 33, story 33.8 — remplace
+      « un seul par Partie » ; AD-23.)*
 - [ ] **Fiches de référence Ryuutama** : journal, carte, monde, monstre, ville, objectifs (chasse/quête/
       voyage), œuf de bataille, structure — servies telles quelles en téléchargement PDF (journal/carte
       à tout membre, le reste au MJ seul), aucun remplissage dynamique à ce stade. *(Épic 12, en cours —

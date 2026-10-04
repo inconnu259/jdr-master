@@ -39,7 +39,9 @@
            écraserait le nom. Classe et Partie sont les deux repères que l'utilisateur a
            explicitement demandé de conserver en liste compacte. -->
       @if (compactSubtitle()) {
-        <span class="character-summary-card__compact-sub">{{ compactSubtitle() }}</span>
+        <span class="character-summary-card__compact-sub" [attr.title]="compactSubtitle()">{{
+          compactSubtitle()
+        }}</span>
       }
     } @else {
       @if (className()) {
@@ -49,7 +51,9 @@
         <span class="character-summary-card__type">{{ typeLabel() }}</span>
       }
       @if (partieName()) {
-        <span class="character-summary-card__partie">{{ partieName() }}</span>
+        <span class="character-summary-card__partie" [attr.title]="partieName()">{{
+          partieName()
+        }}</span>
       }
       @if (groupRoleLabel()) {
         <span class="character-summary-card__group-role">{{ groupRoleLabel() }}</span>

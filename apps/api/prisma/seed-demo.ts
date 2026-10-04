@@ -4,7 +4,7 @@ import * as argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 import { RYUUTAMA_ID } from '../src/game-systems/supported-game-systems';
 import { writeDocumentFile } from '../src/scenarios/document-storage.util';
-import type { HommeDragonRace } from '@master-jdr/game-rules';
+import type { HommeDragonSheetData } from '@master-jdr/game-rules';
 
 // `@master-jdr/game-rules` est un package ESM — `ts-node` (CJS, ce script) ne peut pas le
 // `require()` (cf. package.json `"type": "module"` du package). Les stats dérivées sont donc
@@ -81,18 +81,46 @@ function computeDerived(sheetData: RyuutamaSheetData) {
  *
  * ─── Ce que couvre le jeu de données ───
  * 7 comptes aux préférences volontairement toutes différentes (thème, tris, modes d'affichage,
- * masquage des parties terminées) pour qu'aucun réglage ne reste à sa valeur par défaut. Quatre
- * Parties : une ONE_SHOT clôturée, une CAMPAGNE_LINEAIRE en cours, une CAMPAGNE_EPISODIQUE, et une
- * jamais commencée (MJ : Diane, compte mixte MJ + joueuse).
+ * masquage des parties terminées) pour qu'aucun réglage ne reste à sa valeur par défaut. Cinq
+ * Parties : une ONE_SHOT clôturée, une CAMPAGNE_LINEAIRE en cours, une CAMPAGNE_EPISODIQUE, une
+ * seconde CAMPAGNE_LINEAIRE déjà bien avancée (« Les Annales de Brume », onze scénarios joués) et
+ * une jamais commencée (MJ : Diane, compte mixte MJ + joueuse).
  *
  * Chaque feature a de la donnée à afficher : disponibilités récurrentes/ponctuelles + une archivée,
  * couches de calendrier personnalisées (et un compte qui n'y a jamais touché), deux votes de date
  * ouverts en parallèle **avec des bulletins** (réponses partielles, un membre qui n'a pas voté),
  * scénarios aux quatre statuts, séances avec infos pratiques (heure/lieu/note), inscriptions,
  * journal de personnage (associations manuelle et automatique), distributions d'XP, un personnage
- * monté de niveau avec ses instantanés et un autre en attente de montée, fiches Homme Dragon,
- * documents de scénario et de bibliothèque, annonces MJ avec accusés de lecture, rôles de groupe,
- * favoris, invitations nominatives et liens d'invitation dans leurs quatre états.
+ * monté de niveau avec ses instantanés et un autre en attente de montée, documents de scénario et
+ * de bibliothèque, annonces MJ avec accusés de lecture, rôles de groupe, favoris, invitations
+ * nominatives et liens d'invitation dans leurs quatre états.
+ *
+ * ─── Hommes Dragons : un par état du modèle « un Homme Dragon, plusieurs aventures » (AD-23) ───
+ * Un Homme Dragon n'est plus rattaché à UNE partie : le lien vit sur `Partie.hommeDragonId`. Les
+ * trois fiches sont donc créées AVANT les parties, sans `partieId`, puis liées à la création de
+ * chaque partie. Niveau = scénarios `PASSE` cumulés sur toutes les aventures (seuils 1/3/7/12
+ * scénarios → niveaux 2/3/4/5, cf. `packages/game-rules/src/ryuutama/homme-dragon-derived.ts`).
+ * · Suisen (DRAGON_VERT, MJ `mj`) : « Le Naufrage de l'Aurore » (clôturée) ET « Chroniques de la
+ *   Guilde » → 1 + 1 = 2 scénarios `PASSE` → niveau 2, éveil du niveau 2 EN ATTENTE (aucun
+ *   `eveilPowers`), réserve d'un emplacement (['route']), voyageurs partagés (Alice, Bob) entre
+ *   ses deux aventures.
+ * · Kaien (DRAGON_BLEU, MJ `mj`) : « La Route des Lanternes » ET « Les Annales de Brume » → 1 + 11
+ *   = 12 scénarios `PASSE` → niveau 5 ATTEINT PAR CUMUL (aucune aventure seule n'y arrive), PS 10 ;
+ *   éveils des niveaux 2, 3 et 4 choisis (le 5 en attente), artefact cadeau (race ≠ bleu), réserve
+ *   de 4 emplacements dont un souffle d'une autre race sur un seul emplacement et un rituel.
+ * · Braise (DRAGON_ROUGE, MJ `mj`) : AUCUNE aventure (état atteignable par dissociation ou
+ *   suppression de partie) → niveau 1, aucune réserve ; cible des tests d'association.
+ * · Aucun Homme Dragon pour Diane : « Les Veilleurs du Pont » garde le signal HOMME_DRAGON_A_CREER
+ *   et l'entrée « Créer un Homme Dragon pour… » de « Personnages ».
+ * Les valeurs de niveau et de réserve ci-dessus sont écrites en dur (voir plus bas) : ce script est
+ * CJS et ne peut pas importer `@master-jdr/game-rules` (ESM) — à resynchroniser avec les règles
+ * (`homme-dragon-derived.ts`, `homme-dragon-reserve.ts`) si elles bougent.
+ *
+ * Cas de test documenté : dissocier « Les Annales de Brume » de Kaien ramène son niveau de 5 à 2
+ * (1 scénario `PASSE` restant) SANS rien purger — réserve de 4 emplacements, éveils des niveaux 3
+ * et 4 et artefact cadeau persistent au-dessus du niveau, lisibles, seuls les nouveaux choix sont
+ * refusés (retirer un souffle reste permis). Dissocier aussi « La Route des Lanternes » le ramène à
+ * 1. Les niveaux 3 et 4 ne sont pas figés par le seed mais se reproduisent par dissociation.
  *
  * ─── Cas limites délibérés ───
  * · une séance A_VENIR dont `inscriptionMax` est atteint (fermée) et une autre avec de la place ;
@@ -100,9 +128,13 @@ function computeDerived(sheetData: RyuutamaSheetData) {
  * · un compte `mustResetPassword` (parcours de réinitialisation imposée) ;
  * · un lien d'invitation valide, un à usage unique déjà consommé, un expiré, un ciblé par e-mail.
  *
- * Écart connu, non comblé ici : le contenu Ryuutama enrichi des Epics 23-26 (profils d'attributs,
- * armes libres, sorts rituels, équipement de départ) n'a pas de scénario de seed dédié — les
- * fiches restent sur la forme minimale classe/type/attributs/arme.
+ * Écarts connus, non comblés ici :
+ * · le contenu Ryuutama enrichi des Epics 23-26 (profils d'attributs, armes libres, sorts rituels,
+ *   équipement de départ) n'a pas de scénario de seed dédié — les fiches restent sur la forme
+ *   minimale classe/type/attributs/arme ;
+ * · aucun Homme Dragon n'a d'avatar : il suppose un fichier téléversé, que ce script n'écrit pas ;
+ * · les niveaux 3 et 4 d'un Homme Dragon ne sont pas figés (voir ci-dessus : reproductibles par
+ *   dissociation).
  */
 
 const connectionString = process.env.DATABASE_URL;
@@ -200,6 +232,20 @@ async function createCharacter(
       derived,
       journalAutoAssociate,
       xp,
+    },
+  });
+}
+
+/**
+ * Crée un Homme Dragon SANS aucune partie (AD-23) : le lien est posé ensuite, par
+ * `Partie.hommeDragonId`, à la création de chaque aventure.
+ */
+async function createHommeDragon(userId: string, sheetData: HommeDragonSheetData) {
+  return prisma.hommeDragon.create({
+    data: {
+      userId,
+      gameSystemId: RYUUTAMA_ID,
+      sheetData: sheetData as unknown as Prisma.InputJsonObject,
     },
   });
 }
@@ -355,6 +401,57 @@ async function main() {
     ],
   });
 
+  // ─── Hommes Dragons du MJ (Epic 10, 33 ; AD-23) ─────────────────────────────
+  // Créés AVANT les parties, sans `partieId` : chaque partie les rejoint par `hommeDragonId`. Fiches
+  // valides (clés de catalogue existantes, réserve conforme aux règles de `game-rules`, éveils et
+  // cadeau cohérents avec le niveau — voir l'en-tête pour les niveaux visés). Pas d'avatar.
+  console.log('→ Hommes Dragons...');
+  // Suisen — niveau 2 (1 scénario PASSE dans « Le Naufrage de l'Aurore » + 1 dans « Chroniques de
+  // la Guilde »). Éveil du niveau 2 EN ATTENTE : aucun `eveilPowers`. Réserve : capacité 1 au
+  // niveau 2 (niveau − 1) ; « route » est un souffle de sa race (DRAGON_VERT), admis.
+  const suisen = await createHommeDragon(mj.id, {
+    race: 'DRAGON_VERT',
+    artefact: { key: 'lanterne', nom: 'Lanterne des embruns' },
+    nom: 'Suisen',
+    apparence: 'Une brume verdâtre en forme de lanterne suspendue.',
+    caractere: 'Patient, mais implacable avec les naufrageurs.',
+    vocation: 'Guider les naufragés vers la bonne route.',
+    demeure: "Les criques de l'Aurore",
+    mondesProteges: 'Les côtes du Sud et leurs récifs.',
+    reserve: ['route'],
+  });
+  // Kaien — niveau 5 PAR CUMUL : 1 scénario PASSE (« La Route des Lanternes ») + 11 (« Les Annales
+  // de Brume ») = 12 ≥ seuil 12. Éveils 2, 3 et 4 choisis (le 5 en attente), cadeau d'une autre race
+  // (lanterne = DRAGON_VERT, Kaien est DRAGON_BLEU), réserve pleine de 4 emplacements (niveau 5 :
+  // 5 − 1) : « amour » (sa race, plusieurs emplacements permis), « courage » (DRAGON_ROUGE : l'UNIQUE
+  // souffle d'une autre race, sur un seul emplacement) et « rituel-du-sommeil » (rituel, admis dès
+  // le niveau 5, jamais compté comme « autre race »).
+  const kaien = await createHommeDragon(mj.id, {
+    race: 'DRAGON_BLEU',
+    artefact: { key: 'anneau', nom: 'Anneau des routes liées' },
+    nom: 'Kaien',
+    apparence: 'Un anneau de brume bleutée qui suit la caravane à distance.',
+    vocation: 'Tisser des liens entre les voyageurs du Nord.',
+    mondesProteges: 'Les routes marchandes du Nord et les brumes des Annales.',
+    eveilPowers: [
+      { level: 2, key: 'escorte-du-dragon' },
+      { level: 3, key: 'protection-du-dragon' },
+      { level: 4, key: 'rugissement-du-dragon' },
+    ],
+    artefactCadeau: { key: 'lanterne' },
+    reserve: ['amour', 'amour', 'courage', 'rituel-du-sommeil'],
+  });
+  // Braise — AUCUNE aventure : niveau 1, aucune réserve (capacité 0 au niveau 1), ni éveil ni cadeau.
+  // État atteignable par dissociation ou suppression de partie ; cible des tests d'association.
+  await createHommeDragon(mj.id, {
+    race: 'DRAGON_ROUGE',
+    artefact: { key: 'grande-epee', nom: 'Grande épée des braises' },
+    nom: 'Braise',
+    apparence: 'Une flamme basse qui attend, couchée dans la cendre.',
+    caractere: 'Prête à suivre une nouvelle aventure dès qu’on la lui confie.',
+    vocation: 'Veiller sur les voyageurs qui n’ont pas encore de dragon.',
+  });
+
   // ─── Partie 1 : ONE_SHOT, déjà jouée (PASSE) — clôturée par le MJ (Story 29.6) ────
   console.log('→ Partie ONE_SHOT...');
   const oneShot = await prisma.partie.create({
@@ -364,6 +461,10 @@ async function main() {
       gameSystemId: RYUUTAMA_ID,
       description: 'Un one-shot maritime : un navire échoué, des secrets à la dérive.',
       mjId: mj.id,
+      // AD-23 : première aventure de Suisen. `createdAt` explicite : l'ordre des aventures d'un
+      // Homme Dragon (`createdAt` puis `id`) ne doit pas dépendre de l'horloge d'insertion.
+      hommeDragonId: suisen.id,
+      createdAt: at(-80),
       // Story 29.6 (AD-8) : one-shot rejouée et bouclée, le MJ l'a explicitement déclarée
       // terminée — status: 'TERMINEE' dans PartieDto, seule Partie du seed dans cet état.
       // C'est aussi celle que masque `hideFinishedParties: true` chez Alice.
@@ -477,25 +578,6 @@ async function main() {
     ],
   });
 
-  // Fiche Homme Dragon du MJ (Epic 10) — un artefact par race, associé à la Partie.
-  await prisma.hommeDragon.create({
-    data: {
-      userId: mj.id,
-      partieId: oneShot.id,
-      gameSystemId: RYUUTAMA_ID,
-      sheetData: {
-        race: 'DRAGON_VERT' satisfies HommeDragonRace,
-        artefact: { key: 'lanterne', nom: 'Lanterne des embruns' },
-        nom: 'Suisen',
-        apparence: 'Une brume verdâtre en forme de lanterne suspendue.',
-        caractere: 'Patient, mais implacable avec les naufrageurs.',
-        vocation: 'Guider les naufragés vers la bonne route.',
-        demeure: "Les criques de l'Aurore",
-        mondesProteges: 'Les côtes du Sud et leurs récifs.',
-      },
-    },
-  });
-
   // Document de scénario (Story 7.2) — visible une fois le scénario COURANT/PASSE (anti-spoil).
   const oneShotDocText =
     "Journal de bord de l'Aurore (transcription) : \"...le chargement d'assurance " +
@@ -523,6 +605,10 @@ async function main() {
       gameSystemId: RYUUTAMA_ID,
       description: 'Une campagne itinérante sur les routes marchandes du Nord.',
       mjId: mj.id,
+      // AD-23 : l'une des deux aventures de Kaien (l'autre : « Les Annales de Brume », plus bas,
+      // créée plus tôt dans l'histoire du jeu de données).
+      hommeDragonId: kaien.id,
+      createdAt: at(-60),
     },
   });
   await prisma.membership.createMany({
@@ -706,22 +792,6 @@ async function main() {
     ],
   });
 
-  // Fiche Homme Dragon du MJ (Epic 10) pour cette Partie — race différente pour varier le catalogue.
-  await prisma.hommeDragon.create({
-    data: {
-      userId: mj.id,
-      partieId: lineaire.id,
-      gameSystemId: RYUUTAMA_ID,
-      sheetData: {
-        race: 'DRAGON_BLEU' satisfies HommeDragonRace,
-        artefact: { key: 'anneau', nom: 'Anneau des routes liées' },
-        nom: 'Kaien',
-        apparence: 'Un anneau de brume bleutée qui suit la caravane à distance.',
-        vocation: 'Tisser des liens entre les voyageurs du Nord.',
-      },
-    },
-  });
-
   // Document de bibliothèque de Partie (Story 7.2) — scenarioId null = toujours visible.
   const lineaireLibDocText =
     'Carte des routes marchandes du Nord — repères, relais et distances entre villes.';
@@ -778,6 +848,9 @@ async function main() {
       gameSystemId: RYUUTAMA_ID,
       description: "Chaque enquête est indépendante, résolue par qui s'y inscrit.",
       mjId: mj.id,
+      // AD-23 : seconde aventure de Suisen — Alice et Bob y retrouvent les voyageurs du Naufrage.
+      hommeDragonId: suisen.id,
+      createdAt: at(-50),
     },
   });
   await prisma.membership.createMany({
@@ -989,6 +1062,48 @@ async function main() {
   });
   await prisma.membership.create({ data: { userId: alice.id, partieId: dianeCampagne.id } });
 
+  // ─── Partie 5 : CAMPAGNE_LINEAIRE très avancée — « Les Annales de Brume » ─────
+  // Aventure de Kaien : ses onze scénarios `PASSE`, ajoutés à celui de « La Route des
+  // Lanternes », font 12 → niveau 5 PAR CUMUL (aucune des deux aventures n'y arrive seule).
+  // Chaque scénario porte une séance minimale (`scenarioId` + `dateValidee` suffisent), tous dans
+  // le passé et sans scénario COURANT : une campagne à l'arrêt entre deux chapitres.
+  console.log('→ Partie CAMPAGNE_LINEAIRE (Les Annales de Brume)...');
+  const annales = await prisma.partie.create({
+    data: {
+      name: 'Les Annales de Brume',
+      kind: 'CAMPAGNE_LINEAIRE',
+      gameSystemId: RYUUTAMA_ID,
+      description:
+        'Une longue chronique en brume : onze chapitres déjà racontés, une légende en suspens.',
+      mjId: mj.id,
+      hommeDragonId: kaien.id, // l'une des deux aventures de Kaien (AD-23)
+      // Créée AVANT son premier chapitre (J−216) : une partie ne peut pas avoir joué avant d'exister.
+      // C'est donc la PREMIÈRE aventure de Kaien (`createdAt`), « La Route des Lanternes » la seconde.
+      createdAt: at(-240),
+    },
+  });
+  await prisma.membership.createMany({
+    data: [
+      { userId: alice.id, partieId: annales.id },
+      { userId: diane.id, partieId: annales.id },
+      { userId: faustine.id, partieId: annales.id },
+    ],
+  });
+  for (let chapitre = 1; chapitre <= 11; chapitre++) {
+    const jour = -230 + chapitre * 14; // du chapitre 1 (J−216) au chapitre 11 (J−76), toujours passé
+    const scenario = await prisma.scenario.create({
+      data: {
+        partieId: annales.id,
+        title: `Annales de Brume — Chapitre ${chapitre}`,
+        status: 'PASSE',
+        dureeHeures: 3,
+        dureeSeances: 1,
+        closedAt: at(jour, 19),
+      },
+    });
+    await prisma.seance.create({ data: { scenarioId: scenario.id, dateValidee: at(jour) } });
+  }
+
   // ─── Invitations nominatives (Epic 5) ───────────────────────────────────────
   console.log('→ Invitations et liens...');
   await prisma.invitation.createMany({
@@ -1060,13 +1175,22 @@ async function main() {
 
   console.log('✓ Données de démo créées.');
   console.log(`\n  Comptes (mot de passe commun) : ${DEMO_PASSWORD}`);
-  console.log('    - mj-demo@example.com   MJ des 3 premières Parties');
+  console.log('    - mj-demo@example.com   MJ de 4 Parties · 3 Hommes Dragons (voir ci-dessous)');
   console.log('    - alice@example.com     masque les Parties terminées · a des favoris');
   console.log('    - bob@example.com       a une indisponibilité archivée');
   console.log("    - chloe@example.com     thème jamais choisi · n'a pas voté au sondage ouvert");
   console.log('    - diane@example.com     MJ des « Veilleurs du Pont » ET joueuse ailleurs');
   console.log('    - erwan@example.com     ⚠ mustResetPassword · invitation en attente');
   console.log('    - faustine@example.com  membre sans personnage · invitation refusée');
+  console.log('\n  Parties : 5 (dont « Les Annales de Brume », 11 scénarios joués, MJ : mj)');
+  console.log('  Hommes Dragons (compte mj) :');
+  console.log(
+    "    - Suisen  niveau 2 · 2 aventures (Naufrage de l'Aurore, Chroniques de la Guilde)",
+  );
+  console.log(
+    '    - Kaien   niveau 5 par cumul · 2 aventures (Route des Lanternes, Annales de Brume)',
+  );
+  console.log('    - Braise  niveau 1 · aucune aventure (cible des tests d’association)');
   console.log("\n  Liens d'invitation (http://localhost:4200/join/<token>) :");
   console.log(`    valide    ${validToken}`);
   console.log(`    consommé  ${consumedToken}`);

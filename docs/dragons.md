@@ -208,6 +208,10 @@ jouées avec le même homme-dragon, car **son niveau dépend du nombre de séanc
 À chaque niveau gagné : un emplacement de réserve en plus, un nouveau pouvoir d'éveil, et
 éventuellement d'autres capacités.
 
+> **Dans l'application** (hors livre) : un même homme-dragon peut suivre plusieurs aventures (groupes
+> et mondes différents) ; son niveau cumule alors les séances jouées dans **toutes** ses aventures.
+> Dissocier une aventure peut faire baisser le niveau, sans rien effacer de la fiche.
+
 | Séances jouées | Niv. | Nouvelles capacités |
 | --- | --- | --- |
 | 1 | 2 | Réserve (1 emplacement) et premier pouvoir d'éveil. |

@@ -179,3 +179,12 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-33-6-reserve-de-souffles.md`
   summary: `HommeDragonService.update()` (PATCH) lit puis réécrit tout `sheetData` sans verrou de ligne, alors que `setReserveSlot()`, `chooseEveilPower()` et `chooseArtefactCadeau()` écrivent sous `SELECT … FOR UPDATE`.
   evidence: un PATCH lu avant et écrit après un geste de réserve efface ce geste (mise à jour perdue) ; défaut préexistant, rendu plus atteignable par l'écriture de la réserve à chaque clic ; correction = faire passer `update()` par la même transaction verrouillée.
+- source_spec: `_bmad-output/implementation-artifacts/spec-33-8-un-homme-dragon-pour-plusieurs-aventures.md`
+  summary: Aucun test sur Postgres réel pour la migration `20261004120000_homme_dragon_multi_aventures` (rattrapage, garde de doublons, contrôle des orphelins) ni pour les verrous `FOR NO KEY UPDATE`, l'`updateMany` conditionnel et la course create/link.
+  evidence: la CI ne migre qu'une base vide et les seuls specs d'intégration existants sont `email` et `notifications` ; la migration supprime `HommeDragon.partieId`, donc une erreur de rattrapage perdrait le lien en silence. Vérifié à la main par l'implémentation sur une base jetable ; sans conséquence tant qu'il n'y a aucune production (avant le Palier 10).
+- source_spec: `_bmad-output/implementation-artifacts/spec-33-8-un-homme-dragon-pour-plusieurs-aventures.md`
+  summary: « Ajouter une aventure » (fiche d'un Homme Dragon) ne propose jamais une partie `TERMINEE`, car la liste est lue dans le signal `HOMME_DRAGON_A_CREER`.
+  evidence: le signal exclut les parties terminées depuis la story 29.7 ; un MJ qui retire une partie clôturée de son Homme Dragon ne peut la lui rattacher que depuis le panneau d'aventure de cette partie. Une liste dédiée (ou un champ explicite) lèverait la limite.
+- source_spec: `_bmad-output/implementation-artifacts/spec-33-8-un-homme-dragon-pour-plusieurs-aventures.md`
+  summary: L'historique de la fiche Homme Dragon affiche les participants par pseudo brut (`participants.join(', ')`) au lieu de la convention joueur / personnage (AD-2, `IdentityLabel`).
+  evidence: `HommeDragonDto.historique[].participants` est un tableau de pseudos depuis la story 10.2 ; les voyageurs de la section « Aventures » passent déjà par `IdentityLabel`, d'où l'incohérence visible sur une même fiche.

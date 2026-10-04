@@ -10,7 +10,7 @@ function makeDto(overrides: Partial<HommeDragonPdfInput> = {}): HommeDragonPdfIn
       nom: 'Ignis',
     },
     createdAt: '2026-07-01T00:00:00.000Z',
-    voyageursProteges: [],
+    aventures: [],
     historique: [],
     derived: { level: 1, PS: 3 },
     eveilPowers: [],
@@ -259,14 +259,18 @@ describe('mapHommeDragonToPdfFields', () => {
     expect(field(fields, 'souffle_1')).toBe('souffle-retire');
   });
 
-  it("voyageursProteges : tous imprimés, répartis dans l'ordre sur les deux zones, un par ligne", () => {
+  it("voyageurs : tous imprimés, répartis dans l'ordre sur les deux zones, un par ligne", () => {
     const dto = makeDto({
-      voyageursProteges: [
-        { userId: 'u1', pseudo: 'alice' },
-        { userId: 'u2', pseudo: 'bob' },
-        { userId: 'u3', pseudo: 'carla' },
-        { userId: 'u4', pseudo: 'dave' },
-        { userId: 'u5', pseudo: 'eve' },
+      aventures: [
+        {
+          voyageurs: [
+            { userId: 'u1', pseudo: 'alice' },
+            { userId: 'u2', pseudo: 'bob' },
+            { userId: 'u3', pseudo: 'carla' },
+            { userId: 'u4', pseudo: 'dave' },
+            { userId: 'u5', pseudo: 'eve' },
+          ],
+        },
       ],
     });
 
@@ -279,7 +283,7 @@ describe('mapHommeDragonToPdfFields', () => {
 
   it('un seul voyageur → première zone seule, seconde vide', () => {
     const fields = mapHommeDragonToPdfFields(
-      makeDto({ voyageursProteges: [{ userId: 'u1', pseudo: 'alice' }] }),
+      makeDto({ aventures: [{ voyageurs: [{ userId: 'u1', pseudo: 'alice' }] }] }),
       CONTENT,
     );
 
@@ -287,8 +291,33 @@ describe('mapHommeDragonToPdfFields', () => {
     expect(field(fields, 'voyageurs_proteges_2')).toBe('');
   });
 
-  it('voyageursProteges vide → champs vides, pas undefined', () => {
-    const fields = mapHommeDragonToPdfFields(makeDto({ voyageursProteges: [] }), CONTENT);
+  it('deux aventures partageant un joueur → dédoublonné, ordre de première apparition', () => {
+    const fields = mapHommeDragonToPdfFields(
+      makeDto({
+        aventures: [
+          {
+            voyageurs: [
+              { userId: 'u1', pseudo: 'alice' },
+              { userId: 'u2', pseudo: 'bob' },
+            ],
+          },
+          {
+            voyageurs: [
+              { userId: 'u2', pseudo: 'bob' },
+              { userId: 'u3', pseudo: 'carla' },
+            ],
+          },
+        ],
+      }),
+      CONTENT,
+    );
+
+    expect(field(fields, 'voyageurs_proteges_1')).toBe('alice\nbob');
+    expect(field(fields, 'voyageurs_proteges_2')).toBe('carla');
+  });
+
+  it('aucune aventure ou aventures sans voyageur → champs vides, pas undefined', () => {
+    const fields = mapHommeDragonToPdfFields(makeDto({ aventures: [] }), CONTENT);
 
     expect(field(fields, 'voyageurs_proteges_1')).toBe('');
     expect(field(fields, 'voyageurs_proteges_2')).toBe('');

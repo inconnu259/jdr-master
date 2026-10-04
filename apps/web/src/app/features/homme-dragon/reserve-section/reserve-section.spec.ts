@@ -37,7 +37,6 @@ function makeDto(
   return {
     id: 'hd1',
     userId: 'mj1',
-    partieId: 'p1',
     gameSystemId: 'ryuutama',
     sheetData: {
       race: 'DRAGON_ROUGE',
@@ -47,7 +46,7 @@ function makeDto(
     },
     createdAt: '2026-07-16T00:00:00.000Z',
     updatedAt,
-    voyageursProteges: [],
+    aventures: [],
     historique: [],
     derived: { level, PS: 5 },
     eveilPowers: [],
@@ -93,7 +92,7 @@ async function setup(level: number, reserve?: (string | null)[]) {
     ],
   }).compileComponents();
   const fixture = TestBed.createComponent(ReserveSection);
-  fixture.componentRef.setInput('partieId', 'p1');
+  fixture.componentRef.setInput('hommeDragonId', 'hd1');
   fixture.componentRef.setInput('hommeDragon', makeDto(level, reserve));
   fixture.componentRef.setInput('souffleCatalog', SOUFFLES);
   fixture.componentRef.setInput('ritualCatalog', RITUELS);
@@ -160,6 +159,39 @@ describe('ReserveSection (Story 33.6)', () => {
       );
     });
 
+    it('niveau 1 avec une réserve conservée (dissociation d’une aventure, AD-23) : contenu affiché, retirable, jamais purgé', async () => {
+      const { fixture, svc } = await setup(1, ['courage', 'amour']);
+      svc.setReserveSlot.mockResolvedValue(makeDto(1, [null, 'amour'], '2026-10-01T11:00:00.000Z'));
+
+      // L'info « s'ouvre au niveau 2 » reste, ET les souffles conservés sont lisibles.
+      expect(el(fixture).textContent).toContain("La réserve de souffles s'ouvre au niveau 2.");
+      const slots = qa(fixture, '.reserve__slot');
+      expect(slots).toHaveLength(2);
+      expect(slots[0].textContent).toContain('Courage');
+      expect(slots[1].textContent).toContain('Amour');
+      // Retrait permis, mais ni « Changer » ni « Choisir un souffle » au-dessus du niveau.
+      expect(btn(fixture, 'remove', 1)).not.toBeNull();
+      expect(q(fixture, '[data-reserve-btn="change"]')).toBeNull();
+      expect(q(fixture, '[data-reserve-btn="pick"]')).toBeNull();
+      expect(el(fixture).textContent).toContain('Le niveau a baissé');
+
+      btn(fixture, 'remove', 1).click();
+      fixture.detectChanges();
+      await settle(fixture);
+
+      expect(svc.setReserveSlot).toHaveBeenCalledWith('hd1', 1, { key: null });
+    });
+
+    it('niveau qui baisse à 3 avec 4 emplacements remplis : les emplacements 3 et 4 restent affichés, seuls 1 et 2 sont modifiables', async () => {
+      const { fixture } = await setup(3, ['courage', 'chance', 'defi', 'amour']);
+
+      expect(qa(fixture, '.reserve__slot')).toHaveLength(4);
+      expect(btn(fixture, 'change', 2)).not.toBeNull();
+      expect(q(fixture, '[data-reserve-btn="change"][data-slot="3"]')).toBeNull();
+      expect(btn(fixture, 'remove', 3)).not.toBeNull();
+      expect(btn(fixture, 'remove', 4)).not.toBeNull();
+    });
+
     it.each([
       [3, 2],
       [4, 3],
@@ -205,7 +237,7 @@ describe('ReserveSection (Story 33.6)', () => {
       fixture.detectChanges();
       await settle(fixture);
 
-      expect(svc.setReserveSlot).toHaveBeenCalledWith('p1', 1, { key: null });
+      expect(svc.setReserveSlot).toHaveBeenCalledWith('hd1', 1, { key: null });
     });
 
     it("mention d'enregistrement visible au repos (niveau ≥ 2), absente au niveau 1", async () => {
@@ -234,7 +266,7 @@ describe('ReserveSection (Story 33.6)', () => {
       await pick(fixture, 3, 'defi');
       await settle(fixture);
 
-      expect(svc.setReserveSlot).toHaveBeenCalledWith('p1', 3, { key: 'defi' });
+      expect(svc.setReserveSlot).toHaveBeenCalledWith('hd1', 3, { key: 'defi' });
       expect(q(fixture, 'app-reserve-picker')).toBeNull();
       expect(updated).toEqual([response]);
       expect(qa(fixture, '.reserve__slot')[2].textContent).toContain('Défi');
@@ -252,7 +284,7 @@ describe('ReserveSection (Story 33.6)', () => {
       await pick(fixture, 1, 'defi');
       await settle(fixture);
 
-      expect(svc.setReserveSlot).toHaveBeenCalledWith('p1', 1, { key: 'defi' });
+      expect(svc.setReserveSlot).toHaveBeenCalledWith('hd1', 1, { key: 'defi' });
       expect(qa(fixture, '.reserve__slot')[0].textContent).toContain('Défi');
       expect(focused()).toBe(btn(fixture, 'change', 1));
     });
@@ -389,7 +421,7 @@ describe('ReserveSection (Story 33.6)', () => {
       await settle(fixture);
 
       expect(q(fixture, '[role="alertdialog"], [role="dialog"]')).toBeNull();
-      expect(svc.setReserveSlot).toHaveBeenCalledWith('p1', 2, { key: null });
+      expect(svc.setReserveSlot).toHaveBeenCalledWith('hd1', 2, { key: null });
       expect(qa(fixture, '.reserve__slot')[1].classList).toContain('reserve__slot--empty');
       expect(focused()).toBe(btn(fixture, 'pick', 2));
       // Bandeau affiché, « Annuler » inactif tant que l'écriture du retrait n'est pas terminée.
@@ -436,7 +468,7 @@ describe('ReserveSection (Story 33.6)', () => {
       fixture.detectChanges();
       await settle(fixture);
 
-      expect(svc.setReserveSlot).toHaveBeenLastCalledWith('p1', 2, { key: 'chance' });
+      expect(svc.setReserveSlot).toHaveBeenLastCalledWith('hd1', 2, { key: 'chance' });
       expect(q(fixture, '.reserve__undo')).toBeNull();
       expect(qa(fixture, '.reserve__slot')[1].textContent).toContain('Chance');
       expect(focused()).toBe(btn(fixture, 'change', 2));

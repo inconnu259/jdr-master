@@ -1139,6 +1139,25 @@ describe('PartiesService', () => {
     expect(prisma.partie.delete).toHaveBeenCalledWith({ where: { id: 'p1' } });
   });
 
+  it("remove : émet user: au MJ (AD-23) — la FK délie l'Homme Dragon, son signal et « Personnages » changent", async () => {
+    prisma.partie.findUnique.mockResolvedValue({ ...partie, hommeDragonId: 'hd1' });
+    prisma.partie.delete.mockResolvedValue(partie);
+
+    await service.remove('p1', 'mj1');
+
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+    // La partie n'existe plus : aucun canal partie:{id}.
+    expect(realtimeEvents.emit).not.toHaveBeenCalledWith(partieTopic('p1'));
+  });
+
+  it('remove : rien émis quand la suppression est refusée (non-MJ)', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+
+    await expect(service.remove('p1', 'autre')).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(realtimeEvents.emit).not.toHaveBeenCalled();
+  });
+
   it('remove : 403 si pas le MJ (et aucune suppression)', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     await expect(service.remove('p1', 'autre')).rejects.toBeInstanceOf(ForbiddenException);
@@ -2030,10 +2049,72 @@ describe('PartiesService', () => {
         service.update('p1', 'mj1', { gameSystemId: 'ryuutama' }),
       ).resolves.toBeDefined();
       // Même exigence que sur le cas « identique » ci-dessus : vérifier le payload écrit, pas
-      // seulement que update() a été appelé (revue de code).
+      // seulement que update() a été appelé (revue de code). AD-23 : le changement de système
+      // remet le lien Homme Dragon à NULL dans la MÊME instruction.
       expect(prisma.partie.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
-        data: { gameSystemId: 'ryuutama' },
+        data: { gameSystemId: 'ryuutama', hommeDragonId: null },
+      });
+    });
+  });
+
+  describe('update() — remise à NULL du lien Homme Dragon (AD-23, Story 33.8)', () => {
+    // La partie est sur un système SANS module ('draconis') et porte un Homme Dragon (état fictif :
+    // seul le test de remise à NULL nous intéresse) ; on la fait passer sur Ryuutama.
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'draconis',
+        hommeDragonId: 'hd1',
+      });
+      prisma.partie.update.mockResolvedValue({ ...partie, gameSystemId: 'ryuutama' });
+    });
+
+    it('changement de gameSystemId : hommeDragonId remis à NULL dans le même UPDATE, jamais dans un second statement', async () => {
+      await service.update('p1', 'mj1', { gameSystemId: 'ryuutama' });
+
+      expect(prisma.partie.update).toHaveBeenCalledTimes(1);
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { gameSystemId: 'ryuutama', hommeDragonId: null },
+      });
+    });
+
+    it('émet partie:{id} puis les signaux (user: du MJ et des membres) quand le système change', async () => {
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice' } },
+      ]);
+      prisma.user.findUnique.mockResolvedValue({ id: 'mj1', pseudo: 'mj', displayName: 'MJ' });
+
+      await service.update('p1', 'mj1', { gameSystemId: 'ryuutama' });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+    });
+
+    it('système INCHANGÉ : le lien est conservé (aucun hommeDragonId dans le payload), aucun signal supplémentaire', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'ryuutama',
+        hommeDragonId: 'hd1',
+      });
+
+      await service.update('p1', 'mj1', { name: 'Nouveau nom', gameSystemId: 'ryuutama' });
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom', gameSystemId: 'ryuutama' },
+      });
+      expect(realtimeEvents.emit).not.toHaveBeenCalledWith(userTopic('mj1'));
+    });
+
+    it('sans gameSystemId : le lien est conservé', async () => {
+      await service.update('p1', 'mj1', { name: 'Nouveau nom' });
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom' },
       });
     });
   });

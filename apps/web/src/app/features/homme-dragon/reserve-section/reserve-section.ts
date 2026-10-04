@@ -48,7 +48,8 @@ type Gesture = 'place' | 'remove' | 'undo';
   styleUrl: './reserve-section.scss',
 })
 export class ReserveSection {
-  readonly partieId = input.required<string>();
+  /** Identifiant de l'Homme Dragon (AD-23) : la réserve est écrite sur SA fiche, jamais sur une partie. */
+  readonly hommeDragonId = input.required<string>();
   /** Fiche courante (rafraîchie par la fiche parente) — niveau, race et réserve en sont lus. */
   readonly hommeDragon = input.required<HommeDragonDto>();
   readonly souffleCatalog = input<ContentEntryDto[]>([]);
@@ -83,9 +84,20 @@ export class ReserveSection {
   protected readonly capacity = computed(() => reserveCapacity(this.level()));
   protected readonly race = computed<HommeDragonRace>(() => this.dto().sheetData.race);
 
+  /** Nombre d'emplacements affichés : la capacité du niveau, étendue jusqu'au dernier emplacement
+   *  occupé. Un niveau qui baisse (dissociation d'une aventure, AD-23) ne purge rien : le contenu
+   *  au-dessus du niveau reste affiché et retirable, seuls les nouveaux ajouts sont refusés. */
+  protected readonly shownCount = computed(() => {
+    let lastOccupied = 0;
+    this.reserve().forEach((key, i) => {
+      if (key) lastOccupied = i + 1;
+    });
+    return Math.max(this.capacity(), lastOccupied);
+  });
+
   protected readonly slots = computed(() => {
     const reserve = this.reserve();
-    return Array.from({ length: this.capacity() }, (_, i) => {
+    return Array.from({ length: this.shownCount() }, (_, i) => {
       const key = reserve[i] ?? null;
       const view = key ? souffleView(key, this.souffleCatalog(), this.ritualCatalog()) : null;
       const n = i + 1;
@@ -95,6 +107,8 @@ export class ReserveSection {
         n,
         key,
         view,
+        /** Au-dessus de la capacité du niveau : conservé et lisible, retirable, jamais modifiable. */
+        over: n > this.capacity(),
         changeLabel: `Changer le souffle de l'emplacement ${n} : ${view?.label ?? ''}`,
         removeLabel: `Retirer ${view?.label ?? ''} de l'emplacement ${n}`,
         pickLabel: `Choisir un souffle pour l'emplacement ${n}`,
@@ -156,7 +170,8 @@ export class ReserveSection {
   // — Gestes —
 
   protected openPicker(slot: number, event: Event): void {
-    if (this.saving()) return;
+    // Un emplacement au-dessus du niveau n'accepte plus de nouveau choix (le serveur le refuserait).
+    if (this.saving() || slot > this.capacity()) return;
     this.pickerTrigger = event.currentTarget as HTMLElement;
     this.picking.set({ slot });
   }
@@ -228,7 +243,7 @@ export class ReserveSection {
     this.focusPrimary(slot);
 
     try {
-      const updated = await this.svc.setReserveSlot(this.partieId(), slot, { key });
+      const updated = await this.svc.setReserveSlot(this.hommeDragonId(), slot, { key });
       this.written.set(updated);
       this.overlay.set(null);
       this.updated.emit(updated);

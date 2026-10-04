@@ -12,7 +12,8 @@
       <span class="reserve__info-icon" aria-hidden="true">i</span>
       <span>La réserve de souffles s'ouvre au niveau 2.</span>
     </p>
-  } @else {
+  }
+  @if (shownCount() > 0) {
     @if (saving()) {
       <p class="reserve__hint">Enregistrement…</p>
     } @else if (errors().length === 0) {
@@ -20,7 +21,19 @@
         <span aria-hidden="true">✓</span> Enregistrée automatiquement, utilisée pour l'export PDF.
       </p>
     }
-    <p class="reserve__rule"><strong>Règle :</strong> {{ rule() }}</p>
+    @if (capacity() > 0) {
+      <p class="reserve__rule"><strong>Règle :</strong> {{ rule() }}</p>
+    }
+    @if (shownCount() > capacity()) {
+      <p class="reserve__info">
+        <span class="reserve__info-icon" aria-hidden="true">i</span>
+        <span>
+          Le niveau a baissé : les souffles au-delà des {{ capacity() }}
+          emplacement{{ capacity() > 1 ? 's' : '' }} du niveau sont conservés. Vous pouvez les
+          retirer, pas en ajouter.
+        </span>
+      </p>
+    }
 
     <ol class="reserve__slots" role="list" [attr.aria-busy]="saving()">
       @for (slot of slots(); track slot.n) {
@@ -50,17 +63,19 @@
               }
             </div>
             <div class="reserve__acts">
-              <button
-                type="button"
-                class="reserve__btn"
-                data-reserve-btn="change"
-                [attr.data-slot]="slot.n"
-                [attr.aria-disabled]="saving() ? 'true' : null"
-                [attr.aria-label]="slot.changeLabel"
-                (click)="openPicker(slot.n, $event)"
-              >
-                Changer
-              </button>
+              @if (!slot.over) {
+                <button
+                  type="button"
+                  class="reserve__btn"
+                  data-reserve-btn="change"
+                  [attr.data-slot]="slot.n"
+                  [attr.aria-disabled]="saving() ? 'true' : null"
+                  [attr.aria-label]="slot.changeLabel"
+                  (click)="openPicker(slot.n, $event)"
+                >
+                  Changer
+                </button>
+              }
               <button
                 type="button"
                 class="reserve__btn"

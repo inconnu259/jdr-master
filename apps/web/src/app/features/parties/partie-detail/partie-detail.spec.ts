@@ -289,9 +289,14 @@ async function createFixture(
         provide: HommeDragonService,
         useValue: {
           findOne: vi.fn().mockResolvedValue(null),
+          // Story 33.8 : l'onglet est un panneau d'aventure (lien fiche / associer / dissocier).
+          findForPartie: vi.fn().mockResolvedValue(null),
+          listMine: vi.fn().mockResolvedValue([]),
+          link: vi.fn(),
+          unlink: vi.fn(),
           create: vi.fn(),
           update: vi.fn(),
-          // Story 20.2 (Task 3) : HommeDragonSheet (rendu transitivement) réagit désormais à ce signal.
+          // Story 20.2 (Task 3) : composants Homme Dragon (rendus transitivement) réagissent à ce signal.
           changed: signal(0),
         },
       },
@@ -1301,6 +1306,11 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
           provide: HommeDragonService,
           useValue: {
             findOne: vi.fn().mockResolvedValue(null),
+            // Story 33.8 : l'onglet est un panneau d'aventure (lien fiche / associer / dissocier).
+            findForPartie: vi.fn().mockResolvedValue(null),
+            listMine: vi.fn().mockResolvedValue([]),
+            link: vi.fn(),
+            unlink: vi.fn(),
             create: vi.fn(),
             update: vi.fn(),
             changed: signal(0),
@@ -2036,7 +2046,7 @@ describe('PartieDetail — onglet Chronologie (Story 7.5)', () => {
 describe('PartieDetail — onglet Homme Dragon (Story 10.1)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('MJ + Partie Ryuutama → onglet "Homme Dragon" présent, app-homme-dragon-sheet rendu au clic', async () => {
+  it('MJ + Partie Ryuutama → onglet "Homme Dragon" présent, panneau d\'aventure rendu au clic (Story 33.8)', async () => {
     const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
 
@@ -2048,7 +2058,9 @@ describe('PartieDetail — onglet Homme Dragon (Story 10.1)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
 
-    expect(el.querySelector('app-homme-dragon-sheet')).toBeTruthy();
+    // L'onglet n'embarque plus la fiche : c'est le panneau d'AVENTURE (lien, créer, associer).
+    expect(el.querySelector('app-homme-dragon-aventure-panel')).toBeTruthy();
+    expect(el.querySelector('app-homme-dragon-sheet')).toBeNull();
   });
 
   it('joueur (non-MJ) → onglet "Homme Dragon" absent, même sur une Partie Ryuutama (AC3)', async () => {
@@ -2299,9 +2311,14 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
           provide: HommeDragonService,
           useValue: {
             findOne: vi.fn().mockResolvedValue(null),
+            // Story 33.8 : l'onglet est un panneau d'aventure (lien fiche / associer / dissocier).
+            findForPartie: vi.fn().mockResolvedValue(null),
+            listMine: vi.fn().mockResolvedValue([]),
+            link: vi.fn(),
+            unlink: vi.fn(),
             create: vi.fn(),
             update: vi.fn(),
-            // Story 20.2 (Task 3) : HommeDragonSheet (rendu transitivement) réagit désormais à ce signal.
+            // Story 20.2 (Task 3) : composants Homme Dragon (rendus transitivement) réagissent à ce signal.
             changed: signal(0),
           },
         },

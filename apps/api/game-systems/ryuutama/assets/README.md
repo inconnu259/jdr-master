@@ -77,7 +77,7 @@ plutôt que de redécouvrir ces repères depuis zéro.
 
 ## Ryuutama_fiche_homme-dragon_big_edit.pdf — souffles et pages ajoutées (Story 33.4)
 
-Export `GET /parties/:id/homme-dragon/export.pdf?format=editable|2pages` — **réservé au MJ de la partie** (`403` pour tout autre membre : la fiche porte la réserve de souffles, que les joueurs ne voient jamais) (`format` obligatoire, comme
+Export `GET /homme-dragons/:id/export.pdf?format=editable|2pages` — **réservé au propriétaire de l'Homme Dragon** (`404` pour tout autre, fiche absente ou étrangère : la fiche porte la réserve de souffles, que les joueurs ne voient jamais ; AD-23) (`format` obligatoire, comme
 l'export joueur ; `2pages` aplatit le formulaire avec `form.flatten()`). Champs de souffle du
 gabarit :
 

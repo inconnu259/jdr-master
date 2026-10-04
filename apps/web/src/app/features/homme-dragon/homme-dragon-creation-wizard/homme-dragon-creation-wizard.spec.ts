@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { of } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 import { vi } from 'vitest';
 import type { GameSystemContentDto, HommeDragonDto } from '@master-jdr/shared';
 import { HommeDragonCreationWizard } from './homme-dragon-creation-wizard';
@@ -77,12 +78,11 @@ function makeDto(): HommeDragonDto {
   return {
     id: 'hd1',
     userId: 'mj1',
-    partieId: 'p1',
     gameSystemId: 'ryuutama',
     sheetData: { race: 'DRAGON_VERT', artefact: { key: 'encyclopedie' }, nom: 'Ignis' },
     createdAt: '2026-07-16T00:00:00.000Z',
     updatedAt: '2026-07-16T00:00:00.000Z',
-    voyageursProteges: [],
+    aventures: [],
     historique: [],
     derived: { level: 1, PS: 3 },
     eveilPowers: [],
@@ -474,6 +474,26 @@ describe('HommeDragonCreationWizard', () => {
     await click(fixture, navButtons(fixture).next);
     expect(emitted).toHaveLength(1);
     expect(root(fixture).querySelector('.hdw__error')).toBeNull();
+  });
+
+  it('409 (l’aventure a reçu un Homme Dragon entre-temps, AD-23) : message dédié, la création est annulée côté serveur', async () => {
+    const create = vi
+      .fn()
+      .mockRejectedValue(new HttpErrorResponse({ status: 409, statusText: 'Conflict' }));
+    const { fixture, component, emitted } = await createComponent(CATALOG, create);
+    component['race'].set('DRAGON_ROUGE');
+    component['artefactKey'].set('grand-arc');
+    component['artefactNom'].set('Arc de Kael');
+    component['nom'].set('Ignis');
+    component['stepIndex'].set(4);
+    await settle(fixture);
+
+    await click(fixture, navButtons(fixture).next);
+
+    expect(root(fixture).querySelector('.hdw__error')!.textContent).toContain(
+      'Cette aventure a déjà un Homme Dragon',
+    );
+    expect(emitted).toHaveLength(0);
   });
 
   it('l’alerte d’erreur de création disparaît dès qu’on change d’étape (Précédent)', async () => {

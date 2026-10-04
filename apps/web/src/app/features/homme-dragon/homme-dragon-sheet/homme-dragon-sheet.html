@@ -3,12 +3,6 @@
     <p class="error">{{ loadError() }}</p>
   } @else if (hommeDragon() === undefined) {
     <p class="muted">Chargement...</p>
-  } @else if (hommeDragon() === null) {
-    <app-homme-dragon-creation-wizard
-      [partieId]="partieId()"
-      [partieName]="partieName()"
-      (created)="onCreated($event)"
-    />
   } @else {
     <div class="homme-dragon-sheet__fiche">
       @if (justCreated()) {
@@ -293,7 +287,7 @@
           <!-- Story 33.6 : réserve de souffles (MJ seul — la fiche entière lui est réservée), juste
                avant le catalogue de lecture « Souffles ». -->
           <app-reserve-section
-            [partieId]="partieId()"
+            [hommeDragonId]="hommeDragonId()"
             [hommeDragon]="hommeDragon()!"
             [souffleCatalog]="souffleCatalog()"
             [ritualCatalog]="ritualCatalog()"
@@ -381,17 +375,82 @@
             </div>
           </section>
 
-          <section class="homme-dragon-sheet__card homme-dragon-sheet__voyageurs">
-            <h2 class="homme-dragon-sheet__card-title">Voyageurs protégés</h2>
-            @if (hommeDragon()!.voyageursProteges.length === 0) {
-              <p class="muted">Aucun voyageur pour l'instant.</p>
+          <!-- Story 33.8 (AD-23) : un Homme Dragon suit 0..N aventures. Chaque aventure porte ses
+               voyageurs protégés, un lien vers la partie et « Retirer » (confirmation : le niveau
+               peut baisser, rien n'est purgé) ; « Ajouter une aventure » lit les signaux déjà
+               calculés (HOMME_DRAGON_A_CREER). -->
+          <section class="homme-dragon-sheet__card homme-dragon-sheet__aventures">
+            <h2 class="homme-dragon-sheet__card-title">Aventures</h2>
+            @if (aventures().length === 0) {
+              <p class="muted">Aucune aventure pour l'instant.</p>
             } @else {
-              <ul>
-                @for (v of hommeDragon()!.voyageursProteges; track v.userId) {
-                  <li>{{ v.pseudo }}</li>
+              <ul class="homme-dragon-sheet__aventure-list">
+                @for (a of aventures(); track a.partieId) {
+                  <li class="homme-dragon-sheet__aventure">
+                    <div class="homme-dragon-sheet__aventure-header">
+                      <a class="homme-dragon-sheet__aventure-name" [routerLink]="['/parties', a.partieId]">{{ a.nom }}</a>
+                      <button
+                        mat-button
+                        type="button"
+                        class="homme-dragon-sheet__aventure-remove"
+                        [disabled]="aventureBusy()"
+                        [attr.aria-label]="'Retirer l’aventure ' + a.nom"
+                        (click)="onRemoveAventure(a)"
+                      >
+                        Retirer
+                      </button>
+                    </div>
+                    <p class="homme-dragon-sheet__aventure-voyageurs-title">Voyageurs protégés</p>
+                    @if (a.voyageurs.length === 0) {
+                      <p class="muted">Aucun voyageur pour l'instant.</p>
+                    } @else {
+                      <ul class="homme-dragon-sheet__voyageurs">
+                        @for (v of a.voyageurs; track v.userId) {
+                          <li>
+                            <app-identity-label
+                              [playerName]="v.displayName"
+                              [pseudo]="v.pseudo"
+                              [ambiguous]="isAmbiguous(a.partieId, v.userId)"
+                            />
+                          </li>
+                        }
+                      </ul>
+                    }
+                  </li>
                 }
               </ul>
             }
+
+            <div class="homme-dragon-sheet__aventure-add">
+              @if (eligibleAventures().length === 0) {
+                <p class="muted">Aucune aventure Ryuutama sans Homme Dragon à ajouter.</p>
+              } @else {
+                <label for="homme-dragon-add-aventure">Ajouter une aventure</label>
+                <select
+                  id="homme-dragon-add-aventure"
+                  name="addAventure"
+                  [ngModel]="selectedAventureId()"
+                  (ngModelChange)="selectedAventureId.set($event)"
+                >
+                  <option [ngValue]="null" disabled>—</option>
+                  @for (p of eligibleAventures(); track p.id) {
+                    <option [ngValue]="p.id">{{ p.name }}</option>
+                  }
+                </select>
+                <button
+                  mat-flat-button
+                  color="primary"
+                  type="button"
+                  [disabled]="!selectedAventureId() || aventureBusy()"
+                  (click)="onAddAventure()"
+                >
+                  Ajouter une aventure
+                </button>
+              }
+              @if (aventureError()) {
+                <p class="error" role="alert">{{ aventureError() }}</p>
+              }
+            </div>
           </section>
 
           <section class="homme-dragon-sheet__card homme-dragon-sheet__historique">
@@ -400,8 +459,14 @@
               <p class="muted">Aucun scénario joué pour l'instant.</p>
             } @else {
               <ul>
-                @for (h of hommeDragon()!.historique; track h.scenarioTitle + h.date) {
-                  <li>{{ h.scenarioTitle }} — {{ h.date | date: 'longDate' }} — {{ h.participants.join(', ') }}</li>
+                @for (h of hommeDragon()!.historique; track h.partieId + h.scenarioTitle + h.date) {
+                  <li>
+                    {{ h.scenarioTitle }}
+                    @if (aventureName(h.partieId); as nom) {
+                      <span class="homme-dragon-sheet__historique-aventure">({{ nom }})</span>
+                    }
+                    — {{ h.date | date: 'longDate' }} — {{ h.participants.join(', ') }}
+                  </li>
                 }
               </ul>
             }

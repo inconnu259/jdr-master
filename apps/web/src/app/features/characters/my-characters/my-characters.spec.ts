@@ -37,8 +37,7 @@ function makeMyCharacter(overrides: Partial<MyCharacterDto> = {}): MyCharacterDt
 function makeDragon(overrides: Partial<MyHommeDragonDto> = {}): MyHommeDragonDto {
   return {
     id: 'hd1',
-    partieId: 'p9',
-    partieName: 'Le Convoi du Nord',
+    aventures: [{ partieId: 'p9', nom: 'Le Convoi du Nord' }],
     gameSystemId: 'ryuutama',
     nom: 'Skarn',
     race: 'DRAGON_VERT',
@@ -479,8 +478,16 @@ describe('MyCharacters — Hommes Dragons (Story 33.5)', () => {
   it('MJ avec 2 dragons : 2 cartes marquées « Homme Dragon », chacune avec sa partie', async () => {
     const { fixture } = await createFixture([], {}, makeAccountService(), {
       hommesDragons: [
-        makeDragon({ id: 'hd1', partieId: 'p1', partieName: 'Le Convoi du Nord', nom: 'Skarn' }),
-        makeDragon({ id: 'hd2', partieId: 'p2', partieName: 'Le Ballet des Braises', nom: 'Ignis' }),
+        makeDragon({
+          id: 'hd1',
+          aventures: [{ partieId: 'p1', nom: 'Le Convoi du Nord' }],
+          nom: 'Skarn',
+        }),
+        makeDragon({
+          id: 'hd2',
+          aventures: [{ partieId: 'p2', nom: 'Le Ballet des Braises' }],
+          nom: 'Ignis',
+        }),
       ],
     });
     const el: HTMLElement = fixture.nativeElement;
@@ -497,7 +504,7 @@ describe('MyCharacters — Hommes Dragons (Story 33.5)', () => {
       [makeMyCharacter({ id: 'c1', partieName: 'Abbaye' })],
       {},
       makeAccountService(),
-      { hommesDragons: [makeDragon({ partieName: 'Zéphyr' })] },
+      { hommesDragons: [makeDragon({ aventures: [{ partieId: 'p2', nom: 'Zéphyr' }] })] },
     );
 
     const cards = fixture.nativeElement.querySelectorAll('.list > app-character-summary-card');
@@ -567,16 +574,50 @@ describe('MyCharacters — Hommes Dragons (Story 33.5)', () => {
     expect(firstWords(fixture)).toEqual(['Ambre', 'Zorn']);
   });
 
-  it('clic sur un dragon navigue vers /parties/:partieId/homme-dragon', async () => {
+  it('clic sur un dragon navigue vers sa fiche /homme-dragons/:id (AD-23)', async () => {
     const { fixture } = await createFixture([], {}, makeAccountService(), {
-      hommesDragons: [makeDragon({ partieId: 'p9' })],
+      hommesDragons: [makeDragon({ id: 'hd7' })],
     });
     const router = TestBed.inject(Router);
     const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
 
     (fixture.nativeElement.querySelector('.character-summary-card') as HTMLButtonElement).click();
 
-    expect(navigateSpy).toHaveBeenCalledWith(['/parties', 'p9', 'homme-dragon']);
+    expect(navigateSpy).toHaveBeenCalledWith(['/homme-dragons', 'hd7']);
+  });
+
+  it('un Homme Dragon à deux aventures : UNE seule carte, les noms joints (Story 33.8)', async () => {
+    const { fixture } = await createFixture([], {}, makeAccountService(), {
+      hommesDragons: [
+        makeDragon({
+          aventures: [
+            { partieId: 'p1', nom: 'Les Vents du Nord' },
+            { partieId: 'p2', nom: "L'Archipel" },
+          ],
+        }),
+      ],
+    });
+    const el: HTMLElement = fixture.nativeElement;
+
+    expect(el.querySelectorAll('.character-summary-card').length).toBe(1);
+    expect(el.querySelector('.character-summary-card__partie')?.textContent?.trim()).toBe(
+      "Les Vents du Nord · L'Archipel",
+    );
+  });
+
+  it('un Homme Dragon sans aventure : carte présente, « Sans aventure » lisible, la fiche s’ouvre (Story 33.8)', async () => {
+    const { fixture } = await createFixture([], {}, makeAccountService(), {
+      hommesDragons: [makeDragon({ id: 'hdSans', aventures: [] })],
+    });
+    const el: HTMLElement = fixture.nativeElement;
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+
+    expect(el.querySelector('.character-summary-card__partie')?.textContent?.trim()).toBe(
+      'Sans aventure',
+    );
+    (el.querySelector('.character-summary-card') as HTMLButtonElement).click();
+    expect(navigateSpy).toHaveBeenCalledWith(['/homme-dragons', 'hdSans']);
   });
 
   it('race inconnue (ligne ancienne) : la carte s’affiche sans libellé de race ni erreur', async () => {
@@ -625,13 +666,15 @@ describe('MyCharacters — Hommes Dragons (Story 33.5)', () => {
       expect(row.getAttribute('href')).toBe('/parties/p1/homme-dragon');
     });
 
-    it('signal sur une partie non Ryuutama → aucune ligne', async () => {
+    it('le filtre Ryuutama est celui du serveur (AD-23) : le signal suffit, le front ne le recalcule plus', async () => {
       const { fixture } = await createFixture([], {}, makeAccountService(), {
         partySignalsSvc: signalsFor('p1', ['HOMME_DRAGON_A_CREER']),
         parties: [makePartie({ id: 'p1', gameSystemId: 'draconis', role: 'mj' })],
       });
 
-      expect(fixture.nativeElement.querySelector('.character-creation-entries')).toBeNull();
+      expect(
+        fixture.nativeElement.querySelector('.character-creation-entries__row')?.textContent,
+      ).toContain('Créer un Homme Dragon pour');
     });
 
     it('signal absent (dragon déjà créé, partie terminée) → aucune ligne', async () => {

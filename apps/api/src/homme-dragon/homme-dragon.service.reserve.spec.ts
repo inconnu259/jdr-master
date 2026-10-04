@@ -3,14 +3,14 @@
 // Le catalogue est celui seedé en base (`game-systems/ryuutama/data`).
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { HommeDragonService } from './homme-dragon.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
-import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
+import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { objectLike } from '../common/test-utils/jest-typed';
 
 const DATA_DIR = join(process.cwd(), 'game-systems/ryuutama/data');
@@ -27,8 +27,6 @@ const CONTENT = {
   souffleRituel: readCatalogue('souffles-rituels.json'),
 };
 
-const PARTIE = { id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' };
-
 // 1 scénario PASSE = niveau 2, 3 = niveau 3, 7 = niveau 4, 12 = niveau 5.
 const SCENARIOS_FOR_LEVEL: Record<number, number> = { 1: 0, 2: 1, 3: 3, 4: 7, 5: 12 };
 
@@ -36,7 +34,6 @@ function makeRow(sheetData: Record<string, unknown> = {}) {
   return {
     id: 'hd1',
     userId: 'mj1',
-    partieId: 'p1',
     gameSystemId: 'ryuutama',
     sheetData: { race: 'DRAGON_ROUGE', artefact: { key: 'grand-arc' }, nom: 'Ignis', ...sheetData },
     createdAt: new Date('2026-07-16T00:00:00.000Z'),
@@ -44,34 +41,41 @@ function makeRow(sheetData: Record<string, unknown> = {}) {
   };
 }
 
-describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', () => {
+describe('HommeDragonService.setReserveSlot() (Story 33.6, AD-23, règles réelles)', () => {
   let service: HommeDragonService;
   const tx = {
     $queryRaw: jest.fn(),
-    hommeDragon: { findUnique: jest.fn(), update: jest.fn() },
+    hommeDragon: { findFirst: jest.fn(), update: jest.fn() },
+    scenario: { count: jest.fn() },
   };
   const prisma = {
     $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
+    partie: { findMany: jest.fn() },
   };
-  const parties = { getOwned: jest.fn(), getViewable: jest.fn(), listMembers: jest.fn() };
+  const parties = { getOwned: jest.fn(), notifyPartieSignalsChanged: jest.fn() };
   const gameSystems = { getContent: jest.fn() };
-  const scenarios = { findAllForPartie: jest.fn() };
+  const scenarios = { findPasseForParties: jest.fn() };
   const realtimeEvents = { emit: jest.fn() };
 
   /** Dragon rouge au niveau demandé, avec la réserve stockée donnée. */
   function arrange(level: number, reserve?: (string | null)[]) {
-    parties.getOwned.mockResolvedValue(PARTIE);
-    parties.listMembers.mockResolvedValue([]);
-    scenarios.findAllForPartie.mockResolvedValue(
-      Array.from({ length: SCENARIOS_FOR_LEVEL[level] }, (_, i) => ({
+    // Niveau calculé sous le verrou (comptage dans la transaction) puis relu pour le DTO (lecture
+    // en lot) : les deux racontent la même histoire.
+    const passe = SCENARIOS_FOR_LEVEL[level];
+    tx.scenario.count.mockResolvedValue(passe);
+    prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'Aventure' }]);
+    scenarios.findPasseForParties.mockResolvedValue({
+      scenarios: Array.from({ length: passe }, (_, i) => ({
         id: `s${i}`,
+        partieId: 'p1',
         title: `Scénario ${i}`,
-        status: 'PASSE',
         closedAt: '2026-07-10T00:00:00.000Z',
+        participants: [],
       })),
-    );
+      membersByPartie: new Map(),
+    });
     const row = makeRow(reserve ? { reserve } : {});
-    tx.hommeDragon.findUnique.mockResolvedValue(row);
+    tx.hommeDragon.findFirst.mockResolvedValue(row);
     tx.hommeDragon.update.mockImplementation(({ data }: { data: { sheetData: object } }) =>
       Promise.resolve({ ...row, sheetData: data.sheetData }),
     );
@@ -101,18 +105,20 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
   it('place un souffle valide : verrou de ligne, écriture, émission, DTO avec la réserve', async () => {
     arrange(4);
 
-    const dto = await service.setReserveSlot('p1', 'mj1', 1, { key: 'courage' });
+    const dto = await service.setReserveSlot('hd1', 'mj1', 1, { key: 'courage' });
 
-    expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+    // Fiche adressée par son id, jamais par une partie (AD-23) : aucune garde `getOwned`.
+    expect(parties.getOwned).not.toHaveBeenCalled();
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.hommeDragon.findFirst).toHaveBeenCalledWith({ where: { id: 'hd1', userId: 'mj1' } });
     expect(tx.hommeDragon.update).toHaveBeenCalledWith({
-      where: {
-        userId_partieId_gameSystemId: { userId: 'mj1', partieId: 'p1', gameSystemId: 'ryuutama' },
-      },
+      where: { id: 'hd1' },
       data: { sheetData: objectLike({ nom: 'Ignis', reserve: ['courage'] }) },
     });
-    expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    // Une écriture de fiche n'émet rien (AD-23) : le client se met à jour avec la réponse.
+    expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    expect(parties.notifyPartieSignalsChanged).not.toHaveBeenCalled();
     expect(dto.sheetData.reserve).toEqual(['courage']);
     expect(dto.derived.level).toBe(4);
   });
@@ -120,7 +126,7 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
   it('applique le geste à la liste lue sous verrou : les autres emplacements sont conservés', async () => {
     arrange(4, ['courage', null, 'chance']);
 
-    await service.setReserveSlot('p1', 'mj1', 2, { key: 'defi' });
+    await service.setReserveSlot('hd1', 'mj1', 2, { key: 'defi' });
 
     expect(written()).toEqual(['courage', 'defi', 'chance']);
   });
@@ -128,7 +134,7 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
   it('remplit les emplacements intermédiaires par null (positionnel)', async () => {
     arrange(4);
 
-    await service.setReserveSlot('p1', 'mj1', 3, { key: 'chance' });
+    await service.setReserveSlot('hd1', 'mj1', 3, { key: 'chance' });
 
     expect(written()).toEqual([null, null, 'chance']);
   });
@@ -136,7 +142,7 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
   it('retire un souffle avec { key: null }', async () => {
     arrange(4, ['courage', 'chance']);
 
-    await service.setReserveSlot('p1', 'mj1', 1, { key: null });
+    await service.setReserveSlot('hd1', 'mj1', 1, { key: null });
 
     expect(written()).toEqual([null, 'chance']);
   });
@@ -144,7 +150,7 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
   it("retirer au-delà de la fin de la liste n'allonge pas la réserve", async () => {
     arrange(4, ['courage']);
 
-    await service.setReserveSlot('p1', 'mj1', 3, { key: null });
+    await service.setReserveSlot('hd1', 'mj1', 3, { key: null });
 
     expect(written()).toEqual(['courage']);
   });
@@ -152,7 +158,7 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
   it('un même souffle commun ou de la race peut occuper plusieurs emplacements', async () => {
     arrange(4, ['courage', 'chance']);
 
-    await service.setReserveSlot('p1', 'mj1', 3, { key: 'courage' });
+    await service.setReserveSlot('hd1', 'mj1', 3, { key: 'courage' });
 
     expect(written()).toEqual(['courage', 'chance', 'courage']);
   });
@@ -161,7 +167,7 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
     const row = arrange(4, ['courage']);
     const originalReserve = (row.sheetData as unknown as { reserve: string[] }).reserve;
 
-    await service.setReserveSlot('p1', 'mj1', 2, { key: 'chance' });
+    await service.setReserveSlot('hd1', 'mj1', 2, { key: 'chance' });
 
     expect(originalReserve).toEqual(['courage']);
   });
@@ -169,7 +175,7 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
   it('montée de niveau : la réserve existante est conservée, le nouvel emplacement est vide', async () => {
     arrange(5, ['courage', 'chance']);
 
-    const dto = await service.setReserveSlot('p1', 'mj1', 1, { key: 'defi' });
+    const dto = await service.setReserveSlot('hd1', 'mj1', 1, { key: 'defi' });
 
     expect(dto.derived.level).toBe(5);
     expect(dto.sheetData.reserve).toEqual(['defi', 'chance']);
@@ -177,18 +183,16 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
 
   describe('refus (400, rien écrit, rien émis)', () => {
     async function expectRejected(slot: number, key: string | null) {
-      await expect(service.setReserveSlot('p1', 'mj1', slot, { key })).rejects.toThrow(
+      await expect(service.setReserveSlot('hd1', 'mj1', slot, { key })).rejects.toThrow(
         BadRequestException,
       );
       expect(tx.hommeDragon.update).not.toHaveBeenCalled();
       expect(realtimeEvents.emit).not.toHaveBeenCalled();
     }
 
-    it('niveau 1 : toute écriture refusée, retrait compris', async () => {
+    it('niveau 1 : tout ajout refusé', async () => {
       arrange(1);
       await expectRejected(1, 'chance');
-      await expectRejected(1, null);
-      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('emplacement au-delà de la capacité (niveau 2 : un seul emplacement)', async () => {
@@ -236,7 +240,7 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
   it('niveau 3 : un souffle d’une autre race est accepté (sur un seul emplacement)', async () => {
     arrange(3);
 
-    await service.setReserveSlot('p1', 'mj1', 1, { key: 'nostalgie' });
+    await service.setReserveSlot('hd1', 'mj1', 1, { key: 'nostalgie' });
 
     expect(written()).toEqual(['nostalgie']);
   });
@@ -244,7 +248,7 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
   it('niveau 3+ : changer le souffle d’une autre race sur son propre emplacement reste possible', async () => {
     arrange(3, ['nostalgie', null]);
 
-    await service.setReserveSlot('p1', 'mj1', 1, { key: 'amour' });
+    await service.setReserveSlot('hd1', 'mj1', 1, { key: 'amour' });
 
     expect(written()).toEqual(['amour', null]);
   });
@@ -252,66 +256,85 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, règles réelles)', (
   it('niveau 5 : un rituel est accepté et ne compte pas comme « autre race »', async () => {
     arrange(5, ['nostalgie', null, null, null]);
 
-    await service.setReserveSlot('p1', 'mj1', 2, { key: 'rituel-du-tabou' });
+    await service.setReserveSlot('hd1', 'mj1', 2, { key: 'rituel-du-tabou' });
 
     expect(written()).toEqual(['nostalgie', 'rituel-du-tabou', null, null]);
   });
 
   it('souffle retiré du catalogue déjà présent : toléré, retirable, « Changer » possible', async () => {
     arrange(4, ['souffle-fantome', null, null]);
-    await service.setReserveSlot('p1', 'mj1', 2, { key: 'chance' });
+    await service.setReserveSlot('hd1', 'mj1', 2, { key: 'chance' });
     expect(written()).toEqual(['souffle-fantome', 'chance', null]);
 
     jest.clearAllMocks();
     arrange(4, ['souffle-fantome', null, null]);
-    await service.setReserveSlot('p1', 'mj1', 1, { key: null });
+    await service.setReserveSlot('hd1', 'mj1', 1, { key: null });
     expect(written()).toEqual([null, null, null]);
 
     jest.clearAllMocks();
     arrange(4, ['souffle-fantome', null, null]);
-    await service.setReserveSlot('p1', 'mj1', 1, { key: 'courage' });
+    await service.setReserveSlot('hd1', 'mj1', 1, { key: 'courage' });
     expect(written()).toEqual(['courage', null, null]);
   });
 
   it('baisse de niveau : aucune purge du surplus, le retrait du surplus reste possible', async () => {
     // Réserve de 3 emplacements stockée, niveau actuel 3 (capacité 2).
     arrange(3, ['courage', 'chance', 'defi']);
-    await service.setReserveSlot('p1', 'mj1', 3, { key: null });
+    await service.setReserveSlot('hd1', 'mj1', 3, { key: null });
     expect(written()).toEqual(['courage', 'chance', null]);
 
     // Une autre écriture légitime ne purge pas le surplus.
     jest.clearAllMocks();
     arrange(3, ['courage', 'chance', 'defi']);
-    await service.setReserveSlot('p1', 'mj1', 1, { key: 'chance' });
+    await service.setReserveSlot('hd1', 'mj1', 1, { key: 'chance' });
     expect(written()).toEqual(['chance', 'chance', 'defi']);
   });
 
-  it('non-MJ → ForbiddenException propagée par getOwned, aucune transaction', async () => {
-    parties.getOwned.mockRejectedValue(new ForbiddenException());
+  it('retrait permis à tout niveau, y compris 1 : la réserve conservée au-dessus du niveau reste retirable', async () => {
+    arrange(1, ['courage', 'chance']);
 
-    await expect(service.setReserveSlot('p1', 'joueur1', 1, { key: 'chance' })).rejects.toThrow(
-      ForbiddenException,
-    );
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(tx.hommeDragon.update).not.toHaveBeenCalled();
+    await service.setReserveSlot('hd1', 'mj1', 1, { key: null });
+
+    expect(written()).toEqual([null, 'chance']);
   });
 
-  it('Partie hors Ryuutama → BadRequestException, aucune transaction', async () => {
-    parties.getOwned.mockResolvedValue({ ...PARTIE, gameSystemId: 'draconis' });
+  it('niveau 1 : le contenu conservé est affiché tel quel, jamais purgé par un retrait voisin', async () => {
+    arrange(1, ['courage', 'chance']);
 
-    await expect(service.setReserveSlot('p1', 'mj1', 1, { key: 'chance' })).rejects.toThrow(
-      BadRequestException,
-    );
-    expect(prisma.$transaction).not.toHaveBeenCalled();
+    const dto = await service.setReserveSlot('hd1', 'mj1', 2, { key: null });
+
+    expect(dto.derived.level).toBe(1);
+    expect(dto.sheetData.reserve).toEqual(['courage', null]);
   });
 
-  it('aucun Homme Dragon → NotFoundException', async () => {
+  it("Homme Dragon absent ou d'un autre propriétaire → NotFoundException identique, rien écrit", async () => {
     arrange(4);
-    tx.hommeDragon.findUnique.mockResolvedValue(null);
+    tx.hommeDragon.findFirst.mockResolvedValue(null);
 
-    await expect(service.setReserveSlot('p1', 'mj1', 1, { key: 'chance' })).rejects.toThrow(
+    await expect(service.setReserveSlot('hd1', 'stranger', 1, { key: 'chance' })).rejects.toThrow(
       NotFoundException,
     );
+    expect(tx.hommeDragon.findFirst).toHaveBeenCalledWith({
+      where: { id: 'hd1', userId: 'stranger' },
+    });
     expect(tx.hommeDragon.update).not.toHaveBeenCalled();
+    expect(realtimeEvents.emit).not.toHaveBeenCalled();
+  });
+
+  it('le niveau est calculé sous le verrou, dans la transaction (jamais avant)', async () => {
+    arrange(4);
+    const order: string[] = [];
+    tx.$queryRaw.mockImplementation(() => {
+      order.push('lock');
+      return Promise.resolve([]);
+    });
+    tx.scenario.count.mockImplementation(() => {
+      order.push('niveau');
+      return Promise.resolve(7);
+    });
+
+    await service.setReserveSlot('hd1', 'mj1', 1, { key: 'courage' });
+
+    expect(order).toEqual(['lock', 'niveau']);
   });
 });
