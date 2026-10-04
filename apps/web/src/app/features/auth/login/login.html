@@ -9,7 +9,15 @@
         </mat-form-field>
         <mat-form-field appearance="outline">
           <mat-label>Mot de passe</mat-label>
-          <input matInput type="password" formControlName="password" autocomplete="current-password" />
+          <input
+            matInput
+            type="password"
+            formControlName="password"
+            autocomplete="current-password"
+            appPasswordReveal
+            #pw="appPasswordReveal"
+          />
+          <app-password-toggle matSuffix [for]="pw" />
         </mat-form-field>
         @if (error()) {
           <p class="error" role="alert">{{ error() }}</p>
@@ -18,7 +26,6 @@
       </form>
     </mat-card-content>
     <mat-card-actions>
-      <a routerLink="/register">Créer un compte</a>
       <a routerLink="/forgot-password">Mot de passe oublié ?</a>
     </mat-card-actions>
   </mat-card>

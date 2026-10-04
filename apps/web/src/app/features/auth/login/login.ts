@@ -8,6 +8,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { PasswordReveal } from '../../../shared/password-reveal/password-reveal';
+import { PasswordToggle } from '../../../shared/password-reveal/password-toggle';
 
 @Component({
   selector: 'app-login',
@@ -18,6 +20,8 @@ import { ThemeToneService } from '../../../core/theme/theme-tone.service';
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
+    PasswordReveal,
+    PasswordToggle,
   ],
   templateUrl: './login.html',
   styleUrl: './login.scss',

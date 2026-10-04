@@ -78,6 +78,9 @@ function makeThemeService() {
       'account.calendar_intent.votes': 'Les votes en cours',
       'account.calendar_intent.groupe': 'La disponibilité du groupe',
       'nav.logout': 'Fermer le grimoire',
+      // Story 34.2 — libellés du bouton de révélation du mot de passe.
+      'auth.password_show': 'Afficher le mot de passe',
+      'auth.password_hide': 'Masquer le mot de passe',
     }),
     // ThemeSelector (intégré à l'écran de compte, Story 28.4) a besoin de ces membres.
     activeTheme: signal('grimoire-emeraude'),
@@ -636,6 +639,134 @@ describe('Account — jeu de couches du calendrier par défaut (Story 30.4, Task
     expect(fixture.nativeElement.querySelectorAll('.calendar-intents mat-checkbox').length).toBe(4);
     expect(comp.isIntentActive('seances')).toBe(true);
     expect(comp.isIntentActive('votes')).toBe(false);
+  });
+});
+
+describe('Account — champs de mot de passe révélables (Story 34.2)', () => {
+  function passwordFields(root: HTMLElement) {
+    return {
+      inputs: Array.from(root.querySelectorAll('input[formControlName]')).filter((i) =>
+        ['currentPassword', 'newPassword'].includes(i.getAttribute('formControlName')!),
+      ) as HTMLInputElement[],
+      toggles: Array.from(
+        root.querySelectorAll('app-password-toggle button'),
+      ) as HTMLButtonElement[],
+    };
+  }
+
+  it('mot de passe : champs actuel et nouveau indépendants, chacun masqué au départ', async () => {
+    const { fixture } = await createFixture();
+    const component = fixture.componentInstance as any;
+    component.startPasswordEdit();
+    fixture.detectChanges();
+
+    const { inputs, toggles } = passwordFields(fixture.nativeElement);
+    expect(inputs.map((i) => i.type)).toEqual(['password', 'password']);
+    expect(toggles.length).toBe(2);
+
+    toggles[1].click();
+    fixture.detectChanges();
+    expect(inputs.map((i) => i.type)).toEqual(['password', 'text']);
+    expect(toggles.map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+
+    toggles[0].click();
+    fixture.detectChanges();
+    expect(inputs.map((i) => i.type)).toEqual(['text', 'text']);
+
+    toggles[1].click();
+    fixture.detectChanges();
+    expect(inputs.map((i) => i.type)).toEqual(['text', 'password']);
+  });
+
+  it('mot de passe : la valeur saisie et la validité sont conservées à la bascule', async () => {
+    const { fixture } = await createFixture();
+    const component = fixture.componentInstance as any;
+    component.startPasswordEdit();
+    fixture.detectChanges();
+    component.passwordForm.setValue({ currentPassword: 'oldpw', newPassword: 'newpassword123' });
+    fixture.detectChanges();
+
+    passwordFields(fixture.nativeElement).toggles[1].click();
+    fixture.detectChanges();
+
+    expect(component.passwordForm.getRawValue()).toEqual({
+      currentPassword: 'oldpw',
+      newPassword: 'newpassword123',
+    });
+    expect(component.passwordForm.valid).toBe(true);
+  });
+
+  it('formulaire de mot de passe refermé puis rouvert : à nouveau masqué', async () => {
+    const { fixture } = await createFixture();
+    const component = fixture.componentInstance as any;
+    component.startPasswordEdit();
+    fixture.detectChanges();
+    for (const b of passwordFields(fixture.nativeElement).toggles) b.click();
+    fixture.detectChanges();
+    expect(passwordFields(fixture.nativeElement).inputs.map((i) => i.type)).toEqual([
+      'text',
+      'text',
+    ]);
+
+    component.cancelPasswordEdit();
+    fixture.detectChanges();
+    component.startPasswordEdit();
+    fixture.detectChanges();
+
+    const { inputs, toggles } = passwordFields(fixture.nativeElement);
+    expect(inputs.map((i) => i.type)).toEqual(['password', 'password']);
+    expect(toggles.map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
+  });
+
+  it('demande de changement d’e-mail : le mot de passe actuel est révélable, pas le champ e-mail', async () => {
+    const { fixture } = await createFixture();
+    const component = fixture.componentInstance as any;
+    component.startEmailEdit();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const pw = root.querySelector('input[formControlName="currentPassword"]') as HTMLInputElement;
+    const email = root.querySelector('input[formControlName="newEmail"]') as HTMLInputElement;
+    const toggles = Array.from(
+      root.querySelectorAll('app-password-toggle button'),
+    ) as HTMLButtonElement[];
+    expect(toggles.length).toBe(1);
+    expect(pw.type).toBe('password');
+
+    toggles[0].click();
+    fixture.detectChanges();
+    expect(pw.type).toBe('text');
+    expect(email.type).toBe('email');
+    expect(toggles[0].getAttribute('aria-label')).toBe('Masquer le mot de passe');
+
+    component.cancelEmailEdit();
+    fixture.detectChanges();
+    component.startEmailEdit();
+    fixture.detectChanges();
+    const reopened = root.querySelector(
+      'input[formControlName="currentPassword"]',
+    ) as HTMLInputElement;
+    expect(reopened.type).toBe('password');
+  });
+
+  it('le bouton de révélation ne soumet pas le formulaire de mot de passe', async () => {
+    const accountSvc = {
+      updateDisplayName: vi.fn(),
+      setTheme: vi.fn(),
+      changePassword: vi.fn().mockResolvedValue({ ok: true }),
+      requestEmailChange: vi.fn(),
+      updatePreferences: vi.fn(),
+    };
+    const { fixture } = await createFixture(makeUser(), accountSvc);
+    const component = fixture.componentInstance as any;
+    component.startPasswordEdit();
+    fixture.detectChanges();
+    component.passwordForm.setValue({ currentPassword: 'oldpw', newPassword: 'newpassword123' });
+
+    passwordFields(fixture.nativeElement).toggles[0].click();
+    fixture.detectChanges();
+
+    expect(accountSvc.changePassword).not.toHaveBeenCalled();
   });
 });
 

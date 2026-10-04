@@ -2,9 +2,10 @@
 title: 'Champ de mot de passe révélable, lien mort retiré'
 type: 'feature'
 created: '2026-10-04'
-status: 'ready-for-dev'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
+baseline_commit: 'cf1de2446977dff24032d802a004d4158f9b25e8'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-34-context.md'
 ---
@@ -63,11 +64,11 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `apps/web/src/app/shared/password-reveal/` -- mécanisme partagé (directive + bouton ou composant) et sa spec : bascule, `aria-pressed`, libellés, `type="button"`, valeur conservée, indépendance de deux instances -- révélation réutilisable
-- [ ] `apps/web/src/app/core/theme/tones.ts` + `theme-tone.service.spec.ts` -- clés `auth.password_show` / `auth.password_hide` dans les trois thèmes et parité -- libellés accessibles
-- [ ] `login.html`, `register.html`, `reset-password.html`, `account.html` (et les `imports` de leurs composants) -- appliquer le mécanisme aux six champs -- révélation partout
-- [ ] `apps/web/src/app/features/auth/login/login.html` -- retirer le lien « Créer un compte » -- plus d'impasse
-- [ ] Specs : `login.spec.ts` (aucun lien `/register`, « Mot de passe oublié ? » présent, champ révélable), `account.spec.ts` (deux champs indépendants, formulaire refermé puis rouvert masqué), nouvelle `register.spec.ts` (inscription par jeton fonctionnelle, sans jeton désactivée, champ révélable), contrôle du lien de `join` -- couvre la matrice
+- [x] `apps/web/src/app/shared/password-reveal/` -- mécanisme partagé (directive + bouton ou composant) et sa spec : bascule, `aria-pressed`, libellés, `type="button"`, valeur conservée, indépendance de deux instances -- révélation réutilisable
+- [x] `apps/web/src/app/core/theme/tones.ts` + `theme-tone.service.spec.ts` -- clés `auth.password_show` / `auth.password_hide` dans les trois thèmes et parité -- libellés accessibles
+- [x] `login.html`, `register.html`, `reset-password.html`, `account.html` (et les `imports` de leurs composants) -- appliquer le mécanisme aux six champs -- révélation partout
+- [x] `apps/web/src/app/features/auth/login/login.html` -- retirer le lien « Créer un compte » -- plus d'impasse
+- [x] Specs : `login.spec.ts` (aucun lien `/register`, « Mot de passe oublié ? » présent, champ révélable), `account.spec.ts` (deux champs indépendants, formulaire refermé puis rouvert masqué), nouvelle `register.spec.ts` (inscription par jeton fonctionnelle, sans jeton désactivée, champ révélable), contrôle du lien de `join` -- couvre la matrice
 
 **Acceptance Criteria:**
 - Given un champ de mot de passe, sur n'importe quel écran de l'application, when j'active la révélation, then je vois le contenu que j'ai saisi, et je peux le masquer à nouveau.
@@ -76,9 +77,34 @@ context:
 
 ## Implementation Notes
 
+- **Vérifié par le chef de build** (diff relu, 12 fichiers modifiés et 6 créés, depuis `cf1de24`) : web 2904 tests passés (état final après la revue) / 2 échecs connus et datés (`calendar-view.spec`, hors story) ; `ng build` OK ; aucune erreur de lint sur les lignes ajoutées. Aucun changement d'API ni de dépendance.
+- **Mécanisme** : directive `appPasswordReveal` sur l'`<input>` (signal `revealed` par instance, seule la propriété `type` bascule) et bouton `app-password-toggle` en `matSuffix` (`<button type="button">`, SVG inline `aria-hidden`, `aria-pressed`, libellé suivant l'état, cible de 44 px). Le clic ne remonte pas au conteneur du champ, sinon le focus revenait à l'input à chaque bascule au clavier.
+- **Libellés** : `auth.password_show` / `auth.password_hide`, même texte neutre dans les trois thèmes, avec parité testée.
+- **Matrice** : chaque ligne a un test (`password-reveal.spec.ts`, `login.spec.ts`, `account.spec.ts`, nouvelles `register.spec.ts` et `join.spec.ts`, parité dans `theme-tone.service.spec.ts`).
+- **Revue du 2026-10-04** : 14 constats triés (voir le journal), deux correctifs appliqués puis revérifiés — page de réinitialisation désormais couverte par un spec (`reset-password.spec.ts`, elle n'était rendue par aucun test) et trois attributs d'hôte (`autocapitalize`, `autocorrect`, `spellcheck`) coupés sur le champ révélé, pour que les claviers mobiles ne modifient pas le mot de passe saisi en clair. Un report dans `deferred-work.md` (pas d'`autocomplete` sur les trois champs de l'écran de compte, préexistant).
+- **Hors périmètre touché** : `eslint --fix` a reformaté deux lignes du bloc de test de la story 33.5 dans `theme-tone.service.spec.ts` (déjà en erreur `prettier`), et le fichier a été normalisé en CRLF.
+- **Non fait** : les contrôles manuels de la section Verification (téléphone, clavier, trois thèmes, lien d'invitation) ; l'aspect visuel du bouton dans le `mat-form-field` n'a pas été vu à l'écran.
+
 ## Spec Change Log
 
 ## Review Triage Log
+
+Revue du 2026-10-04, première passe (Blind Hunter, Edge Case Hunter, Verification Gap). Constats dédoublonnés par cause ; B = blind, E = edge, V = verification-gap.
+
+- **[V] La page de réinitialisation (un des six champs) n'est rendue par aucun test** — `medium`, patch : retirer la directive, le bouton ou les `imports` de cette page ne ferait échouer aucun test (le spec du mécanisme utilise son propre hôte, et la CI ne construit pas le front). Spec ajouté, calqué sur `register.spec.ts`.
+- **[B] Une fois en `type="text"`, le champ n'est pas protégé de la majuscule initiale, de la correction ni de la vérification orthographique des claviers mobiles** — `low`, patch : le public visé est surtout mobile et la correction tient en trois attributs d'hôte statiques, sans surface publique. Test ajouté.
+- **[B] `aria-pressed` ET libellé qui change annoncent l'état deux fois** — `low`, rejeté : la spec figée demande explicitement les deux (« `aria-pressed` reflétant l'état et un libellé accessible qui suit l'état ») ; la corriger éditerait l'intention.
+- **[E] Le clic sur le bouton fait perdre le focus au champ (« touched » avant l'heure)** — `low`, rejeté : aucun de ces formulaires n'utilise `mat-error` ni l'état « touched », et n'importe quelle sortie du champ au clavier provoque déjà le même contour d'erreur ; le correctif (`mousedown`) ajoute un chemin d'événements pour un effet inexistant ici.
+- **[E][B] `stopPropagation()` masque le clic aux écouteurs d'ancêtres (fermeture au clic extérieur, mesures)** — `low`, rejeté : le motif est documenté (sans lui le conteneur du champ redonne le focus à l'`input` et l'utilisateur au clavier perd le bouton), et aucun écouteur de clic extérieur n'existe sur ces écrans.
+- **[E] Libellé `undefined` si une clé de ton manque** — `low`, rejeté : la parité des deux clés dans les trois thèmes est testée ; même décision qu'à la 34.1.
+- **[E] Le bouton reste actif quand le contrôle est désactivé** — `low`, rejeté : ces formulaires désactivent le bouton de soumission pendant `loading`, jamais le contrôle du mot de passe.
+- **[E][B][V] Pas de test d'activation clavier (Entrée, Espace) ni d'Entrée-soumission ; test de focus qui appelle `toggle()` directement ; fuite DOM si une assertion échoue** — `low`, rejeté : le bouton est un `<button>` natif dont l'activation clavier produit un `click` (un événement clavier simulé n'en produit pas en jsdom, un test serait trompeur) ; l'ordre de focus est testé ; l'Entrée-soumission est le comportement natif inchangé ; la fuite DOM n'arrive que lorsque le test échoue déjà.
+- **[B] Les champs de mot de passe de l'écran de compte n'ont pas d'`autocomplete`** — `low`, defer : préexistant (la story n'y touche que pour la bascule), et la spec impose de conserver `autocomplete` tel quel. Consigné dans `deferred-work.md`.
+- **[B] `join.spec` vide ses promesses par une boucle de 10 `await`, doublon du balisage SVG, tests liés au nombre de `path`, deux lignes reformatées dans le bloc de test de la 33.5, nom d'entrée `for`** — `low`, rejeté : hygiène de test et de balisage sans effet utilisateur ; le reformatage vient d'un `eslint --fix` sur des lignes déjà en erreur `prettier`.
+- **[B] La parité « même texte neutre » comparerait le premier thème à lui-même** — `false` : les deux autres thèmes sont comparés au premier, ce qui prouve l'égalité des trois ; la comparaison triviale du premier ne retire rien.
+- **[B] D'autres champs `type="password"` auraient pu être oubliés** — `false` : recensement exhaustif du dépôt avant la spec (six champs : connexion, inscription, réinitialisation, e-mail, mot de passe actuel et nouveau), tous couverts. Une garde contre les futurs champs bruts dépasse l'intention.
+- **[B] La page de connexion ne dit plus comment s'inscrire (inscription sur invitation seulement)** — `low`, rejeté : le retrait du lien est le critère de la story ; un texte d'orientation relève de la mise en forme des écrans (34.3) ou d'une décision produit. Signalé à l'utilisateur.
+- **[B] Cible de 44 px, alignement dans le `mat-form-field`, contraste dans les trois thèmes non vérifiés** — `low`, rejeté : relève du contrôle visuel manuel prévu à la spec, non fait à ce stade.
 
 ## Design Notes
 

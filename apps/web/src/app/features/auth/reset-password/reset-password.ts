@@ -8,6 +8,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../../core/auth/auth.service';
+import { PasswordReveal } from '../../../shared/password-reveal/password-reveal';
+import { PasswordToggle } from '../../../shared/password-reveal/password-toggle';
 
 @Component({
   selector: 'app-reset-password',
@@ -18,6 +20,8 @@ import { AuthService } from '../../../core/auth/auth.service';
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
+    PasswordReveal,
+    PasswordToggle,
   ],
   templateUrl: './reset-password.html',
   styleUrl: './reset-password.scss',

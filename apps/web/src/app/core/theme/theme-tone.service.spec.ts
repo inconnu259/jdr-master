@@ -324,10 +324,13 @@ describe('Tones — section de création depuis « Personnages » (Story 29.16)'
 // Story 33.5 — ligne de création de l'Homme Dragon et libellé du marqueur de nature. Même garde
 // de parité que ci-dessus ; « Homme Dragon » est un nom propre du système, jamais thématisé :
 // `character.nature_dragon` doit être strictement identique dans les trois thèmes.
-describe("Tones — Homme Dragon dans « Personnages » (Story 33.5)", () => {
+describe('Tones — Homme Dragon dans « Personnages » (Story 33.5)', () => {
   for (const theme of THEMES) {
     it(`${theme} porte my_characters.create_entry_hd (gabarit {partie}) et character.nature_dragon`, () => {
-      expect(TONE_MAP[theme]['my_characters.create_entry_hd'], `${theme} / create_entry_hd`).toBeTruthy();
+      expect(
+        TONE_MAP[theme]['my_characters.create_entry_hd'],
+        `${theme} / create_entry_hd`,
+      ).toBeTruthy();
       expect(TONE_MAP[theme]['my_characters.create_entry_hd']).toContain('{partie}');
       expect(TONE_MAP[theme]['my_characters.create_entry_hd']).toContain('Homme Dragon');
       expect(TONE_MAP[theme]['character.nature_dragon'], `${theme} / nature_dragon`).toBeTruthy();
@@ -473,4 +476,31 @@ describe("Tones — messages d'échec de connexion (Story 34.1)", () => {
       }
     });
   }
+});
+
+// Story 34.2 — libellés du bouton de révélation du mot de passe. Garde de parité : une clé posée
+// dans un seul thème rendrait `undefined` comme libellé accessible dans les deux autres. Texte
+// neutre, identique dans les trois thèmes (un libellé d'accessibilité ne se thématise pas).
+describe('Tones — libellés de révélation du mot de passe (Story 34.2)', () => {
+  const KEYS = ['auth.password_show', 'auth.password_hide'];
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${KEYS.length} clés, non vides`, () => {
+      for (const key of KEYS) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+      }
+    });
+
+    it(`${theme} porte le même texte neutre que les autres thèmes`, () => {
+      for (const key of KEYS) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(TONE_MAP[THEMES[0]][key]);
+      }
+    });
+  }
+
+  it('« afficher » et « masquer » se distinguent', () => {
+    for (const theme of THEMES) {
+      expect(TONE_MAP[theme]['auth.password_show']).not.toBe(TONE_MAP[theme]['auth.password_hide']);
+    }
+  });
 });

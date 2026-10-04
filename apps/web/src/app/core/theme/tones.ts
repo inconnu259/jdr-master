@@ -387,6 +387,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'auth.login_unavailable':
       'Le grimoire est indisponible pour le moment. Réessayez dans quelques instants.',
     'auth.login_unexpected': 'Une erreur est survenue. Réessayez.',
+    // Story 34.2 — libellés du bouton de révélation du mot de passe : neutres, non thématisés.
+    'auth.password_show': 'Afficher le mot de passe',
+    'auth.password_hide': 'Masquer le mot de passe',
     'account.calendar_layers_title': 'Ce que révèle mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
@@ -821,6 +824,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'auth.login_unavailable':
       'Le carnet est indisponible pour le moment. Réessaie dans quelques instants.',
     'auth.login_unexpected': 'Une erreur est survenue. Réessaie.',
+    // Story 34.2 — libellés du bouton de révélation du mot de passe : neutres, non thématisés.
+    'auth.password_show': 'Afficher le mot de passe',
+    'auth.password_hide': 'Masquer le mot de passe',
     'account.calendar_layers_title': 'Ce que montre mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
@@ -1248,6 +1254,9 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'auth.login_unavailable':
       'L’établi est indisponible pour le moment. Réessayez dans quelques instants.',
     'auth.login_unexpected': 'Une erreur est survenue. Réessayez.',
+    // Story 34.2 — libellés du bouton de révélation du mot de passe : neutres, non thématisés.
+    'auth.password_show': 'Afficher le mot de passe',
+    'auth.password_hide': 'Masquer le mot de passe',
     'account.calendar_layers_title': 'Ce qu’affiche mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
