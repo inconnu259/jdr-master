@@ -9,8 +9,8 @@ inputDocuments:
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-08-04/EXPERIENCE.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-20260626/DESIGN.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-08-04/mockups/contrat-ui-calendrier.html'
-lastUpdated: '2026-10-02'
-lastChange: "2026-10-02 (sprint change) : épic 33 — story 33.6 révisée : une seule réserve de souffles par Homme Dragon, portée par sa fiche (réserve par séance abandonnée), fiche et export PDF de l'Homme Dragon réservés au MJ ; FR-61, D-21, AD-22 (voir sprint-change-proposal-2026-10-02.md). Précédemment : 2026-09-29 (sprint change) : épic 33 — Q-13 corrigée (éveils ≠ souffles), stories 33.6, 33.7, 33.8 ; FR-61 → FR-63, D-21 (voir sprint-change-proposal-2026-09-26.md). Précédemment : 2026-09-20 (sprint change) : épic 29 rouvert — stories 29.15, 29.16, 29.17 ; story 33.5 ; FR-58 → FR-60 (voir sprint-change-proposal-2026-09-20.md). Précédemment : ajout de l'Epic 36 « Calendrier — lisibilité » (FR-49 → FR-57, D-15 → D-18) et de ses 14 stories, ordonnancé après l'épic 30. Ajout EN PLACE — les épics 1 à 35 sont intacts."
+lastUpdated: '2026-10-04'
+lastChange: "2026-10-04 (sprint change) : épic 33 — story 33.8 prête à planifier (AD-23 faite) : critères d'acceptation réécrits, annotations 33.5 et 33.6 ; FR-59 amendée, D-22 (voir sprint-change-proposal-2026-10-04.md). Précédemment : 2026-10-02 (sprint change) : épic 33 — story 33.6 révisée : une seule réserve de souffles par Homme Dragon, portée par sa fiche (réserve par séance abandonnée), fiche et export PDF de l'Homme Dragon réservés au MJ ; FR-61, D-21, AD-22 (voir sprint-change-proposal-2026-10-02.md). Précédemment : 2026-09-29 (sprint change) : épic 33 — Q-13 corrigée (éveils ≠ souffles), stories 33.6, 33.7, 33.8 ; FR-61 → FR-63, D-21 (voir sprint-change-proposal-2026-09-26.md). Précédemment : 2026-09-20 (sprint change) : épic 29 rouvert — stories 29.15, 29.16, 29.17 ; story 33.5 ; FR-58 → FR-60 (voir sprint-change-proposal-2026-09-20.md). Précédemment : ajout de l'Epic 36 « Calendrier — lisibilité » (FR-49 → FR-57, D-15 → D-18) et de ses 14 stories, ordonnancé après l'épic 30. Ajout EN PLACE — les épics 1 à 35 sont intacts."
 epic36StepsCompleted: ['step-01-validate-prerequisites', 'step-02-design-epics', 'step-03-create-stories']
 ---
 
@@ -252,7 +252,7 @@ Chaque exigence est rattachée à la ou aux stories qui la portent.
 | FR-60 | 29.17 | Systèmes jouables seuls proposés |
 | FR-61 | 33.6 | Réserve de souffles |
 | FR-62 | 33.7 | Capacités de niveau |
-| FR-63 | 33.8 | Homme Dragon multi-aventures (planifié) |
+| FR-63 | 33.8 | Homme Dragon multi-aventures (AD-23 faite) |
 | *(Q-1)* | 29.14 | Refonte des écrans de création et d'édition de partie |
 
 ### Exigences d'UX sans ancrage FR
@@ -323,9 +323,9 @@ Le MJ crée et consulte son Homme Dragon avec le même soin qu'une fiche de pers
 
 **Notes d'implémentation :** **Q-13 corrigée le 2026-09-25.** Les six entrées seedées sont les **éveils** ; les 21 souffles (9 communs, 12 de race) sont seedés et affichés par la story 33.2. Référence des règles : `docs/dragons.md`. Aucun décompte pendant la séance ; le niveau compte les scénarios `PASSE`.
 
-**Stories 33.6, 33.7 et 33.8 ajoutées le 2026-09-29 (sprint change) ; 33.6 révisée le 2026-10-02** : réserve de souffles de l'Homme Dragon (une seule réserve, composée sur sa fiche, MJ seul ; passe UX faite le 2026-10-02), capacités de niveau (artefact cadeau, souffles rituels), et Homme Dragon multi-aventures (planifié, après passage architecture). Ordre : 33.3 → 33.4 → 33.5 → 33.7 → 33.6 → 33.8 (la passe UX de la 33.6 est faite).
+**Stories 33.6, 33.7 et 33.8 ajoutées le 2026-09-29 (sprint change) ; 33.6 révisée le 2026-10-02** : réserve de souffles de l'Homme Dragon (une seule réserve, composée sur sa fiche, MJ seul ; passe UX faite le 2026-10-02), capacités de niveau (artefact cadeau, souffles rituels), et Homme Dragon multi-aventures (architecture faite le 2026-10-04, AD-23). Ordre : 33.3 → 33.4 → 33.5 → 33.7 → 33.6 → 33.8 (la passe UX de la 33.6 est faite). **La 33.8 casse volontairement le contrat des stories 33.5 à 33.7** (routes par Homme Dragon, `404` au lieu de `403`, plus de `partieId` sur la fiche) : AD-23 en liste les consommateurs.
 
-**Story 33.5 ajoutée le 2026-09-20 (sprint change)** : l'Homme Dragon rejoint « Personnages » et s'y crée, une entrée par aventure. Seule story de l'épic à toucher une lecture API agrégée ; elle ne doit pas figer « un par partie » dans son contrat (un même Homme Dragon réutilisé sur plusieurs aventures est une piste ultérieure, non planifiée).
+**Story 33.5 ajoutée le 2026-09-20 (sprint change)** : l'Homme Dragon rejoint « Personnages » et s'y crée, une entrée par aventure. Seule story de l'épic à toucher une lecture API agrégée ; elle ne doit pas figer « un par partie » dans son contrat (un même Homme Dragon réutilisé sur plusieurs aventures est repris par la 33.8).
 
 ### Epic 34 : Entrée dans l'application
 
@@ -1903,6 +1903,8 @@ So that mon dragon soit aussi facile à atteindre que les personnages de mes jou
 **Then** la section de création de la story 29.16 propose « Créer un Homme Dragon pour *<nom de l'aventure>* »
 **And** elle m'amène sur le parcours de création de l'Homme Dragon
 
+*Révisé par la 33.8 (AD-23, 2026-10-04) : « un par aventure » n'est plus une règle de modèle. La liste montre un Homme Dragon une seule fois, avec ses aventures ; l'entrée de création reste proposée pour une aventure qui n'en a pas. L'AC de départ est conservé tel quel : il décrit ce qui a été livré.*
+
 **Given** la liste contenant des Hommes Dragons
 **When** j'utilise la recherche, le tri ou le mode d'affichage
 **Then** ils s'appliquent aux Hommes Dragons comme aux personnages
@@ -1973,6 +1975,8 @@ So that elle soit mémorisée et imprimée dans l'export PDF sans que je la refa
 **Given** un joueur de la partie (membre, non MJ)
 **When** il appelle l'export PDF de la fiche de l'Homme Dragon
 **Then** le serveur le refuse (`403`) et ne produit aucun PDF
+
+*Révisé par la 33.8 (AD-23, 2026-10-04) : la lecture et l'export passent par `/homme-dragons/:id`, gardés par le propriétaire de l'Homme Dragon ; tout autre appelant reçoit `404`, jamais `403` (l'existence ne fuit pas). L'intention — aucun accès d'un joueur — est inchangée.*
 
 **Given** un joueur de la partie
 **When** il parcourt l'application (partie, « Personnages »)
@@ -2073,7 +2077,7 @@ So that je sache ce dont il est capable sans rouvrir le livre.
 
 ### Story 33.8 : Un Homme Dragon pour plusieurs aventures
 
-*Planifiée — après révision d'architecture (modèle multi-aventures).*
+*Architecture faite le 2026-10-04 (AD-23, spine du Palier 9 ; AD-22 réécrit). Story lourde : migration, routes, front, PDF — la découpe éventuelle se décide à la planification.*
 
 As a MJ,
 I want que mon Homme Dragon suive plusieurs groupes et plusieurs mondes,
@@ -2081,16 +2085,64 @@ So that son histoire et son niveau reflètent toutes les aventures qu'il a racon
 
 **Acceptance Criteria:**
 
-**Given** un Homme Dragon existant
-**When** je l'associe à une autre aventure Ryuutama dont je suis MJ
+**Given** un Homme Dragon dont je suis propriétaire et une aventure Ryuutama dont je suis MJ, sans Homme Dragon
+**When** je l'associe à cette aventure
 **Then** il y apparaît comme Homme Dragon de cette aventure
-**And** son historique et son niveau cumulent les scénarios `PASSE` de toutes ses aventures
+**And** son historique et son niveau cumulent les scénarios `PASSE` de toutes ses aventures, chaque entrée d'historique portant son aventure
+
+**Given** une aventure qui a déjà un Homme Dragon
+**When** j'en associe un autre
+**Then** le serveur refuse (`409`) et ne remplace rien
+**And** je dois d'abord dissocier le premier
+
+**Given** un Homme Dragon associé à une aventure
+**When** je le dissocie
+**Then** l'aventure n'a plus d'Homme Dragon et son niveau est recalculé, il peut baisser
+**And** aucun éveil, artefact cadeau ni souffle de la réserve n'est supprimé : ce qui dépasse le niveau reste lisible et seuls les nouveaux choix sont refusés
+**And** je peux toujours retirer un souffle de la réserve, quel que soit le niveau
+
+**Given** un Homme Dragon qui n'est pas le mien, ou qui n'existe pas
+**When** je le lis, l'écris, l'exporte ou l'associe
+**Then** la réponse est la même (`404`) dans les deux cas, sans aucune donnée
+**And** un joueur de l'aventure n'y a accès ni dans l'application ni par l'API
+
+**Given** un Homme Dragon associé à deux aventures
+**When** j'ouvre « Personnages »
+**Then** il apparaît une seule fois, avec ses deux aventures
+**And** l'ouvrir m'amène sur sa fiche, qui présente les voyageurs protégés **par aventure**
+
+**Given** un Homme Dragon associé à une aventure
+**When** cette aventure est supprimée
+**Then** l'Homme Dragon subsiste, sans aventure, et reste accessible dans « Personnages »
+**And** son niveau est recalculé sur ses aventures restantes
+
+**Given** une aventure portant un Homme Dragon
+**When** son système de jeu change
+**Then** l'Homme Dragon en est dissocié, sans perdre sa fiche
+
+**Given** une aventure Ryuutama sans Homme Dragon
+**When** j'en crée un depuis la section de création
+**Then** il est créé et associé à cette aventure en une seule opération
+**And** deux créations simultanées pour la même aventure ne donnent jamais deux Hommes Dragons associés ni une fiche orpheline
 
 **Given** les fiches existantes (un Homme Dragon par partie)
 **When** le nouveau modèle est livré
 **Then** chacune reste intacte et rattachée à sa partie
+**And** la migration échoue avec une erreur explicite, sans rien choisir au hasard, si deux fiches visent la même partie ou si une fiche resterait sans lien
 
-*Prérequis :* décision d'architecture sur le modèle (unicité, rattachement, calcul du niveau), migration. Réserve de souffles (33.6) : elle est portée par la fiche (`sheetData`) et suit donc l'Homme Dragon d'une aventure à l'autre. L'AD du modèle multi-aventures confirme que `sheetData`, réserve comprise, reste attaché à l'Homme Dragon et non à l'aventure (la capacité de la réserve dépend du niveau, qui cumulera les scénarios `PASSE` de toutes ses aventures), et traite d'un même mouvement les routes d'écriture aujourd'hui scopées par partie (`eveil-power`, `artefact-cadeau`, réserve) ainsi que la garde « fiche et export PDF réservés au MJ » (sprint change du 2026-10-02).
+**Given** une aventure Ryuutama dont je suis MJ, sans Homme Dragon associé
+**When** la liste des parties est calculée
+**Then** le signal « Homme Dragon à créer » s'affiche comme avant, sans requête par partie
+
+**Given** deux écritures simultanées sur la même fiche (la réserve et la modification générale, par exemple)
+**When** elles aboutissent
+**Then** aucune n'écrase l'autre
+
+**Given** ma fiche ouverte
+**When** un scénario de l'une de ses aventures passe en `PASSE`
+**Then** son niveau et son historique se mettent à jour sans que je recharge
+
+*Prérequis levé :* AD-23 (modèle, routes `PUT`/`DELETE /parties/:id/homme-dragon/:hommeDragonId`, fiche sous `/homme-dragons/:id`, temps réel, migration) et AD-22 réécrite. **Contrat du livré cassé volontairement** (33.5 à 33.7) : la liste des consommateurs à mettre à jour est dans AD-23. À vérifier à l'implémentation : l'absence d'interblocage du verrou `FOR NO KEY UPDATE`, et le comportement d'un deuxième onglet ouvert (il ne se rafraîchit pas sur une écriture de fiche, par choix d'AD-23).
 
 ## Epic 34 : Entrée dans l'application
 

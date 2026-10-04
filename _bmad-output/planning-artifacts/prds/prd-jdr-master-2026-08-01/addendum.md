@@ -157,3 +157,5 @@ Un indicateur booléen porté par la constante partagée des systèmes, vrai pou
 - Sa fiche n'a **pas de route propre** : elle est incrustée dans l'écran de la partie, pour le MJ Ryuutama. L'ouvrir depuis « Personnages » exige soit une route dédiée, soit une navigation vers l'écran de la partie — à trancher à la création de la story.
 - **Choix ouvert, laissé à la story :** endpoint dédié ou extension de la lecture existante. Contrainte ferme : ne pas casser le contrat de la liste des personnages ni ses consommateurs (écran « Personnages », tableau de bord, tris).
 - **Le serveur autoriserait un MJ à créer un personnage joueur sur sa propre partie.** Ne pas l'exposer est un choix produit (FR-58), pas une contrainte technique.
+
+**Révisé le 2026-10-04 (AD-23, D-22).** Les deux premières puces décrivent l'état d'origine. Désormais : la table n'est plus unique par utilisateur, partie et système ; le lien est porté par `Partie.hommeDragonId`, un Homme Dragon a 0..N aventures, et sa fiche a une route propre (`/homme-dragons/:id`), plus incrustée dans l'écran de la partie.

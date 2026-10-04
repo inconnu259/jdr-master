@@ -2,7 +2,7 @@
 title: "Palier 9 — Refonte UI & lisibilité de l'état"
 status: final
 created: 2026-08-01
-updated: 2026-09-21
+updated: 2026-10-04
 ---
 
 # PRD — Palier 9 : Refonte UI & lisibilité de l'état
@@ -18,6 +18,8 @@ Périmètre : l'application Ryuutama existante, sur desktop **et** mobile. Publi
 **Mise à jour du 2026-08-17 — retour d'usage sur le calendrier.** L'épic 30 a livré ; l'utilisateur l'a utilisé et a rapporté que **le calendrier ne répond toujours pas aux questions qu'on lui pose**. Neuf exigences neuves en découlent (FR-49 → FR-57, §4.7 bis), quatre dérogations serveur (D-15 → D-18) et quatre questions ouvertes (Q-19 → Q-22). Le périmètre est très majoritairement de l'interface ; les quatre dérogations ont été vérifiées dans le code et arbitrées une par une. Ces exigences forment un épic distinct, ordonnancé **juste après l'épic 30** — les épics 31 à 35 existant déjà au backlog, c'est un choix d'ordre, pas de numérotation.
 
 **Mise à jour du 2026-09-21 — retour d'usage sur la création de personnage.** En testant le parcours refondu (story 31.4), l'utilisateur a jugé son *point d'entrée* peu évident : il faut deviner que l'initiale du roster est cliquable. Trois exigences neuves en découlent (FR-58 → FR-60) et deux dérogations serveur (D-19, D-20) ; aucune question ouverte. Le parcours de création lui-même (FR-21) n'est pas touché : seuls changent **où l'on y entre** et **pour quels systèmes de jeu**. Deux épics sont concernés : le 29, rouvert, et le 33. Les arbitrages sont dans `sprint-change-proposal-2026-09-20.md` et ne sont pas recopiés ici.
+
+**Mise à jour du 2026-10-04 — architecture du modèle multi-aventures.** L'architecture de FR-63 est faite (`AD-23`, spine du Palier 9). Un Homme Dragon peut suivre plusieurs aventures ; FR-59 est amendée en conséquence (elle posait « un par aventure »), FR-61 précise sa garde, et une dérogation serveur est inscrite (D-22). Les arbitrages sont dans `sprint-change-proposal-2026-10-04.md` et ne sont pas recopiés ici.
 
 ## 1. Contexte & problème
 
@@ -270,19 +272,24 @@ Dès le niveau 2, le MJ compose sur la **fiche** de son Homme Dragon la réserve
 - **Règles :** (niveau − 1) emplacements ; un même souffle commun ou de la race peut occuper plusieurs emplacements ; les souffles du temps n'y entrent jamais ; à partir du niveau 3, au plus **un** souffle d'une autre race, qui n'occupe qu'**un seul** emplacement. Communs et souffles de la race toujours autorisés ; souffles rituels admis au niveau 5, sans compter comme souffle d'une autre race.
 - **Aucun décompte :** la réserve est une composition, pas un stock. L'application ne la consomme jamais et n'affiche aucun compteur « utilisé » ou « restant ».
 - **Export PDF :** la réserve remplit les cases de souffles du PDF (le nom de chaque souffle, dans l'ordre des emplacements) ; une réserve vide laisse les cases vides, à cocher au crayon. Pour exporter sans souffles, le MJ retire les souffles un à un.
-- **MJ seul :** la fiche de l'Homme Dragon, son export PDF et donc sa réserve sont réservés au MJ ; un joueur n'y a accès ni dans l'application ni par l'API (décision du 2026-10-02, qui révise la lecture « par tout membre » du Palier 5). Le meneur annonce la réserve en jeu ; s'il veut que quelqu'un d'autre imprime la fiche, il fait l'export PDF et le lui envoie.
+- **MJ seul :** la fiche de l'Homme Dragon, son export PDF et donc sa réserve sont réservés au MJ ; un joueur n'y a accès ni dans l'application ni par l'API (décision du 2026-10-02, qui révise la lecture « par tout membre » du Palier 5). Le meneur annonce la réserve en jeu ; s'il veut que quelqu'un d'autre imprime la fiche, il fait l'export PDF et le lui envoie. Le droit de lire et d'écrire la fiche est celui de son **propriétaire** (le MJ qui l'a créée), quelle que soit l'aventure d'où il l'ouvre ; un Homme Dragon qui n'est pas le sien ne se distingue pas d'un Homme Dragon inexistant.
 - **Prérequis serveur :** D-21.
 
 #### FR-62 : Capacités de niveau de l'Homme Dragon
 La fiche montre les capacités acquises selon le niveau (réserve, souffles multicolores, invitation au voyage, envol du dragon des saisons) avec leur texte ; au niveau 4, le MJ choisit une fois pour toutes un **artefact cadeau** d'une autre race ; au niveau 5, la mère-dragon accède aux **souffles rituels**, traités pour l'instant comme les autres souffles (décision du 2026-09-29).
 
 #### FR-63 : Un Homme Dragon pour plusieurs aventures
-Un même Homme Dragon peut suivre plusieurs groupes et plusieurs mondes : son historique et son niveau cumulent les aventures qu'il a racontées. Changement de modèle (unicité par partie aujourd'hui) — **planifié, après passage architecture** (story 33.8). FR-59 ne doit pas le rendre plus difficile (déjà exigé).
+Un même Homme Dragon peut suivre plusieurs groupes et plusieurs mondes : son **historique et son niveau cumulent les scénarios `PASSE` de toutes ses aventures**.
+- **Associer / dissocier.** Le MJ associe un de ses Hommes Dragons à une aventure Ryuutama dont il est MJ et qui n'en a pas encore, et peut l'en dissocier. Une aventure a au plus un Homme Dragon ; il n'y a pas de remplacement implicite.
+- **Rien ne se perd.** Dissocier, supprimer l'aventure ou changer son système de jeu dissocie l'Homme Dragon sans supprimer sa fiche ; le niveau est recalculé, et ce qui dépasse le nouveau niveau (éveils, artefact cadeau, réserve) reste lisible, seuls les nouveaux choix sont refusés. Retirer un souffle de la réserve reste possible à tout niveau.
+- **Voyageurs protégés par aventure.** La fiche présente les joueurs de chaque aventure séparément.
+- **Données existantes.** Chaque fiche actuelle reste intacte et liée à sa partie.
+- **Prérequis serveur :** D-22.
 
 #### FR-59 : Les Hommes Dragons dans « Personnages », avec leur création
 Le MJ retrouve ses Hommes Dragons là où les joueurs retrouvent leurs personnages, et peut en créer un depuis la section de création de FR-58.
-- **Dans la liste.** Chaque Homme Dragon apparaît avec la partie dont il provient ; sa nature (Homme Dragon, et non personnage joueur) se lit sans l'ouvrir, et pas par la couleur seule (P-1). La recherche, le tri et le mode d'affichage s'appliquent à lui comme aux personnages ; son nom suit la convention de FR-14. On y ouvre sa fiche.
-- **Dans la section de création.** Une entrée « Créer un Homme Dragon pour *<nom de l'aventure>* » par aventure Ryuutama dont l'utilisateur est MJ et où il n'en a pas encore. **Un Homme Dragon est propre à une aventure** : un MJ en a un *par aventure*, pas un seul au total.
+- **Dans la liste.** Chaque Homme Dragon apparaît **une seule fois**, avec **ses aventures** (éventuellement aucune) ; sa nature (Homme Dragon, et non personnage joueur) se lit sans l'ouvrir, et pas par la couleur seule (P-1). La recherche, le tri et le mode d'affichage s'appliquent à lui comme aux personnages ; son nom suit la convention de FR-14. On y ouvre sa fiche.
+- **Dans la section de création.** Une entrée « Créer un Homme Dragon pour *<nom de l'aventure>* » par aventure Ryuutama dont l'utilisateur est MJ et où il n'en a pas encore. Un Homme Dragon peut suivre **plusieurs aventures** (FR-63) : l'entrée n'est donc proposée que pour une aventure qui n'en a pas encore, et un MJ peut avoir plus ou moins d'Hommes Dragons que d'aventures.
 - **Jamais chez les joueurs.** L'Homme Dragon du MJ n'apparaît pas dans « Personnages » des autres membres de la partie.
 - **Prérequis serveur :** D-20. Les consommateurs existants de la liste des personnages n'en sont pas affectés.
 - La fiche Homme Dragon n'a pas de route propre aujourd'hui ; la façon de l'ouvrir depuis « Personnages » relève de la story, pas du PRD.
@@ -452,7 +459,7 @@ Les textes de thème sont réorganisés pour être relisibles thème par thème,
 
 ## 5. Dérogations serveur actées
 
-Le principe du palier est de ne pas toucher au serveur. **Vingt cas** sont recensés ici pour qu'aucun ne passe inaperçu (P-5). D-8 à D-10 ont été découvertes lors de la revue du PRD ; **D-11 à D-13 sont issues du run d'UX** et **D-14 de la revue d'architecture**, toutes inscrites le 2026-08-05. **D-15 à D-18 sont issues du retour d'usage du 2026-08-17**, toutes vérifiées dans le code avant inscription et arbitrées une par une avec l'utilisateur. **D-19 et D-20 sont issues du retour d'usage du 2026-09-20**, vérifiées dans le code et arbitrées avec l'utilisateur le jour même.
+Le principe du palier est de ne pas toucher au serveur. **Vingt-deux cas** sont recensés ici pour qu'aucun ne passe inaperçu (P-5). D-8 à D-10 ont été découvertes lors de la revue du PRD ; **D-11 à D-13 sont issues du run d'UX** et **D-14 de la revue d'architecture**, toutes inscrites le 2026-08-05. **D-15 à D-18 sont issues du retour d'usage du 2026-08-17**, toutes vérifiées dans le code avant inscription et arbitrées une par une avec l'utilisateur. **D-19 et D-20 sont issues du retour d'usage du 2026-09-20**, vérifiées dans le code et arbitrées avec l'utilisateur le jour même. **D-22 est issue de l'architecture du 2026-10-04** (AD-23), vérifiée dans le code.
 
 Une ligne porte une ampleur **nulle à ce stade** — D-12. Elles restent au tableau pour que le sujet demeure visible au découpage en épics, mais **elles ne demandent aucun travail** tant que le constat qui les accompagne tient. Ne pas les implémenter par réflexe de complétude.
 
@@ -483,6 +490,7 @@ Une ligne porte une ampleur **nulle à ce stade** — D-12. Elles restent au tab
 | D-19 | **Validation du système de jeu à la création d'une partie** — le serveur refuse un système sans module, avec un message explicite | FR-60 | Faible — validation d'entrée seule, aucune migration ; les parties existantes ne sont pas touchées. Des tests utilisent aujourd'hui Draconis comme donnée de départ : à vérifier, pas à présumer | ✅ actée |
 | D-20 | **Lecture agrégée des Hommes Dragons de l'utilisateur**, toutes parties confondues | FR-59 | Modérée — aucune migration ; une lecture par utilisateur, jamais une requête par partie (le fan-out proscrit par FR-12). La liste des personnages et son contrat ne changent pas pour leurs consommateurs. Forme (route dédiée ou extension de la lecture existante) laissée à la story | ✅ actée |
 | D-21 | **Réserve de souffles** — réserve unique de l'Homme Dragon, portée par sa fiche ; la fiche entière et son export PDF sont réservés au MJ | FR-61 | Modérée — un chemin d'écriture MJ neuf (route dédiée, jamais la modification générale de la fiche), validations de règles côté serveur (capacité, souffles du temps, souffle d'une autre race sur un seul emplacement), **lecture de la fiche et export PDF durcis de « tout membre » à « MJ seul »** (changement de comportement du livré, aucun appelant web non-MJ), pas de lecture fan-out, aucune migration | ✅ actée (2026-09-29, AD-22 ; révisée le 2026-10-02, option B2) |
+| D-22 | **Homme Dragon multi-aventures** — colonne `Partie.hommeDragonId`, fiche adressée par son identifiant (`/homme-dragons/:id`, gardée par son propriétaire), association et dissociation par partie, lecture en lot des scénarios `PASSE` de plusieurs parties | FR-63, FR-59, FR-61 | **Élevée** — migration avec rattrapage, **contrat du livré (33.5 à 33.7) cassé volontairement**, toutes les écritures de fiche passent sous verrou (le `PATCH` compris), signal 29.7 recalculé | ✅ actée (2026-10-04, AD-23) |
 
 ## 6. Hors périmètre
 
@@ -491,7 +499,7 @@ Une ligne porte une ampleur **nulle à ce stade** — D-12. Elles restent au tab
 - **Conformité d'accessibilité formelle** (navigation clavier, lecteurs d'écran, audit WCAG AA). Écartée : coût élevé, invérifiable dans le contexte actuel, aucune obligation. Voir P-2.
 - **Ouverture de l'inscription libre.** La création de compte reste sur invitation. Remettre cette règle en cause serait un changement métier, pas une refonte d'UI.
 - **Refonte de la direction artistique.** La DA est validée (§2).
-- ~~**Un même Homme Dragon réutilisé sur plusieurs aventures.**~~ *Planifié le 2026-09-29 : FR-63, story 33.8.*
+- ~~**Un même Homme Dragon réutilisé sur plusieurs aventures.**~~ *Planifié le 2026-09-29 : FR-63, story 33.8 ; architecture faite le 2026-10-04 (AD-23).*
 - **Modules des systèmes de jeu manquants** (Draconis, Conte de Minuit, Esteren). FR-60 empêche d'y créer une partie ; leur donner un module est un chantier de contenu à part, au backlog.
 - **Thème dédié à l'accessibilité.** Le run d'UX a relevé, dans les trois thèmes, des couleurs de statut qui se rapprochent en vision dichromatique. Plutôt que de raboter les trois univers pour un cas aujourd'hui théorique — un seul utilisateur, qui distingue les couleurs —, la réponse retenue est un **quatrième thème** conçu pour cela. Reporté : le mécanisme de thème existe déjà, l'ajout est un travail de contenu, à faire le jour où un joueur concerné rejoint une partie.
 
