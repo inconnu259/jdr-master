@@ -12,7 +12,7 @@
           <input matInput type="password" formControlName="password" autocomplete="current-password" />
         </mat-form-field>
         @if (error()) {
-          <p class="error">{{ error() }}</p>
+          <p class="error" role="alert">{{ error() }}</p>
         }
         <button mat-flat-button type="submit" [disabled]="loading()">Se connecter</button>
       </form>

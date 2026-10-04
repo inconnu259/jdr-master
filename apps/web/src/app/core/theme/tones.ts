@@ -378,6 +378,15 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'account.email_change_wrong_current': "Ce sortilège n'est pas le bon.",
     'account.email_change_taken': 'Un autre voyageur porte déjà ce sceau.',
     'account.email_change_error': "Le grimoire n'a pas pu envoyer la demande. Réessayez.",
+    // Story 34.1 — échecs de connexion : chaque texte nomme sa cause par un mot clair.
+    'auth.login_invalid': 'Le grimoire ne vous reconnaît pas : identifiants invalides.',
+    'auth.login_reset_required':
+      'Ce compte doit être réinitialisé : utilisez « Mot de passe oublié ? » pour rouvrir le grimoire.',
+    'auth.login_throttled':
+      'Trop de tentatives. Patientez une minute avant de frapper de nouveau à la porte du grimoire.',
+    'auth.login_unavailable':
+      'Le grimoire est indisponible pour le moment. Réessayez dans quelques instants.',
+    'auth.login_unexpected': 'Une erreur est survenue. Réessayez.',
     'account.calendar_layers_title': 'Ce que révèle mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
@@ -804,6 +813,14 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'account.email_change_wrong_current': "Ce n'est pas le bon mot de passe.",
     'account.email_change_taken': 'Cette adresse est déjà utilisée par un autre compte.',
     'account.email_change_error': "Le carnet n'a pas pu envoyer la demande. Réessaie.",
+    // Story 34.1 — échecs de connexion : chaque texte nomme sa cause par un mot clair.
+    'auth.login_invalid': 'Le carnet ne te reconnaît pas : identifiants invalides.',
+    'auth.login_reset_required':
+      'Ce compte doit être réinitialisé : utilise « Mot de passe oublié ? » pour rouvrir le carnet.',
+    'auth.login_throttled': 'Trop de tentatives. Patiente une minute avant de retenter ta chance.',
+    'auth.login_unavailable':
+      'Le carnet est indisponible pour le moment. Réessaie dans quelques instants.',
+    'auth.login_unexpected': 'Une erreur est survenue. Réessaie.',
     'account.calendar_layers_title': 'Ce que montre mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
@@ -1222,6 +1239,15 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'account.email_change_wrong_current': 'Code d’accès actuel erroné.',
     'account.email_change_taken': 'Cette fréquence est déjà occupée par un autre poste.',
     'account.email_change_error': 'L’établi n’a pas pu transmettre la demande. Réessayez.',
+    // Story 34.1 — échecs de connexion : chaque texte nomme sa cause par un mot clair.
+    'auth.login_invalid': 'L’établi ne vous reconnaît pas : identifiants invalides.',
+    'auth.login_reset_required':
+      'Ce poste doit être réinitialisé : utilisez « Mot de passe oublié ? » pour le remettre en marche.',
+    'auth.login_throttled':
+      'Trop de tentatives. Patientez une minute avant de relancer la connexion.',
+    'auth.login_unavailable':
+      'L’établi est indisponible pour le moment. Réessayez dans quelques instants.',
+    'auth.login_unexpected': 'Une erreur est survenue. Réessayez.',
     'account.calendar_layers_title': 'Ce qu’affiche mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',

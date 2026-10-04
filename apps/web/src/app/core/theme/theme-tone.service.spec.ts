@@ -437,3 +437,40 @@ describe('Tones — états de scénario et de séance (Story 32.3)', () => {
     });
   }
 });
+
+// Story 34.1 — messages d'échec de connexion. Même garde de parité que ci-dessus : une clé posée
+// dans un seul thème rendrait `undefined` à l'écran dans les deux autres. Et, même thématisé,
+// chaque texte doit NOMMER sa cause par un mot clair — sans quoi un thème pourrait redevenir
+// trompeur (ex. un service indisponible présenté comme des identifiants faux).
+describe("Tones — messages d'échec de connexion (Story 34.1)", () => {
+  const CAUSE_WORDS: Record<string, string> = {
+    'auth.login_invalid': 'invalide',
+    'auth.login_reset_required': 'réinitialis',
+    'auth.login_throttled': 'tentatives',
+    'auth.login_unavailable': 'indisponible',
+    'auth.login_unexpected': 'erreur',
+  };
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${Object.keys(CAUSE_WORDS).length} clés, non vides`, () => {
+      for (const key of Object.keys(CAUSE_WORDS)) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+      }
+    });
+
+    it(`${theme} nomme la cause de chaque échec par un mot clair`, () => {
+      for (const [key, word] of Object.entries(CAUSE_WORDS)) {
+        expect(TONE_MAP[theme][key].toLowerCase(), `${theme} / ${key}`).toContain(word);
+      }
+    });
+
+    it(`${theme} ne parle d'identifiants que pour « identifiants invalides »`, () => {
+      for (const key of Object.keys(CAUSE_WORDS)) {
+        if (key === 'auth.login_invalid') continue;
+        const text = TONE_MAP[theme][key].toLowerCase();
+        expect(text, `${theme} / ${key}`).not.toContain('identifiant');
+        expect(text, `${theme} / ${key}`).not.toContain('mot de passe incorrect');
+      }
+    });
+  }
+});

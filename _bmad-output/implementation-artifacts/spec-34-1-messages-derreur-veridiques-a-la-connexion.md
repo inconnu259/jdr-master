@@ -2,9 +2,10 @@
 title: "Messages d'erreur véridiques à la connexion"
 type: 'feature'
 created: '2026-10-04'
-status: 'ready-for-dev'
+status: 'done'
 route: 'dispatch'
 review_loop_iteration: 0
+baseline_commit: 'dd50fa81655c2725d970fd29325a641c4d742c6e'
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-34-context.md'
 ---
@@ -65,11 +66,11 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] `apps/web/src/app/core/theme/tones.ts` -- cinq clés `auth.login_*` dans les trois thèmes -- registre thématique honnête
-- [ ] `apps/web/src/app/features/auth/login/login.ts` -- classer l'échec (cinq cas) et poser le texte de ton correspondant -- message véridique
-- [ ] `apps/web/src/app/features/auth/login/login.html` -- `role="alert"` sur le message d'erreur -- annonce aux technologies d'assistance
-- [ ] `apps/web/src/app/features/auth/login/login.spec.ts` -- nouveau : une ligne de test par ligne de la matrice, plus formulaire conservé et message effacé -- couvre la matrice
-- [ ] `apps/web/src/app/core/theme/theme-tone.service.spec.ts` -- parité des cinq clés dans les trois thèmes et mot-cause présent dans chacune -- registre honnête
+- [x] `apps/web/src/app/core/theme/tones.ts` -- cinq clés `auth.login_*` dans les trois thèmes -- registre thématique honnête
+- [x] `apps/web/src/app/features/auth/login/login.ts` -- classer l'échec (cinq cas) et poser le texte de ton correspondant -- message véridique
+- [x] `apps/web/src/app/features/auth/login/login.html` -- `role="alert"` sur le message d'erreur -- annonce aux technologies d'assistance
+- [x] `apps/web/src/app/features/auth/login/login.spec.ts` -- nouveau : une ligne de test par ligne de la matrice, plus formulaire conservé et message effacé -- couvre la matrice
+- [x] `apps/web/src/app/core/theme/theme-tone.service.spec.ts` -- parité des cinq clés dans les trois thèmes et mot-cause présent dans chacune -- registre honnête
 
 **Acceptance Criteria:**
 - Given des identifiants incorrects, when je valide, then le message dit que mes identifiants sont invalides.
@@ -78,9 +79,32 @@ context:
 
 ## Implementation Notes
 
+- **Vérifié par le chef de build** (diff relu en entier depuis `dd50fa8`, 5 fichiers de code) : web 2869 tests passés (état final après la revue) / 2 échecs connus et datés (`calendar-view.spec`, hors story) ; `ng build` OK ; aucune erreur de lint sur les lignes ajoutées (105 erreurs `prettier` préexistantes ailleurs). Aucune modification d'API, de dépendance ni de `package.json`.
+- **Matrice** : chaque ligne a un test dédié dans `login.spec.ts` (401 par défaut, 401 personnalisé, 429, statut 0, 502/503/504 séparément, 500/501/400/erreur non HTTP, échec puis succès, message effacé avant l'appel, formulaire conservé, aucune fuite de message/statut/corps) et la parité des cinq clés dans les trois thèmes, avec mot-cause, est testée dans `theme-tone.service.spec.ts`.
+- **Revue du 2026-10-04** : 14 constats triés (voir le journal), un correctif appliqué puis revérifié — un `401` au corps texte (page d'un proxy) n'est plus lu comme « compte à réinitialiser » : seul un corps objet à message texte non vide, différent de `Unauthorized`, l'est, avec six cas de test de plus. Un report dans `deferred-work.md` (contrat des réponses de `/auth/login` à épingler côté API, interdit par la spec figée).
+- **Textes des trois thèmes** : rédigés à l'implémentation (le thème forêt tutoie, les deux autres vouvoient, comme leurs messages `account.*`) ; l'épic 35 (revue éditoriale) pourra les relire.
+- **Non fait** : le contrôle manuel de la section Verification (arrêter l'API, relire les cinq messages dans chaque thème à l'écran).
+
 ## Spec Change Log
 
 ## Review Triage Log
+
+Revue du 2026-10-04, première passe (Blind Hunter, Edge Case Hunter, Verification Gap). Constats dédoublonnés par cause ; B = blind, E = edge, V = verification-gap.
+
+- **[B][E] Un `401` au corps chaîne (page HTML d'un proxy ou d'un WAF) est lu comme « compte à réinitialiser »** — `medium`, patch : `hasCustomMessage` accepte tout texte non vide autre que `Unauthorized` ; Angular ne rend une chaîne que pour un corps non JSON, donc d'origine infrastructure, et le message affiché (« réinitialisez ») serait faux. Correction : n'accepter qu'un corps objet dont `message` est une chaîne.
+- **[E] Comparaison avec `Unauthorized` sensible à la casse et aux espaces** — `low`, patch : même fonction, corrigée avec la ligne ci-dessus ; Nest émet bien `Unauthorized`, mais la correction est triviale et sans surface publique.
+- **[B][E] La classification n'est testée que sur deux formes de `401`** — `low`, patch : les cas de corps (nul, chaîne, HTML, message blanc, tableau, casse) accompagnent la correction.
+- **[V] Le contrat des réponses de `/auth/login` (corps du `401` par défaut, `401` de réinitialisation, `429` au sixième essai) n'est épinglé par aucun test d'API** — `medium`, defer : la spec figée interdit tout changement sous `apps/api`, tests compris ; la dérive d'un message côté serveur ferait afficher la mauvaise cause sans test rouge. Consigné dans `deferred-work.md`.
+- **[B] La cause « réinitialisation » repose sur le fait qu'il n'existe qu'un `401` personnalisé aujourd'hui ; le lien « Mot de passe oublié ? » cité existe-t-il ?** — `false` pour le lien (présent dans `login.html`, section des actions de la carte) ; le couplage au `401` unique est le choix A de l'utilisateur (aucun changement d'API), documenté dans le code.
+- **[B] Les tests moquent `AuthService.login` (aucun test via le vrai service)** — `low`, rejeté : `AuthService.login()` est un `firstValueFrom(http.post…)` qui relaie l'`HttpErrorResponse` d'origine (code relu) ; aucun intercepteur ne réécrit l'erreur.
+- **[B] « Une minute » figé dans le message de limite ; le statut `0` (hors-ligne, CORS) est présenté comme « service indisponible »** — `low`, rejeté : décisions de l'utilisateur à la spec (message de limite dédié, statut `0` dans « indisponible ») ; la corriger éditerait l'intention figée.
+- **[B][E] Message stocké comme chaîne résolue (reste dans l'ancien thème si le thème change)** — `low`, rejeté : la page de connexion n'offre aucune bascule de thème.
+- **[E] Clé de ton absente du thème actif (`undefined`, alerte masquée)** — `low`, rejeté : la parité des cinq clés dans les trois thèmes est testée ; un repli ajouterait du code pour un état que ce test interdit.
+- **[E] Double soumission pendant `loading` (Entrée dans le formulaire)** — `low`, rejeté : préexistant, et la soumission implicite est bloquée par le navigateur quand le bouton par défaut est désactivé.
+- **[E] `auth.login()` qui échoue après un `POST` réussi (ex. synchronisation du thème) affiche « erreur inattendue »** — `low`, rejeté : `syncTheme` absorbe ses propres erreurs ; auparavant ce cas affichait « Identifiants invalides ».
+- **[E] Statuts voisins (403, 408, 499) non testés** — `low`, rejeté : un seul chemin par défaut les couvre, déjà testé par 400, 500, 501 et l'erreur non HTTP.
+- **[B] Accessibilité (focus, `aria-describedby`, `aria-invalid`, `aria-busy`) ; test de parité qui ne contrôle que des mots-clés ; `as any`, clé `jdr-theme` et assertion « 500 » dans les tests** — `low`, rejeté : hors de l'intention (`role="alert"` est ce que la spec demande ; la mise en forme des écrans relève de la 34.3), parité définie par la spec, motifs de test identiques à ceux des specs voisines.
+- **[B] D'autres écrans d'authentification ou le changement d'e-mail portent des messages codés en dur** — `low`, rejeté : hors périmètre (Never : autres écrans, textes d'autres écrans), relus par les stories 34.2/34.3 et l'épic 35.
 
 ## Verification
 
