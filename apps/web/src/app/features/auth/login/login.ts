@@ -12,10 +12,12 @@ import { PasswordReveal } from '../../../shared/password-reveal/password-reveal'
 import { PasswordToggle } from '../../../shared/password-reveal/password-toggle';
 import { AuthAriaInvalid } from '../aria-invalid';
 import { fieldErrorKey, rejectInvalidSubmit } from '../auth-form';
+import { AuthBand } from '../auth-band/auth-band';
 
 @Component({
   selector: 'app-login',
   imports: [
+    AuthBand,
     ReactiveFormsModule,
     RouterLink,
     MatCardModule,

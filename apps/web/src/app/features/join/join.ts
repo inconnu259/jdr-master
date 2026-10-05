@@ -7,10 +7,11 @@ import { AuthService } from '../../core/auth/auth.service';
 import { JoinService } from '../../core/join/join.service';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { gameSystemName } from '../../core/parties/parties.util';
+import { AuthBand } from '../auth/auth-band/auth-band';
 
 @Component({
   selector: 'app-join',
-  imports: [RouterLink, MatCardModule, MatButtonModule],
+  imports: [AuthBand, RouterLink, MatCardModule, MatButtonModule],
   templateUrl: './join.html',
   styleUrl: './join.scss',
 })

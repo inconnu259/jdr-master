@@ -83,6 +83,9 @@ describe('RollbackEmailChange — structure et annonces (Story 34.3)', () => {
     expect(h1s.length).toBe(1);
     expect(h1s[0].textContent?.trim()).toBe("Annuler le changement d'adresse e-mail");
     expect(el.querySelector('main')?.getAttribute('aria-labelledby')).toBe(h1s[0].id);
+    // Bande de marque (story 34.4) : <header> frère de <main>, placé avant lui.
+    expect(el.querySelector('main header.band')).toBeNull();
+    expect(el.querySelector('app-auth-band + main')).not.toBeNull();
     expect(el.textContent).toContain('coupera toutes les sessions actives');
     expect(el.querySelectorAll('.auth-primary').length).toBe(1);
     expect(el.querySelector('.auth-secondary-actions a')?.getAttribute('href')).toBe('/login');

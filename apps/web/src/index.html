@@ -5,7 +5,11 @@
     <title>Dés Dispos</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <!-- Favicon « Dés Dispos » (SVG statique, hors thème). `favicon.ico` reste en repli, déclaré EN
+         PREMIER avec une taille explicite : sinon Chromium pourrait retenir l'ancienne icône par
+         défaut au lieu du SVG (`sizes="any"`). -->
+    <link rel="icon" type="image/x-icon" sizes="32x32" href="favicon.ico" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

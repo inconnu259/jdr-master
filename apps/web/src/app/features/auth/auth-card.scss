@@ -6,12 +6,25 @@
 // rangée d'actions secondaires → (connexion) ligne d'orientation. Couleurs uniquement par les
 // jetons de thème (`--mat-sys-*`, `--jdr-*`) ; hauteurs en `min-height`, tailles en rem.
 
+// L'hôte de chaque écran empile la bande de marque (`app-auth-band`, story 34.4) puis le `<main>` :
+// un hôte en `inline` (défaut d'un élément personnalisé) casserait cette pile.
+:host {
+  display: block;
+}
+
+// Le `<main>` suit la bande de marque : 16 px entre les deux et gouttière de 16 px de chaque côté
+// (mobile : la bande est collée en haut, pleine largeur). Dès 480 px la carte partage la colonne
+// de 448 px de la bande (`max-width` de `.auth-card`, gouttière comprise). Le haut de page (~56 px)
+// appartient à la bande elle-même.
 .auth-page {
   display: flex;
   justify-content: center;
   box-sizing: border-box;
-  // Haut adaptatif (au lieu de 4 rem fixes) et gouttière de 16 px de chaque côté.
-  padding: clamp(1rem, 6vh, 3.5rem) 1rem 2rem;
+  padding: 1rem 1rem 2rem;
+
+  @media (min-width: 480px) {
+    padding-bottom: 4.5rem;
+  }
 }
 
 .auth-card {

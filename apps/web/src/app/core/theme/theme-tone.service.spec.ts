@@ -633,3 +633,19 @@ describe('Tones — validation et orientation des écrans d’authentification (
     });
   }
 });
+
+// Story 34.4 — accroche de la bande d'authentification : une clé par thème, texte propre à chaque
+// thème (contrairement aux messages de validation de la 34.3, volontairement neutres).
+describe('Tones — accroche de la bande d’authentification (Story 34.4)', () => {
+  for (const theme of THEMES) {
+    it(`${theme} porte auth.tagline, non vide`, () => {
+      expect(TONE_MAP[theme]['auth.tagline'], theme).toBeTruthy();
+      expect(TONE_MAP[theme]['auth.tagline'].trim(), theme).not.toBe('');
+    });
+  }
+
+  it('auth.tagline est distincte d’un thème à l’autre', () => {
+    const values = THEMES.map((t) => TONE_MAP[t]['auth.tagline']);
+    expect(new Set(values).size, values.join(' / ')).toBe(THEMES.length);
+  });
+});

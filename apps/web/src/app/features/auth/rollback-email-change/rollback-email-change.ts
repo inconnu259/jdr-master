@@ -13,10 +13,11 @@ import { map } from 'rxjs';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../../core/auth/auth.service';
+import { AuthBand } from '../auth-band/auth-band';
 
 @Component({
   selector: 'app-rollback-email-change',
-  imports: [RouterLink, MatCardModule, MatButtonModule],
+  imports: [AuthBand, RouterLink, MatCardModule, MatButtonModule],
   templateUrl: './rollback-email-change.html',
   styleUrl: './rollback-email-change.scss',
 })

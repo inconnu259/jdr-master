@@ -228,6 +228,9 @@ describe('Login — structure, validation écrite et orientation (Story 34.3)', 
     expect(h1s[0].textContent?.trim()).toBe('Connexion');
     const main = el.querySelector('main')!;
     expect(main.getAttribute('aria-labelledby')).toBe(h1s[0].id);
+    // Bande de marque (story 34.4) : <header> frère de <main>, placé avant lui.
+    expect(el.querySelector('main header.band')).toBeNull();
+    expect(el.querySelector('app-auth-band + main')).not.toBeNull();
     expect(main.contains(el.querySelector('mat-card'))).toBe(true);
   });
 

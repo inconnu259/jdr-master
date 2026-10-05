@@ -130,6 +130,9 @@ describe('Join — structure, états et annonces (Story 34.3)', () => {
     expect(h1s.length).toBe(1);
     expect(h1s[0].textContent?.trim()).toBe('Rejoindre « Le Convoi du Nord »');
     expect(el.querySelector('main')?.getAttribute('aria-labelledby')).toBe(h1s[0].id);
+    // Bande de marque (story 34.4) : <header> frère de <main>, placé avant lui.
+    expect(el.querySelector('main header.band')).toBeNull();
+    expect(el.querySelector('app-auth-band + main')).not.toBeNull();
     const primary = el.querySelectorAll('.auth-primary');
     expect(primary.length).toBe(1);
     expect(primary[0].textContent?.trim()).toBe('Créer un compte');

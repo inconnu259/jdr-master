@@ -124,7 +124,7 @@ describe('Shell — badge de vote en attente sur la destination Parties (Story 2
   it('affiche le badge avec le bon compte quand des polls sont ouverts', async () => {
     const fixture = await createFixture(3);
     expect((fixture.componentInstance as any).openPollsCount()).toBe(3);
-    const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
+    const partiesLink = fixture.nativeElement.querySelector('nav.nav-bar a[routerLink="/"]');
     expect(partiesLink.classList.contains('mat-badge-hidden')).toBe(false);
     const content = partiesLink.querySelector('.mat-badge-content');
     expect(content?.textContent?.trim()).toBe('3');
@@ -133,7 +133,7 @@ describe('Shell — badge de vote en attente sur la destination Parties (Story 2
   it('masque le badge quand le compte est 0', async () => {
     const fixture = await createFixture(0);
     expect((fixture.componentInstance as any).openPollsCount()).toBe(0);
-    const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
+    const partiesLink = fixture.nativeElement.querySelector('nav.nav-bar a[routerLink="/"]');
     expect(partiesLink.classList.contains('mat-badge-hidden')).toBe(true);
   });
 });
@@ -143,7 +143,7 @@ describe('Shell — badge combiné annonces non vues + votes en attente (Story 2
 
   it('additionne polls en attente et annonces non vues dans le même badge', async () => {
     const fixture = await createFixture(2, 3);
-    const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
+    const partiesLink = fixture.nativeElement.querySelector('nav.nav-bar a[routerLink="/"]');
     expect(partiesLink.classList.contains('mat-badge-hidden')).toBe(false);
     const content = partiesLink.querySelector('.mat-badge-content');
     expect(content?.textContent?.trim()).toBe('5');
@@ -151,7 +151,7 @@ describe('Shell — badge combiné annonces non vues + votes en attente (Story 2
 
   it('affiche le badge dès qu’il y a des annonces non vues, même sans poll en attente', async () => {
     const fixture = await createFixture(0, 1);
-    const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
+    const partiesLink = fixture.nativeElement.querySelector('nav.nav-bar a[routerLink="/"]');
     expect(partiesLink.classList.contains('mat-badge-hidden')).toBe(false);
     const content = partiesLink.querySelector('.mat-badge-content');
     expect(content?.textContent?.trim()).toBe('1');
@@ -159,7 +159,7 @@ describe('Shell — badge combiné annonces non vues + votes en attente (Story 2
 
   it('la description accessible mentionne les annonces non vues, jamais la couleur seule', async () => {
     const fixture = await createFixture(0, 2);
-    const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
+    const partiesLink = fixture.nativeElement.querySelector('nav.nav-bar a[routerLink="/"]');
     expect(partiesLink.getAttribute('aria-description') ?? partiesLink.textContent).toBeTruthy();
     expect((fixture.componentInstance as any).homeBadgeDescription()).toContain(
       '2 annonce(s) non lue(s)',
@@ -168,7 +168,7 @@ describe('Shell — badge combiné annonces non vues + votes en attente (Story 2
 
   it('masque le badge quand aucun poll ni aucune annonce non vue', async () => {
     const fixture = await createFixture(0, 0);
-    const partiesLink = fixture.nativeElement.querySelector('a[routerLink="/"]');
+    const partiesLink = fixture.nativeElement.querySelector('nav.nav-bar a[routerLink="/"]');
     expect(partiesLink.classList.contains('mat-badge-hidden')).toBe(true);
   });
 });
@@ -340,5 +340,38 @@ describe('Shell — bandeau contextuel (Story 29.4)', () => {
     );
     expect(active.length).toBe(0);
     expect(fixture.nativeElement.querySelector('nav.nav-bar a[aria-current="page"]')).toBeNull();
+  });
+});
+
+describe('Shell — marque « Dés Dispos » après connexion (Story 34.4)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('barre d’outils : pictogramme + « Dés Dispos », lien vers /, plus de « master-jdr »', async () => {
+    const fixture = await createFixture(0);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const brand = el.querySelector('mat-toolbar a.brand') as HTMLAnchorElement;
+    expect(brand).not.toBeNull();
+    expect(brand.getAttribute('href')).toBe('/');
+    expect(brand.textContent?.trim()).toBe('Dés Dispos');
+    // Pictogramme décoratif : le nom écrit à côté donne son nom accessible au lien.
+    const svg = brand.querySelector('app-brand-logo svg')!;
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+    expect(el.querySelector('mat-toolbar')?.textContent).not.toContain('master-jdr');
+  });
+
+  it('bandeau contextuel mobile : pictogramme seul, lien vers /, nom accessible « Dés Dispos »', async () => {
+    const fixture = await createFixture(0);
+    TestBed.inject(ContextualNavService).set({ title: 'Mes aventures' });
+    fixture.detectChanges();
+
+    const compact = fixture.nativeElement.querySelector(
+      '.contextual-header a.wordmark-compact',
+    ) as HTMLAnchorElement;
+    expect(compact).not.toBeNull();
+    expect(compact.getAttribute('href')).toBe('/');
+    expect(compact.getAttribute('aria-label')).toBe('Dés Dispos');
+    expect(compact.textContent?.trim()).toBe('');
+    expect(compact.querySelector('app-brand-logo svg')?.getAttribute('aria-hidden')).toBe('true');
   });
 });

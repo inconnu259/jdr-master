@@ -8,10 +8,12 @@ import { OpenPollsService } from '../../core/poll/open-polls.service';
 import { UnseenAnnouncementsService } from '../../core/announcements/unseen-announcements.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
+import { BrandLogo } from '../../shared/brand/brand-logo';
 
 @Component({
   selector: 'app-shell',
   imports: [
+    BrandLogo,
     RouterOutlet,
     RouterLink,
     RouterLinkActive,

@@ -100,6 +100,9 @@ describe('Register — structure et validation écrite (Story 34.3)', () => {
     const h1s = el.querySelectorAll('h1');
     expect(h1s.length).toBe(1);
     expect(el.querySelector('main')?.getAttribute('aria-labelledby')).toBe(h1s[0].id);
+    // Bande de marque (story 34.4) : <header> frère de <main>, placé avant lui.
+    expect(el.querySelector('main header.band')).toBeNull();
+    expect(el.querySelector('app-auth-band + main')).not.toBeNull();
     const labels = Array.from(el.querySelectorAll('mat-label')).map((l) => l.textContent?.trim());
     expect(labels).toEqual(['Email', 'Pseudo', 'Mot de passe']);
     expect(el.querySelector('mat-hint')?.textContent?.trim()).toBe('8+ caractères');

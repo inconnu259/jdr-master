@@ -11,10 +11,12 @@ import { PasswordToggle } from '../../../shared/password-reveal/password-toggle'
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { AuthAriaInvalid } from '../aria-invalid';
 import { fieldErrorKey, rejectInvalidSubmit, type MinLengthToneKey } from '../auth-form';
+import { AuthBand } from '../auth-band/auth-band';
 
 @Component({
   selector: 'app-register',
   imports: [
+    AuthBand,
     ReactiveFormsModule,
     RouterLink,
     MatCardModule,

@@ -398,6 +398,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'auth.field_email_invalid': 'Adresse e-mail invalide.',
     'auth.field_pseudo_min': '3 caractères minimum.',
     'auth.field_password_min': '8 caractères minimum.',
+    // Story 34.4 — accroche de la bande d'authentification : une par thème (EXPERIENCE.md §3).
+    'auth.tagline': "Trouvez le soir où le grimoire s'ouvre",
     'account.calendar_layers_title': 'Ce que révèle mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
@@ -843,6 +845,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'auth.field_email_invalid': 'Adresse e-mail invalide.',
     'auth.field_pseudo_min': '3 caractères minimum.',
     'auth.field_password_min': '8 caractères minimum.',
+    // Story 34.4 — accroche de la bande d'authentification : une par thème (EXPERIENCE.md §3).
+    'auth.tagline': 'Un feu de camp, des amis, et une date qui arrange tout le monde',
     'account.calendar_layers_title': 'Ce que montre mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
@@ -1281,6 +1285,8 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     'auth.field_email_invalid': 'Adresse e-mail invalide.',
     'auth.field_pseudo_min': '3 caractères minimum.',
     'auth.field_password_min': '8 caractères minimum.',
+    // Story 34.4 — accroche de la bande d'authentification : une par thème (EXPERIENCE.md §3).
+    'auth.tagline': 'On cale tout le monde, et on lance la machine\u00a0!',
     'account.calendar_layers_title': 'Ce qu’affiche mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',

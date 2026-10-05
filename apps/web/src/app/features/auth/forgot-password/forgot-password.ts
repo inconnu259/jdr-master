@@ -17,10 +17,12 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { AuthAriaInvalid } from '../aria-invalid';
 import { fieldErrorKey, rejectInvalidSubmit } from '../auth-form';
+import { AuthBand } from '../auth-band/auth-band';
 
 @Component({
   selector: 'app-forgot-password',
   imports: [
+    AuthBand,
     ReactiveFormsModule,
     RouterLink,
     MatCardModule,

@@ -68,6 +68,9 @@ describe('ResetPassword — structure et validation écrite (Story 34.3)', () =>
     const h1s = el.querySelectorAll('h1');
     expect(h1s.length).toBe(1);
     expect(el.querySelector('main')?.getAttribute('aria-labelledby')).toBe(h1s[0].id);
+    // Bande de marque (story 34.4) : <header> frère de <main>, placé avant lui.
+    expect(el.querySelector('main header.band')).toBeNull();
+    expect(el.querySelector('app-auth-band + main')).not.toBeNull();
     expect(el.querySelector('mat-label')?.textContent?.trim()).toBe('Nouveau mot de passe');
     expect(el.querySelector('mat-hint')?.textContent?.trim()).toBe('8+ caractères');
     expect(el.querySelectorAll('.auth-primary').length).toBe(1);
