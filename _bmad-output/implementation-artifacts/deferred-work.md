@@ -203,3 +203,6 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-distinguer-creation-personnage-et-homme-dragon.md`
   summary: DESIGN.md §7.3 (ligne « À forger ») ne décrit que la ligne neutre ; documenter la variante Homme Dragon (bordure et pastille `accent-2`, `NatureMarker` sous le libellé).
   evidence: la ligne d'Homme Dragon est désormais teintée et marquée dans `character-creation-entries` ; le document de conception, source de vérité visuelle, n'en dit rien.
+- source_spec: `_bmad-output/implementation-artifacts/spec-35-1-decoupe-des-themes-et-renommage.md`
+  summary: La garde de parité des clés de thème (erreur de type) n'est exécutée ni par la CI ni par Vitest : seul `pnpm build` du web la voit, et la CI ne construit pas le front.
+  evidence: `.github/workflows/ci.yml` ne lance que types et build de l'API plus les tests ; une clé retirée à `atelier-cuivre` fait échouer `pnpm build` (TS2741) mais passerait la CI. Préexistant (même constat pour tout le typage du front), exposé par la 35.1 qui en fait la garantie centrale.

@@ -80,12 +80,12 @@ describe('AuthBand — bande de marque des écrans d’authentification (Story 3
     const { fixture, el, themeSvc } = await render(makeThemeService('grimoire-emeraude'));
     expect(el.querySelectorAll('.star').length).toBeGreaterThan(0);
 
-    themeSvc.switchTo('medieval-steampunk');
+    themeSvc.switchTo('atelier-cuivre');
     fixture.detectChanges();
     expect(el.querySelectorAll('.star').length).toBe(0);
     expect(el.querySelectorAll('.spin').length).toBeGreaterThan(0);
     expect(el.querySelector('.tag')?.textContent?.trim()).toBe(
-      TONE_MAP['medieval-steampunk']['auth.tagline'],
+      TONE_MAP['atelier-cuivre']['auth.tagline'],
     );
 
     themeSvc.switchTo('foret-ancienne');

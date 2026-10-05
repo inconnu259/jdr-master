@@ -84,11 +84,11 @@ function makeThemeService() {
     }),
     // ThemeSelector (intégré à l'écran de compte, Story 28.4) a besoin de ces membres.
     activeTheme: signal('grimoire-emeraude'),
-    themes: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
+    themes: ['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'],
     themeNames: {
       'grimoire-emeraude': 'Grimoire Émeraude',
       'foret-ancienne': 'Forêt Ancienne',
-      'medieval-steampunk': 'Médiéval Steampunk',
+      'atelier-cuivre': 'Atelier Cuivré',
     },
     setTheme: vi.fn(),
   };

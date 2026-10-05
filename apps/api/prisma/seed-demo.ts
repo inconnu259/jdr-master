@@ -408,7 +408,7 @@ async function main() {
     calendarLayersSetAt: at(-5, 9),
   });
   const bob = await createUser('bob@example.com', 'Bob', {
-    theme: 'medieval-steampunk',
+    theme: 'atelier-cuivre',
     partiesSort: 'date',
     partiesViewMode: 'compact',
     charactersViewMode: 'compact',
@@ -439,7 +439,7 @@ async function main() {
   // Cas limite : membre d'une Partie SANS aucun personnage — état de départ réel qu'aucun compte
   // n'exerçait, la vue « Mes personnages » et l'invitation à créer une fiche restaient intestables.
   const faustine = await createUser('faustine@example.com', 'Faustine', {
-    theme: 'medieval-steampunk',
+    theme: 'atelier-cuivre',
     partiesSort: 'urgence',
   });
 

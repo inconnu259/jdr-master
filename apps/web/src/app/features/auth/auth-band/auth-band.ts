@@ -15,7 +15,7 @@ type SceneKind = 'emeraude' | 'foret' | 'atelier';
 const SCENE_BY_THEME: Record<Theme, SceneKind> = {
   'grimoire-emeraude': 'emeraude',
   'foret-ancienne': 'foret',
-  'medieval-steampunk': 'atelier',
+  'atelier-cuivre': 'atelier',
 };
 
 /**

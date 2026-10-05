@@ -8,11 +8,11 @@ import { AccountService } from '../../../core/account/account.service';
 function makeThemeSvc(active = 'grimoire-emeraude') {
   return {
     activeTheme: signal(active),
-    themes: ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'],
+    themes: ['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'],
     themeNames: {
       'grimoire-emeraude': 'Grimoire Émeraude',
       'foret-ancienne': 'Forêt Ancienne',
-      'medieval-steampunk': 'Médiéval Steampunk',
+      'atelier-cuivre': 'Atelier Cuivré',
     },
     setTheme: vi.fn(),
   };

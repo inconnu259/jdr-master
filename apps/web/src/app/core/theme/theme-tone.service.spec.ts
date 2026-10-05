@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { ThemeToneService } from './theme-tone.service';
-import { THEMES, TONE_MAP } from './tones';
+import { THEME_NAMES, THEMES, TONE_MAP } from './tones';
 
 describe('ThemeToneService', () => {
   afterEach(() => {
@@ -33,6 +33,44 @@ describe('ThemeToneService', () => {
     const service = TestBed.inject(ThemeToneService);
 
     expect(service.activeTheme()).toBe('grimoire-emeraude');
+  });
+
+  it("Story 35.1 : un cache d'avant le renommage (`medieval-steampunk`) est lu comme `atelier-cuivre`", () => {
+    localStorage.setItem('jdr-theme', 'medieval-steampunk');
+
+    const service = TestBed.inject(ThemeToneService);
+
+    expect(service.activeTheme()).toBe('atelier-cuivre');
+    expect(document.body.classList.contains('theme-atelier-cuivre')).toBe(true);
+    expect(document.body.classList.contains('theme-medieval-steampunk')).toBe(false);
+  });
+
+  it("Story 35.1 : une clé héritée du prototype (`constructor`) n'est pas prise pour un alias", () => {
+    localStorage.setItem('jdr-theme', 'constructor');
+
+    const service = TestBed.inject(ThemeToneService);
+
+    expect(service.activeTheme()).toBe('grimoire-emeraude');
+  });
+});
+
+// Story 35.1 — registre découpé en un fichier par thème.
+describe('Tones — registre découpé par thème (Story 35.1)', () => {
+  it('Atelier Cuivré est le nom affiché du thème `atelier-cuivre`', () => {
+    expect(THEME_NAMES['atelier-cuivre']).toBe('Atelier Cuivré');
+    expect(THEMES).toContain('atelier-cuivre');
+    expect(THEMES).not.toContain('medieval-steampunk' as never);
+  });
+
+  it('les trois thèmes portent exactement le même jeu de clés, valeurs non vides', () => {
+    const reference = Object.keys(TONE_MAP['grimoire-emeraude']).sort();
+    expect(reference.length).toBeGreaterThan(0);
+    for (const theme of THEMES) {
+      expect(Object.keys(TONE_MAP[theme]).sort(), theme).toEqual(reference);
+      for (const [key, value] of Object.entries(TONE_MAP[theme])) {
+        expect(value.length, `${theme} → ${key}`).toBeGreaterThan(0);
+      }
+    }
   });
 });
 

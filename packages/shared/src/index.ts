@@ -5,7 +5,7 @@
 
 /** Thèmes disponibles — liste déclarée une seule fois (AD-13), la validation API s'y réfère
  *  directement (`@IsIn(THEMES)`), jamais une seconde liste côté serveur. */
-export const THEMES = ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'] as const;
+export const THEMES = ['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'] as const;
 
 export type Theme = (typeof THEMES)[number];
 

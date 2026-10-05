@@ -169,7 +169,7 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 ## Palier 9 — Refonte UI & harmonisation des thèmes *(ex-Palier 6)*
 
 - [ ] Passe d'amélioration de l'UI existante (polish, cohérence visuelle inter-écrans).
-- [ ] Revue des textes des 3 thèmes (Grimoire Émeraude, Forêt Ancienne, Médiéval Steampunk) —
+- [ ] Revue des textes des 3 thèmes (Grimoire Émeraude, Forêt Ancienne, Atelier Cuivré) —
       cohérence de registre, complétude des clés `tones.ts`, élimination des libellés orphelins/oubliés.
 - [ ] `ScenarioTimeline` ne correspond pas au mockup `DESIGN.md` (retour utilisateur, 2026-07-14) : pas
       de ronds d'accroche des nœuds sur la ligne chronologique, ligne et rectangles de scénario trop

@@ -4,6 +4,10 @@ import { THEME_NAMES, THEMES, TONE_MAP, type Theme } from './tones';
 const LS_KEY = 'jdr-theme';
 const DEFAULT_THEME: Theme = 'grimoire-emeraude';
 const THEME_CLASS_PREFIX = 'theme-';
+// Identifiants de thème renommés : la valeur de `jdr-theme` écrite avant le renommage reste lisible.
+const LEGACY_THEME_ALIASES: Record<string, Theme> = {
+  'medieval-steampunk': 'atelier-cuivre',
+};
 
 @Injectable({ providedIn: 'root' })
 export class ThemeToneService {
@@ -55,7 +59,10 @@ export class ThemeToneService {
   private readStoredTheme(): Theme | null {
     try {
       if (typeof localStorage === 'undefined') return null;
-      const stored = localStorage.getItem(LS_KEY);
+      const raw = localStorage.getItem(LS_KEY);
+      // Un cache d'avant le renommage garde l'ancien identifiant : il vaut `atelier-cuivre`.
+      const stored =
+        raw !== null && Object.hasOwn(LEGACY_THEME_ALIASES, raw) ? LEGACY_THEME_ALIASES[raw] : raw;
       return THEMES.includes(stored as Theme) ? (stored as Theme) : null;
     } catch {
       return null;
