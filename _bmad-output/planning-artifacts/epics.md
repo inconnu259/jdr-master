@@ -2210,7 +2210,42 @@ So that l'application inspire confiance avant même que j'aie un compte.
 
 **Given** je ne suis pas connecté
 **When** j'ouvre l'un de ces écrans
-**Then** il s'affiche dans le dernier thème connu localement, sans clignotement
+**Then** il s'affiche dans le dernier thème connu localement, ou dans un thème tiré au hasard si aucun n'est connu, sans clignotement
+
+**Given** un formulaire d'authentification invalide
+**When** je le valide
+**Then** chaque champ fautif affiche un message qui nomme la règle
+**And** le focus va au premier champ fautif et rien n'est envoyé
+
+**Given** n'importe quel écran d'authentification
+**When** un lecteur d'écran le parcourt
+**Then** la langue est le français, le titre d'onglet nomme l'écran et la structure comporte un titre dans une zone principale
+**And** les erreurs et les réussites sont annoncées
+
+*L'identité visuelle (bande animée, logo, emblèmes, accroches par thème) est la story 34.4, dessinée par la passe UX `ux-jdr-master-2026-10-05`.*
+
+### Story 34.4 : Identité visuelle « Dés Dispos » des écrans d'authentification
+
+As a visiteur qui ne connaît pas l'application,
+I want comprendre dès l'arrivée qu'il s'agit d'organiser des parties de jeu de rôle entre amis,
+So that je sache où j'arrive avant d'avoir lu quoi que ce soit.
+
+**Acceptance Criteria:**
+
+**Given** n'importe quel écran d'authentification, dans chacun des trois thèmes
+**When** il s'affiche
+**Then** une bande au décor propre au thème, le nom « Dés Dispos », son logo et une accroche propre au thème précèdent la carte
+
+**Given** la bande animée
+**When** je clique ou touche le fond animé
+**Then** l'animation se fige sur place, et un second clic la relance
+**And** avec « réduire les animations » activé, elle reste immobile d'office
+
+**Given** l'application après connexion
+**When** je regarde l'onglet du navigateur
+**Then** le favicon et le nom reflètent « Dés Dispos »
+
+*Spines : `ux-jdr-master-2026-10-05` (`DESIGN.md`, `EXPERIENCE.md` §2 à §4, §11 b). Dépend de la 34.3 (feuille partagée, structure `<main>`). Le bandeau de navigation de l'application (« master-jdr ») reste à arbitrer à la rédaction de la spec.*
 
 ---
 
