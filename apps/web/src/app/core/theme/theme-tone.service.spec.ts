@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { vi } from 'vitest';
 import { ThemeToneService } from './theme-tone.service';
 import { THEMES, TONE_MAP } from './tones';
 
@@ -503,4 +504,132 @@ describe('Tones — libellés de révélation du mot de passe (Story 34.2)', () 
       expect(TONE_MAP[theme]['auth.password_show']).not.toBe(TONE_MAP[theme]['auth.password_hide']);
     }
   });
+});
+
+// Story 34.3 — thème de la visite, posé avant le premier rendu d'Angular : le dernier thème connu,
+// sinon un tirage équiprobable parmi THEMES, jamais écrit dans le stockage (sinon la visite
+// suivante le prendrait pour un thème connu et le tirage cesserait).
+describe('ThemeToneService — thème de la visite (Story 34.3)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+    document.body.className = '';
+    TestBed.resetTestingModule();
+  });
+
+  const themeClasses = () =>
+    Array.from(document.body.classList).filter((c) => c.startsWith('theme-'));
+
+  it('thème mémorisé valide : appliqué tel quel, aucun tirage', () => {
+    localStorage.setItem('jdr-theme', 'foret-ancienne');
+    const random = vi.spyOn(Math, 'random');
+
+    const service = TestBed.inject(ThemeToneService);
+    service.applyVisitTheme();
+
+    expect(service.activeTheme()).toBe('foret-ancienne');
+    expect(themeClasses()).toEqual(['theme-foret-ancienne']);
+    expect(random).not.toHaveBeenCalled();
+  });
+
+  for (const [index, theme] of THEMES.entries()) {
+    it(`aucun thème mémorisé : le tirage peut donner « ${theme} » (équiprobable parmi THEMES)`, () => {
+      vi.spyOn(Math, 'random').mockReturnValue((index + 0.5) / THEMES.length);
+
+      const service = TestBed.inject(ThemeToneService);
+      service.applyVisitTheme();
+
+      expect(service.activeTheme()).toBe(theme);
+      expect(themeClasses()).toEqual([`theme-${theme}`]);
+    });
+  }
+
+  it("le thème tiré n'est jamais écrit dans le stockage", () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    vi.spyOn(Math, 'random').mockReturnValue(0.99);
+
+    const service = TestBed.inject(ThemeToneService);
+    service.applyVisitTheme();
+
+    expect(setItem).not.toHaveBeenCalled();
+    expect(localStorage.getItem('jdr-theme')).toBeNull();
+  });
+
+  it('valeur illisible ou inconnue : traitée comme « aucune information » (tirage), classe résiduelle retirée', () => {
+    localStorage.setItem('jdr-theme', 'theme-disparu');
+    document.body.classList.add('theme-disparu', 'theme-grimoire-emeraude');
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const service = TestBed.inject(ThemeToneService);
+    service.applyVisitTheme();
+
+    expect(service.activeTheme()).toBe(THEMES[Math.floor(0.5 * THEMES.length)]);
+    expect(themeClasses()).toEqual([`theme-${service.activeTheme()}`]);
+    expect(localStorage.getItem('jdr-theme')).toBe('theme-disparu');
+  });
+
+  it('stockage indisponible : aucune erreur, un thème est tiré et appliqué, rien écrit', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('accès refusé', 'SecurityError');
+    });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+
+    const service = TestBed.inject(ThemeToneService);
+    expect(() => service.applyVisitTheme()).not.toThrow();
+
+    expect(service.activeTheme()).toBe(THEMES[0]);
+    expect(themeClasses()).toEqual([`theme-${THEMES[0]}`]);
+    expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it('setTheme reste le seul à écrire le stockage, et retire toute classe theme-*', () => {
+    document.body.classList.add('theme-inconnu');
+    const service = TestBed.inject(ThemeToneService);
+
+    service.setTheme('foret-ancienne');
+
+    expect(localStorage.getItem('jdr-theme')).toBe('foret-ancienne');
+    expect(themeClasses()).toEqual(['theme-foret-ancienne']);
+  });
+
+  it('setTheme ne plante pas si le stockage est indisponible, et applique quand même le thème', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError');
+    });
+    const service = TestBed.inject(ThemeToneService);
+
+    expect(() => service.setTheme('foret-ancienne')).not.toThrow();
+    expect(service.activeTheme()).toBe('foret-ancienne');
+  });
+});
+
+// Story 34.3 — ligne d'orientation de la connexion et messages de validation des formulaires
+// d'authentification. Garde de parité : une clé posée dans un seul thème rendrait `undefined` à
+// l'écran dans les deux autres. Texte neutre de référence (EXPERIENCE.md §3), identique dans les
+// trois thèmes pour cette story (l'habillage thématique relève de l'épic 35) ; il NOMME la règle.
+describe('Tones — validation et orientation des écrans d’authentification (Story 34.3)', () => {
+  const RULE_WORDS: Record<string, string> = {
+    'auth.login_invite_only': 'invitation',
+    'auth.field_required': 'champ',
+    'auth.field_email_invalid': 'e-mail',
+    'auth.field_pseudo_min': '3 caractères',
+    'auth.field_password_min': '8 caractères',
+  };
+
+  for (const theme of THEMES) {
+    it(`${theme} porte les ${Object.keys(RULE_WORDS).length} clés, non vides, et nomme la règle`, () => {
+      for (const [key, word] of Object.entries(RULE_WORDS)) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+        expect(TONE_MAP[theme][key].toLowerCase(), `${theme} / ${key}`).toContain(word);
+      }
+    });
+  }
+
+  for (const key of Object.keys(RULE_WORDS)) {
+    it(`${key} est identique dans les trois thèmes (texte neutre de référence)`, () => {
+      const values = THEMES.map((t) => TONE_MAP[t][key]);
+      expect(new Set(values).size, `${key} → ${values.join(' / ')}`).toBe(1);
+    });
+  }
 });

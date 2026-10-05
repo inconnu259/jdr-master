@@ -194,3 +194,9 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-34-2-champ-de-mot-de-passe-revelable-lien-mort-retire.md`
   summary: Les trois champs de mot de passe de l'écran de compte (mot de passe actuel pour le changement d'e-mail, mot de passe actuel et nouveau mot de passe) n'ont aucun attribut `autocomplete`, contrairement à la connexion, l'inscription et la réinitialisation.
   evidence: `account.html` ; sans `current-password` / `new-password`, un gestionnaire de mots de passe peut remplir le mauvais champ. Préexistant : la story 34.2 n'y ajoute que la bascule de révélation et doit conserver `autocomplete` tel quel.
+- source_spec: `_bmad-output/implementation-artifacts/spec-34-3-mise-en-forme-des-ecrans-dauthentification.md`
+  summary: Sur « rejoindre », si `AuthService.loadSession()` rejette, la page reste indéfiniment sur « Chargement… » (aucun titre, aucune action, aucune sortie).
+  evidence: `join.ts` `ngOnInit` appelle `await this.auth.loadSession()` hors du `try` qui ne protège que `preview()` ; préexistant (inchangé depuis `2985446`), exposé par la 34.3 puisque le conteneur `role="status"` annonce désormais ce chargement.
+- source_spec: `_bmad-output/implementation-artifacts/spec-34-3-mise-en-forme-des-ecrans-dauthentification.md`
+  summary: Le bouton « Rejoindre » de « rejoindre » n'a aucun état d'envoi : un double clic envoie deux demandes de `join()`.
+  evidence: `join.html` / `join.ts` `join()` sans signal `loading` ni `disabled` ; préexistant, les autres formulaires d'authentification désactivent leur bouton pendant l'envoi.

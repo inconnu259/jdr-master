@@ -1,4 +1,12 @@
-import { Component, inject, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
@@ -15,6 +23,9 @@ import { AuthService } from '../../../core/auth/auth.service';
 export class ConfirmEmailChange {
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly injector = inject(Injector);
+  /** Conteneur `role="status"` persistant : reçoit le focus quand le bouton activé disparaît. */
+  private readonly status = viewChild<ElementRef<HTMLElement>>('status');
 
   // Même patron que ResetPassword : lecture réactive (pas `snapshot` seul) au cas où l'instance
   // de composant serait réutilisée entre deux liens ouverts successivement.
@@ -34,6 +45,7 @@ export class ConfirmEmailChange {
     try {
       await this.auth.confirmEmailChange(token);
       this.confirmed.set(true);
+      afterNextRender(() => this.status()?.nativeElement.focus(), { injector: this.injector });
     } catch {
       // Aucune redirection automatique : l'utilisateur peut déjà être connecté ailleurs, on le
       // laisse choisir sa prochaine action.

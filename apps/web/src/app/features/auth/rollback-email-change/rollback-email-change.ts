@@ -1,4 +1,12 @@
-import { Component, inject, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  Injector,
+  afterNextRender,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
@@ -16,6 +24,9 @@ export class RollbackEmailChange {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly injector = inject(Injector);
+  /** Conteneur `role="status"` persistant : reçoit le focus quand le bouton activé disparaît. */
+  private readonly status = viewChild<ElementRef<HTMLElement>>('status');
 
   protected readonly token = toSignal(
     this.route.paramMap.pipe(map((params) => params.get('token') ?? '')),
@@ -35,6 +46,7 @@ export class RollbackEmailChange {
       // Accusé de réception affiché avant la redirection (revue de code, patron ConfirmEmailChange)
       // — l'utilisateur doit voir que le rollback a bien eu lieu avant d'être envoyé ailleurs.
       this.restored.set(true);
+      afterNextRender(() => this.status()?.nativeElement.focus(), { injector: this.injector });
     } catch {
       this.error.set('Lien invalide ou expiré.');
     } finally {

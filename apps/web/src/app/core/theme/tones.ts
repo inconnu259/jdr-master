@@ -390,6 +390,14 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     // Story 34.2 — libellés du bouton de révélation du mot de passe : neutres, non thématisés.
     'auth.password_show': 'Afficher le mot de passe',
     'auth.password_hide': 'Masquer le mot de passe',
+    // Story 34.3 — ligne d'orientation de la connexion et messages de validation des formulaires
+    // d'authentification : libellé neutre de référence, identique dans les trois thèmes (chacun nomme
+    // la règle) ; l'habillage thématique relève de la revue éditoriale de l'épic 35.
+    'auth.login_invite_only': "L'inscription se fait sur invitation.",
+    'auth.field_required': 'Renseignez ce champ.',
+    'auth.field_email_invalid': 'Adresse e-mail invalide.',
+    'auth.field_pseudo_min': '3 caractères minimum.',
+    'auth.field_password_min': '8 caractères minimum.',
     'account.calendar_layers_title': 'Ce que révèle mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
@@ -827,6 +835,14 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     // Story 34.2 — libellés du bouton de révélation du mot de passe : neutres, non thématisés.
     'auth.password_show': 'Afficher le mot de passe',
     'auth.password_hide': 'Masquer le mot de passe',
+    // Story 34.3 — ligne d'orientation de la connexion et messages de validation des formulaires
+    // d'authentification : libellé neutre de référence, identique dans les trois thèmes (chacun nomme
+    // la règle) ; l'habillage thématique relève de la revue éditoriale de l'épic 35.
+    'auth.login_invite_only': "L'inscription se fait sur invitation.",
+    'auth.field_required': 'Renseignez ce champ.',
+    'auth.field_email_invalid': 'Adresse e-mail invalide.',
+    'auth.field_pseudo_min': '3 caractères minimum.',
+    'auth.field_password_min': '8 caractères minimum.',
     'account.calendar_layers_title': 'Ce que montre mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',
@@ -1257,6 +1273,14 @@ export const TONE_MAP: Record<Theme, Record<string, string>> = {
     // Story 34.2 — libellés du bouton de révélation du mot de passe : neutres, non thématisés.
     'auth.password_show': 'Afficher le mot de passe',
     'auth.password_hide': 'Masquer le mot de passe',
+    // Story 34.3 — ligne d'orientation de la connexion et messages de validation des formulaires
+    // d'authentification : libellé neutre de référence, identique dans les trois thèmes (chacun nomme
+    // la règle) ; l'habillage thématique relève de la revue éditoriale de l'épic 35.
+    'auth.login_invite_only': "L'inscription se fait sur invitation.",
+    'auth.field_required': 'Renseignez ce champ.',
+    'auth.field_email_invalid': 'Adresse e-mail invalide.',
+    'auth.field_pseudo_min': '3 caractères minimum.',
+    'auth.field_password_min': '8 caractères minimum.',
     'account.calendar_layers_title': 'Ce qu’affiche mon calendrier',
     'account.calendar_layer.mes-indisponibilites': 'Mes indisponibilités',
     'account.calendar_layer.mes-disponibilites': 'Mes disponibilités',

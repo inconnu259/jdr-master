@@ -211,3 +211,78 @@ describe('Login — lien mort retiré et mot de passe révélable (Story 34.2)',
     expect(input.type).toBe('password');
   });
 });
+
+describe('Login — structure, validation écrite et orientation (Story 34.3)', () => {
+  beforeEach(() => localStorage.setItem('jdr-theme', THEME));
+  afterEach(() => {
+    localStorage.clear();
+    TestBed.resetTestingModule();
+  });
+
+  it('un seul h1 « Connexion », dans un <main> relié au titre', async () => {
+    const { fixture } = await createFixture(vi.fn());
+    const el = fixture.nativeElement as HTMLElement;
+
+    const h1s = el.querySelectorAll('h1');
+    expect(h1s.length).toBe(1);
+    expect(h1s[0].textContent?.trim()).toBe('Connexion');
+    const main = el.querySelector('main')!;
+    expect(main.getAttribute('aria-labelledby')).toBe(h1s[0].id);
+    expect(main.contains(el.querySelector('mat-card'))).toBe(true);
+  });
+
+  it('une seule action principale, hors de la rangée des actions secondaires', async () => {
+    const { fixture } = await createFixture(vi.fn());
+    const el = fixture.nativeElement as HTMLElement;
+
+    const primary = el.querySelectorAll('.auth-primary');
+    expect(primary.length).toBe(1);
+    expect(primary[0].getAttribute('type')).toBe('submit');
+    const row = el.querySelector('.auth-secondary-actions')!;
+    expect(row.contains(primary[0])).toBe(false);
+    expect(row.querySelectorAll('a.auth-secondary-link').length).toBe(1);
+  });
+
+  it('ligne d’orientation : texte du ton, sous la rangée d’actions, jamais un lien', async () => {
+    const { fixture } = await createFixture(vi.fn());
+    const el = fixture.nativeElement as HTMLElement;
+
+    const line = el.querySelector('.auth-orientation')!;
+    expect(line.textContent?.trim()).toBe(tone['auth.login_invite_only']);
+    expect(line.querySelector('a, button')).toBeNull();
+    const row = el.querySelector('.auth-secondary-actions')!;
+    expect(row.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('envoi invalide : aucun appel serveur, messages écrits, focus sur le premier champ invalide', async () => {
+    const login = vi.fn();
+    const { fixture, component, navigate } = await createFixture(login);
+    component.form.setValue({ identifier: '', password: '' });
+
+    await component.submit();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(login).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    const messages = Array.from(el.querySelectorAll('mat-error')).map((e) => e.textContent?.trim());
+    expect(messages).toEqual([tone['auth.field_required'], tone['auth.field_required']]);
+    const identifier = el.querySelector('input[formControlName="identifier"]') as HTMLInputElement;
+    expect(document.activeElement).toBe(identifier);
+    expect(identifier.getAttribute('aria-invalid')).toBe('true');
+    expect(identifier.getAttribute('aria-describedby')).toBeTruthy();
+  });
+
+  it('seul le mot de passe est vide : le focus va au mot de passe, l’identifiant est conservé', async () => {
+    const { fixture, component } = await createFixture(vi.fn());
+    component.form.setValue({ identifier: 'alice', password: '' });
+
+    await component.submit();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    expect(document.activeElement).toBe(el.querySelector('input[formControlName="password"]'));
+    expect(component.form.getRawValue().identifier).toBe('alice');
+  });
+});

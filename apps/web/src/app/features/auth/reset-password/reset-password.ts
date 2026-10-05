@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, ElementRef, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -10,6 +10,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../../core/auth/auth.service';
 import { PasswordReveal } from '../../../shared/password-reveal/password-reveal';
 import { PasswordToggle } from '../../../shared/password-reveal/password-toggle';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { AuthAriaInvalid } from '../aria-invalid';
+import { fieldErrorKey, rejectInvalidSubmit } from '../auth-form';
 
 @Component({
   selector: 'app-reset-password',
@@ -20,6 +23,7 @@ import { PasswordToggle } from '../../../shared/password-reveal/password-toggle'
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
+    AuthAriaInvalid,
     PasswordReveal,
     PasswordToggle,
   ],
@@ -31,6 +35,8 @@ export class ResetPassword {
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly tone = inject(ThemeToneService).tone;
 
   /**
    * Le lien reçu par e-mail porte le token dans le chemin : /reset-password/:token. Lu de façon
@@ -48,9 +54,20 @@ export class ResetPassword {
     newPassword: ['', [Validators.required, Validators.minLength(8)]],
   });
 
+  /** Message de validation écrit du champ (un seul par champ), ou chaîne vide s'il est valide. */
+  protected fieldError(name: 'newPassword'): string {
+    const key = fieldErrorKey(this.form.controls[name], 'auth.field_password_min');
+    return key ? this.tone()[key] : '';
+  }
+
   async submit(): Promise<void> {
     const token = this.token();
-    if (this.form.invalid || !token) return;
+    if (!token) return;
+    if (this.form.invalid) {
+      // Envoi invalide : jamais muet — messages, focus sur le premier champ invalide, aucun appel.
+      rejectInvalidSubmit(this.form, this.host.nativeElement);
+      return;
+    }
     this.loading.set(true);
     this.error.set(null);
     try {

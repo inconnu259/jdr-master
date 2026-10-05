@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="utf-8" />
-    <title>Web</title>
+    <title>Dés Dispos</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
@@ -13,6 +13,18 @@
       rel="stylesheet"
     />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+    <!--
+      Fond sombre neutre, AVANT le démarrage d'Angular : les trois thèmes sont sombres, la page ne doit
+      jamais s'afficher un instant sur fond clair. Seul code couleur en dur hors thème (exception
+      documentée, aucune liste de thèmes ici) ; la règle cesse de s'appliquer dès que la classe `theme-*`
+      est posée sur <body> par ThemeToneService, et sa spécificité l'emporte sur le `body` de styles.scss.
+    -->
+    <style>
+      body:not([class*="theme-"]) {
+        background-color: #16151b;
+        color-scheme: dark;
+      }
+    </style>
   </head>
   <body>
     <app-root></app-root>

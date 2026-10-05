@@ -56,3 +56,57 @@ describe('ConfirmEmailChange', () => {
     expect(component.confirmed()).toBe(false);
   });
 });
+
+describe('ConfirmEmailChange — structure et annonces (Story 34.3)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('un seul h1 dans un <main>, une action principale, « Retour à la connexion » en secondaire', () => {
+    const fixture = createFixture('tok1.secret', vi.fn());
+    const el = fixture.nativeElement as HTMLElement;
+
+    const h1s = el.querySelectorAll('h1');
+    expect(h1s.length).toBe(1);
+    expect(h1s[0].textContent?.trim()).toBe("Confirmer le changement d'adresse e-mail");
+    expect(el.querySelector('main')?.getAttribute('aria-labelledby')).toBe(h1s[0].id);
+    expect(el.querySelectorAll('.auth-primary').length).toBe(1);
+    expect(el.querySelector('.auth-secondary-actions a')?.getAttribute('href')).toBe('/login');
+  });
+
+  it('« Lien invalide. » présent au chargement : texte simple sans role="alert", action désactivée', () => {
+    const fixture = createFixture('', vi.fn());
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('p.error')?.textContent?.trim()).toBe('Lien invalide.');
+    expect(el.querySelector('[role="alert"]')).toBeNull();
+    expect((el.querySelector('.auth-primary') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('réussite : message dans le conteneur role="status" persistant, focus déplacé, bouton retiré', async () => {
+    const fixture = createFixture('tok1.secret', vi.fn().mockResolvedValue(undefined));
+    const el = fixture.nativeElement as HTMLElement;
+    const status = el.querySelector('[role="status"]') as HTMLElement;
+    expect(status.textContent?.trim()).toBe('');
+
+    await (fixture.componentInstance as any).confirm();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(el.querySelector('[role="status"]')).toBe(status);
+    expect(status.textContent?.trim()).toBe('Votre adresse e-mail a été changée.');
+    expect(el.querySelector('.auth-primary')).toBeNull();
+    expect(document.activeElement).toBe(status);
+  });
+
+  it('échec après action : message avec role="alert", bouton conservé', async () => {
+    const fixture = createFixture('bad.token', vi.fn().mockRejectedValue(new Error('400')));
+    const el = fixture.nativeElement as HTMLElement;
+
+    await (fixture.componentInstance as any).confirm();
+    fixture.detectChanges();
+
+    expect(el.querySelector('p.error[role="alert"]')?.textContent).toContain(
+      'Lien invalide ou expiré',
+    );
+    expect(el.querySelector('.auth-primary')).not.toBeNull();
+  });
+});

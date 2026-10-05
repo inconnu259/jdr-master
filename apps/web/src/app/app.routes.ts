@@ -21,23 +21,27 @@ const partieForm = () =>
   import('./features/parties/partie-form/partie-form').then((m) => m.PartieForm);
 
 export const routes: Routes = [
-  { path: 'login', component: Login },
+  { path: 'login', title: 'Connexion', component: Login },
   {
     path: 'register',
+    title: 'Créer un compte',
     loadComponent: () => import('./features/auth/register/register').then((m) => m.Register),
   },
   {
     path: 'forgot-password',
+    title: 'Mot de passe oublié',
     loadComponent: () =>
       import('./features/auth/forgot-password/forgot-password').then((m) => m.ForgotPassword),
   },
   {
     path: 'reset-password/:token',
+    title: 'Nouveau mot de passe',
     loadComponent: () =>
       import('./features/auth/reset-password/reset-password').then((m) => m.ResetPassword),
   },
   {
     path: 'confirm-email-change/:token',
+    title: "Confirmer le changement d'e-mail",
     loadComponent: () =>
       import('./features/auth/confirm-email-change/confirm-email-change').then(
         (m) => m.ConfirmEmailChange,
@@ -45,6 +49,7 @@ export const routes: Routes = [
   },
   {
     path: 'rollback-email-change/:token',
+    title: "Annuler le changement d'e-mail",
     loadComponent: () =>
       import('./features/auth/rollback-email-change/rollback-email-change').then(
         (m) => m.RollbackEmailChange,
@@ -53,6 +58,7 @@ export const routes: Routes = [
   {
     // hors zone authentifiée : un nouveau venu doit y accéder
     path: 'join/:token',
+    title: 'Rejoindre',
     loadComponent: () => import('./features/join/join').then((m) => m.Join),
   },
   {
