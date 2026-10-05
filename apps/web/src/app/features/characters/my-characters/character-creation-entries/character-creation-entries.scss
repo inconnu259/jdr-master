@@ -43,6 +43,28 @@
     }
   }
 
+  // Ligne d'Homme Dragon (rôle MJ) : même teinte `accent-2` que le `NatureMarker` des cartes
+  // (DESIGN.md §7.4), pour ne jamais la confondre avec la création d'un personnage joueur. La
+  // nature reste portée par le libellé et le marqueur, la couleur n'est qu'un renfort.
+  &__row--dragon {
+    border-color: var(--jdr-accent-2, #a68cf0);
+
+    .character-creation-entries__badge {
+      border-color: var(--jdr-accent-2, #a68cf0);
+      color: var(--jdr-accent-2, #a68cf0);
+    }
+  }
+
+  // Libellé puis marqueur en colonne : le marqueur ne réduit jamais la largeur du libellé.
+  &__text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+  }
+
   &__badge {
     display: flex;
     align-items: center;
@@ -57,7 +79,6 @@
   }
 
   &__label {
-    flex: 1;
     min-width: 0;
   }
 

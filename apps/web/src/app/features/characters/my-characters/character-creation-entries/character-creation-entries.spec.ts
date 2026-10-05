@@ -64,6 +64,24 @@ describe('CharacterCreationEntries (Story 29.16)', () => {
     expect(rows[0].getAttribute('href')).toBe('/parties/p9/homme-dragon');
   });
 
+  it('ligne d’Homme Dragon : modificateur de teinte et marqueur de nature décoratif (aria-hidden)', async () => {
+    const { fixture } = await createFixture([makeEntry({ kind: 'hommeDragon', partieId: 'p9' })]);
+
+    const row: HTMLElement = fixture.nativeElement.querySelector('.character-creation-entries__row');
+    expect(row.classList).toContain('character-creation-entries__row--dragon');
+    const nature: HTMLElement = row.querySelector('.character-creation-entries__nature')!;
+    expect(nature.getAttribute('aria-hidden')).toBe('true');
+    expect(nature.querySelector('app-nature-marker')?.textContent).toContain('Homme Dragon');
+  });
+
+  it('ligne de personnage joueur : ni modificateur de teinte ni marqueur de nature', async () => {
+    const { fixture } = await createFixture([makeEntry()]);
+
+    const row: HTMLElement = fixture.nativeElement.querySelector('.character-creation-entries__row');
+    expect(row.classList).not.toContain('character-creation-entries__row--dragon');
+    expect(row.querySelector('app-nature-marker')).toBeNull();
+  });
+
   it('une ligne de personnage et une ligne d’Homme Dragon sur la même partie coexistent', async () => {
     const { fixture } = await createFixture([
       makeEntry({ partieId: 'p1' }),

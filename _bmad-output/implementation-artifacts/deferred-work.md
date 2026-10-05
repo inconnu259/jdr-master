@@ -200,3 +200,6 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-34-3-mise-en-forme-des-ecrans-dauthentification.md`
   summary: Le bouton « Rejoindre » de « rejoindre » n'a aucun état d'envoi : un double clic envoie deux demandes de `join()`.
   evidence: `join.html` / `join.ts` `join()` sans signal `loading` ni `disabled` ; préexistant, les autres formulaires d'authentification désactivent leur bouton pendant l'envoi.
+- source_spec: `_bmad-output/implementation-artifacts/spec-distinguer-creation-personnage-et-homme-dragon.md`
+  summary: DESIGN.md §7.3 (ligne « À forger ») ne décrit que la ligne neutre ; documenter la variante Homme Dragon (bordure et pastille `accent-2`, `NatureMarker` sous le libellé).
+  evidence: la ligne d'Homme Dragon est désormais teintée et marquée dans `character-creation-entries` ; le document de conception, source de vérité visuelle, n'en dit rien.

@@ -1,6 +1,7 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ThemeToneService } from '../../../../core/theme/theme-tone.service';
+import { NatureMarker } from '../../../../shared/nature-marker/nature-marker';
 
 /** Une ligne « à créer » (Story 29.16) — croisement du signal `PERSONNAGE_A_CREER`
  *  (`PartySignalsService`) et de `MyPartiesService.allParties()`, assemblé par `MyCharacters`.
@@ -25,7 +26,7 @@ const VISIBLE_COUNT = 3;
  */
 @Component({
   selector: 'app-character-creation-entries',
-  imports: [RouterLink],
+  imports: [RouterLink, NatureMarker],
   templateUrl: './character-creation-entries.html',
   styleUrl: './character-creation-entries.scss',
 })
