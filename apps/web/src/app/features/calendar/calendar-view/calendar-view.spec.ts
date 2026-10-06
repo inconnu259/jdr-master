@@ -895,6 +895,11 @@ describe('CalendarView — onBatchDeclareRequested (Story 30.3)', () => {
     expect(labels[0]).toContain('10');
     expect(labels[1]).toContain('11');
     expect(data.conflicts.map((c: { batchIndex: number }) => c.batchIndex)).toEqual([0, 1]);
+    // Story 35.2 — les mots de la phrase « Tu déclares <kind> <intent> » viennent du registre :
+    // un trou `{from}`/`{to}` oublié ou une clé inversée laisserait une accolade à l'écran.
+    expect(data.kindLabel).toBe('indisponible');
+    expect(data.intentLabel).toBeTruthy();
+    expect(data.intentLabel).not.toMatch(/[{}]/);
   });
 
   it('AC2 : un créneau « Journée » est nommé par sa seule date — sinon le séparateur devient ambigu', async () => {

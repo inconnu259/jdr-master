@@ -58,8 +58,9 @@ import { seanceState, type StatusBadgeState } from '../../../core/status/status-
 import { toDateKey } from '../../calendar/day-detail.utils';
 import { StatusBadge } from '../../../shared/status-badge/status-badge';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
-import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
+import { gameSystemName, partieKindLabelKey } from '../../../core/parties/parties.util';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 import { RosterRail } from '../roster-rail/roster-rail';
@@ -656,7 +657,8 @@ export class PartieDetail implements OnInit {
   });
 
   protected readonly system = gameSystemName;
-  protected readonly kind = partieKindLabel;
+  protected readonly kind = (kind: PartieDto['kind']): string =>
+    this.theme.tone()[partieKindLabelKey(kind)] ?? kind;
 
   // Un seul poll actif → détail « X/Y réponses » précis (comportement historique conservé).
   // Plusieurs → l'agrégation par réponse individuelle n'a plus de sens à ce niveau (chaque poll a
@@ -678,7 +680,7 @@ export class PartieDetail implements OnInit {
         ['poll.status_summary'].replace('{responded}', String(this.respondedCount()))
         .replace('{total}', String(polls[0].membersCount));
     }
-    return `${polls.length} votes de date en cours`;
+    return fillTone(this.theme.tone()['parties.detail_polls_in_progress'], { count: polls.length });
   }
 
   async ngOnInit(): Promise<void> {
@@ -764,7 +766,12 @@ export class PartieDetail implements OnInit {
     const p = this.partie();
     if (!p) return;
     const ref = this.dialog.open(ConfirmDialog, {
-      data: { message: `Retirer ${member.displayName} de « ${p.name} » ?` },
+      data: {
+        message: fillTone(this.theme.tone()['parties.detail_remove_member_confirm'], {
+          name: member.displayName,
+          partie: p.name,
+        }),
+      },
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;
     await this.parties.removeMember(p.id, member.userId);
@@ -804,7 +811,9 @@ export class PartieDetail implements OnInit {
 
   async confirmDelete(p: PartieDto): Promise<void> {
     const ref = this.dialog.open(ConfirmDialog, {
-      data: { message: `Supprimer « ${p.name} » ? Cette action est irréversible.` },
+      data: {
+        message: fillTone(this.theme.tone()['parties.detail_delete_confirm'], { partie: p.name }),
+      },
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;
     await this.parties.remove(p.id);

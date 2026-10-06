@@ -3,6 +3,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { RealtimeService, userTopic } from '../../../core/realtime/realtime.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { HommeDragonSheet } from '../homme-dragon-sheet/homme-dragon-sheet';
 
 /**
@@ -30,6 +31,7 @@ export class HommeDragonPage implements OnInit {
   private readonly realtime = inject(RealtimeService);
   private readonly contextualNav = inject(ContextualNavService);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly theme = inject(ThemeToneService);
 
   protected readonly hommeDragonId = signal('');
   /** Arrivée depuis le parcours de création (état de navigation) : bandeau « fiche créée ». */

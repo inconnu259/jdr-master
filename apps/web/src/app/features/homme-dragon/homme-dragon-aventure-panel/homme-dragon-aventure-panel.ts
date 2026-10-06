@@ -16,6 +16,8 @@ import { firstValueFrom } from 'rxjs';
 import type { HommeDragonRefDto, MyHommeDragonDto } from '@master-jdr/shared';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { hommeDragonName } from '../../../core/homme-dragon/homme-dragon.util';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import { ConfirmDialog } from '../../parties/confirm-dialog/confirm-dialog';
 
 /**
@@ -43,6 +45,7 @@ export class HommeDragonAventurePanel implements OnInit {
 
   private readonly hommeDragonSvc = inject(HommeDragonService);
   private readonly dialog = inject(MatDialog);
+  protected readonly theme = inject(ThemeToneService);
 
   /** `undefined` = chargement, `null` = aucune fiche liée, sinon la référence `{ id, nom }`. */
   protected readonly linked = signal<HommeDragonRefDto | null | undefined>(undefined);
@@ -53,6 +56,11 @@ export class HommeDragonAventurePanel implements OnInit {
   protected readonly actionError = signal<string | null>(null);
 
   protected readonly linkedName = computed(() => hommeDragonName(this.linked()?.nom));
+
+  /** Libellé du lien « Créer un Homme Dragon pour <aventure> ». */
+  protected readonly createLabel = computed(() =>
+    fillTone(this.theme.tone()['hd.panel_create_cta'], { partie: this.partieName() }),
+  );
 
   /** Mes Hommes Dragons associables : tous (un Homme Dragon peut suivre plusieurs aventures). */
   protected readonly associable = computed(() =>
@@ -102,7 +110,7 @@ export class HommeDragonAventurePanel implements OnInit {
       this.linked.set(linked);
       this.mine.set(mine);
     } catch {
-      this.loadError.set("Impossible de charger l'Homme Dragon de cette aventure. Réessayez.");
+      this.loadError.set(this.theme.tone()['hd.panel_load_error']);
     }
   }
 
@@ -116,7 +124,7 @@ export class HommeDragonAventurePanel implements OnInit {
       this.linked.set({ id: dto.id, nom: dto.sheetData.nom });
       this.selectedId.set(null);
     } catch {
-      this.actionError.set("Impossible d'associer cet Homme Dragon. Réessayez.");
+      this.actionError.set(this.theme.tone()['hd.panel_associate_error']);
     } finally {
       this.busy.set(false);
     }
@@ -128,8 +136,11 @@ export class HommeDragonAventurePanel implements OnInit {
     if (!current || this.busy()) return;
     const ref = this.dialog.open(ConfirmDialog, {
       data: {
-        message: `Dissocier ${this.linkedName()} de « ${this.partieName()} » ? Son niveau peut baisser ; sa fiche, sa réserve et ses choix sont conservés.`,
-        confirmLabel: 'Dissocier',
+        message: fillTone(this.theme.tone()['hd.panel_dissociate_confirm'], {
+          nom: this.linkedName(),
+          partie: this.partieName(),
+        }),
+        confirmLabel: this.theme.tone()['common.dissocier'],
       },
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;
@@ -139,7 +150,7 @@ export class HommeDragonAventurePanel implements OnInit {
       await this.hommeDragonSvc.unlink(this.partieId(), current.id);
       this.linked.set(null);
     } catch {
-      this.actionError.set('Impossible de dissocier cet Homme Dragon. Réessayez.');
+      this.actionError.set(this.theme.tone()['hd.panel_dissociate_error']);
     } finally {
       this.busy.set(false);
     }

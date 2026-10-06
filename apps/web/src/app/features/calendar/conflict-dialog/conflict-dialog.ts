@@ -1,6 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 
 /** Un créneau du lot en conflit avec une déclaration persistée. Plusieurs entrées peuvent
  *  porter le MÊME `batchIndex` (un créneau peut heurter deux déclarations) : le défilé les
@@ -52,6 +54,7 @@ export class ConflictDialog {
   private readonly dialogRef =
     inject<MatDialogRef<ConflictDialog, ConflictResolutionByIndex | null>>(MatDialogRef);
   protected readonly data = inject<ConflictDialogData>(MAT_DIALOG_DATA);
+  protected readonly theme = inject(ThemeToneService);
 
   /** `false` tant que les trois issues sont proposées, `true` pendant le défilé (AC3). */
   protected readonly walking = signal(false);
@@ -73,8 +76,54 @@ export class ConflictDialog {
 
   protected readonly title = computed(() => {
     const n = this.steps().length;
-    return n === 1 ? '1 créneau est déjà déclaré' : `${n} créneaux sont déjà déclarés`;
+    const key = n === 1 ? 'calendar.conflict_title_one' : 'calendar.conflict_title_many';
+    return fillTone(this.theme.tone()[key], { n });
   });
+
+  /** Tête de l'issue « Remplacer » : « Le créneau devient » / « Les 3 deviennent ». */
+  protected readonly overwriteLead = computed(() => {
+    const n = this.steps().length;
+    const key = n === 1 ? 'calendar.conflict_overwrite_one' : 'calendar.conflict_overwrite_many';
+    return fillTone(this.theme.tone()[key], { n });
+  });
+
+  /** Issue « Conserver » : « Ce créneau reste comme il est » / « Ces 3 restent comme ils sont ». */
+  protected readonly keepLead = computed(() => {
+    const n = this.steps().length;
+    const key = n === 1 ? 'calendar.conflict_keep_one' : 'calendar.conflict_keep_many';
+    return fillTone(this.theme.tone()[key], { n });
+  });
+
+  /** Ce qu'il advient des créneaux du lot sans conflit (affiché dès qu'il y en a au moins un). */
+  protected readonly freeLabel = computed(() => {
+    const n = this.data.freeCount;
+    const key = n === 1 ? 'calendar.conflict_free_one' : 'calendar.conflict_free_many';
+    return fillTone(this.theme.tone()[key], { n, kind: this.data.kindLabel });
+  });
+
+  protected readonly walkthroughCount = computed(() => {
+    const n = this.steps().length;
+    const key =
+      n > 1
+        ? 'calendar.conflict_walkthrough_count_many'
+        : 'calendar.conflict_walkthrough_count_one';
+    return fillTone(this.theme.tone()[key], { n });
+  });
+
+  /** Verbe de la ligne d'exception, accordé avec le nombre de séances. */
+  protected readonly exceptionVerb = computed(() => {
+    const key =
+      this.data.seanceExceptions.length > 1
+        ? 'calendar.conflict_exception_many'
+        : 'calendar.conflict_exception_one';
+    return this.theme.tone()[key];
+  });
+
+  protected readonly exceptionDetail = computed(() =>
+    fillTone(this.theme.tone()['calendar.conflict_exception_detail'], {
+      kind: this.data.kindLabel,
+    }),
+  );
 
   protected readonly currentStep = computed(() => this.steps()[this.stepIndex()]);
 
@@ -86,7 +135,10 @@ export class ConflictDialog {
   protected readonly stepAnnouncement = computed(() => {
     const step = this.currentStep();
     if (!step) return '';
-    return `Créneau ${this.progressLabel()} : ${step.label}. Remplacer ou conserver ?`;
+    return fillTone(this.theme.tone()['calendar.conflict_step_announcement'], {
+      progress: this.progressLabel(),
+      label: step.label,
+    });
   });
 
   protected onChoose(resolution: 'overwrite' | 'keep'): void {

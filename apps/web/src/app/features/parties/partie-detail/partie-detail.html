@@ -37,7 +37,7 @@
         [selectedIndex]="selectedTabIndex()"
         (selectedIndexChange)="onTabIndexChange($event)"
       >
-        <mat-tab label="Détails">
+        <mat-tab [label]="theme.tone()['parties.detail_tab_details']">
             <!-- Story 32.2 : l'onglet Détails est regroupé en trois zones -- Action, Consultation,
                  Référence, dans cet ordre -- plutôt que juxtaposé sans hiérarchie. Chaque bloc garde
                  exactement sa condition d'affichage et son comportement interne d'avant cette story ;
@@ -436,13 +436,14 @@
                 <div class="link-row">
                   <code>{{ joinUrl(l.token) }}</code>
                   <span class="muted">
-                    {{ l.usesCount }}<span>{{ l.maxUses ? '/' + l.maxUses : '' }}</span> · exp.
+                    {{ l.usesCount }}<span>{{ l.maxUses ? '/' + l.maxUses : '' }}</span> ·
+                    {{ theme.tone()['parties.detail_link_expires_short'] }}
                     {{ l.expiresAt | date: 'short' }}
                   </span>
-                  <button mat-icon-button (click)="copyLink(l.token)" aria-label="Copier">
+                  <button mat-icon-button (click)="copyLink(l.token)" [attr.aria-label]="theme.tone()['common.copier']">
                     <mat-icon>content_copy</mat-icon>
                   </button>
-                  <button mat-icon-button (click)="revokeLink(l)" aria-label="Révoquer">
+                  <button mat-icon-button (click)="revokeLink(l)" [attr.aria-label]="theme.tone()['common.revoquer']">
                     <mat-icon>link_off</mat-icon>
                   </button>
                 </div>
@@ -461,17 +462,17 @@
         }
 
         @if (isMj() && p.kind === 'ONE_SHOT') {
-          <mat-tab label="Scénario">
+          <mat-tab [label]="theme.tone()['parties.detail_tab_scenario']">
             <app-scenario-one-shot-tab [partieId]="p.id" />
           </mat-tab>
         }
         @if (isMj() && p.kind !== 'ONE_SHOT') {
-          <mat-tab label="Scénarios">
+          <mat-tab [label]="theme.tone()['parties.detail_tab_scenarios']">
             <app-scenario-list [partieId]="p.id" />
           </mat-tab>
         }
         @if (p.kind !== 'ONE_SHOT') {
-          <mat-tab label="Chronologie">
+          <mat-tab [label]="theme.tone()['parties.detail_tab_timeline']">
             <app-scenario-timeline [partieId]="p.id" [isMj]="isMj()" [partieKind]="p.kind" [characters]="characters()" />
           </mat-tab>
         }

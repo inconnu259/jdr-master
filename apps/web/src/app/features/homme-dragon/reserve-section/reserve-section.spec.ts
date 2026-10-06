@@ -80,7 +80,35 @@ async function setup(level: number, reserve?: (string | null)[]) {
     imports: [ReserveSection],
     providers: [
       { provide: HommeDragonService, useValue: svc },
-      { provide: ThemeToneService, useValue: { tone: () => ({}) } },
+      {
+        provide: ThemeToneService,
+        useValue: {
+          tone: () => ({
+            'common.annuler': 'Annuler',
+            'common.retirer': 'Retirer',
+            'common.changer': 'Changer',
+            'common.enregistrement': 'Enregistrement…',
+            'common.aucune_description_disponible': 'Aucune description disponible.',
+            'hd.reserve_autosaved': "Enregistrée automatiquement, utilisée pour l'export PDF.",
+            'hd.reserve_pick_btn': 'Choisir un souffle',
+            'hd.reserve_pick_for_slot': "Choisir un souffle pour l'emplacement {n}",
+            'hd.reserve_change_aria': "Changer le souffle de l'emplacement {n} : {nom}",
+            'hd.reserve_remove_aria': "Retirer {nom} de l'emplacement {n}",
+            'hd.reserve_save_error': "Impossible d'enregistrer la réserve. Réessayez.",
+            'hd.reserve_undo_text': "{nom} retiré de l'emplacement {n}.",
+            'hd.reserve_removed_status':
+              "{nom} retiré de l'emplacement {n}. Annuler disponible pendant quelques secondes.",
+            'hd.reserve_restored_status': "{nom} remis dans l'emplacement {n}",
+            'hd.reserve_placed_status': "{nom} placé dans l'emplacement {n}. Réserve enregistrée",
+            'hd.picker_place_btn': "Mettre dans l'emplacement {n}",
+            'hd.picker_consult_hint': 'Consultez un souffle de la liste pour lire sa description.',
+            'hd.picker_choose_hint': 'Choisissez un souffle dans la liste.',
+            'hd.picker_slot_gone': "Cet emplacement n'existe plus.",
+            'hd.picker_blocked_announce': "Placement impossible dans l'emplacement {n} : {raison}",
+            'hd.picker_description_aria': 'Description : {nom}',
+          }),
+        },
+      },
       {
         provide: BreakpointObserver,
         useValue: {

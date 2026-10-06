@@ -41,10 +41,10 @@ function makeThemeService() {
   return {
     tone: () => ({
       'account.title': 'Mon grimoire personnel',
+      'characters_sheet.field_edit_aria': 'Modifier {label}',
       'account.pseudo_label': 'Signe de reconnaissance',
       'account.email_label': 'Sceau de correspondance',
       'account.display_name_label': 'Nom affiché',
-      'account.save_btn': 'Sceller',
       'account.cancel_btn': 'Renoncer',
       'account.saved': 'Le grimoire a retenu ce nom.',
       'account.error': "Le grimoire n'a pas pu retenir ce changement. Réessayez.",
@@ -55,7 +55,6 @@ function makeThemeService() {
       'account.password_saved': 'Le mot de passe a été changé.',
       'account.password_wrong_current': 'Mot de passe actuel incorrect.',
       'account.password_error': 'Le changement a échoué. Réessayez.',
-      'account.email_change_title': "Changer d'adresse e-mail",
       'account.current_password_for_email_label': 'Mot de passe actuel',
       'account.new_email_label': 'Nouvelle adresse e-mail',
       'account.email_change_save_btn': 'Envoyer la demande',
@@ -78,6 +77,9 @@ function makeThemeService() {
       'account.calendar_intent.votes': 'Les votes en cours',
       'account.calendar_intent.groupe': 'La disponibilité du groupe',
       'nav.logout': 'Fermer le grimoire',
+      // Story 35.2 — textes ex-codés en dur (libellé de section du sélecteur, libellé commun).
+      'account.appearance_label': 'Apparence',
+      'common.modifier': 'Modifier',
       // Story 34.2 — libellés du bouton de révélation du mot de passe.
       'auth.password_show': 'Afficher le mot de passe',
       'auth.password_hide': 'Masquer le mot de passe',

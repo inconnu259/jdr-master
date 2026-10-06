@@ -14,6 +14,7 @@ import type { CastVoteDto, DaySlot, SessionPollDto, VoteAnswer } from '@master-j
 import { AuthService } from '../../../core/auth/auth.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
@@ -175,7 +176,10 @@ export class PollResponseComponent {
     } else {
       const successCount = entries.length - failed.size;
       this.error.set(
-        `${successCount}/${entries.length} réponse(s) enregistrée(s). Réessayez pour les autres.`,
+        fillTone(this.theme.tone()['pollui.response_partial_error'], {
+          success: successCount,
+          total: entries.length,
+        }),
       );
     }
     this.saving.set(false);

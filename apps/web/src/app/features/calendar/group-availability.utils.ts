@@ -1,4 +1,13 @@
 import type { SlotMemberDto } from '@master-jdr/shared';
+import { fillTone } from '../../core/theme/tone-format';
+import { TONE_MAP } from '../../core/theme/tones';
+
+/** Dictionnaire de ton lisible par les fonctions pures (`theme.tone()` d'un composant). */
+type ToneDict = Readonly<Record<string, string>>;
+
+/** Repli quand l'appelant ne fournit pas le ton actif : les mots du calendrier sont identiques dans
+ *  les trois thèmes, le thème de référence suffit donc pour une fonction appelée sans composant. */
+const DEFAULT_TONE: ToneDict = TONE_MAP['grimoire-emeraude'];
 
 /**
  * Story 36.8 — la disponibilité du groupe, sur un canal séparé (FR-53).
@@ -110,27 +119,31 @@ export function groupIsAllBlocked(group: GroupAvailability): boolean {
  * Les identités ne sont énoncées que si le serveur en a servi — la fonction ne peut structurellement
  * pas en inventer.
  */
-export function groupAriaLabel(group: GroupAvailability): string {
+export function groupAriaLabel(group: GroupAvailability, tone: ToneDict = DEFAULT_TONE): string {
   const total = safeCount(group.total);
   const available = Math.min(safeCount(group.available), total);
   const unavailable = Math.min(safeCount(group.unavailable), total);
 
-  const parts = [
-    `Disponibilité du groupe : ${available} sur ${total} disponible${available > 1 ? 's' : ''}`,
-  ];
+  const availableKey =
+    available > 1 ? 'calendar.util_group_aria_many' : 'calendar.util_group_aria_one';
+  const parts = [fillTone(tone[availableKey], { available, total })];
 
   // Les deux vides, dits en toutes lettres — c'est ici que l'AC6 tient sans la couleur.
   if (groupIsAllBlocked(group)) {
-    parts.push('tout le monde est bloqué');
+    parts.push(tone['calendar.util_group_all_blocked']);
   } else if (available === 0 && unavailable === 0) {
-    parts.push("personne ne s'est prononcé");
+    parts.push(tone['calendar.util_group_nobody']);
   } else if (unavailable > 0) {
-    parts.push(`${unavailable} indisponible${unavailable > 1 ? 's' : ''}`);
+    const unavailableKey =
+      unavailable > 1
+        ? 'calendar.util_group_unavailable_many'
+        : 'calendar.util_group_unavailable_one';
+    parts.push(fillTone(tone[unavailableKey], { n: unavailable }));
   }
 
   const members = group.members;
   if (members !== null && members.length > 0) {
-    parts.push(members.map((m) => `${m.displayName} ${memberStatusWord(m)}`).join(', '));
+    parts.push(members.map((m) => `${m.displayName} ${memberStatusWord(m, tone)}`).join(', '));
   }
 
   return parts.join(' — ');
@@ -138,14 +151,14 @@ export function groupAriaLabel(group: GroupAvailability): string {
 
 /** Le statut d'un membre, **en toutes lettres**. Point unique du vocabulaire du canal : les
  *  surfaces n'en écrivent jamais un second (même règle qu'`answerLabel()` pour le vote). */
-export function memberStatusWord(member: GroupMember): string {
+export function memberStatusWord(member: GroupMember, tone: ToneDict = DEFAULT_TONE): string {
   switch (member.status) {
     case 'AVAILABLE':
-      return 'disponible';
+      return tone['calendar.week_status_available'];
     case 'UNAVAILABLE':
-      return 'indisponible';
+      return tone['calendar.week_status_unavailable'];
     default:
-      return 'sans réponse';
+      return tone['calendar.util_word_no_answer'];
   }
 }
 

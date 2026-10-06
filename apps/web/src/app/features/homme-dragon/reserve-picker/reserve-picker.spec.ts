@@ -44,7 +44,25 @@ async function setup(opts: Opts = {}) {
   await TestBed.configureTestingModule({
     imports: [ReservePicker],
     providers: [
-      { provide: ThemeToneService, useValue: { tone: () => ({}) } },
+      {
+        provide: ThemeToneService,
+        useValue: {
+          tone: () => ({
+            'common.annuler': 'Annuler',
+            'common.aucune_description_disponible': 'Aucune description disponible.',
+            'common.detail': 'Détail',
+            'shared.detail_close_window': 'Fermer la fenêtre',
+            'shared.detail_close_sheet': 'Fermer la feuille',
+            'hd.reserve_pick_for_slot': "Choisir un souffle pour l'emplacement {n}",
+            'hd.picker_place_btn': "Mettre dans l'emplacement {n}",
+            'hd.picker_consult_hint': 'Consultez un souffle de la liste pour lire sa description.',
+            'hd.picker_choose_hint': 'Choisissez un souffle dans la liste.',
+            'hd.picker_slot_gone': "Cet emplacement n'existe plus.",
+            'hd.picker_blocked_announce': "Placement impossible dans l'emplacement {n} : {raison}",
+            'hd.picker_description_aria': 'Description : {nom}',
+          }),
+        },
+      },
       {
         provide: BreakpointObserver,
         useValue: {

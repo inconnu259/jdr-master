@@ -13,10 +13,12 @@ const AVENTURES_SEPARATOR = ' · ';
 
 /** Noms des aventures d'un Homme Dragon, joints pour la carte « Personnages » (Story 33.8) ; la
  *  troncature d'un libellé trop long est visuelle (CSS), le texte complet reste lisible au survol et
- *  pour un lecteur d'écran. Sans aventure : « Sans aventure ». */
+ *  pour un lecteur d'écran. Sans aventure : `emptyLabel` (texte de ton résolu par l'appelant,
+ *  `core.homme_dragon_sans_aventure`), « Sans aventure » par défaut. */
 export function hommeDragonAventuresLabel(
   aventures: readonly { nom: string }[] | null | undefined,
+  emptyLabel: string = SANS_AVENTURE_LABEL,
 ): string {
   const names = (aventures ?? []).map((a) => a.nom.trim()).filter((nom) => nom.length > 0);
-  return names.length > 0 ? names.join(AVENTURES_SEPARATOR) : SANS_AVENTURE_LABEL;
+  return names.length > 0 ? names.join(AVENTURES_SEPARATOR) : emptyLabel;
 }

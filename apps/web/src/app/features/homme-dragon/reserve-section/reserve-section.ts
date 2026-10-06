@@ -13,6 +13,8 @@ import {
 import type { ContentEntryDto, HommeDragonDto, HommeDragonRace } from '@master-jdr/shared';
 import { reserveCapacity } from '@master-jdr/game-rules';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import { RACE_TAGS } from '../homme-dragon-races';
 import { ReservePicker } from '../reserve-picker/reserve-picker';
 import { emplacements, souffleView } from './reserve-souffle.util';
@@ -60,6 +62,7 @@ export class ReserveSection {
   private readonly svc = inject(HommeDragonService);
   private readonly host: ElementRef<HTMLElement> = inject(ElementRef);
   private readonly injector = inject(Injector);
+  protected readonly theme = inject(ThemeToneService);
 
   protected readonly uid = `reserve-${nextInstance++}`;
 
@@ -101,6 +104,8 @@ export class ReserveSection {
       const key = reserve[i] ?? null;
       const view = key ? souffleView(key, this.souffleCatalog(), this.ritualCatalog()) : null;
       const n = i + 1;
+      const tone = this.theme.tone();
+      const nom = view?.label ?? '';
       // Le libellé visible (« Changer », « Retirer », « Choisir un souffle ») est contenu dans le
       // nom accessible, qui ajoute le souffle et l'emplacement (WCAG 2.5.3).
       return {
@@ -109,9 +114,9 @@ export class ReserveSection {
         view,
         /** Au-dessus de la capacité du niveau : conservé et lisible, retirable, jamais modifiable. */
         over: n > this.capacity(),
-        changeLabel: `Changer le souffle de l'emplacement ${n} : ${view?.label ?? ''}`,
-        removeLabel: `Retirer ${view?.label ?? ''} de l'emplacement ${n}`,
-        pickLabel: `Choisir un souffle pour l'emplacement ${n}`,
+        changeLabel: fillTone(tone['hd.reserve_change_aria'], { n, nom }),
+        removeLabel: fillTone(tone['hd.reserve_remove_aria'], { n, nom }),
+        pickLabel: fillTone(tone['hd.reserve_pick_for_slot'], { n }),
       };
     });
   });
@@ -165,6 +170,11 @@ export class ReserveSection {
 
   protected raceClass(race: HommeDragonRace | null): string {
     return race ? `race-${RACE_TAGS[race].toLowerCase()}` : '';
+  }
+
+  /** Texte du bandeau d'annulation du dernier retrait. */
+  protected undoText(u: { slot: number; label: string }): string {
+    return fillTone(this.theme.tone()['hd.reserve_undo_text'], { nom: u.label, n: u.slot });
   }
 
   // — Gestes —
@@ -232,7 +242,7 @@ export class ReserveSection {
 
     this.saving.set(true);
     this.errors.set([]);
-    this.statusMessage.set('Enregistrement…');
+    this.statusMessage.set(this.theme.tone()['common.enregistrement']);
     this.overlay.set(next);
     if (gesture === 'remove' && removedKey) {
       // Un nouveau retrait remplace le message précédent ; « Annuler » reste inactif tant que
@@ -251,14 +261,19 @@ export class ReserveSection {
         this.undo.update((u) => (u ? { ...u, armed: true } : u));
         this.resetUndoTimer();
         this.statusMessage.set(
-          `${label(removedKey)} retiré de l'emplacement ${slot}. Annuler disponible pendant quelques secondes.`,
+          fillTone(this.theme.tone()['hd.reserve_removed_status'], {
+            nom: label(removedKey),
+            n: slot,
+          }),
         );
       } else if (gesture === 'undo' && key) {
         this.clearUndo();
-        this.statusMessage.set(`${label(key)} remis dans l'emplacement ${slot}`);
+        this.statusMessage.set(
+          fillTone(this.theme.tone()['hd.reserve_restored_status'], { nom: label(key), n: slot }),
+        );
       } else if (key) {
         this.statusMessage.set(
-          `${label(key)} placé dans l'emplacement ${slot}. Réserve enregistrée`,
+          fillTone(this.theme.tone()['hd.reserve_placed_status'], { nom: label(key), n: slot }),
         );
       }
     } catch {

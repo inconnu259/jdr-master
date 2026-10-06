@@ -13,7 +13,7 @@
 />
 
 @if (hommesDragonsError()) {
-  <p class="notice" role="status">Vos Hommes Dragons n’ont pas pu être chargés.</p>
+  <p class="notice" role="status">{{ theme.tone()['characters_list.homme_dragons_load_error'] }}</p>
 }
 
 @if (all().length === 0) {

@@ -3,6 +3,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import type { DaySlot } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import {
   type RailTarget,
   composeSeanceInfo,
@@ -478,14 +479,15 @@ export class CalendarAgendaView {
   private missingLabel(group: AgendaVoteGroup): string {
     const names = this.missingByPoll()[group.pollId] ?? [];
     if (names.length === 0) return '';
+    const tone = this.theme.tone();
     const listed = names.slice(0, MAX_LISTED_MISSING).join(', ');
     const rest = names.length - MAX_LISTED_MISSING;
-    return this.theme
-      .tone()
-      ['calendar.agenda.missing_voters'].replace(
-        '{names}',
-        rest > 0 ? `${listed} et ${rest} autre${rest > 1 ? 's' : ''}` : listed,
-      );
+    const moreKey =
+      rest > 1 ? 'calendar.agenda_missing_more_many' : 'calendar.agenda_missing_more_one';
+    return tone['calendar.agenda.missing_voters'].replace(
+      '{names}',
+      rest > 0 ? fillTone(tone[moreKey], { listed, rest }) : listed,
+    );
   }
 
   /** AC8 — l'intention du lecteur prime ; à défaut, la maturité décide (« d'office » = par
@@ -568,18 +570,20 @@ export class CalendarAgendaView {
    *  [Source: EXPERIENCE.md §6 bis] — même formulation qu'au rail. */
   protected openLabel(entry: AgendaEntry): string {
     const meta = this.metaLine(entry);
+    const tone = this.theme.tone();
     return meta
-      ? `Ouvrir le scénario ${entry.label} — ${meta}`
-      : `Ouvrir le scénario ${entry.label}`;
+      ? fillTone(tone['common.ouvrir_le_scenario_label_info'], { label: entry.label, info: meta })
+      : fillTone(tone['common.ouvrir_le_scenario_label'], { label: entry.label });
   }
 
   /** Revue de code 36.7 : même repli qu'au rail — `[attr.aria-label]` écrase le contenu du
    *  bouton, y compris le `role="img"`/`aria-label` propre à `<app-poll-track>` qu'il enveloppe. */
   protected voteAriaLabel(entry: AgendaEntry): string {
-    const detail = entry.vote ? participationAriaLabel(entry.vote) : null;
+    const tone = this.theme.tone();
+    const detail = entry.vote ? participationAriaLabel(entry.vote, tone) : null;
     return detail
-      ? `Répondre au vote — ${entry.label} — ${detail}`
-      : `Répondre au vote — ${entry.label}`;
+      ? fillTone(tone['common.repondre_au_vote_label_detail'], { label: entry.label, detail })
+      : fillTone(tone['common.repondre_au_vote_label'], { label: entry.label });
   }
 
   /** Date à minuit LOCAL, comme les grilles — jamais UTC (cf. `dateKeyToLocalMidnight`). */

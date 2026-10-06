@@ -55,7 +55,11 @@ export class WizardSummary {
   }
 
   /** Titre du bloc : le nom saisi à l'étape Narratif, « Voyageur » tant qu'il est vide. */
-  protected readonly title = computed(() => this.sheetData().narrative?.name?.trim() || 'Voyageur');
+  protected readonly title = computed(
+    () =>
+      this.sheetData().narrative?.name?.trim() ||
+      this.theme.tone()['characters_wizard.summary_default_title'],
+  );
 
   /** Lignes du récapitulatif, dans l'ordre du parcours. Une ligne sans valeur n'est pas rendue. */
   protected readonly rows = computed<SummaryRow[]>(() => {

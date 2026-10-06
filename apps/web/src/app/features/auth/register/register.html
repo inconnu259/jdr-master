@@ -1,17 +1,15 @@
 <app-auth-band />
 <main class="auth-page" aria-labelledby="auth-title">
   <mat-card class="auth-card">
-    <mat-card-header><h1 matCardTitle id="auth-title" class="auth-title">Créer un compte</h1></mat-card-header>
+    <mat-card-header><h1 matCardTitle id="auth-title" class="auth-title">{{ tone()['common.creer_un_compte'] }}</h1></mat-card-header>
     <mat-card-content>
       @if (!token) {
         <!-- Présent dès le chargement : texte simple, sans role="alert" -->
-        <p class="error">
-          L'inscription se fait uniquement sur invitation. Ouvre un lien d'invitation pour créer ton compte.
-        </p>
+        <p class="error">{{ tone()['auth.register_invite_only'] }}</p>
       }
       <form [formGroup]="form" (ngSubmit)="submit()">
         <mat-form-field appearance="outline">
-          <mat-label>Email</mat-label>
+          <mat-label>{{ tone()['common.email'] }}</mat-label>
           <input
             matInput
             type="email"
@@ -22,7 +20,7 @@
           <mat-error>{{ fieldError('email') }}</mat-error>
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>Pseudo</mat-label>
+          <mat-label>{{ tone()['auth.register_pseudo_label'] }}</mat-label>
           <input
             matInput
             formControlName="pseudo"
@@ -32,7 +30,7 @@
           <mat-error>{{ fieldError('pseudo') }}</mat-error>
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>Mot de passe</mat-label>
+          <mat-label>{{ tone()['common.mot_de_passe'] }}</mat-label>
           <input
             matInput
             type="password"
@@ -43,19 +41,19 @@
             #pw="appPasswordReveal"
           />
           <app-password-toggle matSuffix [for]="pw" />
-          <mat-hint>8+ caractères</mat-hint>
+          <mat-hint>{{ tone()['common.8_caracteres'] }}</mat-hint>
           <mat-error>{{ fieldError('password') }}</mat-error>
         </mat-form-field>
         @if (error()) {
           <p class="error" role="alert">{{ error() }}</p>
         }
         <button mat-flat-button class="auth-primary" type="submit" [disabled]="loading() || !token">
-          Créer le compte
+          {{ tone()['auth.register_submit'] }}
         </button>
       </form>
     </mat-card-content>
     <mat-card-actions class="auth-secondary-actions">
-      <a class="auth-secondary-link" routerLink="/login">J'ai déjà un compte</a>
+      <a class="auth-secondary-link" routerLink="/login">{{ tone()['common.j_ai_deja_un_compte'] }}</a>
     </mat-card-actions>
   </mat-card>
 </main>

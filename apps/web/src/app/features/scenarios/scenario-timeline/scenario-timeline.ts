@@ -21,6 +21,8 @@ import { Router } from '@angular/router';
 import type { CharacterDto, PartieKind, ScenarioDto, SeanceDto } from '@master-jdr/shared';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import {
   scenarioState,
   seanceState,
@@ -129,21 +131,24 @@ function formatDayMonth(iso: string): string {
  *
  * @param todayKey le jour courant en `YYYY-MM-DD` — injecté, jamais lu de l'horloge ici (fonction
  *   pure, et une seule source de « aujourd'hui » par écran, comme dans `seanceState()`).
+ * @param tone le registre de ton du thème actif — injecté lui aussi, pour que la fonction reste pure
+ *   (les formulations « depuis le », « à partir du », « Non planifié » viennent du registre).
  */
-function nodeDateLabel(node: TimelineNode, todayKey: string): string {
+function nodeDateLabel(node: TimelineNode, todayKey: string, tone: Record<string, string>): string {
   const dates = nodeDates(node);
-  if (dates.length === 0) return 'Non planifié';
+  if (dates.length === 0) return tone['scenarios.timeline_not_planned'];
   const first = dates[0];
   const last = dates[dates.length - 1];
   const started = first.substring(0, 10) <= todayKey;
   switch (node.scenarios[0].status) {
     case 'COURANT':
-      return started
-        ? `depuis le ${formatDayMonth(first)}`
-        : `à partir du ${formatDayMonth(first)}`;
+      return fillTone(
+        started ? tone['scenarios.timeline_since'] : tone['scenarios.timeline_from'],
+        { date: formatDayMonth(first) },
+      );
     case 'A_VENIR':
     case 'BROUILLON':
-      return `à partir du ${formatDayMonth(first)}`;
+      return fillTone(tone['scenarios.timeline_from'], { date: formatDayMonth(first) });
     case 'PASSE':
       return first.substring(0, 10) === last.substring(0, 10)
         ? formatDayMonth(first)
@@ -196,6 +201,7 @@ export class ScenarioTimeline {
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly theme = inject(ThemeToneService);
 
   readonly partieId = input.required<string>();
   /** Vue MJ : affiche aussi les BROUILLON (jamais pour un joueur, AD-6), stylés distinctement. */
@@ -233,7 +239,8 @@ export class ScenarioTimeline {
 
   protected readonly countLabel = computed(() => {
     const n = this.visibleCount();
-    return `${n} ${n > 1 ? 'scénarios' : 'scénario'}`;
+    const key = n > 1 ? 'scenarios.timeline_count_many' : 'scenarios.timeline_count_one';
+    return fillTone(this.theme.tone()[key], { n });
   });
 
   protected readonly track = viewChild<ElementRef<HTMLElement>>('track');
@@ -267,7 +274,12 @@ export class ScenarioTimeline {
 
   /** Seule la date du jour vient du composant : le calcul du libellé, lui, reste pur. */
   protected nodeDateLabel(node: TimelineNode): string {
-    return nodeDateLabel(node, this.todayKey);
+    return nodeDateLabel(node, this.todayKey, this.theme.tone());
+  }
+
+  /** « Séance N » — l'index est 0-based côté gabarit, le libellé est 1-based. */
+  protected seanceLabel(index: number): string {
+    return fillTone(this.theme.tone()['common.seance_n'], { n: index + 1 });
   }
 
   constructor() {
@@ -329,7 +341,7 @@ export class ScenarioTimeline {
       this.loaded.set(true);
     } catch {
       if (this.destroyed || generation !== this.loadGeneration) return;
-      this.loadError.set('Impossible de charger la chronologie. Réessayez.');
+      this.loadError.set(this.theme.tone()['scenarios.timeline_load_error']);
       this.loaded.set(true);
     }
   }
@@ -384,7 +396,7 @@ export class ScenarioTimeline {
   // que SeanceList (poll.chosenDate ?? dateValidee racine ?? inscription.dateValidee).
   protected seanceDateLabel(seance: SeanceDto): string {
     const iso = seanceIso(seance);
-    return iso ? formatDayMonth(iso) : 'Date à définir';
+    return iso ? formatDayMonth(iso) : this.theme.tone()['common.date_a_definir'];
   }
 
   protected onCardKeydown(event: KeyboardEvent, scenario: ScenarioDto): void {

@@ -36,7 +36,7 @@ export class Register {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly tone = inject(ThemeToneService).tone;
+  protected readonly tone = inject(ThemeToneService).tone;
 
   /** Inscription sur invitation : le token vient du lien (/join → /register?token=…). */
   protected readonly token = this.route.snapshot.queryParamMap.get('token') ?? '';
@@ -74,7 +74,7 @@ export class Register {
       await this.auth.login(email, password);
       void this.router.navigate(['/']);
     } catch {
-      this.error.set('Impossible de créer le compte (lien invalide, ou email/pseudo déjà pris ?).');
+      this.error.set(this.tone()['auth.register_error']);
     } finally {
       this.loading.set(false);
     }

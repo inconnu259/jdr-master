@@ -15,6 +15,8 @@ function makeThemeSvc(active = 'grimoire-emeraude') {
       'atelier-cuivre': 'Atelier Cuivré',
     },
     setTheme: vi.fn(),
+    // Story 35.2 : le libellé de section est lu depuis le registre de ton.
+    tone: () => ({ 'account.appearance_label': 'Apparence' }),
   };
 }
 

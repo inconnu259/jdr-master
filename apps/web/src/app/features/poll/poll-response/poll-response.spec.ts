@@ -58,6 +58,10 @@ function makeThemeService() {
       'poll.withdraw_error': 'Le retrait a échoué.',
       'poll.vote_closed': 'Vote clos',
       'poll.status_title': 'Vote en cours',
+      'common.envoi': 'Envoi…',
+      'pollui.response_not_saved_aria': 'Non enregistré',
+      'pollui.response_partial_error':
+        '{success}/{total} réponse(s) enregistrée(s). Réessayez pour les autres.',
     }),
   };
 }

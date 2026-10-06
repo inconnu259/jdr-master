@@ -28,7 +28,7 @@
             @for (seance of scenario.seances; track seance.id; let i = $index) {
               <li class="card-seances__row">
                 <span class="card-seances__label">
-                  <b>Séance {{ i + 1 }}</b> · {{ seanceDateLabel(seance) }}
+                  <b>{{ seanceLabel(i) }}</b> · {{ seanceDateLabel(seance) }}
                 </span>
                 <app-status-badge [state]="seanceBadge(seance)" />
               </li>
@@ -43,14 +43,16 @@
 @if (loadError()) {
   <p class="error">
     {{ loadError() }}
-    <button mat-button type="button" (click)="retry()">Réessayer</button>
+    <button mat-button type="button" (click)="retry()">
+      {{ theme.tone()['common.reessayer'] }}
+    </button>
   </p>
 } @else if (loaded()) {
   <!-- Rien ne se rend avant que le premier chargement ait tranché : un en-tête « 0 scénario » et un
        « Aucun scénario pour l'instant. » affichés pendant la requête affirmeraient un vide qui n'est
        pas encore connu. -->
   <div class="timeline-header">
-    <h3 class="timeline-header__title">Chronologie</h3>
+    <h3 class="timeline-header__title">{{ theme.tone()['scenarios.timeline_title'] }}</h3>
     <!-- Compteur dérivé des nœuds RENDUS (`visibleCount`) : côté joueur il ne peut structurellement
          pas inclure un brouillon, et l'écart avec le compteur du MJ est automatique. -->
     <span class="timeline-header__count">{{ countLabel() }}</span>
@@ -59,7 +61,7 @@
   @if (nodes().length === 0) {
     <!-- État vide explicite : aucune ligne orpheline, aucun espace réservé qui trahirait un
          scénario masqué. -->
-    <p class="empty">Aucun scénario pour l'instant.</p>
+    <p class="empty">{{ theme.tone()['common.aucun_scenario_pour_l_instant'] }}</p>
   } @else if (isDesktop()) {
     <div class="timeline-desktop">
       @if (fadeStart()) {

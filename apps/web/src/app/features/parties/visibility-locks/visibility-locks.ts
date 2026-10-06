@@ -8,6 +8,7 @@ import type { GameSystemSchemaDto, PartieDto } from '@master-jdr/shared';
 import { CharacterService } from '../../../core/characters/character.service';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 /** Une clé de fiche verrouillable proposée à la coche, avec ses éventuels sous-champs (`attributes`
  *  est aujourd'hui la seule clé object à en déclarer, cf. `GameSystemService.getSchema`). Dérivée
@@ -46,6 +47,7 @@ export class VisibilityLocks implements OnInit {
   private readonly partiesSvc = inject(PartiesService);
   private readonly characterSvc = inject(CharacterService);
   private readonly contextualNav = inject(ContextualNavService);
+  protected readonly theme = inject(ThemeToneService);
 
   protected partieId = '';
 
@@ -79,14 +81,14 @@ export class VisibilityLocks implements OnInit {
     effect(() => {
       const p = this.partie();
       if (!p) return;
-      this.contextualNav.set({ title: 'Confidentialité', subtitle: p.name });
+      this.contextualNav.set({ title: this.theme.tone()['parties.locks_title'], subtitle: p.name });
     });
   }
 
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) {
-      this.error.set('Partie introuvable.');
+      this.error.set(this.theme.tone()['common.partie_introuvable']);
       this.loading.set(false);
       return;
     }
@@ -112,7 +114,7 @@ export class VisibilityLocks implements OnInit {
     );
 
     if (partieResult.status === 'rejected') {
-      this.error.set('Impossible de charger les informations de la partie. Réessayez.');
+      this.error.set(this.theme.tone()['parties.locks_load_partie_error']);
       this.loading.set(false);
       return;
     }
@@ -121,7 +123,7 @@ export class VisibilityLocks implements OnInit {
     try {
       this.schema.set(await this.characterSvc.getGameSystemSchema(partieResult.value.gameSystemId));
     } catch {
-      this.error.set('Impossible de charger le schéma du système de jeu. Réessayez.');
+      this.error.set(this.theme.tone()['parties.locks_load_schema_error']);
     } finally {
       this.loading.set(false);
     }
@@ -165,7 +167,7 @@ export class VisibilityLocks implements OnInit {
       await this.partiesSvc.setVisibilityLocks(this.partieId, paths);
       void this.router.navigate(['/parties', this.partieId]);
     } catch {
-      this.error.set('Impossible d’enregistrer la configuration. Réessayez.');
+      this.error.set(this.theme.tone()['parties.locks_save_error']);
     } finally {
       this.saving.set(false);
     }

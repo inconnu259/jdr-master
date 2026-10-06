@@ -11,6 +11,7 @@ import type { ContentEntryDto, HommeDragonDto, HommeDragonRace } from '@master-j
 import { CharacterService } from '../../../core/characters/character.service';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
 import {
   createDetailSurfaceHost,
@@ -150,6 +151,14 @@ export class HommeDragonCreationWizard implements OnInit {
     { key: 'avatar', label: 'Avatar' },
   ]);
   protected readonly currentStep = computed(() => this.steps()[this.stepIndex()]);
+  /** Indicateur « Étape N/M · <nom de l'étape> » de l'en-tête. */
+  protected readonly stepProgress = computed(() =>
+    fillTone(this.theme.tone()['hd.wizard_step_progress'], {
+      n: this.stepIndex() + 1,
+      total: this.steps().length,
+      etape: this.currentStep().label,
+    }),
+  );
   protected readonly isFirstStep = computed(() => this.stepIndex() === 0);
   protected readonly isLastStep = computed(() => this.stepIndex() === this.steps().length - 1);
 
@@ -269,6 +278,11 @@ export class HommeDragonCreationWizard implements OnInit {
     return this.raceCatalog().find((e) => e.key === race)?.data as RaceData | undefined;
   }
 
+  /** Nom accessible des boutons « En savoir plus » (contient le libellé visible). */
+  protected moreAria(nom: string): string {
+    return fillTone(this.theme.tone()['hd.wizard_more_aria'], { nom });
+  }
+
   /** Ouvre le « En savoir plus » d'une race (contenu projeté, voir `raceInfo`). */
   protected openRaceDetail(race: HommeDragonRace, event: Event): void {
     this.detailRace.set(race);
@@ -330,8 +344,8 @@ export class HommeDragonCreationWizard implements OnInit {
       // été annulée côté serveur, aucune fiche orpheline.
       this.createError.set(
         e instanceof HttpErrorResponse && e.status === 409
-          ? 'Cette aventure a déjà un Homme Dragon.'
-          : 'Impossible de créer votre Homme Dragon. Réessayez.',
+          ? this.theme.tone()['hd.wizard_create_conflict_error']
+          : this.theme.tone()['hd.wizard_create_error'],
       );
     } finally {
       this.creating.set(false);

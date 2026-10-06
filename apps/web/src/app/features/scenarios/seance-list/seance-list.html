@@ -5,7 +5,7 @@
   @for (seance of scenario().seances; track seance.id; let i = $index) {
     <div class="seance-row">
       <div class="seance-row__header">
-        <h3 class="seance-row__title">Séance {{ i + 1 }}</h3>
+        <h3 class="seance-row__title">{{ seanceLabel(i) }}</h3>
         <!-- Story 32.3 — un seul emplacement pour les six états de séance : l'en-tête, commun à
              TOUTES les branches (linéaire/épisodique, MJ/joueur) rendues en dessous. Le poser
              dans chaque branche aurait multiplié les conditions d'affichage sans rien ajouter. -->
@@ -19,7 +19,7 @@
             [disabled]="pollActionPending()"
             (click)="onDeleteSeance(seance)"
           >
-            Supprimer cette séance
+            {{ theme.tone()['scenarios.seances_delete_button'] }}
           </button>
         }
       </div>
@@ -32,7 +32,7 @@
                 min="1"
                 #minInput
                 placeholder="min"
-                aria-label="Nombre minimum d'inscrits"
+                [attr.aria-label]="theme.tone()['scenarios.seances_min_aria']"
                 [value]="seance.inscription?.min ?? ''"
                 (input)="onCapacityFormInput()"
               />
@@ -41,7 +41,7 @@
                 min="1"
                 #maxInput
                 placeholder="max"
-                aria-label="Nombre maximum d'inscrits"
+                [attr.aria-label]="theme.tone()['scenarios.seances_max_aria']"
                 [value]="seance.inscription?.max ?? ''"
                 (input)="onCapacityFormInput()"
               />
@@ -57,7 +57,7 @@
                 "
                 (click)="onSetCapacity(seance.id, minInput.valueAsNumber, maxInput.valueAsNumber)"
               >
-                Définir la capacité
+                {{ theme.tone()['scenarios.seances_set_capacity'] }}
               </button>
               @if (seance.inscription) {
                 <button
@@ -66,12 +66,12 @@
                   [disabled]="pollActionPending()"
                   (click)="cancelCapacityEdit()"
                 >
-                  Annuler
+                  {{ theme.tone()['common.annuler'] }}
                 </button>
               }
             </div>
           } @else if (resolvedDate(seance)) {
-            <p class="seance-row__chosen-date">Date retenue : {{ formatSeanceDate(seance) }}</p>
+            <p class="seance-row__chosen-date">{{ dateRetenue(formatSeanceDate(seance)) }}</p>
             <button
               mat-stroked-button
               color="warn"
@@ -79,7 +79,7 @@
               [disabled]="pollActionPending()"
               (click)="onResetSeanceDate(seance.id)"
             >
-              Réinitialiser la date
+              {{ theme.tone()['common.reinitialiser_la_date'] }}
             </button>
           } @else if (!seance.poll) {
             <app-fill-indicator
@@ -94,7 +94,7 @@
                 type="button"
                 (click)="goToCalendarForSeance(seance.id)"
               >
-                Lancer le vote
+                {{ theme.tone()['common.lancer_le_vote'] }}
               </button>
               <button
                 mat-stroked-button
@@ -102,7 +102,7 @@
                 [disabled]="pollActionPending()"
                 (click)="openCapacityEdit(seance.id)"
               >
-                Modifier la capacité
+                {{ theme.tone()['scenarios.seances_edit_capacity'] }}
               </button>
             </div>
           } @else if (seance.poll.status === 'OPEN') {
@@ -124,10 +124,10 @@
               [disabled]="pollActionPending()"
               (click)="onClosePoll(seance.poll.id)"
             >
-              Clôturer le vote
+              {{ theme.tone()['common.cloturer_le_vote'] }}
             </button>
           } @else {
-            <p class="seance-row__chosen-date">Vote clôturé sans date retenue.</p>
+            <p class="seance-row__chosen-date">{{ theme.tone()['common.vote_cloture_sans_date_retenue'] }}</p>
             <button
               mat-stroked-button
               color="warn"
@@ -135,11 +135,11 @@
               [disabled]="pollActionPending()"
               (click)="onResetSeanceDate(seance.id)"
             >
-              Réinitialiser la date
+              {{ theme.tone()['common.reinitialiser_la_date'] }}
             </button>
           }
         } @else if (seance.inscription && resolvedDate(seance)) {
-          <p class="seance-row__chosen-date">Date retenue : {{ formatSeanceDate(seance) }}</p>
+          <p class="seance-row__chosen-date">{{ dateRetenue(formatSeanceDate(seance)) }}</p>
         } @else if (seance.inscription) {
           <app-fill-indicator
             [count]="seance.inscription.inscrits.length"
@@ -153,7 +153,7 @@
               [disabled]="pollActionPending()"
               (click)="onDesinscrire(seance.id)"
             >
-              Se désinscrire
+              {{ theme.tone()['scenarios.seances_desinscrire'] }}
             </button>
           } @else {
             <button
@@ -163,7 +163,7 @@
               [disabled]="pollActionPending() || seance.inscription.inscrits.length >= seance.inscription.max"
               (click)="onInscrire(seance.id)"
             >
-              S'inscrire
+              {{ theme.tone()['scenarios.seances_inscrire'] }}
             </button>
           }
           @if (seance.poll?.status === 'OPEN') {
@@ -173,7 +173,7 @@
               (responded)="onPollResponded($event)"
             />
           } @else if (seance.poll) {
-            <p class="seance-row__chosen-date">Vote clôturé sans date retenue.</p>
+            <p class="seance-row__chosen-date">{{ theme.tone()['common.vote_cloture_sans_date_retenue'] }}</p>
           }
         }
       } @else {
@@ -182,7 +182,7 @@
             <!-- Story 32.3 — date héritée (`Seance.dateValidee`, sans vote ni inscription) : sans
                  cette ligne, le badge annonçait « Programmée » sans qu'aucune date ne soit visible. -->
             @if (resolvedDate(seance)) {
-              <p class="seance-row__chosen-date">Date retenue : {{ formatSeanceDate(seance) }}</p>
+              <p class="seance-row__chosen-date">{{ dateRetenue(formatSeanceDate(seance)) }}</p>
             }
             <button
               mat-flat-button
@@ -190,7 +190,7 @@
               type="button"
               (click)="goToCalendarForSeance(seance.id)"
             >
-              Lancer le vote
+              {{ theme.tone()['common.lancer_le_vote'] }}
             </button>
           } @else if (seance.poll.status === 'OPEN') {
             <app-poll-status
@@ -206,14 +206,14 @@
               [disabled]="pollActionPending()"
               (click)="onClosePoll(seance.poll.id)"
             >
-              Clôturer le vote
+              {{ theme.tone()['common.cloturer_le_vote'] }}
             </button>
           } @else {
             <p class="seance-row__chosen-date">
               @if (seance.poll.chosenDate) {
-                Date retenue : {{ formatChosenDate(seance.poll) }}
+                {{ dateRetenue(formatChosenDate(seance.poll)) }}
               } @else {
-                Vote clôturé sans date retenue.
+                {{ theme.tone()['common.vote_cloture_sans_date_retenue'] }}
               }
             </p>
             <button
@@ -223,7 +223,7 @@
               [disabled]="pollActionPending()"
               (click)="onResetSeanceDate(seance.id)"
             >
-              Réinitialiser la date
+              {{ theme.tone()['common.reinitialiser_la_date'] }}
             </button>
           }
         } @else if (seance.poll) {
@@ -236,16 +236,16 @@
           } @else {
             <p class="seance-row__chosen-date">
               @if (seance.poll.chosenDate) {
-                Date retenue : {{ formatChosenDate(seance.poll) }}
+                {{ dateRetenue(formatChosenDate(seance.poll)) }}
               } @else {
-                Vote clôturé sans date retenue.
+                {{ theme.tone()['common.vote_cloture_sans_date_retenue'] }}
               }
             </p>
           }
         } @else if (resolvedDate(seance)) {
           <!-- Story 32.3 — même trou côté joueur : une séance datée par héritage n'affichait
                aucune date, alors que son badge annonçait « Programmée ». -->
-          <p class="seance-row__chosen-date">Date retenue : {{ formatSeanceDate(seance) }}</p>
+          <p class="seance-row__chosen-date">{{ dateRetenue(formatSeanceDate(seance)) }}</p>
         }
       }
 
@@ -258,35 +258,34 @@
         @if (isMj()) {
           <div class="infos-pratiques__fields">
             <label class="infos-pratiques__field">
-              <span class="infos-pratiques__label">Heure</span>
+              <span class="infos-pratiques__label">{{ theme.tone()['common.heure'] }}</span>
               <!-- Le widget natif fournit le sélecteur ET la validation de format, et rend
                    déjà "HH:MM". C'est une ÉTIQUETTE : rien ne la parse en aval. -->
               <input #heureInput type="time" [value]="infoDraft(seance.id, 'heureRdv')" />
               @if (malformedHeureRdv(seance); as raw) {
                 <span class="infos-pratiques__warning">
-                  ⚠️ Valeur stockée non reconnue ("{{ raw }}"), champ affiché vide — enregistrer
-                  sans la corriger l'effacera.
+                  {{ heureMalformedWarning(raw) }}
                 </span>
               }
             </label>
             <label class="infos-pratiques__field">
-              <span class="infos-pratiques__label">Lieu</span>
+              <span class="infos-pratiques__label">{{ theme.tone()['common.lieu'] }}</span>
               <!-- Champ visible même vide : c'est lui qui rappelle au MJ de le renseigner. -->
               <input
                 #lieuInput
                 type="text"
                 maxlength="80"
-                placeholder="chez Marc, en visio…"
+                [placeholder]="theme.tone()['scenarios.seances_lieu_placeholder']"
                 [value]="infoDraft(seance.id, 'lieu')"
               />
             </label>
             <label class="infos-pratiques__field infos-pratiques__field--wide">
-              <span class="infos-pratiques__label">À savoir</span>
+              <span class="infos-pratiques__label">{{ theme.tone()['common.a_savoir'] }}</span>
               <input
                 #noteInput
                 type="text"
                 maxlength="200"
-                placeholder="pensez aux dés…"
+                [placeholder]="theme.tone()['scenarios.seances_note_placeholder']"
                 [value]="infoDraft(seance.id, 'notePratique')"
               />
             </label>
@@ -299,7 +298,7 @@
               onSetInfosPratiques(seance.id, heureInput.value, lieuInput.value, noteInput.value)
             "
           >
-            Enregistrer les informations pratiques
+            {{ theme.tone()['scenarios.seances_save_infos'] }}
           </button>
         } @else if (seanceInfos(seance)) {
           <p class="seance-row__infos-pratiques-text">{{ seanceInfos(seance) }}</p>
@@ -312,8 +311,8 @@
             #compteRenduInput
             rows="3"
             maxlength="5000"
-            placeholder="Compte-rendu de la séance…"
-            aria-label="Compte-rendu de la séance"
+            [placeholder]="theme.tone()['scenarios.seances_compte_rendu_placeholder']"
+            [attr.aria-label]="theme.tone()['scenarios.seances_compte_rendu_aria']"
           >{{ seance.compteRendu ?? '' }}</textarea>
           <button
             mat-stroked-button
@@ -321,12 +320,12 @@
             [disabled]="pollActionPending()"
             (click)="onSetCompteRendu(seance.id, compteRenduInput.value)"
           >
-            Enregistrer le compte-rendu
+            {{ theme.tone()['scenarios.seances_save_compte_rendu'] }}
           </button>
         } @else if (seance.compteRendu?.trim()) {
           <p class="seance-row__compte-rendu-text">{{ seance.compteRendu }}</p>
         } @else {
-          <p class="seance-row__compte-rendu-empty">Aucun compte-rendu pour cette séance pour le moment.</p>
+          <p class="seance-row__compte-rendu-empty">{{ theme.tone()['scenarios.seances_compte_rendu_empty'] }}</p>
         }
       </div>
     </div>

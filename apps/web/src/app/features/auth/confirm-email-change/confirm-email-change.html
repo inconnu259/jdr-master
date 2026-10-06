@@ -2,17 +2,17 @@
 <main class="auth-page" aria-labelledby="auth-title">
   <mat-card class="auth-card">
     <mat-card-header>
-      <h1 matCardTitle id="auth-title" class="auth-title">Confirmer le changement d'adresse e-mail</h1>
+      <h1 matCardTitle id="auth-title" class="auth-title">{{ tone()['auth.confirm_email_title'] }}</h1>
     </mat-card-header>
     <mat-card-content>
       @if (!token()) {
         <!-- Présent dès le chargement : texte simple, sans role="alert" -->
-        <p class="error">Lien invalide.</p>
+        <p class="error">{{ tone()['common.lien_invalide'] }}</p>
       }
       <!-- Conteneur persistant : présent avant l'action pour que l'annonce de la réussite ne soit pas perdue -->
       <div class="auth-status" role="status" tabindex="-1" #status>
         @if (confirmed()) {
-          <p class="saved">Votre adresse e-mail a été changée.</p>
+          <p class="saved">{{ tone()['auth.confirm_email_done'] }}</p>
         }
       </div>
       @if (!confirmed()) {
@@ -26,12 +26,12 @@
           [disabled]="loading() || !token()"
           (click)="confirm()"
         >
-          Confirmer
+          {{ tone()['common.confirmer'] }}
         </button>
       }
     </mat-card-content>
     <mat-card-actions class="auth-secondary-actions">
-      <a class="auth-secondary-link" routerLink="/login">Retour à la connexion</a>
+      <a class="auth-secondary-link" routerLink="/login">{{ tone()['common.retour_a_la_connexion'] }}</a>
     </mat-card-actions>
   </mat-card>
 </main>

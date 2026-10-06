@@ -5,14 +5,13 @@
     <mat-progress-spinner mode="indeterminate" diameter="32" />
   } @else if (accessDenied()) {
     <p class="visibility-locks-card__error" role="alert">
-      Accès refusé : seul le MJ de cette partie peut configurer la confidentialité.
+      {{ theme.tone()['parties.locks_access_denied'] }}
     </p>
-    <a mat-stroked-button [routerLink]="['/parties', partieId]">Retour à la partie</a>
+    <a mat-stroked-button [routerLink]="['/parties', partieId]">{{
+      theme.tone()['common.retour_a_la_partie']
+    }}</a>
   } @else {
-    <p class="visibility-locks-card__help">
-      Cochez les éléments de fiche à masquer aux joueurs (hors MJ et propriétaire du personnage).
-      L'enregistrement remplace l'ensemble des verrous actuels de cette partie.
-    </p>
+    <p class="visibility-locks-card__help">{{ theme.tone()['parties.locks_help'] }}</p>
 
     @if (error()) {
       <p class="visibility-locks-card__error" role="alert">{{ error() }}</p>
@@ -43,13 +42,13 @@
         }
       </div>
     } @empty {
-      <p class="visibility-locks-card__empty">
-        Ce système de jeu ne déclare aucun élément verrouillable.
-      </p>
+      <p class="visibility-locks-card__empty">{{ theme.tone()['parties.locks_empty'] }}</p>
     }
 
     <div class="visibility-locks-card__actions">
-      <button mat-button type="button" [disabled]="saving()" (click)="cancel()">Annuler</button>
+      <button mat-button type="button" [disabled]="saving()" (click)="cancel()">{{
+        theme.tone()['common.annuler']
+      }}</button>
       <button
         mat-flat-button
         color="primary"
@@ -58,9 +57,9 @@
         (click)="save()"
       >
         @if (saving()) {
-          Enregistrement…
+          {{ theme.tone()['common.enregistrement'] }}
         } @else {
-          Enregistrer
+          {{ theme.tone()['common.enregistrer'] }}
         }
       </button>
     </div>

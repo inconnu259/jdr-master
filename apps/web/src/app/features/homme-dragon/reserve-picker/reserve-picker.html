@@ -144,13 +144,8 @@
           </span>
         }
       </div>
-      <div
-        class="rp__ddesc"
-        role="group"
-        tabindex="0"
-        [attr.aria-label]="'Description : ' + s.label"
-      >
-        {{ s.description || 'Aucune description disponible.' }}
+      <div class="rp__ddesc" role="group" tabindex="0" [attr.aria-label]="descriptionAria(s.label)">
+        {{ s.description || theme.tone()['common.aucune_description_disponible'] }}
       </div>
       @if (note(); as n) {
         <p class="rp__note">{{ n }}</p>
@@ -162,11 +157,13 @@
       }
     } @else {
       <p class="rp__note" [id]="uid + '-why'">
-        Consultez un souffle de la liste pour lire sa description.
+        {{ theme.tone()['hd.picker_consult_hint'] }}
       </p>
     }
     <div class="rp__actions">
-      <button type="button" class="rp__btn" (click)="closed.emit()">Annuler</button>
+      <button type="button" class="rp__btn" (click)="closed.emit()">
+        {{ theme.tone()['common.annuler'] }}
+      </button>
       <button
         type="button"
         class="rp__btn rp__btn--primary"
@@ -175,7 +172,7 @@
         [attr.aria-describedby]="placeable() ? null : uid + '-why'"
         (click)="place()"
       >
-        Mettre dans l'emplacement {{ slot() }}
+        {{ placeLabel() }}
       </button>
     </div>
     <p class="rp__sr" role="status" aria-live="polite">{{ announcement() }}</p>

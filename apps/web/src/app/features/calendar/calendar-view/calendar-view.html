@@ -4,7 +4,7 @@
        destination globale « Calendrier » déjà accessible en un geste. -->
   @if (partieId()) {
     <button class="oracle-back-btn" mat-stroked-button type="button" (click)="goBack()">
-      ← Retour
+      {{ theme.tone()['calendar.view_back'] }}
     </button>
   }
   <div class="calendar-main">
@@ -70,7 +70,7 @@
            quelque chose à composer (un vote mis en avant, ou une séance qui en attend un). -->
       @if (canCompose() && !composing()) {
         <button type="button" class="compose-arm" (click)="startCompose()">
-          Ajouter des dates
+          {{ theme.tone()['calendar.view_compose_arm'] }}
         </button>
       }
 
@@ -83,7 +83,7 @@
         <mat-button-toggle-group
           [value]="view()"
           (change)="onViewChange($event.value)"
-          aria-label="Vue du calendrier"
+          [attr.aria-label]="theme.tone()['calendar.view_toggle_aria']"
         >
           <!-- AC1 — les DEUX formulations sont émises, le CSS choisit selon la largeur du
                CONTENEUR (voir `.calendar-controls` dans le SCSS). Patron du projet : le composant
@@ -91,14 +91,17 @@
                🚨 `aria-label` porte la forme LONGUE à toutes les largeurs : le nom accessible ne
                se tronque jamais avec le visuel (défaut relevé en revue de la 36.5 sur le rail,
                piège n°11 de la 36.13). -->
-          <mat-button-toggle value="month" aria-label="Vue mois">
-            <span class="vt-long">Vue mois</span><span class="vt-short">Mois</span>
+          <mat-button-toggle value="month" [aria-label]="theme.tone()['common.vue_mois']">
+            <span class="vt-long">{{ theme.tone()['common.vue_mois'] }}</span
+            ><span class="vt-short">{{ theme.tone()['calendar.view_toggle_month_short'] }}</span>
           </mat-button-toggle>
-          <mat-button-toggle value="week" aria-label="Vue semaine">
-            <span class="vt-long">Vue semaine</span><span class="vt-short">Sem.</span>
+          <mat-button-toggle value="week" [aria-label]="theme.tone()['common.vue_semaine']">
+            <span class="vt-long">{{ theme.tone()['common.vue_semaine'] }}</span
+            ><span class="vt-short">{{ theme.tone()['calendar.view_toggle_week_short'] }}</span>
           </mat-button-toggle>
-          <mat-button-toggle value="agenda" aria-label="Vue agenda">
-            <span class="vt-long">Vue agenda</span><span class="vt-short">Agenda</span>
+          <mat-button-toggle value="agenda" [aria-label]="theme.tone()['common.vue_agenda']">
+            <span class="vt-long">{{ theme.tone()['common.vue_agenda'] }}</span
+            ><span class="vt-short">{{ theme.tone()['calendar.view_toggle_agenda_short'] }}</span>
           </mat-button-toggle>
         </mat-button-toggle-group>
       </div>
@@ -285,16 +288,11 @@
                Story 8.8, AC7 : plusieurs votes actifs peuvent coexister (un par Séance), chacun
                étiqueté par son scénario/séance — remplace l'ancien panneau à un seul poll. -->
           @if (activePolls().length === 0) {
-            <p class="hint">Aucun vote de date en cours.</p>
+            <p class="hint">{{ theme.tone()['calendar.view_no_poll'] }}</p>
           }
           @for (entry of activePolls(); track entry.poll.id) {
             <div class="poll-entry">
-              <p class="poll-entry__label">
-                {{ entry.scenario.title }}
-                @if (entry.scenario.seances.length > 1) {
-                  — Séance {{ entry.seanceIndex }}
-                }
-              </p>
+              <p class="poll-entry__label">{{ pollEntryLabel(entry) }}</p>
               <!-- ⚠️ Story 36.9, AC4 — `<app-poll-status>` a été REMPLACÉ ici, et ici seulement.
                    Le panneau du calendrier se réduit à des PERSONNES : dates, participation et ma
                    réponse vivent désormais dans la grille (36.6 / 36.7), les y relister était une
@@ -319,7 +317,7 @@
 
       <div class="date-range-form">
         <label class="date-range-label">
-          Du
+          {{ theme.tone()['common.du'] }}
           <input
             type="date"
             class="date-input"
@@ -328,7 +326,7 @@
           />
         </label>
         <label class="date-range-label">
-          Au
+          {{ theme.tone()['common.au'] }}
           <input
             type="date"
             class="date-input"
@@ -336,7 +334,9 @@
             (change)="onToChange($event)"
           />
         </label>
-        <button mat-stroked-button (click)="onSearch()">Rechercher</button>
+        <button mat-stroked-button (click)="onSearch()">
+          {{ theme.tone()['common.rechercher'] }}
+        </button>
       </div>
       <!-- Story 30.6, AC5 : contenu de l'ancien panneau « voir les créneaux calculés », devenu la
            couche disponibilite-groupe — plus de bouton de défilement dédié, visible seulement
@@ -365,7 +365,7 @@
            qui disparaît ici est précisément ce que la story 36.9 doit retirer du panneau. -->
       <div class="date-range-form">
         <label class="date-range-label">
-          Du
+          {{ theme.tone()['common.du'] }}
           <input
             type="date"
             class="date-input"
@@ -374,7 +374,7 @@
           />
         </label>
         <label class="date-range-label">
-          Au
+          {{ theme.tone()['common.au'] }}
           <input
             type="date"
             class="date-input"
@@ -382,7 +382,9 @@
             (change)="onToChange($event)"
           />
         </label>
-        <button mat-stroked-button (click)="onSearch()">Rechercher</button>
+        <button mat-stroked-button (click)="onSearch()">
+          {{ theme.tone()['common.rechercher'] }}
+        </button>
       </div>
       <!-- Story 30.6, AC5 : couche disponibilite-groupe côté joueur — masquée en vue Agenda
            (revue de code, doublon avec agendaEntries()). -->
@@ -398,7 +400,7 @@
 </div>
 
 @if (pollPanelOpen() && lockedSeanceId(); as sid) {
-  <p class="locked-seance-indicator">Vote pour la séance sélectionnée depuis la fiche scénario.</p>
+  <p class="locked-seance-indicator">{{ theme.tone()['calendar.view_locked_seance_hint'] }}</p>
   <app-poll-creation
     [partieId]="partieId()!"
     [preselectedSlots]="mjSlots()"

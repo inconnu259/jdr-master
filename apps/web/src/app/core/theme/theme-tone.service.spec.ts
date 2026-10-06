@@ -687,3 +687,65 @@ describe('Tones — accroche de la bande d’authentification (Story 34.4)', () 
     expect(new Set(values).size, values.join(' / ')).toBe(THEMES.length);
   });
 });
+
+// Story 35.2 — classement des textes. Les textes migrés au registre gardent leur formulation
+// actuelle, identique dans les trois thèmes (les voix sont réécrites par la 35.3) ; une formulation
+// qui se répète vit sous UNE clé `common.*`. Les trous `{nom}` doivent être les mêmes partout, sinon
+// `fillTone` laisserait un trou affiché dans l'un des thèmes.
+describe('Tones — textes migrés au registre (Story 35.2)', () => {
+  const REFERENCE = TONE_MAP[THEMES[0]];
+
+  it('les clés communes (`common.*`) disent la même chose dans les trois thèmes', () => {
+    const communes = Object.keys(REFERENCE).filter((key) => key.startsWith('common.'));
+    expect(communes.length).toBeGreaterThan(0);
+    for (const key of communes) {
+      for (const theme of THEMES) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(REFERENCE[key]);
+      }
+    }
+  });
+
+  it('les trous `{nom}` d’une clé sont les mêmes dans les trois thèmes', () => {
+    const holes = (text: string) => (text.match(/\{[a-z_]+\}/g) ?? []).sort().join(',');
+    for (const key of Object.keys(REFERENCE)) {
+      for (const theme of THEMES) {
+        expect(holes(TONE_MAP[theme][key]), `${theme} / ${key}`).toBe(holes(REFERENCE[key]));
+      }
+    }
+  });
+
+  it('aucune valeur du registre n’est vide', () => {
+    for (const theme of THEMES) {
+      for (const [key, value] of Object.entries(TONE_MAP[theme])) {
+        expect(value.trim(), `${theme} / ${key}`).not.toBe('');
+      }
+    }
+  });
+
+  it('les libellés orphelins supprimés par la 35.2 ne reviennent pas', () => {
+    const orphelines = [
+      'dashboard.controls_toggle_aria',
+      'dashboard.sort_label',
+      'partie.show_troupe',
+      'partie.hide_troupe',
+      'cta.launch_vote',
+      'cta.send_reminder',
+      'section.constraints',
+      'empty.no_constraints',
+      'alert.expiring_soon',
+      'status.unavailable_label',
+      'status.unknown_label',
+      'empty.no_poll',
+      'success.date_chosen',
+      'character.tab_label',
+      'character.portrait_missing',
+      'account.save_btn',
+      'account.email_change_title',
+    ];
+    for (const theme of THEMES) {
+      for (const key of orphelines) {
+        expect(Object.keys(TONE_MAP[theme]), `${theme} / ${key}`).not.toContain(key);
+      }
+    }
+  });
+});

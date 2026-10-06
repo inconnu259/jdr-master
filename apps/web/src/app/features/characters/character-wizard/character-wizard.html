@@ -1,7 +1,7 @@
 @if (loadError(); as error) {
   <div class="wizard__load-error" role="alert">{{ error }}</div>
 } @else if (steps().length === 0) {
-  <div class="wizard__loading">Chargement de l'assistant…</div>
+  <div class="wizard__loading">{{ theme.tone()['characters_wizard.loading'] }}</div>
 } @else {
   <div class="wizard">
     <div class="wizard__head">
@@ -11,17 +11,17 @@
         class="wizard__nav-btn"
         [disabled]="isFirstStep() || submitting()"
         (click)="goPrev()"
-        aria-label="Étape précédente"
+        [attr.aria-label]="theme.tone()['characters_wizard.step_prev_aria']"
       >❮</button>
       <span class="wizard__nav-title" aria-live="polite">
-        Étape {{ currentStepIndex() + 1 }}/{{ steps().length }} · {{ currentStepLabel() }}
+        {{ stepProgressText() }}
       </span>
       <button
         type="button"
         class="wizard__nav-btn wizard__nav-next"
         [disabled]="!canGoNext() || isLastStep() || submitting()"
         (click)="goNext()"
-        aria-label="Étape suivante"
+        [attr.aria-label]="theme.tone()['characters_wizard.step_next_aria']"
       >❯</button>
       <!-- Téléphone : le récapitulatif ne tient pas en colonne — un bouton l'ouvre en feuille. -->
       <button
@@ -135,20 +135,20 @@
         }
 
         <div class="wizard__nav-bottom">
-          <button mat-stroked-button [disabled]="isFirstStep() || submitting()" (click)="goPrev()">❮ Précédent</button>
+          <button mat-stroked-button [disabled]="isFirstStep() || submitting()" (click)="goPrev()">❮ {{ theme.tone()['common.precedent'] }}</button>
           @if (isLastStep()) {
             <button mat-flat-button color="primary" [disabled]="submitting()" (click)="onSubmit()">
-              @if (submitting()) { Création… } @else { {{ theme.tone()['character.create_cta'] }} }
+              @if (submitting()) { {{ theme.tone()['characters_wizard.submitting'] }} } @else { {{ theme.tone()['character.create_cta'] }} }
             </button>
           } @else {
             <button mat-flat-button color="primary" [disabled]="!canGoNext() || submitting()" (click)="goNext()">
-              Suivant ❯
+              {{ theme.tone()['common.suivant'] }} ❯
             </button>
           }
         </div>
       </div>
 
-      <aside class="wizard__summary" aria-label="Récapitulatif du voyageur">
+      <aside class="wizard__summary" [attr.aria-label]="theme.tone()['characters_wizard.summary_aria']">
         <app-wizard-summary
           [sheetData]="sheetData()"
           [derived]="derived()"

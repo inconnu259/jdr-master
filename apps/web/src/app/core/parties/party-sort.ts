@@ -1,6 +1,6 @@
 import type { PartieDto, PartieSort, PartySignalsDto } from '@master-jdr/shared';
 import { dominantCategory, type SignalCategory } from './party-signal-priority';
-import { partieKindLabel } from './parties.util';
+import { partieKindLabelKey } from './parties.util';
 
 /** Ordre des catégories de priorité pour le tri 'urgence' (Story 29.7, réutilisé tel quel) —
  *  une partie sans signal se comporte comme « aucune catégorie », classée après 'informative'. */
@@ -48,7 +48,11 @@ export function sortParties(
     case 'nom':
       return copy.sort((a, b) => a.name.localeCompare(b.name));
     case 'type':
-      return copy.sort((a, b) => partieKindLabel(a.kind).localeCompare(partieKindLabel(b.kind)));
+      // Tri sur les clés de ton (même ordre alphabétique que les libellés d'origine) : l'ordre ne
+      // dépend ainsi jamais du thème actif.
+      return copy.sort((a, b) =>
+        partieKindLabelKey(a.kind).localeCompare(partieKindLabelKey(b.kind)),
+      );
     case 'statut':
       return copy.sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
     default:

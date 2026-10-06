@@ -36,7 +36,7 @@ export class RosterStrip {
       this.mjId(),
       this.classLabelFor(),
       this.roleLabelFor(),
-      this.theme.tone()['roster.create_slot_label'],
+      this.theme.tone(),
       // Revue de code (bmad-review, 2026-09-21) : aucun appelant ne câble aujourd'hui de slot de
       // création sur RosterStrip (le composant est ouvert à tout membre, cf. docstring, mais ne
       // reçoit ni condition d'éligibilité ni identité courante) — toujours inéligible pour

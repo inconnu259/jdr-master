@@ -32,7 +32,7 @@
     <button
       class="announcement-banner__close"
       type="button"
-      [attr.aria-label]="'Fermer la notification de ' + b.partieName"
+      [attr.aria-label]="bannerCloseLabel(b.partieName)"
       (click)="dismissBanner(b.announcement.id)"
     >
       <mat-icon aria-hidden="true">close</mat-icon>
@@ -43,7 +43,7 @@
 <!-- Story 29.3 : barre à 4 destinations — mêmes liens, barre haute sur desktop / barre basse sur
      mobile (bascule CSS, cf. shell.scss). L'entrée active porte aria-current="page" (posé par
      ariaCurrentWhenActive) et une classe dédiée (poids de police) : jamais la couleur seule (AC3). -->
-<nav class="nav-bar" aria-label="Navigation principale">
+<nav class="nav-bar" [attr.aria-label]="theme.tone()['shell.nav_main_aria']">
   <a
     class="nav-bar__link"
     routerLink="/"

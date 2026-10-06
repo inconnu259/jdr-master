@@ -6,6 +6,7 @@ import { PartiesService } from '../../../core/parties/parties.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { HommeDragonCreationWizard } from '../homme-dragon-creation-wizard/homme-dragon-creation-wizard';
 
 /**
@@ -32,6 +33,7 @@ export class HommeDragonCreationPage implements OnInit {
   private readonly hommeDragonSvc = inject(HommeDragonService);
   private readonly auth = inject(AuthService);
   private readonly contextualNav = inject(ContextualNavService);
+  protected readonly theme = inject(ThemeToneService);
 
   protected partieId = '';
   protected readonly partie = signal<PartieDto | null>(null);
@@ -42,14 +44,17 @@ export class HommeDragonCreationPage implements OnInit {
     effect(() => {
       const p = this.partie();
       if (!p) return;
-      this.contextualNav.set({ title: 'Créer un Homme Dragon', subtitle: p.name });
+      this.contextualNav.set({
+        title: this.theme.tone()['hd.creation_page_title'],
+        subtitle: p.name,
+      });
     });
   }
 
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) {
-      this.error.set('Partie introuvable.');
+      this.error.set(this.theme.tone()['common.partie_introuvable']);
       this.loading.set(false);
       return;
     }
@@ -59,7 +64,7 @@ export class HommeDragonCreationPage implements OnInit {
     try {
       partie = await this.partiesSvc.get(id);
     } catch {
-      this.error.set('Impossible de charger la partie. Réessayez.');
+      this.error.set(this.theme.tone()['common.impossible_de_charger_la_partie_reessayez']);
       this.loading.set(false);
       return;
     }
@@ -77,7 +82,7 @@ export class HommeDragonCreationPage implements OnInit {
         return;
       }
     } catch {
-      this.error.set("Impossible de vérifier l'Homme Dragon de cette aventure. Réessayez.");
+      this.error.set(this.theme.tone()['hd.creation_check_error']);
       this.loading.set(false);
       return;
     }

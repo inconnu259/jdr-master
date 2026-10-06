@@ -1,4 +1,13 @@
-import { Component, computed, effect, input, output, signal, untracked } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import type { ContentEntryDto, HommeDragonRace } from '@master-jdr/shared';
 import {
   RESERVE_REASON_AUTRE_RACE_NIVEAU,
@@ -9,6 +18,8 @@ import {
   type ReserveCatalogs,
   type ReservePlacement,
 } from '@master-jdr/game-rules';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import { DetailSurface } from '../../../shared/detail-surface/detail-surface';
 import { RACES, RACE_LABELS, RACE_TAGS } from '../homme-dragon-races';
 import {
@@ -92,11 +103,22 @@ export class ReservePicker {
   /** « Annuler », Échap ou ✕ : rien n'est modifié. */
   readonly closed = output<void>();
 
+  protected readonly theme = inject(ThemeToneService);
   protected readonly uid = `rp-${nextInstance++}`;
   protected readonly raceTags = RACE_TAGS;
   protected readonly raceLabels = RACE_LABELS;
 
-  protected readonly title = computed(() => `Choisir un souffle pour l'emplacement ${this.slot()}`);
+  protected readonly title = computed(() =>
+    fillTone(this.theme.tone()['hd.reserve_pick_for_slot'], { n: this.slot() }),
+  );
+  /** Nom accessible de la zone de description du souffle consulté. */
+  protected descriptionAria(nom: string): string {
+    return fillTone(this.theme.tone()['hd.picker_description_aria'], { nom });
+  }
+  /** Libellé du bouton qui place le souffle consulté dans l'emplacement visé. */
+  protected readonly placeLabel = computed(() =>
+    fillTone(this.theme.tone()['hd.picker_place_btn'], { n: this.slot() }),
+  );
   private readonly capacity = computed(() => reserveCapacity(this.level()));
 
   /** Emplacements remplis parmi ceux qui existent. */
@@ -324,8 +346,8 @@ export class ReservePicker {
   /** Raison écrite pour laquelle « Mettre dans l'emplacement N » est inactif (`null` si actif). */
   protected readonly blockedReason = computed<string | null>(() => {
     const s = this.selected();
-    if (!s) return 'Choisissez un souffle dans la liste.';
-    if (!this.slotExists()) return "Cet emplacement n'existe plus.";
+    if (!s) return this.theme.tone()['hd.picker_choose_hint'];
+    if (!this.slotExists()) return this.theme.tone()['hd.picker_slot_gone'];
     return s.placement.reason;
   });
 
@@ -348,7 +370,10 @@ export class ReservePicker {
         const previous = this.lastPlaceable;
         if (key && previous?.key === key && previous.ok && !ok && reason) {
           this.announcement.set(
-            `Placement impossible dans l'emplacement ${this.slot()} : ${reason}`,
+            fillTone(this.theme.tone()['hd.picker_blocked_announce'], {
+              n: this.slot(),
+              raison: reason,
+            }),
           );
         }
         this.lastPlaceable = key ? { key, ok } : null;

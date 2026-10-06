@@ -1,5 +1,16 @@
-import { Component, computed, effect, input, output, signal, untracked } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import type { ContentEntryDto } from '@master-jdr/shared';
+import { ThemeToneService } from '../../../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../../../core/theme/tone-format';
 import { ChoiceCard, type ChoiceCardOption } from '../../choice-card/choice-card';
 import { RadioGroupNavDirective } from '../../choice-card/radio-group-nav.directive';
 
@@ -30,6 +41,8 @@ export class AttributesStep {
   readonly attributes = input<Partial<Record<AttrKey, number>> | undefined>();
 
   readonly attributesChange = output<Record<AttrKey, number> | null>();
+
+  protected readonly theme = inject(ThemeToneService);
 
   protected readonly ATTR_KEYS = ATTR_KEYS;
   protected readonly ATTR_LABELS = ATTR_LABELS;
@@ -140,6 +153,16 @@ export class AttributesStep {
     () => Object.values(this.assignment()).filter((i) => i !== undefined).length,
   );
 
+  /** Fin de la bannière « Profil X — n valeurs sur 4 placées » (singulier ou pluriel selon n). */
+  protected bannerTail(): string {
+    const n = this.placedCount();
+    const key =
+      n > 1
+        ? 'characters_wizard.attributes_banner_many'
+        : 'characters_wizard.attributes_banner_one';
+    return fillTone(this.theme.tone()[key], { n, total: ATTR_KEYS.length });
+  }
+
   private valueOf(attr: AttrKey): number | undefined {
     const idx = this.assignment()[attr];
     return idx === undefined ? undefined : this.values()[idx];
@@ -173,7 +196,10 @@ export class AttributesStep {
   /** Nom accessible : la valeur, plus le compteur quand il existe (« 6, encore 2 à placer »). */
   protected chipLabel(value: number): string {
     return this.showCount(value)
-      ? `${value}, encore ${this.remaining(value)} à placer`
+      ? fillTone(this.theme.tone()['characters_wizard.attributes_chip_remaining'], {
+          value,
+          n: this.remaining(value),
+        })
       : `${value}`;
   }
 

@@ -666,16 +666,16 @@ export class CharacterSheet implements OnInit {
 
     const characterId = this.route.snapshot.paramMap.get('characterId');
     if (!characterId) {
-      this.loadError.set('Fiche introuvable.');
+      this.loadError.set(this.theme.tone()['characters_sheet.not_found']);
       return;
     }
     try {
       this.character.set(await this.characterSvc.get(characterId));
     } catch (err) {
       if (err instanceof HttpErrorResponse && err.status === 403) {
-        this.loadError.set("Vous n'avez pas accès à cette fiche.");
+        this.loadError.set(this.theme.tone()['characters_sheet.access_denied']);
       } else {
-        this.loadError.set('Impossible de charger la fiche de personnage. Réessayez.');
+        this.loadError.set(this.theme.tone()['characters_sheet.load_error']);
       }
       return;
     }
@@ -824,7 +824,7 @@ export class CharacterSheet implements OnInit {
       );
       this.character.set(updated);
     } catch {
-      this.portraitError.set("Le portrait n'a pas pu être enregistré. Réessayez.");
+      this.portraitError.set(this.theme.tone()['characters_sheet.portrait_save_error']);
     }
   }
 
@@ -863,7 +863,7 @@ export class CharacterSheet implements OnInit {
       const updated = await this.characterSvc.patchPdfPortraitCrop(characterId, result.cropData);
       this.character.set(updated);
     } catch {
-      this.portraitError.set('Le cadrage PDF n’a pas pu être enregistré. Réessayez.');
+      this.portraitError.set(this.theme.tone()['characters_sheet.pdf_crop_save_error']);
     }
   }
 

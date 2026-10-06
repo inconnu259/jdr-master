@@ -45,8 +45,9 @@ import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { AuthService } from '../../core/auth/auth.service';
 import { AccountService } from '../../core/account/account.service';
 import { RealtimeService, userTopic } from '../../core/realtime/realtime.service';
-import { gameSystemName, partieKindLabel } from '../../core/parties/parties.util';
+import { gameSystemName, partieKindLabelKey } from '../../core/parties/parties.util';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
+import { fillTone } from '../../core/theme/tone-format';
 
 /** Signaux purement informatifs (jamais une action à faire) — exclus du regroupement « ce qui
  *  t'attend » (Task 7) et de la teinte de priorité (Task 6, cf. party-signal-priority.ts). */
@@ -115,7 +116,8 @@ export class Dashboard implements OnInit {
   protected readonly received = signal<InvitationDto[]>([]);
   protected readonly openPolls = this.openPollsSvc.openPolls;
   protected readonly system = gameSystemName;
-  protected readonly kind = partieKindLabel;
+  protected readonly kind = (kind: PartieDto['kind']): string =>
+    this.theme.tone()[partieKindLabelKey(kind)] ?? kind;
 
   /** Critères de filtre (AC2/AC5) — purement transitoires (écran), jamais mémorisés sur le compte
    *  (EXPERIENCE.md §4.2 : seul le tri par défaut vit dans les préférences). */
@@ -281,6 +283,11 @@ export class Dashboard implements OnInit {
   /** Libellé de thème d'un code de signal — clé `partie.signal_<code>` en minuscule. */
   protected signalLabel(code: PartySignalCode): string {
     return this.theme.tone()[`partie.signal_${code.toLowerCase()}`] ?? code;
+  }
+
+  /** Mention « invité par <pseudo> » d'une invitation reçue (gabarit lu dans le registre). */
+  protected invitedByLabel(pseudo: string): string {
+    return fillTone(this.theme.tone()['dashboard.invitation_invited_by'], { pseudo });
   }
 
   /** Gabarit « +{n} » (AC3) — même patron `.replace()` que `partie.notice_invited` ailleurs. */

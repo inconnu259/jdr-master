@@ -1,8 +1,19 @@
-import { Routes } from '@angular/router';
+import { inject } from '@angular/core';
+import { ResolveFn, Routes } from '@angular/router';
 import { authGuard } from './core/auth/auth.guard';
 import { Shell } from './layout/shell/shell';
 import { Login } from './features/auth/login/login';
 import { Dashboard } from './features/dashboard/dashboard';
+import { ThemeToneService } from './core/theme/theme-tone.service';
+
+// Titres d'onglet thématisés : un `ResolveFn` lit le registre de ton au moment de la navigation
+// (la `PageTitleStrategy` reçoit le titre déjà résolu). Le titre reflète le thème actif À LA NAVIGATION,
+// sans que la route ne porte de texte en dur ; un changement de thème sans navigation ne le met pas à
+// jour (les écrans concernés, authentification, n'ont pas de sélecteur de thème).
+const toneTitle =
+  (key: string): ResolveFn<string> =>
+  () =>
+    inject(ThemeToneService).tone()[key];
 
 // Seuls trois composants restent importés en dur, parce qu'ils sont sur le chemin critique du
 // premier affichage : `Shell` (enveloppe de la zone authentifiée), `Dashboard` (route d'accueil
@@ -21,27 +32,27 @@ const partieForm = () =>
   import('./features/parties/partie-form/partie-form').then((m) => m.PartieForm);
 
 export const routes: Routes = [
-  { path: 'login', title: 'Connexion', component: Login },
+  { path: 'login', title: toneTitle('common.connexion'), component: Login },
   {
     path: 'register',
-    title: 'Créer un compte',
+    title: toneTitle('common.creer_un_compte'),
     loadComponent: () => import('./features/auth/register/register').then((m) => m.Register),
   },
   {
     path: 'forgot-password',
-    title: 'Mot de passe oublié',
+    title: toneTitle('common.mot_de_passe_oublie'),
     loadComponent: () =>
       import('./features/auth/forgot-password/forgot-password').then((m) => m.ForgotPassword),
   },
   {
     path: 'reset-password/:token',
-    title: 'Nouveau mot de passe',
+    title: toneTitle('common.nouveau_mot_de_passe'),
     loadComponent: () =>
       import('./features/auth/reset-password/reset-password').then((m) => m.ResetPassword),
   },
   {
     path: 'confirm-email-change/:token',
-    title: "Confirmer le changement d'e-mail",
+    title: toneTitle('route.title_confirm_email_change'),
     loadComponent: () =>
       import('./features/auth/confirm-email-change/confirm-email-change').then(
         (m) => m.ConfirmEmailChange,
@@ -49,7 +60,7 @@ export const routes: Routes = [
   },
   {
     path: 'rollback-email-change/:token',
-    title: "Annuler le changement d'e-mail",
+    title: toneTitle('route.title_rollback_email_change'),
     loadComponent: () =>
       import('./features/auth/rollback-email-change/rollback-email-change').then(
         (m) => m.RollbackEmailChange,
@@ -58,7 +69,7 @@ export const routes: Routes = [
   {
     // hors zone authentifiée : un nouveau venu doit y accéder
     path: 'join/:token',
-    title: 'Rejoindre',
+    title: toneTitle('common.rejoindre'),
     loadComponent: () => import('./features/join/join').then((m) => m.Join),
   },
   {

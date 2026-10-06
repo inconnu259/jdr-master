@@ -83,7 +83,7 @@
                     [ngModel]="valueForChoice(choice)"
                     (ngModelChange)="onChoiceInput(choice, $event)"
                   >
-                    <option value="" disabled>-- Choisir --</option>
+                    <option value="" disabled>{{ theme.tone()['common.choisir'] }}</option>
                     @for (opt of optionsForChoice(choice); track opt.key) {
                       <option [value]="opt.key">{{ opt.label }}</option>
                     }

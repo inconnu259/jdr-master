@@ -2,7 +2,7 @@
   <div
     class="attributes-step__patterns"
     role="radiogroup"
-    aria-label="Profil d'attributs"
+    [attr.aria-label]="theme.tone()['characters_wizard.attributes_profile_aria']"
     appRadioGroupNav
   >
     @for (opt of patternOptions(); track opt.key) {
@@ -17,8 +17,7 @@
 
   @if (selectedPatternData(); as pattern) {
     <p class="attributes-step__banner">
-      Profil <strong>{{ pattern.label }}</strong> — {{ placedCount() }} valeur{{ placedCount() > 1 ? 's' : '' }}
-      sur {{ ATTR_KEYS.length }} placée{{ placedCount() > 1 ? 's' : '' }}
+      {{ theme.tone()['characters_wizard.attributes_banner_profile'] }} <strong>{{ pattern.label }}</strong> {{ bannerTail() }}
     </p>
 
     <div class="attributes-step__grid">

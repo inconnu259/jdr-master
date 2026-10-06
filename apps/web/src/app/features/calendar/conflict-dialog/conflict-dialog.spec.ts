@@ -235,3 +235,58 @@ describe('ConflictDialog (Story 36.4)', () => {
     });
   });
 });
+
+// Story 35.2 — accords en nombre et trous `{kind}` : ces textes viennent désormais du registre de ton,
+// et aucun test ne lisait leur rendu (un `_one`/`_many` inversé ou un trou oublié passait inaperçu).
+describe('ConflictDialog — textes du registre (Story 35.2)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const compact = (el: HTMLElement, selector: string) =>
+    el.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim();
+
+  it('plusieurs créneaux : têtes de « Remplacer » / « Conserver » et compteur de décisions au pluriel', async () => {
+    const { el } = await createComponent(makeData());
+
+    expect(compact(el, '[data-test="choice-overwrite"] b')).toBe('Les 3 deviennent disponibles');
+    expect(compact(el, '[data-test="choice-keep"] b')).toBe('Ces 3 restent comme ils sont');
+    expect(compact(el, '[data-test="choice-walkthrough"] .choice__detail')).toBe(
+      '3 décisions à prendre',
+    );
+  });
+
+  it('un seul créneau : têtes et compteur au singulier', async () => {
+    const { el } = await createComponent(
+      makeData({ conflicts: [{ batchIndex: 2, label: 'Mar 4 août · Soir' }] }),
+    );
+
+    expect(compact(el, '[data-test="choice-overwrite"] b')).toBe('Le créneau devient disponible');
+    expect(compact(el, '[data-test="choice-keep"] b')).toBe('Ce créneau reste comme il est');
+    expect(compact(el, '[data-test="choice-walkthrough"] .choice__detail')).toBe(
+      '1 décision à prendre',
+    );
+  });
+
+  it('ligne d’exception : verbe accordé et mot d’état injecté dans le détail', async () => {
+    const one = await createComponent(makeData({ seanceExceptions: ['Mer 5 août · Soir'] }));
+    expect(compact(one.el, '.exception b')).toBe("Mer 5 août · Soir n'est pas dans la liste");
+    expect(compact(one.el, '.exception__detail')).toContain('tu redeviens disponible.');
+    TestBed.resetTestingModule();
+
+    const many = await createComponent(
+      makeData({ seanceExceptions: ['Mer 5 août · Soir', 'Jeu 6 août · Soir'] }),
+    );
+    expect(compact(many.el, '.exception b')).toBe(
+      'Mer 5 août · Soir · Jeu 6 août · Soir ne sont pas dans la liste',
+    );
+  });
+
+  it('défilé : l’annonce nomme le créneau et la progression', async () => {
+    const { fixture, el } = await createComponent(makeData());
+    el.querySelector<HTMLButtonElement>('[data-test="choice-walkthrough"]')!.click();
+    fixture.detectChanges();
+
+    expect(compact(el, '[aria-live="polite"]')).toBe(
+      'Créneau 1 / 3 : Mar 4 août · Soir. Remplacer ou conserver ?',
+    );
+  });
+});

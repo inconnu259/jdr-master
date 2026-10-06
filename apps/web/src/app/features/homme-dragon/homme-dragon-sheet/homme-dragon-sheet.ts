@@ -38,6 +38,7 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { PartySignalsService } from '../../../core/parties/party-signals.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import { ConfirmDialog } from '../../parties/confirm-dialog/confirm-dialog';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
 import { ambiguousUserIds } from '../../../shared/identity/identity-ambiguity.util';
@@ -254,8 +255,8 @@ export class HommeDragonSheet implements OnInit {
       // serveur) reste transitoire : même état `undefined` que le chargement, message distinct.
       this.loadError.set(
         e instanceof HttpErrorResponse && e.status === 404
-          ? 'Homme Dragon introuvable.'
-          : 'Impossible de charger la fiche. Réessayez.',
+          ? this.theme.tone()['common.homme_dragon_introuvable']
+          : this.theme.tone()['hd.sheet_load_error'],
       );
     }
   }
@@ -275,6 +276,11 @@ export class HommeDragonSheet implements OnInit {
 
   protected isAmbiguous(partieId: string, userId: string): boolean {
     return this.ambiguousByAventure().get(partieId)?.has(userId) ?? false;
+  }
+
+  /** Nom accessible du bouton « Retirer » d'une aventure (contient le libellé visible). */
+  protected removeAventureAria(nom: string): string {
+    return fillTone(this.theme.tone()['hd.sheet_aventure_remove_aria'], { nom });
   }
 
   /** Aventures éligibles à « Ajouter une aventure » : mes parties Ryuutama sans Homme Dragon, lues
@@ -311,7 +317,7 @@ export class HommeDragonSheet implements OnInit {
       this.selectedAventureId.set(null);
       void this.partySignals.refresh();
     } catch {
-      this.aventureError.set("Impossible d'ajouter cette aventure. Réessayez.");
+      this.aventureError.set(this.theme.tone()['hd.sheet_aventure_add_error']);
     } finally {
       this.aventureBusy.set(false);
     }
@@ -322,8 +328,10 @@ export class HommeDragonSheet implements OnInit {
     if (this.aventureBusy()) return;
     const ref = this.dialog.open(ConfirmDialog, {
       data: {
-        message: `Retirer « ${aventure.nom} » ? Le niveau de l'Homme Dragon peut baisser ; sa fiche, sa réserve et ses choix sont conservés.`,
-        confirmLabel: 'Retirer',
+        message: fillTone(this.theme.tone()['hd.sheet_aventure_remove_confirm'], {
+          nom: aventure.nom,
+        }),
+        confirmLabel: this.theme.tone()['common.retirer'],
       },
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;
@@ -335,7 +343,7 @@ export class HommeDragonSheet implements OnInit {
       );
       void this.partySignals.refresh();
     } catch {
-      this.aventureError.set('Impossible de retirer cette aventure. Réessayez.');
+      this.aventureError.set(this.theme.tone()['hd.sheet_aventure_remove_error']);
     } finally {
       this.aventureBusy.set(false);
     }
@@ -362,7 +370,7 @@ export class HommeDragonSheet implements OnInit {
       this.hommeDragon.set(updated);
       this.editingArtefact.set(false);
     } catch {
-      this.updateError.set("Impossible de changer d'artefact. Réessayez.");
+      this.updateError.set(this.theme.tone()['hd.sheet_artefact_change_error']);
     } finally {
       this.updating.set(false);
     }
@@ -411,7 +419,9 @@ export class HommeDragonSheet implements OnInit {
       this.hommeDragon.set(updated);
       this.selectedEveilPowerKey.set(null);
     } catch {
-      this.eveilPowerError.set("Impossible d'enregistrer ce choix. Réessayez.");
+      this.eveilPowerError.set(
+        this.theme.tone()['common.impossible_d_enregistrer_ce_choix_reessayez'],
+      );
     } finally {
       this.choosingEveilPower.set(false);
     }
@@ -582,6 +592,14 @@ export class HommeDragonSheet implements OnInit {
     return this.cadeauOptions().find((o) => o.option.key === key)?.option.label ?? key;
   });
 
+  /** Question de la confirmation du cadeau (la mention « Ce choix est définitif. » est en gras
+   *  dans le gabarit, ce texte la suit). */
+  protected readonly cadeauConfirmText = computed<string>(() =>
+    fillTone(this.theme.tone()['hd.sheet_cadeau_confirm_text'], {
+      nom: this.selectedCadeauLabel(),
+    }),
+  );
+
   protected selectCadeau(key: string): void {
     this.selectedCadeauKey.set(key);
     this.cadeauError.set(null);
@@ -626,7 +644,7 @@ export class HommeDragonSheet implements OnInit {
       this.selectedCadeauKey.set(null);
       this.confirmingCadeau.set(false);
     } catch {
-      this.cadeauError.set("Impossible d'enregistrer ce choix. Réessayez.");
+      this.cadeauError.set(this.theme.tone()['common.impossible_d_enregistrer_ce_choix_reessayez']);
       // Retour à la sélection : le cadeau a pu être choisi ailleurs entre-temps (la fiche se
       // rafraîchit alors d'elle-même par le signal `changed`).
       this.confirmingCadeau.set(false);
@@ -732,7 +750,7 @@ export class HommeDragonSheet implements OnInit {
       link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 0);
     } catch {
-      this.exportError.set("Impossible d'exporter la fiche en PDF. Réessayez.");
+      this.exportError.set(this.theme.tone()['hd.sheet_export_error']);
     } finally {
       this.exporting.set(false);
       this.restoreFocusToExportTrigger();

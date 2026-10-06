@@ -1,4 +1,4 @@
-import { Component, computed, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -10,6 +10,8 @@ import type {
   DaySlot,
   SlotStatus,
 } from '@master-jdr/shared';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import { SelectionBar } from '../selection-bar/selection-bar';
 import { SLOT_LABELS } from '../agenda-badge.utils';
 import type { AgendaEntry, AgendaSealRequest } from '../calendar-agenda-view/calendar-agenda-view';
@@ -37,8 +39,9 @@ import {
   monthRangeDays,
 } from '../selection.utils';
 
-/** Story 36.10, AC16 — le mot que porte un créneau désigné, identique dans les deux grilles. */
-const COMPOSED_ARIA = 'désigné pour le vote';
+/** Story 36.10, AC16 — clé de ton du mot que porte un créneau désigné, identique dans les deux
+ *  grilles. */
+const COMPOSED_ARIA_KEY = 'common.designe_pour_le_vote';
 
 /** Story 36.15 — bloc JUMEAU de `calendar-week-view.ts` (`SEAL_DATE_FORMAT`). Toute retouche ici
  *  est à reporter là-bas. */
@@ -254,6 +257,8 @@ import {
   styleUrl: './calendar-month-view.scss',
 })
 export class CalendarMonthView {
+  protected readonly theme = inject(ThemeToneService);
+
   readonly declarations = input<AvailabilityDeclarationDto[]>([]);
   readonly loading = input(false);
   readonly pendingDto = input<CreateAvailabilityDto | null>(null);
@@ -628,32 +633,43 @@ export class CalendarMonthView {
     // contenu, y compris le `role="img"`/`aria-label` propre à `<app-group-gauge>` qu'elle
     // contient désormais. Sans ce repli, le canal serait purement visuel dans la case du Mois —
     // exactement la régression que la revue de la 36.7 a corrigée pour la piste dans le rail.
-    const groupe = band.group ? groupAriaLabel(band.group) : '';
+    const tone = this.theme.tone();
+    const groupe = band.group ? groupAriaLabel(band.group, tone) : '';
 
     // Story 36.5, AC13 : les informations pratiques sont ANNONCÉES, pas seulement affichées —
     // et à l'oreille elles ne sont jamais tronquées, contrairement à l'ellipse visuelle.
     if (band.text) {
       // Story 36.6, AC14 — la piste code par la PROPORTION : sans ce texte, elle n'existe pas
       // pour un lecteur d'écran. Elle s'ajoute au titre du vote, elle ne le remplace pas.
-      const participation = band.vote ? participationAriaLabel(band.vote) : '';
+      const participation = band.vote ? participationAriaLabel(band.vote, tone) : '';
       const parts = [`${band.label} : ${band.text}`];
       if (band.info) parts.push(band.info);
       if (participation) parts.push(participation);
       if (groupe) parts.push(groupe);
       // Story 36.10, AC16 — l'état composé est ANNONCÉ. Le liseré qui le montre n'existe pas pour
       // un lecteur d'écran, et « jamais la couleur seule » (P-1) vaut aussi pour un filet.
-      if (composed) parts.push(COMPOSED_ARIA);
+      if (composed) parts.push(tone[COMPOSED_ARIA_KEY]);
       return parts.join(' — ');
     }
     const labels: Record<SlotStatus, string> = {
-      AVAILABLE: 'disponible',
-      UNAVAILABLE: 'indisponible',
-      UNKNOWN: 'non déclaré',
+      AVAILABLE: tone['calendar.week_status_available'],
+      UNAVAILABLE: tone['calendar.week_status_unavailable'],
+      UNKNOWN: tone['calendar.month_status_unknown'],
     };
     const parts = [`${band.label} : ${labels[band.status]}`];
     if (groupe) parts.push(groupe);
-    if (composed) parts.push(COMPOSED_ARIA);
+    if (composed) parts.push(tone[COMPOSED_ARIA_KEY]);
     return parts.join(' — ');
+  }
+
+  /** Nom accessible d'une case du mois courant : son numéro, suivi de « aujourd'hui » le cas
+   *  échéant. `null` pour un jour hors du mois affiché (la case est alors masquée aux lecteurs). */
+  protected cellAriaLabel(cell: DayCell): string | null {
+    if (!cell.isCurrentMonth) return null;
+    const day = cell.date.getDate();
+    return cell.isToday
+      ? fillTone(this.theme.tone()['calendar.month_day_today_aria'], { day })
+      : String(day);
   }
 
   /** Story 36.10, AC13 — ce créneau fait-il partie de la composition en cours ? Test

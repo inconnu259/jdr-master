@@ -28,7 +28,7 @@
         }
       </div>
       @if (failedOptionIds().has(opt.id)) {
-        <span class="poll-response__option-error" aria-label="Non enregistré">⚠</span>
+        <span class="poll-response__option-error" [attr.aria-label]="theme.tone()['pollui.response_not_saved_aria']">⚠</span>
       }
     </div>
   }
@@ -46,7 +46,7 @@
         [disabled]="!hasSelection() || saving()"
         (click)="onConfirm()"
       >
-        @if (saving()) { Envoi… } @else { {{ theme.tone()['cta.confirm_votes'] }} }
+        @if (saving()) { {{ theme.tone()['common.envoi'] }} } @else { {{ theme.tone()['cta.confirm_votes'] }} }
       </button>
     </div>
   }

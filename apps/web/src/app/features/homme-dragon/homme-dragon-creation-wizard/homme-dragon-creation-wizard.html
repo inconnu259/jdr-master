@@ -1,7 +1,7 @@
 <div class="hdw">
   <div class="hdw__head">
     <p class="hdw__title" aria-live="polite">
-      Étape {{ stepIndex() + 1 }}/{{ steps().length }} · {{ currentStep().label }}
+      {{ stepProgress() }}
     </p>
     <div class="hdw__progress-track">
       <div class="hdw__progress-fill" [style.width.%]="((stepIndex() + 1) / steps().length) * 100"></div>
@@ -23,7 +23,7 @@
             aria-controls="hdw-intro"
             [attr.aria-expanded]="introExpanded()"
             (click)="introExpanded.set(!introExpanded())"
-          >{{ introExpanded() ? 'Réduire' : 'Lire la suite' }}</button>
+          >{{ introExpanded() ? theme.tone()['common.reduire'] : theme.tone()['common.lire_la_suite'] }}</button>
         }
       </div>
     }
@@ -55,9 +55,9 @@
                 <button
                   type="button"
                   class="hdw__more"
-                  [attr.aria-label]="'En savoir plus sur ' + r.option.label"
+                  [attr.aria-label]="moreAria(r.option.label)"
                   (click)="openRaceDetail(r.race, $event)"
-                >En savoir plus</button>
+                >{{ theme.tone()['common.en_savoir_plus'] }}</button>
               }
             </div>
           }
@@ -66,7 +66,7 @@
 
       @case ('artefact') {
         @if (artefactOptions().length === 0) {
-          <p class="hdw__empty">Aucun artefact n'est disponible pour cette race.</p>
+          <p class="hdw__empty">{{ theme.tone()['hd.wizard_artefact_empty'] }}</p>
         } @else {
           <div
             class="hdw__grid hdw__grid--artefact"
@@ -86,9 +86,9 @@
                   <button
                     type="button"
                     class="hdw__more"
-                    [attr.aria-label]="'En savoir plus sur ' + a.option.label"
+                    [attr.aria-label]="moreAria(a.option.label)"
                     (click)="detail.openContent(content, $event)"
-                  >En savoir plus</button>
+                  >{{ theme.tone()['common.en_savoir_plus'] }}</button>
                 }
               </div>
             }
@@ -238,7 +238,7 @@
 
   <div class="hdw__nav-bottom">
     <button mat-stroked-button type="button" [disabled]="isFirstStep() || creating()" (click)="goPrev()">
-      ❮ Précédent
+      {{ theme.tone()['common.precedent_2'] }}
     </button>
     @if (isLastStep()) {
       <button
@@ -258,7 +258,7 @@
         [disabled]="!canGoNext() || creating()"
         (click)="goNext()"
       >
-        Suivant ❯
+        {{ theme.tone()['common.suivant_2'] }}
       </button>
     }
   </div>

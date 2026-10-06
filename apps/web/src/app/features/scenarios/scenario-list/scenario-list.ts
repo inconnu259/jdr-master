@@ -124,14 +124,14 @@ export class ScenarioList implements OnInit {
       this.loadError.set(null);
     } catch {
       if (this.destroyed || generation !== this.loadGeneration) return;
-      this.loadError.set('Impossible de charger les scénarios. Réessayez.');
+      this.loadError.set(this.theme.tone()['common.impossible_de_charger_les_scenarios_reessayez']);
     }
   }
 
   async ngOnInit(): Promise<void> {
     const partieId = this.resolvePartieId();
     if (!partieId) {
-      this.loadError.set('Partie introuvable.');
+      this.loadError.set(this.theme.tone()['common.partie_introuvable']);
       return;
     }
     this.realtime.connect(partieTopic(partieId));

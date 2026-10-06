@@ -1,13 +1,15 @@
 <div class="scenario-list">
   <div class="header">
-    <h2>Scénarios</h2>
-    <button mat-flat-button type="button" (click)="newScenario()">+ Nouveau scénario</button>
+    <h2>{{ theme.tone()['scenarios.list_title'] }}</h2>
+    <button mat-flat-button type="button" (click)="newScenario()">
+      {{ theme.tone()['scenarios.list_new_button'] }}
+    </button>
   </div>
 
   @if (loadError()) {
     <p class="error">{{ loadError() }}</p>
   } @else if (isEmpty()) {
-    <p class="empty">Aucun scénario pour l'instant.</p>
+    <p class="empty">{{ theme.tone()['common.aucun_scenario_pour_l_instant'] }}</p>
   } @else {
     @for (section of sections(); track section.status) {
       <!-- Le titre de section et le badge des lignes partagent la MÊME clé de registre : un seul
@@ -31,7 +33,7 @@
               <app-scenario-status-badge [status]="scenario.status" />
               @if (scenario.status === 'BROUILLON') {
                 <button mat-button type="button" (click)="openToPlayers(scenario, $event)">
-                  Ouvrir aux joueurs
+                  {{ theme.tone()['common.ouvrir_aux_joueurs'] }}
                 </button>
               }
             </li>

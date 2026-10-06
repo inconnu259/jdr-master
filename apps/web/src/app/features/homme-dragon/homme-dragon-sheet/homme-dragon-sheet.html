@@ -2,7 +2,7 @@
   @if (loadError()) {
     <p class="error">{{ loadError() }}</p>
   } @else if (hommeDragon() === undefined) {
-    <p class="muted">Chargement...</p>
+    <p class="muted">{{ theme.tone()['common.chargement_2'] }}</p>
   } @else {
     <div class="homme-dragon-sheet__fiche">
       @if (justCreated()) {
@@ -27,7 +27,7 @@
             [disabled]="exporting()"
             (click)="toggleExportMenu()"
           >
-            Exporter en PDF <span aria-hidden="true">&#9662;</span>
+            {{ theme.tone()['hd.sheet_export_pdf'] }} <span aria-hidden="true">&#9662;</span>
           </button>
           @if (exportMenuOpen()) {
             <div class="homme-dragon-sheet__export-backdrop" aria-hidden="true" (click)="closeExportMenu()"></div>
@@ -35,7 +35,7 @@
               id="homme-dragon-export-menu"
               class="homme-dragon-sheet__export-menu"
               role="menu"
-              aria-label="Format de l'export PDF"
+              [attr.aria-label]="theme.tone()['hd.sheet_export_menu_aria']"
               (keydown)="onExportMenuKeydown($event)"
             >
               <button
@@ -44,7 +44,7 @@
                 class="homme-dragon-sheet__export-item"
                 (click)="onExportPdf('editable')"
               >
-                PDF éditable
+                {{ theme.tone()['hd.sheet_export_editable'] }}
               </button>
               <button
                 type="button"
@@ -52,7 +52,7 @@
                 class="homme-dragon-sheet__export-item"
                 (click)="onExportPdf('2pages')"
               >
-                PDF 2 pages (à imprimer)
+                {{ theme.tone()['hd.sheet_export_2pages'] }}
               </button>
             </div>
           }
@@ -77,7 +77,7 @@
                 } @else {
                   {{ artefactLabel() }}
                 }
-                <button mat-button type="button" (click)="openArtefactEdit()">Modifier</button>
+                <button mat-button type="button" (click)="openArtefactEdit()">{{ theme.tone()['common.modifier'] }}</button>
               </p>
               @if (artefactCadeau(); as cadeau) {
                 <p class="homme-dragon-sheet__cadeau">
@@ -104,9 +104,9 @@
                   }
                 </select>
                 <button mat-flat-button color="primary" type="button" [disabled]="updating()" (click)="onArtefactSubmit()">
-                  Confirmer
+                  {{ theme.tone()['common.confirmer'] }}
                 </button>
-                <button mat-button type="button" (click)="editingArtefact.set(false)">Annuler</button>
+                <button mat-button type="button" (click)="editingArtefact.set(false)">{{ theme.tone()['common.annuler'] }}</button>
                 @if (updateError()) {
                   <p class="error">{{ updateError() }}</p>
                 }
@@ -170,7 +170,7 @@
                 artefact. Choisissez-en un parmi ceux des trois autres races.
               </p>
               @if (cadeauOptions().length === 0) {
-                <p class="muted">Aucun artefact disponible.</p>
+                <p class="muted">{{ theme.tone()['hd.sheet_cadeau_empty'] }}</p>
               } @else if (!confirmingCadeau()) {
                 <div
                   class="homme-dragon-sheet__cadeau-grid"
@@ -205,13 +205,13 @@
                   [disabled]="!selectedCadeauKey()"
                   (click)="askCadeauConfirmation()"
                 >
-                  Choisir cet artefact
+                  {{ theme.tone()['hd.sheet_cadeau_choose_btn'] }}
                 </button>
               } @else {
                 <div class="homme-dragon-sheet__cadeau-confirm" role="alertdialog" tabindex="-1" aria-labelledby="cadeau-confirm-title">
                   <p id="cadeau-confirm-title">
-                    <strong>Ce choix est définitif.</strong> Offrir « {{ selectedCadeauLabel() }} » à
-                    l'Homme Dragon ? Il ne pourra plus être modifié.
+                    <strong>{{ theme.tone()['hd.sheet_cadeau_confirm_strong'] }}</strong>
+                    {{ cadeauConfirmText() }}
                   </p>
                   <button
                     mat-flat-button
@@ -220,10 +220,10 @@
                     [disabled]="choosingCadeau()"
                     (click)="onConfirmCadeau()"
                   >
-                    Confirmer ce choix définitif
+                    {{ theme.tone()['hd.sheet_cadeau_confirm_btn'] }}
                   </button>
                   <button mat-button type="button" [disabled]="choosingCadeau()" (click)="cancelCadeauConfirmation()">
-                    Revenir au choix
+                    {{ theme.tone()['hd.sheet_cadeau_back_btn'] }}
                   </button>
                 </div>
               }
@@ -238,7 +238,7 @@
               <h2 class="homme-dragon-sheet__card-title">Pouvoir d'éveil à choisir</h2>
               <p>Niveau {{ currentPendingLevel() }} atteint — choisissez un pouvoir d'éveil parmi ceux restants :</p>
               @if (eveilPowersForCurrentLevel().length === 0) {
-                <p class="muted">Aucun pouvoir d'éveil disponible.</p>
+                <p class="muted">{{ theme.tone()['hd.sheet_eveil_empty'] }}</p>
               } @else {
                 <select [ngModel]="selectedEveilPowerKey()" name="eveilPower" (ngModelChange)="selectedEveilPowerKey.set($event)">
                   <option [ngValue]="null" disabled>—</option>
@@ -253,7 +253,7 @@
                   [disabled]="!selectedEveilPowerKey() || choosingEveilPower()"
                   (click)="onChooseEveilPower()"
                 >
-                  Confirmer
+                  {{ theme.tone()['common.confirmer'] }}
                 </button>
               }
               @if (eveilPowerError()) {
@@ -382,7 +382,7 @@
           <section class="homme-dragon-sheet__card homme-dragon-sheet__aventures">
             <h2 class="homme-dragon-sheet__card-title">Aventures</h2>
             @if (aventures().length === 0) {
-              <p class="muted">Aucune aventure pour l'instant.</p>
+              <p class="muted">{{ theme.tone()['hd.sheet_aventures_empty'] }}</p>
             } @else {
               <ul class="homme-dragon-sheet__aventure-list">
                 @for (a of aventures(); track a.partieId) {
@@ -394,15 +394,15 @@
                         type="button"
                         class="homme-dragon-sheet__aventure-remove"
                         [disabled]="aventureBusy()"
-                        [attr.aria-label]="'Retirer l’aventure ' + a.nom"
+                        [attr.aria-label]="removeAventureAria(a.nom)"
                         (click)="onRemoveAventure(a)"
                       >
-                        Retirer
+                        {{ theme.tone()['common.retirer'] }}
                       </button>
                     </div>
                     <p class="homme-dragon-sheet__aventure-voyageurs-title">Voyageurs protégés</p>
                     @if (a.voyageurs.length === 0) {
-                      <p class="muted">Aucun voyageur pour l'instant.</p>
+                      <p class="muted">{{ theme.tone()['hd.sheet_voyageurs_empty'] }}</p>
                     } @else {
                       <ul class="homme-dragon-sheet__voyageurs">
                         @for (v of a.voyageurs; track v.userId) {
@@ -423,9 +423,9 @@
 
             <div class="homme-dragon-sheet__aventure-add">
               @if (eligibleAventures().length === 0) {
-                <p class="muted">Aucune aventure Ryuutama sans Homme Dragon à ajouter.</p>
+                <p class="muted">{{ theme.tone()['hd.sheet_aventure_add_empty'] }}</p>
               } @else {
-                <label for="homme-dragon-add-aventure">Ajouter une aventure</label>
+                <label for="homme-dragon-add-aventure">{{ theme.tone()['common.ajouter_une_aventure'] }}</label>
                 <select
                   id="homme-dragon-add-aventure"
                   name="addAventure"
@@ -444,7 +444,7 @@
                   [disabled]="!selectedAventureId() || aventureBusy()"
                   (click)="onAddAventure()"
                 >
-                  Ajouter une aventure
+                  {{ theme.tone()['common.ajouter_une_aventure'] }}
                 </button>
               }
               @if (aventureError()) {
@@ -456,7 +456,7 @@
           <section class="homme-dragon-sheet__card homme-dragon-sheet__historique">
             <h2 class="homme-dragon-sheet__card-title">Historique</h2>
             @if (hommeDragon()!.historique.length === 0) {
-              <p class="muted">Aucun scénario joué pour l'instant.</p>
+              <p class="muted">{{ theme.tone()['hd.sheet_historique_empty'] }}</p>
             } @else {
               <ul>
                 @for (h of hommeDragon()!.historique; track h.partieId + h.scenarioTitle + h.date) {

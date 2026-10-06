@@ -33,7 +33,7 @@
         <button
           type="button"
           class="field-edit-pencil__button"
-          [attr.aria-label]="'Modifier ' + theme.tone()['account.email_label']"
+          [attr.aria-label]="theme.tone()['common.modifier'] + ' ' + theme.tone()['account.email_label']"
           (click)="startEmailEdit()"
         >
           ✎

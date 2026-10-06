@@ -65,7 +65,10 @@ export class MyCharacters implements OnInit {
   protected readonly raceLabels = RACE_LABELS;
   /** Noms des aventures d'un Homme Dragon, joints pour la carte (« Les Vents du Nord · L'Archipel »)
    *  ou « Sans aventure » (Story 33.8). */
-  protected readonly aventuresLabel = hommeDragonAventuresLabel;
+  protected readonly aventuresLabel = (
+    aventures: Parameters<typeof hommeDragonAventuresLabel>[0],
+  ): string =>
+    hommeDragonAventuresLabel(aventures, this.theme.tone()['core.homme_dragon_sans_aventure']);
   protected readonly query = signal('');
 
   protected readonly sortOptions = CHARACTER_SORTS;

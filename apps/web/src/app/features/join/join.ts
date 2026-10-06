@@ -7,6 +7,8 @@ import { AuthService } from '../../core/auth/auth.service';
 import { JoinService } from '../../core/join/join.service';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
 import { gameSystemName } from '../../core/parties/parties.util';
+import { ThemeToneService } from '../../core/theme/theme-tone.service';
+import { fillTone } from '../../core/theme/tone-format';
 import { AuthBand } from '../auth/auth-band/auth-band';
 
 @Component({
@@ -21,6 +23,8 @@ export class Join implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly joinSvc = inject(JoinService);
   private readonly myPartiesSvc = inject(MyPartiesService);
+  private readonly theme = inject(ThemeToneService);
+  protected readonly tone = this.theme.tone;
 
   protected readonly token = this.route.snapshot.paramMap.get('token') ?? '';
   protected readonly preview = signal<InviteLinkPreviewDto | null>(null);
@@ -28,6 +32,11 @@ export class Join implements OnInit {
   protected readonly error = signal<string | null>(null);
   protected readonly loggedIn = this.auth.currentUser;
   protected readonly system = gameSystemName;
+
+  /** Titre de l'écran : « Rejoindre « nom de la partie » », gabarit lu dans le registre. */
+  protected joinTitle(partieName: string): string {
+    return fillTone(this.tone()['join.title'], { name: partieName });
+  }
 
   async ngOnInit(): Promise<void> {
     await this.auth.loadSession();
@@ -45,7 +54,7 @@ export class Join implements OnInit {
       await this.myPartiesSvc.refreshPlayerParties();
       void this.router.navigate(['/parties', partieId]);
     } catch {
-      this.error.set('Impossible de rejoindre (lien invalide, expiré, ou déjà membre).');
+      this.error.set(this.theme.tone()['join.join_error']);
     }
   }
 }

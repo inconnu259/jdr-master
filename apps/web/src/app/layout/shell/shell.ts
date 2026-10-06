@@ -8,6 +8,7 @@ import { OpenPollsService } from '../../core/poll/open-polls.service';
 import { UnseenAnnouncementsService } from '../../core/announcements/unseen-announcements.service';
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
+import { fillTone } from '../../core/theme/tone-format';
 import { BrandLogo } from '../../shared/brand/brand-logo';
 
 @Component({
@@ -47,8 +48,11 @@ export class Shell implements OnInit {
     const parts: string[] = [];
     const polls = this.openPollsCount();
     const announcements = this.unseenAnnouncementsCount();
-    if (polls > 0) parts.push(`${polls} vote(s) en attente de réponse`);
-    if (announcements > 0) parts.push(`${announcements} annonce(s) non lue(s)`);
+    const tone = this.theme.tone();
+    if (polls > 0) parts.push(fillTone(tone['shell.badge_polls_aria'], { n: polls }));
+    if (announcements > 0) {
+      parts.push(fillTone(tone['shell.badge_announcements_aria'], { n: announcements }));
+    }
     return parts.join(', ');
   });
 
@@ -66,6 +70,11 @@ export class Shell implements OnInit {
     if (!partieName) return null;
     return { announcement, partieName };
   });
+
+  /** Libellé accessible du bouton de fermeture du bandeau (nom de la Partie dans le gabarit). */
+  protected bannerCloseLabel(partieName: string): string {
+    return fillTone(this.theme.tone()['shell.banner_close_aria'], { partie: partieName });
+  }
 
   /** Fermer le bandeau = j'ai vu l'info, décision utilisateur explicite (2026-08-13) : équivaut à
    *  ouvrir l'annonce (même état persisté que le clic sur AnnonceCard), ne réapparaît jamais. */

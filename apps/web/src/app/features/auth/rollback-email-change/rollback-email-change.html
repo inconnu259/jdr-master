@@ -2,30 +2,25 @@
 <main class="auth-page" aria-labelledby="auth-title">
   <mat-card class="auth-card">
     <mat-card-header>
-      <h1 matCardTitle id="auth-title" class="auth-title">Annuler le changement d'adresse e-mail</h1>
+      <h1 matCardTitle id="auth-title" class="auth-title">{{ tone()['auth.rollback_email_title'] }}</h1>
     </mat-card-header>
     <mat-card-content>
       @if (!token()) {
         <!-- Présent dès le chargement : texte simple, sans role="alert" -->
-        <p class="error">Lien invalide.</p>
+        <p class="error">{{ tone()['common.lien_invalide'] }}</p>
       }
       <!-- Conteneur persistant : présent avant l'action pour que l'annonce de la réussite ne soit pas perdue -->
       <div class="auth-status" role="status" tabindex="-1" #status>
         @if (restored()) {
-          <p class="saved">
-            Votre ancienne adresse a été restaurée et toutes les sessions actives ont été coupées.
-          </p>
+          <p class="saved">{{ tone()['auth.rollback_done'] }}</p>
         }
       </div>
       @if (restored()) {
         <button mat-flat-button class="auth-primary" type="button" (click)="continueToPasswordReset()">
-          Continuer vers la réinitialisation du mot de passe
+          {{ tone()['auth.rollback_continue_btn'] }}
         </button>
       } @else {
-        <p>
-          Restaurer votre ancienne adresse coupera toutes les sessions actives et exigera une
-          réinitialisation de votre mot de passe avant toute reconnexion.
-        </p>
+        <p>{{ tone()['auth.rollback_warning'] }}</p>
         @if (error()) {
           <p class="error" role="alert">{{ error() }}</p>
         }
@@ -36,12 +31,12 @@
           [disabled]="loading() || !token()"
           (click)="rollback()"
         >
-          Restaurer mon ancienne adresse
+          {{ tone()['auth.rollback_submit'] }}
         </button>
       }
     </mat-card-content>
     <mat-card-actions class="auth-secondary-actions">
-      <a class="auth-secondary-link" routerLink="/login">Retour à la connexion</a>
+      <a class="auth-secondary-link" routerLink="/login">{{ tone()['common.retour_a_la_connexion'] }}</a>
     </mat-card-actions>
   </mat-card>
 </main>

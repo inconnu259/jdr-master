@@ -1,5 +1,9 @@
 <div class="equipment-step">
-  <div class="equipment-step__mode-toggle" role="radiogroup" aria-label="Choisir un mode d'équipement">
+  <div
+    class="equipment-step__mode-toggle"
+    role="radiogroup"
+    [attr.aria-label]="theme.tone()['characters_wizard.equipment_mode_aria']"
+  >
     <button
       type="button"
       class="equipment-step__mode-button"
@@ -8,7 +12,7 @@
       [attr.aria-checked]="mode() === 'kit'"
       (click)="selectMode('kit')"
     >
-      Nécessaire pré-fait
+      {{ theme.tone()['characters_wizard.equipment_mode_kit'] }}
     </button>
     <button
       type="button"
@@ -18,7 +22,7 @@
       [attr.aria-checked]="mode() === 'shopping'"
       (click)="selectMode('shopping')"
     >
-      Achat libre
+      {{ theme.tone()['characters_wizard.equipment_mode_shopping'] }}
     </button>
   </div>
 
@@ -78,7 +82,11 @@
       }
 
       <!-- Filtre : tout le catalogue, ou seulement ce qu'on a déjà pris (remplace l'ancien panier). -->
-      <div class="equipment-step__filters" role="group" aria-label="Filtre du catalogue">
+      <div
+        class="equipment-step__filters"
+        role="group"
+        [attr.aria-label]="theme.tone()['characters_wizard.equipment_filter_aria']"
+      >
         <button
           type="button"
           class="equipment-step__filter"
@@ -147,7 +155,7 @@
                     </span>
                   } @else {
                     <button type="button" class="equipment-step__add" (click)="addItem(item.key)">
-                      Ajouter
+                      {{ theme.tone()['common.ajouter'] }}
                     </button>
                   }
                 </li>

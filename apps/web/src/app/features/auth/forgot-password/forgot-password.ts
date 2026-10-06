@@ -39,7 +39,7 @@ export class ForgotPassword {
   private readonly auth = inject(AuthService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly injector = inject(Injector);
-  private readonly tone = inject(ThemeToneService).tone;
+  protected readonly tone = inject(ThemeToneService).tone;
   /** Conteneur `role="status"` persistant : reçoit le focus quand le formulaire disparaît. */
   private readonly status = viewChild<ElementRef<HTMLElement>>('status');
 
@@ -73,7 +73,7 @@ export class ForgotPassword {
       // Le bouton activé disparaît avec le formulaire : le focus passe au message de confirmation.
       afterNextRender(() => this.status()?.nativeElement.focus(), { injector: this.injector });
     } catch {
-      this.error.set("Impossible d'envoyer la demande pour le moment. Réessaie plus tard.");
+      this.error.set(this.tone()['auth.forgot_error']);
     } finally {
       this.loading.set(false);
     }

@@ -5,7 +5,7 @@
   [style.--detail-surface-width]="widthVar()"
   role="dialog"
   aria-modal="true"
-  [attr.aria-label]="title() || 'Détail'"
+  [attr.aria-label]="title() || theme.tone()['common.detail']"
   [attr.aria-describedby]="describedBy()"
   cdkTrapFocus
   (keydown)="onKeydown($event)"
@@ -20,7 +20,7 @@
   @if (hasHeader()) {
     <header class="detail-surface-header"><ng-content select="[detail-header]" /></header>
   } @else {
-    <h2 class="detail-surface-title">{{ title() || 'Détail' }}</h2>
+    <h2 class="detail-surface-title">{{ title() || theme.tone()['common.detail'] }}</h2>
   }
   <div class="detail-surface-content">
   @if (isStructured()) {
@@ -53,7 +53,7 @@
       }
     }
   } @else if (!custom()) {
-    <p class="detail-surface-body">{{ body() || 'Aucune description disponible.' }}</p>
+    <p class="detail-surface-body">{{ body() || theme.tone()['common.aucune_description_disponible'] }}</p>
   }
   <ng-content />
   </div>

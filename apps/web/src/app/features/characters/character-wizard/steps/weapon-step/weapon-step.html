@@ -2,7 +2,7 @@
   <div
     class="weapon-step__grid"
     role="radiogroup"
-    aria-label="Choisir une catégorie d'arme"
+    [attr.aria-label]="theme.tone()['characters_wizard.weapon_category_aria']"
     appRadioGroupNav
   >
     @for (opt of categoryOptions(); track opt.key) {
@@ -26,7 +26,7 @@
     <div
       class="weapon-step__grid"
       role="radiogroup"
-      aria-label="Choisir son arme précise"
+      [attr.aria-label]="theme.tone()['characters_wizard.weapon_item_aria']"
       appRadioGroupNav
     >
       @for (opt of itemOptions(); track opt.key) {

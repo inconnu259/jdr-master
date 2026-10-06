@@ -1,16 +1,24 @@
 <div class="calendar-month">
   <div class="month-nav">
-    <button mat-icon-button (click)="prevMonth()" aria-label="Mois précédent">
+    <button
+      mat-icon-button
+      (click)="prevMonth()"
+      [attr.aria-label]="theme.tone()['calendar.month_prev_aria']"
+    >
       <mat-icon>chevron_left</mat-icon>
     </button>
     <h2 class="month-title">{{ monthLabel() }}</h2>
-    <button mat-icon-button (click)="nextMonth()" aria-label="Mois suivant">
+    <button
+      mat-icon-button
+      (click)="nextMonth()"
+      [attr.aria-label]="theme.tone()['calendar.month_next_aria']"
+    >
       <mat-icon>chevron_right</mat-icon>
     </button>
     <button
       mat-icon-button
       (click)="goToToday()"
-      aria-label="Revenir au mois actuel"
+      [attr.aria-label]="theme.tone()['calendar.month_today_aria']"
       class="today-btn"
       [style.visibility]="isCurrentMonth() ? 'hidden' : 'visible'"
     >
@@ -25,9 +33,7 @@
   </div>
 
   <p id="month-cell-instructions" class="visually-hidden">
-    Espace : sélectionner la journée entière. Touches 1, 2, 3 : sélectionner respectivement le
-    matin, l'après-midi ou le soir. Maj plus flèches : étendre la sélection. Entrée : valider la
-    sélection avec ce qu'affiche la barre. Échap : annuler.
+    {{ theme.tone()['calendar.month_cell_instructions'] }}
   </p>
 
   @if (loading()) {
@@ -60,11 +66,7 @@
             [class.current]="isCurrentDay(cell)"
             [class.day-cell--dim]="isDimmed(cell)"
             [attr.aria-hidden]="!cell.isCurrentMonth ? 'true' : null"
-            [attr.aria-label]="
-              cell.isCurrentMonth
-                ? cell.date.getDate() + (cell.isToday ? ' (aujourd\'hui)' : '')
-                : null
-            "
+            [attr.aria-label]="cellAriaLabel(cell)"
             [attr.aria-disabled]="cell.isCurrentMonth && cell.isPast ? 'true' : null"
             [attr.role]="
               !cell.isCurrentMonth ? 'presentation' : cell.isPast ? 'presentation' : 'button'

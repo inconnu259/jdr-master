@@ -2,13 +2,13 @@
   @if (loadError()) {
     <p class="error" role="alert">{{ loadError() }}</p>
   } @else if (linked() === undefined) {
-    <p class="muted">Chargement...</p>
+    <p class="muted">{{ theme.tone()['common.chargement_2'] }}</p>
   } @else if (linked(); as l) {
-    <h2 class="aventure-panel__title">Homme Dragon de cette aventure</h2>
+    <h2 class="aventure-panel__title">{{ theme.tone()['hd.panel_linked_title'] }}</h2>
     <p class="aventure-panel__linked">
       <a class="aventure-panel__link" [routerLink]="['/homme-dragons', l.id]">{{ linkedName() }}</a>
     </p>
-    <p class="muted">Sa fiche, son niveau et son historique cumulent toutes ses aventures.</p>
+    <p class="muted">{{ theme.tone()['hd.panel_linked_help'] }}</p>
     <button
       mat-stroked-button
       type="button"
@@ -16,10 +16,10 @@
       [disabled]="busy()"
       (click)="onDissociate()"
     >
-      Dissocier
+      {{ theme.tone()['common.dissocier'] }}
     </button>
   } @else {
-    <h2 class="aventure-panel__title">Aucun Homme Dragon pour cette aventure</h2>
+    <h2 class="aventure-panel__title">{{ theme.tone()['hd.panel_none_title'] }}</h2>
     <div class="aventure-panel__actions">
       <a
         mat-flat-button
@@ -27,14 +27,14 @@
         class="aventure-panel__create"
         [routerLink]="['/parties', partieId(), 'homme-dragon']"
       >
-        Créer un Homme Dragon pour {{ partieName() }}
+        {{ createLabel() }}
       </a>
     </div>
     <div class="aventure-panel__associate">
       @if (associable().length === 0) {
-        <p class="muted">Vous n'avez encore aucun autre Homme Dragon à associer.</p>
+        <p class="muted">{{ theme.tone()['hd.panel_associate_empty'] }}</p>
       } @else {
-        <label for="aventure-panel-associate">Associer un existant</label>
+        <label for="aventure-panel-associate">{{ theme.tone()['hd.panel_associate_label'] }}</label>
         <select
           id="aventure-panel-associate"
           name="associate"
@@ -54,7 +54,7 @@
           [disabled]="!selectedId() || busy()"
           (click)="onAssociate()"
         >
-          Associer
+          {{ theme.tone()['common.associer'] }}
         </button>
       }
     </div>

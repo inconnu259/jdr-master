@@ -15,10 +15,10 @@
   }
   @if (shownCount() > 0) {
     @if (saving()) {
-      <p class="reserve__hint">Enregistrement…</p>
+      <p class="reserve__hint">{{ theme.tone()['common.enregistrement'] }}</p>
     } @else if (errors().length === 0) {
       <p class="reserve__hint">
-        <span aria-hidden="true">✓</span> Enregistrée automatiquement, utilisée pour l'export PDF.
+        <span aria-hidden="true">✓</span> {{ theme.tone()['hd.reserve_autosaved'] }}
       </p>
     }
     @if (capacity() > 0) {
@@ -73,7 +73,7 @@
                   [attr.aria-label]="slot.changeLabel"
                   (click)="openPicker(slot.n, $event)"
                 >
-                  Changer
+                  {{ theme.tone()['common.changer'] }}
                 </button>
               }
               <button
@@ -85,7 +85,7 @@
                 [attr.aria-label]="slot.removeLabel"
                 (click)="remove(slot.n)"
               >
-                Retirer
+                {{ theme.tone()['common.retirer'] }}
               </button>
             </div>
           } @else {
@@ -98,7 +98,7 @@
               [attr.aria-label]="slot.pickLabel"
               (click)="openPicker(slot.n, $event)"
             >
-              Choisir un souffle
+              {{ theme.tone()['hd.reserve_pick_btn'] }}
             </button>
             <span class="reserve__free" [id]="uid + '-nm-' + slot.n">Emplacement libre</span>
           }
@@ -109,7 +109,7 @@
     @for (e of errors(); track e.id) {
       <p class="reserve__error" role="alert">
         <span aria-hidden="true">⚠</span>
-        <span>Impossible d'enregistrer la réserve. Réessayez.</span>
+        <span>{{ theme.tone()['hd.reserve_save_error'] }}</span>
       </p>
     }
 
@@ -122,7 +122,7 @@
         (focusout)="onBannerFocusOut()"
       >
         <span aria-hidden="true">↶</span>
-        <span class="reserve__undo-text">{{ u.label }} retiré de l'emplacement {{ u.slot }}.</span>
+        <span class="reserve__undo-text">{{ undoText(u) }}</span>
         <button
           type="button"
           class="reserve__btn"
@@ -130,7 +130,7 @@
           [attr.aria-disabled]="!u.armed || saving() ? 'true' : null"
           (click)="undoRemoval()"
         >
-          Annuler
+          {{ theme.tone()['common.annuler'] }}
         </button>
       </div>
     }

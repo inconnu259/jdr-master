@@ -1,5 +1,6 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import type { AggregatedSlotDto } from '@master-jdr/shared';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 const SLOT_LABELS: Record<string, string> = {
   MORNING: 'Matin',
@@ -15,6 +16,8 @@ const SLOT_LABELS: Record<string, string> = {
 })
 export class AggregatedCreneauCard {
   readonly slot = input.required<AggregatedSlotDto>();
+
+  protected readonly theme = inject(ThemeToneService);
 
   protected readonly slotLabel = computed(() => SLOT_LABELS[this.slot().slot] ?? this.slot().slot);
 

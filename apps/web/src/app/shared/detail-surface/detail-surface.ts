@@ -115,8 +115,11 @@ export class DetailSurface {
   });
 
   /** Même vocabulaire que la forme : fenêtre centrée en desktop, feuille basse en mobile. */
-  protected readonly closeLabel = computed(() =>
-    this.isDesktop() ? 'Fermer la fenêtre' : 'Fermer la feuille',
+  protected readonly closeLabel = computed(
+    () =>
+      this.theme.tone()[
+        this.isDesktop() ? 'shared.detail_close_window' : 'shared.detail_close_sheet'
+      ],
   );
 
   private readonly host: ElementRef<HTMLElement> = inject(ElementRef);

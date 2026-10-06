@@ -1,11 +1,11 @@
 <app-auth-band />
 <main class="auth-page" aria-labelledby="auth-title">
   <mat-card class="auth-card">
-    <mat-card-header><h1 matCardTitle id="auth-title" class="auth-title">Connexion</h1></mat-card-header>
+    <mat-card-header><h1 matCardTitle id="auth-title" class="auth-title">{{ tone()['common.connexion'] }}</h1></mat-card-header>
     <mat-card-content>
       <form [formGroup]="form" (ngSubmit)="submit()">
         <mat-form-field appearance="outline">
-          <mat-label>Email ou pseudo</mat-label>
+          <mat-label>{{ tone()['auth.login_identifier_label'] }}</mat-label>
           <input
             matInput
             type="text"
@@ -16,7 +16,7 @@
           <mat-error>{{ fieldError('identifier') }}</mat-error>
         </mat-form-field>
         <mat-form-field appearance="outline">
-          <mat-label>Mot de passe</mat-label>
+          <mat-label>{{ tone()['common.mot_de_passe'] }}</mat-label>
           <input
             matInput
             type="password"
@@ -33,12 +33,12 @@
           <p class="error" role="alert">{{ error() }}</p>
         }
         <button mat-flat-button class="auth-primary" type="submit" [disabled]="loading()">
-          Se connecter
+          {{ tone()['auth.login_submit'] }}
         </button>
       </form>
     </mat-card-content>
     <mat-card-actions class="auth-secondary-actions">
-      <a class="auth-secondary-link" routerLink="/forgot-password">Mot de passe oublié ?</a>
+      <a class="auth-secondary-link" routerLink="/forgot-password">{{ tone()['auth.login_forgot_link'] }}</a>
     </mat-card-actions>
     <p class="auth-orientation">{{ tone()['auth.login_invite_only'] }}</p>
   </mat-card>

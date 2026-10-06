@@ -13,6 +13,7 @@ import { map } from 'rxjs';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { AuthService } from '../../../core/auth/auth.service';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { AuthBand } from '../auth-band/auth-band';
 
 @Component({
@@ -25,6 +26,7 @@ export class ConfirmEmailChange {
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly injector = inject(Injector);
+  protected readonly tone = inject(ThemeToneService).tone;
   /** Conteneur `role="status"` persistant : reçoit le focus quand le bouton activé disparaît. */
   private readonly status = viewChild<ElementRef<HTMLElement>>('status');
 
@@ -50,7 +52,7 @@ export class ConfirmEmailChange {
     } catch {
       // Aucune redirection automatique : l'utilisateur peut déjà être connecté ailleurs, on le
       // laisse choisir sa prochaine action.
-      this.error.set('Lien invalide ou expiré. Merci de refaire une demande.');
+      this.error.set(this.tone()['common.lien_invalide_ou_expire_merci_de_refaire_une_demande']);
     } finally {
       this.loading.set(false);
     }

@@ -1,6 +1,8 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 
 /** Une séance sans vote encore lancé, telle que le dialogue a besoin de la connaître. */
 export interface ComposeSeanceChoice {
@@ -53,6 +55,7 @@ export class ComposeConfirmDialog {
   private readonly dialogRef =
     inject<MatDialogRef<ComposeConfirmDialog, { seanceId: string | null } | null>>(MatDialogRef);
   protected readonly data = inject<ComposeConfirmData>(MAT_DIALOG_DATA);
+  protected readonly theme = inject(ThemeToneService);
 
   /** Mode `new` : la séance retenue. Pré-remplie quand il n'y en a qu'une — la question ne se
    *  pose alors pas vraiment. */
@@ -67,9 +70,33 @@ export class ComposeConfirmDialog {
   /** AC6 — le nombre de votants est NOMMÉ, jamais résumé en « des réponses seront perdues ». */
   protected readonly warning = computed(() => {
     const { removedCount, voterCount } = this.data;
-    const slots = `${removedCount} créneau${removedCount > 1 ? 'x' : ''}`;
-    const votes = `${voterCount} réponse${voterCount > 1 ? 's' : ''}`;
-    return `Retirer ${slots} supprimera ${votes} déjà posée${voterCount > 1 ? 's' : ''}.`;
+    const tone = this.theme.tone();
+    const slotsKey =
+      removedCount > 1
+        ? 'calendar.compose_confirm_slots_many'
+        : 'calendar.compose_confirm_slots_one';
+    const votesKey =
+      voterCount > 1
+        ? 'calendar.compose_confirm_responses_many'
+        : 'calendar.compose_confirm_responses_one';
+    const warningKey =
+      voterCount > 1
+        ? 'calendar.compose_confirm_warning_many'
+        : 'calendar.compose_confirm_warning_one';
+    return fillTone(tone[warningKey], {
+      slots: fillTone(tone[slotsKey], { n: removedCount }),
+      votes: fillTone(tone[votesKey], { n: voterCount }),
+    });
+  });
+
+  /** Nombre de créneaux que la composition va poser, accordé en nombre. */
+  protected readonly summary = computed(() => {
+    const { slotCount } = this.data;
+    const key =
+      slotCount > 1
+        ? 'calendar.compose_confirm_summary_many'
+        : 'calendar.compose_confirm_summary_one';
+    return fillTone(this.theme.tone()[key], { n: slotCount });
   });
 
   protected onSeanceChange(event: Event): void {

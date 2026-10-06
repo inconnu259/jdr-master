@@ -38,7 +38,7 @@ export class ResetPassword {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
-  private readonly tone = inject(ThemeToneService).tone;
+  protected readonly tone = inject(ThemeToneService).tone;
 
   /**
    * Le lien reçu par e-mail porte le token dans le chemin : /reset-password/:token. Lu de façon
@@ -77,7 +77,7 @@ export class ResetPassword {
       await this.auth.resetPassword(token, newPassword);
       void this.router.navigate(['/login']);
     } catch {
-      this.error.set('Lien invalide ou expiré. Merci de refaire une demande.');
+      this.error.set(this.tone()['common.lien_invalide_ou_expire_merci_de_refaire_une_demande']);
     } finally {
       this.loading.set(false);
     }

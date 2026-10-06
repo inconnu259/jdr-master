@@ -167,6 +167,25 @@ describe('CalendarMonthView — accessibilité clavier des bandes (touches 1/2/3
     expect(emitted[0].slot).toBe('EVENING');
   });
 
+  it("Story 35.2 : nom accessible d'une case — « {jour} (aujourd'hui) » pour aujourd'hui, le numéro seul pour un autre jour, aucun hors du mois", async () => {
+    const fixture = await createMonthView();
+    const root = fixture.nativeElement as HTMLElement;
+
+    const today = root.querySelector('.day-cell.today') as HTMLElement;
+    expect(today.getAttribute('aria-label')).toBe(`${new Date().getDate()} (aujourd'hui)`);
+
+    const others = [
+      ...root.querySelectorAll<HTMLElement>('.day-cell:not(.today):not(.other-month)'),
+    ];
+    expect(others.length).toBeGreaterThan(0);
+    for (const cell of others) {
+      expect(cell.getAttribute('aria-label')).toMatch(/^\d{1,2}$/);
+    }
+
+    const outside = root.querySelector('.day-cell.other-month') as HTMLElement | null;
+    if (outside) expect(outside.getAttribute('aria-label')).toBeNull();
+  });
+
   it('la cellule interactive référence les instructions clavier via aria-describedby', async () => {
     const fixture = await createMonthView();
     const cell = fixture.nativeElement.querySelector('.day-cell.today') as HTMLElement;
