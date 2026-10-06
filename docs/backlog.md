@@ -98,10 +98,9 @@ peut l'exporter en PDF (recoupe une partie du Palier 3).
       cumulent les scénarios `PASSE` de toutes ses aventures, il se retrouve (avec ou sans aventure)
       dans « Personnages », et se dissocie sans perdre la fiche. *(Épic 33, story 33.8 — remplace
       « un seul par Partie » ; AD-23.)*
-- [ ] **Fiches de référence Ryuutama** : journal, carte, monde, monstre, ville, objectifs (chasse/quête/
+- [x] **Fiches de référence Ryuutama** : journal, carte, monde, monstre, ville, objectifs (chasse/quête/
       voyage), œuf de bataille, structure — servies telles quelles en téléchargement PDF (journal/carte
-      à tout membre, le reste au MJ seul), aucun remplissage dynamique à ce stade. *(Épic 12, en cours —
-      stories 12.1/12.2 prêtes.)*
+      à tout membre, le reste au MJ seul), aucun remplissage dynamique à ce stade. *(Épic 12.)*
 - [x] **Export PDF équipement & notes du PJ** : deux nouveaux exports auto-remplis depuis les données déjà
       en base (`Character.sheetData.equipment`, `CharacterNote`), en plus de l'export fiche complète déjà
       existant. *(Épic 11.)*
@@ -112,32 +111,32 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 
 ---
 
-## Palier 6 — Dette technique accumulée *(nouveau, décidé le 2026-07-18 — premier palier après l'Épic 12)*
+## Palier 6 — Dette technique accumulée *(décidé le 2026-07-18 — livré, épics 13 à 17)*
 
 > Rassemble les items différés (`_bmad-output/implementation-artifacts/deferred-work.md`) jugés
 > substantiels/cohérents pour justifier une passe dédiée, hors ceux explicitement écartés ou déplacés
 > ailleurs (cf. `deferred-work.md`, section « Décisions actées le 2026-07-18 »).
 
-- [ ] **Nettoyage synchronisation & anti-double-clic UI** : gardes anti-double-clic manquantes sur les
+- [x] **Nettoyage synchronisation & anti-double-clic UI** : gardes anti-double-clic manquantes sur les
       CTA `ScenarioEditor`/`ScenarioReadDialog` (Marquer Courant, Clôturer, Participer), signaux
       d'erreur jamais réinitialisés après un rechargement externe, `_changed` non scopé par Partie,
       `loadScenarios()` sans garde de démontage, `ScenarioTimeline` pas réactif si `partieId` change.
-- [ ] **Fusion du système d'inventaire équipement** : `equipment.group` (texte libre) et
+- [x] **Fusion du système d'inventaire équipement** : `equipment.group` (texte libre) et
       `equipment.individual` (`InventoryItem[]`) unifiés, sélection couplée nom/poids — migration
       Prisma + 2 UI (MJ et propriétaire).
-- [ ] **Durcissement sécurité auth/reset** : hachage du token de reset (actuellement en clair),
+- [x] **Durcissement sécurité auth/reset** : hachage du token de reset (actuellement en clair),
       invalidation des sessions actives au reset réussi, e-mail de confirmation post-changement de mot
       de passe, rate-limit par e-mail (pas seulement IP), purge des tokens expirés.
-- [ ] **Durcissement sécurité fichiers/uploads** : détection PDF par signature magique contournable,
+- [x] **Durcissement sécurité fichiers/uploads** : détection PDF par signature magique contournable,
       nettoyage EXIF des portraits uploadés (nouvelle dépendance `sharp`), header
       `X-Content-Type-Options` manquant sur les téléchargements.
-- [ ] **Robustesse mineure / perf** : pagination des listes qui grossissent (historique XP, scénarios),
+- [x] **Robustesse mineure / perf** : pagination des listes qui grossissent (historique XP, scénarios),
       idempotence des `POST` sensibles, `orderBy` déterministe sur les inscriptions. Traité comme un
       5e epic formel du Palier 6 (décision actée le 2026-07-18, cf. PRD), pas au fil de l'eau.
 
 ---
 
-## Palier 7 — Synchronisation client/serveur en temps quasi réel (SSE) *(nouveau, décidé le 2026-07-18)*
+## Palier 7 — Synchronisation client/serveur en temps quasi réel (SSE) *(décidé le 2026-07-18 — livré, épics 18 à 22)*
 
 > Pas de vrai temps réel bidirectionnel visé — juste éliminer le besoin de recharger la page pour voir
 > une modif faite par quelqu'un d'autre (MJ ↔ joueur, ou un autre onglet). **Approche tranchée avec
@@ -148,36 +147,45 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 > déclenché par le push serveur, pas seulement par une action locale). Touche potentiellement toutes
 > les pages consommant des listes (partie, timeline, séances, calendrier).
 
-- [ ] Mécanisme d'émission d'événements côté NestJS (scope minimal : par Partie, pas par ressource fine).
-- [ ] Connexion SSE côté Angular (`EventSource` ou wrapper), reconnexion sur coupure.
-- [ ] Câblage sur les pages existantes (`partie-detail`, `scenario-timeline`, `seance-list`,
+- [x] Mécanisme d'émission d'événements côté NestJS (scope minimal : par Partie, pas par ressource fine).
+- [x] Connexion SSE côté Angular (`EventSource` ou wrapper), reconnexion sur coupure.
+- [x] Câblage sur les pages existantes (`partie-detail`, `scenario-timeline`, `seance-list`,
       `calendar-view`) pour déclencher leur refetch déjà existant à la réception d'un événement.
-- [ ] *(détail fin à cadrer avec l'utilisateur au démarrage de ce palier)*
+- [x] Détail cadré et livré : fondation + partie en direct (épic 18), scénarios/séances/calendrier (19), fiches (20), dashboard/brouillons/annonces (21), services partagés (22).
 
 ---
 
-## Palier 8 — Refonte complète des classes et textes Ryuutama *(nouveau, décidé le 2026-07-18)*
+## Palier 8 — Refonte complète des classes et textes Ryuutama *(décidé le 2026-07-18 — livré, épics 23 à 27)*
 
 > Regroupe le reliquat « classes et textes manquants » du Palier 5 en une vraie passe de contenu,
 > plutôt qu'un ajout ponctuel en fin de palier précédent. **À discuter ensemble au moment d'attaquer ce
 > palier** — périmètre exact (quelles classes/textes, quelle profondeur) pas encore cadré.
 
-- [ ] *(périmètre à définir avec l'utilisateur à ce moment-là)*
+- [x] Périmètre cadré et livré : contenu enrichi (épic 23), profils d'attributs (24), choix d'arme (25), équipement de départ (26), rôles de groupe (27).
 
 ---
 
-## Palier 9 — Refonte UI & harmonisation des thèmes *(ex-Palier 6)*
+## Palier 9 — Refonte UI & harmonisation des thèmes *(livré, clos le 2026-10-07 — épics 28 à 36)*
 
-- [ ] Passe d'amélioration de l'UI existante (polish, cohérence visuelle inter-écrans).
-- [ ] Revue des textes des 3 thèmes (Grimoire Émeraude, Forêt Ancienne, Atelier Cuivré) —
-      cohérence de registre, complétude des clés `tones.ts`, élimination des libellés orphelins/oubliés.
-- [ ] `ScenarioTimeline` ne correspond pas au mockup `DESIGN.md` (retour utilisateur, 2026-07-14) : pas
-      de ronds d'accroche des nœuds sur la ligne chronologique, ligne et rectangles de scénario trop
-      proches (pas assez d'espacement), dates non affichées sur la ligne. Sans rapport avec les
-      séances/capacité (Story 8.7) — pur défaut visuel du composant existant depuis la Story 7.5.
-      **Décision le 2026-07-18 : à trancher au démarrage de ce palier** (question à reposer à
-      l'utilisateur à ce moment-là — une bonne partie de l'UI sera de toute façon revue ici, autant
-      décider en contexte si ce défaut mérite un traitement dédié ou se résorbe avec le reste).
+> Détail : `_bmad-output/planning-artifacts/epics.md` ; état réel : `sprint-status.yaml`.
+
+- [x] **Compte et identité** : écran de compte, nom affiché, thème persisté, changement de mot de passe
+      et d'e-mail. *(Épic 28.)*
+- [x] **Navigation et listes** : quatre destinations, filtres/tris/favoris, signalétique d'état, bannières,
+      clôture explicite d'une partie, refonte de la création/édition de partie. *(Épic 29.)*
+- [x] **Calendrier** : écriture groupée, sélection par glissement, couches et vue Agenda *(Épic 30)* ;
+      puis lisibilité : rail de détail, case de mois à trois bandes, piste de vote, grille semaine
+      *(Épic 36)*.
+- [x] **Fiche de personnage** : exports regroupés, surface de détail, aide contextuelle, parcours de
+      création refondu, fiches des compagnons, cadenas de visibilité. *(Épic 31.)*
+- [x] **Vue de partie et chronologie** : autocomplétion des invitations, réorganisation, états de
+      scénario/séance, `ScenarioTimeline` refondue. *(Épic 32.)*
+- [x] **Homme Dragon** : fiche refondue, souffles, création guidée, export PDF, réserve de souffles,
+      capacités de niveau, un Homme Dragon pour plusieurs aventures. *(Épic 33.)*
+- [x] **Entrée dans l'application** : messages d'erreur véridiques, champ de mot de passe révélable,
+      identité visuelle « Dés Dispos ». *(Épic 34.)*
+- [x] **Thèmes et textes** : un fichier par thème, renommage `atelier-cuivre`, classement des textes,
+      revue éditoriale des trois thèmes. *(Épic 35.)*
 
 ---
 
