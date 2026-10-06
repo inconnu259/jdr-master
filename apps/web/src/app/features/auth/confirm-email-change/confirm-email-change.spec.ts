@@ -5,6 +5,9 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { ConfirmEmailChange } from './confirm-email-change';
 import { AuthService } from '../../../core/auth/auth.service';
+import { TONE_MAP } from '../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 function createFixture(token: string, confirmEmailChange: ReturnType<typeof vi.fn>) {
   TestBed.configureTestingModule({
@@ -66,7 +69,7 @@ describe('ConfirmEmailChange — structure et annonces (Story 34.3)', () => {
 
     const h1s = el.querySelectorAll('h1');
     expect(h1s.length).toBe(1);
-    expect(h1s[0].textContent?.trim()).toBe("Confirmer le changement d'adresse e-mail");
+    expect(h1s[0].textContent?.trim()).toBe(GRIMOIRE_TONE['auth.confirm_email_title']);
     expect(el.querySelector('main')?.getAttribute('aria-labelledby')).toBe(h1s[0].id);
     // Bande de marque (story 34.4) : <header> frère de <main>, placé avant lui.
     expect(el.querySelector('main header.band')).toBeNull();
@@ -79,7 +82,9 @@ describe('ConfirmEmailChange — structure et annonces (Story 34.3)', () => {
     const fixture = createFixture('', vi.fn());
     const el = fixture.nativeElement as HTMLElement;
 
-    expect(el.querySelector('p.error')?.textContent?.trim()).toBe('Lien invalide.');
+    expect(el.querySelector('p.error')?.textContent?.trim()).toBe(
+      GRIMOIRE_TONE['common.lien_invalide'],
+    );
     expect(el.querySelector('[role="alert"]')).toBeNull();
     expect((el.querySelector('.auth-primary') as HTMLButtonElement).disabled).toBe(true);
   });
@@ -95,7 +100,7 @@ describe('ConfirmEmailChange — structure et annonces (Story 34.3)', () => {
     await fixture.whenStable();
 
     expect(el.querySelector('[role="status"]')).toBe(status);
-    expect(status.textContent?.trim()).toBe('Votre adresse e-mail a été changée.');
+    expect(status.textContent?.trim()).toBe(GRIMOIRE_TONE['auth.confirm_email_done']);
     expect(el.querySelector('.auth-primary')).toBeNull();
     expect(document.activeElement).toBe(status);
   });

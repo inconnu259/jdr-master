@@ -15,6 +15,9 @@ import { CharacterService } from '../../../core/characters/character.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.service';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
+import { TONE_MAP } from '../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const CONTENT: GameSystemContentDto = {
   class: [
@@ -230,7 +233,7 @@ describe('CharacterSheet', () => {
 
     const link: HTMLAnchorElement | null = fixture.nativeElement.querySelector('a[mat-button]');
     expect(link).toBeTruthy();
-    expect(link!.textContent).toContain('Retour à la partie');
+    expect(link!.textContent).toContain(GRIMOIRE_TONE['character.back_to_partie_cta']);
     // RouterLink résout `href` depuis `c.partieId` — CHARACTER n'en porte pas dans sa fixture
     // littérale, mais `makeCharacterDto()` (base de CHARACTER) le fixe à 'p1' par défaut.
     expect(link!.getAttribute('href')).toBe('/parties/p1');
@@ -314,8 +317,10 @@ describe('CharacterSheet', () => {
     const { fixture } = await createComponent(characterSvc);
 
     const comp = fixture.componentInstance as any;
-    expect(comp.loadError()).toBe("Vous n'avez pas accès à cette fiche.");
-    expect(fixture.nativeElement.textContent).toContain("Vous n'avez pas accès à cette fiche.");
+    expect(comp.loadError()).toBe(GRIMOIRE_TONE['characters_sheet.access_denied']);
+    expect(fixture.nativeElement.textContent).toContain(
+      GRIMOIRE_TONE['characters_sheet.access_denied'],
+    );
   });
 
   it('échec de chargement (403) → lien « Retour à la partie » affiché malgré tout, pas seulement dans la branche succès (spec fiches-personnages-partie-et-retour)', async () => {
@@ -326,7 +331,7 @@ describe('CharacterSheet', () => {
 
     const link: HTMLAnchorElement | null = fixture.nativeElement.querySelector('a[mat-button]');
     expect(link).toBeTruthy();
-    expect(link!.textContent).toContain('Retour à la partie');
+    expect(link!.textContent).toContain(GRIMOIRE_TONE['character.back_to_partie_cta']);
     expect(link!.getAttribute('href')).toBe('/parties/p1');
   });
 
@@ -347,8 +352,10 @@ describe('CharacterSheet', () => {
 
     expect(characterSvc.get).not.toHaveBeenCalled();
     const comp = fixture.componentInstance as any;
-    expect(comp.loadError()).toBe('Fiche introuvable.');
-    expect(fixture.nativeElement.textContent).toContain('Fiche introuvable.');
+    expect(comp.loadError()).toBe(GRIMOIRE_TONE['characters_sheet.not_found']);
+    expect(fixture.nativeElement.textContent).toContain(
+      GRIMOIRE_TONE['characters_sheet.not_found'],
+    );
   });
 
   it('échec du chargement du contenu de jeu (getGameSystemContent) → la fiche du personnage reste affichée', async () => {
@@ -1303,22 +1310,30 @@ describe('CharacterSheet', () => {
   });
 
   it('derived absent (fiche d’un compagnon dont les attributs sont verrouillés, Story 31.6) : message de statistiques masquées, aucune erreur', async () => {
-    const masked = { ...CHARACTER, derived: undefined as never, hiddenFields: ['attributes', 'derived'] };
+    const masked = {
+      ...CHARACTER,
+      derived: undefined as never,
+      hiddenFields: ['attributes', 'derived'],
+    };
     const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(masked) });
     const { fixture } = await createComponent(characterSvc);
 
-    expect(fixture.nativeElement.textContent).toContain('Statistiques masquées par le MJ');
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['evolution.derived_hidden']);
     expect(fixture.nativeElement.textContent).not.toContain('PV undefined');
   });
 
   it('attributes verrouillés en bloc (correctif, hiddenFields) : « Masqué par le MJ » à la place de la grille, jamais une grille vide silencieuse', async () => {
-    const masked = { ...CHARACTER, derived: undefined as never, hiddenFields: ['attributes', 'derived'] };
+    const masked = {
+      ...CHARACTER,
+      derived: undefined as never,
+      hiddenFields: ['attributes', 'derived'],
+    };
     const characterSvc = makeCharacterService({ get: vi.fn().mockResolvedValue(masked) });
     const { fixture } = await createComponent(characterSvc);
 
     expect(fixture.nativeElement.querySelector('.sheet__attr-grid')).toBeNull();
     expect(fixture.nativeElement.querySelector('.sheet__masked-note')?.textContent).toContain(
-      'Masqué par le MJ',
+      GRIMOIRE_TONE['evolution.hidden_marker'],
     );
   });
 
@@ -1330,7 +1345,7 @@ describe('CharacterSheet', () => {
     expect(fixture.nativeElement.querySelector('.sheet__attr-grid')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('VIG');
     expect(fixture.nativeElement.textContent).toContain('8'); // VIG toujours visible
-    expect(fixture.nativeElement.textContent).toContain('Masqué par le MJ');
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['evolution.hidden_marker']);
   });
 
   it('section Inventaire visible pour le propriétaire', async () => {
@@ -2074,7 +2089,12 @@ describe('CharacterSheet', () => {
       const labels = Array.from(
         fixture.nativeElement.querySelectorAll('[role="tab"] .mdc-tab__text-label'),
       ).map((el: any) => el.textContent.trim());
-      expect(labels).toEqual(['Fiche', 'Inventaire', 'Journal de notes', 'Historique']);
+      expect(labels).toEqual([
+        'Fiche',
+        GRIMOIRE_TONE['evolution.inventory_section_title'],
+        'Journal de notes',
+        'Historique',
+      ]);
     });
 
     it("fellow player (ni propriétaire, ni MJ) → 3 onglets, l'onglet Historique est absent du DOM (pas seulement vide)", async () => {
@@ -2085,7 +2105,11 @@ describe('CharacterSheet', () => {
       const labels = Array.from(
         fixture.nativeElement.querySelectorAll('[role="tab"] .mdc-tab__text-label'),
       ).map((el: any) => el.textContent.trim());
-      expect(labels).toEqual(['Fiche', 'Inventaire', 'Journal de notes']);
+      expect(labels).toEqual([
+        'Fiche',
+        GRIMOIRE_TONE['evolution.inventory_section_title'],
+        'Journal de notes',
+      ]);
       expect(fixture.nativeElement.textContent).not.toContain('Historique');
     });
 
@@ -2119,8 +2143,8 @@ describe('CharacterSheet', () => {
     it("mat-tab-group porte dynamicHeight -- la molette défile toute la page plutôt qu'un scroll interne à l'onglet actif", async () => {
       const { fixture } = await createComponent();
 
-      const tabGroup = fixture.debugElement.query(By.directive(MatTabGroup))
-        ?.componentInstance as MatTabGroup | undefined;
+      const tabGroup = fixture.debugElement.query(By.directive(MatTabGroup))?.componentInstance as
+        MatTabGroup | undefined;
       expect(tabGroup).toBeTruthy();
       expect(tabGroup!.dynamicHeight).toBe(true);
     });

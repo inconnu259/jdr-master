@@ -3,6 +3,9 @@ import { vi } from 'vitest';
 import { InventoryTab } from './inventory-tab';
 import { CharacterService } from '../../../../core/characters/character.service';
 import { makeCharacterDto } from '../../../../core/characters/character-dto.fixture';
+import { TONE_MAP } from '../../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 function makeCharacterWithItems(
   items: { id: string; name: string; weight: number; addedBy: string }[],
@@ -90,7 +93,9 @@ describe('InventoryTab', () => {
     await fixture.whenStable();
 
     const text = fixture.nativeElement.textContent;
-    expect((text.match(/Masqué par le MJ/g) ?? []).length).toBe(4);
+    expect(
+      (text.match(new RegExp(GRIMOIRE_TONE['evolution.hidden_marker'], 'g')) ?? []).length,
+    ).toBe(4);
     expect(fixture.nativeElement.querySelector('app-encumbrance-bar')).toBeNull();
     expect(text).not.toContain("Aucun objet dans l'inventaire");
     expect(text).not.toContain('Aucun contenant pour le moment');
@@ -113,7 +118,7 @@ describe('InventoryTab', () => {
     await fixture.whenStable();
 
     expect(fixture.nativeElement.querySelector('app-encumbrance-bar')).toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Masqué par le MJ');
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['evolution.hidden_marker']);
   });
 
   it('equipment non verrouillé et vide : messages « vide » habituels conservés', async () => {
@@ -242,9 +247,7 @@ describe('InventoryTab', () => {
     await comp.submitAdd();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain(
-      "L'inventaire n'a pas pu être mis à jour. Réessayez.",
-    );
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['evolution.inventory_error']);
   });
 
   it('empty state si aucun objet', async () => {
@@ -277,7 +280,7 @@ describe('InventoryTab', () => {
 
       expect(
         fixture.nativeElement.querySelectorAll(
-          '.inventory-item-row button[aria-label="Modifier l\'objet"]',
+          `.inventory-item-row button[aria-label="${GRIMOIRE_TONE['characters_sheet.item_edit_aria']}"]`,
         ).length,
       ).toBe(1);
       expect(

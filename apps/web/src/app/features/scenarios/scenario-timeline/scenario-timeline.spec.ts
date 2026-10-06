@@ -11,6 +11,10 @@ import { ScenarioTimeline } from './scenario-timeline';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { ScenarioReadDialog } from '../scenario-read-dialog/scenario-read-dialog';
+import { TONE_MAP } from '../../../core/theme/tones';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 function makeScenario(overrides: Partial<ScenarioDto>): ScenarioDto {
   return {
@@ -537,7 +541,7 @@ describe('ScenarioTimeline', () => {
 
     const button = fixture.nativeElement.querySelector('.error button');
     expect(button).toBeTruthy();
-    expect(button.textContent).toContain('Réessayer');
+    expect(button.textContent).toContain(GRIMOIRE_TONE['common.reessayer']);
 
     scenariosSvc.listAll.mockResolvedValue([PASSE]);
     button.click();
@@ -710,7 +714,7 @@ describe('ScenarioTimeline', () => {
         ],
       });
       const { fixture } = await createComponent([scenarioWithSeances]);
-      expect(fixture.nativeElement.textContent).toContain('Date à définir');
+      expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['common.date_a_definir']);
     });
 
     it('scénario sans séance → aucune liste .card-seances affichée', async () => {
@@ -865,7 +869,9 @@ describe('ScenarioTimeline', () => {
     it('matrice - noeud sans aucune date : « Non planifie », ordonne sur createdAt', async () => {
       const { fixture } = await createComponent([A_VENIR, PASSE]);
       expect(nodeKeys(fixture)).toEqual(['passe', 'a-venir']);
-      expect(normalize(instance(fixture).nodeDateLabel(firstNode(fixture)))).toBe('Non planifié');
+      expect(normalize(instance(fixture).nodeDateLabel(firstNode(fixture)))).toBe(
+        GRIMOIRE_TONE['scenarios.timeline_not_planned'],
+      );
     });
 
     it("la cle d'ordre est la premiere date EFFECTIVE, pas createdAt", async () => {
@@ -1013,7 +1019,7 @@ describe('ScenarioTimeline', () => {
       const { fixture } = await createComponent([sansDate]);
       const row = fixture.nativeElement.querySelector('.card-seances__row');
       expect(normalize(row.querySelector('.card-seances__label').textContent)).toBe(
-        'Séance 1 · Date à définir',
+        `Séance 1 · ${GRIMOIRE_TONE['common.date_a_definir']}`,
       );
       expect(normalize(row.querySelector('.status-badge').textContent)).toBe('À planifier');
     });
@@ -1022,7 +1028,9 @@ describe('ScenarioTimeline', () => {
       const { fixture } = await createComponent([A_VENIR, BROUILLON, PASSE, COURANT_1]);
       expect(fixture.nativeElement.querySelector('.node__dot--draft')).toBeNull();
       expect(fixture.nativeElement.querySelectorAll('.node')).toHaveLength(3);
-      expect(countText(fixture)).toBe('3 scénarios');
+      expect(countText(fixture)).toBe(
+        fillTone(GRIMOIRE_TONE['scenarios.timeline_count_many'], { n: 3 }),
+      );
       expect(fixture.nativeElement.textContent).not.toContain('Brouillon');
     });
 
@@ -1032,14 +1040,18 @@ describe('ScenarioTimeline', () => {
       });
       expect(fixture.nativeElement.querySelector('.node__dot--draft')).toBeTruthy();
       expect(fixture.nativeElement.querySelectorAll('.node')).toHaveLength(4);
-      expect(countText(fixture)).toBe('4 scénarios');
+      expect(countText(fixture)).toBe(
+        fillTone(GRIMOIRE_TONE['scenarios.timeline_count_many'], { n: 4 }),
+      );
       expect(fixture.nativeElement.textContent).toContain('Brouillon');
     });
 
     it('le compteur se derive des noeuds rendus (singulier au singulier)', async () => {
       const { fixture } = await createComponent([PASSE]);
       expect(instance(fixture).visibleCount()).toBe(1);
-      expect(countText(fixture)).toBe('1 scénario');
+      expect(countText(fixture)).toBe(
+        fillTone(GRIMOIRE_TONE['scenarios.timeline_count_one'], { n: 1 }),
+      );
     });
 
     it('matrice - aucun scenario visible : etat vide explicite, aucune ligne orpheline', async () => {
@@ -1096,7 +1108,9 @@ describe('ScenarioTimeline', () => {
     it('un joueur seul devant un brouillon ne voit ni noeud, ni compteur trompeur', async () => {
       const { fixture } = await createComponent([BROUILLON]);
       expect(fixture.nativeElement.querySelector('.empty')).toBeTruthy();
-      expect(countText(fixture)).toBe('0 scénario');
+      expect(countText(fixture)).toBe(
+        fillTone(GRIMOIRE_TONE['scenarios.timeline_count_one'], { n: 0 }),
+      );
     });
 
     it('matrice - echec de chargement : message + « Reessayer », aucun en-tete ni ligne', async () => {
@@ -1126,7 +1140,7 @@ describe('ScenarioTimeline', () => {
 
       expect(fixture.nativeElement.querySelector('.error')).toBeTruthy();
       expect(fixture.nativeElement.querySelector('.error button').textContent).toContain(
-        'Réessayer',
+        GRIMOIRE_TONE['common.reessayer'],
       );
       expect(fixture.nativeElement.querySelector('.timeline-header')).toBeNull();
       expect(fixture.nativeElement.querySelector('.node')).toBeNull();

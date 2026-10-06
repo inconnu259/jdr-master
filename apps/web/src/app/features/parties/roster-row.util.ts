@@ -125,7 +125,10 @@ export function buildRosterRows(
         playerLabel: member.displayName,
         classLabel: '',
         ariaLabel: canCreate
-          ? `${member.displayName} — ${tone['roster.create_slot_label']}`
+          ? fillTone(tone['parties.roster_aria_create'], {
+              name: member.displayName,
+              action: tone['roster.create_slot_label'],
+            })
           : fillTone(tone['parties.roster_aria_no_character'], { name: member.displayName }),
         hasPendingLevelUp: false,
         isSelf,
@@ -151,7 +154,16 @@ export function buildRosterRows(
         tone,
         withLevelUpSuffix(
           tone,
-          `${member.displayName} — ${name}${classLabel ? ` (${classLabel})` : ''}`,
+          classLabel
+            ? fillTone(tone['parties.roster_aria_character_class'], {
+                name: member.displayName,
+                character: name,
+                class: classLabel,
+              })
+            : fillTone(tone['parties.roster_aria_character'], {
+                name: member.displayName,
+                character: name,
+              }),
           pending,
         ),
         assignedRoleLabel,

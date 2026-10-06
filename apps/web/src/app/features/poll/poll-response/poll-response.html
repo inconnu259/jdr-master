@@ -16,7 +16,7 @@
             [class.poll-response__btn--active]="getAnswer(opt.id) === a"
             [disabled]="isClosed() || saving() || withdrawingOptionIds().has(opt.id)"
             (click)="setAnswer(opt.id, a)"
-          >{{ a }}</button>
+          >{{ theme.tone()[VOTE_LABEL_KEYS[a]] }}</button>
         }
         @if (confirmedOptionIds().has(opt.id)) {
           <button

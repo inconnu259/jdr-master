@@ -55,7 +55,7 @@ export class PollTrack {
   protected readonly segments = computed(() => trackSegments(this.vote()));
 
   /** « 3 / 4 » — toujours calculé, toujours émis (AC4). */
-  protected readonly counter = computed(() => counterLabel(this.vote()));
+  protected readonly counter = computed(() => counterLabel(this.vote(), this.theme.tone()));
 
   /** Ma réponse en toutes lettres, ou `''` quand je n'ai pas répondu (AC5). Les DEUX
    *  formulations sont calculées ; c'est le CSS qui choisit selon la surface — aucune logique de

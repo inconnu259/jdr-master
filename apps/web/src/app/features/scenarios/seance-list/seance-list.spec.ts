@@ -8,6 +8,9 @@ import { SeanceList } from './seance-list';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ScenariosService } from '../../../core/scenarios/scenarios.service';
 import { PollService } from '../../../core/poll/poll.service';
+import { TONE_MAP } from '../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const POLL: SessionPollDto = {
   id: 'poll1',
@@ -143,7 +146,7 @@ describe('SeanceList', () => {
       { ...SCENARIO, seances: [SEANCE_NO_POLL] },
       { isMj: true },
     );
-    expect(fixture.nativeElement.textContent).toContain('Lancer le vote');
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['common.lancer_le_vote']);
     expect(fixture.nativeElement.querySelector('app-poll-status')).toBeNull();
   });
 
@@ -154,7 +157,9 @@ describe('SeanceList', () => {
     );
     const btn: HTMLButtonElement = Array.from(
       fixture.nativeElement.querySelectorAll('button'),
-    ).find((b: any) => b.textContent.includes('Lancer le vote')) as HTMLButtonElement;
+    ).find((b: any) =>
+      b.textContent.includes(GRIMOIRE_TONE['common.lancer_le_vote']),
+    ) as HTMLButtonElement;
     btn.click();
 
     expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'calendar'], {
@@ -274,7 +279,9 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [CLOSED_WITH_DATE] },
         { isMj: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Date retenue');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.date_retenue_date'].split(' :')[0],
+      );
       expect(fixture.nativeElement.querySelector('app-poll-status')).toBeNull();
     });
 
@@ -283,7 +290,9 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [CLOSED_WITH_DATE] },
         { isMj: false },
       );
-      expect(fixture.nativeElement.textContent).toContain('Date retenue');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.date_retenue_date'].split(' :')[0],
+      );
       expect(fixture.nativeElement.querySelector('app-poll-response')).toBeNull();
     });
 
@@ -292,7 +301,9 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [CLOSED_WITH_DATE] },
         { isMj: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Réinitialiser la date');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.reinitialiser_la_date'],
+      );
     });
 
     it('MJ, clic sur "Réinitialiser la date" (confirmé) → appelle resetSeanceDate et émet seanceLinked', async () => {
@@ -309,7 +320,9 @@ describe('SeanceList', () => {
 
       const btn: HTMLButtonElement = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
-      ).find((b: any) => b.textContent.includes('Réinitialiser la date')) as HTMLButtonElement;
+      ).find((b: any) =>
+        b.textContent.includes(GRIMOIRE_TONE['common.reinitialiser_la_date']),
+      ) as HTMLButtonElement;
       btn.click();
       await Promise.resolve();
 
@@ -326,7 +339,9 @@ describe('SeanceList', () => {
 
       const btn: HTMLButtonElement = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
-      ).find((b: any) => b.textContent.includes('Réinitialiser la date')) as HTMLButtonElement;
+      ).find((b: any) =>
+        b.textContent.includes(GRIMOIRE_TONE['common.reinitialiser_la_date']),
+      ) as HTMLButtonElement;
       btn.click();
       await Promise.resolve();
 
@@ -338,7 +353,9 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [CLOSED_NO_DATE] },
         { isMj: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Réinitialiser la date');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.reinitialiser_la_date'],
+      );
     });
 
     it("poll CLOSED sans chosenDate → message neutre plutôt qu'une date vide", async () => {
@@ -346,7 +363,9 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [CLOSED_NO_DATE] },
         { isMj: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Vote clôturé sans date retenue');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.vote_cloture_sans_date_retenue'],
+      );
     });
   });
 
@@ -431,7 +450,7 @@ describe('SeanceList', () => {
       const inputs = Array.from(el.querySelectorAll('input[type="number"]')) as HTMLInputElement[];
       const [minInput, maxInput] = inputs;
       const submitBtn = Array.from(el.querySelectorAll('button')).find((b) =>
-        b.textContent?.includes('Définir la capacité'),
+        b.textContent?.includes(GRIMOIRE_TONE['scenarios.seances_set_capacity']),
       ) as HTMLButtonElement;
 
       // Champs vides par défaut → désactivé.
@@ -462,8 +481,10 @@ describe('SeanceList', () => {
         { isMj: true, isEpisodique: true },
       );
       expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
-      expect(fixture.nativeElement.textContent).toContain('Lancer le vote');
-      expect(fixture.nativeElement.textContent).toContain('Modifier la capacité');
+      expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['common.lancer_le_vote']);
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.seances_edit_capacity'],
+      );
     });
 
     it('MJ, clic sur "Lancer le vote" (épisodique) → navigue vers le calendrier avec seanceId (Story 8.8, AC1)', async () => {
@@ -473,7 +494,9 @@ describe('SeanceList', () => {
       );
       const btn: HTMLButtonElement = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
-      ).find((b: any) => b.textContent.includes('Lancer le vote')) as HTMLButtonElement;
+      ).find((b: any) =>
+        b.textContent.includes(GRIMOIRE_TONE['common.lancer_le_vote']),
+      ) as HTMLButtonElement;
       btn.click();
 
       expect(router.navigate).toHaveBeenCalledWith(['/parties', 'p1', 'calendar'], {
@@ -488,7 +511,7 @@ describe('SeanceList', () => {
       );
       expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
       expect(fixture.nativeElement.querySelector('app-poll-status')).toBeTruthy();
-      expect(fixture.nativeElement.textContent).toContain('Clôturer le vote');
+      expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['common.cloturer_le_vote']);
     });
 
     it('MJ, capacité définie + vote clôturé avec chosenDate → "Date retenue", plus de FillIndicator/CTA (Story 8.8, AC2)', async () => {
@@ -496,7 +519,9 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [SEANCE_VALIDATED_VIA_POLL] },
         { isMj: true, isEpisodique: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Date retenue');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.date_retenue_date'].split(' :')[0],
+      );
       expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
       expect(fixture.nativeElement.querySelector('app-poll-status')).toBeNull();
     });
@@ -506,8 +531,12 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [SEANCE_CLOSED_NO_DATE] },
         { isMj: true, isEpisodique: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Vote clôturé sans date retenue');
-      expect(fixture.nativeElement.textContent).toContain('Réinitialiser la date');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.vote_cloture_sans_date_retenue'],
+      );
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.reinitialiser_la_date'],
+      );
     });
 
     it('MJ, date validée (épisodique, via poll) → bouton "Réinitialiser la date" visible, appelle resetSeanceDate (Story 8.8, AC4)', async () => {
@@ -524,7 +553,9 @@ describe('SeanceList', () => {
 
       const btn: HTMLButtonElement = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
-      ).find((b: any) => b.textContent.includes('Réinitialiser la date')) as HTMLButtonElement;
+      ).find((b: any) =>
+        b.textContent.includes(GRIMOIRE_TONE['common.reinitialiser_la_date']),
+      ) as HTMLButtonElement;
       expect(btn).toBeTruthy();
       btn.click();
       await Promise.resolve();
@@ -538,7 +569,9 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [SEANCE_VALIDATED_LEGACY] },
         { isMj: true, isEpisodique: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Réinitialiser la date');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.reinitialiser_la_date'],
+      );
     });
 
     it('MJ, clic sur "Modifier la capacité" → réaffiche le formulaire pré-rempli (AC6)', async () => {
@@ -548,7 +581,9 @@ describe('SeanceList', () => {
       );
       const btn: HTMLButtonElement = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
-      ).find((b: any) => b.textContent.includes('Modifier la capacité')) as HTMLButtonElement;
+      ).find((b: any) =>
+        b.textContent.includes(GRIMOIRE_TONE['scenarios.seances_edit_capacity']),
+      ) as HTMLButtonElement;
       btn.click();
       fixture.detectChanges();
 
@@ -566,18 +601,24 @@ describe('SeanceList', () => {
       );
       const editBtn: HTMLButtonElement = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
-      ).find((b: any) => b.textContent.includes('Modifier la capacité')) as HTMLButtonElement;
+      ).find((b: any) =>
+        b.textContent.includes(GRIMOIRE_TONE['scenarios.seances_edit_capacity']),
+      ) as HTMLButtonElement;
       editBtn.click();
       fixture.detectChanges();
 
       const cancelBtn: HTMLButtonElement = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
-      ).find((b: any) => b.textContent.trim() === 'Annuler') as HTMLButtonElement;
+      ).find(
+        (b: any) => b.textContent.trim() === GRIMOIRE_TONE['common.annuler'],
+      ) as HTMLButtonElement;
       expect(cancelBtn).toBeTruthy();
       cancelBtn.click();
       fixture.detectChanges();
 
-      expect(fixture.nativeElement.textContent).toContain('Modifier la capacité');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.seances_edit_capacity'],
+      );
       expect(fixture.nativeElement.querySelectorAll('input[type="number"]').length).toBe(0);
     });
 
@@ -586,9 +627,13 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [SEANCE_VALIDATED_LEGACY] },
         { isMj: true, isEpisodique: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Date retenue');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.date_retenue_date'].split(' :')[0],
+      );
       expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
-      expect(fixture.nativeElement.textContent).not.toContain('Modifier la capacité');
+      expect(fixture.nativeElement.textContent).not.toContain(
+        GRIMOIRE_TONE['scenarios.seances_edit_capacity'],
+      );
     });
 
     it('joueur, séance sans capacité définie → rien affiché', async () => {
@@ -608,7 +653,9 @@ describe('SeanceList', () => {
       expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
       const btn: HTMLButtonElement = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
-      ).find((b: any) => b.textContent.includes("S'inscrire")) as HTMLButtonElement;
+      ).find((b: any) =>
+        b.textContent.includes(GRIMOIRE_TONE['scenarios.seances_inscrire']),
+      ) as HTMLButtonElement;
       expect(btn).toBeTruthy();
       expect(btn.disabled).toBe(false);
     });
@@ -618,8 +665,12 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [SEANCE_INSCRIT] },
         { isMj: false, isEpisodique: true, currentUserId: 'u1' },
       );
-      expect(fixture.nativeElement.textContent).toContain('Se désinscrire');
-      expect(fixture.nativeElement.textContent).not.toContain("S'inscrire");
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.seances_desinscrire'],
+      );
+      expect(fixture.nativeElement.textContent).not.toContain(
+        GRIMOIRE_TONE['scenarios.seances_inscrire'],
+      );
     });
 
     it('joueur non-inscrit, capacité au max → bouton "S\'inscrire" désactivé (AC4)', async () => {
@@ -629,7 +680,9 @@ describe('SeanceList', () => {
       );
       const btn: HTMLButtonElement = Array.from(
         fixture.nativeElement.querySelectorAll('button'),
-      ).find((b: any) => b.textContent.includes("S'inscrire")) as HTMLButtonElement;
+      ).find((b: any) =>
+        b.textContent.includes(GRIMOIRE_TONE['scenarios.seances_inscrire']),
+      ) as HTMLButtonElement;
       expect(btn.disabled).toBe(true);
     });
 
@@ -647,7 +700,9 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [SEANCE_VALIDATED_VIA_POLL] },
         { isMj: false, isEpisodique: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Date retenue');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.date_retenue_date'].split(' :')[0],
+      );
       expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
     });
 
@@ -656,7 +711,9 @@ describe('SeanceList', () => {
         { ...SCENARIO, seances: [SEANCE_VALIDATED_LEGACY] },
         { isMj: false, isEpisodique: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Date retenue');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.date_retenue_date'].split(' :')[0],
+      );
       expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeNull();
     });
 
@@ -736,7 +793,7 @@ describe('SeanceList', () => {
       const rows = fixture.nativeElement.querySelectorAll('.seance-row');
       expect(
         Array.from(rows[1].querySelectorAll('button')).some((b: any) =>
-          b.textContent.includes('Supprimer cette séance'),
+          b.textContent.includes(GRIMOIRE_TONE['scenarios.seances_delete_button']),
         ),
       ).toBe(true);
     });
@@ -790,9 +847,7 @@ describe('SeanceList', () => {
 
       await comp.onDeleteSeance(SEANCE_2);
 
-      expect(confirmSpy).toHaveBeenCalledWith(
-        'Supprimer cette séance ? Cette action est définitive.',
-      );
+      expect(confirmSpy).toHaveBeenCalledWith(GRIMOIRE_TONE['scenarios.seances_delete_confirm']);
     });
 
     it('séance épisodique avec date validée (inscription.dateValidee) → confirmation renforcée (revue de code)', async () => {
@@ -815,7 +870,7 @@ describe('SeanceList', () => {
       await comp.onDeleteSeance(SEANCE_DATE_VALIDEE);
 
       expect(confirmSpy).toHaveBeenCalledWith(
-        'Cette séance a une date validée. La supprimer quand même ? Cette action est définitive.',
+        GRIMOIRE_TONE['scenarios.seances_delete_confirm_dated'],
       );
     });
 
@@ -845,7 +900,7 @@ describe('SeanceList', () => {
       await comp.onDeleteSeance(SEANCE_POLL_CHOSEN);
 
       expect(confirmSpy).toHaveBeenCalledWith(
-        'Cette séance a une date validée. La supprimer quand même ? Cette action est définitive.',
+        GRIMOIRE_TONE['scenarios.seances_delete_confirm_dated'],
       );
     });
   });
@@ -988,7 +1043,9 @@ describe('SeanceList', () => {
         { isMj: true },
       );
       expect(fixture.nativeElement.querySelector('textarea')).toBeTruthy();
-      expect(fixture.nativeElement.textContent).toContain('Enregistrer le compte-rendu');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.seances_save_compte_rendu'],
+      );
     });
 
     it('MJ, branche épisodique → textarea + bouton également visibles (AC1, indépendant du kind)', async () => {
@@ -1027,7 +1084,7 @@ describe('SeanceList', () => {
         { isMj: false },
       );
       expect(fixture.nativeElement.textContent).toContain(
-        'Aucun compte-rendu pour cette séance pour le moment.',
+        GRIMOIRE_TONE['scenarios.seances_compte_rendu_empty'],
       );
     });
 
@@ -1037,7 +1094,7 @@ describe('SeanceList', () => {
         { isMj: false },
       );
       expect(fixture.nativeElement.textContent).toContain(
-        'Aucun compte-rendu pour cette séance pour le moment.',
+        GRIMOIRE_TONE['scenarios.seances_compte_rendu_empty'],
       );
     });
 
@@ -1047,7 +1104,7 @@ describe('SeanceList', () => {
         { isMj: false },
       );
       expect(fixture.nativeElement.textContent).toContain(
-        'Aucun compte-rendu pour cette séance pour le moment.',
+        GRIMOIRE_TONE['scenarios.seances_compte_rendu_empty'],
       );
     });
 
@@ -1178,7 +1235,7 @@ describe('SeanceList — badge d’état (Story 32.3)', () => {
     expect(badges(fixture)).toEqual(['Inscriptions ouvertes']);
     expect(fixture.nativeElement.querySelector('app-fill-indicator')).toBeTruthy();
     expect(fixture.nativeElement.textContent).toContain(
-      'Aucun compte-rendu pour cette séance pour le moment.',
+      GRIMOIRE_TONE['scenarios.seances_compte_rendu_empty'],
     );
   });
 });

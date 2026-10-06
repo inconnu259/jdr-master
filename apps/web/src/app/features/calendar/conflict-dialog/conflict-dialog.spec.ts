@@ -4,11 +4,24 @@ import { TestBed } from '@angular/core/testing';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
+import { THEMES, TONE_MAP, type Theme } from '../../../core/theme/tones';
 import { ConflictDialog, type ConflictDialogData } from './conflict-dialog';
+
+/** Une phrase du registre, remplie : les attentes lisent le ton au lieu de recopier un texte qui
+ *  changerait avec la voix du thème (story 35.3). */
+function say(
+  key: string,
+  values: Record<string, string | number> = {},
+  theme: Theme = 'grimoire-emeraude',
+): string {
+  return fillTone(TONE_MAP[theme][key], values);
+}
 
 function makeData(overrides: Partial<ConflictDialogData> = {}): ConflictDialogData {
   return {
-    kindLabel: 'disponible',
+    kind: 'AVAILABLE',
     intentLabel: 'du 3 au 9 août, le soir',
     conflicts: [
       { batchIndex: 1, label: 'Mar 4 août · Soir' },
@@ -21,7 +34,7 @@ function makeData(overrides: Partial<ConflictDialogData> = {}): ConflictDialogDa
   };
 }
 
-async function createComponent(data: ConflictDialogData) {
+async function createComponent(data: ConflictDialogData, theme?: Theme) {
   const dialogRef = { close: vi.fn() };
   await TestBed.configureTestingModule({
     imports: [ConflictDialog],
@@ -30,6 +43,7 @@ async function createComponent(data: ConflictDialogData) {
       { provide: MAT_DIALOG_DATA, useValue: data },
     ],
   }).compileComponents();
+  if (theme) TestBed.inject(ThemeToneService).setTheme(theme);
   const fixture = TestBed.createComponent(ConflictDialog);
   fixture.detectChanges();
   return { fixture, dialogRef, el: fixture.nativeElement as HTMLElement };
@@ -55,7 +69,7 @@ describe('ConflictDialog (Story 36.4)', () => {
   it('AC2 : le titre compte les créneaux, et l’intention du geste est rappelée', async () => {
     const { el } = await createComponent(makeData());
     expect(el.querySelector('[mat-dialog-title]')?.textContent).toContain(
-      '3 créneaux sont déjà déclarés',
+      say('calendar.conflict_title_many', { n: 3 }),
     );
     expect(el.textContent).toContain('du 3 au 9 août, le soir');
   });
@@ -169,18 +183,22 @@ describe('ConflictDialog (Story 36.4)', () => {
       makeData({ conflicts: [{ batchIndex: 0, label: 'Lun 3 août · Soir' }], freeCount: 0 }),
     );
     expect(el.querySelector('[mat-dialog-title]')?.textContent).toContain(
-      '1 créneau est déjà déclaré',
+      say('calendar.conflict_title_one', { n: 1 }),
     );
   });
 
   it('« Conserver » annonce ce qu’il advient des créneaux SANS conflit', async () => {
     const { el } = await createComponent(makeData());
-    expect(el.textContent).toContain('Les 4 autres passent en disponible');
+    expect(el.textContent).toContain(
+      say('calendar.conflict_free_many', { n: 4, kind: say('calendar.conflict_kind_available') }),
+    );
   });
 
   it('« Conserver » accorde au singulier quand un seul créneau est libre (revue de code)', async () => {
     const { el } = await createComponent(makeData({ freeCount: 1 }));
-    expect(el.textContent).toContain('Le 1 autre passe en disponible');
+    expect(el.textContent).toContain(
+      say('calendar.conflict_free_one', { n: 1, kind: say('calendar.conflict_kind_available') }),
+    );
     expect(el.textContent).not.toContain('Les 1 autres');
   });
 
@@ -247,10 +265,14 @@ describe('ConflictDialog — textes du registre (Story 35.2)', () => {
   it('plusieurs créneaux : têtes de « Remplacer » / « Conserver » et compteur de décisions au pluriel', async () => {
     const { el } = await createComponent(makeData());
 
-    expect(compact(el, '[data-test="choice-overwrite"] b')).toBe('Les 3 deviennent disponibles');
-    expect(compact(el, '[data-test="choice-keep"] b')).toBe('Ces 3 restent comme ils sont');
+    expect(compact(el, '[data-test="choice-overwrite"] b')).toBe(
+      say('calendar.conflict_overwrite_available_many', { n: 3 }),
+    );
+    expect(compact(el, '[data-test="choice-keep"] b')).toBe(
+      say('calendar.conflict_keep_many', { n: 3 }),
+    );
     expect(compact(el, '[data-test="choice-walkthrough"] .choice__detail')).toBe(
-      '3 décisions à prendre',
+      say('calendar.conflict_walkthrough_count_many', { n: 3 }),
     );
   });
 
@@ -259,24 +281,32 @@ describe('ConflictDialog — textes du registre (Story 35.2)', () => {
       makeData({ conflicts: [{ batchIndex: 2, label: 'Mar 4 août · Soir' }] }),
     );
 
-    expect(compact(el, '[data-test="choice-overwrite"] b')).toBe('Le créneau devient disponible');
-    expect(compact(el, '[data-test="choice-keep"] b')).toBe('Ce créneau reste comme il est');
+    expect(compact(el, '[data-test="choice-overwrite"] b')).toBe(
+      say('calendar.conflict_overwrite_available_one', { n: 1 }),
+    );
+    expect(compact(el, '[data-test="choice-keep"] b')).toBe(
+      say('calendar.conflict_keep_one', { n: 1 }),
+    );
     expect(compact(el, '[data-test="choice-walkthrough"] .choice__detail')).toBe(
-      '1 décision à prendre',
+      say('calendar.conflict_walkthrough_count_one', { n: 1 }),
     );
   });
 
   it('ligne d’exception : verbe accordé et mot d’état injecté dans le détail', async () => {
     const one = await createComponent(makeData({ seanceExceptions: ['Mer 5 août · Soir'] }));
-    expect(compact(one.el, '.exception b')).toBe("Mer 5 août · Soir n'est pas dans la liste");
-    expect(compact(one.el, '.exception__detail')).toContain('tu redeviens disponible.');
+    expect(compact(one.el, '.exception b')).toBe(
+      `Mer 5 août · Soir ${say('calendar.conflict_exception_one')}`,
+    );
+    expect(compact(one.el, '.exception__detail')).toContain(
+      say('calendar.conflict_exception_detail', { kind: say('calendar.conflict_kind_available') }),
+    );
     TestBed.resetTestingModule();
 
     const many = await createComponent(
       makeData({ seanceExceptions: ['Mer 5 août · Soir', 'Jeu 6 août · Soir'] }),
     );
     expect(compact(many.el, '.exception b')).toBe(
-      'Mer 5 août · Soir · Jeu 6 août · Soir ne sont pas dans la liste',
+      `Mer 5 août · Soir · Jeu 6 août · Soir ${say('calendar.conflict_exception_many')}`,
     );
   });
 
@@ -286,7 +316,87 @@ describe('ConflictDialog — textes du registre (Story 35.2)', () => {
     fixture.detectChanges();
 
     expect(compact(el, '[aria-live="polite"]')).toBe(
-      'Créneau 1 / 3 : Mar 4 août · Soir. Remplacer ou conserver ?',
+      say('calendar.conflict_step_announcement', {
+        progress: '1 / 3',
+        label: 'Mar 4 août · Soir',
+      }),
     );
+  });
+});
+
+// Story 35.3 — les voix divergent : l'accord (« devient » / « deviennent », « disponible » /
+// « disponibles ») et l'ordre des mots vivent dans le registre, une phrase entière par cas. Le
+// dialogue ne colle plus de « s » à un mot d'état et ne réutilise plus `calendar.week_status_*`.
+describe('ConflictDialog — une voix par thème (Story 35.3)', () => {
+  afterEach(() => {
+    TestBed.resetTestingModule();
+    localStorage.clear();
+  });
+
+  const compact = (el: HTMLElement, selector: string) =>
+    el.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim();
+
+  for (const theme of THEMES) {
+    it(`${theme} : la tête de « Remplacer » est la phrase entière du thème, au pluriel puis au singulier`, async () => {
+      const many = await createComponent(makeData(), theme);
+      expect(compact(many.el, '[data-test="choice-overwrite"] b')).toBe(
+        say('calendar.conflict_overwrite_available_many', { n: 3 }, theme),
+      );
+      TestBed.resetTestingModule();
+
+      const one = await createComponent(
+        makeData({ conflicts: [{ batchIndex: 2, label: 'Mar 4 août · Soir' }] }),
+        theme,
+      );
+      expect(compact(one.el, '[data-test="choice-overwrite"] b')).toBe(
+        say('calendar.conflict_overwrite_available_one', { n: 1 }, theme),
+      );
+    });
+
+    it(`${theme} : déclarer « indisponible » prend les phrases du cas « indisponible »`, async () => {
+      const { el } = await createComponent(makeData({ kind: 'UNAVAILABLE' }), theme);
+      expect(compact(el, '[data-test="choice-overwrite"] b')).toBe(
+        say('calendar.conflict_overwrite_unavailable_many', { n: 3 }, theme),
+      );
+      expect(compact(el, '.intent')).toContain(say('calendar.conflict_intent_prefix', {}, theme));
+      expect(compact(el, '.intent b')).toBe(say('calendar.conflict_kind_unavailable', {}, theme));
+    });
+
+    it(`${theme} : « indisponible » avec un seul créneau → phrase du cas « unavailable_one »`, async () => {
+      const { el } = await createComponent(
+        makeData({
+          kind: 'UNAVAILABLE',
+          conflicts: [{ batchIndex: 2, label: 'Mar 4 août · Soir' }],
+        }),
+        theme,
+      );
+      expect(compact(el, '[data-test="choice-overwrite"] b')).toBe(
+        say('calendar.conflict_overwrite_unavailable_one', { n: 1 }, theme),
+      );
+    });
+
+    it(`${theme} : la phrase d'intention s'ouvre par le verbe du thème`, async () => {
+      const { el } = await createComponent(makeData(), theme);
+      expect(compact(el, '.intent')).toMatch(
+        new RegExp('^' + say('calendar.conflict_intent_prefix', {}, theme)),
+      );
+    });
+  }
+
+  it('le Grimoire et l’Atelier vouvoient, la Forêt tutoie, dans la même boîte', async () => {
+    const forest = await createComponent(
+      makeData({ seanceExceptions: ['Mer 5 août · Soir'] }),
+      'foret-ancienne',
+    );
+    expect(compact(forest.el, '.intent')).toMatch(/^Tu /);
+    expect(compact(forest.el, '.exception__detail')).toContain('tu ');
+    TestBed.resetTestingModule();
+
+    const grimoire = await createComponent(
+      makeData({ seanceExceptions: ['Mer 5 août · Soir'] }),
+      'grimoire-emeraude',
+    );
+    expect(compact(grimoire.el, '.intent')).toMatch(/^Vous /);
+    expect(compact(grimoire.el, '.exception__detail')).toContain('vous ');
   });
 });

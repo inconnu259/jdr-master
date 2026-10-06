@@ -35,6 +35,9 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatTabGroup } from '@angular/material/tabs';
 import { TONE_MAP } from '../../../core/theme/tones';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 // Story 18.3 : PartieDetail injecte désormais RealtimeService (providedIn: 'root', non fourni par
 // aucune des configurations TestBed de ce fichier — Angular l'auto-construit réellement partout).
@@ -618,7 +621,7 @@ describe('PartieDetail — onglet « Fiches » générique (spec fiches-personna
    *  les tests d'atterrissage ci-dessus (Story 29.15). */
   function clickFichesTab(el: HTMLElement, fixture: ComponentFixture<PartieDetail>): void {
     const tab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
-      (t) => t.textContent?.trim() === 'Fiches',
+      (t) => t.textContent?.trim() === GRIMOIRE_TONE['character.party_sheets_tab_label'],
     );
     tab?.click();
     fixture.detectChanges();
@@ -641,7 +644,7 @@ describe('PartieDetail — onglet « Fiches » générique (spec fiches-personna
     const tabLabels = Array.from(el.querySelectorAll('div[role="tab"]')).map((t) =>
       t.textContent?.trim(),
     );
-    expect(tabLabels).toContain('Fiches');
+    expect(tabLabels).toContain(GRIMOIRE_TONE['character.party_sheets_tab_label']);
     expect(tabLabels).not.toContain('Ma fiche');
   });
 
@@ -827,7 +830,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     expect(el.querySelector('app-roster-rail')).toBeNull();
 
     const activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Fiches');
+    expect(activeTab?.textContent?.trim()).toBe(GRIMOIRE_TONE['character.party_sheets_tab_label']);
   });
 
   it('desktop + joueur → l\'onglet "Ma fiche" est désormais rendu aussi sur desktop (Story 29.15, unification desktop/mobile)', async () => {
@@ -835,7 +838,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     const tabLabels = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
       t.textContent?.trim(),
     );
-    expect(tabLabels).toContain('Fiches');
+    expect(tabLabels).toContain(GRIMOIRE_TONE['character.party_sheets_tab_label']);
   });
 
   it('desktop + joueur sans personnage, système sans module → clic sur sa propre ligne du roster ne navigue plus (Story 29.15, revue de code : slot gardé par canCreateCharacter(), plus de cul-de-sac)', async () => {
@@ -935,7 +938,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     // characters() révèle qu'il n'a aucun personnage sur cette partie : atterrit désormais sur
     // « Ma fiche ».
     activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Fiches');
+    expect(activeTab?.textContent?.trim()).toBe(GRIMOIRE_TONE['character.party_sheets_tab_label']);
 
     // Un rendu supplémentaire (ex. re-détection de changements) ne doit jamais le faire basculer
     // ailleurs une fois genuinely atterri sur « Ma fiche ».
@@ -943,7 +946,7 @@ describe('PartieDetail — roster (Story 6.1)', () => {
     await fixture.whenStable();
     fixture.detectChanges();
     activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Fiches');
+    expect(activeTab?.textContent?.trim()).toBe(GRIMOIRE_TONE['character.party_sheets_tab_label']);
   });
 
   it("conserve la sélection manuelle d'onglet à travers un redimensionnement (Story 29.15 : « Ma fiche » se rend aussi sur desktop, ne disparaît plus)", async () => {
@@ -1042,7 +1045,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     const comp = fixture.componentInstance as unknown as { selectedTabIndex: () => number };
     expect(comp.selectedTabIndex()).toBe(1);
     const activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Fiches');
+    expect(activeTab?.textContent?.trim()).toBe(GRIMOIRE_TONE['character.party_sheets_tab_label']);
     expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeTruthy();
   });
 
@@ -1080,7 +1083,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     expect(comp.selectedTabIndex()).toBe(0);
 
     const maFicheTab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
-      (t) => t.textContent?.trim() === 'Fiches',
+      (t) => t.textContent?.trim() === GRIMOIRE_TONE['character.party_sheets_tab_label'],
     );
     maFicheTab?.click();
     fixture.detectChanges();
@@ -1101,7 +1104,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     expect(comp.selectedTabIndex()).toBe(0);
 
     const maFicheTab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
-      (t) => t.textContent?.trim() === 'Fiches',
+      (t) => t.textContent?.trim() === GRIMOIRE_TONE['character.party_sheets_tab_label'],
     );
     maFicheTab?.click();
     fixture.detectChanges();
@@ -1123,7 +1126,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     expect(comp.selectedTabIndex()).toBe(0);
 
     const maFicheTab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
-      (t) => t.textContent?.trim() === 'Fiches',
+      (t) => t.textContent?.trim() === GRIMOIRE_TONE['character.party_sheets_tab_label'],
     );
     maFicheTab?.click();
     fixture.detectChanges();
@@ -1191,7 +1194,9 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     const slot = el.querySelector<HTMLElement>(`[data-user-id="${PLAYER_ID}"]`);
     expect(slot).toBeTruthy();
     expect(slot!.getAttribute('tabindex')).toBe('-1');
-    expect(slot!.getAttribute('aria-label')).toBe('Alice au pays — aucun personnage créé');
+    expect(slot!.getAttribute('aria-label')).toBe(
+      fillTone(GRIMOIRE_TONE['parties.roster_aria_no_character'], { name: 'Alice au pays' }),
+    );
     expect(slot!.querySelector('.roster-rail__create-badge')).toBeNull();
   });
 
@@ -1210,7 +1215,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     expect(comp.charactersLoaded()).toBe(true);
     expect(comp.selectedTabIndex()).toBe(1);
     const activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Fiches');
+    expect(activeTab?.textContent?.trim()).toBe(GRIMOIRE_TONE['character.party_sheets_tab_label']);
     expect(el.querySelector('.party-sheets-tab a[mat-flat-button]')).toBeTruthy();
   });
 
@@ -1232,7 +1237,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     // le cas visé (navigation manuelle du joueur avant la fin du chargement), pas l'atterrissage
     // automatique (déjà couvert par les tests de flicker ci-dessus).
     const maFicheTab = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).find(
-      (t) => t.textContent?.trim() === 'Fiches',
+      (t) => t.textContent?.trim() === GRIMOIRE_TONE['character.party_sheets_tab_label'],
     );
     maFicheTab?.click();
     fixture.detectChanges();
@@ -1335,7 +1340,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     const el: HTMLElement = fixture.nativeElement;
 
     let activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Fiches');
+    expect(activeTab?.textContent?.trim()).toBe(GRIMOIRE_TONE['character.party_sheets_tab_label']);
 
     // Signal temps réel : characterSvc.changed() déclenche reloadCharacters(), qui révèle
     // désormais un personnage — canCreateCharacter() bascule à `false`, mais l'onglet ne doit
@@ -1348,7 +1353,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     fixture.detectChanges();
 
     activeTab = el.querySelector('div[role="tab"][aria-selected="true"]');
-    expect(activeTab?.textContent?.trim()).toBe('Fiches');
+    expect(activeTab?.textContent?.trim()).toBe(GRIMOIRE_TONE['character.party_sheets_tab_label']);
   });
 });
 
@@ -1386,7 +1391,7 @@ describe('PartieDetail — invitations', () => {
 
     const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
     const invitationsTab = Array.from(tabLabels).find((t) =>
-      t.textContent?.includes('Invitations'),
+      t.textContent?.includes(GRIMOIRE_TONE['partie.invitations_tab_label']),
     );
     invitationsTab?.click();
     fixture.detectChanges();
@@ -1433,7 +1438,7 @@ describe('PartieDetail — invitations', () => {
 
     const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
     const invitationsTab = Array.from(tabLabels).find((t) =>
-      t.textContent?.includes('Invitations'),
+      t.textContent?.includes(GRIMOIRE_TONE['partie.invitations_tab_label']),
     );
     invitationsTab?.click();
     fixture.detectChanges();
@@ -1576,7 +1581,7 @@ describe('PartieDetail — autocomplétion des invitations (Story 32.1)', () => 
     expect(parties.searchUsers).toHaveBeenCalledTimes(1);
   });
 
-  it("une réponse plus ancienne ne doit jamais écraser des résultats plus récents (Story 32.1, revue de code)", async () => {
+  it('une réponse plus ancienne ne doit jamais écraser des résultats plus récents (Story 32.1, revue de code)', async () => {
     const { fixture } = await createFixture(makePartie(), MJ_ID);
     vi.useFakeTimers();
     const parties = TestBed.inject(PartiesService) as unknown as {
@@ -1822,7 +1827,7 @@ describe('PartieDetail — consultation des annonces « toute la campagne » (St
       announcements: [makeAnnouncementDto()],
     });
     expect(elCampagne.querySelector('.announcements-feed')!.textContent).toContain(
-      'Toute la campagne',
+      GRIMOIRE_TONE['announcement.scope_campaign_label'],
     );
   });
 
@@ -1971,7 +1976,9 @@ describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
     const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
 
     const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
-    const scenarioTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Scénario');
+    const scenarioTab = Array.from(tabLabels).find(
+      (t) => t.textContent?.trim() === GRIMOIRE_TONE['parties.detail_tab_scenario'],
+    );
     expect(scenarioTab).toBeTruthy();
     scenarioTab?.click();
     fixture.detectChanges();
@@ -1987,7 +1994,9 @@ describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
     const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
 
     const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
-    const scenarioTab = Array.from(tabLabels).find((t) => t.textContent?.trim() === 'Scénarios');
+    const scenarioTab = Array.from(tabLabels).find(
+      (t) => t.textContent?.trim() === GRIMOIRE_TONE['parties.detail_tab_scenarios'],
+    );
     expect(scenarioTab).toBeTruthy();
     scenarioTab?.click();
     fixture.detectChanges();
@@ -2736,7 +2745,7 @@ describe('PartieDetail — pseudo en complément (gestion des membres)', () => {
 
     const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
     const invitationsTab = Array.from(tabLabels).find((t) =>
-      t.textContent?.includes('Invitations'),
+      t.textContent?.includes(GRIMOIRE_TONE['partie.invitations_tab_label']),
     );
     invitationsTab?.click();
     fixture.detectChanges();
@@ -2773,7 +2782,7 @@ describe('PartieDetail — bandeau contextuel (Story 29.4)', () => {
 
     const contextualNav = TestBed.inject(ContextualNavService);
     expect(contextualNav.title()).toBe('Les Cendres de Kavaan');
-    expect(contextualNav.subtitle()).toBe('Draconis · One-shot');
+    expect(contextualNav.subtitle()).toBe(`Draconis · ${GRIMOIRE_TONE['partie.kind_ONE_SHOT']}`);
   });
 
   it('le sous-titre est identique pour le MJ et pour un joueur (plus de rôle dans le bandeau)', async () => {
@@ -2787,7 +2796,7 @@ describe('PartieDetail — bandeau contextuel (Story 29.4)', () => {
 
     const contextualNav = TestBed.inject(ContextualNavService);
     expect(contextualNav.title()).toBe('Les Cendres de Kavaan');
-    expect(contextualNav.subtitle()).toBe('Draconis · One-shot');
+    expect(contextualNav.subtitle()).toBe(`Draconis · ${GRIMOIRE_TONE['partie.kind_ONE_SHOT']}`);
   });
 });
 
@@ -2887,15 +2896,18 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
   const ZONE_REFERENCE = '.details-zone--reference';
 
   it('les trois titres de zone (Action/Consultation/Référence) sont rendus, thématisés via theme.tone()', async () => {
-    const { el } = await createFixture(makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }), MJ_ID);
+    const { el } = await createFixture(
+      makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }),
+      MJ_ID,
+    );
 
     const tone = TONE_MAP['grimoire-emeraude'];
     expect(el.querySelector(`${ZONE_ACTION} .details-zone__title`)?.textContent?.trim()).toBe(
       tone['partie.details_zone_action'],
     );
-    expect(
-      el.querySelector(`${ZONE_CONSULTATION} .details-zone__title`)?.textContent?.trim(),
-    ).toBe(tone['partie.details_zone_consultation']);
+    expect(el.querySelector(`${ZONE_CONSULTATION} .details-zone__title`)?.textContent?.trim()).toBe(
+      tone['partie.details_zone_consultation'],
+    );
     expect(el.querySelector(`${ZONE_REFERENCE} .details-zone__title`)?.textContent?.trim()).toBe(
       tone['partie.details_zone_reference'],
     );
@@ -2909,15 +2921,21 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
   it.each([true, false])(
     'la zone Action précède la zone Consultation, elle-même avant la zone Référence, dans le flux du DOM (desktop=%s)',
     async (desktop) => {
-      const { el } = await createFixture(makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }), MJ_ID, {
-        desktop,
-      });
+      const { el } = await createFixture(
+        makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }),
+        MJ_ID,
+        {
+          desktop,
+        },
+      );
 
       const zones = Array.from(el.querySelectorAll('.details-zone'));
       expect(zones.length).toBe(3);
       const classNames = zones.map((z) => z.className);
       const actionIndex = classNames.findIndex((c) => c.includes('details-zone--action'));
-      const consultationIndex = classNames.findIndex((c) => c.includes('details-zone--consultation'));
+      const consultationIndex = classNames.findIndex((c) =>
+        c.includes('details-zone--consultation'),
+      );
       const referenceIndex = classNames.findIndex((c) => c.includes('details-zone--reference'));
 
       expect(actionIndex).toBe(0);
@@ -2927,7 +2945,10 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
   );
 
   it('MJ, système Ryuutama : la zone Action porte le widget séance, la distribution d’XP et la publication d’annonce', async () => {
-    const { el } = await createFixture(makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }), MJ_ID);
+    const { el } = await createFixture(
+      makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }),
+      MJ_ID,
+    );
 
     const action = el.querySelector(ZONE_ACTION)!;
     expect(action.querySelector('.scheduling-widget')).toBeTruthy();
@@ -3033,8 +3054,8 @@ describe('PartieDetail — défilement de page unique (dynamicHeight)', () => {
   it("mat-tab-group porte dynamicHeight (API publique Material) -- l'overflow interne par défaut du corps d'onglet est neutralisé, la molette défile toute la page", async () => {
     const { fixture } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
 
-    const tabGroup = fixture.debugElement.query(By.directive(MatTabGroup))
-      ?.componentInstance as MatTabGroup | undefined;
+    const tabGroup = fixture.debugElement.query(By.directive(MatTabGroup))?.componentInstance as
+      MatTabGroup | undefined;
     expect(tabGroup).toBeTruthy();
     expect(tabGroup!.dynamicHeight).toBe(true);
   });
@@ -3047,7 +3068,9 @@ describe('PartieDetail — grimoires de référence/préparation repliés par d�
     const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
     const { el } = await createFixture(partie, MJ_ID);
 
-    const referenceDetails = el.querySelector<HTMLDetailsElement>('.reference-sheets details.download-sheet');
+    const referenceDetails = el.querySelector<HTMLDetailsElement>(
+      '.reference-sheets details.download-sheet',
+    );
     const prepDetails = el.querySelector<HTMLDetailsElement>('.prep-sheets details.download-sheet');
     expect(referenceDetails).toBeTruthy();
     expect(prepDetails).toBeTruthy();
@@ -3059,7 +3082,9 @@ describe('PartieDetail — grimoires de référence/préparation repliés par d�
     const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
     const { el } = await createFixture(partie, PLAYER_ID);
 
-    const referenceDetails = el.querySelector<HTMLDetailsElement>('.reference-sheets details.download-sheet');
+    const referenceDetails = el.querySelector<HTMLDetailsElement>(
+      '.reference-sheets details.download-sheet',
+    );
     expect(referenceDetails).toBeTruthy();
     expect(referenceDetails!.open).toBe(false);
     expect(el.querySelector('.prep-sheets')).toBeNull();
@@ -3069,7 +3094,9 @@ describe('PartieDetail — grimoires de référence/préparation repliés par d�
     const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, MJ_ID);
 
-    const details = el.querySelector<HTMLDetailsElement>('.reference-sheets details.download-sheet')!;
+    const details = el.querySelector<HTMLDetailsElement>(
+      '.reference-sheets details.download-sheet',
+    )!;
     const summary = details.querySelector<HTMLElement>('summary')!;
     expect(details.open).toBe(false);
 
@@ -3123,8 +3150,8 @@ describe('PartieDetail — barre d’icônes partagée (retouche UX 2026-09-23)'
     // La classe `icon-bar__btn--danger` référence directement `--mat-sys-error` (patron déjà en
     // place ailleurs dans ce composant, `.notice.error`) ; c'est elle que ce test vérifie, pas
     // l'attribut `color` désormais retiré du bouton.
-    const deleteButton = Array.from(el.querySelectorAll('mat-card-actions.icon-bar button')).find((b) =>
-      b.textContent?.includes(TONE_MAP['grimoire-emeraude']['partie.delete_btn']),
+    const deleteButton = Array.from(el.querySelectorAll('mat-card-actions.icon-bar button')).find(
+      (b) => b.textContent?.includes(TONE_MAP['grimoire-emeraude']['partie.delete_btn']),
     );
     expect(deleteButton).toBeTruthy();
     expect(deleteButton!.classList.contains('icon-bar__btn--danger')).toBe(true);

@@ -4,6 +4,9 @@ import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { of } from 'rxjs';
 import { DetailSurface } from './detail-surface';
+import { TONE_MAP } from '../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 @Component({
   standalone: true,
@@ -114,7 +117,7 @@ describe('DetailSurface (Story 31.2)', () => {
       btn.click();
       fixture.detectChanges();
       expect(btn.getAttribute('aria-expanded')).toBe('true');
-      expect(btn.textContent).toContain('Masquer le récit');
+      expect(btn.textContent).toContain(GRIMOIRE_TONE['detail.narrative_hide']);
       expect(el.querySelector('.detail-surface-narrative')?.textContent).toContain('Les artisans');
 
       btn.click();
@@ -326,12 +329,12 @@ describe('DetailSurface — extension rétro-compatible (Story 33.6)', () => {
   it('bouton de fermeture : « Fermer la feuille » en mobile, « Fermer la fenêtre » en desktop', async () => {
     const mobile = (await createHost(false)).fixture.nativeElement as HTMLElement;
     expect(mobile.querySelector('.detail-surface-close')?.getAttribute('aria-label')).toBe(
-      'Fermer la feuille',
+      GRIMOIRE_TONE['shared.detail_close_sheet'],
     );
     TestBed.resetTestingModule();
     const desktop = (await createHost(true)).fixture.nativeElement as HTMLElement;
     expect(desktop.querySelector('.detail-surface-close')?.getAttribute('aria-label')).toBe(
-      'Fermer la fenêtre',
+      GRIMOIRE_TONE['shared.detail_close_window'],
     );
   });
 

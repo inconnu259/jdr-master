@@ -4,6 +4,10 @@ import { provideAnimationsAsync } from '@angular/platform-browser/animations/asy
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CalendarMonthView, buildMonth } from './calendar-month-view';
 import { LONG_PRESS_MS } from '../selection.utils';
+import { TONE_MAP } from '../../../core/theme/tones';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 describe('buildMonth', () => {
   it('returns 6 weeks of 7 days', () => {
@@ -504,7 +508,7 @@ describe('CalendarMonthView — sélection par glissement', () => {
     fixture.detectChanges();
 
     const otherBtn = Array.from(el.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Autre…',
+      (b) => b.textContent?.trim() === GRIMOIRE_TONE['calendar.selbar_other'],
     )!;
     otherBtn.click();
     fixture.detectChanges();
@@ -919,8 +923,14 @@ describe('CalendarMonthView — les trois bandes', () => {
     });
 
     const label = cellOf(20).querySelectorAll('.band')[0].getAttribute('aria-label') ?? '';
-    expect(label).toContain('3 réponses sur 4');
-    expect(label).toContain('tu as dit oui');
+    expect(label).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.util_participation_many'], { n: 3, total: 4 }),
+    );
+    expect(label).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.util_answer_mine'], {
+        answer: GRIMOIRE_TONE['calendar.util_answer_yes'],
+      }),
+    );
   });
 
   it('rend trois bandes pour un jour dont les créneaux diffèrent (AC1)', async () => {
@@ -1746,7 +1756,7 @@ describe('CalendarMonthView — mode de composition (Story 36.10)', () => {
 
     const band = bandOf(20, 2);
     expect(band.classList.contains('band--composed')).toBe(true);
-    expect(band.getAttribute('aria-label')).toContain('désigné pour le vote');
+    expect(band.getAttribute('aria-label')).toContain(GRIMOIRE_TONE['common.designe_pour_le_vote']);
 
     // Le voisin ne l'est pas : la classe suit bien la clé, pas le jour.
     const morning = bandOf(20, 0);

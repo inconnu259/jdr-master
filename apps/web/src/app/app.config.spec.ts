@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { LiveAnnouncer } from '@angular/cdk/a11y';
 import { vi } from 'vitest';
 import { appConfig } from './app.config';
-import { THEMES } from './core/theme/tones';
+import { THEMES, TONE_MAP } from './core/theme/tones';
 
 // Câblage RÉEL de l'application (story 34.3) : aucun autre test ne voit la disparition de
 // l'initialiseur de thème, de la stratégie de titre ou d'une propriété `title` de route.
@@ -44,25 +44,36 @@ describe('appConfig — câblage du thème de la visite et des titres d’onglet
     expect(localStorage.getItem('jdr-theme')).toBeNull();
   });
 
+  // Story 35.3 : les titres d'onglet portent la voix du thème actif — le thème est donc fixé (cache
+  // local) et le texte attendu lu dans le registre de CE thème.
   const TITLES: [string, string][] = [
-    ['/login', 'Connexion'],
-    ['/register', 'Créer un compte'],
-    ['/forgot-password', 'Mot de passe oublié'],
-    ['/reset-password/x', 'Nouveau mot de passe'],
-    ['/confirm-email-change/x', "Confirmer le changement d'e-mail"],
-    ['/rollback-email-change/x', "Annuler le changement d'e-mail"],
-    ['/join/x', 'Rejoindre'],
+    ['/login', 'common.connexion'],
+    ['/register', 'common.creer_un_compte'],
+    ['/forgot-password', 'common.mot_de_passe_oublie'],
+    ['/reset-password/x', 'common.nouveau_mot_de_passe'],
+    ['/confirm-email-change/x', 'route.title_confirm_email_change'],
+    ['/rollback-email-change/x', 'route.title_rollback_email_change'],
+    ['/join/x', 'common.rejoindre'],
   ];
 
-  for (const [url, title] of TITLES) {
-    it(`${url} donne « Dés Dispos – ${title} » et l’annonce`, async () => {
-      setup();
-      await TestBed.inject(ApplicationInitStatus).donePromise;
+  for (const theme of THEMES) {
+    for (const [url, key] of TITLES) {
+      it(`${theme} : ${url} donne le titre « ${key} » du thème et l’annonce`, async () => {
+        localStorage.setItem('jdr-theme', theme);
+        setup();
+        await TestBed.inject(ApplicationInitStatus).donePromise;
 
-      await TestBed.inject(Router).navigateByUrl(url);
+        await TestBed.inject(Router).navigateByUrl(url);
 
-      expect(document.title).toBe(`Dés Dispos – ${title}`);
-      expect(announce).toHaveBeenCalledWith(`Dés Dispos – ${title}`);
-    });
+        // Une clé absente ferait « undefined » des deux côtés de la comparaison : on garde donc un
+        // garde-fou explicite sur le texte résolu.
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBeTruthy();
+        const title = `Dés Dispos – ${TONE_MAP[theme][key]}`;
+        expect(document.title).not.toContain('undefined');
+        expect(title).not.toContain('undefined');
+        expect(document.title).toBe(title);
+        expect(announce).toHaveBeenCalledWith(title);
+      });
+    }
   }
 });

@@ -1,13 +1,8 @@
 import type { SlotMemberDto } from '@master-jdr/shared';
 import { fillTone } from '../../core/theme/tone-format';
-import { TONE_MAP } from '../../core/theme/tones';
 
 /** Dictionnaire de ton lisible par les fonctions pures (`theme.tone()` d'un composant). */
 type ToneDict = Readonly<Record<string, string>>;
-
-/** Repli quand l'appelant ne fournit pas le ton actif : les mots du calendrier sont identiques dans
- *  les trois thèmes, le thème de référence suffit donc pour une fonction appelée sans composant. */
-const DEFAULT_TONE: ToneDict = TONE_MAP['grimoire-emeraude'];
 
 /**
  * Story 36.8 — la disponibilité du groupe, sur un canal séparé (FR-53).
@@ -119,7 +114,7 @@ export function groupIsAllBlocked(group: GroupAvailability): boolean {
  * Les identités ne sont énoncées que si le serveur en a servi — la fonction ne peut structurellement
  * pas en inventer.
  */
-export function groupAriaLabel(group: GroupAvailability, tone: ToneDict = DEFAULT_TONE): string {
+export function groupAriaLabel(group: GroupAvailability, tone: ToneDict): string {
   const total = safeCount(group.total);
   const available = Math.min(safeCount(group.available), total);
   const unavailable = Math.min(safeCount(group.unavailable), total);
@@ -151,7 +146,7 @@ export function groupAriaLabel(group: GroupAvailability, tone: ToneDict = DEFAUL
 
 /** Le statut d'un membre, **en toutes lettres**. Point unique du vocabulaire du canal : les
  *  surfaces n'en écrivent jamais un second (même règle qu'`answerLabel()` pour le vote). */
-export function memberStatusWord(member: GroupMember, tone: ToneDict = DEFAULT_TONE): string {
+export function memberStatusWord(member: GroupMember, tone: ToneDict): string {
   switch (member.status) {
     case 'AVAILABLE':
       return tone['calendar.week_status_available'];

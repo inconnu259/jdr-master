@@ -28,6 +28,8 @@ import { ContextualNavService } from '../../../core/navigation/contextual-nav.se
 import { TONE_MAP } from '../../../core/theme/tones';
 import { CalendarSessionLayersService } from '../calendar-session-layers.service';
 
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
+
 interface CreateOptions {
   mode?: 'mj' | 'personal';
   partieId?: string;
@@ -519,7 +521,7 @@ describe('CalendarView — activePolls() (Story 8.8, AC7 : plusieurs votes actif
 
   it('aucun vote actif → message neutre "Aucun vote de date en cours."', async () => {
     const { fixture } = await createCalendarView({ mode: 'mj', partieId: 'partie-1' });
-    expect(fixture.nativeElement.textContent).toContain('Aucun vote de date en cours.');
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['calendar.view_no_poll']);
   });
 
   // ⚠️ Story 36.7, AC3 — ce test CHANGE DE SENS. Il verrouillait la présence de
@@ -895,9 +897,9 @@ describe('CalendarView — onBatchDeclareRequested (Story 30.3)', () => {
     expect(labels[0]).toContain('10');
     expect(labels[1]).toContain('11');
     expect(data.conflicts.map((c: { batchIndex: number }) => c.batchIndex)).toEqual([0, 1]);
-    // Story 35.2 — les mots de la phrase « Tu déclares <kind> <intent> » viennent du registre :
+    // Story 35.2 — les mots de la phrase « Vous déclarez <kind> <intent> » viennent du registre :
     // un trou `{from}`/`{to}` oublié ou une clé inversée laisserait une accolade à l'écran.
-    expect(data.kindLabel).toBe('indisponible');
+    expect(data.kind).toBe('UNAVAILABLE');
     expect(data.intentLabel).toBeTruthy();
     expect(data.intentLabel).not.toMatch(/[{}]/);
   });
@@ -1437,7 +1439,7 @@ describe('CalendarView — barre repliée et panneau « Affichage » (Story 36.1
     const { fixture } = await createCalendarView({ mode: 'personal' });
     const trigger = fixture.nativeElement.querySelector('.display-trigger');
 
-    expect(trigger.getAttribute('aria-label')).toBe("Régler l'affichage du calendrier");
+    expect(trigger.getAttribute('aria-label')).toBe(GRIMOIRE_TONE['calendar.display.trigger_aria']);
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
 
     await openPanel(fixture);
@@ -2971,7 +2973,7 @@ describe('CalendarView — mode de composition (Story 36.10)', () => {
     });
     const btn = fixture.nativeElement.querySelector('.compose-arm');
     expect(btn).not.toBeNull();
-    expect(btn.textContent.trim()).toBe('Ajouter des dates');
+    expect(btn.textContent.trim()).toBe(GRIMOIRE_TONE['calendar.view_compose_arm']);
   });
 
   // ── AC13 : la composition part de l'état réel du vote ──
@@ -3262,7 +3264,7 @@ describe('CalendarView — mode de composition (Story 36.10)', () => {
 
     expect(comp.composing()).toBe(true);
     expect(comp.composedCells()).toHaveLength(3);
-    expect(comp.error()).toContain('Impossible');
+    expect(comp.error()).toBe(GRIMOIRE_TONE['calendar.view_compose_save_error']);
   });
 
   // ── AC1 : la barre persistante ──
@@ -3722,7 +3724,7 @@ describe('CalendarView — sceller depuis l’Agenda (Story 36.12, AC10 à AC12)
 
     await comp.onSealRequested(SEAL_REQUEST);
 
-    expect(comp.error()).toContain('sceller');
+    expect(comp.error()).toBe(GRIMOIRE_TONE['calendar.view_seal_error']);
     expect(comp.pollActionPending()).toBe(false);
   });
 

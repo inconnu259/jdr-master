@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { ThemeToneService } from './theme-tone.service';
-import { THEME_NAMES, THEMES, TONE_MAP } from './tones';
+import { THEME_NAMES, THEMES, TONE_MAP, type Theme } from './tones';
 
 describe('ThemeToneService', () => {
   afterEach(() => {
@@ -644,8 +644,9 @@ describe('ThemeToneService — thème de la visite (Story 34.3)', () => {
 
 // Story 34.3 — ligne d'orientation de la connexion et messages de validation des formulaires
 // d'authentification. Garde de parité : une clé posée dans un seul thème rendrait `undefined` à
-// l'écran dans les deux autres. Texte neutre de référence (EXPERIENCE.md §3), identique dans les
-// trois thèmes pour cette story (l'habillage thématique relève de l'épic 35) ; il NOMME la règle.
+// l'écran dans les deux autres. Les messages de validation (`auth.field_*`) restent neutres et
+// identiques, ils NOMMENT la règle ; la ligne d'orientation (`auth.login_invite_only`) a, depuis la
+// 35.3, la voix de chaque thème (elle doit toujours dire « invitation »).
 describe('Tones — validation et orientation des écrans d’authentification (Story 34.3)', () => {
   const RULE_WORDS: Record<string, string> = {
     'auth.login_invite_only': 'invitation',
@@ -664,12 +665,20 @@ describe('Tones — validation et orientation des écrans d’authentification (
     });
   }
 
-  for (const key of Object.keys(RULE_WORDS)) {
+  for (const key of Object.keys(RULE_WORDS).filter((k) => k.startsWith('auth.field_'))) {
     it(`${key} est identique dans les trois thèmes (texte neutre de référence)`, () => {
       const values = THEMES.map((t) => TONE_MAP[t][key]);
       expect(new Set(values).size, `${key} → ${values.join(' / ')}`).toBe(1);
     });
   }
+});
+
+describe("Tones — ligne d'orientation de la connexion (Story 35.3)", () => {
+  it('auth.login_invite_only a la voix de chaque thème et dit « invitation »', () => {
+    const values = THEMES.map((theme) => TONE_MAP[theme]['auth.login_invite_only']);
+    expect(new Set(values).size, values.join(' / ')).toBe(THEMES.length);
+    for (const value of values) expect(value.toLowerCase()).toContain('invitation');
+  });
 });
 
 // Story 34.4 — accroche de la bande d'authentification : une clé par thème, texte propre à chaque
@@ -688,21 +697,19 @@ describe('Tones — accroche de la bande d’authentification (Story 34.4)', () 
   });
 });
 
-// Story 35.2 — classement des textes. Les textes migrés au registre gardent leur formulation
-// actuelle, identique dans les trois thèmes (les voix sont réécrites par la 35.3) ; une formulation
-// qui se répète vit sous UNE clé `common.*`. Les trous `{nom}` doivent être les mêmes partout, sinon
-// `fillTone` laisserait un trou affiché dans l'un des thèmes.
+// Story 35.2 — classement des textes. Une formulation qui se répète vit sous UNE clé `common.*`
+// (les voix des trois thèmes sont écrites par la 35.3 : ces clés ne sont plus imposées identiques).
+// Les trous `{nom}` doivent être les mêmes partout, sinon `fillTone` laisserait un trou affiché
+// dans l'un des thèmes.
 describe('Tones — textes migrés au registre (Story 35.2)', () => {
   const REFERENCE = TONE_MAP[THEMES[0]];
 
-  it('les clés communes (`common.*`) disent la même chose dans les trois thèmes', () => {
+  it('les clés communes (`common.*`) existent dans les trois thèmes et ont leur propre voix', () => {
     const communes = Object.keys(REFERENCE).filter((key) => key.startsWith('common.'));
     expect(communes.length).toBeGreaterThan(0);
-    for (const key of communes) {
-      for (const theme of THEMES) {
-        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(REFERENCE[key]);
-      }
-    }
+    // Les mots fonctionnels qui restent identiques sont recensés par NEUTRAL_KEYS (voir plus bas).
+    const voix = communes.filter((key) => new Set(THEMES.map((t) => TONE_MAP[t][key])).size > 1);
+    expect(voix.length).toBeGreaterThan(communes.length / 2);
   });
 
   it('les trous `{nom}` d’une clé sont les mêmes dans les trois thèmes', () => {
@@ -741,11 +748,429 @@ describe('Tones — textes migrés au registre (Story 35.2)', () => {
       'character.portrait_missing',
       'account.save_btn',
       'account.email_change_title',
+      // Story 35.3 : les types de partie n'ont plus qu'une série, `partie.kind_*`.
+      'core.parties_kind_one_shot',
+      'core.parties_kind_campagne',
+      'core.parties_kind_campagne_episodique',
+      // Story 35.3 : remplacées par une phrase entière par cas (accord dans le registre).
+      'calendar.conflict_overwrite_one',
+      'calendar.conflict_overwrite_many',
     ];
     for (const theme of THEMES) {
       for (const key of orphelines) {
         expect(Object.keys(TONE_MAP[theme]), `${theme} / ${key}`).not.toContain(key);
       }
+    }
+  });
+});
+
+// Story 35.3 — une voix par thème. Les trois thèmes ne sont plus des copies : chacun tient son
+// univers (Grimoire Émeraude : magie et bibliothèque, vouvoiement ; Forêt Ancienne : nature et
+// druides, tutoiement ; Atelier Cuivré : engrenages et registres, vouvoiement) de la première à la
+// dernière clé. Les textes CONTRACTUELS restent neutres et identiques, et tout autre texte
+// identique doit être recensé ici, avec sa raison : un texte qui reste identique par oubli échoue.
+describe('Tones — une voix par thème (Story 35.3)', () => {
+  /** Clés VOLONTAIREMENT identiques dans les trois thèmes — exactement ces clés, ni plus ni moins.
+   *  Une clé qui s'ajoute au registre sans voix propre fait échouer le premier test ; une clé
+   *  recensée ici qui reçoit une voix fait échouer le second (la liste ne pourrit pas). */
+  const NEUTRAL_KEYS = new Set<string>([
+    // Contractuels (spec 35.3) : états, nom propre, accessibilité du mot de passe, règles de champ, badges de l’Agenda
+    'auth.field_required',
+    'auth.field_email_invalid',
+    'auth.field_pseudo_min',
+    'auth.field_password_min',
+    'auth.password_show',
+    'auth.password_hide',
+    'status.scenario_brouillon',
+    'status.scenario_a_venir',
+    'status.scenario_courant',
+    'status.scenario_passe',
+    'status.seance_a_planifier',
+    'status.seance_answer_poll',
+    'status.seance_poll_open',
+    'status.seance_inscriptions_ouvertes',
+    'status.seance_programmee',
+    'status.seance_a_debriefer',
+    'status.seance_jouee',
+    'calendar.agenda.badge_answer_poll',
+    'calendar.agenda.badge_poll_open',
+    'calendar.agenda.badge_signup',
+    'calendar.agenda.badge_signed_up',
+    'calendar.agenda.badge_debrief',
+    'calendar.agenda.badge_to_seal',
+    'character.nature_dragon',
+    // Verbatim du contrat d’UI du calendrier (stories 32.2, 36.4, 36.9, 36.14) et noms de vues
+    'common.conserver',
+    'common.remplacer',
+    'common.vue_agenda',
+    'common.vue_mois',
+    'common.vue_semaine',
+    'account.calendar_layer.mes-indisponibilites',
+    'account.calendar_layer.mes-disponibilites',
+    'account.calendar_layer.mes-seances',
+    'account.calendar_layer.votes-en-cours',
+    'account.calendar_layer.inscriptions-ouvertes',
+    'account.calendar_layer.disponibilite-groupe',
+    'account.calendar_intent.disponibilites',
+    'account.calendar_intent.seances',
+    'account.calendar_intent.votes',
+    'account.calendar_intent.groupe',
+    'partie.details_zone_action',
+    'partie.details_zone_consultation',
+    'partie.details_zone_reference',
+    'calendar.display.trigger',
+    'calendar.display.section_visible',
+    'calendar.display.show_legend',
+    'calendar.display.filtered_badge',
+    'calendar.legend.entry.available',
+    'calendar.legend.entry.unavailable',
+    'calendar.legend.entry.vote',
+    'calendar.legend.entry.group',
+    'calendar.legend.entry.none',
+    'calendar.view_back',
+    'calendar.view_toggle_month_short',
+    'calendar.view_toggle_week_short',
+    'calendar.view_toggle_agenda_short',
+    'calendar.conflict_walkthrough_label',
+    'cta.destiny_mode',
+    // Vocabulaire du système de jeu (Ryuutama) : noms de fiches, de rubriques et de catégories
+    'partie.asset_journal_cta',
+    'partie.asset_carte_cta',
+    'partie.asset_monde_cta',
+    'partie.asset_monstre_cta',
+    'partie.asset_ville_cta',
+    'partie.asset_objectif_chasse_cta',
+    'partie.asset_objectif_quete_cta',
+    'partie.asset_objectif_voyage_cta',
+    'partie.asset_oeuf_de_bataille_cta',
+    'partie.asset_structure_cta',
+    'my_characters.sort_niveau',
+    'character.level_badge',
+    'characters_sheet.history_level',
+    'characters_sheet.levelup_title_level',
+    'roster.mj_badge',
+    'character.choice_talents_label',
+    'character.choice_advantages_label',
+    'character.choice_reference_toggle',
+    'character.recap_total',
+    'detail.row_attributes',
+    'detail.row_difficulty',
+    'detail.row_effect',
+    'detail.row_conditions',
+    'character.equipment_group_individual',
+    'character.equipment_group_contenant',
+    'character.equipment_group_animal',
+    'characters_wizard.attributes_profile_aria',
+    'characters_wizard.attributes_banner_profile',
+    'hd.sheet_export_editable',
+    'hd.sheet_export_2pages',
+    // Mots fonctionnels courts : états de disponibilité, réponses de vote, champs, bornes, unités
+    'common.au',
+    'common.disponible',
+    'common.du',
+    'common.heure',
+    'common.indisponible',
+    'common.lieu',
+    'common.non',
+    'common.oui',
+    'common.peut_etre',
+    'common.poids',
+    'common.seance_n',
+    'common.title_seance_index',
+    'common.titre',
+    'calendar.agg_available_title',
+    'calendar.agg_unknown_title',
+    'calendar.agg_unavailable_title',
+    'calendar.view_group_unavailable_detail',
+    'calendar.view_selection_one',
+    'calendar.month_cell_instructions',
+    'calendar.month_day_today_aria',
+    'calendar.week_decl_available',
+    'calendar.week_decl_punctual',
+    'calendar.week_decl_recurring',
+    'calendar.week_decl_unavailable',
+    'calendar.week_status_available',
+    'calendar.week_status_unavailable',
+    'calendar.week_status_unknown',
+    'calendar.util_answer_yes',
+    'calendar.util_answer_maybe',
+    'calendar.util_answer_no',
+    'calendar.util_group_unavailable_one',
+    'calendar.util_group_unavailable_many',
+    'calendar.util_word_no_answer',
+    'calendar.util_counter',
+    'calendar.constraint_end_date',
+    'calendar.constraint_kind_aria',
+    'calendar.constraint_start_date',
+    'calendar.conflict_kind_available',
+    'calendar.conflict_kind_unavailable',
+    'calendar.compose_confirm_responses_many',
+    'calendar.compose_confirm_responses_one',
+    // Gabarits structurels et libellés techniques
+    'partie.signal_more_count',
+    'parties.detail_link_expires_short',
+    'parties.roster_aria_character',
+    'parties.roster_aria_character_class',
+    'parties.roster_aria_create',
+    'portrait.cropper_zoom',
+    'portrait.avatar_aria',
+    'portrait.avatar_aria_empty',
+  ]);
+
+  const REFERENCE = TONE_MAP['grimoire-emeraude'];
+  const identicalKeys = () =>
+    Object.keys(REFERENCE).filter(
+      (key) => new Set(THEMES.map((theme) => TONE_MAP[theme][key])).size === 1,
+    );
+
+  it('aucune clé n’est identique dans les trois thèmes, hors des textes neutres recensés', () => {
+    const oubliees = identicalKeys().filter((key) => !NEUTRAL_KEYS.has(key));
+    expect(oubliees, `clés restées en libellé générique : ${oubliees.join(', ')}`).toEqual([]);
+  });
+
+  it('chaque texte neutre recensé existe et est réellement identique dans les trois thèmes', () => {
+    const identiques = new Set(identicalKeys());
+    for (const key of NEUTRAL_KEYS) {
+      expect(Object.keys(REFERENCE), key).toContain(key);
+      expect(identiques.has(key), `${key} a désormais une voix : le retirer de NEUTRAL_KEYS`).toBe(
+        true,
+      );
+    }
+  });
+
+  it('les textes contractuels sont neutres et identiques dans les trois thèmes', () => {
+    const contractuelles = Object.keys(REFERENCE).filter(
+      (key) =>
+        key.startsWith('status.') ||
+        key === 'character.nature_dragon' ||
+        key.startsWith('auth.password_') ||
+        key.startsWith('auth.field_') ||
+        key.startsWith('calendar.agenda.badge_'),
+    );
+    expect(contractuelles.length).toBe(24);
+    for (const key of contractuelles) {
+      const values = THEMES.map((theme) => TONE_MAP[theme][key]);
+      expect(new Set(values).size, `${key} → ${values.join(' / ')}`).toBe(1);
+    }
+  });
+
+  // Les clés les plus vues (navigation, authentification, tableau de bord, partie, calendrier,
+  // vote, personnages, Homme Dragon) : aucun thème ne dit la même chose qu'un autre.
+  const HIGH_VISIBILITY = [
+    'nav.my_games',
+    'nav.create_game',
+    'nav.logout',
+    'nav.calendar',
+    'nav.account',
+    'nav.characters',
+    'auth.tagline',
+    'auth.login_invalid',
+    'auth.login_reset_required',
+    'auth.login_throttled',
+    'auth.login_unavailable',
+    'auth.login_identifier_label',
+    'auth.login_submit',
+    'auth.login_forgot_link',
+    'auth.login_invite_only',
+    'auth.register_submit',
+    'auth.forgot_sent',
+    'auth.forgot_submit',
+    'auth.reset_submit',
+    'common.connexion',
+    'common.creer_un_compte',
+    'common.mot_de_passe',
+    'common.mot_de_passe_oublie',
+    'common.nouveau_mot_de_passe',
+    'common.lien_invalide',
+    'common.retour_a_la_connexion',
+    'common.annuler',
+    'common.enregistrer',
+    'common.supprimer',
+    'common.confirmer',
+    'common.valider',
+    'common.chargement',
+    'common.rechercher',
+    'common.fermer',
+    'dashboard.title_invitations',
+    'dashboard.empty',
+    'dashboard.role_mj',
+    'dashboard.role_player',
+    'dashboard.section_awaiting',
+    'dashboard.section_upcoming',
+    'dashboard.section_finished',
+    'dashboard.sort_urgence',
+    'dashboard.favorite_add_aria',
+    'partie.new_title',
+    'partie.save_btn',
+    'partie.name_label',
+    'partie.kind_ONE_SHOT',
+    'partie.kind_CAMPAGNE_LINEAIRE',
+    'partie.kind_CAMPAGNE_EPISODIQUE',
+    'partie.signal_vote_en_cours_sans_reponse',
+    'partie.signal_aucune_date_ni_vote',
+    'partie.delete_btn',
+    'parties.detail_tab_scenario',
+    'parties.detail_delete_confirm',
+    'scenarios.list_title',
+    'scenarios.form_title',
+    'scenarios.editor_close',
+    'scenarios.seances_inscrire',
+    'scenarios.seances_desinscrire',
+    'calendar.agenda.section_awaiting',
+    'calendar.agenda.empty',
+    'calendar.agenda.poll_open',
+    'calendar.agenda.no_date',
+    'calendar.legend.title',
+    'calendar.view_no_poll',
+    'calendar.view_compose_arm',
+    'calendar.conflict_intent_prefix',
+    'calendar.conflict_title_many',
+    'calendar.conflict_overwrite_available_many',
+    'calendar.compose_count_many',
+    'calendar.selbar_count_many',
+    'cta.withdraw_vote',
+    'poll.status_title',
+    'pollui.creation_title',
+    'pollui.creation_submit',
+    'announcement.publish_cta',
+    'my_characters.title',
+    'character.create_cta',
+    'evolution.levelup_cta',
+    'evolution.inventory_section_title',
+    'roster.invite_slot',
+    'hd.creation_page_title',
+    'homme-dragon.created_notice',
+    'account.title',
+    'account.password_title',
+    'characters_wizard.step_progress',
+    'characters_wizard.summary_default_title',
+  ];
+
+  it('les clés de grande visibilité existent et sont toutes distinctes d’un thème à l’autre', () => {
+    for (const key of HIGH_VISIBILITY) {
+      expect(Object.keys(REFERENCE), key).toContain(key);
+      const values = THEMES.map((theme) => TONE_MAP[theme][key]);
+      expect(new Set(values).size, `${key} → ${values.join(' / ')}`).toBe(THEMES.length);
+    }
+  });
+
+  // Forme d'adresse : une seule par thème, de la première à la dernière clé. Les textes contractuels
+  // sont exclus (neutres, ils gardent leur forme d'origine : « Réponds au vote »).
+  const isContractual = (key: string) =>
+    key.startsWith('status.') ||
+    key === 'character.nature_dragon' ||
+    key.startsWith('auth.password_') ||
+    key.startsWith('auth.field_') ||
+    key.startsWith('calendar.agenda.badge_');
+  const VOUVOIEMENT =
+    /(^|[^\p{L}])(vous|votre|vos)(?=$|[^\p{L}])|-vous(?=$|[^\p{L}])|(^|[^\p{L}])(réessayez|rechargez|vérifiez|choisissez|ouvrez|créez|connectez|terminez|refaites|patientez|utilisez|acceptez|cochez|cliquez|revalidez|demandez|revenez|touchez|répartissez|gravez|ajoutez|sélectionnez|renseignez|veuillez|rédigez|déverrouillez|rouvrez|consultez|plantez|façonnez)(?=$|[^\p{L}])/iu;
+  // Impératifs du tutoiement, restreints aux formes sans ambiguïté (« ouvre » est aussi un « il ouvre »).
+  const TUTOIEMENT_PRONOMS =
+    /(^|[^\p{L}])((tu|toi|ton|ta|tes|te)(?=$|[^\p{L}])|t[’'](?=\p{L}))|-toi(?=$|[^\p{L}])/iu;
+  const TUTOIEMENT_IMPERATIFS =
+    /(^|[^\p{L}])(réessaie|vérifie|choisis|refais|patiente|accepte|coche|clique|revalide|reviens|répartis|déverrouille|saisis|renseigne|prends)(?=$|[^\p{L}])/iu;
+
+  for (const theme of ['grimoire-emeraude', 'atelier-cuivre'] as const) {
+    it(`${theme} vouvoie partout — aucun « tu », « ton », « réessaie »… hors textes contractuels`, () => {
+      for (const [key, value] of Object.entries(TONE_MAP[theme])) {
+        if (isContractual(key)) continue;
+        expect(TUTOIEMENT_PRONOMS.test(value), `${theme} / ${key} → ${value}`).toBe(false);
+        expect(TUTOIEMENT_IMPERATIFS.test(value), `${theme} / ${key} → ${value}`).toBe(false);
+      }
+    });
+  }
+
+  it('foret-ancienne tutoie partout — aucun « vous », « votre », « réessayez »… hors textes contractuels', () => {
+    for (const [key, value] of Object.entries(TONE_MAP['foret-ancienne'])) {
+      if (isContractual(key)) continue;
+      expect(VOUVOIEMENT.test(value), `foret-ancienne / ${key} → ${value}`).toBe(false);
+      // Un impératif en « -ez » (hors « chez », « assez »…) trahit un vouvoiement.
+      const imperatifs = (
+        value.replace(/laissez-passer/gi, 'passe-droit').match(/[\p{L}]+ez(?![\p{L}])/giu) ?? []
+      ).filter((mot) => !/^(chez|assez|nez|rez)$/i.test(mot));
+      expect(imperatifs, `foret-ancienne / ${key} → ${value}`).toEqual([]);
+    }
+  });
+
+  it('chaque thème parle son propre vocabulaire, sur une part substantielle du registre', () => {
+    const univers: Record<Theme, RegExp> = {
+      'grimoire-emeraude':
+        /grimoire|parchemin|oracle|sceau|sortilège|missive|enlumin|chapitre|voyageur|compagnon|chronique|almanach|folio|conseil|proclam|inscri|scell|glose|coffre|maître|forg/i,
+      'foret-ancienne':
+        /sentier|forêt|clairière|cercle|écureuil|hibou|besace|carnet|étape|lune|racine|grav|plant|éveil|parole|guide|habitant|cueill|pécule|feuille|compagnon/i,
+      'atelier-cuivre':
+        /mission|opération|registre|automate|pneumatique|scrutin|consign|équipage|mécanicien|atelier|plaque|badge|composant|calibr|vapeur|purg|ingénieur|établi|fréquence|télégramme|assembl|soute|chargement|rouage/i,
+    };
+    for (const theme of THEMES) {
+      const total = Object.values(TONE_MAP[theme]);
+      const marques = total.filter((value) => univers[theme].test(value));
+      expect(marques.length, `${theme} : ${marques.length}/${total.length}`).toBeGreaterThan(
+        total.length * 0.35,
+      );
+    }
+  });
+
+  it('la connexion ne distingue jamais « compte inexistant » de « mot de passe incorrect »', () => {
+    for (const theme of THEMES) {
+      const text = TONE_MAP[theme]['auth.login_invalid'].toLowerCase();
+      expect(text, theme).not.toMatch(/inexistant|introuvable|inconnu|n’existe pas|incorrect/);
+      expect(text, theme).toContain('invalide');
+    }
+  });
+
+  it('un lien invalide le dit, dans chaque thème (une erreur nomme sa cause)', () => {
+    for (const theme of THEMES) {
+      expect(TONE_MAP[theme]['common.lien_invalide'].toLowerCase(), theme).toContain('invalide');
+      expect(
+        TONE_MAP[theme][
+          'common.lien_invalide_ou_expire_merci_de_refaire_une_demande'
+        ].toLowerCase(),
+        theme,
+      ).toContain('expiré');
+      expect(TONE_MAP[theme]['auth.rollback_error'].toLowerCase(), theme).toContain('expiré');
+    }
+  });
+
+  // La boîte de conflit construit ces clés dynamiquement (`calendar.conflict_overwrite_${kind}_${n}`) :
+  // aucune recherche de la clé complète ne les trouve, ce test est donc leur seule garde.
+  it('les quatre phrases « Remplacer » de la boîte de conflit existent, non vides, dans chaque thème', () => {
+    for (const theme of THEMES) {
+      for (const kind of ['available', 'unavailable']) {
+        for (const nombre of ['one', 'many']) {
+          const key = `calendar.conflict_overwrite_${kind}_${nombre}`;
+          expect(TONE_MAP[theme][key]?.trim(), `${theme} / ${key}`).toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it('le lien « mot de passe oublié » cité par le message de réinitialisation est celui du thème', () => {
+    for (const theme of THEMES) {
+      const lien = TONE_MAP[theme]['auth.login_forgot_link'];
+      expect(TONE_MAP[theme]['auth.login_reset_required'], theme).toContain(`« ${lien} »`);
+    }
+  });
+
+  it('les types de partie ont une seule série de libellés : `partie.kind_*`', () => {
+    for (const theme of THEMES) {
+      expect(
+        Object.keys(TONE_MAP[theme]).filter((key) => key.startsWith('core.parties_kind_')),
+      ).toEqual([]);
+      for (const kind of ['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE']) {
+        expect(TONE_MAP[theme][`partie.kind_${kind}`], `${theme} / ${kind}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('le mot « vote » des paires d’état reste distinct : « Réponds au vote » ≠ « Vote en cours »', () => {
+    for (const theme of THEMES) {
+      expect(TONE_MAP[theme]['calendar.agenda.badge_answer_poll'], theme).not.toBe(
+        TONE_MAP[theme]['calendar.agenda.badge_poll_open'],
+      );
+      // Le signal du tableau de bord reprend la même paire : jamais « Vote en attente ».
+      expect(TONE_MAP[theme]['partie.signal_vote_en_cours_sans_reponse'], theme).not.toMatch(
+        /en attente/i,
+      );
     }
   });
 });

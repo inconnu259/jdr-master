@@ -1,6 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import type { ContentEntryDto } from '@master-jdr/shared';
 import { EquipmentStep } from './equipment-step';
+import { fillTone } from '../../../../../core/theme/tone-format';
+import { TONE_MAP } from '../../../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const EQUIPMENT_ITEMS: ContentEntryDto[] = [
   { key: 'rations', data: { label: 'Rations', priceGold: 10, nature: 'individual', weight: 1 } },
@@ -352,7 +356,7 @@ describe('EquipmentStep — contrat UI 31.4', () => {
   it('AC12 — budget : texte toujours visible + jauge proportionnelle', () => {
     const fixture = mount([{ key: 'alcools', quantity: 5 }], true); // 50 Po
     expect(root(fixture).querySelector('.equipment-step__budget')!.textContent).toContain(
-      'Budget · 50 / 1000 Po',
+      fillTone(GRIMOIRE_TONE['character.equipment_budget'], { spent: 50, total: 1000 }),
     );
     expect(
       root(fixture).querySelector<HTMLElement>('.equipment-step__gauge-fill')!.style.width,
@@ -365,7 +369,7 @@ describe('EquipmentStep — contrat UI 31.4', () => {
       'equipment-step__gauge--over',
     );
     expect(root(fixture).querySelector('.equipment-step__budget')!.textContent).toContain(
-      'dépassement de 800 Po',
+      fillTone(GRIMOIRE_TONE['character.equipment_over_budget'], { n: 800 }).replace(/^— /, ''),
     );
     expect(
       root(fixture).querySelector<HTMLElement>('.equipment-step__gauge-fill')!.style.width,

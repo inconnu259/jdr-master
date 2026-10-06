@@ -9,6 +9,9 @@ import { PartiesService } from '../../../core/parties/parties.service';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
 import { AuthService } from '../../../core/auth/auth.service';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
+import { TONE_MAP } from '../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 @Component({
   selector: 'app-homme-dragon-creation-wizard',
@@ -102,7 +105,7 @@ describe('HommeDragonCreationPage (Story 33.5, AD-23 / 33.8)', () => {
     await createPage({});
 
     const nav = TestBed.inject(ContextualNavService);
-    expect(nav.title()).toBe('Créer un Homme Dragon');
+    expect(nav.title()).toBe(GRIMOIRE_TONE['hd.creation_page_title']);
     expect(nav.subtitle()).toBe('Le Convoi du Nord');
   });
 

@@ -6,6 +6,9 @@ import type { GameSystemSchemaDto, PartieDto, VisibilityLockPathDto } from '@mas
 import { VisibilityLocks } from './visibility-locks';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { CharacterService } from '../../../core/characters/character.service';
+import { TONE_MAP } from '../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const PARTIE: PartieDto = {
   id: 'p1',
@@ -46,12 +49,14 @@ const SCHEMA: GameSystemSchemaDto = {
   creationSteps: [],
 };
 
-async function createComponent(options: {
-  locks?: VisibilityLockPathDto[];
-  locksRejects?: boolean;
-  setVisibilityLocksRejects?: boolean;
-  schema?: GameSystemSchemaDto;
-} = {}) {
+async function createComponent(
+  options: {
+    locks?: VisibilityLockPathDto[];
+    locksRejects?: boolean;
+    setVisibilityLocksRejects?: boolean;
+    schema?: GameSystemSchemaDto;
+  } = {},
+) {
   const partiesSvc = {
     get: vi.fn().mockResolvedValue(PARTIE),
     getVisibilityLocks: options.locksRejects
@@ -185,11 +190,12 @@ describe('VisibilityLocks', () => {
   it('système de jeu sans aucune clé verrouillable : branche @empty affichée, aucune case', async () => {
     const { fixture } = await createComponent({
       locks: [],
-      schema: { sheetSchema: { magicSeason: { type: 'string', label: 'Saison de magie' } }, creationSteps: [] },
+      schema: {
+        sheetSchema: { magicSeason: { type: 'string', label: 'Saison de magie' } },
+        creationSteps: [],
+      },
     });
     expect(checkboxes(fixture)).toHaveLength(0);
-    expect(fixture.nativeElement.textContent).toContain(
-      'Ce système de jeu ne déclare aucun élément verrouillable.',
-    );
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['parties.locks_empty']);
   });
 });

@@ -1,6 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import type { ContentEntryDto } from '@master-jdr/shared';
 import { ClassStep } from './class-step';
+import { TONE_MAP } from '../../../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const CLASSES: ContentEntryDto[] = [
   {
@@ -723,7 +726,7 @@ describe('ClassStep — carte déployée (piste B)', () => {
     const fixture = mount(CLASSES_WITH_CHOICES, 'fermier');
     const must = root(fixture).querySelector('.class-step__required-choice')!;
     expect(must).not.toBeNull();
-    expect(must.textContent).toContain('Obligatoire');
+    expect(must.textContent).toContain(GRIMOIRE_TONE['character.choice_required_flag']);
     expect(root(fixture).querySelector('#fermier-metier-appoint')).not.toBeNull();
     expect(root(fixture).querySelector('.class-step__occupations')).toBeNull();
     // le choix n'est PAS dans la zone repliable
@@ -734,7 +737,7 @@ describe('ClassStep — carte déployée (piste B)', () => {
   it('la spécialité obligatoire de l’Artisan est visible d’emblée', () => {
     const fixture = mount(CLASSES, 'artisan');
     const must = root(fixture).querySelector('.class-step__specialty')!;
-    expect(must.textContent).toContain('Obligatoire');
+    expect(must.textContent).toContain(GRIMOIRE_TONE['character.choice_required_flag']);
     expect(root(fixture).querySelector('#specialtyTypeId')).not.toBeNull();
   });
 

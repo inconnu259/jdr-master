@@ -1660,13 +1660,9 @@ export class CalendarView implements OnInit {
     this.conflictDialogOpen.set(true);
     try {
       const conflictedIndexes = new Set(resolvable.map((c) => c.batchIndex as number));
-      const kindLabel =
-        kind === 'AVAILABLE'
-          ? this.theme.tone()['calendar.week_status_available']
-          : this.theme.tone()['calendar.week_status_unavailable'];
       const seanceExceptions = this.seanceCoveredCells(cells, conflictedIndexes);
       const data: ConflictDialogData = {
-        kindLabel,
+        kind,
         intentLabel: this.describeSelection(cells),
         conflicts: resolvable.map((c) => ({
           batchIndex: c.batchIndex as number,

@@ -4,6 +4,7 @@ import { CharacterSummaryCard } from './character-summary-card';
 import { API_BASE } from '../../../core/api-base';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
 import { hommeDragonAventuresLabel } from '../../../core/homme-dragon/homme-dragon.util';
+import { TONE_MAP } from '../../../core/theme/tones';
 
 const CHARACTER: CharacterDto = makeCharacterDto({
   id: 'c1',
@@ -31,7 +32,11 @@ describe('CharacterSummaryCard', () => {
   });
 
   it('derived absent (cadenas de visibilité, Story 31.6) : aucun badge PV/PE/Initiative/Encombrement, aucune erreur', async () => {
-    const masked: CharacterDto = { ...CHARACTER, derived: undefined as never, hiddenFields: ['derived'] };
+    const masked: CharacterDto = {
+      ...CHARACTER,
+      derived: undefined as never,
+      hiddenFields: ['derived'],
+    };
     TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
     const fixture = TestBed.createComponent(CharacterSummaryCard);
     fixture.componentRef.setInput('character', masked);
@@ -376,7 +381,13 @@ describe('CharacterSummaryCard', () => {
       TestBed.configureTestingModule({ imports: [CharacterSummaryCard] });
       const fixture = TestBed.createComponent(CharacterSummaryCard);
       fixture.componentRef.setInput('hommeDragon', dragon);
-      fixture.componentRef.setInput('partieName', hommeDragonAventuresLabel(dragon.aventures));
+      fixture.componentRef.setInput(
+        'partieName',
+        hommeDragonAventuresLabel(
+          dragon.aventures,
+          TONE_MAP['grimoire-emeraude']['core.homme_dragon_sans_aventure'],
+        ),
+      );
       fixture.componentRef.setInput('showStats', false);
       if (density) fixture.componentRef.setInput('density', density);
       fixture.detectChanges();
@@ -456,9 +467,9 @@ describe('CharacterSummaryCard', () => {
     it('nom vide → repli « Homme Dragon sans nom »', async () => {
       const fixture = await renderDragon('medium', { ...DRAGON, nom: '  ' });
 
-      expect(fixture.nativeElement.querySelector('.character-summary-card__name')?.textContent).toContain(
-        'Homme Dragon sans nom',
-      );
+      expect(
+        fixture.nativeElement.querySelector('.character-summary-card__name')?.textContent,
+      ).toContain('Homme Dragon sans nom');
     });
 
     it('n’affiche aucun portrait (l’avatar du dragon est un texte) : initiales de repli', async () => {

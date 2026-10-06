@@ -6,6 +6,10 @@ import { Join } from './join';
 import { AuthService } from '../../core/auth/auth.service';
 import { JoinService } from '../../core/join/join.service';
 import { MyPartiesService } from '../../core/my-parties/my-parties.service';
+import { TONE_MAP } from '../../core/theme/tones';
+import { fillTone } from '../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 // Story 34.2 : le lien « Créer un compte » de la page de connexion est retiré, celui du parcours
 // « rejoindre par lien » (avec son jeton) doit rester.
@@ -48,7 +52,7 @@ describe('Join — lien « Créer un compte » conservé (Story 34.2)', () => {
     fixture.detectChanges();
 
     const link = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('a')).find(
-      (a) => a.textContent?.includes('Créer un compte'),
+      (a) => a.textContent?.includes(GRIMOIRE_TONE['common.creer_un_compte']),
     );
     expect(link).toBeTruthy();
     const href = link!.getAttribute('href')!;
@@ -111,7 +115,7 @@ describe('Join — structure, états et annonces (Story 34.3)', () => {
     const { fixture, el } = await setup({ preview: validPreview });
     const status = el.querySelector('[role="status"]') as HTMLElement;
 
-    expect(status.textContent).toContain('Chargement…');
+    expect(status.textContent).toContain(GRIMOIRE_TONE['common.chargement']);
     expect(el.querySelector('h1')).toBeNull();
     expect(el.querySelector('.auth-primary')).toBeNull();
 
@@ -128,18 +132,20 @@ describe('Join — structure, états et annonces (Story 34.3)', () => {
 
     const h1s = el.querySelectorAll('h1');
     expect(h1s.length).toBe(1);
-    expect(h1s[0].textContent?.trim()).toBe('Rejoindre « Le Convoi du Nord »');
+    expect(h1s[0].textContent?.trim()).toBe(
+      fillTone(GRIMOIRE_TONE['join.title'], { name: 'Le Convoi du Nord' }),
+    );
     expect(el.querySelector('main')?.getAttribute('aria-labelledby')).toBe(h1s[0].id);
     // Bande de marque (story 34.4) : <header> frère de <main>, placé avant lui.
     expect(el.querySelector('main header.band')).toBeNull();
     expect(el.querySelector('app-auth-band + main')).not.toBeNull();
     const primary = el.querySelectorAll('.auth-primary');
     expect(primary.length).toBe(1);
-    expect(primary[0].textContent?.trim()).toBe('Créer un compte');
+    expect(primary[0].textContent?.trim()).toBe(GRIMOIRE_TONE['common.creer_un_compte']);
     expect(primary[0].getAttribute('href')).toContain('token=abc123');
     const secondary = el.querySelectorAll('.auth-secondary-actions a');
     expect(secondary.length).toBe(1);
-    expect(secondary[0].textContent?.trim()).toBe("J'ai déjà un compte");
+    expect(secondary[0].textContent?.trim()).toBe(GRIMOIRE_TONE['common.j_ai_deja_un_compte']);
     expect(secondary[0].getAttribute('href')).toBe('/login');
   });
 
@@ -152,7 +158,7 @@ describe('Join — structure, états et annonces (Story 34.3)', () => {
 
     const primary = el.querySelectorAll('.auth-primary');
     expect(primary.length).toBe(1);
-    expect(primary[0].textContent?.trim()).toBe('Rejoindre');
+    expect(primary[0].textContent?.trim()).toBe(GRIMOIRE_TONE['common.rejoindre']);
     expect(el.querySelector('.auth-secondary-actions')).toBeNull();
   });
 
@@ -189,8 +195,8 @@ describe('Join — structure, états et annonces (Story 34.3)', () => {
     const { fixture, el } = await setup({ preview: new Error('404') });
     await settle(fixture);
 
-    expect(el.querySelector('h1')?.textContent?.trim()).toBe('Lien introuvable');
-    expect(el.textContent).toContain("Ce lien d'invitation n'existe pas.");
+    expect(el.querySelector('h1')?.textContent?.trim()).toBe(GRIMOIRE_TONE['join.not_found_title']);
+    expect(el.textContent).toContain(GRIMOIRE_TONE['join.not_found_text']);
     expect(el.querySelector('.auth-primary')).toBeNull();
     expect(el.querySelector('main')?.getAttribute('aria-labelledby')).toBe(
       el.querySelector('h1')?.id,

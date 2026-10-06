@@ -7,6 +7,10 @@ import { MatDialog } from '@angular/material/dialog';
 import type { HommeDragonDto, MyHommeDragonDto } from '@master-jdr/shared';
 import { HommeDragonAventurePanel } from './homme-dragon-aventure-panel';
 import { HommeDragonService } from '../../../core/homme-dragon/homme-dragon.service';
+import { TONE_MAP } from '../../../core/theme/tones';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 function makeMine(id: string, nom: string): MyHommeDragonDto {
   return {
@@ -87,7 +91,9 @@ describe('HommeDragonAventurePanel (Story 33.8, AD-23)', () => {
       const link = el.querySelector('.aventure-panel__link') as HTMLAnchorElement;
       expect(link.textContent?.trim()).toBe('Suisen');
       expect(link.getAttribute('href')).toBe('/homme-dragons/hd1');
-      expect(el.querySelector('.aventure-panel__dissociate')?.textContent).toContain('Dissocier');
+      expect(el.querySelector('.aventure-panel__dissociate')?.textContent).toContain(
+        GRIMOIRE_TONE['common.dissocier'],
+      );
       expect(el.querySelector('.aventure-panel__create')).toBeNull();
     });
 
@@ -103,7 +109,7 @@ describe('HommeDragonAventurePanel (Story 33.8, AD-23)', () => {
       expect(config.data.message).toContain('Suisen');
       expect(config.data.message).toContain('Les Vents du Nord');
       expect(config.data.message).toContain('niveau');
-      expect(config.data.confirmLabel).toBe('Dissocier');
+      expect(config.data.confirmLabel).toBe(GRIMOIRE_TONE['common.dissocier']);
       expect(svc.unlink).toHaveBeenCalledWith('p1', 'hd1');
     });
 
@@ -138,7 +144,7 @@ describe('HommeDragonAventurePanel (Story 33.8, AD-23)', () => {
       fixture.detectChanges();
 
       expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
-        'Impossible de dissocier',
+        GRIMOIRE_TONE['hd.panel_dissociate_error'],
       );
       expect(fixture.nativeElement.querySelector('.aventure-panel__link')).not.toBeNull();
     });
@@ -151,7 +157,9 @@ describe('HommeDragonAventurePanel (Story 33.8, AD-23)', () => {
       const create = fixture.nativeElement.querySelector(
         '.aventure-panel__create',
       ) as HTMLAnchorElement;
-      expect(create.textContent).toContain('Créer un Homme Dragon pour Les Vents du Nord');
+      expect(create.textContent).toContain(
+        fillTone(GRIMOIRE_TONE['hd.panel_create_cta'], { partie: 'Les Vents du Nord' }),
+      );
       expect(create.getAttribute('href')).toBe('/parties/p1/homme-dragon');
     });
 
@@ -205,7 +213,7 @@ describe('HommeDragonAventurePanel (Story 33.8, AD-23)', () => {
       fixture.detectChanges();
 
       expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
-        "Impossible d'associer",
+        GRIMOIRE_TONE['hd.panel_associate_error'],
       );
       expect(fixture.nativeElement.querySelector('.aventure-panel__create')).not.toBeNull();
     });

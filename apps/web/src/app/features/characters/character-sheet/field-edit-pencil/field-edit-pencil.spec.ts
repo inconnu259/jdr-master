@@ -1,6 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { FieldEditPencil } from './field-edit-pencil';
+import { fillTone } from '../../../../core/theme/tone-format';
+import { TONE_MAP } from '../../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 async function createComponent(
   value: string | number = 'Lanterne',
@@ -27,7 +31,9 @@ describe('FieldEditPencil', () => {
       '.field-edit-pencil__button',
     ) as HTMLButtonElement;
     expect(pencil).not.toBeNull();
-    expect(pencil.getAttribute('aria-label')).toBe("Modifier l'objet fétiche");
+    expect(pencil.getAttribute('aria-label')).toBe(
+      fillTone(GRIMOIRE_TONE['characters_sheet.field_edit_aria'], { label: "l'objet fétiche" }),
+    );
     expect(fixture.nativeElement.querySelector('.field-edit-pencil__form')).toBeNull();
   });
 

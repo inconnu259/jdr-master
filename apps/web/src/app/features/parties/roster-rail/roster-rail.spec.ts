@@ -2,6 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import type { PartieMemberDto } from '@master-jdr/shared';
 import { RosterRail } from './roster-rail';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
+import { fillTone } from '../../../core/theme/tone-format';
+import { TONE_MAP } from '../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const MEMBERS: PartieMemberDto[] = [
   {
@@ -50,6 +54,21 @@ describe('RosterRail', () => {
     return fixture;
   }
 
+  it('personnage sans classe : aria-label sans parenthèses, gabarit parties.roster_aria_character', () => {
+    const fixture = setup();
+    fixture.componentRef.setInput('classLabelFor', () => '');
+    fixture.detectChanges();
+    const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
+    const label = playerItem.getAttribute('aria-label');
+    expect(label).toBe(
+      fillTone(GRIMOIRE_TONE['parties.roster_aria_character'], {
+        name: 'Alice au pays',
+        character: 'Fenn',
+      }),
+    );
+    expect(label).not.toContain('(');
+  });
+
   it('est replié par défaut (pas la classe --expanded)', () => {
     const fixture = setup();
     const el: HTMLElement = fixture.nativeElement.querySelector('.roster-rail');
@@ -92,7 +111,9 @@ describe('RosterRail', () => {
   it("aria-label complet dès l'état replié (nom + rôle), pas seulement une icône", () => {
     const fixture = setup();
     const mjItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="mj1"]');
-    expect(mjItem.getAttribute('aria-label')).toBe('Sylas — MJ');
+    expect(mjItem.getAttribute('aria-label')).toBe(
+      fillTone(GRIMOIRE_TONE['parties.roster_aria_mj'], { name: 'Sylas' }),
+    );
 
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
     expect(playerItem.getAttribute('aria-label')).toBe('Alice au pays — Fenn (Ménestrel)');
@@ -103,7 +124,9 @@ describe('RosterRail', () => {
     fixture.componentRef.setInput('characters', []);
     fixture.detectChanges();
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
-    expect(playerItem.getAttribute('aria-label')).toBe('Alice au pays — aucun personnage créé');
+    expect(playerItem.getAttribute('aria-label')).toBe(
+      fillTone(GRIMOIRE_TONE['parties.roster_aria_no_character'], { name: 'Alice au pays' }),
+    );
   });
 
   it('clic sur un membre ayant un personnage émet selectCharacter avec son characterId', () => {
@@ -166,7 +189,9 @@ describe('RosterRail', () => {
 
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
     expect(playerItem.querySelector('.roster-rail__levelup-badge')).not.toBeNull();
-    expect(playerItem.getAttribute('aria-label')).toContain('montée de niveau disponible');
+    expect(playerItem.getAttribute('aria-label')).toContain(
+      fillTone(GRIMOIRE_TONE['parties.roster_aria_levelup'], { label: '' }).replace(/^.*— /, ''),
+    );
   });
 
   it('personnage sans niveau en attente → pas de badge de montée de niveau', () => {
@@ -210,7 +235,7 @@ describe('RosterRail', () => {
     const fixture = setup(true, 'mj1', () => 'Cartographe');
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
     expect(playerItem.getAttribute('aria-label')).toBe(
-      'Alice au pays — Fenn (Ménestrel) — rôle : Cartographe',
+      `Alice au pays — Fenn (Ménestrel) — ${fillTone(GRIMOIRE_TONE['parties.roster_aria_role'], { label: '', role: 'Cartographe' }).replace(/^ — /, '')}`,
     );
   });
 
@@ -242,7 +267,9 @@ describe('RosterRail', () => {
     expect(ownItem.getAttribute('tabindex')).toBe('-1');
     expect(ownItem.classList.contains('roster-rail__item--create')).toBe(false);
     expect(ownItem.querySelector('.roster-rail__create-badge')).toBeNull();
-    expect(ownItem.getAttribute('aria-label')).toBe('Alice au pays — aucun personnage créé');
+    expect(ownItem.getAttribute('aria-label')).toBe(
+      fillTone(GRIMOIRE_TONE['parties.roster_aria_no_character'], { name: 'Alice au pays' }),
+    );
     ownItem.click();
 
     expect(createEmitted).toBe(false);

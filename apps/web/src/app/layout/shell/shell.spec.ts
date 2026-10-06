@@ -11,6 +11,9 @@ import { UnseenAnnouncementsService } from '../../core/announcements/unseen-anno
 import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 import { TONE_MAP } from '../../core/theme/tones';
+import { fillTone } from '../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 @Component({ selector: 'app-test-blank', template: '' })
 class BlankComponent {}
@@ -162,7 +165,7 @@ describe('Shell — badge combiné annonces non vues + votes en attente (Story 2
     const partiesLink = fixture.nativeElement.querySelector('nav.nav-bar a[routerLink="/"]');
     expect(partiesLink.getAttribute('aria-description') ?? partiesLink.textContent).toBeTruthy();
     expect((fixture.componentInstance as any).homeBadgeDescription()).toContain(
-      '2 annonce(s) non lue(s)',
+      fillTone(GRIMOIRE_TONE['shell.badge_announcements_aria'], { n: 2 }),
     );
   });
 

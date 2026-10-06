@@ -1,9 +1,15 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { signal } from '@angular/core';
-import { CharacterCreationEntries, type CharacterCreationEntry } from './character-creation-entries';
+import {
+  CharacterCreationEntries,
+  type CharacterCreationEntry,
+} from './character-creation-entries';
 import { ThemeToneService } from '../../../../core/theme/theme-tone.service';
 import { TONE_MAP } from '../../../../core/theme/tones';
+import { fillTone } from '../../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 function makeEntry(overrides: Partial<CharacterCreationEntry> = {}): CharacterCreationEntry {
   return {
@@ -38,7 +44,9 @@ describe('CharacterCreationEntries (Story 29.16)', () => {
   });
 
   it('une ligne par entrée, libellé complet (verbe + partie), vrai lien avec le bon gameSystemId', async () => {
-    const { fixture } = await createFixture([makeEntry({ partieId: 'p1', partieName: 'La Forêt Noire' })]);
+    const { fixture } = await createFixture([
+      makeEntry({ partieId: 'p1', partieName: 'La Forêt Noire' }),
+    ]);
 
     const rows: NodeListOf<HTMLAnchorElement> = fixture.nativeElement.querySelectorAll(
       '.character-creation-entries__row',
@@ -67,7 +75,9 @@ describe('CharacterCreationEntries (Story 29.16)', () => {
   it('ligne d’Homme Dragon : modificateur de teinte et marqueur de nature décoratif (aria-hidden)', async () => {
     const { fixture } = await createFixture([makeEntry({ kind: 'hommeDragon', partieId: 'p9' })]);
 
-    const row: HTMLElement = fixture.nativeElement.querySelector('.character-creation-entries__row');
+    const row: HTMLElement = fixture.nativeElement.querySelector(
+      '.character-creation-entries__row',
+    );
     expect(row.classList).toContain('character-creation-entries__row--dragon');
     const nature: HTMLElement = row.querySelector('.character-creation-entries__nature')!;
     expect(nature.getAttribute('aria-hidden')).toBe('true');
@@ -77,7 +87,9 @@ describe('CharacterCreationEntries (Story 29.16)', () => {
   it('ligne de personnage joueur : ni modificateur de teinte ni marqueur de nature', async () => {
     const { fixture } = await createFixture([makeEntry()]);
 
-    const row: HTMLElement = fixture.nativeElement.querySelector('.character-creation-entries__row');
+    const row: HTMLElement = fixture.nativeElement.querySelector(
+      '.character-creation-entries__row',
+    );
     expect(row.classList).not.toContain('character-creation-entries__row--dragon');
     expect(row.querySelector('app-nature-marker')).toBeNull();
   });
@@ -88,7 +100,9 @@ describe('CharacterCreationEntries (Story 29.16)', () => {
       makeEntry({ kind: 'hommeDragon', partieId: 'p1' }),
     ]);
 
-    expect(fixture.nativeElement.querySelectorAll('.character-creation-entries__row').length).toBe(2);
+    expect(fixture.nativeElement.querySelectorAll('.character-creation-entries__row').length).toBe(
+      2,
+    );
   });
 
   it('plusieurs entrées : chacune sa propre ligne, dans l’ordre reçu', async () => {
@@ -112,10 +126,10 @@ describe('CharacterCreationEntries (Story 29.16)', () => {
       makeEntry({ partieId: 'p3' }),
     ]);
 
-    expect(
-      fixture.nativeElement.querySelector('.character-creation-entries__toggle'),
-    ).toBeNull();
-    expect(fixture.nativeElement.querySelectorAll('.character-creation-entries__row').length).toBe(3);
+    expect(fixture.nativeElement.querySelector('.character-creation-entries__toggle')).toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('.character-creation-entries__row').length).toBe(
+      3,
+    );
   });
 
   it('>3 entrées : 3 visibles + « Voir les N autres », qui bascule vers « Voir moins » puis revient', async () => {
@@ -129,7 +143,9 @@ describe('CharacterCreationEntries (Story 29.16)', () => {
     const toggle: HTMLButtonElement = fixture.nativeElement.querySelector(
       '.character-creation-entries__toggle',
     );
-    expect(toggle.textContent?.trim()).toBe('Voir les 2 autres');
+    expect(toggle.textContent?.trim()).toBe(
+      fillTone(GRIMOIRE_TONE['my_characters.create_more'], { n: 2 }),
+    );
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
 
     toggle.click();
@@ -145,7 +161,9 @@ describe('CharacterCreationEntries (Story 29.16)', () => {
 
     rows = fixture.nativeElement.querySelectorAll('.character-creation-entries__row');
     expect(rows.length).toBe(3);
-    expect(toggle.textContent?.trim()).toBe('Voir les 2 autres');
+    expect(toggle.textContent?.trim()).toBe(
+      fillTone(GRIMOIRE_TONE['my_characters.create_more'], { n: 2 }),
+    );
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -158,6 +176,6 @@ describe('CharacterCreationEntries (Story 29.16)', () => {
     const toggle: HTMLButtonElement = fixture.nativeElement.querySelector(
       '.character-creation-entries__toggle',
     );
-    expect(toggle.textContent?.trim()).toBe('Voir l’autre');
+    expect(toggle.textContent?.trim()).toBe(GRIMOIRE_TONE['my_characters.create_more_one']);
   });
 });

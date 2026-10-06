@@ -5,6 +5,8 @@ import { Register } from './register';
 import { AuthService } from '../../../core/auth/auth.service';
 import { TONE_MAP } from '../../../core/theme/tones';
 
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
+
 async function createFixture(token: string | null) {
   const auth = {
     register: vi.fn().mockResolvedValue(undefined),
@@ -55,7 +57,7 @@ describe('Register — inscription sur invitation (Story 34.2, non-régression)'
     fixture.detectChanges();
 
     expect(el.querySelector('p.error')?.textContent).toContain(
-      "L'inscription se fait uniquement sur invitation.",
+      GRIMOIRE_TONE['auth.register_invite_only'].split('.')[0] + '.',
     );
     expect((el.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
 
@@ -83,7 +85,7 @@ describe('Register — inscription sur invitation (Story 34.2, non-régression)'
   it('le lien « J’ai déjà un compte » vers /login est conservé', async () => {
     const { el } = await createFixture('jeton-valide');
     const link = Array.from(el.querySelectorAll('a')).find((a) =>
-      a.textContent?.includes('déjà un compte'),
+      a.textContent?.includes(GRIMOIRE_TONE['common.j_ai_deja_un_compte']),
     );
     expect(link?.getAttribute('href')).toBe('/login');
   });
@@ -104,8 +106,14 @@ describe('Register — structure et validation écrite (Story 34.3)', () => {
     expect(el.querySelector('main header.band')).toBeNull();
     expect(el.querySelector('app-auth-band + main')).not.toBeNull();
     const labels = Array.from(el.querySelectorAll('mat-label')).map((l) => l.textContent?.trim());
-    expect(labels).toEqual(['Email', 'Pseudo', 'Mot de passe']);
-    expect(el.querySelector('mat-hint')?.textContent?.trim()).toBe('8+ caractères');
+    expect(labels).toEqual([
+      GRIMOIRE_TONE['common.email'],
+      GRIMOIRE_TONE['auth.register_pseudo_label'],
+      GRIMOIRE_TONE['common.mot_de_passe'],
+    ]);
+    expect(el.querySelector('mat-hint')?.textContent?.trim()).toBe(
+      GRIMOIRE_TONE['common.8_caracteres'],
+    );
     expect(el.querySelectorAll('.auth-primary').length).toBe(1);
     expect(el.querySelector('.auth-secondary-actions a')?.getAttribute('href')).toBe('/login');
   });

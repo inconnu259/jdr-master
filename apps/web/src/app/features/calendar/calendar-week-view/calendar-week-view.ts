@@ -21,7 +21,6 @@ import type {
 } from '@master-jdr/shared';
 import { computeDisplayStatus } from '../../../core/availability/compute-display-status';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
-import { TONE_MAP } from '../../../core/theme/tones';
 import { SLOT_LABELS } from '../agenda-badge.utils';
 import type { AgendaEntry, AgendaSealRequest } from '../calendar-agenda-view/calendar-agenda-view';
 import {
@@ -173,11 +172,11 @@ export function buildWeek(
   weekStart: Date,
   decls: AvailabilityDeclarationDto[],
   pendingDecl: AvailabilityDeclarationDto | null,
+  // Textes du thème actif, pour le libellé de déclaration (« Dispo · Récurrent »). Obligatoire : le
+  // composant passe le ton courant, aucun appelant ne retombe sur le thème de référence.
+  tone: Record<string, string>,
   details?: Map<string, DayDetail>,
   previewDetails?: Map<string, DayDetail> | null,
-  // Textes du thème actif, pour le libellé de déclaration (« Dispo · Récurrent »). Le composant
-  // passe le ton courant ; le défaut (thème de référence) sert aux appelants hors composant.
-  tone: Record<string, string> = TONE_MAP['grimoire-emeraude'],
 ): WeekCell[] {
   const now = new Date();
   // Minuit UTC d'aujourd'hui — cohérent avec l'alignement UTC des semaines.
@@ -375,9 +374,9 @@ export class CalendarWeekView {
       this.displayWeekStart(),
       this.declarations(),
       this.pendingDecl(),
+      this.theme.tone(),
       this.weekDetails(),
       this.weekPreviewDetails(),
-      this.theme.tone(),
     ),
   );
 

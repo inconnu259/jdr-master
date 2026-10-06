@@ -221,3 +221,6 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-35-2-classement-des-textes-non-thematises.md`
   summary: Ajouter une assertion de rendu pour les textes paramétrés de la 35.2 restés sans test : `invité par {pseudo}` (dashboard), `Montant suggéré : {amount} XP` et `{xp} XP actuel` (panneau d'XP), avertissement d'heure illisible `{raw}` (séances), « et 1 autre » (agenda, `rest === 1`), `bannerCloseLabel` (shell).
   evidence: un `_one`/`_many` inversé ou un trou oublié ne ferait échouer aucun test existant ; risque surtout cosmétique.
+- source_spec: `_bmad-output/implementation-artifacts/spec-35-3-revue-editoriale-des-trois-themes.md`
+  summary: Rétablir une garde de compilation pour les libellés de type de partie : `partieKindLabelKey()` construit `partie.kind_${kind}` sans que l'ajout d'un `PartieKind` exige sa clé de ton.
+  evidence: l'ancienne table `Record<PartieKind, string>` échouait à la compilation pour un type sans clé ; la clé construite ne rend qu'au runtime l'énumération brute (repli `?? kind` de `dashboard.ts` et `partie-detail.ts`). Aucun type n'est ajouté aujourd'hui ; la parité `partie.kind_*` est testée sur une liste en dur de trois types.

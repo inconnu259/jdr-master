@@ -1,6 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import type { ContentEntryDto } from '@master-jdr/shared';
 import { AttributesStep } from './attributes-step';
+import { fillTone } from '../../../../../core/theme/tone-format';
+import { TONE_MAP } from '../../../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const PATTERNS: ContentEntryDto[] = [
   { key: 'equilibre', data: { label: 'Équilibré', values: [6, 6, 6, 6] } },
@@ -81,7 +85,10 @@ describe('AttributesStep', () => {
 
       expect(fixture.nativeElement.querySelector('.attributes-step__grid')).toBeTruthy();
       expect(fixture.nativeElement.querySelector('.attributes-step__banner').textContent).toContain(
-        '0 valeur sur 4 placée',
+        fillTone(GRIMOIRE_TONE['characters_wizard.attributes_banner_one'], {
+          n: 0,
+          total: 4,
+        }).replace(/^— /, ''),
       );
     });
 
@@ -167,7 +174,10 @@ describe('AttributesStep', () => {
       expect(chip(fixture as unknown as Fixture, 0, 4).classList).toContain('value-chip--selected');
       expect(chip(fixture as unknown as Fixture, 3, 8).classList).toContain('value-chip--selected');
       expect(fixture.nativeElement.querySelector('.attributes-step__banner').textContent).toContain(
-        '4 valeurs sur 4 placées',
+        fillTone(GRIMOIRE_TONE['characters_wizard.attributes_banner_many'], {
+          n: 4,
+          total: 4,
+        }).replace(/^— /, ''),
       );
     });
 
@@ -327,7 +337,9 @@ describe('AttributesStep', () => {
       const fixture = setup();
       selectPolyvalent(fixture);
       await fixture.whenStable();
-      expect(chip(fixture, 0, 6).getAttribute('aria-label')).toBe('6, encore 2 à placer');
+      expect(chip(fixture, 0, 6).getAttribute('aria-label')).toBe(
+        fillTone(GRIMOIRE_TONE['characters_wizard.attributes_chip_remaining'], { value: 6, n: 2 }),
+      );
       expect(chip(fixture, 0, 8).getAttribute('aria-label')).toBe('8');
     });
 

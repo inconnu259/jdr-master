@@ -1,6 +1,5 @@
 import type { DaySlot, VoteAnswer } from '@master-jdr/shared';
 import { fillTone } from '../../core/theme/tone-format';
-import { TONE_MAP } from '../../core/theme/tones';
 
 /**
  * Story 36.6 — la piste de participation d'un vote.
@@ -80,10 +79,6 @@ export type TrackDensity = 'full' | 'compact';
 /** Dictionnaire de ton lisible par les fonctions pures (`theme.tone()` d'un composant). */
 type ToneDict = Readonly<Record<string, string>>;
 
-/** Repli quand l'appelant ne fournit pas le ton actif : les mots du calendrier sont identiques dans
- *  les trois thèmes, le thème de référence suffit donc pour une fonction appelée sans composant. */
-const DEFAULT_TONE: ToneDict = TONE_MAP['grimoire-emeraude'];
-
 /** Clés de ton des trois avis, résolues par `answerWord()`. */
 const ANSWER_WORD_KEYS: Record<VoteAnswer, string> = {
   YES: 'calendar.util_answer_yes',
@@ -137,9 +132,12 @@ export function trackSegments(vote: VoteParticipation): TrackSegments {
  *
  *  Borné comme `trackSegments()` (revue de code du 36.6) : un effectif périmé (membre retiré
  *  après avoir voté) ne doit jamais afficher « 5 / 4 » à côté d'une piste rendue pleine à 100 %. */
-export function counterLabel(vote: VoteParticipation): string {
+export function counterLabel(vote: VoteParticipation, tone: ToneDict): string {
   const total = safeCount(vote.total);
-  return `${Math.min(respondedCount(vote), total)} / ${total}`;
+  return fillTone(tone['calendar.util_counter'], {
+    n: Math.min(respondedCount(vote), total),
+    total,
+  });
 }
 
 /**
@@ -151,8 +149,8 @@ export function counterLabel(vote: VoteParticipation): string {
  */
 export function answerLabel(
   answer: VoteAnswer | null,
-  density: TrackDensity = 'full',
-  tone: ToneDict = DEFAULT_TONE,
+  density: TrackDensity,
+  tone: ToneDict,
 ): string {
   if (!answer) return '';
   const word = tone[ANSWER_WORD_KEYS[answer]];
@@ -166,10 +164,7 @@ export function answerLabel(
  * Il dit le total, le détail des avis donnés (jamais un avis à zéro, qui n'apprendrait rien) et
  * ma réponse.
  */
-export function participationAriaLabel(
-  vote: VoteParticipation,
-  tone: ToneDict = DEFAULT_TONE,
-): string {
+export function participationAriaLabel(vote: VoteParticipation, tone: ToneDict): string {
   const total = safeCount(vote.total);
   // Borné comme `trackSegments()`/`counterLabel()` (revue de code du 36.6) : un effectif périmé
   // ne doit jamais annoncer « 5 réponses sur 4 ».

@@ -6,6 +6,8 @@ import { ResetPassword } from './reset-password';
 import { AuthService } from '../../../core/auth/auth.service';
 import { TONE_MAP } from '../../../core/theme/tones';
 
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
+
 async function createFixture(token: string | null) {
   const auth = { resetPassword: vi.fn().mockResolvedValue(undefined) };
   const paramMap = convertToParamMap(token ? { token } : {});
@@ -71,23 +73,29 @@ describe('ResetPassword — structure et validation écrite (Story 34.3)', () =>
     // Bande de marque (story 34.4) : <header> frère de <main>, placé avant lui.
     expect(el.querySelector('main header.band')).toBeNull();
     expect(el.querySelector('app-auth-band + main')).not.toBeNull();
-    expect(el.querySelector('mat-label')?.textContent?.trim()).toBe('Nouveau mot de passe');
-    expect(el.querySelector('mat-hint')?.textContent?.trim()).toBe('8+ caractères');
+    expect(el.querySelector('mat-label')?.textContent?.trim()).toBe(
+      GRIMOIRE_TONE['common.nouveau_mot_de_passe'],
+    );
+    expect(el.querySelector('mat-hint')?.textContent?.trim()).toBe(
+      GRIMOIRE_TONE['common.8_caracteres'],
+    );
     expect(el.querySelectorAll('.auth-primary').length).toBe(1);
   });
 
   it('« Lien invalide. » présent au chargement : texte simple sans role="alert" ; « Refaire une demande » en secondaire', async () => {
     const { el } = await createFixture(null);
 
-    expect(el.querySelector('p.error')?.textContent?.trim()).toBe('Lien invalide.');
+    expect(el.querySelector('p.error')?.textContent?.trim()).toBe(
+      GRIMOIRE_TONE['common.lien_invalide'],
+    );
     expect(el.querySelector('[role="alert"]')).toBeNull();
     const links = Array.from(el.querySelectorAll('.auth-secondary-actions a')).map((a) => [
       a.textContent?.trim(),
       a.getAttribute('href'),
     ]);
     expect(links).toEqual([
-      ['Refaire une demande', '/forgot-password'],
-      ['Retour à la connexion', '/login'],
+      [GRIMOIRE_TONE['auth.reset_redo_link'], '/forgot-password'],
+      [GRIMOIRE_TONE['common.retour_a_la_connexion'], '/login'],
     ]);
   });
 
@@ -96,7 +104,7 @@ describe('ResetPassword — structure et validation écrite (Story 34.3)', () =>
     const labels = Array.from(el.querySelectorAll('.auth-secondary-actions a')).map((a) =>
       a.textContent?.trim(),
     );
-    expect(labels).toEqual(['Retour à la connexion']);
+    expect(labels).toEqual([GRIMOIRE_TONE['common.retour_a_la_connexion']]);
   });
 
   it('envoi invalide : aucun appel serveur, message « 8 caractères minimum », focus, saisie conservée', async () => {
@@ -150,6 +158,9 @@ describe('ResetPassword — erreur après action (Story 34.3)', () => {
     const labels = Array.from(el.querySelectorAll('.auth-secondary-actions a')).map((a) =>
       a.textContent?.trim(),
     );
-    expect(labels).toEqual(['Refaire une demande', 'Retour à la connexion']);
+    expect(labels).toEqual([
+      GRIMOIRE_TONE['auth.reset_redo_link'],
+      GRIMOIRE_TONE['common.retour_a_la_connexion'],
+    ]);
   });
 });

@@ -6,6 +6,10 @@ import type { CalendarLayerKey } from '@master-jdr/shared';
 import { CalendarDetailRail } from './calendar-detail-rail';
 import type { AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
 import { type DayDetail, buildDayDetail } from '../day-detail.utils';
+import { TONE_MAP } from '../../../core/theme/tones';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const ALL_LAYERS: CalendarLayerKey[] = [
   'mes-indisponibilites',
@@ -87,7 +91,9 @@ describe('CalendarDetailRail — structure', () => {
     const detail = buildDayDetail('2026-08-20', [], ALL_LAYERS, [], NOW);
     const fixture = await createRail(detail);
 
-    expect(fixture.nativeElement.textContent).toContain('Rien de prévu');
+    expect(fixture.nativeElement.textContent).toContain(
+      GRIMOIRE_TONE['calendar.rail_status_unknown'],
+    );
   });
 
   it('affiche le libellé du jour', async () => {
@@ -166,7 +172,9 @@ describe('CalendarDetailRail — AC11 : activer une ligne ouvre le scénario', (
     const fixture = await createRail(detail);
 
     const button = fixture.nativeElement.querySelector('button.v--action');
-    expect(button.getAttribute('aria-label')).toBe('Ouvrir le scénario Le Convoi du Nord');
+    expect(button.getAttribute('aria-label')).toBe(
+      fillTone(GRIMOIRE_TONE['common.ouvrir_le_scenario_label'], { label: 'Le Convoi du Nord' }),
+    );
   });
 
   it('émet la cible du scénario au clic', async () => {
@@ -216,7 +224,7 @@ describe('CalendarDetailRail — état sans détail', () => {
     const fixture = await createRail(null);
 
     expect(fixture.nativeElement.querySelector('.rail')).not.toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('Aucun jour à détailler');
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['calendar.rail_empty']);
   });
 });
 
@@ -318,7 +326,11 @@ describe('CalendarDetailRail — piste de participation (Story 36.6)', () => {
     const detail = buildDayDetail('2026-08-20', [VOTE], ALL_LAYERS, [], NOW);
     const fixture = await createRail(detail);
 
-    expect(fixture.nativeElement.textContent).toContain('tu as dit oui');
+    expect(fixture.nativeElement.textContent).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.util_answer_mine'], {
+        answer: GRIMOIRE_TONE['calendar.util_answer_yes'],
+      }),
+    );
   });
 
   it('couche de votes éteinte : la piste disparaît avec le libellé', async () => {
@@ -351,7 +363,9 @@ describe('CalendarDetailRail — le chemin CLAVIER vers le sélecteur de répons
 
     const btn = fixture.nativeElement.querySelector('button.v--vote');
     expect(btn).toBeTruthy();
-    expect(btn.getAttribute('aria-label')).toContain('Répondre au vote');
+    expect(btn.getAttribute('aria-label')).toContain(
+      GRIMOIRE_TONE['common.repondre_au_vote_label'].split(' — ')[0],
+    );
   });
 
   it('AC7 — l’activer signale l’option, avec le bouton pour ancre', async () => {
@@ -382,7 +396,7 @@ describe('CalendarDetailRail — le chemin CLAVIER vers le sélecteur de répons
     const fixture = await createRail(detail);
 
     expect(fixture.nativeElement.querySelector('button.v--vote')).toBeNull();
-    expect(fixture.nativeElement.textContent).toContain('vote de date');
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['common.vote_de_date']);
   });
 });
 

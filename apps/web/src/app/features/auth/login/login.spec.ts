@@ -7,6 +7,8 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 import { TONE_MAP } from '../../../core/theme/tones';
 
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
+
 const THEME = 'grimoire-emeraude';
 const tone = TONE_MAP[THEME];
 
@@ -165,9 +167,9 @@ describe('Login — lien mort retiré et mot de passe révélable (Story 34.2)',
 
     const hrefs = Array.from(el.querySelectorAll('a')).map((a) => a.getAttribute('href'));
     expect(hrefs.some((h) => h?.includes('register'))).toBe(false);
-    expect(el.textContent).not.toContain('Créer un compte');
+    expect(el.textContent).not.toContain(GRIMOIRE_TONE['common.creer_un_compte']);
     const forgot = Array.from(el.querySelectorAll('a')).find((a) =>
-      a.textContent?.includes('Mot de passe oublié ?'),
+      a.textContent?.includes(GRIMOIRE_TONE['auth.login_forgot_link']),
     );
     expect(forgot?.getAttribute('href')).toBe('/forgot-password');
   });
@@ -225,7 +227,7 @@ describe('Login — structure, validation écrite et orientation (Story 34.3)', 
 
     const h1s = el.querySelectorAll('h1');
     expect(h1s.length).toBe(1);
-    expect(h1s[0].textContent?.trim()).toBe('Connexion');
+    expect(h1s[0].textContent?.trim()).toBe(GRIMOIRE_TONE['common.connexion']);
     const main = el.querySelector('main')!;
     expect(main.getAttribute('aria-labelledby')).toBe(h1s[0].id);
     // Bande de marque (story 34.4) : <header> frère de <main>, placé avant lui.

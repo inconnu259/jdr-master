@@ -2,7 +2,7 @@
 
 <mat-dialog-content>
   <p class="intent">
-    {{ theme.tone()['calendar.conflict_intent_prefix'] }} <b>{{ data.kindLabel }}</b>
+    {{ theme.tone()['calendar.conflict_intent_prefix'] }} <b>{{ kindWord() }}</b>
     {{ data.intentLabel }}.
   </p>
 
@@ -18,9 +18,8 @@
     >
       <span class="choice__label">{{ theme.tone()['common.remplacer'] }}</span>
       <span class="choice__body">
-        <!-- L'adjectif QUALIFIE le sujet ici, il s'accorde donc — contrairement à « passent en
-             disponible » plus bas, où le contrat d'UI le laisse invariable. -->
-        <b>{{ overwriteLead() }} {{ data.kindLabel }}{{ steps().length > 1 ? 's' : '' }}</b>
+        <!-- Phrase entière tirée du registre : l'accord de l'adjectif y est écrit, pas calculé ici. -->
+        <b>{{ overwriteLead() }}</b>
         <span class="choice__detail">{{ conflictLabels().join(' · ') }}</span>
       </span>
     </button>

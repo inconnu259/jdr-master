@@ -2,6 +2,10 @@ import { TestBed } from '@angular/core/testing';
 import type { PartieMemberDto } from '@master-jdr/shared';
 import { RosterStrip } from './roster-strip';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
+import { fillTone } from '../../../core/theme/tone-format';
+import { TONE_MAP } from '../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const MEMBERS: PartieMemberDto[] = [
   {
@@ -60,7 +64,9 @@ describe('RosterStrip', () => {
   it('aria-label complet par pastille (nom + rôle/personnage)', () => {
     const fixture = setup();
     const mjItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="mj1"]');
-    expect(mjItem.getAttribute('aria-label')).toBe('Sylas — MJ');
+    expect(mjItem.getAttribute('aria-label')).toBe(
+      fillTone(GRIMOIRE_TONE['parties.roster_aria_mj'], { name: 'Sylas' }),
+    );
     const playerItem: HTMLElement = fixture.nativeElement.querySelector('[data-user-id="u1"]');
     expect(playerItem.getAttribute('aria-label')).toBe('Alice au pays — Fenn (Ménestrel)');
   });

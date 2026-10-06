@@ -58,6 +58,13 @@ export class PollResponseComponent {
 
   readonly SLOT_LABELS = SLOT_LABELS;
   readonly VOTE_OPTIONS: VoteAnswer[] = ['YES', 'NO', 'MAYBE'];
+  /** Clé de ton du libellé de chaque bouton de vote : les valeurs d'API (YES / NO / MAYBE) ne
+   *  s'affichent jamais telles quelles. */
+  readonly VOTE_LABEL_KEYS: Record<VoteAnswer, string> = {
+    YES: 'common.oui',
+    NO: 'common.non',
+    MAYBE: 'common.peut_etre',
+  };
 
   protected readonly isClosed = computed(() => this.poll().status === 'CLOSED');
   protected readonly hasSelection = computed(() => this.pendingAnswers().size > 0);

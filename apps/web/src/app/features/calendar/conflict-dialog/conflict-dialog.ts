@@ -17,8 +17,10 @@ export interface ConflictSlotLabel {
 }
 
 export interface ConflictDialogData {
-  /** « disponible » / « indisponible » — la valeur que le geste déclare. */
-  kindLabel: string;
+  /** La valeur que le geste déclare. Le dialogue en tire lui-même les mots (accord, ordre des mots) du
+   *  registre de ton : l'appelant ne lui passe plus un libellé tout fait, que le dialogue accordait
+   *  en y collant un “s”. */
+  kind: 'AVAILABLE' | 'UNAVAILABLE';
   /** L'intention du geste, rappelée sous le titre : « du 3 au 9 août, le soir ». */
   intentLabel: string;
   conflicts: ConflictSlotLabel[];
@@ -80,10 +82,23 @@ export class ConflictDialog {
     return fillTone(this.theme.tone()[key], { n });
   });
 
-  /** Tête de l'issue « Remplacer » : « Le créneau devient » / « Les 3 deviennent ». */
+  /** Le mot de la valeur déclarée (« disponible » / « indisponible »), invariable : il s'insère dans
+   *  « Vous déclarez … », « passent en … » et « redevenez … ». */
+  protected readonly kindWord = computed(
+    () =>
+      this.theme.tone()[
+        this.data.kind === 'AVAILABLE'
+          ? 'calendar.conflict_kind_available'
+          : 'calendar.conflict_kind_unavailable'
+      ],
+  );
+
+  /** Tête de l'issue « Remplacer », phrase entière : l'accord (« devient » / « deviennent », « disponible » /
+   *  « disponibles ») et l'ordre des mots vivent dans le registre, une clé par cas. */
   protected readonly overwriteLead = computed(() => {
     const n = this.steps().length;
-    const key = n === 1 ? 'calendar.conflict_overwrite_one' : 'calendar.conflict_overwrite_many';
+    const kind = this.data.kind === 'AVAILABLE' ? 'available' : 'unavailable';
+    const key = `calendar.conflict_overwrite_${kind}_${n === 1 ? 'one' : 'many'}`;
     return fillTone(this.theme.tone()[key], { n });
   });
 
@@ -98,7 +113,7 @@ export class ConflictDialog {
   protected readonly freeLabel = computed(() => {
     const n = this.data.freeCount;
     const key = n === 1 ? 'calendar.conflict_free_one' : 'calendar.conflict_free_many';
-    return fillTone(this.theme.tone()[key], { n, kind: this.data.kindLabel });
+    return fillTone(this.theme.tone()[key], { n, kind: this.kindWord() });
   });
 
   protected readonly walkthroughCount = computed(() => {
@@ -121,14 +136,17 @@ export class ConflictDialog {
 
   protected readonly exceptionDetail = computed(() =>
     fillTone(this.theme.tone()['calendar.conflict_exception_detail'], {
-      kind: this.data.kindLabel,
+      kind: this.kindWord(),
     }),
   );
 
   protected readonly currentStep = computed(() => this.steps()[this.stepIndex()]);
 
-  protected readonly progressLabel = computed(
-    () => `${this.stepIndex() + 1} / ${this.steps().length}`,
+  protected readonly progressLabel = computed(() =>
+    fillTone(this.theme.tone()['calendar.util_counter'], {
+      n: this.stepIndex() + 1,
+      total: this.steps().length,
+    }),
   );
 
   /** Annonce en toutes lettres : le compteur seul ne dit pas de QUEL créneau il s'agit (AC15). */

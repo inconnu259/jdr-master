@@ -3,6 +3,9 @@ import { vi } from 'vitest';
 import type { CharacterNoteDto } from '@master-jdr/shared';
 import { NotesJournal } from './notes-journal';
 import { CharacterService } from '../../../../core/characters/character.service';
+import { TONE_MAP } from '../../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 function makeNote(overrides: Partial<CharacterNoteDto> = {}): CharacterNoteDto {
   return {
@@ -118,9 +121,7 @@ describe('NotesJournal', () => {
     await comp.submitAdd();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain(
-      "Le journal n'a pas pu être mis à jour. Réessayez.",
-    );
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['evolution.notes_error']);
   });
 
   it('erreur réseau (toggle) affiche le message inline', async () => {
@@ -134,9 +135,7 @@ describe('NotesJournal', () => {
     await comp.toggleShare(makeNote());
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain(
-      "Le journal n'a pas pu être mis à jour. Réessayez.",
-    );
+    expect(fixture.nativeElement.textContent).toContain(GRIMOIRE_TONE['evolution.notes_error']);
   });
 
   it('une note ajoutée avec succès après un échec de chargement initial redevient visible (corrige loadError non réinitialisé, revue de code Story 6.5)', async () => {

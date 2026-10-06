@@ -4,6 +4,10 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { ComposeConfirmDialog, type ComposeConfirmData } from './compose-confirm-dialog';
+import { TONE_MAP } from '../../../core/theme/tones';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 function makeData(overrides: Partial<ComposeConfirmData> = {}): ComposeConfirmData {
   return {
@@ -42,16 +46,22 @@ describe('ComposeConfirmDialog — textes du registre (Story 35.2)', () => {
     const el = await createComponent(makeData({ removedCount: 2, voterCount: 4 }));
 
     expect(text(el, '.compose-confirm__warning')).toBe(
-      'Retirer 2 créneaux supprimera 4 réponses déjà posées.',
+      fillTone(GRIMOIRE_TONE['calendar.compose_confirm_warning_many'], {
+        slots: fillTone(GRIMOIRE_TONE['calendar.compose_confirm_slots_many'], { n: 2 }),
+        votes: fillTone(GRIMOIRE_TONE['calendar.compose_confirm_responses_many'], { n: 4 }),
+      }),
     );
-    expect(text(el, 'h2')).toBe('Modifier les créneaux du vote');
+    expect(text(el, 'h2')).toBe(GRIMOIRE_TONE['calendar.compose_confirm_title_modify']);
   });
 
   it('mode « modifier », singulier : « 1 créneau » et « 1 réponse déjà posée »', async () => {
     const el = await createComponent(makeData({ removedCount: 1, voterCount: 1 }));
 
     expect(text(el, '.compose-confirm__warning')).toBe(
-      'Retirer 1 créneau supprimera 1 réponse déjà posée.',
+      fillTone(GRIMOIRE_TONE['calendar.compose_confirm_warning_one'], {
+        slots: fillTone(GRIMOIRE_TONE['calendar.compose_confirm_slots_one'], { n: 1 }),
+        votes: fillTone(GRIMOIRE_TONE['calendar.compose_confirm_responses_one'], { n: 1 }),
+      }),
     );
   });
 
@@ -63,11 +73,15 @@ describe('ComposeConfirmDialog — textes du registre (Story 35.2)', () => {
 
   it('résumé accordé en nombre', async () => {
     const one = await createComponent(makeData({ slotCount: 1 }));
-    expect(text(one, '.compose-confirm__summary')).toBe('1 créneau proposé.');
+    expect(text(one, '.compose-confirm__summary')).toBe(
+      fillTone(GRIMOIRE_TONE['calendar.compose_confirm_summary_one'], { n: 1 }),
+    );
     TestBed.resetTestingModule();
 
     const many = await createComponent(makeData({ slotCount: 5 }));
-    expect(text(many, '.compose-confirm__summary')).toBe('5 créneaux proposés.');
+    expect(text(many, '.compose-confirm__summary')).toBe(
+      fillTone(GRIMOIRE_TONE['calendar.compose_confirm_summary_many'], { n: 5 }),
+    );
   });
 
   it('mode « créer » : titre et question de la séance, sans avertissement', async () => {
@@ -81,9 +95,13 @@ describe('ComposeConfirmDialog — textes du registre (Story 35.2)', () => {
       }),
     );
 
-    expect(text(el, 'h2')).toBe('Lancer le vote');
-    expect(text(el, '.compose-confirm__field')).toContain('Pour quelle séance ?');
-    expect(text(el, '.compose-confirm__select option')).toBe('Choisir une séance…');
+    expect(text(el, 'h2')).toBe(GRIMOIRE_TONE['common.lancer_le_vote']);
+    expect(text(el, '.compose-confirm__field')).toContain(
+      GRIMOIRE_TONE['calendar.compose_confirm_seance_label'],
+    );
+    expect(text(el, '.compose-confirm__select option')).toBe(
+      GRIMOIRE_TONE['calendar.compose_confirm_seance_placeholder'],
+    );
     expect(el.querySelector('.compose-confirm__warning')).toBeNull();
   });
 });
