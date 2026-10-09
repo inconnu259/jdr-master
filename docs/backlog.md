@@ -189,10 +189,12 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 
 ---
 
-## Palier 10 — Soirées entre amis (mode soirée, groupes, socle de permissions) *(PRD, UX et architecture finals — prochaine étape : épics, porte en premier)*
+## Palier 10 — Soirées entre amis (mode soirée, groupes, socle de permissions) *(PRD, UX, architecture et épics finals — prochaine étape : sprint planning, porte en premier)*
 
 > PRD : `_bmad-output/planning-artifacts/prds/prd-jdr-master-2026-10-08/prd.md` (final, 2026-10-08). Issu de la forge
 > `_bmad-output/forge/soiree-jeux-de-societe/`. Palier **avant** la mise en production.
+> Épics : `_bmad-output/planning-artifacts/epics-palier10.md` (final, 2026-10-09) — épics 37 à 43, 38 stories ;
+> épic 37 = la porte (9 stories), seule à démarrer.
 
 - [ ] **Porte : socle de permissions à comportement constant** (point unique des règles « qui peut faire quoi »,
       mode soirée/JDR, migration des parties existantes en mode JDR) — aucune story « soirée » avant.
