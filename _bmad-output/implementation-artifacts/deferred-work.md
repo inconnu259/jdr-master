@@ -224,3 +224,10 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-35-3-revue-editoriale-des-trois-themes.md`
   summary: Rétablir une garde de compilation pour les libellés de type de partie : `partieKindLabelKey()` construit `partie.kind_${kind}` sans que l'ajout d'un `PartieKind` exige sa clé de ton.
   evidence: l'ancienne table `Record<PartieKind, string>` échouait à la compilation pour un type sans clé ; la clé construite ne rend qu'au runtime l'énumération brute (repli `?? kind` de `dashboard.ts` et `partie-detail.ts`). Aucun type n'est ajouté aujourd'hui ; la parité `partie.kind_*` est testée sur une liste en dur de trois types.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-1-figer-le-comportement-actuel-du-jdr-par-des-tests-de-caracterisation.md`
+  summary: Extract a shared `configureApp(app)` from `apps/api/src/main.ts` and use it in `apps/api/test/characterization/harness.ts` so the e2e harness cannot drift from the real middleware chain.
+  evidence: The harness copies main.ts by hand and already differs (no cookie maxAge, no enableCors); story 37.1 forbids touching `src/`.
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-1-figer-le-comportement-actuel-du-jdr-par-des-tests-de-caracterisation.md`
+  summary: Isolate reminder tests from the dev database (dedicated test DB or restore of stamped rows) so `sendDueReminders()` no longer marks the developer's own due parties as reminded.
+  evidence: Both `characterization/reminders.e2e-spec.ts` and `notifications.integration.spec.ts` run the global reminder query against the shared dev DB; best handled after 37.9 moves `reminderSentAt` onto Seance.
