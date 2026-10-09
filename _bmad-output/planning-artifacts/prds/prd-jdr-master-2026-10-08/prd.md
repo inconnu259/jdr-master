@@ -278,7 +278,7 @@ Toute décision d'autorisation sur une partie (modifier, inviter, lancer un vote
 
 #### FR-14 : Migration
 
-Les parties existantes ont toutes un système de la famille JDR : elles sont en mode JDR sans rien écrire. La migration unique de l'architecture (AD-16) renomme le propriétaire (`ownerId`), extrait l'événement du scénario avec le même identifiant, et pose la date d'une séance en plage.
+Les parties existantes ont toutes un système de la famille JDR : elles sont en mode JDR sans rien écrire. Les migrations de la porte (AD-16, une par étape, sans migration en plusieurs temps) renomment le propriétaire (`ownerId`), extraient l'événement du scénario avec le même identifiant, et posent la date d'une séance en plage.
 
 **Consequences (testable) :**
 - Aucune donnée existante n'est perdue ni modifiée en dehors du mode.

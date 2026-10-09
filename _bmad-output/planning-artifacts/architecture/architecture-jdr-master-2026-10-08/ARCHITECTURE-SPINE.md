@@ -174,7 +174,7 @@ Flèche = « peut dépendre de ». La couche 1 n'importe **jamais** un module de
 - **Prevents:** un calendrier qui relit le type de partie, le propriétaire ou le scénario ; des indisponibilités qui ignorent les événements de ralliement ; un créateur rendu « occupé » par l'événement de n'importe quel membre ; une `nextSessionDate` recalculée à plusieurs endroits.
 - **Rule:** La couche 1 déclare deux **ports**, implémentés par `events/` : `OccupiedSpansPort` — pour des utilisateurs et une période, les plages des **autres** parties où ils sont **participants**, **sans titre ni identité** (P9-AD-9 étendu à toute famille) ; `OwnEventsPort` — pour le calendrier personnel (P9-AD-18), les plages des parties **du lecteur**, avec titre, hors masquées, sous les règles d'affichage actuelles du JDR. **Participants d'une plage** : JDR inchangé ; ralliement = hôte + inscrits `CONFIRMED` (groupe) ou membres (isolée). Les plages d'événements **annulés** sont exclues. `Partie.nextSessionDate` / `nextSessionSlot` (exception persistée de P9-AD-3) = le **début** de la plus proche plage **à venir**, datée, d'un événement non annulé de la partie (vide s'il n'y en a pas), recalculée par **une seule fonction** d'`EventsService`, appelée après toute écriture de date, d'annulation ou de suppression. `PollService` n'écrit plus `nextSessionDate`.
 
-### AD-16 — Une migration unique, puis une porte à comportement constant [ADOPTED]
+### AD-16 — Une migration par étape, dans une porte à comportement constant [ADOPTED]
 
 - **Binds:** FR-13, FR-14
 - **Prevents:** un refactor mêlé aux fonctionnalités ; trois lectures de « recopier chaque scénario » ; un rappel JDR envoyé deux fois après la migration ; un service de permission construit avant le registre dont il dépend.
