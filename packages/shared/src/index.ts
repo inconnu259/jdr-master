@@ -242,17 +242,19 @@ export interface PartieDto {
   kind: PartieKind;
   gameSystemId: string;
   description: string | null;
-  mjId: string;
+  /** Propriétaire de la partie (le MJ pour la famille `jdr`). `null` = compte propriétaire supprimé
+   *  (AD-5) — inatteignable tant qu'aucun code ne supprime de compte, mais à traiter. */
+  ownerId: string | null;
   /** Renseigné uniquement par `GET /parties/:id` (`findOneDto`) — jamais par `GET /parties`
    *  (`listForUser`, tableau de bord), qui reste volontairement hors du périmètre de l'homonymie
    *  (Story 28.3, Task 1). Toujours vérifier avant usage plutôt que supposer présent. */
-  mjPseudo?: string;
-  mjDisplayName?: string;
+  ownerPseudo?: string;
+  ownerDisplayName?: string;
   createdAt: string;
   nextSessionDate: string | null;
   nextSessionSlot: DaySlot | null;
-  /** Rôle de l'appelant sur cette partie — calculé serveur (`mjId === userId`), jamais dérivé
-   *  côté client (Story 29.1, AD-15). Toujours présent, contrairement à `mjPseudo`/`mjDisplayName`. */
+  /** Rôle de l'appelant sur cette partie — calculé serveur (`ownerId === userId`), jamais dérivé
+   *  côté client (Story 29.1, AD-15). Toujours présent, contrairement à `ownerPseudo`/`ownerDisplayName`. */
   role: 'mj' | 'player';
   /** Toujours présent, calculé serveur (AD-8) — jamais dérivé côté client (Story 29.6). */
   status: PartieStatus;
@@ -474,7 +476,7 @@ export interface AnnouncementDto {
   scenarioId: string | null;
   text: string;
   createdAt: string;
-  /** Identité du MJ auteur — dérivée de `Partie.mjId`, jamais stockée sur l'annonce (AD-2, Story 28.2). */
+  /** Identité du MJ auteur — dérivée de `Partie.ownerId`, jamais stockée sur l'annonce (AD-2, Story 28.2). */
   authorPseudo: string;
   authorDisplayName: string;
 }

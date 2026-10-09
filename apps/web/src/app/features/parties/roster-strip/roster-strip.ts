@@ -21,7 +21,9 @@ export class RosterStrip {
 
   readonly members = input.required<PartieMemberDto[]>();
   readonly characters = input.required<CharacterDto[]>();
-  readonly mjId = input.required<string>();
+  /** Propriétaire de la partie — `null` si son compte a été supprimé (AD-5) : aucun membre
+   *  n'est alors MJ. */
+  readonly ownerId = input.required<string | null>();
   readonly hasFreeSlot = input.required<boolean>();
   readonly classLabelFor = input.required<(c: CharacterDto) => string>();
   readonly roleLabelFor = input.required<(c: CharacterDto) => string | null>();
@@ -33,7 +35,7 @@ export class RosterStrip {
     buildRosterRows(
       this.members(),
       this.characters(),
-      this.mjId(),
+      this.ownerId(),
       this.classLabelFor(),
       this.roleLabelFor(),
       this.theme.tone(),

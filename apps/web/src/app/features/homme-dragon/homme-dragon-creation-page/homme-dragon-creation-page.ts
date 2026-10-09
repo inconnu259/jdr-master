@@ -69,7 +69,7 @@ export class HommeDragonCreationPage implements OnInit {
       return;
     }
 
-    const isMj = partie.mjId === this.auth.currentUser()?.id;
+    const isMj = partie.ownerId === this.auth.currentUser()?.id;
     if (!isMj || partie.gameSystemId !== 'ryuutama') {
       void this.router.navigate(['/parties', id], { replaceUrl: true });
       return;

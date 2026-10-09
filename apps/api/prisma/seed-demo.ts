@@ -596,7 +596,7 @@ async function main() {
       kind: 'ONE_SHOT',
       gameSystemId: RYUUTAMA_ID,
       description: 'Un one-shot maritime : un navire échoué, des secrets à la dérive.',
-      mjId: mj.id,
+      ownerId: mj.id,
       // AD-23 : première aventure de Suisen. `createdAt` explicite : l'ordre des aventures d'un
       // Homme Dragon (`createdAt` puis `id`) ne doit pas dépendre de l'horloge d'insertion.
       hommeDragonId: suisen.id,
@@ -740,7 +740,7 @@ async function main() {
       kind: 'CAMPAGNE_LINEAIRE',
       gameSystemId: RYUUTAMA_ID,
       description: 'Une campagne itinérante sur les routes marchandes du Nord.',
-      mjId: mj.id,
+      ownerId: mj.id,
       // AD-23 : l'une des deux aventures de Kaien (l'autre : « Les Annales de Brume », plus bas,
       // créée plus tôt dans l'histoire du jeu de données).
       hommeDragonId: kaien.id,
@@ -1025,7 +1025,7 @@ async function main() {
       kind: 'CAMPAGNE_EPISODIQUE',
       gameSystemId: RYUUTAMA_ID,
       description: "Chaque enquête est indépendante, résolue par qui s'y inscrit.",
-      mjId: mj.id,
+      ownerId: mj.id,
       // AD-23 : seconde aventure de Suisen — Alice et Bob y retrouvent les voyageurs du Naufrage.
       hommeDragonId: suisen.id,
       createdAt: at(-50),
@@ -1294,7 +1294,7 @@ async function main() {
       kind: 'CAMPAGNE_LINEAIRE',
       gameSystemId: RYUUTAMA_ID,
       description: 'Une garnison isolée surveille un pont que plus personne ne devrait franchir.',
-      mjId: diane.id,
+      ownerId: diane.id,
     },
   });
   await prisma.membership.create({ data: { userId: alice.id, partieId: dianeCampagne.id } });
@@ -1312,7 +1312,7 @@ async function main() {
       gameSystemId: RYUUTAMA_ID,
       description:
         'Une longue chronique en brume : onze chapitres déjà racontés, une légende en suspens.',
-      mjId: mj.id,
+      ownerId: mj.id,
       hommeDragonId: kaien.id, // l'une des deux aventures de Kaien (AD-23)
       // Créée AVANT son premier chapitre (J−216) : une partie ne peut pas avoir joué avant d'exister.
       // C'est donc la PREMIÈRE aventure de Kaien (`createdAt`), « La Route des Lanternes » la seconde.
@@ -1355,7 +1355,7 @@ async function main() {
       kind: 'ONE_SHOT',
       gameSystemId: RYUUTAMA_ID,
       description: 'Un one-shot de bord de mer : la marée monte demain soir.',
-      mjId: diane.id,
+      ownerId: diane.id,
       createdAt: at(-12),
       nextSessionDate: day(1),
       nextSessionSlot: 'EVENING',
@@ -1426,7 +1426,7 @@ async function main() {
       kind: 'ONE_SHOT',
       gameSystemId: RYUUTAMA_ID,
       description: "Un one-shot prêt à jouer, mais dont personne n'a encore été invité.",
-      mjId: diane.id,
+      ownerId: diane.id,
       createdAt: at(-9),
     },
   });
@@ -1470,7 +1470,7 @@ async function main() {
       kind: 'CAMPAGNE_LINEAIRE',
       gameSystemId: DRACONIS_ID,
       description: 'Une campagne Draconis héritée : le système ne propose pas encore de fiche.',
-      mjId: diane.id,
+      ownerId: diane.id,
       createdAt: at(-20),
       nextSessionDate: day(21),
       nextSessionSlot: 'EVENING',

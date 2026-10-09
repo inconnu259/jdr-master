@@ -171,7 +171,7 @@ const CATALOG_CONTENT = {
   ],
 };
 
-const PARTIE_RYUUTAMA = { id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama', name: 'Ma Campagne' };
+const PARTIE_RYUUTAMA = { id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama', name: 'Ma Campagne' };
 
 describe('HommeDragonService', () => {
   let service: HommeDragonService;
@@ -269,7 +269,7 @@ describe('HommeDragonService', () => {
         },
       });
       expect(prisma.tx.partie.updateMany).toHaveBeenCalledWith({
-        where: { id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama', hommeDragonId: null },
+        where: { id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama', hommeDragonId: null },
         data: { hommeDragonId: 'hd1' },
       });
       expect(result.id).toBe('hd1');
@@ -379,7 +379,7 @@ describe('HommeDragonService', () => {
         where: { id: 'hd1', userId: 'mj1' },
       });
       expect(prisma.tx.partie.updateMany).toHaveBeenCalledWith({
-        where: { id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama', hommeDragonId: null },
+        where: { id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama', hommeDragonId: null },
         data: { hommeDragonId: 'hd1' },
       });
       expect(dto.id).toBe('hd1');
@@ -438,7 +438,7 @@ describe('HommeDragonService', () => {
 
       expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
       expect(prisma.tx.partie.updateMany).toHaveBeenCalledWith({
-        where: { id: 'p1', mjId: 'mj1', hommeDragonId: 'hd1' },
+        where: { id: 'p1', ownerId: 'mj1', hommeDragonId: 'hd1' },
         data: { hommeDragonId: null },
       });
       expect(prisma.tx.hommeDragon.update).not.toHaveBeenCalled();
@@ -451,7 +451,7 @@ describe('HommeDragonService', () => {
       await service.unlink('p1', 'hd1', 'mj1');
 
       expect(prisma.tx.partie.updateMany).toHaveBeenCalledWith({
-        where: { id: 'p1', mjId: 'mj1', hommeDragonId: 'hd1' },
+        where: { id: 'p1', ownerId: 'mj1', hommeDragonId: 'hd1' },
         data: { hommeDragonId: null },
       });
     });

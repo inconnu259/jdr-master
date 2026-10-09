@@ -83,7 +83,7 @@ describe('AnnouncementsService', () => {
 
   describe('create()', () => {
     it('pas de scenarioId → Announcement créée avec scenarioId: null (AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.announcement.create.mockResolvedValue(makeAnnouncement());
       prisma.user.findUnique.mockResolvedValue({
         pseudo: 'le-mj',
@@ -107,7 +107,7 @@ describe('AnnouncementsService', () => {
     });
 
     it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.announcement.create.mockResolvedValue(makeAnnouncement());
       prisma.user.findUnique.mockResolvedValue({
         pseudo: 'le-mj',
@@ -120,7 +120,7 @@ describe('AnnouncementsService', () => {
     });
 
     it('scenarioId valide de la Partie → Announcement créée avec ce scenarioId (AC2)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       scenarios.verifyScenarioBelongsToPartie.mockResolvedValue(undefined);
       prisma.announcement.create.mockResolvedValue(makeAnnouncement({ scenarioId: 's1' }));
       prisma.user.findUnique.mockResolvedValue({
@@ -141,7 +141,7 @@ describe('AnnouncementsService', () => {
     });
 
     it("scenarioId d'une autre Partie → rejet propagé par verifyScenarioBelongsToPartie, aucune écriture (AC3)", async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       scenarios.verifyScenarioBelongsToPartie.mockRejectedValue(
         new Error("Ce scénario n'appartient pas à cette Partie"),
       );
@@ -153,7 +153,7 @@ describe('AnnouncementsService', () => {
     });
 
     it('scenarioId visant un scénario BROUILLON/A_VENIR de la même Partie → acceptée, aucune validation de statut (AC7)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       // verifyScenarioBelongsToPartie ne valide jamais le statut (délégué à ScenariosService, AD-2) —
       // ce test documente que AnnouncementsService ne fait lui non plus aucune vérification de statut.
       scenarios.verifyScenarioBelongsToPartie.mockResolvedValue(undefined);
@@ -188,12 +188,12 @@ describe('AnnouncementsService', () => {
         makeAnnouncement({
           id: 'ann2',
           createdAt: new Date('2026-07-15T10:00:00.000Z'),
-          partie: { mj },
+          partie: { owner: mj },
         }),
         makeAnnouncement({
           id: 'ann1',
           createdAt: new Date('2026-07-14T10:00:00.000Z'),
-          partie: { mj },
+          partie: { owner: mj },
         }),
       ]);
 
@@ -205,7 +205,7 @@ describe('AnnouncementsService', () => {
         orderBy: { createdAt: 'desc' },
         include: {
           partie: {
-            select: { mj: { select: { pseudo: true, displayName: true } } },
+            select: { owner: { select: { pseudo: true, displayName: true } } },
           },
         },
       });
@@ -220,7 +220,7 @@ describe('AnnouncementsService', () => {
         makeAnnouncement({
           id: 'ann-brouillon',
           scenarioId: 's-brouillon',
-          partie: { mj: { pseudo: 'le-mj', displayName: 'Le Grand MJ' } },
+          partie: { owner: { pseudo: 'le-mj', displayName: 'Le Grand MJ' } },
         }),
       ]);
 

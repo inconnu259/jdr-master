@@ -36,7 +36,7 @@ describe('InviteLinksService', () => {
       $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn({})),
     };
     parties = {
-      getOwned: jest.fn().mockResolvedValue({ id: 'p1', mjId: 'mj1' }),
+      getOwned: jest.fn().mockResolvedValue({ id: 'p1', ownerId: 'mj1' }),
       notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
     };
     realtimeEvents = { emit: jest.fn() };
@@ -127,7 +127,7 @@ describe('InviteLinksService', () => {
       maxUses: null,
       usesCount: 0,
       partieId: 'p1',
-      partie: { mjId: 'mj1' },
+      partie: { ownerId: 'mj1' },
     });
     await expect(service.consumeLink(tx as never, 'tok', 'u')).rejects.toBeInstanceOf(
       ForbiddenException,
@@ -142,7 +142,7 @@ describe('InviteLinksService', () => {
       maxUses: null,
       usesCount: 0,
       partieId: 'p1',
-      partie: { mjId: 'mj1' },
+      partie: { ownerId: 'mj1' },
     });
     await expect(service.consumeLink(tx as never, 'tok', 'mj1')).rejects.toBeInstanceOf(
       ConflictException,
@@ -158,7 +158,7 @@ describe('InviteLinksService', () => {
         maxUses: null,
         usesCount: 0,
         partieId: 'p1',
-        partie: { mjId: 'mj1' },
+        partie: { ownerId: 'mj1' },
       },
       { userId: 'u', partieId: 'p1' },
     );
@@ -176,7 +176,7 @@ describe('InviteLinksService', () => {
         maxUses: 1,
         usesCount: 1,
         partieId: 'p1',
-        partie: { mjId: 'mj1' },
+        partie: { ownerId: 'mj1' },
       },
       null,
       0,
@@ -194,7 +194,7 @@ describe('InviteLinksService', () => {
       maxUses: null,
       usesCount: 0,
       partieId: 'p1',
-      partie: { mjId: 'mj1' },
+      partie: { ownerId: 'mj1' },
     };
     const tx = makeTx(link);
     const res = await service.consumeLink(tx as never, 'tok', 'u');
@@ -210,7 +210,7 @@ describe('InviteLinksService', () => {
   it('join : émet un événement temps réel scopé sur la Partie après la transaction', async () => {
     jest.spyOn(service, 'consumeLink').mockResolvedValue({
       partieId: 'p1',
-      partie: { mjId: 'mj1' },
+      partie: { ownerId: 'mj1' },
     } as never);
     const res = await service.join('tok', 'u');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
@@ -220,7 +220,7 @@ describe('InviteLinksService', () => {
   it("join : émet aussi userTopic(userId) (bug fix : les AUTRES sessions/onglets déjà ouverts du joueur n'étaient jamais notifiés)", async () => {
     jest.spyOn(service, 'consumeLink').mockResolvedValue({
       partieId: 'p1',
-      partie: { mjId: 'mj1' },
+      partie: { ownerId: 'mj1' },
     } as never);
     await service.join('tok', 'u');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
@@ -229,7 +229,7 @@ describe('InviteLinksService', () => {
   it('join : notifie aussi PartiesService.notifyPartieSignalsChanged pour le MJ (Story 29.7, AD-14, signal AUCUN_MEMBRE_INVITE)', async () => {
     jest.spyOn(service, 'consumeLink').mockResolvedValue({
       partieId: 'p1',
-      partie: { mjId: 'mj1' },
+      partie: { ownerId: 'mj1' },
     } as never);
     await service.join('tok', 'u');
     expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');

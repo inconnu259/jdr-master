@@ -45,7 +45,7 @@ describe('InvitationsService', () => {
     parties = {
       getOwned: jest.fn().mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         name: 'La Forêt Ancienne',
       }),
       notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
@@ -177,7 +177,7 @@ describe('InvitationsService', () => {
     prisma.invitation.findUnique.mockResolvedValue({
       id: 'inv1',
       inviterId: 'mj1',
-      partie: { mjId: 'mj1' },
+      partie: { ownerId: 'mj1' },
     });
     await expect(service.revoke('inv1', 'intrus')).rejects.toBeInstanceOf(ForbiddenException);
   });
@@ -187,7 +187,7 @@ describe('InvitationsService', () => {
       id: 'inv1',
       inviterId: 'mj1',
       inviteeUserId: 'u',
-      partie: { mjId: 'mj1' },
+      partie: { ownerId: 'mj1' },
     });
     await service.revoke('inv1', 'mj1');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));

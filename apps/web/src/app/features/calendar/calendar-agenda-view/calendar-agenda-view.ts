@@ -250,7 +250,7 @@ export class CalendarAgendaView {
    *
    * 🚨 **Deux conditions, décidées par le parent** : être MJ **et** être dans le calendrier d'une
    * partie. Le calendrier personnel agrège plusieurs parties et ne sait de AUCUNE d'elles si j'en
-   * suis le MJ — `MyCalendarPollEntry` ne porte ni rôle ni `mjId`, et ne doit pas les porter
+   * suis le MJ — `MyCalendarPollEntry` ne porte ni rôle ni `ownerId`, et ne doit pas les porter
    * (AD-9). Un bouton *Sceller* y échouerait en 403 une ligne sur deux.
    *
    * 🚨 Ce drapeau est une affaire d'**interface**, jamais de sécurité : `PollService.choose()`

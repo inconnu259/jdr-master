@@ -79,10 +79,12 @@ export class AnnouncementsService {
       orderBy: { createdAt: 'desc' },
       include: {
         partie: {
-          select: { mj: { select: { pseudo: true, displayName: true } } },
+          select: { owner: { select: { pseudo: true, displayName: true } } },
         },
       },
     });
-    return announcements.map((a) => toDto(a, a.partie.mj));
+    // Une partie sans propriétaire (AD-5, compte supprimé — inatteignable aujourd'hui) n'a plus
+    // d'auteur à afficher : ses annonces sont écartées en attendant l'affichage « compte supprimé ».
+    return announcements.flatMap((a) => (a.partie.owner ? [toDto(a, a.partie.owner)] : []));
   }
 }

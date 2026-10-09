@@ -14,7 +14,7 @@
         <app-roster-rail
           [members]="members()"
           [characters]="characters()"
-          [mjId]="p.mjId"
+          [ownerId]="p.ownerId"
           [currentUserId]="auth.currentUser()?.id ?? ''"
           [canCreateCharacter]="canCreateCharacter()"
           [hasFreeSlot]="isMj() && hasFreeSlot"
@@ -495,7 +495,7 @@
       <app-roster-strip
         [members]="members()"
         [characters]="characters()"
-        [mjId]="p.mjId"
+        [ownerId]="p.ownerId"
         [hasFreeSlot]="isMj() && hasFreeSlot"
         [classLabelFor]="classLabelFor"
         [roleLabelFor]="roleLabelFor"

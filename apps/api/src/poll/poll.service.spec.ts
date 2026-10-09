@@ -268,7 +268,7 @@ describe('PollService', () => {
   });
 
   it('castVote() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -288,7 +288,7 @@ describe('PollService', () => {
 
   describe('withdrawVote() (Story 30.1, AD-10)', () => {
     beforeEach(() => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.sessionPoll.findUnique.mockResolvedValue({
         id: 'poll1',
         partieId: 'p1',
@@ -381,7 +381,7 @@ describe('PollService', () => {
 
   it('choose() → positionne chosenDate/chosenSlot, ferme le poll, met à jour Partie', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -412,7 +412,7 @@ describe('PollService', () => {
 
   it('choose() → émet un événement temps réel scopé sur la Partie, après la résolution des DEUX écritures (Story 18.1, AC1)', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -432,7 +432,7 @@ describe('PollService', () => {
 
   it('choose() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14)', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -454,7 +454,7 @@ describe('PollService', () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
     parties.getOwned.mockResolvedValue({
       id: 'p1',
-      mjId: 'mj1',
+      ownerId: 'mj1',
       nextSessionDate: d,
       nextSessionSlot: 'MORNING',
     });
@@ -479,7 +479,7 @@ describe('PollService', () => {
   });
 
   it('close() sur un poll OPEN → le ferme', async () => {
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -494,7 +494,7 @@ describe('PollService', () => {
   });
 
   it('close() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -506,7 +506,7 @@ describe('PollService', () => {
   });
 
   it('close() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14)', async () => {
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -518,7 +518,7 @@ describe('PollService', () => {
   });
 
   it('close() sur un poll déjà CLOSED → BadRequestException', async () => {
-    parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
       partieId: 'p1',
@@ -567,7 +567,7 @@ describe('PollService', () => {
     }
 
     beforeEach(() => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.sessionPoll.findUnique.mockResolvedValue(pollWithOptions());
     });
 

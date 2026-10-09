@@ -118,10 +118,10 @@ export class InvitationsService {
   async revoke(invitationId: string, userId: string) {
     const inv = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
-      include: { partie: { select: { mjId: true } } },
+      include: { partie: { select: { ownerId: true } } },
     });
     if (!inv) throw new NotFoundException('Invitation introuvable');
-    if (inv.inviterId !== userId && inv.partie.mjId !== userId) throw new ForbiddenException();
+    if (inv.inviterId !== userId && inv.partie.ownerId !== userId) throw new ForbiddenException();
     await this.prisma.invitation.update({
       where: { id: invitationId },
       data: { status: 'REVOKED', respondedAt: new Date() },

@@ -106,7 +106,7 @@ function makeMockPrisma() {
   const mockMembershipFindMany = jest.fn(() => Promise.resolve([] as { partieId: string }[]));
   const mockPartieFindMany = jest.fn(() => Promise.resolve([] as { id: string }[]));
   // AD-9 (Story 30.5) — getSeanceDerivedUnavailability() lit aussi partie.findMany (forme enrichie
-  // kind/mjId/memberships) et seance.findMany : vide par défaut, sans effet sur les tests existants.
+  // kind/ownerId/memberships) et seance.findMany : vide par défaut, sans effet sur les tests existants.
   const mockSeanceFindMany = jest.fn(() => Promise.resolve([] as object[]));
   // GET /me/calendar (AD-18, Story 30.5) — couche `votes-en-cours` : vide par défaut.
   const mockSessionPollFindMany = jest.fn(() => Promise.resolve([] as object[]));
@@ -1346,7 +1346,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       {
         id: 'partieB',
         kind: 'ONE_SHOT',
-        mjId: 'mjB',
+        ownerId: 'mjB',
         memberships: [{ userId: 'u1' }],
       },
     ]);
@@ -1381,7 +1381,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       {
         id: 'partieB',
         kind: 'CAMPAGNE_LINEAIRE',
-        mjId: 'mjB',
+        ownerId: 'mjB',
         memberships: [{ userId: 'u1' }],
       },
     ]);
@@ -1404,7 +1404,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       {
         id: 'partieB',
         kind: 'ONE_SHOT',
-        mjId: 'mjB',
+        ownerId: 'mjB',
         memberships: [{ userId: 'u1' }],
       },
     ]);
@@ -1430,7 +1430,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       {
         id: 'partieB',
         kind: 'CAMPAGNE_EPISODIQUE',
-        mjId: 'mjB',
+        ownerId: 'mjB',
         memberships: [{ userId: 'u1' }, { userId: 'u2' }],
       },
     ]);
@@ -1454,7 +1454,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       {
         id: 'partieB',
         kind: 'CAMPAGNE_EPISODIQUE',
-        mjId: 'mjB',
+        ownerId: 'mjB',
         memberships: [],
       },
     ]);
@@ -1477,7 +1477,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       {
         id: 'partieB',
         kind: 'ONE_SHOT',
-        mjId: 'mjB',
+        ownerId: 'mjB',
         memberships: [{ userId: 'u1' }],
       },
     ]);
@@ -1511,7 +1511,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       {
         id: 'partieB',
         kind: 'ONE_SHOT',
-        mjId: 'mjB',
+        ownerId: 'mjB',
         memberships: [{ userId: 'u1' }],
       },
     ]);
@@ -1541,7 +1541,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       {
         id: 'partieB',
         kind: 'ONE_SHOT',
-        mjId: 'mjB',
+        ownerId: 'mjB',
         memberships: [{ userId: 'u1' }],
       },
     ]);
@@ -1582,7 +1582,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       {
         id: 'partieB',
         kind: 'ONE_SHOT',
-        mjId: 'mjB',
+        ownerId: 'mjB',
         memberships: [{ userId: 'u1' }],
       },
     ]);
@@ -1610,7 +1610,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       {
         id: 'partieB',
         kind: 'ONE_SHOT',
-        mjId: 'mjB',
+        ownerId: 'mjB',
         memberships: [{ userId: 'u1' }],
       },
     ]);
@@ -1636,7 +1636,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     id: 'A',
     name: 'Ma Partie',
     kind: 'ONE_SHOT',
-    mjId: 'me',
+    ownerId: 'me',
   };
 
   beforeEach(() => {
@@ -2221,7 +2221,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
 
   it('couche inscriptions-ouvertes : séance CAMPAGNE_EPISODIQUE sans date validée et à capacité définie, non filtrée par plage', async () => {
     mockPartieFindMany.mockResolvedValue([
-      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', mjId: 'me' },
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', ownerId: 'me' },
     ]);
     mockSeanceFindMany.mockResolvedValue([
       {
@@ -2255,7 +2255,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
 
   it('couche inscriptions-ouvertes : une séance dont la date est déjà validée est exclue (roster figé)', async () => {
     mockPartieFindMany.mockResolvedValue([
-      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', mjId: 'me' },
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', ownerId: 'me' },
     ]);
     mockSeanceFindMany.mockResolvedValue([
       {
@@ -2276,7 +2276,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
 
   it('couche inscriptions-ouvertes : une séance sans capacité définie (inscriptionMax null) est exclue', async () => {
     mockPartieFindMany.mockResolvedValue([
-      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', mjId: 'me' },
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', ownerId: 'me' },
     ]);
     mockSeanceFindMany.mockResolvedValue([
       {
@@ -2332,7 +2332,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
   it('aucune itération par partie : une seule requête pour chaque table, quel que soit le nombre de mes parties (AC1)', async () => {
     mockPartieFindMany.mockResolvedValue([
       myPartie,
-      { id: 'B', name: 'Autre partie', kind: 'ONE_SHOT', mjId: 'me' },
+      { id: 'B', name: 'Autre partie', kind: 'ONE_SHOT', ownerId: 'me' },
     ]);
 
     await service.getMyCalendar('me', '2026-10-01', '2026-10-31');

@@ -70,7 +70,7 @@ function withRoleSuffix(
 export function buildRosterRows(
   members: PartieMemberDto[],
   characters: CharacterDto[],
-  mjId: string,
+  ownerId: string | null,
   classLabelFor: (c: CharacterDto) => string,
   roleLabelFor: (c: CharacterDto) => string | null,
   /** Registre de ton courant : source du libellé thématisé du slot d'initiale (Story 29.15,
@@ -84,7 +84,7 @@ export function buildRosterRows(
   currentUserId?: string,
 ): RosterRow[] {
   return members.map((member) => {
-    const isMj = member.userId === mjId;
+    const isMj = member.userId === ownerId;
     const isSelf = member.userId === currentUserId;
     const character = characters.find((c) => c.userId === member.userId) ?? null;
     if (isMj) {

@@ -180,7 +180,7 @@ describe('ScenariosService', () => {
 
   describe('create()', () => {
     it('crée un scénario BROUILLON rattaché à la Partie (AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.create.mockResolvedValue({
         id: 's1',
         partieId: 'p1',
@@ -213,7 +213,7 @@ describe('ScenariosService', () => {
     });
 
     it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.create.mockResolvedValue({
         id: 's1',
         partieId: 'p1',
@@ -233,7 +233,7 @@ describe('ScenariosService', () => {
     });
 
     it('crée automatiquement une première Seance rattachée (le scénario a toujours besoin d’au moins une date à planifier)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.create.mockResolvedValue({
         id: 's1',
         partieId: 'p1',
@@ -266,7 +266,7 @@ describe('ScenariosService', () => {
     it('Partie ONE_SHOT → rejet, aucune écriture (FR-1 : un seul scénario, jamais créé manuellement)', async () => {
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'ONE_SHOT',
       });
 
@@ -279,7 +279,7 @@ describe('ScenariosService', () => {
     it('Partie CAMPAGNE_LINEAIRE → autorisée (pas de restriction de kind)', async () => {
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.scenario.create.mockResolvedValue({
@@ -302,7 +302,7 @@ describe('ScenariosService', () => {
     });
 
     it('plusieurs créations indépendantes créent chacune un BROUILLON, sans contrainte d’ordre (AC6)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.create
         .mockResolvedValueOnce({
           id: 's1',
@@ -345,7 +345,7 @@ describe('ScenariosService', () => {
         partieId: 'p1',
         status: 'A_VENIR',
       });
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.update.mockResolvedValue({
         id: 's1',
         partieId: 'p1',
@@ -379,7 +379,7 @@ describe('ScenariosService', () => {
         partieId: 'p1',
         status: 'A_VENIR',
       });
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.update.mockResolvedValue({
         id: 's1',
         partieId: 'p1',
@@ -406,7 +406,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.scenario.update.mockResolvedValue({
@@ -444,7 +444,7 @@ describe('ScenariosService', () => {
         partieId: 'p1',
         status: 'PASSE',
       });
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
 
       await expect(
         service.update('s1', 'mj1', { description: 'nouvelle description' }),
@@ -469,7 +469,7 @@ describe('ScenariosService', () => {
 
   describe('uploadDocument()', () => {
     it('upload avec scenarioId → ScenarioDocument rattaché au scénario (AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.findUnique.mockResolvedValue({
         id: VALID_SCENARIO_ID,
         partieId: 'p1',
@@ -501,7 +501,7 @@ describe('ScenariosService', () => {
     });
 
     it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
       (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.pdf');
       prisma.scenarioDocument.create.mockResolvedValue({
@@ -519,7 +519,7 @@ describe('ScenariosService', () => {
     });
 
     it('upload sans scenarioId → scenarioId: null (AC3)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
       (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.pdf');
       prisma.scenarioDocument.create.mockResolvedValue({
@@ -543,7 +543,7 @@ describe('ScenariosService', () => {
     });
 
     it('upload sur un scénario PASSE → rejet, aucune écriture (exigence croisée 7.1 AC5)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.findUnique.mockResolvedValue({
         id: VALID_SCENARIO_ID,
         partieId: 'p1',
@@ -558,7 +558,7 @@ describe('ScenariosService', () => {
     });
 
     it('upload sur un scenarioId n’appartenant pas à la Partie → rejet', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.findUnique.mockResolvedValue({
         id: VALID_SCENARIO_ID,
         partieId: 'AUTRE_PARTIE',
@@ -572,7 +572,7 @@ describe('ScenariosService', () => {
     });
 
     it('scenarioId inexistant → 404, aucune écriture', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -582,7 +582,7 @@ describe('ScenariosService', () => {
     });
 
     it('fichier non reconnu (ni PDF ni texte) → rejet, aucune écriture (AC1/AC2)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       (detectDocumentMime as jest.Mock).mockReturnValue(null);
 
       await expect(service.uploadDocument('p1', 'mj1', makeFile())).rejects.toThrow(
@@ -593,7 +593,7 @@ describe('ScenariosService', () => {
     });
 
     it('PDF détecté par signature magique mais structurellement invalide → rejet, aucune écriture (Story 16.1 AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
       (isStructurallyValidPdf as jest.Mock).mockResolvedValue(false);
 
@@ -605,7 +605,7 @@ describe('ScenariosService', () => {
     });
 
     it('fichier texte détecté → isStructurallyValidPdf jamais appelé, upload réussit (Story 16.1 AC3, non-régression texte)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       (detectDocumentMime as jest.Mock).mockReturnValue('text/plain');
       (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.txt');
       prisma.scenarioDocument.create.mockResolvedValue({
@@ -633,7 +633,7 @@ describe('ScenariosService', () => {
     });
 
     it('scenarioId malformé (pas un UUID) → rejet, aucune écriture', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
 
       await expect(service.uploadDocument('p1', 'mj1', makeFile(), 'not-a-uuid')).rejects.toThrow(
         BadRequestException,
@@ -643,7 +643,7 @@ describe('ScenariosService', () => {
     });
 
     it('scenarioId fourni en chaîne vide → rejet explicite, jamais traité comme absent', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
 
       await expect(service.uploadDocument('p1', 'mj1', makeFile(), '')).rejects.toThrow(
         BadRequestException,
@@ -652,7 +652,7 @@ describe('ScenariosService', () => {
     });
 
     it('échec de l’insertion Prisma → nettoie le fichier orphelin puis relance l’erreur', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
       (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.pdf');
       const dbError = new Error('DB down');
@@ -795,7 +795,7 @@ describe('ScenariosService', () => {
 
   describe('listDrafts()', () => {
     it('retourne uniquement les scénarios BROUILLON de la Partie (AC2)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.findMany.mockResolvedValue([]);
 
       await service.listDrafts('p1', 'mj1');
@@ -1718,7 +1718,7 @@ describe('ScenariosService', () => {
         partieId: 'p1',
         status: 'BROUILLON',
       });
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.update.mockResolvedValue({
         id: VALID_SCENARIO_ID,
         partieId: 'p1',
@@ -1750,7 +1750,7 @@ describe('ScenariosService', () => {
         partieId: 'p1',
         status: 'BROUILLON',
       });
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.update.mockResolvedValue({
         id: VALID_SCENARIO_ID,
         partieId: 'p1',
@@ -1775,7 +1775,7 @@ describe('ScenariosService', () => {
         partieId: 'p1',
         status: 'BROUILLON',
       });
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       prisma.scenario.update.mockResolvedValue({
         id: VALID_SCENARIO_ID,
         partieId: 'p1',
@@ -1802,7 +1802,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.scenario.update.mockResolvedValue({
@@ -1840,7 +1840,7 @@ describe('ScenariosService', () => {
           partieId: 'p1',
           status,
         });
-        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+        parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
 
         await expect(service.open(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(BadRequestException);
         expect(prisma.scenario.update).not.toHaveBeenCalled();
@@ -1876,7 +1876,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.tx.scenario.findFirst.mockResolvedValue(null);
@@ -1917,7 +1917,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.tx.scenario.findFirst.mockResolvedValue(null);
@@ -1948,7 +1948,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.tx.scenario.findFirst.mockResolvedValue(null);
@@ -1979,7 +1979,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.tx.scenario.findFirst.mockResolvedValue(null);
@@ -1999,7 +1999,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.tx.scenario.findFirst.mockResolvedValue({
@@ -2022,7 +2022,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
@@ -2058,7 +2058,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
@@ -2089,7 +2089,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 0 });
@@ -2108,7 +2108,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'ONE_SHOT',
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
@@ -2141,7 +2141,7 @@ describe('ScenariosService', () => {
         });
         parties.getOwned.mockResolvedValue({
           id: 'p1',
-          mjId: 'mj1',
+          ownerId: 'mj1',
           kind: 'CAMPAGNE_LINEAIRE',
         });
 
@@ -2187,7 +2187,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
@@ -2224,7 +2224,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
@@ -2254,7 +2254,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
@@ -2284,7 +2284,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
@@ -2325,7 +2325,7 @@ describe('ScenariosService', () => {
         });
         parties.getOwned.mockResolvedValue({
           id: 'p1',
-          mjId: 'mj1',
+          ownerId: 'mj1',
           kind: 'CAMPAGNE_LINEAIRE',
         });
 
@@ -2363,7 +2363,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.scenario.updateMany.mockResolvedValue({ count: 0 });
@@ -2381,7 +2381,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValueOnce({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.scenario.updateMany.mockResolvedValueOnce({ count: 1 });
@@ -2408,7 +2408,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValueOnce({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.tx.scenario.findFirst.mockResolvedValueOnce(null);
@@ -2444,7 +2444,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -2462,7 +2462,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue({
@@ -2523,7 +2523,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue({
@@ -2552,7 +2552,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue({
@@ -2581,7 +2581,7 @@ describe('ScenariosService', () => {
       });
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue({
@@ -2838,7 +2838,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValueOnce([
@@ -2865,7 +2865,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValueOnce([
@@ -2889,7 +2889,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValueOnce([
@@ -2947,7 +2947,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValueOnce([
@@ -2979,7 +2979,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValueOnce([
@@ -3007,7 +3007,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValueOnce([
@@ -3037,7 +3037,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValueOnce([
@@ -3061,7 +3061,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValueOnce([
@@ -3109,7 +3109,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -3127,7 +3127,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValueOnce([
@@ -3183,7 +3183,7 @@ describe('ScenariosService', () => {
         .mockResolvedValueOnce(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       pollService.create.mockResolvedValue({ id: POLL_ID });
@@ -3230,7 +3230,7 @@ describe('ScenariosService', () => {
         .mockResolvedValueOnce(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       pollService.create.mockResolvedValue({ id: POLL_ID });
@@ -3251,7 +3251,7 @@ describe('ScenariosService', () => {
         .mockResolvedValueOnce(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       pollService.create.mockResolvedValue({ id: POLL_ID });
@@ -3301,7 +3301,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -3321,7 +3321,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -3388,7 +3388,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValue([]);
@@ -3420,7 +3420,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValue([]);
@@ -3440,7 +3440,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValue([]);
@@ -3459,7 +3459,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValue([]);
@@ -3481,7 +3481,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
       prisma.seance.findMany.mockResolvedValue([]);
@@ -3500,7 +3500,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -3560,7 +3560,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -3580,7 +3580,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.seance.findMany.mockResolvedValue([
@@ -3622,7 +3622,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -3641,7 +3641,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -3660,7 +3660,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -3680,7 +3680,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -3765,7 +3765,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'BROUILLON' }));
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -3785,7 +3785,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -3805,7 +3805,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.tx.inscription.findUnique.mockResolvedValue(null);
@@ -3828,7 +3828,7 @@ describe('ScenariosService', () => {
       });
     });
 
-    it('notifie PartiesService.notifyPartieSignalsChanged avec le mjId de la Partie, pas userId (deferred-work, SSE calendrier personnel)', async () => {
+    it('notifie PartiesService.notifyPartieSignalsChanged avec le ownerId de la Partie, pas userId (deferred-work, SSE calendrier personnel)', async () => {
       prisma.seance.findUnique.mockResolvedValue({
         id: SEANCE_ID,
         scenarioId: VALID_SCENARIO_ID,
@@ -3839,7 +3839,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.tx.inscription.findUnique.mockResolvedValue(null);
@@ -3866,7 +3866,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.tx.inscription.findUnique.mockResolvedValue(null);
@@ -3892,7 +3892,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.tx.inscription.findUnique.mockResolvedValue({
@@ -3919,7 +3919,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.tx.inscription.findUnique.mockResolvedValue(null);
@@ -3944,7 +3944,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -3963,7 +3963,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -3983,7 +3983,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -4003,7 +4003,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.tx.inscription.findUnique.mockResolvedValue(null);
@@ -4031,7 +4031,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -4088,7 +4088,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -4108,7 +4108,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -4117,7 +4117,7 @@ describe('ScenariosService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
-    it('notifie PartiesService.notifyPartieSignalsChanged avec le mjId de la Partie, pas userId (deferred-work, SSE calendrier personnel)', async () => {
+    it('notifie PartiesService.notifyPartieSignalsChanged avec le ownerId de la Partie, pas userId (deferred-work, SSE calendrier personnel)', async () => {
       prisma.seance.findUnique.mockResolvedValue({
         id: SEANCE_ID,
         scenarioId: VALID_SCENARIO_ID,
@@ -4125,7 +4125,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -4142,7 +4142,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario({ status: 'PASSE' }));
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -4161,7 +4161,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
       prisma.inscription.deleteMany.mockResolvedValue({ count: 0 });
@@ -4197,7 +4197,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -4215,7 +4215,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getViewable.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_EPISODIQUE',
       });
 
@@ -4251,7 +4251,7 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
         });
         prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
-        parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind });
+        parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1', kind });
 
         await service.setCompteRendu(SEANCE_ID, 'mj1', 'Les PJ ont vaincu le dragon.');
 
@@ -4271,7 +4271,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -4288,7 +4288,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -4305,7 +4305,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -4374,7 +4374,7 @@ describe('ScenariosService', () => {
         scenarioId: VALID_SCENARIO_ID,
       });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1', kind });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1', kind });
     }
 
     it.each(['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as const)(
@@ -4497,7 +4497,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -4520,7 +4520,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -4535,7 +4535,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -4550,7 +4550,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -4568,7 +4568,7 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(mockScenario());
       parties.getOwned.mockResolvedValue({
         id: 'p1',
-        mjId: 'mj1',
+        ownerId: 'mj1',
         kind: 'CAMPAGNE_LINEAIRE',
       });
 
@@ -4586,7 +4586,7 @@ describe('ScenariosService', () => {
         prisma.scenario.findUnique.mockResolvedValue(mockScenario({ status }));
         parties.getOwned.mockResolvedValue({
           id: 'p1',
-          mjId: 'mj1',
+          ownerId: 'mj1',
           kind: 'CAMPAGNE_LINEAIRE',
         });
 

@@ -124,18 +124,22 @@ export class AccountService {
     const announcements = await this.prisma.announcement.findMany({
       where: {
         partie: {
-          OR: [{ mjId: userId }, { memberships: { some: { userId } } }],
+          OR: [{ ownerId: userId }, { memberships: { some: { userId } } }],
         },
         reads: { none: { userId } },
       },
       orderBy: { createdAt: 'desc' },
       include: {
         partie: {
-          select: { mj: { select: { pseudo: true, displayName: true } } },
+          select: { owner: { select: { pseudo: true, displayName: true } } },
         },
       },
     });
-    return announcements.map((a) => toAnnouncementDto(a, a.partie.mj));
+    // Une partie sans propriétaire (AD-5, compte supprimé — inatteignable aujourd'hui) n'a plus
+    // d'auteur à afficher : ses annonces sont écartées en attendant l'affichage « compte supprimé ».
+    return announcements.flatMap((a) =>
+      a.partie.owner ? [toAnnouncementDto(a, a.partie.owner)] : [],
+    );
   }
 
   /** Idempotent (sémantique PUT), même pattern que addFavorite(). */

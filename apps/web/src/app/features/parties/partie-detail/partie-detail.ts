@@ -204,7 +204,7 @@ export class PartieDetail implements OnInit {
   protected readonly downloadingPrepAsset = signal(false);
 
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
-  protected readonly isMj = computed(() => this.partie()?.mjId === this.auth.currentUser()?.id);
+  protected readonly isMj = computed(() => this.partie()?.ownerId === this.auth.currentUser()?.id);
 
   /** Story 32.2 (revue de code) : la zone Consultation de l'onglet Détails ne doit jamais se rendre
    *  avec un titre de zone et aucun contenu — un joueur sans annonce de campagne ni bandeau
@@ -260,8 +260,8 @@ export class PartieDetail implements OnInit {
 
   /** Membres autres que le MJ — utilisé pour l'action « Retirer » dans l'onglet Invitations. */
   protected readonly otherMembers = computed(() => {
-    const mjId = this.partie()?.mjId;
-    return this.members().filter((m) => m.userId !== mjId);
+    const ownerId = this.partie()?.ownerId;
+    return this.members().filter((m) => m.userId !== ownerId);
   });
 
   /** AC3 : ambiguïté calculée sur `members()` en entier (pas `otherMembers()`) — détection
@@ -273,7 +273,7 @@ export class PartieDetail implements OnInit {
   }
 
   /** FR-4b/AC1 : l'utilisateur courant partage-t-il son nom affiché avec un autre membre — joueur
-   *  ou MJ (jamais un `Membership`, cf. Découverte story 28.3, comparé séparément via `partie().mjDisplayName`) ? */
+   *  ou MJ (jamais un `Membership`, cf. Découverte story 28.3, comparé séparément via `partie().ownerDisplayName`) ? */
   protected readonly homonymousWith = computed(() => {
     const me = this.auth.currentUser();
     const p = this.partie();
@@ -281,7 +281,7 @@ export class PartieDetail implements OnInit {
     const displayName = me.displayName;
     if (this.members().some((m) => m.userId !== me.id && m.displayName === displayName))
       return true;
-    return !!p && p.mjId !== me.id && p.mjDisplayName === displayName;
+    return !!p && p.ownerId !== me.id && p.ownerDisplayName === displayName;
   });
 
   /** Mémorisé en `sessionStorage` (pas de préférence compte persistée, AC2) — s'efface à la
@@ -729,7 +729,7 @@ export class PartieDetail implements OnInit {
     if (this.search().trim() !== q) return;
     // On masque le MJ et les membres déjà présents.
     const memberIds = new Set(this.members().map((m) => m.userId));
-    this.results.set(found.filter((u) => u.id !== this.partie()?.mjId && !memberIds.has(u.id)));
+    this.results.set(found.filter((u) => u.id !== this.partie()?.ownerId && !memberIds.has(u.id)));
   }
 
   async invite(user: UserSearchResultDto): Promise<void> {

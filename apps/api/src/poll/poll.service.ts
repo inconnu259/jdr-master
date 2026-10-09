@@ -113,7 +113,7 @@ export class PollService {
     this.realtimeEvents.emit(partieTopic(partieId));
     // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
-    await this.parties.notifyPartieSignalsChanged(partieId, partie.mjId);
+    await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
   }
 
   /** Retire la réponse de l'appelant sur une option (Story 30.1, AD-10) — supprime la ligne
@@ -149,7 +149,7 @@ export class PollService {
     // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : un retrait peut faire réapparaître ce
     // signal pour ce membre — même raisonnement que castVote(), en plus de partieTopic ci-dessus,
     // jamais en remplacement.
-    await this.parties.notifyPartieSignalsChanged(partieId, partie.mjId);
+    await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
   }
 
   async choose(

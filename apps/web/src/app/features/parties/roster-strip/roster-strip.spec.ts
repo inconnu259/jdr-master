@@ -36,7 +36,7 @@ describe('RosterStrip', () => {
     const fixture = TestBed.createComponent(RosterStrip);
     fixture.componentRef.setInput('members', MEMBERS);
     fixture.componentRef.setInput('characters', CHARACTERS);
-    fixture.componentRef.setInput('mjId', 'mj1');
+    fixture.componentRef.setInput('ownerId', 'mj1');
     fixture.componentRef.setInput('hasFreeSlot', hasFreeSlot);
     fixture.componentRef.setInput('classLabelFor', () => 'Ménestrel');
     fixture.componentRef.setInput('roleLabelFor', roleLabelFor);

@@ -279,10 +279,10 @@ export class CharacterService {
       this.realtimeEvents.emit(partieTopic(partieId));
       // PERSONNAGE_A_CREER (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
       // remplacement — atteint le canal personnel de chaque membre pour rafraîchir ses signaux.
-      await this.parties.notifyPartieSignalsChanged(partieId, partie.mjId);
+      await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
       const owner = await this.users.findById(userId);
       // Le créateur est toujours le propriétaire ici — ownerIsMj et viewerIsMj coïncident.
-      const isMj = partie.mjId === userId;
+      const isMj = partie.ownerId === userId;
       return toDto(character, owner?.pseudo ?? '', owner?.displayName ?? '', isMj, isMj);
     } catch (e) {
       if (hasPrismaErrorCode(e, 'P2002')) {
@@ -368,16 +368,16 @@ export class CharacterService {
     // depuis la Story 6.5 (prérequis du Journal de notes, cf. AC4 : un fellow player doit
     // pouvoir atteindre cette page pour y voir les entrées partagées). getHistory/
     // getPortraitFile ont leur propre check indépendant, non affectés par ce changement.
-    let mjId: string | undefined;
+    let partieOwnerId: string | null | undefined;
     if (character.userId !== userId) {
-      mjId = (await this.parties.getViewable(character.partieId, userId)).mjId;
+      partieOwnerId = (await this.parties.getViewable(character.partieId, userId)).ownerId;
     } else {
-      mjId = (
+      partieOwnerId = (
         await this.prisma.partie.findUnique({
           where: { id: character.partieId },
-          select: { mjId: true },
+          select: { ownerId: true },
         })
-      )?.mjId;
+      )?.ownerId;
     }
     const owner = await this.users.findById(character.userId);
     // ownerIsMj : le PROPRIÉTAIRE du personnage est-il le MJ. viewerIsMj : le VIEWER (userId, le
@@ -389,7 +389,7 @@ export class CharacterService {
     // Story 31.6 : le cadenas de visibilité ne s'applique JAMAIS au propriétaire de la fiche ni au
     // MJ de la partie (Intent, "Always") — le masque n'est résolu (requête dédiée) que dans le cas
     // restant, un fellow player, seul lecteur concerné depuis la Story 6.5.
-    const isOwnerOrMj = character.userId === userId || mjId === userId;
+    const isOwnerOrMj = character.userId === userId || partieOwnerId === userId;
     const lockedPaths = isOwnerOrMj
       ? new Set<string>()
       : await this.resolveLockedPaths(character.partieId);
@@ -397,8 +397,8 @@ export class CharacterService {
       character,
       owner?.pseudo ?? '',
       owner?.displayName ?? '',
-      mjId === character.userId,
-      mjId === userId,
+      partieOwnerId === character.userId,
+      partieOwnerId === userId,
       lockedPaths,
     );
   }
@@ -430,7 +430,7 @@ export class CharacterService {
     });
     const ownerById = new Map(owners.map((o) => [o.id, o]));
 
-    const viewerIsMj = partie.mjId === userId;
+    const viewerIsMj = partie.ownerId === userId;
     // Story 31.6 : le masque de visibilité s'applique à chaque personnage d'autrui pour un
     // lecteur qui n'est ni son propriétaire ni le MJ — jamais au sien ni à ceux vus par le MJ
     // (Intent, "Always"), même règle que `findOne` (L.392-395). Résolu au plus une fois pour toute
@@ -448,7 +448,7 @@ export class CharacterService {
         c,
         ownerById.get(c.userId)?.pseudo ?? '',
         ownerById.get(c.userId)?.displayName ?? '',
-        c.userId === partie.mjId,
+        c.userId === partie.ownerId,
         viewerIsMj,
         isOwnerOrMj ? new Set<string>() : lockedPaths,
       );
@@ -502,7 +502,7 @@ export class CharacterService {
     const [parties, owner, groupRoles, contentEntries] = await Promise.all([
       this.prisma.partie.findMany({
         where: { id: { in: partieIds } },
-        select: { id: true, name: true, mjId: true },
+        select: { id: true, name: true, ownerId: true },
       }),
       this.users.findById(userId),
       this.prisma.characterGroupRole.findMany({
@@ -519,7 +519,7 @@ export class CharacterService {
 
     return characters.map((c) => {
       const partie = partieById.get(c.partieId);
-      const isMj = partie?.mjId === userId;
+      const isMj = partie?.ownerId === userId;
       const content = contentByGameSystemId.get(c.gameSystemId);
       const sheetData = c.sheetData as { classId?: string; typeId?: string };
       return {
@@ -1515,7 +1515,7 @@ export class CharacterService {
     let sharedOnly = character.userId !== userId;
     if (sharedOnly) {
       const partie = await this.parties.getViewable(character.partieId, userId);
-      if (partie.mjId === userId) sharedOnly = false;
+      if (partie.ownerId === userId) sharedOnly = false;
     }
     const notes = await this.prisma.characterNote.findMany({
       where: { characterId, ...(sharedOnly ? { shared: true } : {}) },
@@ -1533,13 +1533,13 @@ export class CharacterService {
       this.users.findById(ownerId),
       this.prisma.partie.findUnique({
         where: { id: partieId },
-        select: { mjId: true },
+        select: { ownerId: true },
       }),
     ]);
     return {
       pseudo: owner?.pseudo ?? '',
       displayName: owner?.displayName ?? '',
-      isMj: partie?.mjId === ownerId,
+      isMj: partie?.ownerId === ownerId,
     };
   }
 

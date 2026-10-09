@@ -125,7 +125,7 @@ function toPartieDto(
     kind: partie.kind,
     gameSystemId: partie.gameSystemId,
     description: partie.description,
-    mjId: partie.mjId,
+    ownerId: partie.ownerId,
     createdAt: partie.createdAt.toISOString(),
     nextSessionDate: partie.nextSessionDate?.toISOString() ?? null,
     nextSessionSlot: partie.nextSessionSlot,
@@ -155,7 +155,7 @@ export class PartiesService {
     }
   }
 
-  async create(mjId: string, dto: CreatePartieDto): Promise<PartieDto> {
+  async create(ownerId: string, dto: CreatePartieDto): Promise<PartieDto> {
     // Story 29.17, AC2 : refus AVANT toute écriture — même discipline que la garde `kind` de
     // `convertKind()` (aucune trace en base d'une partie sur un système sans module).
     this.assertGameSystemHasModule(dto.gameSystemId);
@@ -166,7 +166,7 @@ export class PartiesService {
           kind: dto.kind,
           gameSystemId: dto.gameSystemId,
           description: dto.description ?? null,
-          mjId,
+          ownerId,
         },
       });
 
@@ -264,7 +264,7 @@ export class PartiesService {
       );
     }
     const parties = await this.prisma.partie.findMany({
-      where: { mjId: userId },
+      where: { ownerId: userId },
       orderBy: { createdAt: 'desc' },
     });
     const partieIds = parties.map((p) => p.id);
@@ -277,19 +277,22 @@ export class PartiesService {
     );
   }
 
-  /** Récupère une partie en vérifiant que l'utilisateur en est le MJ (sinon 404 / 403). */
-  async getOwned(id: string, userId: string) {
+  /** Récupère une partie en vérifiant que l'utilisateur en est le MJ (sinon 404 / 403). Une partie
+   *  sans propriétaire (`ownerId` null, AD-5) ne satisfait jamais ce contrôle : le type de retour
+   *  garantit donc un `ownerId` non nul aux appelants. */
+  async getOwned(id: string, userId: string): Promise<Partie & { ownerId: string }> {
     const partie = await this.prisma.partie.findUnique({ where: { id } });
     if (!partie) throw new NotFoundException('Partie introuvable');
-    if (partie.mjId !== userId) throw new ForbiddenException();
-    return partie;
+    if (partie.ownerId !== userId) throw new ForbiddenException();
+    // Rétréci par l'égalité ci-dessus : `partie.ownerId` est ici un `string`.
+    return { ...partie, ownerId: partie.ownerId };
   }
 
   /** Récupère une partie visible par l'utilisateur : MJ **ou** membre (sinon 404 / 403). */
   async getViewable(id: string, userId: string) {
     const partie = await this.prisma.partie.findUnique({ where: { id } });
     if (!partie) throw new NotFoundException('Partie introuvable');
-    if (partie.mjId === userId) return partie;
+    if (partie.ownerId === userId) return partie;
     const membership = await this.prisma.membership.findUnique({
       where: { userId_partieId: { userId, partieId: id } },
     });
@@ -301,21 +304,23 @@ export class PartiesService {
    *  du pseudo/nom affiché du MJ (AD-2) — le MJ n'étant jamais un `Membership`, son identité
    *  n'apparaît nulle part ailleurs dans `PartieDto`. Revue de code : `mj` gardé comme
    *  `resolveParticipants()` plutôt qu'une assertion non-null — une ligne `User` orpheline ne doit
-   *  jamais transformer ce chemin de lecture principal en 500 (mjPseudo/mjDisplayName optionnels). */
+   *  jamais transformer ce chemin de lecture principal en 500 (ownerPseudo/ownerDisplayName
+   *  optionnels). Une partie sans propriétaire (AD-5) les laisse également absents. */
   async findOneDto(id: string, userId: string): Promise<PartieDto> {
     const partie = await this.getViewable(id, userId);
-    const role: 'mj' | 'player' = partie.mjId === userId ? 'mj' : 'player';
+    const role: 'mj' | 'player' = partie.ownerId === userId ? 'mj' : 'player';
     const [hasScenario, favorite] = await Promise.all([
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
     const dto = toPartieDto(partie, role, hasScenario, favorite);
-    const mj = await this.prisma.user.findUnique({
-      where: { id: partie.mjId },
+    if (partie.ownerId === null) return dto;
+    const owner = await this.prisma.user.findUnique({
+      where: { id: partie.ownerId },
       select: { pseudo: true, displayName: true },
     });
-    if (!mj) return dto;
-    return { ...dto, mjPseudo: mj.pseudo, mjDisplayName: mj.displayName };
+    if (!owner) return dto;
+    return { ...dto, ownerPseudo: owner.pseudo, ownerDisplayName: owner.displayName };
   }
 
   /** Liste des joueurs d'une partie (visible par le MJ ou un membre). L'e-mail n'est renseigné
@@ -323,7 +328,7 @@ export class PartiesService {
    *  illimité, un membre n'est pas nécessairement quelqu'un que le MJ a choisi individuellement. */
   async listMembers(partieId: string, userId: string) {
     const partie = await this.getViewable(partieId, userId);
-    const isMj = partie.mjId === userId;
+    const isMj = partie.ownerId === userId;
     const memberships = await this.prisma.membership.findMany({
       where: { partieId },
       orderBy: { joinedAt: 'asc' },
@@ -543,7 +548,7 @@ export class PartiesService {
     // AD-14 : la conversion change des statuts de scénario, donc des signaux. Émission tolérante
     // aux pannes (patron `close()`/`reopen()`, Story 29.6) — un commit réussi ne doit jamais se
     // transformer en 500 parce qu'une notification a échoué.
-    await this.emitPartieAndMembersSafe(id, partie.mjId);
+    await this.emitPartieAndMembersSafe(id, partie.ownerId);
 
     const [hasScenario, favorite] = await Promise.all([
       this.hasScenario(id),
@@ -560,7 +565,7 @@ export class PartiesService {
       where: { id },
       data: { closedAt: new Date() },
     });
-    await this.emitPartieAndMembersSafe(id, partie.mjId);
+    await this.emitPartieAndMembersSafe(id, partie.ownerId);
     // Le MJ peut clôturer une partie jamais commencée (aucun scénario) — hasScenario recalculé,
     // jamais supposé, `closedAt` primant de toute façon sur le résultat dans toPartieDto().
     const [hasScenario, favorite] = await Promise.all([
@@ -577,7 +582,7 @@ export class PartiesService {
       where: { id },
       data: { closedAt: null },
     });
-    await this.emitPartieAndMembersSafe(id, partie.mjId);
+    await this.emitPartieAndMembersSafe(id, partie.ownerId);
     const [hasScenario, favorite] = await Promise.all([
       this.hasScenario(id),
       this.isFavorite(userId, id),
@@ -591,7 +596,7 @@ export class PartiesService {
     // fiche est conservée. Le signal HOMME_DRAGON_A_CREER du MJ n'est plus celui d'avant et sa liste
     // « Personnages » change : `user:` au MJ (aucun canal `partie:`, la partie n'existe plus).
     await this.prisma.partie.delete({ where: { id } });
-    this.realtimeEvents.emit(userTopic(partie.mjId));
+    this.realtimeEvents.emit(userTopic(partie.ownerId));
     return { ok: true };
   }
 
@@ -704,7 +709,7 @@ export class PartiesService {
     // rechargement complet sans cette émission — `emitPartieAndMembersSafe` n'a pas encore été
     // appelée pour cette mutation (contrairement à `close()`/`reopen()`), donc `partieTopic` n'a
     // pas déjà été émis ailleurs.
-    await this.emitPartieAndMembersSafe(id, partie.mjId);
+    await this.emitPartieAndMembersSafe(id, partie.ownerId);
 
     const [hasScenario, favorite] = await Promise.all([
       this.hasScenario(id),
@@ -729,7 +734,7 @@ export class PartiesService {
       await this.deleteCoverFiles(partie.coverImageUrl);
     }
 
-    await this.emitPartieAndMembersSafe(id, partie.mjId);
+    await this.emitPartieAndMembersSafe(id, partie.ownerId);
 
     const [hasScenario, favorite] = await Promise.all([
       this.hasScenario(id),
@@ -775,9 +780,9 @@ export class PartiesService {
   /** Double émission temps réel (AD-14) pour toute mutation partagée à l'échelle d'une Partie :
    *  `partie:{id}` pour l'écran de détail déjà connecté, `user:{id}` pour chaque membre (MJ inclus)
    *  afin que sa propre liste de parties (Dashboard) reflète le changement sans recharger. */
-  private async emitPartieAndMembers(partieId: string, mjId: string): Promise<void> {
+  private async emitPartieAndMembers(partieId: string, ownerId: string | null): Promise<void> {
     this.realtimeEvents.emit(partieTopic(partieId));
-    const { participants } = await this.resolveParticipants(partieId, mjId);
+    const { participants } = await this.resolveParticipants(partieId, ownerId);
     for (const p of participants) this.realtimeEvents.emit(userTopic(p.userId));
   }
 
@@ -785,9 +790,9 @@ export class PartiesService {
    *  appelée après que la mutation DB a déjà été committée, une erreur ici ne doit jamais faire
    *  croire au client que la clôture/réouverture a échoué alors qu'elle a bien eu lieu (revue de
    *  code, Story 29.6). */
-  private async emitPartieAndMembersSafe(partieId: string, mjId: string): Promise<void> {
+  private async emitPartieAndMembersSafe(partieId: string, ownerId: string | null): Promise<void> {
     try {
-      await this.emitPartieAndMembers(partieId, mjId);
+      await this.emitPartieAndMembers(partieId, ownerId);
     } catch (err) {
       this.logger.warn(
         `Échec de l'émission temps réel après mutation de la partie ${partieId} : ${String(err)}`,
@@ -800,15 +805,15 @@ export class PartiesService {
    *  causait une double émission `partie:{id}` sur chaque point d'appel de
    *  `notifyPartieSignalsChanged`, qui a tous déjà leur propre `realtimeEvents.emit(partieTopic(...))`
    *  juste avant). */
-  private async emitMembersOnly(partieId: string, mjId: string): Promise<void> {
-    const { participants } = await this.resolveParticipants(partieId, mjId);
+  private async emitMembersOnly(partieId: string, ownerId: string | null): Promise<void> {
+    const { participants } = await this.resolveParticipants(partieId, ownerId);
     for (const p of participants) this.realtimeEvents.emit(userTopic(p.userId));
   }
 
   /** Variante sans échec d'`emitMembersOnly` — même garde que `emitPartieAndMembersSafe`. */
-  private async emitMembersOnlySafe(partieId: string, mjId: string): Promise<void> {
+  private async emitMembersOnlySafe(partieId: string, ownerId: string | null): Promise<void> {
     try {
-      await this.emitMembersOnly(partieId, mjId);
+      await this.emitMembersOnly(partieId, ownerId);
     } catch (err) {
       this.logger.warn(
         `Échec de l'émission temps réel (membres) après mutation de la partie ${partieId} : ${String(err)}`,
@@ -822,17 +827,20 @@ export class PartiesService {
    *  déjà `PartiesService`). Ces appelants émettent **déjà** `partieTopic` eux-mêmes juste avant
    *  d'appeler cette méthode — elle n'émet donc que `userTopic` par membre (`emitMembersOnlySafe`),
    *  jamais `emitPartieAndMembersSafe` qui réémettrait `partieTopic` une seconde fois. */
-  async notifyPartieSignalsChanged(partieId: string, mjId: string): Promise<void> {
-    await this.emitMembersOnlySafe(partieId, mjId);
+  async notifyPartieSignalsChanged(partieId: string, ownerId: string | null): Promise<void> {
+    await this.emitMembersOnlySafe(partieId, ownerId);
   }
 
-  /** Retourne MJ + membres (dédoublonnés) avec leur pseudo et leur nom affiché. */
-  private async resolveParticipants(partieId: string, mjId: string) {
+  /** Retourne MJ + membres (dédoublonnés) avec leur pseudo et leur nom affiché. Une partie sans
+   *  propriétaire (`ownerId` null, AD-5) ne renvoie que ses membres. */
+  private async resolveParticipants(partieId: string, ownerId: string | null) {
     const [mjUser, memberships] = await Promise.all([
-      this.prisma.user.findUnique({
-        where: { id: mjId },
-        select: { id: true, pseudo: true, displayName: true },
-      }),
+      ownerId === null
+        ? Promise.resolve(null)
+        : this.prisma.user.findUnique({
+            where: { id: ownerId },
+            select: { id: true, pseudo: true, displayName: true },
+          }),
       this.prisma.membership.findMany({
         where: { partieId },
         // Story 36.8 — ORDRE FIXE DE LA TROUPE. La couche « disponibilité du groupe » rend une
@@ -890,9 +898,9 @@ export class PartiesService {
     });
     if (!partie) throw new NotFoundException('Partie introuvable');
 
-    const { participants, memberships } = await this.resolveParticipants(partieId, partie.mjId);
+    const { participants, memberships } = await this.resolveParticipants(partieId, partie.ownerId);
 
-    const isMj = partie.mjId === userId;
+    const isMj = partie.ownerId === userId;
     const isMember = memberships.some((m) => m.userId === userId);
     if (!isMj && !isMember) throw new ForbiddenException();
 
@@ -962,9 +970,9 @@ export class PartiesService {
     }
 
     // Q1: hard-exclude tout créneau où le MJ est UNAVAILABLE (prérequis organisateur)
-    const mjId = partie.mjId;
+    const ownerId = partie.ownerId;
     const filtered = all.filter((s) => {
-      const mj = s.members.find((m) => m.userId === mjId);
+      const mj = s.members.find((m) => m.userId === ownerId);
       return mj?.status !== 'UNAVAILABLE';
     });
 
@@ -1018,9 +1026,9 @@ export class PartiesService {
     });
     if (!partie) throw new NotFoundException('Partie introuvable');
 
-    const { participants, memberships } = await this.resolveParticipants(partieId, partie.mjId);
+    const { participants, memberships } = await this.resolveParticipants(partieId, partie.ownerId);
 
-    const isMj = partie.mjId === userId;
+    const isMj = partie.ownerId === userId;
     const isMember = memberships.some((m) => m.userId === userId);
     if (!isMj && !isMember) throw new ForbiddenException();
 

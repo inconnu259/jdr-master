@@ -94,7 +94,7 @@ export class InviteLinksService {
     this.realtimeEvents.emit(userTopic(userId));
     // AUCUN_MEMBRE_INVITE (Story 29.7, AD-14) : le MJ doit voir ce signal se lever quand quelqu'un
     // rejoint par lien. En plus des émissions ci-dessus, jamais en remplacement.
-    await this.parties.notifyPartieSignalsChanged(link.partieId, link.partie.mjId);
+    await this.parties.notifyPartieSignalsChanged(link.partieId, link.partie.ownerId);
     return { ok: true, partieId: link.partieId };
   }
 
@@ -107,15 +107,15 @@ export class InviteLinksService {
     tx: Prisma.TransactionClient,
     token: string,
     userId: string,
-  ): Promise<InviteLink & { partie: { mjId: string } }> {
+  ): Promise<InviteLink & { partie: { ownerId: string | null } }> {
     const link = await tx.inviteLink.findUnique({
       where: { token },
-      include: { partie: { select: { mjId: true } } },
+      include: { partie: { select: { ownerId: true } } },
     });
     if (!link) throw new NotFoundException('Lien invalide');
     const status = this.linkStatus(link);
     if (!status.valid) throw new ForbiddenException(status.reason);
-    if (link.partie.mjId === userId) {
+    if (link.partie.ownerId === userId) {
       throw new ConflictException('Vous êtes déjà le MJ de cette partie.');
     }
     const existing = await tx.membership.findUnique({

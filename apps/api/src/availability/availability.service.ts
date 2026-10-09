@@ -89,7 +89,7 @@ export class AvailabilityService {
         select: { partieId: true },
       }),
       this.prisma.partie.findMany({
-        where: { mjId: userId },
+        where: { ownerId: userId },
         select: { id: true },
       }),
     ]);
@@ -708,12 +708,12 @@ export class AvailabilityService {
 
     const parties = await this.prisma.partie.findMany({
       where: {
-        OR: [{ mjId: { in: userIds } }, { memberships: { some: { userId: { in: userIds } } } }],
+        OR: [{ ownerId: { in: userIds } }, { memberships: { some: { userId: { in: userIds } } } }],
       },
       select: {
         id: true,
         kind: true,
-        mjId: true,
+        ownerId: true,
         memberships: { select: { userId: true } },
       },
     });
@@ -740,10 +740,12 @@ export class AvailabilityService {
       const partie = partieById.get(seance.scenario.partieId);
       if (!partie) continue; // partie hors du périmètre résolu ci-dessus
 
+      // Propriétaire absent (AD-5, compte supprimé) : seuls les membres/inscrits sont concernés.
+      const ownerIds = partie.ownerId === null ? [] : [partie.ownerId];
       const participantIds =
         partie.kind === 'CAMPAGNE_EPISODIQUE'
-          ? new Set([partie.mjId, ...seance.inscriptions.map((i) => i.userId)])
-          : new Set([partie.mjId, ...partie.memberships.map((m) => m.userId)]);
+          ? new Set([...ownerIds, ...seance.inscriptions.map((i) => i.userId)])
+          : new Set([...ownerIds, ...partie.memberships.map((m) => m.userId)]);
 
       const dayUtc = new Date(
         Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
@@ -791,8 +793,8 @@ export class AvailabilityService {
     }
 
     const myParties = await this.prisma.partie.findMany({
-      where: { OR: [{ mjId: userId }, { memberships: { some: { userId } } }] },
-      select: { id: true, name: true, kind: true, mjId: true },
+      where: { OR: [{ ownerId: userId }, { memberships: { some: { userId } } }] },
+      select: { id: true, name: true, kind: true, ownerId: true },
     });
     const partieIds = myParties.map((p) => p.id);
     const partieById = new Map(myParties.map((p) => [p.id, p]));
@@ -950,7 +952,7 @@ export class AvailabilityService {
       // Story 36.16 — même raisonnement : déjà chargé par le findMany, aucun appel de plus.
       compteRendu?: string | null;
     }>,
-    partieById: Map<string, { id: string; name: string; kind: string; mjId: string }>,
+    partieById: Map<string, { id: string; name: string; kind: string; ownerId: string | null }>,
     userId: string,
     fromMs: number,
     toMs: number,
@@ -964,7 +966,7 @@ export class AvailabilityService {
       if (!partie) continue;
       if (
         partie.kind === 'CAMPAGNE_EPISODIQUE' &&
-        partie.mjId !== userId &&
+        partie.ownerId !== userId &&
         !s.inscriptions.some((i) => i.userId === userId)
       ) {
         continue;

@@ -82,7 +82,7 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
         name: `Due-${suffix}`,
         kind: 'ONE_SHOT',
         gameSystemId: 'ryuutama',
-        mjId: mj.id,
+        ownerId: mj.id,
         nextSessionDate: in12h,
         nextSessionSlot: 'EVENING',
       },
@@ -92,7 +92,7 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
         name: `NotYet-${suffix}`,
         kind: 'ONE_SHOT',
         gameSystemId: 'ryuutama',
-        mjId: mj.id,
+        ownerId: mj.id,
         nextSessionDate: in48h,
       },
     });
@@ -101,7 +101,7 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
         name: `NoDate-${suffix}`,
         kind: 'ONE_SHOT',
         gameSystemId: 'ryuutama',
-        mjId: mj.id,
+        ownerId: mj.id,
       },
     });
     partieIds.push(duePartie.id, notYetDuePartie.id, noDatePartie.id);

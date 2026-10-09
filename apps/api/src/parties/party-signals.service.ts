@@ -52,7 +52,7 @@ export class PartySignalsService {
       this.prisma.partie.findMany({
         where: {
           id: { in: mjPartieIds },
-          mjId: userId,
+          ownerId: userId,
           gameSystemId: RYUUTAMA_ID,
           hommeDragonId: null,
         },

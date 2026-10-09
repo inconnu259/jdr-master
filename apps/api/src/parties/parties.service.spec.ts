@@ -121,7 +121,7 @@ describe('PartiesService', () => {
     kind: 'ONE_SHOT',
     gameSystemId: 'draconis',
     description: null,
-    mjId: 'mj1',
+    ownerId: 'mj1',
     createdAt: new Date(),
     nextSessionDate: null,
     nextSessionSlot: null,
@@ -198,7 +198,7 @@ describe('PartiesService', () => {
     );
   });
 
-  it('create attache le mjId', async () => {
+  it('create attache le ownerId', async () => {
     prisma.partie.create.mockResolvedValue(partie);
     await service.create('mj1', {
       name: 'La Nuit',
@@ -207,7 +207,7 @@ describe('PartiesService', () => {
     });
     expect(prisma.partie.create).toHaveBeenCalledWith({
       data: objectLike({
-        mjId: 'mj1',
+        ownerId: 'mj1',
         name: 'La Nuit',
         description: null,
       }),
@@ -227,7 +227,7 @@ describe('PartiesService', () => {
       kind: partie.kind,
       gameSystemId: partie.gameSystemId,
       description: partie.description,
-      mjId: partie.mjId,
+      ownerId: partie.ownerId,
       createdAt: partie.createdAt.toISOString(),
       nextSessionDate: null,
       nextSessionSlot: null,
@@ -326,7 +326,7 @@ describe('PartiesService', () => {
         kind: partie.kind,
         gameSystemId: partie.gameSystemId,
         description: partie.description,
-        mjId: partie.mjId,
+        ownerId: partie.ownerId,
         createdAt: partie.createdAt.toISOString(),
         nextSessionDate: null,
         nextSessionSlot: null,
@@ -353,7 +353,7 @@ describe('PartiesService', () => {
         kind: partie.kind,
         gameSystemId: partie.gameSystemId,
         description: partie.description,
-        mjId: partie.mjId,
+        ownerId: partie.ownerId,
         createdAt: partie.createdAt.toISOString(),
         nextSessionDate: null,
         nextSessionSlot: null,
@@ -487,7 +487,7 @@ describe('PartiesService', () => {
         'kind',
         'gameSystemId',
         'description',
-        'mjId',
+        'ownerId',
         'createdAt',
         'nextSessionDate',
         'nextSessionSlot',
@@ -519,7 +519,7 @@ describe('PartiesService', () => {
         'kind',
         'gameSystemId',
         'description',
-        'mjId',
+        'ownerId',
         'createdAt',
         'nextSessionDate',
         'nextSessionSlot',
@@ -628,7 +628,7 @@ describe('PartiesService', () => {
     });
 
     it('AC4 : joueur non-MJ → ForbiddenException, aucune écriture disque', async () => {
-      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+      prisma.partie.findUnique.mockResolvedValue(partie); // ownerId: 'mj1'
       await expect(service.setCoverImage('p1', 'autre', makeCoverFile())).rejects.toBeInstanceOf(
         ForbiddenException,
       );
@@ -770,7 +770,7 @@ describe('PartiesService', () => {
     });
 
     it('getCoverFile : non-membre et non-MJ → ForbiddenException (getViewable)', async () => {
-      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+      prisma.partie.findUnique.mockResolvedValue(partie); // ownerId: 'mj1'
       prisma.membership.findUnique.mockResolvedValue(null);
       await expect(service.getCoverFile('p1', 'etranger', 'large')).rejects.toBeInstanceOf(
         ForbiddenException,
@@ -799,7 +799,7 @@ describe('PartiesService', () => {
     await expect(service.getViewable('p1', 'u')).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('findOneDto : retourne mjPseudo/mjDisplayName et role: mj pour le MJ (getViewable inchangée)', async () => {
+  it('findOneDto : retourne ownerPseudo/ownerDisplayName et role: mj pour le MJ (getViewable inchangée)', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.user.findUnique.mockResolvedValue({
       pseudo: 'mj-pseudo',
@@ -812,14 +812,14 @@ describe('PartiesService', () => {
       kind: partie.kind,
       gameSystemId: partie.gameSystemId,
       description: partie.description,
-      mjId: partie.mjId,
+      ownerId: partie.ownerId,
       createdAt: partie.createdAt.toISOString(),
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'mj',
       status: 'A_VENIR',
-      mjPseudo: 'mj-pseudo',
-      mjDisplayName: 'MJ Nom',
+      ownerPseudo: 'mj-pseudo',
+      ownerDisplayName: 'MJ Nom',
       isFavorite: false,
       coverImageVersion: null,
     });
@@ -830,7 +830,7 @@ describe('PartiesService', () => {
     expect(prisma.membership.findUnique).not.toHaveBeenCalled();
   });
 
-  it('findOneDto : retourne mjPseudo/mjDisplayName et role: player pour un joueur consultant la même partie', async () => {
+  it('findOneDto : retourne ownerPseudo/ownerDisplayName et role: player pour un joueur consultant la même partie', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.membership.findUnique.mockResolvedValue({
       userId: 'u',
@@ -847,14 +847,14 @@ describe('PartiesService', () => {
       kind: partie.kind,
       gameSystemId: partie.gameSystemId,
       description: partie.description,
-      mjId: partie.mjId,
+      ownerId: partie.ownerId,
       createdAt: partie.createdAt.toISOString(),
       nextSessionDate: null,
       nextSessionSlot: null,
       role: 'player',
       status: 'A_VENIR',
-      mjPseudo: 'mj-pseudo',
-      mjDisplayName: 'MJ Nom',
+      ownerPseudo: 'mj-pseudo',
+      ownerDisplayName: 'MJ Nom',
       isFavorite: false,
       coverImageVersion: null,
     });
@@ -888,7 +888,7 @@ describe('PartiesService', () => {
     await expect(service.findOneDto('p1', 'u')).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it("findOneDto : renvoie la partie projetée (avec role), sans mjPseudo/mjDisplayName, si l'utilisateur MJ est introuvable (revue de code, pas de 500)", async () => {
+  it("findOneDto : renvoie la partie projetée (avec role), sans ownerPseudo/ownerDisplayName, si l'utilisateur MJ est introuvable (revue de code, pas de 500)", async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.user.findUnique.mockResolvedValue(null);
     const dto = await service.findOneDto('p1', 'mj1');
@@ -898,7 +898,7 @@ describe('PartiesService', () => {
       kind: partie.kind,
       gameSystemId: partie.gameSystemId,
       description: partie.description,
-      mjId: partie.mjId,
+      ownerId: partie.ownerId,
       createdAt: partie.createdAt.toISOString(),
       nextSessionDate: null,
       nextSessionSlot: null,
@@ -907,7 +907,7 @@ describe('PartiesService', () => {
       isFavorite: false,
       coverImageVersion: null,
     });
-    expect((dto as unknown as Record<string, unknown>).mjPseudo).toBeUndefined();
+    expect((dto as unknown as Record<string, unknown>).ownerPseudo).toBeUndefined();
   });
 
   it('removeMember : MJ uniquement, puis supprime le membership', async () => {
@@ -980,7 +980,7 @@ describe('PartiesService', () => {
       kind: partie.kind,
       gameSystemId: partie.gameSystemId,
       description: partie.description,
-      mjId: partie.mjId,
+      ownerId: partie.ownerId,
       createdAt: partie.createdAt.toISOString(),
       nextSessionDate: null,
       nextSessionSlot: null,
@@ -1166,7 +1166,7 @@ describe('PartiesService', () => {
 
   describe('listMembers', () => {
     it("renvoie displayName pour chaque membre, et l'e-mail uniquement si le demandeur est le MJ", async () => {
-      prisma.partie.findUnique.mockResolvedValue(partie); // mjId = 'mj1'
+      prisma.partie.findUnique.mockResolvedValue(partie); // ownerId = 'mj1'
       prisma.membership.findMany.mockResolvedValue([
         {
           joinedAt: new Date('2026-01-01'),
@@ -1220,7 +1220,7 @@ describe('PartiesService', () => {
     ];
 
     beforeEach(() => {
-      prisma.partie.findUnique.mockResolvedValue(partie); // mjId = 'mj1'
+      prisma.partie.findUnique.mockResolvedValue(partie); // ownerId = 'mj1'
       prisma.membership.findMany.mockResolvedValue(members);
       avail.getActiveDeclarationsWithSeances.mockResolvedValue(
         new Map([
@@ -1482,7 +1482,7 @@ describe('PartiesService', () => {
       kind: 'ONE_SHOT',
       gameSystemId: 'draconis',
       description: null,
-      mjId: 'mjA',
+      ownerId: 'mjA',
       createdAt: new Date(),
       nextSessionDate: null,
       nextSessionSlot: null,
@@ -1496,7 +1496,7 @@ describe('PartiesService', () => {
             {
               id: 'B',
               kind: 'ONE_SHOT',
-              mjId: 'mjB',
+              ownerId: 'mjB',
               memberships: [{ userId: 'u1' }],
             },
           ]),
@@ -2121,7 +2121,7 @@ describe('PartiesService', () => {
 
   describe('setVisibilityLocks() — Story 31.6, cadenas de visibilité', () => {
     beforeEach(() => {
-      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+      prisma.partie.findUnique.mockResolvedValue(partie); // ownerId: 'mj1'
     });
 
     it('MJ seul : joueur non-MJ → ForbiddenException, aucune écriture', async () => {
@@ -2180,7 +2180,7 @@ describe('PartiesService', () => {
 
   describe('getVisibilityLocks() — Story 31.7, lecture symétrique au PUT', () => {
     beforeEach(() => {
-      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+      prisma.partie.findUnique.mockResolvedValue(partie); // ownerId: 'mj1'
     });
 
     it('MJ seul : joueur non-MJ → ForbiddenException, aucune lecture de verrou', async () => {

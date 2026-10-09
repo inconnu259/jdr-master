@@ -29,7 +29,7 @@ model User {
   charactersSort      String  @default("partie") // AD-1 — vocabulaire disjoint de celui des parties (Story 29.9)
   calendarLayersSetAt DateTime? // AD-16 — null = jamais réglé, le jeu par défaut s'applique (Story 30.4)
 
-  mjOfParties               Partie[]                   @relation("PartieMJ")
+  ownedParties              Partie[]                   @relation("PartieOwner")
   memberships               Membership[]
   invitesSent               Invitation[]               @relation("InvitationInviter")
   invitesRecv               Invitation[]               @relation("InvitationInvitee")
@@ -56,15 +56,17 @@ enum PartieKind {
   CAMPAGNE_EPISODIQUE
 }
 
-/// Une partie (one-shot ou campagne). Le MJ = le créateur (`mjId`) ; les joueurs sont des `Membership`.
+/// Une partie (one-shot ou campagne). Le propriétaire = le créateur (`ownerId`, le MJ pour la famille
+/// `jdr`) ; les joueurs sont des `Membership`. `ownerId` est nullable (AD-5) : la suppression du
+/// compte propriétaire laisse la partie en place (`SetNull`), sans propriétaire.
 model Partie {
   id           String     @id @default(uuid())
   name         String
   kind         PartieKind
   gameSystemId String
   description  String?
-  mjId         String
-  mj           User       @relation("PartieMJ", fields: [mjId], references: [id], onDelete: Cascade)
+  ownerId      String?
+  owner        User?      @relation("PartieOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   createdAt    DateTime   @default(now())
 
   nextSessionDate DateTime? // Date confirmée de la prochaine séance (mise à jour par Epic 3)
@@ -148,7 +150,7 @@ enum InvitationStatus {
   REVOKED
 }
 
-/// Un JOUEUR dans une partie (le MJ n'est pas un membership, il est `Partie.mjId`).
+/// Un JOUEUR dans une partie (le MJ n'est pas un membership, il est `Partie.ownerId`).
 model Membership {
   id       String   @id @default(uuid())
   userId   String

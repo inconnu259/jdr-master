@@ -841,9 +841,9 @@ export class ScenariosService {
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
     // Deferred-work (SSE, calendrier personnel) : une inscription change inscritsCount pour tous
     // les autres membres — GET /me/calendar doit le savoir. `userId` ici est le joueur agissant,
-    // pas le MJ : notifyPartieSignalsChanged() veut l'id du MJ (partie.mjId), déjà résolu par
+    // pas le MJ : notifyPartieSignalsChanged() veut l'id du MJ (partie.ownerId), déjà résolu par
     // getViewable() ci-dessus.
-    await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.mjId);
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.ownerId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -876,7 +876,7 @@ export class ScenariosService {
     });
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
     // Deferred-work (SSE, calendrier personnel) : même raison qu'inscrire() ci-dessus.
-    await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.mjId);
+    await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.ownerId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 

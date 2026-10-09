@@ -44,7 +44,7 @@ describe('RosterRail', () => {
     const fixture = TestBed.createComponent(RosterRail);
     fixture.componentRef.setInput('members', MEMBERS);
     fixture.componentRef.setInput('characters', CHARACTERS);
-    fixture.componentRef.setInput('mjId', 'mj1');
+    fixture.componentRef.setInput('ownerId', 'mj1');
     fixture.componentRef.setInput('currentUserId', currentUserId);
     fixture.componentRef.setInput('canCreateCharacter', canCreateCharacter);
     fixture.componentRef.setInput('hasFreeSlot', hasFreeSlot);

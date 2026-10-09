@@ -133,9 +133,9 @@ function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
     kind: 'ONE_SHOT',
     gameSystemId: 'draconis',
     description: null,
-    mjId: MJ_ID,
-    mjPseudo: 'mj-pseudo',
-    mjDisplayName: 'MJ Nom',
+    ownerId: MJ_ID,
+    ownerPseudo: 'mj-pseudo',
+    ownerDisplayName: 'MJ Nom',
     createdAt: new Date().toISOString(),
     nextSessionDate: null,
     nextSessionSlot: null,
@@ -364,7 +364,7 @@ describe('PartieDetail — widget de planification', () => {
   });
 
   it('affiche le bouton cta.find_date pour le MJ mais pas pour un joueur', async () => {
-    const partie = makePartie({ mjId: MJ_ID });
+    const partie = makePartie({ ownerId: MJ_ID });
 
     // MJ voit le bouton
     const { el: elMj } = await createFixture(partie, MJ_ID);
@@ -480,7 +480,7 @@ describe('PartieDetail — statut du vote', () => {
   });
 
   it('le lien joueur utilise poll.vote_pending quand un poll est actif', async () => {
-    const partie = makePartie({ mjId: MJ_ID });
+    const partie = makePartie({ ownerId: MJ_ID });
     const { el } = await createFixture(partie, PLAYER_ID, { members, poll: makePoll(['u1']) });
     const link = el.querySelector('.scheduling-widget a[mat-stroked-button]');
     expect(link).toBeTruthy();
@@ -713,7 +713,7 @@ describe('PartieDetail — onglet « Fiches » générique (spec fiches-personna
       level: 4,
       sheetData: { narrative: { name: 'Iris' } },
     });
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
 
     const { fixture, el } = await createFixture(partie, PLAYER_ID, {
       desktop: true,
@@ -739,7 +739,7 @@ describe('PartieDetail — onglet « Fiches » générique (spec fiches-personna
   });
 
   it('joueur sans personnage personnel, personne d’autre n’en a → message + CTA seulement, aucune carte (I/O Matrix, cas 3)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
 
     const { fixture, el } = await createFixture(partie, PLAYER_ID, {
       desktop: true,
@@ -1036,7 +1036,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   afterEach(() => TestBed.resetTestingModule());
 
   it('desktop, joueur sans personnage, système avec module, partie ouverte → atterrit sur "Ma fiche", bouton visible immédiatement (AC1)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, {
       desktop: true,
       noopAnimations: true,
@@ -1050,7 +1050,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   });
 
   it('mobile, même joueur → atterrissage identique aux deux gabarits (AC2)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, {
       desktop: false,
       noopAnimations: true,
@@ -1062,7 +1062,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   });
 
   it('le bouton de création est un vrai lien <a> — atteignable au clavier (AC3)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const { el } = await createFixture(partie, PLAYER_ID, { desktop: true, noopAnimations: true });
 
     const cta = el.querySelector<HTMLAnchorElement>('.party-sheets-tab a[mat-flat-button]');
@@ -1071,7 +1071,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   });
 
   it('joueur ayant déjà un personnage sur cette partie → onglet par défaut "Détails", pas de bouton de création dans "Ma fiche"', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const character = makeCharacterDto({ userId: PLAYER_ID, partieId: 'party-1' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, {
       desktop: true,
@@ -1094,7 +1094,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   });
 
   it('système sans module → onglet par défaut "Détails" ; bouton absent de "Ma fiche" même sans personnage (gating corrigé)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'draconis', status: 'EN_COURS' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, {
       desktop: true,
       noopAnimations: true,
@@ -1116,7 +1116,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   });
 
   it('partie terminée → onglet par défaut "Détails" ; bouton absent de "Ma fiche" même sans personnage (gating corrigé)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'TERMINEE' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'TERMINEE' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, {
       desktop: true,
       noopAnimations: true,
@@ -1137,7 +1137,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   });
 
   it('le MJ reste sur "Détails" par défaut, même sur un système avec module et une partie ouverte (inchangé)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const { fixture } = await createFixture(partie, MJ_ID, { desktop: true, noopAnimations: true });
 
     const comp = fixture.componentInstance as unknown as { selectedTabIndex: () => number };
@@ -1145,7 +1145,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   });
 
   it("slot d'initiale du roster desktop (isSelf sans personnage) : aria-label/tooltip thématisé depuis roster.create_slot_label", async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const members: PartieMemberDto[] = [
       {
         userId: MJ_ID,
@@ -1172,7 +1172,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   });
 
   it("système sans module → slot roster de l'utilisateur courant non actionnable (tabindex -1, aria-label générique, pas le libellé de création) (bmad-review, 2026-09-21)", async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'draconis', status: 'EN_COURS' });
     const members: PartieMemberDto[] = [
       {
         userId: MJ_ID,
@@ -1201,7 +1201,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   });
 
   it("échec réseau de listByPartie() → charactersLoaded() devient quand même true, canCreateCharacter()/l'atterrissage se résolvent normalement (bmad-review, 2026-09-21)", async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, {
       desktop: true,
       noopAnimations: true,
@@ -1224,7 +1224,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
     const charactersPromise = new Promise<CharacterDto[]>((resolve) => {
       resolveCharacters = resolve;
     });
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, {
       desktop: true,
       noopAnimations: true,
@@ -1258,7 +1258,7 @@ describe('PartieDetail — canCreateCharacter / atterrissage sur « Ma fiche » 
   });
 
   it("un personnage créé ailleurs et rechargé via le signal temps réel ne fait plus basculer l'onglet hors de « Ma fiche » une fois l'atterrissage stabilisé (bmad-review, 2026-09-21 : gel tabSettled)", async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', status: 'EN_COURS' });
     const changed = signal(0);
     const newCharacter = makeCharacterDto({ id: 'char-x', userId: PLAYER_ID, partieId: partie.id });
     let callCount = 0;
@@ -1622,7 +1622,7 @@ describe('PartieDetail — invitation par e-mail', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('succès : affiche la confirmation et vide le champ', async () => {
-    const { fixture } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
+    const { fixture } = await createFixture(makePartie({ ownerId: MJ_ID }), MJ_ID);
     const parties = TestBed.inject(PartiesService) as unknown as {
       inviteByEmail: ReturnType<typeof vi.fn>;
     };
@@ -1645,7 +1645,7 @@ describe('PartieDetail — invitation par e-mail', () => {
   });
 
   it('échec ({ ok: false }) : affiche un message d’erreur explicite, ne vide pas le champ', async () => {
-    const { fixture } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
+    const { fixture } = await createFixture(makePartie({ ownerId: MJ_ID }), MJ_ID);
     const parties = TestBed.inject(PartiesService) as unknown as {
       inviteByEmail: ReturnType<typeof vi.fn>;
     };
@@ -1665,7 +1665,7 @@ describe('PartieDetail — invitation par e-mail', () => {
   });
 
   it('ignore un second appel concurrent tant que le premier est en cours (anti double-soumission)', async () => {
-    const { fixture } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
+    const { fixture } = await createFixture(makePartie({ ownerId: MJ_ID }), MJ_ID);
     const parties = TestBed.inject(PartiesService) as unknown as {
       inviteByEmail: ReturnType<typeof vi.fn>;
     };
@@ -1698,7 +1698,7 @@ describe('PartieDetail — distribution d’XP', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('bouton "Distribuer de l’XP" visible pour le MJ uniquement', async () => {
-    const partie = makePartie({ mjId: MJ_ID });
+    const partie = makePartie({ ownerId: MJ_ID });
 
     const { el: elMj } = await createFixture(partie, MJ_ID);
     const buttons = Array.from(elMj.querySelectorAll('button')).filter((b) =>
@@ -1715,7 +1715,7 @@ describe('PartieDetail — distribution d’XP', () => {
   });
 
   it('section historique chargée seulement pour le MJ', async () => {
-    const partie = makePartie({ mjId: MJ_ID });
+    const partie = makePartie({ ownerId: MJ_ID });
     await createFixture(partie, MJ_ID);
     const parties = TestBed.inject(PartiesService) as unknown as {
       listXpDistributions: ReturnType<typeof vi.fn>;
@@ -1731,7 +1731,7 @@ describe('PartieDetail — distribution d’XP', () => {
   });
 
   it('après distributed(), characters()/xpDistributions() sont rechargés', async () => {
-    const partie = makePartie({ mjId: MJ_ID });
+    const partie = makePartie({ ownerId: MJ_ID });
     const { fixture } = await createFixture(partie, MJ_ID, {
       characters: [makeCharacterDto({ id: 'c1' })],
     });
@@ -1758,7 +1758,7 @@ describe('PartieDetail — publication d’annonce (Story 9.1)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('bouton de publication d’annonce visible pour le MJ, absent pour un joueur (AC6)', async () => {
-    const partie = makePartie({ mjId: MJ_ID });
+    const partie = makePartie({ ownerId: MJ_ID });
 
     const { el: elMj } = await createFixture(partie, MJ_ID);
     expect(elMj.querySelector('.announcement-section')).toBeTruthy();
@@ -1769,7 +1769,7 @@ describe('PartieDetail — publication d’annonce (Story 9.1)', () => {
   });
 
   it('le panel reste ouvert après publication (revue de code : le MJ voit la confirmation avant de fermer lui-même)', async () => {
-    const partie = makePartie({ mjId: MJ_ID });
+    const partie = makePartie({ ownerId: MJ_ID });
     const { fixture } = await createFixture(partie, MJ_ID);
 
     const component = fixture.componentInstance as unknown as {
@@ -1786,7 +1786,7 @@ describe('PartieDetail — consultation des annonces « toute la campagne » (St
   afterEach(() => TestBed.resetTestingModule());
 
   it('AC1 : affiche les annonces scenarioId: null, triées (ordre déjà renvoyé par le backend)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const announcements = [
       makeAnnouncementDto({ id: 'ann-recent', text: 'La plus récente' }),
       makeAnnouncementDto({ id: 'ann-ancien', text: 'La plus ancienne' }),
@@ -1801,7 +1801,7 @@ describe('PartieDetail — consultation des annonces « toute la campagne » (St
   });
 
   it("une annonce scopée à un scénario n'apparaît jamais dans ce flux (filtrée côté client)", async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const announcements = [
       makeAnnouncementDto({ id: 'ann-campagne', text: 'Annonce campagne', scenarioId: null }),
       makeAnnouncementDto({ id: 'ann-scenario', text: 'Annonce scénario', scenarioId: 's1' }),
@@ -1815,14 +1815,14 @@ describe('PartieDetail — consultation des annonces « toute la campagne » (St
   });
 
   it('libellé « Ce one-shot » pour une Partie ONE_SHOT, « Toute la campagne » sinon', async () => {
-    const oneShot = makePartie({ mjId: MJ_ID, kind: 'ONE_SHOT' });
+    const oneShot = makePartie({ ownerId: MJ_ID, kind: 'ONE_SHOT' });
     const { el: elOneShot } = await createFixture(oneShot, MJ_ID, {
       announcements: [makeAnnouncementDto()],
     });
     expect(elOneShot.querySelector('.announcements-feed')!.textContent).toContain('Cette quête');
     TestBed.resetTestingModule();
 
-    const campagne = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const campagne = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const { el: elCampagne } = await createFixture(campagne, MJ_ID, {
       announcements: [makeAnnouncementDto()],
     });
@@ -1832,7 +1832,7 @@ describe('PartieDetail — consultation des annonces « toute la campagne » (St
   });
 
   it('visible pour un joueur, pas seulement le MJ', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const { el } = await createFixture(partie, PLAYER_ID, {
       announcements: [makeAnnouncementDto({ text: 'Visible du joueur' })],
     });
@@ -1841,7 +1841,7 @@ describe('PartieDetail — consultation des annonces « toute la campagne » (St
   });
 
   it('publication réussie recharge la liste (announcementsSvc.listAll rappelé)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const { fixture } = await createFixture(partie, MJ_ID);
     const announcementsSvc = TestBed.inject(AnnouncementsService) as unknown as {
       listAll: ReturnType<typeof vi.fn>;
@@ -1861,7 +1861,7 @@ describe('PartieDetail — marquage « vue » des annonces de campagne sur clic 
   afterEach(() => TestBed.resetTestingModule());
 
   it("une annonce non vue affichée n'appelle jamais markRead() tant qu'elle n'est pas cliquée", async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const announcements = [makeAnnouncementDto({ id: 'ann-non-vue', text: 'Non vue' })];
     const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
 
@@ -1875,7 +1875,7 @@ describe('PartieDetail — marquage « vue » des annonces de campagne sur clic 
   });
 
   it('un clic sur une annonce non vue déclenche markRead() avec le bon id', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const announcements = [makeAnnouncementDto({ id: 'ann-non-vue', text: 'Non vue' })];
     const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
 
@@ -1893,7 +1893,7 @@ describe('PartieDetail — marquage « vue » des annonces de campagne sur clic 
   });
 
   it('un clic sur une annonce déjà vue (absente des non-vues) ne déclenche aucun appel', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const announcements = [makeAnnouncementDto({ id: 'ann-deja-vue', text: 'Déjà vue' })];
     const markAnnouncementRead = vi.fn().mockResolvedValue(undefined);
 
@@ -1918,7 +1918,11 @@ describe('PartieDetail — arrivée depuis le bandeau du Shell (Story 29.13, ré
     Element.prototype.scrollIntoView = vi.fn();
     // gameSystemId: 'ryuutama' (avec module) — sans forçage, ce joueur sans personnage atterrit
     // sur "Ma fiche" (index 1, Story 29.15) ; le test vérifie que le forçage du bandeau l'emporte.
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE', gameSystemId: 'ryuutama' });
+    const partie = makePartie({
+      ownerId: MJ_ID,
+      kind: 'CAMPAGNE_LINEAIRE',
+      gameSystemId: 'ryuutama',
+    });
     const announcements = [makeAnnouncementDto({ id: 'ann-cible', scenarioId: null })];
 
     const { fixture } = await createFixture(partie, 'player-1', {
@@ -1936,7 +1940,7 @@ describe('PartieDetail — arrivée depuis le bandeau du Shell (Story 29.13, ré
 
   it("fait défiler jusqu'à l'AnnonceCard visée et la met en évidence", async () => {
     Element.prototype.scrollIntoView = vi.fn();
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const announcements = [makeAnnouncementDto({ id: 'ann-cible', scenarioId: null })];
 
     const { fixture, el } = await createFixture(partie, MJ_ID, {
@@ -1960,7 +1964,7 @@ describe('PartieDetail — arrivée depuis le bandeau du Shell (Story 29.13, ré
   it("n'interfère pas quand aucun announcementId n'est présent dans l'URL", async () => {
     const scrollSpy = vi.fn();
     Element.prototype.scrollIntoView = scrollSpy;
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
 
     await createFixture(partie, MJ_ID, { noopAnimations: true });
 
@@ -1972,7 +1976,7 @@ describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('Partie ONE_SHOT + MJ → onglet "Scénario" (singulier), app-scenario-one-shot-tab, jamais app-scenario-list', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'ONE_SHOT' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'ONE_SHOT' });
     const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
 
     const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
@@ -1990,7 +1994,7 @@ describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
   });
 
   it('Partie CAMPAGNE_LINEAIRE + MJ → onglet "Scénarios" (pluriel), app-scenario-list, jamais app-scenario-one-shot-tab', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
 
     const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
@@ -2008,7 +2012,7 @@ describe('PartieDetail — onglet Scénario(s) (Story 7.4)', () => {
   });
 
   it('joueur (non-MJ) → aucun des deux onglets Scénario(s), quel que soit le kind', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const { el } = await createFixture(partie, PLAYER_ID);
     expect(el.querySelector('app-scenario-list')).toBeNull();
     expect(el.querySelector('app-scenario-one-shot-tab')).toBeNull();
@@ -2019,7 +2023,7 @@ describe('PartieDetail — onglet Chronologie (Story 7.5)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('Partie CAMPAGNE_LINEAIRE + MJ → onglet "Chronologie" présent, app-scenario-timeline rendu au clic', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
 
     const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
@@ -2034,7 +2038,7 @@ describe('PartieDetail — onglet Chronologie (Story 7.5)', () => {
   });
 
   it('Partie CAMPAGNE_LINEAIRE + joueur (non-MJ) → onglet "Chronologie" présent (visible à tout membre)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const { el } = await createFixture(partie, PLAYER_ID, { noopAnimations: true });
 
     const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
@@ -2043,7 +2047,7 @@ describe('PartieDetail — onglet Chronologie (Story 7.5)', () => {
   });
 
   it('Partie ONE_SHOT → onglet "Chronologie" absent (un ONE_SHOT n’a pas de timeline)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'ONE_SHOT' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'ONE_SHOT' });
     const { el } = await createFixture(partie, MJ_ID);
     const tabLabels = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
       t.textContent?.trim(),
@@ -2056,7 +2060,7 @@ describe('PartieDetail — onglet Homme Dragon (Story 10.1)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('MJ + Partie Ryuutama → onglet "Homme Dragon" présent, panneau d\'aventure rendu au clic (Story 33.8)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, MJ_ID, { noopAnimations: true });
 
     const tabLabels = el.querySelectorAll<HTMLElement>('div[role="tab"]');
@@ -2073,7 +2077,7 @@ describe('PartieDetail — onglet Homme Dragon (Story 10.1)', () => {
   });
 
   it('joueur (non-MJ) → onglet "Homme Dragon" absent, même sur une Partie Ryuutama (AC3)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { el } = await createFixture(partie, PLAYER_ID);
     const tabLabels = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
       t.textContent?.trim(),
@@ -2082,7 +2086,7 @@ describe('PartieDetail — onglet Homme Dragon (Story 10.1)', () => {
   });
 
   it('Partie non-Ryuutama → onglet "Homme Dragon" absent, même pour le MJ (AD-1/AD-5)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'draconis' });
     const { el } = await createFixture(partie, MJ_ID);
     const tabLabels = Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]')).map((t) =>
       t.textContent?.trim(),
@@ -2112,20 +2116,20 @@ describe('PartieDetail — fiches de référence (Story 12.1)', () => {
   }
 
   it('Partie Ryuutama → section "Fiches de référence" présente, visible à tout membre (pas seulement au MJ)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, { noopAnimations: true });
     await goToDetailsTab(fixture, el);
     expect(el.querySelector('.reference-sheets')).toBeTruthy();
   });
 
   it('Partie non-Ryuutama → section "Fiches de référence" absente', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'draconis' });
     const { el } = await createFixture(partie, PLAYER_ID);
     expect(el.querySelector('.reference-sheets')).toBeNull();
   });
 
   it('clic sur "Journal" → appelle getGameSystemAsset(partieId, gameSystemId, "journal") et déclenche un téléchargement', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, { noopAnimations: true });
     await goToDetailsTab(fixture, el);
     const characterSvc = TestBed.inject(CharacterService) as any;
@@ -2143,7 +2147,7 @@ describe('PartieDetail — fiches de référence (Story 12.1)', () => {
   });
 
   it('clic sur "Carte" → appelle getGameSystemAsset(partieId, gameSystemId, "carte")', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, { noopAnimations: true });
     await goToDetailsTab(fixture, el);
     const characterSvc = TestBed.inject(CharacterService) as any;
@@ -2159,7 +2163,7 @@ describe('PartieDetail — fiches de référence (Story 12.1)', () => {
   });
 
   it("échec du téléchargement → message d'erreur affiché, pas de plantage", async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, { noopAnimations: true });
     await goToDetailsTab(fixture, el);
     const characterSvc = TestBed.inject(CharacterService) as any;
@@ -2175,7 +2179,7 @@ describe('PartieDetail — fiches de référence (Story 12.1)', () => {
   });
 
   it('les 2 boutons sont désactivés pendant un téléchargement en cours (revue de code : garde anti-double-clic)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, PLAYER_ID, { noopAnimations: true });
     await goToDetailsTab(fixture, el);
     const characterSvc = TestBed.inject(CharacterService) as any;
@@ -2209,7 +2213,7 @@ describe('PartieDetail — fiches de préparation MJ-only (Story 12.2)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('MJ + Partie Ryuutama → section "Fiches de préparation" présente avec les 8 liens', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { el } = await createFixture(partie, MJ_ID);
     const section = el.querySelector('.prep-sheets');
     expect(section).toBeTruthy();
@@ -2217,13 +2221,13 @@ describe('PartieDetail — fiches de préparation MJ-only (Story 12.2)', () => {
   });
 
   it('joueur (non-MJ) → section "Fiches de préparation" absente, même sur une Partie Ryuutama (AC2)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { el } = await createFixture(partie, PLAYER_ID);
     expect(el.querySelector('.prep-sheets')).toBeNull();
   });
 
   it('MJ + Partie non-Ryuutama → section "Fiches de préparation" absente', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'draconis' });
     const { el } = await createFixture(partie, MJ_ID);
     expect(el.querySelector('.prep-sheets')).toBeNull();
   });
@@ -2240,7 +2244,7 @@ describe('PartieDetail — fiches de préparation MJ-only (Story 12.2)', () => {
   ])(
     'clic sur le lien #%s (index %i) → appelle getGameSystemAsset(partieId, "ryuutama", "%s")',
     async (key, index) => {
-      const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+      const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
       const { fixture, el } = await createFixture(partie, MJ_ID);
       const characterSvc = TestBed.inject(CharacterService) as any;
       vi.spyOn(HTMLAnchorElement.prototype, 'click').mockReturnValue(undefined);
@@ -2260,7 +2264,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
   afterEach(() => TestBed.resetTestingModule());
 
   it('la Partie éditée ailleurs (ex. gameSystemId) apparaît sans F5 quand un événement temps réel est reçu (AC1)', async () => {
-    const initial = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const initial = makePartie({ ownerId: MJ_ID, gameSystemId: 'draconis' });
     const updated = { ...initial, gameSystemId: 'ryuutama' };
     const changed = signal(0);
     const partiesSvc = {
@@ -2374,7 +2378,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
   });
 
   it('AC2 : le patch visibilitychange est retiré — un dispatch manuel ne déclenche plus aucun rechargement', async () => {
-    const initial = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const initial = makePartie({ ownerId: MJ_ID, gameSystemId: 'draconis' });
     const { fixture, el } = await createFixture(initial, MJ_ID);
     const partiesSvcSpy = TestBed.inject(PartiesService) as unknown as {
       get: ReturnType<typeof vi.fn>;
@@ -2395,7 +2399,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
   });
 
   it('bug fix : un CharacterService.changed() (personnage créé par un joueur) recharge le roster sans reload', async () => {
-    const initial = makePartie({ mjId: MJ_ID });
+    const initial = makePartie({ ownerId: MJ_ID });
     const { fixture } = await createFixture(initial, MJ_ID);
     const characterSvc = TestBed.inject(CharacterService) as unknown as {
       listByPartie: ReturnType<typeof vi.fn>;
@@ -2416,7 +2420,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
   });
 
   it('bug fix (revue de code) : un échec réseau transitoire du rechargement de roster ne vide pas la liste affichée', async () => {
-    const initial = makePartie({ mjId: MJ_ID });
+    const initial = makePartie({ ownerId: MJ_ID });
     const { fixture } = await createFixture(initial, MJ_ID);
     const characterSvc = TestBed.inject(CharacterService) as unknown as {
       listByPartie: ReturnType<typeof vi.fn>;
@@ -2447,7 +2451,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
   });
 
   it('charge les rôles de groupe assignés via CharacterRolesService.listForPartie (Story 27.3, AC1)', async () => {
-    const partie = makePartie({ mjId: MJ_ID });
+    const partie = makePartie({ ownerId: MJ_ID });
     await createFixture(partie, MJ_ID);
 
     const characterRolesSvc = TestBed.inject(CharacterRolesService) as unknown as {
@@ -2457,7 +2461,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
   });
 
   it('un CharacterRolesService.changed() (rôle assigné/retiré par le MJ) recharge characterRoles (Story 27.3, AC3)', async () => {
-    const initial = makePartie({ mjId: MJ_ID });
+    const initial = makePartie({ ownerId: MJ_ID });
     const { fixture } = await createFixture(initial, MJ_ID);
     const characterRolesSvc = TestBed.inject(CharacterRolesService) as unknown as {
       listForPartie: ReturnType<typeof vi.fn>;
@@ -2486,7 +2490,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
   });
 
   it('garde firstRun : un CharacterService.changed() déjà non-nul au montage ne déclenche PAS de refetch redondant', async () => {
-    const initial = makePartie({ mjId: MJ_ID });
+    const initial = makePartie({ ownerId: MJ_ID });
     await TestBed.configureTestingModule({
       imports: [PartieDetail],
       providers: [
@@ -2546,7 +2550,7 @@ describe('PartieDetail — rechargement sur signal temps réel (Story 18.3)', ()
   });
 
   it('bug fix : un PartiesService.changed() (invitation acceptée par un joueur) recharge la liste des membres sans reload', async () => {
-    const initial = makePartie({ mjId: MJ_ID });
+    const initial = makePartie({ ownerId: MJ_ID });
     const { fixture } = await createFixture(initial, MJ_ID);
     const partiesSvc = TestBed.inject(PartiesService) as unknown as {
       members: ReturnType<typeof vi.fn>;
@@ -2625,7 +2629,7 @@ describe("PartieDetail — alerte d'homonymie", () => {
   });
 
   it('le displayName du joueur courant identique à celui du MJ (absent de members()) → avertissement visible (AC1)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, mjDisplayName: 'Même Nom' });
+    const partie = makePartie({ ownerId: MJ_ID, ownerDisplayName: 'Même Nom' });
     const members: PartieMemberDto[] = [
       {
         userId: PLAYER_ID,
@@ -2757,7 +2761,7 @@ describe('PartieDetail — pseudo en complément (gestion des membres)', () => {
   });
 
   it("Revue de code (2026-08-06) : le badge « MJ » est toujours affiché sur l'auteur d'une annonce campagne", async () => {
-    const partie = makePartie({ mjId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
+    const partie = makePartie({ ownerId: MJ_ID, kind: 'CAMPAGNE_LINEAIRE' });
     const { el } = await createFixture(partie, PLAYER_ID, {
       announcements: [makeAnnouncementDto({ scenarioId: null, authorDisplayName: 'MJ Nom' })],
     });
@@ -2773,7 +2777,7 @@ describe('PartieDetail — bandeau contextuel (Story 29.4)', () => {
 
   it('le sous-titre porte le système de jeu et le type de partie (correction post-test)', async () => {
     const partie = makePartie({
-      mjId: MJ_ID,
+      ownerId: MJ_ID,
       name: 'Les Cendres de Kavaan',
       gameSystemId: 'draconis',
       kind: 'ONE_SHOT',
@@ -2787,7 +2791,7 @@ describe('PartieDetail — bandeau contextuel (Story 29.4)', () => {
 
   it('le sous-titre est identique pour le MJ et pour un joueur (plus de rôle dans le bandeau)', async () => {
     const partie = makePartie({
-      mjId: MJ_ID,
+      ownerId: MJ_ID,
       name: 'Les Cendres de Kavaan',
       gameSystemId: 'draconis',
       kind: 'ONE_SHOT',
@@ -2806,7 +2810,7 @@ describe('PartieDetail — clôture explicite (Story 29.6)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('le MJ voit le bouton "Clôturer" quand status !== TERMINEE, jamais "Rouvrir"', async () => {
-    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, status: 'EN_COURS' });
     const { el } = await createFixture(partie, MJ_ID);
     const actions = el.querySelector('mat-card-actions');
     expect(actions!.textContent).toContain('Clore le grimoire');
@@ -2814,7 +2818,7 @@ describe('PartieDetail — clôture explicite (Story 29.6)', () => {
   });
 
   it('le MJ voit le bouton "Rouvrir" quand status === TERMINEE, jamais "Clôturer"', async () => {
-    const partie = makePartie({ mjId: MJ_ID, status: 'TERMINEE' });
+    const partie = makePartie({ ownerId: MJ_ID, status: 'TERMINEE' });
     const { el } = await createFixture(partie, MJ_ID);
     const actions = el.querySelector('mat-card-actions');
     expect(actions!.textContent).toContain('Rouvrir le grimoire');
@@ -2822,7 +2826,7 @@ describe('PartieDetail — clôture explicite (Story 29.6)', () => {
   });
 
   it('un joueur ne voit ni le bouton "Clôturer" ni "Rouvrir" (actions MJ-only)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, status: 'EN_COURS' });
     const { el } = await createFixture(partie, PLAYER_ID);
     const actions = el.querySelector('mat-card-actions');
     expect(actions?.textContent ?? '').not.toContain('Clore le grimoire');
@@ -2830,7 +2834,7 @@ describe('PartieDetail — clôture explicite (Story 29.6)', () => {
   });
 
   it('clic sur "Clôturer" appelle PartiesService.close et met à jour partie() avec la réponse', async () => {
-    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, status: 'EN_COURS' });
     const { fixture, el } = await createFixture(partie, MJ_ID);
     const parties = TestBed.inject(PartiesService) as unknown as {
       close: ReturnType<typeof vi.fn>;
@@ -2852,7 +2856,7 @@ describe('PartieDetail — clôture explicite (Story 29.6)', () => {
   });
 
   it('clic sur "Rouvrir" appelle PartiesService.reopen et met à jour partie() avec la réponse', async () => {
-    const partie = makePartie({ mjId: MJ_ID, status: 'TERMINEE' });
+    const partie = makePartie({ ownerId: MJ_ID, status: 'TERMINEE' });
     const { fixture, el } = await createFixture(partie, MJ_ID);
     const parties = TestBed.inject(PartiesService) as unknown as {
       reopen: ReturnType<typeof vi.fn>;
@@ -2874,13 +2878,13 @@ describe('PartieDetail — clôture explicite (Story 29.6)', () => {
   });
 
   it('le bandeau "partie terminée" est visible pour un joueur (pas seulement le MJ) quand status === TERMINEE', async () => {
-    const partie = makePartie({ mjId: MJ_ID, status: 'TERMINEE' });
+    const partie = makePartie({ ownerId: MJ_ID, status: 'TERMINEE' });
     const { el } = await createFixture(partie, PLAYER_ID);
     expect(el.querySelector('.closed-banner')).toBeTruthy();
   });
 
   it('le bandeau "partie terminée" est absent quand status !== TERMINEE', async () => {
-    const partie = makePartie({ mjId: MJ_ID, status: 'EN_COURS' });
+    const partie = makePartie({ ownerId: MJ_ID, status: 'EN_COURS' });
     const { el } = await createFixture(partie, MJ_ID);
     expect(el.querySelector('.closed-banner')).toBeFalsy();
   });
@@ -2897,7 +2901,7 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
 
   it('les trois titres de zone (Action/Consultation/Référence) sont rendus, thématisés via theme.tone()', async () => {
     const { el } = await createFixture(
-      makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }),
+      makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' }),
       MJ_ID,
     );
 
@@ -2922,7 +2926,7 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
     'la zone Action précède la zone Consultation, elle-même avant la zone Référence, dans le flux du DOM (desktop=%s)',
     async (desktop) => {
       const { el } = await createFixture(
-        makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }),
+        makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' }),
         MJ_ID,
         {
           desktop,
@@ -2946,7 +2950,7 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
 
   it('MJ, système Ryuutama : la zone Action porte le widget séance, la distribution d’XP et la publication d’annonce', async () => {
     const { el } = await createFixture(
-      makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' }),
+      makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' }),
       MJ_ID,
     );
 
@@ -2961,7 +2965,7 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
   it('MJ, système Ryuutama : la zone Consultation porte le fil d’annonces et l’historique d’XP (extrait de la zone Action)', async () => {
     const announcements = [makeAnnouncementDto({ id: 'ann-1', scenarioId: null })];
     const { el } = await createFixture(
-      makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', kind: 'CAMPAGNE_LINEAIRE' }),
+      makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', kind: 'CAMPAGNE_LINEAIRE' }),
       MJ_ID,
       { announcements },
     );
@@ -2973,7 +2977,7 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
 
   it('MJ, système Ryuutama : la zone Référence porte la description, les fiches de référence et les fiches de préparation', async () => {
     const { el } = await createFixture(
-      makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', description: 'Un récit à découvrir' }),
+      makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', description: 'Un récit à découvrir' }),
       MJ_ID,
     );
 
@@ -2984,7 +2988,7 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
   });
 
   it('Joueur (non-MJ) : la zone Action est réduite au widget séance, aucun bloc MJ-only dans Consultation/Référence', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { el } = await createFixture(partie, PLAYER_ID);
 
     const action = el.querySelector(ZONE_ACTION)!;
@@ -3005,7 +3009,7 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
   });
 
   it('Système non-Ryuutama : les fiches de référence/préparation sont absentes de la zone Référence, les zones Action/Consultation restent intactes', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'draconis' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'draconis' });
     const { el } = await createFixture(partie, MJ_ID);
 
     const reference = el.querySelector(ZONE_REFERENCE)!;
@@ -3019,7 +3023,7 @@ describe('PartieDetail — zones de l’onglet Détails (Story 32.2)', () => {
   });
 
   it('Vote de date en cours : le lien de vote reste dans le widget séance de la zone Action, inchangé', async () => {
-    const partie = makePartie({ mjId: MJ_ID });
+    const partie = makePartie({ ownerId: MJ_ID });
     const poll: SessionPollDto = {
       id: 'poll1',
       partieId: 'party-1',
@@ -3052,7 +3056,7 @@ describe('PartieDetail — défilement de page unique (dynamicHeight)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it("mat-tab-group porte dynamicHeight (API publique Material) -- l'overflow interne par défaut du corps d'onglet est neutralisé, la molette défile toute la page", async () => {
-    const { fixture } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
+    const { fixture } = await createFixture(makePartie({ ownerId: MJ_ID }), MJ_ID);
 
     const tabGroup = fixture.debugElement.query(By.directive(MatTabGroup))?.componentInstance as
       MatTabGroup | undefined;
@@ -3065,7 +3069,7 @@ describe('PartieDetail — grimoires de référence/préparation repliés par d�
   afterEach(() => TestBed.resetTestingModule());
 
   it('à l’affichage initial de l’onglet Détails, les deux grimoires (référence, préparation MJ) sont repliés', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { el } = await createFixture(partie, MJ_ID);
 
     const referenceDetails = el.querySelector<HTMLDetailsElement>(
@@ -3079,7 +3083,7 @@ describe('PartieDetail — grimoires de référence/préparation repliés par d�
   });
 
   it('un joueur (non-MJ) voit aussi le grimoire de référence replié par défaut (les fiches de préparation restent MJ-only, inchangé)', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { el } = await createFixture(partie, PLAYER_ID);
 
     const referenceDetails = el.querySelector<HTMLDetailsElement>(
@@ -3091,7 +3095,7 @@ describe('PartieDetail — grimoires de référence/préparation repliés par d�
   });
 
   it('clic sur le résumé « Grimoires de référence » déplie la fiche -- les puces (icône+libellé) deviennent visibles', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, MJ_ID);
 
     const details = el.querySelector<HTMLDetailsElement>(
@@ -3112,7 +3116,7 @@ describe('PartieDetail — grimoires de référence/préparation repliés par d�
   });
 
   it('clic sur le résumé « Grimoires de préparation (MJ) » déplie la fiche -- les 8 puces deviennent visibles', async () => {
-    const partie = makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama' });
+    const partie = makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama' });
     const { fixture, el } = await createFixture(partie, MJ_ID);
 
     const details = el.querySelector<HTMLDetailsElement>('.prep-sheets details.download-sheet')!;
@@ -3131,7 +3135,7 @@ describe('PartieDetail — barre d’icônes partagée (retouche UX 2026-09-23)'
   afterEach(() => TestBed.resetTestingModule());
 
   it('MJ : les déclencheurs "Distribuer de l’XP" et "Proclamer une annonce" partagent la même barre d’icônes', async () => {
-    const { el } = await createFixture(makePartie({ mjId: MJ_ID }), MJ_ID);
+    const { el } = await createFixture(makePartie({ ownerId: MJ_ID }), MJ_ID);
 
     const bar = el.querySelector('.details-zone--action .icon-bar');
     expect(bar).toBeTruthy();
@@ -3140,7 +3144,7 @@ describe('PartieDetail — barre d’icônes partagée (retouche UX 2026-09-23)'
   });
 
   it('le pied de carte (Retranscrire/Sceller/Clore/Supprimer) est une barre d’icônes -- "Supprimer" porte la classe de couleur destructrice', async () => {
-    const { el } = await createFixture(makePartie({ mjId: MJ_ID, status: 'EN_COURS' }), MJ_ID);
+    const { el } = await createFixture(makePartie({ ownerId: MJ_ID, status: 'EN_COURS' }), MJ_ID);
 
     const actions = el.querySelector('mat-card-actions.icon-bar');
     expect(actions).toBeTruthy();
@@ -3164,7 +3168,7 @@ describe('PartieDetail — patron de carte à liseré, revue de code (retouche U
   it('MJ, système Ryuutama : app-xp-history et chaque app-annonce-card reçoivent les classes de carte de la zone Consultation', async () => {
     const announcements = [makeAnnouncementDto({ id: 'ann-1', scenarioId: null })];
     const { el } = await createFixture(
-      makePartie({ mjId: MJ_ID, gameSystemId: 'ryuutama', kind: 'CAMPAGNE_LINEAIRE' }),
+      makePartie({ ownerId: MJ_ID, gameSystemId: 'ryuutama', kind: 'CAMPAGNE_LINEAIRE' }),
       MJ_ID,
       { announcements },
     );
@@ -3183,7 +3187,7 @@ describe('PartieDetail — patron de carte à liseré, revue de code (retouche U
 
   it('la description de la partie (zone Référence) reçoit le même patron de carte à liseré que les deux autres zones', async () => {
     const { el } = await createFixture(
-      makePartie({ mjId: MJ_ID, description: 'Un récit à découvrir' }),
+      makePartie({ ownerId: MJ_ID, description: 'Un récit à découvrir' }),
       MJ_ID,
     );
 

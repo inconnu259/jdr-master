@@ -151,7 +151,7 @@ export class HommeDragonService {
       const owned = await tx.hommeDragon.findFirst({ where: { id: hommeDragonId, userId } });
       if (!owned) throw new NotFoundException('Homme Dragon introuvable');
       const { count } = await tx.partie.updateMany({
-        where: { id: partieId, mjId: userId, hommeDragonId },
+        where: { id: partieId, ownerId: userId, hommeDragonId },
         data: { hommeDragonId: null },
       });
       if (count === 0) {
@@ -482,7 +482,7 @@ export class HommeDragonService {
     hommeDragonId: string,
   ): Promise<void> {
     const { count } = await tx.partie.updateMany({
-      where: { id: partieId, mjId: userId, gameSystemId: RYUUTAMA_ID, hommeDragonId: null },
+      where: { id: partieId, ownerId: userId, gameSystemId: RYUUTAMA_ID, hommeDragonId: null },
       data: { hommeDragonId },
     });
     if (count === 0) throw new ConflictException('Cette aventure a déjà un Homme Dragon');

@@ -29,7 +29,7 @@ describe('RealtimeController', () => {
   });
 
   it('membre/MJ de la Partie → getViewable appelé, un emit() sur le bon topic remonte un MessageEvent (AC1)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
 
     const stream = await controller.partieEvents('p1', { id: 'u1' } as any);
     const received = firstValueFrom(stream.pipe(take(1)));
@@ -51,7 +51,7 @@ describe('RealtimeController', () => {
   });
 
   it("emit() sur un autre topic ne fait remonter aucun MessageEvent sur l'Observable du client (AC1, filtrage traversé sans casse)", async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
 
     const stream = await controller.partieEvents('p1', { id: 'u1' } as any);
     const receivedFromOther: unknown[] = [];

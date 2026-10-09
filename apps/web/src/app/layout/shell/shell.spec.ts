@@ -25,7 +25,7 @@ function makePartie(overrides: Partial<PartieDto> = {}): PartieDto {
     kind: 'CAMPAGNE_LINEAIRE',
     gameSystemId: 'ryuutama',
     description: null,
-    mjId: 'mj1',
+    ownerId: 'mj1',
     createdAt: '',
     nextSessionDate: null,
     nextSessionSlot: null,

@@ -50,7 +50,7 @@ export class NotificationsService {
         reminderSentAt: null,
       },
       include: {
-        mj: { select: { id: true, email: true } },
+        owner: { select: { id: true, email: true } },
         memberships: {
           include: { user: { select: { id: true, email: true } } },
         },
@@ -58,7 +58,11 @@ export class NotificationsService {
     });
 
     for (const partie of dueParties) {
-      const allRecipients = [partie.mj, ...partie.memberships.map((m) => m.user)];
+      // Propriétaire absent (AD-5, compte supprimé) : seuls les membres restent destinataires.
+      const allRecipients = [
+        ...(partie.owner ? [partie.owner] : []),
+        ...partie.memberships.map((m) => m.user),
+      ];
       const recipients = [...new Map(allRecipients.map((r) => [r.id, r])).values()];
       for (const recipient of recipients) {
         const result = await this.email.sendMail('session-reminder', recipient.email, {

@@ -231,3 +231,17 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-37-1-figer-le-comportement-actuel-du-jdr-par-des-tests-de-caracterisation.md`
   summary: Isolate reminder tests from the dev database (dedicated test DB or restore of stamped rows) so `sendDueReminders()` no longer marks the developer's own due parties as reminded.
   evidence: Both `characterization/reminders.e2e-spec.ts` and `notifications.integration.spec.ts` run the global reminder query against the shared dev DB; best handled after 37.9 moves `reminderSentAt` onto Seance.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-2-remplacer-mjid-par-ownerid-le-proprietaire-de-la-partie.md`
+  summary: Decide the account-deletion fate of `InviteLink.createdBy`, `Invitation.inviter` and `XpDistribution.mj`, still `onDelete: Cascade`, so deleting an owner does not silently wipe a surviving partie's links, invitations and XP history.
+  evidence: AD-5 forbids a database cascade on an owner and routes account deletion through AD-11; story 37.2 only switched `Partie.ownerId` to SetNull.
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-2-remplacer-mjid-par-ownerid-le-proprietaire-de-la-partie.md`
+  summary: Add an index on `Partie.ownerId` (no index existed on `mjId` either).
+  evidence: listForUser, availability, party-signals and account announcements all filter on it.
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-2-remplacer-mjid-par-ownerid-le-proprietaire-de-la-partie.md`
+  summary: Make the web read `PartieDto.role === 'mj'` instead of comparing `ownerId` with the current user (partie-detail.ts, homme-dragon-creation-page.ts).
+  evidence: Shared doc says role is computed server-side and never derived client-side (AD-15); owner and MJ diverge with ralliement (epic 38).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-2-remplacer-mjid-par-ownerid-le-proprietaire-de-la-partie.md`
+  summary: Make date-dependent tests clock-independent (api `party-signals.service.spec.ts` L261 `2026-09-01`, `parties.service.spec.ts` L1521-1563 `2026-09-20`, web `calendar-view.spec.ts` rail tests) — they now fail because those dates are in the past.
+  evidence: Failures reproduce independently of story 37.2 (dates untouched by its diff); the API ones pass with the clock faked to 2026-08-15.

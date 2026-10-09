@@ -15,7 +15,7 @@ describe('NotificationsService', () => {
     name: 'La Nuit',
     nextSessionDate: new Date(),
     nextSessionSlot: 'MORNING',
-    mj: { id: 'mj1', email: 'mj@example.com' },
+    owner: { id: 'mj1', email: 'mj@example.com' },
     memberships: [{ user: { id: 'u1', email: 'joueur@example.com' } }],
     ...overrides,
   });

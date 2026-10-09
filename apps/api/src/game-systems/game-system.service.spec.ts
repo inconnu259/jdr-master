@@ -255,7 +255,7 @@ describe('GameSystemService', () => {
     });
 
     it('clé "member" (journal) + membre viewable → fichier retourné, getViewable appelé (pas getOwned)', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
 
       const result = await service.getAssetFile('p1', 'ryuutama', 'journal', 'u1');
 
@@ -274,7 +274,7 @@ describe('GameSystemService', () => {
     });
 
     it('clé "mj" (monde) + MJ → fichier retourné, getOwned appelé (pas getViewable)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
 
       const result = await service.getAssetFile('p1', 'ryuutama', 'monde', 'mj1');
 
@@ -320,7 +320,7 @@ describe('GameSystemService', () => {
     });
 
     it('fichier absent du disque → erreur explicite pointant vers le README', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
       mockReadFile.mockRejectedValue(new Error('ENOENT'));
 
       await expect(service.getAssetFile('p1', 'ryuutama', 'journal', 'u1')).rejects.toThrow(
@@ -343,7 +343,7 @@ describe('GameSystemService', () => {
       it.each(MJ_KEYS)(
         'clé "%s" + MJ authentifié → fichier retourné, getOwned appelé avec la bonne Partie (AC1)',
         async (key) => {
-          parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+          parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
 
           const result = await service.getAssetFile('p1', 'ryuutama', key, 'mj1');
 
@@ -374,8 +374,8 @@ describe('GameSystemService', () => {
     });
 
     it('les 12 clés de la table sont résolues vers un fichier sans lever d\'erreur "Fiche introuvable"', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'u1' });
-      parties.getOwned.mockResolvedValue({ id: 'p1', mjId: 'u1' });
+      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'u1' });
+      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'u1' });
       const keys = [
         'journal',
         'carte',

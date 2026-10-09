@@ -30,12 +30,12 @@ const PARTIE_DTO_KEYS = [
   'id',
   'isFavorite',
   'kind',
-  'mjDisplayName',
-  'mjId',
-  'mjPseudo',
   'name',
   'nextSessionDate',
   'nextSessionSlot',
+  'ownerDisplayName',
+  'ownerId',
+  'ownerPseudo',
   'role',
   'status',
 ];
@@ -169,8 +169,10 @@ describe('Caractérisation JDR — parties (Story 37.1)', () => {
     });
 
     it('fige : clés de PartieDto sur POST /parties, GET /parties (MJ et joueur) et GET /parties/:id (joueur)', async () => {
-      // Sans identité du MJ (mjPseudo/mjDisplayName) hors de GET /parties/:id.
-      const listKeys = PARTIE_DTO_KEYS.filter((k) => k !== 'mjPseudo' && k !== 'mjDisplayName');
+      // Sans identité du MJ (ownerPseudo/ownerDisplayName) hors de GET /parties/:id.
+      const listKeys = PARTIE_DTO_KEYS.filter(
+        (k) => k !== 'ownerPseudo' && k !== 'ownerDisplayName',
+      );
       const owner = await h.createUser('mj-formes');
       const member = await h.createUser('joueur-formes');
       const { res, id } = await h.createPartie(owner, 'CAMPAGNE_LINEAIRE', 'formes-liste');

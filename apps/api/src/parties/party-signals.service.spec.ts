@@ -21,7 +21,7 @@ describe('PartySignalsService', () => {
       kind: 'ONE_SHOT',
       gameSystemId: 'draconis',
       description: null,
-      mjId: 'mj1',
+      ownerId: 'mj1',
       createdAt: '2026-01-01T00:00:00.000Z',
       nextSessionDate: null,
       nextSessionSlot: null,
@@ -173,7 +173,7 @@ describe('PartySignalsService', () => {
     expect(prisma.partie.findMany).toHaveBeenCalledWith({
       where: {
         id: { in: ['p1', 'p2'] },
-        mjId: 'u1',
+        ownerId: 'u1',
         gameSystemId: 'ryuutama',
         hommeDragonId: null,
       },

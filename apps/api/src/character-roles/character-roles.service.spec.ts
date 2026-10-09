@@ -19,8 +19,10 @@ function makePrisma() {
 
 function makeParties() {
   return {
-    getOwned: jest.fn().mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' }),
-    getViewable: jest.fn().mockResolvedValue({ id: 'p1', mjId: 'mj1', gameSystemId: 'ryuutama' }),
+    getOwned: jest.fn().mockResolvedValue({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    getViewable: jest
+      .fn()
+      .mockResolvedValue({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
   };
 }
 

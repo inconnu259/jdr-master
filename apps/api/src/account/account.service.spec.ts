@@ -466,14 +466,14 @@ describe('AccountService', () => {
       expect(prisma.announcement.findMany).toHaveBeenCalledWith({
         where: {
           partie: {
-            OR: [{ mjId: 'u1' }, { memberships: { some: { userId: 'u1' } } }],
+            OR: [{ ownerId: 'u1' }, { memberships: { some: { userId: 'u1' } } }],
           },
           reads: { none: { userId: 'u1' } },
         },
         orderBy: { createdAt: 'desc' },
         include: {
           partie: {
-            select: { mj: { select: { pseudo: true, displayName: true } } },
+            select: { owner: { select: { pseudo: true, displayName: true } } },
           },
         },
       });
@@ -487,7 +487,7 @@ describe('AccountService', () => {
           scenarioId: null,
           text: 'Bienvenue',
           createdAt: new Date('2026-08-01T00:00:00.000Z'),
-          partie: { mj: { pseudo: 'mj1', displayName: 'Le Meneur' } },
+          partie: { owner: { pseudo: 'mj1', displayName: 'Le Meneur' } },
         },
       ]);
 
@@ -519,7 +519,7 @@ describe('AccountService', () => {
         scenarioId: null,
         text: 'Bienvenue',
         createdAt: new Date('2026-08-01T00:00:00.000Z'),
-        partie: { mj: { pseudo: 'mj1', displayName: 'Le Meneur' } },
+        partie: { owner: { pseudo: 'mj1', displayName: 'Le Meneur' } },
       };
       // Premier appareil : l'annonce est encore non-lue.
       prisma.announcement.findMany.mockResolvedValueOnce([announcement]);
