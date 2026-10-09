@@ -150,6 +150,11 @@ function makePrisma() {
     user: {
       findMany: jest.fn().mockResolvedValue([]),
     },
+    // Story 31.6 : défaut « rien de verrouillé » (Partie neuve, cf. I/O Matrix du spec) — les
+    // tests dédiés au cadenas de visibilité reconfigurent explicitement ce mock.
+    partieVisibilityLock: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   };
   // Le client transactionnel réutilise les mêmes mocks (updateMany/snapshot.create) que le client
   // racine — suffisant pour asserter les appels ; le rollback réel n'est pas testé ici.
@@ -657,6 +662,89 @@ describe('CharacterService', () => {
     expect(result.ownerIsMj).toBe(false);
   });
 
+  describe('findOne() — cadenas de visibilité (Story 31.6)', () => {
+    it('Partie neuve, aucune configuration : rien de verrouillé, hiddenFields vide', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+
+      const result = await service.findOne('char1', 'joueur-tiers');
+
+      expect(result.hiddenFields).toEqual([]);
+      expect((result.sheetData as { classId?: string }).classId).toBe('chasseur');
+      expect(result.derived).toEqual(makeCharacter().derived);
+    });
+
+    it('clé simple verrouillée (classId) : absente de sheetData, listée dans hiddenFields, reste inchangé', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { fieldKey: 'classId', subField: null },
+      ]);
+
+      const result = await service.findOne('char1', 'joueur-tiers');
+
+      expect((result.sheetData as { classId?: string }).classId).toBeUndefined();
+      expect(result.hiddenFields).toEqual(['classId']);
+      expect((result.sheetData as { typeId?: string }).typeId).toBe('attaque');
+      expect(result.derived).toEqual(makeCharacter().derived);
+      // AC3 : « absente de la réponse (jamais vide ou nulle) » — pas seulement `undefined` côté
+      // objet JS, la clé doit disparaître de la charge JSON réellement envoyée (`JSON.stringify`
+      // omet une propriété `undefined`, `Object.hasOwn` la retrouverait pourtant après `delete`).
+      expect(JSON.parse(JSON.stringify(result)).sheetData).not.toHaveProperty('classId');
+    });
+
+    it('sous-champ verrouillé (attributes.AGI) : derived retiré en entier, seul AGI absent des autres sous-champs', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter());
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { fieldKey: 'attributes', subField: 'AGI' },
+      ]);
+
+      const result = await service.findOne('char1', 'joueur-tiers');
+
+      const attributes = (result.sheetData as { attributes?: Record<string, number> }).attributes;
+      expect(attributes?.AGI).toBeUndefined();
+      expect(attributes?.ESP).toBe(6);
+      expect(attributes?.INT).toBe(6);
+      expect(attributes?.VIG).toBe(8);
+      expect(result.derived).toBeUndefined();
+      expect(result.hiddenFields).toEqual(['attributes.AGI', 'derived']);
+      // AC3/AC4 : `derived` doit disparaître de la charge JSON, pas juste être `undefined` côté objet.
+      const serialized = JSON.parse(JSON.stringify(result));
+      expect(serialized).not.toHaveProperty('derived');
+      expect(serialized.sheetData).not.toHaveProperty(['attributes', 'AGI']);
+    });
+
+    it('le propriétaire voit la fiche entière malgré des verrous configurés (mask jamais résolu)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'u1' }));
+      prisma.partie.findUnique.mockResolvedValue({ mjId: 'mj1' });
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { fieldKey: 'classId', subField: null },
+      ]);
+
+      const result = await service.findOne('char1', 'u1');
+
+      expect(result.hiddenFields).toEqual([]);
+      expect((result.sheetData as { classId?: string }).classId).toBe('chasseur');
+      // Aucune requête DB pour le masque sur le chemin le plus fréquent (revue de code).
+      expect(prisma.partieVisibilityLock.findMany).not.toHaveBeenCalled();
+    });
+
+    it('le MJ voit la fiche entière malgré des verrous configurés (mask jamais résolu)', async () => {
+      prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'u1' }));
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { fieldKey: 'classId', subField: null },
+      ]);
+
+      const result = await service.findOne('char1', 'mj1');
+
+      expect(result.hiddenFields).toEqual([]);
+      expect((result.sheetData as { classId?: string }).classId).toBe('chasseur');
+      expect(prisma.partieVisibilityLock.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   it('create() utilise validate et computeDerived de @master-jdr/game-rules', async () => {
     parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
@@ -832,16 +920,65 @@ describe('CharacterService', () => {
       expect(result.map((c) => c.ownerIsMj)).toEqual([false, false, true]);
     });
 
-    it('joueur → ne reçoit que ses propres personnages', async () => {
+    it('joueur → reçoit tous les personnages de la Partie (Story 31.5), pas seulement les siens', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
-      prisma.character.findMany.mockResolvedValue([makeCharacter({ id: 'c1', userId: 'u1' })]);
-      prisma.user.findMany.mockResolvedValue([{ id: 'u1', pseudo: 'alice' }]);
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1' }),
+        makeCharacter({ id: 'c2', userId: 'u2' }),
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        { id: 'u1', pseudo: 'alice' },
+        { id: 'u2', pseudo: 'bob' },
+      ]);
 
-      await service.findByPartie('p1', 'u1');
+      const result = await service.findByPartie('p1', 'u1');
 
       expect(prisma.character.findMany).toHaveBeenCalledWith({
-        where: { partieId: 'p1', userId: 'u1' },
+        where: { partieId: 'p1' },
       });
+      expect(result.map((c) => c.id)).toEqual(['c1', 'c2']);
+    });
+
+    it("cadenas de visibilité (Story 31.6) : appliqué à tout personnage d'autrui pour un joueur — y compris celui du MJ — jamais au sien ni à aucun personnage quand le viewer est le MJ", async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1', mjId: 'mj1' });
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { fieldKey: 'classId', subField: null },
+      ]);
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1' }),
+        makeCharacter({ id: 'c2', userId: 'u2' }),
+        makeCharacter({ id: 'c3', userId: 'mj1' }),
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        { id: 'u1', pseudo: 'alice' },
+        { id: 'u2', pseudo: 'bob' },
+        { id: 'mj1', pseudo: 'le-mj' },
+      ]);
+
+      const asOwner = await service.findByPartie('p1', 'u1');
+      const byId = new Map(asOwner.map((c) => [c.id, c]));
+
+      // Son propre personnage : jamais masqué.
+      expect((byId.get('c1')!.sheetData as { classId?: string }).classId).toBe('chasseur');
+      expect(byId.get('c1')!.hiddenFields).toEqual([]);
+      // Personnage d'un autre joueur : masqué.
+      expect((byId.get('c2')!.sheetData as { classId?: string }).classId).toBeUndefined();
+      expect(byId.get('c2')!.hiddenFields).toEqual(['classId']);
+      // Personnage du MJ, vu par un joueur (qui n'est ni son propriétaire ni le MJ) : masqué aussi.
+      expect((byId.get('c3')!.sheetData as { classId?: string }).classId).toBeUndefined();
+      expect(byId.get('c3')!.hiddenFields).toEqual(['classId']);
+      // Résolu une seule fois pour toute la liste (pas de N+1) malgré 2 personnages masqués.
+      expect(prisma.partieVisibilityLock.findMany).toHaveBeenCalledTimes(1);
+
+      prisma.partieVisibilityLock.findMany.mockClear();
+      const asMj = await service.findByPartie('p1', 'mj1');
+
+      for (const c of asMj) {
+        expect((c.sheetData as { classId?: string }).classId).toBe('chasseur');
+        expect(c.hiddenFields).toEqual([]);
+      }
+      // Le MJ voit tout sans jamais résoudre les verrous.
+      expect(prisma.partieVisibilityLock.findMany).not.toHaveBeenCalled();
     });
 
     it('aucun personnage → ne fait aucun appel user.findMany', async () => {
@@ -914,6 +1051,23 @@ describe('CharacterService', () => {
 
       expect(result.map((c) => c.ownerIsMj)).toEqual([true, false]);
       expect(result.map((c) => c.viewerIsMj)).toEqual([true, false]);
+    });
+
+    it("cadenas de visibilité configurés sur la Partie (Story 31.6, revue de code) : findMine() renvoie quand même la fiche complète — le lecteur est toujours le propriétaire de chaque personnage listé ici, aucun masque n'est jamais calculé", async () => {
+      users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice', displayName: 'Alice' });
+      prisma.character.findMany.mockResolvedValue([
+        makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
+      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire', mjId: 'mj1' }]);
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { fieldKey: 'classId', subField: null },
+      ]);
+
+      const result = await service.findMine('u1');
+
+      expect((result[0].sheetData as { classId?: string }).classId).toBe('chasseur');
+      expect(result[0].hiddenFields).toEqual([]);
+      expect(prisma.partieVisibilityLock.findMany).not.toHaveBeenCalled();
     });
 
     it('aucun personnage → tableau vide, aucun appel partie.findMany ni user.findById', async () => {

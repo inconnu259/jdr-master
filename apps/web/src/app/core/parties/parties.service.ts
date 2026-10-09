@@ -8,6 +8,7 @@ import type {
   PartieKind,
   PartieMemberDto,
   UserSearchResultDto,
+  VisibilityLockPathDto,
   XpDistributionDto,
 } from '@master-jdr/shared';
 import { API_BASE } from '../api-base';
@@ -209,6 +210,31 @@ export class PartiesService {
       this.http.get<XpDistributionDto[]>(`${API_BASE}/parties/${id}/xp-distributions`, {
         withCredentials: true,
       }),
+    );
+  }
+
+  // --- Cadenas de visibilité (Story 31.6/31.7) ---
+
+  getVisibilityLocks(id: string): Promise<VisibilityLockPathDto[]> {
+    return firstValueFrom(
+      this.http.get<VisibilityLockPathDto[]>(`${API}/parties/${id}/visibility-locks`, {
+        withCredentials: true,
+      }),
+    );
+  }
+
+  /** Enregistrement DÉCLARATIF COMPLET (jamais un delta, même patron que `setOptions()`,
+   *  Story 36.10) — `paths` décrit l'état voulu en entier. */
+  setVisibilityLocks(
+    id: string,
+    paths: { fieldKey: string; subField?: string }[],
+  ): Promise<VisibilityLockPathDto[]> {
+    return firstValueFrom(
+      this.http.put<VisibilityLockPathDto[]>(
+        `${API}/parties/${id}/visibility-locks`,
+        { paths },
+        { withCredentials: true },
+      ),
     );
   }
 }

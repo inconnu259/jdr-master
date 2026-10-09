@@ -3,6 +3,8 @@ import { PartiesModule } from '../parties/parties.module';
 import { GameSystemModule } from '../game-systems/game-system.module';
 import { ScenariosModule } from '../scenarios/scenarios.module';
 import { HommeDragonController } from './homme-dragon.controller';
+import { HommeDragonSheetController } from './homme-dragons.controller';
+import { MyHommeDragonsController } from './my-homme-dragons.controller';
 import { HommeDragonService } from './homme-dragon.service';
 import { HommeDragonPdfService } from './homme-dragon.pdf.service';
 
@@ -11,7 +13,7 @@ import { HommeDragonPdfService } from './homme-dragon.pdf.service';
   // unique, ScenariosModule n'a besoin de rien en retour, aucun forwardRef nécessaire (même
   // situation que AnnouncementsModule → ScenariosModule, Story 9.1).
   imports: [PartiesModule, GameSystemModule, ScenariosModule],
-  controllers: [HommeDragonController],
+  controllers: [HommeDragonController, HommeDragonSheetController, MyHommeDragonsController],
   providers: [HommeDragonService, HommeDragonPdfService],
   exports: [HommeDragonService],
 })

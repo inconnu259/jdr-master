@@ -2,6 +2,9 @@ import { TestBed } from '@angular/core/testing';
 import { ComponentFixture } from '@angular/core/testing';
 import { CreneauCard } from './creneau-card';
 import type { AvailableSlotDto } from '@master-jdr/shared';
+import { TONE_MAP } from '../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 function makeSlot(overrides: Partial<AvailableSlotDto> = {}): AvailableSlotDto {
   return {
@@ -45,7 +48,7 @@ describe('CreneauCard', () => {
         ],
       }),
     );
-    expect(el.textContent).toContain('Guilde complète');
+    expect(el.textContent).toContain(GRIMOIRE_TONE['calendar.card_full_guild']);
   });
 
   it("affiche l'alerte avec le nom affiché interpolé pour chaque membre UNKNOWN", () => {

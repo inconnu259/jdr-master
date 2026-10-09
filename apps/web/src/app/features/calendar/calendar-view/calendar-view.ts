@@ -54,6 +54,7 @@ import { PollService } from '../../../core/poll/poll.service';
 import { getMissingVoters } from '../../../core/poll/poll.util';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import {
   CalendarSessionLayersService,
   calendarSessionKey,
@@ -504,6 +505,7 @@ export class CalendarView implements OnInit {
   private readonly allCalendarEntries = computed<AgendaEntry[]>(() => {
     const entries: AgendaEntry[] = [];
     const pid = this.partieId();
+    const tone = this.theme.tone();
 
     if (pid) {
       for (const scenario of this.scenarios()) {
@@ -583,7 +585,10 @@ export class CalendarView implements OnInit {
           type: 'inscriptions-ouvertes',
           date: '',
           label: scenario.title,
-          detail: `${seance.inscription!.inscrits.length}/${seance.inscription!.max} inscrits`,
+          detail: fillTone(tone['common.n_max_inscrits'], {
+            n: seance.inscription!.inscrits.length,
+            max: seance.inscription!.max,
+          }),
           // Story 36.11 — commande le badge (« S'inscrire » contre « Inscrit »), jamais
           // l'appartenance à la section : une inscription reste dans « Ça t'attend » même une
           // fois prise, c'est le libellé qui change (même règle que pour un vote répondu).
@@ -611,7 +616,7 @@ export class CalendarView implements OnInit {
             date: '',
             label:
               e.scenario.seances.length > 1
-                ? `${e.scenario.title} — Séance ${e.seanceIndex}`
+                ? this.scenarioSeanceTitle(e.scenario.title, e.seanceIndex)
                 : e.scenario.title,
             partieId: pid,
             scenarioId: e.scenario.id,
@@ -624,8 +629,15 @@ export class CalendarView implements OnInit {
           key: `groupe-${slot.date}-${slot.slot}`,
           type: 'disponibilite-groupe',
           date: slot.date,
-          label: `${slot.slot} — ${slot.available}/${slot.total} disponibles`,
-          detail: slot.unavailable > 0 ? `${slot.unavailable} indisponible(s)` : undefined,
+          label: fillTone(tone['calendar.view_group_label'], {
+            slot: slot.slot,
+            available: slot.available,
+            total: slot.total,
+          }),
+          detail:
+            slot.unavailable > 0
+              ? fillTone(tone['calendar.view_group_unavailable_detail'], { n: slot.unavailable })
+              : undefined,
           slot: slot.slot,
           // La charge utile STRUCTURÉE que la grille et le rail consomment (le `label` ci-dessus
           // reste le texte de l'Agenda). `members` vient du serveur et n'existe que pour le MJ :
@@ -710,7 +722,10 @@ export class CalendarView implements OnInit {
             type: 'inscriptions-ouvertes',
             date: '',
             label: `${i.partieName} — ${i.scenarioTitle}`,
-            detail: `${i.inscritsCount}/${i.inscriptionMax} inscrits`,
+            detail: fillTone(tone['common.n_max_inscrits'], {
+              n: i.inscritsCount,
+              max: i.inscriptionMax,
+            }),
             // Story 36.11 — servi par le DTO ici, dérivé de la liste des inscrits en contexte de
             // partie. Deferred-work (2026-08-24) : `MyCalendarOpenInscriptionEntry` porte
             // désormais `scenarioId`, la ligne est donc ouvrable comme en contexte de partie
@@ -728,7 +743,10 @@ export class CalendarView implements OnInit {
         key: `decl-${d.id}`,
         type: d.kind === 'AVAILABLE' ? 'mes-disponibilites' : 'mes-indisponibilites',
         date: d.startDate ?? '',
-        label: d.recurKind === 'RECURRING' ? 'Récurrent' : 'Ponctuel',
+        label:
+          d.recurKind === 'RECURRING'
+            ? tone['calendar.week_decl_recurring']
+            : tone['calendar.week_decl_punctual'],
         detail: d.slot,
         slot: d.slot,
       });
@@ -976,13 +994,27 @@ export class CalendarView implements OnInit {
   });
 
   protected readonly composeTargetLabel = computed(() => {
+    const tone = this.theme.tone();
     const entry = this.composedPollEntry();
     if (entry) {
-      const suffix = entry.scenario.seances.length > 1 ? ` — Séance ${entry.seanceIndex}` : '';
-      return `Créneaux du vote : ${entry.scenario.title}${suffix}`;
+      return fillTone(tone['calendar.view_compose_target_poll'], {
+        label: this.pollEntryLabel(entry),
+      });
     }
-    return 'Créneaux d’un nouveau vote';
+    return tone['calendar.view_compose_target_new'];
   });
+
+  /** Titre d'un scénario suivi du rang de la séance — « Titre — Séance 2 ». */
+  private scenarioSeanceTitle(title: string, index: number): string {
+    return fillTone(this.theme.tone()['common.title_seance_index'], { title, index });
+  }
+
+  /** Étiquette d'un vote actif : le scénario, et la séance seulement s'il en a plusieurs. */
+  protected pollEntryLabel(entry: ActivePollEntry): string {
+    return entry.scenario.seances.length > 1
+      ? this.scenarioSeanceTitle(entry.scenario.title, entry.seanceIndex)
+      : entry.scenario.title;
+  }
 
   /** Les séances auxquelles un vote neuf peut être rattaché (AC11). Vide ⇒ la création n'est pas
    *  proposée : un vote sans séance est structurellement interdit. */
@@ -997,7 +1029,7 @@ export class CalendarView implements OnInit {
       .filter((e) => !only || e.seance.id === only)
       .map((e) => ({
         seanceId: e.seance.id,
-        label: `${e.scenario.title} — Séance ${e.seanceIndex}`,
+        label: this.scenarioSeanceTitle(e.scenario.title, e.seanceIndex),
       }));
   });
 
@@ -1012,11 +1044,12 @@ export class CalendarView implements OnInit {
   });
 
   protected readonly composeBlockedReason = computed(() => {
+    const tone = this.theme.tone();
     const n = this.composedCells().length;
-    if (n < 2) return 'Un vote demande au moins deux créneaux.';
-    if (n > 40) return 'Quarante créneaux au maximum.';
+    if (n < 2) return tone['calendar.view_compose_blocked_min'];
+    if (n > 40) return tone['calendar.view_compose_blocked_max'];
     if (this.composeTarget()?.kind === 'new' && this.composeSeanceChoices().length === 0)
-      return 'Aucune séance n’attend un vote : un vote se rattache toujours à une séance.';
+      return tone['calendar.view_compose_blocked_no_seance'];
     return '';
   });
 
@@ -1164,9 +1197,7 @@ export class CalendarView implements OnInit {
       );
       const freshVoterCount = freshRemoved.reduce((sum, o) => sum + o.votes.length, 0);
       if (freshVoterCount > voterCount) {
-        this.error.set(
-          'Une nouvelle réponse est arrivée depuis l’avertissement — revalidez pour voir le chiffre à jour.',
-        );
+        this.error.set(this.theme.tone()['calendar.view_compose_stale_voters']);
         return;
       }
     }
@@ -1189,7 +1220,7 @@ export class CalendarView implements OnInit {
     } catch {
       // 🚨 Le mode NE SE FERME PAS sur une erreur : la composition du MJ est en mémoire et nulle
       // part ailleurs. La perdre l'obligerait à tout redésigner sur la grille.
-      this.error.set('Impossible d’enregistrer ces créneaux. Réessayez.');
+      this.error.set(this.theme.tone()['calendar.view_compose_save_error']);
     } finally {
       this.pollActionPending.set(false);
     }
@@ -1586,9 +1617,11 @@ export class CalendarView implements OnInit {
         await this.resolveBatchConflicts(err, event.cells, event.kind, items);
         return;
       }
-      this.snack.open('Impossible d’enregistrer ces disponibilités. Réessayez.', undefined, {
-        duration: 5000,
-      });
+      this.snack.open(
+        this.theme.tone()['common.impossible_d_enregistrer_ces_disponibilites_reessayez'],
+        undefined,
+        { duration: 5000 },
+      );
     }
   }
 
@@ -1604,10 +1637,11 @@ export class CalendarView implements OnInit {
     const resolvable = err.conflicts.filter((c) => typeof c.batchIndex === 'number' && !c.internal);
     if (resolvable.length === 0) {
       const labels = err.conflicts.map((c) => c.startDate ?? c.dayOfWeek).join(', ');
+      const tone = this.theme.tone();
       this.snack.open(
         labels
-          ? `Ces créneaux se contredisent entre eux (${labels}). Rien n'a été enregistré.`
-          : "Ces créneaux se contredisent entre eux. Rien n'a été enregistré.",
+          ? fillTone(tone['calendar.view_batch_conflict_labels'], { labels })
+          : tone['calendar.view_batch_conflict_plain'],
         undefined,
         { duration: 5000 },
       );
@@ -1618,20 +1652,17 @@ export class CalendarView implements OnInit {
     // tout await, sans quoi deux gestes rapprochés ouvriraient deux dialogues concurrents. Le
     // second geste est notifié plutôt que silencieusement perdu (revue de code Story 36.4).
     if (this.conflictDialogOpen()) {
-      this.snack.open(
-        'Une résolution de conflit est déjà en cours. Terminez-la avant de recommencer.',
-        undefined,
-        { duration: 5000 },
-      );
+      this.snack.open(this.theme.tone()['calendar.view_conflict_in_progress'], undefined, {
+        duration: 5000,
+      });
       return;
     }
     this.conflictDialogOpen.set(true);
     try {
       const conflictedIndexes = new Set(resolvable.map((c) => c.batchIndex as number));
-      const kindLabel = kind === 'AVAILABLE' ? 'disponible' : 'indisponible';
       const seanceExceptions = this.seanceCoveredCells(cells, conflictedIndexes);
       const data: ConflictDialogData = {
-        kindLabel,
+        kind,
         intentLabel: this.describeSelection(cells),
         conflicts: resolvable.map((c) => ({
           batchIndex: c.batchIndex as number,
@@ -1670,9 +1701,11 @@ export class CalendarView implements OnInit {
       await this.loadDeclarations();
       await this.refreshMjPanels();
     } catch {
-      this.snack.open('Impossible d’enregistrer ces disponibilités. Réessayez.', undefined, {
-        duration: 5000,
-      });
+      this.snack.open(
+        this.theme.tone()['common.impossible_d_enregistrer_ces_disponibilites_reessayez'],
+        undefined,
+        { duration: 5000 },
+      );
     } finally {
       this.conflictDialogOpen.set(false);
     }
@@ -1702,19 +1735,22 @@ export class CalendarView implements OnInit {
    *  écrit d'ailleurs « Mar 4 · Ven 7 · Dim 9 », sans créneau. Il reste nommé dès qu'il porte une
    *  information (Matin / Après-midi / Soir). */
   private describeCell(cell: SelectedCell | undefined): string {
-    if (!cell) return 'Créneau inconnu';
+    if (!cell) return this.theme.tone()['calendar.view_cell_unknown'];
     const date = CALENDAR_CELL_DATE_FORMAT.format(cell.date);
     return cell.slot === 'FULL_DAY' ? date : `${date} · ${SLOT_LABELS[cell.slot]}`;
   }
 
   /** Rappelle l'intention du geste sous le titre du dialogue — « du 3 au 9 août, le soir ». */
   private describeSelection(cells: SelectedCell[]): string {
-    if (cells.length === 0) return 'sur aucun créneau';
-    if (cells.length === 1) return `le ${this.describeCell(cells[0])}`;
+    const tone = this.theme.tone();
+    if (cells.length === 0) return tone['calendar.view_selection_none'];
+    if (cells.length === 1) {
+      return fillTone(tone['calendar.view_selection_one'], { cell: this.describeCell(cells[0]) });
+    }
     const sorted = [...cells].sort((a, b) => a.date.getTime() - b.date.getTime());
     const from = CALENDAR_CELL_DATE_FORMAT.format(sorted[0].date);
     const to = CALENDAR_CELL_DATE_FORMAT.format(sorted[sorted.length - 1].date);
-    return `sur ${cells.length} créneaux, du ${from} au ${to}`;
+    return fillTone(tone['calendar.view_selection_many'], { n: cells.length, from, to });
   }
 
   protected onViewChange(value: string): void {
@@ -1914,7 +1950,7 @@ export class CalendarView implements OnInit {
       await this.pollSvc.closePoll(id, pollId);
       await this.loadScenarios(id);
     } catch {
-      this.error.set('Impossible de clôturer le vote. Réessayez.');
+      this.error.set(this.theme.tone()['common.impossible_de_cloturer_le_vote_reessayez']);
     } finally {
       this.pollActionPending.set(false);
     }
@@ -1968,7 +2004,7 @@ export class CalendarView implements OnInit {
       await this.loadScenarios(id);
       await this.refreshMjPanels();
     } catch {
-      this.error.set('Impossible de sceller ce créneau. Réessayez.');
+      this.error.set(this.theme.tone()['calendar.view_seal_error']);
     }
   }
 
@@ -2033,7 +2069,7 @@ export class CalendarView implements OnInit {
     const from = this.fromDateStr();
     const to = this.toDateStr();
     if (from > to) {
-      this.slotsError.set('La date de début doit être avant ou égale à la date de fin.');
+      this.slotsError.set(this.theme.tone()['calendar.view_range_error']);
       return;
     }
     this.slotsError.set(null);
@@ -2052,7 +2088,7 @@ export class CalendarView implements OnInit {
     try {
       this.declarations.set(await this.availabilitySvc.getMyDeclarations());
     } catch {
-      this.error.set('Impossible de charger les disponibilités.');
+      this.error.set(this.theme.tone()['calendar.view_load_declarations_error']);
     } finally {
       this.loading.set(false);
     }
@@ -2106,7 +2142,7 @@ export class CalendarView implements OnInit {
     try {
       this.availableSlots.set(await this.pollSvc.getAvailableSlots(id, undefined, from, to));
     } catch {
-      this.slotsError.set('Impossible de charger les créneaux.');
+      this.slotsError.set(this.theme.tone()['calendar.view_load_slots_error']);
     } finally {
       this.slotsLoading.set(false);
     }
@@ -2135,7 +2171,7 @@ export class CalendarView implements OnInit {
       // était à jour — signaler l'échec et vider les couches temporelles plutôt que de les
       // laisser silencieusement périmées.
       this.meCalendar.set(null);
-      this.error.set('Impossible de charger le calendrier pour cette période.');
+      this.error.set(this.theme.tone()['calendar.view_load_calendar_error']);
     } finally {
       if (reqId === this.meCalendarReqId) this.meCalendarLoading.set(false);
     }

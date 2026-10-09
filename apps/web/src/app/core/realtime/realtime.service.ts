@@ -83,7 +83,12 @@ export class RealtimeService {
     { prefix: 'partie:', notifyChanged: () => this.parties.notifyChanged() },
     { prefix: 'partie:', notifyChanged: () => this.scenarios.notifyRealtimeChanged() },
     { prefix: 'partie:', notifyChanged: () => this.characters.notifyChanged() },
-    { prefix: 'partie:', notifyChanged: () => this.hommeDragon.notifyChanged() },
+    // AD-23 : la fiche d'un Homme Dragon n'écoute QUE `user:{id}` (aucun canal `partie:`, quel que
+    // soit son nombre d'aventures) — le niveau suit un scénario clos par l'émission existante de
+    // `ScenariosService` (`notifyPartieSignalsChanged`, `user:` au MJ et aux membres). Les écritures
+    // de fiche n'émettent rien : le client qui écrit se met à jour avec la réponse. La page de la
+    // fiche ouvre `userTopic` elle-même (`connect` / `disconnect` à sa destruction).
+    { prefix: 'user:', notifyChanged: () => this.hommeDragon.notifyChanged() },
     { prefix: 'user:', notifyChanged: () => this.invitations.notifyChanged() },
     { prefix: 'partie:', notifyChanged: (topic) => this.openPolls.notifyChanged(topic) },
     { prefix: 'user:', notifyChanged: () => this.myParties.notifyChanged() },

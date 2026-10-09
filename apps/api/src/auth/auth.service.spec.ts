@@ -236,7 +236,7 @@ describe('AuthService', () => {
         token: 'tok',
       });
       const data = callArg<{ data: { theme: string } }>(tx.user.create).data;
-      expect(['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk']).toContain(data.theme);
+      expect(['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre']).toContain(data.theme);
     });
 
     it('lève ConflictException si email/pseudo déjà pris (P2002)', async () => {

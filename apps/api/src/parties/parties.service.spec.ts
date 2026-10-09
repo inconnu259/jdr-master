@@ -59,7 +59,7 @@ import { readFile, unlink, writeFile } from 'node:fs/promises';
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { PartiesService } from './parties.service';
+import { GAME_SYSTEM_WITHOUT_MODULE_MESSAGE, PartiesService } from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { anyOf, arrayLike, callArg, objectLike, stringLike } from '../common/test-utils/jest-typed';
@@ -100,6 +100,11 @@ describe('PartiesService', () => {
     partieFavorite: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
+    };
+    partieVisibilityLock: {
+      findMany: jest.Mock;
+      deleteMany: jest.Mock;
+      createMany: jest.Mock;
     };
     $transaction: jest.Mock;
   };
@@ -166,6 +171,12 @@ describe('PartiesService', () => {
         findUnique: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
       },
+      // Story 31.6 — les tests dédiés au cadenas de visibilité reconfigurent explicitement.
+      partieVisibilityLock: {
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
     };
     // $transaction exécute le callback avec le même mock en guise de `tx`
     prisma = {
@@ -192,7 +203,7 @@ describe('PartiesService', () => {
     await service.create('mj1', {
       name: 'La Nuit',
       kind: 'ONE_SHOT',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(prisma.partie.create).toHaveBeenCalledWith({
       data: objectLike({
@@ -208,7 +219,7 @@ describe('PartiesService', () => {
     const dto = await service.create('mj1', {
       name: 'La Nuit',
       kind: 'ONE_SHOT',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(dto).toEqual({
       id: partie.id,
@@ -232,7 +243,7 @@ describe('PartiesService', () => {
     await service.create('mj1', {
       name: 'La Nuit',
       kind: 'ONE_SHOT',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(prisma.scenario.count).not.toHaveBeenCalled();
     expect(prisma.scenario.groupBy).not.toHaveBeenCalled();
@@ -246,7 +257,7 @@ describe('PartiesService', () => {
     const dto = await service.create('mj1', {
       name: 'Les Chroniques',
       kind: 'CAMPAGNE_LINEAIRE',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(dto.status).toBe('A_VENIR');
     expect(prisma.scenario.count).not.toHaveBeenCalled();
@@ -258,7 +269,7 @@ describe('PartiesService', () => {
     await service.create('mj1', {
       name: 'La Nuit',
       kind: 'ONE_SHOT',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.scenario.create).toHaveBeenCalledWith({
@@ -281,16 +292,29 @@ describe('PartiesService', () => {
     await service.create('mj1', {
       name: 'Les Chroniques',
       kind: 'CAMPAGNE_LINEAIRE',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(prisma.scenario.create).not.toHaveBeenCalled();
 
     await service.create('mj1', {
       name: 'Agence',
       kind: 'CAMPAGNE_EPISODIQUE',
-      gameSystemId: 'draconis',
+      gameSystemId: 'ryuutama',
     });
     expect(prisma.scenario.create).not.toHaveBeenCalled();
+  });
+
+  it('create() refuse un gameSystemId sans module, avant toute écriture (Story 29.17, AC2)', async () => {
+    const promise = service.create('mj1', {
+      name: 'La Nuit',
+      kind: 'ONE_SHOT',
+      gameSystemId: 'draconis',
+    });
+    await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+    // AC2 : message explicite — pas seulement le type d'exception (revue de code).
+    await expect(promise).rejects.toThrow(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.partie.create).not.toHaveBeenCalled();
   });
 
   it('listForUser(player) renvoie les parties des memberships, projetées avec role: player', async () => {
@@ -403,7 +427,7 @@ describe('PartiesService', () => {
       const dto = await service.create('mj1', {
         name: 'La Nuit',
         kind: 'ONE_SHOT',
-        gameSystemId: 'draconis',
+        gameSystemId: 'ryuutama',
       });
       expect(dto.isFavorite).toBe(false);
       expect(prisma.partieFavorite.findUnique).not.toHaveBeenCalled();
@@ -1113,6 +1137,25 @@ describe('PartiesService', () => {
     prisma.partie.delete.mockResolvedValue(partie);
     await service.remove('p1', 'mj1');
     expect(prisma.partie.delete).toHaveBeenCalledWith({ where: { id: 'p1' } });
+  });
+
+  it("remove : émet user: au MJ (AD-23) — la FK délie l'Homme Dragon, son signal et « Personnages » changent", async () => {
+    prisma.partie.findUnique.mockResolvedValue({ ...partie, hommeDragonId: 'hd1' });
+    prisma.partie.delete.mockResolvedValue(partie);
+
+    await service.remove('p1', 'mj1');
+
+    expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+    // La partie n'existe plus : aucun canal partie:{id}.
+    expect(realtimeEvents.emit).not.toHaveBeenCalledWith(partieTopic('p1'));
+  });
+
+  it('remove : rien émis quand la suppression est refusée (non-MJ)', async () => {
+    prisma.partie.findUnique.mockResolvedValue(partie);
+
+    await expect(service.remove('p1', 'autre')).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(realtimeEvents.emit).not.toHaveBeenCalled();
   });
 
   it('remove : 403 si pas le MJ (et aucune suppression)', async () => {
@@ -1950,6 +1993,231 @@ describe('PartiesService', () => {
         where: { id: 'p1' },
         data: { name: 'Nouveau nom' },
       });
+    });
+  });
+
+  describe('update() — garde gameSystemId sans module (Story 29.17, AC3/AC4)', () => {
+    // `partie` (fixture module-level) porte déjà gameSystemId: 'draconis', sans module — sert ici de
+    // partie déjà enregistrée sur un système sans module, même patron que le `kind` ci-dessus.
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(partie);
+      prisma.partie.update.mockResolvedValue(partie);
+    });
+
+    it('un gameSystemId DIFFÉRENT vers un système sans module est rejeté, sans écriture (AC4)', async () => {
+      const promise = service.update('p1', 'mj1', { gameSystemId: 'conte-de-minuit' });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      // AC4 : message explicite — pas seulement le type d'exception (revue de code).
+      await expect(promise).rejects.toThrow(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('un gameSystemId DIFFÉRENT vers un système sans module est rejeté même en partant d’un système AVEC module (AC4)', async () => {
+      // Contrairement au cas ci-dessus (source déjà sans module), celui-ci part d'une partie sur
+      // ryuutama (avec module) — la garde ne compare que la cible, jamais la source, donc les deux
+      // sens doivent être refusés de la même façon (revue de code).
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, gameSystemId: 'ryuutama' });
+      const promise = service.update('p1', 'mj1', { gameSystemId: 'draconis' });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      await expect(promise).rejects.toThrow(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('un gameSystemId IDENTIQUE (déjà sans module) reste accepté — aucune migration (AC3)', async () => {
+      await expect(
+        service.update('p1', 'mj1', { name: 'Nouveau nom', gameSystemId: 'draconis' }),
+      ).resolves.toBeDefined();
+      // AC3 : gameSystemId inchangé doit vraiment atteindre l'écriture tel quel — pas seulement
+      // « update() a été appelé » (revue de code : un régression qui le dropperait/muterait
+      // passerait sinon inaperçue malgré le nom du test).
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom', gameSystemId: 'draconis' },
+      });
+    });
+
+    it('sans gameSystemId du tout : enregistrement normal, sans toucher au système existant', async () => {
+      await service.update('p1', 'mj1', { name: 'Nouveau nom' });
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom' },
+      });
+    });
+
+    it('un changement vers un système AVEC module reste accepté', async () => {
+      await expect(
+        service.update('p1', 'mj1', { gameSystemId: 'ryuutama' }),
+      ).resolves.toBeDefined();
+      // Même exigence que sur le cas « identique » ci-dessus : vérifier le payload écrit, pas
+      // seulement que update() a été appelé (revue de code). AD-23 : le changement de système
+      // remet le lien Homme Dragon à NULL dans la MÊME instruction.
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { gameSystemId: 'ryuutama', hommeDragonId: null },
+      });
+    });
+  });
+
+  describe('update() — remise à NULL du lien Homme Dragon (AD-23, Story 33.8)', () => {
+    // La partie est sur un système SANS module ('draconis') et porte un Homme Dragon (état fictif :
+    // seul le test de remise à NULL nous intéresse) ; on la fait passer sur Ryuutama.
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'draconis',
+        hommeDragonId: 'hd1',
+      });
+      prisma.partie.update.mockResolvedValue({ ...partie, gameSystemId: 'ryuutama' });
+    });
+
+    it('changement de gameSystemId : hommeDragonId remis à NULL dans le même UPDATE, jamais dans un second statement', async () => {
+      await service.update('p1', 'mj1', { gameSystemId: 'ryuutama' });
+
+      expect(prisma.partie.update).toHaveBeenCalledTimes(1);
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { gameSystemId: 'ryuutama', hommeDragonId: null },
+      });
+    });
+
+    it('émet partie:{id} puis les signaux (user: du MJ et des membres) quand le système change', async () => {
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice' } },
+      ]);
+      prisma.user.findUnique.mockResolvedValue({ id: 'mj1', pseudo: 'mj', displayName: 'MJ' });
+
+      await service.update('p1', 'mj1', { gameSystemId: 'ryuutama' });
+
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+    });
+
+    it('système INCHANGÉ : le lien est conservé (aucun hommeDragonId dans le payload), aucun signal supplémentaire', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'ryuutama',
+        hommeDragonId: 'hd1',
+      });
+
+      await service.update('p1', 'mj1', { name: 'Nouveau nom', gameSystemId: 'ryuutama' });
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom', gameSystemId: 'ryuutama' },
+      });
+      expect(realtimeEvents.emit).not.toHaveBeenCalledWith(userTopic('mj1'));
+    });
+
+    it('sans gameSystemId : le lien est conservé', async () => {
+      await service.update('p1', 'mj1', { name: 'Nouveau nom' });
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom' },
+      });
+    });
+  });
+
+  describe('setVisibilityLocks() — Story 31.6, cadenas de visibilité', () => {
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+    });
+
+    it('MJ seul : joueur non-MJ → ForbiddenException, aucune écriture', async () => {
+      await expect(
+        service.setVisibilityLocks('p1', 'joueur1', { paths: [{ fieldKey: 'classId' }] }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('MJ : remplace intégralement les verrous existants (deleteMany puis createMany, une seule transaction)', async () => {
+      await service.setVisibilityLocks('p1', 'mj1', {
+        paths: [{ fieldKey: 'classId' }, { fieldKey: 'attributes', subField: 'AGI' }],
+      });
+
+      expect(prisma.partieVisibilityLock.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+      });
+      expect(prisma.partieVisibilityLock.createMany).toHaveBeenCalledWith({
+        data: [
+          { partieId: 'p1', fieldKey: 'classId', subField: null },
+          { partieId: 'p1', fieldKey: 'attributes', subField: 'AGI' },
+        ],
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('jeu vide : deleteMany appelé, createMany jamais (aucune ligne à créer)', async () => {
+      await service.setVisibilityLocks('p1', 'mj1', { paths: [] });
+
+      expect(prisma.partieVisibilityLock.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+      });
+      expect(prisma.partieVisibilityLock.createMany).not.toHaveBeenCalled();
+    });
+
+    it('chemins dupliqués (même fieldKey+subField) → BadRequestException, aucune écriture', async () => {
+      await expect(
+        service.setVisibilityLocks('p1', 'mj1', {
+          paths: [
+            { fieldKey: 'attributes', subField: 'AGI' },
+            { fieldKey: 'attributes', subField: 'AGI' },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('renvoie le jeu de verrous persisté', async () => {
+      const result = await service.setVisibilityLocks('p1', 'mj1', {
+        paths: [{ fieldKey: 'classId' }],
+      });
+      expect(result).toEqual([{ fieldKey: 'classId', subField: null }]);
+    });
+  });
+
+  describe('getVisibilityLocks() — Story 31.7, lecture symétrique au PUT', () => {
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(partie); // mjId: 'mj1'
+    });
+
+    it('MJ seul : joueur non-MJ → ForbiddenException, aucune lecture de verrou', async () => {
+      await expect(service.getVisibilityLocks('p1', 'joueur1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.partieVisibilityLock.findMany).not.toHaveBeenCalled();
+    });
+
+    it('partie introuvable → NotFoundException (même garde getOwned() que le PUT)', async () => {
+      prisma.partie.findUnique.mockResolvedValue(null);
+      await expect(service.getVisibilityLocks('p1', 'mj1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('MJ : lit les verrous persistés pour cette partie, même forme {fieldKey, subField}[]', async () => {
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([
+        { partieId: 'p1', fieldKey: 'classId', subField: null },
+        { partieId: 'p1', fieldKey: 'attributes', subField: 'AGI' },
+      ]);
+
+      const result = await service.getVisibilityLocks('p1', 'mj1');
+
+      expect(prisma.partieVisibilityLock.findMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+      });
+      expect(result).toEqual([
+        { fieldKey: 'classId', subField: null },
+        { fieldKey: 'attributes', subField: 'AGI' },
+      ]);
+    });
+
+    it('aucun verrou posé → tableau vide (pas une erreur)', async () => {
+      prisma.partieVisibilityLock.findMany.mockResolvedValue([]);
+      const result = await service.getVisibilityLocks('p1', 'mj1');
+      expect(result).toEqual([]);
     });
   });
 });

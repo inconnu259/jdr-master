@@ -68,6 +68,14 @@ function makeThemeService() {
       'cta.choose_date': 'Sceller ce créneau',
       'alert.all_responded': 'Tous ont répondu.',
       'alert.missing_player': "{name} n'a pas encore répondu.",
+      'common.oui': 'Oui',
+      'common.non': 'Non',
+      'common.peut_etre': 'Peut-être',
+      'pollui.status_voters_aria': 'Votants',
+      'pollui.status_missing_aria': "N'ont pas encore répondu pour cette date",
+      'pollui.status_choose_confirm':
+        'Confirmer {date} — {slot} comme date de la prochaine séance ?',
+      'pollui.status_choose_no_vote_warning': "⚠️ Aucun membre n'a voté pour cette date.",
     }),
   };
 }

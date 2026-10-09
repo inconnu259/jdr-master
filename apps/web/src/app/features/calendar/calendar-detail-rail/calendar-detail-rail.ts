@@ -1,5 +1,7 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import type { DaySlot, SlotStatus } from '@master-jdr/shared';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import {
   type DayDetail,
   type DaySlotDetail,
@@ -20,10 +22,11 @@ import {
 import { PollTrack } from '../poll-track/poll-track';
 import { participationAriaLabel, type VoteOptionActivatedEvent } from '../poll-track.utils';
 
-const STATUS_LABELS: Record<SlotStatus, string> = {
-  AVAILABLE: 'Disponible',
-  UNAVAILABLE: 'Indisponible',
-  UNKNOWN: 'Rien de prévu',
+/** Clés de ton des trois états d'un créneau, résolues par `statusLabel()`. */
+const STATUS_LABEL_KEYS: Record<SlotStatus, string> = {
+  AVAILABLE: 'common.disponible',
+  UNAVAILABLE: 'common.indisponible',
+  UNKNOWN: 'calendar.rail_status_unknown',
 };
 
 const SLOT_NAMES: Record<RailSlot, string> = {
@@ -56,6 +59,8 @@ const DAY_FORMAT = new Intl.DateTimeFormat('fr-FR', {
   styleUrl: './calendar-detail-rail.scss',
 })
 export class CalendarDetailRail {
+  protected readonly theme = inject(ThemeToneService);
+
   readonly detail = input<DayDetail | null>(null);
   /** Créneau effectivement touché, quand le geste en désignait un. `FULL_DAY` (tap sur le corps
    *  d'une case de la vue Mois) ne nomme aucun créneau en particulier. */
@@ -88,7 +93,7 @@ export class CalendarDetailRail {
   }
 
   protected statusLabel(status: SlotStatus): string {
-    return STATUS_LABELS[status];
+    return this.theme.tone()[STATUS_LABEL_KEYS[status]];
   }
 
   /** Story 36.5 — la composition passe par le point unique de `day-detail.utils` (AC10). Le rail
@@ -103,9 +108,11 @@ export class CalendarDetailRail {
    *  tout contenu visuel, les informations pratiques doivent y être repliées (AC13). */
   protected openLabel(slot: DaySlotDetail): string {
     const info = this.seanceInfo(slot);
+    const tone = this.theme.tone();
+    const label = slot.seanceLabel ?? '';
     return info
-      ? `Ouvrir le scénario ${slot.seanceLabel} — ${info}`
-      : `Ouvrir le scénario ${slot.seanceLabel}`;
+      ? fillTone(tone['common.ouvrir_le_scenario_label_info'], { label, info })
+      : fillTone(tone['common.ouvrir_le_scenario_label'], { label });
   }
 
   protected onActivate(slot: DaySlotDetail): void {
@@ -122,10 +129,12 @@ export class CalendarDetailRail {
    *  clavier/lecteur d'écran, régression symétrique de celle qu'`openLabel()` évite déjà pour les
    *  informations pratiques d'une séance. */
   protected voteLabel(slot: DaySlotDetail): string {
-    const detail = slot.pollVote ? participationAriaLabel(slot.pollVote) : null;
+    const tone = this.theme.tone();
+    const detail = slot.pollVote ? participationAriaLabel(slot.pollVote, tone) : null;
+    const label = slot.label.toLowerCase();
     return detail
-      ? `Répondre au vote — ${slot.label.toLowerCase()} — ${detail}`
-      : `Répondre au vote — ${slot.label.toLowerCase()}`;
+      ? fillTone(tone['common.repondre_au_vote_label_detail'], { label, detail })
+      : fillTone(tone['common.repondre_au_vote_label'], { label });
   }
 
   /**
@@ -150,13 +159,13 @@ export class CalendarDetailRail {
   /** Le nom accessible de la lecture longue. Le conteneur porte `role="img"` et ce libellé, ses
    *  enfants sont `aria-hidden` : sinon chaque nom serait annoncé deux fois. */
   protected groupLabel(group: GroupAvailability): string {
-    return groupAriaLabel(group);
+    return groupAriaLabel(group, this.theme.tone());
   }
 
   /** Le statut d'un membre en toutes lettres — jamais la couleur seule (P-1). Point unique du
    *  vocabulaire, partagé avec le nom accessible : les deux ne peuvent pas diverger. */
   protected statusWord(member: GroupMember): string {
-    return memberStatusWord(member);
+    return memberStatusWord(member, this.theme.tone());
   }
 
   /** La version courte, pour la largeur où le mot entier céderait (revue de code du 36.8) : sous

@@ -82,6 +82,27 @@ describe('PartiesService (front)', () => {
     expect(await p).toEqual(partie);
   });
 
+  it('getVisibilityLocks → GET /parties/:id/visibility-locks avec withCredentials (Story 31.7)', async () => {
+    const locks = [{ fieldKey: 'classId', subField: null }];
+    const p = service.getVisibilityLocks('p1');
+    const req = http.expectOne(`${API}/parties/p1/visibility-locks`);
+    expect(req.request.method).toBe('GET');
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(locks);
+    expect(await p).toEqual(locks);
+  });
+
+  it('setVisibilityLocks → PUT /parties/:id/visibility-locks avec le payload et withCredentials (Story 31.7)', async () => {
+    const paths = [{ fieldKey: 'attributes', subField: 'AGI' }];
+    const p = service.setVisibilityLocks('p1', paths);
+    const req = http.expectOne(`${API}/parties/p1/visibility-locks`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ paths });
+    expect(req.request.withCredentials).toBe(true);
+    req.flush(paths);
+    expect(await p).toEqual(paths);
+  });
+
   it('notifyChanged() incrémente changed() (Story 18.3, AD-4)', () => {
     expect(service.changed()).toBe(0);
     service.notifyChanged();

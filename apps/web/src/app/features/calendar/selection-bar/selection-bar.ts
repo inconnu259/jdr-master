@@ -2,6 +2,7 @@ import { Component, computed, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import type { AvailKind, DaySlot } from '@master-jdr/shared';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import type { AgendaSealRequest } from '../calendar-agenda-view/calendar-agenda-view';
 
 /** Un segment du sélecteur de portée. L'ordre est celui du contrat d'UI :
@@ -72,7 +73,7 @@ export class SelectionBar {
   readonly sealRequested = output<AgendaSealRequest>();
 
   protected readonly SCOPE_OPTIONS = SCOPE_OPTIONS;
-  private readonly theme = inject(ThemeToneService);
+  protected readonly theme = inject(ThemeToneService);
 
   /** Même clé de thème que le bouton *Sceller* de l'Agenda (36.12) — la même action mérite le
    *  même mot, sur les trois thèmes (« Sceller » / « Planter » / « Verrouiller »). */
@@ -86,8 +87,27 @@ export class SelectionBar {
   }
 
   protected readonly scopeLabel = computed(
-    () => SCOPE_OPTIONS.find((o) => o.slot === this.scope())?.fullLabel ?? 'créneaux variés',
+    () =>
+      SCOPE_OPTIONS.find((o) => o.slot === this.scope())?.fullLabel ??
+      this.theme.tone()['common.creneaux_varies'],
   );
+
+  /** Le compte de créneaux sélectionnés, accordé en nombre (« 1 créneau sélectionné »). */
+  protected readonly countLabel = computed(() => {
+    const n = this.count();
+    const key = n > 1 ? 'calendar.selbar_count_many' : 'calendar.selbar_count_one';
+    return fillTone(this.theme.tone()[key], { n });
+  });
+
+  /** AC14 — l'état de la barre en toutes lettres : la portée, et ce que `Entrée` validera. */
+  protected readonly announcement = computed(() => {
+    const tone = this.theme.tone();
+    return fillTone(tone['calendar.selbar_announcement'], {
+      scope: this.scopeLabel(),
+      kind:
+        this.armedKind() === 'AVAILABLE' ? tone['common.disponible'] : tone['common.indisponible'],
+    });
+  });
 
   /** Le groupe de portée est **un seul** arrêt de tabulation (AC13) : quatre `tabindex` de plus
    *  par barre alourdiraient un parcours clavier déjà long. Les flèches y circulent, comme dans

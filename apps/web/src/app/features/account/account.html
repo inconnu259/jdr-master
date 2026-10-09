@@ -33,7 +33,7 @@
         <button
           type="button"
           class="field-edit-pencil__button"
-          [attr.aria-label]="'Modifier ' + theme.tone()['account.email_label']"
+          [attr.aria-label]="theme.tone()['common.modifier'] + ' ' + theme.tone()['account.email_label']"
           (click)="startEmailEdit()"
         >
           ✎
@@ -43,7 +43,14 @@
       <form [formGroup]="emailForm" (ngSubmit)="submitEmailChange()" class="inline-edit-form">
         <mat-form-field appearance="outline">
           <mat-label>{{ theme.tone()['account.current_password_for_email_label'] }}</mat-label>
-          <input matInput type="password" formControlName="currentPassword" />
+          <input
+            matInput
+            type="password"
+            formControlName="currentPassword"
+            appPasswordReveal
+            #emailPw="appPasswordReveal"
+          />
+          <app-password-toggle matSuffix [for]="emailPw" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -108,12 +115,26 @@
       <form [formGroup]="passwordForm" (ngSubmit)="submitPassword()" class="inline-edit-form">
         <mat-form-field appearance="outline">
           <mat-label>{{ theme.tone()['account.current_password_label'] }}</mat-label>
-          <input matInput type="password" formControlName="currentPassword" />
+          <input
+            matInput
+            type="password"
+            formControlName="currentPassword"
+            appPasswordReveal
+            #currentPw="appPasswordReveal"
+          />
+          <app-password-toggle matSuffix [for]="currentPw" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
           <mat-label>{{ theme.tone()['account.new_password_label'] }}</mat-label>
-          <input matInput type="password" formControlName="newPassword" />
+          <input
+            matInput
+            type="password"
+            formControlName="newPassword"
+            appPasswordReveal
+            #newPw="appPasswordReveal"
+          />
+          <app-password-toggle matSuffix [for]="newPw" />
         </mat-form-field>
 
         <div class="actions">

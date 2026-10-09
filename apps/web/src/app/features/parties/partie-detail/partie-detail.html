@@ -16,6 +16,7 @@
           [characters]="characters()"
           [mjId]="p.mjId"
           [currentUserId]="auth.currentUser()?.id ?? ''"
+          [canCreateCharacter]="canCreateCharacter()"
           [hasFreeSlot]="isMj() && hasFreeSlot"
           [classLabelFor]="classLabelFor"
           [roleLabelFor]="roleLabelFor"
@@ -26,65 +27,96 @@
       }
 
     <mat-card-content>
-      <mat-tab-group [selectedIndex]="selectedTabIndex()" (selectedIndexChange)="onTabIndexChange($event)">
-        <mat-tab label="Détails">
-            @if (p.description) {
-              <p>{{ p.description }}</p>
-            } @else {
-              <p class="muted">{{ theme.tone()['partie.no_description'] }}</p>
-            }
+      <!-- Retouche UX (2026-09-23) : dynamicHeight (API publique Angular Material, cf.
+           EXPERIENCE.md du delta) -- neutralise l'overflow interne par défaut du corps d'onglet
+           (mat-mdc-tab-body-content) pour que la molette fasse défiler toute la page, pied de
+           carte compris, plutôt qu'un scroll interne isolé à l'onglet actif. Même correctif sur
+           l'unique autre consommateur de mat-tab-group de l'app (character-sheet.html). -->
+      <mat-tab-group
+        dynamicHeight
+        [selectedIndex]="selectedTabIndex()"
+        (selectedIndexChange)="onTabIndexChange($event)"
+      >
+        <mat-tab [label]="theme.tone()['parties.detail_tab_details']">
+            <!-- Story 32.2 : l'onglet Détails est regroupé en trois zones -- Action, Consultation,
+                 Référence, dans cet ordre -- plutôt que juxtaposé sans hiérarchie. Chaque bloc garde
+                 exactement sa condition d'affichage et son comportement interne d'avant cette story ;
+                 seuls sa position et son regroupement visuel changent. Patron de décision documentée
+                 bloc par bloc comme la Story 36.11 (calendar-agenda-view). Zone Action en tête pour
+                 rester visible sans défilement sur mobile (seuil unique du projet, 1024px, déjà
+                 utilisé par isDesktop() dans ce composant). -->
 
-            <section class="scheduling-widget">
-              <h3>{{ theme.tone()['partie.scheduling_title'] }}</h3>
-              @if (nextSessionLabel()) {
-                <p class="next-session-date">{{ nextSessionLabel() }}</p>
-              } @else {
-                <p class="muted">{{ theme.tone()['partie.no_session'] }}</p>
-              }
-              @if (activePolls().length > 0) {
-                <p class="poll-status-line">{{ pollStatusLabel() }}</p>
-              }
-              @if (isMj()) {
-                <a mat-flat-button color="primary" [routerLink]="['/parties', p.id, 'calendar']">
-                  {{ theme.tone()['cta.find_date'] }}
-                </a>
-              } @else {
-                <a mat-stroked-button [routerLink]="['/parties', p.id, 'guild-calendar']">
-                  {{ activePolls().length > 0 ? theme.tone()['poll.vote_pending'] : theme.tone()['cta.guild_calendar'] }}
-                </a>
-              }
-            </section>
+            <section class="details-zone details-zone--action">
+              <h3 class="details-zone__title">{{ theme.tone()['partie.details_zone_action'] }}</h3>
 
-            @if (!isDesktop() && !isMj()) {
-              <section class="troupe-toggle">
-                <button type="button" mat-button (click)="showTroupe.set(!showTroupe())">
-                  {{ showTroupe() ? theme.tone()['partie.hide_troupe'] : theme.tone()['partie.show_troupe'] }}
-                </button>
-                @if (showTroupe()) {
-                  <mat-list>
-                    @for (m of members(); track m.userId) {
-                      <mat-list-item>
-                        <app-identity-label
-                          [playerName]="m.displayName"
-                          [pseudo]="m.pseudo"
-                          [ambiguous]="isMemberAmbiguous(m.userId)"
-                        />
-                      </mat-list-item>
-                    }
-                  </mat-list>
+              <!-- Widget séance : CTA (vote/oracle des créneaux) et contexte de date (prochaine
+                   séance, statut du vote) restent un bloc unique -- scinder romprait le contexte
+                   sans bénéfice net (Design Notes de la story) -- Action. -->
+              <section class="scheduling-widget">
+                <!-- Story 32.3 — le titre porte désormais l'état de la prochaine séance. Le
+                     libellé de date et la ligne de vote ci-dessous restent inchangés : le badge
+                     les résume, il ne les remplace pas. -->
+                <div class="scheduling-widget__header">
+                  <h4>{{ theme.tone()['partie.scheduling_title'] }}</h4>
+                  <app-status-badge [state]="nextSessionBadge()" />
+                </div>
+                @if (nextSessionLabel()) {
+                  <p class="next-session-date">{{ nextSessionLabel() }}</p>
+                } @else {
+                  <p class="muted">{{ theme.tone()['partie.no_session'] }}</p>
+                }
+                @if (activePolls().length > 0) {
+                  <p class="poll-status-line">{{ pollStatusLabel() }}</p>
+                }
+                @if (isMj()) {
+                  <a mat-flat-button color="primary" [routerLink]="['/parties', p.id, 'calendar']">
+                    {{ theme.tone()['cta.find_date'] }}
+                  </a>
+                } @else {
+                  <a mat-stroked-button [routerLink]="['/parties', p.id, 'guild-calendar']">
+                    {{ activePolls().length > 0 ? theme.tone()['poll.vote_pending'] : theme.tone()['cta.guild_calendar'] }}
+                  </a>
                 }
               </section>
-            }
 
-            @if (notice()) {
-              <p class="notice">{{ notice() }}</p>
-            }
+              @if (isMj()) {
+                <!-- Retouche UX (2026-09-23) : les deux déclencheurs MJ (XP/annonce) partagent
+                     désormais le même patron de barre d'icônes que le pied de carte (DESIGN.md
+                     §3/§4, EXPERIENCE.md « Barre d'icônes partagée ») -- .xp-section/
+                     .announcement-section restent des conteneurs distincts (sélecteurs déjà
+                     couverts par les tests existants), seul leur bouton rejoint la barre commune ;
+                     chaque panneau garde sa propre condition d'affichage, inchangée. -->
+                <div class="icon-bar">
+                  <section class="xp-section">
+                    <button
+                      type="button"
+                      mat-stroked-button
+                      class="icon-bar__btn"
+                      (click)="showXpPanel.set(!showXpPanel())"
+                    >
+                      <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+                      {{ theme.tone()['evolution.xp_distribute_cta'] }}
+                    </button>
+                  </section>
 
-            @if (isMj()) {
-              <section class="xp-section">
-                <button type="button" mat-stroked-button (click)="showXpPanel.set(!showXpPanel())">
-                  {{ theme.tone()['evolution.xp_distribute_cta'] }}
-                </button>
+                  <!-- Publication d'annonce : action MJ déclenchée depuis cet écran -- Action. Le fil
+                       de lecture des annonces publiées (campaignAnnouncements) vit en zone
+                       Consultation, avec le bandeau transitoire ci-dessous. -->
+                  <section class="announcement-section">
+                    <button
+                      type="button"
+                      mat-stroked-button
+                      class="icon-bar__btn"
+                      (click)="showAnnouncementForm.set(!showAnnouncementForm())"
+                    >
+                      <mat-icon aria-hidden="true">campaign</mat-icon>
+                      {{ theme.tone()['announcement.publish_cta'] }}
+                    </button>
+                  </section>
+                </div>
+
+                <!-- Distribution d'XP : l'historique (app-xp-history) est un journal en lecture
+                     seule, extrait vers la zone Consultation ci-dessous (Story 32.2). -->
                 @if (showXpPanel()) {
                   <app-xp-distribution-panel
                     [partieId]="p.id"
@@ -92,159 +124,247 @@
                     (distributed)="onXpDistributed()"
                   />
                 }
-                <app-xp-history [distributions]="xpDistributions()" [characters]="characters()" />
-              </section>
-            }
-
-            @if (isMj()) {
-              <section class="announcement-section">
-                <button
-                  type="button"
-                  mat-stroked-button
-                  (click)="showAnnouncementForm.set(!showAnnouncementForm())"
-                >
-                  {{ theme.tone()['announcement.publish_cta'] }}
-                </button>
                 @if (showAnnouncementForm()) {
                   <app-announcement-form [partieId]="p.id" (published)="onAnnouncementPublished()" />
                 }
-              </section>
-            }
+              }
+            </section>
 
-            @if (campaignAnnouncements().length > 0) {
-              <section class="announcements-feed">
-                @for (a of campaignAnnouncements(); track a.id) {
-                  <app-annonce-card
-                    [announcement]="a"
-                    [scopeLabel]="campaignScopeLabel()"
-                    [unseen]="unseenAnnouncementIds().has(a.id)"
-                    (opened)="markAnnouncementOpened(a.id)"
+            @if (hasConsultationContent()) {
+              <!-- Revue de code (Story 32.2) : garde nécessaire -- sans elle, un joueur sans
+                   notice() ni annonce de campagne (isMj() faux ⇒ pas d'historique d'XP non plus)
+                   verrait un titre de zone Consultation vide, sur le modèle du garde-fou déjà
+                   appliqué à la zone Référence (Ryuutama/non-Ryuutama). -->
+              <section class="details-zone details-zone--consultation">
+                <h3 class="details-zone__title">{{ theme.tone()['partie.details_zone_consultation'] }}</h3>
+
+                <!-- Bandeau d'annonce transitoire (confirmation d'action) : lecture seule, pas une
+                     action en soi -- Consultation. -->
+                @if (notice()) {
+                  <p class="notice">{{ notice() }}</p>
+                }
+
+                @if (isMj()) {
+                  <!-- Historique des distributions d'XP : journal en lecture seule -- extrait de la
+                       zone Action (Story 32.2), c'est une consultation, pas une action. Retouche UX
+                       (2026-09-23) : patron de carte à liseré (DESIGN.md §2/§4) appliqué au composant
+                       lui-même depuis ce template -- app-xp-history n'a pas sa propre carte. -->
+                  <app-xp-history
+                    class="zone-card zone-card--consultation"
+                    [distributions]="xpDistributions()"
+                    [characters]="characters()"
                   />
                 }
-              </section>
-            }
 
-            @if (p.gameSystemId === 'ryuutama') {
-              <section class="reference-sheets">
-                <h3>{{ theme.tone()['partie.reference_sheets_title'] }}</h3>
-                <div class="reference-sheets__links">
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingReferenceAsset()"
-                    (click)="downloadAsset('journal', 'reference')"
-                  >
-                    {{ theme.tone()['partie.asset_journal_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingReferenceAsset()"
-                    (click)="downloadAsset('carte', 'reference')"
-                  >
-                    {{ theme.tone()['partie.asset_carte_cta'] }}
-                  </button>
-                </div>
-                @if (referenceAssetError(); as error) {
-                  <p class="reference-sheets__error">{{ error }}</p>
+                @if (campaignAnnouncements().length > 0) {
+                  <!-- Fil d'annonces de campagne : flux en lecture seule -- Consultation. Retouche UX
+                       (2026-09-23) : chaque annonce est déjà sa propre carte (app-annonce-card) --
+                       on ajoute seulement le liseré de zone partagé, sans dupliquer son fond/bordure
+                       (cf. .zone-card--flush dans partie-detail.scss). -->
+                  <section class="announcements-feed">
+                    @for (a of campaignAnnouncements(); track a.id) {
+                      <app-annonce-card
+                        class="zone-card zone-card--consultation zone-card--flush"
+                        [announcement]="a"
+                        [scopeLabel]="campaignScopeLabel()"
+                        [unseen]="unseenAnnouncementIds().has(a.id)"
+                        (opened)="markAnnouncementOpened(a.id)"
+                      />
+                    }
+                  </section>
                 }
               </section>
             }
 
-            @if (isMj() && p.gameSystemId === 'ryuutama') {
-              <section class="prep-sheets">
-                <h3>{{ theme.tone()['partie.prep_sheets_title'] }}</h3>
-                <div class="prep-sheets__links">
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('monde', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_monde_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('monstre', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_monstre_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('ville', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_ville_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('objectif-chasse', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_objectif_chasse_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('objectif-quete', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_objectif_quete_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('objectif-voyage', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_objectif_voyage_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('oeuf-de-bataille', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_oeuf_de_bataille_cta'] }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    type="button"
-                    [disabled]="downloadingPrepAsset()"
-                    (click)="downloadAsset('structure', 'prep')"
-                  >
-                    {{ theme.tone()['partie.asset_structure_cta'] }}
-                  </button>
-                </div>
-                @if (prepAssetError(); as error) {
-                  <p class="prep-sheets__error">{{ error }}</p>
+            <section class="details-zone details-zone--reference">
+              <h3 class="details-zone__title">{{ theme.tone()['partie.details_zone_reference'] }}</h3>
+
+              <!-- Description de la partie : document statique de support -- Référence. Revue de
+                   code (retouche UX 2026-09-23) : rejoint le patron de carte à liseré des deux
+                   autres zones (DESIGN.md §1, liseré neutre) -- jusqu'ici seule Référence n'avait
+                   aucune carte, la classe .zone-card--reference restait posée mais inutilisée. -->
+              <div class="zone-card zone-card--reference">
+                @if (p.description) {
+                  <p>{{ p.description }}</p>
+                } @else {
+                  <p class="muted">{{ theme.tone()['partie.no_description'] }}</p>
                 }
-              </section>
-            }
+              </div>
+
+              @if (p.gameSystemId === 'ryuutama') {
+                <!-- Fiches de référence Ryuutama (journal/carte) : documents statiques de support,
+                     consultés au besoin -- Référence. Retouche UX (2026-09-23) : repliées par défaut
+                     (<details>/<summary> natifs, DESIGN.md §2/§4 -- pas de MatExpansionModule),
+                     puces icône+libellé compactes au lieu de boutons pleine largeur. -->
+                <section class="reference-sheets">
+                  <details class="download-sheet">
+                    <summary>
+                      <mat-icon aria-hidden="true" class="download-sheet__chevron">chevron_right</mat-icon>
+                      <h4 class="download-sheet__title">{{ theme.tone()['partie.reference_sheets_title'] }}</h4>
+                    </summary>
+                    <div class="reference-sheets__links">
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingReferenceAsset()"
+                        (click)="downloadAsset('journal', 'reference')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_journal_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingReferenceAsset()"
+                        (click)="downloadAsset('carte', 'reference')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_carte_cta'] }}
+                      </button>
+                    </div>
+                    @if (referenceAssetError(); as error) {
+                      <p class="reference-sheets__error">{{ error }}</p>
+                    }
+                  </details>
+                </section>
+              }
+
+              @if (isMj() && p.gameSystemId === 'ryuutama') {
+                <!-- Fiches de préparation MJ (monde, monstres, structure...) : documents statiques
+                     de support, consultés au besoin -- Référence. Retouche UX (2026-09-23) : même
+                     patron replié par défaut + puces compactes que .reference-sheets ci-dessus. -->
+                <section class="prep-sheets">
+                  <details class="download-sheet">
+                    <summary>
+                      <mat-icon aria-hidden="true" class="download-sheet__chevron">chevron_right</mat-icon>
+                      <h4 class="download-sheet__title">{{ theme.tone()['partie.prep_sheets_title'] }}</h4>
+                    </summary>
+                    <div class="prep-sheets__links">
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('monde', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_monde_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('monstre', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_monstre_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('ville', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_ville_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('objectif-chasse', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_objectif_chasse_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('objectif-quete', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_objectif_quete_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('objectif-voyage', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_objectif_voyage_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('oeuf-de-bataille', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_oeuf_de_bataille_cta'] }}
+                      </button>
+                      <button
+                        mat-stroked-button
+                        type="button"
+                        class="dl-chip"
+                        [disabled]="downloadingPrepAsset()"
+                        (click)="downloadAsset('structure', 'prep')"
+                      >
+                        <mat-icon aria-hidden="true">download</mat-icon>
+                        {{ theme.tone()['partie.asset_structure_cta'] }}
+                      </button>
+                    </div>
+                    @if (prepAssetError(); as error) {
+                      <p class="prep-sheets__error">{{ error }}</p>
+                    }
+                  </details>
+                </section>
+              }
+            </section>
         </mat-tab>
 
-        @if (!isMj() && !isDesktop()) {
-          <mat-tab [label]="theme.tone()['character.my_sheet_tab_label']">
-            <section class="my-sheet-tab">
-              @if (myCharacters().length === 0) {
-                <p class="muted">Aucun personnage créé sur cette partie pour l'instant.</p>
-                <a
-                  mat-flat-button
-                  color="primary"
-                  [routerLink]="['/parties', p.id, 'characters', 'new']"
-                  [queryParams]="{ gameSystemId: p.gameSystemId }"
-                >
-                  {{ theme.tone()['character.create_cta'] }}
-                </a>
+        @if (!isMj()) {
+          <mat-tab [label]="theme.tone()['character.party_sheets_tab_label']">
+            <section class="party-sheets-tab">
+              @if (!charactersLoaded()) {
+                <!-- Revue de code (bmad-review, 2026-09-21) : pendant le chargement, ni le message
+                     « aucun personnage » ni son absence de bouton ne doivent apparaître — l'un et
+                     l'autre sont indiscernables de l'état « on ne peut jamais créer ici » tant que
+                     characters()/canCreateCharacter() ne sont pas connus. -->
+                <mat-progress-spinner mode="indeterminate" diameter="32" />
               } @else {
-                @for (character of myCharacters(); track character.id) {
+                <!-- Story « Fiches » (retour utilisateur) : le message « aucun personnage » (basé
+                     sur myCharacters(), l'absence de personnage PERSONNEL) et la liste générique
+                     (basée sur charactersSelfFirst(), tous les personnages de la partie) sont deux
+                     blocs indépendants qui cohabitent -- un joueur sans personnage sur une partie
+                     où d'autres en ont voit le message/CTA ET la liste des autres en dessous. -->
+                @if (myCharacters().length === 0) {
+                  <p class="muted">{{ theme.tone()['character.no_character_yet'] }}</p>
+                  @if (canCreateCharacter()) {
+                    <a
+                      mat-flat-button
+                      color="primary"
+                      [routerLink]="['/parties', p.id, 'characters', 'new']"
+                      [queryParams]="{ gameSystemId: p.gameSystemId }"
+                    >
+                      {{ theme.tone()['character.create_cta'] }}
+                    </a>
+                  }
+                }
+                @for (character of charactersSelfFirst(); track character.id) {
                   <app-character-summary-card
                     [character]="character"
                     [className]="classLabel(character)"
+                    [showOwnerInfo]="true"
                     (selected)="openCharacterSheet(p.id, character.id)"
                   />
                 }
@@ -316,13 +436,14 @@
                 <div class="link-row">
                   <code>{{ joinUrl(l.token) }}</code>
                   <span class="muted">
-                    {{ l.usesCount }}<span>{{ l.maxUses ? '/' + l.maxUses : '' }}</span> · exp.
+                    {{ l.usesCount }}<span>{{ l.maxUses ? '/' + l.maxUses : '' }}</span> ·
+                    {{ theme.tone()['parties.detail_link_expires_short'] }}
                     {{ l.expiresAt | date: 'short' }}
                   </span>
-                  <button mat-icon-button (click)="copyLink(l.token)" aria-label="Copier">
+                  <button mat-icon-button (click)="copyLink(l.token)" [attr.aria-label]="theme.tone()['common.copier']">
                     <mat-icon>content_copy</mat-icon>
                   </button>
-                  <button mat-icon-button (click)="revokeLink(l)" aria-label="Révoquer">
+                  <button mat-icon-button (click)="revokeLink(l)" [attr.aria-label]="theme.tone()['common.revoquer']">
                     <mat-icon>link_off</mat-icon>
                   </button>
                 </div>
@@ -333,22 +454,25 @@
 
         @if (isMj() && p.gameSystemId === 'ryuutama') {
           <mat-tab label="Homme Dragon">
-            <app-homme-dragon-sheet [partieId]="p.id" [partieName]="p.name" />
+            <!-- Story 33.8 (AD-23) : l'onglet est le panneau d'AVENTURE — le lien entre cette partie et
+                 un Homme Dragon (lien vers la fiche + « Dissocier », ou « Créer » / « Associer un
+                 existant »). La fiche vit sur /homme-dragons/:id. -->
+            <app-homme-dragon-aventure-panel [partieId]="p.id" [partieName]="p.name" />
           </mat-tab>
         }
 
         @if (isMj() && p.kind === 'ONE_SHOT') {
-          <mat-tab label="Scénario">
+          <mat-tab [label]="theme.tone()['parties.detail_tab_scenario']">
             <app-scenario-one-shot-tab [partieId]="p.id" />
           </mat-tab>
         }
         @if (isMj() && p.kind !== 'ONE_SHOT') {
-          <mat-tab label="Scénarios">
-            <app-scenario-drafts [partieId]="p.id" />
+          <mat-tab [label]="theme.tone()['parties.detail_tab_scenarios']">
+            <app-scenario-list [partieId]="p.id" />
           </mat-tab>
         }
         @if (p.kind !== 'ONE_SHOT') {
-          <mat-tab label="Chronologie">
+          <mat-tab [label]="theme.tone()['parties.detail_tab_timeline']">
             <app-scenario-timeline [partieId]="p.id" [isMj]="isMj()" [partieKind]="p.kind" [characters]="characters()" />
           </mat-tab>
         }
@@ -367,12 +491,12 @@
       </div>
     }
 
-    @if (!isDesktop() && isMj()) {
+    @if (!isDesktop()) {
       <app-roster-strip
         [members]="members()"
         [characters]="characters()"
         [mjId]="p.mjId"
-        [hasFreeSlot]="hasFreeSlot"
+        [hasFreeSlot]="isMj() && hasFreeSlot"
         [classLabelFor]="classLabelFor"
         [roleLabelFor]="roleLabelFor"
         (selectCharacter)="onSelectRosterCharacter($event)"
@@ -380,22 +504,31 @@
       />
     }
 
-    <mat-card-actions>
+    <!-- Retouche UX (2026-09-23) : même patron de barre d'icônes que les déclencheurs XP/annonce de
+         la zone Action (DESIGN.md §3/§4). Revue de code : « Supprimer » (delete_btn) devait passer
+         en color="warn" -- vérification visuelle réelle a montré que cet attribut Material n'a
+         AUCUN EFFET en theming M3 (documenté par Angular Material, « supported in M2 themes only »)
+         -- la teinte destructrice passe donc par la classe icon-bar__btn--danger, qui référence
+         --mat-sys-error directement (cf. partie-detail.scss). -->
+    <mat-card-actions class="icon-bar">
       @if (isMj()) {
-        <a mat-button [routerLink]="['/parties', p.id, 'edit']">
-          <mat-icon>edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
+        <a mat-button class="icon-bar__btn" [routerLink]="['/parties', p.id, 'edit']">
+          <mat-icon aria-hidden="true">edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
+        </a>
+        <a mat-button class="icon-bar__btn" [routerLink]="['/parties', p.id, 'visibility']">
+          <mat-icon aria-hidden="true">lock</mat-icon> {{ theme.tone()['partie.visibility_btn'] }}
         </a>
         @if (p.status !== 'TERMINEE') {
-          <button mat-button (click)="closeGame(p)">
-            <mat-icon>flag</mat-icon> {{ theme.tone()['partie.close_btn'] }}
+          <button mat-button class="icon-bar__btn" (click)="closeGame(p)">
+            <mat-icon aria-hidden="true">flag</mat-icon> {{ theme.tone()['partie.close_btn'] }}
           </button>
         } @else {
-          <button mat-button (click)="reopenGame(p)">
-            <mat-icon>replay</mat-icon> {{ theme.tone()['partie.reopen_btn'] }}
+          <button mat-button class="icon-bar__btn" (click)="reopenGame(p)">
+            <mat-icon aria-hidden="true">replay</mat-icon> {{ theme.tone()['partie.reopen_btn'] }}
           </button>
         }
-        <button mat-button (click)="confirmDelete(p)">
-          <mat-icon>delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
+        <button mat-button class="icon-bar__btn icon-bar__btn--danger" (click)="confirmDelete(p)">
+          <mat-icon aria-hidden="true">delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
         </button>
       }
     </mat-card-actions>

@@ -82,9 +82,35 @@ model Partie {
   scenarios           Scenario[]
   scenarioDocuments   ScenarioDocument[]
   announcements       Announcement[]
-  hommeDragons        HommeDragon[]
   characterGroupRoles CharacterGroupRole[]
   favorites           PartieFavorite[]
+  visibilityLocks     PartieVisibilityLock[]
+
+  /// AD-23 — l'Homme Dragon que cette partie (une « aventure ») suit : au plus un, par construction.
+  /// Écrivains autorisés : `HommeDragonService` (create, link, unlink) et `PartiesService.update`
+  /// (remise à NULL quand `gameSystemId` change). Jamais exposé par `PartieDto`.
+  hommeDragonId String?
+  hommeDragon   HommeDragon? @relation(fields: [hommeDragonId], references: [id], onDelete: SetNull)
+
+  @@index([hommeDragonId])
+}
+
+/// Une clé de fiche verrouillée (anti-spoil) pour une Partie (Story 31.6) — état multi-valué, donc
+/// relationnel (AD-1/AD-16, même convention que `UserCalendarLayer`), jamais un JSON fourre-tout.
+/// Une ligne = une clé (ou sous-clé) effectivement retirée de la fiche pour tout lecteur qui n'est
+/// ni le propriétaire du personnage ni le MJ de la Partie. `fieldKey` référence une clé déclarée
+/// `lockable` dans `sheetSchema` (`GameSystemService.getSchema`) ; `subField` (optionnel) cible un
+/// sous-champ d'une clé objet déclarant `lockableFields` (ex. `fieldKey="attributes"`,
+/// `subField="AGI"`). `subField` null = la clé entière est verrouillée. Écriture MJ-only,
+/// déclarative et complète (`PartiesService.setVisibilityLocks`), jamais un delta.
+model PartieVisibilityLock {
+  id       String  @id @default(uuid())
+  partieId String
+  partie   Partie  @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  fieldKey String
+  subField String?
+
+  @@unique([partieId, fieldKey, subField])
 }
 
 /// Une partie marquée favorite par un utilisateur (Story 29.8) — état multi-valué, donc relationnel
@@ -392,24 +418,23 @@ model Character {
   @@index([userId])
 }
 
-/// Personnage du MJ pour Ryuutama (Story 10.1, Epic 10). Un seul par [userId, partieId,
-/// gameSystemId] — toujours le MJ de la Partie. Pas de verrouillage optimiste (AD-2, MJ seul
-/// écrivain) ; pas de colonne `derived` (AD-3, niveau/PS/historique/voyageurs protégés calculés
-/// à la lecture par HommeDragonService, jamais persistés).
+/// Personnage du MJ pour Ryuutama (Story 10.1, Epic 10). AD-23 : il n'est plus rattaché à UNE
+/// partie — c'est `Partie.hommeDragonId` qui porte le lien (0..N aventures, une partie au plus un
+/// Homme Dragon). Toujours possédé par un MJ (`userId`). Pas de verrouillage optimiste (AD-2, MJ
+/// seul écrivain) mais écritures sous verrou de ligne (AD-23) ; pas de colonne `derived` (AD-3,
+/// niveau/PS/historique/voyageurs protégés calculés à la lecture par HommeDragonService, jamais
+/// persistés). `sheetData` (réserve comprise) reste attaché à l'Homme Dragon, jamais à l'aventure.
 model HommeDragon {
   id           String     @id @default(uuid())
   userId       String
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partieId     String
-  partie       Partie     @relation(fields: [partieId], references: [id], onDelete: Cascade)
   gameSystemId String
   gameSystem   GameSystem @relation(fields: [gameSystemId], references: [id])
   sheetData    Json
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+  parties      Partie[]
 
-  @@unique([userId, partieId, gameSystemId])
-  @@index([partieId])
   @@index([userId])
 }
 

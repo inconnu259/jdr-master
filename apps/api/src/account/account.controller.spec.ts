@@ -267,6 +267,14 @@ describe('AccountController', () => {
       expect(account.updateTheme).not.toHaveBeenCalled();
     });
 
+    it('Story 35.1 : l’ancien identifiant `medieval-steampunk` est refusé (400), service jamais appelé', async () => {
+      await request(app.getHttpServer())
+        .patch('/me/theme')
+        .send({ theme: 'medieval-steampunk' })
+        .expect(400);
+      expect(account.updateTheme).not.toHaveBeenCalled();
+    });
+
     it('id glissé dans le corps (même avec un theme valide) → 400 forbidNonWhitelisted, service jamais appelé', async () => {
       account.updateTheme.mockResolvedValue({
         id: 'u1',
@@ -291,13 +299,13 @@ describe('AccountController', () => {
     it('theme valide sans champ superflu → 200', async () => {
       account.updateTheme.mockResolvedValue({
         id: 'u1',
-        theme: 'medieval-steampunk',
+        theme: 'atelier-cuivre',
       });
       await request(app.getHttpServer())
         .patch('/me/theme')
-        .send({ theme: 'medieval-steampunk' })
+        .send({ theme: 'atelier-cuivre' })
         .expect(200);
-      expect(account.updateTheme).toHaveBeenCalledWith('u1', 'medieval-steampunk');
+      expect(account.updateTheme).toHaveBeenCalledWith('u1', 'atelier-cuivre');
     });
 
     it('newPassword < 8 caractères → 400, service jamais appelé', async () => {

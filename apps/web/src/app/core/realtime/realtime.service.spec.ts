@@ -194,18 +194,27 @@ describe('RealtimeService', () => {
     expect(charactersSvc.notifyChanged).toHaveBeenCalledTimes(1);
   });
 
-  it("'open' déclenche AUSSI notifyChanged() sur HommeDragonService — quatre handlers au même préfixe (Story 20.2, AC1)", () => {
+  it("un topic 'partie:' ne déclenche JAMAIS HommeDragonService (AD-23) : la fiche n'écoute que 'user:'", () => {
     service.connect(partieTopic('p1'));
 
     FakeEventSource.instances[0].emit('open');
+    FakeEventSource.instances[0].emit('message');
 
-    expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
-    expect(scenariosSvc.notifyRealtimeChanged).toHaveBeenCalledTimes(1);
-    expect(charactersSvc.notifyChanged).toHaveBeenCalledTimes(1);
-    expect(hommeDragonSvc.notifyChanged).toHaveBeenCalledTimes(1);
+    expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(2);
+    expect(hommeDragonSvc.notifyChanged).not.toHaveBeenCalled();
   });
 
-  it("'open' déclenche AUSSI notifyChanged() sur OpenPollsService ET AvailabilityService — six handlers au même préfixe 'partie:' (Story 22.1, AC1 ; bug fix calendrier)", () => {
+  it("un topic 'user:' déclenche HommeDragonService.notifyChanged() — niveau et historique suivent un scénario clos (AD-23)", () => {
+    service.connect(userTopic('u1'));
+
+    FakeEventSource.instances[0].emit('open');
+    expect(hommeDragonSvc.notifyChanged).toHaveBeenCalledTimes(1);
+
+    FakeEventSource.instances[0].emit('message');
+    expect(hommeDragonSvc.notifyChanged).toHaveBeenCalledTimes(2);
+  });
+
+  it("'open' déclenche AUSSI notifyChanged() sur OpenPollsService ET AvailabilityService — cinq handlers au même préfixe 'partie:' (Story 22.1, AC1 ; bug fix calendrier)", () => {
     service.connect(partieTopic('p1'));
 
     FakeEventSource.instances[0].emit('open');
@@ -213,7 +222,6 @@ describe('RealtimeService', () => {
     expect(partiesSvc.notifyChanged).toHaveBeenCalledTimes(1);
     expect(scenariosSvc.notifyRealtimeChanged).toHaveBeenCalledTimes(1);
     expect(charactersSvc.notifyChanged).toHaveBeenCalledTimes(1);
-    expect(hommeDragonSvc.notifyChanged).toHaveBeenCalledTimes(1);
     expect(openPollsSvc.notifyChanged).toHaveBeenCalledTimes(1);
     expect(availabilitySvc.notifyChanged).toHaveBeenCalledTimes(1);
   });

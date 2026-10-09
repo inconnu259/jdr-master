@@ -1,5 +1,7 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 jest.mock('node:fs/promises', () => ({
   readFile: jest.fn(),
@@ -52,6 +54,46 @@ describe('GameSystemService', () => {
       ],
     }).compile();
     service = module.get(GameSystemService);
+  });
+
+  it('seedRyuutama() enregistre les catalogues Homme Dragon (races, textes de création, capacités de niveau, souffles rituels) avec toutes leurs entrées (Stories 33.3 et 33.7)', async () => {
+    // Vrai répertoire de données (cwd Jest = apps/api) : seul le module fs/promises est mocké
+    // dans ce fichier, on le redirige vers l'implémentation réelle pour ce test.
+    const actualFs = jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises');
+    mockReadFile.mockImplementation((path: string, enc: BufferEncoding) => actualFs.readFile(path, enc));
+    const contentTypeIds: Record<string, string> = {};
+    prisma.contentType.upsert.mockImplementation(({ create }: { create: { key: string } }) => {
+      contentTypeIds[create.key] = `ct-${create.key}`;
+      return Promise.resolve({ id: `ct-${create.key}` });
+    });
+
+    await service.seedRyuutama();
+
+    const dataDir = join(process.cwd(), 'game-systems/ryuutama/data');
+    const countEntries = (file: string): number =>
+      (JSON.parse(readFileSync(join(dataDir, file), 'utf-8')) as unknown[]).length;
+    const entryUpserts = (typeKey: string): unknown[] =>
+      prisma.contentEntry.upsert.mock.calls.filter(
+        ([arg]: [{ create: { contentTypeId: string } }]) =>
+          arg.create.contentTypeId === `ct-${typeKey}`,
+      );
+
+    for (const [typeKey, file] of [
+      ['hommeDragonRace', 'homme-dragon-races.json'],
+      ['hommeDragonCreationIntro', 'homme-dragon-creation-intros.json'],
+      ['hommeDragonLevelCapacity', 'homme-dragon-level-capacities.json'],
+      ['souffleRituel', 'souffles-rituels.json'],
+    ]) {
+      expect(prisma.contentType.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({ gameSystemId: 'ryuutama', key: typeKey }),
+        }),
+      );
+      expect(entryUpserts(typeKey)).toHaveLength(countEntries(file));
+    }
+    expect(entryUpserts('hommeDragonRace')).toHaveLength(4);
+    expect(entryUpserts('hommeDragonLevelCapacity')).toHaveLength(6);
+    expect(entryUpserts('souffleRituel')).toHaveLength(6);
   });
 
   it('getContent("ryuutama") → retourne le contenu groupé par clé de ContentType', async () => {
@@ -129,6 +171,81 @@ describe('GameSystemService', () => {
       await expect(service.getSchema('conte-de-minuit')).rejects.toThrow(
         'Aucun schéma implémenté pour ce système de jeu',
       );
+    });
+
+    it('déclare `lockable` sur les 10 clés (Story 31.6) et `lockableFields` sur attributes, mirroir de `fields`', async () => {
+      prisma.gameSystem.findUnique.mockResolvedValue({
+        id: 'ryuutama',
+        name: 'Ryuutama',
+        version: '1.0.0',
+      });
+      const schema = await service.getSchema('ryuutama');
+      const sheetSchema = schema.sheetSchema as Record<
+        string,
+        { lockable?: boolean; lockableFields?: string[]; fields?: string[] }
+      >;
+      const lockableKeys = [
+        'classId',
+        'specialtyTypeId',
+        'typeId',
+        'attributes',
+        'weaponId',
+        'customWeapon',
+        'fetiqueObject',
+        'equipment',
+        'startingEquipment',
+        'narrative',
+      ];
+      for (const key of lockableKeys) {
+        expect(sheetSchema[key]?.lockable).toBe(true);
+      }
+      // Hors périmètre (décision utilisateur 2026-09-22) : ces clés existent mais ne sont PAS
+      // déclarées `lockable` — la lacune reste préexistante, jamais comblée par cette story.
+      expect(sheetSchema).not.toHaveProperty('levelUps');
+
+      expect(sheetSchema.attributes.lockableFields).toEqual(sheetSchema.attributes.fields);
+      // Aucune autre clé objet n'a de sous-champs déclarés ici (pas de `fields` à mirroir).
+      expect(sheetSchema.customWeapon.lockableFields).toBeUndefined();
+      expect(sheetSchema.equipment.lockableFields).toBeUndefined();
+      expect(sheetSchema.narrative.lockableFields).toBeUndefined();
+    });
+
+    it('déclare un `label` sur chaque clé et `lockableFieldLabels` sur attributes (Story 31.7) — écran schema-driven, aucun libellé en dur côté écran', async () => {
+      prisma.gameSystem.findUnique.mockResolvedValue({
+        id: 'ryuutama',
+        name: 'Ryuutama',
+        version: '1.0.0',
+      });
+      const schema = await service.getSchema('ryuutama');
+      const sheetSchema = schema.sheetSchema as Record<
+        string,
+        { label?: string; lockableFieldLabels?: Record<string, string> }
+      >;
+      const expectedLabels: Record<string, string> = {
+        classId: 'Classe',
+        specialtyTypeId: 'Spécialité',
+        typeId: 'Type',
+        attributes: 'Attributs',
+        weaponId: 'Arme favorite',
+        customWeapon: 'Arme personnalisée',
+        fetiqueObject: 'Objet fétiche',
+        equipment: 'Équipement',
+        startingEquipment: 'Équipement de départ',
+        narrative: 'Narratif',
+      };
+      for (const [key, label] of Object.entries(expectedLabels)) {
+        expect(sheetSchema[key].label).toBe(label);
+      }
+      expect(sheetSchema.attributes.lockableFieldLabels).toEqual({
+        AGI: 'AGI',
+        ESP: 'ESP',
+        INT: 'INT',
+        VIG: 'VIG',
+      });
+      // Seul `attributes` a des sous-champs déclarés — aucune autre clé n'a de libellés de sous-champ.
+      expect(sheetSchema.customWeapon.lockableFieldLabels).toBeUndefined();
+      expect(sheetSchema.equipment.lockableFieldLabels).toBeUndefined();
+      expect(sheetSchema.narrative.lockableFieldLabels).toBeUndefined();
     });
   });
 

@@ -5,7 +5,7 @@
 
 /** Thèmes disponibles — liste déclarée une seule fois (AD-13), la validation API s'y réfère
  *  directement (`@IsIn(THEMES)`), jamais une seconde liste côté serveur. */
-export const THEMES = ['grimoire-emeraude', 'foret-ancienne', 'medieval-steampunk'] as const;
+export const THEMES = ['grimoire-emeraude', 'foret-ancienne', 'atelier-cuivre'] as const;
 
 export type Theme = (typeof THEMES)[number];
 
@@ -95,15 +95,27 @@ export interface HealthStatus {
   timestamp: string;
 }
 
-/** Systèmes de jeu proposés (liste constante — le moteur de règles viendra au Palier 2). */
+/** Systèmes de jeu proposés (liste constante — le moteur de règles viendra au Palier 2).
+ *  `module` (Story 29.15, consolidé en 29.17) : source UNIQUE d'éligibilité, lue via
+ *  `gameSystemHasModule()` ci-dessous — plus aucune liste parallèle côté API depuis que
+ *  `CharacterService.create()` a cessé de lire `SUPPORTED_GAME_SYSTEMS` (revue de code, story
+ *  29.17). Consommée par le web (bouton de création, onglet par défaut, tooltip du slot roster,
+ *  liste proposée par `PartieForm`) et par l'API (`party-signals.service.ts`, garde du signal
+ *  `PERSONNAGE_A_CREER` ; `PartiesService.create()`/`update()` ; `CharacterService.create()`). */
 export const GAME_SYSTEMS = [
-  { id: 'draconis', name: 'Draconis' },
-  { id: 'conte-de-minuit', name: 'Conte de Minuit' },
-  { id: 'ryuutama', name: 'Ryuutama' },
-  { id: 'esteren', name: 'Esteren' },
+  { id: 'draconis', name: 'Draconis', module: false },
+  { id: 'conte-de-minuit', name: 'Conte de Minuit', module: false },
+  { id: 'ryuutama', name: 'Ryuutama', module: true },
+  { id: 'esteren', name: 'Esteren', module: false },
 ] as const;
 
 export type GameSystemId = (typeof GAME_SYSTEMS)[number]['id'];
+
+/** Un système de jeu propose-t-il un module de création de personnage jouable ? Tolère un `id`
+ *  inconnu (jamais d'exception) → `false`, même discipline défensive que `gameSystemName()`. */
+export function gameSystemHasModule(id: string): boolean {
+  return GAME_SYSTEMS.some((g) => g.id === id && g.module);
+}
 
 /** Type d'une partie. En 1b l'UI n'expose que ONE_SHOT + CAMPAGNE_LINEAIRE (libellé « Campagne »). */
 export type PartieKind = 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE' | 'CAMPAGNE_EPISODIQUE';
@@ -359,6 +371,21 @@ export interface SeanceDto {
   poll?: SessionPollDto;
   /** Inscription à capacité limitée (CAMPAGNE_EPISODIQUE uniquement, Story 8.3) — peuplé seulement si `inscriptionMax` est défini sur la Seance (AD-4 : jamais en même temps que `poll`). */
   inscription?: SeanceInscriptionDto;
+  /**
+   * Story 32.3 — date EFFECTIVE de la séance, **à la racine**, résolue côté serveur :
+   * `poll.chosenDate` quand un vote a été scellé, sinon la colonne `Seance.dateValidee`.
+   *
+   * 🚨 **Pourquoi à la racine.** `dateValidee` ne vivait que dans le bloc `inscription`, lui-même
+   * peuplé seulement si `inscriptionMax != null` : une séance datée **sans vote ni inscription**
+   * (héritage `validerDate()`, campagne linéaire) n'exposait donc AUCUNE date exploitable, et son
+   * état (« Programmée », « À débriefer », « Jouée ») n'était pas dérivable. Ajout purement
+   * additif — `inscription.dateValidee` reste servi à l'identique, aucun site d'appel n'est touché.
+   */
+  dateValidee: string | null;
+  /** Créneau de `dateValidee`. Renseigné seulement quand la date vient d'un vote scellé
+   *  (`poll.chosenSlot`) : la colonne `Seance.dateValidee` n'a pas de créneau propre — même
+   *  convention que `recalculateNextSession()`, qui pose `slot: null` dans ce cas. */
+  slotValidee: DaySlot | null;
   compteRendu: string | null;
   /** Informations pratiques (Story 36.5, D-15 amendée le 2026-08-19) — trois champs
    *  facultatifs, séparés pour qu'on puisse en lâcher un quand la place manque.
@@ -869,6 +896,22 @@ export interface CharacterDto {
    * de niveau sans que `level` n'augmente tant que le joueur n'a pas validé le `LevelUpWizard`.
    */
   level: number;
+  /**
+   * Chemins de fiche retirés de cette réponse par le cadenas de visibilité (Story 31.6) — chemin
+   * pointé simple (`"classId"`) ou sous-champ (`"attributes.AGI"`), plus `"derived"` quand
+   * `derived` est retiré en entier (dépendance à `attributes`/`levelUps` verrouillée). Toujours
+   * renvoyé par l'API (tableau vide pour le propriétaire de la fiche et pour le MJ, qui voient
+   * toujours tout — ou quand rien n'est configuré pour la Partie). `sheetData`/`derived` restent
+   * typés pleins ci-dessus (contrat DTO existant) : une clé retirée est simplement absente à
+   * l'exécution (jamais vide ni nulle), signalée ici.
+   *
+   * Optionnel dans CE TYPE (pas côté API, qui le peuple systématiquement) : `apps/web/**` est hors
+   * périmètre de la Story 31.6 (aucune modification, cf. spec) et
+   * `apps/web/src/app/core/characters/character-dto.fixture.ts` construit un `CharacterDto`
+   * littéral sans ce champ — le marquer requis casserait sa compilation sans qu'aucune story
+   * n'ait mandat de la corriger ici.
+   */
+  hiddenFields?: string[];
 }
 
 /** Personnage enrichi du nom de sa Partie d'origine — forme de réponse propre à `GET /me/characters`
@@ -1078,10 +1121,32 @@ export interface CreateCharacterDto {
   sheetData: SheetData;
 }
 
+/** Description d'une clé de `sheetSchema` (Story 31.6/31.7) — `lockable`/`lockableFields`
+ *  déclarent ce que l'écran de configuration des cadenas (31.7) peut proposer à la coche, sans
+ *  aucune liste écrite en dur côté écran. `label`/`lockableFieldLabels` portent les libellés
+ *  affichés (mêmes textes que `creationSteps`/la fiche personnage, jamais un nouveau libellé
+ *  inventé pour cet écran). */
+export interface SheetSchemaFieldDto {
+  type: string;
+  optional?: boolean;
+  fields?: string[];
+  lockable?: boolean;
+  lockableFields?: string[];
+  label: string;
+  lockableFieldLabels?: Record<string, string>;
+}
+
 /** Réponse de GET /game-systems/:id/schema. */
 export interface GameSystemSchemaDto {
-  sheetSchema: unknown;
+  sheetSchema: Record<string, SheetSchemaFieldDto>;
   creationSteps: unknown[];
+}
+
+/** Un chemin verrouillé (Story 31.6/31.7) — miroir du retour de `setVisibilityLocks()`/
+ *  `getVisibilityLocks()` côté API, jamais réimporté depuis `apps/api`. */
+export interface VisibilityLockPathDto {
+  fieldKey: string;
+  subField: string | null;
 }
 
 /** Entrée de contenu générique d'un système de jeu (ex: une classe, un type, une arme). */
@@ -1111,8 +1176,9 @@ export interface ResetPasswordDto {
 /** Race de l'Homme Dragon (Story 10.1) — fixée à la création, détermine les artefacts proposés. */
 export type HommeDragonRace = 'DRAGON_VERT' | 'DRAGON_BLEU' | 'DRAGON_ROUGE' | 'DRAGON_NOIR';
 
-/** Fiche du personnage du MJ pour Ryuutama (Story 10.1). Forme minimale — `derived`/
- * `voyageursProteges`/`historique` seront ajoutés par les Stories 10.2/10.3, pas encore calculés. */
+/** Fiche du personnage du MJ pour Ryuutama (Story 10.1) — la part saisie et persistée (`sheetData`).
+ * Niveau, PS, aventures, historique et éveils en attente sont calculés à la lecture
+ * (`HommeDragonDto`, AD-3), jamais stockés ici. */
 export interface HommeDragonSheetData {
   race: HommeDragonRace;
   artefact: { key: string; nom?: string; inscription?: string };
@@ -1126,22 +1192,56 @@ export interface HommeDragonSheetData {
   /** Pouvoirs d'éveil choisis, un par niveau franchi (2-5) — jamais recalculé, c'est un choix
    * du MJ (Story 10.4). Absent sur les fiches créées avant cette story. */
   eveilPowers?: { level: number; key: string }[];
+  /** Artefact offert par les hommes-dragons des autres races au niveau 4 (Story 33.7) : choix
+   * unique et définitif du MJ, jamais d'artefact de la race du dragon. Le libellé se lit au
+   * catalogue `hommeDragonArtefact`. Absent tant que rien n'est choisi. */
+  artefactCadeau?: { key: string };
+  /** Réserve de souffles du dragon (Story 33.6) : une seule par Homme Dragon, positionnelle
+   * (index = numéro d'emplacement − 1), clé d'un souffle du catalogue `souffle` ou `souffleRituel`,
+   * `null`/absent = emplacement vide. Écrite uniquement par `PUT …/reserve/:slot`, jamais par le
+   * `PATCH` générique ; lue par le MJ seul (la fiche entière lui est réservée). */
+  reserve?: (string | null)[];
+}
+
+/** Référence légère à un Homme Dragon : `{ id, nom }` (AD-23). Renvoyée par
+ * `GET /parties/:id/homme-dragon` (`null` si l'aventure n'en a pas) — ni race, ni niveau, ni réserve. */
+export interface HommeDragonRefDto {
+  id: string;
+  nom: string;
+}
+
+/** Un voyageur protégé d'une aventure (AD-23) — convention joueur / personnage : `pseudo` et
+ * `displayName` permettent au front d'afficher le nom selon la convention de l'application. */
+export interface HommeDragonVoyageurDto {
+  userId: string;
+  pseudo: string;
+  displayName: string;
+}
+
+/** Une aventure d'un Homme Dragon (AD-23) : une partie dont `hommeDragonId` est son id, avec les
+ * voyageurs protégés (membres de la partie hors MJ) — calculé à la lecture, jamais stocké. */
+export interface HommeDragonAventureDto {
+  partieId: string;
+  nom: string;
+  voyageurs: HommeDragonVoyageurDto[];
 }
 
 export interface HommeDragonDto {
   id: string;
   userId: string;
-  partieId: string;
   gameSystemId: string;
   sheetData: HommeDragonSheetData;
   createdAt: string;
   updatedAt: string;
-  /** Membres actuels de la Partie (hors MJ) — calculé à la lecture, jamais stocké (AD-3, Story 10.2). */
-  voyageursProteges: { userId: string; pseudo: string }[];
-  /** Scénarios `PASSE` de la Partie — calculé à la lecture, jamais stocké (AD-3, Story 10.2). */
-  historique: { scenarioTitle: string; date: string; participants: string[] }[];
+  /** Aventures de l'Homme Dragon (0..N, triées par `Partie.createdAt` puis `id`) avec leurs
+   * voyageurs protégés — calculé à la lecture, jamais stocké (AD-3, AD-23). Remplace le
+   * `partieId` et le `voyageursProteges` plat d'avant la Story 33.8. */
+  aventures: HommeDragonAventureDto[];
+  /** Scénarios `PASSE` de TOUTES les aventures, chacun avec sa `partieId`, triés par date de
+   * clôture puis id croissants — calculé à la lecture, jamais stocké (AD-3, AD-23). */
+  historique: { scenarioTitle: string; date: string; participants: string[]; partieId: string }[];
   /** Niveau (1-5) et Points de Souffle max — calculés à la lecture depuis le nombre de scénarios
-   * `PASSE`, jamais stockés (AD-3, Story 10.3). */
+   * `PASSE` cumulés sur toutes les aventures, jamais stockés (AD-3, Story 10.3, AD-23). */
   derived: { level: number; PS: number };
   /** Miroir de `sheetData.eveilPowers`, toujours un tableau (jamais `undefined`). */
   eveilPowers: { level: number; key: string }[];
@@ -1150,13 +1250,34 @@ export interface HommeDragonDto {
   pendingEveilLevels: number[];
 }
 
-/** Payload de création (POST /parties/:id/homme-dragon) — mêmes champs que la fiche, à plat. */
+/**
+ * Un Homme Dragon vu depuis « Personnages » (Story 33.5) — lecture agrégée `GET /me/homme-dragons`,
+ * volontairement légère : pas de `derived` ni de niveau (calcul par scénarios `PASSE`, fan-out
+ * par partie). Une ligne par Homme Dragon, filtrée par propriétaire seul (AD-23) : `aventures`
+ * peut être vide (Homme Dragon sans aventure, atteignable par dissociation ou suppression de partie).
+ */
+export interface MyHommeDragonDto {
+  id: string;
+  /** Aventures de l'Homme Dragon, triées par `Partie.createdAt` puis `id` ; éventuellement vide. */
+  aventures: { partieId: string; nom: string }[];
+  gameSystemId: string;
+  nom: string;
+  race: HommeDragonRace;
+  avatar?: string;
+  createdAt: string;
+}
+
+/** Payload de création (POST /parties/:id/homme-dragon, crée ET lie à la partie) — mêmes champs que la fiche, à plat. */
 export type CreateHommeDragonDto = HommeDragonSheetData;
 
-/** Payload de mise à jour (PATCH /parties/:id/homme-dragon) — race jamais éditable après création. */
-export type UpdateHommeDragonDto = Partial<Omit<HommeDragonSheetData, 'race'>>;
+/** Payload de mise à jour (PATCH /homme-dragons/:id) — race jamais éditable après création,
+ * ni l'artefact cadeau (choix définitif via POST `artefact-cadeau`, Story 33.7), ni la réserve de
+ * souffles (route dédiée `PUT reserve/:slot`, Story 33.6). */
+export type UpdateHommeDragonDto = Partial<
+  Omit<HommeDragonSheetData, 'race' | 'artefactCadeau' | 'reserve'>
+>;
 
-/** Payload de choix d'un pouvoir d'éveil (POST /parties/:id/homme-dragon/eveil-power).
+/** Payload de choix d'un pouvoir d'éveil (POST /homme-dragons/:id/eveil-power).
  * Décision utilisateur (Story 10.4) : le catalogue `eveilPower` est un pool commun à toutes les
  * races, sans niveau de déblocage par pouvoir — `level` désigne ici le seuil de niveau franchi
  * pour lequel ce choix est fait (doit appartenir à `pendingEveilLevels`), pas un attribut du
@@ -1164,4 +1285,17 @@ export type UpdateHommeDragonDto = Partial<Omit<HommeDragonSheetData, 'race'>>;
 export interface ChooseEveilPowerDto {
   level: number;
   key: string;
+}
+
+/** Payload du choix de l'artefact cadeau (POST /homme-dragons/:id/artefact-cadeau,
+ * Story 33.7) — niveau ≥ 4, choix unique et définitif, artefact d'une autre race que le dragon. */
+export interface ChooseArtefactCadeauDto {
+  key: string;
+}
+
+/** Payload de l'écriture d'un emplacement de la réserve (PUT /homme-dragons/:id/reserve/:slot,
+ * Story 33.6) — `key: null` retire le souffle de l'emplacement. Un seul emplacement par appel ; le
+ * numéro d'emplacement (1-based) est dans l'URL. */
+export interface SetReserveSlotDto {
+  key: string | null;
 }

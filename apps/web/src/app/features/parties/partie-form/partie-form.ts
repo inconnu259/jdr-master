@@ -9,7 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRadioModule } from '@angular/material/radio';
-import { GAME_SYSTEMS, checkPartieKindTransition } from '@master-jdr/shared';
+import { GAME_SYSTEMS, checkPartieKindTransition, gameSystemHasModule } from '@master-jdr/shared';
 import type { PartieKind, PartieKindTransitionRefusal, ScenarioDto } from '@master-jdr/shared';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
@@ -29,6 +29,32 @@ const KIND_OPTIONS: readonly FormKind[] = [
 
 /** Formats acceptés par le contrôleur de couverture (`party-cover.controller.ts`). */
 const ACCEPTED_COVER_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+
+/** Forme minimale consommée par le `<mat-select>` — `string` plutôt que `GameSystemId` pour rester
+ *  compatible avec une entrée synthétique (`systems`, cas d'un id persisté inconnu de `GAME_SYSTEMS`,
+ *  revue de code). */
+interface GameSystemOption {
+  id: string;
+  name: string;
+  module: boolean;
+}
+
+/**
+ * Systèmes avec module, repliés sur le premier système de la liste si aucun n'a de module (état
+ * transitoire uniquement, `GAME_SYSTEMS` n'est jamais vide). Source UNIQUE de cette règle — revue
+ * de code (Story 29.17) : `DEFAULT_GAME_SYSTEM_ID` et le repli de `systems` la réimplémentaient
+ * chacun indépendamment, synchronisés seulement par un commentaire manuel. Lit `gameSystemHasModule()`
+ * (jamais `s.module` directement) pour rester la même source de vérité que `systems`.
+ */
+const MODULE_ELIGIBLE_GAME_SYSTEMS: readonly GameSystemOption[] = (() => {
+  const eligible = GAME_SYSTEMS.filter((s) => gameSystemHasModule(s.id));
+  return eligible.length > 0 ? eligible : [GAME_SYSTEMS[0]];
+})();
+
+/** Défaut du formulaire de création (Story 29.17) : le premier système éligible. `string`, pas
+ *  `GameSystemId` — le contrôle réactif reste au même type que `PartieDto.gameSystemId` côté
+ *  serveur (revue de code, cf. `savedGameSystemId`). */
+const DEFAULT_GAME_SYSTEM_ID: string = MODULE_ELIGIBLE_GAME_SYSTEMS[0].id;
 
 /**
  * Plafond de dépôt appliqué AVANT tout envoi réseau (Story 29.14, AC14).
@@ -74,7 +100,6 @@ export class PartieForm implements OnInit {
   private readonly route = inject(ActivatedRoute);
 
   protected readonly theme = inject(ThemeToneService);
-  protected readonly systems = GAME_SYSTEMS;
   protected readonly kindOptions = KIND_OPTIONS;
   protected readonly editId = signal<string | null>(null);
   protected readonly saving = signal(false);
@@ -97,14 +122,45 @@ export class PartieForm implements OnInit {
   /** Type de la partie tel qu'enregistré (édition) — référence pour savoir si le MJ demande une
    *  conversion, et pour évaluer la matrice. */
   private readonly savedKind = signal<FormKind | null>(null);
+  /** Système de jeu tel qu'enregistré (édition) — `null` en création. Type `string`, pas
+   *  `GameSystemId` (revue de code) : `PartieDto.gameSystemId` est lui-même un `string` côté
+   *  serveur, un cast non vérifié ici n'aurait fait que déplacer le problème sans le résoudre — la
+   *  valeur peut en théorie ne correspondre à aucun `GAME_SYSTEMS` connu (ex. décalage frontend/
+   *  données), cas géré explicitement par `systems` ci-dessous plutôt qu'ignoré par le typage.
+   *  Permet de garder ce système visible/sélectionnable dans `systems` même sans module
+   *  (Story 29.17) : aucune migration, aucune perte de valeur pour une partie déjà créée dessus. */
+  private readonly savedGameSystemId = signal<string | null>(null);
   private readonly partieClosed = signal(false);
   private readonly partieScenarios = signal<ScenarioDto[]>([]);
   protected readonly courantChoice = signal<CourantChoice | null>(null);
   protected readonly chosenCourantId = signal<string | null>(null);
 
+  /**
+   * Systèmes proposés au choix (Story 29.17, AC1) : ceux de `MODULE_ELIGIBLE_GAME_SYSTEMS`, plus le
+   * système déjà enregistré de la partie en édition — même s'il n'a pas de module — pour qu'il
+   * reste visible/sélectionnable au chargement (aucun AUTRE système sans module ne devient
+   * choisissable). `gameSystemHasModule()` reste l'unique source de vérité de l'éligibilité
+   * (story 29.15) ; le repli « aucun système n'a de module » est partagé avec
+   * `DEFAULT_GAME_SYSTEM_ID` via `MODULE_ELIGIBLE_GAME_SYSTEMS` (revue de code, plus de double
+   * implémentation à synchroniser à la main).
+   *
+   * Repli défensif (revue de code) : si `saved` ne correspond à AUCUN `GAME_SYSTEMS` connu (décalage
+   * frontend/données, jamais atteint aujourd'hui — `@IsIn` cadre déjà `gameSystemId` côté API), une
+   * entrée minimale synthétique est ajoutée plutôt que de le faire disparaître silencieusement du
+   * menu pendant que le formulaire le présélectionne quand même.
+   */
+  protected readonly systems = computed<readonly GameSystemOption[]>(() => {
+    const saved = this.savedGameSystemId();
+    if (saved === null || MODULE_ELIGIBLE_GAME_SYSTEMS.some((s) => s.id === saved)) {
+      return MODULE_ELIGIBLE_GAME_SYSTEMS;
+    }
+    const savedEntry = GAME_SYSTEMS.find((s) => s.id === saved);
+    return [...MODULE_ELIGIBLE_GAME_SYSTEMS, savedEntry ?? { id: saved, name: saved, module: false }];
+  });
+
   protected readonly form = this.fb.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(120)]],
-    gameSystemId: ['draconis', [Validators.required]],
+    gameSystemId: [DEFAULT_GAME_SYSTEM_ID, [Validators.required]],
     kind: ['ONE_SHOT' as FormKind, [Validators.required]],
     description: [''],
   });
@@ -159,6 +215,9 @@ export class PartieForm implements OnInit {
     this.partieName.set(p.name);
     this.coverImageVersion.set(p.coverImageVersion);
     this.savedKind.set(p.kind);
+    // `string` de part en part (revue de code) : plus de cast `as GameSystemId` non vérifié, ni ici
+    // ni dans patchValue() ci-dessous — le contrôle réactif est lui-même typé `string`.
+    this.savedGameSystemId.set(p.gameSystemId);
     this.partieClosed.set(p.status === 'TERMINEE');
     this.form.patchValue({
       name: p.name,

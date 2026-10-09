@@ -22,6 +22,8 @@ import { RealtimeService, userTopic } from '../../core/realtime/realtime.service
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 import { TONE_MAP } from '../../core/theme/tones';
 
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
+
 function makeParty(
   id: string,
   role: 'mj' | 'player' = 'player',
@@ -169,6 +171,25 @@ describe('Dashboard — liste unifiée (Story 29.1, AC1)', () => {
     const tiles = fixture.nativeElement.querySelectorAll('.tile');
     // 1 tuile de partie MJ + 1 tuile de partie joueur (aucune invitation ici).
     expect(tiles.length).toBe(2);
+  });
+
+  it('le sous-titre de tuile affiche le libellé du registre du type de partie, jamais l’énumération brute', async () => {
+    const { fixture } = await createFixture(
+      new Map(),
+      undefined,
+      [
+        { ...makeParty('p-lin'), kind: 'CAMPAGNE_LINEAIRE' },
+        { ...makeParty('p-epi'), kind: 'CAMPAGNE_EPISODIQUE' },
+      ],
+      true,
+    );
+    const subtitles = Array.from(
+      fixture.nativeElement.querySelectorAll('.tile mat-card-subtitle'),
+    ).map((el) => (el as HTMLElement).textContent ?? '');
+    expect(subtitles).toHaveLength(2);
+    expect(subtitles[0]).toContain(GRIMOIRE_TONE['partie.kind_CAMPAGNE_LINEAIRE']);
+    expect(subtitles[1]).toContain(GRIMOIRE_TONE['partie.kind_CAMPAGNE_EPISODIQUE']);
+    for (const text of subtitles) expect(text).not.toContain('CAMPAGNE_');
   });
 
   it('état vide : aucune carte, message affiché, quand allParties() est vide', async () => {
@@ -552,7 +573,9 @@ describe('Dashboard — badges de signal (Story 29.7, AC3/AC9)', () => {
     );
     expect(actionable).not.toBeUndefined();
     expect(informational).not.toBeUndefined();
-    expect(informational!.textContent).toContain('Prochaine séance connue');
+    expect(informational!.textContent).toContain(
+      GRIMOIRE_TONE['partie.signal_prochaine_seance_connue'],
+    );
   });
 });
 

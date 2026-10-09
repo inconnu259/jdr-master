@@ -24,6 +24,10 @@ export class RosterRail {
   readonly characters = input.required<CharacterDto[]>();
   readonly mjId = input.required<string>();
   readonly currentUserId = input.required<string>();
+  /** Revue de code (bmad-review, 2026-09-21) : `canCreateCharacter()` du parent — `false` tant que
+   *  `characters()` charge encore, pas seulement quand la création est réellement impossible. Seule
+   *  source de `RosterRow.canCreate`, jamais réévaluée localement. */
+  readonly canCreateCharacter = input.required<boolean>();
   readonly hasFreeSlot = input.required<boolean>();
   readonly classLabelFor = input.required<(c: CharacterDto) => string>();
   readonly roleLabelFor = input.required<(c: CharacterDto) => string | null>();
@@ -41,6 +45,8 @@ export class RosterRail {
       this.mjId(),
       this.classLabelFor(),
       this.roleLabelFor(),
+      this.theme.tone(),
+      this.canCreateCharacter(),
       this.currentUserId(),
     ),
   );
@@ -51,6 +57,6 @@ export class RosterRail {
 
   protected selectRow(row: RosterRow): void {
     if (row.character) this.selectCharacter.emit({ characterId: row.character.id });
-    else if (row.isSelf) this.createCharacter.emit();
+    else if (row.canCreate) this.createCharacter.emit();
   }
 }

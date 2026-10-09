@@ -90,6 +90,7 @@ function makePrisma() {
     // soit un effectif de 1 (le MJ) : aucun effet sur les tests existants.
     membership: {
       count: jest.fn().mockResolvedValue(0),
+      findMany: jest.fn().mockResolvedValue([]),
     },
     partie: {
       findUniqueOrThrow: jest.fn().mockResolvedValue({
@@ -814,6 +815,99 @@ describe('ScenariosService', () => {
     });
   });
 
+  describe('findPasseForParties() (AD-23, lecture en lot)', () => {
+    const user = (userId: string) => ({ pseudo: userId, displayName: `Nom ${userId}` });
+    const passe = (id: string, partieId: string, kind: string, closedAt: string) => ({
+      id,
+      partieId,
+      title: `Scénario ${id}`,
+      closedAt: new Date(closedAt),
+      partie: { kind },
+    });
+
+    it('aucune partie → aucune requête', async () => {
+      const result = await service.findPasseForParties([]);
+
+      expect(result.scenarios).toEqual([]);
+      expect(result.membersByPartie.size).toBe(0);
+      expect(prisma.scenario.findMany).not.toHaveBeenCalled();
+      expect(prisma.membership.findMany).not.toHaveBeenCalled();
+      expect(prisma.scenarioParticipant.findMany).not.toHaveBeenCalled();
+    });
+
+    it('trois requêtes groupées pour N parties, jamais de garde d’accès ni de boucle par partie', async () => {
+      prisma.scenario.findMany.mockResolvedValue([
+        passe('s1', 'p1', 'ONE_SHOT', '2026-01-01T00:00:00.000Z'),
+        passe('s2', 'p2', 'CAMPAGNE_EPISODIQUE', '2026-02-01T00:00:00.000Z'),
+        passe('s3', 'p3', 'CAMPAGNE_LINEAIRE', '2026-03-01T00:00:00.000Z'),
+      ]);
+      prisma.membership.findMany.mockResolvedValue([]);
+
+      await service.findPasseForParties(['p1', 'p2', 'p3']);
+
+      expect(prisma.scenario.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.scenario.findMany).toHaveBeenCalledWith(
+        objectLike({
+          where: { partieId: { in: ['p1', 'p2', 'p3'] }, status: 'PASSE', closedAt: { not: null } },
+          orderBy: [{ closedAt: 'asc' }, { id: 'asc' }],
+        }),
+      );
+      expect(prisma.membership.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.scenarioParticipant.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.scenarioParticipant.findMany).toHaveBeenCalledWith(
+        objectLike({ where: { scenarioId: { in: ['s2'] } } }),
+      );
+      expect(parties.getViewable).not.toHaveBeenCalled();
+      expect(parties.getOwned).not.toHaveBeenCalled();
+    });
+
+    it('épisodique → inscrits du scénario ; sinon tous les membres de la partie', async () => {
+      prisma.scenario.findMany.mockResolvedValue([
+        passe('s1', 'p1', 'CAMPAGNE_LINEAIRE', '2026-01-01T00:00:00.000Z'),
+        passe('s2', 'p2', 'CAMPAGNE_EPISODIQUE', '2026-02-01T00:00:00.000Z'),
+      ]);
+      prisma.membership.findMany.mockResolvedValue([
+        { partieId: 'p1', userId: 'alice', user: user('alice') },
+        { partieId: 'p1', userId: 'bob', user: user('bob') },
+        { partieId: 'p2', userId: 'alice', user: user('alice') },
+        { partieId: 'p2', userId: 'carla', user: user('carla') },
+      ]);
+      prisma.scenarioParticipant.findMany.mockResolvedValue([
+        { scenarioId: 's2', userId: 'carla', user: user('carla') },
+      ]);
+
+      const { scenarios, membersByPartie } = await service.findPasseForParties(['p1', 'p2']);
+
+      expect(scenarios[0].participants.map((p) => p.pseudo)).toEqual(['alice', 'bob']);
+      expect(scenarios[1].participants.map((p) => p.pseudo)).toEqual(['carla']);
+      expect(membersByPartie.get('p2')?.map((m) => m.userId)).toEqual(['alice', 'carla']);
+    });
+
+    it('closedAt rendu en ISO, ordre du tri serveur conservé, partieId porté par chaque scénario', async () => {
+      prisma.scenario.findMany.mockResolvedValue([
+        passe('a', 'p2', 'ONE_SHOT', '2026-01-01T10:00:00.000Z'),
+        passe('b', 'p1', 'ONE_SHOT', '2026-01-02T10:00:00.000Z'),
+      ]);
+
+      const { scenarios } = await service.findPasseForParties(['p1', 'p2']);
+
+      expect(scenarios.map((s) => [s.id, s.partieId, s.closedAt])).toEqual([
+        ['a', 'p2', '2026-01-01T10:00:00.000Z'],
+        ['b', 'p1', '2026-01-02T10:00:00.000Z'],
+      ]);
+    });
+
+    it("aucun scénario épisodique → pas de requête d'inscrits", async () => {
+      prisma.scenario.findMany.mockResolvedValue([
+        passe('s1', 'p1', 'ONE_SHOT', '2026-01-01T00:00:00.000Z'),
+      ]);
+
+      await service.findPasseForParties(['p1']);
+
+      expect(prisma.scenarioParticipant.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('findAllForPartie()', () => {
     it('lecture ouverte à tout membre (getViewable, pas getOwned), tri chronologique croissant avec tie-breaker id (Story 17.1)', async () => {
       parties.getViewable.mockResolvedValue({ id: 'p1' });
@@ -942,6 +1036,199 @@ describe('ScenariosService', () => {
       expect(prisma.membership.count).toHaveBeenCalledWith({
         where: { partieId: 'p1' },
       });
+    });
+
+    // Story 32.3 — 🚨 le trou que ce correctif bouche : `dateValidee` ne vivait que dans le bloc
+    // `inscription`, lui-même absent dès que `inscriptionMax` est nul. Une séance de campagne
+    // linéaire datée par héritage n'exposait donc AUCUNE date, et son état n'était pas dérivable.
+    it('Story 32.3 — dateValidee/slotValidee à la racine : date héritée sans vote ni inscription', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.membership.count.mockResolvedValue(1);
+      prisma.scenario.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          partieId: 'p1',
+          title: 'Les Cendres',
+          description: null,
+          status: 'EN_COURS',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01'),
+          closedAt: null,
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 'se1',
+          scenarioId: 's1',
+          createdAt: new Date('2026-07-01'),
+          dateValidee: new Date('2026-08-15T00:00:00.000Z'),
+          inscriptionMin: null,
+          inscriptionMax: null,
+          inscriptions: [],
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
+          poll: null,
+        },
+      ]);
+
+      const result = await service.findAllForPartie('p1', 'u1');
+
+      expect(result[0].seances[0].dateValidee).toBe('2026-08-15T00:00:00.000Z');
+      // La colonne `Seance.dateValidee` n'a pas de créneau propre — même convention que
+      // `recalculateNextSession()`, qui pose `slot: null` sur cette branche.
+      expect(result[0].seances[0].slotValidee).toBeNull();
+      // Additif : le bloc `inscription` n'apparaît toujours pas sans `inscriptionMax`.
+      expect(result[0].seances[0].inscription).toBeUndefined();
+    });
+
+    it('Story 32.3 — un vote SCELLÉ l’emporte, et apporte son créneau', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.membership.count.mockResolvedValue(1);
+      prisma.scenario.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          partieId: 'p1',
+          title: 'Les Cendres',
+          description: null,
+          status: 'EN_COURS',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01'),
+          closedAt: null,
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 'se1',
+          scenarioId: 's1',
+          createdAt: new Date('2026-07-01'),
+          dateValidee: new Date('2026-08-15T00:00:00.000Z'),
+          inscriptionMin: null,
+          inscriptionMax: null,
+          inscriptions: [],
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
+          poll: {
+            id: 'poll1',
+            partieId: 'p1',
+            status: 'CLOSED',
+            scenarioRef: null,
+            expiresAt: null,
+            chosenDate: new Date('2026-09-02T00:00:00.000Z'),
+            chosenSlot: 'EVENING',
+            options: [],
+          },
+        },
+      ]);
+
+      const result = await service.findAllForPartie('p1', 'u1');
+
+      expect(result[0].seances[0].dateValidee).toBe('2026-09-02T00:00:00.000Z');
+      expect(result[0].seances[0].slotValidee).toBe('EVENING');
+    });
+
+    it('Story 32.3 — un vote OUVERT ne prête jamais son créneau à la date héritée', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.membership.count.mockResolvedValue(1);
+      prisma.scenario.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          partieId: 'p1',
+          title: 'Les Cendres',
+          description: null,
+          status: 'EN_COURS',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01'),
+          closedAt: null,
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 'se1',
+          scenarioId: 's1',
+          createdAt: new Date('2026-07-01'),
+          dateValidee: new Date('2026-08-15T00:00:00.000Z'),
+          inscriptionMin: null,
+          inscriptionMax: null,
+          inscriptions: [],
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
+          poll: {
+            id: 'poll1',
+            partieId: 'p1',
+            status: 'OPEN',
+            scenarioRef: null,
+            expiresAt: null,
+            chosenDate: null,
+            // Créneau résiduel : rien ne le rattache à la date héritée tant que rien n'est scellé.
+            chosenSlot: 'MORNING',
+            options: [],
+          },
+        },
+      ]);
+
+      const result = await service.findAllForPartie('p1', 'u1');
+
+      expect(result[0].seances[0].dateValidee).toBe('2026-08-15T00:00:00.000Z');
+      expect(result[0].seances[0].slotValidee).toBeNull();
+    });
+
+    // 🚨 Le test qui prouve que la condition est bien `chosenDate` et NON `status === 'CLOSED'` :
+    // un vote clos sans date retenue ne scelle rien, la date héritée reste la date effective.
+    it('Story 32.3 — vote CLOS SANS date retenue : la date héritée gagne, sans créneau', async () => {
+      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      prisma.membership.count.mockResolvedValue(1);
+      prisma.scenario.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          partieId: 'p1',
+          title: 'Les Cendres',
+          description: null,
+          status: 'EN_COURS',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-01'),
+          closedAt: null,
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 'se1',
+          scenarioId: 's1',
+          createdAt: new Date('2026-07-01'),
+          dateValidee: new Date('2026-08-15T00:00:00.000Z'),
+          inscriptionMin: null,
+          inscriptionMax: null,
+          inscriptions: [],
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
+          poll: {
+            id: 'poll1',
+            partieId: 'p1',
+            status: 'CLOSED',
+            scenarioRef: null,
+            expiresAt: null,
+            chosenDate: null,
+            chosenSlot: 'MORNING',
+            options: [],
+          },
+        },
+      ]);
+
+      const result = await service.findAllForPartie('p1', 'u1');
+
+      expect(result[0].seances[0].dateValidee).toBe('2026-08-15T00:00:00.000Z');
+      expect(result[0].seances[0].slotValidee).toBeNull();
     });
 
     it('deferred-work (2026-08-24) : toSessionPollDto() porte displayName sur chaque vote — défaut pré-existant, PollVoteDto.displayName est requis mais poll était typé any (invisible au compilateur)', async () => {
@@ -2212,6 +2499,10 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           poll: undefined,
           inscription: undefined,
+          // Story 32.3 : la date effective (et son créneau) remontent à la RACINE du DTO, pour
+          // qu'une séance datée sans vote ni inscription expose enfin une date exploitable.
+          dateValidee: null,
+          slotValidee: null,
           compteRendu: null,
           // Story 36.5 : les trois champs d'informations pratiques figurent désormais dans
           // SeanceDto. Une séance qui n'en porte aucun les expose à null — jamais absents,

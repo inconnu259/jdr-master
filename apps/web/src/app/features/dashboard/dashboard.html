@@ -12,12 +12,12 @@
         <mat-card-header>
           <mat-card-title>{{ inv.partie.name }}</mat-card-title>
           <mat-card-subtitle>
-            {{ system(inv.partie.gameSystemId) }} · invité par {{ inv.inviterPseudo }}
+            {{ system(inv.partie.gameSystemId) }} · {{ invitedByLabel(inv.inviterPseudo) }}
           </mat-card-subtitle>
         </mat-card-header>
         <mat-card-actions>
-          <button mat-flat-button (click)="accept(inv)"><mat-icon>check</mat-icon> Accepter</button>
-          <button mat-button (click)="decline(inv)"><mat-icon>close</mat-icon> Refuser</button>
+          <button mat-flat-button (click)="accept(inv)"><mat-icon>check</mat-icon> {{ theme.tone()['common.accepter'] }}</button>
+          <button mat-button (click)="decline(inv)"><mat-icon>close</mat-icon> {{ theme.tone()['common.refuser'] }}</button>
         </mat-card-actions>
       </mat-card>
     }

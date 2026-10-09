@@ -1,5 +1,5 @@
 <div class="appearance-section">
-  <span class="section-label">Apparence</span>
+  <span class="section-label">{{ themeSvc.tone()['account.appearance_label'] }}</span>
   @for (t of themeSvc.themes; track t) {
     <button
       class="theme-option"

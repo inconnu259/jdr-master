@@ -86,7 +86,7 @@ describe('sortParties (Story 29.8)', () => {
     expect(sorted.map((p) => p.id)).toEqual(['b', 'a']);
   });
 
-  it('type : ordre alphabétique des libellés (Campagne < Campagne épisodique < One-shot)', () => {
+  it('type : rang explicite, indépendant des libellés (Campagne < Campagne épisodique < One-shot)', () => {
     const oneShot = makeParty({ id: 'a', kind: 'ONE_SHOT' });
     const campagne = makeParty({ id: 'b', kind: 'CAMPAGNE_LINEAIRE' });
     const episodique = makeParty({ id: 'c', kind: 'CAMPAGNE_EPISODIQUE' });

@@ -5,6 +5,10 @@ import type { AvailabilityDeclarationDto, CalendarLayerKey } from '@master-jdr/s
 import type { AgendaEntry } from '../calendar-agenda-view/calendar-agenda-view';
 import { CalendarWeekView, buildWeek, getWeekStart } from './calendar-week-view';
 import { LONG_PRESS_MS } from '../selection.utils';
+import { THEMES, TONE_MAP } from '../../../core/theme/tones';
+import { fillTone } from '../../../core/theme/tone-format';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 describe('getWeekStart', () => {
   it('returns Monday for a Wednesday', () => {
@@ -47,14 +51,14 @@ describe('buildWeek', () => {
 
   it('returns 7 cells', () => {
     const weekStart = getWeekStart(new Date(2026, 5, 22));
-    const cells = buildWeek(weekStart, emptyDecls, null);
+    const cells = buildWeek(weekStart, emptyDecls, null, TONE_MAP['grimoire-emeraude']);
     expect(cells).toHaveLength(7);
   });
 
   it('marks today as isToday', () => {
     const today = new Date();
     const weekStart = getWeekStart(today);
-    const cells = buildWeek(weekStart, emptyDecls, null);
+    const cells = buildWeek(weekStart, emptyDecls, null, TONE_MAP['grimoire-emeraude']);
 
     const todayCell = cells.find((c) => {
       const midnight = new Date(c.date);
@@ -73,7 +77,7 @@ describe('buildWeek', () => {
     const pastWeekStart = new Date();
     pastWeekStart.setDate(pastWeekStart.getDate() - 14);
     const weekStart = getWeekStart(pastWeekStart);
-    const cells = buildWeek(weekStart, emptyDecls, null);
+    const cells = buildWeek(weekStart, emptyDecls, null, TONE_MAP['grimoire-emeraude']);
     expect(cells.every((c) => c.isPast)).toBe(true);
   });
 
@@ -82,7 +86,7 @@ describe('buildWeek', () => {
     const futureWeekStart = new Date();
     futureWeekStart.setDate(futureWeekStart.getDate() + 7);
     const weekStart = getWeekStart(futureWeekStart);
-    const cells = buildWeek(weekStart, emptyDecls, null);
+    const cells = buildWeek(weekStart, emptyDecls, null, TONE_MAP['grimoire-emeraude']);
     expect(cells.every((c) => !c.isPast)).toBe(true);
   });
 });
@@ -109,7 +113,7 @@ describe('buildWeek - findWeekDecl avec endDate (AC1)', () => {
       startDate: null,
       endDate: '2026-06-21', // veille du lundi → la série est terminée
     };
-    const cells = buildWeek(weekStart, [decl], null);
+    const cells = buildWeek(weekStart, [decl], null, TONE_MAP['grimoire-emeraude']);
     const monday = cells[0]; // index 0 = lundi
     expect(monday.morning.declLabel).toBeNull();
   });
@@ -124,11 +128,29 @@ describe('buildWeek - findWeekDecl avec endDate (AC1)', () => {
       startDate: null,
       endDate: '2026-06-22', // exactement le jour de la cellule → encore valide
     };
-    const cells = buildWeek(weekStart, [decl], null);
+    const cells = buildWeek(weekStart, [decl], null, TONE_MAP['grimoire-emeraude']);
     const monday = cells[0];
     expect(monday.morning.declLabel).not.toBeNull();
     expect(monday.morning.declLabel).toContain('Récurrent');
   });
+
+  for (const theme of THEMES) {
+    it(`${theme} : le libellé de déclaration emploie les mots du thème passé`, () => {
+      const decl: AvailabilityDeclarationDto = {
+        ...BASE_DECL,
+        kind: 'UNAVAILABLE',
+        recurKind: 'RECURRING',
+        dayOfWeek: 1,
+        slot: 'MORNING',
+        startDate: null,
+        endDate: null,
+      };
+      const tone = TONE_MAP[theme];
+      const label = buildWeek(weekStart, [decl], null, tone)[0].morning.declLabel;
+      expect(label).toContain(tone['calendar.week_decl_unavailable']);
+      expect(label).toContain(tone['calendar.week_decl_recurring']);
+    });
+  }
 
   it('renvoie le declLabel pour une déclaration RECURRING sans endDate', () => {
     const decl: AvailabilityDeclarationDto = {
@@ -140,7 +162,7 @@ describe('buildWeek - findWeekDecl avec endDate (AC1)', () => {
       startDate: null,
       endDate: null,
     };
-    const cells = buildWeek(weekStart, [decl], null);
+    const cells = buildWeek(weekStart, [decl], null, TONE_MAP['grimoire-emeraude']);
     const wednesday = cells[2]; // index 2 = mercredi
     expect(wednesday.afternoon.declLabel).not.toBeNull();
   });
@@ -466,7 +488,7 @@ describe('CalendarWeekView — sélection par glissement', () => {
     fixture.detectChanges();
 
     const otherBtn = Array.from(el.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Autre…',
+      (b) => b.textContent?.trim() === GRIMOIRE_TONE['calendar.selbar_other'],
     )!;
     otherBtn.click();
     fixture.detectChanges();
@@ -776,8 +798,14 @@ describe('CalendarWeekView — densité variable (Story 36.13)', () => {
   it('Story 36.6, AC14 — le nom accessible de la cellule dit la participation et ma réponse', () => {
     create([voteEntry(2, { vote: PARTICIPATION })], ['votes-en-cours']);
     const label = cellAt('MORNING', 2).getAttribute('aria-label')!;
-    expect(label).toContain('3 réponses sur 4');
-    expect(label).toContain('tu as dit oui');
+    expect(label).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.util_participation_many'], { n: 3, total: 4 }),
+    );
+    expect(label).toContain(
+      fillTone(GRIMOIRE_TONE['calendar.util_answer_mine'], {
+        answer: GRIMOIRE_TONE['calendar.util_answer_yes'],
+      }),
+    );
   });
 
   it('🚨 Story 36.6, AC9 — le nœud de piste reste un descendant porteur de data-cell-date', () => {
@@ -1106,7 +1134,7 @@ describe('CalendarWeekView — mode de composition (Story 36.10)', () => {
 
     const cell = cellAt('EVENING', 2);
     expect(cell.classList.contains('slot-cell--composed')).toBe(true);
-    expect(cell.getAttribute('aria-label')).toContain('désigné pour le vote');
+    expect(cell.getAttribute('aria-label')).toContain(GRIMOIRE_TONE['common.designe_pour_le_vote']);
 
     const other = cellAt('MORNING', 2);
     expect(other.classList.contains('slot-cell--composed')).toBe(false);

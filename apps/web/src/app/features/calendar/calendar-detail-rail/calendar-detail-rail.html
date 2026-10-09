@@ -4,7 +4,7 @@
   class="rail"
   [class.rail--loading]="loading()"
   role="region"
-  aria-label="Détail du jour"
+  [attr.aria-label]="theme.tone()['common.detail_du_jour']"
   aria-live="polite"
 >
   @if (detail(); as d) {
@@ -72,7 +72,7 @@
             (click)="onVoteActivate(s, $event)"
           >
             <b>{{ s.pollLabel }}</b
-            ><span class="m"> · vote de date</span>
+            ><span class="m"> {{ theme.tone()['common.vote_de_date'] }}</span>
             <!-- Story 36.6 — le rail est la surface la plus riche : il porte la piste, son
                  compteur ET ma réponse en toutes lettres, à TOUTES les largeurs (AC4, AC5). -->
             <app-poll-track class="rail-track track-lg" [vote]="s.pollVote" />
@@ -80,7 +80,7 @@
         } @else if (s.pollLabel) {
           <span class="v">
             <b>{{ s.pollLabel }}</b
-            ><span class="m"> · vote de date</span>
+            ><span class="m"> {{ theme.tone()['common.vote_de_date'] }}</span>
           </span>
         } @else {
           <!-- Jamais la couleur seule : l'état est écrit en toutes lettres (AC8). -->
@@ -116,7 +116,9 @@
       </div>
     }
   } @else {
-    <div class="dl">Détail du jour</div>
-    <div class="it"><span class="v empty">Aucun jour à détailler</span></div>
+    <div class="dl">{{ theme.tone()['common.detail_du_jour'] }}</div>
+    <div class="it">
+      <span class="v empty">{{ theme.tone()['calendar.rail_empty'] }}</span>
+    </div>
   }
 </div>

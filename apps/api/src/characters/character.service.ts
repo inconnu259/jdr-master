@@ -11,6 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { Prisma, type Character } from '@prisma/client';
 import { hasPrismaErrorCode } from '../common/prisma-error.util';
+import { gameSystemHasModule } from '@master-jdr/shared';
 import type {
   CharacterDto,
   DerivedStats,
@@ -37,7 +38,6 @@ import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { EmailService } from '../email/email.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
-import { SUPPORTED_GAME_SYSTEMS } from '../game-systems/supported-game-systems';
 import { CreateCharacterDto } from './dto/create-character.dto';
 import type { CreateLevelUpDto } from './dto/create-level-up.dto';
 import type { CreateInventoryItemDto } from './dto/create-inventory-item.dto';
@@ -199,7 +199,10 @@ export class CharacterService {
   async create(partieId: string, userId: string, dto: CreateCharacterDto): Promise<CharacterDto> {
     const partie = await this.parties.getViewable(partieId, userId);
 
-    if (!SUPPORTED_GAME_SYSTEMS.includes(dto.gameSystemId)) {
+    // Revue de code (Story 29.17) : lit gameSystemHasModule() (packages/shared), la même source
+    // que PartiesService.create()/update() et PartieForm — plus SUPPORTED_GAME_SYSTEMS, une liste
+    // séparée qui pouvait diverger silencieusement (risque déjà consigné dans deferred-work.md).
+    if (!gameSystemHasModule(dto.gameSystemId)) {
       throw new BadRequestException(`Système de jeu non supporté : ${dto.gameSystemId}`);
     }
 
@@ -382,23 +385,41 @@ export class CharacterService {
     // tout participant (Story 6.5) : un fellow player n'est ni l'un ni l'autre, mais l'ancienne
     // heuristique frontend ("tout non-propriétaire = MJ") le traitait à tort comme MJ (cf. revue
     // de code Story 6.5). C'est ce champ, pas une heuristique client, qui doit trancher.
+    //
+    // Story 31.6 : le cadenas de visibilité ne s'applique JAMAIS au propriétaire de la fiche ni au
+    // MJ de la partie (Intent, "Always") — le masque n'est résolu (requête dédiée) que dans le cas
+    // restant, un fellow player, seul lecteur concerné depuis la Story 6.5.
+    const isOwnerOrMj = character.userId === userId || mjId === userId;
+    const lockedPaths = isOwnerOrMj
+      ? new Set<string>()
+      : await this.resolveLockedPaths(character.partieId);
     return toDto(
       character,
       owner?.pseudo ?? '',
       owner?.displayName ?? '',
       mjId === character.userId,
       mjId === userId,
+      lockedPaths,
     );
+  }
+
+  /**
+   * Résout les chemins verrouillés (Story 31.6) d'une Partie en chemins pointés consommables par
+   * `toDto()` (`"classId"`, `"attributes.AGI"`). Aucune configuration en base ⇔ ensemble vide
+   * (Partie neuve, cf. I/O Matrix du spec 31.6). N'est appelé que pour un lecteur qui n'est ni le
+   * propriétaire ni le MJ — jamais depuis `toDto()` lui-même (qui reste pur/synchrone).
+   */
+  private async resolveLockedPaths(partieId: string): Promise<Set<string>> {
+    const locks = await this.prisma.partieVisibilityLock.findMany({ where: { partieId } });
+    return new Set(locks.map((l) => (l.subField ? `${l.fieldKey}.${l.subField}` : l.fieldKey)));
   }
 
   async findByPartie(partieId: string, userId: string): Promise<CharacterDto[]> {
     const partie = await this.parties.getViewable(partieId, userId);
-    const characters =
-      partie.mjId === userId
-        ? await this.prisma.character.findMany({ where: { partieId } })
-        : await this.prisma.character.findMany({
-            where: { partieId, userId },
-          });
+    // Story 31.5 : tout membre valide de la Partie (contrôle d'appartenance déjà effectué par
+    // `getViewable` ci-dessus) voit désormais tous les personnages, pas seulement le sien
+    // (Intent, "Approach") — plus de restriction `userId` dans le `where` selon le rôle.
+    const characters = await this.prisma.character.findMany({ where: { partieId } });
     if (characters.length === 0) return [];
 
     // Résolution en lot (pas de N+1) — même pattern que PartiesService.resolveParticipants.
@@ -410,24 +431,38 @@ export class CharacterService {
     const ownerById = new Map(owners.map((o) => [o.id, o]));
 
     const viewerIsMj = partie.mjId === userId;
-    return characters.map((c) =>
-      toDto(
+    // Story 31.6 : le masque de visibilité s'applique à chaque personnage d'autrui pour un
+    // lecteur qui n'est ni son propriétaire ni le MJ — jamais au sien ni à ceux vus par le MJ
+    // (Intent, "Always"), même règle que `findOne` (L.392-395). Résolu au plus une fois pour toute
+    // la liste (pas de N+1) : jamais si le viewer est le MJ (toujours `isOwnerOrMj`), ni si tous
+    // les personnages retournés appartiennent déjà au viewer (personne d'autre à masquer), sinon
+    // une seule requête pour tous les personnages d'autrui.
+    const hasOtherOwnerCharacter = characters.some((c) => c.userId !== userId);
+    const lockedPaths =
+      viewerIsMj || !hasOtherOwnerCharacter
+        ? new Set<string>()
+        : await this.resolveLockedPaths(partieId);
+    return characters.map((c) => {
+      const isOwnerOrMj = c.userId === userId || viewerIsMj;
+      return toDto(
         c,
         ownerById.get(c.userId)?.pseudo ?? '',
         ownerById.get(c.userId)?.displayName ?? '',
         c.userId === partie.mjId,
         viewerIsMj,
-      ),
-    );
+        isOwnerOrMj ? new Set<string>() : lockedPaths,
+      );
+    });
   }
 
   /**
    * Liste tous les personnages d'une Partie, sans notion de viewer (Story 8.6) — usage interne
    * cross-module uniquement (`ScenariosService.loadRetrospectiveNotes`), déjà en aval d'un
    * `getViewable`/`getOwned` réussi sur la Partie côté appelant. Contrairement à `findByPartie`
-   * (scope au viewer : MJ voit tout, joueur seulement son propre personnage), cette méthode n'a
-   * pas de restriction — nécessaire pour agréger le journal de TOUS les participants, pas
-   * seulement celui du viewer courant (cf. `[ASSUMPTION]` Dev Notes Story 8.6, Task 6).
+   * (scopé au viewer : tout membre valide voit tous les personnages, avec masquage par champ
+   * selon le cadenas de visibilité — Story 31.5/31.6), cette méthode n'a ni notion de viewer ni
+   * masquage — nécessaire pour agréger le journal de TOUS les participants, pas seulement celui
+   * du viewer courant (cf. `[ASSUMPTION]` Dev Notes Story 8.6, Task 6).
    */
   async findAllByPartie(partieId: string): Promise<{ id: string; userId: string }[]> {
     return this.prisma.character.findMany({
@@ -443,6 +478,10 @@ export class CharacterService {
    * viewer) : une seule résolution `users.findById` suffit, contrairement à `findByPartie` qui
    * résout plusieurs propriétaires distincts. `ownerIsMj`/`viewerIsMj` varient en revanche par
    * Partie (l'appelant peut être MJ d'une Partie et joueur d'une autre) — jamais un calcul global.
+   *
+   * Story 31.6 : aucun masque à calculer (`toDto()` reçoit son défaut vide) — le lecteur EST
+   * toujours le propriétaire de chaque personnage retourné ici, un des deux rôles qui voient
+   * toujours la fiche entière (Intent, "Always").
    */
   async findMine(userId: string): Promise<MyCharacterDto[]> {
     const characters = await this.prisma.character.findMany({
@@ -1535,23 +1574,96 @@ export class CharacterService {
   }
 }
 
+/**
+ * Un chemin verrouillé (Story 31.6) dérive-t-il `derived` ? `compute-derived.ts` ne lit QUE
+ * `attributes`/`levelUps` — verrouiller la clé entière OU un seul sous-champ de l'une des deux
+ * retire `derived` EN ENTIER, jamais une entrée isolée (cf. Design Notes du spec 31.6 : pas de
+ * carte de dépendance persistée, cette règle est dérivée de `compute-derived.ts` et doit être
+ * revue si cette fonction gagne une nouvelle dépendance). `levelUps` n'est pas verrouillable
+ * aujourd'hui (hors périmètre, cf. `GameSystemService.getSchema`) mais la règle reste générique.
+ */
+function locksDerivedDependency(lockedPaths: ReadonlySet<string>): boolean {
+  for (const path of lockedPaths) {
+    if (
+      path === 'attributes' ||
+      path.startsWith('attributes.') ||
+      path === 'levelUps' ||
+      path.startsWith('levelUps.')
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Retire de `sheetData` chaque chemin verrouillé (clé simple `"classId"` ou sous-champ
+ * `"attributes.AGI"`) et renvoie la liste de ce qui a été RÉELLEMENT retiré (un chemin verrouillé
+ * mais déjà absent de la fiche n'y figure pas). Ne clone `sheetData` que si un retrait est
+ * nécessaire — jamais de mutation de l'objet reçu (celui-ci vient directement de Prisma).
+ */
+function applyVisibilityMask(
+  sheetData: SheetData,
+  lockedPaths: ReadonlySet<string>,
+): { sheetData: SheetData; removedPaths: string[] } {
+  if (lockedPaths.size === 0) return { sheetData, removedPaths: [] };
+
+  const masked = structuredClone(sheetData);
+  const removedPaths: string[] = [];
+  for (const path of lockedPaths) {
+    const dotIndex = path.indexOf('.');
+    if (dotIndex === -1) {
+      if (Object.hasOwn(masked, path)) {
+        delete masked[path];
+        removedPaths.push(path);
+      }
+      continue;
+    }
+    const key = path.slice(0, dotIndex);
+    const subField = path.slice(dotIndex + 1);
+    const parent = masked[key];
+    if (
+      parent !== null &&
+      typeof parent === 'object' &&
+      !Array.isArray(parent) &&
+      Object.hasOwn(parent as object, subField)
+    ) {
+      delete (parent as Record<string, unknown>)[subField];
+      removedPaths.push(path);
+    }
+  }
+  return { sheetData: masked, removedPaths };
+}
+
 function toDto(
   character: Character,
   ownerPseudo: string,
   ownerDisplayName: string,
   ownerIsMj: boolean,
   viewerIsMj: boolean,
+  // Story 31.6 : masque calculé par l'APPELANT (owner/MJ → toujours vide) — jamais résolu ici par
+  // un accès base, pour que `toDto()` reste pur/synchrone (Intent, "Always"). Défaut vide : les
+  // appelants propriétaire-seul/MJ-seul (mutations) n'ont rien à calculer.
+  lockedPaths: ReadonlySet<string> = new Set(),
 ): CharacterDto {
   // `sheetData`/`derived` sont des colonnes JSON : Prisma les rend en `JsonValue`, sans forme
   // garantie. La relecture vers les types du contrat se fait ici, au seul point de sortie.
-  const sheetData = (character.sheetData ?? {}) as SheetData;
+  const rawSheetData = (character.sheetData ?? {}) as SheetData;
+  const { sheetData, removedPaths } = applyVisibilityMask(rawSheetData, lockedPaths);
+  const derivedLocked = locksDerivedDependency(lockedPaths);
   return {
     id: character.id,
     userId: character.userId,
     partieId: character.partieId,
     gameSystemId: character.gameSystemId,
     sheetData,
-    derived: character.derived as unknown as DerivedStats,
+    // `derived` reste typé plein dans `CharacterDto` (contrat DTO existant) : l'absence à
+    // l'exécution quand `derivedLocked` est vraie est intentionnelle, signalée par
+    // `hiddenFields` — `JSON.stringify` omet une propriété `undefined`, exactement comme les clés
+    // retirées de `sheetData` ci-dessus (jamais vide ni nulle, cf. AC « la clé est absente »).
+    derived: derivedLocked
+      ? (undefined as unknown as DerivedStats)
+      : (character.derived as unknown as DerivedStats),
     portraitUrl: character.portraitUrl ?? null,
     portraitCropData: character.portraitCropData ?? null,
     pdfPortraitCropData: character.pdfPortraitCropData ?? null,
@@ -1567,6 +1679,7 @@ function toDto(
     // acquis tant que le joueur n'a pas traité son `LevelUpBanner` (cf. `pendingLevels`).
     level: 1 + ((sheetData as { levelUps?: unknown[] }).levelUps?.length ?? 0),
     journalAutoAssociate: character.journalAutoAssociate ?? false,
+    hiddenFields: derivedLocked ? [...removedPaths, 'derived'] : removedPaths,
   };
 }
 

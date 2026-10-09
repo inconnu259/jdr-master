@@ -14,6 +14,7 @@ import type { CastVoteDto, DaySlot, SessionPollDto, VoteAnswer } from '@master-j
 import { AuthService } from '../../../core/auth/auth.service';
 import { PollService } from '../../../core/poll/poll.service';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 
 const SLOT_LABELS: Record<DaySlot, string> = {
   MORNING: 'Matin',
@@ -57,6 +58,13 @@ export class PollResponseComponent {
 
   readonly SLOT_LABELS = SLOT_LABELS;
   readonly VOTE_OPTIONS: VoteAnswer[] = ['YES', 'NO', 'MAYBE'];
+  /** Clé de ton du libellé de chaque bouton de vote : les valeurs d'API (YES / NO / MAYBE) ne
+   *  s'affichent jamais telles quelles. */
+  readonly VOTE_LABEL_KEYS: Record<VoteAnswer, string> = {
+    YES: 'common.oui',
+    NO: 'common.non',
+    MAYBE: 'common.peut_etre',
+  };
 
   protected readonly isClosed = computed(() => this.poll().status === 'CLOSED');
   protected readonly hasSelection = computed(() => this.pendingAnswers().size > 0);
@@ -175,7 +183,10 @@ export class PollResponseComponent {
     } else {
       const successCount = entries.length - failed.size;
       this.error.set(
-        `${successCount}/${entries.length} réponse(s) enregistrée(s). Réessayez pour les autres.`,
+        fillTone(this.theme.tone()['pollui.response_partial_error'], {
+          success: successCount,
+          total: entries.length,
+        }),
       );
     }
     this.saving.set(false);

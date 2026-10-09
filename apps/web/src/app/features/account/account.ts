@@ -14,6 +14,8 @@ import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 import { ThemeSelector } from './theme-selector/theme-selector';
 import { FieldEditPencil } from '../characters/character-sheet/field-edit-pencil/field-edit-pencil';
+import { PasswordReveal } from '../../shared/password-reveal/password-reveal';
+import { PasswordToggle } from '../../shared/password-reveal/password-toggle';
 
 const DISPLAY_NAME_MAX_LENGTH = 60;
 
@@ -58,6 +60,8 @@ const CALENDAR_INTENTS: readonly CalendarIntent[] = [
     MatCheckboxModule,
     ThemeSelector,
     FieldEditPencil,
+    PasswordReveal,
+    PasswordToggle,
   ],
   templateUrl: './account.html',
   styleUrl: './account.scss',

@@ -94,7 +94,7 @@
       <mat-form-field appearance="outline">
         <mat-label>{{ theme.tone()['partie.system_label'] }}</mat-label>
         <mat-select formControlName="gameSystemId">
-          @for (s of systems; track s.id) {
+          @for (s of systems(); track s.id) {
             <mat-option [value]="s.id">{{ s.name }}</mat-option>
           }
         </mat-select>

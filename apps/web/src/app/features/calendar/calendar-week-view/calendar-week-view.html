@@ -1,14 +1,27 @@
 <div class="calendar-week">
   <div class="week-nav">
-    <button mat-icon-button (click)="prevWeek()" aria-label="Semaine précédente">
+    <button
+      mat-icon-button
+      (click)="prevWeek()"
+      [attr.aria-label]="theme.tone()['calendar.week_prev_aria']"
+    >
       <mat-icon>chevron_left</mat-icon>
     </button>
     <h2 class="week-title">{{ weekLabel() }}</h2>
-    <button mat-icon-button (click)="nextWeek()" aria-label="Semaine suivante">
+    <button
+      mat-icon-button
+      (click)="nextWeek()"
+      [attr.aria-label]="theme.tone()['calendar.week_next_aria']"
+    >
       <mat-icon>chevron_right</mat-icon>
     </button>
-    <button mat-icon-button (click)="goToToday()" class="today-btn" aria-label="Revenir à la semaine actuelle"
-            [style.visibility]="isCurrentWeek() ? 'hidden' : 'visible'">
+    <button
+      mat-icon-button
+      (click)="goToToday()"
+      class="today-btn"
+      [attr.aria-label]="theme.tone()['calendar.week_today_aria']"
+      [style.visibility]="isCurrentWeek() ? 'hidden' : 'visible'"
+    >
       <mat-icon>today</mat-icon>
     </button>
   </div>

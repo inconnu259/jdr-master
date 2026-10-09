@@ -22,6 +22,9 @@ import { AnnouncementsService } from '../../../core/announcements/announcements.
 import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
 import { makeAnnouncementDto } from '../../../core/announcements/announcement-dto.fixture';
 import { makeCharacterDto } from '../../../core/characters/character-dto.fixture';
+import { TONE_MAP } from '../../../core/theme/tones';
+
+const GRIMOIRE_TONE = TONE_MAP['grimoire-emeraude'];
 
 const BASE: ScenarioDto = {
   id: 's1',
@@ -147,7 +150,10 @@ describe('ScenarioReadDialog', () => {
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Une enquête discrète.');
     expect(text).toContain('3 h');
-    expect(text).toContain('En cours');
+    // Story 32.3 — « Courant », plus « En cours » : ce dernier reste réservé au VOTE (« Vote en
+    // cours »), et le bouton voisin de `scenario-editor` dit déjà « Marquer comme Courant ».
+    expect(text).toContain('Courant');
+    expect(text).not.toContain('En cours');
     expect(text).not.toContain('Résumé de fin');
   });
 
@@ -165,7 +171,7 @@ describe('ScenarioReadDialog', () => {
   it('PASSE sans résumé → message neutre, pas d’incitation MJ', async () => {
     const { fixture } = await createComponent({ ...BASE, status: 'PASSE', resumeFin: null });
     const text = fixture.nativeElement.textContent as string;
-    expect(text).toContain('Aucun résumé pour l’instant.');
+    expect(text).toContain(GRIMOIRE_TONE['scenarios.read_resume_empty']);
   });
 
   it('aucun élément interactif d’édition dans le DOM, quel que soit le statut', async () => {
@@ -198,7 +204,9 @@ describe('ScenarioReadDialog', () => {
         { ...BASE, status: 'PASSE', resumeFin: null },
         { isMj: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Rédiger le résumé de fin');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.read_resume_write'],
+      );
     });
 
     it('MJ + PASSE avec résumé déjà rédigé → bouton « Modifier le résumé de fin » visible', async () => {
@@ -206,7 +214,9 @@ describe('ScenarioReadDialog', () => {
         { ...BASE, status: 'PASSE', resumeFin: 'Les PJ ont vaincu le dragon.' },
         { isMj: true },
       );
-      expect(fixture.nativeElement.textContent).toContain('Modifier le résumé de fin');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.read_resume_edit'],
+      );
     });
 
     it('joueur (isMj=false) + PASSE → aucun CTA de rédaction', async () => {
@@ -245,7 +255,9 @@ describe('ScenarioReadDialog', () => {
         { ...BASE, status: 'PASSE' },
         { characters: [owner], currentUserId: 'viewer1' },
       );
-      expect(fixture.nativeElement.textContent).toContain('Association automatique');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.read_auto_associate'],
+      );
     });
 
     it('non-participant (aucun personnage sur cette Partie) → section absente', async () => {
@@ -418,7 +430,9 @@ describe('ScenarioReadDialog', () => {
         { ...BASE, status: 'PASSE' },
         { characters: [owner], currentUserId: 'viewer1', ownNotes: notes },
       );
-      expect(fixture.nativeElement.textContent).toContain('déverrouillez-la');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.read_note_private_hint'],
+      );
     });
 
     it('note partagée cochée → aucun indice de déverrouillage', async () => {
@@ -437,7 +451,9 @@ describe('ScenarioReadDialog', () => {
         { ...BASE, status: 'PASSE' },
         { characters: [owner], currentUserId: 'viewer1', ownNotes: notes },
       );
-      expect(fixture.nativeElement.textContent).not.toContain('déverrouillez-la');
+      expect(fixture.nativeElement.textContent).not.toContain(
+        GRIMOIRE_TONE['scenarios.read_note_private_hint'],
+      );
     });
 
     it('clic sur le cadenas → appelle toggleNoteShare et bascule shared', async () => {
@@ -470,7 +486,9 @@ describe('ScenarioReadDialog', () => {
       '%s → section participants/bouton absents',
       async (partieKind) => {
         const { fixture } = await createComponent({ ...BASE, status: 'COURANT' }, { partieKind });
-        expect(fixture.nativeElement.textContent).not.toContain('Participer à cette enquête');
+        expect(fixture.nativeElement.textContent).not.toContain(
+          GRIMOIRE_TONE['scenarios.read_participate'],
+        );
         expect(fixture.nativeElement.querySelector('.participants')).toBeNull();
       },
     );
@@ -480,7 +498,9 @@ describe('ScenarioReadDialog', () => {
         { ...BASE, status: 'COURANT', participants: [] },
         { partieKind: 'CAMPAGNE_EPISODIQUE', currentUserId: 'viewer1' },
       );
-      expect(fixture.nativeElement.textContent).toContain('Participer à cette enquête');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['scenarios.read_participate'],
+      );
     });
 
     it('clic → appelle participate, scenario() réassigné, bouton disparaît sans rechargement', async () => {
@@ -558,7 +578,7 @@ describe('ScenarioReadDialog', () => {
       );
       const button = Array.from(
         fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>,
-      ).find((b) => b.textContent?.includes('Participer à cette enquête'))!;
+      ).find((b) => b.textContent?.includes(GRIMOIRE_TONE['scenarios.read_participate']))!;
 
       const comp = fixture.componentInstance as any;
       const clickPromise = comp.participate().catch(() => {});
@@ -639,7 +659,9 @@ describe('ScenarioReadDialog', () => {
       );
       expect(fixture.nativeElement.querySelector('app-character-summary-card')).toBeNull();
       expect(fixture.nativeElement.textContent).toContain('Viewer');
-      expect(fixture.nativeElement.textContent).toContain('pas encore de personnage');
+      expect(fixture.nativeElement.textContent).toContain(
+        GRIMOIRE_TONE['common.pas_encore_de_personnage'],
+      );
     });
   });
 
@@ -653,6 +675,8 @@ describe('ScenarioReadDialog', () => {
             {
               id: 'seance1',
               scenarioId: 's1',
+              dateValidee: null,
+              slotValidee: null,
               compteRendu: null,
               heureRdv: null,
               lieu: null,

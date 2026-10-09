@@ -19,10 +19,12 @@ import { MatInputModule } from '@angular/material/input';
 import { MatListModule } from '@angular/material/list';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { gameSystemHasModule } from '@master-jdr/shared';
 import type {
   AnnouncementDto,
   CharacterDto,
@@ -51,17 +53,21 @@ import { RealtimeService, partieTopic } from '../../../core/realtime/realtime.se
 import { ambiguousUserIds } from '../../../shared/identity/identity-ambiguity.util';
 import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
 import { ScenariosService, matchesPartie } from '../../../core/scenarios/scenarios.service';
-import { getRespondedCount } from '../../../core/poll/poll.util';
+import { getRespondedCount, hasUnansweredOptions } from '../../../core/poll/poll.util';
+import { seanceState, type StatusBadgeState } from '../../../core/status/status-derivation';
+import { toDateKey } from '../../calendar/day-detail.utils';
+import { StatusBadge } from '../../../shared/status-badge/status-badge';
 import { ThemeToneService } from '../../../core/theme/theme-tone.service';
+import { fillTone } from '../../../core/theme/tone-format';
 import { ContextualNavService } from '../../../core/navigation/contextual-nav.service';
-import { gameSystemName, partieKindLabel } from '../../../core/parties/parties.util';
+import { gameSystemName, partieKindLabelKey } from '../../../core/parties/parties.util';
 import { ConfirmDialog } from '../confirm-dialog/confirm-dialog';
 import { CharacterSummaryCard } from '../../characters/character-summary-card/character-summary-card';
 import { RosterRail } from '../roster-rail/roster-rail';
 import { RosterStrip } from '../roster-strip/roster-strip';
 import { XpDistributionPanel } from '../xp-distribution-panel/xp-distribution-panel';
 import { XpHistory } from '../xp-history/xp-history';
-import { ScenarioDrafts } from '../../scenarios/scenario-drafts/scenario-drafts';
+import { ScenarioList } from '../../scenarios/scenario-list/scenario-list';
 import { ScenarioOneShotTab } from '../../scenarios/scenario-one-shot-tab/scenario-one-shot-tab';
 import { ScenarioTimeline } from '../../scenarios/scenario-timeline/scenario-timeline';
 import { AnnouncementFormComponent } from '../../announcements/announcement-form/announcement-form';
@@ -70,11 +76,19 @@ import { AnnouncementsService } from '../../../core/announcements/announcements.
 import { UnseenAnnouncementsService } from '../../../core/announcements/unseen-announcements.service';
 import { scrollToAnnouncement } from '../../../core/announcements/scroll-to-announcement.util';
 import { CharacterRolesService } from '../../../core/character-roles/character-roles.service';
-import { HommeDragonSheet } from '../../homme-dragon/homme-dragon-sheet/homme-dragon-sheet';
+import { HommeDragonAventurePanel } from '../../homme-dragon/homme-dragon-aventure-panel/homme-dragon-aventure-panel';
 import { IdentityLabel } from '../../../shared/identity/identity-label';
 
 /** Index de l'onglet "Invitations" — toujours en 2e position pour le MJ (jamais d'onglet "Ma fiche" pour lui). */
 const MJ_INVITATIONS_TAB_INDEX = 1;
+
+/** Story 32.1 : longueur minimale de saisie avant d'interroger `GET /users/search` (autocomplétion
+ *  par pseudo) — en dessous, aucune requête HTTP n'est émise (décidé par l'utilisateur, 2026-09-22). */
+const SEARCH_MIN_LENGTH = 2;
+
+/** Story 32.1 : délai de debounce (ms) avant de déclencher automatiquement `runSearch()` au fil de
+ *  la frappe — pas de lib de debounce, un simple `setTimeout` suffit à l'échelle actuelle. */
+const SEARCH_DEBOUNCE_MS = 500;
 
 @Component({
   selector: 'app-partie-detail',
@@ -89,18 +103,20 @@ const MJ_INVITATIONS_TAB_INDEX = 1;
     MatInputModule,
     MatListModule,
     MatTabsModule,
+    MatProgressSpinnerModule,
     CharacterSummaryCard,
     RosterRail,
     RosterStrip,
     XpDistributionPanel,
     XpHistory,
-    ScenarioDrafts,
+    ScenarioList,
     ScenarioOneShotTab,
     ScenarioTimeline,
     AnnouncementFormComponent,
     AnnonceCard,
-    HommeDragonSheet,
+    HommeDragonAventurePanel,
     IdentityLabel,
+    StatusBadge,
   ],
   templateUrl: './partie-detail.html',
   styleUrl: './partie-detail.scss',
@@ -138,6 +154,13 @@ export class PartieDetail implements OnInit {
   protected readonly activePolls = signal<SessionPollDto[]>([]);
   protected readonly links = signal<InviteLinkDto[]>([]);
   protected readonly characters = signal<CharacterDto[]>([]);
+  // Revue de code (Story 29.15) : `characters()` démarre à `[]` et n'est peuplé que tardivement
+  // dans `ngOnInit()` (après `loadMembers`/`loadActivePolls`/`announcements`), alors que `partie()`
+  // (qui déclenche le rendu du tab group) l'est bien plus tôt. Sans ce garde, un joueur ayant déjà
+  // un personnage atterrissait brièvement sur "Ma fiche" (CTA de création visible) avant d'être
+  // basculé silencieusement vers "Détails" une fois `characters()` chargé — flicker/redirection non
+  // désirée. `canCreateCharacter` exige désormais ce signal avant de statuer.
+  protected readonly charactersLoaded = signal(false);
   protected readonly xpDistributions = signal<XpDistributionDto[]>([]);
   protected readonly showXpPanel = signal(false);
   protected readonly showAnnouncementForm = signal(false);
@@ -168,11 +191,13 @@ export class PartieDetail implements OnInit {
   protected readonly gameSystemContent = signal<GameSystemContentDto | null>(null);
   protected readonly search = signal('');
   protected readonly results = signal<UserSearchResultDto[]>([]);
+  // Story 32.1 : minuteur du debounce d'autocomplétion — annulé/réarmé à chaque frappe, jamais lu
+  // ailleurs qu'ici et dans le nettoyage à la destruction du composant.
+  private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   protected readonly notice = signal<string | null>(null);
   protected readonly inviteEmail = signal('');
   protected readonly invitingByEmail = signal(false);
   protected readonly inviteEmailError = signal<string | null>(null);
-  protected readonly showTroupe = signal(false);
   protected readonly referenceAssetError = signal<string | null>(null);
   protected readonly downloadingReferenceAsset = signal(false);
   protected readonly prepAssetError = signal<string | null>(null);
@@ -181,13 +206,48 @@ export class PartieDetail implements OnInit {
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
   protected readonly isMj = computed(() => this.partie()?.mjId === this.auth.currentUser()?.id);
 
+  /** Story 32.2 (revue de code) : la zone Consultation de l'onglet Détails ne doit jamais se rendre
+   *  avec un titre de zone et aucun contenu — un joueur sans annonce de campagne ni bandeau
+   *  transitoire n'a ni `notice()`, ni `isMj()` (historique d'XP), ni `campaignAnnouncements()`. */
+  protected readonly hasConsultationContent = computed(
+    () => !!this.notice() || this.isMj() || this.campaignAnnouncements().length > 0,
+  );
+
   /** Personnages de l'utilisateur courant sur cette partie (pas ceux des autres joueurs). */
   protected readonly myCharacters = computed(() => {
     const userId = this.auth.currentUser()?.id;
     return this.characters().filter((c) => c.userId === userId);
   });
 
+  /** Story « Fiches » : tous les personnages de la partie, le sien en tête — alimente l'onglet
+   *  générique (distinct de `myCharacters`, toujours utilisé par `canCreateCharacter`). Revue de
+   *  code : partitionne `characters()` à partir des ids déjà présents dans `myCharacters()` plutôt
+   *  que de refiltrer indépendamment sur `userId` — une seule définition de « mine », jamais deux
+   *  risquant de diverger si l'une change sans l'autre. */
+  protected readonly charactersSelfFirst = computed(() => {
+    const mine = this.myCharacters();
+    const mineIds = new Set(mine.map((c) => c.id));
+    const others = this.characters().filter((c) => !mineIds.has(c.id));
+    return [...mine, ...others];
+  });
+
   protected readonly characterName = characterName;
+
+  /** Prédicat unique (Story 29.15) : pas MJ · aucun personnage sur cette partie · système avec
+   *  module · partie non terminée. Réutilisé tel quel par la visibilité du bouton de création,
+   *  l'onglet par défaut et le tooltip du slot roster — jamais réécrit ailleurs (réutilisé tel
+   *  quel par la story 29.16). */
+  protected readonly canCreateCharacter = computed(() => {
+    const p = this.partie();
+    return (
+      !!p &&
+      this.charactersLoaded() &&
+      !this.isMj() &&
+      this.myCharacters().length === 0 &&
+      gameSystemHasModule(p.gameSystemId) &&
+      p.status !== 'TERMINEE'
+    );
+  });
 
   /** `isMatched` est synchrone — évite un flash d'un rendu desktop sur un premier chargement mobile. */
   protected readonly isDesktop = toSignal(
@@ -256,8 +316,10 @@ export class PartieDetail implements OnInit {
     this.homonymyDismissed.set(true);
   }
 
-  /** Onglet "Ma fiche" (joueur mobile) sélectionné par défaut ; sinon "Détails" (index 0). */
-  protected readonly defaultTabIndex = computed(() => (!this.isMj() && !this.isDesktop() ? 1 : 0));
+  /** Onglet "Ma fiche" sélectionné par défaut quand il reste à créer son personnage (même prédicat
+   *  que le bouton, desktop et mobile confondus, Story 29.15) ; sinon "Détails" (index 0) — le MJ
+   *  n'a jamais cet onglet, donc toujours "Détails" par défaut. */
+  protected readonly defaultTabIndex = computed(() => (this.canCreateCharacter() ? 1 : 0));
 
   private readonly manualTabIndex = signal<number | null>(null);
 
@@ -265,9 +327,11 @@ export class PartieDetail implements OnInit {
     () => this.manualTabIndex() ?? this.defaultTabIndex(),
   );
 
-  /** Combinaison qui détermine l'ensemble des onglets rendus — un changement invalide toute sélection manuelle
-   *  antérieure (ex. joueur mobile sur "Ma fiche" qui redimensionne vers desktop, où cet onglet n'existe pas). */
-  private readonly tabSetKey = computed(() => `${this.isMj()}-${this.isDesktop()}`);
+  /** Détermine l'ensemble des onglets rendus — un changement invalide toute sélection manuelle
+   *  antérieure. Ne dépend plus de l'appareil (Story 29.15) : l'onglet "Ma fiche" se rend
+   *  désormais pour tout joueur non-MJ, desktop compris — seul le rôle MJ/joueur fait varier le
+   *  jeu d'onglets. */
+  private readonly tabSetKey = computed(() => `${this.isMj()}`);
 
   protected onTabIndexChange(index: number): void {
     this.manualTabIndex.set(index);
@@ -284,8 +348,12 @@ export class PartieDetail implements OnInit {
   }
 
   /** Slot "créer mon personnage" du roster desktop (joueur sans personnage sur cette partie) —
-   *  seul point d'entrée équivalent au CTA de l'onglet "Ma fiche" (mobile) sur cette vue. */
+   *  seul point d'entrée équivalent au CTA de l'onglet "Ma fiche" (mobile) sur cette vue. Revue de
+   *  code (Story 29.15) : le slot reste toujours visible (initiale/avatar + aria-label
+   *  `roster.create_slot_label`) mais ne doit naviguer que dans les mêmes conditions que ce CTA —
+   *  même prédicat `canCreateCharacter()`, jamais réécrit ailleurs. */
   protected createCharacter(p: PartieDto): void {
+    if (!this.canCreateCharacter()) return;
     void this.router.navigate(['/parties', p.id, 'characters', 'new'], {
       queryParams: { gameSystemId: p.gameSystemId },
     });
@@ -340,9 +408,28 @@ export class PartieDetail implements OnInit {
       if (this.isMj()) void this.loadXpDistributions();
     });
 
+    // Revue de code (bmad-review, 2026-09-21) : `tabSettled` figé une seule fois par « session » de
+    // rôle MJ/joueur (réarmé par tabSetKey ci-dessous), pas suivi en continu. Sans ce gel,
+    // `defaultTabIndex()` restant réactif à `canCreateCharacter()`, un joueur déjà en train de lire
+    // « Détails » pouvait être basculé vers « Ma fiche » sans avoir rien demandé dès que
+    // `charactersLoaded()` passait à `true` (ou plus tard, si `canCreateCharacter()` change encore
+    // en cours de visite, ex. personnage créé ailleurs et rechargé par le signal temps réel) — AC1
+    // ne couvre que l'atterrissage initial, pas une bascule surprise ultérieure.
+    let tabSettled = false;
     effect(() => {
       this.tabSetKey();
-      untracked(() => this.manualTabIndex.set(null));
+      untracked(() => {
+        this.manualTabIndex.set(null);
+        tabSettled = false;
+      });
+    });
+
+    effect(() => {
+      if (tabSettled || !this.charactersLoaded()) return;
+      tabSettled = true;
+      untracked(() => {
+        if (this.manualTabIndex() === null) this.manualTabIndex.set(this.defaultTabIndex());
+      });
     });
 
     // Story 18.3 : remplace le patch visibilitychange (retour de focus d'onglet, bug-fix
@@ -359,6 +446,30 @@ export class PartieDetail implements OnInit {
       this.realtime.connect(partieTopic(id));
       this.destroyRef.onDestroy(() => this.realtime.disconnect(partieTopic(id)));
     }
+
+    // Story 32.1 : déclenchement automatique de la recherche d'invitation au fil de la frappe,
+    // debounced à 500 ms, sous garde de longueur minimale (2 caractères) — le bouton/(keyup.enter)
+    // restent un déclenchement manuel de secours (runSearch() applique la même garde).
+    effect(() => {
+      const q = this.search();
+      untracked(() => {
+        if (this.searchDebounceTimer !== null) {
+          clearTimeout(this.searchDebounceTimer);
+          this.searchDebounceTimer = null;
+        }
+        if (q.trim().length < SEARCH_MIN_LENGTH) {
+          this.results.set([]);
+          return;
+        }
+        this.searchDebounceTimer = setTimeout(() => {
+          this.searchDebounceTimer = null;
+          void this.runSearch();
+        }, SEARCH_DEBOUNCE_MS);
+      });
+    });
+    this.destroyRef.onDestroy(() => {
+      if (this.searchDebounceTimer !== null) clearTimeout(this.searchDebounceTimer);
+    });
     // Garde firstRun (même piège que partout ailleurs, cf. l'effect characterSvc.changed() juste
     // en dessous) : le signal peut déjà porter une valeur avant le montage — sans cette garde,
     // refreshPartie()/loadMembers() étaient rechargés une seconde fois inutilement au montage, en
@@ -397,7 +508,7 @@ export class PartieDetail implements OnInit {
     // Bug fix (temps réel, production) : un nouveau sondage de date créé sur une Séance pendant
     // que cette page est déjà ouverte n'apparaissait jamais dans le widget "Vote ouvert"
     // (activePolls n'était chargé qu'une fois dans ngOnInit). Même garde `matchesPartie` que
-    // CalendarView/ScenarioEditor/ScenarioDrafts pour ce même signal.
+    // CalendarView/ScenarioEditor/ScenarioList pour ce même signal.
     let firstRunScenarios = true;
     effect(() => {
       const change = this.scenariosSvc.changed();
@@ -438,7 +549,8 @@ export class PartieDetail implements OnInit {
     // Story 29.13 (révision du 2026-08-13, retour utilisateur) : clic sur le bandeau du Shell —
     // force l'onglet "Détails" (0, où vivent les annonces de campagne) puis défile jusqu'à
     // l'annonce visée dès qu'elle apparaît dans campaignAnnouncements(). Après `tabSetKey()`
-    // (qui remet `manualTabIndex` à `null` à chaque changement MJ/desktop) pour ne pas être écrasé.
+    // (qui remet `manualTabIndex` à `null` uniquement sur un changement de rôle MJ/joueur — plus sur
+    // un changement d'appareil/breakpoint desktop-mobile depuis Story 29.15) pour ne pas être écrasé.
     effect(() => {
       const id = this.pendingScrollAnnouncementId;
       if (!id) return;
@@ -502,8 +614,51 @@ export class PartieDetail implements OnInit {
     }
   });
 
+  /** Jour courant figé à la construction — même raison que `CalendarView.todayKey` et
+   *  `SeanceList.todayKey` : une seule source de « aujourd'hui » par écran. */
+  private readonly todayKey = toDateKey(new Date());
+
+  /**
+   * Story 32.3 — l'état du widget « Prochaine séance », porté par le badge partagé.
+   *
+   * Le widget n'a JAMAIS de `SeanceDto` : il ne connaît que la date agrégée au niveau de la Partie
+   * (`nextSessionDate`/`nextSessionSlot`, posées par `recalculateNextSession()`) et les votes
+   * actifs. C'est exactement pour ce cas que `seanceState()` prend une forme structurelle plutôt
+   * que le DTO complet — fabriquer ici une fausse séance aurait été pire.
+   *
+   * 🚨 **Une date déjà passée n'est pas remontée.** `recalculateNextSession()` ne retient que le
+   * futur, mais un recalcul en retard (SSE manqué) pourrait laisser une date périmée : sans ce
+   * filtre, un widget intitulé « Prochaine séance » afficherait « À débriefer », un état qui
+   * appartient à la LISTE des séances, pas à lui.
+   *
+   * 🚨 **Le vote retenu est celui qui attend MA réponse**, s'il y en a un. Avec plusieurs votes
+   * actifs, prendre le premier venu masquerait l'appel à l'action — exactement ce que la story
+   * cherche à rendre visible.
+   */
+  protected readonly nextSessionBadge = computed<StatusBadgeState>(() => {
+    const p = this.partie();
+    const me = this.auth.currentUser()?.id;
+    const polls = this.activePolls();
+    const pending = me ? polls.find((poll) => hasUnansweredOptions(poll, me)) : undefined;
+    const dateKey = p?.nextSessionDate ? p.nextSessionDate.substring(0, 10) : null;
+    const scheduled = dateKey && dateKey >= this.todayKey ? p!.nextSessionDate : null;
+    return seanceState(
+      {
+        // 🚨 Un vote n'est retenu QUE tant que la prochaine séance n'a pas de date : `activePolls()`
+        // est scopé à la PARTIE, pas à une séance. Avec une date confirmée, transmettre un vote
+        // ouvert ailleurs ferait afficher « Réponds au vote » sous la date d'une AUTRE séance.
+        poll: scheduled ? undefined : (pending ?? polls[0]),
+        dateValidee: scheduled,
+        slotValidee: p?.nextSessionSlot ?? null,
+      },
+      me,
+      this.todayKey,
+    );
+  });
+
   protected readonly system = gameSystemName;
-  protected readonly kind = partieKindLabel;
+  protected readonly kind = (kind: PartieDto['kind']): string =>
+    this.theme.tone()[partieKindLabelKey(kind)] ?? kind;
 
   // Un seul poll actif → détail « X/Y réponses » précis (comportement historique conservé).
   // Plusieurs → l'agrégation par réponse individuelle n'a plus de sens à ce niveau (chaque poll a
@@ -525,13 +680,12 @@ export class PartieDetail implements OnInit {
         ['poll.status_summary'].replace('{responded}', String(this.respondedCount()))
         .replace('{total}', String(polls[0].membersCount));
     }
-    return `${polls.length} votes de date en cours`;
+    return fillTone(this.theme.tone()['parties.detail_polls_in_progress'], { count: polls.length });
   }
 
   async ngOnInit(): Promise<void> {
     const id = this.route.snapshot.paramMap.get('id');
     if (!id) return;
-    this.showTroupe.set(false);
     this.partie.set(await this.parties.get(id));
     const me = this.auth.currentUser();
     if (me) {
@@ -541,6 +695,7 @@ export class PartieDetail implements OnInit {
     await this.loadActivePolls(id);
     this.announcements.set(await this.announcementsSvc.listAll(id).catch(() => []));
     this.characters.set(await this.characterSvc.listByPartie(id).catch(() => []));
+    this.charactersLoaded.set(true);
     this.characterRoles.set(await this.characterRolesSvc.listForPartie(id).catch(() => []));
     this.gameSystemContent.set(
       await this.characterSvc.getGameSystemContent(this.partie()!.gameSystemId).catch(() => null),
@@ -553,13 +708,25 @@ export class PartieDetail implements OnInit {
   }
 
   async runSearch(): Promise<void> {
+    // Revue de code (Story 32.1) : un déclenchement manuel (bouton/(keyup.enter)) n'annulait jamais
+    // le minuteur du debounce — un `runSearch()` redondant pouvait alors partir ~500 ms plus tard.
+    if (this.searchDebounceTimer !== null) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
     const q = this.search().trim();
     this.notice.set(null);
-    if (!q) {
+    // Story 32.1 : garde de longueur minimale avant tout appel réseau — s'applique aussi bien au
+    // déclenchement automatique (debounce) qu'au bouton/(keyup.enter) manuel de secours.
+    if (q.length < SEARCH_MIN_LENGTH) {
       this.results.set([]);
       return;
     }
     const found = await this.parties.searchUsers(q);
+    // Revue de code (Story 32.1) : une réponse plus ancienne peut résoudre après une plus récente
+    // (double déclenchement manuel/auto rapproché) — n'applique le résultat que si la saisie n'a pas
+    // changé depuis l'appel, sinon une réponse périmée écraserait des résultats déjà plus frais.
+    if (this.search().trim() !== q) return;
     // On masque le MJ et les membres déjà présents.
     const memberIds = new Set(this.members().map((m) => m.userId));
     this.results.set(found.filter((u) => u.id !== this.partie()?.mjId && !memberIds.has(u.id)));
@@ -599,7 +766,12 @@ export class PartieDetail implements OnInit {
     const p = this.partie();
     if (!p) return;
     const ref = this.dialog.open(ConfirmDialog, {
-      data: { message: `Retirer ${member.displayName} de « ${p.name} » ?` },
+      data: {
+        message: fillTone(this.theme.tone()['parties.detail_remove_member_confirm'], {
+          name: member.displayName,
+          partie: p.name,
+        }),
+      },
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;
     await this.parties.removeMember(p.id, member.userId);
@@ -639,7 +811,9 @@ export class PartieDetail implements OnInit {
 
   async confirmDelete(p: PartieDto): Promise<void> {
     const ref = this.dialog.open(ConfirmDialog, {
-      data: { message: `Supprimer « ${p.name} » ? Cette action est irréversible.` },
+      data: {
+        message: fillTone(this.theme.tone()['parties.detail_delete_confirm'], { partie: p.name }),
+      },
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;
     await this.parties.remove(p.id);

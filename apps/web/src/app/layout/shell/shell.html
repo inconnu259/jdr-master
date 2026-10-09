@@ -3,7 +3,12 @@
      (ex. formulaire de Partie, fiche personnage) se retrouveraient sans aucun en-tête sur mobile. -->
 <mat-toolbar color="primary" [class.hidden-mobile]="contextualNav.title()">
   <mat-toolbar-row>
-    <span class="logo" routerLink="/">master-jdr</span>
+    <!-- Marque « Dés Dispos » (story 34.4) : pictogramme + nom, lien vers l'accueil. Le pictogramme est
+         décoratif, le nom écrit à côté donne son nom accessible au lien. -->
+    <a class="brand" routerLink="/">
+      <app-brand-logo />
+      <span class="brand-name">Dés Dispos</span>
+    </a>
     <span class="spacer"></span>
   </mat-toolbar-row>
 </mat-toolbar>
@@ -27,7 +32,7 @@
     <button
       class="announcement-banner__close"
       type="button"
-      [attr.aria-label]="'Fermer la notification de ' + b.partieName"
+      [attr.aria-label]="bannerCloseLabel(b.partieName)"
       (click)="dismissBanner(b.announcement.id)"
     >
       <mat-icon aria-hidden="true">close</mat-icon>
@@ -38,7 +43,7 @@
 <!-- Story 29.3 : barre à 4 destinations — mêmes liens, barre haute sur desktop / barre basse sur
      mobile (bascule CSS, cf. shell.scss). L'entrée active porte aria-current="page" (posé par
      ariaCurrentWhenActive) et une classe dédiée (poids de police) : jamais la couleur seule (AC3). -->
-<nav class="nav-bar" aria-label="Navigation principale">
+<nav class="nav-bar" [attr.aria-label]="theme.tone()['shell.nav_main_aria']">
   <a
     class="nav-bar__link"
     routerLink="/"
@@ -89,7 +94,7 @@
      bandeau au lieu de deux empilés, cf. correction post-test de 29.4. -->
 @if (contextualNav.title(); as title) {
   <div class="contextual-header">
-    <a class="wordmark-compact" routerLink="/">jdr</a>
+    <a class="wordmark-compact" routerLink="/" aria-label="Dés Dispos"><app-brand-logo /></a>
     <div class="titles">
       <span class="t1" role="heading" aria-level="1">{{ title }}</span>
       @if (contextualNav.subtitle(); as subtitle) {

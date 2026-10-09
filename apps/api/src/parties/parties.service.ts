@@ -18,10 +18,14 @@ import type {
   PartieKindTransitionRefusal,
   PartieStatus,
 } from '@master-jdr/shared';
-// Seul import RUNTIME de `@master-jdr/shared` dans ce service : la matrice de conversion (Story
-// 29.14), partagée avec le formulaire d'édition. Impose `jest.mock('@master-jdr/shared')` dans les
-// specs de ce service — le paquet est ESM, que le runner Jest de l'API ne sait pas charger.
-import { checkPartieKindTransition } from '@master-jdr/shared';
+// Imports RUNTIME de `@master-jdr/shared` dans ce service : la matrice de conversion (Story 29.14,
+// partagée avec le formulaire d'édition) et le prédicat d'éligibilité du module de personnage
+// (Story 29.15/29.17, même source que `PartieForm`). `apps/api/package.json` (`transformIgnorePatterns`)
+// laisse déjà ts-jest transformer `@master-jdr/*` : `parties.service.spec.ts` n'a donc besoin
+// d'AUCUN `jest.mock('@master-jdr/shared')` pour ces deux imports (la vraie matrice/le vrai
+// prédicat y sont exercés). Ce mock n'est requis que côté `parties.controller.spec.ts`, pour une
+// tout autre raison : les DTO évaluent `@IsIn(GAME_SYSTEM_IDS)` au chargement de la classe.
+import { checkPartieKindTransition, gameSystemHasModule } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
@@ -35,6 +39,7 @@ import {
 import { UPLOADS_ROOT } from '../common/uploads-root';
 import { ConvertPartieKindDto } from './dto/convert-partie-kind.dto';
 import { CreatePartieDto } from './dto/create-partie.dto';
+import { SetVisibilityLocksDto } from './dto/set-visibility-locks.dto';
 import { UpdatePartieDto } from './dto/update-partie.dto';
 
 /** Traduit un code de refus de conversion (union fermée) en message destiné au MJ.
@@ -61,6 +66,12 @@ export const COVERS_DIR = join(UPLOADS_ROOT, 'covers');
 export const COVERS_URL_PREFIX = '/uploads/covers/';
 
 const INVALID_COVER_IMAGE_MESSAGE = "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
+
+/** Story 29.17, AC2/AC4 : message de refus explicite quand la création ou le changement de
+ *  système de jeu cible un système sans module de création de personnage jouable. Exportée pour
+ *  que les specs l'importent plutôt que de retaper le texte en dur (revue de code). */
+export const GAME_SYSTEM_WITHOUT_MODULE_MESSAGE =
+  'Ce système de jeu ne propose pas encore de création de personnage jouable';
 
 /**
  * Dimensions cibles des dérivées (Story 29.12, AC9) — alignées sur le rendu réel de `PartyBanner`
@@ -135,7 +146,19 @@ export class PartiesService {
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
+  /** Story 29.17, AC2/AC4 : refus explicite partagé par `create()` et `update()` — un seul endroit
+   *  à faire évoluer si la règle change (revue de code : les deux étaient des blocs copiés-collés
+   *  indépendants, jamais comparés par aucun test). */
+  private assertGameSystemHasModule(gameSystemId: string): void {
+    if (!gameSystemHasModule(gameSystemId)) {
+      throw new BadRequestException(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
+    }
+  }
+
   async create(mjId: string, dto: CreatePartieDto): Promise<PartieDto> {
+    // Story 29.17, AC2 : refus AVANT toute écriture — même discipline que la garde `kind` de
+    // `convertKind()` (aucune trace en base d'une partie sur un système sans module).
+    this.assertGameSystemHasModule(dto.gameSystemId);
     return this.prisma.$transaction(async (tx) => {
       const partie = await tx.partie.create({
         data: {
@@ -352,11 +375,28 @@ export class PartiesService {
       );
     }
 
+    // Story 29.17, AC4 : même patron que la garde `kind` ci-dessus — un CHANGEMENT vers un système
+    // sans module est refusé, mais renvoyer la valeur déjà enregistrée (même sans module, AC3) reste
+    // accepté : sans cette distinction, chaque sauvegarde d'une partie existante sur un système sans
+    // module casserait.
+    const systemChanged =
+      dto.gameSystemId !== undefined && dto.gameSystemId !== partie.gameSystemId;
+    if (systemChanged) {
+      this.assertGameSystemHasModule(dto.gameSystemId as string);
+    }
+
+    // AD-23 : tout `UPDATE` qui change `gameSystemId` remet `hommeDragonId` à NULL DANS LA MÊME
+    // instruction — c'est ce qui rend « une aventure de H = une partie dont hommeDragonId = H.id »
+    // vrai par construction (un lien existant est toujours un lien Ryuutama du MJ). La fiche de
+    // l'Homme Dragon n'est pas touchée : seul le lien disparaît, le niveau est recalculé à la lecture.
     const updated = await this.prisma.partie.update({
       where: { id },
-      data: { ...dto },
+      data: { ...dto, ...(systemChanged ? { hommeDragonId: null } : {}) },
     });
     this.realtimeEvents.emit(partieTopic(id));
+    // Le changement de système fait apparaître ou disparaître HOMME_DRAGON_A_CREER (et le lien) :
+    // signaux du MJ et des membres, en plus de `partie:` ci-dessus (jamais en remplacement).
+    if (systemChanged) await this.notifyPartieSignalsChanged(id, userId);
     const [hasScenario, favorite] = await Promise.all([
       this.hasScenario(id),
       this.isFavorite(userId, id),
@@ -546,8 +586,12 @@ export class PartiesService {
   }
 
   async remove(id: string, userId: string) {
-    await this.getOwned(id, userId);
+    const partie = await this.getOwned(id, userId);
+    // AD-23 : si la partie portait un Homme Dragon, la FK `SetNull` ne fait que le délier — la
+    // fiche est conservée. Le signal HOMME_DRAGON_A_CREER du MJ n'est plus celui d'avant et sa liste
+    // « Personnages » change : `user:` au MJ (aucun canal `partie:`, la partie n'existe plus).
     await this.prisma.partie.delete({ where: { id } });
+    this.realtimeEvents.emit(userTopic(partie.mjId));
     return { ok: true };
   }
 
@@ -1032,5 +1076,66 @@ export class PartiesService {
     }
 
     return results;
+  }
+
+  /**
+   * Remplace l'ensemble complet des chemins de fiche verrouillés (cadenas de visibilité, Story
+   * 31.6) pour une Partie — MJ SEUL (`getOwned`, réutilisé tel quel, même garde que les autres
+   * mutations de Partie ci-dessus). Consommé par l'écran de configuration des cadenas (Story 31.7,
+   * `VisibilityLocks`), qui s'appuie sur ce mécanisme déjà fonctionnel sans le modifier.
+   *
+   * Jeu DÉCLARATIF COMPLET, comme `PollService.setOptions()` (Story 36.10, D-16, même transaction
+   * delete-tout-puis-recrée) : ce qui n'est pas dans `dto.paths` est retiré. Contrairement au vote
+   * (`PollOption` porte des `PollVote` en cascade, jamais recréables à l'identique), une ligne de
+   * `PartieVisibilityLock` ne porte aucune donnée dérivée — un remplacement intégral est sans
+   * risque, pas besoin de diff conserver/créer/retirer.
+   */
+  async setVisibilityLocks(
+    partieId: string,
+    userId: string,
+    dto: SetVisibilityLocksDto,
+  ): Promise<{ fieldKey: string; subField: string | null }[]> {
+    await this.getOwned(partieId, userId);
+
+    const wanted = new Map<string, { fieldKey: string; subField: string | null }>();
+    for (const p of dto.paths) {
+      const subField = p.subField ?? null;
+      // Séparateur `.` sûr : `fieldKey`/`subField` sont validés par `FIELD_KEY_PATTERN`
+      // (`set-visibility-locks.dto.ts`, alphanumérique sans point) — aucune collision possible
+      // entre deux chemins distincts.
+      const key = `${p.fieldKey}.${subField ?? ''}`;
+      if (wanted.has(key)) {
+        throw new BadRequestException('Chemins verrouillés dupliqués');
+      }
+      wanted.set(key, { fieldKey: p.fieldKey, subField });
+    }
+    const locks = [...wanted.values()];
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.partieVisibilityLock.deleteMany({ where: { partieId } });
+      if (locks.length > 0) {
+        await tx.partieVisibilityLock.createMany({
+          data: locks.map((l) => ({ partieId, fieldKey: l.fieldKey, subField: l.subField })),
+        });
+      }
+    });
+    this.realtimeEvents.emit(partieTopic(partieId));
+
+    return locks;
+  }
+
+  /**
+   * Lecture symétrique à `setVisibilityLocks()` ci-dessus (Story 31.7) — même garde MJ-only
+   * (`getOwned()`), même forme `{fieldKey, subField}[]`. Alimente l'écran de configuration des
+   * cadenas : un joueur atteignant directement cette route se voit refuser l'accès (403/404),
+   * jamais une liste vide qui laisserait croire qu'aucun cadenas n'est posé.
+   */
+  async getVisibilityLocks(
+    partieId: string,
+    userId: string,
+  ): Promise<{ fieldKey: string; subField: string | null }[]> {
+    await this.getOwned(partieId, userId);
+    const locks = await this.prisma.partieVisibilityLock.findMany({ where: { partieId } });
+    return locks.map((l) => ({ fieldKey: l.fieldKey, subField: l.subField }));
   }
 }

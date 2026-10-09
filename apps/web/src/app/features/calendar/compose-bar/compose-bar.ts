@@ -1,5 +1,7 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { fillTone } from '../../../core/theme/tone-format';
+import { ThemeToneService } from '../../../core/theme/theme-tone.service';
 
 /**
  * Story 36.10 — la barre **persistante** du mode de composition d'un vote (AC1).
@@ -44,10 +46,15 @@ export class ComposeBar {
   readonly confirmed = output<void>();
   readonly cancelled = output<void>();
 
+  protected readonly theme = inject(ThemeToneService);
+
   /** AC16 — l'état du mode vit dans du TEXTE, pas seulement dans un liseré. */
   protected readonly countLabel = computed(() => {
     const n = this.count();
-    if (n === 0) return 'Aucun créneau désigné';
-    return `${n} créneau${n > 1 ? 'x' : ''} désigné${n > 1 ? 's' : ''}`;
+    const tone = this.theme.tone();
+    if (n === 0) return tone['calendar.compose_count_none'];
+    return fillTone(tone[n > 1 ? 'calendar.compose_count_many' : 'calendar.compose_count_one'], {
+      n,
+    });
   });
 }
