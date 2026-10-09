@@ -334,7 +334,7 @@ export class CharacterWizard implements OnInit {
       this.content.set(content);
       this.currentStepKeyTracked.set(this.steps()[0]?.key ?? '');
     } catch (err) {
-      // Un système de jeu déclaré mais sans module (ex. Draconis, prévu au Palier 12) répond 404 :
+      // Un système de jeu déclaré mais sans module (ex. Draconis, prévu au Palier 13) répond 404 :
       // dire la vraie cause plutôt qu'un « vérifiez votre connexion » trompeur.
       if (loadingGameSystem && err instanceof HttpErrorResponse && err.status === 404) {
         this.loadError.set(this.theme.tone()['characters_wizard.load_error_no_module']);

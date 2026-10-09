@@ -63,9 +63,9 @@ Quatre services front redéfinissaient chacun `const API = 'http://localhost:300
 
 Corrigé : les quatre services pointent sur `API_BASE`. Vérifié — aucune occurrence de `localhost:3000` dans les chunks servis, 1017/1017 tests web au vert.
 
-### 4.2 Aménagements temporaires à reprendre au Palier 10
+### 4.2 Aménagements temporaires à reprendre au Palier 11
 
-Faits avec accord explicite, pour permettre le test sur téléphone réel via le réseau local. Consignés dans `docs/backlog.md` § Palier 10.
+Faits avec accord explicite, pour permettre le test sur téléphone réel via le réseau local. Consignés dans `docs/backlog.md` § Palier 11.
 
 - `apps/web/src/app/core/api-base.ts` — `API_BASE` est calculé depuis `window.location` au lieu d'être figé sur `http://localhost:3000`. En production, l'API sera vraisemblablement derrière le même domaine (reverse-proxy, chemin `/api`) et/ou en HTTPS : le port 3000 en dur n'aura plus de sens.
 - `apps/api/src/main.ts` + `.env` — `WEB_ORIGIN` accepte une liste d'origines séparées par des virgules. **En production, n'y laisser que l'origine publique réelle, jamais une IP de réseau local.**

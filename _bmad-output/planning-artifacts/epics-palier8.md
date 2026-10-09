@@ -375,7 +375,7 @@ So that je puisse jouer une arme non couverte par le catalogue, tout en gardant 
 **When** une fiche porte transitoirement à la fois `weaponId` et `customWeapon`
 **Then** la résolution à la lecture privilégie toujours `weaponId` en premier — un seul chemin déterministe
 
-**Given** `ContentEntry.scope` `MJ`/`PARTIE` (déjà présent dans le schéma, réservé au Palier 14 homebrew)
+**Given** `ContentEntry.scope` `MJ`/`PARTIE` (déjà présent dans le schéma, réservé au Palier 15 homebrew)
 **When** cette story est implémentée
 **Then** aucune arme personnalisée ne crée de `ContentEntry` — elle reste strictement inline dans `sheetData`, jamais partagée/interrogée entre personnages
 

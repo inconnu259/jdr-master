@@ -55,7 +55,7 @@ ALTER TABLE "Partie" ADD CONSTRAINT "Partie_hommeDragonId_fkey" FOREIGN KEY ("ho
 - ✅ Précédents de migrations avec rattrapage SQL édité à la main : `20260805182210_user_display_name` (ADD nullable → `UPDATE … WHERE … IS NULL` → SET NOT NULL) et `20260712115353_scenarios_seances_p4` (`INSERT … SELECT … WHERE NOT EXISTS`, idempotent). Style à imiter : commentaire en tête expliquant l'édition manuelle. (Prisma 7 exige `migration_lock.toml` provider postgresql ✅ présent.)
 - ✅ Syntaxe du rattrapage de l'AD valide en PostgreSQL 17 (`UPDATE … SET … FROM … WHERE`, doc `sql-update`). Réserve de la doc : si une ligne cible joint plusieurs lignes `FROM`, **laquelle est utilisée n'est pas prévisible**. Aujourd'hui au plus un `HommeDragon` par partie : `HommeDragon.userId` = MJ (création via `getOwned`, `homme-dragon.service.ts` l.54-80), `gameSystemId` toujours Ryuutama, et **aucun code ne modifie `Partie.mjId`** (recherche `mjId` en `data:` : aucune occurrence) ⇒ déterministe. Par prudence, ajouter `AND h."userId" = "Partie"."mjId"` (cohérent avec la définition d'aventure effective).
 - ❌ Omission : **Prisma ne crée aucun index sur la FK `Partie.hommeDragonId`** (absent du SQL ci-dessus). Or `ON DELETE SET NULL` (suppression d'un Homme Dragon, ou du compte propriétaire) et la lecture `aventures` (`WHERE "hommeDragonId" = :h`) parcourent `Partie`. Ajouter `@@index([hommeDragonId])` sur `Partie` (le schéma actuel indexait `HommeDragon.partieId`, supprimé avec la colonne).
-- ✅ « Aucun expand/contract : pas de production avant le Palier 10 » : `docs/backlog.md` l.180 « Palier 10 — Mise en production d'une première version ».
+- ✅ « Aucun expand/contract : pas de production avant le Palier 11 » : `docs/backlog.md` l.180 « Palier 11 — Mise en production d'une première version ».
 
 ### F5 — ⚠️ Moyenne — `PATCH` générique sans verrou : l'écrasement que l'AD-22 prétend prévenir reste possible
 
@@ -107,7 +107,7 @@ ALTER TABLE "Partie" ADD CONSTRAINT "Partie_hommeDragonId_fkey" FOREIGN KEY ("ho
 | AD-14 : la liste (dashboard) écoute `user:` seul | ✅ | `dashboard.ts` l.434-435 |
 | `HommeDragonSheet` se rafraîchit sur `hommeDragon.changed` | ✅ mais câblé `'partie:'` seulement (F2) | `homme-dragon-sheet.ts` l.183 ; `realtime.service.ts` l.86 |
 | P7-AD-2 (émission en fin de méthode, hors transaction) existe | ✅ | spine 2026-07-24 ; référencé spine l.283 |
-| « Pas de production avant le Palier 10 » | ✅ | `docs/backlog.md` l.180 |
+| « Pas de production avant le Palier 11 » | ✅ | `docs/backlog.md` l.180 |
 
 ---
 

@@ -203,7 +203,7 @@ après la migration ; l'AD ne le mentionne pas, ni les mocks de `party-signals.s
 > aucun lien (`NOT EXISTS (SELECT 1 FROM "Partie" WHERE "hommeDragonId" = h."id")`), pour ne jamais
 > supprimer silencieusement la dernière trace d'une partie ; (5) `DROP INDEX` + `DROP COLUMN
 > "partieId"` + `DROP` de l'unicité. La migration est irréversible (documenté ; pas de production
-> avant le Palier 10). Même story : mise à jour de `seed-demo.ts` (création de l'Homme Dragon puis
+> avant le Palier 11). Même story : mise à jour de `seed-demo.ts` (création de l'Homme Dragon puis
 > `partie.update({ hommeDragonId })`), des specs de signaux et de `findMine`.
 
 ### F7 — Faible — Surfaces de fuite à expliciter dans l'AD (aucune faille avec le texte actuel, mais rien ne les verrouille)

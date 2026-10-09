@@ -165,7 +165,7 @@ Ce document décompose en stories implémentables les exigences du Palier 9 — 
 
 - **D-12** est d'ampleur nulle : elle figure au PRD pour rester visible, mais ne demande aucun travail tant que son constat tient. `AD-20` en fixe la condition de révision — le jour où l'on voudrait masquer l'identité des autres votants.
 - **D-7 n'est plus d'ampleur nulle.** Requalifiée « Faible — actée » le 2026-08-05, **corrigée le 2026-09-25** : les six entrées seedées étaient les **éveils** ; le catalogue manquant était celui de tous les souffles (9 communs, 12 de race), porté par la **story 33.2** (livrée). **D-21** (réserve de souffles, MJ seul) est portée par la **story 33.6**.
-- Aucun changement d'environnement, de déploiement ou d'exploitation — propriété du Palier 10.
+- Aucun changement d'environnement, de déploiement ou d'exploitation — propriété du Palier 11.
 
 ### UX Design Requirements
 
