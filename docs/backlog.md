@@ -53,7 +53,7 @@ But : un squelette qui démarre en une commande, base de la collaboration.
       reconstruire la base proprement — **jamais lus directement par l'UI**, qui passe exclusivement par
       `GET /game-systems/:id/content` (lecture DB). Textes reformulés à partir du livre (mécaniques conservées) :
       c'est ce qui permet de les versionner (NFR4 révisée le 2026-09-25). *(Nuance : `getSchema()` — structure de l'assistant de création, étapes/champs — reste codée
-      en dur en TypeScript, pas encore pilotée par le catalogue ; à revoir si besoin lors du Palier 11.)*
+      en dur en TypeScript, pas encore pilotée par le catalogue ; à revoir si besoin lors du Palier 12.)*
 - [x] Front : **rendu de fiche** et **assistant de création pas à pas** pilotés par le schéma.
 - [x] Créer un personnage (guidé), le **rattacher** à une partie (neuf ou existant compatible).
 
@@ -189,7 +189,85 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 
 ---
 
-## Palier 10 — Mise en production d'une première version *(ex-Palier 7)*
+## Palier 10 — Soirées entre amis (mode soirée, groupes, socle de permissions) *(PRD, UX et architecture finals — prochaine étape : épics, porte en premier)*
+
+> PRD : `_bmad-output/planning-artifacts/prds/prd-jdr-master-2026-10-08/prd.md` (final, 2026-10-08). Issu de la forge
+> `_bmad-output/forge/soiree-jeux-de-societe/`. Palier **avant** la mise en production.
+
+- [ ] **Porte : socle de permissions à comportement constant** (point unique des règles « qui peut faire quoi »,
+      mode soirée/JDR, migration des parties existantes en mode JDR) — aucune story « soirée » avant.
+- [ ] Soirée isolée et groupe ; admins multiples ; tout membre propose et héberge un événement.
+- [ ] Participation (tous / places limitées avec places réservées), date fixée ou sondage, inscriptions tardives.
+- [ ] E-mails du mode soirée (dont une relance du vote) ; libellés propres au mode soirée.
+- [ ] *Palier suivant : voir Palier 10.5 ci-dessous.*
+
+---
+
+## Palier 10.4 — Sondage et Destinée dans le calendrier *(avant le 10.5, vaut aussi pour le JDR)*
+
+> Demandé pendant l'UX du Palier 10 (2026-10-08) : « j'ai galéré » à créer un sondage. Touche le calendrier **et** le
+> JDR ; lève, pour ce sujet seulement, la contrainte « le JDR ne change pas » du Palier 10. En attendant, le Palier 10
+> utilise le mode « composer » existant pour les sondages de conjonction.
+
+- [ ] **Créneaux de l'automate** (« Fenêtres de la destinée ») **sélectionnables** : mise en évidence dans le
+      calendrier, tous les autres créneaux grisés ; actions « Ajouter au vote » / « Masquer » ; un créneau ajouté
+      quitte la liste de l'automate (il vit dans le vote, où on peut le retirer) ; liste **repliable**.
+- [ ] **Créer un vote par sélection de jours**, comme on déclare ses dispos (rendre le mode « composer » trouvable).
+- [ ] **Mode Destinée enrichi** : choisir sa destinée active parmi **toutes** celles des parties **actives** (plus
+      seulement le mois affiché) via une liste ; les flèches ‹ n/N › servent à parcourir les **moments de vote**
+      (options) du vote actif et déplacent le calendrier ; créer / éditer le sondage depuis la Destinée (MJ / hôte).
+- [ ] **Ouvrir le calendrier directement en Destinée sur un sondage précis** (paramètre d'URL) et **filtrer le
+      calendrier par partie / groupe** (aujourd'hui le panneau « Affichage » filtre par nature, pas par partie).
+
+---
+
+## Palier 10.5 — Jeux de société : liste de jeux, « j'apporte », historique des hôtes *(avant la mise en production)*
+
+> Suite du Palier 10, à cadrer (PRD à écrire) une fois celui-ci livré.
+
+- [ ] Liste des jeux possédés par chaque utilisateur (profil), affichée quand il est hôte.
+- [ ] « J'apporte » : un invité coche les jeux qu'il apporte en rejoignant un événement.
+- [ ] Historique et équilibre des hôtes d'un groupe.
+- [ ] Bibliothèque de jeux commune au groupe.
+
+---
+
+## Palier 10.6 — Découvrabilité de la déclaration des dispos *(après le 10.5, avant la mise en production)*
+
+> Remonté pendant l'UX du Palier 10 (2026-10-08). Aujourd'hui, déclarer ses dispos exige un **appui long** sur le
+> calendrier (Story 36.3, AC15) : rien à l'écran ne l'annonce, un nouvel utilisateur ne le trouvera pas.
+
+- [ ] Rendre la déclaration de dispos découvrable : tutoriel, ou autre mécanisme à choisir (⚠️ modifie un écran
+      validé : calendrier, Épic 30 / 36). Peut remonter si les amis de la bande ne trouvent pas le geste.
+
+---
+
+## Palier 10.7 — Jeu d'icônes sur mesure, par thème *(après le 10.6, avant la mise en production)*
+
+> Décidé pendant l'UX du Palier 10 (2026-10-08). Inventaire de départ :
+> `_bmad-output/planning-artifacts/ux-designs/ux-jdr-master-2026-10-08/.working/inventaire-icones.md`.
+
+- [ ] Remplacer les ~43 icônes Material génériques (identiques dans les 3 thèmes) par un jeu propre à l'app,
+      éventuellement **différent selon le thème** ; icône du bouton de création déjà dessinée au Palier 10 (dé + crayon).
+- [ ] Lever les surcharges : `flag` (terminé / signal à traiter), `person` (compte / rôle joueur).
+- [ ] Remplacer les emoji des titres de liste (⚔ 🌿 ⚙) par des icônes teintées par le thème.
+
+---
+
+## Palier 10.8 — Reporter côté JDR les acquis UX du mode soirée *(après le 10.7, avant la mise en production)*
+
+> Décidé pendant l'UX du Palier 10 (2026-10-08) : le travail fait pour le mode soirée vaut aussi pour le JDR, qui
+> garde pour l'instant son interface inchangée (contrainte dure du Palier 10). Candidats, à trier avec l'utilisateur :
+
+- [ ] Pastille « **Ma situation** » sur les cartes de chapitres/séances (participe, vote à faire, pas inscrit).
+- [ ] Détail d'un chapitre/séance **« situation d'abord »** (l'action à faire en tête, la fiche ensuite) ; vote en **résumé** (réponses, meilleur créneau, qui n'a pas répondu) plutôt qu'en liste.
+- [ ] Onglet d'accueil d'une partie = **la suite des chapitres/séances** (ordre des onglets inversé), badges de rôle sur les avatars.
+- [ ] Couverture : pastille « Changer » sur la bannière (déjà prévue au 10 pour la création ; à étendre à l'édition).
+- [ ] Boutons d'action du pied de page (clore, brûler…) et libellés revus avec la même langue.
+
+---
+
+## Palier 11 — Mise en production d'une première version *(ex-Palier 7)*
 
 - [ ] Décision d'hébergement : auto-hébergé (VPS, Docker Compose en prod) **vs** hébergement managé
       (PaaS) — arbitrage coût / simplicité / maintenance.
@@ -208,7 +286,7 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 
 ---
 
-## Palier 11 — 2e système (Conte de Minuit) & durcissement multi-MJ *(ex-Palier 8)*
+## Palier 12 — 2e système (Conte de Minuit) & durcissement multi-MJ *(ex-Palier 8)*
 
 > Ryuutama étant le système v1 (Palier 2), ce palier valide l'abstraction plugin sur un
 > **2ᵉ système** avec **Conte de Minuit** (agence, épisodique — mécaniques très différentes de
@@ -220,7 +298,7 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 
 ---
 
-## Palier 12 — Module Draconis (3ᵉ système) *(ex-Palier 9)*
+## Palier 13 — Module Draconis (3ᵉ système) *(ex-Palier 9)*
 
 > Repoussé depuis le Palier 2 initial (décidé avec l'utilisateur, 2026-07-07) : Ryuutama puis Conte de
 > Minuit passent devant. Draconis nécessite une référence des règles (D&D 5e) — cf. spec §9.
@@ -233,14 +311,14 @@ la dette technique et la synchro (cf. ordre ci-dessous).
 
 ---
 
-## Palier 13 — Carte interactive *(ex-Palier 10)*
+## Palier 14 — Carte interactive *(ex-Palier 10)*
 
 - [ ] Carte (Leaflet + fond image) : **marqueurs** (lieux, événements, scénarios), **routes**.
 - [ ] **Visibilité contrôlée par le MJ** (révéler / masquer aux joueurs).
 
 ---
 
-## Palier 14 — Contenu personnalisable par le MJ (homebrew) *(ex-Palier 11)*
+## Palier 15 — Contenu personnalisable par le MJ (homebrew) *(ex-Palier 11)*
 
 - [ ] Le MJ **ajoute / édite** des entrées (classes, métiers, compétences…) par-dessus le catalogue
       d'un système existant, scope `MJ` / `PARTIE` (le scope `BASE` sert déjà au contenu officiel
