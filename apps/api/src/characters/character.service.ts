@@ -11,7 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { Prisma, type Character } from '@prisma/client';
 import { hasPrismaErrorCode } from '../common/prisma-error.util';
-import { gameSystemHasModule } from '@master-jdr/shared';
+import { hasCapability } from '@master-jdr/shared';
 import type {
   CharacterDto,
   DerivedStats,
@@ -199,10 +199,11 @@ export class CharacterService {
   async create(partieId: string, userId: string, dto: CreateCharacterDto): Promise<CharacterDto> {
     const partie = await this.parties.getViewable(partieId, userId);
 
-    // Revue de code (Story 29.17) : lit gameSystemHasModule() (packages/shared), la même source
-    // que PartiesService.create()/update() et PartieForm — plus SUPPORTED_GAME_SYSTEMS, une liste
+    // Revue de code (Story 29.17), registre depuis la Story 37.5 : lit la capacité `characters`
+    // du registre `GAME_SYSTEMS` (packages/shared), la même source que le signal
+    // PERSONNAGE_A_CREER et le bouton de création côté web — plus SUPPORTED_GAME_SYSTEMS, une liste
     // séparée qui pouvait diverger silencieusement (risque déjà consigné dans deferred-work.md).
-    if (!gameSystemHasModule(dto.gameSystemId)) {
+    if (!hasCapability(dto.gameSystemId, 'characters')) {
       throw new BadRequestException(`Système de jeu non supporté : ${dto.gameSystemId}`);
     }
 

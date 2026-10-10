@@ -4,11 +4,14 @@ import { Test } from '@nestjs/testing';
 // type`) de GAME_SYSTEMS depuis @master-jdr/shared (ESM, non transformé par ts-jest) — même piège
 // déjà documenté pour THEMES (account.controller.spec.ts) et @master-jdr/game-rules (mémoire projet).
 jest.mock('@master-jdr/shared', () => ({
+  // Réduit à ce que lisent les DTO (`id`, et `name` pour la lisibilité) — pas la forme complète
+  // du registre (Story 37.5).
   GAME_SYSTEMS: [
     { id: 'draconis', name: 'Draconis' },
     { id: 'conte-de-minuit', name: 'Conte de Minuit' },
     { id: 'ryuutama', name: 'Ryuutama' },
     { id: 'esteren', name: 'Esteren' },
+    { id: 'ralliement', name: 'Ralliement' },
   ],
 }));
 

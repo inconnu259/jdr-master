@@ -249,3 +249,10 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-37-3-extraire-levenement-de-base-le-scenario-devenant-son-extension-jdr.md`
   summary: Add a repeatable migration-on-data check (seed at parent commit, `migrate deploy`, compare per-partie Scenario/Seance counts, ids, titles, createdAt) for the porte's data-moving migrations before the Palier 11 deploy.
   evidence: CI applies migrations to an empty DB; 37.2/37.3 backfills were only verified by hand on the dev DB (md5 before/after).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-5-declarer-les-systemes-et-leurs-capacites-dans-un-registre-unique.md`
+  summary: Gate character creation on the partie's own system (`hasCapability(partie.gameSystemId, 'characters')` and `dto.gameSystemId === partie.gameSystemId`), not on the payload's `gameSystemId`.
+  evidence: `CharacterService.create` checks `dto.gameSystemId` (pre-existing); a Ryuutama character can be posted into a partie on another system. Natural home: 37.7 capability guards.
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-5-declarer-les-systemes-et-leurs-capacites-dans-un-registre-unique.md`
+  summary: Before epic 38 opens `ralliement`, enforce `kindsOf(gameSystemId)` at partie creation/conversion and make the web partie form follow family rules (no cross-family system choice, no kind conversion outside `jdr`).
+  evidence: Registry declares ralliement kinds ONE_SHOT/CAMPAGNE_EPISODIQUE but nothing enforces them; server refuses what the form would offer.

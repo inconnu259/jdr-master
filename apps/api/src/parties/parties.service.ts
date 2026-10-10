@@ -19,13 +19,13 @@ import type {
   PartieStatus,
 } from '@master-jdr/shared';
 // Imports RUNTIME de `@master-jdr/shared` dans ce service : la matrice de conversion (Story 29.14,
-// partagée avec le formulaire d'édition) et le prédicat d'éligibilité du module de personnage
-// (Story 29.15/29.17, même source que `PartieForm`). `apps/api/package.json` (`transformIgnorePatterns`)
+// partagée avec le formulaire d'édition) et les lecteurs du registre des systèmes (Story 37.5,
+// même source que `PartieForm`). `apps/api/package.json` (`transformIgnorePatterns`)
 // laisse déjà ts-jest transformer `@master-jdr/*` : `parties.service.spec.ts` n'a donc besoin
-// d'AUCUN `jest.mock('@master-jdr/shared')` pour ces deux imports (la vraie matrice/le vrai
-// prédicat y sont exercés). Ce mock n'est requis que côté `parties.controller.spec.ts`, pour une
+// d'AUCUN `jest.mock('@master-jdr/shared')` pour ces imports (la vraie matrice/le vrai
+// registre y sont exercés). Ce mock n'est requis que côté `parties.controller.spec.ts`, pour une
 // tout autre raison : les DTO évaluent `@IsIn(GAME_SYSTEM_IDS)` au chargement de la classe.
-import { checkPartieKindTransition, gameSystemHasModule } from '@master-jdr/shared';
+import { checkPartieKindTransition, familyOf, isOpenForCreation } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { EventsService } from '../events/events.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -69,10 +69,21 @@ export const COVERS_URL_PREFIX = '/uploads/covers/';
 const INVALID_COVER_IMAGE_MESSAGE = "Le fichier fourni n'est pas une image JPEG/PNG/WEBP valide";
 
 /** Story 29.17, AC2/AC4 : message de refus explicite quand la création ou le changement de
- *  système de jeu cible un système sans module de création de personnage jouable. Exportée pour
- *  que les specs l'importent plutôt que de retaper le texte en dur (revue de code). */
+ *  système de jeu cible un système fermé à la création (Story 37.5 : `isOpenForCreation()`).
+ *  Exportée pour que les specs l'importent plutôt que de retaper le texte en dur (revue de
+ *  code). */
 export const GAME_SYSTEM_WITHOUT_MODULE_MESSAGE =
   'Ce système de jeu ne propose pas encore de création de personnage jouable';
+
+/** Story 37.5 : refus d'un changement de système qui ferait passer la partie d'une famille à une
+ *  autre (ex. `jdr` → `ralliement`) — les données propres à chaque famille ne se convertissent pas. */
+export const GAME_SYSTEM_FAMILY_CHANGE_MESSAGE =
+  "Impossible de changer de famille de système : une partie de jeu de rôle ne peut pas devenir un ralliement, ni l'inverse";
+
+/** Story 37.5 : la conversion de type (matrice `checkPartieKindTransition`) est réservée à la
+ *  famille `jdr`. */
+export const KIND_CONVERSION_NOT_JDR_MESSAGE =
+  'Le type de cette partie ne peut pas être converti : la conversion est réservée aux parties de jeu de rôle';
 
 /**
  * Dimensions cibles des dérivées (Story 29.12, AC9) — alignées sur le rendu réel de `PartyBanner`
@@ -151,8 +162,8 @@ export class PartiesService {
   /** Story 29.17, AC2/AC4 : refus explicite partagé par `create()` et `update()` — un seul endroit
    *  à faire évoluer si la règle change (revue de code : les deux étaient des blocs copiés-collés
    *  indépendants, jamais comparés par aucun test). */
-  private assertGameSystemHasModule(gameSystemId: string): void {
-    if (!gameSystemHasModule(gameSystemId)) {
+  private assertGameSystemOpenForCreation(gameSystemId: string): void {
+    if (!isOpenForCreation(gameSystemId)) {
       throw new BadRequestException(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
     }
   }
@@ -160,7 +171,7 @@ export class PartiesService {
   async create(ownerId: string, dto: CreatePartieDto): Promise<PartieDto> {
     // Story 29.17, AC2 : refus AVANT toute écriture — même discipline que la garde `kind` de
     // `convertKind()` (aucune trace en base d'une partie sur un système sans module).
-    this.assertGameSystemHasModule(dto.gameSystemId);
+    this.assertGameSystemOpenForCreation(dto.gameSystemId);
     return this.prisma.$transaction(async (tx) => {
       const partie = await tx.partie.create({
         data: {
@@ -388,7 +399,14 @@ export class PartiesService {
     const systemChanged =
       dto.gameSystemId !== undefined && dto.gameSystemId !== partie.gameSystemId;
     if (systemChanged) {
-      this.assertGameSystemHasModule(dto.gameSystemId as string);
+      // Story 37.5 : un changement entre familles est refusé AVANT le contrôle d'ouverture, pour
+      // nommer la vraie cause. Un système courant inconnu du registre (`null`) n'est pas bloqué
+      // ici : le contrôle d'ouverture ci-dessous suffit à filtrer la cible.
+      const currentFamily = familyOf(partie.gameSystemId);
+      if (currentFamily !== null && currentFamily !== familyOf(dto.gameSystemId as string)) {
+        throw new BadRequestException(GAME_SYSTEM_FAMILY_CHANGE_MESSAGE);
+      }
+      this.assertGameSystemOpenForCreation(dto.gameSystemId as string);
     }
 
     // AD-23 : tout `UPDATE` qui change `gameSystemId` remet `hommeDragonId` à NULL DANS LA MÊME
@@ -424,6 +442,14 @@ export class PartiesService {
    */
   async convertKind(id: string, userId: string, dto: ConvertPartieKindDto): Promise<PartieDto> {
     const partie = await this.getOwned(id, userId);
+
+    // Story 37.5 : la matrice de conversion ne vaut que pour la famille `jdr` — hors de celle-ci,
+    // refus avant toute lecture ou écriture, sans consulter `checkPartieKindTransition`.
+    // Un système inconnu du registre (`null`) n'est pas refusé ici, comme dans `update()`.
+    const family = familyOf(partie.gameSystemId);
+    if (family !== null && family !== 'jdr') {
+      throw new BadRequestException(KIND_CONVERSION_NOT_JDR_MESSAGE);
+    }
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const [scenarioCount, courantCount] = await Promise.all([

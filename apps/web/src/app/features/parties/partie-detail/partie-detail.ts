@@ -24,7 +24,7 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { gameSystemHasModule } from '@master-jdr/shared';
+import { hasCapability } from '@master-jdr/shared';
 import type {
   AnnouncementDto,
   CharacterDto,
@@ -233,10 +233,10 @@ export class PartieDetail implements OnInit {
 
   protected readonly characterName = characterName;
 
-  /** Prédicat unique (Story 29.15) : pas MJ · aucun personnage sur cette partie · système avec
-   *  module · partie non terminée. Réutilisé tel quel par la visibilité du bouton de création,
-   *  l'onglet par défaut et le tooltip du slot roster — jamais réécrit ailleurs (réutilisé tel
-   *  quel par la story 29.16). */
+  /** Prédicat unique (Story 29.15) : pas MJ · aucun personnage sur cette partie · système avec la
+   *  capacité `characters` (Story 37.5, registre) · partie non terminée. Réutilisé tel quel par
+   *  la visibilité du bouton de création, l'onglet par défaut et le tooltip du slot roster —
+   *  jamais réécrit ailleurs (réutilisé tel quel par la story 29.16). */
   protected readonly canCreateCharacter = computed(() => {
     const p = this.partie();
     return (
@@ -244,7 +244,7 @@ export class PartieDetail implements OnInit {
       this.charactersLoaded() &&
       !this.isMj() &&
       this.myCharacters().length === 0 &&
-      gameSystemHasModule(p.gameSystemId) &&
+      hasCapability(p.gameSystemId, 'characters') &&
       p.status !== 'TERMINEE'
     );
   });

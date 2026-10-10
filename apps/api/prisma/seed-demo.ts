@@ -159,8 +159,8 @@ function computeDerived(sheetData: RyuutamaSheetData) {
  * · une Partie sans aucun membre (signal AUCUN_MEMBRE_INVITE) ;
  * · une Partie sur un système SANS module de création de personnage (« Les Cendres de Nacre »,
  *   Draconis). ⚠ Ce n'est PAS un état créable via l'API : `PartiesService.create()` refuse tout
- *   système sans module (story 29.17, `gameSystemHasModule()`). Il est semé directement en base
- *   pour représenter une partie héritée d'avant cette règle (AC3 de la story : consultable et
+ *   système fermé à la création (story 29.17, `isOpenForCreation()` depuis la story 37.5). Il
+ *   est semé directement en base pour représenter une partie héritée d'avant cette règle (AC3 de la story : consultable et
  *   modifiable sans changer de système, aucun signal PERSONNAGE_A_CREER). Sans ligne
  *   `GameSystem` « draconis » : `Partie.gameSystemId` est un simple texte, sans FK ;
  * · une prochaine séance à moins de 24 h (rappel e-mail, visible dans Mailpit au prochain passage

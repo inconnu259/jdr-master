@@ -121,6 +121,19 @@ describe('PartySignalsService', () => {
     expect(map['p1'].signals).not.toContain('PERSONNAGE_A_CREER');
   });
 
+  it('PERSONNAGE_A_CREER : jamais émis sur ralliement, sans capacité `characters` (Story 37.5)', async () => {
+    parties.listForUser.mockImplementation((_u: string, role: string) =>
+      Promise.resolve(
+        role === 'player'
+          ? [makePartie({ id: 'p1', role: 'player', gameSystemId: 'ralliement' })]
+          : [],
+      ),
+    );
+    prisma.character.findMany.mockResolvedValue([]);
+    const map = await service.getSignals('u1');
+    expect(map['p1'].signals).not.toContain('PERSONNAGE_A_CREER');
+  });
+
   it('VOTE_EN_COURS_SANS_REPONSE (joueur) : actif si un poll OPEN a une option sans vote de cet utilisateur', async () => {
     parties.listForUser.mockImplementation((_u: string, role: string) =>
       Promise.resolve(role === 'player' ? [makePartie({ id: 'p1', role: 'player' })] : []),

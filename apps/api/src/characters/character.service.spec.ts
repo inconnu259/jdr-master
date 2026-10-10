@@ -371,6 +371,18 @@ describe('CharacterService', () => {
     expect(prisma.character.create).not.toHaveBeenCalled();
   });
 
+  it('create() gameSystemId ralliement (sans capacité `characters`, Story 37.5) → refus, message existant', async () => {
+    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+
+    const promise = service.create('p1', 'u1', {
+      gameSystemId: 'ralliement',
+      sheetData: validSheet(),
+    });
+    await expect(promise).rejects.toThrow(BadRequestException);
+    await expect(promise).rejects.toThrow('Système de jeu non supporté : ralliement');
+    expect(prisma.character.create).not.toHaveBeenCalled();
+  });
+
   it('create() sheetData avec customWeapon (arme libre, Story 25.2) → prisma.character.create appelé (délègue l’exclusivité mutuelle à validate())', async () => {
     parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });

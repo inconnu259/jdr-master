@@ -9,7 +9,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRadioModule } from '@angular/material/radio';
-import { GAME_SYSTEMS, checkPartieKindTransition, gameSystemHasModule } from '@master-jdr/shared';
+import { GAME_SYSTEMS, checkPartieKindTransition, isOpenForCreation } from '@master-jdr/shared';
 import type { PartieKind, PartieKindTransitionRefusal, ScenarioDto } from '@master-jdr/shared';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
@@ -36,25 +36,25 @@ const ACCEPTED_COVER_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 interface GameSystemOption {
   id: string;
   name: string;
-  module: boolean;
 }
 
 /**
- * Systèmes avec module, repliés sur le premier système de la liste si aucun n'a de module (état
- * transitoire uniquement, `GAME_SYSTEMS` n'est jamais vide). Source UNIQUE de cette règle — revue
- * de code (Story 29.17) : `DEFAULT_GAME_SYSTEM_ID` et le repli de `systems` la réimplémentaient
- * chacun indépendamment, synchronisés seulement par un commentaire manuel. Lit `gameSystemHasModule()`
- * (jamais `s.module` directement) pour rester la même source de vérité que `systems`.
+ * Systèmes ouverts à la création, repliés sur le premier système de la liste si aucun ne l'est
+ * (état transitoire uniquement, `GAME_SYSTEMS` n'est jamais vide). Source UNIQUE de cette règle —
+ * revue de code (Story 29.17) : `DEFAULT_GAME_SYSTEM_ID` et le repli de `systems` la
+ * réimplémentaient chacun indépendamment, synchronisés seulement par un commentaire manuel. Lit
+ * `isOpenForCreation()` (Story 37.5, registre ; jamais un champ du registre directement) pour
+ * rester la même source de vérité que l'API (`PartiesService.create()`/`update()`).
  */
-const MODULE_ELIGIBLE_GAME_SYSTEMS: readonly GameSystemOption[] = (() => {
-  const eligible = GAME_SYSTEMS.filter((s) => gameSystemHasModule(s.id));
+const OPEN_GAME_SYSTEMS: readonly GameSystemOption[] = (() => {
+  const eligible = GAME_SYSTEMS.filter((s) => isOpenForCreation(s.id));
   return eligible.length > 0 ? eligible : [GAME_SYSTEMS[0]];
 })();
 
-/** Défaut du formulaire de création (Story 29.17) : le premier système éligible. `string`, pas
- *  `GameSystemId` — le contrôle réactif reste au même type que `PartieDto.gameSystemId` côté
- *  serveur (revue de code, cf. `savedGameSystemId`). */
-const DEFAULT_GAME_SYSTEM_ID: string = MODULE_ELIGIBLE_GAME_SYSTEMS[0].id;
+/** Défaut du formulaire de création (Story 29.17) : le premier système ouvert à la création.
+ *  `string`, pas `GameSystemId` — le contrôle réactif reste au même type que
+ *  `PartieDto.gameSystemId` côté serveur (revue de code, cf. `savedGameSystemId`). */
+const DEFAULT_GAME_SYSTEM_ID: string = OPEN_GAME_SYSTEMS[0].id;
 
 /**
  * Plafond de dépôt appliqué AVANT tout envoi réseau (Story 29.14, AC14).
@@ -127,7 +127,7 @@ export class PartieForm implements OnInit {
    *  serveur, un cast non vérifié ici n'aurait fait que déplacer le problème sans le résoudre — la
    *  valeur peut en théorie ne correspondre à aucun `GAME_SYSTEMS` connu (ex. décalage frontend/
    *  données), cas géré explicitement par `systems` ci-dessous plutôt qu'ignoré par le typage.
-   *  Permet de garder ce système visible/sélectionnable dans `systems` même sans module
+   *  Permet de garder ce système visible/sélectionnable dans `systems` même fermé à la création
    *  (Story 29.17) : aucune migration, aucune perte de valeur pour une partie déjà créée dessus. */
   private readonly savedGameSystemId = signal<string | null>(null);
   private readonly partieClosed = signal(false);
@@ -136,13 +136,12 @@ export class PartieForm implements OnInit {
   protected readonly chosenCourantId = signal<string | null>(null);
 
   /**
-   * Systèmes proposés au choix (Story 29.17, AC1) : ceux de `MODULE_ELIGIBLE_GAME_SYSTEMS`, plus le
-   * système déjà enregistré de la partie en édition — même s'il n'a pas de module — pour qu'il
-   * reste visible/sélectionnable au chargement (aucun AUTRE système sans module ne devient
-   * choisissable). `gameSystemHasModule()` reste l'unique source de vérité de l'éligibilité
-   * (story 29.15) ; le repli « aucun système n'a de module » est partagé avec
-   * `DEFAULT_GAME_SYSTEM_ID` via `MODULE_ELIGIBLE_GAME_SYSTEMS` (revue de code, plus de double
-   * implémentation à synchroniser à la main).
+   * Systèmes proposés au choix (Story 29.17, AC1) : ceux de `OPEN_GAME_SYSTEMS`, plus le système
+   * déjà enregistré de la partie en édition — même fermé à la création — pour qu'il reste
+   * visible/sélectionnable au chargement (aucun AUTRE système fermé ne devient choisissable).
+   * `isOpenForCreation()` (Story 37.5, registre) reste l'unique source de vérité de l'éligibilité ;
+   * le repli « aucun système n'est ouvert » est partagé avec `DEFAULT_GAME_SYSTEM_ID` via
+   * `OPEN_GAME_SYSTEMS` (revue de code, plus de double implémentation à synchroniser à la main).
    *
    * Repli défensif (revue de code) : si `saved` ne correspond à AUCUN `GAME_SYSTEMS` connu (décalage
    * frontend/données, jamais atteint aujourd'hui — `@IsIn` cadre déjà `gameSystemId` côté API), une
@@ -151,11 +150,11 @@ export class PartieForm implements OnInit {
    */
   protected readonly systems = computed<readonly GameSystemOption[]>(() => {
     const saved = this.savedGameSystemId();
-    if (saved === null || MODULE_ELIGIBLE_GAME_SYSTEMS.some((s) => s.id === saved)) {
-      return MODULE_ELIGIBLE_GAME_SYSTEMS;
+    if (saved === null || OPEN_GAME_SYSTEMS.some((s) => s.id === saved)) {
+      return OPEN_GAME_SYSTEMS;
     }
-    const savedEntry = GAME_SYSTEMS.find((s) => s.id === saved);
-    return [...MODULE_ELIGIBLE_GAME_SYSTEMS, savedEntry ?? { id: saved, name: saved, module: false }];
+    const savedEntry: GameSystemOption | undefined = GAME_SYSTEMS.find((s) => s.id === saved);
+    return [...OPEN_GAME_SYSTEMS, savedEntry ?? { id: saved, name: saved }];
   });
 
   protected readonly form = this.fb.nonNullable.group({

@@ -60,7 +60,12 @@ import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { EventsService } from '../events/events.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { GAME_SYSTEM_WITHOUT_MODULE_MESSAGE, PartiesService } from './parties.service';
+import {
+  GAME_SYSTEM_FAMILY_CHANGE_MESSAGE,
+  GAME_SYSTEM_WITHOUT_MODULE_MESSAGE,
+  KIND_CONVERSION_NOT_JDR_MESSAGE,
+  PartiesService,
+} from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { anyOf, arrayLike, callArg, objectLike, stringLike } from '../common/test-utils/jest-typed';
@@ -337,6 +342,18 @@ describe('PartiesService', () => {
     });
     await expect(promise).rejects.toBeInstanceOf(BadRequestException);
     // AC2 : message explicite — pas seulement le type d'exception (revue de code).
+    await expect(promise).rejects.toThrow(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.partie.create).not.toHaveBeenCalled();
+  });
+
+  it('create() refuse le système ralliement, fermé à la création jusqu’à l’épic 38 (Story 37.5)', async () => {
+    const promise = service.create('mj1', {
+      name: 'Soirée',
+      kind: 'ONE_SHOT',
+      gameSystemId: 'ralliement',
+    });
+    await expect(promise).rejects.toBeInstanceOf(BadRequestException);
     await expect(promise).rejects.toThrow(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(prisma.partie.create).not.toHaveBeenCalled();
@@ -1735,6 +1752,34 @@ describe('PartiesService', () => {
       expectNoWrites();
     });
 
+    it('Story 37.5 — hors famille jdr : 400 sans consulter la matrice, aucune lecture ni écriture', async () => {
+      // Aucune partie ralliement ne peut encore être créée : état posé au niveau unitaire.
+      prisma.partie.findUnique.mockResolvedValue({ ...episodique, gameSystemId: 'ralliement' });
+
+      const promise = service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      await expect(promise).rejects.toThrow(KIND_CONVERSION_NOT_JDR_MESSAGE);
+      // La matrice lit les compteurs de scénarios dans la transaction : ni l'une ni les autres.
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.scenario.count).not.toHaveBeenCalled();
+      expectNoWrites();
+    });
+
+    it('Story 37.5 — système inconnu du registre : non refusé par la garde de famille', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        closedAt: null,
+        gameSystemId: 'systeme-disparu',
+      });
+
+      await service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_LINEAIRE' });
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { kind: 'CAMPAGNE_LINEAIRE' },
+      });
+    });
+
     it('Cas 1 — ONE_SHOT → CAMPAGNE_LINEAIRE : autorisée sans condition', async () => {
       prisma.partie.findUnique.mockResolvedValue({ ...partie, closedAt: null });
 
@@ -2076,6 +2121,58 @@ describe('PartiesService', () => {
       // Même exigence que sur le cas « identique » ci-dessus : vérifier le payload écrit, pas
       // seulement que update() a été appelé (revue de code). AD-23 : le changement de système
       // remet le lien Homme Dragon à NULL dans la MÊME instruction.
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { gameSystemId: 'ryuutama', hommeDragonId: null },
+      });
+    });
+  });
+
+  describe('update() — changement de famille de système refusé (Story 37.5)', () => {
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, gameSystemId: 'ryuutama' });
+      prisma.partie.update.mockResolvedValue(partie);
+    });
+
+    it('une partie jdr ne passe pas sur ralliement : 400 nommant le changement de famille, sans écriture', async () => {
+      const promise = service.update('p1', 'mj1', { gameSystemId: 'ralliement' });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      await expect(promise).rejects.toThrow(GAME_SYSTEM_FAMILY_CHANGE_MESSAGE);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('une partie ralliement ne passe pas sur un système jdr (même ouvert)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, gameSystemId: 'ralliement' });
+      const promise = service.update('p1', 'mj1', { gameSystemId: 'ryuutama' });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      await expect(promise).rejects.toThrow(GAME_SYSTEM_FAMILY_CHANGE_MESSAGE);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('renvoyer le gameSystemId ralliement inchangé reste accepté', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, gameSystemId: 'ralliement' });
+      await expect(
+        service.update('p1', 'mj1', { name: 'Nouveau nom', gameSystemId: 'ralliement' }),
+      ).resolves.toBeDefined();
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { name: 'Nouveau nom', gameSystemId: 'ralliement' },
+      });
+    });
+
+    it('même famille vers un système fermé (ryuutama → draconis) : message « sans module », pas celui de famille', async () => {
+      const promise = service.update('p1', 'mj1', { gameSystemId: 'draconis' });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      await expect(promise).rejects.toThrow(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
+      await expect(promise).rejects.not.toThrow(GAME_SYSTEM_FAMILY_CHANGE_MESSAGE);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('système courant inconnu du registre → ryuutama : non bloqué par la garde de famille', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, gameSystemId: 'systeme-disparu' });
+      await expect(
+        service.update('p1', 'mj1', { gameSystemId: 'ryuutama' }),
+      ).resolves.toBeDefined();
       expect(prisma.partie.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
         data: { gameSystemId: 'ryuutama', hommeDragonId: null },

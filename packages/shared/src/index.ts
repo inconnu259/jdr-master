@@ -95,30 +95,129 @@ export interface HealthStatus {
   timestamp: string;
 }
 
-/** Systèmes de jeu proposés (liste constante — le moteur de règles viendra au Palier 2).
- *  `module` (Story 29.15, consolidé en 29.17) : source UNIQUE d'éligibilité, lue via
- *  `gameSystemHasModule()` ci-dessous — plus aucune liste parallèle côté API depuis que
- *  `CharacterService.create()` a cessé de lire `SUPPORTED_GAME_SYSTEMS` (revue de code, story
- *  29.17). Consommée par le web (bouton de création, onglet par défaut, tooltip du slot roster,
- *  liste proposée par `PartieForm`) et par l'API (`party-signals.service.ts`, garde du signal
- *  `PERSONNAGE_A_CREER` ; `PartiesService.create()`/`update()` ; `CharacterService.create()`). */
+/** Type d'une partie. En 1b l'UI n'expose que ONE_SHOT + CAMPAGNE_LINEAIRE (libellé « Campagne »). */
+export type PartieKind = 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE' | 'CAMPAGNE_EPISODIQUE';
+
+/** Famille d'un système de jeu (Story 37.5, AD-2) : `jdr` pour les jeux de rôle, `ralliement`
+ *  pour les soirées entre amis (épic 38). Gouverne la politique de droits et les transitions
+ *  autorisées (changement de système, conversion de type). */
+export type GameSystemFamily = 'jdr' | 'ralliement';
+
+/** Capacités qu'un système peut déclarer (Story 37.5) — à terme (Story 37.7), chaque
+ *  fonctionnalité de couche 3 (JDR) sera conditionnée à l'une d'elles, plus à un identifiant de
+ *  système en dur. */
+export type GameSystemCapability =
+  | 'characters'
+  | 'scenarioLifecycle'
+  | 'xp'
+  | 'hommeDragon'
+  | 'groupRoles'
+  | 'announcements'
+  | 'linearCampaign';
+
+/** Forme d'une entrée du registre `GAME_SYSTEMS`. */
+export interface GameSystemEntry {
+  id: string;
+  name: string;
+  family: GameSystemFamily;
+  capabilities: readonly GameSystemCapability[];
+  kinds: readonly PartieKind[];
+  /** Le système peut-il être choisi à la création d'une partie (ou par un changement de
+   *  système) ? */
+  openForCreation: boolean;
+}
+
+const JDR_KINDS = ['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as const;
+
+/** Registre UNIQUE des systèmes de jeu (Story 37.5, AD-2) : famille, capacités, types de partie
+ *  admis et ouverture à la création. Remplace l'ancien drapeau `module` (Story 29.15/29.17), qui
+ *  confondait « a des personnages jouables » et « peut être choisi à la création ». Toujours lu via
+ *  les lecteurs `familyOf()`, `hasCapability()`, `kindsOf()`, `isOpenForCreation()` ci-dessous,
+ *  jamais champ par champ. Consommé par le web (bouton de création de personnage, onglet par
+ *  défaut, tooltip du slot roster, liste proposée par `PartieForm`, libellés) et par l'API
+ *  (`PartiesService.create()`/`update()`/`convertKind()`, `CharacterService.create()`, signal
+ *  `PERSONNAGE_A_CREER` de `party-signals.service.ts`, validateurs DTO « id connu »).
+ *
+ *  `ralliement` reste FERMÉ à la création jusqu'à l'épic 38 et n'a pas de ligne en table
+ *  `GameSystem`. Importer en VALEUR (jamais `import type`). */
 export const GAME_SYSTEMS = [
-  { id: 'draconis', name: 'Draconis', module: false },
-  { id: 'conte-de-minuit', name: 'Conte de Minuit', module: false },
-  { id: 'ryuutama', name: 'Ryuutama', module: true },
-  { id: 'esteren', name: 'Esteren', module: false },
-] as const;
+  {
+    id: 'draconis',
+    name: 'Draconis',
+    family: 'jdr',
+    capabilities: [],
+    kinds: JDR_KINDS,
+    openForCreation: false,
+  },
+  {
+    id: 'conte-de-minuit',
+    name: 'Conte de Minuit',
+    family: 'jdr',
+    capabilities: [],
+    kinds: JDR_KINDS,
+    openForCreation: false,
+  },
+  {
+    id: 'ryuutama',
+    name: 'Ryuutama',
+    family: 'jdr',
+    capabilities: [
+      'characters',
+      'scenarioLifecycle',
+      'xp',
+      'hommeDragon',
+      'groupRoles',
+      'announcements',
+      'linearCampaign',
+    ],
+    kinds: JDR_KINDS,
+    openForCreation: true,
+  },
+  {
+    id: 'esteren',
+    name: 'Esteren',
+    family: 'jdr',
+    capabilities: [],
+    kinds: JDR_KINDS,
+    openForCreation: false,
+  },
+  {
+    id: 'ralliement',
+    name: 'Ralliement',
+    family: 'ralliement',
+    capabilities: [],
+    kinds: ['ONE_SHOT', 'CAMPAGNE_EPISODIQUE'],
+    openForCreation: false,
+  },
+] as const satisfies readonly GameSystemEntry[];
 
 export type GameSystemId = (typeof GAME_SYSTEMS)[number]['id'];
 
-/** Un système de jeu propose-t-il un module de création de personnage jouable ? Tolère un `id`
- *  inconnu (jamais d'exception) → `false`, même discipline défensive que `gameSystemName()`. */
-export function gameSystemHasModule(id: string): boolean {
-  return GAME_SYSTEMS.some((g) => g.id === id && g.module);
+/** Entrée du registre pour un `id`, ou `undefined` si inconnu. */
+function findGameSystem(id: string): GameSystemEntry | undefined {
+  return (GAME_SYSTEMS as readonly GameSystemEntry[]).find((g) => g.id === id);
 }
 
-/** Type d'une partie. En 1b l'UI n'expose que ONE_SHOT + CAMPAGNE_LINEAIRE (libellé « Campagne »). */
-export type PartieKind = 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE' | 'CAMPAGNE_EPISODIQUE';
+/** Famille d'un système. Tolère un `id` inconnu (jamais d'exception) → `null`. */
+export function familyOf(id: string): GameSystemFamily | null {
+  return findGameSystem(id)?.family ?? null;
+}
+
+/** Le système déclare-t-il cette capacité ? `id` inconnu → `false`. */
+export function hasCapability(id: string, capability: GameSystemCapability): boolean {
+  return findGameSystem(id)?.capabilities.includes(capability) ?? false;
+}
+
+/** Types de partie admis par le système. `id` inconnu → `[]`. */
+export function kindsOf(id: string): readonly PartieKind[] {
+  return findGameSystem(id)?.kinds ?? [];
+}
+
+/** Le système peut-il être choisi à la création d'une partie ou par un changement de système ?
+ *  `id` inconnu → `false`. */
+export function isOpenForCreation(id: string): boolean {
+  return findGameSystem(id)?.openForCreation ?? false;
+}
 
 /** Statut d'une partie — dérivé côté serveur à partir de `Partie.closedAt` et de la présence de
  *  scénarios (AD-8), jamais recalculé côté client (Story 29.6). */
