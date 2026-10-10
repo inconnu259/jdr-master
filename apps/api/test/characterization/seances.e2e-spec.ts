@@ -246,4 +246,20 @@ describe('Caractérisation JDR — séances (Story 37.1)', () => {
       expect(raw).not.toContain(mjB.pseudo);
     });
   });
+
+  describe('scénario Courant en campagne linéaire', () => {
+    it('fige : un seul scénario Courant — 1er passage 200, second refusé en 409', async () => {
+      const { id: partieId } = await h.createPartie(mj, 'CAMPAGNE_LINEAIRE', 'courant');
+      const { scenario: premier } = await addScenario(mj, partieId, 'Chapitre 1');
+      const { scenario: second } = await addScenario(mj, partieId, 'Chapitre 2');
+      await mj.agent.patch(`/scenarios/${premier.id}/open`).expect(200);
+      await mj.agent.patch(`/scenarios/${second.id}/open`).expect(200);
+
+      await mj.agent.patch(`/scenarios/${premier.id}/courant`).expect(200);
+      const refus = await mj.agent.patch(`/scenarios/${second.id}/courant`).expect(409);
+      expect(body<{ message: string }>(refus).message).toBe(
+        'Un scénario est déjà marqué Courant sur cette Partie.',
+      );
+    });
+  });
 });

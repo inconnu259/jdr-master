@@ -58,6 +58,7 @@ import { validate } from 'class-validator';
 import { readFile, unlink, writeFile } from 'node:fs/promises';
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
+import { EventsService } from '../events/events.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GAME_SYSTEM_WITHOUT_MODULE_MESSAGE, PartiesService } from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
@@ -83,6 +84,12 @@ describe('PartiesService', () => {
     user: {
       findUnique: jest.Mock;
     };
+    event: {
+      create: jest.Mock;
+      count: jest.Mock;
+      groupBy: jest.Mock;
+      findFirst: jest.Mock;
+    };
     scenario: {
       create: jest.Mock;
       count: jest.Mock;
@@ -107,6 +114,7 @@ describe('PartiesService', () => {
       createMany: jest.Mock;
     };
     $transaction: jest.Mock;
+    $queryRaw: jest.Mock;
   };
   let avail: {
     getActiveDeclarations: jest.Mock;
@@ -149,10 +157,19 @@ describe('PartiesService', () => {
       user: {
         findUnique: jest.fn().mockResolvedValue(null),
       },
-      scenario: {
+      // Story 37.3 — événement de base (porteur de `partieId`, compté pour `status`).
+      event: {
         create: jest.fn().mockResolvedValue({ id: 'scenario1' }),
         // Défaut « sans scénario » (status: A_VENIR) — les tests de dérivation ci-dessous
         // reconfigurent explicitement ces mocks quand ils veulent tester EN_COURS/TERMINEE.
+        count: jest.fn().mockResolvedValue(0),
+        groupBy: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      // Verrou de la partie pris par `EventsService.createInTx` (garde ONE_SHOT).
+      $queryRaw: jest.fn().mockResolvedValue([{ kind: 'ONE_SHOT' }]),
+      scenario: {
+        create: jest.fn().mockResolvedValue({ id: 'scenario1' }),
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
         findUnique: jest.fn().mockResolvedValue(null),
@@ -195,6 +212,10 @@ describe('PartiesService', () => {
       prisma as unknown as PrismaService,
       avail as unknown as AvailabilityService,
       realtimeEvents as unknown as RealtimeEventsService,
+      new EventsService(
+        prisma as unknown as PrismaService,
+        realtimeEvents as unknown as RealtimeEventsService,
+      ),
     );
   });
 
@@ -245,8 +266,8 @@ describe('PartiesService', () => {
       kind: 'ONE_SHOT',
       gameSystemId: 'ryuutama',
     });
-    expect(prisma.scenario.count).not.toHaveBeenCalled();
-    expect(prisma.scenario.groupBy).not.toHaveBeenCalled();
+    expect(prisma.event.count).not.toHaveBeenCalled();
+    expect(prisma.event.groupBy).not.toHaveBeenCalled();
   });
 
   it('create CAMPAGNE_LINEAIRE renvoie status: A_VENIR (aucun scénario auto-créé, Story 29.6)', async () => {
@@ -260,8 +281,8 @@ describe('PartiesService', () => {
       gameSystemId: 'ryuutama',
     });
     expect(dto.status).toBe('A_VENIR');
-    expect(prisma.scenario.count).not.toHaveBeenCalled();
-    expect(prisma.scenario.groupBy).not.toHaveBeenCalled();
+    expect(prisma.event.count).not.toHaveBeenCalled();
+    expect(prisma.event.groupBy).not.toHaveBeenCalled();
   });
 
   it('create ONE_SHOT crée automatiquement son scénario unique BROUILLON dans la même transaction (AC3, Story 7.1)', async () => {
@@ -272,15 +293,19 @@ describe('PartiesService', () => {
       gameSystemId: 'ryuutama',
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-    expect(prisma.scenario.create).toHaveBeenCalledWith({
+    expect(prisma.event.create).toHaveBeenCalledWith({
       data: {
         partieId: partie.id,
         title: partie.name,
-        status: 'BROUILLON',
+        description: null,
+        ownerId: partie.ownerId,
       },
     });
+    expect(prisma.scenario.create).toHaveBeenCalledWith({
+      data: { id: 'scenario1', status: 'BROUILLON' },
+    });
     expect(prisma.seance.create).toHaveBeenCalledWith({
-      data: { scenarioId: 'scenario1' },
+      data: { eventId: 'scenario1' },
     });
   });
 
@@ -367,7 +392,7 @@ describe('PartiesService', () => {
 
   it('listForUser(mj) : status: EN_COURS quand scenario.groupBy renvoie un compte > 0 pour la partie (Story 29.6)', async () => {
     prisma.partie.findMany.mockResolvedValue([partie]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 2 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 2 } }]);
     const [dto] = await service.listForUser('mj1', 'mj');
     expect(dto.status).toBe('EN_COURS');
   });
@@ -376,7 +401,7 @@ describe('PartiesService', () => {
     prisma.partie.findMany.mockResolvedValue([
       { ...partie, closedAt: new Date('2026-08-01T00:00:00.000Z') },
     ]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 3 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 3 } }]);
     const [dto] = await service.listForUser('mj1', 'mj');
     expect(dto.status).toBe('TERMINEE');
   });
@@ -385,13 +410,13 @@ describe('PartiesService', () => {
     const partieB = { ...partie, id: 'p2' };
     prisma.partie.findMany.mockResolvedValue([partie, partieB]);
     await service.listForUser('mj1', 'mj');
-    expect(prisma.scenario.groupBy).toHaveBeenCalledTimes(1);
-    expect(prisma.scenario.groupBy).toHaveBeenCalledWith({
+    expect(prisma.event.groupBy).toHaveBeenCalledTimes(1);
+    expect(prisma.event.groupBy).toHaveBeenCalledWith({
       by: ['partieId'],
       where: { partieId: { in: ['p1', 'p2'] } },
       _count: { _all: true },
     });
-    expect(prisma.scenario.count).not.toHaveBeenCalled();
+    expect(prisma.event.count).not.toHaveBeenCalled();
   });
 
   describe('isFavorite (Story 29.8)', () => {
@@ -862,11 +887,11 @@ describe('PartiesService', () => {
 
   it('findOneDto : status: EN_COURS quand la partie a au moins un scénario (Story 29.6)', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
-    prisma.scenario.count.mockResolvedValue(1);
+    prisma.event.count.mockResolvedValue(1);
     prisma.user.findUnique.mockResolvedValue(null);
     const dto = await service.findOneDto('p1', 'mj1');
     expect(dto.status).toBe('EN_COURS');
-    expect(prisma.scenario.count).toHaveBeenCalledWith({
+    expect(prisma.event.count).toHaveBeenCalledWith({
       where: { partieId: 'p1' },
     });
   });
@@ -876,7 +901,7 @@ describe('PartiesService', () => {
       ...partie,
       closedAt: new Date('2026-08-01T00:00:00.000Z'),
     });
-    prisma.scenario.count.mockResolvedValue(3);
+    prisma.event.count.mockResolvedValue(3);
     prisma.user.findUnique.mockResolvedValue(null);
     const dto = await service.findOneDto('p1', 'mj1');
     expect(dto.status).toBe('TERMINEE');
@@ -1052,7 +1077,7 @@ describe('PartiesService', () => {
         ...partie,
         kind: 'CAMPAGNE_LINEAIRE',
       });
-      prisma.scenario.count.mockResolvedValue(0);
+      prisma.event.count.mockResolvedValue(0);
       prisma.partie.update.mockResolvedValue({
         ...partie,
         kind: 'CAMPAGNE_LINEAIRE',
@@ -1089,7 +1114,7 @@ describe('PartiesService', () => {
         closedAt: new Date('2026-08-01T00:00:00.000Z'),
       });
       prisma.partie.update.mockResolvedValue({ ...partie, closedAt: null });
-      prisma.scenario.count.mockResolvedValue(0);
+      prisma.event.count.mockResolvedValue(0);
       const dto = await service.reopen('p1', 'mj1');
       expect(dto.status).toBe('A_VENIR');
     });
@@ -1523,7 +1548,7 @@ describe('PartiesService', () => {
               },
               dateValidee: null,
               inscriptions: [],
-              scenario: { partieId: 'B' },
+              event: { partieId: 'B' },
             },
           ]),
         },
@@ -1531,9 +1556,8 @@ describe('PartiesService', () => {
       const realAvailability = new AvailabilityService(p, {
         emit: jest.fn(),
       } as unknown as RealtimeEventsService);
-      const svc = new PartiesService(p, realAvailability, {
-        emit: jest.fn(),
-      } as unknown as RealtimeEventsService);
+      const realtime = { emit: jest.fn() } as unknown as RealtimeEventsService;
+      const svc = new PartiesService(p, realAvailability, realtime, new EventsService(p, realtime));
 
       const mjResults = (await svc.getAvailableSlots(
         'A',
@@ -1685,6 +1709,7 @@ describe('PartiesService', () => {
     /** Vrai si AUCUNE écriture n'a eu lieu, sur aucune des quatre tables concernées (AC10). */
     function expectNoWrites(): void {
       expect(prisma.partie.update).not.toHaveBeenCalled();
+      expect(prisma.event.create).not.toHaveBeenCalled();
       expect(prisma.scenario.create).not.toHaveBeenCalled();
       expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
       expect(prisma.scenarioParticipant.createMany).not.toHaveBeenCalled();
@@ -1777,15 +1802,18 @@ describe('PartiesService', () => {
 
     it('AC7 — cas 3 à 0 scénario : crée un scénario BROUILLON titré du nom de la partie, ET sa séance', async () => {
       setScenarioCounts(0, 0);
-      prisma.scenario.create.mockResolvedValue({ id: 'sc-neuf' });
+      prisma.event.create.mockResolvedValue({ id: 'sc-neuf' });
 
       await service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
 
+      expect(prisma.event.create).toHaveBeenCalledWith({
+        data: { partieId: 'p1', title: campagne.name, description: null, ownerId: 'mj1' },
+      });
       expect(prisma.scenario.create).toHaveBeenCalledWith({
-        data: { partieId: 'p1', title: campagne.name, status: 'BROUILLON' },
+        data: { id: 'sc-neuf', status: 'BROUILLON' },
       });
       expect(prisma.seance.create).toHaveBeenCalledWith({
-        data: { scenarioId: 'sc-neuf' },
+        data: { eventId: 'sc-neuf' },
       });
     });
 
@@ -1834,7 +1862,7 @@ describe('PartiesService', () => {
       setScenarioCounts(4, 2);
       prisma.scenario.findUnique.mockResolvedValue({
         id: 'sc-garde',
-        partieId: 'p1',
+        event: { partieId: 'p1' },
         status: 'COURANT',
       });
 
@@ -1844,7 +1872,7 @@ describe('PartiesService', () => {
       });
 
       expect(prisma.scenario.updateMany).toHaveBeenCalledWith({
-        where: { partieId: 'p1', status: 'COURANT', id: { not: 'sc-garde' } },
+        where: { event: { partieId: 'p1' }, status: 'COURANT', id: { not: 'sc-garde' } },
         data: { status: 'A_VENIR' },
       });
     });
@@ -1854,7 +1882,7 @@ describe('PartiesService', () => {
       setScenarioCounts(4, 2);
       prisma.scenario.findUnique.mockResolvedValue({
         id: 'sc-garde',
-        partieId: 'p1',
+        event: { partieId: 'p1' },
         status: 'COURANT',
       });
 
@@ -1885,7 +1913,7 @@ describe('PartiesService', () => {
       setScenarioCounts(4, 2);
       prisma.scenario.findUnique.mockResolvedValue({
         id: 'sc-ailleurs',
-        partieId: 'p-autre',
+        event: { partieId: 'p-autre' },
         status: 'COURANT',
       });
 
@@ -1903,7 +1931,7 @@ describe('PartiesService', () => {
       setScenarioCounts(4, 2);
       prisma.scenario.findUnique.mockResolvedValue({
         id: 'sc-brouillon',
-        partieId: 'p1',
+        event: { partieId: 'p1' },
         status: 'BROUILLON',
       });
 

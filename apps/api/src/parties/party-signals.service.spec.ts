@@ -8,7 +8,7 @@ describe('PartySignalsService', () => {
     character: { findMany: jest.Mock };
     partie: { findMany: jest.Mock };
     membership: { groupBy: jest.Mock };
-    scenario: { groupBy: jest.Mock; findMany: jest.Mock };
+    event: { groupBy: jest.Mock; findMany: jest.Mock };
     seance: { findMany: jest.Mock };
     sessionPoll: { findMany: jest.Mock };
   };
@@ -40,7 +40,7 @@ describe('PartySignalsService', () => {
       // défaut, c'est-à-dire aucune partie à pourvoir.
       partie: { findMany: jest.fn().mockResolvedValue([]) },
       membership: { groupBy: jest.fn().mockResolvedValue([]) },
-      scenario: {
+      event: {
         groupBy: jest.fn().mockResolvedValue([]),
         findMany: jest.fn().mockResolvedValue([]),
       },
@@ -75,7 +75,7 @@ describe('PartySignalsService', () => {
     );
     prisma.partie.findMany.mockResolvedValue([]);
     prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
     prisma.sessionPoll.findMany.mockResolvedValue([{ partieId: 'p1', options: [] }]);
 
     const map = await service.getSignals('u1');
@@ -148,7 +148,7 @@ describe('PartySignalsService', () => {
       Promise.resolve(role === 'mj' ? [makePartie({ id: 'p1' })] : []),
     );
     prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
     prisma.partie.findMany.mockResolvedValue([{ id: 'p1' }]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).toContain('HOMME_DRAGON_A_CREER');
@@ -186,7 +186,7 @@ describe('PartySignalsService', () => {
       Promise.resolve(role === 'mj' ? [makePartie({ id: 'p1' })] : []),
     );
     prisma.partie.findMany.mockResolvedValue([]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
     prisma.membership.groupBy.mockResolvedValue([]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).toContain('AUCUN_MEMBRE_INVITE');
@@ -198,7 +198,7 @@ describe('PartySignalsService', () => {
     );
     prisma.partie.findMany.mockResolvedValue([]);
     prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.scenario.groupBy.mockResolvedValue([]);
+    prisma.event.groupBy.mockResolvedValue([]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).toContain('AUCUN_SCENARIO_EN_COURS');
   });
@@ -209,7 +209,7 @@ describe('PartySignalsService', () => {
     );
     prisma.partie.findMany.mockResolvedValue([]);
     prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
     prisma.sessionPoll.findMany.mockResolvedValue([]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).toContain('AUCUNE_DATE_NI_VOTE');
@@ -221,7 +221,7 @@ describe('PartySignalsService', () => {
     );
     prisma.partie.findMany.mockResolvedValue([]);
     prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
     prisma.sessionPoll.findMany.mockResolvedValue([{ partieId: 'p1', options: [] }]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).not.toContain('AUCUNE_DATE_NI_VOTE');
@@ -233,8 +233,8 @@ describe('PartySignalsService', () => {
     );
     prisma.partie.findMany.mockResolvedValue([]);
     prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.scenario.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.findMany.mockResolvedValue([{ partieId: 'p1' }]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).toContain('RAPPORT_FIN_MANQUANT');
   });
@@ -245,8 +245,8 @@ describe('PartySignalsService', () => {
     );
     prisma.partie.findMany.mockResolvedValue([]);
     prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.seance.findMany.mockResolvedValue([{ scenario: { partieId: 'p1' } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.seance.findMany.mockResolvedValue([{ event: { partieId: 'p1' } }]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).toContain('COMPTE_RENDU_NON_REDIGE');
   });
@@ -266,7 +266,7 @@ describe('PartySignalsService', () => {
     );
     prisma.partie.findMany.mockResolvedValue([]);
     prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).toContain('PROCHAINE_SEANCE_CONNUE');
   });
@@ -286,7 +286,7 @@ describe('PartySignalsService', () => {
     );
     prisma.partie.findMany.mockResolvedValue([]);
     prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.scenario.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).not.toContain('PROCHAINE_SEANCE_CONNUE');
     expect(map['p1'].signals).toContain('AUCUNE_DATE_NI_VOTE');
@@ -300,9 +300,9 @@ describe('PartySignalsService', () => {
     // AUCUN_SCENARIO_EN_COURS/AUCUNE_DATE_NI_VOTE si la partie n'était pas clôturée.
     prisma.partie.findMany.mockResolvedValue([{ id: 'p1' }]);
     prisma.membership.groupBy.mockResolvedValue([]);
-    prisma.scenario.groupBy.mockResolvedValue([]);
-    prisma.scenario.findMany.mockResolvedValue([{ partieId: 'p1' }]);
-    prisma.seance.findMany.mockResolvedValue([{ scenario: { partieId: 'p1' } }]);
+    prisma.event.groupBy.mockResolvedValue([]);
+    prisma.event.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+    prisma.seance.findMany.mockResolvedValue([{ event: { partieId: 'p1' } }]);
 
     const map = await service.getSignals('u1');
     expect(map['p1'].signals.sort()).toEqual(
@@ -319,8 +319,8 @@ describe('PartySignalsService', () => {
         role === 'player' ? [makePartie({ id: 'p1', role: 'player', status: 'TERMINEE' })] : [],
       ),
     );
-    prisma.scenario.findMany.mockResolvedValue([{ partieId: 'p1' }]);
-    prisma.seance.findMany.mockResolvedValue([{ scenario: { partieId: 'p1' } }]);
+    prisma.event.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+    prisma.seance.findMany.mockResolvedValue([{ event: { partieId: 'p1' } }]);
 
     const map = await service.getSignals('u1');
     expect(map['p1'].signals).toEqual(['PARTIE_TERMINEE']);
@@ -334,7 +334,7 @@ describe('PartySignalsService', () => {
     // même pour vérifier qu'aucune fuite ne se produit si jamais il l'était.
     prisma.partie.findMany.mockResolvedValue([{ id: 'p-player' }]);
     prisma.membership.groupBy.mockResolvedValue([]);
-    prisma.scenario.groupBy.mockResolvedValue([]);
+    prisma.event.groupBy.mockResolvedValue([]);
     prisma.character.findMany.mockResolvedValue([{ partieId: 'p-player' }]);
 
     const map = await service.getSignals('u1');
@@ -356,8 +356,8 @@ describe('PartySignalsService', () => {
     expect(prisma.character.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.partie.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.membership.groupBy).toHaveBeenCalledTimes(1);
-    expect(prisma.scenario.groupBy).toHaveBeenCalledTimes(1);
-    expect(prisma.scenario.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.event.groupBy).toHaveBeenCalledTimes(1);
+    expect(prisma.event.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.seance.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.sessionPoll.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.sessionPoll.findMany).toHaveBeenCalledWith(

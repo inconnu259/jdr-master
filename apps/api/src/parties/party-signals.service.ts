@@ -63,16 +63,16 @@ export class PartySignalsService {
         where: { partieId: { in: mjPartieIds } },
         _count: { _all: true },
       }),
-      this.prisma.scenario.groupBy({
+      // Story 37.3 : `partieId` vit sur l'événement de base, le statut sur son extension scénario.
+      this.prisma.event.groupBy({
         by: ['partieId'],
-        where: { partieId: { in: mjPartieIds }, status: 'COURANT' },
+        where: { partieId: { in: mjPartieIds }, scenario: { is: { status: 'COURANT' } } },
         _count: { _all: true },
       }),
-      this.prisma.scenario.findMany({
+      this.prisma.event.findMany({
         where: {
           partieId: { in: mjPartieIds },
-          status: 'PASSE',
-          resumeFin: null,
+          scenario: { is: { status: 'PASSE', resumeFin: null } },
         },
         select: { partieId: true },
       }),
@@ -81,10 +81,10 @@ export class PartySignalsService {
       this.prisma.seance.findMany({
         where: {
           compteRendu: null,
-          scenario: { partieId: { in: mjPartieIds } },
+          event: { partieId: { in: mjPartieIds } },
           OR: [{ dateValidee: { not: null } }, { poll: { chosenDate: { not: null } } }],
         },
-        select: { scenario: { select: { partieId: true } } },
+        select: { event: { select: { partieId: true } } },
       }),
       // Une seule requête groupée sert à la fois VOTE_EN_COURS_SANS_REPONSE (joueur, filtré sur
       // les votes de l'utilisateur) et AUCUNE_DATE_NI_VOTE (MJ, simple présence d'un poll OPEN).
@@ -105,7 +105,7 @@ export class PartySignalsService {
     const partiesWithCourantScenario = new Set(courantScenarios.map((s) => s.partieId));
     const partiesMissingResume = new Set(scenariosMissingResume.map((s) => s.partieId));
     const partiesMissingCompteRendu = new Set(
-      seancesMissingCompteRendu.map((s) => s.scenario.partieId),
+      seancesMissingCompteRendu.map((s) => s.event.partieId),
     );
     const openPollsByPartie = new Map<string, OpenPollWithVotes[]>();
     for (const poll of openPolls as OpenPollWithVotes[]) {

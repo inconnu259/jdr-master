@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { PartiesModule } from '../parties/parties.module';
 import { CharacterModule } from '../characters/character.module';
 import { PollModule } from '../poll/poll.module';
+import { EventsModule } from '../events/events.module';
 import { ScenariosController } from './scenarios.controller';
 import { ScenariosService } from './scenarios.service';
 
@@ -12,7 +13,9 @@ import { ScenariosService } from './scenarios.service';
   // appelé tel quel, CreatePollDto inchangé — P2-AD-2).
   // Story 8.8 : forwardRef nécessaire — PollModule importe désormais ScenariosModule en retour
   // (PollController a besoin de ScenariosService.recalculateNextSession()).
-  imports: [PartiesModule, CharacterModule, forwardRef(() => PollModule)],
+  // Story 37.3 : EventsModule écrit l'événement de base, les séances et les inscriptions — ce
+  // service garde les gardes JDR puis lui délègue l'écriture.
+  imports: [PartiesModule, CharacterModule, EventsModule, forwardRef(() => PollModule)],
   controllers: [ScenariosController],
   providers: [ScenariosService],
   exports: [ScenariosService],

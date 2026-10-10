@@ -567,7 +567,7 @@ export class HommeDragonService {
   ): Promise<{ level: number } | DerivedBlock> {
     if (mode === 'level') {
       const passe = await db.scenario.count({
-        where: { status: 'PASSE', closedAt: { not: null }, partie: { hommeDragonId } },
+        where: { status: 'PASSE', closedAt: { not: null }, event: { partie: { hommeDragonId } } },
       });
       return { level: levelForScenariosPasse(passe) };
     }

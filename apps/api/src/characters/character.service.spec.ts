@@ -3302,8 +3302,7 @@ describe('CharacterService', () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         prisma.characterNote.findUnique.mockResolvedValue(makeNote());
         prisma.scenario.findUnique.mockResolvedValue({
-          id: 'scenario1',
-          partieId: 'p1',
+          event: { partieId: 'p1' },
         });
         prisma.partie.findUnique.mockResolvedValue({
           kind: 'CAMPAGNE_LINEAIRE',
@@ -3323,8 +3322,7 @@ describe('CharacterService', () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         prisma.characterNote.findUnique.mockResolvedValue(makeNote());
         prisma.scenario.findUnique.mockResolvedValue({
-          id: 'scenario1',
-          partieId: 'p1',
+          event: { partieId: 'p1' },
         });
         prisma.partie.findUnique.mockResolvedValue({
           kind: 'CAMPAGNE_LINEAIRE',
@@ -3340,8 +3338,7 @@ describe('CharacterService', () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         prisma.characterNote.findUnique.mockResolvedValue(makeNote());
         prisma.scenario.findUnique.mockResolvedValue({
-          id: 'scenario1',
-          partieId: 'p1',
+          event: { partieId: 'p1' },
         });
         prisma.partie.findUnique.mockResolvedValue({
           kind: 'CAMPAGNE_EPISODIQUE',
@@ -3370,8 +3367,7 @@ describe('CharacterService', () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         prisma.characterNote.findUnique.mockResolvedValue(makeNote());
         prisma.scenario.findUnique.mockResolvedValue({
-          id: 'scenario1',
-          partieId: 'p1',
+          event: { partieId: 'p1' },
         });
         prisma.partie.findUnique.mockResolvedValue({
           kind: 'CAMPAGNE_EPISODIQUE',
@@ -3388,8 +3384,7 @@ describe('CharacterService', () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         prisma.characterNote.findUnique.mockResolvedValue(makeNote());
         prisma.scenario.findUnique.mockResolvedValue({
-          id: 'scenario1',
-          partieId: 'partie-autre',
+          event: { partieId: 'partie-autre' },
         });
 
         await expect(service.setNoteScenario('char1', 'u1', 'note-1', 'scenario1')).rejects.toThrow(

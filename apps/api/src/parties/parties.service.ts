@@ -27,6 +27,7 @@ import type {
 // tout autre raison : les DTO évaluent `@IsIn(GAME_SYSTEM_IDS)` au chargement de la classe.
 import { checkPartieKindTransition, gameSystemHasModule } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
+import { EventsService } from '../events/events.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import {
@@ -107,10 +108,10 @@ export function coverImageVersion(coverImageUrl: string | null): string | null {
  * propagé tel quel.
  *
  * `hasScenario` détermine `status` (AD-8) : `closedAt` renseigné prime toujours (`TERMINEE`),
- * sinon la présence d'au moins un `Scenario` fait passer de `A_VENIR` à `EN_COURS`. Compter les
- * `Scenario` suffit à détecter « sans aucun scénario ni séance » — `Seance.scenarioId` est une FK
- * obligatoire (pas de séance orpheline) et tout scénario créé reçoit systématiquement au moins une
- * séance (cf. `create()` ci-dessous, `ScenariosService.addSeance`).
+ * sinon la présence d'au moins un `Event` (Story 37.3 : chaque scénario en est l'extension) fait
+ * passer de `A_VENIR` à `EN_COURS`. Compter les événements suffit à détecter « sans aucun scénario
+ * ni séance » — `Seance.eventId` est une FK obligatoire (pas de séance orpheline) et tout événement
+ * créé reçoit systématiquement au moins une séance (cf. `EventsService.createInTx`).
  */
 function toPartieDto(
   partie: Partie,
@@ -144,6 +145,7 @@ export class PartiesService {
     private readonly prisma: PrismaService,
     private readonly availability: AvailabilityService,
     private readonly realtimeEvents: RealtimeEventsService,
+    private readonly events: EventsService,
   ) {}
 
   /** Story 29.17, AC2/AC4 : refus explicite partagé par `create()` et `update()` — un seul endroit
@@ -173,17 +175,16 @@ export class PartiesService {
       // AD-7 : une Partie ONE_SHOT n'existe jamais sans son scénario unique — créé au même titre
       // que la Partie, statut BROUILLON, ouverture (BROUILLON→A_VENIR) toujours une action MJ
       // explicite ultérieure (Story 7.3), jamais automatique ici.
+      // Story 37.3 : l'événement de base et sa première séance sont créés par `EventsService`
+      // (variante transactionnelle) ; la ligne `Scenario` qui l'étend est écrite par le rappel
+      // ci-dessous — exception connue à la table des écrivains (couche 2 sans import de la couche
+      // 3), à refermer avec les capacités (37.5–37.7).
       if (dto.kind === 'ONE_SHOT') {
-        const scenario = await tx.scenario.create({
-          data: {
-            partieId: partie.id,
-            title: partie.name,
-            status: 'BROUILLON',
-          },
-        });
-        // Un scénario a systématiquement besoin d'au moins une séance pour planifier sa date — le
-        // MJ peut toujours en ajouter d'autres ensuite (ScenariosService.addSeance, aucun plafond).
-        await tx.seance.create({ data: { scenarioId: scenario.id } });
+        await this.events.createInTx(
+          tx,
+          { partieId: partie.id, title: partie.name, ownerId: partie.ownerId },
+          (etx, event) => etx.scenario.create({ data: { id: event.id, status: 'BROUILLON' } }),
+        );
       }
 
       // Le créateur est toujours MJ de la partie qu'il crée (revue de code, AC6).
@@ -200,7 +201,7 @@ export class PartiesService {
    *  renvoyé — jamais un `scenario.count()` par partie dans une boucle (Story 29.6). */
   private async hasScenarioByPartieId(partieIds: string[]): Promise<Set<string>> {
     if (partieIds.length === 0) return new Set();
-    const counts = await this.prisma.scenario.groupBy({
+    const counts = await this.prisma.event.groupBy({
       by: ['partieId'],
       where: { partieId: { in: partieIds } },
       _count: { _all: true },
@@ -213,7 +214,7 @@ export class PartiesService {
   /** Variante mono-partie de `hasScenarioByPartieId` — la lecture en lot (AD-3) ne s'applique pas
    *  quand une seule partie est concernée (`findOneDto`, `update`, `close`, `reopen`). */
   private async hasScenario(partieId: string): Promise<boolean> {
-    const count = await this.prisma.scenario.count({
+    const count = await this.prisma.event.count({
       where: { partieId },
     });
     return count > 0;
@@ -426,8 +427,8 @@ export class PartiesService {
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const [scenarioCount, courantCount] = await Promise.all([
-        tx.scenario.count({ where: { partieId: id } }),
-        tx.scenario.count({ where: { partieId: id, status: 'COURANT' } }),
+        tx.scenario.count({ where: { event: { partieId: id } } }),
+        tx.scenario.count({ where: { event: { partieId: id }, status: 'COURANT' } }),
       ]);
 
       const verdict = checkPartieKindTransition(partie.kind, dto.kind, {
@@ -451,8 +452,9 @@ export class PartiesService {
         }
         const kept = await tx.scenario.findUnique({
           where: { id: dto.courantScenarioId },
+          include: { event: { select: { partieId: true } } },
         });
-        if (!kept || kept.partieId !== id) {
+        if (!kept || kept.event.partieId !== id) {
           throw new BadRequestException("Ce scénario n'appartient pas à cette partie");
         }
         if (kept.status !== 'COURANT') {
@@ -476,10 +478,13 @@ export class PartiesService {
             // de la partie, plus la séance sans laquelle il n'a aucune date à planifier. Sans cela la
             // partie resterait sans scénario pour toujours — `ScenariosService.create()` refuse d'en
             // créer un sur un ONE_SHOT, et il n'existe aucun autre chemin.
-            const scenario = await tx.scenario.create({
-              data: { partieId: id, title: partie.name, status: 'BROUILLON' },
-            });
-            await tx.seance.create({ data: { scenarioId: scenario.id } });
+            // Story 37.3 : via `EventsService.createInTx` (garde ONE_SHOT sous verrou de la partie,
+            // dont le `kind` vient d'être écrit dans cette transaction), extension écrite en ligne.
+            await this.events.createInTx(
+              tx,
+              { partieId: id, title: partie.name, ownerId: partie.ownerId },
+              (etx, event) => etx.scenario.create({ data: { id: event.id, status: 'BROUILLON' } }),
+            );
             break;
           }
 
@@ -490,7 +495,7 @@ export class PartiesService {
             // `skipDuplicates` rend le semis idempotent, comme l'upsert de `participate()`.
             const [scenarios, memberships] = await Promise.all([
               tx.scenario.findMany({
-                where: { partieId: id },
+                where: { event: { partieId: id } },
                 select: { id: true },
               }),
               tx.membership.findMany({
@@ -526,7 +531,7 @@ export class PartiesService {
             // une séance datée (seul PASSE fige, cf. `addSeance`/`createSeancePoll`).
             await tx.scenario.updateMany({
               where: {
-                partieId: id,
+                event: { partieId: id },
                 status: 'COURANT',
                 id: { not: keptCourantId },
               },

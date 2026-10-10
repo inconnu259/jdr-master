@@ -722,11 +722,11 @@ export class AvailabilityService {
     const partieIds = parties.map((p) => p.id);
     const partieById = new Map(parties.map((p) => [p.id, p]));
     const seances = await this.prisma.seance.findMany({
-      where: { scenario: { partieId: { in: partieIds } } },
+      where: { event: { partieId: { in: partieIds } } },
       include: {
         poll: true,
         inscriptions: { select: { userId: true } },
-        scenario: { select: { partieId: true } },
+        event: { select: { partieId: true } },
       },
     });
 
@@ -737,7 +737,7 @@ export class AvailabilityService {
       if (!date) continue;
       const slot = seance.poll?.chosenSlot ?? 'FULL_DAY';
 
-      const partie = partieById.get(seance.scenario.partieId);
+      const partie = partieById.get(seance.event.partieId);
       if (!partie) continue; // partie hors du périmètre résolu ci-dessus
 
       // Propriétaire absent (AD-5, compte supprimé) : seuls les membres/inscrits sont concernés.
@@ -806,11 +806,11 @@ export class AvailabilityService {
       partieIds.length === 0
         ? Promise.resolve([])
         : this.prisma.seance.findMany({
-            where: { scenario: { partieId: { in: partieIds } } },
+            where: { event: { partieId: { in: partieIds } } },
             include: {
               poll: true,
               inscriptions: { select: { userId: true } },
-              scenario: { select: { partieId: true, title: true } },
+              event: { select: { partieId: true, title: true } },
             },
           }),
       partieIds.length === 0
@@ -940,11 +940,11 @@ export class AvailabilityService {
   private buildMySeancesLayer(
     seances: Array<{
       id: string;
-      scenarioId: string;
+      eventId: string;
       poll: { chosenDate: Date | null; chosenSlot: string | null } | null;
       dateValidee: Date | null;
       inscriptions: { userId: string }[];
-      scenario: { partieId: string; title: string };
+      event: { partieId: string; title: string };
       // Story 36.5 — déjà chargés par le findMany (aucun `select` de scalaires), donc gratuits.
       heureRdv?: string | null;
       lieu?: string | null;
@@ -962,7 +962,7 @@ export class AvailabilityService {
       const date = s.poll?.chosenDate ?? s.dateValidee;
       if (!date) continue;
       if (date.getTime() < fromMs || date.getTime() > toMs) continue;
-      const partie = partieById.get(s.scenario.partieId);
+      const partie = partieById.get(s.event.partieId);
       if (!partie) continue;
       if (
         partie.kind === 'CAMPAGNE_EPISODIQUE' &&
@@ -975,8 +975,8 @@ export class AvailabilityService {
         seanceId: s.id,
         partieId: partie.id,
         partieName: partie.name,
-        scenarioId: s.scenarioId,
-        scenarioTitle: s.scenario.title,
+        scenarioId: s.eventId,
+        scenarioTitle: s.event.title,
         date: date.toISOString().substring(0, 10),
         // AC5 : lu sur le sondage rattaché s'il existe, FULL_DAY à défaut — jamais une supposition
         // locale à l'appelant.
@@ -1063,13 +1063,13 @@ export class AvailabilityService {
   private buildOpenInscriptionsLayer(
     seances: Array<{
       id: string;
-      scenarioId: string;
+      eventId: string;
       poll: { chosenDate: Date | null } | null;
       dateValidee: Date | null;
       inscriptionMin: number | null;
       inscriptionMax: number | null;
       inscriptions: { userId: string }[];
-      scenario: { partieId: string; title: string };
+      event: { partieId: string; title: string };
     }>,
     partieById: Map<string, { id: string; name: string; kind: string }>,
     userId: string,
@@ -1077,17 +1077,17 @@ export class AvailabilityService {
     const entries: MyCalendarOpenInscriptionEntry[] = [];
     for (const s of seances) {
       if (s.inscriptionMax == null) continue;
-      // Date validée (via poll ou dateValidee) fige le roster (ScenariosService.inscrire()) —
+      // Date validée (via poll ou dateValidee) fige le roster (EventsService.inscrire()) —
       // l'inscription n'est alors plus "ouverte".
       if (s.poll?.chosenDate ?? s.dateValidee) continue;
-      const partie = partieById.get(s.scenario.partieId);
+      const partie = partieById.get(s.event.partieId);
       if (!partie || partie.kind !== 'CAMPAGNE_EPISODIQUE') continue;
       entries.push({
         seanceId: s.id,
         partieId: partie.id,
         partieName: partie.name,
-        scenarioId: s.scenarioId,
-        scenarioTitle: s.scenario.title,
+        scenarioId: s.eventId,
+        scenarioTitle: s.event.title,
         inscriptionMin: s.inscriptionMin ?? 0,
         inscriptionMax: s.inscriptionMax,
         inscritsCount: s.inscriptions.length,

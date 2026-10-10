@@ -266,6 +266,34 @@ async function createTokenSecret() {
   return { secret, tokenHash: await argon2.hash(secret) };
 }
 
+/**
+ * Story 37.3 — un scénario est l'extension JDR d'un `Event` (même identifiant) : l'événement porte
+ * `partieId`, `title`, `description` ; son propriétaire est celui de la partie. Même forme d'appel
+ * que l'ancien `prisma.scenario.create({ data })`, pour garder le seed lisible.
+ */
+async function createScenario(args: {
+  data: { partieId: string; title: string; description?: string } & Omit<
+    Prisma.ScenarioCreateWithoutEventInput,
+    'id'
+  >;
+}): Promise<{ id: string }> {
+  const { partieId, title, description, ...extension } = args.data;
+  const partie = await prisma.partie.findUniqueOrThrow({
+    where: { id: partieId },
+    select: { ownerId: true },
+  });
+  const event = await prisma.event.create({
+    data: {
+      partieId,
+      title,
+      description: description ?? null,
+      ownerId: partie.ownerId,
+      scenario: { create: extension },
+    },
+  });
+  return { id: event.id };
+}
+
 async function createUser(email: string, pseudo: string, prefs: UserPrefs = {}) {
   const passwordHash = await argon2.hash(DEMO_PASSWORD);
   return prisma.user.create({
@@ -648,7 +676,7 @@ async function main() {
       chosenSlot: 'AFTERNOON',
     },
   });
-  const oneShotScenario = await prisma.scenario.create({
+  const oneShotScenario = await createScenario({
     data: {
       partieId: oneShot.id,
       title: "Le Naufrage de l'Aurore",
@@ -665,7 +693,7 @@ async function main() {
   });
   await prisma.seance.create({
     data: {
-      scenarioId: oneShotScenario.id,
+      eventId: oneShotScenario.id,
       pollId: oneShotPoll.id,
       // Infos pratiques (jusqu'ici jamais peuplées par le seed).
       heureRdv: '14:00',
@@ -866,7 +894,7 @@ async function main() {
       chosenSlot: 'AFTERNOON',
     },
   });
-  const chap1 = await prisma.scenario.create({
+  const chap1 = await createScenario({
     data: {
       partieId: lineaire.id,
       title: 'Chapitre 1 : Les Ombres du Marché',
@@ -882,7 +910,7 @@ async function main() {
   });
   await prisma.seance.create({
     data: {
-      scenarioId: chap1.id,
+      eventId: chap1.id,
       pollId: chap1Poll.id,
       heureRdv: '14:00',
       lieu: 'Chez Alice',
@@ -920,7 +948,7 @@ async function main() {
       // Chloe ne vote pas : réponse partielle du groupe, cas le plus fréquent en vrai.
     ],
   });
-  const chap2 = await prisma.scenario.create({
+  const chap2 = await createScenario({
     data: {
       partieId: lineaire.id,
       title: 'Chapitre 2 : Le Sceau Brisé',
@@ -930,9 +958,9 @@ async function main() {
       dureeSeances: 2,
     },
   });
-  await prisma.seance.create({ data: { scenarioId: chap2.id, pollId: chap2Poll.id } });
+  await prisma.seance.create({ data: { eventId: chap2.id, pollId: chap2Poll.id } });
 
-  const chap3 = await prisma.scenario.create({
+  const chap3 = await createScenario({
     data: {
       partieId: lineaire.id,
       title: "Chapitre 3 : L'Appel du Nord",
@@ -941,7 +969,7 @@ async function main() {
   });
   // Invariant « tout scénario a au moins une séance » (cf. `PartiesService.create`) : un brouillon
   // porte une séance vide, sans date ni vote — le MJ la planifiera plus tard.
-  await prisma.seance.create({ data: { scenarioId: chap3.id } });
+  await prisma.seance.create({ data: { eventId: chap3.id } });
   await prisma.characterNote.createMany({
     data: [
       {
@@ -1136,7 +1164,7 @@ async function main() {
     ],
   });
 
-  const bijou = await prisma.scenario.create({
+  const bijou = await createScenario({
     data: {
       partieId: episodique.id,
       title: "L'Affaire du Bijou Volé",
@@ -1158,7 +1186,7 @@ async function main() {
   });
   const bijouSeance = await prisma.seance.create({
     data: {
-      scenarioId: bijou.id,
+      eventId: bijou.id,
       inscriptionMin: 2,
       inscriptionMax: 4,
       dateValidee: at(-30),
@@ -1191,7 +1219,7 @@ async function main() {
 
   // ─── Cas limite : séance A_VENIR COMPLÈTE (inscriptionMax atteint) ─────────
   // 3 inscrits pour un maximum de 3 → le bouton d'inscription doit être fermé aux autres.
-  const auberge = await prisma.scenario.create({
+  const auberge = await createScenario({
     data: {
       partieId: episodique.id,
       title: "Le Mystère de l'Auberge",
@@ -1209,7 +1237,7 @@ async function main() {
   });
   const aubergeSeance = await prisma.seance.create({
     data: {
-      scenarioId: auberge.id,
+      eventId: auberge.id,
       inscriptionMin: 2,
       inscriptionMax: 3,
       dateValidee: at(10), // = Partie.nextSessionDate (voir plus haut)
@@ -1229,7 +1257,7 @@ async function main() {
   // ─── Cas limite : séance A_VENIR avec de la PLACE ──────────────────────────
   // 1 inscrit pour un maximum de 5 → le bouton d'inscription reste ouvert. Diane et les autres
   // peuvent s'inscrire depuis l'interface.
-  const phare = await prisma.scenario.create({
+  const phare = await createScenario({
     data: {
       partieId: episodique.id,
       title: 'Le Secret du Phare',
@@ -1240,7 +1268,7 @@ async function main() {
   });
   const phareSeance = await prisma.seance.create({
     data: {
-      scenarioId: phare.id,
+      eventId: phare.id,
       inscriptionMin: 2,
       inscriptionMax: 5,
       dateValidee: at(12),
@@ -1278,11 +1306,11 @@ async function main() {
     ],
   });
 
-  const dette = await prisma.scenario.create({
+  const dette = await createScenario({
     data: { partieId: episodique.id, title: 'La Dette du Passeur', status: 'BROUILLON' },
   });
   // Brouillon : séance vide, comme pour le Chapitre 3.
-  await prisma.seance.create({ data: { scenarioId: dette.id } });
+  await prisma.seance.create({ data: { eventId: dette.id } });
 
   // ─── Partie 4 : CAMPAGNE_LINEAIRE MJ'd par Diane, jamais commencée ────────
   // Aucun scénario volontairement : status: 'A_VENIR' (« pas encore commencée », AD-8) —
@@ -1302,7 +1330,7 @@ async function main() {
   // ─── Partie 5 : CAMPAGNE_LINEAIRE très avancée — « Les Annales de Brume » ─────
   // Aventure de Kaien : ses onze scénarios `PASSE`, ajoutés à celui de « La Route des
   // Lanternes », font 12 → niveau 5 PAR CUMUL (aucune des deux aventures n'y arrive seule).
-  // Chaque scénario porte une séance minimale (`scenarioId` + `dateValidee` suffisent), tous dans
+  // Chaque scénario porte une séance minimale (`eventId` + `dateValidee` suffisent), tous dans
   // le passé et sans scénario COURANT : une campagne à l'arrêt entre deux chapitres.
   console.log('→ Partie CAMPAGNE_LINEAIRE (Les Annales de Brume)...');
   const annales = await prisma.partie.create({
@@ -1328,7 +1356,7 @@ async function main() {
   });
   for (let chapitre = 1; chapitre <= 11; chapitre++) {
     const jour = -230 + chapitre * 14; // du chapitre 1 (J−216) au chapitre 11 (J−76), toujours passé
-    const scenario = await prisma.scenario.create({
+    const scenario = await createScenario({
       data: {
         partieId: annales.id,
         title: `Annales de Brume — Chapitre ${chapitre}`,
@@ -1338,7 +1366,7 @@ async function main() {
         closedAt: at(jour, 19),
       },
     });
-    await prisma.seance.create({ data: { scenarioId: scenario.id, dateValidee: at(jour) } });
+    await prisma.seance.create({ data: { eventId: scenario.id, dateValidee: at(jour) } });
   }
 
   // ─── Partie 6 : ONE_SHOT dont la séance tombe dans moins de 24 h (MJ : Diane) ──────
@@ -1394,7 +1422,7 @@ async function main() {
     ],
   });
   // Un one-shot porte son scénario unique (AD-7), ici ouvert aux joueurs (A_VENIR).
-  const mareeScenario = await prisma.scenario.create({
+  const mareeScenario = await createScenario({
     data: {
       partieId: maree.id,
       title: 'La Marée du Lendemain',
@@ -1406,7 +1434,7 @@ async function main() {
   });
   await prisma.seance.create({
     data: {
-      scenarioId: mareeScenario.id,
+      eventId: mareeScenario.id,
       pollId: mareePoll.id,
       heureRdv: '20:30',
       lieu: 'En visio',
@@ -1445,7 +1473,7 @@ async function main() {
       { pollId: veilleePoll.id, date: day(-3), slot: 'FULL_DAY' },
     ],
   });
-  const veilleeScenario = await prisma.scenario.create({
+  const veilleeScenario = await createScenario({
     data: {
       partieId: veillee.id,
       title: 'La Veillée des Absents',
@@ -1455,7 +1483,7 @@ async function main() {
       dureeSeances: 1,
     },
   });
-  await prisma.seance.create({ data: { scenarioId: veilleeScenario.id, pollId: veilleePoll.id } });
+  await prisma.seance.create({ data: { eventId: veilleeScenario.id, pollId: veilleePoll.id } });
 
   // ─── Partie 8 : CAMPAGNE_LINEAIRE sur un système SANS module (Draconis, MJ : Diane) ──────
   // ⚠ État HÉRITÉ, non créable via l'API : `PartiesService.create()` refuse un système sans module
@@ -1498,7 +1526,7 @@ async function main() {
   await prisma.pollOption.create({
     data: { pollId: cendresPoll.id, date: day(21), slot: 'EVENING' },
   });
-  const cendresScenario = await prisma.scenario.create({
+  const cendresScenario = await createScenario({
     data: {
       partieId: cendres.id,
       title: 'Prologue : Le Pacte de Cendres',
@@ -1510,7 +1538,7 @@ async function main() {
   });
   await prisma.seance.create({
     data: {
-      scenarioId: cendresScenario.id,
+      eventId: cendresScenario.id,
       pollId: cendresPoll.id,
       heureRdv: '19:00',
       lieu: 'Chez Diane',

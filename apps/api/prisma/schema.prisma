@@ -30,6 +30,7 @@ model User {
   calendarLayersSetAt DateTime? // AD-16 — null = jamais réglé, le jeu par défaut s'applique (Story 30.4)
 
   ownedParties              Partie[]                   @relation("PartieOwner")
+  ownedEvents               Event[]                    @relation("EventOwner")
   memberships               Membership[]
   invitesSent               Invitation[]               @relation("InvitationInviter")
   invitesRecv               Invitation[]               @relation("InvitationInvitee")
@@ -81,7 +82,7 @@ model Partie {
   polls               SessionPoll[]
   characters          Character[]
   xpDistributions     XpDistribution[]
-  scenarios           Scenario[]
+  events              Event[]
   scenarioDocuments   ScenarioDocument[]
   announcements       Announcement[]
   characterGroupRoles CharacterGroupRole[]
@@ -522,38 +523,58 @@ enum ScenarioStatus {
   PASSE
 }
 
-/// Unité de contenu narratif d'une Partie (Story 7.1). Un one-shot = un scénario unique
+/// Événement de base d'une Partie (Story 37.3, AD-3) — ce qui porte les séances, donc les votes de
+/// date et les inscriptions. Un scénario JDR en est l'extension 1:1 (`Scenario.id` = `Event.id`) ;
+/// le ralliement (épics 38+) réutilisera l'événement seul, sans scénario caché.
+/// Écrivain unique : `EventsService` (module `events/`). `ownerId` = propriétaire de la partie à
+/// la création (`SetNull` : la suppression du compte laisse l'événement en place).
+model Event {
+  id          String   @id @default(uuid())
+  partieId    String
+  partie      Partie   @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  ownerId     String?
+  owner       User?    @relation("EventOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  scenario Scenario?
+  seances  Seance[]
+
+  @@index([partieId])
+}
+
+/// Unité de contenu narratif d'une Partie (Story 7.1), extension JDR d'un `Event` depuis la
+/// Story 37.3 : sa clé primaire EST l'identifiant de l'événement — `partieId`, `title`,
+/// `description` et `createdAt` vivent sur l'événement. Un one-shot = un scénario unique
 /// (créé automatiquement, cf. PartiesService.create). Cycle de vie anti-spoil :
 /// BROUILLON (invisible joueurs) → A_VENIR (titre+date seuls) → COURANT (contenu complet) → PASSE.
 /// Pas de verrouillage optimiste (AD-3) : MJ seul écrivain de son contenu propre.
 model Scenario {
-  id           String         @id @default(uuid())
-  partieId     String
-  partie       Partie         @relation(fields: [partieId], references: [id], onDelete: Cascade)
-  title        String
-  description  String?
+  id           String         @id
+  event        Event          @relation(fields: [id], references: [id], onDelete: Cascade)
   status       ScenarioStatus @default(BROUILLON)
   dureeHeures  Int?
   dureeSeances Int?
   resumeFin    String? // rétrospective, FR-15 (Epic 8) — champ créé maintenant, non écrit par 7.1
-  createdAt    DateTime       @default(now())
   closedAt     DateTime?
 
-  seances        Seance[]
   documents      ScenarioDocument[]
   participants   ScenarioParticipant[]
   announcements  Announcement[]
   characterNotes CharacterNote[]
 
-  @@index([partieId, status])
+  @@index([status])
 }
 
-/// Une soirée de jeu rattachée à un scénario (Epic 8, non exploité par la Story 7.1).
-/// Relation vers SessionPoll (linéaire/one-shot) OU Inscription[] (épisodique), jamais les deux (AD-4).
+/// Une soirée de jeu rattachée à un événement (Epic 8 ; `eventId` remplace `scenarioId` depuis la
+/// Story 37.3, mêmes valeurs). Relation vers SessionPoll (linéaire/one-shot) OU Inscription[]
+/// (épisodique), jamais les deux (AD-4). Écrivain : `EventsService`, sauf `compteRendu`
+/// (`ScenariosService`).
 model Seance {
   id             String       @id @default(uuid())
-  scenarioId     String
-  scenario       Scenario     @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  eventId        String
+  event          Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
   pollId         String?      @unique
   poll           SessionPoll? @relation(fields: [pollId], references: [id])
   inscriptionMin Int?

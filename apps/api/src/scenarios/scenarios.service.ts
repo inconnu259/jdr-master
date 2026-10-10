@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
-import { Prisma, type Scenario, type ScenarioDocument } from '@prisma/client';
+import { Prisma, type Event, type Scenario, type ScenarioDocument } from '@prisma/client';
 import type {
   CharacterNoteDto,
   DaySlot,
@@ -16,6 +16,7 @@ import type {
   SessionPollDto,
 } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { EventsService } from '../events/events.service';
 import { PartiesService } from '../parties/parties.service';
 import { countParticipants } from '../parties/participant-count.util';
 import { CharacterService } from '../characters/character.service';
@@ -51,7 +52,27 @@ export class ScenariosService {
     private readonly characters: CharacterService,
     private readonly pollService: PollService,
     private readonly realtimeEvents: RealtimeEventsService,
+    private readonly events: EventsService,
   ) {}
+
+  /** Scénario aplati avec son événement de base (Story 37.3), `null` s'il n'existe pas. */
+  private async findScenario(scenarioId: string): Promise<ScenarioRow | null> {
+    const scenario = await this.prisma.scenario.findUnique({
+      where: { id: scenarioId },
+      include: WITH_EVENT,
+    });
+    return scenario ? flattenScenario(scenario) : null;
+  }
+
+  /** Relecture d'un scénario dont l'existence vient d'être établie. */
+  private async reloadScenario(scenarioId: string): Promise<ScenarioRow> {
+    return flattenScenario(
+      await this.prisma.scenario.findUniqueOrThrow({
+        where: { id: scenarioId },
+        include: WITH_EVENT,
+      }),
+    );
+  }
 
   async create(partieId: string, mjId: string, dto: CreateScenarioDto): Promise<ScenarioDto> {
     const partie = await this.parties.getOwned(partieId, mjId);
@@ -64,28 +85,32 @@ export class ScenariosService {
       );
     }
 
-    const scenario = await this.prisma.scenario.create({
-      data: {
+    // Story 37.3 : l'événement de base (titre, description, première séance) est créé par
+    // `EventsService`, le scénario en est l'extension JDR, écrite dans la même transaction.
+    // L'émission `partie:` a lieu dans `EventsService.create()`, après validation.
+    const { event, extension } = await this.events.create(
+      {
         partieId,
         title: dto.title,
         description: dto.description ?? null,
-        dureeHeures: dto.dureeHeures ?? null,
-        dureeSeances: dto.dureeSeances ?? null,
-        status: 'BROUILLON',
+        ownerId: partie.ownerId,
       },
-    });
-    // Un scénario a systématiquement besoin d'au moins une séance pour planifier sa date — le MJ
-    // peut toujours en ajouter d'autres ensuite (addSeance, aucun plafond, cf. AC1 Story 8.2).
-    await this.prisma.seance.create({ data: { scenarioId: scenario.id } });
+      (tx, created) =>
+        tx.scenario.create({
+          data: {
+            id: created.id,
+            dureeHeures: dto.dureeHeures ?? null,
+            dureeSeances: dto.dureeSeances ?? null,
+            status: 'BROUILLON',
+          },
+        }),
+    );
 
-    this.realtimeEvents.emit(partieTopic(partieId));
-    return toEnrichedDto(this.prisma, this.characters, scenario, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, toRow(extension, event), partie.kind);
   }
 
   async update(scenarioId: string, mjId: string, dto: UpdateScenarioDto): Promise<ScenarioDto> {
-    const scenario = await this.prisma.scenario.findUnique({
-      where: { id: scenarioId },
-    });
+    const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
@@ -95,20 +120,29 @@ export class ScenariosService {
       );
     }
 
-    const updated = await this.prisma.scenario.update({
-      where: { id: scenarioId },
-      data: {
-        ...(dto.title !== undefined && { title: dto.title }),
-        ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.dureeHeures !== undefined && { dureeHeures: dto.dureeHeures }),
-        ...(dto.dureeSeances !== undefined && {
-          dureeSeances: dto.dureeSeances,
-        }),
-      },
+    // Story 37.3 : titre et description vivent sur l'événement (écrits par `EventsService`), les
+    // durées sur le scénario — une seule transaction, émission après validation.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (dto.title !== undefined || dto.description !== undefined) {
+        await this.events.updateInTx(tx, scenarioId, {
+          ...(dto.title !== undefined && { title: dto.title }),
+          ...(dto.description !== undefined && { description: dto.description }),
+        });
+      }
+      return tx.scenario.update({
+        where: { id: scenarioId },
+        data: {
+          ...(dto.dureeHeures !== undefined && { dureeHeures: dto.dureeHeures }),
+          ...(dto.dureeSeances !== undefined && {
+            dureeSeances: dto.dureeSeances,
+          }),
+        },
+        include: WITH_EVENT,
+      });
     });
 
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, flattenScenario(updated), partie.kind);
   }
 
   async uploadDocument(
@@ -126,9 +160,7 @@ export class ScenariosService {
       if (!isUUID(scenarioId)) {
         throw new BadRequestException('scenarioId doit être un UUID valide ou absent');
       }
-      const scenario = await this.prisma.scenario.findUnique({
-        where: { id: scenarioId },
-      });
+      const scenario = await this.findScenario(scenarioId);
       if (!scenario) throw new NotFoundException('Scénario introuvable');
       if (scenario.partieId !== partieId) {
         throw new BadRequestException("Ce scénario n'appartient pas à cette Partie");
@@ -172,9 +204,7 @@ export class ScenariosService {
   }
 
   async listDocuments(scenarioId: string, userId: string): Promise<ScenarioDocumentDto[]> {
-    const scenario = await this.prisma.scenario.findUnique({
-      where: { id: scenarioId },
-    });
+    const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     await this.parties.getViewable(scenario.partieId, userId);
 
@@ -200,10 +230,13 @@ export class ScenariosService {
   async listDrafts(partieId: string, mjId: string): Promise<ScenarioDto[]> {
     const partie = await this.parties.getOwned(partieId, mjId);
 
-    const scenarios = await this.prisma.scenario.findMany({
-      where: { partieId, status: 'BROUILLON' },
-      orderBy: { createdAt: 'desc' },
-    });
+    const scenarios = (
+      await this.prisma.scenario.findMany({
+        where: { event: { partieId }, status: 'BROUILLON' },
+        orderBy: { event: { createdAt: 'desc' } },
+        include: WITH_EVENT,
+      })
+    ).map(flattenScenario);
     const seancesByScenario = await loadSeancesBatch(
       this.prisma,
       scenarios.map((s) => s.id),
@@ -224,12 +257,15 @@ export class ScenariosService {
   ): Promise<ScenarioDto[]> {
     const partie = await this.parties.getViewable(partieId, userId);
 
-    const scenarios = await this.prisma.scenario.findMany({
-      where: { partieId },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      skip: pagination?.skip,
-      take: pagination?.take,
-    });
+    const scenarios = (
+      await this.prisma.scenario.findMany({
+        where: { event: { partieId } },
+        orderBy: [{ event: { createdAt: 'asc' } }, { id: 'asc' }],
+        skip: pagination?.skip,
+        take: pagination?.take,
+        include: WITH_EVENT,
+      })
+    ).map(flattenScenario);
     const scenarioIds = scenarios.map((s) => s.id);
     const seancesByScenario = await loadSeancesBatch(
       this.prisma,
@@ -306,14 +342,18 @@ export class ScenariosService {
 
     const [scenarios, memberships] = await Promise.all([
       this.prisma.scenario.findMany({
-        where: { partieId: { in: partieIds }, status: 'PASSE', closedAt: { not: null } },
+        where: {
+          event: { partieId: { in: partieIds } },
+          status: 'PASSE',
+          closedAt: { not: null },
+        },
         orderBy: [{ closedAt: 'asc' }, { id: 'asc' }],
         select: {
           id: true,
-          partieId: true,
-          title: true,
           closedAt: true,
-          partie: { select: { kind: true } },
+          event: {
+            select: { partieId: true, title: true, partie: { select: { kind: true } } },
+          },
         },
       }),
       this.prisma.membership.findMany({
@@ -330,7 +370,7 @@ export class ScenariosService {
     }
 
     const episodicScenarioIds = scenarios
-      .filter((s) => s.partie.kind === 'CAMPAGNE_EPISODIQUE')
+      .filter((s) => s.event.partie.kind === 'CAMPAGNE_EPISODIQUE')
       .map((s) => s.id);
     const inscrits =
       episodicScenarioIds.length === 0
@@ -349,22 +389,20 @@ export class ScenariosService {
     return {
       scenarios: scenarios.map((s) => ({
         id: s.id,
-        partieId: s.partieId,
-        title: s.title,
+        partieId: s.event.partieId,
+        title: s.event.title,
         closedAt: (s.closedAt as Date).toISOString(),
         participants:
-          s.partie.kind === 'CAMPAGNE_EPISODIQUE'
+          s.event.partie.kind === 'CAMPAGNE_EPISODIQUE'
             ? (inscritsByScenario.get(s.id) ?? [])
-            : (membersByPartie.get(s.partieId) ?? []),
+            : (membersByPartie.get(s.event.partieId) ?? []),
       })),
       membersByPartie,
     };
   }
 
   async open(scenarioId: string, mjId: string): Promise<ScenarioDto> {
-    const scenario = await this.prisma.scenario.findUnique({
-      where: { id: scenarioId },
-    });
+    const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
@@ -372,10 +410,13 @@ export class ScenariosService {
       throw new BadRequestException('Seul un scénario Brouillon peut être ouvert aux joueurs');
     }
 
-    const updated = await this.prisma.scenario.update({
-      where: { id: scenarioId },
-      data: { status: 'A_VENIR' },
-    });
+    const updated = flattenScenario(
+      await this.prisma.scenario.update({
+        where: { id: scenarioId },
+        data: { status: 'A_VENIR' },
+        include: WITH_EVENT,
+      }),
+    );
 
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
     // Deferred-work (SSE, calendrier personnel) : un scénario ouvert peut rendre une inscription
@@ -389,9 +430,7 @@ export class ScenariosService {
   // mécanisme qu'AD-5), uniquement pour CAMPAGNE_LINEAIRE — CAMPAGNE_EPISODIQUE/ONE_SHOT autorisent
   // plusieurs COURANT simultanés (AD-4), aucun verrou/vérification pour ces kinds.
   async markCourant(scenarioId: string, mjId: string): Promise<ScenarioDto> {
-    const scenario = await this.prisma.scenario.findUnique({
-      where: { id: scenarioId },
-    });
+    const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
@@ -401,9 +440,11 @@ export class ScenariosService {
 
     if (partie.kind === 'CAMPAGNE_LINEAIRE') {
       const updated = await this.prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT id FROM "Scenario" WHERE "partieId" = ${partie.id} FOR UPDATE`;
+        // Story 37.3 : `partieId` vit sur l'événement — verrou des scénarios de la partie par
+        // jointure, `OF s` pour ne verrouiller que les lignes `Scenario` (comme avant).
+        await tx.$queryRaw`SELECT s."id" FROM "Scenario" s JOIN "Event" e ON e."id" = s."id" WHERE e."partieId" = ${partie.id} FOR UPDATE OF s`;
         const existingCourant = await tx.scenario.findFirst({
-          where: { partieId: partie.id, status: 'COURANT' },
+          where: { event: { partieId: partie.id }, status: 'COURANT' },
         });
         if (existingCourant) {
           throw new ConflictException('Un scénario est déjà marqué Courant sur cette Partie.');
@@ -417,7 +458,9 @@ export class ScenariosService {
         if (count === 0) {
           throw new ConflictException('Le statut du scénario a changé entretemps, réessayez.');
         }
-        return tx.scenario.findUniqueOrThrow({ where: { id: scenarioId } });
+        return flattenScenario(
+          await tx.scenario.findUniqueOrThrow({ where: { id: scenarioId }, include: WITH_EVENT }),
+        );
       });
       this.realtimeEvents.emit(partieTopic(partie.id));
       // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : en plus de partieTopic, jamais en remplacement.
@@ -432,9 +475,7 @@ export class ScenariosService {
     if (count === 0) {
       throw new ConflictException('Le statut du scénario a changé entretemps, réessayez.');
     }
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenarioId },
-    });
+    const updated = await this.reloadScenario(scenarioId);
     this.realtimeEvents.emit(partieTopic(partie.id));
     // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
@@ -446,9 +487,7 @@ export class ScenariosService {
   // contraint que le scénario ciblé lui-même — updateMany + count suffit (pas de verrou
   // FOR UPDATE/$transaction, aucune contrainte d'unicité entre scénarios ici).
   async close(scenarioId: string, mjId: string): Promise<ScenarioDto> {
-    const scenario = await this.prisma.scenario.findUnique({
-      where: { id: scenarioId },
-    });
+    const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
@@ -463,9 +502,7 @@ export class ScenariosService {
     if (count === 0) {
       throw new ConflictException('Le statut du scénario a changé entretemps, réessayez.');
     }
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenarioId },
-    });
+    const updated = await this.reloadScenario(scenarioId);
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
     // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : la partie perd son scénario COURANT — en plus
     // de partieTopic ci-dessus, jamais en remplacement.
@@ -476,9 +513,7 @@ export class ScenariosService {
   // AD-9 : action joueur, getViewable (pas getOwned) — MJ+membre. AD-4 : ScenarioParticipant
   // n'existe que pour CAMPAGNE_EPISODIQUE, jamais peuplé/lu pour ONE_SHOT/CAMPAGNE_LINEAIRE.
   async participate(scenarioId: string, userId: string): Promise<ScenarioDto> {
-    const scenario = await this.prisma.scenario.findUnique({
-      where: { id: scenarioId },
-    });
+    const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     const partie = await this.parties.getViewable(scenario.partieId, userId);
 
@@ -494,9 +529,7 @@ export class ScenariosService {
       update: {},
     });
 
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenarioId },
-    });
+    const updated = await this.reloadScenario(scenarioId);
     this.realtimeEvents.emit(partieTopic(partie.id));
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
@@ -504,9 +537,7 @@ export class ScenariosService {
   // AD-9 : écriture MJ-only (getOwned, comme create/update/open/markCourant/close) — ajouter une
   // séance est une action MJ, contrairement à participate() (AD-9 joueur). Aucun plafond (AC1).
   async addSeance(scenarioId: string, mjId: string): Promise<ScenarioDto> {
-    const scenario = await this.prisma.scenario.findUnique({
-      where: { id: scenarioId },
-    });
+    const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
@@ -514,67 +545,22 @@ export class ScenariosService {
       throw new BadRequestException("Impossible d'ajouter une séance à un scénario clôturé");
     }
 
-    await this.prisma.seance.create({ data: { scenarioId } });
+    // Story 37.3 : écriture déléguée à `EventsService` (qui émet `partie:`).
+    await this.events.addSeance(partie.id, scenarioId);
 
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenarioId },
-    });
-    this.realtimeEvents.emit(partieTopic(partie.id));
+    const updated = await this.reloadScenario(scenarioId);
     // Deferred-work (SSE, calendrier personnel) : une nouvelle séance peut apparaître dans
     // mes-seances/inscriptions-ouvertes pour un membre — GET /me/calendar doit le savoir.
     await this.parties.notifyPartieSignalsChanged(partie.id, mjId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
-  // Story 8.8 (Décision 2) : un seul vote actif par Séance (pas par Partie, cf. PollService.create()
-  // qui ne ferme plus l'existant) — Partie.nextSessionDate/nextSessionSlot ne peuvent donc plus être
-  // posés par un seul choose() isolé, ils doivent refléter la date la plus proche dans le futur
-  // parmi TOUTES les séances actives de la Partie (poll.chosenDate ?? dateValidee, même logique de
-  // résolution que ScenarioTimeline/SeanceList depuis la Story 8.7). Appelé après tout événement
-  // pouvant faire changer cette date la plus proche : PollController.choose() (via forwardRef —
-  // PollService lui-même reste générique, P2-AD-2, c'est le contrôleur qui orchestre),
-  // resetSeanceDate(), deleteSeance(). Reproduit le comportement de reset de `reminderSentAt`
-  // (Palier 4 e-mail) déjà établi dans PollService.choose() : seulement si la date/le créneau change
-  // réellement.
+  // Story 8.8 (Décision 2) : Partie.nextSessionDate/nextSessionSlot = date la plus proche dans le
+  // futur parmi TOUTES les séances de la Partie. Story 37.3 : le calcul vit dans `EventsService`
+  // (écrivain des séances) ; ce point d'entrée reste celui de PollController.choose() (via
+  // forwardRef — PollService lui-même reste générique, P2-AD-2).
   async recalculateNextSession(partieId: string): Promise<void> {
-    const seances = await this.prisma.seance.findMany({
-      where: { scenario: { partieId } },
-      include: { poll: true },
-    });
-
-    // Bug fix (production) : comparer à Date.now() excluait TOUJOURS une séance datée
-    // d'aujourd'hui dès que l'heure courante dépassait minuit, quel que soit le créneau
-    // (matin/après-midi/soir, un champ séparé de `date` — la date elle-même n'a pas d'heure
-    // propre). On compare donc au début du jour courant (UTC), pas à l'horodatage exact.
-    const startOfToday = new Date();
-    startOfToday.setUTCHours(0, 0, 0, 0);
-    const now = startOfToday.getTime();
-    type Candidate = { date: Date; slot: DaySlot | null };
-    const nearest =
-      seances
-        .map((s): Candidate | null => {
-          if (s.poll?.chosenDate) return { date: s.poll.chosenDate, slot: s.poll.chosenSlot };
-          if (s.dateValidee) return { date: s.dateValidee, slot: null };
-          return null;
-        })
-        .filter((c): c is Candidate => c !== null && c.date.getTime() >= now)
-        .sort((a, b) => a.date.getTime() - b.date.getTime())[0] ?? null;
-
-    const partie = await this.prisma.partie.findUniqueOrThrow({
-      where: { id: partieId },
-    });
-    const unchanged =
-      (partie.nextSessionDate?.getTime() ?? null) === (nearest?.date.getTime() ?? null) &&
-      partie.nextSessionSlot === (nearest?.slot ?? null);
-
-    await this.prisma.partie.update({
-      where: { id: partieId },
-      data: {
-        nextSessionDate: nearest?.date ?? null,
-        nextSessionSlot: nearest?.slot ?? null,
-        ...(unchanged ? {} : { reminderSentAt: null }),
-      },
-    });
+    await this.events.recalculateNextSession(partieId);
   }
 
   // AD-9 : écriture MJ-only (getOwned). Un scénario a toujours au moins une séance (invariant
@@ -590,47 +576,18 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status === 'PASSE') {
       throw new BadRequestException("Impossible de supprimer une séance d'un scénario clôturé");
     }
 
-    const [firstSeance] = await this.prisma.seance.findMany({
-      where: { scenarioId: seance.scenarioId },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: 1,
-    });
-    if (firstSeance?.id === seanceId) {
-      throw new BadRequestException("La première séance d'un scénario ne peut pas être supprimée");
-    }
+    // Story 37.3 : règles de la séance (première séance protégée, 404 concurrent, vote lié
+    // supprimé, recalcul de la prochaine date) et émission `partie:` déléguées à `EventsService`.
+    await this.events.deleteSeance(scenario.partieId, seance);
 
-    // Revue de code Story 8.8 (décision utilisateur) : sans Séance, un vote de date n'a plus de
-    // sens — supprimer le SessionPoll lié plutôt que le laisser orphelin et injoignable (plus aucun
-    // écran ne dérive l'affichage que de `seance.poll`). Seance.pollId référence SessionPoll (FK) :
-    // la Seance doit être supprimée avant le SessionPoll, jamais l'inverse.
-    const pollIdToDelete = seance.pollId;
-    // Deferred-work (2026-08-25) : TOCTOU entre le findUnique() ci-dessus et ce delete() — une
-    // seconde suppression concurrente de la MÊME séance ferait lever un P2025 brut plutôt qu'un
-    // 404 propre. Même patron que `resolveScenarioOrThrow()` ci-dessous.
-    try {
-      await this.prisma.seance.delete({ where: { id: seanceId } });
-    } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
-        throw new NotFoundException('Séance introuvable');
-      }
-      throw e;
-    }
-    if (pollIdToDelete) {
-      await this.prisma.sessionPoll.delete({ where: { id: pollIdToDelete } });
-    }
-    await this.recalculateNextSession(scenario.partieId);
-
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenario.id },
-    });
-    this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    const updated = await this.reloadScenario(scenario.id);
     // Deferred-work (SSE, calendrier personnel) : une séance supprimée peut retirer une ligne de
     // mes-seances/votes-en-cours chez un membre — GET /me/calendar doit le savoir.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
@@ -657,7 +614,7 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     // Un scénario PASSE est figé (cohérent avec deleteSeance/resetSeanceDate) : pas de nouveau
@@ -668,23 +625,15 @@ export class ScenariosService {
       );
     }
 
-    if (seance.pollId) {
-      throw new BadRequestException('Cette séance est déjà liée à un vote de date');
-    }
+    // Story 37.3 : `EventsService` refuse une séance déjà liée AVANT de faire créer le vote par
+    // `PollService` (seul écrivain de SessionPoll), pose `Seance.pollId` et émet `partie:`.
+    await this.events.createSeancePoll(scenario.partieId, seance, () =>
+      this.pollService.create(scenario.partieId, mjId, {
+        options,
+      }),
+    );
 
-    const poll = await this.pollService.create(scenario.partieId, mjId, {
-      options,
-    });
-
-    await this.prisma.seance.update({
-      where: { id: seanceId },
-      data: { pollId: poll.id },
-    });
-
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenario.id },
-    });
-    this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    const updated = await this.reloadScenario(scenario.id);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
@@ -699,7 +648,7 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status === 'PASSE') {
@@ -708,20 +657,10 @@ export class ScenariosService {
       );
     }
 
-    const pollIdToDelete = seance.pollId;
-    await this.prisma.seance.update({
-      where: { id: seanceId },
-      data: { pollId: null, dateValidee: null },
-    });
-    if (pollIdToDelete) {
-      await this.prisma.sessionPoll.delete({ where: { id: pollIdToDelete } });
-    }
-    await this.recalculateNextSession(scenario.partieId);
+    // Story 37.3 : détachement, suppression du vote, recalcul et émission `partie:` délégués.
+    await this.events.resetSeanceDate(scenario.partieId, seance);
 
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenario.id },
-    });
-    this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    const updated = await this.reloadScenario(scenario.id);
     // Deferred-work (SSE, calendrier personnel) : une date réinitialisée rouvre un vote absent de
     // votes-en-cours chez un membre — GET /me/calendar doit le savoir.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
@@ -742,7 +681,7 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     if (scenario.status === 'PASSE') {
@@ -755,19 +694,15 @@ export class ScenariosService {
         "La capacité d'inscription ne peut être définie que pour les campagnes épisodiques",
       );
     }
-    if (inscriptionMax < inscriptionMin) {
-      throw new BadRequestException('Le maximum doit être supérieur ou égal au minimum');
-    }
+    // Story 37.3 : contrôle min/max, écriture et émission `partie:` délégués à `EventsService`.
+    await this.events.setSeanceCapacity(
+      scenario.partieId,
+      seanceId,
+      inscriptionMin,
+      inscriptionMax,
+    );
 
-    await this.prisma.seance.update({
-      where: { id: seanceId },
-      data: { inscriptionMin, inscriptionMax },
-    });
-
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenario.id },
-    });
-    this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    const updated = await this.reloadScenario(scenario.id);
     // Deferred-work (SSE, calendrier personnel) : une capacité posée peut rendre une inscription
     // ouvrable pour un membre — GET /me/calendar doit le savoir.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
@@ -782,7 +717,7 @@ export class ScenariosService {
       include: { poll: true },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const partie = await this.parties.getViewable(scenario.partieId, userId);
 
     if (scenario.status === 'BROUILLON' || scenario.status === 'PASSE') {
@@ -795,50 +730,11 @@ export class ScenariosService {
         "L'inscription à capacité limitée n'est disponible que pour les campagnes épisodiques",
       );
     }
-    if (seance.inscriptionMax == null) {
-      throw new BadRequestException("Cette séance n'a pas encore de capacité définie par le MJ");
-    }
-    // Story 8.8 : la date peut désormais aussi provenir d'un vote (Décision 1) — Seance.dateValidee
-    // seul ne suffit plus à détecter le gel du roster (gap trouvé en analyse : validerDate(), seule
-    // à écrire ce champ, a été retirée).
-    if (seance.poll?.chosenDate ?? seance.dateValidee) {
-      throw new BadRequestException(
-        'Cette séance a déjà une date validée — les inscriptions sont figées',
-      );
-    }
+    // Story 37.3 : règles de la séance (capacité définie, gel par la date, verrou FOR UPDATE,
+    // idempotence, plafond) et émission `partie:` déléguées à `EventsService`.
+    await this.events.inscrire(scenario.partieId, seance, userId);
 
-    await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM "Seance" WHERE id = ${seanceId} FOR UPDATE`;
-      const existing = await tx.inscription.findUnique({
-        where: { seanceId_userId: { seanceId, userId } },
-      });
-      // AC2 vs AC4 : ce check précède le comptage — un joueur déjà inscrit reste inscrit sans
-      // jamais être rejeté par un quota déjà atteint par d'autres (idempotence).
-      if (existing) return;
-      // Relit inscriptionMax ET le poll sous le verrou — sinon un setSeanceCapacity() ou une
-      // date validée (via poll ou dateValidee) concurrents entre la lecture initiale (hors
-      // transaction) et cette comparaison utiliseraient un état périmé, ce que le verrou FOR
-      // UPDATE est censé prévenir (trouvé en revue de code, 2026-07-14).
-      const locked = await tx.seance.findUniqueOrThrow({
-        where: { id: seanceId },
-        include: { poll: true },
-      });
-      if (locked.poll?.chosenDate ?? locked.dateValidee) {
-        throw new ConflictException(
-          'Cette séance a déjà une date validée — les inscriptions sont figées',
-        );
-      }
-      const count = await tx.inscription.count({ where: { seanceId } });
-      if (count >= locked.inscriptionMax!) {
-        throw new ConflictException('Cette séance a atteint son nombre maximal d’inscrits');
-      }
-      await tx.inscription.create({ data: { seanceId, userId } });
-    });
-
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenario.id },
-    });
-    this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    const updated = await this.reloadScenario(scenario.id);
     // Deferred-work (SSE, calendrier personnel) : une inscription change inscritsCount pour tous
     // les autres membres — GET /me/calendar doit le savoir. `userId` ici est le joueur agissant,
     // pas le MJ : notifyPartieSignalsChanged() veut l'id du MJ (partie.ownerId), déjà résolu par
@@ -857,24 +753,15 @@ export class ScenariosService {
       include: { poll: true },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const partie = await this.parties.getViewable(scenario.partieId, userId);
 
     // Décision utilisateur (revue de code, 2026-07-14) : la date validée fige le roster — un
-    // joueur ne peut plus se désinscrire une fois la séance confirmée par le MJ. Story 8.8 : la
-    // date peut désormais aussi provenir d'un vote (Décision 1), cf. inscrire() ci-dessus.
-    if (seance.poll?.chosenDate ?? seance.dateValidee) {
-      throw new BadRequestException(
-        'Cette séance a déjà une date validée — les inscriptions sont figées',
-      );
-    }
+    // joueur ne peut plus se désinscrire une fois la séance confirmée par le MJ. Story 37.3 : règle,
+    // retrait et émission `partie:` délégués à `EventsService`.
+    await this.events.desinscrire(scenario.partieId, seance, userId);
 
-    await this.prisma.inscription.deleteMany({ where: { seanceId, userId } });
-
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenario.id },
-    });
-    this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    const updated = await this.reloadScenario(scenario.id);
     // Deferred-work (SSE, calendrier personnel) : même raison qu'inscrire() ci-dessus.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.ownerId);
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
@@ -888,7 +775,7 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
     await this.prisma.seance.update({
@@ -896,9 +783,7 @@ export class ScenariosService {
       data: { compteRendu },
     });
 
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenario.id },
-    });
+    const updated = await this.reloadScenario(scenario.id);
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
     // COMPTE_RENDU_NON_REDIGE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
@@ -923,23 +808,14 @@ export class ScenariosService {
       where: { id: seanceId },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
-    const scenario = await resolveScenarioOrThrow(this.prisma, seance.scenarioId);
+    const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
-    // Un seul update pour les trois champs : ils sont saisis ensemble.
-    await this.prisma.seance.update({
-      where: { id: seanceId },
-      data: {
-        heureRdv: dto.heureRdv,
-        lieu: dto.lieu,
-        notePratique: dto.notePratique,
-      },
-    });
+    // Story 37.3 : écriture (un seul update, les trois champs ensemble) et émission `partie:`
+    // déléguées à `EventsService`.
+    await this.events.setInfosPratiques(scenario.partieId, seanceId, dto);
 
-    const updated = await this.prisma.scenario.findUniqueOrThrow({
-      where: { id: scenario.id },
-    });
-    this.realtimeEvents.emit(partieTopic(scenario.partieId));
+    const updated = await this.reloadScenario(scenario.id);
     // Pas de notifyPartieSignalsChanged ici : contrairement au compte-rendu, l'absence
     // d'informations pratiques n'est PAS un manquement et ne porte aucun signal (AC4).
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
@@ -950,9 +826,7 @@ export class ScenariosService {
   // scénario n'est pas encore PASSE, update() rejette une fois PASSE — les deux se complètent.
   // Aucune restriction de kind, rappelable à volonté après la première rédaction (AC3).
   async setResumeFin(scenarioId: string, mjId: string, resumeFin: string): Promise<ScenarioDto> {
-    const scenario = await this.prisma.scenario.findUnique({
-      where: { id: scenarioId },
-    });
+    const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     const partie = await this.parties.getOwned(scenario.partieId, mjId);
 
@@ -962,10 +836,13 @@ export class ScenariosService {
       );
     }
 
-    const updated = await this.prisma.scenario.update({
-      where: { id: scenarioId },
-      data: { resumeFin },
-    });
+    const updated = flattenScenario(
+      await this.prisma.scenario.update({
+        where: { id: scenarioId },
+        data: { resumeFin },
+        include: WITH_EVENT,
+      }),
+    );
 
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
     // RAPPORT_FIN_MANQUANT (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
@@ -979,9 +856,7 @@ export class ScenariosService {
    * (contrairement à uploadDocument() qui bloque PASSE) : AD-2 est explicite, une annonce peut
    * viser un scénario BROUILLON/A_VENIR, seul le rendu frontend (Story 9.2) protège l'anti-spoil. */
   async verifyScenarioBelongsToPartie(scenarioId: string, partieId: string): Promise<void> {
-    const scenario = await this.prisma.scenario.findUnique({
-      where: { id: scenarioId },
-    });
+    const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     if (scenario.partieId !== partieId) {
       throw new BadRequestException("Ce scénario n'appartient pas à cette Partie");
@@ -1020,8 +895,37 @@ function toDocumentDto(document: ScenarioDocument): ScenarioDocumentDto {
   };
 }
 
+/** Inclusion de l'événement de base, porteur de `partieId/title/description/createdAt`. */
+const WITH_EVENT = { event: true } as const;
+
+type ScenarioWithEvent = Prisma.ScenarioGetPayload<{ include: typeof WITH_EVENT }>;
+
+/** Scénario aplati (Story 37.3) : l'extension JDR et les champs de son événement de base, sous la
+ *  forme qu'avait la ligne `Scenario` avant l'extraction — les projections DTO restent inchangées. */
+export type ScenarioRow = Scenario &
+  Pick<Event, 'partieId' | 'title' | 'description' | 'createdAt'>;
+
+function toRow(scenario: Scenario, event: Event): ScenarioRow {
+  return {
+    id: scenario.id,
+    partieId: event.partieId,
+    title: event.title,
+    description: event.description,
+    createdAt: event.createdAt,
+    status: scenario.status,
+    dureeHeures: scenario.dureeHeures,
+    dureeSeances: scenario.dureeSeances,
+    resumeFin: scenario.resumeFin,
+    closedAt: scenario.closedAt,
+  };
+}
+
+function flattenScenario(scenario: ScenarioWithEvent): ScenarioRow {
+  return toRow(scenario, scenario.event);
+}
+
 function toDto(
-  scenario: Scenario,
+  scenario: ScenarioRow,
   partieKind?: PartieKind,
   participants?: { userId: string; pseudo: string; displayName: string }[],
   seances?: SeanceDto[],
@@ -1131,7 +1035,8 @@ function toSeanceDto(
   const slotEffectif = seance.poll?.chosenDate ? seance.poll.chosenSlot : null;
   return {
     id: seance.id,
-    scenarioId: seance.scenarioId,
+    // Story 37.3 : le contrat garde `scenarioId` — même valeur que `Seance.eventId`.
+    scenarioId: seance.eventId,
     poll: seance.poll ? toSessionPollDto(seance.poll, membersCount) : undefined,
     inscription:
       seance.inscriptionMax != null
@@ -1157,15 +1062,21 @@ function toSeanceDto(
   };
 }
 
-// AC2 (Story 17.2) : résout la relation Seance.scenarioId → Scenario sans laisser fuiter un 500
-// non contrôlé si la clé étrangère se révèle orpheline (cas normalement impossible en usage
-// courant — findUniqueOrThrow() lève Prisma.PrismaClientKnownRequestError/P2025, vérifié
-// empiriquement contre la base de ce projet).
-async function resolveScenarioOrThrow(prisma: PrismaService, scenarioId: string) {
+// AC2 (Story 17.2) : résout la relation Seance.eventId → Scenario (même identifiant, Story
+// 37.3) sans laisser fuiter un 500 non contrôlé si la clé étrangère se révèle orpheline (cas
+// normalement impossible en usage courant — findUniqueOrThrow() lève
+// Prisma.PrismaClientKnownRequestError/P2025, vérifié empiriquement contre la base de ce projet).
+async function resolveScenarioOrThrow(
+  prisma: PrismaService,
+  eventId: string,
+): Promise<ScenarioRow> {
   try {
-    return await prisma.scenario.findUniqueOrThrow({
-      where: { id: scenarioId },
-    });
+    return flattenScenario(
+      await prisma.scenario.findUniqueOrThrow({
+        where: { id: eventId },
+        include: WITH_EVENT,
+      }),
+    );
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') {
       throw new NotFoundException('Scénario introuvable');
@@ -1180,15 +1091,15 @@ async function loadSeancesBatch(
   membersCount: number,
 ): Promise<Map<string, SeanceDto[]>> {
   const seances = await prisma.seance.findMany({
-    where: { scenarioId: { in: scenarioIds } },
+    where: { eventId: { in: scenarioIds } },
     orderBy: { createdAt: 'asc' },
     include: SEANCE_INCLUDE,
   });
   const byScenario = new Map<string, SeanceDto[]>();
   for (const s of seances) {
-    const list = byScenario.get(s.scenarioId) ?? [];
+    const list = byScenario.get(s.eventId) ?? [];
     list.push(toSeanceDto(s, membersCount));
-    byScenario.set(s.scenarioId, list);
+    byScenario.set(s.eventId, list);
   }
   return byScenario;
 }
@@ -1209,7 +1120,7 @@ async function loadSeances(
 async function toEnrichedDto(
   prisma: PrismaService,
   characters: CharacterService,
-  scenario: Scenario,
+  scenario: ScenarioRow,
   partieKind: PartieKind,
 ): Promise<ScenarioDto> {
   // Story 36.6 — l'effectif est dérivé de `scenario.partieId`, déjà chargé, plutôt que threadé

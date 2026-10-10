@@ -696,7 +696,11 @@ describe('HommeDragonService', () => {
 
       expect(prisma.tx.scenario.count).toHaveBeenCalledTimes(1);
       expect(prisma.tx.scenario.count).toHaveBeenCalledWith({
-        where: { status: 'PASSE', closedAt: { not: null }, partie: { hommeDragonId: 'hd1' } },
+        where: {
+          status: 'PASSE',
+          closedAt: { not: null },
+          event: { partie: { hommeDragonId: 'hd1' } },
+        },
       });
     });
 

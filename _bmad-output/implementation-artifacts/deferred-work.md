@@ -245,3 +245,7 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-37-2-remplacer-mjid-par-ownerid-le-proprietaire-de-la-partie.md`
   summary: Make date-dependent tests clock-independent (api `party-signals.service.spec.ts` L261 `2026-09-01`, `parties.service.spec.ts` L1521-1563 `2026-09-20`, web `calendar-view.spec.ts` rail tests) — they now fail because those dates are in the past.
   evidence: Failures reproduce independently of story 37.2 (dates untouched by its diff); the API ones pass with the clock faked to 2026-08-15.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-3-extraire-levenement-de-base-le-scenario-devenant-son-extension-jdr.md`
+  summary: Add a repeatable migration-on-data check (seed at parent commit, `migrate deploy`, compare per-partie Scenario/Seance counts, ids, titles, createdAt) for the porte's data-moving migrations before the Palier 11 deploy.
+  evidence: CI applies migrations to an empty DB; 37.2/37.3 backfills were only verified by hand on the dev DB (md5 before/after).

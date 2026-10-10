@@ -1418,14 +1418,16 @@ export class CharacterService {
     }
 
     if (scenarioId !== null) {
+      // Story 37.3 : `partieId` est porté par l'événement de base du scénario.
       const scenario = await this.prisma.scenario.findUnique({
         where: { id: scenarioId },
+        select: { event: { select: { partieId: true } } },
       });
-      if (!scenario || scenario.partieId !== character.partieId) {
+      if (!scenario || scenario.event.partieId !== character.partieId) {
         throw new BadRequestException("Ce scénario n'appartient pas à la Partie de ce personnage");
       }
       const partie = await this.prisma.partie.findUnique({
-        where: { id: scenario.partieId },
+        where: { id: scenario.event.partieId },
         select: { kind: true },
       });
       if (partie?.kind === 'CAMPAGNE_EPISODIQUE') {

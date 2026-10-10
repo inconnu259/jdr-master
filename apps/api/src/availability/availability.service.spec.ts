@@ -1359,7 +1359,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
         },
         dateValidee: null,
         inscriptions: [],
-        scenario: { partieId: 'partieB' },
+        event: { partieId: 'partieB' },
       },
     ]);
 
@@ -1391,7 +1391,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
         poll: null,
         dateValidee: new Date('2026-09-11T00:00:00Z'),
         inscriptions: [],
-        scenario: { partieId: 'partieB' },
+        event: { partieId: 'partieB' },
       },
     ]);
 
@@ -1417,7 +1417,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
         },
         dateValidee: null,
         inscriptions: [],
-        scenario: { partieId: 'partieB' },
+        event: { partieId: 'partieB' },
       },
     ]);
 
@@ -1440,7 +1440,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
         poll: null,
         dateValidee: new Date('2026-09-12T00:00:00Z'),
         inscriptions: [{ userId: 'u1' }],
-        scenario: { partieId: 'partieB' },
+        event: { partieId: 'partieB' },
       },
     ]);
 
@@ -1464,7 +1464,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
         poll: null,
         dateValidee: new Date('2026-09-13T00:00:00Z'),
         inscriptions: [],
-        scenario: { partieId: 'partieB' },
+        event: { partieId: 'partieB' },
       },
     ]);
 
@@ -1487,7 +1487,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
         poll: null,
         dateValidee: null,
         inscriptions: [],
-        scenario: { partieId: 'partieB' },
+        event: { partieId: 'partieB' },
       },
     ]);
 
@@ -1524,7 +1524,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
         },
         dateValidee: null,
         inscriptions: [],
-        scenario: { partieId: 'partieB' },
+        event: { partieId: 'partieB' },
       },
     ]);
 
@@ -1554,7 +1554,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
         },
         dateValidee: null,
         inscriptions: [],
-        scenario: { partieId: 'partieB' },
+        event: { partieId: 'partieB' },
         // La séance porte tout ce qu'il ne faut pas laisser passer.
         heureRdv: '20:30',
         lieu: 'chez Marc',
@@ -1595,7 +1595,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
         },
         dateValidee: null,
         inscriptions: [],
-        scenario: { partieId: 'partieB' },
+        event: { partieId: 'partieB' },
       },
     ]);
 
@@ -1686,7 +1686,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: {
           chosenDate: new Date('2026-10-10T00:00:00Z'),
           chosenSlot: 'MORNING',
@@ -1695,7 +1695,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Le Donjon Oublié' },
+        event: { partieId: 'A', title: 'Le Donjon Oublié' },
       },
     ]);
 
@@ -1726,7 +1726,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: {
           chosenDate: new Date('2026-10-10T00:00:00Z'),
           chosenSlot: 'EVENING',
@@ -1735,7 +1735,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        event: { partieId: 'A', title: 'Le Convoi du Nord' },
         heureRdv: '20:30',
         lieu: 'chez Marc',
         notePratique: 'pensez aux dés',
@@ -1757,7 +1757,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: {
           chosenDate: new Date('2026-10-10T00:00:00Z'),
           chosenSlot: 'EVENING',
@@ -1766,7 +1766,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        event: { partieId: 'A', title: 'Le Convoi du Nord' },
         compteRendu: null,
       },
     ]);
@@ -1782,7 +1782,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: {
           chosenDate: new Date('2026-10-10T00:00:00Z'),
           chosenSlot: 'EVENING',
@@ -1791,7 +1791,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        event: { partieId: 'A', title: 'Le Convoi du Nord' },
         compteRendu: '   ',
       },
     ]);
@@ -1807,7 +1807,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: {
           chosenDate: new Date('2026-10-10T00:00:00Z'),
           chosenSlot: 'EVENING',
@@ -1816,7 +1816,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        event: { partieId: 'A', title: 'Le Convoi du Nord' },
         compteRendu: 'La troupe a repoussé les maraudeurs.',
       },
     ]);
@@ -1832,7 +1832,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: {
           chosenDate: new Date('2026-07-10T00:00:00Z'),
           chosenSlot: 'EVENING',
@@ -1841,7 +1841,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        event: { partieId: 'A', title: 'Le Convoi du Nord' },
         compteRendu: null,
       },
     ]);
@@ -1860,7 +1860,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: {
           chosenDate: new Date('2026-10-10T00:00:00Z'),
           chosenSlot: 'EVENING',
@@ -1869,7 +1869,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        event: { partieId: 'A', title: 'Le Convoi du Nord' },
         heureRdv: '20:30',
         lieu: 'chez Marc',
         notePratique: null,
@@ -1886,7 +1886,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: {
           chosenDate: new Date('2026-10-10T00:00:00Z'),
           chosenSlot: 'EVENING',
@@ -1895,7 +1895,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Les Cendres d’Ashal' },
+        event: { partieId: 'A', title: 'Les Cendres d’Ashal' },
         heureRdv: null,
         lieu: 'en visio',
         notePratique: null,
@@ -1915,7 +1915,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: {
           chosenDate: new Date('2026-10-10T00:00:00Z'),
           chosenSlot: 'EVENING',
@@ -1924,7 +1924,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Le Convoi du Nord' },
+        event: { partieId: 'A', title: 'Le Convoi du Nord' },
         heureRdv: '20:30',
         lieu: null,
         notePratique: null,
@@ -1943,7 +1943,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: {
           chosenDate: new Date('2026-10-10T00:00:00Z'),
           chosenSlot: null,
@@ -1952,7 +1952,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Le Donjon Oublié' },
+        event: { partieId: 'A', title: 'Le Donjon Oublié' },
       },
     ]);
 
@@ -1964,13 +1964,13 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: null,
         dateValidee: new Date('2026-10-11T00:00:00Z'),
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Le Donjon Oublié' },
+        event: { partieId: 'A', title: 'Le Donjon Oublié' },
       },
     ]);
 
@@ -1985,7 +1985,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seanceEtrangere',
-        scenarioId: 'scenarioX',
+        eventId: 'scenarioX',
         poll: null,
         dateValidee: new Date('2026-10-15T00:00:00Z'),
         inscriptions: [],
@@ -1993,7 +1993,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         inscriptionMax: 4,
         // Partie 'Z' absente de myParties (mocké à [myPartie] seulement) — simule une ligne
         // renvoyée par erreur (défense en profondeur, la requête réelle la filtrerait déjà).
-        scenario: { partieId: 'Z', title: 'Ne devrait jamais apparaître' },
+        event: { partieId: 'Z', title: 'Ne devrait jamais apparaître' },
       },
     ]);
 
@@ -2226,13 +2226,13 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: null,
         dateValidee: null,
         inscriptions: [{ userId: 'me' }, { userId: 'other' }],
         inscriptionMin: 2,
         inscriptionMax: 5,
-        scenario: { partieId: 'A', title: 'Enquête épisodique' },
+        event: { partieId: 'A', title: 'Enquête épisodique' },
       },
     ]);
 
@@ -2260,13 +2260,13 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: null,
         dateValidee: new Date('2026-10-05T00:00:00Z'),
         inscriptions: [],
         inscriptionMin: 2,
         inscriptionMax: 5,
-        scenario: { partieId: 'A', title: 'Enquête épisodique' },
+        event: { partieId: 'A', title: 'Enquête épisodique' },
       },
     ]);
 
@@ -2281,13 +2281,13 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        scenarioId: 'scenario1',
+        eventId: 'scenario1',
         poll: null,
         dateValidee: null,
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
-        scenario: { partieId: 'A', title: 'Enquête épisodique' },
+        event: { partieId: 'A', title: 'Enquête épisodique' },
       },
     ]);
 
