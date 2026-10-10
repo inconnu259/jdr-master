@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, type Event, type Seance } from '@prisma/client';
 import type { DaySlot, PartieKind } from '@master-jdr/shared';
+import type { PartieGrant } from '../permissions/permission.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
@@ -50,9 +51,26 @@ const FROZEN_ROSTER_MESSAGE = 'Cette séance a déjà une date validée — les 
  * anti-spoil) restent chez l'appelant, qui délègue ensuite l'écriture ici ; les règles propres à la
  * séance (verrou de ligne, capacité, gel par la date, idempotence) vivent ici, messages inchangés.
  *
- * Les droits sont vérifiés par l'appelant AVANT tout appel (`partieId` reçu = partie déjà résolue
- * et autorisée). Toute méthode publique non transactionnelle émet `partie:{id}` après validation ;
- * les variantes `…InTx` n'émettent jamais — l'appelant émet après SON commit.
+ * Les droits sont vérifiés par l'appelant AVANT tout appel : chaque écriture publique exige
+ * l'autorisation (`PartieGrant`) délivrée par `PermissionService.assert()` (Story 37.6, AD-6) —
+ * pas d'autorisation, pas d'appel, et la partie écrite est celle de l'autorisation, jamais un
+ * identifiant passé à part. Une séance ou un événement écrit doit appartenir à la partie de
+ * l'autorisation, sinon 404 avec le message historique (`Séance introuvable`, `Scénario
+ * introuvable`) : une autorisation obtenue sur la partie A ne permet jamais d'écrire dans B.
+ *
+ * Seules exceptions, qui prennent un `partieId` (ou un identifiant) nu, chacune pour une raison :
+ * - `createInTx` : appelée par `PartiesService` (écrivain de `Partie`) dans sa propre transaction,
+ *   sur la partie qu'il crée (aucune autorisation ne peut encore exister) ou qu'il convertit
+ *   (autorisation déjà vérifiée dans la même méthode) ;
+ * - `updateInTx` : appelée dans la transaction de l'appelant, qui a obtenu l'autorisation sur
+ *   l'événement lui-même (`{ eventId }`) juste avant ;
+ * - `setSpanFromPollInTx` : appelée par `PollService.choose()` dans sa transaction, après
+ *   l'autorisation `POLL_CHOOSE` et la vérification que le vote appartient à la partie ;
+ * - `recalculateNextSession` : recalcul d'une valeur dérivée (aucune donnée saisie), idempotent,
+ *   appelé après une écriture déjà autorisée (refondu en Story 37.8).
+ *
+ * Toute méthode publique non transactionnelle émet `partie:{id}` après validation ; les variantes
+ * `…InTx` n'émettent jamais — l'appelant émet après SON commit.
  */
 @Injectable()
 export class EventsService {
@@ -62,18 +80,23 @@ export class EventsService {
   ) {}
 
   /** Création composite (événement + extension + première séance) dans une transaction, puis
-   *  émission après validation. */
+   *  émission après validation. La partie est celle de l'autorisation. */
   async create<T = undefined>(
-    input: CreateEventInput,
+    grant: PartieGrant,
+    input: Omit<CreateEventInput, 'partieId'>,
     extend?: EventExtension<T>,
   ): Promise<CreatedEvent<T>> {
-    const created = await this.prisma.$transaction((tx) => this.createInTx(tx, input, extend));
-    this.realtimeEvents.emit(partieTopic(input.partieId));
+    const created = await this.prisma.$transaction((tx) =>
+      this.createInTx(tx, { ...input, partieId: grant.partieId }, extend),
+    );
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
     return created;
   }
 
   /** Variante pour un appelant déjà dans une transaction (`PartiesService.create`/`convertKind`).
-   *  N'émet rien : l'appelant émet après son propre commit. */
+   *  N'émet rien : l'appelant émet après son propre commit. Seul écrivain de `Partie`,
+   *  `PartiesService` l'appelle sur la partie qu'il est en train de créer (aucune autorisation ne
+   *  peut encore exister) ou de convertir (autorisation déjà vérifiée dans la même méthode). */
   async createInTx<T = undefined>(
     tx: Prisma.TransactionClient,
     input: CreateEventInput,
@@ -120,12 +143,35 @@ export class EventsService {
     }
   }
 
+  // ─── Appartenance à la partie de l'autorisation ──────────────────────────────────────────────
+
+  /** L'événement appartient-il à la partie de l'autorisation ? Sans requête quand l'autorisation a
+   *  été délivrée sur cet événement (ou une de ses séances) ; sinon vérifié en base. 404 avec le
+   *  message historique dans le cas contraire — jamais d'écriture hors de la partie autorisée. */
+  private async assertEventInGrant(grant: PartieGrant, eventId: string): Promise<void> {
+    if (grant.target.eventId === eventId) return;
+    const count = await this.prisma.event.count({
+      where: { id: eventId, partieId: grant.partieId },
+    });
+    if (count === 0) throw new NotFoundException('Scénario introuvable');
+  }
+
+  /** Même garde pour une séance (`Séance introuvable`). */
+  private async assertSeanceInGrant(grant: PartieGrant, seanceId: string): Promise<void> {
+    if (grant.target.seanceId === seanceId) return;
+    const count = await this.prisma.seance.count({
+      where: { id: seanceId, event: { partieId: grant.partieId } },
+    });
+    if (count === 0) throw new NotFoundException('Séance introuvable');
+  }
+
   // ─── Séances ────────────────────────────────────────────────────────────────────────────────
 
   /** Ajoute une séance à un événement — aucun plafond (Story 8.2, AC1). */
-  async addSeance(partieId: string, eventId: string): Promise<void> {
+  async addSeance(grant: PartieGrant, eventId: string): Promise<void> {
+    await this.assertEventInGrant(grant, eventId);
     await this.prisma.seance.create({ data: { eventId } });
-    this.realtimeEvents.emit(partieTopic(partieId));
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
   }
 
   /**
@@ -136,7 +182,8 @@ export class EventsService {
    * supprimé plutôt que laissé orphelin ; la Seance d'abord (elle référence le poll en FK). Enfin,
    * la date la plus proche de la Partie peut disparaître → recalcul.
    */
-  async deleteSeance(partieId: string, seance: SeanceRef): Promise<void> {
+  async deleteSeance(grant: PartieGrant, seance: SeanceRef): Promise<void> {
+    await this.assertSeanceInGrant(grant, seance.id);
     const [firstSeance] = await this.prisma.seance.findMany({
       where: { eventId: seance.eventId },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -160,8 +207,8 @@ export class EventsService {
     if (seance.pollId) {
       await this.prisma.sessionPoll.delete({ where: { id: seance.pollId } });
     }
-    await this.recalculateNextSession(partieId);
-    this.realtimeEvents.emit(partieTopic(partieId));
+    await this.recalculateNextSession(grant.partieId);
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
   }
 
   /**
@@ -171,10 +218,11 @@ export class EventsService {
    * ne fait que poser `Seance.pollId`. Non-atomique par construction (risque accepté, Story 8.7).
    */
   async createSeancePoll(
-    partieId: string,
+    grant: PartieGrant,
     seance: SeanceRef,
     createPoll: () => Promise<{ id: string }>,
   ): Promise<void> {
+    await this.assertSeanceInGrant(grant, seance.id);
     if (seance.pollId) {
       throw new BadRequestException('Cette séance est déjà liée à un vote de date');
     }
@@ -183,7 +231,7 @@ export class EventsService {
       where: { id: seance.id },
       data: { pollId: poll.id },
     });
-    this.realtimeEvents.emit(partieTopic(partieId));
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
   }
 
   /**
@@ -191,7 +239,8 @@ export class EventsService {
    * supprime le SessionPoll lui-même (détacher avant de supprimer : FK). La date la plus proche de
    * la Partie peut changer → recalcul.
    */
-  async resetSeanceDate(partieId: string, seance: SeanceRef): Promise<void> {
+  async resetSeanceDate(grant: PartieGrant, seance: SeanceRef): Promise<void> {
+    await this.assertSeanceInGrant(grant, seance.id);
     await this.prisma.seance.update({
       where: { id: seance.id },
       data: { pollId: null, startDate: null, startSlot: null, endDate: null, endSlot: null },
@@ -199,8 +248,8 @@ export class EventsService {
     if (seance.pollId) {
       await this.prisma.sessionPoll.delete({ where: { id: seance.pollId } });
     }
-    await this.recalculateNextSession(partieId);
-    this.realtimeEvents.emit(partieTopic(partieId));
+    await this.recalculateNextSession(grant.partieId);
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
   }
 
   /**
@@ -223,11 +272,12 @@ export class EventsService {
 
   /** Capacité d'inscription d'une séance (Story 8.3). */
   async setSeanceCapacity(
-    partieId: string,
+    grant: PartieGrant,
     seanceId: string,
     inscriptionMin: number,
     inscriptionMax: number,
   ): Promise<void> {
+    await this.assertSeanceInGrant(grant, seanceId);
     if (inscriptionMax < inscriptionMin) {
       throw new BadRequestException('Le maximum doit être supérieur ou égal au minimum');
     }
@@ -235,17 +285,18 @@ export class EventsService {
       where: { id: seanceId },
       data: { inscriptionMin, inscriptionMax },
     });
-    this.realtimeEvents.emit(partieTopic(partieId));
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
   }
 
   /** Informations pratiques d'une séance (Story 36.5, dérogation D-15 amendée le 2026-08-19).
    *  🚨 Les trois valeurs sont écrites TELLES QUELLES : `heureRdv` est une étiquette `"HH:MM"`,
    *  jamais parsée, convertie ni comparée (addendum §5.7). `null` vide le champ. */
   async setInfosPratiques(
-    partieId: string,
+    grant: PartieGrant,
     seanceId: string,
     dto: SeanceInfosPratiques,
   ): Promise<void> {
+    await this.assertSeanceInGrant(grant, seanceId);
     // Un seul update pour les trois champs : ils sont saisis ensemble.
     await this.prisma.seance.update({
       where: { id: seanceId },
@@ -255,7 +306,7 @@ export class EventsService {
         notePratique: dto.notePratique,
       },
     });
-    this.realtimeEvents.emit(partieTopic(partieId));
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
   }
 
   // ─── Inscriptions ───────────────────────────────────────────────────────────────────────────
@@ -265,7 +316,8 @@ export class EventsService {
    * SELECT ... FOR UPDATE obligatoire — READ COMMITTED seul ne suffit pas à empêcher un dépassement
    * de max entre deux inscriptions concurrentes.
    */
-  async inscrire(partieId: string, seance: SeanceDated, userId: string): Promise<void> {
+  async inscrire(grant: PartieGrant, seance: SeanceDated, userId: string): Promise<void> {
+    await this.assertSeanceInGrant(grant, seance.id);
     const seanceId = seance.id;
     if (seance.inscriptionMax == null) {
       throw new BadRequestException("Cette séance n'a pas encore de capacité définie par le MJ");
@@ -296,7 +348,7 @@ export class EventsService {
       }
       await tx.inscription.create({ data: { seanceId, userId } });
     });
-    this.realtimeEvents.emit(partieTopic(partieId));
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
   }
 
   /**
@@ -304,15 +356,16 @@ export class EventsService {
    * inscrit. Décision utilisateur (revue de code, 2026-07-14) : la date validée fige le roster.
    */
   async desinscrire(
-    partieId: string,
+    grant: PartieGrant,
     seance: Omit<SeanceDated, 'inscriptionMax'>,
     userId: string,
   ): Promise<void> {
+    await this.assertSeanceInGrant(grant, seance.id);
     if (seance.startDate) {
       throw new BadRequestException(FROZEN_ROSTER_MESSAGE);
     }
     await this.prisma.inscription.deleteMany({ where: { seanceId: seance.id, userId } });
-    this.realtimeEvents.emit(partieTopic(partieId));
+    this.realtimeEvents.emit(partieTopic(grant.partieId));
   }
 
   // ─── Prochaine séance ───────────────────────────────────────────────────────────────────────

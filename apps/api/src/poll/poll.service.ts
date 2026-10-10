@@ -3,6 +3,7 @@ import type { DaySlot, SessionPollDto } from '@master-jdr/shared';
 import { EventsService } from '../events/events.service';
 import { PartiesService } from '../parties/parties.service';
 import { countParticipants } from '../parties/participant-count.util';
+import { PermissionService, type PartieGrant } from '../permissions/permission.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CastVoteDto } from './dto/cast-vote.dto';
@@ -28,14 +29,21 @@ export class PollService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
+    // Story 37.6 (AD-6) : tout droit sur une partie est décidé par le service de permission. Les
+    // routes de vote gardent la cible `{ partieId }` de l'URL plus leurs propres contrôles
+    // d'appartenance (vote → partie, option → vote).
+    private readonly permissions: PermissionService,
     private readonly realtimeEvents: RealtimeEventsService,
     // Story 37.4 : import temporaire couche 1 → couche 2 (remplacé par un port en 37.8) — la date
     // de la séance s'écrit dans la même transaction que la clôture du vote.
     private readonly events: EventsService,
   ) {}
 
-  async create(partieId: string, userId: string, dto: CreatePollDto): Promise<SessionPollDto> {
-    await this.parties.getOwned(partieId, userId);
+  /** Crée un vote de date sur la partie de l'autorisation. Seul appelant :
+   *  `ScenariosService.createSeancePoll()`, qui a déjà obtenu l'autorisation `SEANCE_POLL_CREATE`
+   *  pour la séance visée (Story 37.6 : plus de second contrôle de droit ici). */
+  async create(grant: PartieGrant, userId: string, dto: CreatePollDto): Promise<SessionPollDto> {
+    const partieId = grant.partieId;
 
     // Revue de code (Story 36.10) — clé normalisée par `optionKey()`, la MÊME que celle de
     // `setOptions()` : comparer la chaîne brute reçue laissait deux dates représentant le même
@@ -71,13 +79,13 @@ export class PollService {
     });
     this.realtimeEvents.emit(partieTopic(partieId));
     // AUCUNE_DATE_NI_VOTE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
-    // remplacement — getOwned() garantit que userId est déjà le MJ.
-    await this.parties.notifyPartieSignalsChanged(partieId, userId);
+    // remplacement.
+    await this.parties.notifyPartieSignalsChanged(partieId, grant.partie.ownerId);
     return toDto(poll, await countParticipants(this.prisma, partieId));
   }
 
   async findOpen(partieId: string, userId: string): Promise<SessionPollDto | null> {
-    await this.parties.getViewable(partieId, userId);
+    await this.permissions.assert(userId, 'POLL_READ', { partieId });
     const poll = await this.prisma.sessionPoll.findFirst({
       where: { partieId, status: 'OPEN' },
       include: POLL_INCLUDE,
@@ -91,7 +99,7 @@ export class PollService {
     userId: string,
     dto: CastVoteDto,
   ): Promise<void> {
-    const partie = await this.parties.getViewable(partieId, userId);
+    const { partie } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -133,7 +141,7 @@ export class PollService {
     optionId: string,
     userId: string,
   ): Promise<void> {
-    const partie = await this.parties.getViewable(partieId, userId);
+    const { partie } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -162,7 +170,7 @@ export class PollService {
     userId: string,
     dto: ChooseDateDto,
   ): Promise<void> {
-    const partie = await this.parties.getOwned(partieId, userId);
+    const { partie } = await this.permissions.assert(userId, 'POLL_CHOOSE', { partieId });
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -200,13 +208,13 @@ export class PollService {
     });
     this.realtimeEvents.emit(partieTopic(partieId));
     // AUCUNE_DATE_NI_VOTE/PROCHAINE_SEANCE_CONNUE (Story 29.7, AD-14) : en plus de partieTopic
-    // ci-dessus, jamais en remplacement — getOwned() garantit que userId est déjà le MJ.
-    await this.parties.notifyPartieSignalsChanged(partieId, userId);
+    // ci-dessus, jamais en remplacement.
+    await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
   }
 
   /**
    * Story 36.10 (dérogation D-16) — remplace le jeu d'options d'un vote **OUVERT** par celui que
-   * le MJ vient de composer sur la grille. MJ seul (`getOwned`).
+   * le MJ vient de composer sur la grille. MJ seul (`POLL_OPTIONS_SET`).
    *
    * 🚨 **RÉCONCILIATION, JAMAIS REMPLACEMENT.** `PollVote` est en cascade sur `PollOption`
    * (`schema.prisma:313`) : supprimer toutes les options pour les recréer détruirait les réponses
@@ -223,7 +231,7 @@ export class PollService {
     userId: string,
     dto: SetPollOptionsDto,
   ): Promise<SessionPollDto> {
-    await this.parties.getOwned(partieId, userId);
+    const { partie } = await this.permissions.assert(userId, 'POLL_OPTIONS_SET', { partieId });
 
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
@@ -284,14 +292,13 @@ export class PollService {
     this.realtimeEvents.emit(partieTopic(partieId));
     // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : ajouter une option fait RÉAPPARAÎTRE ce
     // signal chez les membres qui avaient tout répondu ; en retirer une peut le faire
-    // disparaître. En plus de partieTopic ci-dessus, jamais en remplacement — getOwned()
-    // garantit que userId est déjà le MJ.
-    await this.parties.notifyPartieSignalsChanged(partieId, userId);
+    // disparaître. En plus de partieTopic ci-dessus, jamais en remplacement.
+    await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
     return toDto(updated, await countParticipants(this.prisma, partieId));
   }
 
   async close(partieId: string, pollId: string, userId: string): Promise<void> {
-    await this.parties.getOwned(partieId, userId);
+    const { partie } = await this.permissions.assert(userId, 'POLL_CLOSE', { partieId });
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -303,8 +310,8 @@ export class PollService {
     });
     this.realtimeEvents.emit(partieTopic(partieId));
     // VOTE_EN_COURS_SANS_REPONSE/AUCUNE_DATE_NI_VOTE (Story 29.7, AD-14) : en plus de partieTopic
-    // ci-dessus, jamais en remplacement — getOwned() garantit que userId est déjà le MJ.
-    await this.parties.notifyPartieSignalsChanged(partieId, userId);
+    // ci-dessus, jamais en remplacement.
+    await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
   }
 }
 

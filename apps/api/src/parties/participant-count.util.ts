@@ -4,14 +4,15 @@
  * **La règle : effectif = le MJ + ses `Membership`.**
  *
  * Deux définitions incompatibles coexistaient dans le code avant cette story :
- * - `resolveParticipants()` (`parties.service.ts`) construit `[mjUser, ...memberships]` et
- *   alimente `AggregatedSlotDto.total` — **avec** le MJ ;
+ * - `resolveParticipants()` (`parties.service.ts`, devenu `PermissionService.membersOf()` en
+ *   Story 37.6) construit `[mjUser, ...memberships]` et alimente `AggregatedSlotDto.total` —
+ *   **avec** le MJ ;
  * - `listMembers()` / `GET /parties/:id/members` renvoie les seuls `Membership` — **sans** le MJ,
  *   « le MJ n'étant jamais un `Membership` ».
  *
- * Or le MJ **peut voter** : `PollService.castVote()` garde par `getViewable()`, pas par
- * `getOwned()`. Compter la troupe sans lui rendait « 5 / 4 » possible, et faisait afficher deux
- * dénominateurs différents sur la même case (la piste de participation et la jauge de
+ * Or le MJ **peut voter** : `PollService.castVote()` est ouvert au MJ comme aux membres
+ * (`POLL_VOTE`). Compter la troupe sans lui rendait « 5 / 4 » possible, et faisait afficher
+ * deux dénominateurs différents sur la même case (la piste de participation et la jauge de
  * disponibilité du groupe). **Tranché le 2026-08-20 : le MJ compte.**
  *
  * ⚠️ Pourquoi une fonction PURE plutôt qu'une méthode de service : `AvailabilityService` en a

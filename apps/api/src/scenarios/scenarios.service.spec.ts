@@ -35,7 +35,9 @@ import { PollService } from '../poll/poll.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { ScenariosService } from './scenarios.service';
 import { EventsService } from '../events/events.service';
+import { PermissionService } from '../permissions/permission.service';
 import { anyOf, objectLike } from '../common/test-utils/jest-typed';
+import { testGrant } from '../common/test-utils/grant';
 
 function makePrisma() {
   const tx = {
@@ -61,6 +63,9 @@ function makePrisma() {
       create: jest.fn(),
       update: jest.fn(),
       findFirst: jest.fn().mockResolvedValue(null),
+      // Story 37.6 — `EventsService` vérifie que l'événement écrit appartient à la partie de
+      // l'autorisation (1 = oui).
+      count: jest.fn().mockResolvedValue(1),
     },
     scenario: {
       create: jest.fn(),
@@ -80,6 +85,8 @@ function makePrisma() {
       findMany: jest.fn(),
     },
     seance: {
+      // Story 37.6 — idem pour la séance écrite.
+      count: jest.fn().mockResolvedValue(1),
       create: jest.fn(),
       findUnique: jest.fn(),
       findUniqueOrThrow: jest.fn(),
@@ -160,10 +167,14 @@ function mockCreatedScenario(prisma: ReturnType<typeof makePrisma>, flat: Record
 
 function makeParties() {
   return {
-    getOwned: jest.fn(),
-    getViewable: jest.fn(),
     notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
   };
+}
+
+/** Story 37.6 — les droits sont décidés par `PermissionService.assert()`, simulé ici : une
+ *  autorisation (`testGrant`) ou un refus selon le test. */
+function makePermissions() {
+  return { assert: jest.fn() };
 }
 
 function makeCharacters() {
@@ -196,6 +207,7 @@ describe('ScenariosService', () => {
   let service: ScenariosService;
   let prisma: ReturnType<typeof makePrisma>;
   let parties: ReturnType<typeof makeParties>;
+  let permissions: ReturnType<typeof makePermissions>;
   let characters: ReturnType<typeof makeCharacters>;
   let pollService: ReturnType<typeof makePollService>;
   let realtimeEvents: ReturnType<typeof makeRealtimeEvents>;
@@ -208,6 +220,7 @@ describe('ScenariosService', () => {
     (isStructurallyValidPdf as jest.Mock).mockResolvedValue(true);
     prisma = makePrisma();
     parties = makeParties();
+    permissions = makePermissions();
     characters = makeCharacters();
     pollService = makePollService();
     realtimeEvents = makeRealtimeEvents();
@@ -222,6 +235,7 @@ describe('ScenariosService', () => {
         ScenariosService,
         { provide: PrismaService, useValue: prisma },
         { provide: PartiesService, useValue: parties },
+        { provide: PermissionService, useValue: permissions },
         { provide: CharacterService, useValue: characters },
         { provide: PollService, useValue: pollService },
         { provide: RealtimeEventsService, useValue: realtimeEvents },
@@ -234,7 +248,7 @@ describe('ScenariosService', () => {
 
   describe('create()', () => {
     it('crée un scénario BROUILLON rattaché à la Partie (AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       mockCreatedScenario(prisma, {
         id: 's1',
         partieId: 'p1',
@@ -252,7 +266,7 @@ describe('ScenariosService', () => {
         title: 'Le Marché aux Ombres',
       });
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SCENARIO_CREATE', { partieId: 'p1' });
       // Story 37.3 : `partieId`/`title` sur l'événement de base, `status` sur son extension.
       expect(prisma.event.create).toHaveBeenCalledWith(
         objectLike({
@@ -275,7 +289,7 @@ describe('ScenariosService', () => {
     });
 
     it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       mockCreatedScenario(prisma, {
         id: 's1',
         partieId: 'p1',
@@ -295,7 +309,7 @@ describe('ScenariosService', () => {
     });
 
     it('crée automatiquement une première Seance rattachée (le scénario a toujours besoin d’au moins une date à planifier)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       mockCreatedScenario(prisma, {
         id: 's1',
         partieId: 'p1',
@@ -316,8 +330,8 @@ describe('ScenariosService', () => {
       });
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune écriture (AC2)', async () => {
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+    it('non-MJ → 403 propagé par permissions.assert, aucune écriture (AC2)', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.create('p1', 'stranger', { title: 'Test' })).rejects.toThrow(
         ForbiddenException,
@@ -326,11 +340,13 @@ describe('ScenariosService', () => {
     });
 
     it('Partie ONE_SHOT → rejet, aucune écriture (FR-1 : un seul scénario, jamais créé manuellement)', async () => {
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'ONE_SHOT',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'ONE_SHOT',
+        }),
+      );
 
       await expect(service.create('p1', 'mj1', { title: 'Second scénario' })).rejects.toThrow(
         BadRequestException,
@@ -339,11 +355,13 @@ describe('ScenariosService', () => {
     });
 
     it('Partie CAMPAGNE_LINEAIRE → autorisée (pas de restriction de kind)', async () => {
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       mockCreatedScenario(prisma, {
         id: 's1',
         partieId: 'p1',
@@ -364,7 +382,7 @@ describe('ScenariosService', () => {
     });
 
     it('plusieurs créations indépendantes créent chacune un BROUILLON, sans contrainte d’ordre (AC6)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.event.create
         .mockResolvedValueOnce({
           id: 's1',
@@ -418,7 +436,7 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.scenario.update.mockResolvedValue(
         withEvent({
           id: 's1',
@@ -438,7 +456,7 @@ describe('ScenariosService', () => {
         title: 'Nouveau titre',
       });
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SCENARIO_UPDATE', { eventId: 's1' });
       // Story 37.3 : le titre vit sur l'événement de base, écrit par `EventsService`.
       expect(prisma.event.update).toHaveBeenCalledWith(
         objectLike({
@@ -457,7 +475,7 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.scenario.update.mockResolvedValue(
         withEvent({
           id: 's1',
@@ -486,11 +504,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
       prisma.scenario.update.mockResolvedValue(
         withEvent({
           id: 's1',
@@ -530,7 +550,7 @@ describe('ScenariosService', () => {
           status: 'PASSE',
         }),
       );
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
 
       await expect(
         service.update('s1', 'mj1', { description: 'nouvelle description' }),
@@ -538,7 +558,7 @@ describe('ScenariosService', () => {
       expect(prisma.scenario.update).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucune écriture', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: 's1',
@@ -546,7 +566,7 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.update('s1', 'stranger', { title: 'X' })).rejects.toThrow(
         ForbiddenException,
@@ -557,7 +577,7 @@ describe('ScenariosService', () => {
 
   describe('uploadDocument()', () => {
     it('upload avec scenarioId → ScenarioDocument rattaché au scénario (AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -578,7 +598,9 @@ describe('ScenariosService', () => {
 
       const result = await service.uploadDocument('p1', 'mj1', makeFile(), VALID_SCENARIO_ID);
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SCENARIO_DOCUMENT_UPLOAD', {
+        partieId: 'p1',
+      });
       expect(prisma.scenarioDocument.create).toHaveBeenCalledWith(
         objectLike({
           data: objectLike({
@@ -591,7 +613,7 @@ describe('ScenariosService', () => {
     });
 
     it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
       (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.pdf');
       prisma.scenarioDocument.create.mockResolvedValue({
@@ -609,7 +631,7 @@ describe('ScenariosService', () => {
     });
 
     it('upload sans scenarioId → scenarioId: null (AC3)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
       (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.pdf');
       prisma.scenarioDocument.create.mockResolvedValue({
@@ -633,7 +655,7 @@ describe('ScenariosService', () => {
     });
 
     it('upload sur un scénario PASSE → rejet, aucune écriture (exigence croisée 7.1 AC5)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -650,7 +672,7 @@ describe('ScenariosService', () => {
     });
 
     it('upload sur un scenarioId n’appartenant pas à la Partie → rejet', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -666,7 +688,7 @@ describe('ScenariosService', () => {
     });
 
     it('scenarioId inexistant → 404, aucune écriture', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.scenario.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -676,7 +698,7 @@ describe('ScenariosService', () => {
     });
 
     it('fichier non reconnu (ni PDF ni texte) → rejet, aucune écriture (AC1/AC2)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       (detectDocumentMime as jest.Mock).mockReturnValue(null);
 
       await expect(service.uploadDocument('p1', 'mj1', makeFile())).rejects.toThrow(
@@ -687,7 +709,7 @@ describe('ScenariosService', () => {
     });
 
     it('PDF détecté par signature magique mais structurellement invalide → rejet, aucune écriture (Story 16.1 AC1)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
       (isStructurallyValidPdf as jest.Mock).mockResolvedValue(false);
 
@@ -699,7 +721,7 @@ describe('ScenariosService', () => {
     });
 
     it('fichier texte détecté → isStructurallyValidPdf jamais appelé, upload réussit (Story 16.1 AC3, non-régression texte)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       (detectDocumentMime as jest.Mock).mockReturnValue('text/plain');
       (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.txt');
       prisma.scenarioDocument.create.mockResolvedValue({
@@ -717,8 +739,8 @@ describe('ScenariosService', () => {
       expect(result.scenarioId).toBeNull();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+    it('non-MJ → 403 propagé par permissions.assert, aucune écriture', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.uploadDocument('p1', 'stranger', makeFile())).rejects.toThrow(
         ForbiddenException,
@@ -727,7 +749,7 @@ describe('ScenariosService', () => {
     });
 
     it('scenarioId malformé (pas un UUID) → rejet, aucune écriture', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
 
       await expect(service.uploadDocument('p1', 'mj1', makeFile(), 'not-a-uuid')).rejects.toThrow(
         BadRequestException,
@@ -737,7 +759,7 @@ describe('ScenariosService', () => {
     });
 
     it('scenarioId fourni en chaîne vide → rejet explicite, jamais traité comme absent', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
 
       await expect(service.uploadDocument('p1', 'mj1', makeFile(), '')).rejects.toThrow(
         BadRequestException,
@@ -746,7 +768,7 @@ describe('ScenariosService', () => {
     });
 
     it('échec de l’insertion Prisma → nettoie le fichier orphelin puis relance l’erreur', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       (detectDocumentMime as jest.Mock).mockReturnValue('application/pdf');
       (writeDocumentFile as jest.Mock).mockResolvedValue('uuid.pdf');
       const dbError = new Error('DB down');
@@ -766,12 +788,14 @@ describe('ScenariosService', () => {
           status: 'BROUILLON',
         }),
       );
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.scenarioDocument.findMany.mockResolvedValue([]);
 
       await service.listDocuments('s1', 'u1');
 
-      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'SCENARIO_DOCUMENTS_READ', {
+        eventId: 's1',
+      });
       expect(prisma.scenarioDocument.findMany).toHaveBeenCalledWith(
         objectLike({
           where: {
@@ -789,7 +813,7 @@ describe('ScenariosService', () => {
           status: 'BROUILLON',
         }),
       );
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.scenarioDocument.findMany.mockResolvedValue([
         {
           id: 'd1',
@@ -810,7 +834,7 @@ describe('ScenariosService', () => {
       await expect(service.listDocuments('s1', 'u1')).rejects.toThrow(NotFoundException);
     });
 
-    it('non-membre → 403 propagé par getViewable', async () => {
+    it('non-membre → 403 propagé par permissions.assert', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: 's1',
@@ -818,7 +842,7 @@ describe('ScenariosService', () => {
           status: 'BROUILLON',
         }),
       );
-      parties.getViewable.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.listDocuments('s1', 'stranger')).rejects.toThrow(ForbiddenException);
     });
@@ -826,13 +850,15 @@ describe('ScenariosService', () => {
 
   describe('listLibraryDocuments()', () => {
     it('ne renvoie que les documents scenarioId: null d’une Partie sans aucun scénario créé', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.scenarioDocument.findMany.mockResolvedValue([]);
 
       await service.listLibraryDocuments('p1', 'u1');
 
       expect(prisma.scenario.findUnique).not.toHaveBeenCalled();
-      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'SCENARIO_DOCUMENTS_READ', {
+        partieId: 'p1',
+      });
       expect(prisma.scenarioDocument.findMany).toHaveBeenCalledWith(
         objectLike({
           where: { partieId: 'p1', scenarioId: null },
@@ -849,7 +875,7 @@ describe('ScenariosService', () => {
         filename: 'uuid.pdf',
         originalName: 'lettre-ossian.pdf',
       });
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       (readDocumentFile as jest.Mock).mockResolvedValue({
         buffer: Buffer.from('bytes'),
         mime: 'application/pdf',
@@ -857,7 +883,9 @@ describe('ScenariosService', () => {
 
       const result = await service.getDocumentFile('d1', 'u1');
 
-      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'SCENARIO_DOCUMENTS_READ', {
+        partieId: 'p1',
+      });
       expect(result.originalName).toBe('lettre-ossian.pdf');
       expect(result.mime).toBe('application/pdf');
     });
@@ -874,20 +902,20 @@ describe('ScenariosService', () => {
         filename: 'uuid.pdf',
         originalName: 'x.pdf',
       });
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       (readDocumentFile as jest.Mock).mockResolvedValue(null);
 
       await expect(service.getDocumentFile('d1', 'u1')).rejects.toThrow(NotFoundException);
     });
 
-    it('non-membre → 403 propagé par getViewable', async () => {
+    it('non-membre → 403 propagé par permissions.assert', async () => {
       prisma.scenarioDocument.findUnique.mockResolvedValue({
         id: 'd1',
         partieId: 'p1',
         filename: 'uuid.pdf',
         originalName: 'x.pdf',
       });
-      parties.getViewable.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.getDocumentFile('d1', 'stranger')).rejects.toThrow(ForbiddenException);
     });
@@ -895,12 +923,14 @@ describe('ScenariosService', () => {
 
   describe('listDrafts()', () => {
     it('retourne uniquement les scénarios BROUILLON de la Partie (AC2)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.scenario.findMany.mockResolvedValue([]);
 
       await service.listDrafts('p1', 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SCENARIO_DRAFTS_READ', {
+        partieId: 'p1',
+      });
       expect(prisma.scenario.findMany).toHaveBeenCalledWith({
         where: { event: { partieId: 'p1' }, status: 'BROUILLON' },
         orderBy: { event: { createdAt: 'desc' } },
@@ -908,8 +938,8 @@ describe('ScenariosService', () => {
       });
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune lecture', async () => {
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+    it('non-MJ → 403 propagé par permissions.assert, aucune lecture', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.listDrafts('p1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.scenario.findMany).not.toHaveBeenCalled();
@@ -964,8 +994,7 @@ describe('ScenariosService', () => {
       expect(prisma.scenarioParticipant.findMany).toHaveBeenCalledWith(
         objectLike({ where: { scenarioId: { in: ['s2'] } } }),
       );
-      expect(parties.getViewable).not.toHaveBeenCalled();
-      expect(parties.getOwned).not.toHaveBeenCalled();
+      expect(permissions.assert).not.toHaveBeenCalled();
     });
 
     it('épisodique → inscrits du scénario ; sinon tous les membres de la partie', async () => {
@@ -1020,14 +1049,13 @@ describe('ScenariosService', () => {
   });
 
   describe('findAllForPartie()', () => {
-    it('lecture ouverte à tout membre (getViewable, pas getOwned), tri chronologique croissant avec tie-breaker id (Story 17.1)', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+    it('lecture ouverte à tout membre (SCENARIO_READ, pas une action MJ), tri chronologique croissant avec tie-breaker id (Story 17.1)', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.scenario.findMany.mockResolvedValue([]);
 
       await service.findAllForPartie('p1', 'u1');
 
-      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
-      expect(parties.getOwned).not.toHaveBeenCalled();
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'SCENARIO_READ', { partieId: 'p1' });
       expect(prisma.scenario.findMany).toHaveBeenCalledWith(
         objectLike({
           where: { event: { partieId: 'p1' } },
@@ -1037,7 +1065,7 @@ describe('ScenariosService', () => {
     });
 
     it('skip/take fournis → transmis tels quels à Prisma (AC1)', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.scenario.findMany.mockResolvedValue([]);
 
       await service.findAllForPartie('p1', 'u1', { skip: 20, take: 10 });
@@ -1046,7 +1074,7 @@ describe('ScenariosService', () => {
     });
 
     it('skip/take absents → aucune limite appliquée (comportement par défaut inchangé)', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.scenario.findMany.mockResolvedValue([]);
 
       await service.findAllForPartie('p1', 'u1');
@@ -1057,7 +1085,7 @@ describe('ScenariosService', () => {
     });
 
     it('inscriptions triées par createdAt asc avec tie-breaker id (AC2, Story 17.1)', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.scenario.findMany.mockResolvedValue([]);
       prisma.seance.findMany.mockResolvedValue([]);
 
@@ -1075,7 +1103,7 @@ describe('ScenariosService', () => {
     });
 
     it('aucun filtrage par statut — un scénario BROUILLON est bien retourné (AD-6)', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.scenario.findMany.mockResolvedValue(
         withEvent([
           {
@@ -1100,7 +1128,7 @@ describe('ScenariosService', () => {
     });
 
     it("Story 36.6 (AC7/AC9/AC10) — le SessionPollDto d'une séance porte l'effectif MJ + membres, compté UNE seule fois pour tout l'appel", async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.membership.count.mockResolvedValue(3);
       prisma.scenario.findMany.mockResolvedValue(
         withEvent([
@@ -1160,7 +1188,7 @@ describe('ScenariosService', () => {
     // `inscription`, lui-même absent dès que `inscriptionMax` est nul. Une séance de campagne
     // linéaire datée par héritage n'exposait donc AUCUNE date, et son état n'était pas dérivable.
     it('Story 32.3 — dateValidee/slotValidee à la racine : date héritée sans vote ni inscription', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.membership.count.mockResolvedValue(1);
       prisma.scenario.findMany.mockResolvedValue(
         withEvent([
@@ -1208,7 +1236,7 @@ describe('ScenariosService', () => {
     });
 
     it('Story 32.3 — un vote SCELLÉ l’emporte, et apporte son créneau', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.membership.count.mockResolvedValue(1);
       prisma.scenario.findMany.mockResolvedValue(
         withEvent([
@@ -1263,7 +1291,7 @@ describe('ScenariosService', () => {
     });
 
     it('Story 32.3 — un vote OUVERT ne prête jamais son créneau à la date héritée', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.membership.count.mockResolvedValue(1);
       prisma.scenario.findMany.mockResolvedValue(
         withEvent([
@@ -1319,7 +1347,7 @@ describe('ScenariosService', () => {
     // 🚨 Le test qui prouve que la condition est bien `chosenDate` et NON `status === 'CLOSED'` :
     // un vote clos sans date retenue ne scelle rien, la date héritée reste la date effective.
     it('Story 32.3 — vote CLOS SANS date retenue : la date héritée gagne, sans créneau', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.membership.count.mockResolvedValue(1);
       prisma.scenario.findMany.mockResolvedValue(
         withEvent([
@@ -1372,7 +1400,7 @@ describe('ScenariosService', () => {
     });
 
     it('deferred-work (2026-08-24) : toSessionPollDto() porte displayName sur chaque vote — défaut pré-existant, PollVoteDto.displayName est requis mais poll était typé any (invisible au compilateur)', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.membership.count.mockResolvedValue(1);
       prisma.scenario.findMany.mockResolvedValue(
         withEvent([
@@ -1441,18 +1469,23 @@ describe('ScenariosService', () => {
       });
     });
 
-    it('non-membre → 403 propagé par getViewable, aucune lecture', async () => {
-      parties.getViewable.mockRejectedValue(new ForbiddenException());
+    it('non-membre → 403 propagé par permissions.assert, aucune lecture', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.findAllForPartie('p1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.scenario.findMany).not.toHaveBeenCalled();
     });
 
     it('CAMPAGNE_EPISODIQUE : chaque ScenarioDto porte ses participants exacts (AC7)', async () => {
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.scenario.findMany.mockResolvedValue(
         withEvent([
           {
@@ -1510,7 +1543,7 @@ describe('ScenariosService', () => {
     it.each(['CAMPAGNE_LINEAIRE', 'ONE_SHOT'])(
       '%s : participants toujours undefined, scenarioParticipant.findMany jamais appelé (AC1/AD-4)',
       async (kind) => {
-        parties.getViewable.mockResolvedValue({ id: 'p1', kind });
+        permissions.assert.mockResolvedValue(testGrant({ id: 'p1', kind }, 'player'));
         prisma.scenario.findMany.mockResolvedValue(
           withEvent([
             {
@@ -1553,10 +1586,15 @@ describe('ScenariosService', () => {
       }
 
       it('status !== PASSE → retrospectiveNotes undefined, CharacterService jamais appelé (AC7)', async () => {
-        parties.getViewable.mockResolvedValue({
-          id: 'p1',
-          kind: 'CAMPAGNE_LINEAIRE',
-        });
+        permissions.assert.mockResolvedValue(
+          testGrant(
+            {
+              id: 'p1',
+              kind: 'CAMPAGNE_LINEAIRE',
+            },
+            'player',
+          ),
+        );
         prisma.scenario.findMany.mockResolvedValue(
           withEvent([makeScenario({ status: 'COURANT' })]),
         );
@@ -1569,10 +1607,15 @@ describe('ScenariosService', () => {
       });
 
       it('PASSE, CAMPAGNE_LINEAIRE → agrège les notes de TOUS les membres de la Partie', async () => {
-        parties.getViewable.mockResolvedValue({
-          id: 'p1',
-          kind: 'CAMPAGNE_LINEAIRE',
-        });
+        permissions.assert.mockResolvedValue(
+          testGrant(
+            {
+              id: 'p1',
+              kind: 'CAMPAGNE_LINEAIRE',
+            },
+            'player',
+          ),
+        );
         prisma.scenario.findMany.mockResolvedValue(withEvent([makeScenario({ status: 'PASSE' })]));
         characters.findAllByPartie.mockResolvedValue([
           { id: 'char1', userId: 'u1' },
@@ -1612,10 +1655,15 @@ describe('ScenariosService', () => {
       });
 
       it('PASSE, CAMPAGNE_EPISODIQUE → agrège seulement les personnages des participants du scénario', async () => {
-        parties.getViewable.mockResolvedValue({
-          id: 'p1',
-          kind: 'CAMPAGNE_EPISODIQUE',
-        });
+        permissions.assert.mockResolvedValue(
+          testGrant(
+            {
+              id: 'p1',
+              kind: 'CAMPAGNE_EPISODIQUE',
+            },
+            'player',
+          ),
+        );
         prisma.scenario.findMany.mockResolvedValue(withEvent([makeScenario({ status: 'PASSE' })]));
         prisma.scenarioParticipant.findMany.mockResolvedValue([
           {
@@ -1637,10 +1685,15 @@ describe('ScenariosService', () => {
       });
 
       it('fenêtre calculée à partir de poll.chosenDate/inscription.dateValidee mixtes (min/max)', async () => {
-        parties.getViewable.mockResolvedValue({
-          id: 'p1',
-          kind: 'CAMPAGNE_LINEAIRE',
-        });
+        permissions.assert.mockResolvedValue(
+          testGrant(
+            {
+              id: 'p1',
+              kind: 'CAMPAGNE_LINEAIRE',
+            },
+            'player',
+          ),
+        );
         prisma.scenario.findMany.mockResolvedValue(withEvent([makeScenario({ status: 'PASSE' })]));
         prisma.seance.findMany.mockResolvedValue(
           asSeance([
@@ -1689,10 +1742,15 @@ describe('ScenariosService', () => {
       });
 
       it('aucune séance datée → fenêtre null/null, seule la branche manuelle s’applique côté CharacterService', async () => {
-        parties.getViewable.mockResolvedValue({
-          id: 'p1',
-          kind: 'CAMPAGNE_LINEAIRE',
-        });
+        permissions.assert.mockResolvedValue(
+          testGrant(
+            {
+              id: 'p1',
+              kind: 'CAMPAGNE_LINEAIRE',
+            },
+            'player',
+          ),
+        );
         prisma.scenario.findMany.mockResolvedValue(withEvent([makeScenario({ status: 'PASSE' })]));
         prisma.seance.findMany.mockResolvedValue(
           asSeance([
@@ -1725,10 +1783,15 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.scenarioParticipant.upsert.mockResolvedValue({});
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
@@ -1754,7 +1817,9 @@ describe('ScenariosService', () => {
 
       const result = await service.participate(VALID_SCENARIO_ID, 'u1');
 
-      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'SCENARIO_PARTICIPATE', {
+        eventId: VALID_SCENARIO_ID,
+      });
       expect(prisma.scenarioParticipant.upsert).toHaveBeenCalledWith({
         where: {
           scenarioId_userId: { scenarioId: VALID_SCENARIO_ID, userId: 'u1' },
@@ -1775,10 +1840,15 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.scenarioParticipant.upsert.mockResolvedValue({});
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
@@ -1808,10 +1878,15 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.scenarioParticipant.upsert.mockResolvedValue({});
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
@@ -1850,7 +1925,7 @@ describe('ScenariosService', () => {
             status: 'COURANT',
           }),
         );
-        parties.getViewable.mockResolvedValue({ id: 'p1', kind });
+        permissions.assert.mockResolvedValue(testGrant({ id: 'p1', kind }, 'player'));
 
         await expect(service.participate(VALID_SCENARIO_ID, 'u1')).rejects.toThrow(
           BadRequestException,
@@ -1859,7 +1934,7 @@ describe('ScenariosService', () => {
       },
     );
 
-    it('non-membre → 403 propagé par getViewable, aucune écriture (AC5)', async () => {
+    it('non-membre → 403 propagé par permissions.assert, aucune écriture (AC5)', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -1867,7 +1942,7 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getViewable.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.participate(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
         ForbiddenException,
@@ -1892,7 +1967,7 @@ describe('ScenariosService', () => {
           status: 'BROUILLON',
         }),
       );
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.scenario.update.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -1910,7 +1985,9 @@ describe('ScenariosService', () => {
 
       const result = await service.open(VALID_SCENARIO_ID, 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SCENARIO_STATUS_CHANGE', {
+        eventId: VALID_SCENARIO_ID,
+      });
       expect(prisma.scenario.update).toHaveBeenCalledWith(
         objectLike({
           where: { id: VALID_SCENARIO_ID },
@@ -1928,7 +2005,7 @@ describe('ScenariosService', () => {
           status: 'BROUILLON',
         }),
       );
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.scenario.update.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -1957,7 +2034,7 @@ describe('ScenariosService', () => {
           status: 'BROUILLON',
         }),
       );
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       prisma.scenario.update.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -1986,11 +2063,13 @@ describe('ScenariosService', () => {
           status: 'BROUILLON',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
       prisma.scenario.update.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -2030,7 +2109,7 @@ describe('ScenariosService', () => {
             status,
           }),
         );
-        parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+        permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
 
         await expect(service.open(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(BadRequestException);
         expect(prisma.scenario.update).not.toHaveBeenCalled();
@@ -2044,7 +2123,7 @@ describe('ScenariosService', () => {
       expect(prisma.scenario.update).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucune écriture', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -2052,7 +2131,7 @@ describe('ScenariosService', () => {
           status: 'BROUILLON',
         }),
       );
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.open(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.scenario.update).not.toHaveBeenCalled();
@@ -2068,11 +2147,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.tx.scenario.findFirst.mockResolvedValue(null);
       prisma.tx.scenario.updateMany.mockResolvedValue({ count: 1 });
       prisma.tx.scenario.findUniqueOrThrow.mockResolvedValue(
@@ -2092,7 +2173,9 @@ describe('ScenariosService', () => {
 
       const result = await service.markCourant(VALID_SCENARIO_ID, 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SCENARIO_STATUS_CHANGE', {
+        eventId: VALID_SCENARIO_ID,
+      });
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
       expect(prisma.tx.scenario.findFirst).toHaveBeenCalledWith({
@@ -2113,11 +2196,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.tx.scenario.findFirst.mockResolvedValue(null);
       prisma.tx.scenario.updateMany.mockResolvedValue({ count: 1 });
       prisma.tx.scenario.findUniqueOrThrow.mockResolvedValue(
@@ -2148,11 +2233,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.tx.scenario.findFirst.mockResolvedValue(null);
       prisma.tx.scenario.updateMany.mockResolvedValue({ count: 1 });
       prisma.tx.scenario.findUniqueOrThrow.mockResolvedValue(
@@ -2183,11 +2270,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.tx.scenario.findFirst.mockResolvedValue(null);
       prisma.tx.scenario.updateMany.mockResolvedValue({ count: 0 });
 
@@ -2205,11 +2294,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.tx.scenario.findFirst.mockResolvedValue(
         withEvent({
           id: 'autre-scenario',
@@ -2232,11 +2323,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
@@ -2272,11 +2365,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
@@ -2307,11 +2402,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
       prisma.scenario.updateMany.mockResolvedValue({ count: 0 });
 
       await expect(service.markCourant(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
@@ -2328,11 +2425,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'ONE_SHOT',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'ONE_SHOT',
+        }),
+      );
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
@@ -2365,11 +2464,13 @@ describe('ScenariosService', () => {
             status,
           }),
         );
-        parties.getOwned.mockResolvedValue({
-          id: 'p1',
-          ownerId: 'mj1',
-          kind: 'CAMPAGNE_LINEAIRE',
-        });
+        permissions.assert.mockResolvedValue(
+          testGrant({
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_LINEAIRE',
+          }),
+        );
 
         await expect(service.markCourant(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
           BadRequestException,
@@ -2388,7 +2489,7 @@ describe('ScenariosService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune lecture/écriture (AC5)', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucune lecture/écriture (AC5)', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -2396,7 +2497,7 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.markCourant(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
         ForbiddenException,
@@ -2415,11 +2516,13 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
       const closedAt = new Date('2026-07-13T10:00:00.000Z');
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
@@ -2439,7 +2542,9 @@ describe('ScenariosService', () => {
 
       const result = await service.close(VALID_SCENARIO_ID, 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SCENARIO_STATUS_CHANGE', {
+        eventId: VALID_SCENARIO_ID,
+      });
       expect(prisma.scenario.updateMany).toHaveBeenCalledWith({
         where: { id: VALID_SCENARIO_ID, status: 'COURANT' },
         data: { status: 'PASSE', closedAt: anyOf(Date) },
@@ -2456,11 +2561,13 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
@@ -2490,11 +2597,13 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
@@ -2524,11 +2633,13 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
       prisma.scenario.updateMany.mockResolvedValue({ count: 1 });
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
@@ -2569,11 +2680,13 @@ describe('ScenariosService', () => {
             status,
           }),
         );
-        parties.getOwned.mockResolvedValue({
-          id: 'p1',
-          ownerId: 'mj1',
-          kind: 'CAMPAGNE_LINEAIRE',
-        });
+        permissions.assert.mockResolvedValue(
+          testGrant({
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_LINEAIRE',
+          }),
+        );
 
         await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(BadRequestException);
         expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
@@ -2587,7 +2700,7 @@ describe('ScenariosService', () => {
       expect(prisma.scenario.updateMany).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune lecture/écriture (AC3)', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucune lecture/écriture (AC3)', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -2595,7 +2708,7 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.close(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
         ForbiddenException,
@@ -2611,11 +2724,13 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.scenario.updateMany.mockResolvedValue({ count: 0 });
 
       await expect(service.close(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(ConflictException);
@@ -2631,11 +2746,13 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockResolvedValueOnce({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValueOnce(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.scenario.updateMany.mockResolvedValueOnce({ count: 1 });
       prisma.scenario.findUniqueOrThrow.mockResolvedValueOnce(
         withEvent({
@@ -2662,11 +2779,13 @@ describe('ScenariosService', () => {
           status: 'A_VENIR',
         }),
       );
-      parties.getOwned.mockResolvedValueOnce({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValueOnce(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.tx.scenario.findFirst.mockResolvedValueOnce(null);
       prisma.tx.scenario.updateMany.mockResolvedValueOnce({ count: 1 });
       prisma.tx.scenario.findUniqueOrThrow.mockResolvedValueOnce(
@@ -2702,11 +2821,13 @@ describe('ScenariosService', () => {
           status: 'PASSE',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await expect(service.addSeance(VALID_SCENARIO_ID, 'mj1')).rejects.toThrow(
         BadRequestException,
@@ -2722,11 +2843,13 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -2755,7 +2878,9 @@ describe('ScenariosService', () => {
 
       const result = await service.addSeance(VALID_SCENARIO_ID, 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SEANCE_ADD', {
+        eventId: VALID_SCENARIO_ID,
+      });
       expect(prisma.seance.create).toHaveBeenCalledWith({
         data: { eventId: VALID_SCENARIO_ID },
       });
@@ -2789,11 +2914,13 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -2822,11 +2949,13 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -2855,11 +2984,13 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -2912,7 +3043,7 @@ describe('ScenariosService', () => {
       expect(prisma.seance.create).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucune écriture', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: VALID_SCENARIO_ID,
@@ -2920,7 +3051,7 @@ describe('ScenariosService', () => {
           status: 'COURANT',
         }),
       );
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.addSeance(VALID_SCENARIO_ID, 'stranger')).rejects.toThrow(
         ForbiddenException,
@@ -3130,11 +3261,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValueOnce(
         asSeance([
           {
@@ -3147,7 +3280,9 @@ describe('ScenariosService', () => {
 
       await service.deleteSeance(SECOND_SEANCE_ID, 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SEANCE_DELETE', {
+        seanceId: SECOND_SEANCE_ID,
+      });
       expect(prisma.seance.delete).toHaveBeenCalledWith({
         where: { id: SECOND_SEANCE_ID },
       });
@@ -3161,11 +3296,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValueOnce(
         asSeance([
           {
@@ -3189,11 +3326,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValueOnce(
         asSeance([
           {
@@ -3255,11 +3394,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValueOnce(
         asSeance([
           {
@@ -3291,11 +3432,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValueOnce(
         asSeance([
           {
@@ -3323,11 +3466,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValueOnce(
         asSeance([
           {
@@ -3357,11 +3502,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValueOnce(
         asSeance([
           {
@@ -3385,11 +3532,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValueOnce(
         asSeance([
           {
@@ -3415,7 +3564,7 @@ describe('ScenariosService', () => {
       expect(prisma.seance.delete).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune suppression', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucune suppression', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SECOND_SEANCE_ID,
@@ -3423,7 +3572,7 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.deleteSeance(SECOND_SEANCE_ID, 'stranger')).rejects.toThrow(
         ForbiddenException,
@@ -3441,11 +3590,13 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent(mockScenario({ status: 'PASSE' })),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await expect(service.deleteSeance(SECOND_SEANCE_ID, 'mj1')).rejects.toThrow(
         BadRequestException,
@@ -3461,11 +3612,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValueOnce(
         asSeance([
           {
@@ -3521,11 +3674,13 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow
         .mockResolvedValueOnce(withEvent(mockScenario()))
         .mockResolvedValueOnce(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       pollService.create.mockResolvedValue({ id: POLL_ID });
       prisma.seance.findMany.mockResolvedValue(
         asSeance([
@@ -3550,8 +3705,11 @@ describe('ScenariosService', () => {
 
       const result = await service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS);
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
-      expect(pollService.create).toHaveBeenCalledWith('p1', 'mj1', {
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SEANCE_POLL_CREATE', {
+        seanceId: SEANCE_ID,
+      });
+      // Story 37.6 : le vote reçoit l'autorisation de la séance (partie `p1`), plus un `partieId` nu.
+      expect(pollService.create).toHaveBeenCalledWith(objectLike({ partieId: 'p1' }), 'mj1', {
         options: OPTIONS,
       });
       expect(prisma.seance.update).toHaveBeenCalledWith({
@@ -3572,11 +3730,13 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow
         .mockResolvedValueOnce(withEvent(mockScenario()))
         .mockResolvedValueOnce(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       pollService.create.mockResolvedValue({ id: POLL_ID });
 
       await service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS);
@@ -3595,11 +3755,13 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow
         .mockResolvedValueOnce(withEvent(mockScenario()))
         .mockResolvedValueOnce(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
       pollService.create.mockResolvedValue({ id: POLL_ID });
       prisma.seance.findMany.mockResolvedValue(
         asSeance([
@@ -3627,8 +3789,11 @@ describe('ScenariosService', () => {
 
       const result = await service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS);
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
-      expect(pollService.create).toHaveBeenCalledWith('p1', 'mj1', {
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SEANCE_POLL_CREATE', {
+        seanceId: SEANCE_ID,
+      });
+      // Story 37.6 : le vote reçoit l'autorisation de la séance (partie `p1`), plus un `partieId` nu.
+      expect(pollService.create).toHaveBeenCalledWith(objectLike({ partieId: 'p1' }), 'mj1', {
         options: OPTIONS,
       });
       expect(prisma.seance.update).toHaveBeenCalledWith({
@@ -3649,11 +3814,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await expect(service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS)).rejects.toThrow(
         BadRequestException,
@@ -3673,11 +3840,13 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent(mockScenario({ status: 'PASSE' })),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await expect(service.createSeancePoll(SEANCE_ID, 'mj1', OPTIONS)).rejects.toThrow(
         BadRequestException,
@@ -3696,7 +3865,7 @@ describe('ScenariosService', () => {
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucun poll créé, aucune écriture', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucun poll créé, aucune écriture', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
@@ -3705,7 +3874,7 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.createSeancePoll(SEANCE_ID, 'stranger', OPTIONS)).rejects.toThrow(
         ForbiddenException,
@@ -3745,16 +3914,20 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValue([]);
 
       await service.resetSeanceDate(SEANCE_ID, 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SEANCE_DATE_RESET', {
+        seanceId: SEANCE_ID,
+      });
       expect(prisma.seance.update).toHaveBeenCalledWith({
         where: { id: SEANCE_ID },
         data: { pollId: null, startDate: null, startSlot: null, endDate: null, endSlot: null },
@@ -3780,11 +3953,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValue([]);
 
       await service.resetSeanceDate(SEANCE_ID, 'mj1');
@@ -3803,11 +3978,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValue([]);
 
       await service.resetSeanceDate(SEANCE_ID, 'mj1');
@@ -3824,11 +4001,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValue([]);
 
       await service.resetSeanceDate(SEANCE_ID, 'mj1');
@@ -3849,11 +4028,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValue([]);
 
       await service.resetSeanceDate(SEANCE_ID, 'mj1');
@@ -3872,11 +4053,13 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent(mockScenario({ status: 'PASSE' })),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await expect(service.resetSeanceDate(SEANCE_ID, 'mj1')).rejects.toThrow(BadRequestException);
       expect(prisma.seance.update).not.toHaveBeenCalled();
@@ -3889,7 +4072,7 @@ describe('ScenariosService', () => {
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucune écriture', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
@@ -3898,7 +4081,7 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.resetSeanceDate(SEANCE_ID, 'stranger')).rejects.toThrow(
         ForbiddenException,
@@ -3938,11 +4121,13 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent(mockScenario({ status: 'PASSE' })),
       );
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
 
       await expect(service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6)).rejects.toThrow(
         BadRequestException,
@@ -3960,11 +4145,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
       prisma.seance.findMany.mockResolvedValue(
         asSeance([
           {
@@ -3984,7 +4171,9 @@ describe('ScenariosService', () => {
 
       const result = await service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6);
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SEANCE_CAPACITY_SET', {
+        seanceId: SEANCE_ID,
+      });
       expect(prisma.seance.update).toHaveBeenCalledWith({
         where: { id: SEANCE_ID },
         data: { inscriptionMin: 4, inscriptionMax: 6 },
@@ -4007,11 +4196,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
 
       await service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6);
 
@@ -4028,11 +4219,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
 
       await service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6);
 
@@ -4049,11 +4242,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await expect(service.setSeanceCapacity(SEANCE_ID, 'mj1', 4, 6)).rejects.toThrow(
         BadRequestException,
@@ -4071,11 +4266,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_EPISODIQUE',
+        }),
+      );
 
       await expect(service.setSeanceCapacity(SEANCE_ID, 'mj1', 6, 4)).rejects.toThrow(
         BadRequestException,
@@ -4092,7 +4289,7 @@ describe('ScenariosService', () => {
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucune écriture', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
@@ -4102,7 +4299,7 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.setSeanceCapacity(SEANCE_ID, 'stranger', 4, 6)).rejects.toThrow(
         ForbiddenException,
@@ -4166,11 +4363,16 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent(mockScenario({ status: 'BROUILLON' })),
       );
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
@@ -4191,11 +4393,16 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent(mockScenario({ status: 'PASSE' })),
       );
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
@@ -4214,11 +4421,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.tx.inscription.findUnique.mockResolvedValue(null);
       prisma.tx.seance.findUniqueOrThrow.mockResolvedValue(
         asSeance({
@@ -4231,7 +4443,9 @@ describe('ScenariosService', () => {
 
       await service.inscrire(SEANCE_ID, 'u1');
 
-      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'SEANCE_INSCRIBE', {
+        seanceId: SEANCE_ID,
+      });
       expect(prisma.tx.$queryRaw).toHaveBeenCalled();
       expect(prisma.tx.inscription.count).toHaveBeenCalledWith({
         where: { seanceId: SEANCE_ID },
@@ -4253,11 +4467,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.tx.inscription.findUnique.mockResolvedValue(null);
       prisma.tx.seance.findUniqueOrThrow.mockResolvedValue(
         asSeance({
@@ -4285,11 +4504,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.tx.inscription.findUnique.mockResolvedValue(null);
       // Valeur fraîche sous le verrou : max abaissé à 2, déjà atteint par 2 inscrits.
       prisma.tx.seance.findUniqueOrThrow.mockResolvedValue(
@@ -4316,11 +4540,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.tx.inscription.findUnique.mockResolvedValue({
         seanceId: SEANCE_ID,
         userId: 'u1',
@@ -4346,11 +4575,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.tx.inscription.findUnique.mockResolvedValue(null);
       prisma.tx.seance.findUniqueOrThrow.mockResolvedValue(
         asSeance({
@@ -4376,11 +4610,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
@@ -4398,11 +4637,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
@@ -4420,11 +4664,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
@@ -4443,11 +4692,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.tx.inscription.findUnique.mockResolvedValue(null);
       // Le MJ a choisi une date (choose()) entre le check initial et l'acquisition du verrou.
       prisma.tx.seance.findUniqueOrThrow.mockResolvedValue(
@@ -4476,11 +4730,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_LINEAIRE',
+          },
+          'player',
+        ),
+      );
 
       await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
@@ -4493,7 +4752,7 @@ describe('ScenariosService', () => {
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
-    it('non-membre → 403 propagé par getViewable, aucune écriture', async () => {
+    it('non-membre → 403 propagé par permissions.assert, aucune écriture', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
@@ -4503,7 +4762,7 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.inscrire(SEANCE_ID, 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
@@ -4537,15 +4796,22 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await service.desinscrire(SEANCE_ID, 'u1');
 
-      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'SEANCE_UNSUBSCRIBE', {
+        seanceId: SEANCE_ID,
+      });
       expect(prisma.inscription.deleteMany).toHaveBeenCalledWith({
         where: { seanceId: SEANCE_ID, userId: 'u1' },
       });
@@ -4559,11 +4825,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await service.desinscrire(SEANCE_ID, 'u1');
 
@@ -4578,11 +4849,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await service.desinscrire(SEANCE_ID, 'u1');
 
@@ -4599,11 +4875,16 @@ describe('ScenariosService', () => {
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
         withEvent(mockScenario({ status: 'PASSE' })),
       );
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await service.desinscrire(SEANCE_ID, 'u1');
 
@@ -4620,11 +4901,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
       prisma.inscription.deleteMany.mockResolvedValue({ count: 0 });
 
       await expect(service.desinscrire(SEANCE_ID, 'u1')).resolves.toBeDefined();
@@ -4637,7 +4923,7 @@ describe('ScenariosService', () => {
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
     });
 
-    it('non-membre → 403 propagé par getViewable', async () => {
+    it('non-membre → 403 propagé par permissions.assert', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
@@ -4645,7 +4931,7 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.desinscrire(SEANCE_ID, 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
@@ -4661,11 +4947,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await expect(service.desinscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
@@ -4681,11 +4972,16 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getViewable.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_EPISODIQUE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          {
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_EPISODIQUE',
+          },
+          'player',
+        ),
+      );
 
       await expect(service.desinscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
@@ -4721,11 +5017,13 @@ describe('ScenariosService', () => {
           }),
         );
         prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-        parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1', kind });
+        permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1', kind }));
 
         await service.setCompteRendu(SEANCE_ID, 'mj1', 'Les PJ ont vaincu le dragon.');
 
-        expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+        expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SEANCE_COMPTE_RENDU_SET', {
+          seanceId: SEANCE_ID,
+        });
         expect(prisma.seance.update).toHaveBeenCalledWith({
           where: { id: SEANCE_ID },
           data: { compteRendu: 'Les PJ ont vaincu le dragon.' },
@@ -4741,11 +5039,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await service.setCompteRendu(SEANCE_ID, 'mj1', 'texte');
 
@@ -4760,11 +5060,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await service.setCompteRendu(SEANCE_ID, 'mj1', 'texte');
 
@@ -4779,11 +5081,13 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await service.setCompteRendu(SEANCE_ID, 'mj1', '');
 
@@ -4802,7 +5106,7 @@ describe('ScenariosService', () => {
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucune écriture', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
@@ -4810,7 +5114,7 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.setCompteRendu(SEANCE_ID, 'stranger', 'texte')).rejects.toThrow(
         ForbiddenException,
@@ -4854,7 +5158,7 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1', kind });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1', kind }));
     }
 
     it.each(['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as const)(
@@ -4876,6 +5180,9 @@ describe('ScenariosService', () => {
 
       await service.setInfosPratiques(SEANCE_ID, 'mj1', PAYLOAD);
 
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SEANCE_PRACTICAL_INFO_SET', {
+        seanceId: SEANCE_ID,
+      });
       expect(prisma.seance.update).toHaveBeenCalledTimes(1);
     });
 
@@ -4909,7 +5216,7 @@ describe('ScenariosService', () => {
       });
     });
 
-    it('AC5 : non-MJ → 403 propagé par getOwned, aucune écriture', async () => {
+    it('AC5 : non-MJ → 403 propagé par permissions.assert, aucune écriture', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
@@ -4917,7 +5224,7 @@ describe('ScenariosService', () => {
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.setInfosPratiques(SEANCE_ID, 'stranger', PAYLOAD)).rejects.toThrow(
         ForbiddenException,
@@ -4977,11 +5284,13 @@ describe('ScenariosService', () => {
       prisma.scenario.findUnique.mockResolvedValue(withEvent(mockScenario()));
       prisma.scenario.update.mockResolvedValue(withEvent(mockScenario()));
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await service.setResumeFin(
         VALID_SCENARIO_ID,
@@ -4989,7 +5298,9 @@ describe('ScenariosService', () => {
         'Les PJ ont vaincu le dragon et sauvé le village.',
       );
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'SCENARIO_UPDATE', {
+        eventId: VALID_SCENARIO_ID,
+      });
       expect(prisma.scenario.update).toHaveBeenCalledWith({
         where: { id: VALID_SCENARIO_ID },
         data: { resumeFin: 'Les PJ ont vaincu le dragon et sauvé le village.' },
@@ -5001,11 +5312,13 @@ describe('ScenariosService', () => {
       prisma.scenario.findUnique.mockResolvedValue(withEvent(mockScenario()));
       prisma.scenario.update.mockResolvedValue(withEvent(mockScenario()));
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte');
 
@@ -5016,11 +5329,13 @@ describe('ScenariosService', () => {
       prisma.scenario.findUnique.mockResolvedValue(withEvent(mockScenario()));
       prisma.scenario.update.mockResolvedValue(withEvent(mockScenario()));
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte');
 
@@ -5033,11 +5348,13 @@ describe('ScenariosService', () => {
       );
       prisma.scenario.update.mockResolvedValue(withEvent(mockScenario({ resumeFin: '' })));
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await service.setResumeFin(VALID_SCENARIO_ID, 'mj1', '');
 
@@ -5056,11 +5373,13 @@ describe('ScenariosService', () => {
         withEvent(mockScenario({ resumeFin: 'Version corrigée' })),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        kind: 'CAMPAGNE_LINEAIRE',
-      });
+      permissions.assert.mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          kind: 'CAMPAGNE_LINEAIRE',
+        }),
+      );
 
       await service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'Version corrigée');
 
@@ -5075,11 +5394,13 @@ describe('ScenariosService', () => {
       'statut %s : rejet 400, aucune écriture (AC2)',
       async (status) => {
         prisma.scenario.findUnique.mockResolvedValue(withEvent(mockScenario({ status })));
-        parties.getOwned.mockResolvedValue({
-          id: 'p1',
-          ownerId: 'mj1',
-          kind: 'CAMPAGNE_LINEAIRE',
-        });
+        permissions.assert.mockResolvedValue(
+          testGrant({
+            id: 'p1',
+            ownerId: 'mj1',
+            kind: 'CAMPAGNE_LINEAIRE',
+          }),
+        );
 
         await expect(service.setResumeFin(VALID_SCENARIO_ID, 'mj1', 'texte')).rejects.toThrow(
           BadRequestException,
@@ -5097,9 +5418,9 @@ describe('ScenariosService', () => {
       expect(prisma.scenario.update).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → 403 propagé par getOwned, aucune écriture (AC5)', async () => {
+    it('non-MJ → 403 propagé par permissions.assert, aucune écriture (AC5)', async () => {
       prisma.scenario.findUnique.mockResolvedValue(withEvent(mockScenario()));
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.setResumeFin(VALID_SCENARIO_ID, 'stranger', 'texte')).rejects.toThrow(
         ForbiddenException,

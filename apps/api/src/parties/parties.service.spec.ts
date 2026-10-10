@@ -59,6 +59,7 @@ import { readFile, unlink, writeFile } from 'node:fs/promises';
 import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { EventsService } from '../events/events.service';
+import { PermissionService } from '../permissions/permission.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GAME_SYSTEM_FAMILY_CHANGE_MESSAGE,
@@ -221,6 +222,10 @@ describe('PartiesService', () => {
         prisma as unknown as PrismaService,
         realtimeEvents as unknown as RealtimeEventsService,
       ),
+      // Story 37.6 — le vrai service de permission, sur les mêmes mocks Prisma : les droits
+      // restent exercés de bout en bout (partie lue, puis `Membership` si l'appelant n'est pas
+      // le propriétaire), comme l'étaient `getOwned`/`getViewable`.
+      new PermissionService(prisma as unknown as PrismaService),
     );
   });
 
@@ -1380,6 +1385,8 @@ describe('PartiesService', () => {
           const isEven = callIdx++ % 2 === 0;
           return isEven ? 'AVAILABLE' : 'UNAVAILABLE'; // mj=AVAILABLE, u1=UNAVAILABLE
         });
+        // Story 37.6 : l'appartenance est lue par `PermissionService` (ligne `Membership` de l'appelant).
+        prisma.membership.findUnique.mockResolvedValue({ userId: 'u1', partieId: 'p1' });
         const results = (await service.getAvailableSlots('p1', 'u1', 1)) as AggregatedSlotDto[];
         expect(results.length).toBeGreaterThan(0);
         // Au moins un créneau doit avoir unavailable > 0 (Q2B)
@@ -1413,6 +1420,8 @@ describe('PartiesService', () => {
         ]),
       );
       avail.computeSlotStatus.mockReturnValue('UNKNOWN');
+      // Story 37.6 : l'appartenance est lue par `PermissionService` (ligne `Membership` de l'appelant).
+      prisma.membership.findUnique.mockResolvedValue({ userId: 'player1', partieId: 'p1' });
 
       const results = (await service.getAvailableSlots('p1', 'player1', 1)) as AggregatedSlotDto[];
       expect(results.length).toBeGreaterThan(0);
@@ -1544,6 +1553,8 @@ describe('PartiesService', () => {
           ]),
         },
         membership: {
+          // Story 37.6 : appartenance de l'appelant lue par `PermissionService`.
+          findUnique: jest.fn().mockResolvedValue({ userId: 'u1', partieId: 'A' }),
           findMany: jest.fn().mockResolvedValue([
             {
               userId: 'u1',
@@ -1571,7 +1582,13 @@ describe('PartiesService', () => {
         emit: jest.fn(),
       } as unknown as RealtimeEventsService);
       const realtime = { emit: jest.fn() } as unknown as RealtimeEventsService;
-      const svc = new PartiesService(p, realAvailability, realtime, new EventsService(p, realtime));
+      const svc = new PartiesService(
+        p,
+        realAvailability,
+        realtime,
+        new EventsService(p, realtime),
+        new PermissionService(p),
+      );
 
       const mjResults = (await svc.getAvailableSlots(
         'A',
@@ -1672,6 +1689,8 @@ describe('PartiesService', () => {
 
     it("n'expose AUCUNE identité à un joueur — la clé est ABSENTE, jamais un tableau vide (AC14)", async () => {
       setupTroupe();
+      // Story 37.6 : l'appartenance est lue par `PermissionService` (ligne `Membership` de l'appelant).
+      prisma.membership.findUnique.mockResolvedValue({ userId: 'u1', partieId: 'p1' });
 
       const heatmap = await service.getHeatmap('p1', 'u1', '2026-09-01', '2026-09-01');
 

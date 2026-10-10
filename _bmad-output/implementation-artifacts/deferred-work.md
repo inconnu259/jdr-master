@@ -256,3 +256,7 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-37-5-declarer-les-systemes-et-leurs-capacites-dans-un-registre-unique.md`
   summary: Before epic 38 opens `ralliement`, enforce `kindsOf(gameSystemId)` at partie creation/conversion and make the web partie form follow family rules (no cross-family system choice, no kind conversion outside `jdr`).
   evidence: Registry declares ralliement kinds ONE_SHOT/CAMPAGNE_EPISODIQUE but nothing enforces them; server refuses what the form would offer.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-6-faire-decider-les-droits-sur-une-partie-et-ses-evenements-par-un-service-unique.md`
+  summary: Enforce scenario anti-spoil server-side — members can list BROUILLON scenarios (`findAllForPartie`), read their documents, and `participate()` in a BROUILLON/PASSE scenario through the API; today hiding is front-end only.
+  evidence: Found during 37.6 investigation (scenarios.service.ts `findAllForPartie` ~L253, `participate` ~L515, `listDocuments`); out of the porte's constant-behaviour scope. Security-relevant (spoilers leak to players via direct API calls).

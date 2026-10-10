@@ -219,6 +219,65 @@ export function isOpenForCreation(id: string): boolean {
   return findGameSystem(id)?.openForCreation ?? false;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Droits sur une partie (Story 37.6, AD-6)
+//
+// Toute décision de droit sur une partie, ses événements et ses séances passe par
+// `PermissionService.assert(userId, action, cible)` côté API. Les actions forment une union
+// FERMÉE : en ajouter une oblige à compléter la table de politique de chaque famille (le
+// compilateur refuse une table incomplète).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Rôle d'un utilisateur sur une partie. Famille `jdr` : `mj` (propriétaire) ou `player`
+ *  (membre). `admin`/`member` sont réservés aux politiques du ralliement (épic 38), inutilisés
+ *  ici. Un propriétaire nul (compte supprimé, AD-5) ne donne jamais `mj`. */
+export type PartieRole = 'mj' | 'player' | 'admin' | 'member';
+
+/** Action soumise à un droit sur une partie (Story 37.6) — union fermée, `SCREAMING_SNAKE`. */
+export type PermissionAction =
+  // Partie
+  | 'PARTIE_READ'
+  /** Garde générique « propriétaire seul » de `PartiesService.getOwned()`, conservé comme délégué
+   *  pour les modules pas encore migrés (Story 37.7). */
+  | 'PARTIE_MANAGE'
+  | 'PARTIE_UPDATE'
+  | 'PARTIE_CONVERT_KIND'
+  | 'PARTIE_CLOSE'
+  | 'PARTIE_REOPEN'
+  | 'PARTIE_DELETE'
+  | 'PARTIE_MEMBERS_READ'
+  | 'PARTIE_MEMBER_REMOVE'
+  | 'PARTIE_AVAILABILITY_READ'
+  | 'PARTIE_VISIBILITY_LOCKS_READ'
+  | 'PARTIE_VISIBILITY_LOCKS_UPDATE'
+  | 'PARTIE_COVER_READ'
+  | 'PARTIE_COVER_UPDATE'
+  // Scénario (extension JDR de l'événement)
+  | 'SCENARIO_CREATE'
+  | 'SCENARIO_UPDATE'
+  | 'SCENARIO_STATUS_CHANGE'
+  | 'SCENARIO_READ'
+  | 'SCENARIO_DRAFTS_READ'
+  | 'SCENARIO_DOCUMENT_UPLOAD'
+  | 'SCENARIO_DOCUMENTS_READ'
+  | 'SCENARIO_PARTICIPATE'
+  // Séance
+  | 'SEANCE_ADD'
+  | 'SEANCE_DELETE'
+  | 'SEANCE_DATE_RESET'
+  | 'SEANCE_CAPACITY_SET'
+  | 'SEANCE_COMPTE_RENDU_SET'
+  | 'SEANCE_PRACTICAL_INFO_SET'
+  | 'SEANCE_POLL_CREATE'
+  | 'SEANCE_INSCRIBE'
+  | 'SEANCE_UNSUBSCRIBE'
+  // Vote de date
+  | 'POLL_READ'
+  | 'POLL_VOTE'
+  | 'POLL_CHOOSE'
+  | 'POLL_OPTIONS_SET'
+  | 'POLL_CLOSE';
+
 /** Statut d'une partie — dérivé côté serveur à partir de `Partie.closedAt` et de la présence de
  *  scénarios (AD-8), jamais recalculé côté client (Story 29.6). */
 export type PartieStatus = 'A_VENIR' | 'EN_COURS' | 'TERMINEE';

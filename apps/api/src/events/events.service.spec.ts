@@ -3,6 +3,10 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { EventsService } from './events.service';
+import { testGrant } from '../common/test-utils/grant';
+
+/** Story 37.6 — autorisation délivrée (simulée) par `PermissionService.assert()` sur `p1`. */
+const GRANT_P1 = testGrant({ id: 'p1', ownerId: 'mj1' });
 
 const EVENT = {
   id: 'e1',
@@ -35,7 +39,10 @@ function makePrisma() {
   return {
     tx,
     $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
+    // Story 37.6 — appartenance à la partie de l'autorisation (1 = la séance/l'événement en est).
+    event: { count: jest.fn().mockResolvedValue(1) },
     seance: {
+      count: jest.fn().mockResolvedValue(1),
       create: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
       delete: jest.fn(),
@@ -72,10 +79,7 @@ describe('EventsService (Story 37.3)', () => {
     it('crée l’événement, son extension et sa première séance dans UNE transaction, puis émet', async () => {
       const extend = jest.fn().mockResolvedValue({ id: 'e1', status: 'BROUILLON' });
 
-      const result = await service.create(
-        { partieId: 'p1', title: EVENT.title, ownerId: 'mj1' },
-        extend,
-      );
+      const result = await service.create(GRANT_P1, { title: EVENT.title, ownerId: 'mj1' }, extend);
 
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
@@ -92,7 +96,7 @@ describe('EventsService (Story 37.3)', () => {
       const extend = jest.fn().mockRejectedValue(new Error('échec extension'));
 
       await expect(
-        service.create({ partieId: 'p1', title: 'X', ownerId: 'mj1' }, extend),
+        service.create(GRANT_P1, { title: 'X', ownerId: 'mj1' }, extend),
       ).rejects.toThrow('échec extension');
       expect(realtime.emit).not.toHaveBeenCalled();
     });
@@ -102,7 +106,7 @@ describe('EventsService (Story 37.3)', () => {
       prisma.tx.event.findFirst.mockResolvedValue({ id: 'existant' });
 
       await expect(
-        service.create({ partieId: 'p1', title: 'Second', ownerId: 'mj1' }),
+        service.create(GRANT_P1, { title: 'Second', ownerId: 'mj1' }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.tx.event.create).not.toHaveBeenCalled();
       expect(prisma.tx.seance.create).not.toHaveBeenCalled();
@@ -112,7 +116,7 @@ describe('EventsService (Story 37.3)', () => {
     it('ONE_SHOT sans événement → création autorisée (le premier, créé avec la partie)', async () => {
       prisma.tx.$queryRaw.mockResolvedValue([{ kind: 'ONE_SHOT' }]);
 
-      await service.create({ partieId: 'p1', title: 'Unique', ownerId: 'mj1' });
+      await service.create(GRANT_P1, { title: 'Unique', ownerId: 'mj1' });
 
       expect(prisma.tx.event.findFirst).toHaveBeenCalledWith({
         where: { partieId: 'p1' },
@@ -125,7 +129,7 @@ describe('EventsService (Story 37.3)', () => {
       prisma.tx.$queryRaw.mockResolvedValue([]);
 
       await expect(
-        service.create({ partieId: 'absente', title: 'X', ownerId: null }),
+        service.create(testGrant({ id: 'absente', ownerId: null }), { title: 'X', ownerId: null }),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(prisma.tx.event.create).not.toHaveBeenCalled();
     });
@@ -147,7 +151,7 @@ describe('EventsService (Story 37.3)', () => {
     const seance = { id: 'se2', eventId: 'e1', pollId: 'poll1' };
 
     it('addSeance() crée une séance rattachée à l’événement et émet', async () => {
-      await service.addSeance('p1', 'e1');
+      await service.addSeance(GRANT_P1, 'e1');
 
       expect(prisma.seance.create).toHaveBeenCalledWith({ data: { eventId: 'e1' } });
       expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
@@ -156,14 +160,16 @@ describe('EventsService (Story 37.3)', () => {
     it('deleteSeance() refuse la première séance de l’événement', async () => {
       prisma.seance.findMany.mockResolvedValueOnce([{ id: 'se2' }]);
 
-      await expect(service.deleteSeance('p1', seance)).rejects.toBeInstanceOf(BadRequestException);
+      await expect(service.deleteSeance(GRANT_P1, seance)).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
       expect(prisma.seance.delete).not.toHaveBeenCalled();
     });
 
     it('deleteSeance() supprime la séance PUIS son vote, recalcule la prochaine date et émet', async () => {
       prisma.seance.findMany.mockResolvedValueOnce([{ id: 'se1' }]);
 
-      await service.deleteSeance('p1', seance);
+      await service.deleteSeance(GRANT_P1, seance);
 
       expect(prisma.seance.delete).toHaveBeenCalledWith({ where: { id: 'se2' } });
       expect(prisma.sessionPoll.delete).toHaveBeenCalledWith({ where: { id: 'poll1' } });
@@ -180,14 +186,16 @@ describe('EventsService (Story 37.3)', () => {
         }),
       );
 
-      await expect(service.deleteSeance('p1', seance)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.deleteSeance(GRANT_P1, seance)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
       expect(realtime.emit).not.toHaveBeenCalled();
     });
 
     it('createSeancePoll() refuse une séance déjà liée AVANT de créer le vote', async () => {
       const createPoll = jest.fn();
 
-      await expect(service.createSeancePoll('p1', seance, createPoll)).rejects.toThrow(
+      await expect(service.createSeancePoll(GRANT_P1, seance, createPoll)).rejects.toThrow(
         'Cette séance est déjà liée à un vote de date',
       );
       expect(createPoll).not.toHaveBeenCalled();
@@ -196,7 +204,7 @@ describe('EventsService (Story 37.3)', () => {
     it('createSeancePoll() pose Seance.pollId du vote créé par l’appelant et émet', async () => {
       const createPoll = jest.fn().mockResolvedValue({ id: 'poll9' });
 
-      await service.createSeancePoll('p1', { ...seance, pollId: null }, createPoll);
+      await service.createSeancePoll(GRANT_P1, { ...seance, pollId: null }, createPoll);
 
       expect(prisma.seance.update).toHaveBeenCalledWith({
         where: { id: 'se2' },
@@ -223,7 +231,7 @@ describe('EventsService (Story 37.3)', () => {
     });
 
     it('resetSeanceDate() détache le vote, le supprime, recalcule et émet', async () => {
-      await service.resetSeanceDate('p1', seance);
+      await service.resetSeanceDate(GRANT_P1, seance);
 
       expect(prisma.seance.update).toHaveBeenCalledWith({
         where: { id: 'se2' },
@@ -235,14 +243,14 @@ describe('EventsService (Story 37.3)', () => {
     });
 
     it('setSeanceCapacity() refuse max < min, sans écriture', async () => {
-      await expect(service.setSeanceCapacity('p1', 'se2', 4, 2)).rejects.toThrow(
+      await expect(service.setSeanceCapacity(GRANT_P1, 'se2', 4, 2)).rejects.toThrow(
         'Le maximum doit être supérieur ou égal au minimum',
       );
       expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
     it('setInfosPratiques() écrit les trois champs tels quels et émet', async () => {
-      await service.setInfosPratiques('p1', 'se2', {
+      await service.setInfosPratiques(GRANT_P1, 'se2', {
         heureRdv: '20:30',
         lieu: null,
         notePratique: 'Apporter des dés',
@@ -256,26 +264,77 @@ describe('EventsService (Story 37.3)', () => {
     });
   });
 
+  describe('appartenance à la partie de l’autorisation (Story 37.6)', () => {
+    const seanceB = { id: 'seance-b', eventId: 'event-b', pollId: null };
+
+    it('séance d’une autre partie → 404 « Séance introuvable », aucune écriture', async () => {
+      prisma.seance.count.mockResolvedValue(0);
+
+      await expect(service.resetSeanceDate(GRANT_P1, seanceB)).rejects.toThrow(
+        new NotFoundException('Séance introuvable'),
+      );
+      await expect(service.deleteSeance(GRANT_P1, seanceB)).rejects.toThrow('Séance introuvable');
+      await expect(service.setSeanceCapacity(GRANT_P1, 'seance-b', 1, 2)).rejects.toThrow(
+        'Séance introuvable',
+      );
+      await expect(
+        service.inscrire(GRANT_P1, { id: 'seance-b', inscriptionMax: 2, startDate: null }, 'u1'),
+      ).rejects.toThrow('Séance introuvable');
+      expect(prisma.seance.count).toHaveBeenCalledWith({
+        where: { id: 'seance-b', event: { partieId: 'p1' } },
+      });
+      expect(prisma.seance.update).not.toHaveBeenCalled();
+      expect(prisma.seance.delete).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+
+    it('événement d’une autre partie → 404 « Scénario introuvable », aucune séance créée', async () => {
+      prisma.event.count.mockResolvedValue(0);
+
+      await expect(service.addSeance(GRANT_P1, 'event-b')).rejects.toThrow(
+        new NotFoundException('Scénario introuvable'),
+      );
+      expect(prisma.event.count).toHaveBeenCalledWith({
+        where: { id: 'event-b', partieId: 'p1' },
+      });
+      expect(prisma.seance.create).not.toHaveBeenCalled();
+    });
+
+    it('autorisation délivrée sur la séance elle-même → aucune requête d’appartenance', async () => {
+      const grant = testGrant({ id: 'p1' }, 'mj', { eventId: 'e1', seanceId: 'se2' });
+
+      await service.setInfosPratiques(grant, 'se2', {
+        heureRdv: null,
+        lieu: null,
+        notePratique: null,
+      });
+
+      expect(prisma.seance.count).not.toHaveBeenCalled();
+      expect(prisma.seance.update).toHaveBeenCalled();
+    });
+  });
+
   describe('inscriptions', () => {
     const open = { id: 'se1', inscriptionMax: 2, startDate: null };
 
     it('capacité non définie → 400, aucune transaction', async () => {
       await expect(
-        service.inscrire('p1', { ...open, inscriptionMax: null }, 'u1'),
+        service.inscrire(GRANT_P1, { ...open, inscriptionMax: null }, 'u1'),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('date validée (vote scellé) → 400, roster figé', async () => {
       await expect(
-        service.inscrire('p1', { ...open, startDate: new Date() }, 'u1'),
+        service.inscrire(GRANT_P1, { ...open, startDate: new Date() }, 'u1'),
       ).rejects.toThrow('Cette séance a déjà une date validée — les inscriptions sont figées');
     });
 
     it('verrou FOR UPDATE puis inscription, émission après validation', async () => {
       prisma.tx.seance.findUniqueOrThrow.mockResolvedValue({ ...open });
 
-      await service.inscrire('p1', open, 'u1');
+      await service.inscrire(GRANT_P1, open, 'u1');
 
       expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
       expect(prisma.tx.inscription.create).toHaveBeenCalledWith({
@@ -287,7 +346,7 @@ describe('EventsService (Story 37.3)', () => {
     it('déjà inscrit → idempotent, aucun comptage ni création', async () => {
       prisma.tx.inscription.findUnique.mockResolvedValue({ id: 'i1' });
 
-      await service.inscrire('p1', open, 'u1');
+      await service.inscrire(GRANT_P1, open, 'u1');
 
       expect(prisma.tx.inscription.count).not.toHaveBeenCalled();
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
@@ -297,17 +356,19 @@ describe('EventsService (Story 37.3)', () => {
       prisma.tx.seance.findUniqueOrThrow.mockResolvedValue({ ...open });
       prisma.tx.inscription.count.mockResolvedValue(2);
 
-      await expect(service.inscrire('p1', open, 'u1')).rejects.toBeInstanceOf(ConflictException);
+      await expect(service.inscrire(GRANT_P1, open, 'u1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
       expect(realtime.emit).not.toHaveBeenCalled();
     });
 
     it('desinscrire() : date validée → 400 ; sinon retrait idempotent et émission', async () => {
       await expect(
-        service.desinscrire('p1', { id: 'se1', startDate: new Date() }, 'u1'),
+        service.desinscrire(GRANT_P1, { id: 'se1', startDate: new Date() }, 'u1'),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
 
-      await service.desinscrire('p1', { id: 'se1', startDate: null }, 'u1');
+      await service.desinscrire(GRANT_P1, { id: 'se1', startDate: null }, 'u1');
       expect(prisma.inscription.deleteMany).toHaveBeenCalledWith({
         where: { seanceId: 'se1', userId: 'u1' },
       });

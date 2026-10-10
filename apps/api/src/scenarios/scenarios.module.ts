@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { PartiesModule } from '../parties/parties.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 import { CharacterModule } from '../characters/character.module';
 import { PollModule } from '../poll/poll.module';
 import { EventsModule } from '../events/events.module';
@@ -15,7 +16,15 @@ import { ScenariosService } from './scenarios.service';
   // (PollController a besoin de ScenariosService.recalculateNextSession()).
   // Story 37.3 : EventsModule écrit l'événement de base, les séances et les inscriptions — ce
   // service garde les gardes JDR puis lui délègue l'écriture.
-  imports: [PartiesModule, CharacterModule, EventsModule, forwardRef(() => PollModule)],
+  // Story 37.6 : PermissionsModule (transverse) décide des droits sur la partie, l'événement et
+  // la séance.
+  imports: [
+    PartiesModule,
+    PermissionsModule,
+    CharacterModule,
+    EventsModule,
+    forwardRef(() => PollModule),
+  ],
   controllers: [ScenariosController],
   providers: [ScenariosService],
   exports: [ScenariosService],

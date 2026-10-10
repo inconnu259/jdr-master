@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -16,6 +10,7 @@ import type {
   ListViewMode,
   PartieDto,
   PartieKindTransitionRefusal,
+  PartieRole,
   PartieStatus,
 } from '@master-jdr/shared';
 // Imports RUNTIME de `@master-jdr/shared` dans ce service : la matrice de conversion (Story 29.14,
@@ -28,6 +23,7 @@ import type {
 import { checkPartieKindTransition, familyOf, isOpenForCreation } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { EventsService } from '../events/events.service';
+import { PermissionService } from '../permissions/permission.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import {
@@ -114,6 +110,25 @@ export function coverImageVersion(coverImageUrl: string | null): string | null {
   return filename.slice(0, filename.lastIndexOf('.'));
 }
 
+/** Projection du rôle de l'appelant vers `PartieDto.role` (Story 37.6) : le rôle vient TOUJOURS du
+ *  service de permission, jamais d'une comparaison à `ownerId`. Famille `jdr` : `mj` ou `player`.
+ *  Un rôle que le contrat ne sait pas exprimer (`admin`/`member`, épic 38) lève au lieu d'être
+ *  rabattu en silence sur `player`. */
+function toDtoRole(role: PartieRole): 'mj' | 'player' {
+  switch (role) {
+    case 'mj':
+    case 'player':
+      return role;
+    case 'admin':
+    case 'member':
+      throw new Error(`Rôle non projetable dans PartieDto.role : ${role}`);
+    default: {
+      const exhaustive: never = role;
+      throw new Error(`Rôle de partie non géré : ${String(exhaustive)}`);
+    }
+  }
+}
+
 /**
  * Projection explicite (AD-15, Story 29.1) — énumère les champs renvoyés, jamais un objet Prisma
  * propagé tel quel.
@@ -157,6 +172,8 @@ export class PartiesService {
     private readonly availability: AvailabilityService,
     private readonly realtimeEvents: RealtimeEventsService,
     private readonly events: EventsService,
+    // Story 37.6 (AD-6) : toute décision de droit sur une partie passe par ce service.
+    private readonly permissions: PermissionService,
   ) {}
 
   /** Story 29.17, AC2/AC4 : refus explicite partagé par `create()` et `update()` — un seul endroit
@@ -289,43 +306,38 @@ export class PartiesService {
     );
   }
 
-  /** Récupère une partie en vérifiant que l'utilisateur en est le MJ (sinon 404 / 403). Une partie
-   *  sans propriétaire (`ownerId` null, AD-5) ne satisfait jamais ce contrôle : le type de retour
-   *  garantit donc un `ownerId` non nul aux appelants. */
+  /** Délégué (Story 37.6) conservé pour les modules pas encore migrés (Story 37.7) : partie dont
+   *  l'utilisateur est le MJ, sinon 404 / 403 — décidé par `PermissionService` (`PARTIE_MANAGE`).
+   *  Une partie sans propriétaire (`ownerId` null, AD-5) ne donne jamais le rôle `mj` : le type de
+   *  retour garantit donc un `ownerId` non nul aux appelants. */
   async getOwned(id: string, userId: string): Promise<Partie & { ownerId: string }> {
-    const partie = await this.prisma.partie.findUnique({ where: { id } });
-    if (!partie) throw new NotFoundException('Partie introuvable');
-    if (partie.ownerId !== userId) throw new ForbiddenException();
-    // Rétréci par l'égalité ci-dessus : `partie.ownerId` est ici un `string`.
+    const { partie } = await this.permissions.assert(userId, 'PARTIE_MANAGE', { partieId: id });
+    if (partie.ownerId === null) {
+      throw new Error('Rôle mj accordé sur une partie sans propriétaire — invariant rompu');
+    }
     return { ...partie, ownerId: partie.ownerId };
   }
 
-  /** Récupère une partie visible par l'utilisateur : MJ **ou** membre (sinon 404 / 403). */
-  async getViewable(id: string, userId: string) {
-    const partie = await this.prisma.partie.findUnique({ where: { id } });
-    if (!partie) throw new NotFoundException('Partie introuvable');
-    if (partie.ownerId === userId) return partie;
-    const membership = await this.prisma.membership.findUnique({
-      where: { userId_partieId: { userId, partieId: id } },
-    });
-    if (!membership) throw new ForbiddenException();
+  /** Délégué (Story 37.6) conservé pour les modules pas encore migrés (Story 37.7) : partie
+   *  visible par l'utilisateur, MJ **ou** membre (sinon 404 / 403) — `PARTIE_READ`. */
+  async getViewable(id: string, userId: string): Promise<Partie> {
+    const { partie } = await this.permissions.assert(userId, 'PARTIE_READ', { partieId: id });
     return partie;
   }
 
-  /** Récupère une partie visible par l'utilisateur (garde inchangée, cf. `getViewable`) enrichie
+  /** Récupère une partie visible par l'utilisateur (`PARTIE_READ`, MJ ou membre) enrichie
    *  du pseudo/nom affiché du MJ (AD-2) — le MJ n'étant jamais un `Membership`, son identité
    *  n'apparaît nulle part ailleurs dans `PartieDto`. Revue de code : `mj` gardé comme
-   *  `resolveParticipants()` plutôt qu'une assertion non-null — une ligne `User` orpheline ne doit
+   *  `PermissionService.membersOf()` plutôt qu'une assertion non-null — une ligne `User` orpheline ne doit
    *  jamais transformer ce chemin de lecture principal en 500 (ownerPseudo/ownerDisplayName
    *  optionnels). Une partie sans propriétaire (AD-5) les laisse également absents. */
   async findOneDto(id: string, userId: string): Promise<PartieDto> {
-    const partie = await this.getViewable(id, userId);
-    const role: 'mj' | 'player' = partie.ownerId === userId ? 'mj' : 'player';
+    const { partie, role } = await this.permissions.assert(userId, 'PARTIE_READ', { partieId: id });
     const [hasScenario, favorite] = await Promise.all([
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
-    const dto = toPartieDto(partie, role, hasScenario, favorite);
+    const dto = toPartieDto(partie, toDtoRole(role), hasScenario, favorite);
     if (partie.ownerId === null) return dto;
     const owner = await this.prisma.user.findUnique({
       where: { id: partie.ownerId },
@@ -339,8 +351,9 @@ export class PartiesService {
    *  que si le demandeur est le MJ (AD-2) — un `InviteLink` acceptant un nombre d'usages
    *  illimité, un membre n'est pas nécessairement quelqu'un que le MJ a choisi individuellement. */
   async listMembers(partieId: string, userId: string) {
-    const partie = await this.getViewable(partieId, userId);
-    const isMj = partie.ownerId === userId;
+    const { role } = await this.permissions.assert(userId, 'PARTIE_MEMBERS_READ', { partieId });
+    // Projection selon le rôle (Story 37.6) : l'e-mail n'est exposé qu'au MJ.
+    const withEmail = role === 'mj';
     const memberships = await this.prisma.membership.findMany({
       where: { partieId },
       orderBy: { joinedAt: 'asc' },
@@ -354,14 +367,14 @@ export class PartiesService {
       userId: m.user.id,
       pseudo: m.user.pseudo,
       displayName: m.user.displayName,
-      email: isMj ? m.user.email : undefined,
+      email: withEmail ? m.user.email : undefined,
       joinedAt: m.joinedAt,
     }));
   }
 
   /** Le MJ retire un joueur de SA partie. */
   async removeMember(partieId: string, userId: string, targetUserId: string) {
-    await this.getOwned(partieId, userId);
+    const { partie } = await this.permissions.assert(userId, 'PARTIE_MEMBER_REMOVE', { partieId });
     await this.prisma.membership.deleteMany({
       where: { partieId, userId: targetUserId },
     });
@@ -370,15 +383,17 @@ export class PartiesService {
     this.realtimeEvents.emit(partieTopic(partieId));
     this.realtimeEvents.emit(userTopic(targetUserId));
     // AUCUN_MEMBRE_INVITE (Story 29.7, AD-14) : retirer le dernier membre fait réapparaître ce
-    // signal pour le MJ — getOwned() garantit que userId est déjà le MJ. `partieTopic` déjà émis
-    // ci-dessus : `emitMembersOnlySafe` (pas `emitPartieAndMembersSafe`) pour ne pas le réémettre
-    // (revue de code, Story 29.7 — double émission SSE trouvée sur tous les points d'appel).
-    await this.emitMembersOnlySafe(partieId, userId);
+    // signal pour le MJ. `partieTopic` déjà émis ci-dessus : `emitMembersOnlySafe` (pas
+    // `emitPartieAndMembersSafe`) pour ne pas le réémettre (revue de code, Story 29.7 — double
+    // émission SSE trouvée sur tous les points d'appel).
+    await this.emitMembersOnlySafe(partieId, partie.ownerId);
     return { ok: true };
   }
 
   async update(id: string, userId: string, dto: UpdatePartieDto): Promise<PartieDto> {
-    const partie = await this.getOwned(id, userId);
+    const { partie, role } = await this.permissions.assert(userId, 'PARTIE_UPDATE', {
+      partieId: id,
+    });
 
     // Story 29.14 : jusqu'ici `data: { ...dto }` écrivait `kind` sans aucune vérification, alors que
     // le type gouverne des invariants dans quatre services. Changer de type est une OPÉRATION à
@@ -420,13 +435,12 @@ export class PartiesService {
     this.realtimeEvents.emit(partieTopic(id));
     // Le changement de système fait apparaître ou disparaître HOMME_DRAGON_A_CREER (et le lien) :
     // signaux du MJ et des membres, en plus de `partie:` ci-dessus (jamais en remplacement).
-    if (systemChanged) await this.notifyPartieSignalsChanged(id, userId);
+    if (systemChanged) await this.notifyPartieSignalsChanged(id, partie.ownerId);
     const [hasScenario, favorite] = await Promise.all([
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
-    // getOwned() a déjà garanti que l'appelant est le MJ (revue de code, AC6).
-    return toPartieDto(updated, 'mj', hasScenario, favorite);
+    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
   }
 
   /**
@@ -441,7 +455,9 @@ export class PartiesService {
    * aussi, pour désactiver les types inatteignables. Deux tables de règles divergeraient.
    */
   async convertKind(id: string, userId: string, dto: ConvertPartieKindDto): Promise<PartieDto> {
-    const partie = await this.getOwned(id, userId);
+    const { partie, role } = await this.permissions.assert(userId, 'PARTIE_CONVERT_KIND', {
+      partieId: id,
+    });
 
     // Story 37.5 : la matrice de conversion ne vaut que pour la famille `jdr` — hors de celle-ci,
     // refus avant toute lecture ou écriture, sans consulter `checkPartieKindTransition`.
@@ -585,13 +601,14 @@ export class PartiesService {
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
-    // getOwned() a déjà garanti que l'appelant est le MJ.
-    return toPartieDto(updated, 'mj', hasScenario, favorite);
+    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
   }
 
   /** Déclare la partie terminée (AD-8, Story 29.6) — MJ uniquement. Réversible via `reopen()`. */
   async close(id: string, userId: string): Promise<PartieDto> {
-    const partie = await this.getOwned(id, userId);
+    const { partie, role } = await this.permissions.assert(userId, 'PARTIE_CLOSE', {
+      partieId: id,
+    });
     const updated = await this.prisma.partie.update({
       where: { id },
       data: { closedAt: new Date() },
@@ -603,12 +620,14 @@ export class PartiesService {
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
-    return toPartieDto(updated, 'mj', hasScenario, favorite);
+    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
   }
 
   /** Revient sur une clôture (AD-8, Story 29.6) — MJ uniquement. */
   async reopen(id: string, userId: string): Promise<PartieDto> {
-    const partie = await this.getOwned(id, userId);
+    const { partie, role } = await this.permissions.assert(userId, 'PARTIE_REOPEN', {
+      partieId: id,
+    });
     const updated = await this.prisma.partie.update({
       where: { id },
       data: { closedAt: null },
@@ -618,22 +637,22 @@ export class PartiesService {
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
-    return toPartieDto(updated, 'mj', hasScenario, favorite);
+    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
   }
 
   async remove(id: string, userId: string) {
-    const partie = await this.getOwned(id, userId);
+    const { partie } = await this.permissions.assert(userId, 'PARTIE_DELETE', { partieId: id });
     // AD-23 : si la partie portait un Homme Dragon, la FK `SetNull` ne fait que le délier — la
     // fiche est conservée. Le signal HOMME_DRAGON_A_CREER du MJ n'est plus celui d'avant et sa liste
     // « Personnages » change : `user:` au MJ (aucun canal `partie:`, la partie n'existe plus).
     await this.prisma.partie.delete({ where: { id } });
-    this.realtimeEvents.emit(userTopic(partie.ownerId));
+    if (partie.ownerId !== null) this.realtimeEvents.emit(userTopic(partie.ownerId));
     return { ok: true };
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Image de couverture (Story 29.12, AD-17/AD-19) — MJ seul en écriture (getOwned), lecture
-  // ouverte à tout membre (getViewable). Patron repris de `character.service.ts:updatePortrait()`
+  // Image de couverture (Story 29.12, AD-17/AD-19) — MJ seul en écriture (`PARTIE_COVER_UPDATE`),
+  // lecture ouverte à tout membre (`PARTIE_COVER_READ`). Patron repris de `character.service.ts:updatePortrait()`
   // pour la validation/le nettoyage/le nettoyage du fichier orphelin, étendu pour écrire trois
   // dérivées pré-générées (AC9) plutôt qu'un fichier unique.
   // ─────────────────────────────────────────────────────────────────────────
@@ -673,13 +692,15 @@ export class PartiesService {
   }
 
   /**
-   * Dépose une image de couverture (AC1, AC4, AC6, AC9) — MJ seul (`getOwned`). Détection MIME →
+   * Dépose une image de couverture (AC1, AC4, AC6, AC9) — MJ seul (`PARTIE_COVER_UPDATE`). Détection MIME →
    * nettoyage EXIF → 3 dérivées redimensionnées pré-générées → écriture DB, avec nettoyage des
    * fichiers orphelins si une étape échoue après coup (patron `character.service.ts`). Au
    * remplacement d'une image existante, l'ancienne est supprimée (les 3 dérivées).
    */
   async setCoverImage(id: string, userId: string, file: Express.Multer.File): Promise<PartieDto> {
-    const partie = await this.getOwned(id, userId);
+    const { partie, role } = await this.permissions.assert(userId, 'PARTIE_COVER_UPDATE', {
+      partieId: id,
+    });
 
     const mime = detectImageMime(file.buffer);
     if (!mime) {
@@ -749,12 +770,14 @@ export class PartiesService {
     const updated = await this.prisma.partie.findUniqueOrThrow({
       where: { id },
     });
-    return toPartieDto(updated, 'mj', hasScenario, favorite);
+    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
   }
 
   /** Retire l'image de couverture (AC3, AC4) — MJ seul. La bannière générée reprend sa place. */
   async removeCoverImage(id: string, userId: string): Promise<PartieDto> {
-    const partie = await this.getOwned(id, userId);
+    const { partie, role } = await this.permissions.assert(userId, 'PARTIE_COVER_UPDATE', {
+      partieId: id,
+    });
 
     await this.prisma.partie.update({
       where: { id },
@@ -774,12 +797,12 @@ export class PartiesService {
     const updated = await this.prisma.partie.findUniqueOrThrow({
       where: { id },
     });
-    return toPartieDto(updated, 'mj', hasScenario, favorite);
+    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
   }
 
   /**
-   * Lecture d'une dérivée de couverture (AC8, AC9) — mêmes règles d'accès que `findOneDto`
-   * (`getViewable`, MJ ou membre), contrairement aux mutations (MJ seul). Retourne `null` si la
+   * Lecture d'une dérivée de couverture (AC8, AC9) — MJ ou membre (`PARTIE_COVER_READ`, mêmes
+   * règles d'accès que `findOneDto`), contrairement aux mutations (MJ seul). Retourne `null` si la
    * partie n'a pas de couverture, ou si le fichier référencé a disparu du disque (base et disque
    * désynchronisés) — **jamais une exception** : CAP-20 impose qu'aucune partie ne soit jamais
    * nue, c'est au contrôleur/au front de retomber sur la bannière générée, pas à cette méthode de
@@ -794,7 +817,7 @@ export class PartiesService {
     mime: DetectedImageMime;
     version: string;
   } | null> {
-    const partie = await this.getViewable(id, userId);
+    const { partie } = await this.permissions.assert(userId, 'PARTIE_COVER_READ', { partieId: id });
     if (!partie.coverImageUrl) return null;
 
     const stem = this.coverStem(partie.coverImageUrl);
@@ -813,7 +836,7 @@ export class PartiesService {
    *  afin que sa propre liste de parties (Dashboard) reflète le changement sans recharger. */
   private async emitPartieAndMembers(partieId: string, ownerId: string | null): Promise<void> {
     this.realtimeEvents.emit(partieTopic(partieId));
-    const { participants } = await this.resolveParticipants(partieId, ownerId);
+    const participants = await this.permissions.membersOf({ id: partieId, ownerId });
     for (const p of participants) this.realtimeEvents.emit(userTopic(p.userId));
   }
 
@@ -837,7 +860,7 @@ export class PartiesService {
    *  `notifyPartieSignalsChanged`, qui a tous déjà leur propre `realtimeEvents.emit(partieTopic(...))`
    *  juste avant). */
   private async emitMembersOnly(partieId: string, ownerId: string | null): Promise<void> {
-    const { participants } = await this.resolveParticipants(partieId, ownerId);
+    const participants = await this.permissions.membersOf({ id: partieId, ownerId });
     for (const p of participants) this.realtimeEvents.emit(userTopic(p.userId));
   }
 
@@ -862,61 +885,6 @@ export class PartiesService {
     await this.emitMembersOnlySafe(partieId, ownerId);
   }
 
-  /** Retourne MJ + membres (dédoublonnés) avec leur pseudo et leur nom affiché. Une partie sans
-   *  propriétaire (`ownerId` null, AD-5) ne renvoie que ses membres. */
-  private async resolveParticipants(partieId: string, ownerId: string | null) {
-    const [mjUser, memberships] = await Promise.all([
-      ownerId === null
-        ? Promise.resolve(null)
-        : this.prisma.user.findUnique({
-            where: { id: ownerId },
-            select: { id: true, pseudo: true, displayName: true },
-          }),
-      this.prisma.membership.findMany({
-        where: { partieId },
-        // Story 36.8 — ORDRE FIXE DE LA TROUPE. La couche « disponibilité du groupe » rend une
-        // pastille par membre et fait porter l'identité par la POSITION (FR-53) : sans clé de
-        // tri, deux requêtes successives pouvaient permuter deux personnes, et la promesse
-        // « la position identifie la personne » devenait fausse par intermittence. Même clé que
-        // `listMembers()`, qui l'a depuis toujours — les deux listes s'accordent désormais.
-        // Revue de code : `userId` en départage — deux membres invités dans le même lot peuvent
-        // partager le même `joinedAt`, ce qui rendrait `joinedAt` seul insuffisant pour garantir
-        // un ordre stable d'une requête à l'autre.
-        orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
-        include: {
-          user: { select: { id: true, pseudo: true, displayName: true } },
-        },
-      }),
-    ]);
-
-    const seen = new Set<string>();
-    const participants: {
-      userId: string;
-      pseudo: string;
-      displayName: string;
-    }[] = [];
-
-    if (mjUser) {
-      seen.add(mjUser.id);
-      participants.push({
-        userId: mjUser.id,
-        pseudo: mjUser.pseudo,
-        displayName: mjUser.displayName,
-      });
-    }
-    for (const m of memberships) {
-      if (!seen.has(m.user.id)) {
-        seen.add(m.user.id);
-        participants.push({
-          userId: m.user.id,
-          pseudo: m.user.pseudo,
-          displayName: m.user.displayName,
-        });
-      }
-    }
-    return { participants, memberships };
-  }
-
   async getAvailableSlots(
     partieId: string,
     userId: string,
@@ -924,16 +892,12 @@ export class PartiesService {
     from?: string,
     to?: string,
   ): Promise<AvailableSlotDto[] | AggregatedSlotDto[]> {
-    const partie = await this.prisma.partie.findUnique({
-      where: { id: partieId },
+    const { partie, role } = await this.permissions.assert(userId, 'PARTIE_AVAILABILITY_READ', {
+      partieId,
     });
-    if (!partie) throw new NotFoundException('Partie introuvable');
-
-    const { participants, memberships } = await this.resolveParticipants(partieId, partie.ownerId);
-
-    const isMj = partie.ownerId === userId;
-    const isMember = memberships.some((m) => m.userId === userId);
-    if (!isMj && !isMember) throw new ForbiddenException();
+    // Projection selon le rôle (Story 37.6) : détail nominatif des créneaux pour le MJ seul.
+    const nominative = role === 'mj';
+    const participants = await this.permissions.membersOf(partie);
 
     const participantIds = participants.map((p) => p.userId);
     // getActiveDeclarationsWithSeances (pas getActiveDeclarations) : injecte l'indisponibilité
@@ -1034,7 +998,7 @@ export class PartiesService {
 
     const limited = sorted.slice(0, 20);
 
-    if (isMj) return limited;
+    if (nominative) return limited;
 
     return limited.map(({ date, slot, members }) => ({
       date,
@@ -1052,16 +1016,12 @@ export class PartiesService {
     from: string,
     to: string,
   ): Promise<AggregatedSlotDto[]> {
-    const partie = await this.prisma.partie.findUnique({
-      where: { id: partieId },
+    const { partie, role } = await this.permissions.assert(userId, 'PARTIE_AVAILABILITY_READ', {
+      partieId,
     });
-    if (!partie) throw new NotFoundException('Partie introuvable');
-
-    const { participants, memberships } = await this.resolveParticipants(partieId, partie.ownerId);
-
-    const isMj = partie.ownerId === userId;
-    const isMember = memberships.some((m) => m.userId === userId);
-    if (!isMj && !isMember) throw new ForbiddenException();
+    // Projection selon le rôle (Story 37.6) : détail nominatif pour le MJ seul (FR-53).
+    const nominative = role === 'mj';
+    const participants = await this.permissions.membersOf(partie);
 
     const participantIds = participants.map((p) => p.userId);
     // getActiveDeclarationsWithSeances (pas getActiveDeclarations) : injecte l'indisponibilité
@@ -1096,11 +1056,12 @@ export class PartiesService {
           // sont déjà calculés juste au-dessus : jusqu'ici on les agrégeait et on jetait les
           // identités. Aucune requête nouvelle n'est émise ici.
           //
-          // 🚨 La garde est `isMj`, celle qui existe déjà en tête de méthode — ne pas la
-          // dupliquer, ne pas la déplacer. Le spread conditionnel OMET la clé pour un joueur ;
-          // un `members: isMj ? … : []` exposerait la forme de la donnée, et un `: undefined`
-          // laisserait la clé dans l'objet. L'absence ne dit rien, c'est ce qu'on veut.
-          ...(isMj
+          // 🚨 La garde est `nominative`, dérivée en tête de méthode du rôle délivré par le
+          // service de permission — ne pas la dupliquer, ne pas la déplacer. Le spread
+          // conditionnel OMET la clé pour un joueur ; un `members: nominative ? … : []`
+          // exposerait la forme de la donnée, et un `: undefined` laisserait la clé dans
+          // l'objet. L'absence ne dit rien, c'est ce qu'on veut.
+          ...(nominative
             ? {
                 members: participants.map((p, i) => ({
                   userId: p.userId,
@@ -1119,8 +1080,8 @@ export class PartiesService {
 
   /**
    * Remplace l'ensemble complet des chemins de fiche verrouillés (cadenas de visibilité, Story
-   * 31.6) pour une Partie — MJ SEUL (`getOwned`, réutilisé tel quel, même garde que les autres
-   * mutations de Partie ci-dessus). Consommé par l'écran de configuration des cadenas (Story 31.7,
+   * 31.6) pour une Partie — MJ SEUL (`PARTIE_VISIBILITY_LOCKS_UPDATE`, même politique que les
+   * autres mutations de Partie ci-dessus). Consommé par l'écran de configuration des cadenas (Story 31.7,
    * `VisibilityLocks`), qui s'appuie sur ce mécanisme déjà fonctionnel sans le modifier.
    *
    * Jeu DÉCLARATIF COMPLET, comme `PollService.setOptions()` (Story 36.10, D-16, même transaction
@@ -1134,7 +1095,7 @@ export class PartiesService {
     userId: string,
     dto: SetVisibilityLocksDto,
   ): Promise<{ fieldKey: string; subField: string | null }[]> {
-    await this.getOwned(partieId, userId);
+    await this.permissions.assert(userId, 'PARTIE_VISIBILITY_LOCKS_UPDATE', { partieId });
 
     const wanted = new Map<string, { fieldKey: string; subField: string | null }>();
     for (const p of dto.paths) {
@@ -1164,8 +1125,8 @@ export class PartiesService {
   }
 
   /**
-   * Lecture symétrique à `setVisibilityLocks()` ci-dessus (Story 31.7) — même garde MJ-only
-   * (`getOwned()`), même forme `{fieldKey, subField}[]`. Alimente l'écran de configuration des
+   * Lecture symétrique à `setVisibilityLocks()` ci-dessus (Story 31.7) — MJ seul
+   * (`PARTIE_VISIBILITY_LOCKS_READ`), même forme `{fieldKey, subField}[]`. Alimente l'écran de configuration des
    * cadenas : un joueur atteignant directement cette route se voit refuser l'accès (403/404),
    * jamais une liste vide qui laisserait croire qu'aucun cadenas n'est posé.
    */
@@ -1173,7 +1134,7 @@ export class PartiesService {
     partieId: string,
     userId: string,
   ): Promise<{ fieldKey: string; subField: string | null }[]> {
-    await this.getOwned(partieId, userId);
+    await this.permissions.assert(userId, 'PARTIE_VISIBILITY_LOCKS_READ', { partieId });
     const locks = await this.prisma.partieVisibilityLock.findMany({ where: { partieId } });
     return locks.map((l) => ({ fieldKey: l.fieldKey, subField: l.subField }));
   }
