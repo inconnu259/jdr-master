@@ -1208,6 +1208,47 @@ describe('PartiesService', () => {
     });
   });
 
+  describe('notifyChanged — adaptateur de PartieSignalsPort (Story 37.8)', () => {
+    it('lit le propriétaire lui-même et produit la même émission par membre, sans partieTopic', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj1' });
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'u1', pseudo: 'Alice', displayName: 'Alice au pays' } },
+      ]);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'mj1',
+        pseudo: 'mj-pseudo',
+        displayName: 'MJ Nom',
+      });
+
+      await service.notifyChanged('p1');
+
+      expect(prisma.partie.findUnique).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        select: { ownerId: true },
+      });
+      expect(realtimeEvents.emit).not.toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u1'));
+    });
+
+    it("ne lève jamais : ni si l'émission échoue, ni si la lecture du propriétaire échoue", async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj1' });
+      prisma.membership.findMany.mockRejectedValue(new Error('boom'));
+      await expect(service.notifyChanged('p1')).resolves.toBeUndefined();
+
+      prisma.partie.findUnique.mockRejectedValue(new Error('base indisponible'));
+      await expect(service.notifyChanged('p1')).resolves.toBeUndefined();
+    });
+
+    it('partie introuvable : rien émis', async () => {
+      prisma.partie.findUnique.mockResolvedValue(null);
+
+      await service.notifyChanged('p1');
+
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+  });
+
   it('remove : vérifie la propriété puis supprime', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.partie.delete.mockResolvedValue(partie);
@@ -1609,10 +1650,15 @@ describe('PartiesService', () => {
       };
       const realtime = { emit: jest.fn() } as unknown as RealtimeEventsService;
       const permissions = new PermissionService(p);
+      // Story 37.8 : les ports du calendrier sont câblés sur la vraie implémentation (`events/`),
+      // comme `PortsModule` en production — les attentes de ce test restent celles de la 37.1.
+      const realEvents = new EventsService(p, realtime);
       const realAvailability = new AvailabilityService(
         p,
         { emit: jest.fn() } as unknown as RealtimeEventsService,
         permissions,
+        realEvents,
+        realEvents,
       );
       const svc = new PartiesService(
         p,

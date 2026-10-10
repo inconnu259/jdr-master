@@ -1067,7 +1067,7 @@ async function main() {
       // AD-23 : seconde aventure de Suisen — Alice et Bob y retrouvent les voyageurs du Naufrage.
       hommeDragonId: suisen.id,
       createdAt: at(-50),
-      // Prochaine séance matérialisée, comme le fait `ScenariosService.recalculateNextSession()` :
+      // Prochaine séance matérialisée, comme le fait `EventsService.recalculateNextSession()` :
       // la date la plus proche dans le futur parmi les séances (début de leur plage, Story 37.4),
       // ici « Le Mystère de l'Auberge » (J+10) — « Le Secret du Phare » (J+12) vient après. Ces
       // plages n'ont pas de créneau → `nextSessionSlot` reste null. `reminderSentAt` reste
@@ -1391,7 +1391,7 @@ async function main() {
   // http://localhost:8025) puis pose `reminderSentAt`. La date est MINUIT UTC de demain (`day(1)`) :
   // quelle que soit l'heure du seed, elle est strictement dans les 24 h à venir (`now ≤ date ≤
   // now + 24 h`). `nextSessionDate`/`Slot` = date et créneau du vote clôturé, comme le recalcule
-  // `ScenariosService.recalculateNextSession()` ; `reminderSentAt: null` = rappel pas encore envoyé.
+  // `EventsService.recalculateNextSession()` ; `reminderSentAt: null` = rappel pas encore envoyé.
   console.log('→ Partie ONE_SHOT (séance dans moins de 24 h)...');
   const maree = await prisma.partie.create({
     data: {

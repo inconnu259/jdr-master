@@ -1,8 +1,6 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import type { DaySlot, SessionPollDto } from '@master-jdr/shared';
-import { EventsService } from '../events/events.service';
-import { PartiesService } from '../parties/parties.service';
-import { countParticipants } from '../parties/participant-count.util';
+import { countParticipants } from '../common/participant-count.util';
 import { PermissionService, type PartieGrant } from '../permissions/permission.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
@@ -11,6 +9,8 @@ import { ChooseDateDto } from './dto/choose-date.dto';
 import { CreatePollDto } from './dto/create-poll.dto';
 import { Prisma } from '@prisma/client';
 import { SetPollOptionsDto } from './dto/set-poll-options.dto';
+import { PARTIE_SIGNALS_PORT, type PartieSignalsPort } from './ports/partie-signals.port';
+import { SEANCE_DATE_PORT, type SeanceDatePort } from './ports/seance-date.port';
 
 const DEFAULT_POLL_TTL_MS = 14 * 24 * 60 * 60 * 1000; // défaut 14 jours
 
@@ -28,15 +28,17 @@ const POLL_INCLUDE = {
 export class PollService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly parties: PartiesService,
     // Story 37.6 (AD-6) : tout droit sur une partie est décidé par le service de permission. Les
     // routes de vote gardent la cible `{ partieId }` de l'URL plus leurs propres contrôles
     // d'appartenance (vote → partie, option → vote).
     private readonly permissions: PermissionService,
     private readonly realtimeEvents: RealtimeEventsService,
-    // Story 37.4 : import temporaire couche 1 → couche 2 (remplacé par un port en 37.8) — la date
-    // de la séance s'écrit dans la même transaction que la clôture du vote.
-    private readonly events: EventsService,
+    // Story 37.8 (AD-8) : couche 1 — les deux dépendances vers les couches supérieures sont des
+    // ports (`poll/ports/`), liés par `PortsModule` : la date de la séance (écrite dans la
+    // transaction de clôture du vote, avec `Partie.nextSessionDate/Slot`, seul écrivain
+    // `events/`) et les signaux de partie (émis par `parties/`).
+    @Inject(SEANCE_DATE_PORT) private readonly seanceDate: SeanceDatePort,
+    @Inject(PARTIE_SIGNALS_PORT) private readonly partieSignals: PartieSignalsPort,
   ) {}
 
   /** Crée un vote de date sur la partie de l'autorisation. Seul appelant :
@@ -80,7 +82,7 @@ export class PollService {
     this.realtimeEvents.emit(partieTopic(partieId));
     // AUCUNE_DATE_NI_VOTE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
-    await this.parties.notifyPartieSignalsChanged(partieId, grant.partie.ownerId);
+    await this.partieSignals.notifyChanged(partieId);
     return toDto(poll, await countParticipants(this.prisma, partieId));
   }
 
@@ -99,7 +101,7 @@ export class PollService {
     userId: string,
     dto: CastVoteDto,
   ): Promise<void> {
-    const { partie } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
+    await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -125,7 +127,7 @@ export class PollService {
     this.realtimeEvents.emit(partieTopic(partieId));
     // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
-    await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
+    await this.partieSignals.notifyChanged(partieId);
   }
 
   /** Retire la réponse de l'appelant sur une option (Story 30.1, AD-10) — supprime la ligne
@@ -141,7 +143,7 @@ export class PollService {
     optionId: string,
     userId: string,
   ): Promise<void> {
-    const { partie } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
+    await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -161,7 +163,7 @@ export class PollService {
     // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : un retrait peut faire réapparaître ce
     // signal pour ce membre — même raisonnement que castVote(), en plus de partieTopic ci-dessus,
     // jamais en remplacement.
-    await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
+    await this.partieSignals.notifyChanged(partieId);
   }
 
   async choose(
@@ -170,7 +172,7 @@ export class PollService {
     userId: string,
     dto: ChooseDateDto,
   ): Promise<void> {
-    const { partie } = await this.permissions.assert(userId, 'POLL_CHOOSE', { partieId });
+    await this.permissions.assert(userId, 'POLL_CHOOSE', { partieId });
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -180,8 +182,11 @@ export class PollService {
       where: { id: dto.optionId },
     });
     if (!option || option.pollId !== pollId) throw new NotFoundException('Option introuvable');
-    // Story 37.4 : vote clos et plage de la séance rattachée écrits ensemble ou pas du tout — la
-    // plage est la seule source de la date de séance (auparavant, la ligne du vote suffisait).
+    // Story 37.8 (AD-15) : le vote clos, la plage de la séance rattachée et la prochaine séance de
+    // la partie sont écrits ensemble ou pas du tout. Ce service n'écrit QUE le vote : la date de
+    // séance et `Partie.nextSessionDate/Slot` (recalculé comme la plus proche séance à venir, une
+    // date passée n'est pas retenue ; `reminderSentAt` remis à zéro seulement si la date ou le
+    // créneau change) sont l'affaire du port, dans cette même transaction.
     await this.prisma.$transaction(async (tx) => {
       await tx.sessionPoll.update({
         where: { id: pollId },
@@ -191,25 +196,12 @@ export class PollService {
           chosenSlot: option.slot,
         },
       });
-      await this.events.setSpanFromPollInTx(tx, pollId, option.date, option.slot);
-    });
-    // Ne remettre reminderSentAt à null que si la date/le créneau change réellement — une
-    // re-confirmation du créneau déjà actif ne doit pas annuler un rappel déjà envoyé.
-    const dateUnchanged =
-      partie.nextSessionDate?.getTime() === option.date.getTime() &&
-      partie.nextSessionSlot === option.slot;
-    await this.prisma.partie.update({
-      where: { id: partieId },
-      data: {
-        nextSessionDate: option.date,
-        nextSessionSlot: option.slot,
-        ...(dateUnchanged ? {} : { reminderSentAt: null }),
-      },
+      await this.seanceDate.chooseDate(tx, pollId, option.date, option.slot);
     });
     this.realtimeEvents.emit(partieTopic(partieId));
     // AUCUNE_DATE_NI_VOTE/PROCHAINE_SEANCE_CONNUE (Story 29.7, AD-14) : en plus de partieTopic
     // ci-dessus, jamais en remplacement.
-    await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
+    await this.partieSignals.notifyChanged(partieId);
   }
 
   /**
@@ -231,7 +223,7 @@ export class PollService {
     userId: string,
     dto: SetPollOptionsDto,
   ): Promise<SessionPollDto> {
-    const { partie } = await this.permissions.assert(userId, 'POLL_OPTIONS_SET', { partieId });
+    await this.permissions.assert(userId, 'POLL_OPTIONS_SET', { partieId });
 
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
@@ -293,12 +285,12 @@ export class PollService {
     // VOTE_EN_COURS_SANS_REPONSE (Story 29.7, AD-14) : ajouter une option fait RÉAPPARAÎTRE ce
     // signal chez les membres qui avaient tout répondu ; en retirer une peut le faire
     // disparaître. En plus de partieTopic ci-dessus, jamais en remplacement.
-    await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
+    await this.partieSignals.notifyChanged(partieId);
     return toDto(updated, await countParticipants(this.prisma, partieId));
   }
 
   async close(partieId: string, pollId: string, userId: string): Promise<void> {
-    const { partie } = await this.permissions.assert(userId, 'POLL_CLOSE', { partieId });
+    await this.permissions.assert(userId, 'POLL_CLOSE', { partieId });
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
@@ -311,7 +303,7 @@ export class PollService {
     this.realtimeEvents.emit(partieTopic(partieId));
     // VOTE_EN_COURS_SANS_REPONSE/AUCUNE_DATE_NI_VOTE (Story 29.7, AD-14) : en plus de partieTopic
     // ci-dessus, jamais en remplacement.
-    await this.parties.notifyPartieSignalsChanged(partieId, partie.ownerId);
+    await this.partieSignals.notifyChanged(partieId);
   }
 }
 

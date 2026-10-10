@@ -18,7 +18,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service';
 import { EventsService } from '../events/events.service';
 import { PartiesService } from '../parties/parties.service';
-import { countParticipants } from '../parties/participant-count.util';
+import { countParticipants } from '../common/participant-count.util';
 import { PermissionService } from '../permissions/permission.service';
 import { CharacterService } from '../characters/character.service';
 import { PollService } from '../poll/poll.service';
@@ -574,14 +574,6 @@ export class ScenariosService {
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
-  // Story 8.8 (Décision 2) : Partie.nextSessionDate/nextSessionSlot = date la plus proche dans le
-  // futur parmi TOUTES les séances de la Partie. Story 37.3 : le calcul vit dans `EventsService`
-  // (écrivain des séances) ; ce point d'entrée reste celui de PollController.choose() (via
-  // forwardRef — PollService lui-même reste générique, P2-AD-2).
-  async recalculateNextSession(partieId: string): Promise<void> {
-    await this.events.recalculateNextSession(partieId);
-  }
-
   // AD-9 : écriture MJ-only (`SEANCE_DELETE`). Un scénario a toujours au moins une séance (invariant
   // posé à sa création, cf. create()) — la toute première (par createdAt croissant, id en
   // tie-breaker si égalité exacte) ne peut donc jamais être supprimée (Story 8.7, AC5). Un
@@ -1053,11 +1045,11 @@ function toSeanceDto(
   membersCount: number,
 ): SeanceDto {
   // Story 32.3 — la date EFFECTIVE remonte à la racine. Même résolution que partout ailleurs
-  // (`recalculateNextSession()`, `availability.service.ts`, `CalendarView`) : le vote scellé
+  // (`EventsService.recalculateNextSession()`, `availability.service.ts`, `CalendarView`) : le vote scellé
   // d'abord, la colonne héritée ensuite. Sans ce champ, une séance datée dont `inscriptionMax`
   // est nul n'exposait aucune date — le bloc `inscription` était son seul porteur.
   // Story 37.4 : la plage de la séance est la seule source — `startDate`/`startSlot`. Un créneau
-  // vide (date posée hors vote) reste « sans créneau » (`null`), comme `recalculateNextSession()`.
+  // vide (date posée hors vote) reste « sans créneau » (`null`), comme `EventsService.recalculateNextSession()`.
   const dateEffective = seance.startDate ?? null;
   const slotEffectif = seance.startSlot ?? null;
   // Contrat inchangé du bloc `inscription` : `dateValidee` y garde sa sémantique brute d'avant la

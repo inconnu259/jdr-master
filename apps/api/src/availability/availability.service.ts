@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -13,19 +14,18 @@ import type {
   CreateAvailabilityBatchItem,
   DaySlot,
   MeCalendarDto,
-  MyCalendarOpenInscriptionEntry,
   MyCalendarPollEntry,
-  MyCalendarSeanceEntry,
-  PartieRole,
   RecurKind,
   SlotStatus,
   VoteAnswer,
 } from '@master-jdr/shared';
-import { participantCount } from '../parties/participant-count.util';
+import { participantCount } from '../common/participant-count.util';
 import { PermissionService } from '../permissions/permission.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
+import { OCCUPIED_SPANS_PORT, type OccupiedSpansPort } from './ports/occupied-spans.port';
+import { OWN_EVENTS_PORT, type OwnEventsPort } from './ports/own-events.port';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
 
 export interface SplitOccurrenceModifyDto {
@@ -77,6 +77,11 @@ export class AvailabilityService {
     private readonly realtimeEvents: RealtimeEventsService,
     // Story 37.7 (AD-6) : le rôle de l'utilisateur sur chacune de ses parties vient d'ici.
     private readonly permissions: PermissionService,
+    // Story 37.8 (AD-8) : les séances des parties arrivent par des ports de la couche 1, liés à
+    // `events/` par `PortsModule` — ce service n'importe ni `parties/`, ni `events/`, ni
+    // `scenarios/`.
+    @Inject(OCCUPIED_SPANS_PORT) private readonly occupiedSpans: OccupiedSpansPort,
+    @Inject(OWN_EVENTS_PORT) private readonly ownEvents: OwnEventsPort,
   ) {}
 
   // ─── Temps réel ─────────────────────────────────────────────────────────────
@@ -692,85 +697,40 @@ export class AvailabilityService {
   }
 
   /**
-   * Résout, pour chaque utilisateur demandé, les créneaux occupés par une séance datée de
-   * N'IMPORTE LAQUELLE de ses parties (MJ ou membre) — pas seulement celle consultée par
-   * l'appelant. C'est la traduction structurelle d'AD-9 : la sortie est un `DeclarationLike`
-   * synthétique (`UNAVAILABLE`, `PUNCTUAL`), jamais une identité de partie/scénario — la non-fuite
-   * cross-partie découle directement de cette forme, aucun filtrage supplémentaire n'est requis.
-   *
-   * Participant d'une séance datée : ONE_SHOT/CAMPAGNE_LINEAIRE → tous les membres + le MJ (aucune
-   * présence individuelle dans ces kinds) ; CAMPAGNE_EPISODIQUE → le MJ + les seuls utilisateurs
-   * inscrits (`Inscription`) à CETTE séance — un joueur non inscrit n'est engagé sur rien.
-   *
-   * Deux requêtes Prisma au total, jamais une par utilisateur ni par partie (pas de N+1).
+   * Indisponibilités dérivées des séances datées de CHACUNE des parties (toutes, pas seulement
+   * celle consultée par l'appelant) des utilisateurs demandés. C'est la traduction structurelle
+   * d'AD-9 : `OccupiedSpansPort` ne rend que des plages `{ date, slot }` — jamais une identité de
+   * partie/scénario — que ce service habille en `DeclarationLike` synthétique (`UNAVAILABLE`,
+   * `PUNCTUAL`). La non-fuite cross-partie découle directement de cette forme, aucun filtrage
+   * supplémentaire n'est requis. Les règles de « participant » vivent chez l'implémenteur du port
+   * (`events/`, Story 37.8).
    */
   private async getSeanceDerivedUnavailability(
     userIds: string[],
   ): Promise<Map<string, DeclarationLike[]>> {
+    const spans = await this.occupiedSpans.occupiedSpansOf(userIds);
     const map = new Map<string, DeclarationLike[]>();
     for (const userId of userIds) map.set(userId, []);
-
-    const parties = await this.prisma.partie.findMany({
-      where: {
-        OR: [{ ownerId: { in: userIds } }, { memberships: { some: { userId: { in: userIds } } } }],
-      },
-      select: {
-        id: true,
-        kind: true,
-        ownerId: true,
-        memberships: { select: { userId: true } },
-      },
-    });
-    if (parties.length === 0) return map;
-
-    const partieIds = parties.map((p) => p.id);
-    const partieById = new Map(parties.map((p) => [p.id, p]));
-    const seances = await this.prisma.seance.findMany({
-      where: { event: { partieId: { in: partieIds } } },
-      include: {
-        inscriptions: { select: { userId: true } },
-        event: { select: { partieId: true } },
-      },
-    });
-
-    const requested = new Set(userIds);
-
-    for (const seance of seances) {
-      // Story 37.4 : la plage de la séance est la seule source ; créneau vide = FULL_DAY ici.
-      const date = seance.startDate;
-      if (!date) continue;
-      const slot = seance.startSlot ?? 'FULL_DAY';
-
-      const partie = partieById.get(seance.event.partieId);
-      if (!partie) continue; // partie hors du périmètre résolu ci-dessus
-
-      // Propriétaire absent (AD-5, compte supprimé) : seuls les membres/inscrits sont concernés.
-      const ownerIds = partie.ownerId === null ? [] : [partie.ownerId];
-      const participantIds =
-        partie.kind === 'CAMPAGNE_EPISODIQUE'
-          ? new Set([...ownerIds, ...seance.inscriptions.map((i) => i.userId)])
-          : new Set([...ownerIds, ...partie.memberships.map((m) => m.userId)]);
-
-      const dayUtc = new Date(
-        Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    for (const [userId, userSpans] of spans) {
+      if (!map.has(userId)) continue;
+      map.set(
+        userId,
+        userSpans.map((span): DeclarationLike => {
+          const dayUtc = new Date(
+            Date.UTC(span.date.getUTCFullYear(), span.date.getUTCMonth(), span.date.getUTCDate()),
+          );
+          return {
+            kind: 'UNAVAILABLE',
+            recurKind: 'PUNCTUAL',
+            dayOfWeek: null,
+            slot: span.slot,
+            startDate: dayUtc,
+            endDate: dayUtc,
+            expiresAt: new Date(dayUtc.getTime() + 86_399_999),
+          };
+        }),
       );
-      const entry: DeclarationLike = {
-        kind: 'UNAVAILABLE',
-        recurKind: 'PUNCTUAL',
-        dayOfWeek: null,
-        slot: slot,
-        startDate: dayUtc,
-        endDate: dayUtc,
-        expiresAt: new Date(dayUtc.getTime() + 86_399_999),
-      };
-
-      for (const userId of participantIds) {
-        // Copie par entrée : chaque utilisateur reçoit son propre objet, jamais une référence
-        // partagée avec les autres participants de la même séance.
-        if (requested.has(userId)) map.get(userId)!.push({ ...entry });
-      }
     }
-
     return map;
   }
 
@@ -796,26 +756,22 @@ export class AvailabilityService {
       );
     }
 
-    const myParties = await this.prisma.partie.findMany({
-      where: { OR: [{ ownerId: userId }, { memberships: { some: { userId } } }] },
-      select: { id: true, name: true, kind: true },
-    });
-    const partieIds = myParties.map((p) => p.id);
-    const partieById = new Map(myParties.map((p) => [p.id, p]));
-
-    const [declarations, seances, polls, membershipCounts, roles] = await Promise.all([
+    // Story 37.8 : mes parties, `mes-seances` et `inscriptions-ouvertes` viennent d'`OwnEventsPort`
+    // (qui lit les séances de TOUTES mes parties en une requête groupée). Le rôle sur chaque partie
+    // est résolu en lot par le service de permission, au moment où le port connaît les parties.
+    const [declarations, own] = await Promise.all([
       this.prisma.availabilityDeclaration.findMany({
         where: { userId, expiresAt: { gt: new Date() } },
       }),
-      partieIds.length === 0
-        ? Promise.resolve([])
-        : this.prisma.seance.findMany({
-            where: { event: { partieId: { in: partieIds } } },
-            include: {
-              inscriptions: { select: { userId: true } },
-              event: { select: { partieId: true, title: true } },
-            },
-          }),
+      this.ownEvents.ownEventsOf(userId, (ids) => this.permissions.rolesOf(userId, ids), {
+        fromMs,
+        toMs,
+      }),
+    ]);
+    const partieIds = own.parties.map((p) => p.id);
+    const partieById = new Map(own.parties.map((p) => [p.id, p]));
+
+    const [polls, membershipCounts] = await Promise.all([
       partieIds.length === 0
         ? Promise.resolve([])
         : this.prisma.sessionPoll.findMany({
@@ -836,8 +792,6 @@ export class AvailabilityService {
             where: { partieId: { in: partieIds } },
             _count: true,
           }),
-      // Rôle de l'utilisateur sur chacune de ses parties, en UNE requête (jamais une par partie).
-      this.permissions.rolesOf(userId, partieIds),
     ]);
 
     // Le MJ n'a jamais de ligne `Membership` : une partie absente de l'agrégat a 0 membre, donc
@@ -856,7 +810,7 @@ export class AvailabilityService {
       'mes-disponibilites': declarations
         .filter((d) => d.kind === 'AVAILABLE' && this.declarationOverlapsRange(d, fromMs, toMs))
         .map((d) => this.toAvailabilityDeclarationDto(d)),
-      'mes-seances': this.buildMySeancesLayer(seances, partieById, roles, userId, fromMs, toMs),
+      'mes-seances': own.seances,
       'votes-en-cours': this.buildOpenPollsLayer(
         polls,
         partieById,
@@ -867,7 +821,7 @@ export class AvailabilityService {
       ),
       // Non filtrée par [from, to] (décision documentée, Story 30.5 Dev Notes) : une séance en
       // attente d'inscriptions n'a pas encore de date propre à comparer.
-      'inscriptions-ouvertes': this.buildOpenInscriptionsLayer(seances, partieById, userId),
+      'inscriptions-ouvertes': own.inscriptionsOuvertes,
     };
   }
 
@@ -937,69 +891,6 @@ export class AvailabilityService {
     };
   }
 
-  /** Mes séances datées, toutes mes parties confondues — identité de partie/scénario incluse,
-   *  ce sont mes propres parties (AC4 : la notion de partie tierce n'existe pas ici). Pour une
-   *  partie CAMPAGNE_EPISODIQUE, une séance n'est « mienne » que si j'y suis inscrit (ou MJ) —
-   *  même règle « participant » qu'`getSeanceDerivedUnavailability` (AD-9), sinon un membre non
-   *  inscrit verrait une séance à laquelle il ne participe pas listée comme sienne. */
-  private buildMySeancesLayer(
-    seances: Array<{
-      id: string;
-      eventId: string;
-      startDate: Date | null;
-      startSlot: string | null;
-      inscriptions: { userId: string }[];
-      event: { partieId: string; title: string };
-      // Story 36.5 — déjà chargés par le findMany (aucun `select` de scalaires), donc gratuits.
-      heureRdv?: string | null;
-      lieu?: string | null;
-      notePratique?: string | null;
-      // Story 36.16 — même raisonnement : déjà chargé par le findMany, aucun appel de plus.
-      compteRendu?: string | null;
-    }>,
-    partieById: Map<string, { id: string; name: string; kind: string }>,
-    roles: ReadonlyMap<string, PartieRole>,
-    userId: string,
-    fromMs: number,
-    toMs: number,
-  ): MyCalendarSeanceEntry[] {
-    const entries: MyCalendarSeanceEntry[] = [];
-    for (const s of seances) {
-      const date = s.startDate;
-      if (!date) continue;
-      if (date.getTime() < fromMs || date.getTime() > toMs) continue;
-      const partie = partieById.get(s.event.partieId);
-      if (!partie) continue;
-      if (
-        partie.kind === 'CAMPAGNE_EPISODIQUE' &&
-        roles.get(partie.id) !== 'mj' &&
-        !s.inscriptions.some((i) => i.userId === userId)
-      ) {
-        continue;
-      }
-      entries.push({
-        seanceId: s.id,
-        partieId: partie.id,
-        partieName: partie.name,
-        scenarioId: s.eventId,
-        scenarioTitle: s.event.title,
-        date: date.toISOString().substring(0, 10),
-        // AC5 : créneau de la plage de la séance (Story 37.4), FULL_DAY à défaut — jamais une
-        // supposition locale à l'appelant.
-        slot: (s.startSlot ?? 'FULL_DAY') as DaySlot,
-        // Story 36.5 — transmis tels quels. `heureRdv` reste une CHAÎNE : rien ici ne la parse
-        // ni ne la compare, et elle n'entre pas dans le calcul de statut de créneau (AD-9).
-        heureRdv: s.heureRdv ?? null,
-        lieu: s.lieu ?? null,
-        notePratique: s.notePratique ?? null,
-        // Story 36.16 — même formule que `CalendarView.allCalendarEntries()` (front, ligne 535) :
-        // une chaîne vide ou uniquement des espaces compte comme manquant.
-        compteRenduManquant: !s.compteRendu?.trim(),
-      });
-    }
-    return entries;
-  }
-
   /**
    * Sondages de date ouverts sur mes parties, dont au moins une option tombe dans la plage.
    *
@@ -1063,45 +954,6 @@ export class AvailabilityService {
     }
     return entries;
   }
-
-  /** Séances à inscription ouverte de mes parties CAMPAGNE_EPISODIQUE — jamais filtrée par plage
-   *  (D-13, Story 30.5 Dev Notes) : une séance en attente d'inscriptions n'a pas encore de date. */
-  private buildOpenInscriptionsLayer(
-    seances: Array<{
-      id: string;
-      eventId: string;
-      startDate: Date | null;
-      inscriptionMin: number | null;
-      inscriptionMax: number | null;
-      inscriptions: { userId: string }[];
-      event: { partieId: string; title: string };
-    }>,
-    partieById: Map<string, { id: string; name: string; kind: string }>,
-    userId: string,
-  ): MyCalendarOpenInscriptionEntry[] {
-    const entries: MyCalendarOpenInscriptionEntry[] = [];
-    for (const s of seances) {
-      if (s.inscriptionMax == null) continue;
-      // Date validée (plage de la séance, Story 37.4) fige le roster (EventsService.inscrire()) —
-      // l'inscription n'est alors plus "ouverte".
-      if (s.startDate) continue;
-      const partie = partieById.get(s.event.partieId);
-      if (!partie || partie.kind !== 'CAMPAGNE_EPISODIQUE') continue;
-      entries.push({
-        seanceId: s.id,
-        partieId: partie.id,
-        partieName: partie.name,
-        scenarioId: s.eventId,
-        scenarioTitle: s.event.title,
-        inscriptionMin: s.inscriptionMin ?? 0,
-        inscriptionMax: s.inscriptionMax,
-        inscritsCount: s.inscriptions.length,
-        jeSuisInscrit: s.inscriptions.some((i) => i.userId === userId),
-      });
-    }
-    return entries;
-  }
-
   /**
    * Calcule le statut d'un créneau (date + slot) pour un utilisateur,
    * à partir de ses déclarations pré-chargées (pas de requête SQL ici).

@@ -6,9 +6,12 @@ import { MeCalendarController } from './me-calendar.controller';
 
 @Module({
   // Story 37.7 : PermissionsModule (transverse) décide du rôle de l'utilisateur sur ses parties.
+  // Story 37.8 : couche 1 — les séances des parties (plages occupées, calendrier personnel)
+  // arrivent par les ports de `availability/ports/`, liés par `PortsModule` (global) ; ce module
+  // n'importe aucune couche supérieure.
   imports: [PermissionsModule],
   controllers: [AvailabilityController, MeCalendarController],
   providers: [AvailabilityService],
-  exports: [AvailabilityService], // consommé par PartiesModule et PollModule
+  exports: [AvailabilityService], // consommé par PartiesModule
 })
 export class AvailabilityModule {}

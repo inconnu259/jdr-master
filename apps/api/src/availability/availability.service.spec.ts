@@ -6,6 +6,9 @@ import {
 } from '@nestjs/common';
 import type { DaySlot, PartieRole } from '@master-jdr/shared';
 import { AvailabilityService, DeclarationLike } from './availability.service';
+import type { OccupiedSpansPort } from './ports/occupied-spans.port';
+import type { OwnEventsPort } from './ports/own-events.port';
+import { EventsService } from '../events/events.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionService } from '../permissions/permission.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
@@ -42,6 +45,18 @@ function makeMockPermissions(roles: Record<string, PartieRole> = {}): MockPermis
 /** Le même mock, présenté au constructeur d'`AvailabilityService` sous son type de production. */
 function asPermissionService(mock: MockPermissions = makeMockPermissions()): PermissionService {
   return mock as unknown as PermissionService;
+}
+
+/**
+ * Story 37.8 : `AvailabilityService` ne connaît que les ports `OccupiedSpansPort`/`OwnEventsPort`.
+ * Les suites de caractérisation (Story 30.5 / 37.1) décrivent un comportement de bout en bout du
+ * calendrier ; elles câblent donc ici les ports sur la vraie implémentation (`EventsService`, qui
+ * lit les mêmes mocks Prisma) — exactement ce que fait `PortsModule` en production — et leurs
+ * attentes restent INCHANGÉES. Les tests « fakes » du bas du fichier isolent, eux, le service.
+ */
+function wirePorts(prisma: unknown): [OccupiedSpansPort, OwnEventsPort] {
+  const events = new EventsService(prisma as PrismaService, makeMockRealtimeEvents());
+  return [events, events];
 }
 
 // Dates de référence (UTC) :
@@ -187,6 +202,7 @@ describe('AvailabilityService.splitOccurrence', () => {
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
       asPermissionService(),
+      ...wirePorts(mocks.mockPrisma),
     );
     mockCreate = mocks.mockCreate;
     mockUpdate = mocks.mockUpdate;
@@ -354,6 +370,7 @@ describe('AvailabilityService.findConflictsForCreate', () => {
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
       asPermissionService(),
+      ...wirePorts(mocks.mockPrisma),
     );
     mockFindMany = mocks.mockFindMany;
   });
@@ -574,6 +591,7 @@ describe('AvailabilityService.create — conflict detection', () => {
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
       asPermissionService(),
+      ...wirePorts(mocks.mockPrisma),
     );
     mockCreate = mocks.mockCreate;
     mockUpdateMany = mocks.mockUpdateMany;
@@ -693,6 +711,7 @@ describe('AvailabilityService.createBatch', () => {
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
       asPermissionService(),
+      ...wirePorts(mocks.mockPrisma),
     );
     mockCreate = mocks.mockCreate;
     mockFindMany = mocks.mockFindMany;
@@ -1125,6 +1144,7 @@ describe('AvailabilityService — émission temps réel', () => {
       mocks.mockPrisma as unknown as PrismaService,
       mockRealtimeEvents,
       asPermissionService(),
+      ...wirePorts(mocks.mockPrisma),
     );
     mockMembershipFindMany = mocks.mockMembershipFindMany;
     mockPartieFindMany = mocks.mockPartieFindMany;
@@ -1224,6 +1244,8 @@ describe('AvailabilityService.computeSlotStatus', () => {
       {} as PrismaService,
       {} as RealtimeEventsService,
       {} as PermissionService,
+      {} as OccupiedSpansPort,
+      {} as OwnEventsPort,
     );
   });
 
@@ -1360,6 +1382,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
       asPermissionService(),
+      ...wirePorts(mocks.mockPrisma),
     );
   });
 
@@ -1666,6 +1689,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
       asPermissionService(permissions),
+      ...wirePorts(mocks.mockPrisma),
     );
   });
 
@@ -2369,5 +2393,107 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     // Story 36.6, AC12 — l'effectif de la troupe est lui aussi obtenu par UNE seule requête
     // groupée, jamais un membership.count par partie (AD-3). Garde renforcée, jamais affaiblie.
     expect(mockMembershipGroupBy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── Consommation des ports (Story 37.8) ──────────────────────────────────────────────────────
+// Ici le service est isolé de `events/` : seuls des FAUX ports lui répondent. Il prouve qu'il ne
+// connaît que les interfaces de `availability/ports/`.
+
+describe('AvailabilityService — consommation des ports (Story 37.8)', () => {
+  function build(
+    occupied: OccupiedSpansPort = { occupiedSpansOf: jest.fn() },
+    own: OwnEventsPort = { ownEventsOf: jest.fn() },
+    permissions: MockPermissions = makeMockPermissions({ A: 'mj' }),
+  ) {
+    const mocks = makeMockPrisma();
+    mocks.mockFindMany.mockResolvedValue([]);
+    const service = new AvailabilityService(
+      mocks.mockPrisma as unknown as PrismaService,
+      makeMockRealtimeEvents(),
+      asPermissionService(permissions),
+      occupied,
+      own,
+    );
+    return { service, mocks, permissions };
+  }
+
+  it('habille les plages occupées du port en indisponibilités ponctuelles synthétiques, sans rien d’autre', async () => {
+    const occupiedSpansOf = jest
+      .fn()
+      .mockResolvedValue(
+        new Map([['u1', [{ date: new Date('2026-09-10T00:00:00Z'), slot: 'EVENING' }]]]),
+      );
+    const { service } = build({ occupiedSpansOf });
+
+    const map = await service.getActiveDeclarationsWithSeances(['u1', 'u2']);
+
+    expect(occupiedSpansOf).toHaveBeenCalledWith(['u1', 'u2']);
+    expect(map.get('u1')).toEqual([
+      {
+        kind: 'UNAVAILABLE',
+        recurKind: 'PUNCTUAL',
+        dayOfWeek: null,
+        slot: 'EVENING',
+        startDate: new Date('2026-09-10T00:00:00Z'),
+        endDate: new Date('2026-09-10T00:00:00Z'),
+        expiresAt: new Date('2026-09-10T23:59:59.999Z'),
+      },
+    ]);
+    expect(map.get('u2')).toEqual([]);
+  });
+
+  it('aucune lecture de partie ni de séance par le service lui-même pour les plages occupées', async () => {
+    const { service, mocks } = build({
+      occupiedSpansOf: jest.fn().mockResolvedValue(new Map([['u1', []]])),
+    });
+
+    await service.getActiveDeclarationsWithSeances(['u1']);
+
+    expect(mocks.mockPartieFindMany).not.toHaveBeenCalled();
+    expect(mocks.mockSeanceFindMany).not.toHaveBeenCalled();
+  });
+
+  it('getMyCalendar : mes séances et inscriptions viennent du port ; les rôles sont résolus en lot via le service de permission', async () => {
+    const seanceEntry = {
+      seanceId: 's1',
+      partieId: 'A',
+      partieName: 'Ma Partie',
+      scenarioId: 'e1',
+      scenarioTitle: 'Titre',
+      date: '2026-10-10',
+      slot: 'EVENING' as DaySlot,
+      heureRdv: null,
+      lieu: null,
+      notePratique: null,
+      compteRenduManquant: true,
+    };
+    const ownEventsOf = jest
+      .fn()
+      .mockImplementation(
+        async (
+          userId: string,
+          roles: (ids: string[]) => Promise<ReadonlyMap<string, PartieRole>>,
+        ) => {
+          await roles(['A']);
+          return {
+            parties: [{ id: 'A', name: 'Ma Partie', kind: 'ONE_SHOT' }],
+            seances: [seanceEntry],
+            inscriptionsOuvertes: [],
+          };
+        },
+      );
+    const { service, permissions } = build(undefined, { ownEventsOf });
+
+    const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+
+    expect(result['mes-seances']).toEqual([seanceEntry]);
+    expect(result['inscriptions-ouvertes']).toEqual([]);
+    expect(ownEventsOf).toHaveBeenCalledWith('me', anyOf(Function), {
+      fromMs: Date.parse('2026-10-01T00:00:00.000Z'),
+      toMs: Date.parse('2026-10-31T23:59:59.999Z'),
+    });
+    expect(permissions.rolesOf).toHaveBeenCalledTimes(1);
+    expect(permissions.rolesOf).toHaveBeenCalledWith('me', ['A']);
   });
 });

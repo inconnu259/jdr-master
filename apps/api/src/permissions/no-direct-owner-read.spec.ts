@@ -34,12 +34,10 @@ const EXCEPTIONS: Readonly<Record<string, string>> = {
     "Écrivain de la table Partie : projection DTO (`ownerId`), écritures de création/mise à jour, filtre de liste (propriétaire OU membre) et transmission de l'identifiant du propriétaire aux helpers d'émission temps réel. Les rôles viennent de PermissionService.",
   'scenarios/scenarios.service.ts':
     'Remplit `Event.ownerId` à la création et transmet le propriétaire à `notifyPartieSignalsChanged` ; les droits viennent de PermissionService.assert (hors périmètre de 37.7, scénario inchangé).',
-  'poll/poll.service.ts':
-    'Transmet le propriétaire à `notifyPartieSignalsChanged` ; les droits viennent de PermissionService.assert (hors périmètre de 37.7, sondages inchangés).',
   'events/events.service.ts':
-    'Écrivain de la table Event : `Event.ownerId` est une colonne écrite à la création, jamais une décision de droit.',
+    "Écrivain de la table Event : `Event.ownerId` est une colonne écrite à la création, jamais une décision de droit. Implémente aussi `OccupiedSpansPort` et `OwnEventsPort` (Story 37.8) : filtres de requête « propriétaire OU membre » et constitution des participants d'une séance (sélection de personnes, pas un droit) ; le rôle de l'appelant lui est fourni par le service de permission.",
   'availability/availability.service.ts':
-    "Filtres de requête (parties où l'utilisateur est propriétaire OU membre) et constitution des ensembles de participants d'une séance (propriétaire + inscrits/membres, sans `membersOf` en lot — exception nommée). Le rôle de l'utilisateur (visibilité d'une séance épisodique) vient de PermissionService.rolesOf.",
+    "Résolution des parties à notifier après l'écriture d'une déclaration (`affectedPartieIds` : parties où l'utilisateur est propriétaire OU membre) — plomberie temps réel, pas un droit. Depuis la Story 37.8, les ensembles de participants d'une séance et le calendrier personnel viennent des ports (`events/`) ; le rôle de l'utilisateur vient de PermissionService.rolesOf.",
   'homme-dragon/homme-dragon.service.ts':
     "Filtre d'écriture atomique (`updateMany` conditionnel sur `Partie.ownerId`, protection contre la course), après un `assert(HOMME_DRAGON_MANAGE)` qui a déjà décidé du droit.",
   'invitations/invite-links.service.ts':

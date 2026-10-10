@@ -19,7 +19,8 @@
  * besoin (`GET /me/calendar`) et **ne peut pas injecter `PartiesService`** — `AvailabilityModule`
  * exporte `AvailabilityService` et est consommé PAR `PartiesModule`, l'inverse créerait un cycle
  * de modules Nest. Une fonction sans DI traverse la frontière sans la casser, et garantit qu'il
- * n'existe qu'une formule.
+ * n'existe qu'une formule. Story 37.8 : le fichier vit désormais dans `common/` — `availability/` et
+ * `poll/` (couche 1) ne doivent importer ni `parties/` ni aucune couche supérieure.
  *
  * @param membershipCount nombre de lignes `Membership` de la partie (le MJ n'en a jamais).
  */

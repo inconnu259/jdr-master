@@ -1,13 +1,13 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PollService } from './poll.service';
+import { PARTIE_SIGNALS_PORT } from './ports/partie-signals.port';
+import { SEANCE_DATE_PORT } from './ports/seance-date.port';
 import { PrismaService } from '../prisma/prisma.service';
-import { PartiesService } from '../parties/parties.service';
-import { EventsService } from '../events/events.service';
 import { PermissionService } from '../permissions/permission.service';
 import { testGrant } from '../common/test-utils/grant';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
-import { callArg, mockCalls } from '../common/test-utils/jest-typed';
+import { anyOf, callArg, mockCalls } from '../common/test-utils/jest-typed';
 import type { DaySlot } from '@master-jdr/shared';
 
 /**
@@ -55,9 +55,10 @@ function makePrisma() {
   };
 }
 
-function makePartiesService() {
+/** Story 37.8 : `PartieSignalsPort` — port de la couche 1, implémenté par `parties/`. */
+function makePartieSignals() {
   return {
-    notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
+    notifyChanged: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -69,8 +70,9 @@ function makePermissions() {
 /** Autorisation délivrée par `ScenariosService.createSeancePoll()` à `create()` (MJ de `p1`). */
 const GRANT_P1 = testGrant({ id: 'p1', ownerId: 'mj1' });
 
-function makeEventsService() {
-  return { setSpanFromPollInTx: jest.fn().mockResolvedValue(undefined) };
+/** Story 37.8 : `SeanceDatePort` — port de la couche 1, implémenté par `events/`. */
+function makeSeanceDate() {
+  return { chooseDate: jest.fn().mockResolvedValue(undefined) };
 }
 
 function makeRealtimeEvents() {
@@ -99,25 +101,25 @@ function makePoll() {
 describe('PollService', () => {
   let service: PollService;
   let prisma: ReturnType<typeof makePrisma>;
-  let parties: ReturnType<typeof makePartiesService>;
+  let partieSignals: ReturnType<typeof makePartieSignals>;
   let permissions: ReturnType<typeof makePermissions>;
   let realtimeEvents: ReturnType<typeof makeRealtimeEvents>;
-  let events: ReturnType<typeof makeEventsService>;
+  let seanceDate: ReturnType<typeof makeSeanceDate>;
 
   beforeEach(async () => {
     prisma = makePrisma();
-    parties = makePartiesService();
+    partieSignals = makePartieSignals();
     permissions = makePermissions();
     realtimeEvents = makeRealtimeEvents();
-    events = makeEventsService();
+    seanceDate = makeSeanceDate();
     const module = await Test.createTestingModule({
       providers: [
         PollService,
         { provide: PrismaService, useValue: prisma },
-        { provide: PartiesService, useValue: parties },
+        { provide: PARTIE_SIGNALS_PORT, useValue: partieSignals },
         { provide: PermissionService, useValue: permissions },
         { provide: RealtimeEventsService, useValue: realtimeEvents },
-        { provide: EventsService, useValue: events },
+        { provide: SEANCE_DATE_PORT, useValue: seanceDate },
       ],
     }).compile();
     service = module.get(PollService);
@@ -173,12 +175,12 @@ describe('PollService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
-  it('create() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal AUCUNE_DATE_NI_VOTE)', async () => {
+  it('create() → notifie aussi PartieSignalsPort.notifyChanged (Story 29.7, AD-14, signal AUCUNE_DATE_NI_VOTE)', async () => {
     prisma.sessionPoll.create.mockResolvedValue(makePoll());
     await service.create(GRANT_P1, 'mj1', {
       options: [opt('2026-08-01', 'MORNING'), opt('2026-08-02', 'AFTERNOON')],
     });
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
   });
 
   describe('membersCount — effectif de la troupe (Story 36.6, AC7/AC9)', () => {
@@ -286,7 +288,7 @@ describe('PollService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
-  it('castVote() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
+  it('castVote() → notifie aussi PartieSignalsPort.notifyChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
     permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }, 'player'));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
@@ -302,7 +304,7 @@ describe('PollService', () => {
       optionId: 'opt1',
       answer: 'YES',
     });
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
   });
 
   describe('withdrawVote() (Story 30.1, AD-10)', () => {
@@ -385,9 +387,9 @@ describe('PollService', () => {
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
-    it('notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
+    it('notifie aussi PartieSignalsPort.notifyChanged (Story 29.7, AD-14, signal VOTE_EN_COURS_SANS_REPONSE)', async () => {
       await service.withdrawVote('p1', 'poll1', 'opt1', 'u1');
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+      expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
     });
   });
 
@@ -398,7 +400,7 @@ describe('PollService', () => {
     );
   });
 
-  it('choose() → positionne chosenDate/chosenSlot, ferme le poll, met à jour Partie', async () => {
+  it('choose() → positionne chosenDate/chosenSlot, ferme le poll, délègue la date de séance au port', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
     permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
@@ -420,17 +422,13 @@ describe('PollService', () => {
       where: { id: 'poll1' },
       data: { status: 'CLOSED', chosenDate: d, chosenSlot: 'MORNING' },
     });
-    expect(prisma.partie.update).toHaveBeenCalledWith({
-      where: { id: 'p1' },
-      data: {
-        nextSessionDate: d,
-        nextSessionSlot: 'MORNING',
-        reminderSentAt: null,
-      },
-    });
+    // Story 37.8 (AD-15) : la date de séance et `nextSessionDate/Slot` sont écrites par le port.
+    expect(seanceDate.chooseDate).toHaveBeenCalledWith(anyOf(Object), 'poll1', d, 'MORNING');
+    // PollService n'écrit JAMAIS `Partie` : `events/` est l'unique écrivain de la prochaine séance.
+    expect(prisma.partie.update).not.toHaveBeenCalled();
   });
 
-  it('choose() → ferme le poll ET pose la plage de la séance dans la même transaction (Story 37.4)', async () => {
+  it('choose() → ferme le poll ET délègue la plage de la séance au port dans la même transaction (Stories 37.4, 37.8)', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
     permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
@@ -456,10 +454,10 @@ describe('PollService', () => {
       data: { status: 'CLOSED', chosenDate: d, chosenSlot: 'MORNING' },
     });
     expect(prisma.sessionPoll.update).not.toHaveBeenCalled();
-    expect(events.setSpanFromPollInTx).toHaveBeenCalledWith(tx, 'poll1', d, 'MORNING');
+    expect(seanceDate.chooseDate).toHaveBeenCalledWith(tx, 'poll1', d, 'MORNING');
   });
 
-  it('choose() → échec de la plage : ni Partie mise à jour ni émission (tout ou rien, Story 37.4)', async () => {
+  it('choose() → échec du port : ni émission ni notification des signaux (tout ou rien, Stories 37.4, 37.8)', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
     permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
@@ -474,12 +472,13 @@ describe('PollService', () => {
       slot: 'MORNING',
     });
     prisma.sessionPoll.update.mockResolvedValue({});
-    events.setSpanFromPollInTx.mockRejectedValue(new Error('boom'));
+    seanceDate.chooseDate.mockRejectedValue(new Error('boom'));
     await expect(service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' })).rejects.toThrow(
       'boom',
     );
     expect(prisma.partie.update).not.toHaveBeenCalled();
     expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
   });
 
   it('choose() → émet un événement temps réel scopé sur la Partie, après la résolution des DEUX écritures (Story 18.1, AC1)', async () => {
@@ -502,7 +501,7 @@ describe('PollService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
-  it('choose() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14)', async () => {
+  it('choose() → notifie aussi PartieSignalsPort.notifyChanged (Story 29.7, AD-14)', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
     permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
@@ -519,10 +518,10 @@ describe('PollService', () => {
     prisma.sessionPoll.update.mockResolvedValue({});
     prisma.partie.update.mockResolvedValue({});
     await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
   });
 
-  it('choose() sur le même créneau déjà actif → ne remet PAS reminderSentAt à null', async () => {
+  it('choose() sur le même créneau déjà actif → PollService n’écrit pas Partie (la remise à zéro du rappel est décidée par events/, Story 37.8)', async () => {
     const d = new Date('2026-08-01T00:00:00.000Z');
     permissions.assert.mockResolvedValue(
       testGrant({
@@ -544,12 +543,9 @@ describe('PollService', () => {
       slot: 'MORNING',
     });
     prisma.sessionPoll.update.mockResolvedValue({});
-    prisma.partie.update.mockResolvedValue({});
     await service.choose('p1', 'poll1', 'mj1', { optionId: 'opt1' });
-    expect(prisma.partie.update).toHaveBeenCalledWith({
-      where: { id: 'p1' },
-      data: { nextSessionDate: d, nextSessionSlot: 'MORNING' },
-    });
+    expect(prisma.partie.update).not.toHaveBeenCalled();
+    expect(seanceDate.chooseDate).toHaveBeenCalledWith(anyOf(Object), 'poll1', d, 'MORNING');
   });
 
   it('close() sur un poll OPEN → le ferme', async () => {
@@ -580,7 +576,7 @@ describe('PollService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
-  it('close() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14)', async () => {
+  it('close() → notifie aussi PartieSignalsPort.notifyChanged (Story 29.7, AD-14)', async () => {
     permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
     prisma.sessionPoll.findUnique.mockResolvedValue({
       id: 'poll1',
@@ -589,7 +585,7 @@ describe('PollService', () => {
     });
     prisma.sessionPoll.update.mockResolvedValue({});
     await service.close('p1', 'poll1', 'mj1');
-    expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+    expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
   });
 
   it('close() sur un poll déjà CLOSED → BadRequestException', async () => {
@@ -770,7 +766,7 @@ describe('PollService', () => {
         options: [opt('2026-08-01', 'MORNING'), opt('2026-08-03', 'EVENING')],
       });
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
-      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+      expect(partieSignals.notifyChanged).toHaveBeenCalledWith('p1');
     });
 
     it('→ renvoie le DTO relu, avec membersCount (AC5)', async () => {

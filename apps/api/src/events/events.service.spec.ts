@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { EventsService } from './events.service';
 import { testGrant } from '../common/test-utils/grant';
+import { mockCalls } from '../common/test-utils/jest-typed';
 
 /** Story 37.6 — autorisation délivrée (simulée) par `PermissionService.assert()` sur `p1`. */
 const GRANT_P1 = testGrant({ id: 'p1', ownerId: 'mj1' });
@@ -28,7 +29,19 @@ function makePrisma() {
     seance: {
       create: jest.fn().mockResolvedValue({ id: 'se1' }),
       findUniqueOrThrow: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
       updateMany: jest.fn(),
+    },
+    // Story 37.8 : `chooseDate` lit le vote (sa partie) et recalcule la prochaine séance DANS la
+    // transaction fournie.
+    sessionPoll: { findUnique: jest.fn().mockResolvedValue({ partieId: 'p1' }) },
+    partie: {
+      findUniqueOrThrow: jest.fn().mockResolvedValue({
+        id: 'p1',
+        nextSessionDate: null,
+        nextSessionSlot: null,
+      }),
+      update: jest.fn(),
     },
     inscription: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -57,6 +70,7 @@ function makePrisma() {
         nextSessionSlot: null,
       }),
       update: jest.fn(),
+      findMany: jest.fn().mockResolvedValue([]),
     },
   };
 }
@@ -213,10 +227,10 @@ describe('EventsService (Story 37.3)', () => {
       expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
-    it('setSpanFromPollInTx() pose une plage start = end sur la séance du vote, sans émettre', async () => {
+    it('chooseDate() pose une plage start = end sur la séance du vote, sans émettre', async () => {
       const d = new Date('2026-11-03T00:00:00.000Z');
 
-      await service.setSpanFromPollInTx(
+      await service.chooseDate(
         prisma.tx as unknown as Prisma.TransactionClient,
         'poll1',
         d,
@@ -228,6 +242,77 @@ describe('EventsService (Story 37.3)', () => {
         data: { startDate: d, startSlot: 'EVENING', endDate: d, endSlot: 'EVENING' },
       });
       expect(realtime.emit).not.toHaveBeenCalled();
+    });
+
+    it('chooseDate() recalcule la prochaine séance de la partie du vote DANS la transaction fournie (Story 37.8, AD-15)', async () => {
+      const future = new Date(Date.UTC(2099, 0, 2));
+      prisma.tx.seance.findMany.mockResolvedValue([{ startDate: future, startSlot: 'EVENING' }]);
+
+      await service.chooseDate(
+        prisma.tx as unknown as Prisma.TransactionClient,
+        'poll1',
+        future,
+        'EVENING',
+      );
+
+      expect(prisma.tx.sessionPoll.findUnique).toHaveBeenCalledWith({
+        where: { id: 'poll1' },
+        select: { partieId: true },
+      });
+      expect(prisma.tx.seance.findMany).toHaveBeenCalledWith({
+        where: { event: { partieId: 'p1' } },
+        select: { startDate: true, startSlot: true },
+      });
+      expect(prisma.tx.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { nextSessionDate: future, nextSessionSlot: 'EVENING', reminderSentAt: null },
+      });
+      // Rien n'est écrit hors de la transaction de l'appelant.
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+
+    it('chooseDate() : une date passée est écrite sur la séance mais n’est pas retenue comme prochaine séance', async () => {
+      const past = new Date(Date.UTC(2020, 0, 2));
+      prisma.tx.seance.findMany.mockResolvedValue([{ startDate: past, startSlot: 'MORNING' }]);
+      prisma.tx.partie.findUniqueOrThrow.mockResolvedValue({
+        id: 'p1',
+        nextSessionDate: null,
+        nextSessionSlot: null,
+      });
+
+      await service.chooseDate(
+        prisma.tx as unknown as Prisma.TransactionClient,
+        'poll1',
+        past,
+        'MORNING',
+      );
+
+      expect(prisma.tx.seance.updateMany).toHaveBeenCalledWith({
+        where: { pollId: 'poll1' },
+        data: { startDate: past, startSlot: 'MORNING', endDate: past, endSlot: 'MORNING' },
+      });
+      // Rien n'a changé (null → null) : le rappel déjà envoyé n'est pas remis à zéro.
+      expect(prisma.tx.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { nextSessionDate: null, nextSessionSlot: null },
+      });
+    });
+
+    it('chooseDate() : un vote introuvable lève 404 sans recalcul', async () => {
+      prisma.tx.sessionPoll.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.chooseDate(
+          prisma.tx as unknown as Prisma.TransactionClient,
+          'poll-inconnu',
+          new Date(),
+          'EVENING',
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.tx.partie.update).not.toHaveBeenCalled();
+      // Le vote est cherché AVANT toute écriture : rien n'a été écrit sur les séances.
+      expect(prisma.tx.seance.updateMany).not.toHaveBeenCalled();
     });
 
     it('resetSeanceDate() détache le vote, le supprime, recalcule et émet', async () => {
@@ -376,22 +461,434 @@ describe('EventsService (Story 37.3)', () => {
     });
   });
 
-  it('recalculateNextSession() lit les séances par l’événement et pose la plus proche date future', async () => {
-    const future = new Date(Date.UTC(2099, 0, 2));
-    prisma.seance.findMany.mockResolvedValue([
-      { startDate: new Date(Date.UTC(2099, 0, 5)), startSlot: null },
-      { startDate: future, startSlot: 'EVENING' },
-    ]);
+  describe('recalculateNextSession() (Story 8.8, Décision 2 ; seul écrivain de nextSession, Story 37.8)', () => {
+    const NOW = new Date('2026-07-14T12:00:00.000Z');
+    const FUTURE_NEAR = new Date('2026-08-01T00:00:00.000Z');
+    const FUTURE_FAR = new Date('2026-09-01T00:00:00.000Z');
+    const PAST = new Date('2026-06-01T00:00:00.000Z');
 
-    await service.recalculateNextSession('p1');
-
-    expect(prisma.seance.findMany).toHaveBeenCalledWith({
-      where: { event: { partieId: 'p1' } },
-      select: { startDate: true, startSlot: true },
+    beforeEach(() => {
+      jest.useFakeTimers().setSystemTime(NOW);
     });
-    expect(prisma.partie.update).toHaveBeenCalledWith({
-      where: { id: 'p1' },
-      data: { nextSessionDate: future, nextSessionSlot: 'EVENING', reminderSentAt: null },
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("n'émet PAS d'événement temps réel directement (Story 18.1) — couvert par ses appelants deleteSeance()/resetSeanceDate()", async () => {
+      prisma.seance.findMany.mockResolvedValue([]);
+
+      await service.recalculateNextSession('p1');
+
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+
+    it('plusieurs séances actives → Partie.nextSessionDate reflète la plus proche dans le futur', async () => {
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          startDate: FUTURE_FAR,
+          startSlot: 'MORNING',
+        },
+        {
+          id: 's2',
+          startDate: FUTURE_NEAR,
+          startSlot: 'EVENING',
+        },
+      ]);
+
+      await service.recalculateNextSession('p1');
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: {
+          nextSessionDate: FUTURE_NEAR,
+          nextSessionSlot: 'EVENING',
+          reminderSentAt: null,
+        },
+      });
+    });
+
+    it("séance datée d'aujourd'hui (même jour que NOW, minuit) → toujours retenue comme prochaine séance", async () => {
+      const TODAY = new Date('2026-07-14T00:00:00.000Z');
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          startDate: TODAY,
+          startSlot: 'MORNING',
+        },
+      ]);
+
+      await service.recalculateNextSession('p1');
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: {
+          nextSessionDate: TODAY,
+          nextSessionSlot: 'MORNING',
+          reminderSentAt: null,
+        },
+      });
+    });
+
+    it('date passée ignorée — seules les dates futures comptent', async () => {
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          startDate: PAST,
+          startSlot: 'MORNING',
+        },
+        {
+          id: 's2',
+          startDate: FUTURE_FAR,
+          startSlot: 'AFTERNOON',
+        },
+      ]);
+
+      await service.recalculateNextSession('p1');
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: {
+          nextSessionDate: FUTURE_FAR,
+          nextSessionSlot: 'AFTERNOON',
+          reminderSentAt: null,
+        },
+      });
+    });
+
+    it('plage sans créneau (date posée hors vote) → utilisée, slot null', async () => {
+      prisma.seance.findMany.mockResolvedValue([
+        { id: 's1', startDate: FUTURE_NEAR, startSlot: null },
+      ]);
+
+      await service.recalculateNextSession('p1');
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: {
+          nextSessionDate: FUTURE_NEAR,
+          nextSessionSlot: null,
+          reminderSentAt: null,
+        },
+      });
+    });
+
+    it('aucune date future → nextSessionDate/nextSessionSlot remis à null', async () => {
+      prisma.seance.findMany.mockResolvedValue([
+        { id: 's1', startDate: null, startSlot: null },
+        { id: 's2', startDate: PAST, startSlot: null },
+      ]);
+      prisma.partie.findUniqueOrThrow.mockResolvedValueOnce({
+        id: 'p1',
+        nextSessionDate: PAST,
+        nextSessionSlot: 'MORNING',
+        reminderSentAt: null,
+      });
+
+      await service.recalculateNextSession('p1');
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: {
+          nextSessionDate: null,
+          nextSessionSlot: null,
+          reminderSentAt: null,
+        },
+      });
+    });
+
+    it('date/slot inchangés → reminderSentAt non réinitialisé', async () => {
+      prisma.seance.findMany.mockResolvedValue([
+        {
+          id: 's1',
+          startDate: FUTURE_NEAR,
+          startSlot: 'EVENING',
+        },
+      ]);
+      prisma.partie.findUniqueOrThrow.mockResolvedValueOnce({
+        id: 'p1',
+        nextSessionDate: FUTURE_NEAR,
+        nextSessionSlot: 'EVENING',
+        reminderSentAt: new Date('2026-07-13T00:00:00.000Z'),
+      });
+
+      await service.recalculateNextSession('p1');
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: {
+          nextSessionDate: FUTURE_NEAR,
+          nextSessionSlot: 'EVENING',
+        },
+      });
+    });
+
+    it('recalculateNextSessionInTx() verrouille la ligne Partie AVANT de lire les séances (Story 37.8, concurrence)', async () => {
+      prisma.tx.seance.findMany.mockResolvedValue([]);
+
+      await service.recalculateNextSessionInTx(
+        prisma.tx as unknown as Prisma.TransactionClient,
+        'p1',
+      );
+
+      expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
+      const [strings, ...values] = mockCalls<[readonly string[], ...unknown[]]>(
+        prisma.tx.$queryRaw,
+      )[0];
+      expect(strings.join('?')).toContain('FROM "Partie"');
+      expect(strings.join('?')).toContain('FOR UPDATE');
+      expect(values).toEqual(['p1']);
+      expect(prisma.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.tx.seance.findMany.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('recalculateNextSessionInTx() écrit dans la transaction fournie, jamais via le client global (Story 37.8)', async () => {
+      prisma.tx.seance.findMany.mockResolvedValue([
+        { startDate: FUTURE_NEAR, startSlot: 'EVENING' },
+      ]);
+      prisma.tx.partie.findUniqueOrThrow.mockResolvedValue({
+        id: 'p1',
+        nextSessionDate: null,
+        nextSessionSlot: null,
+      });
+
+      await service.recalculateNextSessionInTx(
+        prisma.tx as unknown as Prisma.TransactionClient,
+        'p1',
+      );
+
+      expect(prisma.tx.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { nextSessionDate: FUTURE_NEAR, nextSessionSlot: 'EVENING', reminderSentAt: null },
+      });
+      expect(prisma.seance.findMany).not.toHaveBeenCalled();
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── Ports du calendrier (Story 37.8) ───────────────────────────────────────────────────────
+
+  describe('occupiedSpansOf() — OccupiedSpansPort (AD-9)', () => {
+    const seanceB = (over: Record<string, unknown> = {}) => ({
+      id: 'sB',
+      startDate: new Date('2026-09-10T00:00:00Z'),
+      startSlot: 'EVENING',
+      inscriptions: [],
+      event: { partieId: 'B' },
+      ...over,
+    });
+
+    it('renvoie une entrée vide par utilisateur quand aucune partie n’est trouvée', async () => {
+      const map = await service.occupiedSpansOf(['u1', 'u2']);
+
+      expect([...map.keys()]).toEqual(['u1', 'u2']);
+      expect(map.get('u1')).toEqual([]);
+      expect(prisma.seance.findMany).not.toHaveBeenCalled();
+    });
+
+    it('un membre d’une partie ONE_SHOT est occupé sur la plage de sa séance datée — { date, slot } SEULEMENT', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'B', kind: 'ONE_SHOT', ownerId: 'mjB', memberships: [{ userId: 'u1' }] },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([seanceB()]);
+
+      const map = await service.occupiedSpansOf(['u1']);
+
+      expect(map.get('u1')).toEqual([{ date: new Date('2026-09-10T00:00:00Z'), slot: 'EVENING' }]);
+      // Aucun titre, aucun identifiant de partie, aucune identité : la forme l'interdit.
+      expect(Object.keys(map.get('u1')![0]).sort()).toEqual(['date', 'slot']);
+    });
+
+    it('créneau de début vide → FULL_DAY ; séance sans date ignorée', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'B', kind: 'CAMPAGNE_LINEAIRE', ownerId: 'mjB', memberships: [{ userId: 'u1' }] },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        seanceB({ startSlot: null }),
+        seanceB({ id: 'sans-date', startDate: null }),
+      ]);
+
+      const map = await service.occupiedSpansOf(['u1']);
+
+      expect(map.get('u1')).toEqual([{ date: new Date('2026-09-10T00:00:00Z'), slot: 'FULL_DAY' }]);
+    });
+
+    it('campagne épisodique : seuls le propriétaire et les inscrits à CETTE séance sont occupés', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        {
+          id: 'B',
+          kind: 'CAMPAGNE_EPISODIQUE',
+          ownerId: 'mjB',
+          memberships: [{ userId: 'inscrit' }, { userId: 'absent' }],
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([
+        seanceB({ inscriptions: [{ userId: 'inscrit' }] }),
+      ]);
+
+      const map = await service.occupiedSpansOf(['mjB', 'inscrit', 'absent']);
+
+      expect(map.get('mjB')).toHaveLength(1);
+      expect(map.get('inscrit')).toHaveLength(1);
+      expect(map.get('absent')).toEqual([]);
+    });
+
+    it('propriétaire absent (compte supprimé) : seuls les membres sont concernés ; jamais d’utilisateur non demandé', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        {
+          id: 'B',
+          kind: 'ONE_SHOT',
+          ownerId: null,
+          memberships: [{ userId: 'u1' }, { userId: 'x' }],
+        },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([seanceB()]);
+
+      const map = await service.occupiedSpansOf(['u1']);
+
+      expect([...map.keys()]).toEqual(['u1']);
+      expect(map.get('u1')).toHaveLength(1);
+    });
+
+    it('deux requêtes au total, jamais une par utilisateur ni par partie', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'B', kind: 'ONE_SHOT', ownerId: 'mjB', memberships: [{ userId: 'u1' }] },
+        { id: 'C', kind: 'ONE_SHOT', ownerId: 'mjC', memberships: [{ userId: 'u2' }] },
+      ]);
+      prisma.seance.findMany.mockResolvedValue([]);
+
+      await service.occupiedSpansOf(['u1', 'u2']);
+
+      expect(prisma.partie.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.seance.findMany).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('ownEventsOf() — OwnEventsPort', () => {
+    const RANGE = {
+      fromMs: Date.parse('2026-10-01T00:00:00.000Z'),
+      toMs: Date.parse('2026-10-31T23:59:59.999Z'),
+    };
+    const partieA = { id: 'A', name: 'Ma Partie', kind: 'ONE_SHOT' };
+    const episodique = { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE' };
+    const seance = (over: Record<string, unknown> = {}) => ({
+      id: 'se1',
+      eventId: 'ev1',
+      startDate: new Date('2026-10-10T00:00:00Z'),
+      startSlot: 'MORNING',
+      inscriptions: [],
+      inscriptionMin: null,
+      inscriptionMax: null,
+      event: { partieId: 'A', title: 'Le Donjon Oublié' },
+      ...over,
+    });
+    const rolesOf = (role: 'mj' | 'player') => jest.fn().mockResolvedValue(new Map([['A', role]]));
+
+    it('sans partie : rien, et aucune lecture de séances ni de rôles', async () => {
+      const roles = rolesOf('mj');
+
+      const own = await service.ownEventsOf('me', roles, RANGE);
+
+      expect(own).toEqual({ parties: [], seances: [], inscriptionsOuvertes: [] });
+      expect(prisma.seance.findMany).not.toHaveBeenCalled();
+      expect(roles).not.toHaveBeenCalled();
+    });
+
+    it('rend mes parties et mes séances avec titres (mes propres parties), rôles résolus UNE fois en lot', async () => {
+      prisma.partie.findMany.mockResolvedValue([partieA, { ...partieA, id: 'B' }]);
+      prisma.seance.findMany.mockResolvedValue([seance()]);
+      const roles = rolesOf('mj');
+
+      const own = await service.ownEventsOf('me', roles, RANGE);
+
+      expect(own.parties).toEqual([partieA, { ...partieA, id: 'B' }]);
+      expect(own.seances).toEqual([
+        {
+          seanceId: 'se1',
+          partieId: 'A',
+          partieName: 'Ma Partie',
+          scenarioId: 'ev1',
+          scenarioTitle: 'Le Donjon Oublié',
+          date: '2026-10-10',
+          slot: 'MORNING',
+          heureRdv: null,
+          lieu: null,
+          notePratique: null,
+          compteRenduManquant: true,
+        },
+      ]);
+      expect(roles).toHaveBeenCalledTimes(1);
+      expect(roles).toHaveBeenCalledWith(['A', 'B']);
+      expect(prisma.seance.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('une séance hors de la fenêtre ou sans date n’est pas dans mes séances ; créneau vide → FULL_DAY', async () => {
+      prisma.partie.findMany.mockResolvedValue([partieA]);
+      prisma.seance.findMany.mockResolvedValue([
+        seance({ id: 'hors', startDate: new Date('2026-12-01T00:00:00Z') }),
+        seance({ id: 'sans-date', startDate: null }),
+        seance({ id: 'plein', startSlot: null }),
+      ]);
+
+      const own = await service.ownEventsOf('me', rolesOf('mj'), RANGE);
+
+      expect(own.seances.map((s) => [s.seanceId, s.slot])).toEqual([['plein', 'FULL_DAY']]);
+    });
+
+    it('épisodique : le MJ voit la séance sans inscription, un membre non inscrit ne la voit pas, un inscrit oui', async () => {
+      prisma.partie.findMany.mockResolvedValue([episodique]);
+      prisma.seance.findMany.mockResolvedValue([seance({ inscriptions: [{ userId: 'autre' }] })]);
+
+      expect((await service.ownEventsOf('me', rolesOf('mj'), RANGE)).seances).toHaveLength(1);
+      expect((await service.ownEventsOf('me', rolesOf('player'), RANGE)).seances).toEqual([]);
+
+      prisma.seance.findMany.mockResolvedValue([seance({ inscriptions: [{ userId: 'me' }] })]);
+      expect((await service.ownEventsOf('me', rolesOf('player'), RANGE)).seances).toHaveLength(1);
+    });
+
+    it('inscriptions ouvertes : épisodique, capacité définie, sans date — jamais filtrées par la fenêtre', async () => {
+      prisma.partie.findMany.mockResolvedValue([episodique]);
+      prisma.seance.findMany.mockResolvedValue([
+        seance({
+          id: 'ouverte',
+          startDate: null,
+          startSlot: null,
+          inscriptionMin: null,
+          inscriptionMax: 4,
+          inscriptions: [{ userId: 'me' }, { userId: 'autre' }],
+        }),
+        seance({ id: 'datee', inscriptionMax: 4 }),
+        seance({ id: 'sans-capacite', startDate: null, inscriptionMax: null }),
+      ]);
+
+      const own = await service.ownEventsOf('me', rolesOf('player'), RANGE);
+
+      expect(own.inscriptionsOuvertes).toEqual([
+        {
+          seanceId: 'ouverte',
+          partieId: 'A',
+          partieName: 'Ma Partie',
+          scenarioId: 'ev1',
+          scenarioTitle: 'Le Donjon Oublié',
+          inscriptionMin: 0,
+          inscriptionMax: 4,
+          inscritsCount: 2,
+          jeSuisInscrit: true,
+        },
+      ]);
+    });
+
+    it('inscriptions ouvertes : une partie non épisodique n’en a jamais', async () => {
+      prisma.partie.findMany.mockResolvedValue([partieA]);
+      prisma.seance.findMany.mockResolvedValue([
+        seance({ startDate: null, startSlot: null, inscriptionMax: 4 }),
+      ]);
+
+      const own = await service.ownEventsOf('me', rolesOf('mj'), RANGE);
+
+      expect(own.inscriptionsOuvertes).toEqual([]);
     });
   });
 });

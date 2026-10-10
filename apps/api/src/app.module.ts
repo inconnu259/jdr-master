@@ -23,6 +23,7 @@ import { ScenariosModule } from './scenarios/scenarios.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { CharacterRolesModule } from './character-roles/character-roles.module';
 import { AccountModule } from './account/account.module';
+import { PortsModule } from './ports/ports.module';
 
 @Module({
   imports: [
@@ -54,6 +55,8 @@ import { AccountModule } from './account/account.module';
     AnnouncementsModule,
     CharacterRolesModule,
     AccountModule,
+    // Story 37.8 : lie les ports de la couche 1 à leurs implémentations (module global).
+    PortsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],

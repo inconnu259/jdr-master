@@ -580,7 +580,7 @@ model Seance {
   inscriptionMin Int?
   inscriptionMax Int?
   /// Date de la séance (Story 37.4, AD-4) : plage continue, SEULE source de la date. Écrite au
-  /// choix d'une option de vote (`EventsService.setSpanFromPollInTx`), effacée à sa remise à zéro.
+  /// choix d'une option de vote (`EventsService.chooseDate`), effacée à sa remise à zéro.
   /// Seules des plages `start = end` sont écrites à ce palier. `startSlot` vide = « sans
   /// créneau » à l'affichage, `FULL_DAY` pour les disponibilités.
   startDate      DateTime?

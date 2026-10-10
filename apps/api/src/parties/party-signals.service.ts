@@ -120,7 +120,7 @@ export class PartySignalsService {
       const signals: PartySignalCode[] = [];
       // Deferred-work (2026-08-25) : `Partie.nextSessionDate` n'est jamais effacé après la date
       // passée (AD-3 interdit de le recalculer depuis les séances ici — c'est un champ matérialisé,
-      // recalculé uniquement par `recalculateNextSession()` sur événement). Une date passée non
+      // recalculé uniquement par `EventsService.recalculateNextSession()` sur événement). Une date passée non
       // recalculée depuis désynchronise ces deux signaux si on la traite comme "connue" ; on la
       // lit donc comme absente ici, sans jamais réécrire le champ.
       const hasFutureSessionDate =

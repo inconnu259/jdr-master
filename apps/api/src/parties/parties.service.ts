@@ -24,6 +24,7 @@ import { checkPartieKindTransition, familyOf, isOpenForCreation } from '@master-
 import { AvailabilityService } from '../availability/availability.service';
 import { EventsService } from '../events/events.service';
 import { PermissionService } from '../permissions/permission.service';
+import type { PartieSignalsPort } from '../poll/ports/partie-signals.port';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import {
@@ -164,7 +165,7 @@ function toPartieDto(
 }
 
 @Injectable()
-export class PartiesService {
+export class PartiesService implements PartieSignalsPort {
   private readonly logger = new Logger(PartiesService.name);
 
   constructor(
@@ -885,6 +886,25 @@ export class PartiesService {
    *  jamais `emitPartieAndMembersSafe` qui réémettrait `partieTopic` une seconde fois. */
   async notifyPartieSignalsChanged(partieId: string, ownerId: string | null): Promise<void> {
     await this.emitMembersOnlySafe(partieId, ownerId);
+  }
+
+  /** `PartieSignalsPort` (Story 37.8) : le port de la couche 1 (`poll/`) vers ce point d'entrée —
+   *  même comportement, un seul émetteur. */
+  async notifyChanged(partieId: string): Promise<void> {
+    // Contrat du port : ne lève jamais (la mutation appelante est déjà validée). Le propriétaire
+    // est lu ici, pour que `poll/` n'ait jamais à le connaître.
+    try {
+      const partie = await this.prisma.partie.findUnique({
+        where: { id: partieId },
+        select: { ownerId: true },
+      });
+      if (!partie) return;
+      await this.notifyPartieSignalsChanged(partieId, partie.ownerId);
+    } catch (err) {
+      this.logger.warn(
+        `Échec de la notification des signaux de la partie ${partieId} : ${String(err)}`,
+      );
+    }
   }
 
   async getAvailableSlots(
