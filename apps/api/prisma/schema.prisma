@@ -579,7 +579,14 @@ model Seance {
   poll           SessionPoll? @relation(fields: [pollId], references: [id])
   inscriptionMin Int?
   inscriptionMax Int?
-  dateValidee    DateTime?
+  /// Date de la séance (Story 37.4, AD-4) : plage continue, SEULE source de la date. Écrite au
+  /// choix d'une option de vote (`EventsService.setSpanFromPollInTx`), effacée à sa remise à zéro.
+  /// Seules des plages `start = end` sont écrites à ce palier. `startSlot` vide = « sans
+  /// créneau » à l'affichage, `FULL_DAY` pour les disponibilités.
+  startDate      DateTime?
+  startSlot      DaySlot?
+  endDate        DateTime?
+  endSlot        DaySlot?
   compteRendu    String?
   /// Informations pratiques (Story 36.5, dérogation D-15 amendée le 2026-08-19).
   /// heureRdv est une ÉTIQUETTE, jamais un instant : String "HH:MM" que rien ne parse,

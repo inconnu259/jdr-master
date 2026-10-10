@@ -12,6 +12,7 @@ type SeanceDtoLike = Record<string, unknown> & {
 };
 type ScenarioDtoLike = { id: string; status: string; seances: SeanceDtoLike[] };
 type PartieDtoLike = { nextSessionDate: string | null; nextSessionSlot: string | null };
+type SignalsLike = Record<string, { signals: string[] }>;
 type AvailableSlotLike = {
   date: string;
   slot: string;
@@ -195,6 +196,29 @@ describe('Caractérisation JDR — séances (Story 37.1)', () => {
       const after = await mj.agent.get(`/parties/${partieId}`).expect(200);
       expect(body<PartieDtoLike>(after).nextSessionDate).toBe(`${jourSoir}T00:00:00.000Z`);
       expect(body<PartieDtoLike>(after).nextSessionSlot).toBe('EVENING');
+    });
+
+    it('fige : une séance datée par vote sans compte-rendu fait apparaître COMPTE_RENDU_NON_REDIGE côté MJ', async () => {
+      const { id: partieId } = await h.createPartie(mj, 'ONE_SHOT', 'vote-cr');
+      const scenariosRes = await mj.agent.get(`/parties/${partieId}/scenarios`).expect(200);
+      const seanceId = body<ScenarioDtoLike[]>(scenariosRes)[0].seances[0].id;
+
+      const before = body<SignalsLike>(await mj.agent.get('/me/party-signals').expect(200));
+      expect(before[partieId].signals).not.toContain('COMPTE_RENDU_NON_REDIGE');
+
+      await datePourVote(
+        mj,
+        partieId,
+        seanceId,
+        [
+          { date: isoDay(12), slot: 'AFTERNOON' },
+          { date: isoDay(13), slot: 'EVENING' },
+        ],
+        0,
+      );
+
+      const after = body<SignalsLike>(await mj.agent.get('/me/party-signals').expect(200));
+      expect(after[partieId].signals).toContain('COMPTE_RENDU_NON_REDIGE');
     });
   });
 

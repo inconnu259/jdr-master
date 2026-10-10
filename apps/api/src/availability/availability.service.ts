@@ -724,7 +724,6 @@ export class AvailabilityService {
     const seances = await this.prisma.seance.findMany({
       where: { event: { partieId: { in: partieIds } } },
       include: {
-        poll: true,
         inscriptions: { select: { userId: true } },
         event: { select: { partieId: true } },
       },
@@ -733,9 +732,10 @@ export class AvailabilityService {
     const requested = new Set(userIds);
 
     for (const seance of seances) {
-      const date = seance.poll?.chosenDate ?? seance.dateValidee;
+      // Story 37.4 : la plage de la séance est la seule source ; créneau vide = FULL_DAY ici.
+      const date = seance.startDate;
       if (!date) continue;
-      const slot = seance.poll?.chosenSlot ?? 'FULL_DAY';
+      const slot = seance.startSlot ?? 'FULL_DAY';
 
       const partie = partieById.get(seance.event.partieId);
       if (!partie) continue; // partie hors du périmètre résolu ci-dessus
@@ -808,7 +808,6 @@ export class AvailabilityService {
         : this.prisma.seance.findMany({
             where: { event: { partieId: { in: partieIds } } },
             include: {
-              poll: true,
               inscriptions: { select: { userId: true } },
               event: { select: { partieId: true, title: true } },
             },
@@ -941,8 +940,8 @@ export class AvailabilityService {
     seances: Array<{
       id: string;
       eventId: string;
-      poll: { chosenDate: Date | null; chosenSlot: string | null } | null;
-      dateValidee: Date | null;
+      startDate: Date | null;
+      startSlot: string | null;
       inscriptions: { userId: string }[];
       event: { partieId: string; title: string };
       // Story 36.5 — déjà chargés par le findMany (aucun `select` de scalaires), donc gratuits.
@@ -959,7 +958,7 @@ export class AvailabilityService {
   ): MyCalendarSeanceEntry[] {
     const entries: MyCalendarSeanceEntry[] = [];
     for (const s of seances) {
-      const date = s.poll?.chosenDate ?? s.dateValidee;
+      const date = s.startDate;
       if (!date) continue;
       if (date.getTime() < fromMs || date.getTime() > toMs) continue;
       const partie = partieById.get(s.event.partieId);
@@ -978,9 +977,9 @@ export class AvailabilityService {
         scenarioId: s.eventId,
         scenarioTitle: s.event.title,
         date: date.toISOString().substring(0, 10),
-        // AC5 : lu sur le sondage rattaché s'il existe, FULL_DAY à défaut — jamais une supposition
-        // locale à l'appelant.
-        slot: (s.poll?.chosenSlot ?? 'FULL_DAY') as DaySlot,
+        // AC5 : créneau de la plage de la séance (Story 37.4), FULL_DAY à défaut — jamais une
+        // supposition locale à l'appelant.
+        slot: (s.startSlot ?? 'FULL_DAY') as DaySlot,
         // Story 36.5 — transmis tels quels. `heureRdv` reste une CHAÎNE : rien ici ne la parse
         // ni ne la compare, et elle n'entre pas dans le calcul de statut de créneau (AD-9).
         heureRdv: s.heureRdv ?? null,
@@ -1064,8 +1063,7 @@ export class AvailabilityService {
     seances: Array<{
       id: string;
       eventId: string;
-      poll: { chosenDate: Date | null } | null;
-      dateValidee: Date | null;
+      startDate: Date | null;
       inscriptionMin: number | null;
       inscriptionMax: number | null;
       inscriptions: { userId: string }[];
@@ -1077,9 +1075,9 @@ export class AvailabilityService {
     const entries: MyCalendarOpenInscriptionEntry[] = [];
     for (const s of seances) {
       if (s.inscriptionMax == null) continue;
-      // Date validée (via poll ou dateValidee) fige le roster (EventsService.inscrire()) —
+      // Date validée (plage de la séance, Story 37.4) fige le roster (EventsService.inscrire()) —
       // l'inscription n'est alors plus "ouverte".
-      if (s.poll?.chosenDate ?? s.dateValidee) continue;
+      if (s.startDate) continue;
       const partie = partieById.get(s.event.partieId);
       if (!partie || partie.kind !== 'CAMPAGNE_EPISODIQUE') continue;
       entries.push({

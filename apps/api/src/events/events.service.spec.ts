@@ -24,6 +24,7 @@ function makePrisma() {
     seance: {
       create: jest.fn().mockResolvedValue({ id: 'se1' }),
       findUniqueOrThrow: jest.fn(),
+      updateMany: jest.fn(),
     },
     inscription: {
       findUnique: jest.fn().mockResolvedValue(null),
@@ -204,12 +205,29 @@ describe('EventsService (Story 37.3)', () => {
       expect(realtime.emit).toHaveBeenCalledWith(partieTopic('p1'));
     });
 
+    it('setSpanFromPollInTx() pose une plage start = end sur la séance du vote, sans émettre', async () => {
+      const d = new Date('2026-11-03T00:00:00.000Z');
+
+      await service.setSpanFromPollInTx(
+        prisma.tx as unknown as Prisma.TransactionClient,
+        'poll1',
+        d,
+        'EVENING',
+      );
+
+      expect(prisma.tx.seance.updateMany).toHaveBeenCalledWith({
+        where: { pollId: 'poll1' },
+        data: { startDate: d, startSlot: 'EVENING', endDate: d, endSlot: 'EVENING' },
+      });
+      expect(realtime.emit).not.toHaveBeenCalled();
+    });
+
     it('resetSeanceDate() détache le vote, le supprime, recalcule et émet', async () => {
       await service.resetSeanceDate('p1', seance);
 
       expect(prisma.seance.update).toHaveBeenCalledWith({
         where: { id: 'se2' },
-        data: { pollId: null, dateValidee: null },
+        data: { pollId: null, startDate: null, startSlot: null, endDate: null, endSlot: null },
       });
       expect(prisma.sessionPoll.delete).toHaveBeenCalledWith({ where: { id: 'poll1' } });
       expect(prisma.partie.update).toHaveBeenCalled();
@@ -239,7 +257,7 @@ describe('EventsService (Story 37.3)', () => {
   });
 
   describe('inscriptions', () => {
-    const open = { id: 'se1', inscriptionMax: 2, dateValidee: null, poll: null };
+    const open = { id: 'se1', inscriptionMax: 2, startDate: null };
 
     it('capacité non définie → 400, aucune transaction', async () => {
       await expect(
@@ -250,12 +268,12 @@ describe('EventsService (Story 37.3)', () => {
 
     it('date validée (vote scellé) → 400, roster figé', async () => {
       await expect(
-        service.inscrire('p1', { ...open, poll: { chosenDate: new Date() } }, 'u1'),
+        service.inscrire('p1', { ...open, startDate: new Date() }, 'u1'),
       ).rejects.toThrow('Cette séance a déjà une date validée — les inscriptions sont figées');
     });
 
     it('verrou FOR UPDATE puis inscription, émission après validation', async () => {
-      prisma.tx.seance.findUniqueOrThrow.mockResolvedValue({ ...open, poll: null });
+      prisma.tx.seance.findUniqueOrThrow.mockResolvedValue({ ...open });
 
       await service.inscrire('p1', open, 'u1');
 
@@ -276,7 +294,7 @@ describe('EventsService (Story 37.3)', () => {
     });
 
     it('plafond atteint sous le verrou → 409', async () => {
-      prisma.tx.seance.findUniqueOrThrow.mockResolvedValue({ ...open, poll: null });
+      prisma.tx.seance.findUniqueOrThrow.mockResolvedValue({ ...open });
       prisma.tx.inscription.count.mockResolvedValue(2);
 
       await expect(service.inscrire('p1', open, 'u1')).rejects.toBeInstanceOf(ConflictException);
@@ -285,11 +303,11 @@ describe('EventsService (Story 37.3)', () => {
 
     it('desinscrire() : date validée → 400 ; sinon retrait idempotent et émission', async () => {
       await expect(
-        service.desinscrire('p1', { id: 'se1', dateValidee: new Date(), poll: null }, 'u1'),
+        service.desinscrire('p1', { id: 'se1', startDate: new Date() }, 'u1'),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
 
-      await service.desinscrire('p1', { id: 'se1', dateValidee: null, poll: null }, 'u1');
+      await service.desinscrire('p1', { id: 'se1', startDate: null }, 'u1');
       expect(prisma.inscription.deleteMany).toHaveBeenCalledWith({
         where: { seanceId: 'se1', userId: 'u1' },
       });
@@ -300,15 +318,15 @@ describe('EventsService (Story 37.3)', () => {
   it('recalculateNextSession() lit les séances par l’événement et pose la plus proche date future', async () => {
     const future = new Date(Date.UTC(2099, 0, 2));
     prisma.seance.findMany.mockResolvedValue([
-      { poll: null, dateValidee: new Date(Date.UTC(2099, 0, 5)) },
-      { poll: { chosenDate: future, chosenSlot: 'EVENING' }, dateValidee: null },
+      { startDate: new Date(Date.UTC(2099, 0, 5)), startSlot: null },
+      { startDate: future, startSlot: 'EVENING' },
     ]);
 
     await service.recalculateNextSession('p1');
 
     expect(prisma.seance.findMany).toHaveBeenCalledWith({
       where: { event: { partieId: 'p1' } },
-      include: { poll: true },
+      select: { startDate: true, startSlot: true },
     });
     expect(prisma.partie.update).toHaveBeenCalledWith({
       where: { id: 'p1' },

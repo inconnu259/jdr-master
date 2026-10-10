@@ -695,6 +695,11 @@ async function main() {
     data: {
       eventId: oneShotScenario.id,
       pollId: oneShotPoll.id,
+      // Story 37.4 : plage de la séance = option choisie du vote (seule source de la date).
+      startDate: at(-70),
+      startSlot: 'AFTERNOON',
+      endDate: at(-70),
+      endSlot: 'AFTERNOON',
       // Infos pratiques (jusqu'ici jamais peuplées par le seed).
       heureRdv: '14:00',
       lieu: 'Chez le MJ',
@@ -912,6 +917,11 @@ async function main() {
     data: {
       eventId: chap1.id,
       pollId: chap1Poll.id,
+      // Story 37.4 : plage de la séance = option choisie du vote (seule source de la date).
+      startDate: at(-45),
+      startSlot: 'AFTERNOON',
+      endDate: at(-45),
+      endSlot: 'AFTERNOON',
       heureRdv: '14:00',
       lieu: 'Chez Alice',
       compteRendu: 'Bonne mise en place de la campagne, les joueurs ont accroché sur le mystère.',
@@ -1058,9 +1068,9 @@ async function main() {
       hommeDragonId: suisen.id,
       createdAt: at(-50),
       // Prochaine séance matérialisée, comme le fait `ScenariosService.recalculateNextSession()` :
-      // la date la plus proche dans le futur parmi les séances (`poll.chosenDate ?? dateValidee`),
-      // ici « Le Mystère de l'Auberge » (J+10) — « Le Secret du Phare » (J+12) vient après. Une
-      // `dateValidee` n'a pas de créneau → `nextSessionSlot` reste null. `reminderSentAt` reste
+      // la date la plus proche dans le futur parmi les séances (début de leur plage, Story 37.4),
+      // ici « Le Mystère de l'Auberge » (J+10) — « Le Secret du Phare » (J+12) vient après. Ces
+      // plages n'ont pas de créneau → `nextSessionSlot` reste null. `reminderSentAt` reste
       // null : le rappel n'est dû que dans les 24 h précédant la séance (`NotificationsService`).
       nextSessionDate: at(10),
       nextSessionSlot: null,
@@ -1189,7 +1199,9 @@ async function main() {
       eventId: bijou.id,
       inscriptionMin: 2,
       inscriptionMax: 4,
-      dateValidee: at(-30),
+      // Story 37.4 : date posée hors vote → plage sans créneau, `end = start`.
+      startDate: at(-30),
+      endDate: at(-30),
       heureRdv: '14:30',
       lieu: 'Taverne du Griffon',
       compteRendu: 'Enquête bouclée en une séance, bon rythme, twist final apprécié.',
@@ -1240,7 +1252,8 @@ async function main() {
       eventId: auberge.id,
       inscriptionMin: 2,
       inscriptionMax: 3,
-      dateValidee: at(10), // = Partie.nextSessionDate (voir plus haut)
+      startDate: at(10), // = Partie.nextSessionDate (voir plus haut)
+      endDate: at(10),
       heureRdv: '20:30',
       lieu: 'Chez Bob',
       notePratique: 'Code de la porte : 1234B. Sonner deux fois.',
@@ -1271,7 +1284,8 @@ async function main() {
       eventId: phare.id,
       inscriptionMin: 2,
       inscriptionMax: 5,
-      dateValidee: at(12),
+      startDate: at(12),
+      endDate: at(12),
       heureRdv: '20:00',
       lieu: 'En visio',
     },
@@ -1330,7 +1344,7 @@ async function main() {
   // ─── Partie 5 : CAMPAGNE_LINEAIRE très avancée — « Les Annales de Brume » ─────
   // Aventure de Kaien : ses onze scénarios `PASSE`, ajoutés à celui de « La Route des
   // Lanternes », font 12 → niveau 5 PAR CUMUL (aucune des deux aventures n'y arrive seule).
-  // Chaque scénario porte une séance minimale (`eventId` + `dateValidee` suffisent), tous dans
+  // Chaque scénario porte une séance minimale (`eventId` + plage sans créneau), tous dans
   // le passé et sans scénario COURANT : une campagne à l'arrêt entre deux chapitres.
   console.log('→ Partie CAMPAGNE_LINEAIRE (Les Annales de Brume)...');
   const annales = await prisma.partie.create({
@@ -1366,7 +1380,9 @@ async function main() {
         closedAt: at(jour, 19),
       },
     });
-    await prisma.seance.create({ data: { eventId: scenario.id, dateValidee: at(jour) } });
+    await prisma.seance.create({
+      data: { eventId: scenario.id, startDate: at(jour), endDate: at(jour) },
+    });
   }
 
   // ─── Partie 6 : ONE_SHOT dont la séance tombe dans moins de 24 h (MJ : Diane) ──────
@@ -1436,6 +1452,11 @@ async function main() {
     data: {
       eventId: mareeScenario.id,
       pollId: mareePoll.id,
+      // Story 37.4 : plage de la séance = option choisie du vote (seule source de la date).
+      startDate: day(1),
+      startSlot: 'EVENING',
+      endDate: day(1),
+      endSlot: 'EVENING',
       heureRdv: '20:30',
       lieu: 'En visio',
       notePratique: 'Se connecter dix minutes avant, micro et caméra testés.',
@@ -1540,6 +1561,11 @@ async function main() {
     data: {
       eventId: cendresScenario.id,
       pollId: cendresPoll.id,
+      // Story 37.4 : plage de la séance = option choisie du vote (seule source de la date).
+      startDate: day(21),
+      startSlot: 'EVENING',
+      endDate: day(21),
+      endSlot: 'EVENING',
       heureRdv: '19:00',
       lieu: 'Chez Diane',
     },

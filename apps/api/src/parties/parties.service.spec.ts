@@ -1542,11 +1542,8 @@ describe('PartiesService', () => {
           findMany: jest.fn().mockResolvedValue([
             {
               id: 'seanceB1',
-              poll: {
-                chosenDate: new Date('2026-09-20T00:00:00Z'),
-                chosenSlot: 'EVENING',
-              },
-              dateValidee: null,
+              startDate: new Date('2026-09-20T00:00:00Z'),
+              startSlot: 'EVENING',
               inscriptions: [],
               event: { partieId: 'B' },
             },

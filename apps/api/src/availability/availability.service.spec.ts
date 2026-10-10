@@ -1353,11 +1353,8 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        poll: {
-          chosenDate: new Date('2026-09-10T00:00:00Z'),
-          chosenSlot: 'EVENING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-09-10T00:00:00Z'),
+        startSlot: 'EVENING',
         inscriptions: [],
         event: { partieId: 'partieB' },
       },
@@ -1388,8 +1385,8 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        poll: null,
-        dateValidee: new Date('2026-09-11T00:00:00Z'),
+        startDate: new Date('2026-09-11T00:00:00Z'),
+        startSlot: null,
         inscriptions: [],
         event: { partieId: 'partieB' },
       },
@@ -1411,11 +1408,8 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        poll: {
-          chosenDate: new Date('2026-09-16T00:00:00Z'),
-          chosenSlot: null,
-        },
-        dateValidee: null,
+        startDate: new Date('2026-09-16T00:00:00Z'),
+        startSlot: null,
         inscriptions: [],
         event: { partieId: 'partieB' },
       },
@@ -1437,8 +1431,8 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        poll: null,
-        dateValidee: new Date('2026-09-12T00:00:00Z'),
+        startDate: new Date('2026-09-12T00:00:00Z'),
+        startSlot: null,
         inscriptions: [{ userId: 'u1' }],
         event: { partieId: 'partieB' },
       },
@@ -1461,8 +1455,8 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        poll: null,
-        dateValidee: new Date('2026-09-13T00:00:00Z'),
+        startDate: new Date('2026-09-13T00:00:00Z'),
+        startSlot: null,
         inscriptions: [],
         event: { partieId: 'partieB' },
       },
@@ -1484,8 +1478,8 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        poll: null,
-        dateValidee: null,
+        startDate: null,
+        startSlot: null,
         inscriptions: [],
         event: { partieId: 'partieB' },
       },
@@ -1518,11 +1512,8 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        poll: {
-          chosenDate: new Date('2026-09-14T00:00:00Z'),
-          chosenSlot: 'AFTERNOON',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-09-14T00:00:00Z'),
+        startSlot: 'AFTERNOON',
         inscriptions: [],
         event: { partieId: 'partieB' },
       },
@@ -1548,11 +1539,8 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        poll: {
-          chosenDate: new Date('2026-09-15T00:00:00Z'),
-          chosenSlot: 'EVENING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-09-15T00:00:00Z'),
+        startSlot: 'EVENING',
         inscriptions: [],
         event: { partieId: 'partieB' },
         // La séance porte tout ce qu'il ne faut pas laisser passer.
@@ -1589,11 +1577,8 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     mockSeanceFindMany.mockResolvedValue([
       {
         id: 'seance1',
-        poll: {
-          chosenDate: new Date('2026-09-15T00:00:00Z'),
-          chosenSlot: 'MORNING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-09-15T00:00:00Z'),
+        startSlot: 'MORNING',
         inscriptions: [],
         event: { partieId: 'partieB' },
       },
@@ -1687,11 +1672,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: {
-          chosenDate: new Date('2026-10-10T00:00:00Z'),
-          chosenSlot: 'MORNING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-10-10T00:00:00Z'),
+        startSlot: 'MORNING',
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1727,11 +1709,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: {
-          chosenDate: new Date('2026-10-10T00:00:00Z'),
-          chosenSlot: 'EVENING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-10-10T00:00:00Z'),
+        startSlot: 'EVENING',
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1758,11 +1737,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: {
-          chosenDate: new Date('2026-10-10T00:00:00Z'),
-          chosenSlot: 'EVENING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-10-10T00:00:00Z'),
+        startSlot: 'EVENING',
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1783,11 +1759,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: {
-          chosenDate: new Date('2026-10-10T00:00:00Z'),
-          chosenSlot: 'EVENING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-10-10T00:00:00Z'),
+        startSlot: 'EVENING',
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1808,11 +1781,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: {
-          chosenDate: new Date('2026-10-10T00:00:00Z'),
-          chosenSlot: 'EVENING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-10-10T00:00:00Z'),
+        startSlot: 'EVENING',
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1833,11 +1803,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: {
-          chosenDate: new Date('2026-07-10T00:00:00Z'),
-          chosenSlot: 'EVENING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-07-10T00:00:00Z'),
+        startSlot: 'EVENING',
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1861,11 +1828,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: {
-          chosenDate: new Date('2026-10-10T00:00:00Z'),
-          chosenSlot: 'EVENING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-10-10T00:00:00Z'),
+        startSlot: 'EVENING',
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1887,11 +1851,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: {
-          chosenDate: new Date('2026-10-10T00:00:00Z'),
-          chosenSlot: 'EVENING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-10-10T00:00:00Z'),
+        startSlot: 'EVENING',
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1916,11 +1877,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: {
-          chosenDate: new Date('2026-10-10T00:00:00Z'),
-          chosenSlot: 'EVENING',
-        },
-        dateValidee: null,
+        startDate: new Date('2026-10-10T00:00:00Z'),
+        startSlot: 'EVENING',
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1944,11 +1902,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: {
-          chosenDate: new Date('2026-10-10T00:00:00Z'),
-          chosenSlot: null,
-        },
-        dateValidee: null,
+        startDate: new Date('2026-10-10T00:00:00Z'),
+        startSlot: null,
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1965,8 +1920,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: null,
-        dateValidee: new Date('2026-10-11T00:00:00Z'),
+        startDate: new Date('2026-10-11T00:00:00Z'),
+        startSlot: null,
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,
@@ -1986,8 +1941,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seanceEtrangere',
         eventId: 'scenarioX',
-        poll: null,
-        dateValidee: new Date('2026-10-15T00:00:00Z'),
+        startDate: new Date('2026-10-15T00:00:00Z'),
+        startSlot: null,
         inscriptions: [],
         inscriptionMin: 1,
         inscriptionMax: 4,
@@ -2227,8 +2182,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: null,
-        dateValidee: null,
+        startDate: null,
+        startSlot: null,
         inscriptions: [{ userId: 'me' }, { userId: 'other' }],
         inscriptionMin: 2,
         inscriptionMax: 5,
@@ -2261,8 +2216,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: null,
-        dateValidee: new Date('2026-10-05T00:00:00Z'),
+        startDate: new Date('2026-10-05T00:00:00Z'),
+        startSlot: null,
         inscriptions: [],
         inscriptionMin: 2,
         inscriptionMax: 5,
@@ -2282,8 +2237,8 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
       {
         id: 'seance1',
         eventId: 'scenario1',
-        poll: null,
-        dateValidee: null,
+        startDate: null,
+        startSlot: null,
         inscriptions: [],
         inscriptionMin: null,
         inscriptionMax: null,

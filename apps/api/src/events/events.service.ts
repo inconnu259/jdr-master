@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type Event, type Seance, type SessionPoll } from '@prisma/client';
+import { Prisma, type Event, type Seance } from '@prisma/client';
 import type { DaySlot, PartieKind } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
@@ -28,9 +28,9 @@ export interface CreatedEvent<T> {
 
 /** Une séance telle que lue par l'appelant — seuls les champs dont les règles ont besoin. */
 type SeanceRef = Pick<Seance, 'id' | 'eventId' | 'pollId'>;
-type SeanceWithPoll = Pick<Seance, 'id' | 'inscriptionMax' | 'dateValidee'> & {
-  poll: Pick<SessionPoll, 'chosenDate'> | null;
-};
+/** Story 37.4 : la date de la séance est le début de sa plage (`startDate`), seule source de la
+ *  date — posée au choix d'une option de vote, effacée à sa remise à zéro. */
+type SeanceDated = Pick<Seance, 'id' | 'inscriptionMax' | 'startDate'>;
 
 /** Forme du payload des informations pratiques (Story 36.5) — les trois champs sont saisis
  *  ensemble et `null` vide le champ. */
@@ -187,20 +187,38 @@ export class EventsService {
   }
 
   /**
-   * Story 8.8, AC4 : détache le vote de la séance et retire l'éventuel `dateValidee` hérité, PUIS
+   * Story 8.8, AC4 : détache le vote de la séance et efface sa plage de date (Story 37.4), PUIS
    * supprime le SessionPoll lui-même (détacher avant de supprimer : FK). La date la plus proche de
    * la Partie peut changer → recalcul.
    */
   async resetSeanceDate(partieId: string, seance: SeanceRef): Promise<void> {
     await this.prisma.seance.update({
       where: { id: seance.id },
-      data: { pollId: null, dateValidee: null },
+      data: { pollId: null, startDate: null, startSlot: null, endDate: null, endSlot: null },
     });
     if (seance.pollId) {
       await this.prisma.sessionPoll.delete({ where: { id: seance.pollId } });
     }
     await this.recalculateNextSession(partieId);
     this.realtimeEvents.emit(partieTopic(partieId));
+  }
+
+  /**
+   * Story 37.4 : pose la plage de date de la séance rattachée au vote `pollId` depuis l'option
+   * choisie — `start = end` (seules plages écrites à ce palier). Appelé par `PollService.choose`
+   * DANS sa transaction : le vote clos et la date de la séance sont écrits ensemble ou pas du tout.
+   * Un vote sans séance rattachée (vote de partie hérité) ne touche aucune ligne. N'émet jamais.
+   */
+  async setSpanFromPollInTx(
+    tx: Prisma.TransactionClient,
+    pollId: string,
+    date: Date,
+    slot: DaySlot,
+  ): Promise<void> {
+    await tx.seance.updateMany({
+      where: { pollId },
+      data: { startDate: date, startSlot: slot, endDate: date, endSlot: slot },
+    });
   }
 
   /** Capacité d'inscription d'une séance (Story 8.3). */
@@ -247,14 +265,13 @@ export class EventsService {
    * SELECT ... FOR UPDATE obligatoire — READ COMMITTED seul ne suffit pas à empêcher un dépassement
    * de max entre deux inscriptions concurrentes.
    */
-  async inscrire(partieId: string, seance: SeanceWithPoll, userId: string): Promise<void> {
+  async inscrire(partieId: string, seance: SeanceDated, userId: string): Promise<void> {
     const seanceId = seance.id;
     if (seance.inscriptionMax == null) {
       throw new BadRequestException("Cette séance n'a pas encore de capacité définie par le MJ");
     }
-    // Story 8.8 : la date peut aussi provenir d'un vote (Décision 1) — Seance.dateValidee seul ne
-    // suffit plus à détecter le gel du roster.
-    if (seance.poll?.chosenDate ?? seance.dateValidee) {
+    // Story 37.4 : la plage porte la date, qu'elle vienne d'un vote choisi ou non.
+    if (seance.startDate) {
       throw new BadRequestException(FROZEN_ROSTER_MESSAGE);
     }
 
@@ -266,14 +283,11 @@ export class EventsService {
       // AC2 vs AC4 : ce check précède le comptage — un joueur déjà inscrit reste inscrit sans
       // jamais être rejeté par un quota déjà atteint par d'autres (idempotence).
       if (existing) return;
-      // Relit inscriptionMax ET le poll sous le verrou — sinon une capacité ou une date validée
+      // Relit inscriptionMax ET la date sous le verrou — sinon une capacité ou une date validée
       // concurrentes entre la lecture initiale (hors transaction) et cette comparaison
       // utiliseraient un état périmé (revue de code, 2026-07-14).
-      const locked = await tx.seance.findUniqueOrThrow({
-        where: { id: seanceId },
-        include: { poll: true },
-      });
-      if (locked.poll?.chosenDate ?? locked.dateValidee) {
+      const locked = await tx.seance.findUniqueOrThrow({ where: { id: seanceId } });
+      if (locked.startDate) {
         throw new ConflictException(FROZEN_ROSTER_MESSAGE);
       }
       const count = await tx.inscription.count({ where: { seanceId } });
@@ -291,10 +305,10 @@ export class EventsService {
    */
   async desinscrire(
     partieId: string,
-    seance: Omit<SeanceWithPoll, 'inscriptionMax'>,
+    seance: Omit<SeanceDated, 'inscriptionMax'>,
     userId: string,
   ): Promise<void> {
-    if (seance.poll?.chosenDate ?? seance.dateValidee) {
+    if (seance.startDate) {
       throw new BadRequestException(FROZEN_ROSTER_MESSAGE);
     }
     await this.prisma.inscription.deleteMany({ where: { seanceId: seance.id, userId } });
@@ -306,14 +320,14 @@ export class EventsService {
   /**
    * Story 8.8 (Décision 2) : un seul vote actif par Séance — Partie.nextSessionDate/nextSessionSlot
    * reflètent la date la plus proche dans le futur parmi TOUTES les séances de la Partie
-   * (poll.chosenDate ?? dateValidee). Appelé après tout événement pouvant faire changer cette date :
+   * (début de leur plage, Story 37.4). Appelé après tout événement pouvant faire changer cette date :
    * choix d'un vote (PollController, via `ScenariosService`), réinitialisation ou suppression d'une
    * séance. Remet `reminderSentAt` à null seulement si la date/le créneau change réellement.
    */
   async recalculateNextSession(partieId: string): Promise<void> {
     const seances = await this.prisma.seance.findMany({
       where: { event: { partieId } },
-      include: { poll: true },
+      select: { startDate: true, startSlot: true },
     });
 
     // Bug fix (production) : comparer à Date.now() excluait TOUJOURS une séance datée
@@ -326,8 +340,8 @@ export class EventsService {
     const nearest =
       seances
         .map((s): Candidate | null => {
-          if (s.poll?.chosenDate) return { date: s.poll.chosenDate, slot: s.poll.chosenSlot };
-          if (s.dateValidee) return { date: s.dateValidee, slot: null };
+          // Créneau vide = « sans créneau » (date posée hors vote) → `nextSessionSlot` null.
+          if (s.startDate) return { date: s.startDate, slot: s.startSlot ?? null };
           return null;
         })
         .filter((c): c is Candidate => c !== null && c.date.getTime() >= now)

@@ -1124,7 +1124,8 @@ describe('ScenariosService', () => {
             id: 'se1',
             scenarioId: 's1',
             createdAt: new Date('2026-07-01'),
-            dateValidee: null,
+            startDate: null,
+            startSlot: null,
             inscriptionMin: null,
             inscriptionMax: null,
             inscriptions: [],
@@ -1183,7 +1184,8 @@ describe('ScenariosService', () => {
             id: 'se1',
             scenarioId: 's1',
             createdAt: new Date('2026-07-01'),
-            dateValidee: new Date('2026-08-15T00:00:00.000Z'),
+            startDate: new Date('2026-08-15T00:00:00.000Z'),
+            startSlot: null,
             inscriptionMin: null,
             inscriptionMax: null,
             inscriptions: [],
@@ -1198,8 +1200,8 @@ describe('ScenariosService', () => {
       const result = await service.findAllForPartie('p1', 'u1');
 
       expect(result[0].seances[0].dateValidee).toBe('2026-08-15T00:00:00.000Z');
-      // La colonne `Seance.dateValidee` n'a pas de créneau propre — même convention que
-      // `recalculateNextSession()`, qui pose `slot: null` sur cette branche.
+      // Plage sans créneau (date posée hors vote) — même convention que
+      // `recalculateNextSession()`, qui pose `slot: null` dans ce cas.
       expect(result[0].seances[0].slotValidee).toBeNull();
       // Additif : le bloc `inscription` n'apparaît toujours pas sans `inscriptionMax`.
       expect(result[0].seances[0].inscription).toBeUndefined();
@@ -1230,7 +1232,10 @@ describe('ScenariosService', () => {
             id: 'se1',
             scenarioId: 's1',
             createdAt: new Date('2026-07-01'),
-            dateValidee: new Date('2026-08-15T00:00:00.000Z'),
+            // Story 37.4 : la plage est la seule source lue — un vote scellé l'a posée à sa date et
+            // son créneau (cf. migration `seance_date_span`, qui fait prévaloir le vote).
+            startDate: new Date('2026-09-02T00:00:00.000Z'),
+            startSlot: 'EVENING',
             inscriptionMin: null,
             inscriptionMax: null,
             inscriptions: [],
@@ -1282,7 +1287,8 @@ describe('ScenariosService', () => {
             id: 'se1',
             scenarioId: 's1',
             createdAt: new Date('2026-07-01'),
-            dateValidee: new Date('2026-08-15T00:00:00.000Z'),
+            startDate: new Date('2026-08-15T00:00:00.000Z'),
+            startSlot: null,
             inscriptionMin: null,
             inscriptionMax: null,
             inscriptions: [],
@@ -1337,7 +1343,8 @@ describe('ScenariosService', () => {
             id: 'se1',
             scenarioId: 's1',
             createdAt: new Date('2026-07-01'),
-            dateValidee: new Date('2026-08-15T00:00:00.000Z'),
+            startDate: new Date('2026-08-15T00:00:00.000Z'),
+            startSlot: null,
             inscriptionMin: null,
             inscriptionMax: null,
             inscriptions: [],
@@ -1389,7 +1396,8 @@ describe('ScenariosService', () => {
             id: 'se1',
             scenarioId: 's1',
             createdAt: new Date('2026-07-01'),
-            dateValidee: null,
+            startDate: null,
+            startSlot: null,
             inscriptionMin: null,
             inscriptionMax: null,
             inscriptions: [],
@@ -1659,7 +1667,8 @@ describe('ScenariosService', () => {
               poll: null,
               inscriptionMin: 2,
               inscriptionMax: 5,
-              dateValidee: new Date('2026-06-20T00:00:00.000Z'),
+              startDate: new Date('2026-06-20T00:00:00.000Z'),
+              startSlot: null,
               inscriptions: [],
               compteRendu: null,
               createdAt: new Date('2026-06-05'),
@@ -2946,13 +2955,13 @@ describe('ScenariosService', () => {
         asSeance([
           {
             id: 's1',
-            dateValidee: null,
-            poll: { chosenDate: FUTURE_FAR, chosenSlot: 'MORNING' },
+            startDate: FUTURE_FAR,
+            startSlot: 'MORNING',
           },
           {
             id: 's2',
-            dateValidee: null,
-            poll: { chosenDate: FUTURE_NEAR, chosenSlot: 'EVENING' },
+            startDate: FUTURE_NEAR,
+            startSlot: 'EVENING',
           },
         ]),
       );
@@ -2975,8 +2984,8 @@ describe('ScenariosService', () => {
         asSeance([
           {
             id: 's1',
-            dateValidee: null,
-            poll: { chosenDate: TODAY, chosenSlot: 'MORNING' },
+            startDate: TODAY,
+            startSlot: 'MORNING',
           },
         ]),
       );
@@ -2998,13 +3007,13 @@ describe('ScenariosService', () => {
         asSeance([
           {
             id: 's1',
-            dateValidee: null,
-            poll: { chosenDate: PAST, chosenSlot: 'MORNING' },
+            startDate: PAST,
+            startSlot: 'MORNING',
           },
           {
             id: 's2',
-            dateValidee: null,
-            poll: { chosenDate: FUTURE_FAR, chosenSlot: 'AFTERNOON' },
+            startDate: FUTURE_FAR,
+            startSlot: 'AFTERNOON',
           },
         ]),
       );
@@ -3021,9 +3030,9 @@ describe('ScenariosService', () => {
       });
     });
 
-    it('épisodique sans poll, dateValidee brut (héritage) → utilisé, slot null', async () => {
+    it('plage sans créneau (date posée hors vote) → utilisée, slot null', async () => {
       prisma.seance.findMany.mockResolvedValue(
-        asSeance([{ id: 's1', dateValidee: FUTURE_NEAR, poll: null }]),
+        asSeance([{ id: 's1', startDate: FUTURE_NEAR, startSlot: null }]),
       );
 
       await service.recalculateNextSession('p1');
@@ -3041,8 +3050,8 @@ describe('ScenariosService', () => {
     it('aucune date future → nextSessionDate/nextSessionSlot remis à null', async () => {
       prisma.seance.findMany.mockResolvedValue(
         asSeance([
-          { id: 's1', dateValidee: null, poll: null },
-          { id: 's2', dateValidee: PAST, poll: null },
+          { id: 's1', startDate: null, startSlot: null },
+          { id: 's2', startDate: PAST, startSlot: null },
         ]),
       );
       prisma.partie.findUniqueOrThrow.mockResolvedValueOnce({
@@ -3069,8 +3078,8 @@ describe('ScenariosService', () => {
         asSeance([
           {
             id: 's1',
-            dateValidee: null,
-            poll: { chosenDate: FUTURE_NEAR, chosenSlot: 'EVENING' },
+            startDate: FUTURE_NEAR,
+            startSlot: 'EVENING',
           },
         ]),
       );
@@ -3725,13 +3734,14 @@ describe('ScenariosService', () => {
       };
     }
 
-    it('détache le poll et retire dateValidee, déclenche le recalcul de nextSessionDate', async () => {
+    it('détache le poll et efface la plage de date, déclenche le recalcul de nextSessionDate', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
           scenarioId: VALID_SCENARIO_ID,
           pollId: 'poll1',
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -3747,7 +3757,7 @@ describe('ScenariosService', () => {
       expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
       expect(prisma.seance.update).toHaveBeenCalledWith({
         where: { id: SEANCE_ID },
-        data: { pollId: null, dateValidee: null },
+        data: { pollId: null, startDate: null, startSlot: null, endDate: null, endSlot: null },
       });
       // Recalcul déclenché : Partie relue/réécrite via recalculateNextSession().
       expect(prisma.partie.update).toHaveBeenCalledWith({
@@ -3765,7 +3775,8 @@ describe('ScenariosService', () => {
           id: SEANCE_ID,
           scenarioId: VALID_SCENARIO_ID,
           pollId: 'poll1',
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -3787,7 +3798,8 @@ describe('ScenariosService', () => {
           id: SEANCE_ID,
           scenarioId: VALID_SCENARIO_ID,
           pollId: 'poll1',
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -3826,13 +3838,14 @@ describe('ScenariosService', () => {
       });
     });
 
-    it('séance sans poll lié (héritage dateValidee seul) → aucun appel à sessionPoll.delete', async () => {
+    it('séance sans poll lié (plage posée hors vote) → aucun appel à sessionPoll.delete', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
           scenarioId: VALID_SCENARIO_ID,
           pollId: null,
-          dateValidee: new Date('2026-08-01T00:00:00.000Z'),
+          startDate: new Date('2026-08-01T00:00:00.000Z'),
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -3960,7 +3973,8 @@ describe('ScenariosService', () => {
             poll: null,
             inscriptionMin: 4,
             inscriptionMax: 6,
-            dateValidee: null,
+            startDate: null,
+            startSlot: null,
             inscriptions: [],
             compteRendu: null,
             createdAt: new Date('2026-07-13T00:00:00.000Z'),
@@ -4123,7 +4137,8 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockRejectedValue(
@@ -4144,7 +4159,8 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
@@ -4168,7 +4184,8 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(
@@ -4192,7 +4209,8 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -4230,7 +4248,8 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -4261,7 +4280,8 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6, // valeur périmée : setSeanceCapacity() a réduit le max entretemps
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -4291,7 +4311,8 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -4320,7 +4341,8 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -4349,7 +4371,8 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: null,
           inscriptionMax: null,
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -4363,14 +4386,15 @@ describe('ScenariosService', () => {
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
-    it('date déjà validée (héritage Seance.dateValidee) → rejet 400, aucune écriture', async () => {
+    it('date déjà validée (plage sans créneau, posée hors vote) → rejet 400, aucune écriture', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: new Date('2026-08-01T00:00:00.000Z'),
+          startDate: new Date('2026-08-01T00:00:00.000Z'),
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -4384,15 +4408,15 @@ describe('ScenariosService', () => {
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
-    it('date choisie via un vote clôturé (poll.chosenDate) → rejet 400, aucune écriture (Story 8.8, gap gel du roster)', async () => {
+    it('date choisie via un vote clôturé (plage posée) → rejet 400, aucune écriture (Story 8.8, gap gel du roster)', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: null,
-          poll: { chosenDate: new Date('2026-08-01T00:00:00.000Z') },
+          startDate: new Date('2026-08-01T00:00:00.000Z'),
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -4406,14 +4430,15 @@ describe('ScenariosService', () => {
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
-    it('date validée (via poll.chosenDate) concurremment entre le check initial et la lecture sous verrou → rejet 409, aucune écriture (TOCTOU, revue de code 2026-07-14)', async () => {
+    it('date validée (plage posée par un vote) concurremment entre le check initial et la lecture sous verrou → rejet 409, aucune écriture (TOCTOU, revue de code 2026-07-14)', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
           poll: null, // pas encore de date validée au moment du check initial hors transaction
         }),
       );
@@ -4429,8 +4454,8 @@ describe('ScenariosService', () => {
         asSeance({
           id: SEANCE_ID,
           inscriptionMax: 6,
-          dateValidee: null,
-          poll: { chosenDate: new Date('2026-08-01T00:00:00.000Z') },
+          startDate: new Date('2026-08-01T00:00:00.000Z'),
+          startSlot: null,
         }),
       );
 
@@ -4446,7 +4471,8 @@ describe('ScenariosService', () => {
           scenarioId: VALID_SCENARIO_ID,
           inscriptionMin: 4,
           inscriptionMax: 6,
-          dateValidee: null,
+          startDate: null,
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -4625,12 +4651,13 @@ describe('ScenariosService', () => {
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
     });
 
-    it('date déjà validée (héritage Seance.dateValidee) → rejet 400, aucune écriture (roster figé après validation MJ)', async () => {
+    it('date déjà validée (plage sans créneau, posée hors vote) → rejet 400, aucune écriture (roster figé après validation MJ)', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
           scenarioId: VALID_SCENARIO_ID,
-          dateValidee: new Date('2026-08-01T00:00:00.000Z'),
+          startDate: new Date('2026-08-01T00:00:00.000Z'),
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));
@@ -4644,13 +4671,13 @@ describe('ScenariosService', () => {
       expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
     });
 
-    it('date choisie via un vote clôturé (poll.chosenDate) → rejet 400, aucune écriture (Story 8.8, gap gel du roster)', async () => {
+    it('date choisie via un vote clôturé (plage posée) → rejet 400, aucune écriture (Story 8.8, gap gel du roster)', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
           scenarioId: VALID_SCENARIO_ID,
-          dateValidee: null,
-          poll: { chosenDate: new Date('2026-08-01T00:00:00.000Z') },
+          startDate: new Date('2026-08-01T00:00:00.000Z'),
+          startSlot: null,
         }),
       );
       prisma.scenario.findUniqueOrThrow.mockResolvedValue(withEvent(mockScenario()));

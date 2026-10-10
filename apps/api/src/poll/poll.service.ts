@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { DaySlot, SessionPollDto } from '@master-jdr/shared';
+import { EventsService } from '../events/events.service';
 import { PartiesService } from '../parties/parties.service';
 import { countParticipants } from '../parties/participant-count.util';
 import { PrismaService } from '../prisma/prisma.service';
@@ -28,6 +29,9 @@ export class PollService {
     private readonly prisma: PrismaService,
     private readonly parties: PartiesService,
     private readonly realtimeEvents: RealtimeEventsService,
+    // Story 37.4 : import temporaire couche 1 → couche 2 (remplacé par un port en 37.8) — la date
+    // de la séance s'écrit dans la même transaction que la clôture du vote.
+    private readonly events: EventsService,
   ) {}
 
   async create(partieId: string, userId: string, dto: CreatePollDto): Promise<SessionPollDto> {
@@ -168,13 +172,18 @@ export class PollService {
       where: { id: dto.optionId },
     });
     if (!option || option.pollId !== pollId) throw new NotFoundException('Option introuvable');
-    await this.prisma.sessionPoll.update({
-      where: { id: pollId },
-      data: {
-        status: 'CLOSED',
-        chosenDate: option.date,
-        chosenSlot: option.slot,
-      },
+    // Story 37.4 : vote clos et plage de la séance rattachée écrits ensemble ou pas du tout — la
+    // plage est la seule source de la date de séance (auparavant, la ligne du vote suffisait).
+    await this.prisma.$transaction(async (tx) => {
+      await tx.sessionPoll.update({
+        where: { id: pollId },
+        data: {
+          status: 'CLOSED',
+          chosenDate: option.date,
+          chosenSlot: option.slot,
+        },
+      });
+      await this.events.setSpanFromPollInTx(tx, pollId, option.date, option.slot);
     });
     // Ne remettre reminderSentAt à null que si la date/le créneau change réellement — une
     // re-confirmation du créneau déjà actif ne doit pas annuler un rappel déjà envoyé.

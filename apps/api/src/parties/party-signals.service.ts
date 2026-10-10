@@ -82,7 +82,8 @@ export class PartySignalsService {
         where: {
           compteRendu: null,
           event: { partieId: { in: mjPartieIds } },
-          OR: [{ dateValidee: { not: null } }, { poll: { chosenDate: { not: null } } }],
+          // Story 37.4 : séance datée = plage posée (seule source de la date).
+          startDate: { not: null },
         },
         select: { event: { select: { partieId: true } } },
       }),

@@ -568,9 +568,10 @@ export class ScenariosService {
   // tie-breaker si égalité exacte) ne peut donc jamais être supprimée (Story 8.7, AC5). Un
   // scénario PASSE (clôturé) est figé — sa découpe en séances ne doit plus changer rétroactivement
   // (revue de code Story 8.7). Inscription.onDelete: Cascade (déjà en place) supprime
-  // automatiquement les inscriptions liées ; le SessionPoll lié (si pollId posé) n'est PAS
-  // supprimé — cycle de vie indépendant (P2-AD-2), seule la ligne Seance disparaît. Story 8.8 :
-  // supprimer une séance peut faire disparaître la date la plus proche de la Partie → recalcul.
+  // automatiquement les inscriptions liées ; le SessionPoll lié (si pollId posé) est supprimé
+  // ensuite (revue de code Story 8.8 : sans séance, le vote n'a plus de sens — cf.
+  // `EventsService.deleteSeance`). Story 8.8 : supprimer une séance peut faire disparaître la date
+  // la plus proche de la Partie → recalcul.
   async deleteSeance(seanceId: string, mjId: string): Promise<ScenarioDto> {
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
@@ -637,8 +638,8 @@ export class ScenariosService {
     return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
   }
 
-  // Story 8.8, AC4 : détache le poll de la séance (Seance.pollId = null) et retire l'éventuel
-  // Seance.dateValidee hérité, PUIS supprime le SessionPoll lui-même (revue de code, décision
+  // Story 8.8, AC4 : détache le poll de la séance (Seance.pollId = null) et efface sa plage de
+  // date (Story 37.4), PUIS supprime le SessionPoll lui-même (revue de code, décision
   // utilisateur : sans séance à dater, le vote n'a plus de sens — plus d'orphelin injoignable).
   // Ordre requis : détacher avant de supprimer (Seance.pollId référence SessionPoll en FK). Permet
   // de rappeler createSeancePoll() ensuite (sa garde « déjà liée à un vote » n'est plus bloquée une
@@ -714,7 +715,6 @@ export class ScenariosService {
   async inscrire(seanceId: string, userId: string): Promise<ScenarioDto> {
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
-      include: { poll: true },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
     const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
@@ -750,7 +750,6 @@ export class ScenariosService {
   async desinscrire(seanceId: string, userId: string): Promise<ScenarioDto> {
     const seance = await this.prisma.seance.findUnique({
       where: { id: seanceId },
-      include: { poll: true },
     });
     if (!seance) throw new NotFoundException('Séance introuvable');
     const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
@@ -1028,11 +1027,13 @@ function toSeanceDto(
   // (`recalculateNextSession()`, `availability.service.ts`, `CalendarView`) : le vote scellé
   // d'abord, la colonne héritée ensuite. Sans ce champ, une séance datée dont `inscriptionMax`
   // est nul n'exposait aucune date — le bloc `inscription` était son seul porteur.
-  const dateEffective = seance.poll?.chosenDate ?? seance.dateValidee ?? null;
-  // Le créneau n'existe QUE sur le vote : `Seance.dateValidee` n'en a pas (cf. `recalculateNext
-  // Session()`, qui pose `slot: null` sur cette branche). Ne jamais prêter le créneau d'un vote
-  // non scellé à une date héritée.
-  const slotEffectif = seance.poll?.chosenDate ? seance.poll.chosenSlot : null;
+  // Story 37.4 : la plage de la séance est la seule source — `startDate`/`startSlot`. Un créneau
+  // vide (date posée hors vote) reste « sans créneau » (`null`), comme `recalculateNextSession()`.
+  const dateEffective = seance.startDate ?? null;
+  const slotEffectif = seance.startSlot ?? null;
+  // Contrat inchangé du bloc `inscription` : `dateValidee` y garde sa sémantique brute d'avant la
+  // plage — `null` quand la date vient d'un vote choisi, le début de la plage sinon.
+  const dateHorsVote = seance.poll?.chosenDate ? null : dateEffective;
   return {
     id: seance.id,
     // Story 37.3 : le contrat garde `scenarioId` — même valeur que `Seance.eventId`.
@@ -1047,7 +1048,7 @@ function toSeanceDto(
               userId: i.userId,
               pseudo: i.user.pseudo,
             })),
-            dateValidee: seance.dateValidee ? seance.dateValidee.toISOString() : null,
+            dateValidee: dateHorsVote ? dateHorsVote.toISOString() : null,
           }
         : undefined,
     dateValidee: dateEffective ? dateEffective.toISOString() : null,
@@ -1154,7 +1155,7 @@ async function toEnrichedDto(
 // AD-11 : agrégation en lecture seule via CharacterService (jamais d'accès Prisma direct à
 // CharacterNote depuis ScenariosModule). Ne s'exécute que pour un scénario PASSE (AC7) — sinon
 // retourne `undefined` immédiatement, sans appel CharacterService. Fenêtre = [min, max] des dates
-// effectives des séances (poll.chosenDate ?? inscription.dateValidee), `null`/`null` si aucune
+// des séances (poll.chosenDate ?? inscription.dateValidee, DTO inchangé), `null`/`null` si aucune
 // séance datée (cf. `[ASSUMPTION]` Story 8.6 : aucune automatisation sur donnée non confirmée).
 async function loadRetrospectiveNotes(
   prisma: PrismaService,
