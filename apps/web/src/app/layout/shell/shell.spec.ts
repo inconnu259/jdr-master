@@ -378,3 +378,73 @@ describe('Shell — marque « Dés Dispos » après connexion (Story 34.4)', () 
     expect(compact.querySelector('app-brand-logo svg')?.getAttribute('aria-hidden')).toBe('true');
   });
 });
+
+describe('Shell — bouton de création dans l’en-tête (Story 38.1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const createLinks = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll('a[routerLink="/parties/new"]')) as HTMLAnchorElement[];
+
+  it('barre du haut : lien vers /parties/new, icône + libellé du thème, pour tout utilisateur', async () => {
+    // Le Shell ne lit ni rôle ni parties pour ce bouton : aucune partie (nouvel inscrit) suffit.
+    const fixture = await createFixture(0);
+    const el = fixture.nativeElement as HTMLElement;
+
+    const link = el.querySelector('mat-toolbar a.create-cta') as HTMLAnchorElement;
+    expect(link).not.toBeNull();
+    expect(link.getAttribute('routerLink')).toBe('/parties/new');
+    expect(link.textContent?.trim()).toBe(GRIMOIRE_TONE['nav.create_game']);
+    expect(link.getAttribute('aria-label')).toBe(GRIMOIRE_TONE['nav.create_game']);
+    expect(link.querySelector('app-create-icon svg')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('sans titre contextuel : un seul bouton dans le DOM, celui de la barre', async () => {
+    const fixture = await createFixture(0);
+    expect(createLinks(fixture.nativeElement)).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('.contextual-header')).toBeNull();
+    // La barre reste affichée sur mobile : c'est elle qui porte le bouton.
+    expect(fixture.nativeElement.querySelector('mat-toolbar').classList).not.toContain(
+      'hidden-mobile',
+    );
+  });
+
+  it('avec titre contextuel : bouton icône seule dans le bandeau, nom accessible = libellé du thème', async () => {
+    const fixture = await createFixture(0);
+    TestBed.inject(ContextualNavService).set({ title: 'Mes aventures' });
+    fixture.detectChanges();
+
+    const link = fixture.nativeElement.querySelector(
+      '.contextual-header a.create-cta--header',
+    ) as HTMLAnchorElement;
+    expect(link).not.toBeNull();
+    expect(link.getAttribute('routerLink')).toBe('/parties/new');
+    expect(link.getAttribute('aria-label')).toBe(GRIMOIRE_TONE['nav.create_game']);
+    // La barre du haut est masquée sur mobile (CSS) : un seul bouton visible à la fois.
+    expect(fixture.nativeElement.querySelector('mat-toolbar').classList).toContain('hidden-mobile');
+    // Icône seule : aucun texte visible, glyphe décoratif.
+    expect(link.textContent?.trim()).toBe('');
+    expect(link.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    // Le titre reste entier : le bouton est le dernier enfant du bandeau, à droite de .titles.
+    expect(link.previousElementSibling?.classList).toContain('titles');
+    expect(fixture.nativeElement.querySelector('.titles .t1').textContent.trim()).toBe(
+      'Mes aventures',
+    );
+  });
+
+  it.each([
+    ['foret-ancienne', 'Ouvrir un sentier'],
+    ['atelier-cuivre', 'Initier une mission'],
+  ] as const)('le libellé et le nom accessible suivent le thème %s', async (theme, label) => {
+    const fixture = await createFixture(0);
+    TestBed.inject(ContextualNavService).set({ title: 'Mes aventures' });
+    (TestBed.inject(ThemeToneService).tone as ReturnType<typeof signal>).set(TONE_MAP[theme]);
+    fixture.detectChanges();
+
+    const links = createLinks(fixture.nativeElement);
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      expect(link.getAttribute('aria-label')).toBe(label);
+    }
+    expect(links[0].textContent?.trim()).toBe(label);
+  });
+});

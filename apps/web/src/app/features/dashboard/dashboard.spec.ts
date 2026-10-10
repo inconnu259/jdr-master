@@ -109,7 +109,6 @@ async function createFixture(
   openPolls: Map<string, SessionPollDto>,
   invitationsSvc = makeInvitationsService(),
   allParties: PartieDto[] = [makeParty('p1', 'player'), makeParty('p2', 'player')],
-  hasMjParties = false,
   partySignals = new Map<string, PartySignalsDto>(),
   authUserOverrides: Partial<AuthUser> = {},
   accountSvc = makeAccountService(),
@@ -120,7 +119,6 @@ async function createFixture(
   const authSvc = { currentUser: signal(makeAuthUser(authUserOverrides)) };
   const myPartiesSvc = {
     allParties: signal(allParties),
-    hasMjParties: signal(hasMjParties),
     refreshPlayerParties: vi.fn().mockResolvedValue(undefined),
     refreshMjParties: vi.fn().mockResolvedValue(undefined),
   };
@@ -162,27 +160,20 @@ describe('Dashboard — liste unifiée (Story 29.1, AC1)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('affiche toutes les parties (MJ et joueur confondues) dans une seule grille', async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p-mj', 'mj'), makeParty('p-player', 'player')],
-      true,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeParty('p-mj', 'mj'),
+      makeParty('p-player', 'player'),
+    ]);
     const tiles = fixture.nativeElement.querySelectorAll('.tile');
     // 1 tuile de partie MJ + 1 tuile de partie joueur (aucune invitation ici).
     expect(tiles.length).toBe(2);
   });
 
   it('le sous-titre de tuile affiche le libellé du registre du type de partie, jamais l’énumération brute', async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [
-        { ...makeParty('p-lin'), kind: 'CAMPAGNE_LINEAIRE' },
-        { ...makeParty('p-epi'), kind: 'CAMPAGNE_EPISODIQUE' },
-      ],
-      true,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [
+      { ...makeParty('p-lin'), kind: 'CAMPAGNE_LINEAIRE' },
+      { ...makeParty('p-epi'), kind: 'CAMPAGNE_EPISODIQUE' },
+    ]);
     const subtitles = Array.from(
       fixture.nativeElement.querySelectorAll('.tile mat-card-subtitle'),
     ).map((el) => (el as HTMLElement).textContent ?? '');
@@ -193,7 +184,7 @@ describe('Dashboard — liste unifiée (Story 29.1, AC1)', () => {
   });
 
   it('état vide : aucune carte, message affiché, quand allParties() est vide', async () => {
-    const { fixture } = await createFixture(new Map(), undefined, [], false);
+    const { fixture } = await createFixture(new Map(), undefined, []);
     expect(fixture.nativeElement.querySelector('.tile')).toBeNull();
     expect(fixture.nativeElement.querySelector('.empty')).not.toBeNull();
   });
@@ -203,7 +194,7 @@ describe('Dashboard — indicateur de rôle non chromatique (Story 29.1, AC2)', 
   afterEach(() => TestBed.resetTestingModule());
 
   it('une carte de partie MJ affiche le libellé de rôle MJ (icône + texte)', async () => {
-    const { fixture } = await createFixture(new Map(), undefined, [makeParty('p-mj', 'mj')], true);
+    const { fixture } = await createFixture(new Map(), undefined, [makeParty('p-mj', 'mj')]);
     const indicator = fixture.nativeElement.querySelector('.role-indicator');
     expect(indicator).not.toBeNull();
     expect(indicator.querySelector('mat-icon')).not.toBeNull();
@@ -211,35 +202,33 @@ describe('Dashboard — indicateur de rôle non chromatique (Story 29.1, AC2)', 
   });
 
   it('une carte de partie joueur affiche le libellé de rôle joueur (icône + texte)', async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p-player', 'player')],
-      false,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeParty('p-player', 'player'),
+    ]);
     const indicator = fixture.nativeElement.querySelector('.role-indicator');
     expect(indicator).not.toBeNull();
     expect(indicator.textContent).toContain('Héros'); // dashboard.role_player, thème grimoire-emeraude
   });
 
   it("l'indicateur porte un aria-label explicite (jamais la couleur seule)", async () => {
-    const { fixture } = await createFixture(new Map(), undefined, [makeParty('p-mj', 'mj')], true);
+    const { fixture } = await createFixture(new Map(), undefined, [makeParty('p-mj', 'mj')]);
     const indicator = fixture.nativeElement.querySelector('.role-indicator');
     expect(indicator.getAttribute('aria-label')).toBeTruthy();
   });
 });
 
-describe('Dashboard — CTA de création conditionnel (Story 29.1, AC3/AC4)', () => {
+describe('Dashboard — aucun bouton de création (Story 38.1)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  it('hasMjParties() vrai → le CTA de création est présent', async () => {
-    const { fixture } = await createFixture(new Map(), undefined, [], true);
-    expect(fixture.nativeElement.querySelector('a[routerLink="/parties/new"]')).not.toBeNull();
-  });
-
-  it('hasMjParties() faux → aucun CTA de création sur le dashboard (accès réservé au menu)', async () => {
-    const { fixture } = await createFixture(new Map(), undefined, [], false);
-    expect(fixture.nativeElement.querySelector('a[routerLink="/parties/new"]')).toBeNull();
+  // Le bouton de création vit dans l'en-tête global (Shell), pour tout utilisateur : la page
+  // Parties ne le porte plus, que l'on y soit MJ, joueur ou nouvel inscrit.
+  it('aucun lien vers /parties/new dans le Dashboard, avec ou sans partie de MJ', async () => {
+    for (const parties of [[], [makeParty('p-mj', 'mj')], [makeParty('p-pl', 'player')]]) {
+      const { fixture } = await createFixture(new Map(), undefined, parties);
+      expect(fixture.nativeElement.querySelector('a[routerLink="/parties/new"]')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.head')).toBeNull();
+      TestBed.resetTestingModule();
+    }
   });
 });
 
@@ -247,23 +236,17 @@ describe('Dashboard — badge de vote en attente (Story 29.1 : limité aux carte
   afterEach(() => TestBed.resetTestingModule());
 
   it("affiche le badge sur la carte d'une partie JOUEUR présente dans OpenPollsService.openPolls", async () => {
-    const { fixture } = await createFixture(
-      new Map([['p1', makePoll('p1')]]),
-      undefined,
-      [makeParty('p1', 'player')],
-      false,
-    );
+    const { fixture } = await createFixture(new Map([['p1', makePoll('p1')]]), undefined, [
+      makeParty('p1', 'player'),
+    ]);
     const badges = fixture.nativeElement.querySelectorAll('.poll-badge');
     expect(badges.length).toBe(1);
   });
 
   it("n'affiche jamais le badge sur une carte MJ, même si openPolls la contient (revue de code)", async () => {
-    const { fixture } = await createFixture(
-      new Map([['p-mj', makePoll('p-mj')]]),
-      undefined,
-      [makeParty('p-mj', 'mj')],
-      true,
-    );
+    const { fixture } = await createFixture(new Map([['p-mj', makePoll('p-mj')]]), undefined, [
+      makeParty('p-mj', 'mj'),
+    ]);
     const badges = fixture.nativeElement.querySelectorAll('.poll-badge');
     expect(badges.length).toBe(0);
   });
@@ -289,12 +272,7 @@ describe('Dashboard — invitations toujours visibles, sans condition de rôle (
         createdAt: '2026-07-22T00:00:00.000Z',
       },
     ]);
-    const { fixture } = await createFixture(
-      new Map(),
-      invitationsSvc,
-      [makeParty('p-mj', 'mj')],
-      true,
-    );
+    const { fixture } = await createFixture(new Map(), invitationsSvc, [makeParty('p-mj', 'mj')]);
     expect(fixture.nativeElement.textContent).toContain('Nouvelle Campagne');
   });
 });
@@ -382,12 +360,9 @@ describe('Dashboard — traitement « en retrait » des parties terminées (Stor
   afterEach(() => TestBed.resetTestingModule());
 
   it('une partie TERMINEE porte la classe tile--closed et un libellé/icône non chromatique', async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p1', 'player', 'TERMINEE')],
-      false,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'TERMINEE'),
+    ]);
     const tile = fixture.nativeElement.querySelector('.tile');
     expect(tile.classList.contains('tile--closed')).toBe(true);
     const indicator = fixture.nativeElement.querySelector('.status-indicator');
@@ -399,12 +374,10 @@ describe('Dashboard — traitement « en retrait » des parties terminées (Stor
   });
 
   it('une partie EN_COURS/A_VENIR ne porte ni la classe tile--closed ni le badge « terminée »', async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p1', 'player', 'EN_COURS'), makeParty('p2', 'player', 'A_VENIR')],
-      false,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'EN_COURS'),
+      makeParty('p2', 'player', 'A_VENIR'),
+    ]);
     const tiles = fixture.nativeElement.querySelectorAll('.tile');
     tiles.forEach((tile: Element) => expect(tile.classList.contains('tile--closed')).toBe(false));
     // Ces tuiles portent tout de même leur propre .status-indicator (AC9/P-1, revue de code) —
@@ -451,7 +424,6 @@ describe('Dashboard — badges de signal (Story 29.7, AC3/AC9)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       signals as any,
     );
     const badges = fixture.nativeElement.querySelectorAll('.signal-badge:not(.signal-badge--more)');
@@ -476,7 +448,6 @@ describe('Dashboard — badges de signal (Story 29.7, AC3/AC9)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'mj', 'EN_COURS')],
-      true,
       signals as any,
     );
     const badge = fixture.nativeElement.querySelector('.signal-badge');
@@ -490,7 +461,6 @@ describe('Dashboard — badges de signal (Story 29.7, AC3/AC9)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
     );
     expect(fixture.nativeElement.querySelector('.signal-badge')).toBeNull();
@@ -512,7 +482,7 @@ describe('Dashboard — badges de signal (Story 29.7, AC3/AC9)', () => {
         },
       ],
     ]);
-    const { fixture } = await createFixture(new Map(), undefined, [party], false, signals as any);
+    const { fixture } = await createFixture(new Map(), undefined, [party], signals as any);
     const badge = fixture.nativeElement.querySelector('.signal-badge');
     expect(badge.textContent).toContain('12 août');
     expect(badge.textContent).toContain('Soir');
@@ -533,7 +503,6 @@ describe('Dashboard — badges de signal (Story 29.7, AC3/AC9)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'TERMINEE')],
-      false,
       signals as any,
     );
     const badges = fixture.nativeElement.querySelectorAll('.signal-badge:not(.signal-badge--more)');
@@ -560,7 +529,6 @@ describe('Dashboard — badges de signal (Story 29.7, AC3/AC9)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       signals as any,
     );
     const badges = fixture.nativeElement.querySelectorAll('.signal-badge:not(.signal-badge--more)');
@@ -587,7 +555,6 @@ describe('Dashboard — teinte des cartes selon le statut (bug fix, revue utilis
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
     );
     const tile = fixture.nativeElement.querySelector('.tile');
@@ -599,7 +566,6 @@ describe('Dashboard — teinte des cartes selon le statut (bug fix, revue utilis
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'A_VENIR')],
-      false,
       new Map(),
     );
     const tile = fixture.nativeElement.querySelector('.tile');
@@ -621,7 +587,6 @@ describe('Dashboard — teinte des cartes selon le statut (bug fix, revue utilis
       new Map(),
       undefined,
       [makeParty('p1', 'mj', 'EN_COURS')],
-      true,
       signals as any,
     );
     const tile = fixture.nativeElement.querySelector('.tile');
@@ -634,7 +599,6 @@ describe('Dashboard — teinte des cartes selon le statut (bug fix, revue utilis
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
     );
     const tile = fixture.nativeElement.querySelector('.tile');
@@ -652,7 +616,6 @@ describe('Dashboard — teinte des cartes selon le statut (bug fix, revue utilis
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'A_VENIR')],
-      false,
       new Map(),
     );
     const tile = fixture.nativeElement.querySelector('.tile');
@@ -679,7 +642,6 @@ describe('Dashboard — teinte des cartes selon le statut (bug fix, revue utilis
       new Map(),
       undefined,
       [makeParty('p1', 'mj', 'EN_COURS')],
-      true,
       signals as any,
     );
     const tile = fixture.nativeElement.querySelector('.tile');
@@ -711,7 +673,6 @@ describe('Dashboard — quatre intertitres (Story 29.7, AC10)', () => {
         makeParty('p-upcoming', 'player', 'A_VENIR'),
         makeParty('p-finished', 'player', 'TERMINEE'),
       ],
-      true,
       signals as any,
     );
     const headings: string[] = [];
@@ -730,7 +691,6 @@ describe('Dashboard — quatre intertitres (Story 29.7, AC10)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
     );
     const headings: string[] = [];
@@ -747,12 +707,10 @@ describe('Dashboard — filtres rôle/statut (Story 29.8, AC2/AC5)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it('filtre par rôle : réduit la liste affichée sans appel réseau supplémentaire', async () => {
-    const { fixture, myPartiesSvc } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p-mj', 'mj'), makeParty('p-player', 'player')],
-      true,
-    );
+    const { fixture, myPartiesSvc } = await createFixture(new Map(), undefined, [
+      makeParty('p-mj', 'mj'),
+      makeParty('p-player', 'player'),
+    ]);
     expect(fixture.nativeElement.querySelectorAll('.tile').length).toBe(2);
 
     const comp = fixture.componentInstance as any;
@@ -765,12 +723,10 @@ describe('Dashboard — filtres rôle/statut (Story 29.8, AC2/AC5)', () => {
   });
 
   it('filtre par statut : réduit la liste affichée', async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p1', 'player', 'EN_COURS'), makeParty('p2', 'player', 'A_VENIR')],
-      false,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'EN_COURS'),
+      makeParty('p2', 'player', 'A_VENIR'),
+    ]);
     expect(fixture.nativeElement.querySelectorAll('.tile').length).toBe(2);
 
     const comp = fixture.componentInstance as any;
@@ -829,7 +785,6 @@ describe('Dashboard — mode liste : gabarit ligne (Story 29.9, AC1)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
       { partiesViewMode: 'compact' },
     );
@@ -843,7 +798,6 @@ describe('Dashboard — mode liste : gabarit ligne (Story 29.9, AC1)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
       { partiesViewMode: 'medium' },
     );
@@ -867,7 +821,6 @@ describe('Dashboard — mode liste : gabarit ligne (Story 29.9, AC1)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       signals as any,
       { partiesViewMode: 'compact' },
     );
@@ -883,7 +836,6 @@ describe('Dashboard — mode liste : gabarit ligne (Story 29.9, AC1)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
       { partiesViewMode: 'compact' },
     );
@@ -911,7 +863,6 @@ describe('Dashboard — mode liste : gabarit ligne (Story 29.9, AC1)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       signals as any,
       { partiesViewMode: 'compact' },
     );
@@ -928,7 +879,6 @@ describe('Dashboard — mode liste : gabarit ligne (Story 29.9, AC1)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
       { partiesViewMode: 'compact' },
     );
@@ -948,7 +898,7 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
   const PARTIES = [makeParty('p1', 'player', 'EN_COURS'), makeParty('p2', 'mj', 'A_VENIR')];
 
   it('mode grand → une bannière par tuile, en mode "large"', async () => {
-    const { fixture } = await createFixture(new Map(), undefined, PARTIES, true, new Map(), {
+    const { fixture } = await createFixture(new Map(), undefined, PARTIES, new Map(), {
       partiesViewMode: 'large',
     });
 
@@ -960,7 +910,7 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
   });
 
   it('mode moyen → une vignette carrée par tuile, dans l’en-tête', async () => {
-    const { fixture } = await createFixture(new Map(), undefined, PARTIES, true, new Map(), {
+    const { fixture } = await createFixture(new Map(), undefined, PARTIES, new Map(), {
       partiesViewMode: 'medium',
     });
 
@@ -973,7 +923,7 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
   });
 
   it('mode liste → une vignette par ligne, entre la pastille d’état et le texte', async () => {
-    const { fixture } = await createFixture(new Map(), undefined, PARTIES, true, new Map(), {
+    const { fixture } = await createFixture(new Map(), undefined, PARTIES, new Map(), {
       partiesViewMode: 'compact',
     });
 
@@ -991,7 +941,7 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
 
   it('le monogramme rendu en mode liste vient du nom de la partie', async () => {
     const partie = { ...makeParty('p1', 'player', 'EN_COURS'), name: 'Les Cendres de Kavaan' };
-    const { fixture } = await createFixture(new Map(), undefined, [partie], false, new Map(), {
+    const { fixture } = await createFixture(new Map(), undefined, [partie], new Map(), {
       partiesViewMode: 'compact',
     });
 
@@ -1001,7 +951,7 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
   });
 
   it('deux parties différentes → deux compositions différentes ; la même partie → la même', async () => {
-    const { fixture } = await createFixture(new Map(), undefined, PARTIES, true, new Map(), {
+    const { fixture } = await createFixture(new Map(), undefined, PARTIES, new Map(), {
       partiesViewMode: 'large',
     });
 
@@ -1018,7 +968,7 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
       ...makeParty('p1', 'player', 'EN_COURS'),
       coverImageVersion: '99999999-9999-9999-9999-999999999999',
     };
-    const { fixture } = await createFixture(new Map(), undefined, [withCover], false, new Map(), {
+    const { fixture } = await createFixture(new Map(), undefined, [withCover], new Map(), {
       partiesViewMode: 'large',
     });
 
@@ -1027,7 +977,7 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
   });
 
   it('non-régression 29.9 : le placeholder de bannière a disparu, la ligne garde ses éléments', async () => {
-    const { fixture } = await createFixture(new Map(), undefined, PARTIES, true, new Map(), {
+    const { fixture } = await createFixture(new Map(), undefined, PARTIES, new Map(), {
       partiesViewMode: 'compact',
     });
 
@@ -1048,7 +998,7 @@ describe('Dashboard — câblage de la bannière générative (Story 29.10, AC3/
         partie: { id: 'px', name: 'Invitée', gameSystemId: 'draconis' },
       },
     ]);
-    const { fixture } = await createFixture(new Map(), invitationsSvc, [], false, new Map(), {
+    const { fixture } = await createFixture(new Map(), invitationsSvc, [], new Map(), {
       partiesViewMode: 'large',
     });
 
@@ -1099,14 +1049,9 @@ describe('Dashboard — compte à rebours de séance (Story 29.11, AC4/AC5)', ()
   }
 
   async function renderLarge(parties: PartieDto[], signalled: string[]) {
-    return createFixture(
-      new Map(),
-      undefined,
-      parties,
-      false,
-      sessionSignals(...signalled) as any,
-      { partiesViewMode: 'large' },
-    );
+    return createFixture(new Map(), undefined, parties, sessionSignals(...signalled) as any, {
+      partiesViewMode: 'large',
+    });
   }
 
   it('séance dans trois jours, badge visible, mode grand → compte à rebours rendu', async () => {
@@ -1131,7 +1076,6 @@ describe('Dashboard — compte à rebours de séance (Story 29.11, AC4/AC5)', ()
       new Map(),
       undefined,
       [partyWithSession('p1', 3)],
-      false,
       new Map(),
       { partiesViewMode: 'large' },
     );
@@ -1144,7 +1088,6 @@ describe('Dashboard — compte à rebours de séance (Story 29.11, AC4/AC5)', ()
         new Map(),
         undefined,
         [partyWithSession('p1', 3)],
-        false,
         sessionSignals('p1') as any,
         { partiesViewMode: mode },
       );
@@ -1198,12 +1141,10 @@ describe('Dashboard — tri (Story 29.8, AC3/AC4)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it("changer le tri appelle AccountService.updatePreferences({ partiesSort }) et réordonne l'affichage", async () => {
-    const { fixture, accountSvc } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('zebre', 'player', 'A_VENIR'), makeParty('abbaye', 'player', 'A_VENIR')],
-      false,
-    );
+    const { fixture, accountSvc } = await createFixture(new Map(), undefined, [
+      makeParty('zebre', 'player', 'A_VENIR'),
+      makeParty('abbaye', 'player', 'A_VENIR'),
+    ]);
     const comp = fixture.componentInstance as any;
     // Deux parties A_VENIR nommées 'Party zebre'/'Party abbaye' — noms générés par makeParty().
     comp.onSortChange('nom');
@@ -1222,12 +1163,9 @@ describe('Dashboard — tri (Story 29.8, AC3/AC4)', () => {
   });
 
   it("tri 'urgence' (défaut) : les 4 intertitres restent affichés", async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p1', 'player', 'EN_COURS')],
-      false,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'EN_COURS'),
+    ]);
     expect(fixture.nativeElement.textContent).toContain(
       TONE_MAP['grimoire-emeraude']['dashboard.section_ongoing'],
     );
@@ -1238,7 +1176,6 @@ describe('Dashboard — tri (Story 29.8, AC3/AC4)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
       { partiesSort: 'nom' },
     );
@@ -1260,7 +1197,6 @@ describe('Dashboard — tri (Story 29.8, AC3/AC4)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
       { partiesSort: 'urgence' },
       failingAccountSvc as any,
@@ -1286,7 +1222,6 @@ describe('Dashboard — masquage des parties terminées (Story 29.8, AC6)', () =
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS'), makeParty('p2', 'player', 'TERMINEE')],
-      false,
       new Map(),
       { hideFinishedParties: true },
     );
@@ -1298,7 +1233,6 @@ describe('Dashboard — masquage des parties terminées (Story 29.8, AC6)', () =
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS'), makeParty('p2', 'player', 'TERMINEE')],
-      false,
       new Map(),
       { hideFinishedParties: true },
     );
@@ -1318,7 +1252,6 @@ describe('Dashboard — masquage des parties terminées (Story 29.8, AC6)', () =
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'TERMINEE')],
-      false,
       new Map(),
       { hideFinishedParties: false },
     );
@@ -1346,7 +1279,6 @@ describe('Dashboard — masquage des parties terminées (Story 29.8, AC6)', () =
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS')],
-      false,
       new Map(),
       { hideFinishedParties: false },
       failingAccountSvc as any,
@@ -1368,7 +1300,6 @@ describe('Dashboard — masquage des parties terminées (Story 29.8, AC6)', () =
       new Map(),
       undefined,
       [makeParty('p-mj', 'mj', 'EN_COURS'), makeParty('p-player-terminee', 'player', 'TERMINEE')],
-      true,
       new Map(),
       { hideFinishedParties: true },
     );
@@ -1385,12 +1316,9 @@ describe('Dashboard — favoris (Story 29.8, AC1, FR-11)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
   it("clic sur l'étoile d'une partie MJ non favorite appelle addFavorite et recharge refreshMjParties (jamais refreshPlayerParties)", async () => {
-    const { fixture, accountSvc, myPartiesSvc } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p1', 'mj', 'EN_COURS', false)],
-      true,
-    );
+    const { fixture, accountSvc, myPartiesSvc } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'mj', 'EN_COURS', false),
+    ]);
     const star = fixture.nativeElement.querySelector('.favorite-btn');
     expect(star).not.toBeNull();
     star.click();
@@ -1406,12 +1334,9 @@ describe('Dashboard — favoris (Story 29.8, AC1, FR-11)', () => {
   });
 
   it("clic sur l'étoile d'une partie joueur déjà favorite appelle removeFavorite et recharge refreshPlayerParties", async () => {
-    const { fixture, accountSvc, myPartiesSvc } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p1', 'player', 'EN_COURS', true)],
-      false,
-    );
+    const { fixture, accountSvc, myPartiesSvc } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'EN_COURS', true),
+    ]);
     const star = fixture.nativeElement.querySelector('.favorite-btn');
     star.click();
     fixture.detectChanges();
@@ -1426,24 +1351,19 @@ describe('Dashboard — favoris (Story 29.8, AC1, FR-11)', () => {
   });
 
   it("l'étoile porte un aria-label explicite, jamais la couleur/l'icône seule", async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p1', 'player', 'EN_COURS', true)],
-      false,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeParty('p1', 'player', 'EN_COURS', true),
+    ]);
     const star = fixture.nativeElement.querySelector('.favorite-btn');
     expect(star.getAttribute('aria-label')).toBeTruthy();
     expect(star.classList.contains('favorite-btn--active')).toBe(true);
   });
 
   it('une partie favorite apparaît en tête de son groupe après rechargement (AC1)', async () => {
-    const { fixture } = await createFixture(
-      new Map(),
-      undefined,
-      [makeParty('p-a', 'player', 'A_VENIR', false), makeParty('p-b', 'player', 'A_VENIR', true)],
-      false,
-    );
+    const { fixture } = await createFixture(new Map(), undefined, [
+      makeParty('p-a', 'player', 'A_VENIR', false),
+      makeParty('p-b', 'player', 'A_VENIR', true),
+    ]);
     const titles = Array.from(fixture.nativeElement.querySelectorAll('mat-card-title')).map(
       (el: any) => el.textContent,
     );
@@ -1467,7 +1387,6 @@ describe('Dashboard — favoris (Story 29.8, AC1, FR-11)', () => {
       new Map(),
       undefined,
       [makeParty('p1', 'player', 'EN_COURS', false)],
-      false,
       new Map(),
       {},
       accountSvc as any,

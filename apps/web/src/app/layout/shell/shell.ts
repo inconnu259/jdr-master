@@ -10,11 +10,13 @@ import { ThemeToneService } from '../../core/theme/theme-tone.service';
 import { ContextualNavService } from '../../core/navigation/contextual-nav.service';
 import { fillTone } from '../../core/theme/tone-format';
 import { BrandLogo } from '../../shared/brand/brand-logo';
+import { CreateIcon } from '../../shared/create-icon/create-icon';
 
 @Component({
   selector: 'app-shell',
   imports: [
     BrandLogo,
+    CreateIcon,
     RouterOutlet,
     RouterLink,
     RouterLinkActive,
@@ -32,6 +34,9 @@ export class Shell implements OnInit {
   // Injecter pour déclencher l'initialisation du thème (apply CSS class + localStorage) dès le Shell.
   protected readonly theme = inject(ThemeToneService);
   protected readonly contextualNav = inject(ContextualNavService);
+
+  // Story 38.1 : libellé de thème du bouton de création (texte visible sur la barre, `aria-label` partout).
+  protected readonly createLabel = computed(() => this.theme.tone()['nav.create_game']);
 
   protected readonly openPollsCount = this.openPollsSvc.count;
   protected readonly unseenAnnouncementsCount = this.unseenAnnouncementsSvc.count;

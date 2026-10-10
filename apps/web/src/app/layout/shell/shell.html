@@ -10,6 +10,14 @@
       <span class="brand-name">Dés Dispos</span>
     </a>
     <span class="spacer"></span>
+    <!-- Story 38.1 (⚠️ contrat UI) : création ouverte à tout utilisateur connecté, depuis l'en-tête
+         global. Bureau : pilule icône + libellé de thème ; sous 440 px le libellé disparaît (icône
+         seule). Sur mobile avec titre, cette barre est masquée et c'est le bouton du bandeau
+         contextuel qui prend le relais : un seul bouton visible et exposé à la fois. -->
+    <a class="create-cta create-cta--bar" routerLink="/parties/new" [attr.aria-label]="createLabel()">
+      <app-create-icon />
+      <span class="create-cta__label">{{ createLabel() }}</span>
+    </a>
   </mat-toolbar-row>
 </mat-toolbar>
 
@@ -101,6 +109,11 @@
         <span class="t2">{{ subtitle }}</span>
       }
     </div>
+    <!-- Story 38.1 : variante mobile du bouton de création, icône seule (nom accessible = libellé
+         de thème, jamais affiché). Masquée en CSS dès 768 px, où la barre du haut porte le bouton. -->
+    <a class="create-cta create-cta--header" routerLink="/parties/new" [attr.aria-label]="createLabel()">
+      <app-create-icon />
+    </a>
   </div>
 }
 

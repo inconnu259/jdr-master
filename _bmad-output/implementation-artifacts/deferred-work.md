@@ -267,3 +267,7 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-37-7-brancher-les-capacites-jdr-sur-le-service-de-permission-et-interdire-les-lectures-directes.md`
   summary: Add capability guards for the scenario features (`scenarioLifecycle`, `linearCampaign`) in the permission layer, and decide the Draconis demo partie's scenario.
   evidence: Story 37.7 limited its capability table to characters/xp/hommeDragon/groupRoles/announcements writes; scenarios and linear-campaign rules still check kind/status locally.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-38-1-creer-depuis-un-bouton-den-tete-pour-tout-utilisateur.md`
+  summary: Visually check the header create button (pill, icon-only mobile button, icon legibility) in the Forêt Ancienne and Atelier Cuivré themes, and on a real phone (label thresholds 399/422/437 px).
+  evidence: The browser session runs on the Grimoire Émeraude account theme; the theme is persisted on the account, so the other two themes were only covered by unit tests on labels.

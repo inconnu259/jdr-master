@@ -112,7 +112,6 @@ export class Dashboard implements OnInit {
   private readonly contextualNav = inject(ContextualNavService);
 
   protected readonly allParties = this.myPartiesSvc.allParties;
-  protected readonly hasMjParties = this.myPartiesSvc.hasMjParties;
   protected readonly received = signal<InvitationDto[]>([]);
   protected readonly openPolls = this.openPollsSvc.openPolls;
   protected readonly system = gameSystemName;
