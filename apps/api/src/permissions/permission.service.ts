@@ -8,6 +8,7 @@ import type { Partie } from '@prisma/client';
 import type {
   GameSystemCapability,
   GameSystemFamily,
+  MembershipRole,
   PartieRole,
   PermissionAction,
 } from '@master-jdr/shared';
@@ -92,6 +93,13 @@ export interface PartieMember {
 
 /** Refus d'une action réservée au propriétaire, opposé à un membre. */
 export const MJ_ONLY_MESSAGE = 'Action réservée au MJ de la partie';
+/** Refus d'une action réservée aux administrateurs d'un ralliement, opposé à un simple membre
+ *  (Story 38.2). */
+export const ADMIN_ONLY_MESSAGE = 'Action réservée aux administrateurs de la partie';
+/** Refus d'une action que la politique du ralliement n'ouvre à aucun rôle (Story 38.2) : le
+ *  ralliement n'a ni scénario, ni personnage, ni XP… */
+export const RALLIEMENT_UNAVAILABLE_MESSAGE =
+  "Cette action n'est pas disponible pour ce type de partie";
 /** Refus opposé à quelqu'un qui n'a aucun rôle sur la partie. */
 export const NO_ACCESS_MESSAGE = "Vous n'avez pas accès à cette partie";
 /** Refus d'une action de couche 3 sur une partie dont le système ne déclare pas la capacité. */
@@ -100,6 +108,9 @@ export const CAPABILITY_UNAVAILABLE_MESSAGE =
 
 const OWNER_ONLY: readonly PartieRole[] = ['mj'];
 const OWNER_AND_MEMBERS: readonly PartieRole[] = ['mj', 'player'];
+const ADMIN_ONLY: readonly PartieRole[] = ['admin'];
+const ADMIN_AND_MEMBERS: readonly PartieRole[] = ['admin', 'member'];
+const NOBODY: readonly PartieRole[] = [];
 
 /**
  * Politique de la famille `jdr` : le propriétaire (MJ) seul organise et administre, les membres
@@ -185,6 +196,84 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
 };
 
 /**
+ * Politique de la famille `ralliement` (Story 38.2) : « voir » (partie, membres, couverture) pour
+ * l'administrateur et les membres, « modifier la partie » (édition, couverture) pour
+ * l'administrateur seul. TOUTE autre action est refusée à tous les rôles — le ralliement n'a ni
+ * scénario, ni personnage, ni XP. Table COMPLÈTE par construction (`Record` sur l'union fermée) :
+ * une action ajoutée sans sa ligne ne compile pas.
+ */
+export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]>> = {
+  // Partie
+  PARTIE_READ: ADMIN_AND_MEMBERS,
+  PARTIE_UPDATE: ADMIN_ONLY,
+  PARTIE_CONVERT_KIND: NOBODY,
+  PARTIE_CLOSE: NOBODY,
+  PARTIE_REOPEN: NOBODY,
+  PARTIE_DELETE: NOBODY,
+  PARTIE_MEMBERS_READ: ADMIN_AND_MEMBERS,
+  PARTIE_MEMBER_REMOVE: NOBODY,
+  PARTIE_AVAILABILITY_READ: NOBODY,
+  PARTIE_VISIBILITY_LOCKS_READ: NOBODY,
+  PARTIE_VISIBILITY_LOCKS_UPDATE: NOBODY,
+  PARTIE_COVER_READ: ADMIN_AND_MEMBERS,
+  PARTIE_COVER_UPDATE: ADMIN_ONLY,
+  PARTIE_REFERENCE_ASSET_READ: NOBODY,
+  PARTIE_REFERENCE_ASSET_MJ_READ: NOBODY,
+  // Scénario
+  SCENARIO_CREATE: NOBODY,
+  SCENARIO_UPDATE: NOBODY,
+  SCENARIO_STATUS_CHANGE: NOBODY,
+  SCENARIO_READ: NOBODY,
+  SCENARIO_DRAFTS_READ: NOBODY,
+  SCENARIO_DOCUMENT_UPLOAD: NOBODY,
+  SCENARIO_DOCUMENTS_READ: NOBODY,
+  SCENARIO_PARTICIPATE: NOBODY,
+  // Séance
+  SEANCE_ADD: NOBODY,
+  SEANCE_DELETE: NOBODY,
+  SEANCE_DATE_RESET: NOBODY,
+  SEANCE_CAPACITY_SET: NOBODY,
+  SEANCE_COMPTE_RENDU_SET: NOBODY,
+  SEANCE_PRACTICAL_INFO_SET: NOBODY,
+  SEANCE_POLL_CREATE: NOBODY,
+  SEANCE_INSCRIBE: NOBODY,
+  SEANCE_UNSUBSCRIBE: NOBODY,
+  // Vote de date
+  POLL_READ: NOBODY,
+  POLL_VOTE: NOBODY,
+  POLL_CHOOSE: NOBODY,
+  POLL_OPTIONS_SET: NOBODY,
+  POLL_CLOSE: NOBODY,
+  // Capacités JDR
+  CHARACTER_CREATE: NOBODY,
+  CHARACTER_LIST: NOBODY,
+  CHARACTER_READ: NOBODY,
+  CHARACTER_PORTRAIT_READ: NOBODY,
+  CHARACTER_NOTES_READ: NOBODY,
+  CHARACTER_XP_SET: NOBODY,
+  CHARACTER_SHEET_FIELD_SET: NOBODY,
+  CHARACTER_HISTORY_READ: NOBODY,
+  XP_DISTRIBUTION_CREATE: NOBODY,
+  XP_DISTRIBUTION_READ: NOBODY,
+  HOMME_DRAGON_MANAGE: NOBODY,
+  HOMME_DRAGON_READ: NOBODY,
+  HOMME_DRAGON_UNLINK: NOBODY,
+  GROUP_ROLE_ASSIGN: NOBODY,
+  GROUP_ROLE_UNASSIGN: NOBODY,
+  GROUP_ROLE_READ: NOBODY,
+  ANNOUNCEMENT_CREATE: NOBODY,
+  ANNOUNCEMENT_READ: NOBODY,
+  ANNOUNCEMENT_MARK_READ: NOBODY,
+  // Invitations (épic 39)
+  INVITATION_CREATE: NOBODY,
+  INVITATION_READ: NOBODY,
+  INVITATION_REVOKE: NOBODY,
+  INVITE_LINK_CREATE: NOBODY,
+  INVITE_LINK_READ: NOBODY,
+  INVITE_LINK_REVOKE: NOBODY,
+};
+
+/**
  * Garde de capacité (Story 37.7, AD-1) : action d'ÉCRITURE de couche 3 → capacité que le système
  * de la partie doit déclarer dans le registre. Posée ICI, dans `assert()`, jamais par un test local
  * du système : un service de couche 3 n'a pas d'autre chemin vers une autorisation, il ne peut donc
@@ -207,14 +296,15 @@ export const ACTION_CAPABILITY: Readonly<Partial<Record<PermissionAction, GameSy
     ANNOUNCEMENT_CREATE: 'announcements',
   };
 
-/** Politique applicable à une famille. Le ralliement n'a pas encore la sienne (épic 38, fermé à
- *  la création) : il retombe, comme un système inconnu du registre, sur la politique `jdr`. */
+/** Politique applicable à une famille. Un système inconnu du registre retombe sur la politique
+ *  `jdr`. */
 function policyFor(
   family: GameSystemFamily | null,
 ): Readonly<Record<PermissionAction, readonly PartieRole[]>> {
   switch (family) {
-    case 'jdr':
     case 'ralliement':
+      return RALLIEMENT_POLICY;
+    case 'jdr':
     case null:
       return JDR_POLICY;
     default: {
@@ -229,6 +319,32 @@ function policyFor(
 function jdrRole(ownerId: string | null, userId: string, isMember: boolean): PartieRole | null {
   if (ownerId !== null && ownerId === userId) return 'mj';
   return isMember ? 'player' : null;
+}
+
+/** Règle de rôle de la famille `ralliement` (Story 38.2) : le rôle vient UNIQUEMENT de
+ *  `Membership.role` (`ADMIN` → `admin`, `MEMBER` → `member`) ; le propriétaire n'est jamais `mj`.
+ *  Un propriétaire sans ligne de membership compte comme `admin`. */
+function ralliementRole(
+  ownerId: string | null,
+  userId: string,
+  membershipRole: MembershipRole | null,
+): PartieRole | null {
+  if (membershipRole === 'ADMIN') return 'admin';
+  if (membershipRole === 'MEMBER') return 'member';
+  return ownerId !== null && ownerId === userId ? 'admin' : null;
+}
+
+/** Rôle de `userId` selon la famille de la partie. `membership` = sa ligne `Membership` (`null`
+ *  s'il n'en a pas) : famille `jdr`, sa seule existence compte ; `ralliement`, son `role` décide. */
+function roleFor(
+  partie: Pick<Partie, 'ownerId' | 'gameSystemId'>,
+  userId: string,
+  membership: { role: MembershipRole } | null,
+): PartieRole | null {
+  if (familyOf(partie.gameSystemId) === 'ralliement') {
+    return ralliementRole(partie.ownerId, userId, membership?.role ?? null);
+  }
+  return jdrRole(partie.ownerId, userId, membership != null);
 }
 
 /**
@@ -255,8 +371,18 @@ export class PermissionService {
     const { partie, resolved } = await this.resolveTarget(target);
     const role = await this.roleIn(partie, userId);
     if (role === null) throw new ForbiddenException(NO_ACCESS_MESSAGE);
-    const allowed = policyFor(familyOf(partie.gameSystemId))[action];
-    if (!allowed.includes(role)) throw new ForbiddenException(MJ_ONLY_MESSAGE);
+    const family = familyOf(partie.gameSystemId);
+    const allowed = policyFor(family)[action];
+    if (!allowed.includes(role)) {
+      if (family === 'ralliement') {
+        // Aucun rôle n'a ce droit : l'action n'existe pas pour ce type de partie ; sinon elle est
+        // réservée aux administrateurs.
+        throw new ForbiddenException(
+          allowed.length === 0 ? RALLIEMENT_UNAVAILABLE_MESSAGE : ADMIN_ONLY_MESSAGE,
+        );
+      }
+      throw new ForbiddenException(MJ_ONLY_MESSAGE);
+    }
     const capability = ACTION_CAPABILITY[action];
     if (capability !== undefined && !hasCapability(partie.gameSystemId, capability)) {
       throw new BadRequestException(CAPABILITY_UNAVAILABLE_MESSAGE);
@@ -269,10 +395,14 @@ export class PermissionService {
   async roleOf(partieId: string, userId: string): Promise<PartieRole | null> {
     const partie = await this.prisma.partie.findUnique({
       where: { id: partieId },
-      select: { ownerId: true, memberships: { where: { userId }, select: { userId: true } } },
+      select: {
+        ownerId: true,
+        gameSystemId: true,
+        memberships: { where: { userId }, select: { role: true } },
+      },
     });
     if (!partie) return null;
-    return jdrRole(partie.ownerId, userId, partie.memberships.length > 0);
+    return roleFor(partie, userId, partie.memberships[0] ?? null);
   }
 
   /** Rôles de `userId` sur un lot de parties — UNE seule requête, jamais une par partie. Les
@@ -285,11 +415,21 @@ export class PermissionService {
         id: { in: partieIds },
         OR: [{ ownerId: userId }, { memberships: { some: { userId } } }],
       },
-      select: { id: true, ownerId: true },
+      select: {
+        id: true,
+        ownerId: true,
+        gameSystemId: true,
+        memberships: { where: { userId }, select: { role: true } },
+      },
     });
     for (const p of parties) {
       // Retenue par le filtre : propriétaire ou membre — donc membre si elle n'est pas à lui.
-      const role = jdrRole(p.ownerId, userId, true);
+      // Famille `jdr` : le propriétaire est `mj`, sinon `player` ; `ralliement` : rôle de la ligne
+      // de membership (propriétaire sans ligne = `admin`).
+      const role =
+        familyOf(p.gameSystemId) === 'ralliement'
+          ? ralliementRole(p.ownerId, userId, p.memberships[0]?.role ?? null)
+          : jdrRole(p.ownerId, userId, true);
       if (role) roles.set(p.id, role);
     }
     return roles;
@@ -417,14 +557,18 @@ export class PermissionService {
     };
   }
 
-  /** Rôle de `userId` sur une partie déjà lue. La table `Membership` n'est consultée que si
-   *  l'utilisateur n'est pas le propriétaire. */
+  /** Rôle de `userId` sur une partie déjà lue. Famille `jdr` : la table `Membership` n'est
+   *  consultée que si l'utilisateur n'est pas le propriétaire. Famille `ralliement` : le rôle vient
+   *  de la ligne `Membership`, toujours lue. */
   private async roleIn(partie: Partie, userId: string): Promise<PartieRole | null> {
-    const asOwner = jdrRole(partie.ownerId, userId, false);
-    if (asOwner) return asOwner;
+    if (familyOf(partie.gameSystemId) !== 'ralliement') {
+      const asOwner = jdrRole(partie.ownerId, userId, false);
+      if (asOwner) return asOwner;
+    }
     const membership = await this.prisma.membership.findUnique({
       where: { userId_partieId: { userId, partieId: partie.id } },
+      select: { role: true },
     });
-    return jdrRole(partie.ownerId, userId, membership != null);
+    return roleFor(partie, userId, membership);
   }
 }

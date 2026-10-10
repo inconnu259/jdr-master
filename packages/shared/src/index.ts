@@ -138,7 +138,7 @@ const JDR_KINDS = ['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'] as co
  *  (`PartiesService.create()`/`update()`/`convertKind()`, `CharacterService.create()`, signal
  *  `PERSONNAGE_A_CREER` de `party-signals.service.ts`, validateurs DTO « id connu »).
  *
- *  `ralliement` reste FERMÉ à la création jusqu'à l'épic 38 et n'a pas de ligne en table
+ *  `ralliement` est ouvert à la création depuis la Story 38.2 ; il n'a pas de ligne en table
  *  `GameSystem`. Importer en VALEUR (jamais `import type`). */
 export const GAME_SYSTEMS = [
   {
@@ -187,7 +187,7 @@ export const GAME_SYSTEMS = [
     family: 'ralliement',
     capabilities: [],
     kinds: ['ONE_SHOT', 'CAMPAGNE_EPISODIQUE'],
-    openForCreation: false,
+    openForCreation: true,
   },
 ] as const satisfies readonly GameSystemEntry[];
 
@@ -229,9 +229,14 @@ export function isOpenForCreation(id: string): boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Rôle d'un utilisateur sur une partie. Famille `jdr` : `mj` (propriétaire) ou `player`
- *  (membre). `admin`/`member` sont réservés aux politiques du ralliement (épic 38), inutilisés
- *  ici. Un propriétaire nul (compte supprimé, AD-5) ne donne jamais `mj`. */
+ *  (membre). Famille `ralliement` (Story 38.2) : `admin` ou `member`, dérivé de
+ *  `Membership.role` uniquement. Un propriétaire nul (compte supprimé, AD-5) ne donne jamais
+ *  `mj`. */
 export type PartieRole = 'mj' | 'player' | 'admin' | 'member';
+
+/** Rôle d'un membre d'une partie (colonne `Membership.role`, Story 38.2) — union FERMÉE. Le
+ *  créateur d'un ralliement est inséré `ADMIN` ; tout autre membre est `MEMBER`. */
+export type MembershipRole = 'ADMIN' | 'MEMBER';
 
 /** Action soumise à un droit sur une partie (Story 37.6) — union fermée, `SCREAMING_SNAKE`. */
 export type PermissionAction =
@@ -447,7 +452,7 @@ export interface PartieDto {
   nextSessionSlot: DaySlot | null;
   /** Rôle de l'appelant sur cette partie — calculé serveur (`ownerId === userId`), jamais dérivé
    *  côté client (Story 29.1, AD-15). Toujours présent, contrairement à `ownerPseudo`/`ownerDisplayName`. */
-  role: 'mj' | 'player';
+  role: PartieRole;
   /** Toujours présent, calculé serveur (AD-8) — jamais dérivé côté client (Story 29.6). */
   status: PartieStatus;
   /** Toujours présent, calculé serveur (Story 29.8) — jamais dérivé côté client. */

@@ -150,14 +150,22 @@ enum InvitationStatus {
   REVOKED
 }
 
-/// Un JOUEUR dans une partie (le MJ n'est pas un membership, il est `Partie.ownerId`).
+/// Rôle d'un membre (Story 38.2) : `ADMIN` = créateur d'un ralliement, `MEMBER` = tout autre membre.
+enum MembershipRole {
+  ADMIN
+  MEMBER
+}
+
+/// Un JOUEUR dans une partie (le MJ n'est pas un membership, il est `Partie.ownerId`). Pour un
+/// ralliement, le créateur est aussi un membership `ADMIN` (Story 38.2).
 model Membership {
-  id       String   @id @default(uuid())
+  id       String         @id @default(uuid())
   userId   String
   partieId String
-  joinedAt DateTime @default(now())
-  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partie   Partie   @relation(fields: [partieId], references: [id], onDelete: Cascade)
+  role     MembershipRole @default(MEMBER)
+  joinedAt DateTime       @default(now())
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partie   Partie         @relation(fields: [partieId], references: [id], onDelete: Cascade)
 
   @@unique([userId, partieId])
 }

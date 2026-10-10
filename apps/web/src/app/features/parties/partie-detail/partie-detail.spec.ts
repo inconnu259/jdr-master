@@ -3196,3 +3196,121 @@ describe('PartieDetail — patron de carte à liseré, revue de code (retouche U
     expect(reference!.textContent).toContain('Un récit à découvrir');
   });
 });
+
+describe('PartieDetail — ralliement, garde minimale (Story 38.2)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const ralliement = () =>
+    makePartie({
+      gameSystemId: 'ralliement',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      role: 'admin',
+    });
+
+  it('un ralliement fraîchement créé ne déclenche aucune lecture liée à une capacité JDR', async () => {
+    const { el } = await createFixture(ralliement(), MJ_ID);
+
+    const characterSvc = TestBed.inject(CharacterService) as unknown as {
+      listByPartie: ReturnType<typeof vi.fn>;
+      getGameSystemContent: ReturnType<typeof vi.fn>;
+    };
+    const scenariosSvc = TestBed.inject(ScenariosService) as unknown as {
+      listAll: ReturnType<typeof vi.fn>;
+    };
+    const announcementsSvc = TestBed.inject(AnnouncementsService) as unknown as {
+      listAll: ReturnType<typeof vi.fn>;
+    };
+    const rolesSvc = TestBed.inject(CharacterRolesService) as unknown as {
+      listForPartie: ReturnType<typeof vi.fn>;
+    };
+    const partiesSvc = TestBed.inject(PartiesService) as unknown as {
+      inviteLinks: ReturnType<typeof vi.fn>;
+      listXpDistributions: ReturnType<typeof vi.fn>;
+    };
+    expect(characterSvc.listByPartie).not.toHaveBeenCalled();
+    expect(characterSvc.getGameSystemContent).not.toHaveBeenCalled();
+    expect(scenariosSvc.listAll).not.toHaveBeenCalled();
+    expect(announcementsSvc.listAll).not.toHaveBeenCalled();
+    expect(rolesSvc.listForPartie).not.toHaveBeenCalled();
+    // Son créateur y est admin, jamais MJ : pas de liens d'invitation ni d'historique d'XP.
+    expect(partiesSvc.inviteLinks).not.toHaveBeenCalled();
+    expect(partiesSvc.listXpDistributions).not.toHaveBeenCalled();
+    expect(el.querySelector('app-scenario-timeline')).toBeNull();
+    expect(el.querySelector('app-scenario-list')).toBeNull();
+  });
+
+  it('l’admin garde l’accès à la modification, sans clôture ni suppression', async () => {
+    const { el } = await createFixture(ralliement(), MJ_ID);
+    const links = Array.from(el.querySelectorAll('.icon-bar a')).map((a) =>
+      a.getAttribute('href'),
+    );
+    expect(links).toEqual(['/parties/party-1/edit']);
+    expect(el.querySelector('.icon-bar button')).toBeNull();
+  });
+
+  /** Fait émettre les signaux temps réel des services de domaine, puis laisse les effets s'exécuter. */
+  async function bumpRealtime(fixture: ComponentFixture<PartieDetail>) {
+    const bump = (token: unknown, value: unknown) =>
+      (TestBed.inject(token as never) as { changed: WritableSignal<unknown> }).changed.set(value);
+    bump(CharacterService, 1);
+    bump(AnnouncementsService, 1);
+    bump(CharacterRolesService, 1);
+    bump(ScenariosService, { partieId: 'party-1' });
+    for (let i = 0; i < 15; i++) {
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    await fixture.whenStable();
+  }
+
+  const readCounts = () => {
+    const characterSvc = TestBed.inject(CharacterService) as unknown as {
+      listByPartie: ReturnType<typeof vi.fn>;
+    };
+    const announcementsSvc = TestBed.inject(AnnouncementsService) as unknown as {
+      listAll: ReturnType<typeof vi.fn>;
+    };
+    const rolesSvc = TestBed.inject(CharacterRolesService) as unknown as {
+      listForPartie: ReturnType<typeof vi.fn>;
+    };
+    const scenariosSvc = TestBed.inject(ScenariosService) as unknown as {
+      listAll: ReturnType<typeof vi.fn>;
+    };
+    return {
+      characters: characterSvc.listByPartie.mock.calls.length,
+      announcements: announcementsSvc.listAll.mock.calls.length,
+      roles: rolesSvc.listForPartie.mock.calls.length,
+      scenarios: scenariosSvc.listAll.mock.calls.length,
+    };
+  };
+
+  it('ralliement : les signaux temps réel ne rechargent ni personnages, ni annonces, ni rôles, ni scénarios (votes actifs compris)', async () => {
+    const { fixture } = await createFixture(ralliement(), MJ_ID);
+    expect(readCounts()).toEqual({ characters: 0, announcements: 0, roles: 0, scenarios: 0 });
+
+    await bumpRealtime(fixture);
+
+    expect(readCounts()).toEqual({ characters: 0, announcements: 0, roles: 0, scenarios: 0 });
+  });
+
+  it('témoin : sur une quête, les mêmes signaux déclenchent bien ces rechargements', async () => {
+    const { fixture } = await createFixture(makePartie(), MJ_ID);
+    const before = readCounts();
+
+    await bumpRealtime(fixture);
+
+    const after = readCounts();
+    expect(after.characters).toBeGreaterThan(before.characters);
+    expect(after.announcements).toBeGreaterThan(before.announcements);
+    expect(after.roles).toBeGreaterThan(before.roles);
+    expect(after.scenarios).toBeGreaterThan(before.scenarios);
+  });
+
+  it('une quête garde son comportement : lectures JDR effectuées', async () => {
+    await createFixture(makePartie(), MJ_ID);
+    const characterSvc = TestBed.inject(CharacterService) as unknown as {
+      listByPartie: ReturnType<typeof vi.fn>;
+    };
+    expect(characterSvc.listByPartie).toHaveBeenCalledWith('party-1');
+  });
+});

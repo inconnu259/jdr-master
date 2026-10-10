@@ -86,34 +86,66 @@
     }
 
     <form [formGroup]="form" (ngSubmit)="submit()">
+      <!-- Ordre fixe (planche validée, Story 38.2) : couverture, nom, bascule, champs du mode,
+           description (toujours dernière). -->
       <mat-form-field appearance="outline">
-        <mat-label>{{ theme.tone()['partie.name_label'] }}</mat-label>
+        <mat-label>{{
+          isRalliement() ? theme.tone()['partie.ralliement_name_label'] : theme.tone()['partie.name_label']
+        }}</mat-label>
         <input matInput formControlName="name" />
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
-        <mat-label>{{ theme.tone()['partie.system_label'] }}</mat-label>
-        <mat-select formControlName="gameSystemId">
-          @for (s of systems(); track s.id) {
-            <mat-option [value]="s.id">{{ s.name }}</mat-option>
+      @if (!editId()) {
+        <!-- Le mode se choisit à la création et reste définitif : aucune bascule à l'édition. Le
+             changer reconfigure les champs suivants sans effacer le nom ni la description. -->
+        <mat-button-toggle-group
+          class="mode-toggle"
+          [value]="mode()"
+          (change)="setMode($event.value)"
+          [attr.aria-label]="theme.tone()['partie.mode_label']"
+          hideSingleSelectionIndicator
+        >
+          @for (option of modeOptions; track option) {
+            <mat-button-toggle [value]="option">
+              {{
+                option === 'ralliement'
+                  ? theme.tone()['partie.mode_ralliement']
+                  : theme.tone()['partie.mode_quete']
+              }}
+            </mat-button-toggle>
           }
-        </mat-select>
-      </mat-form-field>
+        </mat-button-toggle-group>
+      }
+
+      @if (!isRalliement()) {
+        <mat-form-field appearance="outline">
+          <mat-label>{{ theme.tone()['partie.system_label'] }}</mat-label>
+          <mat-select formControlName="gameSystemId">
+            @for (s of systems(); track s.id) {
+              <mat-option [value]="s.id">{{ s.name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
 
       <fieldset class="kind-field">
-        <legend class="lbl">{{ theme.tone()['partie.kind_label'] }}</legend>
+        <legend class="lbl">{{
+          isRalliement() ? theme.tone()['partie.ralliement_kind_label'] : theme.tone()['partie.kind_label']
+        }}</legend>
         <!-- Groupe vertical : « Campagne épisodique » ne tient pas sur une ligne de 375 px, et un
              groupe horizontal y tronquait le libellé (AC1). -->
         <mat-button-toggle-group
           formControlName="kind"
           class="kind-toggle"
-          [attr.aria-label]="theme.tone()['partie.kind_label']"
+          [attr.aria-label]="
+            isRalliement() ? theme.tone()['partie.ralliement_kind_label'] : theme.tone()['partie.kind_label']
+          "
           hideSingleSelectionIndicator
           vertical
         >
           @for (option of kindAvailability(); track option.kind) {
             <mat-button-toggle [value]="option.kind" [disabled]="option.disabled">
-              {{ theme.tone()['partie.kind_' + option.kind] }}
+              {{ kindLabel(option.kind) }}
             </mat-button-toggle>
           }
         </mat-button-toggle-group>
@@ -122,7 +154,7 @@
         @for (option of kindAvailability(); track option.kind) {
           @if (option.reason) {
             <p class="kind-reason">
-              <strong>{{ theme.tone()['partie.kind_' + option.kind] }}</strong> —
+              <strong>{{ kindLabel(option.kind) }}</strong> —
               {{ option.reason }}
             </p>
           }
@@ -143,7 +175,13 @@
           {{ theme.tone()['partie.cancel_btn'] }}
         </button>
         <button mat-flat-button type="submit" [disabled]="saving()">
-          {{ editId() ? theme.tone()['partie.save_btn'] : theme.tone()['nav.create_game'] }}
+          {{
+            editId()
+              ? theme.tone()['partie.save_btn']
+              : isRalliement()
+                ? theme.tone()['partie.ralliement_submit_btn']
+                : theme.tone()['nav.create_game']
+          }}
         </button>
       </div>
     </form>

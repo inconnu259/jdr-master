@@ -56,17 +56,23 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { readFile, unlink, writeFile } from 'node:fs/promises';
-import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
+import type { AggregatedSlotDto, AvailableSlotDto, PartieKind } from '@master-jdr/shared';
+import { GAME_SYSTEMS, isOpenForCreation, kindsOf } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { EventsService } from '../events/events.service';
-import { PermissionService } from '../permissions/permission.service';
+import {
+  ADMIN_ONLY_MESSAGE,
+  PermissionService,
+  RALLIEMENT_UNAVAILABLE_MESSAGE,
+} from '../permissions/permission.service';
 import { VISIBLE_SEANCE_WHERE } from '../permissions/scenario-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GAME_SYSTEM_FAMILY_CHANGE_MESSAGE,
   GAME_SYSTEM_WITHOUT_MODULE_MESSAGE,
-  KIND_CONVERSION_NOT_JDR_MESSAGE,
+  KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE,
   PartiesService,
+  RALLIEMENT_TYPE_LOCKED_MESSAGE,
 } from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
@@ -87,6 +93,7 @@ describe('PartiesService', () => {
       findUnique: jest.Mock;
       findMany: jest.Mock;
       deleteMany: jest.Mock;
+      create: jest.Mock;
     };
     user: {
       findUnique: jest.Mock;
@@ -96,6 +103,7 @@ describe('PartiesService', () => {
       count: jest.Mock;
       groupBy: jest.Mock;
       findFirst: jest.Mock;
+      update: jest.Mock;
     };
     scenario: {
       create: jest.Mock;
@@ -161,6 +169,7 @@ describe('PartiesService', () => {
         findUnique: jest.fn(),
         findMany: jest.fn(),
         deleteMany: jest.fn(),
+        create: jest.fn(),
       },
       user: {
         findUnique: jest.fn().mockResolvedValue(null),
@@ -173,6 +182,7 @@ describe('PartiesService', () => {
         count: jest.fn().mockResolvedValue(0),
         groupBy: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue({}),
       },
       // Verrou de la partie pris par `EventsService.createInTx` (garde ONE_SHOT).
       $queryRaw: jest.fn().mockResolvedValue([{ kind: 'ONE_SHOT' }]),
@@ -356,16 +366,114 @@ describe('PartiesService', () => {
     expect(prisma.partie.create).not.toHaveBeenCalled();
   });
 
-  it('create() refuse le système ralliement, fermé à la création jusqu’à l’épic 38 (Story 37.5)', async () => {
-    const promise = service.create('mj1', {
-      name: 'Soirée',
-      kind: 'ONE_SHOT',
-      gameSystemId: 'ralliement',
+  describe('create() — types admis par le registre (Story 38.2)', () => {
+    const ALL_KINDS: PartieKind[] = ['ONE_SHOT', 'CAMPAGNE_LINEAIRE', 'CAMPAGNE_EPISODIQUE'];
+    const cases = GAME_SYSTEMS.filter((g) => isOpenForCreation(g.id)).flatMap((g) =>
+      ALL_KINDS.map((kind) => ({
+        id: g.id as string,
+        kind,
+        allowed: kindsOf(g.id).includes(kind),
+      })),
+    );
+
+    it.each(cases)(
+      'système $id, kind $kind : admis=$allowed (exactement kindsOf)',
+      async ({ id, kind, allowed }) => {
+        prisma.partie.create.mockResolvedValue({ ...partie, gameSystemId: id, kind });
+        const promise = service.create('mj1', { name: 'Test', kind, gameSystemId: id });
+        if (allowed) {
+          await expect(promise).resolves.toBeDefined();
+        } else {
+          await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+          expect(prisma.partie.create).not.toHaveBeenCalled();
+        }
+      },
+    );
+  });
+
+  describe('create() — ralliement (Story 38.2)', () => {
+    const ralliement = { ...partie, gameSystemId: 'ralliement', name: 'Soirée' };
+
+    it('rencontre isolée : partie ONE_SHOT + un événement + une séance non datée, SANS scénario, créateur membre ADMIN, rôle admin', async () => {
+      prisma.partie.create.mockResolvedValue(ralliement);
+
+      const dto = await service.create('mj1', {
+        name: 'Soirée',
+        kind: 'ONE_SHOT',
+        gameSystemId: 'ralliement',
+      });
+
+      expect(prisma.partie.create).toHaveBeenCalledWith({
+        data: objectLike({ gameSystemId: 'ralliement', ownerId: 'mj1', kind: 'ONE_SHOT' }),
+      });
+      expect(prisma.membership.create).toHaveBeenCalledWith({
+        data: { userId: 'mj1', partieId: 'p1', role: 'ADMIN' },
+      });
+      expect(prisma.event.create).toHaveBeenCalledTimes(1);
+      expect(prisma.event.create).toHaveBeenCalledWith({
+        data: { partieId: 'p1', title: 'Soirée', description: null, ownerId: 'mj1' },
+      });
+      expect(prisma.seance.create).toHaveBeenCalledTimes(1);
+      expect(prisma.scenario.create).not.toHaveBeenCalled();
+      // Une seule transaction : partie, membership, événement et séance ensemble.
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(dto.role).toBe('admin');
+      expect(dto.ownerId).toBe('mj1');
+      // Aucun Scenario n'existe : le statut n'est jamais dérivé d'un scénario (A_VENIR, comme GET).
+      expect(dto.status).toBe('A_VENIR');
     });
-    await expect(promise).rejects.toBeInstanceOf(BadRequestException);
-    await expect(promise).rejects.toThrow(GAME_SYSTEM_WITHOUT_MODULE_MESSAGE);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect(prisma.partie.create).not.toHaveBeenCalled();
+
+    it('groupe (CAMPAGNE_EPISODIQUE) : partie + membership ADMIN, aucun événement', async () => {
+      prisma.partie.create.mockResolvedValue({ ...ralliement, kind: 'CAMPAGNE_EPISODIQUE' });
+
+      const dto = await service.create('mj1', {
+        name: 'Les voisins',
+        kind: 'CAMPAGNE_EPISODIQUE',
+        gameSystemId: 'ralliement',
+      });
+
+      expect(prisma.membership.create).toHaveBeenCalledWith({
+        data: { userId: 'mj1', partieId: 'p1', role: 'ADMIN' },
+      });
+      expect(prisma.event.create).not.toHaveBeenCalled();
+      expect(prisma.seance.create).not.toHaveBeenCalled();
+      expect(prisma.scenario.create).not.toHaveBeenCalled();
+      expect(dto.role).toBe('admin');
+      expect(dto.status).toBe('A_VENIR');
+    });
+
+    it('CAMPAGNE_LINEAIRE refusée (400), avant toute écriture', async () => {
+      const promise = service.create('mj1', {
+        name: 'Soirée',
+        kind: 'CAMPAGNE_LINEAIRE',
+        gameSystemId: 'ralliement',
+      });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      await expect(promise).rejects.toThrow(KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.partie.create).not.toHaveBeenCalled();
+      expect(prisma.membership.create).not.toHaveBeenCalled();
+    });
+
+    it('une quête ONE_SHOT garde hasScenario vrai à la création (statut EN_COURS, inchangé)', async () => {
+      prisma.partie.create.mockResolvedValue(partie);
+      const dto = await service.create('mj1', {
+        name: 'La Nuit',
+        kind: 'ONE_SHOT',
+        gameSystemId: 'ryuutama',
+      });
+      expect(dto.status).toBe('EN_COURS');
+    });
+
+    it('une quête ne reçoit AUCUN membership à la création (comportement JDR inchangé)', async () => {
+      prisma.partie.create.mockResolvedValue(partie);
+      await service.create('mj1', {
+        name: 'La Nuit',
+        kind: 'ONE_SHOT',
+        gameSystemId: 'ryuutama',
+      });
+      expect(prisma.membership.create).not.toHaveBeenCalled();
+    });
   });
 
   it('listForUser(player) renvoie les parties des memberships, projetées avec role: player', async () => {
@@ -452,6 +560,39 @@ describe('PartiesService', () => {
       ]);
     });
 
+    it('ralliement : rôles admin / member dans la liste sans rôle (Story 38.2)', async () => {
+      const r1 = { ...partieB, id: 'r1', gameSystemId: 'ralliement', ownerId: 'u' };
+      const r2 = { ...partieB, id: 'r2', gameSystemId: 'ralliement', ownerId: 'autre' };
+      prisma.partie.findMany.mockResolvedValueOnce([r1, r2]).mockResolvedValueOnce([
+        { id: 'r1', ownerId: 'u', gameSystemId: 'ralliement', memberships: [{ role: 'ADMIN' }] },
+        {
+          id: 'r2',
+          ownerId: 'autre',
+          gameSystemId: 'ralliement',
+          memberships: [{ role: 'MEMBER' }],
+        },
+      ]);
+
+      const dtos = await service.listForUser('u');
+
+      expect(dtos.map((d) => [d.id, d.role])).toEqual([
+        ['r1', 'admin'],
+        ['r2', 'member'],
+      ]);
+    });
+
+    it('listes par rôle (mj / player) : les ralliements sont exclus (Story 38.2)', async () => {
+      const r = { ...partieB, id: 'r1', gameSystemId: 'ralliement', ownerId: 'u' };
+      prisma.partie.findMany.mockResolvedValue([r, { ...partie, ownerId: 'u' }]);
+      prisma.membership.findMany.mockResolvedValue([
+        { partie: r },
+        { partie: { ...partieB, id: 'p9', gameSystemId: 'ryuutama' } },
+      ]);
+
+      expect((await service.listForUser('u', 'mj')).map((d) => d.id)).toEqual(['p1']);
+      expect((await service.listForUser('u', 'player')).map((d) => d.id)).toEqual(['p9']);
+    });
+
     it('aucune partie → liste vide, sans lecture de rôles', async () => {
       prisma.partie.findMany.mockResolvedValueOnce([]);
 
@@ -504,7 +645,7 @@ describe('PartiesService', () => {
     expect(prisma.event.groupBy).toHaveBeenCalledTimes(1);
     expect(prisma.event.groupBy).toHaveBeenCalledWith({
       by: ['partieId'],
-      where: { partieId: { in: ['p1', 'p2'] } },
+      where: { partieId: { in: ['p1', 'p2'] }, scenario: { isNot: null } },
       _count: { _all: true },
     });
     expect(prisma.event.count).not.toHaveBeenCalled();
@@ -962,7 +1103,7 @@ describe('PartiesService', () => {
     const dto = await service.findOneDto('p1', 'mj1');
     expect(dto.status).toBe('EN_COURS');
     expect(prisma.event.count).toHaveBeenCalledWith({
-      where: { partieId: 'p1' },
+      where: { partieId: 'p1', scenario: { isNot: null } },
     });
   });
 
@@ -1853,13 +1994,12 @@ describe('PartiesService', () => {
       expectNoWrites();
     });
 
-    it('Story 37.5 — hors famille jdr : 400 sans consulter la matrice, aucune lecture ni écriture', async () => {
-      // Aucune partie ralliement ne peut encore être créée : état posé au niveau unitaire.
+    it('Story 38.2 — ralliement : 403 par la politique (même pour son admin), sans consulter la matrice, aucune lecture ni écriture', async () => {
       prisma.partie.findUnique.mockResolvedValue({ ...episodique, gameSystemId: 'ralliement' });
 
       const promise = service.convertKind('p1', 'mj1', { kind: 'ONE_SHOT' });
-      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
-      await expect(promise).rejects.toThrow(KIND_CONVERSION_NOT_JDR_MESSAGE);
+      await expect(promise).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(promise).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
       // La matrice lit les compteurs de scénarios dans la transaction : ni l'une ni les autres.
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(prisma.scenario.count).not.toHaveBeenCalled();
@@ -2261,12 +2401,102 @@ describe('PartiesService', () => {
       expect(prisma.partie.update).not.toHaveBeenCalled();
     });
 
-    it('une partie ralliement ne passe pas sur un système jdr (même ouvert)', async () => {
+    it('une partie ralliement ne passe pas sur un système jdr (même ouvert) — le type est définitif (Story 38.2)', async () => {
       prisma.partie.findUnique.mockResolvedValue({ ...partie, gameSystemId: 'ralliement' });
       const promise = service.update('p1', 'mj1', { gameSystemId: 'ryuutama' });
       await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      await expect(promise).rejects.toThrow(RALLIEMENT_TYPE_LOCKED_MESSAGE);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('un système inconnu du registre ne devient pas un ralliement (400 famille), aucune écriture (Story 38.2)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, gameSystemId: 'systeme-disparu' });
+      const promise = service.update('p1', 'mj1', { gameSystemId: 'ralliement' });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
       await expect(promise).rejects.toThrow(GAME_SYSTEM_FAMILY_CHANGE_MESSAGE);
       expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('renommer une rencontre isolée renomme son événement unique, dans la même transaction (Story 38.2)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'ralliement',
+        kind: 'ONE_SHOT',
+      });
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'ralliement',
+        name: 'Neuf',
+      });
+      prisma.event.findFirst.mockResolvedValue({ id: 'ev1' });
+
+      await service.update('p1', 'mj1', { name: 'Neuf' });
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.event.update).toHaveBeenCalledWith({
+        where: { id: 'ev1' },
+        data: { title: 'Neuf' },
+      });
+    });
+
+    it('un groupe ou un nom inchangé ne touche à aucun événement (Story 38.2)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'ralliement',
+        kind: 'CAMPAGNE_EPISODIQUE',
+      });
+      prisma.partie.update.mockResolvedValue({ ...partie, gameSystemId: 'ralliement' });
+      await service.update('p1', 'mj1', { name: 'Neuf' });
+
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'ralliement',
+        kind: 'ONE_SHOT',
+      });
+      await service.update('p1', 'mj1', { name: partie.name });
+
+      expect(prisma.event.update).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('un admin ne change pas le kind d’un ralliement (400), aucune écriture (Story 38.2)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'ralliement',
+        kind: 'ONE_SHOT',
+      });
+      const promise = service.update('p1', 'mj1', { kind: 'CAMPAGNE_EPISODIQUE' });
+      await expect(promise).rejects.toBeInstanceOf(BadRequestException);
+      await expect(promise).rejects.toThrow(RALLIEMENT_TYPE_LOCKED_MESSAGE);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('un membre ne modifie pas un ralliement : 403 « réservée aux administrateurs », aucune écriture (Story 38.2)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, gameSystemId: 'ralliement' });
+      prisma.membership.findUnique.mockResolvedValue({ userId: 'm', role: 'MEMBER' });
+      const promise = service.update('p1', 'm', { name: 'Nouveau nom' });
+      await expect(promise).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(promise).rejects.toThrow(ADMIN_ONLY_MESSAGE);
+      expect(prisma.partie.update).not.toHaveBeenCalled();
+    });
+
+    it('un admin renomme son ralliement en renvoyant les mêmes kind et système : accepté, rôle admin (Story 38.2)', async () => {
+      prisma.partie.findUnique.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'ralliement',
+        kind: 'ONE_SHOT',
+      });
+      prisma.partie.update.mockResolvedValue({
+        ...partie,
+        gameSystemId: 'ralliement',
+        name: 'Nouveau nom',
+      });
+      const dto = await service.update('p1', 'mj1', {
+        name: 'Nouveau nom',
+        kind: 'ONE_SHOT',
+        gameSystemId: 'ralliement',
+      });
+      expect(dto.role).toBe('admin');
     });
 
     it('renvoyer le gameSystemId ralliement inchangé reste accepté', async () => {

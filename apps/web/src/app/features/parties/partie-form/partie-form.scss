@@ -43,6 +43,21 @@ mat-form-field {
   gap: 0.35rem;
 }
 
+// Bascule quête / ralliement (Story 38.2) : deux options sur toute la largeur, zone de toucher d'au
+// moins 44 px de haut (planche validée).
+.mode-toggle {
+  width: 100%;
+  --mat-button-toggle-height: 44px;
+}
+
+.mode-toggle .mat-button-toggle {
+  flex: 1 1 0;
+}
+
+.mode-toggle .mat-button-toggle-button {
+  min-height: 44px;
+}
+
 // Vertical : « Campagne épisodique » ne tient pas sur une ligne étroite, et un groupe horizontal
 // tronquait le libellé sur mobile (AC1).
 .kind-toggle {

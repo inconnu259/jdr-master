@@ -24,7 +24,7 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { hasCapability } from '@master-jdr/shared';
+import { familyOf, hasCapability } from '@master-jdr/shared';
 import type {
   AnnouncementDto,
   CharacterDto,
@@ -203,8 +203,19 @@ export class PartieDetail implements OnInit {
   protected readonly prepAssetError = signal<string | null>(null);
   protected readonly downloadingPrepAsset = signal(false);
 
-  /** Le MJ a accès à l'invitation et à la gestion des membres/liens. */
-  protected readonly isMj = computed(() => this.partie()?.ownerId === this.auth.currentUser()?.id);
+  /** Story 38.2 (garde minimale, la page de famille complète est la 38.4) : un ralliement n'a ni
+   *  scénario, ni personnage, ni annonce, ni rôle de groupe — le serveur refuse ces lectures (403).
+   *  Les chargements qui en dépendent sont donc sautés, sans quoi la page d'un ralliement fraîchement
+   *  créé lèverait des erreurs. */
+  protected readonly isRalliement = computed(
+    () => familyOf(this.partie()?.gameSystemId ?? '') === 'ralliement',
+  );
+
+  /** Le MJ a accès à l'invitation et à la gestion des membres/liens. Jamais dans un ralliement :
+   *  son créateur y est `admin` (rôle serveur), pas MJ — ses droits propres arrivent en 38.4. */
+  protected readonly isMj = computed(
+    () => this.partie()?.ownerId === this.auth.currentUser()?.id && !this.isRalliement(),
+  );
 
   /** Story 32.2 (revue de code) : la zone Consultation de l'onglet Détails ne doit jamais se rendre
    *  avec un titre de zone et aucun contenu — un joueur sans annonce de campagne ni bandeau
@@ -396,7 +407,12 @@ export class PartieDetail implements OnInit {
       if (!p) return;
       this.contextualNav.set({
         title: p.name,
-        subtitle: `${this.system(p.gameSystemId)} · ${this.kind(p.kind)}`,
+        // Story 38.2 : un ralliement dit sa nature avec ses propres mots (jamais "Quête unique").
+        subtitle: `${this.system(p.gameSystemId)} · ${
+          this.isRalliement()
+            ? (this.theme.tone()[`partie.ralliement_kind_${p.kind}`] ?? p.kind)
+            : this.kind(p.kind)
+        }`,
       });
     });
 
@@ -576,7 +592,7 @@ export class PartieDetail implements OnInit {
    *  même risque déjà corrigé pour `MyPartiesService` (garder le dernier état connu bon). */
   private async reloadCharacters(): Promise<void> {
     const p = this.partie();
-    if (!p) return;
+    if (!p || this.isRalliement()) return;
     try {
       this.characters.set(await this.characterSvc.listByPartie(p.id));
     } catch {
@@ -693,6 +709,11 @@ export class PartieDetail implements OnInit {
     }
     await this.loadMembers();
     await this.loadActivePolls(id);
+    // Story 38.2 : ces chargements relèvent de capacités du JDR, absentes d'un ralliement.
+    if (this.isRalliement()) {
+      this.charactersLoaded.set(true);
+      return;
+    }
     this.announcements.set(await this.announcementsSvc.listAll(id).catch(() => []));
     this.characters.set(await this.characterSvc.listByPartie(id).catch(() => []));
     this.charactersLoaded.set(true);
@@ -827,6 +848,8 @@ export class PartieDetail implements OnInit {
   }
 
   private async loadActivePolls(partieId: string): Promise<void> {
+    // Story 38.2 : pas de scénario ni de vote dans un ralliement (lecture refusée par le serveur).
+    if (this.isRalliement()) return;
     try {
       const scenarios = await this.scenariosSvc.listAll(partieId);
       const polls: SessionPollDto[] = [];
@@ -869,7 +892,7 @@ export class PartieDetail implements OnInit {
 
   private async reloadAnnouncements(): Promise<void> {
     const p = this.partie();
-    if (!p) return;
+    if (!p || this.isRalliement()) return;
     const reqId = ++this.announcementsReqId;
     const list = await this.announcementsSvc.listAll(p.id).catch(() => this.announcements());
     if (reqId === this.announcementsReqId) this.announcements.set(list);
@@ -881,7 +904,7 @@ export class PartieDetail implements OnInit {
    *  `changed()` rapprochés ne doivent jamais laisser une réponse périmée écraser un état plus frais. */
   private async reloadCharacterRoles(): Promise<void> {
     const p = this.partie();
-    if (!p) return;
+    if (!p || this.isRalliement()) return;
     const reqId = ++this.characterRolesReqId;
     const list = await this.characterRolesSvc
       .listForPartie(p.id)

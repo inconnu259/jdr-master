@@ -54,7 +54,7 @@ describe('registre GAME_SYSTEMS (Story 37.5)', () => {
     },
   );
 
-  it('ralliement : famille ralliement, aucune capacité, ONE_SHOT + CAMPAGNE_EPISODIQUE, fermé jusqu’à l’épic 38', () => {
+  it('ralliement : famille ralliement, aucune capacité, ONE_SHOT + CAMPAGNE_EPISODIQUE, ouvert à la création (Story 38.2)', () => {
     const entry = GAME_SYSTEMS.find((g) => g.id === 'ralliement');
     expect(entry?.name).toBe('Ralliement');
     expect(familyOf('ralliement')).toBe('ralliement');
@@ -62,12 +62,13 @@ describe('registre GAME_SYSTEMS (Story 37.5)', () => {
       expect(hasCapability('ralliement', capability)).toBe(false);
     }
     expect(kindsOf('ralliement')).toEqual(['ONE_SHOT', 'CAMPAGNE_EPISODIQUE']);
-    expect(isOpenForCreation('ralliement')).toBe(false);
+    expect(isOpenForCreation('ralliement')).toBe(true);
   });
 
-  it('seul ryuutama est ouvert à la création (aucun changement de l’offre)', () => {
+  it('seuls ryuutama et ralliement sont ouverts à la création (Story 38.2)', () => {
     expect(GAME_SYSTEMS.filter((g) => isOpenForCreation(g.id)).map((g) => g.id)).toEqual([
       'ryuutama',
+      'ralliement',
     ]);
   });
 

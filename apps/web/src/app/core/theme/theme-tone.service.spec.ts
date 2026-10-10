@@ -1173,4 +1173,43 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
       );
     }
   });
+
+  it('Story 38.2 : le formulaire en mode ralliement porte les libellés validés le 2026-10-11', () => {
+    const attendu: Record<Theme, Record<string, string>> = {
+      'grimoire-emeraude': {
+        'partie.mode_ralliement': 'Ralliement',
+        'partie.mode_quete': 'Quête',
+        'partie.ralliement_kind_label': 'Nature du ralliement',
+        'partie.ralliement_name_label': 'Nom du ralliement',
+        'partie.ralliement_kind_ONE_SHOT': 'La conjonction des Esprits',
+        'partie.ralliement_kind_CAMPAGNE_EPISODIQUE': 'La convergence des Sortilèges',
+        'partie.ralliement_submit_btn': 'Convoquer le ralliement',
+      },
+      'foret-ancienne': {
+        'partie.mode_ralliement': 'Veillée',
+        'partie.mode_quete': 'Sentier',
+        'partie.ralliement_kind_label': 'Nature de la veillée',
+        'partie.ralliement_name_label': 'Nom de la veillée',
+        'partie.ralliement_kind_ONE_SHOT': 'La halte au gué',
+        'partie.ralliement_kind_CAMPAGNE_EPISODIQUE': 'La grande transhumance',
+        'partie.ralliement_submit_btn': 'Allumer la veillée',
+      },
+      'atelier-cuivre': {
+        'partie.mode_ralliement': 'Rassemblement',
+        'partie.mode_quete': 'Mission',
+        'partie.ralliement_kind_label': 'Régime du rassemblement',
+        'partie.ralliement_name_label': 'Nom du rassemblement',
+        'partie.ralliement_kind_ONE_SHOT': 'La réunion d’établi',
+        'partie.ralliement_kind_CAMPAGNE_EPISODIQUE': 'Le grand chantier',
+        'partie.ralliement_submit_btn': 'Monter le rassemblement',
+      },
+    };
+    for (const theme of THEMES) {
+      for (const [key, value] of Object.entries(attendu[theme])) {
+        expect(TONE_MAP[theme][key], `${theme} / ${key}`).toBe(value);
+      }
+      // Le groupe de la bascule est nommé (annoncé aux lecteurs d’écran).
+      expect(TONE_MAP[theme]['partie.mode_label'], theme).toBeTruthy();
+    }
+  });
 });

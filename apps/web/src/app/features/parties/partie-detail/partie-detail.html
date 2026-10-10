@@ -10,7 +10,7 @@
           <mat-icon aria-hidden="true">flag</mat-icon> {{ theme.tone()['partie.status_closed_label'] }}
         </p>
       }
-      @if (isDesktop()) {
+      @if (isDesktop() && !isRalliement()) {
         <app-roster-rail
           [members]="members()"
           [characters]="characters()"
@@ -332,7 +332,7 @@
             </section>
         </mat-tab>
 
-        @if (!isMj()) {
+        @if (!isMj() && !isRalliement()) {
           <mat-tab [label]="theme.tone()['character.party_sheets_tab_label']">
             <section class="party-sheets-tab">
               @if (!charactersLoaded()) {
@@ -471,7 +471,7 @@
             <app-scenario-list [partieId]="p.id" />
           </mat-tab>
         }
-        @if (p.kind !== 'ONE_SHOT') {
+        @if (p.kind !== 'ONE_SHOT' && !isRalliement()) {
           <mat-tab [label]="theme.tone()['parties.detail_tab_timeline']">
             <app-scenario-timeline [partieId]="p.id" [isMj]="isMj()" [partieKind]="p.kind" [characters]="characters()" />
           </mat-tab>
@@ -491,7 +491,7 @@
       </div>
     }
 
-    @if (!isDesktop()) {
+    @if (!isDesktop() && !isRalliement()) {
       <app-roster-strip
         [members]="members()"
         [characters]="characters()"
@@ -530,6 +530,12 @@
         <button mat-button class="icon-bar__btn icon-bar__btn--danger" (click)="confirmDelete(p)">
           <mat-icon aria-hidden="true">delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
         </button>
+      } @else if (isRalliement() && p.role === 'admin') {
+        <!-- Story 38.2 : l'admin d'un ralliement modifie sa partie (PARTIE_UPDATE) ; clôture, suppression
+             et visibilité n'existent pas pour cette famille (page complète : story 38.4). -->
+        <a mat-button class="icon-bar__btn" [routerLink]="['/parties', p.id, 'edit']">
+          <mat-icon aria-hidden="true">edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
+        </a>
       }
     </mat-card-actions>
   </mat-card>

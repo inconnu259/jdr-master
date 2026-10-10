@@ -327,6 +327,15 @@ export const grimoireEmeraude = {
     'Le grimoire est bien inscrit, mais son enluminure n’a pu être fixée. Vous pouvez la redéposer ici.',
   'partie.fields_saved_but_convert_failed':
     'Les autres modifications sont enregistrées, mais la nature du grimoire n’a pu être changée. Réessayez.',
+  /* — formulaire de partie : mode ralliement (Story 38.2) — */
+  'partie.mode_label': 'Genre du grimoire',
+  'partie.mode_ralliement': 'Ralliement',
+  'partie.mode_quete': 'Quête',
+  'partie.ralliement_name_label': 'Nom du ralliement',
+  'partie.ralliement_kind_label': 'Nature du ralliement',
+  'partie.ralliement_kind_ONE_SHOT': 'La conjonction des Esprits',
+  'partie.ralliement_kind_CAMPAGNE_EPISODIQUE': 'La convergence des Sortilèges',
+  'partie.ralliement_submit_btn': 'Convoquer le ralliement',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine séance au grimoire',
   'partie.no_session': "Aucune séance convoquée. Consultez l'oracle des créneaux.",

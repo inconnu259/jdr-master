@@ -271,3 +271,14 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-38-1-creer-depuis-un-bouton-den-tete-pour-tout-utilisateur.md`
   summary: Visually check the header create button (pill, icon-only mobile button, icon legibility) in the Forêt Ancienne and Atelier Cuivré themes, and on a real phone (label thresholds 399/422/437 px).
   evidence: The browser session runs on the Grimoire Émeraude account theme; the theme is persisted on the account, so the other two themes were only covered by unit tests on labels.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-38-2-choisir-quete-ou-ralliement-a-la-creation.md`
+  summary: Reconcile the code that assumes the owner is NOT a `Membership` row, now that a ralliement creator is both owner and `ADMIN` member: `common/participant-count.util.ts` (`+1` for the owner, used by availability votes and the poll/scenarios counts), `invitations/invite-links.service.ts` `consumeLink` (409 « déjà le MJ » — a ralliement admin would instead hit the unique-membership conflict), and `EventsService.ownEventsOf` (role test for episodic campaigns).
+  evidence: Story 38.2 inserts the creator as `ADMIN` member of a ralliement (AD-5 keeps `ownerId`). All three places are JDR-only today (a ralliement refuses their actions by policy, and the role-split lists exclude ralliements), so nothing breaks yet; epic 39 (invitations, admin management, leave) must handle them when ralliement groups gain members and votes.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-38-2-choisir-quete-ou-ralliement-a-la-creation.md`
+  summary: Decide the "at least one admin" invariant of a ralliement: when the sole ADMIN's account is deleted (Membership cascades, `Partie.ownerId` set null) nobody can edit, delete or manage the partie; design promotion of a remaining member or a deletion path with the account-deletion flow (AD-11).
+  evidence: `RALLIEMENT_POLICY` gives PARTIE_DELETE/PARTIE_MEMBER_REMOVE to nobody and role derivation reads `Membership.role` only; reviewers 38.2.
+- source_spec: `_bmad-output/implementation-artifacts/spec-38-2-choisir-quete-ou-ralliement-a-la-creation.md`
+  summary: Cover the admin cover upload/removal on a ralliement end to end (e2e PUT/DELETE `/parties/:id/cover`, member refused) when the cover story lands.
+  evidence: Only the policy cells `PARTIE_COVER_UPDATE/READ` are pinned for ralliement today.

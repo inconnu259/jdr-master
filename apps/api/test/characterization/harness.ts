@@ -161,8 +161,12 @@ export class Harness {
   }
 
   /** Ajoute un joueur à une partie (table `Membership`, non remaniée par l'épic). */
-  async addMember(partieId: string, user: TestUser): Promise<void> {
-    await this.prisma.membership.create({ data: { userId: user.id, partieId } });
+  async addMember(
+    partieId: string,
+    user: TestUser,
+    role: 'ADMIN' | 'MEMBER' = 'MEMBER',
+  ): Promise<void> {
+    await this.prisma.membership.create({ data: { userId: user.id, partieId, role } });
   }
 
   /** Crée une partie par `POST /parties` et l'enregistre pour le nettoyage. */
@@ -170,9 +174,10 @@ export class Harness {
     owner: TestUser,
     kind: 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE' | 'CAMPAGNE_EPISODIQUE',
     label: string = kind,
+    gameSystemId: string = 'ryuutama',
   ): Promise<{ res: Response; id: string; name: string }> {
     const name = `C37 ${label} ${this.suffix}`;
-    const res = await owner.agent.post('/parties').send({ name, kind, gameSystemId: 'ryuutama' });
+    const res = await owner.agent.post('/parties').send({ name, kind, gameSystemId });
     const id = (res.body as { id?: string }).id;
     if (id) this.partieIds.push(id);
     return { res, id: id ?? '', name };

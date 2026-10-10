@@ -9,7 +9,13 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRadioModule } from '@angular/material/radio';
-import { GAME_SYSTEMS, checkPartieKindTransition, isOpenForCreation } from '@master-jdr/shared';
+import {
+  GAME_SYSTEMS,
+  checkPartieKindTransition,
+  familyOf,
+  isOpenForCreation,
+  kindsOf,
+} from '@master-jdr/shared';
 import type { PartieKind, PartieKindTransitionRefusal, ScenarioDto } from '@master-jdr/shared';
 import { PartiesService } from '../../../core/parties/parties.service';
 import { MyPartiesService } from '../../../core/my-parties/my-parties.service';
@@ -27,6 +33,16 @@ const KIND_OPTIONS: readonly FormKind[] = [
   'CAMPAGNE_EPISODIQUE',
 ] as const;
 
+/** Mode de création (Story 38.2) : une quête de JDR ou un ralliement. Dérivé de la famille du
+ *  système (`familyOf`), jamais stocké ; choisi à la création, définitif ensuite. */
+type FormMode = 'quest' | 'ralliement';
+
+/** Identifiant du système du mode ralliement (entrée unique du registre pour cette famille). */
+const RALLIEMENT_SYSTEM_ID = 'ralliement';
+
+/** Modes proposés par la bascule : ralliement à gauche, quête à droite (planche validée). */
+const MODE_OPTIONS: readonly FormMode[] = ['ralliement', 'quest'] as const;
+
 /** Formats acceptés par le contrôleur de couverture (`party-cover.controller.ts`). */
 const ACCEPTED_COVER_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -39,7 +55,8 @@ interface GameSystemOption {
 }
 
 /**
- * Systèmes ouverts à la création, repliés sur le premier système de la liste si aucun ne l'est
+ * Systèmes de JDR ouverts à la création (le ralliement a son propre mode, Story 38.2), repliés sur
+ * le premier système de la liste si aucun ne l'est
  * (état transitoire uniquement, `GAME_SYSTEMS` n'est jamais vide). Source UNIQUE de cette règle —
  * revue de code (Story 29.17) : `DEFAULT_GAME_SYSTEM_ID` et le repli de `systems` la
  * réimplémentaient chacun indépendamment, synchronisés seulement par un commentaire manuel. Lit
@@ -47,7 +64,7 @@ interface GameSystemOption {
  * rester la même source de vérité que l'API (`PartiesService.create()`/`update()`).
  */
 const OPEN_GAME_SYSTEMS: readonly GameSystemOption[] = (() => {
-  const eligible = GAME_SYSTEMS.filter((s) => isOpenForCreation(s.id));
+  const eligible = GAME_SYSTEMS.filter((s) => familyOf(s.id) === 'jdr' && isOpenForCreation(s.id));
   return eligible.length > 0 ? eligible : [GAME_SYSTEMS[0]];
 })();
 
@@ -100,7 +117,7 @@ export class PartieForm implements OnInit {
   private readonly route = inject(ActivatedRoute);
 
   protected readonly theme = inject(ThemeToneService);
-  protected readonly kindOptions = KIND_OPTIONS;
+  protected readonly modeOptions = MODE_OPTIONS;
   protected readonly editId = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -118,6 +135,21 @@ export class PartieForm implements OnInit {
    *  existe, puisqu'un dépôt a besoin d'un identifiant à cibler. */
   protected readonly pendingCoverFile = signal<File | null>(null);
   protected readonly pendingCoverPreview = signal<string | null>(null);
+
+  /** Mode courant (Story 38.2). Création : choisi par la bascule (quête par défaut). Édition :
+   *  imposé par la famille de la partie, la bascule n'existe pas. */
+  protected readonly mode = signal<FormMode>('quest');
+  protected readonly isRalliement = computed(() => this.mode() === 'ralliement');
+  /** Dernier livre de règles choisi en mode quête, restauré au retour sur ce mode. */
+  private lastQuestSystemId = DEFAULT_GAME_SYSTEM_ID;
+
+  /** Types proposés dans le mode courant, dans l'ordre d'affichage : tous ceux du JDR, ou ceux que
+   *  le registre déclare pour le ralliement (`kindsOf`, source unique). */
+  protected readonly kindChoices = computed<readonly FormKind[]>(() =>
+    this.isRalliement()
+      ? KIND_OPTIONS.filter((k) => kindsOf(RALLIEMENT_SYSTEM_ID).includes(k))
+      : KIND_OPTIONS,
+  );
 
   /** Type de la partie tel qu'enregistré (édition) — référence pour savoir si le MJ demande une
    *  conversion, et pour évaluer la matrice. */
@@ -177,8 +209,11 @@ export class PartieForm implements OnInit {
       courantCount: this.partieScenarios().filter((s) => s.status === 'COURANT').length,
       isClosed: this.partieClosed(),
     };
-    return KIND_OPTIONS.map((kind) => {
+    return this.kindChoices().map((kind) => {
       if (from === null) return { kind, disabled: false, reason: null as string | null };
+      // Story 38.2 : le type d'un ralliement est définitif (le serveur refuse tout changement) ;
+      // la matrice de conversion ne vaut que pour le JDR.
+      if (this.isRalliement()) return { kind, disabled: true, reason: null as string | null };
       const verdict = checkPartieKindTransition(from, kind, state);
       return {
         kind,
@@ -217,6 +252,7 @@ export class PartieForm implements OnInit {
     // `string` de part en part (revue de code) : plus de cast `as GameSystemId` non vérifié, ni ici
     // ni dans patchValue() ci-dessous — le contrôle réactif est lui-même typé `string`.
     this.savedGameSystemId.set(p.gameSystemId);
+    this.mode.set(familyOf(p.gameSystemId) === 'ralliement' ? 'ralliement' : 'quest');
     this.partieClosed.set(p.status === 'TERMINEE');
     this.form.patchValue({
       name: p.name,
@@ -232,11 +268,37 @@ export class PartieForm implements OnInit {
     // Un seul appel, pour une seule partie : NFR-6 vise les appels proportionnels au NOMBRE de
     // parties, ce qui n'est pas le cas ici. Un échec ne bloque pas l'édition des autres champs —
     // la matrice reste alors permissive côté client, le serveur restant l'autorité (Règle B).
+    // Story 38.2 : un ralliement n'a pas de scénario (lecture refusée par le serveur) — rien à lire.
+    if (this.isRalliement()) return;
     try {
       this.partieScenarios.set(await this.scenarios.listAll(id));
     } catch {
       this.partieScenarios.set([]);
     }
+  }
+
+  /** Bascule quête / ralliement (création uniquement, Story 38.2). Reconfigure les champs qui
+   *  suivent — livre de règles et types — sans jamais toucher au nom ni à la description. */
+  protected setMode(mode: FormMode): void {
+    if (this.editId() !== null || mode === this.mode()) return;
+    const { gameSystemId, kind } = this.form.getRawValue();
+    if (mode === 'ralliement') {
+      this.lastQuestSystemId = gameSystemId;
+      this.mode.set('ralliement');
+      this.form.patchValue({
+        gameSystemId: RALLIEMENT_SYSTEM_ID,
+        kind: this.kindChoices().includes(kind) ? kind : 'ONE_SHOT',
+      });
+    } else {
+      this.mode.set('quest');
+      this.form.patchValue({ gameSystemId: this.lastQuestSystemId });
+    }
+  }
+
+  /** Libellé d'un type dans le mode courant : vocabulaire du ralliement ou de la quête. */
+  protected kindLabel(kind: FormKind): string {
+    const key = this.isRalliement() ? `partie.ralliement_kind_${kind}` : `partie.kind_${kind}`;
+    return this.theme.tone()[key] ?? kind;
   }
 
   /** Dépôt de l'image de couverture. En édition, immédiat (Story 29.12) ; en création, le fichier

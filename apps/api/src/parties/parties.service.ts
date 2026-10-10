@@ -20,7 +20,12 @@ import type {
 // d'AUCUN `jest.mock('@master-jdr/shared')` pour ces imports (la vraie matrice/le vrai
 // registre y sont exercés). Ce mock n'est requis que côté `parties.controller.spec.ts`, pour une
 // tout autre raison : les DTO évaluent `@IsIn(GAME_SYSTEM_IDS)` au chargement de la classe.
-import { checkPartieKindTransition, familyOf, isOpenForCreation } from '@master-jdr/shared';
+import {
+  checkPartieKindTransition,
+  familyOf,
+  isOpenForCreation,
+  kindsOf,
+} from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { EventsService } from '../events/events.service';
 import { PermissionService } from '../permissions/permission.service';
@@ -82,6 +87,14 @@ export const GAME_SYSTEM_FAMILY_CHANGE_MESSAGE =
 export const KIND_CONVERSION_NOT_JDR_MESSAGE =
   'Le type de cette partie ne peut pas être converti : la conversion est réservée aux parties de jeu de rôle';
 
+/** Story 38.2 : le type de partie demandé n'est pas admis par le système (registre, `kindsOf`) —
+ *  ex. une campagne linéaire pour un ralliement. */
+export const KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE =
+  "Ce type de partie n'est pas disponible pour ce système de jeu";
+
+/** Story 38.2 : le type (`kind`) et le système d'un ralliement sont définitifs. */
+export const RALLIEMENT_TYPE_LOCKED_MESSAGE = "Le type d'un ralliement ne peut pas être modifié";
+
 /**
  * Dimensions cibles des dérivées (Story 29.12, AC9) — alignées sur le rendu réel de `PartyBanner`
  * (Stories 29.10/29.11 : grand 320×124, moyen 44×44, liste 28×28), doublées pour rester nettes sur
@@ -111,25 +124,6 @@ export function coverImageVersion(coverImageUrl: string | null): string | null {
   return filename.slice(0, filename.lastIndexOf('.'));
 }
 
-/** Projection du rôle de l'appelant vers `PartieDto.role` (Story 37.6) : le rôle vient TOUJOURS du
- *  service de permission, jamais d'une comparaison à `ownerId`. Famille `jdr` : `mj` ou `player`.
- *  Un rôle que le contrat ne sait pas exprimer (`admin`/`member`, épic 38) lève au lieu d'être
- *  rabattu en silence sur `player`. */
-function toDtoRole(role: PartieRole): 'mj' | 'player' {
-  switch (role) {
-    case 'mj':
-    case 'player':
-      return role;
-    case 'admin':
-    case 'member':
-      throw new Error(`Rôle non projetable dans PartieDto.role : ${role}`);
-    default: {
-      const exhaustive: never = role;
-      throw new Error(`Rôle de partie non géré : ${String(exhaustive)}`);
-    }
-  }
-}
-
 /**
  * Projection explicite (AD-15, Story 29.1) — énumère les champs renvoyés, jamais un objet Prisma
  * propagé tel quel.
@@ -142,7 +136,7 @@ function toDtoRole(role: PartieRole): 'mj' | 'player' {
  */
 function toPartieDto(
   partie: Partie,
-  role: 'mj' | 'player',
+  role: PartieRole,
   hasScenario: boolean,
   isFavorite: boolean,
 ): PartieDto {
@@ -190,6 +184,11 @@ export class PartiesService implements PartieSignalsPort {
     // Story 29.17, AC2 : refus AVANT toute écriture — même discipline que la garde `kind` de
     // `convertKind()` (aucune trace en base d'une partie sur un système sans module).
     this.assertGameSystemOpenForCreation(dto.gameSystemId);
+    // Story 38.2 : le type demandé doit être admis par le système (le registre est la seule source).
+    if (!kindsOf(dto.gameSystemId).includes(dto.kind)) {
+      throw new BadRequestException(KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE);
+    }
+    const isRalliement = familyOf(dto.gameSystemId) === 'ralliement';
     return this.prisma.$transaction(async (tx) => {
       const partie = await tx.partie.create({
         data: {
@@ -200,6 +199,26 @@ export class PartiesService implements PartieSignalsPort {
           ownerId,
         },
       });
+
+      // Story 38.2 : le créateur d'un ralliement est aussi membre `ADMIN`, dans la même transaction
+      // que la partie (`ownerId` reste le créateur, AD-5). Le rôle d'un ralliement vient de cette
+      // ligne uniquement.
+      if (isRalliement) {
+        await tx.membership.create({
+          data: { userId: ownerId, partieId: partie.id, role: 'ADMIN' },
+        });
+        // Rencontre isolée : un événement et une séance non datée, SANS extension `Scenario` (le
+        // scénario n'existe que pour les événements de JDR). Un groupe n'a aucun événement.
+        if (dto.kind === 'ONE_SHOT') {
+          await this.events.createInTx(tx, {
+            partieId: partie.id,
+            title: partie.name,
+            ownerId: partie.ownerId,
+          });
+        }
+        // Aucun `Scenario` n'existe dans un ralliement : `hasScenario` vaut toujours faux.
+        return toPartieDto(partie, 'admin', false, false);
+      }
 
       // AD-7 : une Partie ONE_SHOT n'existe jamais sans son scénario unique — créé au même titre
       // que la Partie, statut BROUILLON, ouverture (BROUILLON→A_VENIR) toujours une action MJ
@@ -232,7 +251,7 @@ export class PartiesService implements PartieSignalsPort {
     if (partieIds.length === 0) return new Set();
     const counts = await this.prisma.event.groupBy({
       by: ['partieId'],
-      where: { partieId: { in: partieIds } },
+      where: { partieId: { in: partieIds }, scenario: { isNot: null } },
       _count: { _all: true },
     });
     // `groupBy` ne renvoie jamais de groupe à compte zéro pour un partieId sans scénario — chaque
@@ -243,8 +262,10 @@ export class PartiesService implements PartieSignalsPort {
   /** Variante mono-partie de `hasScenarioByPartieId` — la lecture en lot (AD-3) ne s'applique pas
    *  quand une seule partie est concernée (`findOneDto`, `update`, `close`, `reopen`). */
   private async hasScenario(partieId: string): Promise<boolean> {
+    // Story 38.2 : seuls les événements porteurs d'un `Scenario` comptent — l'événement unique
+    // d'une rencontre isolée de ralliement n'en est pas un.
     const count = await this.prisma.event.count({
-      where: { partieId },
+      where: { partieId, scenario: { isNot: null } },
     });
     return count > 0;
   }
@@ -273,6 +294,8 @@ export class PartiesService implements PartieSignalsPort {
    * `mj` = les parties que je maîtrise ; `player` = celles où je suis membre (via `Membership`) ;
    * sans rôle (Story 37.7) = TOUTES mes parties, propriétaire ou membre, chacune avec son rôle —
    * lu en une seule fois par `PermissionService.rolesOf()`, jamais déduit d'une comparaison.
+   * Story 38.2 : les listes par rôle (`mj`/`player`, donc `party-signals`) EXCLUENT les
+   * ralliements, qui n'apparaissent que dans la liste sans rôle (`admin`/`member`).
    */
   async listForUser(userId: string, role?: 'mj' | 'player'): Promise<PartieDto[]> {
     if (role === undefined) {
@@ -289,17 +312,18 @@ export class PartiesService implements PartieSignalsPort {
       return mine.flatMap((p) => {
         const partieRole = roles.get(p.id);
         if (!partieRole) return [];
-        return [
-          toPartieDto(p, toDtoRole(partieRole), hasScenarioIds.has(p.id), favoriteIds.has(p.id)),
-        ];
+        return [toPartieDto(p, partieRole, hasScenarioIds.has(p.id), favoriteIds.has(p.id))];
       });
     }
     if (role === 'player') {
-      const memberships = await this.prisma.membership.findMany({
+      const allMemberships = await this.prisma.membership.findMany({
         where: { userId },
         orderBy: { joinedAt: 'desc' },
         include: { partie: true },
       });
+      const memberships = allMemberships.filter(
+        (m) => familyOf(m.partie.gameSystemId) !== 'ralliement',
+      );
       const partieIds = memberships.map((m) => m.partie.id);
       const [hasScenarioIds, favoriteIds] = await Promise.all([
         this.hasScenarioByPartieId(partieIds),
@@ -314,10 +338,11 @@ export class PartiesService implements PartieSignalsPort {
         ),
       );
     }
-    const parties = await this.prisma.partie.findMany({
+    const ownedParties = await this.prisma.partie.findMany({
       where: { ownerId: userId },
       orderBy: { createdAt: 'desc' },
     });
+    const parties = ownedParties.filter((p) => familyOf(p.gameSystemId) !== 'ralliement');
     const partieIds = parties.map((p) => p.id);
     const [hasScenarioIds, favoriteIds] = await Promise.all([
       this.hasScenarioByPartieId(partieIds),
@@ -340,7 +365,7 @@ export class PartiesService implements PartieSignalsPort {
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
-    const dto = toPartieDto(partie, toDtoRole(role), hasScenario, favorite);
+    const dto = toPartieDto(partie, role, hasScenario, favorite);
     if (partie.ownerId === null) return dto;
     const owner = await this.prisma.user.findUnique({
       where: { id: partie.ownerId },
@@ -398,6 +423,27 @@ export class PartiesService implements PartieSignalsPort {
       partieId: id,
     });
 
+    // Story 38.2 : le type et le système d'un ralliement sont définitifs. Garde posée AVANT les
+    // autres (leurs messages parleraient de conversion ou de famille) ; renvoyer les valeurs déjà
+    // enregistrées reste accepté (le formulaire renvoie tous les champs).
+    if (
+      familyOf(partie.gameSystemId) === 'ralliement' &&
+      ((dto.kind !== undefined && dto.kind !== partie.kind) ||
+        (dto.gameSystemId !== undefined && dto.gameSystemId !== partie.gameSystemId))
+    ) {
+      throw new BadRequestException(RALLIEMENT_TYPE_LOCKED_MESSAGE);
+    }
+
+    // Story 38.2 : aucune partie ne devient un ralliement par édition (elle n'aurait ni membership
+    // ADMIN ni événement) — y compris quand son système actuel est inconnu du registre.
+    if (
+      dto.gameSystemId !== undefined &&
+      familyOf(dto.gameSystemId) === 'ralliement' &&
+      familyOf(partie.gameSystemId) !== 'ralliement'
+    ) {
+      throw new BadRequestException(GAME_SYSTEM_FAMILY_CHANGE_MESSAGE);
+    }
+
     // Story 29.14 : jusqu'ici `data: { ...dto }` écrivait `kind` sans aucune vérification, alors que
     // le type gouverne des invariants dans quatre services. Changer de type est une OPÉRATION à
     // effets (création de scénario, semis de participants, rétrogradation de statuts) portant son
@@ -431,10 +477,22 @@ export class PartiesService implements PartieSignalsPort {
     // instruction — c'est ce qui rend « une aventure de H = une partie dont hommeDragonId = H.id »
     // vrai par construction (un lien existant est toujours un lien Ryuutama du MJ). La fiche de
     // l'Homme Dragon n'est pas touchée : seul le lien disparaît, le niveau est recalculé à la lecture.
-    const updated = await this.prisma.partie.update({
-      where: { id },
-      data: { ...dto, ...(systemChanged ? { hommeDragonId: null } : {}) },
-    });
+    const data = { ...dto, ...(systemChanged ? { hommeDragonId: null } : {}) };
+    // Story 38.2 : l'événement unique d'une rencontre isolée porte le nom de la partie — renommer
+    // la partie renomme son événement, dans la même transaction.
+    const renameEvent =
+      familyOf(partie.gameSystemId) === 'ralliement' &&
+      partie.kind === 'ONE_SHOT' &&
+      dto.name !== undefined &&
+      dto.name !== partie.name;
+    const updated = renameEvent
+      ? await this.prisma.$transaction(async (tx) => {
+          const written = await tx.partie.update({ where: { id }, data });
+          const event = await tx.event.findFirst({ where: { partieId: id }, select: { id: true } });
+          if (event) await this.events.updateInTx(tx, event.id, { title: dto.name });
+          return written;
+        })
+      : await this.prisma.partie.update({ where: { id }, data });
     this.realtimeEvents.emit(partieTopic(id));
     // Le changement de système fait apparaître ou disparaître HOMME_DRAGON_A_CREER (et le lien) :
     // signaux du MJ et des membres, en plus de `partie:` ci-dessus (jamais en remplacement).
@@ -443,7 +501,7 @@ export class PartiesService implements PartieSignalsPort {
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
-    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
+    return toPartieDto(updated, role, hasScenario, favorite);
   }
 
   /**
@@ -608,7 +666,7 @@ export class PartiesService implements PartieSignalsPort {
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
-    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
+    return toPartieDto(updated, role, hasScenario, favorite);
   }
 
   /** Déclare la partie terminée (AD-8, Story 29.6) — MJ uniquement. Réversible via `reopen()`. */
@@ -627,7 +685,7 @@ export class PartiesService implements PartieSignalsPort {
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
-    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
+    return toPartieDto(updated, role, hasScenario, favorite);
   }
 
   /** Revient sur une clôture (AD-8, Story 29.6) — MJ uniquement. */
@@ -644,7 +702,7 @@ export class PartiesService implements PartieSignalsPort {
       this.hasScenario(id),
       this.isFavorite(userId, id),
     ]);
-    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
+    return toPartieDto(updated, role, hasScenario, favorite);
   }
 
   async remove(id: string, userId: string) {
@@ -777,7 +835,7 @@ export class PartiesService implements PartieSignalsPort {
     const updated = await this.prisma.partie.findUniqueOrThrow({
       where: { id },
     });
-    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
+    return toPartieDto(updated, role, hasScenario, favorite);
   }
 
   /** Retire l'image de couverture (AC3, AC4) — MJ seul. La bannière générée reprend sa place. */
@@ -804,7 +862,7 @@ export class PartiesService implements PartieSignalsPort {
     const updated = await this.prisma.partie.findUniqueOrThrow({
       where: { id },
     });
-    return toPartieDto(updated, toDtoRole(role), hasScenario, favorite);
+    return toPartieDto(updated, role, hasScenario, favorite);
   }
 
   /**

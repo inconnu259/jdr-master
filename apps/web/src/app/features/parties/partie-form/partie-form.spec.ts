@@ -95,7 +95,7 @@ describe('PartieForm', () => {
   it('propose les 3 types de partie, y compris la campagne épisodique', async () => {
     const { fixture } = await createComponent();
     const toggles = Array.from(
-      fixture.nativeElement.querySelectorAll('mat-button-toggle'),
+      fixture.nativeElement.querySelectorAll('.kind-toggle mat-button-toggle'),
     ) as HTMLElement[];
     expect(toggles).toHaveLength(3);
   });
@@ -540,6 +540,134 @@ describe('PartieForm', () => {
       fixture.detectChanges();
 
       expect(fixture.nativeElement.querySelector('mat-progress-bar')).not.toBeNull();
+    });
+  });
+
+  describe('mode quête / ralliement (Story 38.2)', () => {
+    const labels = (fixture: { nativeElement: HTMLElement }, selector: string): string[] =>
+      Array.from(fixture.nativeElement.querySelectorAll(selector)).map((el) =>
+        (el.textContent ?? '').trim(),
+      );
+
+    it('création : la bascule est présente, à deux options, ralliement à gauche et quête à droite, quête par défaut', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      expect(fixture.nativeElement.querySelector('.mode-toggle')).not.toBeNull();
+      expect(labels(fixture, '.mode-toggle mat-button-toggle')).toEqual(['Ralliement', 'Quête']);
+      expect(comp.mode()).toBe('quest');
+      // La bascule est nommée (groupe annoncé).
+      expect(
+        fixture.nativeElement.querySelector('.mode-toggle').getAttribute('aria-label'),
+      ).toBeTruthy();
+    });
+
+    it('ordre des champs : couverture, nom, bascule, champs du mode, description', async () => {
+      const { fixture } = await createComponent();
+      const root = fixture.nativeElement as HTMLElement;
+      const position = (selector: string): number => {
+        const el = root.querySelector(selector);
+        expect(el, selector).not.toBeNull();
+        return Array.from(root.querySelectorAll('*')).indexOf(el as Element);
+      };
+      const cover = position('.cover-section');
+      const name = position('input[formcontrolname="name"]');
+      const toggle = position('.mode-toggle');
+      const system = position('mat-select');
+      const kind = position('.kind-field');
+      const description = position('textarea');
+      expect([cover, name, toggle, system, kind, description]).toEqual(
+        [cover, name, toggle, system, kind, description].sort((a, b) => a - b),
+      );
+    });
+
+    it('mode quête : livre de règles + nature (comportement actuel), libellé de validation de nav.create_game', async () => {
+      const { fixture } = await createComponent();
+      const root = fixture.nativeElement as HTMLElement;
+      expect(root.querySelector('mat-select')).not.toBeNull();
+      expect(labels(fixture, '.kind-toggle mat-button-toggle')).toHaveLength(3);
+      expect(labels(fixture, 'button[type=submit]')).toEqual(['Lancer une quête']);
+    });
+
+    it('le registre du livre de règles ne propose jamais le ralliement', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      expect(comp.systems().map((s: { id: string }) => s.id)).not.toContain('ralliement');
+    });
+
+    it('bascule vers ralliement : plus de livre de règles, deux types, libellés du ralliement, bouton dédié', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      comp.setMode('ralliement');
+      fixture.detectChanges();
+      const root = fixture.nativeElement as HTMLElement;
+
+      expect(root.querySelector('mat-select')).toBeNull();
+      expect(labels(fixture, '.kind-toggle mat-button-toggle')).toEqual([
+        'La conjonction des Esprits',
+        'La convergence des Sortilèges',
+      ]);
+      expect(labels(fixture, 'legend')).toEqual(['Nature du ralliement']);
+      expect(labels(fixture, 'mat-label')).toContain('Nom du ralliement');
+      expect(labels(fixture, 'button[type=submit]')).toEqual(['Convoquer le ralliement']);
+      expect(comp.form.value.gameSystemId).toBe('ralliement');
+    });
+
+    it('basculer ne vide ni le nom ni la description, et le retour à la quête restitue le livre de règles', async () => {
+      const { fixture } = await createComponent();
+      const comp = fixture.componentInstance as any;
+      comp.form.patchValue({ name: 'Ma partie', description: 'Un mot', kind: 'CAMPAGNE_LINEAIRE' });
+
+      comp.setMode('ralliement');
+      expect(comp.form.value.name).toBe('Ma partie');
+      expect(comp.form.value.description).toBe('Un mot');
+      // CAMPAGNE_LINEAIRE n'existe pas pour un ralliement : retour au premier type.
+      expect(comp.form.value.kind).toBe('ONE_SHOT');
+
+      comp.setMode('quest');
+      expect(comp.form.value.name).toBe('Ma partie');
+      expect(comp.form.value.description).toBe('Un mot');
+      expect(comp.form.value.gameSystemId).toBe('ryuutama');
+    });
+
+    it.each(['ONE_SHOT', 'CAMPAGNE_EPISODIQUE'] as PartieKind[])(
+      'ralliement %s : create() reçoit ce kind et le système ralliement',
+      async (kind) => {
+        const { fixture, partiesSvc } = await createComponent();
+        const comp = fixture.componentInstance as any;
+        comp.setMode('ralliement');
+        comp.form.patchValue({ name: 'Soirée', kind });
+        await comp.submit();
+        expect(partiesSvc.create).toHaveBeenCalledWith(
+          expect.objectContaining({ name: 'Soirée', kind, gameSystemId: 'ralliement' }),
+        );
+      },
+    );
+
+    it('édition d’une quête : la bascule est absente', async () => {
+      const { fixture } = await createComponent('p1');
+      expect(fixture.nativeElement.querySelector('.mode-toggle')).toBeNull();
+      expect((fixture.componentInstance as any).mode()).toBe('quest');
+    });
+
+    it('édition d’un ralliement : bascule absente, mode ralliement, type verrouillé, aucune conversion ni lecture de scénarios', async () => {
+      const { fixture, partiesSvc, scenariosSvc } = await createComponent('p1', {
+        partie: { gameSystemId: 'ralliement', kind: 'ONE_SHOT' },
+      });
+      const comp = fixture.componentInstance as any;
+      expect(fixture.nativeElement.querySelector('.mode-toggle')).toBeNull();
+      expect(comp.mode()).toBe('ralliement');
+      expect(scenariosSvc.listAll).not.toHaveBeenCalled();
+      expect(
+        comp.kindAvailability().every((o: { disabled: boolean }) => o.disabled),
+      ).toBe(true);
+      expect(labels(fixture, 'button[type=submit]')).toEqual(['Inscrire']);
+
+      await comp.submit();
+      expect(partiesSvc.update).toHaveBeenCalledWith(
+        'p1',
+        expect.objectContaining({ gameSystemId: 'ralliement', kind: 'ONE_SHOT' }),
+      );
+      expect(partiesSvc.convertKind).not.toHaveBeenCalled();
     });
   });
 });

@@ -321,6 +321,15 @@ export const foretAncienne: Record<ToneKey, string> = {
     'Le sentier est bien tracé, mais son image n’a pu prendre racine. Tu peux la redéposer ici.',
   'partie.fields_saved_but_convert_failed':
     'Les autres changements sont enregistrés, mais la nature du sentier n’a pu être changée. Réessaie.',
+  /* — formulaire de partie : mode ralliement (Story 38.2) — */
+  'partie.mode_label': 'Genre de la piste',
+  'partie.mode_ralliement': 'Veillée',
+  'partie.mode_quete': 'Sentier',
+  'partie.ralliement_name_label': 'Nom de la veillée',
+  'partie.ralliement_kind_label': 'Nature de la veillée',
+  'partie.ralliement_kind_ONE_SHOT': 'La halte au gué',
+  'partie.ralliement_kind_CAMPAGNE_EPISODIQUE': 'La grande transhumance',
+  'partie.ralliement_submit_btn': 'Allumer la veillée',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine clairière',
   'partie.no_session': "Aucune clairière réservée. L'écureuil cherche encore.",

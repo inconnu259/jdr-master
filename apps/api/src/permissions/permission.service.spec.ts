@@ -4,11 +4,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { objectLike } from '../common/test-utils/jest-typed';
 import {
   ACTION_CAPABILITY,
+  ADMIN_ONLY_MESSAGE,
   CAPABILITY_UNAVAILABLE_MESSAGE,
   JDR_POLICY,
   MJ_ONLY_MESSAGE,
   NO_ACCESS_MESSAGE,
   PermissionService,
+  RALLIEMENT_POLICY,
+  RALLIEMENT_UNAVAILABLE_MESSAGE,
 } from './permission.service';
 
 // Story 37.6 (AD-6) — service UNIQUE de décision des droits. Un test de refus par cellule
@@ -425,11 +428,165 @@ describe('PermissionService', () => {
       },
     );
 
-    it('un système de la famille ralliement (aucune capacité) refuse aussi', async () => {
+    it('un système de la famille ralliement (aucune capacité) refuse aussi — par la politique (Story 38.2)', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie('R', MJ, 'ralliement'));
+      // Le créateur (propriétaire sans ligne de membership ici) est `admin` : la politique du
+      // ralliement n'ouvre l'action à aucun rôle, le refus précède la garde de capacité.
       await expect(service.assert(MJ, 'CHARACTER_CREATE', { partieId: 'R' })).rejects.toThrow(
-        CAPABILITY_UNAVAILABLE_MESSAGE,
+        RALLIEMENT_UNAVAILABLE_MESSAGE,
       );
+    });
+  });
+
+  // Story 38.2 — politique de la famille `ralliement` : « voir » pour l'admin et les membres,
+  // « modifier la partie » pour l'admin seul, tout le reste refusé à tous. Table ÉCRITE EN DUR,
+  // un test de refus par cellule (admin / membre / étranger).
+  describe('politique ralliement — Story 38.2', () => {
+    const ADMIN = 'admin-r';
+    const MEMBRE = 'membre-r';
+    const OWNER_SANS_LIGNE = 'proprio-r';
+    const RALLIEMENT = partie('R', ADMIN, 'ralliement');
+
+    /** Voir : admin + membre. */
+    const RALLIEMENT_VIEW: PermissionAction[] = [
+      'PARTIE_READ',
+      'PARTIE_MEMBERS_READ',
+      'PARTIE_COVER_READ',
+    ];
+    /** Modifier la partie : admin seul. */
+    const RALLIEMENT_ADMIN_ONLY: PermissionAction[] = ['PARTIE_UPDATE', 'PARTIE_COVER_UPDATE'];
+    /** Tout le reste : aucun rôle. */
+    const RALLIEMENT_NOBODY: PermissionAction[] = ACTIONS.filter(
+      (a) => !RALLIEMENT_VIEW.includes(a) && !RALLIEMENT_ADMIN_ONLY.includes(a),
+    );
+
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(RALLIEMENT);
+      prisma.membership.findUnique.mockImplementation(
+        ({ where }: { where: { userId_partieId: { userId: string } } }) => {
+          const { userId } = where.userId_partieId;
+          if (userId === ADMIN) return Promise.resolve({ userId, role: 'ADMIN' });
+          if (userId === MEMBRE) return Promise.resolve({ userId, role: 'MEMBER' });
+          return Promise.resolve(null);
+        },
+      );
+    });
+
+    it('RALLIEMENT_POLICY est exactement la politique écrite en dur', () => {
+      const expected: Record<string, string[]> = {};
+      for (const action of RALLIEMENT_VIEW) expected[action] = ['admin', 'member'];
+      for (const action of RALLIEMENT_ADMIN_ONLY) expected[action] = ['admin'];
+      for (const action of RALLIEMENT_NOBODY) expected[action] = [];
+      expect(RALLIEMENT_POLICY).toEqual(expected);
+      expect(Object.keys(RALLIEMENT_POLICY).sort()).toEqual(Object.keys(JDR_POLICY).sort());
+    });
+
+    it.each([...RALLIEMENT_VIEW, ...RALLIEMENT_ADMIN_ONLY])(
+      '%s : accordé à l’admin, avec le rôle admin (jamais mj)',
+      async (action) => {
+        const grant = await service.assert(ADMIN, action, { partieId: 'R' });
+        expect(grant).toEqual(objectLike({ partieId: 'R', role: 'admin' }));
+      },
+    );
+
+    it.each(RALLIEMENT_VIEW)('%s : accordé à un membre, avec le rôle member', async (action) => {
+      const grant = await service.assert(MEMBRE, action, { partieId: 'R' });
+      expect(grant).toEqual(objectLike({ partieId: 'R', role: 'member' }));
+    });
+
+    it.each(RALLIEMENT_ADMIN_ONLY)(
+      '%s : refusé à un membre — 403 « réservée aux administrateurs »',
+      async (action) => {
+        const refusal = service.assert(MEMBRE, action, { partieId: 'R' });
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(ADMIN_ONLY_MESSAGE);
+      },
+    );
+
+    it.each(RALLIEMENT_NOBODY)(
+      '%s : refusé à l’admin — 403 « indisponible pour ce type de partie »',
+      async (action) => {
+        const refusal = service.assert(ADMIN, action, { partieId: 'R' });
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
+      },
+    );
+
+    it.each(RALLIEMENT_NOBODY)(
+      '%s : refusé à un membre — 403 « indisponible pour ce type de partie »',
+      async (action) => {
+        const refusal = service.assert(MEMBRE, action, { partieId: 'R' });
+        await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+        await expect(refusal).rejects.toThrow(RALLIEMENT_UNAVAILABLE_MESSAGE);
+      },
+    );
+
+    it.each(ACTIONS)('%s : refusé à un étranger — 403 « pas accès »', async (action) => {
+      const refusal = service.assert(STRANGER, action, { partieId: 'R' });
+      await expect(refusal).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(refusal).rejects.toThrow(NO_ACCESS_MESSAGE);
+    });
+
+    it('un propriétaire sans ligne de membership compte comme admin, jamais mj', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie('R', OWNER_SANS_LIGNE, 'ralliement'));
+      const grant = await service.assert(OWNER_SANS_LIGNE, 'PARTIE_UPDATE', { partieId: 'R' });
+      expect(grant.role).toBe('admin');
+    });
+
+    it('le rôle vient de la ligne de membership uniquement : propriétaire déclaré MEMBER → member', async () => {
+      prisma.partie.findUnique.mockResolvedValue(partie('R', MEMBRE, 'ralliement'));
+      const grant = await service.assert(MEMBRE, 'PARTIE_READ', { partieId: 'R' });
+      expect(grant.role).toBe('member');
+    });
+
+    it('roleOf : admin / member / propriétaire sans ligne → admin / étranger → null', async () => {
+      prisma.partie.findUnique.mockImplementation(() =>
+        Promise.resolve({
+          ownerId: OWNER_SANS_LIGNE,
+          gameSystemId: 'ralliement',
+          memberships: [],
+        }),
+      );
+      expect(await service.roleOf('R', OWNER_SANS_LIGNE)).toBe('admin');
+      expect(await service.roleOf('R', STRANGER)).toBeNull();
+
+      prisma.partie.findUnique.mockResolvedValue({
+        ownerId: ADMIN,
+        gameSystemId: 'ralliement',
+        memberships: [{ role: 'ADMIN' }],
+      });
+      expect(await service.roleOf('R', ADMIN)).toBe('admin');
+
+      prisma.partie.findUnique.mockResolvedValue({
+        ownerId: ADMIN,
+        gameSystemId: 'ralliement',
+        memberships: [{ role: 'MEMBER' }],
+      });
+      expect(await service.roleOf('R', MEMBRE)).toBe('member');
+    });
+
+    it('rolesOf : un lot mixte jdr / ralliement, une seule requête', async () => {
+      prisma.partie.findMany.mockResolvedValue([
+        { id: 'J', ownerId: 'u', gameSystemId: 'ryuutama', memberships: [] },
+        { id: 'K', ownerId: 'autre', gameSystemId: 'ryuutama', memberships: [{ role: 'MEMBER' }] },
+        { id: 'R1', ownerId: 'u', gameSystemId: 'ralliement', memberships: [{ role: 'ADMIN' }] },
+        { id: 'R2', ownerId: 'u', gameSystemId: 'ralliement', memberships: [] },
+        {
+          id: 'R3',
+          ownerId: 'autre',
+          gameSystemId: 'ralliement',
+          memberships: [{ role: 'MEMBER' }],
+        },
+      ]);
+      const roles = await service.rolesOf('u', ['J', 'K', 'R1', 'R2', 'R3']);
+      expect(Object.fromEntries(roles)).toEqual({
+        J: 'mj',
+        K: 'player',
+        R1: 'admin',
+        R2: 'admin',
+        R3: 'member',
+      });
+      expect(prisma.partie.findMany).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -505,7 +662,12 @@ describe('PermissionService', () => {
           id: { in: ['A', 'B', 'C'] },
           OR: [{ ownerId: 'u' }, { memberships: { some: { userId: 'u' } } }],
         },
-        select: { id: true, ownerId: true },
+        select: {
+          id: true,
+          ownerId: true,
+          gameSystemId: true,
+          memberships: { where: { userId: 'u' }, select: { role: true } },
+        },
       });
       expect(prisma.partie.findUnique).not.toHaveBeenCalled();
       expect(prisma.membership.findUnique).not.toHaveBeenCalled();

@@ -325,6 +325,15 @@ export const atelierCuivre: Record<ToneKey, string> = {
     'La mission est bien enregistrée, mais sa plaque n’a pu être gravée. Vous pouvez la redéposer ici.',
   'partie.fields_saved_but_convert_failed':
     'Les autres modifications sont enregistrées, mais le régime de la mission n’a pu être changé. Réessayez.',
+  /* — formulaire de partie : mode ralliement (Story 38.2) — */
+  'partie.mode_label': 'Genre de l’opération',
+  'partie.mode_ralliement': 'Rassemblement',
+  'partie.mode_quete': 'Mission',
+  'partie.ralliement_name_label': 'Nom du rassemblement',
+  'partie.ralliement_kind_label': 'Régime du rassemblement',
+  'partie.ralliement_kind_ONE_SHOT': 'La réunion d’établi',
+  'partie.ralliement_kind_CAMPAGNE_EPISODIQUE': 'Le grand chantier',
+  'partie.ralliement_submit_btn': 'Monter le rassemblement',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine séance d’atelier',
   'partie.no_session': 'Aucune séance planifiée. Interrogez l’automate.',
