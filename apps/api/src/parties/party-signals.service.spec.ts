@@ -176,20 +176,24 @@ describe('PartySignalsService', () => {
     expect(map['p1'].signals).not.toContain('HOMME_DRAGON_A_CREER');
   });
 
-  it('HOMME_DRAGON_A_CREER : UNE requête dédiée sur Partie — MJ, Ryuutama, hommeDragonId nul — sans lecture des Hommes Dragons ni requête par partie (AD-23)', async () => {
+  it('HOMME_DRAGON_A_CREER : UNE requête dédiée sur Partie — parties MJ dont le système a la capacité hommeDragon, hommeDragonId nul — sans lecture des Hommes Dragons ni requête par partie (AD-23)', async () => {
     parties.listForUser.mockImplementation((_u: string, role: string) =>
-      Promise.resolve(role === 'mj' ? [makePartie({ id: 'p1' }), makePartie({ id: 'p2' })] : []),
+      Promise.resolve(
+        role === 'mj'
+          ? [
+              makePartie({ id: 'p1', gameSystemId: 'ryuutama' }),
+              makePartie({ id: 'p2', gameSystemId: 'ryuutama' }),
+              // Système sans la capacité : jamais candidat, même MJ.
+              makePartie({ id: 'p3', gameSystemId: 'draconis' }),
+            ]
+          : [],
+      ),
     );
     await service.getSignals('u1');
 
     expect(prisma.partie.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.partie.findMany).toHaveBeenCalledWith({
-      where: {
-        id: { in: ['p1', 'p2'] },
-        ownerId: 'u1',
-        gameSystemId: 'ryuutama',
-        hommeDragonId: null,
-      },
+      where: { id: { in: ['p1', 'p2'] }, hommeDragonId: null },
       select: { id: true },
     });
   });

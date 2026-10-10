@@ -391,6 +391,71 @@ describe('PartiesService', () => {
     );
   });
 
+  describe('listForUser() sans rôle — toutes mes parties (Story 37.7)', () => {
+    const partieB = {
+      ...partie,
+      id: 'p2',
+      name: 'Autre partie',
+      ownerId: 'mj-autre',
+      createdAt: new Date(partie.createdAt.getTime() + 1_000),
+    };
+
+    it('MJ de A et joueur de B : les deux parties, rôles mj / player lus en une fois, la plus récente d’abord', async () => {
+      // 1er appel : la liste (déjà triée createdAt desc) ; 2e : la lecture en lot des rôles.
+      prisma.partie.findMany
+        .mockResolvedValueOnce([partieB, { ...partie, ownerId: 'u' }])
+        .mockResolvedValueOnce([
+          { id: 'p1', ownerId: 'u' },
+          { id: 'p2', ownerId: 'mj-autre' },
+        ]);
+
+      const dtos = await service.listForUser('u');
+
+      expect(dtos.map((d) => [d.id, d.role])).toEqual([
+        ['p2', 'player'],
+        ['p1', 'mj'],
+      ]);
+      expect(prisma.partie.findMany).toHaveBeenNthCalledWith(1, {
+        where: { OR: [{ ownerId: 'u' }, { memberships: { some: { userId: 'u' } } }] },
+        orderBy: { createdAt: 'desc' },
+      });
+      // Une seule lecture de rôles pour toutes les parties, jamais une par partie.
+      expect(prisma.partie.findMany).toHaveBeenCalledTimes(2);
+      expect(prisma.membership.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('même forme de DTO que les listes filtrées (statut, favori, couverture)', async () => {
+      prisma.partie.findMany
+        .mockResolvedValueOnce([partieB])
+        .mockResolvedValueOnce([{ id: 'p2', ownerId: 'mj-autre' }]);
+
+      expect(await service.listForUser('u')).toEqual([
+        {
+          id: 'p2',
+          name: 'Autre partie',
+          kind: partieB.kind,
+          gameSystemId: partieB.gameSystemId,
+          description: partieB.description,
+          ownerId: 'mj-autre',
+          createdAt: partieB.createdAt.toISOString(),
+          nextSessionDate: null,
+          nextSessionSlot: null,
+          role: 'player',
+          status: 'A_VENIR',
+          isFavorite: false,
+          coverImageVersion: null,
+        },
+      ]);
+    });
+
+    it('aucune partie → liste vide, sans lecture de rôles', async () => {
+      prisma.partie.findMany.mockResolvedValueOnce([]);
+
+      expect(await service.listForUser('u')).toEqual([]);
+      expect(prisma.partie.findMany).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('listForUser(mj) renvoie les parties dont je suis MJ, projetées avec role: mj (revue de code)', async () => {
     prisma.partie.findMany.mockResolvedValue([partie]);
     expect(await service.listForUser('mj1', 'mj')).toEqual([
@@ -816,7 +881,7 @@ describe('PartiesService', () => {
       await expect(service.getCoverFile('p1', 'mj1', 'large')).resolves.toBeNull();
     });
 
-    it('getCoverFile : non-membre et non-MJ → ForbiddenException (getViewable)', async () => {
+    it('getCoverFile : non-membre et non-MJ → ForbiddenException (PARTIE_READ)', async () => {
       prisma.partie.findUnique.mockResolvedValue(partie); // ownerId: 'mj1'
       prisma.membership.findUnique.mockResolvedValue(null);
       await expect(service.getCoverFile('p1', 'etranger', 'large')).rejects.toBeInstanceOf(
@@ -825,28 +890,7 @@ describe('PartiesService', () => {
     });
   });
 
-  it('getViewable : renvoie la partie au MJ sans vérifier les memberships', async () => {
-    prisma.partie.findUnique.mockResolvedValue(partie);
-    expect(await service.getViewable('p1', 'mj1')).toEqual(partie);
-    expect(prisma.membership.findUnique).not.toHaveBeenCalled();
-  });
-
-  it('getViewable : autorise un membre', async () => {
-    prisma.partie.findUnique.mockResolvedValue(partie);
-    prisma.membership.findUnique.mockResolvedValue({
-      userId: 'u',
-      partieId: 'p1',
-    });
-    expect(await service.getViewable('p1', 'u')).toEqual(partie);
-  });
-
-  it('getViewable : 403 si ni MJ ni membre', async () => {
-    prisma.partie.findUnique.mockResolvedValue(partie);
-    prisma.membership.findUnique.mockResolvedValue(null);
-    await expect(service.getViewable('p1', 'u')).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('findOneDto : retourne ownerPseudo/ownerDisplayName et role: mj pour le MJ (getViewable inchangée)', async () => {
+  it('findOneDto : retourne ownerPseudo/ownerDisplayName et role: mj pour le MJ (PARTIE_READ inchangé)', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.user.findUnique.mockResolvedValue({
       pseudo: 'mj-pseudo',
@@ -995,21 +1039,6 @@ describe('PartiesService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
   });
 
-  it('getOwned : 404 si introuvable', async () => {
-    prisma.partie.findUnique.mockResolvedValue(null);
-    await expect(service.getOwned('p1', 'mj1')).rejects.toBeInstanceOf(NotFoundException);
-  });
-
-  it('getOwned : 403 si pas le MJ', async () => {
-    prisma.partie.findUnique.mockResolvedValue(partie);
-    await expect(service.getOwned('p1', 'autre')).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('getOwned : renvoie la partie si MJ', async () => {
-    prisma.partie.findUnique.mockResolvedValue(partie);
-    expect(await service.getOwned('p1', 'mj1')).toEqual(partie);
-  });
-
   it('update() émet un événement temps réel scopé sur la Partie (Story 18.3, AC1)', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.partie.update.mockResolvedValue({ ...partie, name: 'Nouveau nom' });
@@ -1017,7 +1046,7 @@ describe('PartiesService', () => {
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
   });
 
-  it("update() renvoie une partie projetée avec role: 'mj' (revue de code, AC6) — getOwned garantit que l'appelant est MJ", async () => {
+  it("update() renvoie une partie projetée avec role: 'mj' (revue de code, AC6) — PARTIE_UPDATE garantit que l'appelant est MJ", async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
     prisma.partie.update.mockResolvedValue({ ...partie, name: 'Nouveau nom' });
     const dto = await service.update('p1', 'mj1', { name: 'Nouveau nom' });
@@ -1578,16 +1607,19 @@ describe('PartiesService', () => {
           ]),
         },
       };
-      const realAvailability = new AvailabilityService(p, {
-        emit: jest.fn(),
-      } as unknown as RealtimeEventsService);
       const realtime = { emit: jest.fn() } as unknown as RealtimeEventsService;
+      const permissions = new PermissionService(p);
+      const realAvailability = new AvailabilityService(
+        p,
+        { emit: jest.fn() } as unknown as RealtimeEventsService,
+        permissions,
+      );
       const svc = new PartiesService(
         p,
         realAvailability,
         realtime,
         new EventsService(p, realtime),
-        new PermissionService(p),
+        permissions,
       );
 
       const mjResults = (await svc.getAvailableSlots(

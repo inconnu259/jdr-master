@@ -1,13 +1,13 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import type { InvitationDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
 import { InviteLinksService } from './invite-links.service';
 import { EmailService } from '../email/email.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
@@ -16,7 +16,10 @@ import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realt
 export class InvitationsService {
   constructor(
     private readonly prisma: PrismaService,
+    // Signaux de la partie (`notifyPartieSignalsChanged`) : écriture de `parties/`,
+    // aucune décision de droit.
     private readonly parties: PartiesService,
+    private readonly permissions: PermissionService,
     private readonly inviteLinks: InviteLinksService,
     private readonly email: EmailService,
     private readonly realtimeEvents: RealtimeEventsService,
@@ -24,7 +27,7 @@ export class InvitationsService {
 
   /** Le MJ invite un utilisateur déjà inscrit. Idempotent : ré-invite ranime une invitation close. */
   async invite(partieId: string, inviterId: string, inviteeUserId: string) {
-    await this.parties.getOwned(partieId, inviterId); // MJ uniquement
+    await this.permissions.assert(inviterId, 'INVITATION_CREATE', { partieId }); // MJ uniquement
     if (inviteeUserId === inviterId) {
       throw new BadRequestException('Vous ne pouvez pas vous inviter vous-même.');
     }
@@ -49,7 +52,7 @@ export class InvitationsService {
 
   /** Invitations émises pour une partie (vue MJ). */
   async listForPartie(partieId: string, mjId: string) {
-    await this.parties.getOwned(partieId, mjId);
+    await this.permissions.assert(mjId, 'INVITATION_READ', { partieId });
     return this.prisma.invitation.findMany({
       where: { partieId },
       orderBy: { createdAt: 'desc' },
@@ -114,14 +117,14 @@ export class InvitationsService {
     return { ok: true };
   }
 
-  /** L'inviteur (ou le MJ de la partie) révoque une invitation. */
+  /** Le MJ de la partie (l'invitant) révoque une invitation. */
   async revoke(invitationId: string, userId: string) {
-    const inv = await this.prisma.invitation.findUnique({
-      where: { id: invitationId },
-      include: { partie: { select: { ownerId: true } } },
-    });
+    // La partie est résolue depuis l'invitation (404 si inconnue, 403 si étrangère). L'invitant
+    // est toujours le propriétaire (la propriété d'une partie est immuable) : révoquer est donc
+    // MJ seul.
+    await this.permissions.assert(userId, 'INVITATION_REVOKE', { invitationId });
+    const inv = await this.prisma.invitation.findUnique({ where: { id: invitationId } });
     if (!inv) throw new NotFoundException('Invitation introuvable');
-    if (inv.inviterId !== userId && inv.partie.ownerId !== userId) throw new ForbiddenException();
     await this.prisma.invitation.update({
       where: { id: invitationId },
       data: { status: 'REVOKED', respondedAt: new Date() },
@@ -143,7 +146,7 @@ export class InvitationsService {
     // Normalisée une seule fois ici : couvre la recherche User, le dédoublonnage InviteLink et
     // l'envoi, sans dépendre de la casse saisie par le MJ (foo@bar.com === Foo@Bar.com).
     const email = rawEmail.trim().toLowerCase();
-    const partie = await this.parties.getOwned(partieId, inviterId);
+    const { partie } = await this.permissions.assert(inviterId, 'INVITATION_CREATE', { partieId });
     const origin = process.env.WEB_ORIGIN ?? 'http://localhost:4200';
     const user = await this.prisma.user.findUnique({ where: { email } });
 

@@ -16,8 +16,8 @@ import { HommeDragonService } from './homme-dragon.service';
 import { CreateHommeDragonDto } from './dto/create-homme-dragon.dto';
 
 /**
- * Routes PAR PARTIE (AD-23), gardées par `getOwned` (MJ de la partie) : elles ne font que créer,
- * lier, délier et référencer. La fiche elle-même vit sous `homme-dragons/:id`
+ * Routes PAR PARTIE (AD-23), gardées par le service de permission (MJ de la partie) : elles ne
+ * font que créer, lier, délier et référencer. La fiche elle-même vit sous `homme-dragons/:id`
  * (`HommeDragonSheetController`), gardée par son propriétaire.
  */
 @UseGuards(AuthenticatedGuard)

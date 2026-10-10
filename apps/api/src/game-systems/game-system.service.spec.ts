@@ -10,7 +10,8 @@ jest.mock('node:fs/promises', () => ({
 import { readFile } from 'node:fs/promises';
 import { GameSystemService } from './game-system.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
+import { testGrant } from '../common/test-utils/grant';
 
 function makePrisma() {
   return {
@@ -29,28 +30,26 @@ function makePrisma() {
   };
 }
 
-function makePartiesService() {
-  return {
-    getOwned: jest.fn(),
-    getViewable: jest.fn(),
-  };
+/** Story 37.7 : les droits sont décidés par `PermissionService.assert()`, simulé ici. */
+function makePermissions() {
+  return { assert: jest.fn() };
 }
 
 describe('GameSystemService', () => {
   let service: GameSystemService;
   let prisma: ReturnType<typeof makePrisma>;
-  let parties: ReturnType<typeof makePartiesService>;
+  let permissions: ReturnType<typeof makePermissions>;
   const mockReadFile = readFile as jest.Mock;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     prisma = makePrisma();
-    parties = makePartiesService();
+    permissions = makePermissions();
     const module = await Test.createTestingModule({
       providers: [
         GameSystemService,
         { provide: PrismaService, useValue: prisma },
-        { provide: PartiesService, useValue: parties },
+        { provide: PermissionService, useValue: permissions },
       ],
     }).compile();
     service = module.get(GameSystemService);
@@ -60,7 +59,9 @@ describe('GameSystemService', () => {
     // Vrai répertoire de données (cwd Jest = apps/api) : seul le module fs/promises est mocké
     // dans ce fichier, on le redirige vers l'implémentation réelle pour ce test.
     const actualFs = jest.requireActual<typeof import('node:fs/promises')>('node:fs/promises');
-    mockReadFile.mockImplementation((path: string, enc: BufferEncoding) => actualFs.readFile(path, enc));
+    mockReadFile.mockImplementation((path: string, enc: BufferEncoding) =>
+      actualFs.readFile(path, enc),
+    );
     const contentTypeIds: Record<string, string> = {};
     prisma.contentType.upsert.mockImplementation(({ create }: { create: { key: string } }) => {
       contentTypeIds[create.key] = `ct-${create.key}`;
@@ -254,18 +255,20 @@ describe('GameSystemService', () => {
       mockReadFile.mockResolvedValue(Buffer.from('pdf-bytes'));
     });
 
-    it('clé "member" (journal) + membre viewable → fichier retourné, getViewable appelé (pas getOwned)', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    it('clé "member" (journal) + membre → fichier retourné, PARTIE_REFERENCE_ASSET_READ vérifié (pas la lecture MJ)', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
 
       const result = await service.getAssetFile('p1', 'ryuutama', 'journal', 'u1');
 
-      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
-      expect(parties.getOwned).not.toHaveBeenCalled();
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'PARTIE_REFERENCE_ASSET_READ', {
+        partieId: 'p1',
+      });
+      expect(permissions.assert).toHaveBeenCalledTimes(1);
       expect(result).toEqual(Buffer.from('pdf-bytes'));
     });
 
-    it('clé "member" (carte) + non-membre → l\'erreur de getViewable est propagée', async () => {
-      parties.getViewable.mockRejectedValue(new ForbiddenException());
+    it('clé "member" (carte) + non-membre → l\'erreur du service de permission est propagée', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.getAssetFile('p1', 'ryuutama', 'carte', 'stranger')).rejects.toThrow(
         ForbiddenException,
@@ -273,18 +276,20 @@ describe('GameSystemService', () => {
       expect(mockReadFile).not.toHaveBeenCalled();
     });
 
-    it('clé "mj" (monde) + MJ → fichier retourné, getOwned appelé (pas getViewable)', async () => {
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    it('clé "mj" (monde) + MJ → fichier retourné, PARTIE_REFERENCE_ASSET_MJ_READ vérifié (pas la lecture membre)', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
 
       const result = await service.getAssetFile('p1', 'ryuutama', 'monde', 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
-      expect(parties.getViewable).not.toHaveBeenCalled();
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'PARTIE_REFERENCE_ASSET_MJ_READ', {
+        partieId: 'p1',
+      });
+      expect(permissions.assert).toHaveBeenCalledTimes(1);
       expect(result).toEqual(Buffer.from('pdf-bytes'));
     });
 
-    it('clé "mj" (structure) + joueur non-MJ → l\'erreur de getOwned est propagée', async () => {
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+    it('clé "mj" (structure) + joueur non-MJ → l\'erreur du service de permission est propagée', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.getAssetFile('p1', 'ryuutama', 'structure', 'player1')).rejects.toThrow(
         ForbiddenException,
@@ -296,8 +301,7 @@ describe('GameSystemService', () => {
       await expect(service.getAssetFile('p1', 'ryuutama', 'inexistante', 'u1')).rejects.toThrow(
         'Fiche introuvable',
       );
-      expect(parties.getViewable).not.toHaveBeenCalled();
-      expect(parties.getOwned).not.toHaveBeenCalled();
+      expect(permissions.assert).not.toHaveBeenCalled();
     });
 
     it.each(['__proto__', 'constructor', 'toString', 'hasOwnProperty'])(
@@ -306,8 +310,7 @@ describe('GameSystemService', () => {
         await expect(service.getAssetFile('p1', 'ryuutama', key, 'u1')).rejects.toThrow(
           'Fiche introuvable',
         );
-        expect(parties.getViewable).not.toHaveBeenCalled();
-        expect(parties.getOwned).not.toHaveBeenCalled();
+        expect(permissions.assert).not.toHaveBeenCalled();
         expect(mockReadFile).not.toHaveBeenCalled();
       },
     );
@@ -316,11 +319,11 @@ describe('GameSystemService', () => {
       await expect(service.getAssetFile('p1', 'conte-de-minuit', 'journal', 'u1')).rejects.toThrow(
         'Système de jeu introuvable',
       );
-      expect(parties.getViewable).not.toHaveBeenCalled();
+      expect(permissions.assert).not.toHaveBeenCalled();
     });
 
     it('fichier absent du disque → erreur explicite pointant vers le README', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
       mockReadFile.mockRejectedValue(new Error('ENOENT'));
 
       await expect(service.getAssetFile('p1', 'ryuutama', 'journal', 'u1')).rejects.toThrow(
@@ -341,14 +344,16 @@ describe('GameSystemService', () => {
       ];
 
       it.each(MJ_KEYS)(
-        'clé "%s" + MJ authentifié → fichier retourné, getOwned appelé avec la bonne Partie (AC1)',
+        'clé "%s" + MJ authentifié → fichier retourné, PARTIE_REFERENCE_ASSET_MJ_READ vérifié sur la bonne Partie (AC1)',
         async (key) => {
-          parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+          permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
 
           const result = await service.getAssetFile('p1', 'ryuutama', key, 'mj1');
 
-          expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
-          expect(parties.getViewable).not.toHaveBeenCalled();
+          expect(permissions.assert).toHaveBeenCalledWith('mj1', 'PARTIE_REFERENCE_ASSET_MJ_READ', {
+            partieId: 'p1',
+          });
+          expect(permissions.assert).toHaveBeenCalledTimes(1);
           expect(result).toEqual(Buffer.from('pdf-bytes'));
         },
       );
@@ -356,7 +361,7 @@ describe('GameSystemService', () => {
       it.each(MJ_KEYS)(
         'clé "%s" + joueur non-MJ → ForbiddenException propagée, jamais un fichier vide (AC2)',
         async (key) => {
-          parties.getOwned.mockRejectedValue(new ForbiddenException());
+          permissions.assert.mockRejectedValue(new ForbiddenException());
 
           await expect(service.getAssetFile('p1', 'ryuutama', key, 'player1')).rejects.toThrow(
             ForbiddenException,
@@ -369,13 +374,13 @@ describe('GameSystemService', () => {
         await expect(
           service.getAssetFile('p1', 'ryuutama', 'objectif-peche', 'mj1'),
         ).rejects.toThrow('Fiche introuvable');
-        expect(parties.getOwned).not.toHaveBeenCalled();
+        expect(permissions.assert).not.toHaveBeenCalled();
       });
     });
 
     it('les 12 clés de la table sont résolues vers un fichier sans lever d\'erreur "Fiche introuvable"', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'u1' });
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'u1' });
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'u1' }));
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'u1' }));
       const keys = [
         'journal',
         'carte',

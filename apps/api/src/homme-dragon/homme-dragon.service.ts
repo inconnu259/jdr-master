@@ -29,6 +29,7 @@ import {
 } from '@master-jdr/game-rules';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
@@ -50,17 +51,15 @@ interface DerivedBlock {
   pendingEveilLevels: number[];
 }
 
-/** Le message partagé par les routes qui exigent une partie Ryuutama. */
-const ERR_RYUUTAMA_ONLY = (gameSystemId: string) =>
-  `L'Homme Dragon n'existe que pour Ryuutama, pas pour "${gameSystemId}"`;
-
 /**
  * Homme Dragon (Epic 10, 33 ; AD-22, AD-23).
  *
  * Modèle : une fiche appartient à son propriétaire (`userId`, toujours un MJ) et suit 0..N
  * aventures — une aventure de `H` est une partie dont `hommeDragonId = H.id`, sans autre prédicat.
  * La fiche est adressée par son `id` et gardée par son propriétaire : absent ou étranger, c'est
- * `404`, jamais `403`. Les routes par partie (`getOwned`) ne font que créer / lier / délier.
+ * `404`, jamais `403`. Les routes par partie ne font que créer / lier (`HOMME_DRAGON_MANAGE`,
+ * soumis à la capacité `hommeDragon`), délier (`HOMME_DRAGON_UNLINK`) et référencer
+ * (`HOMME_DRAGON_READ`), ces deux dernières sans capacité.
  *
  * Écrivains de `Partie.hommeDragonId` : ce service (create, link, unlink) et `PartiesService.update`
  * (remise à `NULL` au changement de système) — aucun autre.
@@ -69,7 +68,10 @@ const ERR_RYUUTAMA_ONLY = (gameSystemId: string) =>
 export class HommeDragonService {
   constructor(
     private readonly prisma: PrismaService,
+    // Signaux de la partie (`notifyPartieSignalsChanged`) : écriture de `parties/`,
+    // aucune décision de droit.
     private readonly parties: PartiesService,
+    private readonly permissions: PermissionService,
     private readonly gameSystems: GameSystemService,
     private readonly scenarios: ScenariosService,
     private readonly realtimeEvents: RealtimeEventsService,
@@ -77,20 +79,17 @@ export class HommeDragonService {
 
   /**
    * Crée un Homme Dragon ET le lie à la partie, dans une même transaction (AD-23) : aucune
-   * création hors aventure. Ryuutama seul. Si le lien perd la course (la partie a reçu un Homme
-   * Dragon entre-temps), `409` et la création est annulée avec la transaction — aucune fiche
-   * orpheline.
+   * création hors aventure. Réservé aux systèmes déclarant la capacité `hommeDragon`. Si le lien
+   * perd la course (la partie a reçu un Homme Dragon entre-temps), `409` et la création est
+   * annulée avec la transaction — aucune fiche orpheline.
    */
   async create(
     partieId: string,
     userId: string,
     dto: CreateHommeDragonDto,
   ): Promise<HommeDragonDto> {
-    const partie = await this.parties.getOwned(partieId, userId);
-
-    if (partie.gameSystemId !== RYUUTAMA_ID) {
-      throw new BadRequestException(ERR_RYUUTAMA_ONLY(partie.gameSystemId));
-    }
+    // La capacité `hommeDragon` du système est contrôlée par `assert()` (400 si absente).
+    const { partie } = await this.permissions.assert(userId, 'HOMME_DRAGON_MANAGE', { partieId });
 
     const catalog = await this.buildArtefactCatalog(partie.gameSystemId);
     const sheetData = {
@@ -115,21 +114,19 @@ export class HommeDragonService {
 
   /**
    * Lie un Homme Dragon à une aventure (AD-23) : `PUT /parties/:id/homme-dragon/:hommeDragonId`.
-   * Ordre des refus : partie inaccessible (`getOwned`), Homme Dragon absent ou étranger `404`
-   * AVANT tout `409` (aucun oracle d'existence), partie non Ryuutama `400`, partie déjà pourvue
-   * `409` (jamais de remplacement implicite : dissocier d'abord). Verrou `HommeDragon` pris avant
-   * l'écriture de `Partie` (ordre fixé par AD-23).
+   * Ordre des refus : partie inaccessible (`403`) ou système sans la capacité `hommeDragon`
+   * (`400`), tous deux décidés par `assert()` AVANT toute lecture de la fiche ; puis Homme Dragon
+   * absent ou étranger `404` AVANT tout `409` (aucun oracle d'existence) ; puis partie déjà
+   * pourvue `409` (jamais de remplacement implicite : dissocier d'abord). Verrou `HommeDragon`
+   * pris avant l'écriture de `Partie` (ordre fixé par AD-23).
    */
   async link(partieId: string, hommeDragonId: string, userId: string): Promise<HommeDragonDto> {
-    const partie = await this.parties.getOwned(partieId, userId);
+    await this.permissions.assert(userId, 'HOMME_DRAGON_MANAGE', { partieId });
 
     const hommeDragon = await this.prisma.$transaction(async (tx) => {
       await this.lockHommeDragon(tx, hommeDragonId);
       const owned = await tx.hommeDragon.findFirst({ where: { id: hommeDragonId, userId } });
       if (!owned) throw new NotFoundException('Homme Dragon introuvable');
-      if (partie.gameSystemId !== RYUUTAMA_ID) {
-        throw new BadRequestException(ERR_RYUUTAMA_ONLY(partie.gameSystemId));
-      }
       await this.linkPartie(tx, partieId, userId, hommeDragonId);
       return owned;
     });
@@ -139,12 +136,13 @@ export class HommeDragonService {
 
   /**
    * Délie un Homme Dragon d'une aventure (AD-23) : `DELETE /parties/:id/homme-dragon/:hommeDragonId`.
-   * Sans condition de système (une partie sortie de Ryuutama est de toute façon déjà déliée). Zéro
-   * ligne touchée = `404` (la partie ne porte pas cet Homme Dragon). Le niveau est recalculé à la
-   * lecture suivante et peut baisser ; `sheetData` n'est jamais touché (rien n'est purgé).
+   * Action `HOMME_DRAGON_UNLINK` (MJ seul) SANS condition de capacité : une partie sortie du
+   * système est de toute façon déjà déliée. Zéro ligne touchée = `404` (la partie ne porte pas cet
+   * Homme Dragon). Le niveau est recalculé à la lecture suivante et peut baisser ; `sheetData`
+   * n'est jamais touché (rien n'est purgé).
    */
   async unlink(partieId: string, hommeDragonId: string, userId: string): Promise<HommeDragonDto> {
-    await this.parties.getOwned(partieId, userId);
+    await this.permissions.assert(userId, 'HOMME_DRAGON_UNLINK', { partieId });
 
     const hommeDragon = await this.prisma.$transaction(async (tx) => {
       await this.lockHommeDragon(tx, hommeDragonId);
@@ -165,11 +163,12 @@ export class HommeDragonService {
 
   /**
    * `GET /parties/:id/homme-dragon` : l'Homme Dragon lié à cette aventure sous forme de référence
-   * `{ id, nom }`, ou `null` (état normal, jamais un 404). MJ seul (`getOwned`) : l'existence d'un
-   * Homme Dragon ne fuit jamais vers un joueur.
+   * `{ id, nom }`, ou `null` (état normal, jamais un 404), y compris sur un système sans la
+   * capacité `hommeDragon`. MJ seul (`HOMME_DRAGON_READ`) : l'existence d'un Homme Dragon ne
+   * fuit jamais vers un joueur.
    */
   async findForPartie(partieId: string, userId: string): Promise<HommeDragonRefDto | null> {
-    const partie = await this.parties.getOwned(partieId, userId);
+    const { partie } = await this.permissions.assert(userId, 'HOMME_DRAGON_READ', { partieId });
     if (!partie.hommeDragonId) return null;
     const hommeDragon = await this.prisma.hommeDragon.findFirst({
       where: { id: partie.hommeDragonId, userId },
@@ -374,9 +373,9 @@ export class HommeDragonService {
   }
 
   /**
-   * `hommeDragon.userId` EST le MJ propriétaire (toujours créé par un MJ via `getOwned` — jamais
-   * un joueur). Utilisé pour l'export PDF (Story 10.5), `HommeDragonDto` n'exposant pas le pseudo
-   * du propriétaire.
+   * `hommeDragon.userId` EST le MJ propriétaire (toujours créé par un MJ via
+   * `HOMME_DRAGON_MANAGE` — jamais un joueur). Utilisé pour l'export PDF (Story 10.5),
+   * `HommeDragonDto` n'exposant pas le pseudo du propriétaire.
    */
   async getOwnerPseudo(userId: string): Promise<string> {
     const user = await this.prisma.user.findUniqueOrThrow({
@@ -474,6 +473,11 @@ export class HommeDragonService {
    * Homme Dragon. Zéro ligne = la partie en a déjà un (ou a changé de système entre-temps) :
    * `409`, sans remplacement implicite. Sous le verrou de l'Homme Dragon et, pour `create()`, dans
    * la transaction de sa création (le `409` l'annule).
+   *
+   * Le filtre `gameSystemId: RYUUTAMA_ID` est un garde d'écriture atomique (course avec un
+   * changement de système) : il DOIT suivre la capacité `hommeDragon` du registre le jour où un
+   * autre système la déclare, faute de quoi `link`/`create` y répondraient `409` malgré le feu
+   * vert de `assert()`.
    */
   private async linkPartie(
     tx: Db,
@@ -490,7 +494,7 @@ export class HommeDragonService {
 
   /**
    * Create, link, unlink : `partie:{id}` puis les signaux (`HOMME_DRAGON_A_CREER` change), hors
-   * transaction (P7-AD-2). `getOwned()` a déjà garanti que `userId` est le MJ.
+   * transaction (P7-AD-2). `assert()` a déjà garanti que `userId` est le MJ.
    */
   private async emitLinkChanged(partieId: string, userId: string): Promise<void> {
     this.realtimeEvents.emit(partieTopic(partieId));

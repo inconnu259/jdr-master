@@ -7,6 +7,8 @@ import {
 import { InviteLinksService } from './invite-links.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
+import { testGrant } from '../common/test-utils/grant';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { anyOf } from '../common/test-utils/jest-typed';
 
@@ -20,10 +22,13 @@ describe('InviteLinksService', () => {
       create: jest.Mock;
       findUnique: jest.Mock;
       findFirst: jest.Mock;
+      findMany: jest.Mock;
+      update: jest.Mock;
     };
     $transaction: jest.Mock;
   };
-  let parties: { getOwned: jest.Mock; notifyPartieSignalsChanged: jest.Mock };
+  let parties: { notifyPartieSignalsChanged: jest.Mock };
+  let permissions: { assert: jest.Mock };
   let realtimeEvents: { emit: jest.Mock };
 
   beforeEach(() => {
@@ -32,17 +37,23 @@ describe('InviteLinksService', () => {
         create: jest.fn(),
         findUnique: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn().mockResolvedValue({}),
       },
       $transaction: jest.fn((fn: (tx: unknown) => unknown) => fn({})),
     };
     parties = {
-      getOwned: jest.fn().mockResolvedValue({ id: 'p1', ownerId: 'mj1' }),
       notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
+    };
+    // Story 37.7 : les droits sont décidés par `PermissionService.assert()`, simulé ici.
+    permissions = {
+      assert: jest.fn().mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' })),
     };
     realtimeEvents = { emit: jest.fn() };
     service = new InviteLinksService(
       prisma as unknown as PrismaService,
       parties as unknown as PartiesService,
+      permissions as unknown as PermissionService,
       realtimeEvents as unknown as RealtimeEventsService,
     );
   });
@@ -54,7 +65,9 @@ describe('InviteLinksService', () => {
       token: string;
       expiresAt: Date;
     };
-    expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+    expect(permissions.assert).toHaveBeenCalledWith('mj1', 'INVITE_LINK_CREATE', {
+      partieId: 'p1',
+    });
     expect(link.token).toHaveLength(43); // 32 octets en base64url
     expect(link.expiresAt.getTime()).toBeGreaterThan(before + 6 * 24 * 3600 * 1000);
   });
@@ -269,5 +282,34 @@ describe('InviteLinksService', () => {
     const link = await service.findOrCreateForEmail('p1', 'mj1', 'ami@example.com');
     expect(link).toBe(existing);
     expect(prisma.inviteLink.create).not.toHaveBeenCalled();
+  });
+
+  it('listForPartie : MJ requis (INVITE_LINK_READ), liens de la partie renvoyés', async () => {
+    prisma.inviteLink.findMany.mockResolvedValue([{ id: 'l1' }]);
+    await expect(service.listForPartie('p1', 'mj1')).resolves.toEqual([{ id: 'l1' }]);
+    expect(permissions.assert).toHaveBeenCalledWith('mj1', 'INVITE_LINK_READ', { partieId: 'p1' });
+  });
+
+  it('revoke : la partie est résolue depuis le lien (INVITE_LINK_REVOKE), puis le lien est révoqué', async () => {
+    await expect(service.revoke('l1', 'mj1')).resolves.toEqual({ ok: true });
+    expect(permissions.assert).toHaveBeenCalledWith('mj1', 'INVITE_LINK_REVOKE', {
+      inviteLinkId: 'l1',
+    });
+    expect(prisma.inviteLink.update).toHaveBeenCalledWith({
+      where: { id: 'l1' },
+      data: { revoked: true },
+    });
+  });
+
+  it('revoke : lien d’une autre partie ou non MJ → refus propagé, aucune écriture', async () => {
+    permissions.assert.mockRejectedValue(new ForbiddenException());
+    await expect(service.revoke('l-autre', 'mj1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.inviteLink.update).not.toHaveBeenCalled();
+  });
+
+  it('revoke : lien inconnu → 404 « Lien introuvable » du service de permission, aucune écriture', async () => {
+    permissions.assert.mockRejectedValue(new NotFoundException('Lien introuvable'));
+    await expect(service.revoke('zzz', 'mj1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.inviteLink.update).not.toHaveBeenCalled();
   });
 });

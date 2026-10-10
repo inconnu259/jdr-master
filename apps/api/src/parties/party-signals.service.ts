@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { hasCapability } from '@master-jdr/shared';
 import type { PartieDto, PartySignalCode, PartySignalsDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { RYUUTAMA_ID } from '../game-systems/supported-game-systems';
 import { PartiesService } from './parties.service';
 
 type OpenPollWithVotes = {
@@ -29,6 +28,11 @@ export class PartySignalsService {
       this.parties.listForUser(userId, 'player'),
     ]);
     const mjPartieIds = mjParties.map((p) => p.id);
+    // HOMME_DRAGON_A_CREER (AD-23) : seules les parties dont le système déclare la capacité
+    // `hommeDragon` (registre, Story 37.7) peuvent porter ce signal — plus un identifiant en dur.
+    const hommeDragonPartieIds = mjParties
+      .filter((p) => hasCapability(p.gameSystemId, 'hommeDragon'))
+      .map((p) => p.id);
     const playerPartieIds = playerParties.map((p) => p.id);
     const allPartieIds = [...mjPartieIds, ...playerPartieIds];
 
@@ -45,17 +49,12 @@ export class PartySignalsService {
         where: { userId, partieId: { in: playerPartieIds } },
         select: { partieId: true },
       }),
-      // HOMME_DRAGON_A_CREER (AD-23) : partie dont l'utilisateur est MJ, Ryuutama, `hommeDragonId`
-      // nul. Le lien vit sur `Partie` : une seule requête sur les parties du MJ, sans requête par
-      // partie ni lecture des Hommes Dragons. Le filtre Ryuutama est ici, côté serveur — le front
-      // ne le recalcule plus.
+      // HOMME_DRAGON_A_CREER (AD-23) : partie dont l'utilisateur est MJ, au système doté de la
+      // capacité `hommeDragon`, `hommeDragonId` nul. Le lien vit sur `Partie` : une seule requête
+      // sur les parties du MJ, sans requête par partie ni lecture des Hommes Dragons. Le filtre de
+      // capacité est appliqué plus haut, côté serveur — le front ne le recalcule plus.
       this.prisma.partie.findMany({
-        where: {
-          id: { in: mjPartieIds },
-          ownerId: userId,
-          gameSystemId: RYUUTAMA_ID,
-          hommeDragonId: null,
-        },
+        where: { id: { in: hommeDragonPartieIds }, hommeDragonId: null },
         select: { id: true },
       }),
       this.prisma.membership.groupBy({

@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 
@@ -13,6 +13,8 @@ jest.mock('@master-jdr/game-rules', () => ({
 }));
 
 import { PrismaService } from '../prisma/prisma.service';
+import { PermissionService } from '../permissions/permission.service';
+import { testGrant } from '../common/test-utils/grant';
 import { AccountService } from './account.service';
 import { anyOf } from '../common/test-utils/jest-typed';
 
@@ -38,11 +40,18 @@ function makePrisma() {
 describe('AccountService', () => {
   let service: AccountService;
   let prisma: ReturnType<typeof makePrisma>;
+  // Story 37.7 : l'appartenance à la partie est décidée par `PermissionService.assert()`, simulé ici.
+  let permissions: { assert: jest.Mock };
 
   beforeEach(async () => {
     prisma = makePrisma();
+    permissions = { assert: jest.fn().mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' })) };
     const module = await Test.createTestingModule({
-      providers: [AccountService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        AccountService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: PermissionService, useValue: permissions },
+      ],
     }).compile();
     service = module.get(AccountService);
   });
@@ -394,10 +403,27 @@ describe('AccountService', () => {
 
       const result = await service.addFavorite('u1', 'p1');
 
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'PARTIE_READ', { partieId: 'p1' });
       expect(prisma.partieFavorite.create).toHaveBeenCalledWith({
         data: { userId: 'u1', partieId: 'p1' },
       });
       expect(result).toEqual({ ok: true });
+    });
+
+    it('utilisateur sans rôle sur la partie → refus du service de permission, aucun favori écrit', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.addFavorite('stranger', 'p1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.partieFavorite.create).not.toHaveBeenCalled();
+    });
+
+    it('partie inconnue → 404 du service de permission, aucun favori écrit', async () => {
+      permissions.assert.mockRejectedValue(new NotFoundException('Partie introuvable'));
+
+      await expect(service.addFavorite('u1', 'inconnue')).rejects.toBeInstanceOf(NotFoundException);
+      expect(prisma.partieFavorite.create).not.toHaveBeenCalled();
     });
 
     it('déjà favori (P2002) → aucune erreur, idempotent', async () => {
@@ -550,10 +576,31 @@ describe('AccountService', () => {
 
       const result = await service.markAnnouncementRead('u1', 'a1');
 
+      expect(permissions.assert).toHaveBeenCalledWith('u1', 'ANNOUNCEMENT_MARK_READ', {
+        announcementId: 'a1',
+      });
       expect(prisma.announcementRead.create).toHaveBeenCalledWith({
         data: { userId: 'u1', announcementId: 'a1' },
       });
       expect(result).toEqual({ ok: true });
+    });
+
+    it('annonce d’une partie où l’utilisateur n’a aucun rôle → refus, aucune ligne de lecture écrite', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
+
+      await expect(service.markAnnouncementRead('stranger', 'a-etrangere')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(prisma.announcementRead.create).not.toHaveBeenCalled();
+    });
+
+    it('annonce inconnue → 404 « Annonce introuvable » du service de permission, aucune écriture', async () => {
+      permissions.assert.mockRejectedValue(new NotFoundException('Annonce introuvable'));
+
+      await expect(service.markAnnouncementRead('u1', 'inconnue')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.announcementRead.create).not.toHaveBeenCalled();
     });
 
     it('déjà marquée lue (P2002) → aucune erreur, idempotent', async () => {

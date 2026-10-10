@@ -8,6 +8,7 @@ import { Test } from '@nestjs/testing';
 import { HommeDragonService } from './homme-dragon.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
@@ -52,7 +53,8 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, AD-23, règles réell
     $transaction: jest.fn((cb: (t: typeof tx) => unknown) => cb(tx)),
     partie: { findMany: jest.fn() },
   };
-  const parties = { getOwned: jest.fn(), notifyPartieSignalsChanged: jest.fn() };
+  const parties = { notifyPartieSignalsChanged: jest.fn() };
+  const permissions = { assert: jest.fn() };
   const gameSystems = { getContent: jest.fn() };
   const scenarios = { findPasseForParties: jest.fn() };
   const realtimeEvents = { emit: jest.fn() };
@@ -94,6 +96,7 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, AD-23, règles réell
         HommeDragonService,
         { provide: PrismaService, useValue: prisma },
         { provide: PartiesService, useValue: parties },
+        { provide: PermissionService, useValue: permissions },
         { provide: GameSystemService, useValue: gameSystems },
         { provide: ScenariosService, useValue: scenarios },
         { provide: RealtimeEventsService, useValue: realtimeEvents },
@@ -107,8 +110,8 @@ describe('HommeDragonService.setReserveSlot() (Story 33.6, AD-23, règles réell
 
     const dto = await service.setReserveSlot('hd1', 'mj1', 1, { key: 'courage' });
 
-    // Fiche adressée par son id, jamais par une partie (AD-23) : aucune garde `getOwned`.
-    expect(parties.getOwned).not.toHaveBeenCalled();
+    // Fiche adressée par son id, jamais par une partie (AD-23) : aucune décision de droit de partie.
+    expect(permissions.assert).not.toHaveBeenCalled();
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
     expect(tx.hommeDragon.findFirst).toHaveBeenCalledWith({ where: { id: 'hd1', userId: 'mj1' } });

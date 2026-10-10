@@ -27,3 +27,15 @@ export function testGrant(
     partie,
   } as unknown as PartieGrant;
 }
+
+/**
+ * Implémentation de `PermissionService.assert()` pour les specs dont le rôle dépend de
+ * l'appelant (Story 37.7) : l'appelant propriétaire de la partie reçoit `mj`, tout autre `player`.
+ * À passer à `permissions.assert.mockImplementation(...)`.
+ */
+export function grantByOwner(
+  partie: Record<string, unknown>,
+): (userId: string) => Promise<PartieGrant> {
+  return (userId: string) =>
+    Promise.resolve(testGrant(partie, partie.ownerId === userId ? 'mj' : 'player'));
+}

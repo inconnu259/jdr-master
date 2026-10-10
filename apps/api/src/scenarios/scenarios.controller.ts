@@ -164,7 +164,7 @@ export class ScenariosController {
 
   // Story 36.5 — informations pratiques (D-15). Un seul PATCH pour les trois champs : le MJ les
   // saisit ensemble. Comme partout dans ce contrôleur, l'autorisation MJ est vérifiée EN SERVICE
-  // (parties.getOwned), pas par un guard de route.
+  // (PermissionService.assert), pas par un guard de route.
   @Patch('scenarios/seances/:id/infos-pratiques')
   setInfosPratiques(
     @Param('id', ParseUUIDPipe) seanceId: string,

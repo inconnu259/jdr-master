@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AnnouncementDto, Theme } from '@master-jdr/shared';
+import { PermissionService } from '../permissions/permission.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { toDto as toAnnouncementDto } from '../announcements/announcements.service';
 import { toAuthUser } from '../users/to-auth-user.util';
@@ -8,7 +9,11 @@ import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 
 @Injectable()
 export class AccountService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Story 37.7 (AD-6) : toute décision de droit sur une partie passe par ce service.
+    private readonly permissions: PermissionService,
+  ) {}
 
   async updateDisplayName(userId: string, displayName: string) {
     let user;
@@ -94,9 +99,11 @@ export class AccountService {
   }
 
   /** Idempotent (sémantique PUT) : un favori déjà posé n'est jamais une erreur (P2002 absorbé).
-   *  Aucune vérification d'appartenance à la partie — un favori sur une partie non visible par
-   *  l'utilisateur n'a aucun effet observable (listForUser() ne liste que ses propres parties). */
+   *  Story 37.7 : l'utilisateur doit avoir un rôle sur la partie (`PARTIE_READ`) — 404 si elle
+   *  n'existe pas, 403 s'il n'y est ni MJ ni membre : aucune ligne n'est écrite pour une partie
+   *  étrangère. */
   async addFavorite(userId: string, partieId: string): Promise<{ ok: true }> {
+    await this.permissions.assert(userId, 'PARTIE_READ', { partieId });
     try {
       await this.prisma.partieFavorite.create({ data: { userId, partieId } });
     } catch (e) {
@@ -142,8 +149,11 @@ export class AccountService {
     );
   }
 
-  /** Idempotent (sémantique PUT), même pattern que addFavorite(). */
+  /** Idempotent (sémantique PUT), même pattern que addFavorite(). Story 37.7 : un rôle sur la
+   *  partie de l'annonce est exigé (`ANNOUNCEMENT_MARK_READ`, partie résolue depuis l'annonce) —
+   *  aucune ligne de lecture n'est écrite pour l'annonce d'une partie étrangère. */
   async markAnnouncementRead(userId: string, announcementId: string): Promise<{ ok: true }> {
+    await this.permissions.assert(userId, 'ANNOUNCEMENT_MARK_READ', { announcementId });
     try {
       await this.prisma.announcementRead.create({
         data: { userId, announcementId },

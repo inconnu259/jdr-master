@@ -68,11 +68,13 @@ import { stripImageMetadata } from '../common/image-upload.util';
 import { CharacterService } from './character.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
 import { UsersService } from '../users/users.service';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { EmailService } from '../email/email.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { anyOf, arrayLike, callArg, objectLike } from '../common/test-utils/jest-typed';
+import { grantByOwner } from '../common/test-utils/grant';
 
 /**
  * Fiche telle que les assertions la relisent après écriture. Les sous-objets sont déclarés
@@ -166,10 +168,19 @@ function makePrisma() {
   };
 }
 
+/** Story 37.7 : les droits (et le rôle de l'appelant) sont décidés par `PermissionService`, simulé ici. */
+function makePermissions() {
+  return { assert: jest.fn(), roleOf: jest.fn(), rolesOf: jest.fn() };
+}
+
+/** Rôle simulé : `ownerId` est le MJ de la partie, tout autre utilisateur y est joueur. */
+function roleOwnedBy(ownerId: string) {
+  return (_partieId: string, userId: string) =>
+    Promise.resolve(userId === ownerId ? 'mj' : 'player');
+}
+
 function makePartiesService() {
   return {
-    getOwned: jest.fn(),
-    getViewable: jest.fn(),
     notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
   };
 }
@@ -249,6 +260,7 @@ describe('CharacterService', () => {
   let service: CharacterService;
   let prisma: ReturnType<typeof makePrisma>;
   let parties: ReturnType<typeof makePartiesService>;
+  let permissions: ReturnType<typeof makePermissions>;
   let users: ReturnType<typeof makeUsersService>;
   let gameSystems: ReturnType<typeof makeGameSystemService>;
   let email: ReturnType<typeof makeEmailService>;
@@ -258,6 +270,7 @@ describe('CharacterService', () => {
     jest.clearAllMocks();
     prisma = makePrisma();
     parties = makePartiesService();
+    permissions = makePermissions();
     users = makeUsersService();
     gameSystems = makeGameSystemService();
     email = makeEmailService();
@@ -268,7 +281,8 @@ describe('CharacterService', () => {
       pseudo: 'default-pseudo',
       email: 'default@example.com',
     });
-    prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj-default' });
+    permissions.roleOf.mockImplementation(roleOwnedBy('mj-default'));
+    permissions.rolesOf.mockResolvedValue(new Map());
     (pendingLevels as jest.Mock).mockReturnValue([]);
     // `jest.clearAllMocks()` ne réinitialise pas l'implémentation posée par un `mockReturnValue()`
     // d'un test précédent (seulement `mock.calls`/`mock.results`) — sans ce reset explicite, un
@@ -290,6 +304,7 @@ describe('CharacterService', () => {
         CharacterService,
         { provide: PrismaService, useValue: prisma },
         { provide: PartiesService, useValue: parties },
+        { provide: PermissionService, useValue: permissions },
         { provide: UsersService, useValue: users },
         { provide: GameSystemService, useValue: gameSystems },
         { provide: EmailService, useValue: email },
@@ -300,7 +315,9 @@ describe('CharacterService', () => {
   });
 
   it('create() sheetData valide → prisma.character.create appelé avec derived calculé', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
     const derived = {
       PV: 16,
@@ -330,7 +347,9 @@ describe('CharacterService', () => {
   });
 
   it('create() → émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
     (computeDerived as jest.Mock).mockReturnValue({});
     prisma.character.create.mockResolvedValue(makeCharacter());
@@ -344,7 +363,9 @@ describe('CharacterService', () => {
   });
 
   it('create() → notifie aussi PartiesService.notifyPartieSignalsChanged (Story 29.7, AD-14, signal PERSONNAGE_A_CREER)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
     (computeDerived as jest.Mock).mockReturnValue({});
     prisma.character.create.mockResolvedValue(makeCharacter());
@@ -358,7 +379,9 @@ describe('CharacterService', () => {
   });
 
   it('create() gameSystemId non supporté → BadRequestException, validate/computeDerived non appelés', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
 
     await expect(
       service.create('p1', 'u1', {
@@ -372,7 +395,9 @@ describe('CharacterService', () => {
   });
 
   it('create() gameSystemId ralliement (sans capacité `characters`, Story 37.5) → refus, message existant', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
 
     const promise = service.create('p1', 'u1', {
       gameSystemId: 'ralliement',
@@ -383,8 +408,48 @@ describe('CharacterService', () => {
     expect(prisma.character.create).not.toHaveBeenCalled();
   });
 
+  it('create() vérifie CHARACTER_CREATE sur la partie visée (rôle et capacité décidés par le service de permission)', async () => {
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
+    (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
+    (computeDerived as jest.Mock).mockReturnValue({});
+    prisma.character.create.mockResolvedValue(makeCharacter());
+
+    await service.create('p1', 'u1', { gameSystemId: 'ryuutama', sheetData: validSheet() });
+
+    expect(permissions.assert).toHaveBeenCalledWith('u1', 'CHARACTER_CREATE', { partieId: 'p1' });
+  });
+
+  it('create() partie dont le système n’a pas la capacité characters → refus du service de permission propagé, aucune écriture', async () => {
+    permissions.assert.mockRejectedValue(new BadRequestException('capacité indisponible'));
+
+    await expect(
+      service.create('p1', 'u1', { gameSystemId: 'ryuutama', sheetData: validSheet() }),
+    ).rejects.toThrow('capacité indisponible');
+    expect(validate).not.toHaveBeenCalled();
+    expect(prisma.character.create).not.toHaveBeenCalled();
+  });
+
+  it('create() gameSystemId différent de celui de la partie → 400 « Système de jeu non supporté », aucune écriture', async () => {
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'autre-systeme' }),
+    );
+
+    const promise = service.create('p1', 'u1', {
+      gameSystemId: 'ryuutama',
+      sheetData: validSheet(),
+    });
+    await expect(promise).rejects.toThrow(BadRequestException);
+    await expect(promise).rejects.toThrow('Système de jeu non supporté : ryuutama');
+    expect(validate).not.toHaveBeenCalled();
+    expect(prisma.character.create).not.toHaveBeenCalled();
+  });
+
   it('create() sheetData avec customWeapon (arme libre, Story 25.2) → prisma.character.create appelé (délègue l’exclusivité mutuelle à validate())', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
     (computeDerived as jest.Mock).mockReturnValue({});
     const sheetData = {
@@ -403,7 +468,9 @@ describe('CharacterService', () => {
 
   describe('startingEquipment (Story 26.1)', () => {
     it('sélection valide, total ≤ 1000 Po → personnage créé, equipment.* peuplé avec id/addedBy serveur, startingEquipment absent du sheetData persisté', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
       (computeDerived as jest.Mock).mockReturnValue({});
       (resolveStartingEquipment as jest.Mock).mockReturnValue({
@@ -447,7 +514,9 @@ describe('CharacterService', () => {
     });
 
     it('total > 1000 Po → BadRequestException, prisma.character.create non appelé', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       (resolveStartingEquipment as jest.Mock).mockReturnValue({
         individual: [],
         contenants: [],
@@ -470,7 +539,9 @@ describe('CharacterService', () => {
     });
 
     it('revue de code (2026-07-29) : startingEquipment non-tableau (objet direct API) → BadRequestException, resolveStartingEquipment jamais appelé avec une valeur non-itérable', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.create('p1', 'u1', {
@@ -485,7 +556,9 @@ describe('CharacterService', () => {
     });
 
     it('clé de sélection inconnue du catalogue → BadRequestException, prisma.character.create non appelé', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       (resolveStartingEquipment as jest.Mock).mockReturnValue({
         individual: [],
         contenants: [],
@@ -511,7 +584,9 @@ describe('CharacterService', () => {
       (computeDerived as jest.Mock).mockReturnValue({});
       const character = makeCharacter();
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(character);
       (resolveStartingEquipment as jest.Mock).mockClear();
@@ -526,7 +601,9 @@ describe('CharacterService', () => {
   });
 
   it('create() sheetData avec weaponId ET customWeapon simultanés (Story 25.2, revue de code) → BadRequestException, prisma.character.create non appelé', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     (validate as jest.Mock).mockReturnValue({
       valid: false,
       errors: [
@@ -549,7 +626,9 @@ describe('CharacterService', () => {
   });
 
   it('create() sheetData invalide → BadRequestException, prisma.character.create non appelé', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     (validate as jest.Mock).mockReturnValue({
       valid: false,
       errors: [{ field: 'classId', message: 'Classe invalide' }],
@@ -565,7 +644,9 @@ describe('CharacterService', () => {
   });
 
   it('create() erreur Prisma P2002 → ConflictException avec message spécifique', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
     (computeDerived as jest.Mock).mockReturnValue({});
     prisma.character.create.mockRejectedValue({ code: 'P2002' });
@@ -582,28 +663,36 @@ describe('CharacterService', () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
     const result = await service.findOne('char1', 'u1');
     expect(result.id).toBe('char1');
-    expect(parties.getOwned).not.toHaveBeenCalled();
+    expect(permissions.assert).not.toHaveBeenCalled();
   });
 
   it('findOne() par le MJ (non-propriétaire) → retourne le personnage', async () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     const result = await service.findOne('char1', 'mj1');
     expect(result.id).toBe('char1');
-    expect(parties.getViewable).toHaveBeenCalledWith('p1', 'mj1');
+    expect(permissions.assert).toHaveBeenCalledWith('mj1', 'CHARACTER_READ', {
+      characterId: 'char1',
+    });
   });
 
   it('findOne() par un joueur membre de la Partie (ni propriétaire ni MJ) → accès autorisé (Story 6.5, prérequis Notes)', async () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     const result = await service.findOne('char1', 'joueur-tiers');
     expect(result.id).toBe('char1');
-    expect(parties.getViewable).toHaveBeenCalledWith('p1', 'joueur-tiers');
+    expect(permissions.assert).toHaveBeenCalledWith('joueur-tiers', 'CHARACTER_READ', {
+      characterId: 'char1',
+    });
   });
 
   it('findOne() par non-membre → ForbiddenException', async () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
-    parties.getViewable.mockRejectedValue(new ForbiddenException());
+    permissions.assert.mockRejectedValue(new ForbiddenException());
     await expect(service.findOne('char1', 'stranger')).rejects.toThrow(ForbiddenException);
   });
 
@@ -619,7 +708,7 @@ describe('CharacterService', () => {
       pseudo: 'alice',
       displayName: 'Alice au pays',
     });
-    prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj1' });
+    permissions.roleOf.mockImplementation(roleOwnedBy('mj1'));
 
     const result = await service.findOne('char1', 'u1');
 
@@ -635,7 +724,7 @@ describe('CharacterService', () => {
       pseudo: 'le-mj',
       displayName: 'Le Grand MJ',
     });
-    prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj1' });
+    permissions.roleOf.mockImplementation(roleOwnedBy('mj1'));
 
     const result = await service.findOne('char1', 'mj1');
 
@@ -647,7 +736,7 @@ describe('CharacterService', () => {
   it('findOne() par le propriétaire (non-MJ) → viewerIsMj=false', async () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
     users.findById.mockResolvedValue({ id: 'u1', pseudo: 'alice' });
-    prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj1' });
+    permissions.roleOf.mockImplementation(roleOwnedBy('mj1'));
 
     const result = await service.findOne('char1', 'u1');
 
@@ -656,7 +745,9 @@ describe('CharacterService', () => {
 
   it('findOne() par le MJ (non-propriétaire) → viewerIsMj=true, distinct de ownerIsMj', async () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
 
     const result = await service.findOne('char1', 'mj1');
 
@@ -666,7 +757,9 @@ describe('CharacterService', () => {
 
   it("findOne() par un fellow player (ni propriétaire ni MJ) → viewerIsMj=false — corrige l'ambiguïté qui rendait la section Historique visible à tort (revue de code Story 6.5)", async () => {
     prisma.character.findUnique.mockResolvedValue(makeCharacter());
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
 
     const result = await service.findOne('char1', 'joueur-tiers');
 
@@ -677,7 +770,9 @@ describe('CharacterService', () => {
   describe('findOne() — cadenas de visibilité (Story 31.6)', () => {
     it('Partie neuve, aucune configuration : rien de verrouillé, hiddenFields vide', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       const result = await service.findOne('char1', 'joueur-tiers');
 
@@ -688,7 +783,9 @@ describe('CharacterService', () => {
 
     it('clé simple verrouillée (classId) : absente de sheetData, listée dans hiddenFields, reste inchangé', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.partieVisibilityLock.findMany.mockResolvedValue([
         { fieldKey: 'classId', subField: null },
       ]);
@@ -707,7 +804,9 @@ describe('CharacterService', () => {
 
     it('sous-champ verrouillé (attributes.AGI) : derived retiré en entier, seul AGI absent des autres sous-champs', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.partieVisibilityLock.findMany.mockResolvedValue([
         { fieldKey: 'attributes', subField: 'AGI' },
       ]);
@@ -729,7 +828,7 @@ describe('CharacterService', () => {
 
     it('le propriétaire voit la fiche entière malgré des verrous configurés (mask jamais résolu)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'u1' }));
-      prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj1' });
+      permissions.roleOf.mockImplementation(roleOwnedBy('mj1'));
       prisma.partieVisibilityLock.findMany.mockResolvedValue([
         { fieldKey: 'classId', subField: null },
       ]);
@@ -744,7 +843,9 @@ describe('CharacterService', () => {
 
     it('le MJ voit la fiche entière malgré des verrous configurés (mask jamais résolu)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter({ userId: 'u1' }));
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.partieVisibilityLock.findMany.mockResolvedValue([
         { fieldKey: 'classId', subField: null },
       ]);
@@ -758,7 +859,9 @@ describe('CharacterService', () => {
   });
 
   it('create() utilise validate et computeDerived de @master-jdr/game-rules', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
     (computeDerived as jest.Mock).mockReturnValue({});
     prisma.character.create.mockResolvedValue(makeCharacter());
@@ -789,7 +892,9 @@ describe('CharacterService', () => {
   });
 
   it('create() dérive le catalog de validate() du contenu réellement seedé (GameSystemService.getContent)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
     (computeDerived as jest.Mock).mockReturnValue({});
     prisma.character.create.mockResolvedValue(makeCharacter());
@@ -803,7 +908,9 @@ describe('CharacterService', () => {
   });
 
   it('create() ignore un attributePattern malformé (values non-numériques) plutôt que de produire un pattern trié n’importe comment', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     gameSystems.getContent.mockResolvedValue({
       class: [{ key: 'chasseur', data: {} }],
       type: [{ key: 'attaque', data: {} }],
@@ -833,7 +940,9 @@ describe('CharacterService', () => {
   });
 
   it('create() dérive validSeasons/validDebutantRitualSpells du contenu seedé (Story 23.9)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+    );
     gameSystems.getContent.mockResolvedValue({
       class: [{ key: 'chasseur', data: {} }],
       type: [{ key: 'attaque', data: {} }],
@@ -877,8 +986,10 @@ describe('CharacterService', () => {
     );
   });
 
-  it('create() résout ownerPseudo/ownerDisplayName/ownerIsMj du créateur sans requête partie supplémentaire (réutilise getViewable)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'u1' });
+  it('create() résout ownerPseudo/ownerDisplayName/ownerIsMj du créateur sans requête partie supplémentaire (réutilise le rôle de l’autorisation)', async () => {
+    permissions.assert.mockImplementation(
+      grantByOwner({ id: 'p1', ownerId: 'u1', gameSystemId: 'ryuutama' }),
+    );
     (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
     (computeDerived as jest.Mock).mockReturnValue({});
     prisma.character.create.mockResolvedValue(makeCharacter({ userId: 'u1' }));
@@ -897,11 +1008,14 @@ describe('CharacterService', () => {
     expect(result.ownerDisplayName).toBe('Bobby');
     expect(result.ownerIsMj).toBe(true);
     expect(prisma.partie.findUnique).not.toHaveBeenCalled();
+    expect(permissions.roleOf).not.toHaveBeenCalled();
   });
 
   describe('findByPartie()', () => {
     it('MJ → reçoit tous les personnages, avec le bon pseudo/displayName par personnage (une seule requête user.findMany)', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.findMany.mockResolvedValue([
         makeCharacter({ id: 'c1', userId: 'u1' }),
         makeCharacter({ id: 'c2', userId: 'u2' }),
@@ -915,6 +1029,7 @@ describe('CharacterService', () => {
 
       const result = await service.findByPartie('p1', 'mj1');
 
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'CHARACTER_LIST', { partieId: 'p1' });
       expect(prisma.character.findMany).toHaveBeenCalledWith({
         where: { partieId: 'p1' },
       });
@@ -933,7 +1048,9 @@ describe('CharacterService', () => {
     });
 
     it('joueur → reçoit tous les personnages de la Partie (Story 31.5), pas seulement les siens', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.findMany.mockResolvedValue([
         makeCharacter({ id: 'c1', userId: 'u1' }),
         makeCharacter({ id: 'c2', userId: 'u2' }),
@@ -952,7 +1069,9 @@ describe('CharacterService', () => {
     });
 
     it("cadenas de visibilité (Story 31.6) : appliqué à tout personnage d'autrui pour un joueur — y compris celui du MJ — jamais au sien ni à aucun personnage quand le viewer est le MJ", async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.partieVisibilityLock.findMany.mockResolvedValue([
         { fieldKey: 'classId', subField: null },
       ]);
@@ -994,7 +1113,9 @@ describe('CharacterService', () => {
     });
 
     it('aucun personnage → ne fait aucun appel user.findMany', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.findMany.mockResolvedValue([]);
 
       const result = await service.findByPartie('p1', 'mj1');
@@ -1004,7 +1125,9 @@ describe('CharacterService', () => {
     });
 
     it('userId sans pseudo résolu (défensif) → ownerPseudo vide plutôt que de planter', async () => {
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.findMany.mockResolvedValue([makeCharacter({ id: 'c1', userId: 'orphan' })]);
       prisma.user.findMany.mockResolvedValue([]);
 
@@ -1027,9 +1150,16 @@ describe('CharacterService', () => {
         makeCharacter({ id: 'c2', userId: 'u1', partieId: 'p2' }),
       ]);
       prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', ownerId: 'mj-autre' },
-        { id: 'p2', name: 'Le Donjon Oublié', ownerId: 'u1' },
+        { id: 'p1', name: 'La Forêt Noire' },
+        { id: 'p2', name: 'Le Donjon Oublié' },
       ]);
+      // Rôle de l'appelant sur chaque partie, lu en une fois par le service de permission.
+      permissions.rolesOf.mockResolvedValue(
+        new Map([
+          ['p1', 'player'],
+          ['p2', 'mj'],
+        ]),
+      );
 
       const result = await service.findMine('u1');
 
@@ -1040,8 +1170,10 @@ describe('CharacterService', () => {
       expect(prisma.partie.findMany).toHaveBeenCalledTimes(1);
       expect(prisma.partie.findMany).toHaveBeenCalledWith({
         where: { id: { in: ['p1', 'p2'] } },
-        select: { id: true, name: true, ownerId: true },
+        select: { id: true, name: true },
       });
+      expect(permissions.rolesOf).toHaveBeenCalledTimes(1);
+      expect(permissions.rolesOf).toHaveBeenCalledWith('u1', ['p1', 'p2']);
       expect(users.findById).toHaveBeenCalledTimes(1);
       expect(users.findById).toHaveBeenCalledWith('u1');
       expect(result.map((c) => c.partieName)).toEqual(['La Forêt Noire', 'Le Donjon Oublié']);
@@ -1055,9 +1187,16 @@ describe('CharacterService', () => {
         makeCharacter({ id: 'c2', userId: 'u1', partieId: 'p-player' }),
       ]);
       prisma.partie.findMany.mockResolvedValue([
-        { id: 'p-mj', name: 'Ma partie', ownerId: 'u1' },
-        { id: 'p-player', name: 'Partie d’un ami', ownerId: 'mj-autre' },
+        { id: 'p-mj', name: 'Ma partie' },
+        { id: 'p-player', name: 'Partie d’un ami' },
       ]);
+      // Rôle de l'appelant sur chaque partie, lu en une fois par le service de permission.
+      permissions.rolesOf.mockResolvedValue(
+        new Map([
+          ['p-mj', 'mj'],
+          ['p-player', 'player'],
+        ]),
+      );
 
       const result = await service.findMine('u1');
 
@@ -1070,9 +1209,9 @@ describe('CharacterService', () => {
       prisma.character.findMany.mockResolvedValue([
         makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
       ]);
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', ownerId: 'mj1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire' }]);
+      // Rôle de l'appelant sur chaque partie, lu en une fois par le service de permission.
+      permissions.rolesOf.mockResolvedValue(new Map([['p1', 'player']]));
       prisma.partieVisibilityLock.findMany.mockResolvedValue([
         { fieldKey: 'classId', subField: null },
       ]);
@@ -1114,9 +1253,9 @@ describe('CharacterService', () => {
       prisma.character.findMany.mockImplementation(({ where }: { where: { userId: string } }) =>
         Promise.resolve(allCharacters.filter((c) => c.userId === where.userId)),
       );
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', ownerId: 'u1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire' }]);
+      // Rôle de l'appelant sur chaque partie, lu en une fois par le service de permission.
+      permissions.rolesOf.mockResolvedValue(new Map([['p1', 'mj']]));
       users.findById.mockResolvedValue({
         id: 'u1',
         pseudo: 'alice',
@@ -1138,9 +1277,9 @@ describe('CharacterService', () => {
       prisma.character.findMany.mockResolvedValue([
         makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
       ]);
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', ownerId: 'u1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire' }]);
+      // Rôle de l'appelant sur chaque partie, lu en une fois par le service de permission.
+      permissions.rolesOf.mockResolvedValue(new Map([['p1', 'mj']]));
 
       const result = await service.findMine('u1');
 
@@ -1154,9 +1293,9 @@ describe('CharacterService', () => {
       prisma.character.findMany.mockResolvedValue([
         makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
       ]);
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', ownerId: 'u1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire' }]);
+      // Rôle de l'appelant sur chaque partie, lu en une fois par le service de permission.
+      permissions.rolesOf.mockResolvedValue(new Map([['p1', 'mj']]));
 
       const result = await service.findMine('u1');
 
@@ -1174,9 +1313,9 @@ describe('CharacterService', () => {
         makeCharacter({ id: 'c1', userId: 'u1', partieId: 'p1' }),
         makeCharacter({ id: 'c2', userId: 'u1', partieId: 'p1' }),
       ]);
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', ownerId: 'u1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire' }]);
+      // Rôle de l'appelant sur chaque partie, lu en une fois par le service de permission.
+      permissions.rolesOf.mockResolvedValue(new Map([['p1', 'mj']]));
       prisma.characterGroupRole.findMany.mockResolvedValue([
         { characterId: 'c1', roleKey: 'chef' },
       ]);
@@ -1212,9 +1351,9 @@ describe('CharacterService', () => {
           gameSystemId: 'homme-dragon',
         }),
       ]);
-      prisma.partie.findMany.mockResolvedValue([
-        { id: 'p1', name: 'La Forêt Noire', ownerId: 'u1' },
-      ]);
+      prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'La Forêt Noire' }]);
+      // Rôle de l'appelant sur chaque partie, lu en une fois par le service de permission.
+      permissions.rolesOf.mockResolvedValue(new Map([['p1', 'mj']]));
 
       await service.findMine('u1');
 
@@ -1380,7 +1519,7 @@ describe('CharacterService', () => {
         pseudo: 'alice',
         displayName: 'Alice au pays',
       });
-      prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj1' });
+      permissions.roleOf.mockImplementation(roleOwnedBy('mj1'));
 
       const result = await service.updatePortrait('char1', 'u1', makeMulterFile(), null);
 
@@ -1442,7 +1581,7 @@ describe('CharacterService', () => {
         pseudo: 'alice',
         displayName: 'Alice au pays',
       });
-      prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj1' });
+      permissions.roleOf.mockImplementation(roleOwnedBy('mj1'));
 
       const result = await service.removePortrait('char1', 'u1');
 
@@ -1527,7 +1666,7 @@ describe('CharacterService', () => {
         pseudo: 'alice',
         displayName: 'Alice au pays',
       });
-      prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj1' });
+      permissions.roleOf.mockImplementation(roleOwnedBy('mj1'));
 
       const result = await service.updatePdfPortraitCrop('char1', 'u1', CROP_DATA);
 
@@ -1550,7 +1689,7 @@ describe('CharacterService', () => {
 
       expect(result.mime).toBe('image/jpeg');
       expect(result.buffer).toEqual(Buffer.from('bytes'));
-      expect(parties.getOwned).not.toHaveBeenCalled();
+      expect(permissions.assert).not.toHaveBeenCalled();
     });
 
     it('MJ (non-propriétaire) de la partie → accès autorisé', async () => {
@@ -1559,11 +1698,15 @@ describe('CharacterService', () => {
           portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
         }),
       );
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await service.getPortraitFile('char1', 'mj1');
 
-      expect(parties.getViewable).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'CHARACTER_PORTRAIT_READ', {
+        characterId: 'char1',
+      });
     });
 
     it('fellow player (ni propriétaire ni MJ, mais membre de la Partie) → accès autorisé (cohérence avec findOne, revue de code Story 6.5)', async () => {
@@ -1572,7 +1715,9 @@ describe('CharacterService', () => {
           portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
         }),
       );
-      parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       (readFile as jest.Mock).mockResolvedValue(Buffer.from('bytes'));
 
       const result = await service.getPortraitFile('char1', 'joueur-tiers');
@@ -1586,7 +1731,7 @@ describe('CharacterService', () => {
           portraitUrl: `/uploads/portraits/${OLD_PORTRAIT_UUID}.jpg`,
         }),
       );
-      parties.getViewable.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.getPortraitFile('char1', 'stranger')).rejects.toThrow(
         ForbiddenException,
@@ -1701,15 +1846,19 @@ describe('CharacterService', () => {
   describe('setXp()', () => {
     it('non-MJ de la Partie → ForbiddenException, aucune écriture', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.setXp('char1', 'stranger', 500)).rejects.toThrow(ForbiddenException);
+      // La partie est résolue depuis le personnage par le service de permission (aucun IDOR).
+      expect(permissions.assert).toHaveBeenCalledWith('stranger', 'CHARACTER_XP_SET', {
+        characterId: 'char1',
+      });
       expect(prisma.character.updateMany).not.toHaveBeenCalled();
     });
 
-    it('MJ d’une AUTRE Partie → ForbiddenException (parties.getOwned rejette)', async () => {
+    it('MJ d’une AUTRE Partie → ForbiddenException (permissions.assert rejette)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter({ partieId: 'p1' }));
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.setXp('char1', 'mj-autre-partie', 500)).rejects.toThrow(
         ForbiddenException,
@@ -1718,7 +1867,9 @@ describe('CharacterService', () => {
 
     it('409 si updatedAt périmé', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
       await expect(service.setXp('char1', 'mj1', 500)).rejects.toThrow(ConflictException);
@@ -1730,7 +1881,9 @@ describe('CharacterService', () => {
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ xp: 500 }));
       (pendingLevels as jest.Mock).mockReturnValue([]);
@@ -1755,7 +1908,9 @@ describe('CharacterService', () => {
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(
         makeCharacter({ xp: 500, partieId: 'p1' }),
@@ -1776,7 +1931,9 @@ describe('CharacterService', () => {
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ xp: 500 }));
       (pendingLevels as jest.Mock).mockReturnValue([]);
@@ -1794,7 +1951,9 @@ describe('CharacterService', () => {
 
     it('franchissement de seuil → déclenche EmailService.sendMail("level-up", ...), comme applyXpDelta', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(
         makeCharacter({ xp: 150, partieId: 'p1', userId: 'u1' }),
@@ -1805,10 +1964,8 @@ describe('CharacterService', () => {
         pseudo: 'alice',
         email: 'alice@example.com',
       });
-      prisma.partie.findUnique.mockResolvedValue({
-        name: 'Les Brumes',
-        ownerId: 'mj1',
-      });
+      prisma.partie.findUnique.mockResolvedValue({ name: 'Les Brumes' });
+      permissions.roleOf.mockImplementation(roleOwnedBy('mj1'));
 
       await service.setXp('char1', 'mj1', 150);
 
@@ -1821,7 +1978,9 @@ describe('CharacterService', () => {
 
     it('pas de franchissement de seuil → pas d’e-mail', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ xp: 10 }));
       (pendingLevels as jest.Mock).mockReturnValue([]);
@@ -1833,7 +1992,9 @@ describe('CharacterService', () => {
 
     it('viewerIsMj: true dans le CharacterDto retourné (le viewer est nécessairement le MJ appelant)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ xp: 10 }));
       (pendingLevels as jest.Mock).mockReturnValue([]);
@@ -1842,7 +2003,7 @@ describe('CharacterService', () => {
         pseudo: 'alice',
         displayName: 'Alice au pays',
       });
-      prisma.partie.findUnique.mockResolvedValue({ ownerId: 'mj1' });
+      permissions.roleOf.mockImplementation(roleOwnedBy('mj1'));
 
       const result = await service.setXp('char1', 'mj1', 10);
 
@@ -1859,7 +2020,7 @@ describe('CharacterService', () => {
 
     it('non-MJ de la Partie → ForbiddenException, aucune écriture', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(
         service.setSheetField('char1', 'stranger', {
@@ -1872,17 +2033,21 @@ describe('CharacterService', () => {
 
     it('non-MJ tentant "xp"/"levelUps" via sheet-field → ForbiddenException (auth vérifiée avant le denylist, AC5)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(
         service.setSheetField('char1', 'stranger', { path: 'xp', value: 999 }),
       ).rejects.toThrow(ForbiddenException);
-      expect(parties.getOwned).toHaveBeenCalled();
+      expect(permissions.assert).toHaveBeenCalledWith('stranger', 'CHARACTER_SHEET_FIELD_SET', {
+        characterId: 'char1',
+      });
     });
 
     it('path racine "xp" → BadRequestException (MJ autorisé)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', { path: 'xp', value: 999 }),
@@ -1891,7 +2056,9 @@ describe('CharacterService', () => {
 
     it('path racine "levelUps" → BadRequestException', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', { path: 'levelUps', value: [] }),
@@ -1900,7 +2067,9 @@ describe('CharacterService', () => {
 
     it('path imbriqué sous "levelUps" (ex. levelUps.0.level) → toujours rejeté (denylist sur le segment racine)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', {
@@ -1912,7 +2081,9 @@ describe('CharacterService', () => {
 
     it('path "__proto__.polluted" → BadRequestException (protection pollution de prototype)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', {
@@ -1925,7 +2096,9 @@ describe('CharacterService', () => {
 
     it('path "equipment" (1 segment, hors equipment.individual.<index>) → BadRequestException, jamais de remplacement en bloc', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', {
@@ -1942,7 +2115,9 @@ describe('CharacterService', () => {
 
     it('409 si updatedAt périmé', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 0 });
 
       await expect(
@@ -1956,7 +2131,9 @@ describe('CharacterService', () => {
 
     it('succès sur un champ simple → warnings: [] si validate("mj", ...) ne remonte aucune erreur', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
       (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
@@ -1985,7 +2162,9 @@ describe('CharacterService', () => {
 
     it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter({ partieId: 'p1' }));
       (validate as jest.Mock).mockReturnValue({ valid: true, errors: [] });
@@ -2000,7 +2179,9 @@ describe('CharacterService', () => {
 
     it('warnings non vides → écriture quand même effectuée (jamais bloquant, AD-7)', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(makeCharacter());
       (validate as jest.Mock).mockReturnValue({
@@ -2029,7 +2210,9 @@ describe('CharacterService', () => {
         },
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
@@ -2059,7 +2242,9 @@ describe('CharacterService', () => {
         },
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
@@ -2094,7 +2279,9 @@ describe('CharacterService', () => {
         },
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', {
@@ -2117,7 +2304,9 @@ describe('CharacterService', () => {
         },
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', {
@@ -2136,7 +2325,9 @@ describe('CharacterService', () => {
         },
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', {
@@ -2155,7 +2346,9 @@ describe('CharacterService', () => {
         },
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', {
@@ -2169,7 +2362,9 @@ describe('CharacterService', () => {
     it('equipment.individual sans index (2 segments) → BadRequestException', async () => {
       const character = makeCharacter();
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', {
@@ -2187,7 +2382,9 @@ describe('CharacterService', () => {
         },
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
@@ -2213,7 +2410,9 @@ describe('CharacterService', () => {
         },
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
@@ -2238,7 +2437,9 @@ describe('CharacterService', () => {
         },
       });
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.character.updateMany.mockResolvedValue({ count: 1 });
       prisma.character.findUniqueOrThrow.mockResolvedValue(character);
 
@@ -2254,7 +2455,9 @@ describe('CharacterService', () => {
     it('equipment.<catégorie invalide> → BadRequestException', async () => {
       const character = makeCharacter();
       prisma.character.findUnique.mockResolvedValue(character);
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
 
       await expect(
         service.setSheetField('char1', 'mj1', {
@@ -2584,17 +2787,21 @@ describe('CharacterService', () => {
 
     it('MJ (non-propriétaire) → accès autorisé', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+      permissions.assert.mockImplementation(
+        grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+      );
       prisma.characterSnapshot.findMany.mockResolvedValue([]);
 
       await service.getHistory('char1', 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'CHARACTER_HISTORY_READ', {
+        characterId: 'char1',
+      });
     });
 
     it('ni propriétaire ni MJ → ForbiddenException', async () => {
       prisma.character.findUnique.mockResolvedValue(makeCharacter());
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.getHistory('char1', 'stranger')).rejects.toThrow(ForbiddenException);
     });
@@ -3269,7 +3476,9 @@ describe('CharacterService', () => {
       it('propriétaire → écrit journalAutoAssociate et le reflète dans le CharacterDto', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         prisma.character.update.mockResolvedValue(makeCharacter({ journalAutoAssociate: true }));
-        parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+        permissions.assert.mockImplementation(
+          grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+        );
 
         const result = await service.setJournalAutoAssociate('char1', 'u1', true);
 
@@ -3283,7 +3492,9 @@ describe('CharacterService', () => {
       it('émet un événement temps réel scopé sur la Partie (Story 18.1, AC1)', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
         prisma.character.update.mockResolvedValue(makeCharacter({ journalAutoAssociate: true }));
-        parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+        permissions.assert.mockImplementation(
+          grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+        );
 
         await service.setJournalAutoAssociate('char1', 'u1', true);
 
@@ -3586,16 +3797,21 @@ describe('CharacterService', () => {
           orderBy: { createdAt: 'desc' },
         });
         expect(result).toHaveLength(2);
-        expect(parties.getViewable).not.toHaveBeenCalled();
+        expect(permissions.assert).not.toHaveBeenCalled();
       });
 
       it('MJ → toutes les entrées', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+        permissions.assert.mockImplementation(
+          grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+        );
         prisma.characterNote.findMany.mockResolvedValue([makeNote({ id: 'n1', shared: false })]);
 
         await service.getNotes('char1', 'mj1');
 
+        expect(permissions.assert).toHaveBeenCalledWith('mj1', 'CHARACTER_NOTES_READ', {
+          characterId: 'char1',
+        });
         expect(prisma.characterNote.findMany).toHaveBeenCalledWith({
           where: { characterId: 'char1' },
           orderBy: { createdAt: 'desc' },
@@ -3604,7 +3820,9 @@ describe('CharacterService', () => {
 
       it('autre participant (membre non-MJ) → uniquement shared: true', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+        permissions.assert.mockImplementation(
+          grantByOwner({ id: 'p1', ownerId: 'mj1', gameSystemId: 'ryuutama' }),
+        );
         prisma.characterNote.findMany.mockResolvedValue([]);
 
         await service.getNotes('char1', 'joueur-tiers');
@@ -3617,7 +3835,7 @@ describe('CharacterService', () => {
 
       it('non-participant (ni MJ ni membre) → ForbiddenException', async () => {
         prisma.character.findUnique.mockResolvedValue(makeCharacter());
-        parties.getViewable.mockRejectedValue(new ForbiddenException());
+        permissions.assert.mockRejectedValue(new ForbiddenException());
 
         await expect(service.getNotes('char1', 'stranger')).rejects.toThrow(ForbiddenException);
       });

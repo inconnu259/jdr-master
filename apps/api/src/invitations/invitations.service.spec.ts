@@ -7,6 +7,8 @@ import {
 import { InvitationsService } from './invitations.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
+import { testGrant } from '../common/test-utils/grant';
 import { InviteLinksService } from './invite-links.service';
 import { EmailService } from '../email/email.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
@@ -25,7 +27,8 @@ describe('InvitationsService', () => {
     };
     $transaction: jest.Mock;
   };
-  let parties: { getOwned: jest.Mock; notifyPartieSignalsChanged: jest.Mock };
+  let parties: { notifyPartieSignalsChanged: jest.Mock };
+  let permissions: { assert: jest.Mock };
   let inviteLinks: { findOrCreateForEmail: jest.Mock };
   let email: { sendMail: jest.Mock };
   let realtimeEvents: { emit: jest.Mock };
@@ -43,12 +46,17 @@ describe('InvitationsService', () => {
       $transaction: jest.fn().mockResolvedValue([]),
     };
     parties = {
-      getOwned: jest.fn().mockResolvedValue({
-        id: 'p1',
-        ownerId: 'mj1',
-        name: 'La Forêt Ancienne',
-      }),
       notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
+    };
+    // Story 37.7 : les droits sont décidés par `PermissionService.assert()`, simulé ici.
+    permissions = {
+      assert: jest.fn().mockResolvedValue(
+        testGrant({
+          id: 'p1',
+          ownerId: 'mj1',
+          name: 'La Forêt Ancienne',
+        }),
+      ),
     };
     inviteLinks = {
       findOrCreateForEmail: jest.fn().mockResolvedValue({ token: 'tok123' }),
@@ -58,6 +66,7 @@ describe('InvitationsService', () => {
     service = new InvitationsService(
       prisma as unknown as PrismaService,
       parties as unknown as PartiesService,
+      permissions as unknown as PermissionService,
       inviteLinks as unknown as InviteLinksService,
       email as unknown as EmailService,
       realtimeEvents as unknown as RealtimeEventsService,
@@ -87,7 +96,7 @@ describe('InvitationsService', () => {
     prisma.membership.findUnique.mockResolvedValue(null);
     prisma.invitation.upsert.mockResolvedValue({ id: 'inv1' });
     await service.invite('p1', 'mj1', 'u');
-    expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+    expect(permissions.assert).toHaveBeenCalledWith('mj1', 'INVITATION_CREATE', { partieId: 'p1' });
     expect(prisma.invitation.upsert).toHaveBeenCalledWith(
       objectLike({
         update: objectLike({ status: 'PENDING' }),
@@ -173,13 +182,39 @@ describe('InvitationsService', () => {
     expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
   });
 
-  it('revoke : 403 si ni inviteur ni MJ', async () => {
-    prisma.invitation.findUnique.mockResolvedValue({
-      id: 'inv1',
-      inviterId: 'mj1',
-      partie: { ownerId: 'mj1' },
-    });
+  it('listForPartie : réservé au MJ (INVITATION_READ), invitations de la partie renvoyées', async () => {
+    prisma.invitation.findMany.mockResolvedValue([{ id: 'inv1' }]);
+
+    await expect(service.listForPartie('p1', 'mj1')).resolves.toEqual([{ id: 'inv1' }]);
+
+    // Un membre ne doit jamais lire les invitations (adresses e-mail des invités) : l'action reste
+    // MJ seul, ce test fige le câblage.
+    expect(permissions.assert).toHaveBeenCalledWith('mj1', 'INVITATION_READ', { partieId: 'p1' });
+    expect(prisma.invitation.findMany).toHaveBeenCalledWith(
+      objectLike({ where: { partieId: 'p1' } }),
+    );
+  });
+
+  it('listForPartie : refus du service de permission propagé, aucune invitation lue', async () => {
+    permissions.assert.mockRejectedValue(new ForbiddenException());
+
+    await expect(service.listForPartie('p1', 'joueur1')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.invitation.findMany).not.toHaveBeenCalled();
+  });
+
+  it('revoke : 403 si non MJ de la partie de l’invitation (refus du service de permission, aucune écriture)', async () => {
+    permissions.assert.mockRejectedValue(new ForbiddenException());
     await expect(service.revoke('inv1', 'intrus')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(permissions.assert).toHaveBeenCalledWith('intrus', 'INVITATION_REVOKE', {
+      invitationId: 'inv1',
+    });
+    expect(prisma.invitation.update).not.toHaveBeenCalled();
+  });
+
+  it('revoke : 404 si l’invitation est inconnue (message historique porté par le service de permission)', async () => {
+    permissions.assert.mockRejectedValue(new NotFoundException('Invitation introuvable'));
+    await expect(service.revoke('zzz', 'mj1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.invitation.update).not.toHaveBeenCalled();
   });
 
   it('revoke : émet un événement temps réel scopé sur l’invité de l’invitation révoquée (Story 18.1, AC1)', async () => {
@@ -187,9 +222,11 @@ describe('InvitationsService', () => {
       id: 'inv1',
       inviterId: 'mj1',
       inviteeUserId: 'u',
-      partie: { ownerId: 'mj1' },
     });
     await service.revoke('inv1', 'mj1');
+    expect(permissions.assert).toHaveBeenCalledWith('mj1', 'INVITATION_REVOKE', {
+      invitationId: 'inv1',
+    });
     expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
   });
 
@@ -202,7 +239,7 @@ describe('InvitationsService', () => {
 
     const result = await service.inviteByEmail('p1', 'mj1', 'ami@example.com');
 
-    expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+    expect(permissions.assert).toHaveBeenCalledWith('mj1', 'INVITATION_CREATE', { partieId: 'p1' });
     expect(prisma.invitation.upsert).toHaveBeenCalled(); // délègue à invite()
     expect(inviteLinks.findOrCreateForEmail).not.toHaveBeenCalled();
     expect(email.sendMail).toHaveBeenCalledWith(

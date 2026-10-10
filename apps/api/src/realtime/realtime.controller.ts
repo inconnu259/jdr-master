@@ -4,7 +4,7 @@ import { map } from 'rxjs/operators';
 import type { AuthUser } from '@master-jdr/shared';
 import { AuthenticatedGuard } from '../auth/guards/authenticated.guard';
 import { CurrentUser } from '../common/current-user.decorator';
-import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
 import { RealtimeEventsService, partieTopic, userTopic } from './realtime-events.service';
 
 // Pas de préfixe de classe (contrairement aux autres controllers `parties/:id/...` du projet) :
@@ -15,7 +15,7 @@ import { RealtimeEventsService, partieTopic, userTopic } from './realtime-events
 @Controller()
 export class RealtimeController {
   constructor(
-    private readonly parties: PartiesService,
+    private readonly permissions: PermissionService,
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
@@ -24,7 +24,8 @@ export class RealtimeController {
     @Param('id') id: string,
     @CurrentUser() user: AuthUser,
   ): Promise<Observable<MessageEvent>> {
-    await this.parties.getViewable(id, user.id); // AD-5 : même contrôle que le reste de l'API
+    // AD-5 : même contrôle que le reste de l'API.
+    await this.permissions.assert(user.id, 'PARTIE_READ', { partieId: id });
     return this.realtimeEvents.subscribe(partieTopic(id)).pipe(map(() => ({ data: {} })));
   }
 

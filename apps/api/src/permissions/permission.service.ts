@@ -1,29 +1,66 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Partie } from '@prisma/client';
-import type { GameSystemFamily, PartieRole, PermissionAction } from '@master-jdr/shared';
+import type {
+  GameSystemCapability,
+  GameSystemFamily,
+  PartieRole,
+  PermissionAction,
+} from '@master-jdr/shared';
 // Import RUNTIME du registre des systèmes (Story 37.5) : la famille du système de la partie choisit
-// la politique de droits. Jamais `import type` sur une valeur.
-import { familyOf } from '@master-jdr/shared';
+// la politique de droits, ses capacités gardent les actions de couche 3 (Story 37.7). Jamais
+// `import type` sur une valeur.
+import { familyOf, hasCapability } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
+/** Clés d'identifiant qu'une cible de décision de droit peut porter (une seule à la fois). */
+type TargetKey =
+  | 'partieId'
+  | 'eventId'
+  | 'seanceId'
+  | 'characterId'
+  | 'invitationId'
+  | 'inviteLinkId'
+  | 'announcementId';
+
+/** Cible désignée par la SEULE clé `K` : toutes les autres clés sont interdites (`never`). */
+type OnlyTarget<K extends TargetKey> = { [P in K]: string } & {
+  [P in Exclude<TargetKey, K>]?: never;
+};
+
 /**
- * Cible d'une décision de droit (Story 37.6, AD-6). Pour un événement ou une séance, la partie est
- * TOUJOURS résolue depuis la cible elle-même — jamais lue dans un paramètre de route : un
- * identifiant de séance d'une autre partie ne peut donc pas être « rattaché » à la partie de l'URL.
+ * Cible d'une décision de droit (Story 37.6, AD-6). Pour un événement, une séance, un personnage,
+ * une invitation, un lien ou une annonce, la partie est TOUJOURS résolue depuis la cible
+ * elle-même — jamais lue dans un paramètre de route : un identifiant d'une autre partie ne peut
+ * donc pas être « rattaché » à la partie de l'URL.
  */
 export type PermissionTarget =
   // Membres mutuellement exclusifs : une cible mixte (`{ partieId, seanceId }`) ne compile pas —
   // sans quoi l'identifiant de partie (souvent lu dans la route) primerait sur la séance visée.
-  | { partieId: string; eventId?: never; seanceId?: never }
-  | { eventId: string; partieId?: never; seanceId?: never }
-  | { seanceId: string; partieId?: never; eventId?: never };
+  // Story 37.7 : personnage, invitation, lien d'invitation et annonce se résolvent eux aussi vers
+  // leur partie — jamais depuis la route.
+  | OnlyTarget<'partieId'>
+  | OnlyTarget<'eventId'>
+  | OnlyTarget<'seanceId'>
+  | OnlyTarget<'characterId'>
+  | OnlyTarget<'invitationId'>
+  | OnlyTarget<'inviteLinkId'>
+  | OnlyTarget<'announcementId'>;
 
-/** Cible telle que résolue par `assert()` : la partie, plus l'événement et la séance quand la
- *  cible les désignait (une séance donne aussi son événement). */
+/** Cible telle que résolue par `assert()` : la partie, plus ce que la cible désignait (une séance
+ *  donne aussi son événement). */
 export interface ResolvedTarget {
   readonly partieId: string;
   readonly eventId?: string;
   readonly seanceId?: string;
+  readonly characterId?: string;
+  readonly invitationId?: string;
+  readonly inviteLinkId?: string;
+  readonly announcementId?: string;
 }
 
 /** Marque de l'autorisation : non exportée, aucun autre module ne peut fabriquer un `PartieGrant`
@@ -57,6 +94,9 @@ export interface PartieMember {
 export const MJ_ONLY_MESSAGE = 'Action réservée au MJ de la partie';
 /** Refus opposé à quelqu'un qui n'a aucun rôle sur la partie. */
 export const NO_ACCESS_MESSAGE = "Vous n'avez pas accès à cette partie";
+/** Refus d'une action de couche 3 sur une partie dont le système ne déclare pas la capacité. */
+export const CAPABILITY_UNAVAILABLE_MESSAGE =
+  "Cette fonctionnalité n'est pas disponible pour le système de jeu de cette partie";
 
 const OWNER_ONLY: readonly PartieRole[] = ['mj'];
 const OWNER_AND_MEMBERS: readonly PartieRole[] = ['mj', 'player'];
@@ -69,7 +109,6 @@ const OWNER_AND_MEMBERS: readonly PartieRole[] = ['mj', 'player'];
 export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]>> = {
   // Partie
   PARTIE_READ: OWNER_AND_MEMBERS,
-  PARTIE_MANAGE: OWNER_ONLY,
   PARTIE_UPDATE: OWNER_ONLY,
   PARTIE_CONVERT_KIND: OWNER_ONLY,
   PARTIE_CLOSE: OWNER_ONLY,
@@ -82,6 +121,9 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
   PARTIE_VISIBILITY_LOCKS_UPDATE: OWNER_ONLY,
   PARTIE_COVER_READ: OWNER_AND_MEMBERS,
   PARTIE_COVER_UPDATE: OWNER_ONLY,
+  // Fiches de référence du système (Story 37.7)
+  PARTIE_REFERENCE_ASSET_READ: OWNER_AND_MEMBERS,
+  PARTIE_REFERENCE_ASSET_MJ_READ: OWNER_ONLY,
   // Scénario
   SCENARIO_CREATE: OWNER_ONLY,
   SCENARIO_UPDATE: OWNER_ONLY,
@@ -108,7 +150,61 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
   POLL_CHOOSE: OWNER_ONLY,
   POLL_OPTIONS_SET: OWNER_ONLY,
   POLL_CLOSE: OWNER_ONLY,
+  // Personnage (Story 37.7) : tout participant lit ; l'édition de l'XP et de la fiche, l'historique
+  // et la distribution d'XP sont réservés au MJ. L'inventaire, le portrait et le journal restent
+  // des droits de PROPRIÉTAIRE DE LA FICHE, jamais des droits de partie (hors de cette table).
+  CHARACTER_CREATE: OWNER_AND_MEMBERS,
+  CHARACTER_LIST: OWNER_AND_MEMBERS,
+  CHARACTER_READ: OWNER_AND_MEMBERS,
+  CHARACTER_PORTRAIT_READ: OWNER_AND_MEMBERS,
+  CHARACTER_NOTES_READ: OWNER_AND_MEMBERS,
+  CHARACTER_XP_SET: OWNER_ONLY,
+  CHARACTER_SHEET_FIELD_SET: OWNER_ONLY,
+  CHARACTER_HISTORY_READ: OWNER_ONLY,
+  XP_DISTRIBUTION_CREATE: OWNER_ONLY,
+  XP_DISTRIBUTION_READ: OWNER_ONLY,
+  // Homme Dragon : créer / lier (MANAGE, soumis à la capacité), lire et délier (sans capacité).
+  HOMME_DRAGON_MANAGE: OWNER_ONLY,
+  HOMME_DRAGON_READ: OWNER_ONLY,
+  HOMME_DRAGON_UNLINK: OWNER_ONLY,
+  GROUP_ROLE_ASSIGN: OWNER_ONLY,
+  GROUP_ROLE_UNASSIGN: OWNER_ONLY,
+  GROUP_ROLE_READ: OWNER_AND_MEMBERS,
+  ANNOUNCEMENT_CREATE: OWNER_ONLY,
+  ANNOUNCEMENT_READ: OWNER_AND_MEMBERS,
+  ANNOUNCEMENT_MARK_READ: OWNER_AND_MEMBERS,
+  // Invitations : le MJ invite, liste et révoque (l'invitant est toujours le propriétaire, la
+  // propriété d'une partie étant immuable).
+  INVITATION_CREATE: OWNER_ONLY,
+  INVITATION_READ: OWNER_ONLY,
+  INVITATION_REVOKE: OWNER_ONLY,
+  INVITE_LINK_CREATE: OWNER_ONLY,
+  INVITE_LINK_READ: OWNER_ONLY,
+  INVITE_LINK_REVOKE: OWNER_ONLY,
 };
+
+/**
+ * Garde de capacité (Story 37.7, AD-1) : action d'ÉCRITURE de couche 3 → capacité que le système
+ * de la partie doit déclarer dans le registre. Posée ICI, dans `assert()`, jamais par un test local
+ * du système : un service de couche 3 n'a pas d'autre chemin vers une autorisation, il ne peut donc
+ * pas l'oublier.
+ *
+ * Les LECTURES, le retrait d'un lien (`HOMME_DRAGON_UNLINK`) et `ANNOUNCEMENT_MARK_READ` n'exigent
+ * aucune capacité (décision du 2026-10-10) : sur un système sans la capacité, une lecture garde son
+ * contrôle de rôle et renvoie vide / null comme avant. Une action absente de la table n'exige
+ * aucune capacité (couches 1 et 2, scénario — `scenarioLifecycle` et `linearCampaign` restent
+ * gardés dans `scenarios/`, reporté).
+ */
+export const ACTION_CAPABILITY: Readonly<Partial<Record<PermissionAction, GameSystemCapability>>> =
+  {
+    CHARACTER_CREATE: 'characters',
+    CHARACTER_XP_SET: 'xp',
+    CHARACTER_SHEET_FIELD_SET: 'characters',
+    XP_DISTRIBUTION_CREATE: 'xp',
+    HOMME_DRAGON_MANAGE: 'hommeDragon',
+    GROUP_ROLE_ASSIGN: 'groupRoles',
+    ANNOUNCEMENT_CREATE: 'announcements',
+  };
 
 /** Politique applicable à une famille. Le ralliement n'a pas encore la sienne (épic 38, fermé à
  *  la création) : il retombe, comme un système inconnu du registre, sur la politique `jdr`. */
@@ -146,7 +242,9 @@ export class PermissionService {
   /**
    * Vérifie que `userId` peut faire `action` sur `target`, et renvoie l'autorisation.
    * Cible inconnue → 404 (message historique de la cible) ; aucun rôle → 403
-   * `NO_ACCESS_MESSAGE` ; rôle insuffisant → 403 `MJ_ONLY_MESSAGE`.
+   * `NO_ACCESS_MESSAGE` ; rôle insuffisant → 403 `MJ_ONLY_MESSAGE` ; capacité absente du système
+   * de la partie → 400 `CAPABILITY_UNAVAILABLE_MESSAGE`. Ordre : rôle d'abord, capacité ensuite
+   * (un étranger n'apprend rien du système d'une partie qui n'est pas la sienne).
    */
   async assert(
     userId: string,
@@ -158,6 +256,10 @@ export class PermissionService {
     if (role === null) throw new ForbiddenException(NO_ACCESS_MESSAGE);
     const allowed = policyFor(familyOf(partie.gameSystemId))[action];
     if (!allowed.includes(role)) throw new ForbiddenException(MJ_ONLY_MESSAGE);
+    const capability = ACTION_CAPABILITY[action];
+    if (capability !== undefined && !hasCapability(partie.gameSystemId, capability)) {
+      throw new BadRequestException(CAPABILITY_UNAVAILABLE_MESSAGE);
+    }
     return { partieId: partie.id, role, action, target: resolved, partie } as PartieGrant;
   }
 
@@ -202,12 +304,7 @@ export class PermissionService {
    */
   async membersOf(partie: Pick<Partie, 'id' | 'ownerId'>): Promise<PartieMember[]> {
     const [owner, memberships] = await Promise.all([
-      partie.ownerId === null
-        ? Promise.resolve(null)
-        : this.prisma.user.findUnique({
-            where: { id: partie.ownerId },
-            select: { id: true, pseudo: true, displayName: true },
-          }),
+      this.ownerOf(partie),
       this.prisma.membership.findMany({
         where: { partieId: partie.id },
         orderBy: [{ joinedAt: 'asc' }, { userId: 'asc' }],
@@ -221,8 +318,8 @@ export class PermissionService {
     const members: PartieMember[] = [];
     // Un compte propriétaire orphelin (ligne `User` absente) est simplement omis.
     if (owner) {
-      seen.add(owner.id);
-      members.push({ userId: owner.id, pseudo: owner.pseudo, displayName: owner.displayName });
+      seen.add(owner.userId);
+      members.push(owner);
     }
     for (const m of memberships) {
       if (seen.has(m.user.id)) continue;
@@ -230,6 +327,19 @@ export class PermissionService {
       members.push({ userId: m.user.id, pseudo: m.user.pseudo, displayName: m.user.displayName });
     }
     return members;
+  }
+
+  /** Identité (pseudo + nom affiché) du propriétaire d'une partie, `null` si elle n'en a pas
+   *  (AD-5) ou si son compte est absent. Sert aux projections « auteur » (annonces), jamais à
+   *  décider d'un droit. */
+  async ownerOf(partie: Pick<Partie, 'ownerId'>): Promise<PartieMember | null> {
+    if (partie.ownerId === null) return null;
+    const owner = await this.prisma.user.findUnique({
+      where: { id: partie.ownerId },
+      select: { id: true, pseudo: true, displayName: true },
+    });
+    if (!owner) return null;
+    return { userId: owner.id, pseudo: owner.pseudo, displayName: owner.displayName };
   }
 
   /** Résout la partie de la cible (et ce qu'elle désigne), 404 avec le message historique de la
@@ -250,6 +360,50 @@ export class PermissionService {
       // Message historique : dans le JDR, un événement est toujours un scénario.
       if (!event) throw new NotFoundException('Scénario introuvable');
       return { partie: event.partie, resolved: { partieId: event.partie.id, eventId: event.id } };
+    }
+    if (target.characterId !== undefined) {
+      const character = await this.prisma.character.findUnique({
+        where: { id: target.characterId },
+        include: { partie: true },
+      });
+      if (!character) throw new NotFoundException('Personnage introuvable');
+      return {
+        partie: character.partie,
+        resolved: { partieId: character.partie.id, characterId: character.id },
+      };
+    }
+    if (target.invitationId !== undefined) {
+      const invitation = await this.prisma.invitation.findUnique({
+        where: { id: target.invitationId },
+        include: { partie: true },
+      });
+      if (!invitation) throw new NotFoundException('Invitation introuvable');
+      return {
+        partie: invitation.partie,
+        resolved: { partieId: invitation.partie.id, invitationId: invitation.id },
+      };
+    }
+    if (target.inviteLinkId !== undefined) {
+      const link = await this.prisma.inviteLink.findUnique({
+        where: { id: target.inviteLinkId },
+        include: { partie: true },
+      });
+      if (!link) throw new NotFoundException('Lien introuvable');
+      return {
+        partie: link.partie,
+        resolved: { partieId: link.partie.id, inviteLinkId: link.id },
+      };
+    }
+    if (target.announcementId !== undefined) {
+      const announcement = await this.prisma.announcement.findUnique({
+        where: { id: target.announcementId },
+        include: { partie: true },
+      });
+      if (!announcement) throw new NotFoundException('Annonce introuvable');
+      return {
+        partie: announcement.partie,
+        resolved: { partieId: announcement.partie.id, announcementId: announcement.id },
+      };
     }
     const seance = await this.prisma.seance.findUnique({
       where: { id: target.seanceId },

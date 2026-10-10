@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { Prisma } from '@prisma/client';
 import type { GameSystemDto, GameSystemSchemaDto, GameSystemContentDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
 import { RYUUTAMA_ID } from './supported-game-systems';
 
 const RYUUTAMA_DATA_DIR = join(process.cwd(), 'game-systems/ryuutama/data');
@@ -148,7 +148,7 @@ export class GameSystemService implements OnApplicationBootstrap {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly parties: PartiesService,
+    private readonly permissions: PermissionService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -353,11 +353,11 @@ export class GameSystemService implements OnApplicationBootstrap {
     }
     const asset = REFERENCE_ASSETS[key];
 
-    if (asset.access === 'member') {
-      await this.parties.getViewable(partieId, userId);
-    } else {
-      await this.parties.getOwned(partieId, userId);
-    }
+    await this.permissions.assert(
+      userId,
+      asset.access === 'member' ? 'PARTIE_REFERENCE_ASSET_READ' : 'PARTIE_REFERENCE_ASSET_MJ_READ',
+      { partieId },
+    );
 
     return readFile(join(ASSETS_DIR, asset.file)).catch((e) => {
       this.logger.error(`Échec du chargement de la fiche de référence "${key}" (${asset.file})`, e);

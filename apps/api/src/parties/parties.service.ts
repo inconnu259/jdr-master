@@ -269,9 +269,30 @@ export class PartiesService {
   }
 
   /**
-   * `mj` = les parties que je maîtrise ; `player` = celles où je suis membre (via `Membership`).
+   * `mj` = les parties que je maîtrise ; `player` = celles où je suis membre (via `Membership`) ;
+   * sans rôle (Story 37.7) = TOUTES mes parties, propriétaire ou membre, chacune avec son rôle —
+   * lu en une seule fois par `PermissionService.rolesOf()`, jamais déduit d'une comparaison.
    */
-  async listForUser(userId: string, role: 'mj' | 'player'): Promise<PartieDto[]> {
+  async listForUser(userId: string, role?: 'mj' | 'player'): Promise<PartieDto[]> {
+    if (role === undefined) {
+      const mine = await this.prisma.partie.findMany({
+        where: { OR: [{ ownerId: userId }, { memberships: { some: { userId } } }] },
+        orderBy: { createdAt: 'desc' },
+      });
+      const mineIds = mine.map((p) => p.id);
+      const [roles, hasScenarioIds, favoriteIds] = await Promise.all([
+        this.permissions.rolesOf(userId, mineIds),
+        this.hasScenarioByPartieId(mineIds),
+        this.favoritePartieIds(userId, mineIds),
+      ]);
+      return mine.flatMap((p) => {
+        const partieRole = roles.get(p.id);
+        if (!partieRole) return [];
+        return [
+          toPartieDto(p, toDtoRole(partieRole), hasScenarioIds.has(p.id), favoriteIds.has(p.id)),
+        ];
+      });
+    }
     if (role === 'player') {
       const memberships = await this.prisma.membership.findMany({
         where: { userId },
@@ -304,25 +325,6 @@ export class PartiesService {
     return parties.map((p) =>
       toPartieDto(p, 'mj', hasScenarioIds.has(p.id), favoriteIds.has(p.id)),
     );
-  }
-
-  /** Délégué (Story 37.6) conservé pour les modules pas encore migrés (Story 37.7) : partie dont
-   *  l'utilisateur est le MJ, sinon 404 / 403 — décidé par `PermissionService` (`PARTIE_MANAGE`).
-   *  Une partie sans propriétaire (`ownerId` null, AD-5) ne donne jamais le rôle `mj` : le type de
-   *  retour garantit donc un `ownerId` non nul aux appelants. */
-  async getOwned(id: string, userId: string): Promise<Partie & { ownerId: string }> {
-    const { partie } = await this.permissions.assert(userId, 'PARTIE_MANAGE', { partieId: id });
-    if (partie.ownerId === null) {
-      throw new Error('Rôle mj accordé sur une partie sans propriétaire — invariant rompu');
-    }
-    return { ...partie, ownerId: partie.ownerId };
-  }
-
-  /** Délégué (Story 37.6) conservé pour les modules pas encore migrés (Story 37.7) : partie
-   *  visible par l'utilisateur, MJ **ou** membre (sinon 404 / 403) — `PARTIE_READ`. */
-  async getViewable(id: string, userId: string): Promise<Partie> {
-    const { partie } = await this.permissions.assert(userId, 'PARTIE_READ', { partieId: id });
-    return partie;
   }
 
   /** Récupère une partie visible par l'utilisateur (`PARTIE_READ`, MJ ou membre) enrichie

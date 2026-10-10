@@ -50,6 +50,9 @@ import { validateHommeDragon } from '@master-jdr/game-rules';
 import { HommeDragonService } from './homme-dragon.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
+import { CAPABILITY_UNAVAILABLE_MESSAGE } from '../permissions/permission.service';
+import { testGrant } from '../common/test-utils/grant';
 import { GameSystemService } from '../game-systems/game-system.service';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
@@ -93,9 +96,13 @@ function makePrisma() {
   };
 }
 
+/** Story 37.7 : les droits (rôle MJ et capacité `hommeDragon`) sont décidés par `assert()`. */
+function makePermissions() {
+  return { assert: jest.fn() };
+}
+
 function makePartiesService() {
   return {
-    getOwned: jest.fn(),
     notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined),
   };
 }
@@ -177,6 +184,7 @@ describe('HommeDragonService', () => {
   let service: HommeDragonService;
   let prisma: ReturnType<typeof makePrisma>;
   let parties: ReturnType<typeof makePartiesService>;
+  let permissions: ReturnType<typeof makePermissions>;
   let gameSystems: ReturnType<typeof makeGameSystems>;
   let scenarios: ReturnType<typeof makeScenarios>;
   let realtimeEvents: ReturnType<typeof makeRealtimeEvents>;
@@ -221,6 +229,7 @@ describe('HommeDragonService', () => {
     jest.clearAllMocks();
     prisma = makePrisma();
     parties = makePartiesService();
+    permissions = makePermissions();
     gameSystems = makeGameSystems();
     scenarios = makeScenarios();
     realtimeEvents = makeRealtimeEvents();
@@ -234,6 +243,7 @@ describe('HommeDragonService', () => {
         HommeDragonService,
         { provide: PrismaService, useValue: prisma },
         { provide: PartiesService, useValue: parties },
+        { provide: PermissionService, useValue: permissions },
         { provide: GameSystemService, useValue: gameSystems },
         { provide: ScenariosService, useValue: scenarios },
         { provide: RealtimeEventsService, useValue: realtimeEvents },
@@ -250,7 +260,7 @@ describe('HommeDragonService', () => {
     };
 
     beforeEach(() => {
-      parties.getOwned.mockResolvedValue(PARTIE_RYUUTAMA);
+      permissions.assert.mockResolvedValue(testGrant(PARTIE_RYUUTAMA));
       prisma.tx.hommeDragon.create.mockResolvedValue(makeHommeDragon());
       prisma.tx.partie.updateMany.mockResolvedValue({ count: 1 });
       prisma.partie.findMany.mockResolvedValue([{ id: 'p1', name: 'Ma Campagne' }]);
@@ -259,7 +269,9 @@ describe('HommeDragonService', () => {
     it('création et lien dans UNE transaction : aucune fiche sans partieId, lien posé par un updateMany conditionnel', async () => {
       const result = await service.create('p1', 'mj1', dto);
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'HOMME_DRAGON_MANAGE', {
+        partieId: 'p1',
+      });
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(prisma.tx.hommeDragon.create).toHaveBeenCalledWith({
         data: {
@@ -324,8 +336,8 @@ describe('HommeDragonService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('Partie non-Ryuutama → BadRequestException, rien écrit', async () => {
-      parties.getOwned.mockResolvedValue({ ...PARTIE_RYUUTAMA, gameSystemId: 'autre-systeme' });
+    it('système sans la capacité hommeDragon → BadRequestException du service de permission, rien écrit', async () => {
+      permissions.assert.mockRejectedValue(new BadRequestException(CAPABILITY_UNAVAILABLE_MESSAGE));
 
       await expect(service.create('p1', 'mj1', dto)).rejects.toThrow(BadRequestException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -340,8 +352,8 @@ describe('HommeDragonService', () => {
       expect(parties.notifyPartieSignalsChanged).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → ForbiddenException propagée par getOwned, aucune écriture', async () => {
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+    it('non-MJ → ForbiddenException propagée par permissions.assert, aucune écriture', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.create('p1', 'stranger', dto)).rejects.toThrow(ForbiddenException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -350,7 +362,7 @@ describe('HommeDragonService', () => {
 
   describe('link() (AD-23)', () => {
     beforeEach(() => {
-      parties.getOwned.mockResolvedValue(PARTIE_RYUUTAMA);
+      permissions.assert.mockResolvedValue(testGrant(PARTIE_RYUUTAMA));
       arrange({ aventures: [{ id: 'p1', name: 'Ma Campagne' }] });
       prisma.tx.partie.updateMany.mockResolvedValue({ count: 1 });
     });
@@ -372,7 +384,9 @@ describe('HommeDragonService', () => {
 
       const dto = await service.link('p1', 'hd1', 'mj1');
 
-      expect(parties.getOwned).toHaveBeenCalledWith('p1', 'mj1');
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'HOMME_DRAGON_MANAGE', {
+        partieId: 'p1',
+      });
       // Ordre de prise des verrous fixé par AD-23 : HommeDragon puis Partie.
       expect(order).toEqual(['lock', 'relecture', 'partie']);
       expect(prisma.tx.hommeDragon.findFirst).toHaveBeenCalledWith({
@@ -402,8 +416,8 @@ describe('HommeDragonService', () => {
       expect(realtimeEvents.emit).not.toHaveBeenCalled();
     });
 
-    it('partie non Ryuutama → 400, rien écrit', async () => {
-      parties.getOwned.mockResolvedValue({ ...PARTIE_RYUUTAMA, gameSystemId: 'autre-systeme' });
+    it('système sans la capacité hommeDragon → 400 du service de permission, rien écrit', async () => {
+      permissions.assert.mockRejectedValue(new BadRequestException(CAPABILITY_UNAVAILABLE_MESSAGE));
 
       await expect(service.link('p1', 'hd1', 'mj1')).rejects.toThrow(BadRequestException);
       expect(prisma.tx.partie.updateMany).not.toHaveBeenCalled();
@@ -418,8 +432,8 @@ describe('HommeDragonService', () => {
       expect(parties.notifyPartieSignalsChanged).not.toHaveBeenCalled();
     });
 
-    it('non-MJ de la partie → ForbiddenException propagée par getOwned', async () => {
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+    it('non-MJ de la partie → ForbiddenException propagée par permissions.assert', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.link('p1', 'hd1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -428,7 +442,7 @@ describe('HommeDragonService', () => {
 
   describe('unlink() (AD-23)', () => {
     beforeEach(() => {
-      parties.getOwned.mockResolvedValue(PARTIE_RYUUTAMA);
+      permissions.assert.mockResolvedValue(testGrant(PARTIE_RYUUTAMA));
       arrange({ aventures: [] });
       prisma.tx.partie.updateMany.mockResolvedValue({ count: 1 });
     });
@@ -436,6 +450,10 @@ describe('HommeDragonService', () => {
     it('délie : verrou, updateMany « WHERE id AND hommeDragonId = :h », sheetData intact (rien purgé)', async () => {
       const dto = await service.unlink('p1', 'hd1', 'mj1');
 
+      // Action dédiée, sans capacité : une partie sortie du système se délie toujours.
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'HOMME_DRAGON_UNLINK', {
+        partieId: 'p1',
+      });
       expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
       expect(prisma.tx.partie.updateMany).toHaveBeenCalledWith({
         where: { id: 'p1', ownerId: 'mj1', hommeDragonId: 'hd1' },
@@ -445,15 +463,12 @@ describe('HommeDragonService', () => {
       expect(dto.aventures).toEqual([]);
     });
 
-    it('sans condition de système : une partie sortie de Ryuutama se délie aussi', async () => {
-      parties.getOwned.mockResolvedValue({ ...PARTIE_RYUUTAMA, gameSystemId: 'autre-systeme' });
+    it('non-MJ → ForbiddenException propagée par permissions.assert, rien délié', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
-      await service.unlink('p1', 'hd1', 'mj1');
-
-      expect(prisma.tx.partie.updateMany).toHaveBeenCalledWith({
-        where: { id: 'p1', ownerId: 'mj1', hommeDragonId: 'hd1' },
-        data: { hommeDragonId: null },
-      });
+      await expect(service.unlink('p1', 'hd1', 'joueur1')).rejects.toThrow(ForbiddenException);
+      expect(prisma.tx.partie.updateMany).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
     });
 
     it('émet partie:{id} puis notifyPartieSignalsChanged', async () => {
@@ -477,8 +492,8 @@ describe('HommeDragonService', () => {
       expect(prisma.tx.partie.updateMany).not.toHaveBeenCalled();
     });
 
-    it('non-MJ → ForbiddenException propagée par getOwned', async () => {
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+    it('non-MJ → ForbiddenException propagée par permissions.assert', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.unlink('p1', 'hd1', 'stranger')).rejects.toThrow(ForbiddenException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -487,14 +502,18 @@ describe('HommeDragonService', () => {
 
   describe('findForPartie() (AD-23)', () => {
     it("partie sans Homme Dragon → null, jamais d'exception", async () => {
-      parties.getOwned.mockResolvedValue({ ...PARTIE_RYUUTAMA, hommeDragonId: null });
+      permissions.assert.mockResolvedValue(testGrant({ ...PARTIE_RYUUTAMA, hommeDragonId: null }));
 
       await expect(service.findForPartie('p1', 'mj1')).resolves.toBeNull();
+      // Lecture MJ seul, sans capacité : null sur un système sans Homme Dragon, jamais un 400.
+      expect(permissions.assert).toHaveBeenCalledWith('mj1', 'HOMME_DRAGON_READ', {
+        partieId: 'p1',
+      });
       expect(prisma.hommeDragon.findFirst).not.toHaveBeenCalled();
     });
 
     it('partie liée → référence { id, nom } uniquement', async () => {
-      parties.getOwned.mockResolvedValue({ ...PARTIE_RYUUTAMA, hommeDragonId: 'hd1' });
+      permissions.assert.mockResolvedValue(testGrant({ ...PARTIE_RYUUTAMA, hommeDragonId: 'hd1' }));
       prisma.hommeDragon.findFirst.mockResolvedValue(makeHommeDragon());
 
       const ref = await service.findForPartie('p1', 'mj1');
@@ -505,8 +524,8 @@ describe('HommeDragonService', () => {
       });
     });
 
-    it('joueur de la partie (non MJ) → ForbiddenException propagée par getOwned, aucune donnée lue', async () => {
-      parties.getOwned.mockRejectedValue(new ForbiddenException());
+    it('joueur de la partie (non MJ) → ForbiddenException propagée par permissions.assert, aucune donnée lue', async () => {
+      permissions.assert.mockRejectedValue(new ForbiddenException());
 
       await expect(service.findForPartie('p1', 'joueur1')).rejects.toThrow(ForbiddenException);
       expect(prisma.hommeDragon.findFirst).not.toHaveBeenCalled();
@@ -528,7 +547,7 @@ describe('HommeDragonService', () => {
         where: { id: 'hd1' },
         data: { sheetData: objectLike({ nom: 'Pyros', race: 'DRAGON_ROUGE' }) },
       });
-      expect(parties.getOwned).not.toHaveBeenCalled();
+      expect(permissions.assert).not.toHaveBeenCalled();
     });
 
     it('verrou pris AVANT la relecture, et SELECT … FOR NO KEY UPDATE sur la ligne par id', async () => {
@@ -933,7 +952,7 @@ describe('HommeDragonService', () => {
       expect(prisma.hommeDragon.findFirst).toHaveBeenCalledWith({
         where: { id: 'hd1', userId: 'mj1' },
       });
-      expect(parties.getOwned).not.toHaveBeenCalled();
+      expect(permissions.assert).not.toHaveBeenCalled();
       expect(dto.id).toBe('hd1');
       expect(dto).not.toHaveProperty('partieId');
       expect(dto).not.toHaveProperty('voyageursProteges');
@@ -1215,7 +1234,7 @@ describe('HommeDragonService', () => {
 
     it('create/update/link/unlink retournent le même bloc dérivé que findOne', async () => {
       arrange({ passeCount: 3, aventures: [{ id: 'p1', name: 'A' }] });
-      parties.getOwned.mockResolvedValue({ ...PARTIE_RYUUTAMA, hommeDragonId: 'hd1' });
+      permissions.assert.mockResolvedValue(testGrant({ ...PARTIE_RYUUTAMA, hommeDragonId: 'hd1' }));
       prisma.tx.partie.updateMany.mockResolvedValue({ count: 1 });
 
       const fromUpdate = await service.update('hd1', 'mj1', { nom: 'Pyros' });

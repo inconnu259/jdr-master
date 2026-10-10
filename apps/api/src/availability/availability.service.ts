@@ -16,11 +16,13 @@ import type {
   MyCalendarOpenInscriptionEntry,
   MyCalendarPollEntry,
   MyCalendarSeanceEntry,
+  PartieRole,
   RecurKind,
   SlotStatus,
   VoteAnswer,
 } from '@master-jdr/shared';
 import { participantCount } from '../parties/participant-count.util';
+import { PermissionService } from '../permissions/permission.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
@@ -73,6 +75,8 @@ export class AvailabilityService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtimeEvents: RealtimeEventsService,
+    // Story 37.7 (AD-6) : le rôle de l'utilisateur sur chacune de ses parties vient d'ici.
+    private readonly permissions: PermissionService,
   ) {}
 
   // ─── Temps réel ─────────────────────────────────────────────────────────────
@@ -794,12 +798,12 @@ export class AvailabilityService {
 
     const myParties = await this.prisma.partie.findMany({
       where: { OR: [{ ownerId: userId }, { memberships: { some: { userId } } }] },
-      select: { id: true, name: true, kind: true, ownerId: true },
+      select: { id: true, name: true, kind: true },
     });
     const partieIds = myParties.map((p) => p.id);
     const partieById = new Map(myParties.map((p) => [p.id, p]));
 
-    const [declarations, seances, polls, membershipCounts] = await Promise.all([
+    const [declarations, seances, polls, membershipCounts, roles] = await Promise.all([
       this.prisma.availabilityDeclaration.findMany({
         where: { userId, expiresAt: { gt: new Date() } },
       }),
@@ -832,6 +836,8 @@ export class AvailabilityService {
             where: { partieId: { in: partieIds } },
             _count: true,
           }),
+      // Rôle de l'utilisateur sur chacune de ses parties, en UNE requête (jamais une par partie).
+      this.permissions.rolesOf(userId, partieIds),
     ]);
 
     // Le MJ n'a jamais de ligne `Membership` : une partie absente de l'agrégat a 0 membre, donc
@@ -850,7 +856,7 @@ export class AvailabilityService {
       'mes-disponibilites': declarations
         .filter((d) => d.kind === 'AVAILABLE' && this.declarationOverlapsRange(d, fromMs, toMs))
         .map((d) => this.toAvailabilityDeclarationDto(d)),
-      'mes-seances': this.buildMySeancesLayer(seances, partieById, userId, fromMs, toMs),
+      'mes-seances': this.buildMySeancesLayer(seances, partieById, roles, userId, fromMs, toMs),
       'votes-en-cours': this.buildOpenPollsLayer(
         polls,
         partieById,
@@ -951,7 +957,8 @@ export class AvailabilityService {
       // Story 36.16 — même raisonnement : déjà chargé par le findMany, aucun appel de plus.
       compteRendu?: string | null;
     }>,
-    partieById: Map<string, { id: string; name: string; kind: string; ownerId: string | null }>,
+    partieById: Map<string, { id: string; name: string; kind: string }>,
+    roles: ReadonlyMap<string, PartieRole>,
     userId: string,
     fromMs: number,
     toMs: number,
@@ -965,7 +972,7 @@ export class AvailabilityService {
       if (!partie) continue;
       if (
         partie.kind === 'CAMPAGNE_EPISODIQUE' &&
-        partie.ownerId !== userId &&
+        roles.get(partie.id) !== 'mj' &&
         !s.inscriptions.some((i) => i.userId === userId)
       ) {
         continue;

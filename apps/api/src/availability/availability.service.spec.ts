@@ -4,9 +4,10 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import type { DaySlot } from '@master-jdr/shared';
+import type { DaySlot, PartieRole } from '@master-jdr/shared';
 import { AvailabilityService, DeclarationLike } from './availability.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { PermissionService } from '../permissions/permission.service';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { anyOf, arrayLike, objectLike } from '../common/test-utils/jest-typed';
 
@@ -25,6 +26,22 @@ type MockRealtimeEvents = RealtimeEventsService & { emit: jest.Mock };
 
 function makeMockRealtimeEvents(): MockRealtimeEvents {
   return { emit: jest.fn() } as unknown as MockRealtimeEvents;
+}
+
+/**
+ * Mock du service de permission (Story 37.7) : seul `rolesOf` est lu par `AvailabilityService`
+ * (rôle de l'utilisateur sur chacune de ses parties). Par défaut aucun rôle ; les tests de
+ * `getMyCalendar` le configurent explicitement.
+ */
+type MockPermissions = { rolesOf: jest.Mock };
+
+function makeMockPermissions(roles: Record<string, PartieRole> = {}): MockPermissions {
+  return { rolesOf: jest.fn(() => Promise.resolve(new Map(Object.entries(roles)))) };
+}
+
+/** Le même mock, présenté au constructeur d'`AvailabilityService` sous son type de production. */
+function asPermissionService(mock: MockPermissions = makeMockPermissions()): PermissionService {
+  return mock as unknown as PermissionService;
 }
 
 // Dates de référence (UTC) :
@@ -169,6 +186,7 @@ describe('AvailabilityService.splitOccurrence', () => {
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
+      asPermissionService(),
     );
     mockCreate = mocks.mockCreate;
     mockUpdate = mocks.mockUpdate;
@@ -335,6 +353,7 @@ describe('AvailabilityService.findConflictsForCreate', () => {
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
+      asPermissionService(),
     );
     mockFindMany = mocks.mockFindMany;
   });
@@ -554,6 +573,7 @@ describe('AvailabilityService.create — conflict detection', () => {
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
+      asPermissionService(),
     );
     mockCreate = mocks.mockCreate;
     mockUpdateMany = mocks.mockUpdateMany;
@@ -672,6 +692,7 @@ describe('AvailabilityService.createBatch', () => {
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
+      asPermissionService(),
     );
     mockCreate = mocks.mockCreate;
     mockFindMany = mocks.mockFindMany;
@@ -1103,6 +1124,7 @@ describe('AvailabilityService — émission temps réel', () => {
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
       mockRealtimeEvents,
+      asPermissionService(),
     );
     mockMembershipFindMany = mocks.mockMembershipFindMany;
     mockPartieFindMany = mocks.mockPartieFindMany;
@@ -1198,7 +1220,11 @@ describe('AvailabilityService.computeSlotStatus', () => {
   let service: AvailabilityService;
 
   beforeEach(() => {
-    service = new AvailabilityService({} as PrismaService, {} as RealtimeEventsService);
+    service = new AvailabilityService(
+      {} as PrismaService,
+      {} as RealtimeEventsService,
+      {} as PermissionService,
+    );
   });
 
   it('déclaration UNAVAILABLE sur le bon créneau → UNAVAILABLE', () => {
@@ -1333,6 +1359,7 @@ describe('AvailabilityService.getActiveDeclarationsWithSeances (AD-9, Story 30.5
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
+      asPermissionService(),
     );
   });
 
@@ -1616,12 +1643,13 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
   let mockSessionPollFindMany: jest.Mock;
   let mockMembershipGroupBy: jest.Mock;
   let mockDeclFindMany: jest.Mock;
+  let permissions: MockPermissions;
 
+  // Story 37.7 : le rôle de l'utilisateur sur ses parties vient de `PermissionService.rolesOf`.
   const myPartie = {
     id: 'A',
     name: 'Ma Partie',
     kind: 'ONE_SHOT',
-    ownerId: 'me',
   };
 
   beforeEach(() => {
@@ -1633,9 +1661,11 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     mockDeclFindMany = mocks.mockFindMany;
     mockDeclFindMany.mockResolvedValue([]);
     mockPartieFindMany.mockResolvedValue([myPartie]);
+    permissions = makeMockPermissions({ A: 'mj', B: 'mj' });
     service = new AvailabilityService(
       mocks.mockPrisma as unknown as PrismaService,
       makeMockRealtimeEvents(),
+      asPermissionService(permissions),
     );
   });
 
@@ -1700,6 +1730,46 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
         compteRenduManquant: true,
       },
     ]);
+  });
+
+  describe('mes-seances — partie épisodique selon mon rôle (Story 37.7)', () => {
+    const episodique = { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE' };
+    const seance = (inscriptions: { userId: string }[]) => ({
+      id: 'seance1',
+      eventId: 'scenario1',
+      startDate: new Date('2026-10-10T00:00:00Z'),
+      startSlot: 'MORNING',
+      inscriptions,
+      inscriptionMin: null,
+      inscriptionMax: null,
+      event: { partieId: 'A', title: 'Le Donjon Oublié' },
+    });
+
+    it('MJ : la séance est la mienne même sans inscription', async () => {
+      mockPartieFindMany.mockResolvedValue([episodique]);
+      mockSeanceFindMany.mockResolvedValue([seance([])]);
+
+      const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+      expect(result['mes-seances']).toHaveLength(1);
+    });
+
+    it('membre non inscrit : la séance n’est pas la mienne', async () => {
+      permissions.rolesOf.mockResolvedValue(new Map([['A', 'player']]));
+      mockPartieFindMany.mockResolvedValue([episodique]);
+      mockSeanceFindMany.mockResolvedValue([seance([{ userId: 'quelquun-d-autre' }])]);
+
+      const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+      expect(result['mes-seances']).toEqual([]);
+    });
+
+    it('membre inscrit : la séance est la mienne', async () => {
+      permissions.rolesOf.mockResolvedValue(new Map([['A', 'player']]));
+      mockPartieFindMany.mockResolvedValue([episodique]);
+      mockSeanceFindMany.mockResolvedValue([seance([{ userId: 'me' }])]);
+
+      const result = await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+      expect(result['mes-seances']).toHaveLength(1);
+    });
   });
 
   // ─── Informations pratiques (Story 36.5, D-15 amendée) ────────────────────
@@ -2176,7 +2246,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
 
   it('couche inscriptions-ouvertes : séance CAMPAGNE_EPISODIQUE sans date validée et à capacité définie, non filtrée par plage', async () => {
     mockPartieFindMany.mockResolvedValue([
-      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', ownerId: 'me' },
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE' },
     ]);
     mockSeanceFindMany.mockResolvedValue([
       {
@@ -2210,7 +2280,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
 
   it('couche inscriptions-ouvertes : une séance dont la date est déjà validée est exclue (roster figé)', async () => {
     mockPartieFindMany.mockResolvedValue([
-      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', ownerId: 'me' },
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE' },
     ]);
     mockSeanceFindMany.mockResolvedValue([
       {
@@ -2231,7 +2301,7 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
 
   it('couche inscriptions-ouvertes : une séance sans capacité définie (inscriptionMax null) est exclue', async () => {
     mockPartieFindMany.mockResolvedValue([
-      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE', ownerId: 'me' },
+      { id: 'A', name: 'Ma Partie', kind: 'CAMPAGNE_EPISODIQUE' },
     ]);
     mockSeanceFindMany.mockResolvedValue([
       {
@@ -2287,10 +2357,13 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
   it('aucune itération par partie : une seule requête pour chaque table, quel que soit le nombre de mes parties (AC1)', async () => {
     mockPartieFindMany.mockResolvedValue([
       myPartie,
-      { id: 'B', name: 'Autre partie', kind: 'ONE_SHOT', ownerId: 'me' },
+      { id: 'B', name: 'Autre partie', kind: 'ONE_SHOT' },
     ]);
 
     await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+    // Les rôles de TOUTES mes parties sont lus en une seule fois (Story 37.7).
+    expect(permissions.rolesOf).toHaveBeenCalledTimes(1);
+    expect(permissions.rolesOf).toHaveBeenCalledWith('me', ['A', 'B']);
     expect(mockSeanceFindMany).toHaveBeenCalledTimes(1);
     expect(mockSessionPollFindMany).toHaveBeenCalledTimes(1);
     // Story 36.6, AC12 — l'effectif de la troupe est lui aussi obtenu par UNE seule requête

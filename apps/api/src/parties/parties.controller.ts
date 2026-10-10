@@ -35,7 +35,10 @@ export class PartiesController {
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query('role') role?: string) {
-    return this.parties.listForUser(user.id, role === 'player' ? 'player' : 'mj');
+    // Sans `role` : toutes les parties de l'utilisateur, chacune avec son rôle (Story 37.7).
+    // `?role=player` et toute autre valeur gardent leur sens historique (`mj` par défaut).
+    const filter = role === undefined ? undefined : role === 'player' ? 'player' : 'mj';
+    return this.parties.listForUser(user.id, filter);
   }
 
   @Get(':id')
@@ -117,8 +120,9 @@ export class PartiesController {
     return this.parties.setVisibilityLocks(id, user.id, dto);
   }
 
-  /** Lecture symétrique au PUT ci-dessus (Story 31.7) — même garde MJ-only (`getOwned()`) : un
-   *  non-MJ atteignant l'URL directement se voit refuser l'accès (403/404), jamais une liste vide. */
+  /** Lecture symétrique au PUT ci-dessus (Story 31.7) — même garde MJ-only
+   *  (`PARTIE_VISIBILITY_LOCKS_READ`) : un non-MJ atteignant l'URL directement se voit refuser
+   *  l'accès (403/404), jamais une liste vide. */
   @Get(':id/visibility-locks')
   getVisibilityLocks(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.parties.getVisibilityLocks(id, user.id);

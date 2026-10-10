@@ -3,45 +3,46 @@ import { Test } from '@nestjs/testing';
 import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
 import { RealtimeController } from './realtime.controller';
-import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
+import { testGrant } from '../common/test-utils/grant';
 import { RealtimeEventsService, partieTopic, userTopic } from './realtime-events.service';
 
-function makeParties() {
-  return { getViewable: jest.fn() };
+function makePermissions() {
+  return { assert: jest.fn() };
 }
 
 describe('RealtimeController', () => {
   let controller: RealtimeController;
-  let parties: ReturnType<typeof makeParties>;
+  let permissions: ReturnType<typeof makePermissions>;
   let realtimeEvents: RealtimeEventsService;
 
   beforeEach(async () => {
-    parties = makeParties();
+    permissions = makePermissions();
     realtimeEvents = new RealtimeEventsService();
     const module = await Test.createTestingModule({
       controllers: [RealtimeController],
       providers: [
-        { provide: PartiesService, useValue: parties },
+        { provide: PermissionService, useValue: permissions },
         { provide: RealtimeEventsService, useValue: realtimeEvents },
       ],
     }).compile();
     controller = module.get(RealtimeController);
   });
 
-  it('membre/MJ de la Partie → getViewable appelé, un emit() sur le bon topic remonte un MessageEvent (AC1)', async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+  it('membre/MJ de la Partie → PARTIE_READ vérifié, un emit() sur le bon topic remonte un MessageEvent (AC1)', async () => {
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
 
     const stream = await controller.partieEvents('p1', { id: 'u1' } as any);
     const received = firstValueFrom(stream.pipe(take(1)));
 
-    expect(parties.getViewable).toHaveBeenCalledWith('p1', 'u1');
+    expect(permissions.assert).toHaveBeenCalledWith('u1', 'PARTIE_READ', { partieId: 'p1' });
     realtimeEvents.emit(partieTopic('p1'));
 
     await expect(received).resolves.toEqual({ data: {} });
   });
 
-  it('non-membre → ForbiddenException propagée par getViewable, subscribe jamais atteint (AC1)', async () => {
-    parties.getViewable.mockRejectedValue(new ForbiddenException());
+  it('non-membre → ForbiddenException propagée par permissions.assert, subscribe jamais atteint (AC1)', async () => {
+    permissions.assert.mockRejectedValue(new ForbiddenException());
     const subscribeSpy = jest.spyOn(realtimeEvents, 'subscribe');
 
     await expect(controller.partieEvents('p1', { id: 'stranger' } as any)).rejects.toThrow(
@@ -51,7 +52,7 @@ describe('RealtimeController', () => {
   });
 
   it("emit() sur un autre topic ne fait remonter aucun MessageEvent sur l'Observable du client (AC1, filtrage traversé sans casse)", async () => {
-    parties.getViewable.mockResolvedValue({ id: 'p1', ownerId: 'mj1' });
+    permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
 
     const stream = await controller.partieEvents('p1', { id: 'u1' } as any);
     const receivedFromOther: unknown[] = [];

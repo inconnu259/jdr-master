@@ -10,6 +10,7 @@ import type { InviteLink, Prisma } from '@prisma/client';
 import type { InviteLinkPreviewDto } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
+import { PermissionService } from '../permissions/permission.service';
 import { RealtimeEventsService, partieTopic, userTopic } from '../realtime/realtime-events.service';
 import { CreateInviteLinkDto } from './dto/create-invite-link.dto';
 
@@ -19,13 +20,16 @@ const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000; // +7 jours
 export class InviteLinksService {
   constructor(
     private readonly prisma: PrismaService,
+    // Signaux de la partie (`notifyPartieSignalsChanged`) : écriture de `parties/`,
+    // aucune décision de droit.
     private readonly parties: PartiesService,
+    private readonly permissions: PermissionService,
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
   /** Le MJ génère un lien d'invitation pour SA partie. */
   async create(partieId: string, mjId: string, dto: CreateInviteLinkDto) {
-    await this.parties.getOwned(partieId, mjId);
+    await this.permissions.assert(mjId, 'INVITE_LINK_CREATE', { partieId });
     const expiresAt = dto.expiresAt
       ? new Date(dto.expiresAt)
       : new Date(Date.now() + DEFAULT_TTL_MS);
@@ -46,7 +50,7 @@ export class InviteLinksService {
 
   /** Liens d'une partie (vue MJ). */
   async listForPartie(partieId: string, mjId: string) {
-    await this.parties.getOwned(partieId, mjId);
+    await this.permissions.assert(mjId, 'INVITE_LINK_READ', { partieId });
     return this.prisma.inviteLink.findMany({
       where: { partieId },
       orderBy: { createdAt: 'desc' },
@@ -55,11 +59,8 @@ export class InviteLinksService {
 
   /** Le MJ révoque un lien. */
   async revoke(linkId: string, userId: string) {
-    const link = await this.prisma.inviteLink.findUnique({
-      where: { id: linkId },
-    });
-    if (!link) throw new NotFoundException('Lien introuvable');
-    await this.parties.getOwned(link.partieId, userId); // MJ uniquement
+    // La partie est résolue depuis le lien (404 si inconnu, 403 si étranger) — MJ uniquement.
+    await this.permissions.assert(userId, 'INVITE_LINK_REVOKE', { inviteLinkId: linkId });
     await this.prisma.inviteLink.update({
       where: { id: linkId },
       data: { revoked: true },

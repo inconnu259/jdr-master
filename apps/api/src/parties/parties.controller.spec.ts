@@ -72,8 +72,18 @@ describe('PartiesController', () => {
     expect(parties.create).toHaveBeenCalledWith('mj1', dto);
   });
 
-  it("list() route user/role vers PartiesService.listForUser, 'mj' par défaut", async () => {
+  it('list() sans role route vers PartiesService.listForUser sans filtre : toutes les parties avec leur rôle (Story 37.7)', async () => {
     await controller.list(user, undefined);
+    expect(parties.listForUser).toHaveBeenCalledWith('mj1', undefined);
+  });
+
+  it("list() role: 'mj' route vers PartiesService.listForUser avec le filtre mj", async () => {
+    await controller.list(user, 'mj');
+    expect(parties.listForUser).toHaveBeenCalledWith('mj1', 'mj');
+  });
+
+  it("list() toute autre valeur de role garde son sens historique ('mj')", async () => {
+    await controller.list(user, 'n-importe-quoi');
     expect(parties.listForUser).toHaveBeenCalledWith('mj1', 'mj');
   });
 

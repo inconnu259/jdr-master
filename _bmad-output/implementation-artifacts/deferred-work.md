@@ -260,3 +260,10 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-37-6-faire-decider-les-droits-sur-une-partie-et-ses-evenements-par-un-service-unique.md`
   summary: Enforce scenario anti-spoil server-side — members can list BROUILLON scenarios (`findAllForPartie`), read their documents, and `participate()` in a BROUILLON/PASSE scenario through the API; today hiding is front-end only.
   evidence: Found during 37.6 investigation (scenarios.service.ts `findAllForPartie` ~L253, `participate` ~L515, `listDocuments`); out of the porte's constant-behaviour scope. Security-relevant (spoilers leak to players via direct API calls).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-7-brancher-les-capacites-jdr-sur-le-service-de-permission-et-interdire-les-lectures-directes.md`
+  summary: Make the no-direct-owner-read sweep line-granular (pin allowed owner-read lines/counts per exception file, or move projections/writes behind helpers) instead of whole-file exceptions.
+  evidence: A new owner-based right check added inside an excepted file (parties.service.ts, character.service.ts, availability.service.ts) passes the sweep silently.
+- source_spec: `_bmad-output/implementation-artifacts/spec-37-7-brancher-les-capacites-jdr-sur-le-service-de-permission-et-interdire-les-lectures-directes.md`
+  summary: Add capability guards for the scenario features (`scenarioLifecycle`, `linearCampaign`) in the permission layer, and decide the Draconis demo partie's scenario.
+  evidence: Story 37.7 limited its capability table to characters/xp/hommeDragon/groupRoles/announcements writes; scenarios and linear-campaign rules still check kind/status locally.

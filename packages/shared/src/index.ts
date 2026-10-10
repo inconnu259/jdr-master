@@ -237,9 +237,6 @@ export type PartieRole = 'mj' | 'player' | 'admin' | 'member';
 export type PermissionAction =
   // Partie
   | 'PARTIE_READ'
-  /** Garde générique « propriétaire seul » de `PartiesService.getOwned()`, conservé comme délégué
-   *  pour les modules pas encore migrés (Story 37.7). */
-  | 'PARTIE_MANAGE'
   | 'PARTIE_UPDATE'
   | 'PARTIE_CONVERT_KIND'
   | 'PARTIE_CLOSE'
@@ -252,6 +249,9 @@ export type PermissionAction =
   | 'PARTIE_VISIBILITY_LOCKS_UPDATE'
   | 'PARTIE_COVER_READ'
   | 'PARTIE_COVER_UPDATE'
+  // Fiches de référence du système (Story 37.7) : lecture par tout participant / par le MJ seul
+  | 'PARTIE_REFERENCE_ASSET_READ'
+  | 'PARTIE_REFERENCE_ASSET_MJ_READ'
   // Scénario (extension JDR de l'événement)
   | 'SCENARIO_CREATE'
   | 'SCENARIO_UPDATE'
@@ -276,7 +276,41 @@ export type PermissionAction =
   | 'POLL_VOTE'
   | 'POLL_CHOOSE'
   | 'POLL_OPTIONS_SET'
-  | 'POLL_CLOSE';
+  | 'POLL_CLOSE'
+  // Capacités JDR (Story 37.7, couche 3) : les actions d'ÉCRITURE sont aussi conditionnées à une
+  // capacité du système de la partie par la table action → capacité de `permissions/`
+  // (`characters`, `xp`, `hommeDragon`, `groupRoles`, `announcements`).
+  // Personnage
+  | 'CHARACTER_CREATE'
+  | 'CHARACTER_LIST'
+  | 'CHARACTER_READ'
+  | 'CHARACTER_PORTRAIT_READ'
+  | 'CHARACTER_NOTES_READ'
+  | 'CHARACTER_XP_SET'
+  | 'CHARACTER_SHEET_FIELD_SET'
+  | 'CHARACTER_HISTORY_READ'
+  // Distribution d'XP
+  | 'XP_DISTRIBUTION_CREATE'
+  | 'XP_DISTRIBUTION_READ'
+  // Homme Dragon
+  | 'HOMME_DRAGON_MANAGE'
+  | 'HOMME_DRAGON_READ'
+  | 'HOMME_DRAGON_UNLINK'
+  // Rôles de groupe
+  | 'GROUP_ROLE_ASSIGN'
+  | 'GROUP_ROLE_UNASSIGN'
+  | 'GROUP_ROLE_READ'
+  // Annonces
+  | 'ANNOUNCEMENT_CREATE'
+  | 'ANNOUNCEMENT_READ'
+  | 'ANNOUNCEMENT_MARK_READ'
+  // Invitations et liens d'invitation (couche 2, aucune capacité requise)
+  | 'INVITATION_CREATE'
+  | 'INVITATION_READ'
+  | 'INVITATION_REVOKE'
+  | 'INVITE_LINK_CREATE'
+  | 'INVITE_LINK_READ'
+  | 'INVITE_LINK_REVOKE';
 
 /** Statut d'une partie — dérivé côté serveur à partir de `Partie.closedAt` et de la présence de
  *  scénarios (AD-8), jamais recalculé côté client (Story 29.6). */
