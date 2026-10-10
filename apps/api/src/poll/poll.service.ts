@@ -185,8 +185,8 @@ export class PollService {
     // Story 37.8 (AD-15) : le vote clos, la plage de la séance rattachée et la prochaine séance de
     // la partie sont écrits ensemble ou pas du tout. Ce service n'écrit QUE le vote : la date de
     // séance et `Partie.nextSessionDate/Slot` (recalculé comme la plus proche séance à venir, une
-    // date passée n'est pas retenue ; `reminderSentAt` remis à zéro seulement si la date ou le
-    // créneau change) sont l'affaire du port, dans cette même transaction.
+    // date passée n'est pas retenue) sont l'affaire du port, dans cette même transaction. Le même
+    // port ré-arme le rappel de la veille de la séance (`Seance.reminderSentAt`, Story 37.9).
     await this.prisma.$transaction(async (tx) => {
       await tx.sessionPoll.update({
         where: { id: pollId },

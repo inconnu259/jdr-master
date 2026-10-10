@@ -19,9 +19,9 @@ import { PrismaService } from '../../src/prisma/prisma.service';
  * Banc d'essai commun des tests de caractérisation (Story 37.1).
  *
  * Point d'entrée unique, volontairement indépendant des formes Prisma que l'épic 37 remanie
- * (`mjId` → `ownerId`, `Scenario`, `Seance.dateValidee`, `Partie.reminderSentAt`) : les données sont créées
- * par les routes HTTP, seules les tables `User` et `Membership` (non remaniées) sont écrites en
- * direct, et le nettoyage supprime par identifiant ce que le banc a lui-même créé.
+ * (`mjId` → `ownerId`, `Scenario`, `Seance.dateValidee`, `Partie.reminderSentAt` devenu
+ * `Seance.reminderSentAt`) : les données sont créées par les routes HTTP, seules les tables `User`
+ * et `Membership` (non remaniées) sont écrites en direct, et le nettoyage supprime par identifiant ce que le banc a lui-même créé.
  *
  * La base locale est la base de dev : chaque exécution tire un suffixe aléatoire et efface tout
  * ce qu'elle a créé dans `close()`.

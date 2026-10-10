@@ -47,7 +47,7 @@ const EXCEPTIONS: Readonly<Record<string, string>> = {
   'characters/character.service.ts':
     "Projection d'étiquette « l'auteur de la fiche est le MJ » (`ownerIsMj`) et transmission à `notifyPartieSignalsChanged` ; le rôle de l'appelant (`viewerIsMj`) vient de PermissionService (grant.role, roleOf, rolesOf).",
   'notifications/notifications.service.ts':
-    'Destinataires du rappel de la veille (propriétaire + membres de la partie) : sélection de destinataires, pas un droit. Réécrit par rappel de séance en 37.9.',
+    'Destinataires du rappel de la veille de chaque séance (propriétaire + membres de la partie) : sélection de destinataires, pas un droit.',
 };
 
 /** Fichiers sources non-spec de `dir`, chemins relatifs à `SRC_ROOT` (séparateur `/`). */

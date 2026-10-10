@@ -72,7 +72,6 @@ model Partie {
 
   nextSessionDate DateTime? // Date confirmée de la prochaine séance (mise à jour par Epic 3)
   nextSessionSlot DaySlot? // Créneau confirmé
-  reminderSentAt  DateTime? // null = rappel pas encore envoyé pour le créneau courant (Epic 5)
   closedAt        DateTime? // AD-8 — seul état persisté ; "en cours"/"pas encore commencée" dérivés à la lecture (Story 29.6)
   coverImageUrl   String? // Story 29.12, AD-19 — null = bannière générée. Seule donnée persistée (jamais dimensions/checksum/horodatage, qui seraient du dérivé)
 
@@ -587,6 +586,9 @@ model Seance {
   startSlot      DaySlot?
   endDate        DateTime?
   endSlot        DaySlot?
+  /// Rappel de la veille (Story 37.9, AD-12) : null = pas encore envoyé pour la date courante de
+  /// cette séance. Remis à null à chaque écriture ou effacement de la plage (`EventsService`).
+  reminderSentAt DateTime?
   compteRendu    String?
   /// Informations pratiques (Story 36.5, dérogation D-15 amendée le 2026-08-19).
   /// heureRdv est une ÉTIQUETTE, jamais un instant : String "HH:MM" que rien ne parse,

@@ -7,7 +7,7 @@ import { EmailService } from '../email/email.service';
 import { NotificationsService } from './notifications.service';
 
 // Test d'intégration réel contre Postgres : notifications.service.spec.ts mocke entièrement
-// `prisma.partie.findMany`, donc la forme réelle du `where` (fenêtre 24h + `reminderSentAt: null`)
+// `prisma.seance.findMany`, donc la forme réelle du `where` (fenêtre 24h + `reminderSentAt: null`)
 // et le snapshot des memberships au moment du job (AC2, AC5) n'étaient vérifiés que par lecture
 // du code. Ce test exécute la vraie requête Prisma contre la DB du docker-compose ; seul
 // EmailService est remplacé par un espion pour éviter un envoi réseau réel.
@@ -54,7 +54,7 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
     await app.close();
   });
 
-  it('AC2 + AC5 : ne rappelle que les parties dues, avec les membres réels au moment du job', async () => {
+  it('AC2 + AC5 : ne rappelle que les séances dues, avec les membres réels au moment du job', async () => {
     const mj = await prisma.user.create({
       data: {
         email: `mj-${suffix}@test.local`,
@@ -77,37 +77,44 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
     const in12h = new Date(now.getTime() + 12 * 60 * 60 * 1000);
     const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
-    const duePartie = await prisma.partie.create({
-      data: {
-        name: `Due-${suffix}`,
-        kind: 'ONE_SHOT',
-        gameSystemId: 'ryuutama',
-        ownerId: mj.id,
-        nextSessionDate: in12h,
-        nextSessionSlot: 'EVENING',
-      },
-    });
-    const notYetDuePartie = await prisma.partie.create({
-      data: {
-        name: `NotYet-${suffix}`,
-        kind: 'ONE_SHOT',
-        gameSystemId: 'ryuutama',
-        ownerId: mj.id,
-        nextSessionDate: in48h,
-      },
-    });
-    const noDatePartie = await prisma.partie.create({
-      data: {
-        name: `NoDate-${suffix}`,
-        kind: 'ONE_SHOT',
-        gameSystemId: 'ryuutama',
-        ownerId: mj.id,
-      },
-    });
-    partieIds.push(duePartie.id, notYetDuePartie.id, noDatePartie.id);
+    // Une partie, un événement et une séance datée (la séance porte la date et le rappel).
+    const partieAvecSeance = async (
+      name: string,
+      startDate: Date | null,
+      startSlot?: 'EVENING',
+    ) => {
+      const partie = await prisma.partie.create({
+        data: {
+          name,
+          kind: 'ONE_SHOT',
+          gameSystemId: 'ryuutama',
+          ownerId: mj.id,
+          nextSessionDate: startDate,
+          nextSessionSlot: startSlot ?? null,
+        },
+      });
+      partieIds.push(partie.id);
+      const event = await prisma.event.create({
+        data: { partieId: partie.id, title: name, ownerId: mj.id },
+      });
+      const seance = await prisma.seance.create({
+        data: {
+          eventId: event.id,
+          startDate,
+          startSlot: startSlot ?? null,
+          endDate: startDate,
+          endSlot: startSlot ?? null,
+        },
+      });
+      return { partie, seance };
+    };
+
+    const due = await partieAvecSeance(`Due-${suffix}`, in12h, 'EVENING');
+    const notYetDue = await partieAvecSeance(`NotYet-${suffix}`, in48h);
+    const noDate = await partieAvecSeance(`NoDate-${suffix}`, null);
 
     await prisma.membership.create({
-      data: { userId: player.id, partieId: duePartie.id },
+      data: { userId: player.id, partieId: due.partie.id },
     });
 
     await service.sendDueReminders();
@@ -116,9 +123,9 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
     expect(recipients).toEqual([mj.email, player.email].sort());
 
     const [refreshedDue, refreshedNotYet, refreshedNoDate] = await Promise.all([
-      prisma.partie.findUniqueOrThrow({ where: { id: duePartie.id } }),
-      prisma.partie.findUniqueOrThrow({ where: { id: notYetDuePartie.id } }),
-      prisma.partie.findUniqueOrThrow({ where: { id: noDatePartie.id } }),
+      prisma.seance.findUniqueOrThrow({ where: { id: due.seance.id } }),
+      prisma.seance.findUniqueOrThrow({ where: { id: notYetDue.seance.id } }),
+      prisma.seance.findUniqueOrThrow({ where: { id: noDate.seance.id } }),
     ]);
     expect(refreshedDue.reminderSentAt).not.toBeNull();
     expect(refreshedNotYet.reminderSentAt).toBeNull();

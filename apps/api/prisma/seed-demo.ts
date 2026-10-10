@@ -114,7 +114,7 @@ function computeDerived(sheetData: RyuutamaSheetData) {
  * bulletins** (réponses partielles, un membre qui n'a pas voté) et un vote OUVERT dont
  * l'expiration est passée, scénarios aux quatre statuts (tous avec au moins une séance), séances
  * avec infos pratiques (heure/lieu/note), prochaine séance matérialisée sur la Partie
- * (`nextSessionDate`/`nextSessionSlot`/`reminderSentAt`), inscriptions, journal de personnage
+ * (`nextSessionDate`/`nextSessionSlot`), inscriptions, journal de personnage
  * (associations manuelle et automatique), distributions d'XP cohérentes avec `Character.xp`, un
  * personnage monté de niveau avec ses instantanés et un autre en attente de montée, fiches de type
  * Magie valides (saison + deux sorts rituels), documents de scénario et de bibliothèque, annonces
@@ -1070,11 +1070,11 @@ async function main() {
       // Prochaine séance matérialisée, comme le fait `EventsService.recalculateNextSession()` :
       // la date la plus proche dans le futur parmi les séances (début de leur plage, Story 37.4),
       // ici « Le Mystère de l'Auberge » (J+10) — « Le Secret du Phare » (J+12) vient après. Ces
-      // plages n'ont pas de créneau → `nextSessionSlot` reste null. `reminderSentAt` reste
-      // null : le rappel n'est dû que dans les 24 h précédant la séance (`NotificationsService`).
+      // plages n'ont pas de créneau → `nextSessionSlot` reste null. Le rappel de la veille est porté par
+      // chaque séance (`Seance.reminderSentAt`, null ici) : il n'est dû que dans les 24 h
+      // précédant la séance (`NotificationsService`).
       nextSessionDate: at(10),
       nextSessionSlot: null,
-      reminderSentAt: null,
     },
   });
   await prisma.membership.createMany({
@@ -1388,10 +1388,11 @@ async function main() {
   // ─── Partie 6 : ONE_SHOT dont la séance tombe dans moins de 24 h (MJ : Diane) ──────
   // Sert à tester le rappel e-mail (`NotificationsService`, cron horaire) : le premier passage après
   // ce seed envoie « session-reminder » au MJ et aux membres (visible dans Mailpit,
-  // http://localhost:8025) puis pose `reminderSentAt`. La date est MINUIT UTC de demain (`day(1)`) :
-  // quelle que soit l'heure du seed, elle est strictement dans les 24 h à venir (`now ≤ date ≤
-  // now + 24 h`). `nextSessionDate`/`Slot` = date et créneau du vote clôturé, comme le recalcule
-  // `EventsService.recalculateNextSession()` ; `reminderSentAt: null` = rappel pas encore envoyé.
+  // http://localhost:8025) puis pose `reminderSentAt` sur la séance. La date est MINUIT UTC de
+  // demain (`day(1)`) : quelle que soit l'heure du seed, elle est strictement dans les 24 h à venir
+  // (`now ≤ date ≤ now + 24 h`). `nextSessionDate`/`Slot` = date et créneau du vote clôturé, comme
+  // le recalcule `EventsService.recalculateNextSession()` ; `Seance.reminderSentAt` reste null
+  // (Story 37.9) = rappel pas encore envoyé.
   console.log('→ Partie ONE_SHOT (séance dans moins de 24 h)...');
   const maree = await prisma.partie.create({
     data: {
@@ -1403,7 +1404,6 @@ async function main() {
       createdAt: at(-12),
       nextSessionDate: day(1),
       nextSessionSlot: 'EVENING',
-      reminderSentAt: null,
     },
   });
   await prisma.membership.createMany({
@@ -1523,7 +1523,6 @@ async function main() {
       createdAt: at(-20),
       nextSessionDate: day(21),
       nextSessionSlot: 'EVENING',
-      reminderSentAt: null,
     },
   });
   await prisma.membership.createMany({

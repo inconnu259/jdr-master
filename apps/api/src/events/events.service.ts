@@ -261,7 +261,14 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     await this.assertSeanceInGrant(grant, seance.id);
     await this.prisma.seance.update({
       where: { id: seance.id },
-      data: { pollId: null, startDate: null, startSlot: null, endDate: null, endSlot: null },
+      data: {
+        pollId: null,
+        startDate: null,
+        startSlot: null,
+        endDate: null,
+        endSlot: null,
+        reminderSentAt: null,
+      },
     });
     if (seance.pollId) {
       await this.prisma.sessionPoll.delete({ where: { id: seance.pollId } });
@@ -292,7 +299,14 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     if (!poll) throw new NotFoundException('Poll introuvable');
     await tx.seance.updateMany({
       where: { pollId },
-      data: { startDate: date, startSlot: slot, endDate: date, endSlot: slot },
+      // Nouvelle date → le rappel de la veille de cette séance est ré-armé (Story 37.9).
+      data: {
+        startDate: date,
+        startSlot: slot,
+        endDate: date,
+        endSlot: slot,
+        reminderSentAt: null,
+      },
     });
     await this.recalculateNextSessionInTx(tx, poll.partieId);
   }
@@ -401,8 +415,8 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
    * Story 8.8 (Décision 2) : un seul vote actif par Séance — Partie.nextSessionDate/nextSessionSlot
    * reflètent la date la plus proche dans le futur parmi TOUTES les séances de la Partie
    * (début de leur plage, Story 37.4). Appelé après tout événement pouvant faire changer cette date :
-   * choix d'un vote (`chooseDate`), réinitialisation ou suppression d'une séance. Remet
-   * `reminderSentAt` à null seulement si la date/le créneau change réellement.
+   * choix d'un vote (`chooseDate`), réinitialisation ou suppression d'une séance. Ne touche pas
+   * aux rappels : ils sont portés par chaque séance (Story 37.9).
    */
   async recalculateNextSession(partieId: string): Promise<void> {
     await this.recomputeNextSession(this.prisma, partieId);
@@ -449,19 +463,11 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
         .filter((c): c is Candidate => c !== null && c.date.getTime() >= now)
         .sort((a, b) => a.date.getTime() - b.date.getTime())[0] ?? null;
 
-    const partie = await tx.partie.findUniqueOrThrow({
-      where: { id: partieId },
-    });
-    const unchanged =
-      (partie.nextSessionDate?.getTime() ?? null) === (nearest?.date.getTime() ?? null) &&
-      partie.nextSessionSlot === (nearest?.slot ?? null);
-
     await tx.partie.update({
       where: { id: partieId },
       data: {
         nextSessionDate: nearest?.date ?? null,
         nextSessionSlot: nearest?.slot ?? null,
-        ...(unchanged ? {} : { reminderSentAt: null }),
       },
     });
   }

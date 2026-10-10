@@ -36,11 +36,6 @@ function makePrisma() {
     // transaction fournie.
     sessionPoll: { findUnique: jest.fn().mockResolvedValue({ partieId: 'p1' }) },
     partie: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({
-        id: 'p1',
-        nextSessionDate: null,
-        nextSessionSlot: null,
-      }),
       update: jest.fn(),
     },
     inscription: {
@@ -64,11 +59,6 @@ function makePrisma() {
     sessionPoll: { delete: jest.fn() },
     inscription: { deleteMany: jest.fn() },
     partie: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({
-        id: 'p1',
-        nextSessionDate: null,
-        nextSessionSlot: null,
-      }),
       update: jest.fn(),
       findMany: jest.fn().mockResolvedValue([]),
     },
@@ -239,7 +229,14 @@ describe('EventsService (Story 37.3)', () => {
 
       expect(prisma.tx.seance.updateMany).toHaveBeenCalledWith({
         where: { pollId: 'poll1' },
-        data: { startDate: d, startSlot: 'EVENING', endDate: d, endSlot: 'EVENING' },
+        data: {
+          startDate: d,
+          startSlot: 'EVENING',
+          endDate: d,
+          endSlot: 'EVENING',
+          // Nouvelle date → rappel de la veille ré-armé (Story 37.9).
+          reminderSentAt: null,
+        },
       });
       expect(realtime.emit).not.toHaveBeenCalled();
     });
@@ -265,7 +262,7 @@ describe('EventsService (Story 37.3)', () => {
       });
       expect(prisma.tx.partie.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
-        data: { nextSessionDate: future, nextSessionSlot: 'EVENING', reminderSentAt: null },
+        data: { nextSessionDate: future, nextSessionSlot: 'EVENING' },
       });
       // Rien n'est écrit hors de la transaction de l'appelant.
       expect(prisma.partie.update).not.toHaveBeenCalled();
@@ -275,11 +272,6 @@ describe('EventsService (Story 37.3)', () => {
     it('chooseDate() : une date passée est écrite sur la séance mais n’est pas retenue comme prochaine séance', async () => {
       const past = new Date(Date.UTC(2020, 0, 2));
       prisma.tx.seance.findMany.mockResolvedValue([{ startDate: past, startSlot: 'MORNING' }]);
-      prisma.tx.partie.findUniqueOrThrow.mockResolvedValue({
-        id: 'p1',
-        nextSessionDate: null,
-        nextSessionSlot: null,
-      });
 
       await service.chooseDate(
         prisma.tx as unknown as Prisma.TransactionClient,
@@ -290,9 +282,14 @@ describe('EventsService (Story 37.3)', () => {
 
       expect(prisma.tx.seance.updateMany).toHaveBeenCalledWith({
         where: { pollId: 'poll1' },
-        data: { startDate: past, startSlot: 'MORNING', endDate: past, endSlot: 'MORNING' },
+        data: {
+          startDate: past,
+          startSlot: 'MORNING',
+          endDate: past,
+          endSlot: 'MORNING',
+          reminderSentAt: null,
+        },
       });
-      // Rien n'a changé (null → null) : le rappel déjà envoyé n'est pas remis à zéro.
       expect(prisma.tx.partie.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
         data: { nextSessionDate: null, nextSessionSlot: null },
@@ -320,7 +317,15 @@ describe('EventsService (Story 37.3)', () => {
 
       expect(prisma.seance.update).toHaveBeenCalledWith({
         where: { id: 'se2' },
-        data: { pollId: null, startDate: null, startSlot: null, endDate: null, endSlot: null },
+        data: {
+          pollId: null,
+          startDate: null,
+          startSlot: null,
+          endDate: null,
+          endSlot: null,
+          // Plage effacée → plus de rappel en attente pour cette séance (Story 37.9).
+          reminderSentAt: null,
+        },
       });
       expect(prisma.sessionPoll.delete).toHaveBeenCalledWith({ where: { id: 'poll1' } });
       expect(prisma.partie.update).toHaveBeenCalled();
@@ -503,7 +508,6 @@ describe('EventsService (Story 37.3)', () => {
         data: {
           nextSessionDate: FUTURE_NEAR,
           nextSessionSlot: 'EVENING',
-          reminderSentAt: null,
         },
       });
     });
@@ -525,7 +529,6 @@ describe('EventsService (Story 37.3)', () => {
         data: {
           nextSessionDate: TODAY,
           nextSessionSlot: 'MORNING',
-          reminderSentAt: null,
         },
       });
     });
@@ -551,7 +554,6 @@ describe('EventsService (Story 37.3)', () => {
         data: {
           nextSessionDate: FUTURE_FAR,
           nextSessionSlot: 'AFTERNOON',
-          reminderSentAt: null,
         },
       });
     });
@@ -568,7 +570,6 @@ describe('EventsService (Story 37.3)', () => {
         data: {
           nextSessionDate: FUTURE_NEAR,
           nextSessionSlot: null,
-          reminderSentAt: null,
         },
       });
     });
@@ -578,12 +579,6 @@ describe('EventsService (Story 37.3)', () => {
         { id: 's1', startDate: null, startSlot: null },
         { id: 's2', startDate: PAST, startSlot: null },
       ]);
-      prisma.partie.findUniqueOrThrow.mockResolvedValueOnce({
-        id: 'p1',
-        nextSessionDate: PAST,
-        nextSessionSlot: 'MORNING',
-        reminderSentAt: null,
-      });
 
       await service.recalculateNextSession('p1');
 
@@ -592,35 +587,22 @@ describe('EventsService (Story 37.3)', () => {
         data: {
           nextSessionDate: null,
           nextSessionSlot: null,
-          reminderSentAt: null,
         },
       });
     });
 
-    it('date/slot inchangés → reminderSentAt non réinitialisé', async () => {
+    it('le recalcul de la prochaine séance ne touche jamais aux rappels (Story 37.9)', async () => {
       prisma.seance.findMany.mockResolvedValue([
-        {
-          id: 's1',
-          startDate: FUTURE_NEAR,
-          startSlot: 'EVENING',
-        },
+        { id: 's1', startDate: FUTURE_NEAR, startSlot: 'EVENING' },
       ]);
-      prisma.partie.findUniqueOrThrow.mockResolvedValueOnce({
-        id: 'p1',
-        nextSessionDate: FUTURE_NEAR,
-        nextSessionSlot: 'EVENING',
-        reminderSentAt: new Date('2026-07-13T00:00:00.000Z'),
-      });
 
       await service.recalculateNextSession('p1');
 
       expect(prisma.partie.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
-        data: {
-          nextSessionDate: FUTURE_NEAR,
-          nextSessionSlot: 'EVENING',
-        },
+        data: { nextSessionDate: FUTURE_NEAR, nextSessionSlot: 'EVENING' },
       });
+      expect(prisma.seance.update).not.toHaveBeenCalled();
     });
 
     it('recalculateNextSessionInTx() verrouille la ligne Partie AVANT de lire les séances (Story 37.8, concurrence)', async () => {
@@ -647,11 +629,6 @@ describe('EventsService (Story 37.3)', () => {
       prisma.tx.seance.findMany.mockResolvedValue([
         { startDate: FUTURE_NEAR, startSlot: 'EVENING' },
       ]);
-      prisma.tx.partie.findUniqueOrThrow.mockResolvedValue({
-        id: 'p1',
-        nextSessionDate: null,
-        nextSessionSlot: null,
-      });
 
       await service.recalculateNextSessionInTx(
         prisma.tx as unknown as Prisma.TransactionClient,
@@ -660,7 +637,7 @@ describe('EventsService (Story 37.3)', () => {
 
       expect(prisma.tx.partie.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
-        data: { nextSessionDate: FUTURE_NEAR, nextSessionSlot: 'EVENING', reminderSentAt: null },
+        data: { nextSessionDate: FUTURE_NEAR, nextSessionSlot: 'EVENING' },
       });
       expect(prisma.seance.findMany).not.toHaveBeenCalled();
       expect(prisma.partie.update).not.toHaveBeenCalled();

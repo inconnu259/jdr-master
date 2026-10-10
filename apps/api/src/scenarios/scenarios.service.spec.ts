@@ -108,12 +108,6 @@ function makePrisma() {
       findMany: jest.fn().mockResolvedValue([]),
     },
     partie: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({
-        id: 'p1',
-        nextSessionDate: null,
-        nextSessionSlot: null,
-        reminderSentAt: null,
-      }),
       update: jest.fn(),
     },
     $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(tx)),
@@ -3757,7 +3751,14 @@ describe('ScenariosService', () => {
       });
       expect(prisma.seance.update).toHaveBeenCalledWith({
         where: { id: SEANCE_ID },
-        data: { pollId: null, startDate: null, startSlot: null, endDate: null, endSlot: null },
+        data: {
+          pollId: null,
+          startDate: null,
+          startSlot: null,
+          endDate: null,
+          endSlot: null,
+          reminderSentAt: null,
+        },
       });
       // Recalcul déclenché : Partie relue/réécrite via recalculateNextSession().
       expect(prisma.partie.update).toHaveBeenCalledWith({
