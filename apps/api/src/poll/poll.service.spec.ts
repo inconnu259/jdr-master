@@ -8,6 +8,7 @@ import { PermissionService } from '../permissions/permission.service';
 import { testGrant } from '../common/test-utils/grant';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { anyOf, callArg, mockCalls } from '../common/test-utils/jest-typed';
+import { HIDDEN_DRAFT_POLL_WHERE, VISIBLE_POLL_WHERE } from '../permissions/scenario-visibility';
 import type { DaySlot } from '@master-jdr/shared';
 
 /**
@@ -22,6 +23,8 @@ function makePrisma() {
       create: jest.fn(),
       update: jest.fn(),
       findUnique: jest.fn(),
+      // Anti-spoil serveur : « ce vote est-il celui d'un brouillon caché ? » (0 = non, par défaut).
+      count: jest.fn().mockResolvedValue(0),
     },
     pollVote: {
       upsert: jest.fn(),
@@ -64,7 +67,9 @@ function makePartieSignals() {
 
 /** Story 37.6 — les droits sont décidés par `PermissionService.assert()`, simulé ici. */
 function makePermissions() {
-  return { assert: jest.fn() };
+  // Par défaut l'appelant est le MJ de `p1` (aucune restriction anti-spoil) ; les tests joueurs
+  // reconfigurent l'autorisation.
+  return { assert: jest.fn().mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }, 'mj')) };
 }
 
 /** Autorisation délivrée par `ScenariosService.createSeancePoll()` à `create()` (MJ de `p1`). */
@@ -215,6 +220,91 @@ describe('PollService', () => {
       const dto = await service.findOpen('p1', 'u1');
       expect(dto).toBeNull();
       expect(prisma.membership.count).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('anti-spoil serveur — vote de la séance d’un brouillon caché', () => {
+    const joueur = () => permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
+
+    it('findOpen() : un joueur ne lit que les votes hors brouillon caché (fragment partagé), le MJ lit tout', async () => {
+      prisma.sessionPoll.findFirst.mockResolvedValue(null);
+
+      joueur();
+      await service.findOpen('p1', 'u1');
+      expect(prisma.sessionPoll.findFirst).toHaveBeenLastCalledWith({
+        where: { AND: [{ partieId: 'p1', status: 'OPEN' }, VISIBLE_POLL_WHERE] },
+        include: expect.anything() as unknown,
+      });
+
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'mj'));
+      await service.findOpen('p1', 'mj1');
+      expect(prisma.sessionPoll.findFirst).toHaveBeenLastCalledWith({
+        where: { partieId: 'p1', status: 'OPEN' },
+        include: expect.anything() as unknown,
+      });
+    });
+
+    it('échec FERMÉ : un rôle autre que MJ (ici admin) est filtré comme un joueur', async () => {
+      prisma.sessionPoll.findFirst.mockResolvedValue(null);
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'admin'));
+
+      await service.findOpen('p1', 'u1');
+
+      expect(prisma.sessionPoll.findFirst).toHaveBeenLastCalledWith({
+        where: { AND: [{ partieId: 'p1', status: 'OPEN' }, VISIBLE_POLL_WHERE] },
+        include: expect.anything() as unknown,
+      });
+    });
+
+    it('castVote() : un joueur sur le vote d’un brouillon caché reçoit l’erreur d’un vote inconnu, aucun vote écrit', async () => {
+      joueur();
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        id: 'poll1',
+        partieId: 'p1',
+        status: 'OPEN',
+      });
+      prisma.sessionPoll.count.mockResolvedValue(1);
+
+      const promise = service.castVote('p1', 'poll1', 'u1', { optionId: 'opt1', answer: 'YES' });
+
+      await expect(promise).rejects.toThrow(BadRequestException);
+      await expect(promise).rejects.toThrow('Poll introuvable ou fermé');
+      expect(prisma.sessionPoll.count).toHaveBeenCalledWith({
+        where: { AND: [{ id: 'poll1' }, HIDDEN_DRAFT_POLL_WHERE] },
+      });
+      expect(prisma.pollVote.upsert).not.toHaveBeenCalled();
+      expect(partieSignals.notifyChanged).not.toHaveBeenCalled();
+    });
+
+    it('withdrawVote() : même refus pour un joueur, aucune suppression', async () => {
+      joueur();
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        id: 'poll1',
+        partieId: 'p1',
+        status: 'OPEN',
+      });
+      prisma.sessionPoll.count.mockResolvedValue(1);
+
+      await expect(service.withdrawVote('p1', 'poll1', 'opt1', 'u1')).rejects.toThrow(
+        'Poll introuvable ou fermé',
+      );
+      expect(prisma.pollVote.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('le MJ vote sur le vote d’un brouillon : aucune requête de masquage', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'mj'));
+      prisma.sessionPoll.findUnique.mockResolvedValue({
+        id: 'poll1',
+        partieId: 'p1',
+        status: 'OPEN',
+      });
+      prisma.pollOption.findUnique.mockResolvedValue({ id: 'opt1', pollId: 'poll1' });
+      prisma.pollVote.upsert.mockResolvedValue({});
+
+      await service.castVote('p1', 'poll1', 'mj1', { optionId: 'opt1', answer: 'YES' });
+
+      expect(prisma.sessionPoll.count).not.toHaveBeenCalled();
+      expect(prisma.pollVote.upsert).toHaveBeenCalledTimes(1);
     });
   });
 

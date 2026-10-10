@@ -1,6 +1,7 @@
 import type { PartieDto } from '@master-jdr/shared';
 import { PartySignalsService } from './party-signals.service';
 import { objectLike } from '../common/test-utils/jest-typed';
+import { VISIBLE_POLL_WHERE } from '../permissions/scenario-visibility';
 
 describe('PartySignalsService', () => {
   let service: PartySignalsService;
@@ -268,23 +269,88 @@ describe('PartySignalsService', () => {
     expect(map['p1'].signals).toContain('COMPTE_RENDU_NON_REDIGE');
   });
 
-  it('PROCHAINE_SEANCE_CONNUE : actif (informatif) si nextSessionDate renseigné', async () => {
+  it('PROCHAINE_SEANCE_CONNUE (MJ) : actif (informatif) si une séance de la partie est à venir', async () => {
+    parties.listForUser.mockImplementation((_u: string, role: string) =>
+      Promise.resolve(role === 'mj' ? [makePartie({ id: 'p1' })] : []),
+    );
+    prisma.partie.findMany.mockResolvedValue([]);
+    prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.seance.findMany.mockResolvedValue([
+      {
+        compteRendu: 'ok',
+        startDate: new Date('2099-01-01T00:00:00.000Z'),
+        event: { partieId: 'p1' },
+      },
+    ]);
+    const map = await service.getSignals('u1');
+    expect(map['p1'].signals).toContain('PROCHAINE_SEANCE_CONNUE');
+    expect(map['p1'].signals).not.toContain('AUCUNE_DATE_NI_VOTE');
+  });
+
+  it('anti-spoil serveur — MJ : la date d’un brouillon caché compte (nextSessionDate l’exclut) : pas de faux « aucune date »', async () => {
+    parties.listForUser.mockImplementation((_u: string, role: string) =>
+      // nextSessionDate partagé = null : seule la séance d'un brouillon est datée.
+      Promise.resolve(role === 'mj' ? [makePartie({ id: 'p1', nextSessionDate: null })] : []),
+    );
+    prisma.partie.findMany.mockResolvedValue([]);
+    prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.seance.findMany.mockResolvedValue([
+      {
+        compteRendu: null,
+        startDate: new Date('2099-01-01T00:00:00.000Z'),
+        event: { partieId: 'p1' },
+      },
+    ]);
+
+    const map = await service.getSignals('u1');
+
+    expect(map['p1'].signals).toContain('PROCHAINE_SEANCE_CONNUE');
+    expect(map['p1'].signals).not.toContain('AUCUNE_DATE_NI_VOTE');
+    // Une seule requête groupée sur les séances, jamais une par partie.
+    expect(prisma.seance.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('MJ : une séance passée seule (compte rendu rédigé) ne fait pas PROCHAINE_SEANCE_CONNUE', async () => {
+    parties.listForUser.mockImplementation((_u: string, role: string) =>
+      Promise.resolve(role === 'mj' ? [makePartie({ id: 'p1' })] : []),
+    );
+    prisma.partie.findMany.mockResolvedValue([]);
+    prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.seance.findMany.mockResolvedValue([
+      {
+        compteRendu: 'ok',
+        startDate: new Date('2020-01-01T00:00:00.000Z'),
+        event: { partieId: 'p1' },
+      },
+    ]);
+
+    const map = await service.getSignals('u1');
+
+    expect(map['p1'].signals).not.toContain('PROCHAINE_SEANCE_CONNUE');
+    expect(map['p1'].signals).toContain('AUCUNE_DATE_NI_VOTE');
+  });
+
+  it('PROCHAINE_SEANCE_CONNUE (joueur) : dérivé de nextSessionDate, partagé et sans brouillons cachés', async () => {
     parties.listForUser.mockImplementation((_u: string, role: string) =>
       Promise.resolve(
-        role === 'mj'
+        role === 'player'
           ? [
               makePartie({
                 id: 'p1',
-                nextSessionDate: '2026-09-01T00:00:00.000Z',
+                role: 'player',
+                nextSessionDate: '2099-01-01T00:00:00.000Z',
               }),
             ]
           : [],
       ),
     );
-    prisma.partie.findMany.mockResolvedValue([]);
-    prisma.membership.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
-    prisma.event.groupBy.mockResolvedValue([{ partieId: 'p1', _count: { _all: 1 } }]);
+    prisma.character.findMany.mockResolvedValue([{ partieId: 'p1' }]);
+
     const map = await service.getSignals('u1');
+
     expect(map['p1'].signals).toContain('PROCHAINE_SEANCE_CONNUE');
   });
 
@@ -377,11 +443,17 @@ describe('PartySignalsService', () => {
     expect(prisma.event.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.seance.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.sessionPoll.findMany).toHaveBeenCalledTimes(1);
+    // Anti-spoil serveur : MJ → tous les votes ouverts ; joueur → sans le vote d'un brouillon caché
+    // (fragment partagé), dans la MÊME requête groupée.
     expect(prisma.sessionPoll.findMany).toHaveBeenCalledWith(
       objectLike({
-        where: objectLike({
-          partieId: { in: ['p1', 'p2', 'p3', 'p4'] },
-        }),
+        where: {
+          status: 'OPEN',
+          OR: [
+            { partieId: { in: ['p1', 'p2'] } },
+            { AND: [{ partieId: { in: ['p3', 'p4'] } }, VISIBLE_POLL_WHERE] },
+          ],
+        },
       }),
     );
   });

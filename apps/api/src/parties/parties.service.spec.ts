@@ -60,6 +60,7 @@ import type { AggregatedSlotDto, AvailableSlotDto } from '@master-jdr/shared';
 import { AvailabilityService } from '../availability/availability.service';
 import { EventsService } from '../events/events.service';
 import { PermissionService } from '../permissions/permission.service';
+import { VISIBLE_SEANCE_WHERE } from '../permissions/scenario-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GAME_SYSTEM_FAMILY_CHANGE_MESSAGE,
@@ -109,6 +110,7 @@ describe('PartiesService', () => {
     };
     seance: {
       create: jest.Mock;
+      findMany: jest.Mock;
     };
     partieFavorite: {
       findUnique: jest.Mock;
@@ -187,6 +189,8 @@ describe('PartiesService', () => {
       },
       seance: {
         create: jest.fn(),
+        // Recalcul de `nextSessionDate` à la conversion de type (séances éligibles, anti-spoil).
+        findMany: jest.fn().mockResolvedValue([]),
       },
       // Défaut « aucun favori » — les tests dédiés au favori (Story 29.8) reconfigurent
       // explicitement ces mocks.
@@ -1886,6 +1890,25 @@ describe('PartiesService', () => {
         where: { id: 'p1' },
         data: { kind: 'CAMPAGNE_LINEAIRE' },
       });
+    });
+
+    it('anti-spoil serveur — la conversion recalcule nextSessionDate/Slot (un brouillon n’est caché que hors ONE_SHOT) dans la même transaction', async () => {
+      prisma.partie.findUnique.mockResolvedValue({ ...partie, closedAt: null });
+      prisma.partie.update.mockResolvedValue({ ...partie, kind: 'CAMPAGNE_LINEAIRE' });
+      const future = new Date(Date.UTC(2099, 0, 2));
+      prisma.seance.findMany.mockResolvedValue([{ startDate: future, startSlot: 'EVENING' }]);
+
+      const dto = await service.convertKind('p1', 'mj1', { kind: 'CAMPAGNE_LINEAIRE' });
+
+      expect(prisma.seance.findMany).toHaveBeenCalledWith({
+        where: { AND: [{ event: { partieId: 'p1' } }, VISIBLE_SEANCE_WHERE] },
+        select: { startDate: true, startSlot: true },
+      });
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { nextSessionDate: future, nextSessionSlot: 'EVENING' },
+      });
+      expect(dto.nextSessionDate).toBe(future.toISOString());
     });
 
     it('AC10 — refus (3 scénarios → ONE_SHOT) : BadRequest levée AVANT toute écriture', async () => {

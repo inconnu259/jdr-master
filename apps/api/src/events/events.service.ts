@@ -19,6 +19,11 @@ import type {
   OwnRolesResolver,
 } from '../availability/ports/own-events.port';
 import type { PartieGrant } from '../permissions/permission.service';
+import {
+  VISIBLE_SEANCE_WHERE,
+  isHiddenDraft,
+  isSpoilRestricted,
+} from '../permissions/scenario-visibility';
 import type { SeanceDatePort } from '../poll/ports/seance-date.port';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
@@ -52,6 +57,12 @@ export interface SeanceInfosPratiques {
   heureRdv: string | null;
   lieu: string | null;
   notePratique: string | null;
+}
+
+/** Valeur persistée de `Partie.nextSessionDate/nextSessionSlot`, telle que (re)calculée. */
+export interface NextSession {
+  nextSessionDate: Date | null;
+  nextSessionSlot: DaySlot | null;
 }
 
 const FROZEN_ROSTER_MESSAGE = 'Cette séance a déjà une date validée — les inscriptions sont figées';
@@ -432,17 +443,23 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
    * privé de la plage non validée de l'autre, et le dernier à écrire figerait une valeur périmée.
    * Le verrou les sérialise : le second relit les séances une fois le premier validé.
    */
-  async recalculateNextSessionInTx(tx: Prisma.TransactionClient, partieId: string): Promise<void> {
+  async recalculateNextSessionInTx(
+    tx: Prisma.TransactionClient,
+    partieId: string,
+  ): Promise<NextSession> {
     await tx.$queryRaw`SELECT "id" FROM "Partie" WHERE "id" = ${partieId} FOR UPDATE`;
-    await this.recomputeNextSession(tx, partieId);
+    return this.recomputeNextSession(tx, partieId);
   }
 
   private async recomputeNextSession(
     tx: Prisma.TransactionClient,
     partieId: string,
-  ): Promise<void> {
+  ): Promise<NextSession> {
+    // Anti-spoil serveur : la valeur est UNIQUE et persistée, partagée par tous les lecteurs (MJ
+    // compris) — les séances d'un brouillon caché n'y entrent donc jamais, sans quoi un joueur lirait
+    // la date d'un scénario qu'il ne doit pas voir. Elles y entrent à l'ouverture du scénario.
     const seances = await tx.seance.findMany({
-      where: { event: { partieId } },
+      where: { AND: [{ event: { partieId } }, VISIBLE_SEANCE_WHERE] },
       select: { startDate: true, startSlot: true },
     });
 
@@ -463,13 +480,12 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
         .filter((c): c is Candidate => c !== null && c.date.getTime() >= now)
         .sort((a, b) => a.date.getTime() - b.date.getTime())[0] ?? null;
 
-    await tx.partie.update({
-      where: { id: partieId },
-      data: {
-        nextSessionDate: nearest?.date ?? null,
-        nextSessionSlot: nearest?.slot ?? null,
-      },
-    });
+    const next: NextSession = {
+      nextSessionDate: nearest?.date ?? null,
+      nextSessionSlot: nearest?.slot ?? null,
+    };
+    await tx.partie.update({ where: { id: partieId }, data: next });
+    return next;
   }
 
   // ─── Ports du calendrier (Story 37.8) ───────────────────────────────────────────────────────
@@ -571,7 +587,9 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
         where: { event: { partieId: { in: partieIds } } },
         include: {
           inscriptions: { select: { userId: true } },
-          event: { select: { partieId: true, title: true } },
+          event: {
+            select: { partieId: true, title: true, scenario: { select: { status: true } } },
+          },
         },
       }),
       // Rôle de l'utilisateur sur chacune de ses parties, en UNE requête (jamais une par partie).
@@ -583,6 +601,16 @@ export class EventsService implements OccupiedSpansPort, OwnEventsPort, SeanceDa
     for (const s of seances) {
       const partie = partieById.get(s.event.partieId);
       if (!partie) continue;
+
+      // Anti-spoil serveur : tout rôle autre que MJ (inconnu compris) ignore les séances d'un
+      // brouillon caché ; seul le MJ voit tout.
+      if (
+        isSpoilRestricted(roleByPartie.get(partie.id)) &&
+        s.event.scenario &&
+        isHiddenDraft(s.event.scenario.status, partie.kind)
+      ) {
+        continue;
+      }
 
       // Mes séances datées dans la fenêtre. Pour une partie CAMPAGNE_EPISODIQUE, une séance n'est
       // « mienne » que si j'y suis inscrit (ou MJ) — même règle « participant » qu'`occupiedSpansOf`

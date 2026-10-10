@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AnnouncementDto, Theme } from '@master-jdr/shared';
 import { PermissionService } from '../permissions/permission.service';
+import { RELEASED_ANNOUNCEMENT_WHERE, isSpoilRestricted } from '../permissions/scenario-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import { toDto as toAnnouncementDto } from '../announcements/announcements.service';
 import { toAuthUser } from '../users/to-auth-user.util';
@@ -130,9 +131,12 @@ export class AccountService {
   async getUnseenAnnouncements(userId: string): Promise<AnnouncementDto[]> {
     const announcements = await this.prisma.announcement.findMany({
       where: {
-        partie: {
-          OR: [{ ownerId: userId }, { memberships: { some: { userId } } }],
-        },
+        // Anti-spoil serveur : propriétaire (MJ) → toutes les annonces ; simple membre (joueur) →
+        // seulement celles de toute la partie ou ciblées sur un scénario `COURANT`/`PASSE`.
+        OR: [
+          { partie: { ownerId: userId } },
+          { AND: [{ partie: { memberships: { some: { userId } } } }, RELEASED_ANNOUNCEMENT_WHERE] },
+        ],
         reads: { none: { userId } },
       },
       orderBy: { createdAt: 'desc' },
@@ -153,7 +157,17 @@ export class AccountService {
    *  partie de l'annonce est exigé (`ANNOUNCEMENT_MARK_READ`, partie résolue depuis l'annonce) —
    *  aucune ligne de lecture n'est écrite pour l'annonce d'une partie étrangère. */
   async markAnnouncementRead(userId: string, announcementId: string): Promise<{ ok: true }> {
-    await this.permissions.assert(userId, 'ANNOUNCEMENT_MARK_READ', { announcementId });
+    const grant = await this.permissions.assert(userId, 'ANNOUNCEMENT_MARK_READ', {
+      announcementId,
+    });
+    // Anti-spoil serveur : hors MJ, une annonce ciblée sur un scénario non diffusé n'existe pas —
+    // 404 comme une annonce inconnue (sinon 200/404 permettrait de sonder son existence).
+    if (isSpoilRestricted(grant.role)) {
+      const visible = await this.prisma.announcement.count({
+        where: { AND: [{ id: announcementId }, RELEASED_ANNOUNCEMENT_WHERE] },
+      });
+      if (visible === 0) throw new NotFoundException('Annonce introuvable');
+    }
     try {
       await this.prisma.announcementRead.create({
         data: { userId, announcementId },

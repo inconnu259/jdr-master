@@ -64,6 +64,57 @@ describe('NotificationsService', () => {
     });
   });
 
+  describe('anti-spoil serveur — séance d’un brouillon caché', () => {
+    const avecScenario = (status: string, kind: string) => {
+      const s = makeSeance({}, { kind });
+      return { ...s, event: { ...s.event, scenario: { status } } };
+    };
+
+    it('brouillon d’une campagne : seul le propriétaire est rappelé, la séance est quand même marquée', async () => {
+      prisma.seance.findMany.mockResolvedValue([avecScenario('BROUILLON', 'CAMPAGNE_LINEAIRE')]);
+
+      await service.sendDueReminders();
+
+      expect(email.sendMail).toHaveBeenCalledTimes(1);
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'session-reminder',
+        'mj@example.com',
+        objectLike({ partieName: 'La Nuit' }),
+      );
+      expect(prisma.seance.updateMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('brouillon d’un ONE_SHOT (exemption) : tout le monde est rappelé', async () => {
+      prisma.seance.findMany.mockResolvedValue([avecScenario('BROUILLON', 'ONE_SHOT')]);
+
+      await service.sendDueReminders();
+
+      expect(email.sendMail).toHaveBeenCalledTimes(2);
+    });
+
+    it.each(['A_VENIR', 'COURANT', 'PASSE'])(
+      'scénario %s d’une campagne : tout le monde est rappelé',
+      async (status) => {
+        prisma.seance.findMany.mockResolvedValue([avecScenario(status, 'CAMPAGNE_EPISODIQUE')]);
+
+        await service.sendDueReminders();
+
+        expect(email.sendMail).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it('brouillon caché sans propriétaire : aucun e-mail, la séance est marquée', async () => {
+      const s = avecScenario('BROUILLON', 'CAMPAGNE_LINEAIRE');
+      s.event.partie.owner = null as never;
+      prisma.seance.findMany.mockResolvedValue([s]);
+
+      await service.sendDueReminders();
+
+      expect(email.sendMail).not.toHaveBeenCalled();
+      expect(prisma.seance.updateMany).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('formate la date depuis le début de la séance et pointe vers la partie', async () => {
     prisma.seance.findMany.mockResolvedValue([makeSeance({ startSlot: 'EVENING' })]);
 

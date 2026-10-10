@@ -131,4 +131,65 @@ describe('NotificationsService (intégration réelle via Postgres)', () => {
     expect(refreshedNotYet.reminderSentAt).toBeNull();
     expect(refreshedNoDate.reminderSentAt).toBeNull();
   });
+
+  it('anti-spoil serveur : brouillon de campagne → propriétaire seul ; brouillon de ONE_SHOT et scénario ouvert → tout le monde', async () => {
+    const [mj, player] = await Promise.all(
+      ['spoil-mj', 'spoil-player'].map((label) =>
+        prisma.user.create({
+          data: {
+            email: `${label}-${suffix}@test.local`,
+            pseudo: `${label}-${suffix}`,
+            displayName: `${label}-${suffix}`,
+            passwordHash: 'x',
+          },
+        }),
+      ),
+    );
+    userIds.push(mj.id, player.id);
+    const in12h = new Date(Date.now() + 12 * 60 * 60 * 1000);
+
+    // Partie + événement + scénario (statut donné) + séance due dans 12 h + un membre.
+    const partieDue = async (
+      name: string,
+      kind: 'ONE_SHOT' | 'CAMPAGNE_LINEAIRE',
+      status: 'BROUILLON' | 'A_VENIR',
+    ) => {
+      const partie = await prisma.partie.create({
+        data: { name, kind, gameSystemId: 'ryuutama', ownerId: mj.id },
+      });
+      partieIds.push(partie.id);
+      const event = await prisma.event.create({
+        data: { partieId: partie.id, title: name, ownerId: mj.id },
+      });
+      await prisma.scenario.create({ data: { id: event.id, status } });
+      const seance = await prisma.seance.create({
+        data: { eventId: event.id, startDate: in12h, endDate: in12h },
+      });
+      await prisma.membership.create({ data: { userId: player.id, partieId: partie.id } });
+      return seance;
+    };
+
+    const brouillon = await partieDue(`SpoilBrouillon-${suffix}`, 'CAMPAGNE_LINEAIRE', 'BROUILLON');
+    const oneShot = await partieDue(`SpoilOneShot-${suffix}`, 'ONE_SHOT', 'BROUILLON');
+    const ouvert = await partieDue(`SpoilOuvert-${suffix}`, 'CAMPAGNE_LINEAIRE', 'A_VENIR');
+
+    fakeEmail.calls = [];
+    await service.sendDueReminders();
+
+    const destinatairesDe = (prefix: string) =>
+      fakeEmail.calls
+        .filter((c) => String(c.data.partieName).startsWith(`${prefix}-${suffix}`))
+        .map((c) => c.to)
+        .sort();
+    expect(destinatairesDe('SpoilBrouillon')).toEqual([mj.email]);
+    expect(destinatairesDe('SpoilOneShot')).toEqual([mj.email, player.email].sort());
+    expect(destinatairesDe('SpoilOuvert')).toEqual([mj.email, player.email].sort());
+
+    // La séance du brouillon est marquée envoyée : elle ne sera pas rappelée une seconde fois
+    // (le propriétaire seul a été prévenu), les trois le sont.
+    for (const s of [brouillon, oneShot, ouvert]) {
+      const refreshed = await prisma.seance.findUniqueOrThrow({ where: { id: s.id } });
+      expect(refreshed.reminderSentAt).not.toBeNull();
+    }
+  });
 });

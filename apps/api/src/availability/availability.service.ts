@@ -21,6 +21,7 @@ import type {
 } from '@master-jdr/shared';
 import { participantCount } from '../common/participant-count.util';
 import { PermissionService } from '../permissions/permission.service';
+import { VISIBLE_POLL_WHERE, isGameMaster } from '../permissions/scenario-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
@@ -759,23 +760,36 @@ export class AvailabilityService {
     // Story 37.8 : mes parties, `mes-seances` et `inscriptions-ouvertes` viennent d'`OwnEventsPort`
     // (qui lit les séances de TOUTES mes parties en une requête groupée). Le rôle sur chaque partie
     // est résolu en lot par le service de permission, au moment où le port connaît les parties.
+    // Les rôles sont résolus UNE fois (en lot) : le port s'en sert pour ses séances, ce service pour
+    // le filtre anti-spoil des votes ci-dessous.
+    let rolesLookup: ReturnType<PermissionService['rolesOf']> | null = null;
+    const resolveRoles = (ids: string[]): ReturnType<PermissionService['rolesOf']> =>
+      (rolesLookup ??= this.permissions.rolesOf(userId, ids));
     const [declarations, own] = await Promise.all([
       this.prisma.availabilityDeclaration.findMany({
         where: { userId, expiresAt: { gt: new Date() } },
       }),
-      this.ownEvents.ownEventsOf(userId, (ids) => this.permissions.rolesOf(userId, ids), {
-        fromMs,
-        toMs,
-      }),
+      this.ownEvents.ownEventsOf(userId, resolveRoles, { fromMs, toMs }),
     ]);
     const partieIds = own.parties.map((p) => p.id);
     const partieById = new Map(own.parties.map((p) => [p.id, p]));
+    // Anti-spoil serveur : hors des parties dont je suis MJ, les votes de la séance d'un brouillon
+    // caché sont ignorés. Tout rôle autre que `mj` (ou inconnu) est restreint.
+    const roles = await resolveRoles(partieIds);
+    const mjPartieIds = partieIds.filter((id) => isGameMaster(roles.get(id)));
+    const otherPartieIds = partieIds.filter((id) => !isGameMaster(roles.get(id)));
 
     const [polls, membershipCounts] = await Promise.all([
       partieIds.length === 0
         ? Promise.resolve([])
         : this.prisma.sessionPoll.findMany({
-            where: { partieId: { in: partieIds }, status: 'OPEN' },
+            where: {
+              status: 'OPEN',
+              OR: [
+                { partieId: { in: mjPartieIds } },
+                { AND: [{ partieId: { in: otherPartieIds } }, VISIBLE_POLL_WHERE] },
+              ],
+            },
             // Story 36.6 — `votes: true` et RIEN de plus. 🚨 Ne jamais y ajouter
             // `include: { user: … }` : le calendrier personnel agrège des parties entre
             // lesquelles aucune identité ne doit transiter (AD-9/AD-2). Les compteurs et ma

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import type { DaySlot } from '@prisma/client';
+import type { DaySlot, PartieKind, ScenarioStatus } from '@prisma/client';
+import { isHiddenDraft } from '../permissions/scenario-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 
@@ -16,9 +17,12 @@ type DueSeance = {
   startDate: Date | null;
   startSlot: DaySlot | null;
   event: {
+    /** Statut du scénario (extension JDR de l'événement) ; absent pour un événement sans scénario. */
+    scenario?: { status: ScenarioStatus } | null;
     partie: {
       id: string;
       name: string;
+      kind: PartieKind;
       owner: { id: string; email: string } | null;
       memberships: { user: { id: string; email: string } }[];
     };
@@ -69,10 +73,12 @@ export class NotificationsService {
       include: {
         event: {
           select: {
+            scenario: { select: { status: true } },
             partie: {
               select: {
                 id: true,
                 name: true,
+                kind: true,
                 owner: { select: { id: true, email: true } },
                 memberships: {
                   include: { user: { select: { id: true, email: true } } },
@@ -100,9 +106,13 @@ export class NotificationsService {
   private async remindSeance(seance: DueSeance): Promise<void> {
     const partie = seance.event.partie;
     // Propriétaire absent (AD-5, compte supprimé) : seuls les membres restent destinataires.
+    // Anti-spoil serveur : la séance d'un brouillon caché (scénario `BROUILLON` hors `ONE_SHOT`)
+    // n'est rappelée qu'au propriétaire, jamais aux membres, tant que le scénario n'est pas ouvert.
+    const scenario = seance.event.scenario;
+    const ownerOnly = !!scenario && isHiddenDraft(scenario.status, partie.kind);
     const allRecipients = [
       ...(partie.owner ? [partie.owner] : []),
-      ...partie.memberships.map((m) => m.user),
+      ...(ownerOnly ? [] : partie.memberships.map((m) => m.user)),
     ];
     const recipients = [...new Map(allRecipients.map((r) => [r.id, r])).values()];
     for (const recipient of recipients) {

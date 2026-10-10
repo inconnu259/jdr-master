@@ -15,6 +15,7 @@ jest.mock('@master-jdr/game-rules', () => ({
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionService } from '../permissions/permission.service';
 import { testGrant } from '../common/test-utils/grant';
+import { RELEASED_ANNOUNCEMENT_WHERE } from '../permissions/scenario-visibility';
 import { AccountService } from './account.service';
 import { anyOf } from '../common/test-utils/jest-typed';
 
@@ -31,7 +32,7 @@ function makePrisma() {
     user: { update: jest.fn() },
     userCalendarLayer: { deleteMany: jest.fn(), createMany: jest.fn() },
     partieFavorite: { create: jest.fn(), deleteMany: jest.fn() },
-    announcement: { findMany: jest.fn() },
+    announcement: { findMany: jest.fn(), count: jest.fn() },
     announcementRead: { create: jest.fn() },
     $transaction: jest.fn(),
   };
@@ -490,10 +491,18 @@ describe('AccountService', () => {
 
       expect(prisma.announcement.findMany).toHaveBeenCalledTimes(1);
       expect(prisma.announcement.findMany).toHaveBeenCalledWith({
+        // Anti-spoil serveur : propriétaire → tout ; simple membre → annonces de toute la partie ou
+        // ciblées sur un scénario diffusé (fragment partagé).
         where: {
-          partie: {
-            OR: [{ ownerId: 'u1' }, { memberships: { some: { userId: 'u1' } } }],
-          },
+          OR: [
+            { partie: { ownerId: 'u1' } },
+            {
+              AND: [
+                { partie: { memberships: { some: { userId: 'u1' } } } },
+                RELEASED_ANNOUNCEMENT_WHERE,
+              ],
+            },
+          ],
           reads: { none: { userId: 'u1' } },
         },
         orderBy: { createdAt: 'desc' },
@@ -583,6 +592,42 @@ describe('AccountService', () => {
         data: { userId: 'u1', announcementId: 'a1' },
       });
       expect(result).toEqual({ ok: true });
+    });
+
+    it('anti-spoil serveur — joueur : annonce visible (toute la partie ou scénario diffusé) → marquée lue', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }, 'player'));
+      prisma.announcement.count.mockResolvedValue(1);
+      prisma.announcementRead.create.mockResolvedValue({ id: 'r1' });
+
+      await expect(service.markAnnouncementRead('u1', 'a1')).resolves.toEqual({ ok: true });
+
+      expect(prisma.announcement.count).toHaveBeenCalledWith({
+        where: { AND: [{ id: 'a1' }, RELEASED_ANNOUNCEMENT_WHERE] },
+      });
+      expect(prisma.announcementRead.create).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['player', 'member'] as const)(
+      'anti-spoil serveur — %s : annonce ciblée sur un scénario non diffusé → 404, aucune ligne écrite',
+      async (role) => {
+        permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }, role));
+        prisma.announcement.count.mockResolvedValue(0);
+
+        const promise = service.markAnnouncementRead('u1', 'a-brouillon');
+
+        await expect(promise).rejects.toBeInstanceOf(NotFoundException);
+        await expect(promise).rejects.toThrow('Annonce introuvable');
+        expect(prisma.announcementRead.create).not.toHaveBeenCalled();
+      },
+    );
+
+    it('le MJ marque toute annonce lue, sans test de visibilité', async () => {
+      prisma.announcementRead.create.mockResolvedValue({ id: 'r1' });
+
+      await service.markAnnouncementRead('mj1', 'a-brouillon');
+
+      expect(prisma.announcement.count).not.toHaveBeenCalled();
+      expect(prisma.announcementRead.create).toHaveBeenCalledTimes(1);
     });
 
     it('annonce d’une partie où l’utilisateur n’a aucun rôle → refus, aucune ligne de lecture écrite', async () => {

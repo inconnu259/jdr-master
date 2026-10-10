@@ -38,6 +38,7 @@ import { EventsService } from '../events/events.service';
 import { PermissionService } from '../permissions/permission.service';
 import { anyOf, objectLike } from '../common/test-utils/jest-typed';
 import { testGrant } from '../common/test-utils/grant';
+import { VISIBLE_SCENARIO_WHERE } from '../permissions/scenario-visibility';
 
 function makePrisma() {
   const tx = {
@@ -117,7 +118,13 @@ function makePrisma() {
   // mocks servent à l'intérieur et à l'extérieur, pour que les assertions restent sur `prisma.*`.
   Object.assign(tx, {
     event: prismaMock.event,
-    seance: { ...tx.seance, create: prismaMock.seance.create },
+    seance: {
+      ...tx.seance,
+      create: prismaMock.seance.create,
+      // Recalcul de la prochaine séance à l'ouverture d'un scénario (dans la transaction).
+      findMany: prismaMock.seance.findMany,
+    },
+    partie: prismaMock.partie,
   });
   Object.assign(tx.scenario, {
     create: prismaMock.scenario.create,
@@ -774,7 +781,55 @@ describe('ScenariosService', () => {
   });
 
   describe('listDocuments()', () => {
-    it('combine documents du scénario ET bibliothèque de Partie (AC4)', async () => {
+    const scenarioIn = (status: string) =>
+      prisma.scenario.findUnique.mockResolvedValue(withEvent({ id: 's1', partieId: 'p1', status }));
+    const WITH_SCENARIO_DOCS = {
+      where: { OR: [{ scenarioId: 's1' }, { partieId: 'p1', scenarioId: null }] },
+    };
+    const LIBRARY_ONLY = { where: { partieId: 'p1', scenarioId: null } };
+
+    it('anti-spoil serveur — joueur, scénario COURANT/PASSE : documents du scénario ET bibliothèque', async () => {
+      permissions.assert.mockResolvedValue(
+        testGrant({ id: 'p1', kind: 'CAMPAGNE_LINEAIRE' }, 'player'),
+      );
+      prisma.scenarioDocument.findMany.mockResolvedValue([]);
+
+      for (const status of ['COURANT', 'PASSE']) {
+        scenarioIn(status);
+        await service.listDocuments('s1', 'u1');
+        expect(prisma.scenarioDocument.findMany).toHaveBeenLastCalledWith(
+          objectLike(WITH_SCENARIO_DOCS),
+        );
+      }
+    });
+
+    it('anti-spoil serveur — joueur, scénario A_VENIR (ou brouillon de ONE_SHOT) : bibliothèque seule', async () => {
+      prisma.scenarioDocument.findMany.mockResolvedValue([]);
+
+      permissions.assert.mockResolvedValue(
+        testGrant({ id: 'p1', kind: 'CAMPAGNE_EPISODIQUE' }, 'player'),
+      );
+      scenarioIn('A_VENIR');
+      await service.listDocuments('s1', 'u1');
+      expect(prisma.scenarioDocument.findMany).toHaveBeenLastCalledWith(objectLike(LIBRARY_ONLY));
+
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', kind: 'ONE_SHOT' }, 'player'));
+      scenarioIn('BROUILLON');
+      await service.listDocuments('s1', 'u1');
+      expect(prisma.scenarioDocument.findMany).toHaveBeenLastCalledWith(objectLike(LIBRARY_ONLY));
+    });
+
+    it('anti-spoil serveur — joueur, brouillon caché (hors ONE_SHOT) : 404, aucune lecture de document', async () => {
+      permissions.assert.mockResolvedValue(
+        testGrant({ id: 'p1', kind: 'CAMPAGNE_LINEAIRE' }, 'player'),
+      );
+      scenarioIn('BROUILLON');
+
+      await expect(service.listDocuments('s1', 'u1')).rejects.toThrow(NotFoundException);
+      expect(prisma.scenarioDocument.findMany).not.toHaveBeenCalled();
+    });
+
+    it('combine documents du scénario ET bibliothèque de Partie (AC4) — le MJ, même sur un BROUILLON', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: 's1',
@@ -782,7 +837,7 @@ describe('ScenariosService', () => {
           status: 'BROUILLON',
         }),
       );
-      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', kind: 'CAMPAGNE_LINEAIRE' }));
       prisma.scenarioDocument.findMany.mockResolvedValue([]);
 
       await service.listDocuments('s1', 'u1');
@@ -799,7 +854,7 @@ describe('ScenariosService', () => {
       );
     });
 
-    it('aucun filtre sur le statut du scénario, même BROUILLON (AC6, AD-6)', async () => {
+    it('le MJ lit les documents de tout statut, même BROUILLON (aucun filtre pour lui)', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
           id: 's1',
@@ -807,7 +862,7 @@ describe('ScenariosService', () => {
           status: 'BROUILLON',
         }),
       );
-      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', kind: 'CAMPAGNE_LINEAIRE' }));
       prisma.scenarioDocument.findMany.mockResolvedValue([
         {
           id: 'd1',
@@ -862,14 +917,43 @@ describe('ScenariosService', () => {
   });
 
   describe('getDocumentFile()', () => {
-    it('téléchargement réussi, aucun filtre sur le statut du scénario parent (AC6, AD-6)', async () => {
-      prisma.scenarioDocument.findUnique.mockResolvedValue({
-        id: 'd1',
-        partieId: 'p1',
-        filename: 'uuid.pdf',
-        originalName: 'lettre-ossian.pdf',
-      });
+    const scenarioDocument = (scenarioStatus: string | null) => ({
+      id: 'd1',
+      partieId: 'p1',
+      scenarioId: scenarioStatus === null ? null : 's1',
+      scenario: scenarioStatus === null ? null : { status: scenarioStatus },
+      filename: 'uuid.pdf',
+      originalName: 'lettre-ossian.pdf',
+    });
+
+    it('anti-spoil serveur — joueur : 404 pour un document ciblé sur un scénario BROUILLON ou A_VENIR, aucun octet lu', async () => {
       permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
+
+      for (const status of ['BROUILLON', 'A_VENIR']) {
+        prisma.scenarioDocument.findUnique.mockResolvedValue(scenarioDocument(status));
+        await expect(service.getDocumentFile('d1', 'u1')).rejects.toThrow('Document introuvable');
+      }
+      expect(readDocumentFile).not.toHaveBeenCalled();
+    });
+
+    it('anti-spoil serveur — joueur : document d’un scénario COURANT/PASSE ou de la bibliothèque servi', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
+      (readDocumentFile as jest.Mock).mockResolvedValue({
+        buffer: Buffer.from('bytes'),
+        mime: 'application/pdf',
+      });
+
+      for (const status of ['COURANT', 'PASSE', null]) {
+        prisma.scenarioDocument.findUnique.mockResolvedValue(scenarioDocument(status));
+        await expect(service.getDocumentFile('d1', 'u1')).resolves.toMatchObject({
+          originalName: 'lettre-ossian.pdf',
+        });
+      }
+    });
+
+    it('téléchargement réussi pour le MJ, quel que soit le statut du scénario parent', async () => {
+      prisma.scenarioDocument.findUnique.mockResolvedValue(scenarioDocument('BROUILLON'));
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }));
       (readDocumentFile as jest.Mock).mockResolvedValue({
         buffer: Buffer.from('bytes'),
         mime: 'application/pdf',
@@ -1043,7 +1127,7 @@ describe('ScenariosService', () => {
   });
 
   describe('findAllForPartie()', () => {
-    it('lecture ouverte à tout membre (SCENARIO_READ, pas une action MJ), tri chronologique croissant avec tie-breaker id (Story 17.1)', async () => {
+    it('lecture ouverte à tout membre (SCENARIO_READ, pas une action MJ), tri chronologique croissant avec tie-breaker id (Story 17.1) — le joueur sans les brouillons cachés', async () => {
       permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
       prisma.scenario.findMany.mockResolvedValue([]);
 
@@ -1052,9 +1136,31 @@ describe('ScenariosService', () => {
       expect(permissions.assert).toHaveBeenCalledWith('u1', 'SCENARIO_READ', { partieId: 'p1' });
       expect(prisma.scenario.findMany).toHaveBeenCalledWith(
         objectLike({
-          where: { event: { partieId: 'p1' } },
+          where: { AND: [{ event: { partieId: 'p1' } }, VISIBLE_SCENARIO_WHERE] },
           orderBy: [{ event: { createdAt: 'asc' } }, { id: 'asc' }],
         }),
+      );
+    });
+
+    it('échec FERMÉ : un rôle autre que MJ (ici member) est filtré comme un joueur', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'member'));
+      prisma.scenario.findMany.mockResolvedValue([]);
+
+      await service.findAllForPartie('p1', 'u1');
+
+      expect(prisma.scenario.findMany).toHaveBeenCalledWith(
+        objectLike({ where: { AND: [{ event: { partieId: 'p1' } }, VISIBLE_SCENARIO_WHERE] } }),
+      );
+    });
+
+    it('le MJ lit la liste sans aucun filtre de statut', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'mj'));
+      prisma.scenario.findMany.mockResolvedValue([]);
+
+      await service.findAllForPartie('p1', 'mj1');
+
+      expect(prisma.scenario.findMany).toHaveBeenCalledWith(
+        objectLike({ where: { event: { partieId: 'p1' } } }),
       );
     });
 
@@ -1096,18 +1202,20 @@ describe('ScenariosService', () => {
       );
     });
 
-    it('aucun filtrage par statut — un scénario BROUILLON est bien retourné (AD-6)', async () => {
-      permissions.assert.mockResolvedValue(testGrant({ id: 'p1' }, 'player'));
+    it('le MJ reçoit un scénario BROUILLON avec tout son contenu', async () => {
+      permissions.assert.mockResolvedValue(
+        testGrant({ id: 'p1', kind: 'CAMPAGNE_LINEAIRE' }, 'mj'),
+      );
       prisma.scenario.findMany.mockResolvedValue(
         withEvent([
           {
             id: 's1',
             partieId: 'p1',
             title: 'Brouillon secret',
-            description: null,
+            description: 'Le meurtrier est le notaire',
             status: 'BROUILLON',
-            dureeHeures: null,
-            dureeSeances: null,
+            dureeHeures: 4,
+            dureeSeances: 2,
             resumeFin: null,
             createdAt: new Date('2026-07-01'),
             closedAt: null,
@@ -1115,10 +1223,112 @@ describe('ScenariosService', () => {
         ]),
       );
 
-      const result = await service.findAllForPartie('p1', 'u1');
+      const result = await service.findAllForPartie('p1', 'mj1');
 
       expect(result).toHaveLength(1);
-      expect(result[0]).toMatchObject({ id: 's1', status: 'BROUILLON' });
+      expect(result[0]).toMatchObject({
+        id: 's1',
+        status: 'BROUILLON',
+        description: 'Le meurtrier est le notaire',
+        dureeHeures: 4,
+        dureeSeances: 2,
+      });
+    });
+
+    describe('anti-spoil serveur — masquage du contenu pour un joueur', () => {
+      const row = (status: string) => ({
+        id: 's1',
+        partieId: 'p1',
+        title: 'La Tour',
+        description: 'Le meurtrier est le notaire',
+        status,
+        dureeHeures: 4,
+        dureeSeances: 2,
+        resumeFin: null,
+        createdAt: new Date('2026-07-01'),
+        closedAt: null,
+      });
+      const seanceRow = {
+        id: 'se1',
+        eventId: 's1',
+        pollId: null,
+        poll: null,
+        inscriptionMin: null,
+        inscriptionMax: null,
+        inscriptions: [],
+        startDate: new Date('2099-01-02T00:00:00Z'),
+        startSlot: 'EVENING',
+        compteRendu: 'Spoil du compte rendu',
+        heureRdv: null,
+        lieu: null,
+        notePratique: null,
+        createdAt: new Date('2026-07-01'),
+      };
+
+      it('A_VENIR : ni description, ni durées, ni compte rendu ; titre et séances (dates) conservés', async () => {
+        permissions.assert.mockResolvedValue(
+          testGrant({ id: 'p1', kind: 'CAMPAGNE_LINEAIRE' }, 'player'),
+        );
+        prisma.scenario.findMany.mockResolvedValue(withEvent([row('A_VENIR')]));
+        prisma.seance.findMany.mockResolvedValue([seanceRow]);
+
+        const [dto] = await service.findAllForPartie('p1', 'u1');
+
+        expect(dto).toMatchObject({
+          title: 'La Tour',
+          status: 'A_VENIR',
+          description: null,
+          dureeHeures: null,
+          dureeSeances: null,
+        });
+        expect(dto.seances).toHaveLength(1);
+        expect(dto.seances[0]).toMatchObject({
+          id: 'se1',
+          compteRendu: null,
+          dateValidee: '2099-01-02T00:00:00.000Z',
+        });
+      });
+
+      it('ONE_SHOT BROUILLON (exemption) : listé, contenu masqué, séances conservées', async () => {
+        permissions.assert.mockResolvedValue(testGrant({ id: 'p1', kind: 'ONE_SHOT' }, 'player'));
+        prisma.scenario.findMany.mockResolvedValue(withEvent([row('BROUILLON')]));
+        prisma.seance.findMany.mockResolvedValue([seanceRow]);
+
+        const [dto] = await service.findAllForPartie('p1', 'u1');
+
+        expect(dto).toMatchObject({ status: 'BROUILLON', description: null, dureeHeures: null });
+        expect(dto.seances[0]).toMatchObject({ id: 'se1', compteRendu: null });
+      });
+
+      it('COURANT : contenu complet pour le joueur', async () => {
+        permissions.assert.mockResolvedValue(
+          testGrant({ id: 'p1', kind: 'CAMPAGNE_LINEAIRE' }, 'player'),
+        );
+        prisma.scenario.findMany.mockResolvedValue(withEvent([row('COURANT')]));
+        prisma.seance.findMany.mockResolvedValue([seanceRow]);
+
+        const [dto] = await service.findAllForPartie('p1', 'u1');
+
+        expect(dto).toMatchObject({
+          description: 'Le meurtrier est le notaire',
+          dureeHeures: 4,
+          dureeSeances: 2,
+        });
+        expect(dto.seances[0].compteRendu).toBe('Spoil du compte rendu');
+      });
+
+      it('A_VENIR : le MJ garde tout', async () => {
+        permissions.assert.mockResolvedValue(
+          testGrant({ id: 'p1', kind: 'CAMPAGNE_LINEAIRE' }, 'mj'),
+        );
+        prisma.scenario.findMany.mockResolvedValue(withEvent([row('A_VENIR')]));
+        prisma.seance.findMany.mockResolvedValue([seanceRow]);
+
+        const [dto] = await service.findAllForPartie('p1', 'mj1');
+
+        expect(dto.description).toBe('Le meurtrier est le notaire');
+        expect(dto.seances[0].compteRendu).toBe('Spoil du compte rendu');
+      });
     });
 
     it("Story 36.6 (AC7/AC9/AC10) — le SessionPollDto d'une séance porte l'effectif MJ + membres, compté UNE seule fois pour tout l'appel", async () => {
@@ -1928,6 +2138,33 @@ describe('ScenariosService', () => {
       },
     );
 
+    it('anti-spoil serveur — un joueur sur un brouillon caché reçoit 404, aucune écriture', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(
+        withEvent({ id: VALID_SCENARIO_ID, partieId: 'p1', status: 'BROUILLON' }),
+      );
+      for (const kind of ['CAMPAGNE_EPISODIQUE', 'CAMPAGNE_LINEAIRE']) {
+        permissions.assert.mockResolvedValue(testGrant({ id: 'p1', kind }, 'player'));
+        const promise = service.participate(VALID_SCENARIO_ID, 'u1');
+        await expect(promise).rejects.toThrow(NotFoundException);
+        await expect(promise).rejects.toThrow('Scénario introuvable');
+      }
+      expect(prisma.scenarioParticipant.upsert).not.toHaveBeenCalled();
+    });
+
+    it('anti-spoil serveur — un joueur ne rejoint pas un scénario PASSE (400), aucune écriture', async () => {
+      prisma.scenario.findUnique.mockResolvedValue(
+        withEvent({ id: VALID_SCENARIO_ID, partieId: 'p1', status: 'PASSE' }),
+      );
+      permissions.assert.mockResolvedValue(
+        testGrant({ id: 'p1', kind: 'CAMPAGNE_EPISODIQUE' }, 'player'),
+      );
+
+      await expect(service.participate(VALID_SCENARIO_ID, 'u1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.scenarioParticipant.upsert).not.toHaveBeenCalled();
+    });
+
     it('non-membre → 403 propagé par permissions.assert, aucune écriture (AC5)', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
@@ -1953,6 +2190,43 @@ describe('ScenariosService', () => {
   });
 
   describe('open()', () => {
+    it('anti-spoil serveur — recalcule nextSessionDate/Slot de la partie (les séances du scénario deviennent éligibles)', async () => {
+      const future = new Date(Date.UTC(2099, 0, 2));
+      prisma.scenario.findUnique.mockResolvedValue(
+        withEvent({ id: VALID_SCENARIO_ID, partieId: 'p1', status: 'BROUILLON' }),
+      );
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }));
+      prisma.scenario.update.mockResolvedValue(
+        withEvent({
+          id: VALID_SCENARIO_ID,
+          partieId: 'p1',
+          title: 'Le Marché aux Ombres',
+          description: null,
+          status: 'A_VENIR',
+          dureeHeures: null,
+          dureeSeances: null,
+          resumeFin: null,
+          createdAt: new Date('2026-07-12T00:00:00.000Z'),
+          closedAt: null,
+        }),
+      );
+      prisma.seance.findMany.mockResolvedValueOnce([{ startDate: future, startSlot: 'EVENING' }]);
+
+      await service.open(VALID_SCENARIO_ID, 'mj1');
+
+      expect(prisma.partie.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: { nextSessionDate: future, nextSessionSlot: 'EVENING' },
+      });
+      // Statut et recalcul dans UNE transaction, la partie verrouillée AVANT la lecture des
+      // séances (FOR UPDATE), puis l'écriture de la prochaine séance.
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const order = (m: jest.Mock) => m.mock.invocationCallOrder[0];
+      expect(order(prisma.tx.$queryRaw)).toBeGreaterThan(order(prisma.scenario.update));
+      expect(order(prisma.seance.findMany)).toBeGreaterThan(order(prisma.tx.$queryRaw));
+      expect(order(prisma.partie.update)).toBeGreaterThan(order(prisma.seance.findMany));
+    });
+
     it('transition BROUILLON → A_VENIR réussie (AC3)', async () => {
       prisma.scenario.findUnique.mockResolvedValue(
         withEvent({
@@ -4177,7 +4451,7 @@ describe('ScenariosService', () => {
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
     });
 
-    it('scénario BROUILLON → rejet 400, aucune inscription créée (Story 17.2 AC1)', async () => {
+    it('scénario BROUILLON → rejet 400 pour le MJ, aucune inscription créée (Story 17.2 AC1)', async () => {
       prisma.seance.findUnique.mockResolvedValue(
         asSeance({
           id: SEANCE_ID,
@@ -4198,11 +4472,36 @@ describe('ScenariosService', () => {
             ownerId: 'mj1',
             kind: 'CAMPAGNE_EPISODIQUE',
           },
-          'player',
+          'mj',
         ),
       );
 
-      await expect(service.inscrire(SEANCE_ID, 'u1')).rejects.toThrow(BadRequestException);
+      await expect(service.inscrire(SEANCE_ID, 'mj1')).rejects.toThrow(BadRequestException);
+      expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('anti-spoil serveur — scénario BROUILLON caché : un joueur reçoit 404 « Séance introuvable » (avant le 400), aucune inscription', async () => {
+      prisma.seance.findUnique.mockResolvedValue(
+        asSeance({
+          id: SEANCE_ID,
+          scenarioId: VALID_SCENARIO_ID,
+          inscriptionMin: 4,
+          inscriptionMax: 6,
+          startDate: null,
+          startSlot: null,
+        }),
+      );
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
+        withEvent(mockScenario({ status: 'BROUILLON' })),
+      );
+      permissions.assert.mockResolvedValue(
+        testGrant({ id: 'p1', ownerId: 'mj1', kind: 'CAMPAGNE_EPISODIQUE' }, 'player'),
+      );
+
+      const promise = service.inscrire(SEANCE_ID, 'u1');
+      await expect(promise).rejects.toThrow(NotFoundException);
+      await expect(promise).rejects.toThrow('Séance introuvable');
       expect(prisma.tx.inscription.create).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
@@ -4615,6 +4914,21 @@ describe('ScenariosService', () => {
         ...overrides,
       };
     }
+
+    it('anti-spoil serveur — un joueur sur la séance d’un brouillon caché reçoit 404, aucune suppression', async () => {
+      prisma.seance.findUnique.mockResolvedValue(
+        asSeance({ id: SEANCE_ID, scenarioId: VALID_SCENARIO_ID }),
+      );
+      prisma.scenario.findUniqueOrThrow.mockResolvedValue(
+        withEvent(mockScenario({ status: 'BROUILLON' })),
+      );
+      permissions.assert.mockResolvedValue(
+        testGrant({ id: 'p1', ownerId: 'mj1', kind: 'CAMPAGNE_EPISODIQUE' }, 'player'),
+      );
+
+      await expect(service.desinscrire(SEANCE_ID, 'u1')).rejects.toThrow('Séance introuvable');
+      expect(prisma.inscription.deleteMany).not.toHaveBeenCalled();
+    });
 
     it('retrait réussi (AC3)', async () => {
       prisma.seance.findUnique.mockResolvedValue(

@@ -11,6 +11,7 @@ import type { OwnEventsPort } from './ports/own-events.port';
 import { EventsService } from '../events/events.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionService } from '../permissions/permission.service';
+import { VISIBLE_POLL_WHERE } from '../permissions/scenario-visibility';
 import { RealtimeEventsService } from '../realtime/realtime-events.service';
 import { anyOf, arrayLike, objectLike } from '../common/test-utils/jest-typed';
 
@@ -2376,6 +2377,41 @@ describe('AvailabilityService.getMyCalendar (AD-18, Story 30.5)', () => {
     expect(result['mes-indisponibilites']).toHaveLength(1);
     expect(result['mes-indisponibilites'][0].id).toBe('d1');
     expect(result['mes-disponibilites']).toEqual([]); // d2 est hors plage
+  });
+
+  it('anti-spoil serveur : votes-en-cours — MJ de A voit tous les votes ouverts, joueur de B sans ceux d’un brouillon caché, dans UNE requête', async () => {
+    mockPartieFindMany.mockResolvedValue([
+      myPartie,
+      { id: 'B', name: 'Autre partie', kind: 'CAMPAGNE_LINEAIRE' },
+    ]);
+    permissions.rolesOf.mockResolvedValue(
+      new Map<string, PartieRole>([
+        ['A', 'mj'],
+        ['B', 'player'],
+      ]),
+    );
+
+    await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+
+    expect(mockSessionPollFindMany).toHaveBeenCalledTimes(1);
+    const calls = mockSessionPollFindMany.mock.calls as unknown as Array<[{ where: unknown }]>;
+    expect(calls[0][0].where).toEqual({
+      status: 'OPEN',
+      OR: [{ partieId: { in: ['A'] } }, { AND: [{ partieId: { in: ['B'] } }, VISIBLE_POLL_WHERE] }],
+    });
+  });
+
+  it('anti-spoil serveur, échec FERMÉ : une partie sans rôle connu est filtrée comme celle d’un joueur', async () => {
+    mockPartieFindMany.mockResolvedValue([myPartie]);
+    permissions.rolesOf.mockResolvedValue(new Map());
+
+    await service.getMyCalendar('me', '2026-10-01', '2026-10-31');
+
+    const calls = mockSessionPollFindMany.mock.calls as unknown as Array<[{ where: unknown }]>;
+    expect(calls[0][0].where).toEqual({
+      status: 'OPEN',
+      OR: [{ partieId: { in: [] } }, { AND: [{ partieId: { in: ['A'] } }, VISIBLE_POLL_WHERE] }],
+    });
   });
 
   it('aucune itération par partie : une seule requête pour chaque table, quel que soit le nombre de mes parties (AC1)', async () => {

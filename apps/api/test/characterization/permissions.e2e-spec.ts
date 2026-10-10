@@ -70,6 +70,9 @@ describe('Droits sur une partie et ses événements (Story 37.6)', () => {
         .send({ title: 'Scénario B' })
         .expect(201),
     );
+    // Anti-spoil serveur : un joueur ne voit ni ne vote le vote d'un brouillon — le scénario est
+    // donc ouvert avant que les tests de membre n'agissent sur son vote.
+    await mjA.agent.patch(`/scenarios/${scenarioA.id}/open`).expect(200);
     const withPoll = body<ScenarioDtoLike>(
       await mjA.agent
         .post(`/scenarios/seances/${scenarioA.seances[0].id}/poll`)

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { hasCapability } from '@master-jdr/shared';
 import type { PartieDto, PartySignalCode, PartySignalsDto } from '@master-jdr/shared';
+import { VISIBLE_POLL_WHERE } from '../permissions/scenario-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from './parties.service';
 
@@ -34,7 +35,6 @@ export class PartySignalsService {
       .filter((p) => hasCapability(p.gameSystemId, 'hommeDragon'))
       .map((p) => p.id);
     const playerPartieIds = playerParties.map((p) => p.id);
-    const allPartieIds = [...mjPartieIds, ...playerPartieIds];
 
     const [
       charactersOwned,
@@ -42,7 +42,7 @@ export class PartySignalsService {
       membershipCounts,
       courantScenarios,
       scenariosMissingResume,
-      seancesMissingCompteRendu,
+      seancesOfMjParties,
       openPolls,
     ] = await Promise.all([
       this.prisma.character.findMany({
@@ -77,19 +77,31 @@ export class PartySignalsService {
       }),
       // COMPTE_RENDU_NON_REDIGE : décision retenue (Dev Notes, story 29.7) — signal MJ-only, la
       // rédaction du compte-rendu (Seance.compteRendu) étant une action exclusivement MJ.
+      //
+      // Anti-spoil serveur : la même requête groupée sert aussi à « la partie a une séance à venir »
+      // pour le MJ — `Partie.nextSessionDate` exclut les brouillons cachés pour tous les lecteurs,
+      // le MJ doit pourtant voir la date d'un brouillon qu'il a lui-même daté (sinon un faux
+      // « aucune date »). Ne sont lues que les séances datées dont le compte rendu manque, ou à venir.
       this.prisma.seance.findMany({
         where: {
-          compteRendu: null,
           event: { partieId: { in: mjPartieIds } },
           // Story 37.4 : séance datée = plage posée (seule source de la date).
-          startDate: { not: null },
+          OR: [{ compteRendu: null, startDate: { not: null } }, { startDate: { gt: new Date() } }],
         },
-        select: { event: { select: { partieId: true } } },
+        select: { compteRendu: true, startDate: true, event: { select: { partieId: true } } },
       }),
       // Une seule requête groupée sert à la fois VOTE_EN_COURS_SANS_REPONSE (joueur, filtré sur
       // les votes de l'utilisateur) et AUCUNE_DATE_NI_VOTE (MJ, simple présence d'un poll OPEN).
+      // Anti-spoil serveur : côté joueur, le vote de la séance d'un brouillon caché n'existe pas — il
+      // ne doit pas faire naître `VOTE_EN_COURS_SANS_REPONSE`.
       this.prisma.sessionPoll.findMany({
-        where: { partieId: { in: allPartieIds }, status: 'OPEN' },
+        where: {
+          status: 'OPEN',
+          OR: [
+            { partieId: { in: mjPartieIds } },
+            { AND: [{ partieId: { in: playerPartieIds } }, VISIBLE_POLL_WHERE] },
+          ],
+        },
         select: {
           partieId: true,
           options: {
@@ -105,7 +117,12 @@ export class PartySignalsService {
     const partiesWithCourantScenario = new Set(courantScenarios.map((s) => s.partieId));
     const partiesMissingResume = new Set(scenariosMissingResume.map((s) => s.partieId));
     const partiesMissingCompteRendu = new Set(
-      seancesMissingCompteRendu.map((s) => s.event.partieId),
+      seancesOfMjParties.filter((s) => s.compteRendu == null).map((s) => s.event.partieId),
+    );
+    const mjPartiesWithFutureSeance = new Set(
+      seancesOfMjParties
+        .filter((s) => s.startDate != null && s.startDate.getTime() > Date.now())
+        .map((s) => s.event.partieId),
     );
     const openPollsByPartie = new Map<string, OpenPollWithVotes[]>();
     for (const poll of openPolls as OpenPollWithVotes[]) {
@@ -123,14 +140,19 @@ export class PartySignalsService {
       // recalculé uniquement par `EventsService.recalculateNextSession()` sur événement). Une date passée non
       // recalculée depuis désynchronise ces deux signaux si on la traite comme "connue" ; on la
       // lit donc comme absente ici, sans jamais réécrire le champ.
+      //
+      // Joueur : `nextSessionDate` (hors brouillons cachés). MJ : toutes les séances de la partie,
+      // brouillons compris (lecture groupée ci-dessus).
       const hasFutureSessionDate =
-        !!partie.nextSessionDate && new Date(partie.nextSessionDate).getTime() > now;
+        role === 'mj'
+          ? mjPartiesWithFutureSeance.has(partie.id)
+          : !!partie.nextSessionDate && new Date(partie.nextSessionDate).getTime() > now;
 
       // AC5 : une partie clôturée ne porte jamais un signal d'action, seuls les signaux de fin
       // subsistent — appliqué en premier, avant toute autre dérivation. Les deux signaux de fin
       // sont MJ-only (garde explicite, revue de code) : `partiesMissingCompteRendu`/
       // `partiesMissingResume` ne sont dérivés que sur `mjPartieIds`, mais le rester même si ces
-      // requêtes étaient un jour élargies à `allPartieIds`.
+      // requêtes étaient un jour élargies à toutes les parties.
       if (partie.status === 'TERMINEE') {
         if (role === 'mj' && partiesMissingCompteRendu.has(partie.id))
           signals.push('COMPTE_RENDU_NON_REDIGE');

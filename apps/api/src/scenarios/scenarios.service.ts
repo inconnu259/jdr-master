@@ -10,6 +10,7 @@ import type {
   CharacterNoteDto,
   DaySlot,
   PartieKind,
+  PartieRole,
   ScenarioDocumentDto,
   ScenarioDto,
   SeanceDto,
@@ -20,6 +21,13 @@ import { EventsService } from '../events/events.service';
 import { PartiesService } from '../parties/parties.service';
 import { countParticipants } from '../common/participant-count.util';
 import { PermissionService } from '../permissions/permission.service';
+import {
+  VISIBLE_SCENARIO_WHERE,
+  isHiddenDraft,
+  isSpoilRestricted,
+  isReleased,
+  isRedactedForPlayer,
+} from '../permissions/scenario-visibility';
 import { CharacterService } from '../characters/character.service';
 import { PollService } from '../poll/poll.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
@@ -111,7 +119,13 @@ export class ScenariosService {
         }),
     );
 
-    return toEnrichedDto(this.prisma, this.characters, toRow(extension, event), partie.kind);
+    return toEnrichedDto(
+      this.prisma,
+      this.characters,
+      toRow(extension, event),
+      partie.kind,
+      grant.role,
+    );
   }
 
   async update(scenarioId: string, mjId: string, dto: UpdateScenarioDto): Promise<ScenarioDto> {
@@ -148,7 +162,13 @@ export class ScenariosService {
     });
 
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
-    return toEnrichedDto(this.prisma, this.characters, flattenScenario(updated), partie.kind);
+    return toEnrichedDto(
+      this.prisma,
+      this.characters,
+      flattenScenario(updated),
+      partie.kind,
+      grant.role,
+    );
   }
 
   async uploadDocument(
@@ -210,14 +230,25 @@ export class ScenariosService {
   }
 
   async listDocuments(scenarioId: string, userId: string): Promise<ScenarioDocumentDto[]> {
-    await this.permissions.assert(userId, 'SCENARIO_DOCUMENTS_READ', { eventId: scenarioId });
+    const grant = await this.permissions.assert(userId, 'SCENARIO_DOCUMENTS_READ', {
+      eventId: scenarioId,
+    });
     const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
 
+    // Anti-spoil serveur : pour un joueur, le brouillon caché n'existe pas (404) et les documents
+    // ciblés sur un scénario non diffusé (hors `COURANT`/`PASSE`) ne sont pas servis — seule la
+    // bibliothèque de la partie (`scenarioId` nul) l'est toujours.
+    const player = isSpoilRestricted(grant.role);
+    if (player && isHiddenDraft(scenario.status, grant.partie.kind)) {
+      throw new NotFoundException('Scénario introuvable');
+    }
+    const withScenarioDocuments = !player || isReleased(scenario.status);
+
     const documents = await this.prisma.scenarioDocument.findMany({
-      where: {
-        OR: [{ scenarioId }, { partieId: scenario.partieId, scenarioId: null }],
-      },
+      where: withScenarioDocuments
+        ? { OR: [{ scenarioId }, { partieId: scenario.partieId, scenarioId: null }] }
+        : { partieId: scenario.partieId, scenarioId: null },
       orderBy: { createdAt: 'desc' },
     });
     return documents.map(toDocumentDto);
@@ -253,19 +284,23 @@ export class ScenariosService {
     );
   }
 
-  // AD-6 : aucun filtrage par statut — l'anti-spoil est un rendu frontend, jamais serveur. Lecture
-  // ouverte à tout membre (`SCENARIO_READ`), pas MJ-only comme listDrafts. Tri chronologique croissant
-  // (passé → futur) pour alimenter la timeline joueur (Story 7.5).
+  // Anti-spoil serveur (PRD FR-5/FR-6) : lecture ouverte à tout membre (`SCENARIO_READ`), pas MJ-only
+  // comme listDrafts. Le MJ voit tout. Un joueur ne reçoit pas les brouillons cachés (hors
+  // `ONE_SHOT`) et le contenu d'un scénario `A_VENIR` ou brouillon de `ONE_SHOT` est masqué
+  // (`redactForViewer`). Tri chronologique croissant (passé → futur) pour alimenter la timeline
+  // joueur (Story 7.5).
   async findAllForPartie(
     partieId: string,
     userId: string,
     pagination?: { skip?: number; take?: number },
   ): Promise<ScenarioDto[]> {
-    const { partie } = await this.permissions.assert(userId, 'SCENARIO_READ', { partieId });
+    const { partie, role } = await this.permissions.assert(userId, 'SCENARIO_READ', { partieId });
 
     const scenarios = (
       await this.prisma.scenario.findMany({
-        where: { event: { partieId } },
+        where: isSpoilRestricted(role)
+          ? { AND: [{ event: { partieId } }, VISIBLE_SCENARIO_WHERE] }
+          : { event: { partieId } },
         orderBy: [{ event: { createdAt: 'asc' } }, { id: 'asc' }],
         skip: pagination?.skip,
         take: pagination?.take,
@@ -291,7 +326,11 @@ export class ScenariosService {
             seances,
             undefined,
           );
-          return toDto(s, partie.kind, undefined, seances, retrospectiveNotes);
+          return redactForViewer(
+            toDto(s, partie.kind, undefined, seances, retrospectiveNotes),
+            role,
+            partie.kind,
+          );
         }),
       );
     }
@@ -322,7 +361,11 @@ export class ScenariosService {
           seances,
           scenarioParticipants,
         );
-        return toDto(s, partie.kind, scenarioParticipants, seances, retrospectiveNotes);
+        return redactForViewer(
+          toDto(s, partie.kind, scenarioParticipants, seances, retrospectiveNotes),
+          role,
+          partie.kind,
+        );
       }),
     );
   }
@@ -419,20 +462,27 @@ export class ScenariosService {
       throw new BadRequestException('Seul un scénario Brouillon peut être ouvert aux joueurs');
     }
 
-    const updated = flattenScenario(
-      await this.prisma.scenario.update({
-        where: { id: scenarioId },
-        data: { status: 'A_VENIR' },
-        include: WITH_EVENT,
-      }),
-    );
+    // Anti-spoil serveur : `Partie.nextSessionDate/Slot` ignore les séances d'un brouillon caché ;
+    // ouvrir le scénario rend ses séances datées éligibles. Changement de statut et recalcul (seul
+    // écrivain : `events/`, sous verrou de la partie) dans UNE transaction ; émission après validation.
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const opened = flattenScenario(
+        await tx.scenario.update({
+          where: { id: scenarioId },
+          data: { status: 'A_VENIR' },
+          include: WITH_EVENT,
+        }),
+      );
+      await this.events.recalculateNextSessionInTx(tx, scenario.partieId);
+      return opened;
+    });
 
     this.realtimeEvents.emit(partieTopic(scenario.partieId));
     // Deferred-work (SSE, calendrier personnel) : un scénario ouvert peut rendre une inscription
     // atteignable pour un membre — sans ceci, GET /me/calendar reste périmé jusqu'au prochain
     // changement de plage.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // AD-10 : unicité du scénario Courant vérifiée en service (verrou SELECT ... FOR UPDATE, même
@@ -477,7 +527,7 @@ export class ScenariosService {
       this.realtimeEvents.emit(partieTopic(partie.id));
       // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : en plus de partieTopic, jamais en remplacement.
       await this.parties.notifyPartieSignalsChanged(partie.id, mjId);
-      return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+      return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
     }
 
     const { count } = await this.prisma.scenario.updateMany({
@@ -492,7 +542,7 @@ export class ScenariosService {
     // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
     await this.parties.notifyPartieSignalsChanged(partie.id, mjId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // AD-9 : écriture MJ-only (`SCENARIO_STATUS_CHANGE`). Contrairement à markCourant/AD-10, close() ne
@@ -522,7 +572,7 @@ export class ScenariosService {
     // AUCUN_SCENARIO_EN_COURS (Story 29.7, AD-14) : la partie perd son scénario COURANT — en plus
     // de partieTopic ci-dessus, jamais en remplacement.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // AD-9 : action joueur (`SCENARIO_PARTICIPATE`) — MJ+membre. AD-4 : ScenarioParticipant
@@ -534,6 +584,17 @@ export class ScenariosService {
     const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
     const { partie } = grant;
+
+    // Anti-spoil serveur : un joueur ne peut ni deviner l'existence d'un brouillon caché (404, aucune
+    // écriture) ni rejoindre un scénario clôturé (400).
+    if (isSpoilRestricted(grant.role)) {
+      if (isHiddenDraft(scenario.status, partie.kind)) {
+        throw new NotFoundException('Scénario introuvable');
+      }
+      if (scenario.status === 'PASSE') {
+        throw new BadRequestException('Impossible de participer à un scénario clôturé');
+      }
+    }
 
     if (partie.kind !== 'CAMPAGNE_EPISODIQUE') {
       throw new BadRequestException(
@@ -549,7 +610,7 @@ export class ScenariosService {
 
     const updated = await this.reloadScenario(scenarioId);
     this.realtimeEvents.emit(partieTopic(partie.id));
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // AD-9 : écriture MJ-only (`SEANCE_ADD`, comme create/update/open/markCourant/close) — ajouter
@@ -571,7 +632,7 @@ export class ScenariosService {
     // Deferred-work (SSE, calendrier personnel) : une nouvelle séance peut apparaître dans
     // mes-seances/inscriptions-ouvertes pour un membre — GET /me/calendar doit le savoir.
     await this.parties.notifyPartieSignalsChanged(partie.id, mjId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // AD-9 : écriture MJ-only (`SEANCE_DELETE`). Un scénario a toujours au moins une séance (invariant
@@ -604,7 +665,7 @@ export class ScenariosService {
     // Deferred-work (SSE, calendrier personnel) : une séance supprimée peut retirer une ligne de
     // mes-seances/votes-en-cours chez un membre — GET /me/calendar doit le savoir.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // AD-4 révisé (Story 8.8, Décision 1) : une Seance CAMPAGNE_EPISODIQUE peut désormais être liée à
@@ -650,7 +711,7 @@ export class ScenariosService {
     );
 
     const updated = await this.reloadScenario(scenario.id);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // Story 8.8, AC4 : détache le poll de la séance (Seance.pollId = null) et efface sa plage de
@@ -681,7 +742,7 @@ export class ScenariosService {
     // Deferred-work (SSE, calendrier personnel) : une date réinitialisée rouvre un vote absent de
     // votes-en-cours chez un membre — GET /me/calendar doit le savoir.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // AD-4/AD-5 : capacité d'inscription réservée à CAMPAGNE_EPISODIQUE — symétrique au rejet
@@ -719,7 +780,7 @@ export class ScenariosService {
     // Deferred-work (SSE, calendrier personnel) : une capacité posée peut rendre une inscription
     // ouvrable pour un membre — GET /me/calendar doit le savoir.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // AD-5 (verbatim) : verrou de ligne explicite SELECT ... FOR UPDATE obligatoire — READ COMMITTED
@@ -733,6 +794,11 @@ export class ScenariosService {
     const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const { partie } = grant;
 
+    // Anti-spoil serveur : la séance d'un brouillon caché n'existe pas pour un joueur (404, comme
+    // `desinscrire`/`participate`) — avant le 400 « non actif », qui révélerait son existence.
+    if (isSpoilRestricted(grant.role) && isHiddenDraft(scenario.status, partie.kind)) {
+      throw new NotFoundException('Séance introuvable');
+    }
     if (scenario.status === 'BROUILLON' || scenario.status === 'PASSE') {
       throw new BadRequestException(
         "Impossible de s'inscrire à une séance dont le scénario n'est pas actif",
@@ -753,7 +819,7 @@ export class ScenariosService {
     // pas le MJ : notifyPartieSignalsChanged() veut l'id du MJ (partie.ownerId), porté par
     // l'autorisation ci-dessus.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.ownerId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // deleteMany (pas delete) : idempotent si l'utilisateur n'était pas inscrit — pas d'effet de
@@ -769,6 +835,12 @@ export class ScenariosService {
     const scenario = await resolveScenarioOrThrow(this.prisma, seance.eventId);
     const { partie } = grant;
 
+    // Anti-spoil serveur : la séance d'un brouillon caché n'existe pas pour un joueur — sans quoi la
+    // réponse renverrait le DTO du brouillon.
+    if (isSpoilRestricted(grant.role) && isHiddenDraft(scenario.status, partie.kind)) {
+      throw new NotFoundException('Séance introuvable');
+    }
+
     // Décision utilisateur (revue de code, 2026-07-14) : la date validée fige le roster — un
     // joueur ne peut plus se désinscrire une fois la séance confirmée par le MJ. Story 37.3 : règle,
     // retrait et émission `partie:` délégués à `EventsService`.
@@ -777,7 +849,7 @@ export class ScenariosService {
     const updated = await this.reloadScenario(scenario.id);
     // Deferred-work (SSE, calendrier personnel) : même raison qu'inscrire() ci-dessus.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, partie.ownerId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // AD-1/AD-9 : compte-rendu = champ neutre de Seance, jamais restreint par kind ni par un
@@ -803,7 +875,7 @@ export class ScenariosService {
     // COMPTE_RENDU_NON_REDIGE (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   /** Informations pratiques d'une séance (Story 36.5, dérogation D-15 amendée le 2026-08-19).
@@ -834,7 +906,7 @@ export class ScenariosService {
     const updated = await this.reloadScenario(scenario.id);
     // Pas de notifyPartieSignalsChanged ici : contrairement au compte-rendu, l'absence
     // d'informations pratiques n'est PAS un manquement et ne porte aucun signal (AC4).
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   // AD-1/AD-9 : résumé de fin = champ de Scenario, écriture MJ-only (`SCENARIO_UPDATE`). Garde de statut
@@ -865,13 +937,14 @@ export class ScenariosService {
     // RAPPORT_FIN_MANQUANT (Story 29.7, AD-14) : en plus de partieTopic ci-dessus, jamais en
     // remplacement.
     await this.parties.notifyPartieSignalsChanged(scenario.partieId, mjId);
-    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind);
+    return toEnrichedDto(this.prisma, this.characters, updated, partie.kind, grant.role);
   }
 
   /** Story 9.1 (AD-2) : valide qu'un scenarioId existe et appartient à la Partie donnée — utilisé
    * par AnnouncementsService pour la portée d'une annonce. AUCUNE validation de statut ici
    * (contrairement à uploadDocument() qui bloque PASSE) : AD-2 est explicite, une annonce peut
-   * viser un scénario BROUILLON/A_VENIR, seul le rendu frontend (Story 9.2) protège l'anti-spoil. */
+   * viser un scénario BROUILLON/A_VENIR ; c'est la LECTURE qui la cache aux joueurs tant que le
+   * scénario n'est ni COURANT ni PASSE (`RELEASED_ANNOUNCEMENT_WHERE`). */
   async verifyScenarioBelongsToPartie(scenarioId: string, partieId: string): Promise<void> {
     const scenario = await this.findScenario(scenarioId);
     if (!scenario) throw new NotFoundException('Scénario introuvable');
@@ -886,12 +959,23 @@ export class ScenariosService {
   ): Promise<{ buffer: Buffer; mime: string; originalName: string }> {
     const document = await this.prisma.scenarioDocument.findUnique({
       where: { id: documentId },
+      include: { scenario: { select: { status: true } } },
     });
     if (!document) throw new NotFoundException('Document introuvable');
     // La partie est celle du document lui-même, jamais un paramètre de route.
-    await this.permissions.assert(userId, 'SCENARIO_DOCUMENTS_READ', {
+    const grant = await this.permissions.assert(userId, 'SCENARIO_DOCUMENTS_READ', {
       partieId: document.partieId,
     });
+    // Anti-spoil serveur : un joueur n'obtient le fichier d'un document ciblé que si son scénario
+    // est diffusé (`COURANT`/`PASSE`) — brouillon, `A_VENIR` : 404, aucun octet. La bibliothèque
+    // (`scenarioId` nul) est toujours servie.
+    if (
+      isSpoilRestricted(grant.role) &&
+      document.scenarioId !== null &&
+      !(document.scenario && isReleased(document.scenario.status))
+    ) {
+      throw new NotFoundException('Document introuvable');
+    }
 
     const file = await readDocumentFile(document.filename);
     if (!file) throw new NotFoundException('Fichier introuvable');
@@ -1140,6 +1224,37 @@ async function loadSeances(
 // sinon ces champs redeviendraient `undefined`/vides après une action MJ, faisant disparaître à
 // tort la liste des participants/séances côté frontend (ScenarioEditor/ScenarioReadDialog).
 async function toEnrichedDto(
+  prisma: PrismaService,
+  characters: CharacterService,
+  scenario: ScenarioRow,
+  partieKind: PartieKind,
+  viewerRole: PartieRole,
+): Promise<ScenarioDto> {
+  return redactForViewer(
+    await buildEnrichedDto(prisma, characters, scenario, partieKind),
+    viewerRole,
+    partieKind,
+  );
+}
+
+/**
+ * Anti-spoil serveur (PRD FR-5/FR-6) : un joueur ne reçoit ni la description, ni les durées, ni le
+ * compte rendu des séances d'un scénario dont le contenu est masqué (`A_VENIR`, ou brouillon de
+ * `ONE_SHOT`). Les champs restent présents mais nuls — la forme du DTO ne change pas. Le MJ reçoit
+ * toujours le DTO complet. Titre, séances (dates, votes, inscriptions) et participants restent.
+ */
+function redactForViewer(dto: ScenarioDto, role: PartieRole, partieKind: PartieKind): ScenarioDto {
+  if (!isSpoilRestricted(role) || !isRedactedForPlayer(dto.status, partieKind)) return dto;
+  return {
+    ...dto,
+    description: null,
+    dureeHeures: null,
+    dureeSeances: null,
+    seances: dto.seances.map((s) => ({ ...s, compteRendu: null })),
+  };
+}
+
+async function buildEnrichedDto(
   prisma: PrismaService,
   characters: CharacterService,
   scenario: ScenarioRow,

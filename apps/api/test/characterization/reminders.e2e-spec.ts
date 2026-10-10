@@ -6,6 +6,7 @@ import { Harness, body, isoDay, type TestUser } from './harness';
 // séance) — mêmes e-mail et destinataires attendus pour une partie à une seule prochaine séance.
 
 type ScenarioDtoLike = {
+  id: string;
   seances: { id: string; poll?: { id: string; options: { id: string; date: string }[] } }[];
 };
 
@@ -114,7 +115,11 @@ describe('Caractérisation JDR — rappel de la veille (Story 37.1)', () => {
       ['Épisode lointain', isoDay(5), 'EVENING'],
     ] as const) {
       const res = await mj.agent.post(`/parties/${id}/scenarios`).send({ title }).expect(201);
+      const scenarioId = body<ScenarioDtoLike>(res).id;
       const seanceId = body<ScenarioDtoLike>(res).seances[0].id;
+      // Anti-spoil serveur : la séance d'un brouillon n'est rappelée qu'au propriétaire — le
+      // scénario est ouvert pour que les membres soient rappelés comme avant.
+      await mj.agent.patch(`/scenarios/${scenarioId}/open`).expect(200);
       const pollRes = await mj.agent
         .post(`/scenarios/seances/${seanceId}/poll`)
         .send({

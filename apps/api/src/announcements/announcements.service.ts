@@ -3,6 +3,7 @@ import type { AnnouncementDto } from '@master-jdr/shared';
 import type { Announcement } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionService } from '../permissions/permission.service';
+import { RELEASED_ANNOUNCEMENT_WHERE, isSpoilRestricted } from '../permissions/scenario-visibility';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
@@ -70,18 +71,22 @@ export class AnnouncementsService {
     return toDto(announcement, mj);
   }
 
-  /** Story 9.2 (AD-9/AD-6) : lecture ouverte à tout membre (ANNOUNCEMENT_READ), retourne TOUTES les
-   * annonces de la Partie sans filtrage de statut de scénario — l'anti-spoil (AC6) est un rendu
-   * Angular conditionnel côté consommateur, jamais un filtrage serveur. */
+  /** Story 9.2 (AD-9/AD-6) : lecture ouverte à tout membre (ANNOUNCEMENT_READ). Le MJ reçoit TOUTES
+   * les annonces de la Partie. Anti-spoil serveur : un joueur ne reçoit pas les annonces ciblées sur
+   * un scénario qui n'est ni `COURANT` ni `PASSE` ; les annonces de toute la partie restent. */
   async findAll(partieId: string, userId: string): Promise<AnnouncementDto[]> {
-    const { partie } = await this.permissions.assert(userId, 'ANNOUNCEMENT_READ', { partieId });
+    const { partie, role } = await this.permissions.assert(userId, 'ANNOUNCEMENT_READ', {
+      partieId,
+    });
     // Une partie sans propriétaire (AD-5, compte supprimé — inatteignable aujourd'hui) n'a plus
     // d'auteur à afficher : ses annonces sont écartées en attendant l'affichage « compte
     // supprimé ».
     const author = await this.permissions.ownerOf(partie);
     if (!author) return [];
     const announcements = await this.prisma.announcement.findMany({
-      where: { partieId },
+      where: isSpoilRestricted(role)
+        ? { AND: [{ partieId }, RELEASED_ANNOUNCEMENT_WHERE] }
+        : { partieId },
       orderBy: { createdAt: 'desc' },
     });
     return announcements.map((a) => toDto(a, author));

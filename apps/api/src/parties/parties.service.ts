@@ -592,7 +592,11 @@ export class PartiesService implements PartieSignalsPort {
         }
       }
 
-      return written;
+      // Anti-spoil serveur : un brouillon est caché sauf dans un ONE_SHOT — convertir le type change
+      // donc l'ensemble des séances éligibles à `nextSessionDate/Slot` (valeur unique, partagée par
+      // tous les lecteurs). Recalcul dans la même transaction, reporté sur le DTO renvoyé.
+      const next = await this.events.recalculateNextSessionInTx(tx, id);
+      return { ...written, ...next };
     });
 
     // AD-14 : la conversion change des statuts de scénario, donc des signaux. Émission tolérante

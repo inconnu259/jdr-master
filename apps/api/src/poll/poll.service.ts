@@ -1,7 +1,12 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import type { DaySlot, SessionPollDto } from '@master-jdr/shared';
+import type { DaySlot, PartieRole, SessionPollDto } from '@master-jdr/shared';
 import { countParticipants } from '../common/participant-count.util';
 import { PermissionService, type PartieGrant } from '../permissions/permission.service';
+import {
+  HIDDEN_DRAFT_POLL_WHERE,
+  VISIBLE_POLL_WHERE,
+  isSpoilRestricted,
+} from '../permissions/scenario-visibility';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { CastVoteDto } from './dto/cast-vote.dto';
@@ -87,9 +92,13 @@ export class PollService {
   }
 
   async findOpen(partieId: string, userId: string): Promise<SessionPollDto | null> {
-    await this.permissions.assert(userId, 'POLL_READ', { partieId });
+    const { role } = await this.permissions.assert(userId, 'POLL_READ', { partieId });
+    // Anti-spoil serveur : un joueur ne voit pas le vote de la séance d'un brouillon caché ; le MJ
+    // voit tout.
     const poll = await this.prisma.sessionPoll.findFirst({
-      where: { partieId, status: 'OPEN' },
+      where: isSpoilRestricted(role)
+        ? { AND: [{ partieId, status: 'OPEN' }, VISIBLE_POLL_WHERE] }
+        : { partieId, status: 'OPEN' },
       include: POLL_INCLUDE,
     });
     return poll ? toDto(poll, await countParticipants(this.prisma, partieId)) : null;
@@ -101,11 +110,16 @@ export class PollService {
     userId: string,
     dto: CastVoteDto,
   ): Promise<void> {
-    await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
+    const { role } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
-    if (!poll || poll.partieId !== partieId || poll.status !== 'OPEN') {
+    if (
+      !poll ||
+      poll.partieId !== partieId ||
+      poll.status !== 'OPEN' ||
+      (await this.isHiddenFromPlayer(role, pollId))
+    ) {
       throw new BadRequestException('Poll introuvable ou fermé');
     }
     const option = await this.prisma.pollOption.findUnique({
@@ -130,6 +144,16 @@ export class PollService {
     await this.partieSignals.notifyChanged(partieId);
   }
 
+  /** Anti-spoil serveur : vrai si `pollId` est le vote de la séance d'un brouillon caché ET que
+   *  l'appelant est un joueur — il reçoit alors la même erreur qu'un vote inconnu, sans écriture. */
+  private async isHiddenFromPlayer(role: PartieRole, pollId: string): Promise<boolean> {
+    if (!isSpoilRestricted(role)) return false;
+    const hidden = await this.prisma.sessionPoll.count({
+      where: { AND: [{ id: pollId }, HIDDEN_DRAFT_POLL_WHERE] },
+    });
+    return hidden > 0;
+  }
+
   /** Retire la réponse de l'appelant sur une option (Story 30.1, AD-10) — supprime la ligne
    *  `PollVote`, jamais une réponse vide : « n'a pas répondu » est déjà représenté par l'absence
    *  de ligne. `userId` vient uniquement de `@CurrentUser()` (jamais de l'URL/du corps), donc le
@@ -143,11 +167,16 @@ export class PollService {
     optionId: string,
     userId: string,
   ): Promise<void> {
-    await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
+    const { role } = await this.permissions.assert(userId, 'POLL_VOTE', { partieId });
     const poll = await this.prisma.sessionPoll.findUnique({
       where: { id: pollId },
     });
-    if (!poll || poll.partieId !== partieId || poll.status !== 'OPEN') {
+    if (
+      !poll ||
+      poll.partieId !== partieId ||
+      poll.status !== 'OPEN' ||
+      (await this.isHiddenFromPlayer(role, pollId))
+    ) {
       throw new BadRequestException('Poll introuvable ou fermé');
     }
     const option = await this.prisma.pollOption.findUnique({

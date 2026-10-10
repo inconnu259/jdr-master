@@ -259,7 +259,7 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-37-6-faire-decider-les-droits-sur-une-partie-et-ses-evenements-par-un-service-unique.md`
   summary: Enforce scenario anti-spoil server-side — members can list BROUILLON scenarios (`findAllForPartie`), read their documents, and `participate()` in a BROUILLON/PASSE scenario through the API; today hiding is front-end only.
-  evidence: Found during 37.6 investigation (scenarios.service.ts `findAllForPartie` ~L253, `participate` ~L515, `listDocuments`); out of the porte's constant-behaviour scope. Security-relevant (spoilers leak to players via direct API calls).
+  evidence: Found during 37.6 investigation (scenarios.service.ts `findAllForPartie` ~L253, `participate` ~L515, `listDocuments`); out of the porte's constant-behaviour scope. Security-relevant (spoilers leak to players via direct API calls). RESOLVED 2026-10-11 by spec-anti-spoil-serveur-des-scenarios.md.
 
 - source_spec: `_bmad-output/implementation-artifacts/spec-37-7-brancher-les-capacites-jdr-sur-le-service-de-permission-et-interdire-les-lectures-directes.md`
   summary: Make the no-direct-owner-read sweep line-granular (pin allowed owner-read lines/counts per exception file, or move projections/writes behind helpers) instead of whole-file exceptions.

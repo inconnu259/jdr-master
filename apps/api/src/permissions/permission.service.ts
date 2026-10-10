@@ -128,7 +128,8 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
   SCENARIO_CREATE: OWNER_ONLY,
   SCENARIO_UPDATE: OWNER_ONLY,
   SCENARIO_STATUS_CHANGE: OWNER_ONLY,
-  // Anti-spoil : un membre lit encore les brouillons par l'API (rendu front seulement — reporté).
+  // Anti-spoil : la lecture est ouverte aux membres, mais filtrée PAR RÔLE dans les services
+  // (`scenario-visibility.ts` : brouillons cachés, contenu masqué) — le rôle vient de ce `assert`.
   SCENARIO_READ: OWNER_AND_MEMBERS,
   SCENARIO_DRAFTS_READ: OWNER_ONLY,
   SCENARIO_DOCUMENT_UPLOAD: OWNER_ONLY,

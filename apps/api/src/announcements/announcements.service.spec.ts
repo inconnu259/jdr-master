@@ -15,6 +15,7 @@ import { AnnouncementsService } from './announcements.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PermissionService } from '../permissions/permission.service';
 import { testGrant } from '../common/test-utils/grant';
+import { RELEASED_ANNOUNCEMENT_WHERE } from '../permissions/scenario-visibility';
 import { ScenariosService } from '../scenarios/scenarios.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 
@@ -206,8 +207,10 @@ describe('AnnouncementsService', () => {
       expect(permissions.assert).toHaveBeenCalledWith('u1', 'ANNOUNCEMENT_READ', {
         partieId: 'p1',
       });
+      // Anti-spoil serveur : un joueur ne lit que les annonces de toute la partie ou ciblées sur un
+      // scénario diffusé (fragment partagé).
       expect(prisma.announcement.findMany).toHaveBeenCalledWith({
-        where: { partieId: 'p1' },
+        where: { AND: [{ partieId: 'p1' }, RELEASED_ANNOUNCEMENT_WHERE] },
         orderBy: { createdAt: 'desc' },
       });
       expect(result.map((a) => a.id)).toEqual(['ann2', 'ann1']);
@@ -215,8 +218,21 @@ describe('AnnouncementsService', () => {
       expect(result[0].authorDisplayName).toBe('Le Grand MJ');
     });
 
-    it('inclut une annonce scopée à un scénario BROUILLON/A_VENIR sans distinction (AC6, aucun filtrage serveur)', async () => {
-      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }, 'player'));
+    it('échec FERMÉ : un rôle autre que MJ (ici member) reçoit la liste filtrée', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }, 'member'));
+      permissions.ownerOf.mockResolvedValue({ userId: 'mj1', pseudo: 'le-mj', displayName: 'MJ' });
+      prisma.announcement.findMany.mockResolvedValue([]);
+
+      await service.findAll('p1', 'u1');
+
+      expect(prisma.announcement.findMany).toHaveBeenCalledWith({
+        where: { AND: [{ partieId: 'p1' }, RELEASED_ANNOUNCEMENT_WHERE] },
+        orderBy: { createdAt: 'desc' },
+      });
+    });
+
+    it('le MJ lit TOUTES les annonces, y compris celles scopées à un scénario BROUILLON/A_VENIR (aucun filtre)', async () => {
+      permissions.assert.mockResolvedValue(testGrant({ id: 'p1', ownerId: 'mj1' }, 'mj'));
       permissions.ownerOf.mockResolvedValue({
         userId: 'mj1',
         pseudo: 'le-mj',
@@ -226,8 +242,12 @@ describe('AnnouncementsService', () => {
         makeAnnouncement({ id: 'ann-brouillon', scenarioId: 's-brouillon' }),
       ]);
 
-      const result = await service.findAll('p1', 'u1');
+      const result = await service.findAll('p1', 'mj1');
 
+      expect(prisma.announcement.findMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1' },
+        orderBy: { createdAt: 'desc' },
+      });
       expect(result).toHaveLength(1);
       expect(result[0].scenarioId).toBe('s-brouillon');
     });

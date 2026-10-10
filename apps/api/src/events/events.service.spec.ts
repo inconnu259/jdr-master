@@ -5,6 +5,7 @@ import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.
 import { EventsService } from './events.service';
 import { testGrant } from '../common/test-utils/grant';
 import { mockCalls } from '../common/test-utils/jest-typed';
+import { VISIBLE_SEANCE_WHERE } from '../permissions/scenario-visibility';
 
 /** Story 37.6 — autorisation délivrée (simulée) par `PermissionService.assert()` sur `p1`. */
 const GRANT_P1 = testGrant({ id: 'p1', ownerId: 'mj1' });
@@ -256,8 +257,10 @@ describe('EventsService (Story 37.3)', () => {
         where: { id: 'poll1' },
         select: { partieId: true },
       });
+      // Anti-spoil serveur : seules les séances qui ne sont pas celles d'un brouillon caché
+      // comptent (fragment partagé `VISIBLE_SEANCE_WHERE`).
       expect(prisma.tx.seance.findMany).toHaveBeenCalledWith({
-        where: { event: { partieId: 'p1' } },
+        where: { AND: [{ event: { partieId: 'p1' } }, VISIBLE_SEANCE_WHERE] },
         select: { startDate: true, startSlot: true },
       });
       expect(prisma.tx.partie.update).toHaveBeenCalledWith({
@@ -855,6 +858,68 @@ describe('EventsService (Story 37.3)', () => {
           jeSuisInscrit: true,
         },
       ]);
+    });
+
+    it('anti-spoil : un joueur ignore les séances d’un brouillon caché (hors ONE_SHOT), le MJ les voit toutes', async () => {
+      prisma.partie.findMany.mockResolvedValue([episodique]);
+      prisma.seance.findMany.mockResolvedValue([
+        seance({
+          id: 'brouillon-datee',
+          inscriptions: [{ userId: 'me' }],
+          event: {
+            partieId: 'A',
+            title: 'Secret',
+            scenario: { status: 'BROUILLON' },
+          },
+        }),
+        seance({
+          id: 'brouillon-ouverte',
+          startDate: null,
+          startSlot: null,
+          inscriptionMax: 4,
+          event: { partieId: 'A', title: 'Secret', scenario: { status: 'BROUILLON' } },
+        }),
+        seance({
+          id: 'ouvert',
+          inscriptions: [{ userId: 'me' }],
+          event: { partieId: 'A', title: 'Public', scenario: { status: 'A_VENIR' } },
+        }),
+      ]);
+
+      const joueur = await service.ownEventsOf('me', rolesOf('player'), RANGE);
+      expect(joueur.seances.map((s) => s.seanceId)).toEqual(['ouvert']);
+      expect(joueur.inscriptionsOuvertes).toEqual([]);
+
+      const mj = await service.ownEventsOf('me', rolesOf('mj'), RANGE);
+      expect(mj.seances.map((s) => s.seanceId)).toEqual(['brouillon-datee', 'ouvert']);
+      expect(mj.inscriptionsOuvertes.map((s) => s.seanceId)).toEqual(['brouillon-ouverte']);
+    });
+
+    it('anti-spoil, échec FERMÉ : un rôle inconnu (absent de la table des rôles) est traité comme un joueur', async () => {
+      prisma.partie.findMany.mockResolvedValue([episodique]);
+      prisma.seance.findMany.mockResolvedValue([
+        seance({
+          inscriptions: [{ userId: 'me' }],
+          event: { partieId: 'A', title: 'Secret', scenario: { status: 'BROUILLON' } },
+        }),
+      ]);
+
+      const own = await service.ownEventsOf('me', jest.fn().mockResolvedValue(new Map()), RANGE);
+
+      expect(own.seances).toEqual([]);
+    });
+
+    it('anti-spoil : le brouillon d’un ONE_SHOT reste dans le calendrier du joueur (exemption)', async () => {
+      prisma.partie.findMany.mockResolvedValue([partieA]);
+      prisma.seance.findMany.mockResolvedValue([
+        seance({
+          event: { partieId: 'A', title: 'One-shot', scenario: { status: 'BROUILLON' } },
+        }),
+      ]);
+
+      const own = await service.ownEventsOf('me', rolesOf('player'), RANGE);
+
+      expect(own.seances.map((s) => s.seanceId)).toEqual(['se1']);
     });
 
     it('inscriptions ouvertes : une partie non épisodique n’en a jamais', async () => {
