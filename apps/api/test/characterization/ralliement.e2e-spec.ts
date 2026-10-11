@@ -1,3 +1,5 @@
+import request from 'supertest';
+import { PartiesService } from '../../src/parties/parties.service';
 import { Harness, body, type TestUser } from './harness';
 
 // Story 38.2 — création et droits d'un ralliement, au niveau HTTP : les deux formes (rencontre
@@ -353,7 +355,10 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
             .post(`${p(partieId)}/xp-distributions`)
             .send({ entries: [{ characterId: ZERO, amount: 1 }] }),
       },
-      { label: 'GET xp-distributions', send: (u) => u.agent.get(`${p(partieId)}/xp-distributions`) },
+      {
+        label: 'GET xp-distributions',
+        send: (u) => u.agent.get(`${p(partieId)}/xp-distributions`),
+      },
       {
         label: 'POST homme-dragon',
         send: (u) =>
@@ -362,7 +367,10 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
             .send({ race: 'DRAGON_VERT', artefact: { key: 'x' }, nom: 'Nom' }),
       },
       { label: 'GET homme-dragon', send: (u) => u.agent.get(`${p(partieId)}/homme-dragon`) },
-      { label: 'PUT homme-dragon/:id', send: (u) => u.agent.put(`${p(partieId)}/homme-dragon/${ZERO}`) },
+      {
+        label: 'PUT homme-dragon/:id',
+        send: (u) => u.agent.put(`${p(partieId)}/homme-dragon/${ZERO}`),
+      },
       {
         label: 'DELETE homme-dragon/:id',
         send: (u) => u.agent.delete(`${p(partieId)}/homme-dragon/${ZERO}`),
@@ -376,7 +384,10 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
         label: 'PUT visibility-locks',
         send: (u) => u.agent.put(`${p(partieId)}/visibility-locks`).send({ paths: [] }),
       },
-      { label: 'GET visibility-locks', send: (u) => u.agent.get(`${p(partieId)}/visibility-locks`) },
+      {
+        label: 'GET visibility-locks',
+        send: (u) => u.agent.get(`${p(partieId)}/visibility-locks`),
+      },
       { label: 'GET characters', send: (u) => u.agent.get(`${p(partieId)}/characters`) },
       {
         label: 'POST characters',
@@ -385,18 +396,8 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
             .post(`${p(partieId)}/characters`)
             .send({ gameSystemId: 'ralliement', sheetData: { a: 1 } }),
       },
-      {
-        label: 'POST invitations',
-        send: (u) => u.agent.post(`${p(partieId)}/invitations`).send({ inviteeUserId: stranger.id }),
-      },
-      {
-        label: 'POST invitations/by-email',
-        send: (u) =>
-          u.agent.post(`${p(partieId)}/invitations/by-email`).send({ email: 'x@test.local' }),
-      },
-      { label: 'GET invitations', send: (u) => u.agent.get(`${p(partieId)}/invitations`) },
-      { label: 'POST invite-links', send: (u) => u.agent.post(`${p(partieId)}/invite-links`).send({}) },
-      { label: 'GET invite-links', send: (u) => u.agent.get(`${p(partieId)}/invite-links`) },
+      // Invitations, liens et retrait d'un membre : ouverts à l'administrateur depuis la Story 39.3
+      // (describe « inviter » ci-dessous) — retirés de cette liste de capacités absentes.
       { label: 'GET poll', send: (u) => u.agent.get(`${p(partieId)}/poll`) },
       {
         label: 'POST poll/:id/vote',
@@ -424,13 +425,12 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
         send: (u) =>
           u.agent.get(`${p(partieId)}/heatmap`).query({ from: '2030-01-01', to: '2030-01-07' }),
       },
-      {
-        label: 'DELETE members/:userId',
-        send: (u) => u.agent.delete(`${p(partieId)}/members/${member.id}`),
-      },
       // Scénarios : aucun n'existe dans un ralliement, les routes de la partie sont refusées.
       { label: 'GET scenarios', send: (u) => u.agent.get(`${p(partieId)}/scenarios`) },
-      { label: 'GET scenarios/drafts', send: (u) => u.agent.get(`${p(partieId)}/scenarios/drafts`) },
+      {
+        label: 'GET scenarios/drafts',
+        send: (u) => u.agent.get(`${p(partieId)}/scenarios/drafts`),
+      },
       {
         label: 'POST scenarios',
         send: (u) => u.agent.post(`${p(partieId)}/scenarios`).send({ title: 'Un scénario' }),
@@ -448,16 +448,14 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
           ['POST scenarios/:id/seances', 'post', '/seances', undefined],
           ['GET scenarios/:id/documents', 'get', '/documents', undefined],
         ] as const
-      ).map(
-        ([label, method, suffix, payload]): Probe => ({
-          label,
-          allowed: [403, 404],
-          send: (u) => {
-            const req = u.agent[method](`/scenarios/${ZERO}${suffix}`);
-            return payload ? req.send(payload) : req;
-          },
-        }),
-      ),
+      ).map(([label, method, suffix, payload]): Probe => ({
+        label,
+        allowed: [403, 404],
+        send: (u) => {
+          const req = u.agent[method](`/scenarios/${ZERO}${suffix}`);
+          return payload ? req.send(payload) : req;
+        },
+      })),
       // Séances : vraie séance de la rencontre isolée → refusées (la politique ne les ouvre à personne).
       {
         label: 'DELETE seances/:id',
@@ -539,9 +537,14 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
           .sort(),
         // La séance entière, champ par champ : date, capacité, compte rendu, infos pratiques, vote.
         seances: JSON.stringify(
-          await h.prisma.seance.findMany({ where: { event: { partieId } }, orderBy: { id: 'asc' } }),
+          await h.prisma.seance.findMany({
+            where: { event: { partieId } },
+            orderBy: { id: 'asc' },
+          }),
         ),
-        partie: JSON.stringify(await h.prisma.partie.findUniqueOrThrow({ where: { id: partieId } })),
+        partie: JSON.stringify(
+          await h.prisma.partie.findUniqueOrThrow({ where: { id: partieId } }),
+        ),
       };
     };
 
@@ -595,5 +598,300 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
       const stored = await h.prisma.partie.findUniqueOrThrow({ where: { id: partieId } });
       expect(stored.coverImageUrl).toBeNull();
     });
+  });
+});
+
+// Story 39.3 — inviter quelqu'un dans un groupe : l'administrateur invite par pseudo, par e-mail et
+// par lien, retire un simple membre ; un membre ou un étranger est refusé en 403 sur chaque route.
+describe('Ralliement — inviter dans un groupe (Story 39.3)', () => {
+  let h: Harness;
+  let admin: TestUser;
+  let admin2: TestUser;
+  let member: TestUser;
+  let stranger: TestUser;
+  let partieId: string;
+  const registeredEmails: string[] = [];
+
+  type InvitationLike = { id: string; partie?: { gameSystemId: string } };
+  type LinkLike = { id: string; token: string };
+
+  beforeAll(async () => {
+    h = await Harness.start();
+    [admin, admin2, member, stranger] = await Promise.all([
+      h.createUser('inv-admin'),
+      h.createUser('inv-admin2'),
+      h.createUser('inv-membre'),
+      h.createUser('inv-etranger'),
+    ]);
+    ({ id: partieId } = await h.createPartie(
+      admin,
+      'CAMPAGNE_EPISODIQUE',
+      'inviter',
+      'ralliement',
+    ));
+    await h.addMember(partieId, admin2, 'ADMIN');
+    await h.addMember(partieId, member);
+  });
+
+  afterAll(async () => {
+    // Comptes créés par l'inscription par lien : le banc ne les connaît pas.
+    if (registeredEmails.length > 0) {
+      await h.prisma.user.deleteMany({ where: { email: { in: registeredEmails } } });
+    }
+    await h?.close();
+  });
+
+  const membershipOf = (userId: string) =>
+    h.prisma.membership.findUnique({ where: { userId_partieId: { userId, partieId } } });
+
+  describe('refus', () => {
+    let invitationId: string;
+    let linkId: string;
+
+    beforeAll(async () => {
+      const target = await h.createUser('inv-cible-refus');
+      const inv = await admin.agent
+        .post(`/parties/${partieId}/invitations`)
+        .send({ inviteeUserId: target.id })
+        .expect(201);
+      invitationId = body<InvitationLike>(inv).id;
+      const link = await admin.agent.post(`/parties/${partieId}/invite-links`).send({}).expect(201);
+      linkId = body<LinkLike>(link).id;
+    });
+
+    const routes = (user: TestUser) => [
+      {
+        label: 'POST invitations',
+        send: () =>
+          user.agent.post(`/parties/${partieId}/invitations`).send({ inviteeUserId: stranger.id }),
+      },
+      {
+        label: 'POST invitations/by-email',
+        send: () =>
+          user.agent
+            .post(`/parties/${partieId}/invitations/by-email`)
+            .send({ email: `refus-${h.suffix}@test.local` }),
+      },
+      { label: 'GET invitations', send: () => user.agent.get(`/parties/${partieId}/invitations`) },
+      {
+        label: 'DELETE invitations/:id',
+        send: () => user.agent.delete(`/invitations/${invitationId}`),
+      },
+      {
+        label: 'POST invite-links',
+        send: () => user.agent.post(`/parties/${partieId}/invite-links`).send({}),
+      },
+      {
+        label: 'GET invite-links',
+        send: () => user.agent.get(`/parties/${partieId}/invite-links`),
+      },
+      {
+        label: 'DELETE invite-links/:id',
+        send: () => user.agent.delete(`/invite-links/${linkId}`),
+      },
+      {
+        label: 'DELETE members/:userId',
+        send: () => user.agent.delete(`/parties/${partieId}/members/${admin2.id}`),
+      },
+    ];
+
+    const snapshot = async () => ({
+      invitations: await h.prisma.invitation.findMany({
+        where: { partieId },
+        orderBy: { id: 'asc' },
+      }),
+      links: await h.prisma.inviteLink.findMany({ where: { partieId }, orderBy: { id: 'asc' } }),
+      memberships: (await h.prisma.membership.findMany({ where: { partieId } }))
+        .map((m) => `${m.userId}:${m.role}`)
+        .sort(),
+    });
+
+    it.each([
+      ['un membre', 'member', ADMIN_ONLY],
+      ['un étranger', 'stranger', NO_ACCESS],
+    ] as const)(
+      '%s : chaque route d’invitation, de lien et de retrait est refusée en 403, rien écrit',
+      async (_label, who, message) => {
+        const user = who === 'member' ? member : stranger;
+        const avant = await snapshot();
+        const ecarts: string[] = [];
+        for (const route of routes(user)) {
+          const res = await route.send();
+          if (res.status !== 403 || body<{ message: string }>(res).message !== message) {
+            ecarts.push(`${route.label} → ${res.status}`);
+          }
+        }
+        expect(ecarts).toEqual([]);
+        expect(await snapshot()).toEqual(avant);
+      },
+    );
+  });
+
+  describe('par pseudo', () => {
+    it('un admin invite, l’invité (carte « groupe ») accepte et devient MEMBER ; les autres membres le voient', async () => {
+      const invitee = await h.createUser('inv-pseudo');
+      const notify = jest.spyOn(h.app.get(PartiesService), 'notifyPartieSignalsChanged');
+      try {
+        // Un second administrateur invite : le signal part vers le propriétaire, pas l'invitant.
+        const created = await admin2.agent
+          .post(`/parties/${partieId}/invitations`)
+          .send({ inviteeUserId: invitee.id })
+          .expect(201);
+        const invitationId = body<InvitationLike>(created).id;
+
+        const received = body<InvitationLike[]>(
+          await invitee.agent.get('/invitations').expect(200),
+        );
+        expect(received.find((i) => i.id === invitationId)?.partie?.gameSystemId).toBe(
+          'ralliement',
+        );
+
+        await invitee.agent.post(`/invitations/${invitationId}/accept`).expect(201);
+        expect(await membershipOf(invitee.id)).toMatchObject({ role: 'MEMBER' });
+        expect(notify).toHaveBeenCalledWith(partieId, admin.id);
+
+        const asMember = await member.agent.get(`/parties/${partieId}/members`).expect(200);
+        expect(body<MemberLike[]>(asMember).map((m) => m.userId)).toContain(invitee.id);
+      } finally {
+        notify.mockRestore();
+      }
+    });
+
+    it('un utilisateur déjà membre : 409 « du groupe »', async () => {
+      const res = await admin.agent
+        .post(`/parties/${partieId}/invitations`)
+        .send({ inviteeUserId: member.id })
+        .expect(409);
+      expect(body<{ message: string }>(res).message).toBe(
+        'Cet utilisateur est déjà membre du groupe.',
+      );
+    });
+
+    it('l’admin révoque une invitation en attente', async () => {
+      const target = await h.createUser('inv-revoque');
+      const created = await admin.agent
+        .post(`/parties/${partieId}/invitations`)
+        .send({ inviteeUserId: target.id })
+        .expect(201);
+      const id = body<InvitationLike>(created).id;
+      await admin.agent.delete(`/invitations/${id}`).expect(200);
+      const stored = await h.prisma.invitation.findUniqueOrThrow({ where: { id } });
+      expect(stored.status).toBe('REVOKED');
+    });
+  });
+
+  describe('par e-mail', () => {
+    it('adresse inconnue : e-mail « group-invitation » au nom de l’invitant, avec un lien de jonction', async () => {
+      const to = `inconnu-${h.suffix}@test.local`;
+      const res = await admin.agent
+        .post(`/parties/${partieId}/invitations/by-email`)
+        .send({ email: to })
+        .expect(201);
+      expect(body<{ ok: boolean }>(res).ok).toBe(true);
+      const sent = h.email.calls.filter((c) => c.to === to);
+      expect(sent).toHaveLength(1);
+      expect(sent[0].template).toBe('group-invitation');
+      expect(sent[0].data).toMatchObject({ inviterName: admin.displayName });
+      expect(String(sent[0].data.link)).toContain('/join/');
+    });
+
+    it('adresse d’un compte existant : invitation en attente + e-mail de groupe vers le tableau de bord', async () => {
+      const known = await h.createUser('inv-connu');
+      const res = await admin.agent
+        .post(`/parties/${partieId}/invitations/by-email`)
+        .send({ email: known.email })
+        .expect(201);
+      expect(body<{ ok: boolean }>(res).ok).toBe(true);
+      const sent = h.email.calls.filter((c) => c.to === known.email);
+      expect(sent.map((c) => c.template)).toEqual(['group-invitation']);
+      expect(
+        await h.prisma.invitation.count({
+          where: { partieId, inviteeUserId: known.id, status: 'PENDING' },
+        }),
+      ).toBe(1);
+    });
+  });
+
+  describe('par lien', () => {
+    it('l’invité connecté rejoint en MEMBER ; un second essai, comme le créateur, est refusé en 409 neutre', async () => {
+      const joiner = await h.createUser('inv-lien');
+      const link = await admin.agent.post(`/parties/${partieId}/invite-links`).send({}).expect(201);
+      const { token } = body<LinkLike>(link);
+
+      const preview = await joiner.agent.get(`/invite-links/${token}`).expect(200);
+      expect(body<{ gameSystemId: string }>(preview).gameSystemId).toBe('ralliement');
+
+      await joiner.agent.post(`/invite-links/${token}/join`).expect(201);
+      expect(await membershipOf(joiner.id)).toMatchObject({ role: 'MEMBER' });
+
+      for (const user of [joiner, admin]) {
+        const again = await user.agent.post(`/invite-links/${token}/join`).expect(409);
+        const message = body<{ message: string }>(again).message;
+        expect(message).toBe('Vous êtes déjà membre de ce groupe.');
+        expect(message).not.toMatch(/MJ|partie/);
+      }
+    });
+
+    it('l’inscription par lien crée un MEMBER ; un lien révoqué est refusé', async () => {
+      const link = await admin.agent.post(`/parties/${partieId}/invite-links`).send({}).expect(201);
+      const { token, id } = body<LinkLike>(link);
+      const email = `inscrit-${h.suffix}@test.local`;
+      registeredEmails.push(email);
+      await request
+        .agent(h.app.getHttpServer())
+        .post('/auth/register')
+        .send({ email, pseudo: `inscrit-${h.suffix}`, password: 'MotDePasse-123', token })
+        .expect(201);
+      const created = await h.prisma.user.findUniqueOrThrow({ where: { email } });
+      expect(await membershipOf(created.id)).toMatchObject({ role: 'MEMBER' });
+
+      await admin.agent.delete(`/invite-links/${id}`).expect(200);
+      const late = await h.createUser('inv-revoque-lien');
+      await late.agent.post(`/invite-links/${token}/join`).expect(403);
+    });
+  });
+
+  describe('retrait', () => {
+    it('l’admin retire un simple membre : adhésion supprimée', async () => {
+      const leaver = await h.createUser('inv-retire');
+      await h.addMember(partieId, leaver);
+      await admin.agent.delete(`/parties/${partieId}/members/${leaver.id}`).expect(200);
+      expect(await membershipOf(leaver.id)).toBeNull();
+      await leaver.agent.get(`/parties/${partieId}`).expect(403);
+    });
+
+    it.each([
+      ['le créateur', 'admin2', 'admin'],
+      ['un autre administrateur', 'admin', 'admin2'],
+      ['soi-même', 'admin', 'admin'],
+    ] as const)('refuse de retirer %s : 409, adhésion intacte', async (_label, caller, target) => {
+      const users = { admin, admin2 };
+      const res = await users[caller].agent
+        .delete(`/parties/${partieId}/members/${users[target].id}`)
+        .expect(409);
+      expect(body<{ message: string }>(res).message).toContain('membre ordinaire');
+      expect(await membershipOf(users[target].id)).not.toBeNull();
+    });
+  });
+
+  // Comportement ACCEPTÉ, à réviser avec l'epic 41 : la politique d'invitation est posée pour la
+  // FAMILLE entière (décision de la Story 39.3), donc l'admin d'une rencontre isolée (ONE_SHOT) peut
+  // créer un lien d'invitation alors que l'interface en est réservée aux groupes. L'invitation à
+  // usage unique de l'epic 41 devra trancher (restreindre la cellule ou l'assumer) et ce test avec.
+  it('rencontre isolée : l’admin crée un lien (accepté jusqu’à l’epic 41), le membre et l’étranger sont refusés', async () => {
+    const { id } = await h.createPartie(admin, 'ONE_SHOT', 'inviter-isolee', 'ralliement');
+    await h.addMember(id, member);
+
+    const asAdmin = await admin.agent.post(`/parties/${id}/invite-links`).send({});
+    expect(asAdmin.status).toBeGreaterThanOrEqual(200);
+    expect(asAdmin.status).toBeLessThan(300);
+
+    const asMember = await member.agent.post(`/parties/${id}/invite-links`).send({}).expect(403);
+    expect(body<{ message: string }>(asMember).message).toBe(ADMIN_ONLY);
+    const asStranger = await stranger.agent
+      .post(`/parties/${id}/invite-links`)
+      .send({})
+      .expect(403);
+    expect(body<{ message: string }>(asStranger).message).toBe(NO_ACCESS);
   });
 });

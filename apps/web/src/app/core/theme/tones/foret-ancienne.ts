@@ -212,6 +212,13 @@ export const foretAncienne: Record<ToneKey, string> = {
   'join.login_or_register': 'Connecte-toi ou crée un compte pour rejoindre ce sentier.',
   'join.join_error':
     'Impossible de rejoindre ce sentier (lien invalide, expiré, ou déjà dans le cercle).',
+  /* — lien d’invitation vers un groupe de ralliement (Story 39.3) : aucun mot de JDR — */
+  'join.ralliement_title': 'Rejoindre la veillée « {name} »',
+  'join.ralliement_login_or_register':
+    'Connecte-toi ou crée un compte pour rejoindre cette veillée.',
+  'join.ralliement_join_btn': 'Rejoindre la veillée',
+  'join.ralliement_join_error':
+    'Impossible de rejoindre cette veillée (lien invalide, expiré, ou déjà autour du feu).',
 
   /* ═══ Compte ═══ */
   /* — profil, mot de passe et e-mail — */
@@ -359,6 +366,15 @@ export const foretAncienne: Record<ToneKey, string> = {
   'partie.ralliement_conjonctions_upcoming_empty': 'Rien de prévu.',
   'partie.ralliement_conjonctions_past_empty': 'Rien d’archivé.',
   'partie.ralliement_conjonctions_empty': 'Aucune halte pour l’instant',
+  /* — « Appels » d’un groupe, côté administrateur (Story 39.3) : variantes sans mot de JDR — */
+  'partie.ralliement_invite_title': 'Appeler à la veillée',
+  'partie.ralliement_search_label': 'Pseudo ou espèce connue',
+  'partie.ralliement_invite_btn': 'Inviter au feu',
+  'partie.ralliement_invite_by_email_label': 'Adresse du hibou pour la veillée',
+  'partie.ralliement_links_title': 'Sifflets de veillée',
+  'partie.ralliement_generate_link': 'Tisser un laissez-passer de veillée',
+  'partie.ralliement_remove_member_confirm': 'Renvoyer {name} de la veillée « {partie} » ?',
+  'partie.ralliement_remove_member_error': 'Cet habitant n’a pu être renvoyé. Réessaie.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine clairière',
   'partie.no_session': "Aucune clairière réservée. L'écureuil cherche encore.",

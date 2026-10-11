@@ -136,6 +136,7 @@ describe('InvitationsService', () => {
       inviteeUserId: 'u',
       partieId: 'p1',
       status: 'PENDING',
+      partie: { ownerId: 'mj1' },
     });
     const res = await service.accept('inv1', 'u');
     expect(prisma.$transaction).toHaveBeenCalled();
@@ -154,6 +155,7 @@ describe('InvitationsService', () => {
       inviteeUserId: 'u',
       partieId: 'p1',
       status: 'PENDING',
+      partie: { ownerId: 'mj1' },
     });
     await service.accept('inv1', 'u');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
@@ -165,21 +167,98 @@ describe('InvitationsService', () => {
       inviteeUserId: 'u',
       partieId: 'p1',
       status: 'PENDING',
+      partie: { ownerId: 'mj1' },
     });
     await service.accept('inv1', 'u');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('u'));
   });
 
-  it('accept : notifie aussi PartiesService.notifyPartieSignalsChanged pour le MJ (inviterId) — Story 29.7, AD-14, signal AUCUN_MEMBRE_INVITE', async () => {
+  it('accept : notifie aussi PartiesService.notifyPartieSignalsChanged pour le MJ (propriétaire) — Story 29.7, AD-14, signal AUCUN_MEMBRE_INVITE', async () => {
     prisma.invitation.findUnique.mockResolvedValue({
       id: 'inv1',
       inviteeUserId: 'u',
       inviterId: 'mj1',
       partieId: 'p1',
       status: 'PENDING',
+      partie: { ownerId: 'mj1' },
     });
     await service.accept('inv1', 'u');
     expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+  });
+
+  // Story 39.3 — groupe de ralliement : plusieurs administrateurs, e-mail neutre, rôle MEMBER.
+  describe('groupe de ralliement (Story 39.3)', () => {
+    beforeEach(() => {
+      permissions.assert.mockResolvedValue(
+        testGrant(
+          { id: 'g1', ownerId: 'admin1', name: 'Les Fidèles', gameSystemId: 'ralliement' },
+          'admin',
+        ),
+      );
+    });
+
+    it("accept : adhésion MEMBER explicite, notifie avec le propriétaire (pas l'invitant)", async () => {
+      prisma.invitation.findUnique.mockResolvedValue({
+        id: 'inv1',
+        inviteeUserId: 'u',
+        inviterId: 'admin2',
+        partieId: 'g1',
+        status: 'PENDING',
+        partie: { ownerId: 'admin1' },
+      });
+      await service.accept('inv1', 'u');
+      expect(prisma.membership.upsert).toHaveBeenCalledWith(
+        objectLike({ create: { userId: 'u', partieId: 'g1', role: 'MEMBER' } }),
+      );
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('g1', 'admin1');
+    });
+
+    it('invite : déjà membre → 409 au texte neutre', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'u' });
+      prisma.membership.findUnique.mockResolvedValue({ userId: 'u', partieId: 'g1' });
+      const promise = service.invite('g1', 'admin1', 'u');
+      await expect(promise).rejects.toThrow('Cet utilisateur est déjà membre du groupe.');
+    });
+
+    it("inviteByEmail : adresse inconnue → e-mail « group-invitation » au nom de l'invitant", async () => {
+      prisma.user.findUnique.mockImplementation(({ where }: { where: { email?: string } }) =>
+        Promise.resolve(where.email ? null : { displayName: 'Marc', pseudo: 'marc42' }),
+      );
+      const result = await service.inviteByEmail('g1', 'admin1', 'ami@example.com');
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'group-invitation',
+        'ami@example.com',
+        objectLike({
+          inviterName: 'Marc',
+          partieName: 'Les Fidèles',
+          link: stringLike('/join/tok123'),
+        }),
+      );
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('inviteByEmail : adresse déjà inscrite → invitation + e-mail de groupe vers le tableau de bord', async () => {
+      prisma.user.findUnique.mockImplementation(({ where }: { where: { email?: string } }) =>
+        Promise.resolve(where.email ? { id: 'u1' } : { displayName: '', pseudo: 'marc42' }),
+      );
+      prisma.membership.findUnique.mockResolvedValue(null);
+      prisma.invitation.upsert.mockResolvedValue({ id: 'inv1' });
+      await service.inviteByEmail('g1', 'admin1', 'ami@example.com');
+      expect(prisma.invitation.upsert).toHaveBeenCalled();
+      expect(email.sendMail).toHaveBeenCalledWith(
+        'group-invitation',
+        'ami@example.com',
+        objectLike({ inviterName: 'marc42', link: stringLike('/') }),
+      );
+    });
+
+    it("inviteByEmail : un échec d'envoi ne fait pas échouer l'appel", async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      email.sendMail.mockResolvedValue({ ok: false });
+      await expect(service.inviteByEmail('g1', 'admin1', 'ami@example.com')).resolves.toEqual({
+        ok: false,
+      });
+    });
   });
 
   it('listForPartie : réservé au MJ (INVITATION_READ), invitations de la partie renvoyées', async () => {

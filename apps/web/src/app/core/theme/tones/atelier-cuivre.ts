@@ -215,6 +215,13 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'join.login_or_register': 'Connectez-vous ou créez un compte pour rejoindre cette mission.',
   'join.join_error':
     'Impossible de rejoindre cette mission (lien invalide, expiré, ou déjà à bord).',
+  /* — lien d’invitation vers un groupe de ralliement (Story 39.3) : aucun mot de JDR — */
+  'join.ralliement_title': 'Rejoindre le rassemblement « {name} »',
+  'join.ralliement_login_or_register':
+    'Connectez-vous ou créez un compte pour rejoindre ce rassemblement.',
+  'join.ralliement_join_btn': 'Rejoindre le rassemblement',
+  'join.ralliement_join_error':
+    'Impossible de rejoindre ce rassemblement (lien invalide, expiré, ou déjà à bord).',
 
   /* ═══ Compte ═══ */
   /* — profil, mot de passe et e-mail — */
@@ -363,6 +370,15 @@ export const atelierCuivre: Record<ToneKey, string> = {
   'partie.ralliement_conjonctions_upcoming_empty': 'Rien de prévu.',
   'partie.ralliement_conjonctions_past_empty': 'Rien d’archivé.',
   'partie.ralliement_conjonctions_empty': 'Aucune réunion pour l’instant',
+  /* — « Télégrammes » d’un groupe, côté administrateur (Story 39.3) : variantes sans mot de JDR — */
+  'partie.ralliement_invite_title': 'Recruter pour le rassemblement',
+  'partie.ralliement_search_label': 'Matricule du mécanicien',
+  'partie.ralliement_invite_btn': 'Affecter',
+  'partie.ralliement_invite_by_email_label': 'Fréquence du destinataire du rassemblement',
+  'partie.ralliement_links_title': 'Badges de rassemblement',
+  'partie.ralliement_generate_link': 'Forger un badge de rassemblement',
+  'partie.ralliement_remove_member_confirm': 'Débarquer {name} du rassemblement « {partie} » ?',
+  'partie.ralliement_remove_member_error': 'Ce mécanicien n’a pu être débarqué. Réessayez.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine séance d’atelier',
   'partie.no_session': 'Aucune séance planifiée. Interrogez l’automate.',

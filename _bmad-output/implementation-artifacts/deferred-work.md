@@ -317,3 +317,22 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-39-2-donner-un-gabarit-commun-a-tous-les-e-mails.md`
   summary: Rename the sender display name « jdr-master » in `MAIL_FROM` (`.env`, `.env.dev`, production config) to « Dés Dispos » if the brand change should reach the From header.
   evidence: Only the footer was in scope; the From name still reads « jdr-master ».
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-3-inviter-quelquun-dans-un-groupe.md`
+  summary: Show the pending invitations of a group to its admin (list + revoke), as the JDR « Missives » tab does; the server already grants INVITATION_READ/REVOKE.
+  evidence: The shared invite tools cover search, e-mail, links and removal only; the pending list stays in the JDR-only branch.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-3-inviter-quelquun-dans-un-groupe.md`
+  summary: Make the register and not-found screens reached from a group invite link free of JDR wording (« grimoire », `auth.register_invite_only`…).
+  evidence: Only the join page and the received-invitation card were made group-aware.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-3-inviter-quelquun-dans-un-groupe.md`
+  summary: Fix `InviteLinksService.findOrCreateForEmail` returning an already consumed single-use link when a removed member is re-invited by e-mail (dead link in the e-mail), for JDR and groups.
+  evidence: Reviewer trace: the lookup does not filter on `usesCount < maxUses`; removal makes the case reachable.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-3-inviter-quelquun-dans-un-groupe.md`
+  summary: In `/security-review`, cover e-mail invitations (no throttle/quota, free group name in the subject, anyone can create a group) and the two exceptions added to `no-direct-owner-read.spec.ts`.
+  evidence: Same exposure exists for JDR; the group flow widens it and CLAUDE.md asks for the review after a feature.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-3-inviter-quelquun-dans-un-groupe.md`
+  summary: In story 39.4 expose the member role on `PartieMemberDto` so « Retirer » is hidden for admins and the 409 special case can go.
+  evidence: The group Missives show « Retirer » on another admin, which the server always refuses.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-3-inviter-quelquun-dans-un-groupe.md`
+  summary: By hand: invite a second account to a group by pseudo, e-mail (Mailpit) and link; check the e-mail, the join page and the invitee's list in the three themes.
+  evidence: No live check was run; only unit/DOM/e2e tests.

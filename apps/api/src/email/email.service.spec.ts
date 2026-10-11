@@ -44,6 +44,25 @@ describe('EmailService', () => {
     );
   });
 
+  it('group-invitation : sujet neutre « <invitant> vous invite à rejoindre « <groupe> » » et bouton « Rejoindre le groupe » (Story 39.3)', async () => {
+    await service.sendMail('group-invitation', 'ami@example.com', {
+      inviterName: 'Marc',
+      partieName: 'Les Fidèles',
+      link: 'https://x/join/abc',
+    });
+    expect(mailer.sendMail).toHaveBeenCalledWith({
+      to: 'ami@example.com',
+      subject: '{{inviterName}} vous invite à rejoindre « {{partieName}} »',
+      template: 'group-invitation',
+      context: {
+        inviterName: 'Marc',
+        partieName: 'Les Fidèles',
+        link: 'https://x/join/abc',
+        actionLabel: 'Rejoindre le groupe',
+      },
+    });
+  });
+
   it('sujet correct par gabarit (session-reminder, password-reset)', async () => {
     await service.sendMail('session-reminder', 'joueur@example.com', {});
     expect(mailer.sendMail).toHaveBeenCalledWith(

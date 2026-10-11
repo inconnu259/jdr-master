@@ -85,6 +85,7 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
   // disparaître le bouton sans aucune erreur.
   it.each([
     ['invitation', 'Rejoindre la partie'],
+    ['group-invitation', 'Rejoindre le groupe'],
     ['session-reminder', 'Voir la partie'],
     ['password-reset', 'Choisir un nouveau mot de passe'],
     ['level-up', 'Voir la fiche'],
@@ -101,7 +102,12 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
 
     try {
       expect(
-        await email.sendMail(template, to, { link, partieName: 'P', characterName: 'C' }),
+        await email.sendMail(template, to, {
+          link,
+          partieName: 'P',
+          characterName: 'C',
+          inviterName: 'I',
+        }),
       ).toEqual({
         ok: true,
       });
@@ -117,6 +123,46 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
       expect(message.HTML).toContain(`href="${link}"`);
       expect(message.HTML).toContain(`>${label}</a>`);
       expect(message.HTML).toContain('Dés Dispos');
+    } finally {
+      await app.close();
+    }
+  });
+
+  // Story 39.3 : e-mail de groupe — sujet « Marc vous invite à rejoindre « Groupe » » (apostrophes et
+  // guillemets inclus, sans échappement HTML), bouton « Rejoindre le groupe », aucun mot de JDR.
+  it('group-invitation : sujet interpolé sans échappement, corps neutre, bouton « Rejoindre le groupe »', async () => {
+    if (!reachable) return;
+
+    const app = await NestFactory.createApplicationContext(TestAppModule, { logger: false });
+    const email = app.get(EmailService);
+    const to = `integration-test-${Date.now()}-groupe@example.com`;
+    const link = 'https://example.com/join/abc.def';
+
+    try {
+      expect(
+        await email.sendMail('group-invitation', to, {
+          inviterName: "Marc d'Aubigné",
+          partieName: "Les Fidèles de l'Aube",
+          link,
+        }),
+      ).toEqual({ ok: true });
+
+      const searchRes = await fetch(
+        `${MAILPIT_API}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`,
+      );
+      const search = (await searchRes.json()) as { messages: Array<{ ID: string }> };
+      expect(search.messages.length).toBeGreaterThan(0);
+
+      const messageRes = await fetch(`${MAILPIT_API}/api/v1/message/${search.messages[0].ID}`);
+      const message = (await messageRes.json()) as { Subject: string; HTML: string };
+      expect(message.Subject).toBe(
+        "Marc d'Aubigné vous invite à rejoindre « Les Fidèles de l'Aube »",
+      );
+      expect(message.HTML).toContain('sur Dés Dispos, pour organiser vos rencontres entre amis.');
+      expect(message.HTML).toContain('>Rejoindre le groupe</a>');
+      for (const mot of ['partie', 'MJ', 'grimoire', 'campagne', 'joueur']) {
+        expect(message.HTML).not.toContain(mot);
+      }
     } finally {
       await app.close();
     }

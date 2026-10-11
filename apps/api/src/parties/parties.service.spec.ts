@@ -52,7 +52,12 @@ jest.mock('sharp', () => {
   return jest.fn(() => chain);
 });
 
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { readFile, unlink, writeFile } from 'node:fs/promises';
@@ -72,6 +77,7 @@ import {
   GAME_SYSTEM_WITHOUT_MODULE_MESSAGE,
   KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE,
   PartiesService,
+  RALLIEMENT_REMOVE_PROTECTED_MESSAGE,
   RALLIEMENT_TYPE_LOCKED_MESSAGE,
 } from './parties.service';
 import { GetAvailableSlotsDto } from './dto/get-available-slots.dto';
@@ -1240,6 +1246,69 @@ describe('PartiesService', () => {
     prisma.membership.findMany.mockResolvedValue([]);
     await service.removeMember('p1', 'mj1', 'u');
     expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('mj1'));
+  });
+
+  // Story 39.3 : l'administrateur d'un groupe retire un simple membre — et lui seul.
+  describe('removeMember() — groupe de ralliement (Story 39.3)', () => {
+    const groupe = {
+      ...partie,
+      kind: 'CAMPAGNE_EPISODIQUE',
+      gameSystemId: 'ralliement',
+      ownerId: 'admin1',
+    };
+    const roles: Record<string, 'ADMIN' | 'MEMBER'> = {
+      admin1: 'ADMIN',
+      admin2: 'ADMIN',
+      membre1: 'MEMBER',
+      membre2: 'MEMBER',
+    };
+
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(groupe);
+      prisma.membership.deleteMany.mockResolvedValue({ count: 1 });
+      prisma.membership.findMany.mockResolvedValue([]);
+      prisma.user.findUnique.mockResolvedValue({ id: 'admin1', pseudo: 'a', displayName: 'A' });
+      prisma.membership.findUnique.mockImplementation(
+        ({ where }: { where: { userId_partieId: { userId: string } } }) => {
+          const role = roles[where.userId_partieId.userId];
+          return Promise.resolve(role ? { userId: where.userId_partieId.userId, role } : null);
+        },
+      );
+    });
+
+    it("l'admin retire un simple membre : adhésion supprimée, listes rafraîchies", async () => {
+      await service.removeMember('p1', 'admin1', 'membre1');
+      expect(prisma.membership.deleteMany).toHaveBeenCalledWith({
+        where: { partieId: 'p1', userId: 'membre1' },
+      });
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+      expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic('membre1'));
+    });
+
+    it.each([
+      ['le créateur', 'admin2', 'admin1'],
+      ['un autre administrateur', 'admin1', 'admin2'],
+      ['soi-même (administrateur)', 'admin1', 'admin1'],
+    ])('refuse de retirer %s : 409, aucune suppression', async (_libelle, appelant, cible) => {
+      const promise = service.removeMember('p1', appelant, cible);
+      await expect(promise).rejects.toBeInstanceOf(ConflictException);
+      await expect(promise).rejects.toThrow(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
+      expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('un membre ordinaire ne retire personne : 403 « réservée aux administrateurs »', async () => {
+      const promise = service.removeMember('p1', 'membre1', 'membre2');
+      await expect(promise).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(promise).rejects.toThrow(ADMIN_ONLY_MESSAGE);
+      expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('cible sans adhésion : 404, aucune suppression', async () => {
+      await expect(service.removeMember('p1', 'admin1', 'inconnu')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+      expect(prisma.membership.deleteMany).not.toHaveBeenCalled();
+    });
   });
 
   it('update() émet un événement temps réel scopé sur la Partie (Story 18.3, AC1)', async () => {

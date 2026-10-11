@@ -1290,6 +1290,43 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     }
   });
 
+  // Story 39.3 : variantes « groupe » des outils d'invitation et de l'écran d'un lien d'invitation.
+  const GROUPE_INVITATION_KEYS = [
+    'partie.ralliement_invite_title',
+    'partie.ralliement_search_label',
+    'partie.ralliement_invite_btn',
+    'partie.ralliement_invite_by_email_label',
+    'partie.ralliement_links_title',
+    'partie.ralliement_generate_link',
+    'partie.ralliement_remove_member_confirm',
+    'partie.ralliement_remove_member_error',
+    'join.ralliement_title',
+    'join.ralliement_login_or_register',
+    'join.ralliement_join_btn',
+    'join.ralliement_join_error',
+  ];
+
+  it('Story 39.3 : les variantes d’invitation d’un groupe existent, avec trois voix et sans mot de JDR', () => {
+    for (const key of GROUPE_INVITATION_KEYS) {
+      const valeurs = THEMES.map((theme) => TONE_MAP[theme][key]);
+      for (const [i, valeur] of valeurs.entries()) {
+        expect(valeur, `${THEMES[i]} / ${key}`).toBeTruthy();
+        expect(NON_JDR_BANNED_WORDS.test(valeur), `${THEMES[i]} / ${key}`).toBe(false);
+      }
+      expect(new Set(valeurs).size, key).toBe(THEMES.length);
+    }
+  });
+
+  it('Story 39.3 : les gabarits de l’écran de lien et de retrait gardent leurs trous', () => {
+    for (const theme of THEMES) {
+      expect(TONE_MAP[theme]['join.ralliement_title'], theme).toContain('{name}');
+      expect(TONE_MAP[theme]['partie.ralliement_remove_member_confirm'], theme).toContain('{name}');
+      expect(TONE_MAP[theme]['partie.ralliement_remove_member_confirm'], theme).toContain(
+        '{partie}',
+      );
+    }
+  });
+
   // Story 38.5 : filtres « Genre » / « Rang » étendu, regroupement par type et rôles d'un ralliement.
   it('Story 38.5 : les genres de la liste ont une voix par thème, et les rôles du ralliement leurs mots de travail', () => {
     const genres: Record<Theme, [string, string]> = {

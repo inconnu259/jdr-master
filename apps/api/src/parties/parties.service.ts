@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -94,6 +100,11 @@ export const KIND_NOT_ALLOWED_FOR_SYSTEM_MESSAGE =
 
 /** Story 38.2 : le type (`kind`) et le système d'un ralliement sont définitifs. */
 export const RALLIEMENT_TYPE_LOCKED_MESSAGE = "Le type d'un ralliement ne peut pas être modifié";
+
+/** Story 39.3 : un administrateur ne retire qu'un simple membre ; le créateur, un autre
+ *  administrateur et soi-même relèvent de la procédure de départ (Stories 39.4/39.5). */
+export const RALLIEMENT_REMOVE_PROTECTED_MESSAGE =
+  'Seul un membre ordinaire peut être retiré ici : ni le créateur du groupe, ni un administrateur, ni vous-même';
 
 /**
  * Dimensions cibles des dérivées (Story 29.12, AC9) — alignées sur le rendu réel de `PartyBanner`
@@ -411,9 +422,25 @@ export class PartiesService implements PartieSignalsPort {
     }));
   }
 
-  /** Le MJ retire un joueur de SA partie. */
+  /** Le MJ retire un joueur de SA partie ; l'administrateur d'un ralliement retire un simple membre. */
   async removeMember(partieId: string, userId: string, targetUserId: string) {
     const { partie } = await this.permissions.assert(userId, 'PARTIE_MEMBER_REMOVE', { partieId });
+    if (familyOf(partie.gameSystemId) === 'ralliement') {
+      // Story 39.3 : seul un membre ordinaire se retire ici. Le créateur, un autre administrateur
+      // et soi-même sont refusés tant que `leave()` (39.4/39.5) ne porte pas les règles de
+      // propriétaire et de dernier administrateur — elles ne sont pas réinventées dans ce chemin.
+      if (targetUserId === userId || targetUserId === partie.ownerId) {
+        throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
+      }
+      const target = await this.prisma.membership.findUnique({
+        where: { userId_partieId: { userId: targetUserId, partieId } },
+        select: { role: true },
+      });
+      if (!target) throw new NotFoundException('Ce membre est introuvable');
+      if (target.role !== 'MEMBER') {
+        throw new ConflictException(RALLIEMENT_REMOVE_PROTECTED_MESSAGE);
+      }
+    }
     await this.prisma.membership.deleteMany({
       where: { partieId, userId: targetUserId },
     });

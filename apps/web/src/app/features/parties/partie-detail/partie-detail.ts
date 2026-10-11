@@ -8,7 +8,7 @@ import {
   signal,
   untracked,
 } from '@angular/core';
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
@@ -96,6 +96,7 @@ const SEARCH_DEBOUNCE_MS = 500;
     RouterLink,
     FormsModule,
     DatePipe,
+    NgTemplateOutlet,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
@@ -223,6 +224,31 @@ export class PartieDetail implements OnInit {
   protected readonly isMj = computed(
     () => this.partie()?.ownerId === this.auth.currentUser()?.id && !this.isRalliement(),
   );
+
+  /** Story 39.3 : l'administrateur d'un GROUPE invite (pseudo, e-mail, lien) et retire un membre
+   *  depuis « Missives ». Le rôle vient du serveur (`PartieDto.role`), jamais de `ownerId` : un groupe
+   *  compte plusieurs administrateurs. La rencontre isolée n'a pas cette interface (epic 41). */
+  protected readonly canInviteMembers = computed(
+    () => this.isGroup() && this.partie()?.role === 'admin',
+  );
+
+  /** « Retirer » n'est offert que sur un membre que le serveur acceptera de retirer : ni le créateur
+   *  (propriétaire), ni soi-même. Un autre administrateur n'est pas distinguable ici (le rôle d'un
+   *  membre n'est pas dans la liste) : le serveur le refuse en 409, message affiché (`removeMember`). */
+  protected canRemoveGroupMember(member: PartieMemberDto): boolean {
+    return (
+      this.canInviteMembers() &&
+      member.userId !== this.partie()?.ownerId &&
+      member.userId !== this.auth.currentUser()?.id
+    );
+  }
+
+  /** Libellé de l'outil d'invitation : clé `partie.<nom>` pour une quête, variante
+   *  `partie.ralliement_<nom>` pour un ralliement (aucun mot de JDR hors de la famille JDR). */
+  protected inviteTone(name: string): string {
+    const tone = this.theme.tone();
+    return this.isRalliement() ? tone[`partie.ralliement_${name}`] : tone[`partie.${name}`];
+  }
 
   /** Story 32.2 (revue de code) : la zone Consultation de l'onglet Détails ne doit jamais se rendre
    *  avec un titre de zone et aucun contenu — un joueur sans annonce de campagne ni bandeau
@@ -426,7 +452,8 @@ export class PartieDetail implements OnInit {
     });
 
     effect(() => {
-      if (this.isMj()) void this.loadLinks();
+      // Story 39.3 : l'administrateur d'un groupe liste lui aussi les liens d'invitation.
+      if (this.isMj() || this.canInviteMembers()) void this.loadLinks();
     });
 
     effect(() => {
@@ -797,14 +824,37 @@ export class PartieDetail implements OnInit {
     if (!p) return;
     const ref = this.dialog.open(ConfirmDialog, {
       data: {
-        message: fillTone(this.theme.tone()['parties.detail_remove_member_confirm'], {
-          name: member.displayName,
-          partie: p.name,
-        }),
+        message: fillTone(
+          this.theme.tone()[
+            this.isRalliement()
+              ? 'partie.ralliement_remove_member_confirm'
+              : 'parties.detail_remove_member_confirm'
+          ],
+          { name: member.displayName, partie: p.name },
+        ),
       },
     });
     if (!(await firstValueFrom(ref.afterClosed()))) return;
-    await this.parties.removeMember(p.id, member.userId);
+    // Groupe (Story 39.3) : un refus précédent ne doit pas rester affiché après une nouvelle tentative.
+    if (this.isRalliement()) this.notice.set(null);
+    try {
+      await this.parties.removeMember(p.id, member.userId);
+    } catch (error) {
+      // Groupe (Story 39.3) : le serveur refuse de retirer un autre administrateur (409) ; son
+      // message est en français et neutre. Sans message textuel (réseau, 403, 404, message en
+      // tableau), repli sur le libellé générique du thème. Quête : comportement inchangé (l'erreur
+      // remonte).
+      if (!this.isRalliement()) throw error;
+      const message = (error as { error?: { message?: unknown } }).error?.message;
+      this.notice.set(
+        typeof message === 'string' && message.trim()
+          ? message
+          : this.theme.tone()['partie.ralliement_remove_member_error'],
+      );
+      // La liste est rechargée : l'échec peut venir d'un état périmé (membre déjà parti, droits changés).
+      await this.loadMembers();
+      return;
+    }
     await this.loadMembers();
   }
 

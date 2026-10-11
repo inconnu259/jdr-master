@@ -370,6 +370,15 @@ export class Dashboard implements OnInit {
     return this.theme.tone()[`partie.signal_${code.toLowerCase()}`] ?? code;
   }
 
+  /** Système affiché sur la carte d'une invitation reçue. Pour un groupe de ralliement (Story 39.3),
+   *  le mot du thème (« Ralliement » / « Veillée » / « Rassemblement ») remplace le nom du système :
+   *  l'invité peut n'avoir jamais vu de JDR, aucun mot de la famille JDR ne doit apparaître. */
+  protected invitationSystemLabel(inv: InvitationDto): string {
+    return familyOf(inv.partie.gameSystemId) === 'ralliement'
+      ? this.theme.tone()['partie.mode_ralliement']
+      : gameSystemName(inv.partie.gameSystemId);
+  }
+
   /** Mention « invité par <pseudo> » d'une invitation reçue (gabarit lu dans le registre). */
   protected invitedByLabel(pseudo: string): string {
     return fillTone(this.theme.tone()['dashboard.invitation_invited_by'], { pseudo });

@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { toAuthUser } from '../users/to-auth-user.util';
 import { InviteLinksService } from '../invitations/invite-links.service';
+import { PartiesService } from '../parties/parties.service';
 import { EmailService } from '../email/email.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { RegisterDto } from './dto/register.dto';
@@ -38,6 +39,9 @@ export class AuthService {
     private readonly inviteLinks: InviteLinksService,
     private readonly email: EmailService,
     private readonly realtimeEvents: RealtimeEventsService,
+    // Signaux de la partie rejointe (`notifyPartieSignalsChanged`, Story 39.3) : écriture de
+    // `parties/`, aucune décision de droit.
+    private readonly parties: PartiesService,
   ) {}
 
   /** Vérifie les identifiants (email OU pseudo) ; renvoie l'utilisateur (sans le hash) ou null. */
@@ -72,6 +76,7 @@ export class AuthService {
     try {
       const passwordHash = await argon2.hash(dto.password);
       let joinedPartieId: string | undefined;
+      let joinedOwnerId: string | null = null;
       const result = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
@@ -88,12 +93,18 @@ export class AuthService {
         });
         const link = await this.inviteLinks.consumeLink(tx, dto.token, user.id);
         joinedPartieId = link.partieId;
+        joinedOwnerId = link.partie.ownerId;
         // Compte tout juste créé : aucune UserCalendarLayer ne peut encore exister (Story 30.4).
         return toAuthUser({ ...user, calendarLayers: [] });
       });
       // Bug fix : le MJ/les autres membres ne voyaient jamais apparaître le nouveau membre sans
       // recharger — émis après résolution complète de la transaction, jamais dans son callback.
-      if (joinedPartieId) this.realtimeEvents.emit(partieTopic(joinedPartieId));
+      if (joinedPartieId) {
+        this.realtimeEvents.emit(partieTopic(joinedPartieId));
+        // Story 39.3 : les autres membres (listes d'accueil, signaux) sont notifiés comme pour un
+        // rejoignant existant, avec le propriétaire de la partie. Après la transaction.
+        await this.parties.notifyPartieSignalsChanged(joinedPartieId, joinedOwnerId);
+      }
       return result;
     } catch (e: unknown) {
       // Email OU pseudo déjà pris → contrainte d'unicité (Prisma P2002) → 409 propre.

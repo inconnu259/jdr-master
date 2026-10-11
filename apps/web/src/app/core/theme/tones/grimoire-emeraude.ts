@@ -217,6 +217,13 @@ export const grimoireEmeraude = {
   'join.logged_as': 'Vous êtes connecté sous le nom de',
   'join.login_or_register': 'Connectez-vous ou créez un compte pour rejoindre ce grimoire.',
   'join.join_error': 'Impossible de rejoindre ce grimoire (lien invalide, expiré, ou déjà membre).',
+  /* — lien d’invitation vers un groupe de ralliement (Story 39.3) : aucun mot de JDR — */
+  'join.ralliement_title': 'Rejoindre le ralliement « {name} »',
+  'join.ralliement_login_or_register':
+    'Connectez-vous ou créez un compte pour rejoindre ce ralliement.',
+  'join.ralliement_join_btn': 'Rejoindre le ralliement',
+  'join.ralliement_join_error':
+    'Impossible de rejoindre ce ralliement (lien invalide, expiré, ou déjà membre).',
 
   /* ═══ Compte ═══ */
   /* — profil, mot de passe et e-mail — */
@@ -365,6 +372,15 @@ export const grimoireEmeraude = {
   'partie.ralliement_conjonctions_upcoming_empty': 'Rien de prévu.',
   'partie.ralliement_conjonctions_past_empty': 'Rien d’archivé.',
   'partie.ralliement_conjonctions_empty': 'Aucune conjonction pour l’instant',
+  /* — « Missives » d’un groupe, côté administrateur (Story 39.3) : variantes sans mot de JDR — */
+  'partie.ralliement_invite_title': 'Convier au ralliement',
+  'partie.ralliement_search_label': 'Pseudo ou signe distinctif',
+  'partie.ralliement_invite_btn': 'Convier',
+  'partie.ralliement_invite_by_email_label': 'Sceau du destinataire du ralliement',
+  'partie.ralliement_links_title': 'Parchemins de ralliement',
+  'partie.ralliement_generate_link': 'Tisser un parchemin de ralliement',
+  'partie.ralliement_remove_member_confirm': 'Retirer {name} du ralliement « {partie} » ?',
+  'partie.ralliement_remove_member_error': 'Ce compagnon n’a pu être retiré. Réessayez.',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine séance au grimoire',
   'partie.no_session': "Aucune séance convoquée. Consultez l'oracle des créneaux.",

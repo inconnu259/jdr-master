@@ -213,9 +213,49 @@ describe('InviteLinksService', () => {
     const res = await service.consumeLink(tx as never, 'tok', 'u');
     expect(tx.inviteLink.updateMany).toHaveBeenCalled();
     expect(tx.membership.create).toHaveBeenCalledWith({
-      data: { userId: 'u', partieId: 'p1' },
+      data: { userId: 'u', partieId: 'p1', role: 'MEMBER' },
     });
     expect(res).toBe(link);
+  });
+
+  // Story 39.3 : un ralliement parle en termes neutres (ni « MJ » ni « partie »).
+  describe('consumeLink — ralliement (Story 39.3)', () => {
+    const groupLink = {
+      id: 'l1',
+      revoked: false,
+      expiresAt: future(),
+      maxUses: null,
+      usesCount: 0,
+      partieId: 'g1',
+      partie: { ownerId: 'admin1', gameSystemId: 'ralliement' },
+    };
+
+    it('le créateur qui rejoint de nouveau : 409 neutre, sans « MJ »', async () => {
+      const promise = service.consumeLink(makeTx(groupLink) as never, 'tok', 'admin1');
+      await expect(promise).rejects.toBeInstanceOf(ConflictException);
+      await expect(promise).rejects.toThrow('Vous êtes déjà membre de ce groupe.');
+      await expect(promise).rejects.not.toThrow(/MJ/);
+    });
+
+    it('un membre qui rejoint de nouveau : 409 neutre, sans « partie »', async () => {
+      const tx = makeTx(groupLink, { userId: 'u', partieId: 'g1' });
+      const promise = service.consumeLink(tx as never, 'tok', 'u');
+      await expect(promise).rejects.toThrow('Vous êtes déjà membre de ce groupe.');
+    });
+
+    it('crée un membership MEMBER explicite', async () => {
+      const tx = makeTx(groupLink);
+      await service.consumeLink(tx as never, 'tok', 'u');
+      expect(tx.membership.create).toHaveBeenCalledWith({
+        data: { userId: 'u', partieId: 'g1', role: 'MEMBER' },
+      });
+    });
+
+    it('join : notifie les signaux avec le propriétaire du groupe (pas le créateur du lien)', async () => {
+      jest.spyOn(service, 'consumeLink').mockResolvedValue(groupLink as never);
+      await service.join('tok', 'u');
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('g1', 'admin1');
+    });
   });
 
   // --- join (bug fix : roster MJ jamais notifié quand un joueur rejoint via lien) ---

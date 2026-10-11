@@ -277,6 +277,40 @@ describe('Dashboard — invitations toujours visibles, sans condition de rôle (
   });
 });
 
+describe('Dashboard — carte d’invitation à un groupe (Story 39.3)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  it('affiche le mot du thème pour le ralliement, jamais le nom d’un système de JDR', async () => {
+    const invitationsSvc = makeInvitationsService();
+    invitationsSvc.listReceived.mockResolvedValue([
+      {
+        id: 'inv-g',
+        partie: { id: 'g1', name: 'Les Fidèles', gameSystemId: 'ralliement' },
+        inviterPseudo: 'Marc',
+        status: 'PENDING' as const,
+        createdAt: '2026-10-11T00:00:00.000Z',
+      },
+      {
+        id: 'inv-q',
+        partie: { id: 'q1', name: 'La Quête', gameSystemId: 'ryuutama' },
+        inviterPseudo: 'Léa',
+        status: 'PENDING' as const,
+        createdAt: '2026-10-11T00:00:00.000Z',
+      },
+    ]);
+    const { fixture } = await createFixture(new Map(), invitationsSvc);
+    const cards = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('mat-card.tile'),
+    );
+    const subtitle = (card: Element) =>
+      (card.querySelector('mat-card-subtitle')?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    const mode = TONE_MAP['grimoire-emeraude']['partie.mode_ralliement'];
+    expect(subtitle(cards[0])).toContain(mode);
+    expect(subtitle(cards[0])).not.toContain('Ryuutama');
+    expect(subtitle(cards[1])).toContain('Ryuutama');
+  });
+});
+
 describe('Dashboard — accept() rafraîchit la liste des parties (Story 38.5 : refreshAll)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
@@ -1538,7 +1572,9 @@ describe('Dashboard — pastille, badge, sous-titre et rôle des ralliements (St
     ]);
     const root = fixture.nativeElement as HTMLElement;
     const subtitleText = (id: string) => {
-      const clone = tileOf(root, id).querySelector('mat-card-subtitle')!.cloneNode(true) as HTMLElement;
+      const clone = tileOf(root, id)
+        .querySelector('mat-card-subtitle')!
+        .cloneNode(true) as HTMLElement;
       clone
         .querySelectorAll('.role-indicator, .status-indicator, .system-chip')
         .forEach((n) => n.remove());
@@ -1592,8 +1628,8 @@ describe('Dashboard — filtres Genre / Rang et regroupement par type (Story 38.
     makeRalliement('grp', 'member', 'CAMPAGNE_EPISODIQUE'),
   ];
   const names = (root: HTMLElement) =>
-    (Array.from(root.querySelectorAll('.tile mat-card-title')) as HTMLElement[]).map(
-      (t) => titleOf(t).replace('Party ', ''),
+    (Array.from(root.querySelectorAll('.tile mat-card-title')) as HTMLElement[]).map((t) =>
+      titleOf(t).replace('Party ', ''),
     );
   const selectLabelled = (root: HTMLElement, label: string) => {
     const selects = Array.from(

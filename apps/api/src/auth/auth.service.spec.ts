@@ -9,6 +9,7 @@ import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteLinksService } from '../invitations/invite-links.service';
 import { EmailService } from '../email/email.service';
+import { PartiesService } from '../parties/parties.service';
 import { RealtimeEventsService, partieTopic } from '../realtime/realtime-events.service';
 import { anyOf, callArg, objectLike, stringLike } from '../common/test-utils/jest-typed';
 
@@ -46,6 +47,7 @@ describe('AuthService', () => {
   let inviteLinks: { consumeLink: jest.Mock };
   let email: { sendMail: jest.Mock };
   let realtimeEvents: { emit: jest.Mock };
+  let parties: { notifyPartieSignalsChanged: jest.Mock };
 
   const fakeUser = {
     id: 'u1',
@@ -121,16 +123,18 @@ describe('AuthService', () => {
       emailChangeRollbackToken: { findUnique: jest.fn() },
     };
     inviteLinks = {
-      consumeLink: jest.fn().mockResolvedValue({ partieId: 'p1' }),
+      consumeLink: jest.fn().mockResolvedValue({ partieId: 'p1', partie: { ownerId: 'mj1' } }),
     };
     email = { sendMail: jest.fn().mockResolvedValue({ ok: true }) };
     realtimeEvents = { emit: jest.fn() };
+    parties = { notifyPartieSignalsChanged: jest.fn().mockResolvedValue(undefined) };
     service = new AuthService(
       users as unknown as UsersService,
       prisma as unknown as PrismaService,
       inviteLinks as unknown as InviteLinksService,
       email as unknown as EmailService,
       realtimeEvents as unknown as RealtimeEventsService,
+      parties as unknown as PartiesService,
     );
   });
 
@@ -208,6 +212,30 @@ describe('AuthService', () => {
         token: 'tok',
       });
       expect(realtimeEvents.emit).toHaveBeenCalledWith(partieTopic('p1'));
+    });
+
+    it('Story 39.3 : notifie les signaux de la partie rejointe avec son propriétaire, après la transaction', async () => {
+      tx.user.create.mockResolvedValue(fakeUser);
+      // Ordre observé : la notification ne doit partir qu'APRÈS la résolution de la transaction (un
+      // appel placé dans son callback la ferait précéder 'transaction résolue').
+      const ordre: string[] = [];
+      prisma.$transaction.mockImplementation(async (cb: (t: typeof tx) => unknown) => {
+        const resultat = await cb(tx);
+        ordre.push('transaction résolue');
+        return resultat;
+      });
+      parties.notifyPartieSignalsChanged.mockImplementation(() => {
+        ordre.push('notification');
+        return Promise.resolve();
+      });
+      await service.register({
+        email: 'a@b.c',
+        pseudo: 'alice',
+        password: 'password123',
+        token: 'tok',
+      });
+      expect(parties.notifyPartieSignalsChanged).toHaveBeenCalledWith('p1', 'mj1');
+      expect(ordre).toEqual(['transaction résolue', 'notification']);
     });
 
     it('renseigne displayName au pseudo à la création (AD-1, deuxième point d’écriture obligatoire)', async () => {

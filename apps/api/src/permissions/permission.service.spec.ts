@@ -453,13 +453,22 @@ describe('PermissionService', () => {
       'PARTIE_MEMBERS_READ',
       'PARTIE_COVER_READ',
     ];
-    /** Modifier la partie, la clore, la rouvrir, la brûler (Story 39.1) : admin seul. */
+    /** Modifier la partie, la clore, la rouvrir, la brûler (Story 39.1), inviter et retirer un
+     *  membre (Story 39.3) : admin seul. */
     const RALLIEMENT_ADMIN_ONLY: PermissionAction[] = [
       'PARTIE_UPDATE',
       'PARTIE_COVER_UPDATE',
       'PARTIE_CLOSE',
       'PARTIE_REOPEN',
       'PARTIE_DELETE',
+      // Story 39.3 : inviter (pseudo, e-mail, lien), lister, révoquer, retirer un membre.
+      'PARTIE_MEMBER_REMOVE',
+      'INVITATION_CREATE',
+      'INVITATION_READ',
+      'INVITATION_REVOKE',
+      'INVITE_LINK_CREATE',
+      'INVITE_LINK_READ',
+      'INVITE_LINK_REVOKE',
     ];
     /** Tout le reste : aucun rôle. */
     const RALLIEMENT_NOBODY: PermissionAction[] = ACTIONS.filter(

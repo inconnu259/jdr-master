@@ -3268,8 +3268,9 @@ describe('PartieDetail — ralliement, garde minimale (Story 38.2)', () => {
     expect(scenariosSvc.listAll).not.toHaveBeenCalled();
     expect(announcementsSvc.listAll).not.toHaveBeenCalled();
     expect(rolesSvc.listForPartie).not.toHaveBeenCalled();
-    // Son créateur y est admin, jamais MJ : pas de liens d'invitation ni d'historique d'XP.
-    expect(partiesSvc.inviteLinks).not.toHaveBeenCalled();
+    // Son créateur y est admin, jamais MJ : pas d'historique d'XP. Groupe (Story 39.3) : l'admin
+    // charge les liens d'invitation de « Missives ».
+    expect(partiesSvc.inviteLinks).toHaveBeenCalledWith('party-1');
     expect(partiesSvc.listXpDistributions).not.toHaveBeenCalled();
     expect(el.querySelector('app-scenario-timeline')).toBeNull();
     expect(el.querySelector('app-scenario-list')).toBeNull();
@@ -3277,9 +3278,7 @@ describe('PartieDetail — ralliement, garde minimale (Story 38.2)', () => {
 
   it('l’admin d’une rencontre isolée garde l’accès à la modification, sans clôture ni suppression', async () => {
     const { el } = await createFixture(ralliement({ kind: 'ONE_SHOT' }), MJ_ID);
-    const links = Array.from(el.querySelectorAll('.icon-bar a')).map((a) =>
-      a.getAttribute('href'),
-    );
+    const links = Array.from(el.querySelectorAll('.icon-bar a')).map((a) => a.getAttribute('href'));
     expect(links).toEqual(['/parties/party-1/edit']);
     expect(el.querySelector('.icon-bar button')).toBeNull();
   });
@@ -3368,7 +3367,12 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
       ...over,
     });
   const members: PartieMemberDto[] = [
-    { userId: MJ_ID, pseudo: 'createur', displayName: 'Créateur', joinedAt: '2026-10-01T00:00:00Z' },
+    {
+      userId: MJ_ID,
+      pseudo: 'createur',
+      displayName: 'Créateur',
+      joinedAt: '2026-10-01T00:00:00Z',
+    },
     {
       userId: OTHER_ID,
       pseudo: 'membre',
@@ -3390,17 +3394,14 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
   it.each([
     ['admin', MJ_ID, 'admin'],
     ['membre', OTHER_ID, 'member'],
-  ] as const)(
-    '%s : exactement deux onglets, Détails puis Missives',
-    async (_nom, userId, role) => {
-      const { el } = await createFixture(ralliement({ role }), userId, { members });
-      const tone = TONE_MAP['grimoire-emeraude'];
-      expect(tabLabels(el)).toEqual([
-        tone['parties.detail_tab_details'],
-        tone['partie.invitations_tab_label'],
-      ]);
-    },
-  );
+  ] as const)('%s : exactement deux onglets, Détails puis Missives', async (_nom, userId, role) => {
+    const { el } = await createFixture(ralliement({ role }), userId, { members });
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(tabLabels(el)).toEqual([
+      tone['parties.detail_tab_details'],
+      tone['partie.invitations_tab_label'],
+    ]);
+  });
 
   it('Détails : la description seule, ni widget de séance, ni calendrier, ni vote, ni XP', async () => {
     const { el } = await createFixture(ralliement(), MJ_ID, { members });
@@ -3467,7 +3468,12 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
   it('Missives : deux membres homonymes sont départagés par leur pseudo', async () => {
     const homonymes: PartieMemberDto[] = [
       { userId: MJ_ID, pseudo: 'alice', displayName: 'Même Nom', joinedAt: '2026-10-01T00:00:00Z' },
-      { userId: OTHER_ID, pseudo: 'bob', displayName: 'Même Nom', joinedAt: '2026-10-02T00:00:00Z' },
+      {
+        userId: OTHER_ID,
+        pseudo: 'bob',
+        displayName: 'Même Nom',
+        joinedAt: '2026-10-02T00:00:00Z',
+      },
     ];
     const { fixture, el } = await createFixture(ralliement(), MJ_ID, {
       members: homonymes,
@@ -3602,7 +3608,12 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
       ...over,
     });
   const members: PartieMemberDto[] = [
-    { userId: MJ_ID, pseudo: 'createur', displayName: 'Créateur', joinedAt: '2026-10-01T00:00:00Z' },
+    {
+      userId: MJ_ID,
+      pseudo: 'createur',
+      displayName: 'Créateur',
+      joinedAt: '2026-10-01T00:00:00Z',
+    },
     { userId: OTHER_ID, pseudo: 'membre', displayName: 'Membre', joinedAt: '2026-10-02T00:00:00Z' },
   ];
   const tabs = (el: HTMLElement) => Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]'));
@@ -3680,7 +3691,8 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
     const rows = Array.from(el.querySelectorAll('.ralliement-members .result-row')).map((r) =>
       (r.textContent ?? '').trim(),
     );
-    expect(rows).toEqual(['Créateur', 'Membre']);
+    // L'admin (Story 39.3) peut retirer le membre, jamais le créateur.
+    expect(rows).toEqual(['Créateur', expect.stringContaining('Membre')]);
   });
 
   it('admin : pied de carte Retranscrire, Clore, Brûler — sans Sceller des secrets', async () => {
@@ -3781,5 +3793,197 @@ describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)
     const tone = TONE_MAP['grimoire-emeraude'];
     expect(tabLabels(el)).not.toContain(tone['partie.ralliement_conjonctions_tab']);
     expect(tabLabels(el)[0]).toBe(tone['parties.detail_tab_details']);
+  });
+});
+
+// ─── Inviter quelqu'un dans un groupe (Story 39.3) ─────────────────────────────────────────
+
+describe('PartieDetail — Missives d’un groupe : invitation et retrait (Story 39.3)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const OTHER_ID = 'member-2';
+  const groupe = (over: Partial<PartieDto> = {}) =>
+    makePartie({
+      gameSystemId: 'ralliement',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      role: 'admin',
+      ...over,
+    });
+  const members: PartieMemberDto[] = [
+    {
+      userId: MJ_ID,
+      pseudo: 'createur',
+      displayName: 'Créateur',
+      joinedAt: '2026-10-01T00:00:00Z',
+    },
+    { userId: OTHER_ID, pseudo: 'membre', displayName: 'Membre', joinedAt: '2026-10-02T00:00:00Z' },
+  ];
+  const openMissives = (el: HTMLElement, fixture: ComponentFixture<PartieDetail>) => {
+    el.querySelectorAll<HTMLElement>('div[role="tab"]')[2].click();
+    fixture.detectChanges();
+  };
+  const panel = (el: HTMLElement) => el.querySelector('.ralliement-members') as HTMLElement;
+  const services = () =>
+    TestBed.inject(PartiesService) as unknown as {
+      inviteLinks: ReturnType<typeof vi.fn>;
+      searchUsers: ReturnType<typeof vi.fn>;
+      inviteUser: ReturnType<typeof vi.fn>;
+      inviteByEmail: ReturnType<typeof vi.fn>;
+      removeMember: ReturnType<typeof vi.fn>;
+      createInviteLink: ReturnType<typeof vi.fn>;
+    };
+
+  it.each(THEMES)(
+    'thème %s : l’admin voit recherche, e-mail, liens et « Retirer » sur le seul membre, avec les mots du groupe',
+    async (theme) => {
+      const { fixture, el } = await createFixture(groupe(), MJ_ID, {
+        members,
+        theme,
+        noopAnimations: true,
+      });
+      openMissives(el, fixture);
+      const tone = TONE_MAP[theme];
+
+      const titres = Array.from(panel(el).querySelectorAll('h3')).map((h) =>
+        (h.textContent ?? '').trim(),
+      );
+      expect(titres).toEqual([
+        tone['partie.members_title'],
+        tone['partie.ralliement_invite_title'],
+        tone['partie.ralliement_links_title'],
+      ]);
+      expect(panel(el).querySelectorAll('input')).toHaveLength(2);
+      expect(panel(el).textContent).toContain(tone['partie.ralliement_search_label']);
+      expect(panel(el).textContent).toContain(tone['partie.ralliement_invite_by_email_label']);
+      expect(panel(el).textContent).toContain(tone['partie.ralliement_generate_link']);
+      // « Retirer » : sur le membre seulement, jamais sur le créateur (et soi-même).
+      const lignes = Array.from(panel(el).querySelectorAll('.result-row'));
+      expect(lignes).toHaveLength(2);
+      expect(lignes[0].querySelector('button')).toBeNull();
+      expect(lignes[1].textContent).toContain(tone['partie.remove_member_btn']);
+      // Aucun mot de JDR, ni libellé de la variante quête.
+      expect(NON_JDR_BANNED_WORDS.test(el.textContent ?? '')).toBe(false);
+      expect(panel(el).textContent).not.toContain(tone['partie.invite_title']);
+      expect(panel(el).textContent).not.toContain(tone['partie.links_title']);
+    },
+  );
+
+  it('l’admin charge les liens d’invitation du groupe', async () => {
+    await createFixture(groupe(), MJ_ID, { members });
+    expect(services().inviteLinks).toHaveBeenCalledWith('party-1');
+  });
+
+  it('un membre garde la seule liste : ni champ, ni bouton, ni lien chargé', async () => {
+    const { fixture, el } = await createFixture(groupe({ role: 'member' }), OTHER_ID, {
+      members,
+      noopAnimations: true,
+    });
+    openMissives(el, fixture);
+    expect(panel(el).querySelector('button')).toBeNull();
+    expect(panel(el).querySelector('input')).toBeNull();
+    expect(panel(el).querySelector('.link-row')).toBeNull();
+    expect(services().inviteLinks).not.toHaveBeenCalled();
+  });
+
+  it('une rencontre isolée n’a pas d’interface d’invitation, même pour son admin', async () => {
+    const { fixture, el } = await createFixture(groupe({ kind: 'ONE_SHOT' }), MJ_ID, {
+      members,
+      noopAnimations: true,
+    });
+    el.querySelectorAll<HTMLElement>('div[role="tab"]')[1].click();
+    fixture.detectChanges();
+    expect(panel(el).querySelector('button')).toBeNull();
+    expect(panel(el).querySelector('input')).toBeNull();
+    expect(services().inviteLinks).not.toHaveBeenCalled();
+  });
+
+  it('invite par pseudo, par e-mail et par lien via PartiesService', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    const svc = services();
+    svc.inviteByEmail.mockResolvedValue({ ok: true });
+    const comp = fixture.componentInstance;
+
+    await comp.invite({ id: 'u9', pseudo: 'ami' });
+    expect(svc.inviteUser).toHaveBeenCalledWith('party-1', 'u9');
+
+    comp['inviteEmail'].set('ami@example.com');
+    await comp.inviteByEmail();
+    expect(svc.inviteByEmail).toHaveBeenCalledWith('party-1', 'ami@example.com');
+
+    await comp.createLink();
+    expect(svc.createInviteLink).toHaveBeenCalledWith('party-1', {});
+  });
+
+  it('retirer un membre : confirmation du groupe puis retrait', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+
+    await fixture.componentInstance.removeMember(members[1]);
+
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(dialog.open.mock.calls[0][1].data.message).toBe(
+      tone['partie.ralliement_remove_member_confirm']
+        .replace('{name}', 'Membre')
+        .replace('{partie}', 'Test Party'),
+    );
+    expect(services().removeMember).toHaveBeenCalledWith('party-1', OTHER_ID);
+  });
+
+  it('un refus du serveur (409) est affiché sans exception', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+    services().removeMember.mockRejectedValue({ error: { message: 'Refus du serveur' } });
+
+    await fixture.componentInstance.removeMember(members[1]);
+
+    expect(fixture.componentInstance['notice']()).toBe('Refus du serveur');
+  });
+
+  it.each([
+    ['erreur réseau sans message', { status: 0 }],
+    ['message en tableau', { error: { message: ['a', 'b'] } }],
+    ['réponse 404 sans message textuel', { status: 404, error: {} }],
+  ])(
+    'échec sans message textuel (%s) : repli sur le libellé du thème, liste rechargée, ancien refus effacé',
+    async (_cas, erreur) => {
+      const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+      const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+      dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+      const svc = services();
+      const loaded = (
+        TestBed.inject(PartiesService) as unknown as { members: ReturnType<typeof vi.fn> }
+      ).members;
+      const comp = fixture.componentInstance;
+
+      // Un refus précédent (409) est affiché ; la tentative suivante l'efface puis le remplace.
+      svc.removeMember.mockRejectedValueOnce({ error: { message: 'Refus du serveur' } });
+      await comp.removeMember(members[1]);
+      expect(comp['notice']()).toBe('Refus du serveur');
+
+      const avant = loaded.mock.calls.length;
+      svc.removeMember.mockRejectedValueOnce(erreur);
+      await comp.removeMember(members[1]);
+
+      expect(comp['notice']()).toBe(
+        TONE_MAP['grimoire-emeraude']['partie.ralliement_remove_member_error'],
+      );
+      expect(loaded.mock.calls.length).toBeGreaterThan(avant);
+    },
+  );
+
+  it('un retrait réussi efface le refus précédent', async () => {
+    const { fixture } = await createFixture(groupe(), MJ_ID, { members });
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+    const comp = fixture.componentInstance;
+
+    services().removeMember.mockRejectedValueOnce({ error: { message: 'Refus du serveur' } });
+    await comp.removeMember(members[1]);
+    services().removeMember.mockResolvedValueOnce({ ok: true });
+    await comp.removeMember(members[1]);
+
+    expect(comp['notice']()).toBeNull();
   });
 });

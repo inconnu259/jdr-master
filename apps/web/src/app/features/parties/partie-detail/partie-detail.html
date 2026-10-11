@@ -424,69 +424,18 @@
                 }
               }
 
-              <h3>{{ theme.tone()['partie.invite_title'] }}</h3>
-              <div class="search-row">
-                <mat-form-field appearance="outline">
-                  <mat-label>{{ theme.tone()['partie.search_label'] }}</mat-label>
-                  <input matInput [ngModel]="search()" (ngModelChange)="search.set($event)"
-                         (keyup.enter)="runSearch()" />
-                </mat-form-field>
-                <button mat-flat-button (click)="runSearch()">
-                  <mat-icon>search</mat-icon> {{ theme.tone()['partie.search_btn'] }}
-                </button>
-              </div>
-              @for (u of results(); track u.id) {
-                <div class="result-row">
-                  <span>{{ u.pseudo }}</span>
-                  <button mat-button (click)="invite(u)">
-                    <mat-icon>person_add</mat-icon> {{ theme.tone()['partie.invite_btn'] }}
-                  </button>
-                </div>
-              }
-
-              <div class="search-row">
-                <mat-form-field appearance="outline">
-                  <mat-label>{{ theme.tone()['partie.invite_by_email_label'] }}</mat-label>
-                  <input matInput type="email" [ngModel]="inviteEmail()" (ngModelChange)="inviteEmail.set($event)"
-                         [disabled]="invitingByEmail()" (keyup.enter)="inviteByEmail()" />
-                </mat-form-field>
-                <button mat-flat-button [disabled]="invitingByEmail()" (click)="inviteByEmail()">
-                  <mat-icon>mail</mat-icon> {{ theme.tone()['partie.invite_by_email_btn'] }}
-                </button>
-              </div>
-              @if (inviteEmailError()) {
-                <p class="notice error">{{ inviteEmailError() }}</p>
-              }
-
-              <h3>{{ theme.tone()['partie.links_title'] }}</h3>
-              <button mat-stroked-button (click)="createLink()">
-                <mat-icon>link</mat-icon> {{ theme.tone()['partie.generate_link'] }}
-              </button>
-              @for (l of activeLinks(); track l.id) {
-                <div class="link-row">
-                  <code>{{ joinUrl(l.token) }}</code>
-                  <span class="muted">
-                    {{ l.usesCount }}<span>{{ l.maxUses ? '/' + l.maxUses : '' }}</span> ·
-                    {{ theme.tone()['parties.detail_link_expires_short'] }}
-                    {{ l.expiresAt | date: 'short' }}
-                  </span>
-                  <button mat-icon-button (click)="copyLink(l.token)" [attr.aria-label]="theme.tone()['common.copier']">
-                    <mat-icon>content_copy</mat-icon>
-                  </button>
-                  <button mat-icon-button (click)="revokeLink(l)" [attr.aria-label]="theme.tone()['common.revoquer']">
-                    <mat-icon>link_off</mat-icon>
-                  </button>
-                </div>
-              }
+              <ng-container [ngTemplateOutlet]="inviteTools" />
             </section>
           </mat-tab>
         }
 
         @if (isRalliement()) {
-          <!-- Story 38.4 : « Missives » d'un ralliement = liste des membres en lecture seule (admin et
-               membre). Ni retrait, ni recherche, ni invitation, ni lien : ces capacités arrivent avec
-               l'epic 39. Le créateur (admin) figure dans members() : on n'utilise donc pas
-               otherMembers(), qui l'écarterait. -->
+          <!-- Story 38.4 : « Missives » d'un ralliement = liste des membres, lisible par l'administrateur
+               comme par un membre. Story 39.3 : l'administrateur d'un GROUPE y gagne l'invitation (pseudo,
+               e-mail, lien) et « Retirer » ; un membre, comme une rencontre isolée (epic 41), garde la
+               seule liste. Le créateur (admin) figure dans members() : on n'utilise donc pas
+               otherMembers(), qui l'écarterait — « Retirer » lui est simplement refusé
+               (canRemoveGroupMember). -->
           <mat-tab [label]="theme.tone()['partie.invitations_tab_label']">
             <section class="invite ralliement-members">
               <h3>{{ theme.tone()['partie.members_title'] }}</h3>
@@ -497,7 +446,18 @@
                     [pseudo]="m.pseudo"
                     [ambiguous]="isMemberAmbiguous(m.userId)"
                   />
+                  @if (canRemoveGroupMember(m)) {
+                    <button mat-button (click)="removeMember(m)">
+                      <mat-icon>person_remove</mat-icon> {{ theme.tone()['partie.remove_member_btn'] }}
+                    </button>
+                  }
                 </div>
+              }
+              @if (canInviteMembers()) {
+                @if (notice()) {
+                  <p class="notice" role="status">{{ notice() }}</p>
+                }
+                <ng-container [ngTemplateOutlet]="inviteTools" />
               }
             </section>
           </mat-tab>
@@ -609,3 +569,64 @@
     </mat-card-actions>
   </mat-card>
 }
+
+<!-- Story 39.3 : outils d'invitation partagés entre « Missives » d'une quête (MJ) et « Missives » d'un
+     groupe (administrateur) — recherche par pseudo, e-mail, liens. Les libellés passent par
+     `inviteTone()` : la quête garde ses clés `partie.*`, le groupe prend ses variantes
+     `partie.ralliement_*` (aucun mot de JDR). -->
+<ng-template #inviteTools>
+  <h3>{{ inviteTone('invite_title') }}</h3>
+  <div class="search-row">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ inviteTone('search_label') }}</mat-label>
+      <input matInput [ngModel]="search()" (ngModelChange)="search.set($event)"
+             (keyup.enter)="runSearch()" />
+    </mat-form-field>
+    <button mat-flat-button (click)="runSearch()">
+      <mat-icon>search</mat-icon> {{ theme.tone()['partie.search_btn'] }}
+    </button>
+  </div>
+  @for (u of results(); track u.id) {
+    <div class="result-row">
+      <span>{{ u.pseudo }}</span>
+      <button mat-button (click)="invite(u)">
+        <mat-icon>person_add</mat-icon> {{ inviteTone('invite_btn') }}
+      </button>
+    </div>
+  }
+
+  <div class="search-row">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ inviteTone('invite_by_email_label') }}</mat-label>
+      <input matInput type="email" [ngModel]="inviteEmail()" (ngModelChange)="inviteEmail.set($event)"
+             [disabled]="invitingByEmail()" (keyup.enter)="inviteByEmail()" />
+    </mat-form-field>
+    <button mat-flat-button [disabled]="invitingByEmail()" (click)="inviteByEmail()">
+      <mat-icon>mail</mat-icon> {{ theme.tone()['partie.invite_by_email_btn'] }}
+    </button>
+  </div>
+  @if (inviteEmailError()) {
+    <p class="notice error">{{ inviteEmailError() }}</p>
+  }
+
+  <h3>{{ inviteTone('links_title') }}</h3>
+  <button mat-stroked-button (click)="createLink()">
+    <mat-icon>link</mat-icon> {{ inviteTone('generate_link') }}
+  </button>
+  @for (l of activeLinks(); track l.id) {
+    <div class="link-row">
+      <code>{{ joinUrl(l.token) }}</code>
+      <span class="muted">
+        {{ l.usesCount }}<span>{{ l.maxUses ? '/' + l.maxUses : '' }}</span> ·
+        {{ theme.tone()['parties.detail_link_expires_short'] }}
+        {{ l.expiresAt | date: 'short' }}
+      </span>
+      <button mat-icon-button (click)="copyLink(l.token)" [attr.aria-label]="theme.tone()['common.copier']">
+        <mat-icon>content_copy</mat-icon>
+      </button>
+      <button mat-icon-button (click)="revokeLink(l)" [attr.aria-label]="theme.tone()['common.revoquer']">
+        <mat-icon>link_off</mat-icon>
+      </button>
+    </div>
+  }
+</ng-template>

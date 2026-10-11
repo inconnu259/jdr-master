@@ -198,7 +198,8 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
 /**
  * Politique de la famille `ralliement` (Story 38.2) : « voir » (partie, membres, couverture) pour
  * l'administrateur et les membres, « modifier la partie » (édition, couverture) et, depuis la Story
- * 39.1, « clore / rouvrir / brûler » pour l'administrateur seul. TOUTE autre action est refusée
+ * 39.1, « clore / rouvrir / brûler » et, depuis la Story 39.3, « inviter / retirer un membre » pour
+ * l'administrateur seul. TOUTE autre action est refusée
  * à tous les rôles — le ralliement n'a ni scénario, ni personnage, ni XP. Table COMPLÈTE par
  * construction (`Record` sur l'union fermée) : une action ajoutée sans sa ligne ne compile pas.
  */
@@ -211,7 +212,7 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   PARTIE_REOPEN: ADMIN_ONLY,
   PARTIE_DELETE: ADMIN_ONLY,
   PARTIE_MEMBERS_READ: ADMIN_AND_MEMBERS,
-  PARTIE_MEMBER_REMOVE: NOBODY,
+  PARTIE_MEMBER_REMOVE: ADMIN_ONLY,
   PARTIE_AVAILABILITY_READ: NOBODY,
   PARTIE_VISIBILITY_LOCKS_READ: NOBODY,
   PARTIE_VISIBILITY_LOCKS_UPDATE: NOBODY,
@@ -264,13 +265,15 @@ export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly Parti
   ANNOUNCEMENT_CREATE: NOBODY,
   ANNOUNCEMENT_READ: NOBODY,
   ANNOUNCEMENT_MARK_READ: NOBODY,
-  // Invitations (épic 39)
-  INVITATION_CREATE: NOBODY,
-  INVITATION_READ: NOBODY,
-  INVITATION_REVOKE: NOBODY,
-  INVITE_LINK_CREATE: NOBODY,
-  INVITE_LINK_READ: NOBODY,
-  INVITE_LINK_REVOKE: NOBODY,
+  // Invitations (Story 39.3) : l'administrateur invite, liste et révoque ; un simple membre n'a que
+  // la lecture de la liste des membres. La cellule vaut pour la famille entière (l'invitation à
+  // usage unique, épopée 41, n'a pas encore d'interface : l'UI reste réservée aux groupes).
+  INVITATION_CREATE: ADMIN_ONLY,
+  INVITATION_READ: ADMIN_ONLY,
+  INVITATION_REVOKE: ADMIN_ONLY,
+  INVITE_LINK_CREATE: ADMIN_ONLY,
+  INVITE_LINK_READ: ADMIN_ONLY,
+  INVITE_LINK_REVOKE: ADMIN_ONLY,
 };
 
 /**

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { InvitationDto } from '@master-jdr/shared';
+import { familyOf } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { PermissionService } from '../permissions/permission.service';
@@ -25,9 +26,11 @@ export class InvitationsService {
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
-  /** Le MJ invite un utilisateur déjà inscrit. Idempotent : ré-invite ranime une invitation close. */
+  /** Le MJ (JDR) ou l'administrateur (ralliement) invite un utilisateur déjà inscrit. Idempotent :
+   *  ré-invite ranime une invitation close. */
   async invite(partieId: string, inviterId: string, inviteeUserId: string) {
-    await this.permissions.assert(inviterId, 'INVITATION_CREATE', { partieId }); // MJ uniquement
+    // MJ uniquement (JDR) ; administrateur uniquement (ralliement, Story 39.3).
+    const { partie } = await this.permissions.assert(inviterId, 'INVITATION_CREATE', { partieId });
     if (inviteeUserId === inviterId) {
       throw new BadRequestException('Vous ne pouvez pas vous inviter vous-même.');
     }
@@ -39,7 +42,13 @@ export class InvitationsService {
     const alreadyMember = await this.prisma.membership.findUnique({
       where: { userId_partieId: { userId: inviteeUserId, partieId } },
     });
-    if (alreadyMember) throw new ConflictException('Cet utilisateur est déjà membre de la partie.');
+    if (alreadyMember) {
+      throw new ConflictException(
+        familyOf(partie.gameSystemId) === 'ralliement'
+          ? 'Cet utilisateur est déjà membre du groupe.'
+          : 'Cet utilisateur est déjà membre de la partie.',
+      );
+    }
 
     const invitation = await this.prisma.invitation.upsert({
       where: { partieId_inviteeUserId: { partieId, inviteeUserId } },
@@ -85,7 +94,8 @@ export class InvitationsService {
     await this.prisma.$transaction([
       this.prisma.membership.upsert({
         where: { userId_partieId: { userId, partieId: inv.partieId } },
-        create: { userId, partieId: inv.partieId },
+        // Rôle explicite (Story 39.3) : on rejoint un ralliement comme simple membre, jamais admin.
+        create: { userId, partieId: inv.partieId, role: 'MEMBER' },
         update: {},
       }),
       this.prisma.invitation.update({
@@ -100,10 +110,11 @@ export class InvitationsService {
     // sessions/onglets déjà ouverts (miroir de removeMember(), qui émet déjà userTopic(targetUserId)
     // pour le membre retiré).
     this.realtimeEvents.emit(userTopic(userId));
-    // AUCUN_MEMBRE_INVITE (Story 29.7, AD-14) : le MJ (toujours `inv.inviterId`, cf. invite() ci-
-    // dessus) doit voir ce signal se lever quand quelqu'un rejoint. En plus des émissions ci-dessus,
-    // jamais en remplacement.
-    await this.parties.notifyPartieSignalsChanged(inv.partieId, inv.inviterId);
+    // AUCUN_MEMBRE_INVITE (Story 29.7, AD-14) : le MJ doit voir ce signal se lever quand quelqu'un
+    // rejoint. En plus des émissions ci-dessus, jamais en remplacement. Notifié avec le propriétaire
+    // de la partie et non l'invitant (Story 39.3) : un ralliement a plusieurs administrateurs, et
+    // l'invitant n'est plus forcément le propriétaire.
+    await this.parties.notifyPartieSignalsChanged(inv.partieId, inv.partie.ownerId);
     return { ok: true, partieId: inv.partieId };
   }
 
@@ -119,9 +130,8 @@ export class InvitationsService {
 
   /** Le MJ de la partie (l'invitant) révoque une invitation. */
   async revoke(invitationId: string, userId: string) {
-    // La partie est résolue depuis l'invitation (404 si inconnue, 403 si étrangère). L'invitant
-    // est toujours le propriétaire (la propriété d'une partie est immuable) : révoquer est donc
-    // MJ seul.
+    // La partie est résolue depuis l'invitation (404 si inconnue, 403 si étrangère). Révoquer est
+    // réservé au MJ (JDR) ou à un administrateur (ralliement, Story 39.3).
     await this.permissions.assert(userId, 'INVITATION_REVOKE', { invitationId });
     const inv = await this.prisma.invitation.findUnique({ where: { id: invitationId } });
     if (!inv) throw new NotFoundException('Invitation introuvable');
@@ -159,6 +169,19 @@ export class InvitationsService {
       link = `${origin}/join/${inviteLink.token}`;
     }
 
+    if (familyOf(partie.gameSystemId) === 'ralliement') {
+      // Story 39.3 : e-mail neutre, au nom de l'invitant (l'invité peut ne pas avoir de compte).
+      const inviter = await this.prisma.user.findUnique({
+        where: { id: inviterId },
+        select: { displayName: true, pseudo: true },
+      });
+      return this.email.sendMail('group-invitation', email, {
+        inviterName: inviter?.displayName || inviter?.pseudo || 'Un ami',
+        partieName: partie.name,
+        link,
+      });
+    }
+
     return this.email.sendMail('invitation', email, {
       partieName: partie.name,
       link,
@@ -169,6 +192,8 @@ export class InvitationsService {
   private async requirePendingForInvitee(invitationId: string, userId: string) {
     const inv = await this.prisma.invitation.findUnique({
       where: { id: invitationId },
+      // Propriétaire de la partie : `accept()` le notifie (Story 39.3), pas l'invitant.
+      include: { partie: { select: { ownerId: true } } },
     });
     if (!inv || inv.inviteeUserId !== userId) throw new NotFoundException('Invitation introuvable');
     if (inv.status !== 'PENDING') throw new ConflictException('Invitation déjà traitée.');

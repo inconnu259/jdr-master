@@ -8,6 +8,7 @@ import {
 import { randomBytes } from 'node:crypto';
 import type { InviteLink, Prisma } from '@prisma/client';
 import type { InviteLinkPreviewDto } from '@master-jdr/shared';
+import { familyOf } from '@master-jdr/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { PartiesService } from '../parties/parties.service';
 import { PermissionService } from '../permissions/permission.service';
@@ -27,7 +28,7 @@ export class InviteLinksService {
     private readonly realtimeEvents: RealtimeEventsService,
   ) {}
 
-  /** Le MJ génère un lien d'invitation pour SA partie. */
+  /** Le MJ (ou l'administrateur d'un ralliement) génère un lien d'invitation pour SA partie. */
   async create(partieId: string, mjId: string, dto: CreateInviteLinkDto) {
     await this.permissions.assert(mjId, 'INVITE_LINK_CREATE', { partieId });
     const expiresAt = dto.expiresAt
@@ -108,21 +109,29 @@ export class InviteLinksService {
     tx: Prisma.TransactionClient,
     token: string,
     userId: string,
-  ): Promise<InviteLink & { partie: { ownerId: string | null } }> {
+  ): Promise<InviteLink & { partie: { ownerId: string | null; gameSystemId: string } }> {
     const link = await tx.inviteLink.findUnique({
       where: { token },
-      include: { partie: { select: { ownerId: true } } },
+      include: { partie: { select: { ownerId: true, gameSystemId: true } } },
     });
     if (!link) throw new NotFoundException('Lien invalide');
     const status = this.linkStatus(link);
     if (!status.valid) throw new ForbiddenException(status.reason);
+    // Textes neutres pour un ralliement (Story 39.3) : ni « MJ » ni « partie ».
+    const isGroup = familyOf(link.partie.gameSystemId) === 'ralliement';
     if (link.partie.ownerId === userId) {
-      throw new ConflictException('Vous êtes déjà le MJ de cette partie.');
+      throw new ConflictException(
+        isGroup ? 'Vous êtes déjà membre de ce groupe.' : 'Vous êtes déjà le MJ de cette partie.',
+      );
     }
     const existing = await tx.membership.findUnique({
       where: { userId_partieId: { userId, partieId: link.partieId } },
     });
-    if (existing) throw new ConflictException('Vous êtes déjà membre de cette partie.');
+    if (existing) {
+      throw new ConflictException(
+        isGroup ? 'Vous êtes déjà membre de ce groupe.' : 'Vous êtes déjà membre de cette partie.',
+      );
+    }
 
     const claim = await tx.inviteLink.updateMany({
       where: {
@@ -135,7 +144,8 @@ export class InviteLinksService {
     });
     if (claim.count === 0) throw new ForbiddenException('Lien invalide ou quota atteint.');
 
-    await tx.membership.create({ data: { userId, partieId: link.partieId } });
+    // Rôle explicite (Story 39.3) : un lien ne fait jamais entrer en administrateur.
+    await tx.membership.create({ data: { userId, partieId: link.partieId, role: 'MEMBER' } });
     return link;
   }
 

@@ -6,6 +6,8 @@ import type { EmailTemplate } from './email-template.enum';
 // que le corps de l'e-mail (ex. {{partieName}} résolu depuis `data`).
 const SUBJECTS: Record<EmailTemplate, string> = {
   invitation: 'Invitation à rejoindre {{partieName}}',
+  // Story 39.3 : e-mail neutre (aucun mot de jeu de rôle, l'invité peut ne pas avoir de compte).
+  'group-invitation': '{{inviterName}} vous invite à rejoindre « {{partieName}} »',
   'session-reminder': 'Rappel : séance de {{partieName}} demain',
   'password-reset': 'Réinitialisation de votre mot de passe',
   'password-changed': 'Votre mot de passe a été modifié',
@@ -21,6 +23,7 @@ const SUBJECTS: Record<EmailTemplate, string> = {
 // sur l'union fermée : un nouveau gabarit ne compile pas tant qu'il n'a pas déclaré son bouton.
 const ACTION_LABELS: Record<EmailTemplate, string | null> = {
   invitation: 'Rejoindre la partie',
+  'group-invitation': 'Rejoindre le groupe',
   'session-reminder': 'Voir la partie',
   'password-reset': 'Choisir un nouveau mot de passe',
   'password-changed': null,

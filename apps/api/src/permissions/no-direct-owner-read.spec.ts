@@ -42,6 +42,10 @@ const EXCEPTIONS: Readonly<Record<string, string>> = {
     "Filtre d'écriture atomique (`updateMany` conditionnel sur `Partie.ownerId`, protection contre la course), après un `assert(HOMME_DRAGON_MANAGE)` qui a déjà décidé du droit.",
   'invitations/invite-links.service.ts':
     "`consumeLink` : refus 409 « déjà le MJ » (état de la relation, pas un droit : le consommateur n'a justement aucun droit sur la partie) et transmission à `notifyPartieSignalsChanged`.",
+  'invitations/invitations.service.ts':
+    "`accept` lit le propriétaire de la partie pour le transmettre à `notifyPartieSignalsChanged` (Story 39.3 : un ralliement a plusieurs administrateurs, l'invitant n'est plus le destinataire du signal) ; le droit d'inviter vient de PermissionService.assert.",
+  'auth/auth.service.ts':
+    "`register` transmet le propriétaire de la partie rejointe par lien à `notifyPartieSignalsChanged` après la transaction (Story 39.3) ; aucune décision de droit, le compte tout juste créé n'en a aucun.",
   'account/account.service.ts':
     "Filtre de lecture agrégée « annonces non vues de MES parties » (propriétaire OU membre) et auteur affiché de l'annonce ; les écritures (favori, annonce lue) passent par PermissionService.assert.",
   'characters/character.service.ts':

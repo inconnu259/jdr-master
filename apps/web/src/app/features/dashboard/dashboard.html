@@ -6,7 +6,7 @@
         <mat-card-header>
           <mat-card-title>{{ inv.partie.name }}</mat-card-title>
           <mat-card-subtitle>
-            {{ system(inv.partie.gameSystemId) }} · {{ invitedByLabel(inv.inviterPseudo) }}
+            {{ invitationSystemLabel(inv) }} · {{ invitedByLabel(inv.inviterPseudo) }}
           </mat-card-subtitle>
         </mat-card-header>
         <mat-card-actions>

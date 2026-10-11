@@ -222,3 +222,80 @@ describe('Join — structure, états et annonces (Story 34.3)', () => {
     );
   });
 });
+
+// Story 39.3 — l'écran d'un lien d'invitation vers un groupe n'emploie aucun mot de JDR.
+describe('Join — lien d’invitation vers un groupe (Story 39.3)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  async function setup(gameSystemId: string, user: { displayName: string } | null) {
+    await TestBed.configureTestingModule({
+      imports: [Join],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ token: 'abc123' }) } },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            currentUser: signal(user),
+            loadSession: vi.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: JoinService,
+          useValue: {
+            preview: vi
+              .fn()
+              .mockResolvedValue({ valid: true, partieName: 'Les Fidèles', gameSystemId }),
+            join: vi.fn().mockRejectedValue(new Error('409')),
+          },
+        },
+        { provide: MyPartiesService, useValue: { refreshAll: vi.fn() } },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(Join);
+    fixture.detectChanges();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    fixture.detectChanges();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it('visiteur : titre, consigne et sous-titre du groupe, sans mot de JDR', async () => {
+    const { el } = await setup('ralliement', null);
+    expect(el.querySelector('h1')?.textContent?.trim()).toBe(
+      fillTone(GRIMOIRE_TONE['join.ralliement_title'], { name: 'Les Fidèles' }),
+    );
+    expect(el.textContent).toContain(GRIMOIRE_TONE['join.ralliement_login_or_register']);
+    expect(el.querySelector('mat-card-subtitle')?.textContent?.trim()).toBe(
+      GRIMOIRE_TONE['partie.mode_ralliement'],
+    );
+    expect(el.textContent).not.toContain('grimoire «');
+    expect(el.textContent).not.toContain('Ryuutama');
+  });
+
+  it('connecté : bouton « Rejoindre le groupe » du thème, erreur de jonction du groupe, titre d’onglet', async () => {
+    const { fixture, el } = await setup('ralliement', { displayName: 'Inès' });
+    const bouton = el.querySelector('.auth-primary') as HTMLButtonElement;
+    expect(bouton.textContent?.trim()).toBe(GRIMOIRE_TONE['join.ralliement_join_btn']);
+    expect(document.title).toBe(`Dés Dispos – ${GRIMOIRE_TONE['join.ralliement_join_btn']}`);
+
+    bouton.click();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    fixture.detectChanges();
+    expect(el.querySelector('p.error[role="alert"]')?.textContent).toContain(
+      GRIMOIRE_TONE['join.ralliement_join_error'],
+    );
+  });
+
+  it('témoin : une invitation de JDR garde ses textes', async () => {
+    const { el } = await setup('ryuutama', { displayName: 'Inès' });
+    expect(el.querySelector('h1')?.textContent?.trim()).toBe(
+      fillTone(GRIMOIRE_TONE['join.title'], { name: 'Les Fidèles' }),
+    );
+    expect(el.querySelector('.auth-primary')?.textContent?.trim()).toBe(
+      GRIMOIRE_TONE['common.rejoindre'],
+    );
+  });
+});
