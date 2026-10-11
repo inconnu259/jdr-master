@@ -38,6 +38,26 @@
         [selectedIndex]="selectedTabIndex()"
         (selectedIndexChange)="onTabIndexChange($event)"
       >
+        @if (isGroup()) {
+          <!-- Story 39.1 (⚠️ contrat UI) : un groupe s'ouvre sur ses conjonctions (onglet par défaut,
+               pour tout membre). Les événements arrivent avec l'epic 40 : aucune source de données
+               n'existe encore, les deux listes restent vides et l'état vide global s'affiche. -->
+          <mat-tab [label]="theme.tone()['partie.ralliement_conjonctions_tab']">
+            <section class="conjonctions">
+              <section class="conjonctions__section conjonctions__section--upcoming">
+                <h3>{{ theme.tone()['partie.ralliement_conjonctions_upcoming'] }}</h3>
+                <p class="muted">{{ theme.tone()['partie.ralliement_conjonctions_upcoming_empty'] }}</p>
+              </section>
+              <section class="conjonctions__section conjonctions__section--past">
+                <h3>{{ theme.tone()['partie.ralliement_conjonctions_past'] }}</h3>
+                <p class="muted">{{ theme.tone()['partie.ralliement_conjonctions_past_empty'] }}</p>
+              </section>
+              <p class="conjonctions__empty" role="status">
+                {{ theme.tone()['partie.ralliement_conjonctions_empty'] }}
+              </p>
+            </section>
+          </mat-tab>
+        }
         <mat-tab [label]="theme.tone()['parties.detail_tab_details']">
             <!-- Story 32.2 : l'onglet Détails est regroupé en trois zones -- Action, Consultation,
                  Référence, dans cet ordre -- plutôt que juxtaposé sans hiérarchie. Chaque bloc garde
@@ -564,11 +584,27 @@
           <mat-icon aria-hidden="true">delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
         </button>
       } @else if (isRalliement() && p.role === 'admin') {
-        <!-- Story 38.2 : l'admin d'un ralliement modifie sa partie (PARTIE_UPDATE) ; clôture, suppression
-             et visibilité n'existent pas pour cette famille (Story 38.4 : un membre n'a aucune action). -->
+        <!-- Story 38.2 : l'admin d'un ralliement modifie sa partie (PARTIE_UPDATE) ; la visibilité
+             n'existe pas pour cette famille (Story 38.4 : un membre n'a aucune action). Story 39.1 :
+             l'admin d'un groupe peut aussi le clore / rouvrir et le brûler (PARTIE_CLOSE / REOPEN /
+             DELETE, admin seul côté serveur) ; la rencontre unique n'a pas ces actions avant l'epic 41. -->
         <a mat-button class="icon-bar__btn" [routerLink]="['/parties', p.id, 'edit']">
           <mat-icon aria-hidden="true">edit</mat-icon> {{ theme.tone()['partie.edit_btn'] }}
         </a>
+        @if (isGroup()) {
+          @if (p.status !== 'TERMINEE') {
+            <button mat-button class="icon-bar__btn" (click)="closeGame(p)">
+              <mat-icon aria-hidden="true">flag</mat-icon> {{ theme.tone()['partie.close_btn'] }}
+            </button>
+          } @else {
+            <button mat-button class="icon-bar__btn" (click)="reopenGame(p)">
+              <mat-icon aria-hidden="true">replay</mat-icon> {{ theme.tone()['partie.reopen_btn'] }}
+            </button>
+          }
+          <button mat-button class="icon-bar__btn icon-bar__btn--danger" (click)="confirmDelete(p)">
+            <mat-icon aria-hidden="true">delete</mat-icon> {{ theme.tone()['partie.delete_btn'] }}
+          </button>
+        }
       }
     </mat-card-actions>
   </mat-card>

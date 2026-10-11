@@ -453,8 +453,14 @@ describe('PermissionService', () => {
       'PARTIE_MEMBERS_READ',
       'PARTIE_COVER_READ',
     ];
-    /** Modifier la partie : admin seul. */
-    const RALLIEMENT_ADMIN_ONLY: PermissionAction[] = ['PARTIE_UPDATE', 'PARTIE_COVER_UPDATE'];
+    /** Modifier la partie, la clore, la rouvrir, la brûler (Story 39.1) : admin seul. */
+    const RALLIEMENT_ADMIN_ONLY: PermissionAction[] = [
+      'PARTIE_UPDATE',
+      'PARTIE_COVER_UPDATE',
+      'PARTIE_CLOSE',
+      'PARTIE_REOPEN',
+      'PARTIE_DELETE',
+    ];
     /** Tout le reste : aucun rôle. */
     const RALLIEMENT_NOBODY: PermissionAction[] = ACTIONS.filter(
       (a) => !RALLIEMENT_VIEW.includes(a) && !RALLIEMENT_ADMIN_ONLY.includes(a),

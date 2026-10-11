@@ -721,8 +721,19 @@ export class PartiesService implements PartieSignalsPort {
     // AD-23 : si la partie portait un Homme Dragon, la FK `SetNull` ne fait que le délier — la
     // fiche est conservée. Le signal HOMME_DRAGON_A_CREER du MJ n'est plus celui d'avant et sa liste
     // « Personnages » change : `user:` au MJ (aucun canal `partie:`, la partie n'existe plus).
+    //
+    // Story 39.1 : un groupe (ralliement) brûlé emporte ses adhésions (cascade) — chaque membre voit
+    // sa liste changer. Les participants sont donc lus AVANT la suppression, et l'émission a lieu
+    // après le commit (jamais dans une transaction).
+    const participants =
+      familyOf(partie.gameSystemId) === 'ralliement'
+        ? await this.permissions.membersOf({ id, ownerId: partie.ownerId })
+        : [];
     await this.prisma.partie.delete({ where: { id } });
     if (partie.ownerId !== null) this.realtimeEvents.emit(userTopic(partie.ownerId));
+    for (const p of participants) {
+      if (p.userId !== partie.ownerId) this.realtimeEvents.emit(userTopic(p.userId));
+    }
     return { ok: true };
   }
 

@@ -197,19 +197,19 @@ export const JDR_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]
 
 /**
  * Politique de la famille `ralliement` (Story 38.2) : « voir » (partie, membres, couverture) pour
- * l'administrateur et les membres, « modifier la partie » (édition, couverture) pour
- * l'administrateur seul. TOUTE autre action est refusée à tous les rôles — le ralliement n'a ni
- * scénario, ni personnage, ni XP. Table COMPLÈTE par construction (`Record` sur l'union fermée) :
- * une action ajoutée sans sa ligne ne compile pas.
+ * l'administrateur et les membres, « modifier la partie » (édition, couverture) et, depuis la Story
+ * 39.1, « clore / rouvrir / brûler » pour l'administrateur seul. TOUTE autre action est refusée
+ * à tous les rôles — le ralliement n'a ni scénario, ni personnage, ni XP. Table COMPLÈTE par
+ * construction (`Record` sur l'union fermée) : une action ajoutée sans sa ligne ne compile pas.
  */
 export const RALLIEMENT_POLICY: Readonly<Record<PermissionAction, readonly PartieRole[]>> = {
   // Partie
   PARTIE_READ: ADMIN_AND_MEMBERS,
   PARTIE_UPDATE: ADMIN_ONLY,
   PARTIE_CONVERT_KIND: NOBODY,
-  PARTIE_CLOSE: NOBODY,
-  PARTIE_REOPEN: NOBODY,
-  PARTIE_DELETE: NOBODY,
+  PARTIE_CLOSE: ADMIN_ONLY,
+  PARTIE_REOPEN: ADMIN_ONLY,
+  PARTIE_DELETE: ADMIN_ONLY,
   PARTIE_MEMBERS_READ: ADMIN_AND_MEMBERS,
   PARTIE_MEMBER_REMOVE: NOBODY,
   PARTIE_AVAILABILITY_READ: NOBODY,

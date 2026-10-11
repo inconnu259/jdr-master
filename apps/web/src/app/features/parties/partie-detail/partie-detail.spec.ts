@@ -3235,11 +3235,12 @@ describe('PartieDetail — patron de carte à liseré, revue de code (retouche U
 describe('PartieDetail — ralliement, garde minimale (Story 38.2)', () => {
   afterEach(() => TestBed.resetTestingModule());
 
-  const ralliement = () =>
+  const ralliement = (over: Partial<PartieDto> = {}) =>
     makePartie({
       gameSystemId: 'ralliement',
       kind: 'CAMPAGNE_EPISODIQUE',
       role: 'admin',
+      ...over,
     });
 
   it('un ralliement fraîchement créé ne déclenche aucune lecture liée à une capacité JDR', async () => {
@@ -3274,8 +3275,8 @@ describe('PartieDetail — ralliement, garde minimale (Story 38.2)', () => {
     expect(el.querySelector('app-scenario-list')).toBeNull();
   });
 
-  it('l’admin garde l’accès à la modification, sans clôture ni suppression', async () => {
-    const { el } = await createFixture(ralliement(), MJ_ID);
+  it('l’admin d’une rencontre isolée garde l’accès à la modification, sans clôture ni suppression', async () => {
+    const { el } = await createFixture(ralliement({ kind: 'ONE_SHOT' }), MJ_ID);
     const links = Array.from(el.querySelectorAll('.icon-bar a')).map((a) =>
       a.getAttribute('href'),
     );
@@ -3356,10 +3357,12 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
   afterEach(() => TestBed.resetTestingModule());
 
   const OTHER_ID = 'member-2';
+  // Story 39.1 : un groupe (CAMPAGNE_EPISODIQUE) s'ouvre désormais sur ses conjonctions (describe
+  // dédié plus bas) ; la rencontre isolée garde « Détails » + « Missives » tels que validés en 38.4.
   const ralliement = (over: Partial<PartieDto> = {}) =>
     makePartie({
       gameSystemId: 'ralliement',
-      kind: 'CAMPAGNE_EPISODIQUE',
+      kind: 'ONE_SHOT',
       role: 'admin',
       description: 'Un soir de partage',
       ...over,
@@ -3520,9 +3523,12 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
         expect(TestBed.inject(ContextualNavService).subtitle()).toBe(
           `${tone['partie.mode_ralliement']} · ${tone[`partie.ralliement_kind_${kind}`]}`,
         );
-        // Détails (onglet actif), puis Missives : les deux corps sont balayés.
-        expect(BANNED.test(el.textContent ?? ''), `${theme}/${kind} Détails`).toBe(false);
-        openMissives(el, fixture);
+        // Onglet d'ouverture (Détails, ou Conjonctions pour un groupe), puis Missives : balayés.
+        expect(BANNED.test(el.textContent ?? ''), `${theme}/${kind} ouverture`).toBe(false);
+        el.querySelectorAll<HTMLElement>('div[role="tab"]')[
+          kind === 'CAMPAGNE_EPISODIQUE' ? 2 : 1
+        ].click();
+        fixture.detectChanges();
         expect(BANNED.test(el.textContent ?? ''), `${theme}/${kind} Missives`).toBe(false);
         TestBed.resetTestingModule();
       }
@@ -3578,5 +3584,202 @@ describe('PartieDetail — page d’un ralliement selon sa famille (Story 38.4)'
     expect(TestBed.inject(ContextualNavService).subtitle()).toBe(
       `Ryuutama · ${tone['partie.kind_CAMPAGNE_EPISODIQUE']}`,
     );
+  });
+});
+
+// ─── Un groupe s'ouvre sur ses conjonctions (Story 39.1) ───────────────────────────────────
+
+describe('PartieDetail — un groupe s’ouvre sur ses conjonctions (Story 39.1)', () => {
+  afterEach(() => TestBed.resetTestingModule());
+
+  const OTHER_ID = 'member-2';
+  const groupe = (over: Partial<PartieDto> = {}) =>
+    makePartie({
+      gameSystemId: 'ralliement',
+      kind: 'CAMPAGNE_EPISODIQUE',
+      role: 'admin',
+      description: 'Une bande de voyageurs',
+      ...over,
+    });
+  const members: PartieMemberDto[] = [
+    { userId: MJ_ID, pseudo: 'createur', displayName: 'Créateur', joinedAt: '2026-10-01T00:00:00Z' },
+    { userId: OTHER_ID, pseudo: 'membre', displayName: 'Membre', joinedAt: '2026-10-02T00:00:00Z' },
+  ];
+  const tabs = (el: HTMLElement) => Array.from(el.querySelectorAll<HTMLElement>('div[role="tab"]'));
+  const tabLabels = (el: HTMLElement) => tabs(el).map((t) => (t.textContent ?? '').trim());
+  const openTab = (el: HTMLElement, fixture: ComponentFixture<PartieDetail>, index: number) => {
+    tabs(el)[index].click();
+    fixture.detectChanges();
+  };
+  /** Libellé d'une action du pied de carte, sans la ligature de son icône (`<mat-icon>` en tête). */
+  const label = (node: Element) => (node.textContent ?? '').trim().replace(/^\S+\s+/, '');
+  const footerButtons = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll('mat-card-actions button')).map(label);
+
+  it.each(THEMES)(
+    'thème %s : un membre voit Conjonctions (ouvert), Détails, Missives, avec les mots du thème',
+    async (theme) => {
+      const tone = TONE_MAP[theme];
+      const { el } = await createFixture(groupe({ role: 'member' }), OTHER_ID, {
+        members,
+        theme,
+      });
+      expect(tabLabels(el)).toEqual([
+        tone['partie.ralliement_conjonctions_tab'],
+        tone['parties.detail_tab_details'],
+        tone['partie.invitations_tab_label'],
+      ]);
+      expect(tabs(el)[0].getAttribute('aria-selected')).toBe('true');
+    },
+  );
+
+  it.each([
+    ['admin', MJ_ID, 'admin'],
+    ['membre', OTHER_ID, 'member'],
+  ] as const)(
+    '%s : Conjonctions affiche « À venir » puis « Passées » et l’état vide',
+    async (_nom, userId, role) => {
+      const { el } = await createFixture(groupe({ role }), userId, { members });
+      const tone = TONE_MAP['grimoire-emeraude'];
+      const titres = Array.from(el.querySelectorAll('.conjonctions h3')).map((h) =>
+        (h.textContent ?? '').trim(),
+      );
+      expect(titres).toEqual([
+        tone['partie.ralliement_conjonctions_upcoming'],
+        tone['partie.ralliement_conjonctions_past'],
+      ]);
+      expect(el.querySelector('.conjonctions__section--upcoming')?.textContent).toContain(
+        tone['partie.ralliement_conjonctions_upcoming_empty'],
+      );
+      expect(el.querySelector('.conjonctions__section--past')?.textContent).toContain(
+        tone['partie.ralliement_conjonctions_past_empty'],
+      );
+      expect(el.querySelector('.conjonctions__empty')?.textContent?.trim()).toBe(
+        'Aucune conjonction pour l’instant',
+      );
+      // Pas de bouton « + Nouvelle conjonction » ni de carte d'événement (epic 40).
+      expect(el.querySelector('.conjonctions button, .conjonctions a')).toBeNull();
+    },
+  );
+
+  it('Détails : la description, aucune carte de conjonction, aucun « Sceller des secrets »', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, { members, noopAnimations: true });
+    openTab(el, fixture, 1);
+
+    expect(
+      el.querySelector('.details-zone--reference .zone-card--reference')?.textContent,
+    ).toContain('Une bande de voyageurs');
+    expect(el.querySelector('.conjonctions')).toBeNull();
+    expect(el.querySelector('a[href$="/visibility"]')).toBeNull();
+    expect(el.textContent).not.toContain(TONE_MAP['grimoire-emeraude']['partie.visibility_btn']);
+  });
+
+  it('Missives : la liste des membres reste accessible en troisième position', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, { members, noopAnimations: true });
+    openTab(el, fixture, 2);
+    const rows = Array.from(el.querySelectorAll('.ralliement-members .result-row')).map((r) =>
+      (r.textContent ?? '').trim(),
+    );
+    expect(rows).toEqual(['Créateur', 'Membre']);
+  });
+
+  it('admin : pied de carte Retranscrire, Clore, Brûler — sans Sceller des secrets', async () => {
+    const { el } = await createFixture(groupe(), MJ_ID, { members });
+    const tone = TONE_MAP['grimoire-emeraude'];
+    const actions = el.querySelector('mat-card-actions') as HTMLElement;
+    expect(Array.from(actions.querySelectorAll('a')).map(label)).toEqual([tone['partie.edit_btn']]);
+    expect(footerButtons(el)).toEqual([tone['partie.close_btn'], tone['partie.delete_btn']]);
+    expect(actions.textContent).not.toContain(tone['partie.visibility_btn']);
+    const brule = Array.from(actions.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes(tone['partie.delete_btn']),
+    );
+    expect(brule!.classList.contains('icon-bar__btn--danger')).toBe(true);
+  });
+
+  it('admin, groupe terminé : « Rouvrir » remplace « Clore »', async () => {
+    const { el } = await createFixture(groupe({ status: 'TERMINEE' }), MJ_ID, { members });
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(footerButtons(el)).toEqual([tone['partie.reopen_btn'], tone['partie.delete_btn']]);
+  });
+
+  it('membre : aucune action au pied de carte', async () => {
+    const { el } = await createFixture(groupe({ role: 'member' }), OTHER_ID, { members });
+    expect(el.querySelector('mat-card-actions a')).toBeNull();
+    expect(el.querySelector('mat-card-actions button')).toBeNull();
+  });
+
+  it('clore puis rouvrir passent par PartiesService et mettent la page à jour', async () => {
+    const { fixture, el } = await createFixture(groupe(), MJ_ID, { members });
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      close: ReturnType<typeof vi.fn>;
+      reopen: ReturnType<typeof vi.fn>;
+    };
+    const tone = TONE_MAP['grimoire-emeraude'];
+    const click = async (label: string) => {
+      const bouton = Array.from(el.querySelectorAll('mat-card-actions button')).find((b) =>
+        b.textContent?.includes(label),
+      ) as HTMLButtonElement;
+      bouton.click();
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+        fixture.detectChanges();
+      }
+    };
+
+    await click(tone['partie.close_btn']);
+    expect(parties.close).toHaveBeenCalledWith('party-1');
+    expect(el.querySelector('.closed-banner')?.textContent).toContain(
+      tone['partie.ralliement_status_closed_label'],
+    );
+
+    await click(tone['partie.reopen_btn']);
+    expect(parties.reopen).toHaveBeenCalledWith('party-1');
+    expect(el.querySelector('.closed-banner')).toBeNull();
+  });
+
+  it('brûler : confirmation, suppression, rechargement de la liste', async () => {
+    const partie = groupe();
+    const { fixture } = await createFixture(partie, MJ_ID, { members });
+    const dialog = TestBed.inject(MatDialog) as unknown as { open: ReturnType<typeof vi.fn> };
+    dialog.open.mockReturnValue({ afterClosed: () => of(true) });
+    const parties = TestBed.inject(PartiesService) as unknown as {
+      remove: ReturnType<typeof vi.fn>;
+    };
+    const myParties = TestBed.inject(MyPartiesService) as unknown as {
+      refreshAll: ReturnType<typeof vi.fn>;
+    };
+
+    await fixture.componentInstance.confirmDelete(partie);
+
+    expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(parties.remove).toHaveBeenCalledWith(partie.id);
+    expect(myParties.refreshAll).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(THEMES)('thème %s : l’onglet Conjonctions n’emploie aucun mot de JDR', async (theme) => {
+    const { el } = await createFixture(groupe(), MJ_ID, { members, theme });
+    expect(NON_JDR_BANNED_WORDS.test(el.textContent ?? '')).toBe(false);
+  });
+
+  it('rencontre isolée : Détails (ouvert) puis Missives, comme avant, sans conjonctions', async () => {
+    const { el } = await createFixture(groupe({ kind: 'ONE_SHOT' }), MJ_ID, { members });
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(tabLabels(el)).toEqual([
+      tone['parties.detail_tab_details'],
+      tone['partie.invitations_tab_label'],
+    ]);
+    expect(tabs(el)[0].getAttribute('aria-selected')).toBe('true');
+    expect(el.querySelector('.conjonctions')).toBeNull();
+    expect(footerButtons(el)).toEqual([]);
+  });
+
+  it('témoin JDR : les onglets d’une quête ne contiennent pas de Conjonctions', async () => {
+    const { el } = await createFixture(
+      makePartie({ gameSystemId: 'ryuutama', kind: 'CAMPAGNE_EPISODIQUE', ownerId: MJ_ID }),
+      MJ_ID,
+    );
+    const tone = TONE_MAP['grimoire-emeraude'];
+    expect(tabLabels(el)).not.toContain(tone['partie.ralliement_conjonctions_tab']);
+    expect(tabLabels(el)[0]).toBe(tone['parties.detail_tab_details']);
   });
 });

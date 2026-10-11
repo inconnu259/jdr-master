@@ -290,3 +290,23 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-38-5-reconnaitre-ses-ralliements-dans-la-liste.md`
   summary: By hand in the browser (a user with a quest AND a ralliement): check the home list tiles in the three view modes and three themes — chip, R1/L1 badge placement (−6/−6 in medium and compact, inset in large), JDR tiles unchanged inside the new wrappers, filters Genre / Rang / Grouper par type, and a ralliement created in another tab appearing without reload.
   evidence: The dev user has no parties and the agent creates no data in the dev DB; only unit/DOM tests were run.
+
+- source_spec: none
+  summary: Epic 39 story 39.2 — give every e-mail a common `layout.hbs` template with a solid green button and the « Dés Dispos » footer (see epics-palier10.md).
+  evidence: Split from the « epic 39 » build request; only 39.1 was kept for this run (multi-goal check).
+- source_spec: none
+  summary: Epic 39 story 39.3 — invite someone into a group by pseudo, e-mail or link, with admin-only server refusal and the neutral-vocabulary e-mail (needs 39.1 and 39.2).
+  evidence: Split from the « epic 39 » build request; only 39.1 was kept for this run (multi-goal check).
+- source_spec: none
+  summary: Epic 39 story 39.4 — name admins and leave the admin office, with the red confirmation variant and the `FOR UPDATE` lock on the partie (needs 39.3).
+  evidence: Split from the « epic 39 » build request; only 39.1 was kept for this run (multi-goal check).
+- source_spec: none
+  summary: Epic 39 story 39.5 — leave a group or remove a member through the single `PartiesService.leave(partieId, userId, cause)` procedure (needs 39.4).
+  evidence: Split from the « epic 39 » build request; only 39.1 was kept for this run (multi-goal check).
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-1-ouvrir-un-groupe-sur-ses-conjonctions.md`
+  summary: By hand in the browser (a group as admin and as member): check the Conjonctions tab (words Conjonctions/Haltes/Réunions, spacing, empty lines, no SCSS was added) and the admin footer Clore/Rouvrir/Brûler in the three themes.
+  evidence: No live check was run; only unit/DOM/e2e tests.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-1-ouvrir-un-groupe-sur-ses-conjonctions.md`
+  summary: Decide whether a one-shot ralliement (ONE_SHOT) should keep PARTIE_CLOSE/REOPEN/DELETE for its host before epic 41 reworks that page.
+  evidence: `RALLIEMENT_POLICY` grants the three cells to the admin for the whole family; only the web footer is gated to groups, so the host can close or burn a one-shot through the API.

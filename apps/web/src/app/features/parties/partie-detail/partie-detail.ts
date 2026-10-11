@@ -211,6 +211,13 @@ export class PartieDetail implements OnInit {
     () => familyOf(this.partie()?.gameSystemId ?? '') === 'ralliement',
   );
 
+  /** Story 39.1 : un groupe (ralliement `CAMPAGNE_EPISODIQUE`) s'ouvre sur ses conjonctions. Dérivé
+   *  de la famille et de la nature — jamais d'un id de système codé en dur. Une rencontre unique
+   *  (`ONE_SHOT`) garde « Détails » + « Missives » (sa page relève de l'epic 41). */
+  protected readonly isGroup = computed(
+    () => this.isRalliement() && this.partie()?.kind === 'CAMPAGNE_EPISODIQUE',
+  );
+
   /** Le MJ a accès à l'invitation et à la gestion des membres/liens. Jamais dans un ralliement :
    *  son créateur y est `admin` (rôle serveur), pas MJ — sa page et ses actions sont celles de sa famille (Story 38.4). */
   protected readonly isMj = computed(

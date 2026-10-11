@@ -358,6 +358,13 @@ export const grimoireEmeraude = {
   'partie.ralliement_save_error': 'Ce ralliement n’a pu être convoqué. Réessayez.',
   'partie.ralliement_created_but_cover_failed':
     'Le ralliement est bien convoqué, mais son enluminure n’a pu être fixée. Vous pouvez la redéposer ici.',
+  /* — onglet d'ouverture d'un groupe (Story 39.1) : « À venir » / « Passées » restent neutres — */
+  'partie.ralliement_conjonctions_tab': 'Conjonctions',
+  'partie.ralliement_conjonctions_upcoming': 'À venir',
+  'partie.ralliement_conjonctions_past': 'Passées',
+  'partie.ralliement_conjonctions_upcoming_empty': 'Rien de prévu.',
+  'partie.ralliement_conjonctions_past_empty': 'Rien d’archivé.',
+  'partie.ralliement_conjonctions_empty': 'Aucune conjonction pour l’instant',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine séance au grimoire',
   'partie.no_session': "Aucune séance convoquée. Consultez l'oracle des créneaux.",

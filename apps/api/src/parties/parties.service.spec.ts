@@ -1470,6 +1470,74 @@ describe('PartiesService', () => {
     expect(realtimeEvents.emit).not.toHaveBeenCalledWith(partieTopic('p1'));
   });
 
+  // Story 39.1 : brûler un groupe emporte ses adhésions (cascade) — chaque membre voit sa liste changer.
+  describe('remove() — groupe de ralliement (Story 39.1)', () => {
+    const groupe = {
+      ...partie,
+      kind: 'CAMPAGNE_EPISODIQUE',
+      gameSystemId: 'ralliement',
+      ownerId: 'admin1',
+    };
+
+    beforeEach(() => {
+      prisma.partie.findUnique.mockResolvedValue(groupe);
+      prisma.partie.delete.mockResolvedValue(groupe);
+      prisma.user.findUnique.mockResolvedValue({ id: 'admin1', pseudo: 'a', displayName: 'A' });
+      prisma.membership.findUnique.mockImplementation(
+        ({ where }: { where: { userId_partieId: { userId: string } } }) =>
+          Promise.resolve(
+            where.userId_partieId.userId === 'admin1'
+              ? { userId: 'admin1', role: 'ADMIN' }
+              : where.userId_partieId.userId === 'membre1'
+                ? { userId: 'membre1', role: 'MEMBER' }
+                : null,
+          ),
+      );
+      prisma.membership.findMany.mockResolvedValue([
+        { user: { id: 'admin1', pseudo: 'a', displayName: 'A' } },
+        { user: { id: 'membre1', pseudo: 'm', displayName: 'M' } },
+        { user: { id: 'membre2', pseudo: 'n', displayName: 'N' } },
+      ]);
+    });
+
+    it("l'admin brûle : chaque membre est notifié sur user:, une seule fois, après la suppression", async () => {
+      const ordre: string[] = [];
+      // La lecture des participants (membersOf → membership.findMany) doit précéder la suppression :
+      // les adhésions partent en cascade avec la partie.
+      const membres = [
+        { user: { id: 'admin1', pseudo: 'a', displayName: 'A' } },
+        { user: { id: 'membre1', pseudo: 'm', displayName: 'M' } },
+        { user: { id: 'membre2', pseudo: 'n', displayName: 'N' } },
+      ];
+      prisma.membership.findMany.mockImplementation(() => {
+        ordre.push('lecture');
+        return Promise.resolve(ordre.includes('delete') ? [] : membres);
+      });
+      prisma.partie.delete.mockImplementation(() => {
+        ordre.push('delete');
+        return Promise.resolve(groupe);
+      });
+      realtimeEvents.emit.mockImplementation((topic: string) => ordre.push(topic));
+
+      await service.remove('p1', 'admin1');
+
+      expect(realtimeEvents.emit).toHaveBeenCalledTimes(3);
+      for (const id of ['admin1', 'membre1', 'membre2']) {
+        expect(realtimeEvents.emit).toHaveBeenCalledWith(userTopic(id));
+      }
+      expect(realtimeEvents.emit).not.toHaveBeenCalledWith(partieTopic('p1'));
+      expect(ordre.indexOf('lecture')).toBeGreaterThanOrEqual(0);
+      expect(ordre.indexOf('lecture')).toBeLessThan(ordre.indexOf('delete'));
+      expect(ordre.indexOf('delete')).toBeLessThan(ordre.indexOf(userTopic('membre1')));
+    });
+
+    it('un membre ne brûle pas : 403, rien supprimé, rien émis', async () => {
+      await expect(service.remove('p1', 'membre1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.partie.delete).not.toHaveBeenCalled();
+      expect(realtimeEvents.emit).not.toHaveBeenCalled();
+    });
+  });
+
   it('remove : rien émis quand la suppression est refusée (non-MJ)', async () => {
     prisma.partie.findUnique.mockResolvedValue(partie);
 

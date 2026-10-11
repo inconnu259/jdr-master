@@ -916,6 +916,11 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
     'dashboard.role_ralliement_guest',
     'dashboard.role_ralliement_admin',
     'dashboard.role_ralliement_member',
+    // Story 39.1 : sections de l’onglet d’ouverture d’un groupe, mots fonctionnels identiques
+    'partie.ralliement_conjonctions_upcoming',
+    'partie.ralliement_conjonctions_past',
+    'partie.ralliement_conjonctions_upcoming_empty',
+    'partie.ralliement_conjonctions_past_empty',
     // Gabarits structurels et libellés techniques
     'partie.signal_more_count',
     'parties.detail_link_expires_short',
@@ -1266,6 +1271,22 @@ describe('Tones — une voix par thème (Story 35.3)', () => {
       const [creation, mot] = attendu[theme];
       expect(TONE_MAP[theme]['partie.ralliement_new_title'], theme).toBe(creation);
       expect(TONE_MAP[theme]['partie.ralliement_edit_title'], theme).toContain(mot);
+    }
+  });
+
+  // Story 39.1 : l'onglet d'ouverture d'un groupe nomme les conjonctions avec les mots du thème.
+  it('Story 39.1 : l’onglet des conjonctions d’un groupe a une voix par thème, sans mot de JDR', () => {
+    const attendu: Record<Theme, [string, string]> = {
+      'grimoire-emeraude': ['Conjonctions', 'Aucune conjonction pour l’instant'],
+      'foret-ancienne': ['Haltes', 'Aucune halte pour l’instant'],
+      'atelier-cuivre': ['Réunions', 'Aucune réunion pour l’instant'],
+    };
+    for (const theme of THEMES) {
+      const [onglet, vide] = attendu[theme];
+      expect(TONE_MAP[theme]['partie.ralliement_conjonctions_tab'], theme).toBe(onglet);
+      expect(TONE_MAP[theme]['partie.ralliement_conjonctions_empty'], theme).toBe(vide);
+      expect(TONE_MAP[theme]['partie.ralliement_conjonctions_upcoming'], theme).toBe('À venir');
+      expect(TONE_MAP[theme]['partie.ralliement_conjonctions_past'], theme).toBe('Passées');
     }
   });
 

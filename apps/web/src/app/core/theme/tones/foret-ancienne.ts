@@ -352,6 +352,13 @@ export const foretAncienne: Record<ToneKey, string> = {
   'partie.ralliement_save_error': 'Cette veillée n’a pu être allumée. Réessaie.',
   'partie.ralliement_created_but_cover_failed':
     'La veillée est bien allumée, mais son image n’a pu prendre racine. Tu peux la redéposer ici.',
+  /* — onglet d'ouverture d'un groupe (Story 39.1) : « À venir » / « Passées » restent neutres — */
+  'partie.ralliement_conjonctions_tab': 'Haltes',
+  'partie.ralliement_conjonctions_upcoming': 'À venir',
+  'partie.ralliement_conjonctions_past': 'Passées',
+  'partie.ralliement_conjonctions_upcoming_empty': 'Rien de prévu.',
+  'partie.ralliement_conjonctions_past_empty': 'Rien d’archivé.',
+  'partie.ralliement_conjonctions_empty': 'Aucune halte pour l’instant',
   /* — détail de partie — */
   'partie.scheduling_title': 'Prochaine clairière',
   'partie.no_session': "Aucune clairière réservée. L'écureuil cherche encore.",

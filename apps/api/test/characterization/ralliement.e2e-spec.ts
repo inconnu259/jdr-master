@@ -199,7 +199,7 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
       expect(body<{ message: string }>(res).message).toBe(UNAVAILABLE);
     });
 
-    it('les actions de JDR sont refusées à tous les rôles (scénarios, clôture, suppression…)', async () => {
+    it('les actions de JDR sont refusées à tous les rôles (scénarios)', async () => {
       for (const user of [admin, member]) {
         const list = await user.agent.get(`/parties/${partieId}/scenarios`).expect(403);
         expect(body<{ message: string }>(list).message).toBe(UNAVAILABLE);
@@ -207,12 +207,61 @@ describe('Ralliement — création et droits (Story 38.2)', () => {
           .post(`/parties/${partieId}/scenarios`)
           .send({ title: 'Un scénario' })
           .expect(403);
-        await user.agent.patch(`/parties/${partieId}/close`).expect(403);
-        await user.agent.delete(`/parties/${partieId}`).expect(403);
       }
       expect(await h.prisma.scenario.count({ where: { event: { partieId } } })).toBe(0);
+    });
+
+    // Story 39.1 : clore, rouvrir et brûler un ralliement sont des droits d'administrateur.
+    it('un membre ni ne clôt, ni ne rouvre, ni ne brûle : 403 « réservée aux administrateurs », rien écrit', async () => {
+      for (const route of [
+        () => member.agent.patch(`/parties/${partieId}/close`),
+        () => member.agent.patch(`/parties/${partieId}/reopen`),
+        () => member.agent.delete(`/parties/${partieId}`),
+      ]) {
+        const res = await route();
+        expect(res.status).toBe(403);
+        expect(body<{ message: string }>(res).message).toBe(ADMIN_ONLY);
+      }
       const stored = await h.prisma.partie.findUniqueOrThrow({ where: { id: partieId } });
       expect(stored.closedAt).toBeNull();
+    });
+
+    it('un étranger ni ne clôt, ni ne rouvre, ni ne brûle : 403 « pas accès », rien écrit', async () => {
+      for (const route of [
+        () => stranger.agent.patch(`/parties/${partieId}/close`),
+        () => stranger.agent.patch(`/parties/${partieId}/reopen`),
+        () => stranger.agent.delete(`/parties/${partieId}`),
+      ]) {
+        const res = await route();
+        expect(res.status).toBe(403);
+        expect(body<{ message: string }>(res).message).toBe(NO_ACCESS);
+      }
+      const stored = await h.prisma.partie.findUniqueOrThrow({ where: { id: partieId } });
+      expect(stored.closedAt).toBeNull();
+    });
+
+    it('un admin clôt puis rouvre son groupe (même état terminé que le JDR, réversible)', async () => {
+      const { id } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'clore', 'ralliement');
+      await h.addMember(id, member);
+      const closed = await admin.agent.patch(`/parties/${id}/close`).expect(200);
+      expect(body<PartieDtoLike>(closed).status).toBe('TERMINEE');
+      expect(body<PartieDtoLike>(closed).role).toBe('admin');
+      expect((await h.prisma.partie.findUniqueOrThrow({ where: { id } })).closedAt).not.toBeNull();
+      const asMember = await member.agent.get(`/parties/${id}`).expect(200);
+      expect(body<PartieDtoLike>(asMember).status).toBe('TERMINEE');
+      const reopened = await admin.agent.patch(`/parties/${id}/reopen`).expect(200);
+      expect(body<PartieDtoLike>(reopened).status).not.toBe('TERMINEE');
+      expect((await h.prisma.partie.findUniqueOrThrow({ where: { id } })).closedAt).toBeNull();
+    });
+
+    it('un admin brûle son groupe : la partie et ses adhésions disparaissent', async () => {
+      const { id } = await h.createPartie(admin, 'CAMPAGNE_EPISODIQUE', 'bruler', 'ralliement');
+      await h.addMember(id, member);
+      expect(await h.prisma.membership.count({ where: { partieId: id } })).toBeGreaterThan(0);
+      await admin.agent.delete(`/parties/${id}`).expect(200);
+      expect(await h.prisma.partie.findUnique({ where: { id } })).toBeNull();
+      expect(await h.prisma.membership.count({ where: { partieId: id } })).toBe(0);
+      await member.agent.get(`/parties/${id}`).expect(404);
     });
   });
 
