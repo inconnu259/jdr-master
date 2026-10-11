@@ -67,8 +67,83 @@ describe('EmailModule (intégration réelle via Mailpit)', () => {
         HTML: string;
       };
       expect(message.Subject).toBe('Invitation à rejoindre Test Intégration');
-      expect(message.HTML).toContain('jdr-master'); // preuve que layout.hbs enveloppe le corps
-      expect(message.HTML).toContain('https://example.com/invite/test');
+      // Story 39.2 : gabarit commun — pied « Dés Dispos » (plus « jdr-master ») et vrai bouton vert
+      // plein (le lien porte le libellé de l'action et le fond vert), pas un simple lien souligné.
+      expect(message.HTML).toContain('Dés Dispos');
+      expect(message.HTML).not.toContain('jdr-master');
+      expect(message.HTML).toMatch(
+        /<a href="https:\/\/example\.com\/invite\/test"[^>]*>Rejoindre la partie<\/a>/,
+      );
+      expect(message.HTML).toContain('background:#2e7d5a');
+    } finally {
+      await app.close();
+    }
+  });
+
+  // Story 39.2 (revue) : l'invariant « link + libellé ⇒ bouton » traverse le vrai layout pour CHAQUE
+  // gabarit à action, pas seulement `invitation` — un libellé oublié ou un `link` mal nommé ferait
+  // disparaître le bouton sans aucune erreur.
+  it.each([
+    ['invitation', 'Rejoindre la partie'],
+    ['session-reminder', 'Voir la partie'],
+    ['password-reset', 'Choisir un nouveau mot de passe'],
+    ['level-up', 'Voir la fiche'],
+    ['email-change-confirm', 'Confirmer cette nouvelle adresse'],
+    ['email-change-rollback-available', 'Annuler ce changement et restaurer mon adresse'],
+    ['email-change-rolled-back', 'Réinitialiser mon mot de passe'],
+  ] as const)('le gabarit « %s » rend un bouton « %s » vers son lien', async (template, label) => {
+    if (!reachable) return;
+
+    const app = await NestFactory.createApplicationContext(TestAppModule, { logger: false });
+    const email = app.get(EmailService);
+    const to = `integration-test-${Date.now()}-${template}@example.com`;
+    const link = `https://example.com/${template}/abc.def`;
+
+    try {
+      expect(
+        await email.sendMail(template, to, { link, partieName: 'P', characterName: 'C' }),
+      ).toEqual({
+        ok: true,
+      });
+
+      const searchRes = await fetch(
+        `${MAILPIT_API}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`,
+      );
+      const search = (await searchRes.json()) as { messages: Array<{ ID: string }> };
+      expect(search.messages.length).toBeGreaterThan(0);
+
+      const messageRes = await fetch(`${MAILPIT_API}/api/v1/message/${search.messages[0].ID}`);
+      const message = (await messageRes.json()) as { HTML: string };
+      expect(message.HTML).toContain(`href="${link}"`);
+      expect(message.HTML).toContain(`>${label}</a>`);
+      expect(message.HTML).toContain('Dés Dispos');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("un e-mail sans action (mot de passe modifié) garde le pied « Dés Dispos » mais n'a pas de bouton", async () => {
+    if (!reachable) return;
+
+    const app = await NestFactory.createApplicationContext(TestAppModule, {
+      logger: false,
+    });
+    const email = app.get(EmailService);
+    const to = `integration-test-${Date.now()}-sans-bouton@example.com`;
+
+    try {
+      expect(await email.sendMail('password-changed', to, {})).toEqual({ ok: true });
+
+      const searchRes = await fetch(
+        `${MAILPIT_API}/api/v1/search?query=${encodeURIComponent(`to:${to}`)}`,
+      );
+      const search = (await searchRes.json()) as { messages: Array<{ ID: string }> };
+      expect(search.messages.length).toBeGreaterThan(0);
+
+      const messageRes = await fetch(`${MAILPIT_API}/api/v1/message/${search.messages[0].ID}`);
+      const message = (await messageRes.json()) as { HTML: string };
+      expect(message.HTML).toContain('Dés Dispos');
+      expect(message.HTML).not.toContain('background:#2e7d5a');
     } finally {
       await app.close();
     }

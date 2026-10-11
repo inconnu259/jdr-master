@@ -310,3 +310,10 @@ Source des règles : `docs/dragons.md` (transcription du livre fournie par l'uti
 - source_spec: `_bmad-output/implementation-artifacts/spec-39-1-ouvrir-un-groupe-sur-ses-conjonctions.md`
   summary: Decide whether a one-shot ralliement (ONE_SHOT) should keep PARTIE_CLOSE/REOPEN/DELETE for its host before epic 41 reworks that page.
   evidence: `RALLIEMENT_POLICY` grants the three cells to the admin for the whole family; only the web footer is gated to groups, so the host can close or burn a one-shot through the API.
+
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-2-donner-un-gabarit-commun-a-tous-les-e-mails.md`
+  summary: Look at the nine e-mails in Mailpit (and a real client if possible): the button now sits after the body, so « Ce lien expire dans 24h » precedes it and the rollback e-mail ends a sentence with « : » before another paragraph — decide whether to reword or add a slot for text after the button.
+  evidence: The frozen intent puts the button in the layout and keeps the words; reordering was not done. No rendering was checked in a mail client.
+- source_spec: `_bmad-output/implementation-artifacts/spec-39-2-donner-un-gabarit-commun-a-tous-les-e-mails.md`
+  summary: Rename the sender display name « jdr-master » in `MAIL_FROM` (`.env`, `.env.dev`, production config) to « Dés Dispos » if the brand change should reach the From header.
+  evidence: Only the footer was in scope; the From name still reads « jdr-master ».

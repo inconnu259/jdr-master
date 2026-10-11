@@ -24,9 +24,24 @@ describe('EmailService', () => {
       context: {
         partieName: 'La Forêt Ancienne',
         link: 'https://jdr-master.local/invite/abc',
+        actionLabel: 'Rejoindre la partie',
       },
     });
     expect(result).toEqual({ ok: true });
+  });
+
+  it("ajoute le libellé du bouton d'action au contexte, et aucun pour un e-mail sans action", async () => {
+    await service.sendMail('password-reset', 'joueur@example.com', { link: 'https://x/y' });
+    expect(mailer.sendMail).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        context: { link: 'https://x/y', actionLabel: 'Choisir un nouveau mot de passe' },
+      }),
+    );
+
+    await service.sendMail('password-changed', 'joueur@example.com', {});
+    expect(mailer.sendMail).toHaveBeenLastCalledWith(
+      expect.objectContaining({ context: { actionLabel: null } }),
+    );
   });
 
   it('sujet correct par gabarit (session-reminder, password-reset)', async () => {

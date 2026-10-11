@@ -16,6 +16,21 @@ const SUBJECTS: Record<EmailTemplate, string> = {
   'email-change-rolled-back': 'Votre adresse e-mail a été restaurée',
 };
 
+// Libellé du bouton d'action (Story 39.2) : le gabarit commun `layout.hbs` dessine un bouton vert plein
+// quand le contexte porte `link` ET `actionLabel`. `null` = e-mail sans action, donc sans bouton. Record
+// sur l'union fermée : un nouveau gabarit ne compile pas tant qu'il n'a pas déclaré son bouton.
+const ACTION_LABELS: Record<EmailTemplate, string | null> = {
+  invitation: 'Rejoindre la partie',
+  'session-reminder': 'Voir la partie',
+  'password-reset': 'Choisir un nouveau mot de passe',
+  'password-changed': null,
+  'level-up': 'Voir la fiche',
+  'email-change-confirm': 'Confirmer cette nouvelle adresse',
+  'email-change-notice': null,
+  'email-change-rollback-available': 'Annuler ce changement et restaurer mon adresse',
+  'email-change-rolled-back': 'Réinitialiser mon mot de passe',
+};
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -33,7 +48,7 @@ export class EmailService {
         to,
         subject: SUBJECTS[template],
         template,
-        context: data,
+        context: { ...data, actionLabel: ACTION_LABELS[template] },
       });
       return { ok: true };
     } catch (error) {
